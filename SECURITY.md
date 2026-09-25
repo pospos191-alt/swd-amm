@@ -997,17 +997,40 @@ guesses):
   Phase 2 design are now each verified against a genuine, cloned Squads v4
   deployment, not just cross-checked against docs or a hand-rolled mock.
 
-## CI/CD — added 2026-09-24
+## CI/CD — added 2026-09-24, CONFIRMED on a real GitHub Actions run 2026-09-25
 
-`.github/workflows/security.yml` runs `cargo build`/`cargo test`/
-`anchor build`/`anchor test` on every push and pull request, so a
-regression is caught automatically instead of relying on someone
-remembering to run `yarn test` locally before merging. **This does not
-reduce anything in "Mandatory steps before ANY mainnet use" above** — it
-only guarantees the tests that already exist keep passing; devnet testing,
-an independent human read-through, and a paid audit are unaffected and
-still fully required. Written blind, not yet verified against a real
-Actions run — see that file's own header comment.
+`.github/workflows/security.yml` (repo: `pospos191-alt/swd-amm`, private)
+runs on every push and pull request:
+
+- **test-ui** — `node --check` on the page's inline scripts, then a
+  headless-Chromium smoke test (`test-ui/tests/smoke.mjs`) that loads the
+  real page with local stubs for web3.js/anchor/spl-token and fails if
+  startup throws or never reaches the `data-app-ready` marker. Added after
+  a real incident: a `const` read before its declaration froze the page on
+  load (build 2026-09-25o), which syntax checks alone could not catch.
+- **program** — `cargo test -p swd_amm`, `anchor build`, and the full
+  `yarn test` localnet suite. CI generates its own throwaway payer wallet
+  and program keypair and rewrites `declare_id!`/`Anchor.toml` to match
+  inside the CI checkout only; the real program keypair (3zKYY...) is not
+  in the repository (`.gitignore` excludes `target/`, `*keypair*.json`,
+  `.env*`).
+- **deploy-devnet** — manual only (`workflow_dispatch` with the
+  "deploy to Devnet" box ticked), runs only after both jobs above pass,
+  needs the `DEVNET_DEPLOYER_KEYPAIR` and `PROGRAM_KEYPAIR` repository
+  secrets, and refuses to deploy if the program keypair does not match
+  `declare_id!`. There is deliberately no mainnet deploy job.
+
+First real run (CI #1, commit `4288fa0`): test-ui and program both green
+(program job 9m 22s: cargo test 1m 6s, anchor build 4m 6s, anchor test
+1m 24s). **This does not reduce anything in "Mandatory steps before ANY
+mainnet use" above** — it only guarantees the tests that already exist
+keep passing; devnet testing, an independent human read-through, and a
+paid audit are unaffected and still fully required.
+
+Known flakiness: the Squads v4 program is cloned from the public
+mainnet-beta RPC at validator start. The anchor-test step retries 3 times;
+if it keeps failing, set a private RPC URL as the `MAINNET_RPC_URL`
+repository secret and the workflow uses it instead.
 
 ## Governance ops CLI — added 2026-09-24
 
