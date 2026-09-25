@@ -52,18 +52,21 @@ env:
   ANCHOR_VERSION: "0.31.1"
   RUST_TOOLCHAIN: "stable"
   NODE_VERSION: "20"
+# Runner image is pinned (not ubuntu-latest): GitHub moves ubuntu-latest to
+# Ubuntu 26 on 2026-10-19, and the Solana/Anchor toolchain here is only
+# proven on 24.04. Bump deliberately, in its own commit, when ready.
 
 jobs:
   test-ui:
     name: test-ui (syntax + page smoke test)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -82,11 +85,11 @@ jobs:
 
   program:
     name: program (cargo test + anchor test)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
@@ -100,7 +103,7 @@ jobs:
 
       - name: Cache Solana CLI
         id: solana-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.local/share/solana/install
           key: ${{ runner.os }}-solana-${{ env.SOLANA_VERSION }}
@@ -113,7 +116,7 @@ jobs:
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
 
       - name: Cache Anchor CLI (avm)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.avm
@@ -135,7 +138,7 @@ jobs:
           anchor --version
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: yarn
@@ -209,7 +212,7 @@ jobs:
     name: deploy to Devnet (manual)
     needs: [test-ui, program]
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_devnet
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     # Create an Environment named "devnet" in Settings → Environments and add
     # yourself as a required reviewer if you want a second "Approve" click
@@ -217,7 +220,7 @@ jobs:
     environment: devnet
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@master
@@ -231,7 +234,7 @@ jobs:
 
       - name: Cache Solana CLI
         id: solana-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.local/share/solana/install
           key: ${{ runner.os }}-solana-${{ env.SOLANA_VERSION }}
@@ -244,7 +247,7 @@ jobs:
           echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
 
       - name: Cache Anchor CLI (avm)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.avm
