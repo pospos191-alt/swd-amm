@@ -1,0 +1,307 @@
+# CI/CD for swd-amm (rewritten 2026-09-25; first version 2026-09-24).
+#
+# What runs, and when:
+#   test-ui       every push / PR — syntax check + a headless-browser smoke
+#                 test of test-ui/index.html (catches a page that freezes on
+#                 load, like build 2026-09-25o). ~2 min.
+#   program       every push / PR — cargo test (unit/property tests) and the
+#                 full `anchor test` localnet suite (the same `yarn test` you
+#                 run in WSL). First run ~20-30 min (compiling), later runs
+#                 are faster thanks to the caches.
+#   deploy-devnet ONLY when started by hand (Actions → CI → Run workflow →
+#                 tick "deploy to Devnet") AND both jobs above passed. Needs
+#                 the two repository secrets described on that job. Never
+#                 touches mainnet — there is no mainnet deploy in this file
+#                 on purpose (see SECURITY.md: no mainnet before an audit).
+#
+# This does NOT replace SECURITY.md's "Mandatory steps before ANY mainnet
+# use" (devnet testing, an independent read-through, a paid audit) — it only
+# guarantees the tests that already exist keep passing.
+#
+# Known flakiness: Anchor.toml's [test.validator] clones the real Squads v4
+# program from a PUBLIC mainnet-beta RPC, which can rate-limit CI. The
+# anchor-test step retries 3 times; if it still fails, add a private RPC URL
+# as the repository secret MAINNET_RPC_URL (Helius/Triton/QuickNode...) and
+# this workflow will use it for the clone instead of the public endpoint.
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy_devnet:
+        description: "After tests pass, deploy the program to Devnet (needs DEVNET_DEPLOYER_KEYPAIR + PROGRAM_KEYPAIR secrets)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Keep these equal to what builds on your own machine (Anchor.toml
+  # [toolchain] + `rustc --version` in WSL). If a CI-only compile error ever
+  # appears, pinning RUST_TOOLCHAIN to your local version is the first fix.
+  SOLANA_VERSION: "3.1.10"
+  ANCHOR_VERSION: "0.31.1"
+  RUST_TOOLCHAIN: "stable"
+  NODE_VERSION: "20"
+
+jobs:
+  test-ui:
+    name: test-ui (syntax + page smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Syntax check (node --check on every inline script)
+        run: node test-ui/tests/check-syntax.mjs
+
+      - name: Install Playwright + Chromium
+        working-directory: test-ui/tests
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Page smoke test (page must finish starting up with no errors)
+        working-directory: test-ui/tests
+        run: node smoke.mjs
+
+  program:
+    name: program (cargo test + anchor test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Cache cargo registry / target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - name: Cache Solana CLI
+        id: solana-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/solana/install
+          key: ${{ runner.os }}-solana-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana CLI
+        run: |
+          if [ "${{ steps.solana-cache.outputs.cache-hit }}" != "true" ]; then
+            sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+          fi
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Anchor CLI (avm)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.avm
+            ~/.cargo/bin/avm
+            ~/.cargo/bin/anchor
+          key: ${{ runner.os }}-avm-anchor-${{ env.ANCHOR_VERSION }}
+
+      - name: Install Anchor CLI
+        run: |
+          if ! command -v avm >/dev/null 2>&1; then
+            cargo install --git https://github.com/solana-foundation/anchor --tag "v${ANCHOR_VERSION}" avm --locked --force
+          fi
+          if ! anchor --version 2>/dev/null | grep -q "${ANCHOR_VERSION}"; then
+            avm install "${ANCHOR_VERSION}"
+          fi
+          avm use "${ANCHOR_VERSION}"
+          anchor --version | grep -q "${ANCHOR_VERSION}" || { echo "::error::anchor ${ANCHOR_VERSION} did not install"; exit 1; }
+          solana --version
+          anchor --version
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: yarn
+
+      - name: Install JS dependencies
+        run: yarn install --frozen-lockfile
+
+      # Throwaway keys that exist only inside this CI run:
+      # - a payer wallet for the local test validator (Anchor.toml points
+      #   [provider] wallet at ~/.config/solana/id.json), and
+      # - a program keypair. The real one (3zKYY...) is NOT in the repo
+      #   (target/ is gitignored), so CI makes its own and rewrites
+      #   declare_id! and Anchor.toml to its address — in this run's checkout
+      #   only. Tests read the id from the workspace, so they don't care.
+      - name: Create CI-only wallet + program keypair
+        run: |
+          mkdir -p ~/.config/solana target/deploy
+          solana-keygen new --no-bip39-passphrase --silent --force --outfile ~/.config/solana/id.json
+          solana-keygen new --no-bip39-passphrase --silent --force --outfile target/deploy/swd_amm-keypair.json
+          pid=$(solana-keygen pubkey target/deploy/swd_amm-keypair.json)
+          sed -i -E "s/declare_id!\(\"[1-9A-HJ-NP-Za-km-z]+\"\)/declare_id!(\"${pid}\")/" programs/swd_amm/src/lib.rs
+          sed -i -E "s/^swd_amm = \"[1-9A-HJ-NP-Za-km-z]+\"/swd_amm = \"${pid}\"/" Anchor.toml
+          grep -q "declare_id!(\"${pid}\")" programs/swd_amm/src/lib.rs || { echo "::error::could not rewrite declare_id!"; exit 1; }
+          grep -n "declare_id" programs/swd_amm/src/lib.rs
+          grep -n "^swd_amm = " Anchor.toml
+
+      - name: Use private RPC for the Squads clone (if MAINNET_RPC_URL secret is set)
+        env:
+          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+        run: |
+          if [ -n "$MAINNET_RPC_URL" ]; then
+            sed -i "s#^url = \"https://api.mainnet-beta.solana.com\"#url = \"${MAINNET_RPC_URL}\"#" Anchor.toml
+            echo "Using the private RPC from MAINNET_RPC_URL for [[test.validator.clone]]"
+          else
+            echo "MAINNET_RPC_URL not set — using the public mainnet-beta RPC (may rate-limit)"
+          fi
+
+      - name: cargo test (unit + property tests, no validator)
+        run: cargo test -p swd_amm
+
+      - name: anchor build (SBF program + IDL)
+        run: anchor build
+
+      - name: anchor test (full localnet suite, same as `yarn test`)
+        run: |
+          attempt=1
+          max_attempts=3
+          until yarn test; do
+            if [ "$attempt" -ge "$max_attempts" ]; then
+              echo "::error::anchor test failed $max_attempts times. If the log shows a clone/RPC error at validator start, set the MAINNET_RPC_URL secret (see the top of this file)."
+              exit 1
+            fi
+            echo "anchor test failed (attempt $attempt/$max_attempts) — retrying in 20s in case the public RPC rate-limited the Squads clone."
+            attempt=$((attempt + 1))
+            sleep 20
+          done
+
+      - name: Upload validator / program logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: anchor-logs
+          path: |
+            .anchor/program-logs/
+            .anchor/test-ledger/test-ledger-log.txt
+            .anchor/test-ledger/validator.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  deploy-devnet:
+    name: deploy to Devnet (manual)
+    needs: [test-ui, program]
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_devnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Create an Environment named "devnet" in Settings → Environments and add
+    # yourself as a required reviewer if you want a second "Approve" click
+    # before anything is deployed.
+    environment: devnet
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Cache cargo registry / target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - name: Cache Solana CLI
+        id: solana-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/solana/install
+          key: ${{ runner.os }}-solana-${{ env.SOLANA_VERSION }}
+
+      - name: Install Solana CLI
+        run: |
+          if [ "${{ steps.solana-cache.outputs.cache-hit }}" != "true" ]; then
+            sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"
+          fi
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Cache Anchor CLI (avm)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.avm
+            ~/.cargo/bin/avm
+            ~/.cargo/bin/anchor
+          key: ${{ runner.os }}-avm-anchor-${{ env.ANCHOR_VERSION }}
+
+      - name: Install Anchor CLI
+        run: |
+          if ! command -v avm >/dev/null 2>&1; then
+            cargo install --git https://github.com/solana-foundation/anchor --tag "v${ANCHOR_VERSION}" avm --locked --force
+          fi
+          if ! anchor --version 2>/dev/null | grep -q "${ANCHOR_VERSION}"; then
+            avm install "${ANCHOR_VERSION}"
+          fi
+          avm use "${ANCHOR_VERSION}"
+          anchor --version | grep -q "${ANCHOR_VERSION}" || { echo "::error::anchor ${ANCHOR_VERSION} did not install"; exit 1; }
+
+      # Two repository secrets, each the full contents of a Solana keypair
+      # JSON file (the [12,34,...] array):
+      #   DEVNET_DEPLOYER_KEYPAIR  a Devnet-only wallet with a few SOL that is
+      #                            (or will become) the program's upgrade
+      #                            authority. Do NOT reuse a mainnet wallet.
+      #   PROGRAM_KEYPAIR          target/deploy/swd_amm-keypair.json from your
+      #                            machine (address 3zKYY...), so the program
+      #                            lands at the same id the UI and declare_id! use.
+      - name: Write deploy keys (from secrets)
+        env:
+          DEVNET_DEPLOYER_KEYPAIR: ${{ secrets.DEVNET_DEPLOYER_KEYPAIR }}
+          PROGRAM_KEYPAIR: ${{ secrets.PROGRAM_KEYPAIR }}
+        run: |
+          if [ -z "$DEVNET_DEPLOYER_KEYPAIR" ] || [ -z "$PROGRAM_KEYPAIR" ]; then
+            echo "::error::Set both DEVNET_DEPLOYER_KEYPAIR and PROGRAM_KEYPAIR repository secrets before deploying."
+            exit 1
+          fi
+          mkdir -p ~/.config/solana target/deploy
+          umask 077
+          printf '%s' "$DEVNET_DEPLOYER_KEYPAIR" > ~/.config/solana/devnet-deployer.json
+          printf '%s' "$PROGRAM_KEYPAIR" > target/deploy/swd_amm-keypair.json
+          want=$(grep -oP 'declare_id!\("\K[1-9A-HJ-NP-Za-km-z]+' programs/swd_amm/src/lib.rs)
+          have=$(solana-keygen pubkey target/deploy/swd_amm-keypair.json)
+          if [ "$want" != "$have" ]; then
+            echo "::error::PROGRAM_KEYPAIR is $have but declare_id! in lib.rs is $want — refusing to deploy."
+            exit 1
+          fi
+          echo "Program id: $have"
+          echo "Deployer:   $(solana-keygen pubkey ~/.config/solana/devnet-deployer.json)"
+          solana balance "$(solana-keygen pubkey ~/.config/solana/devnet-deployer.json)" --url devnet
+
+      - name: anchor build
+        run: anchor build
+
+      - name: Deploy / upgrade on Devnet
+        run: |
+          anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/devnet-deployer.json
+          solana program show "$(solana-keygen pubkey target/deploy/swd_amm-keypair.json)" --url devnet
+
+      - name: Remove key files
+        if: always()
+        run: rm -f ~/.config/solana/devnet-deployer.json target/deploy/swd_amm-keypair.json

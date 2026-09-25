@@ -1,0 +1,13 @@
+{
+  "name": "swd-amm-test-ui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static test UI for the swd-amm devnet program, plus a devnet-SOL faucet serverless function.",
+  "dependencies": {
+    "@solana/web3.js": "^1.95.4",
+    "@vercel/kv": "^2.0.0"
+  },
+  "overrides": {
+    "uuid": "^9.0.1"
+  }
+}

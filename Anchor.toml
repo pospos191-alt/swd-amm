@@ -1,0 +1,115 @@
+[toolchain]
+anchor_version = "0.31.1"
+solana_version = "3.1.10"
+
+[features]
+seeds = false
+skip-lint = false
+
+[programs.localnet]
+# TODO(before build): run `solana-keygen new -o target/deploy/swd_amm-keypair.json`
+# after your first `anchor build`, then `anchor keys list` and paste the
+# real program id here AND in programs/swd_amm/src/lib.rs's declare_id!.
+swd_amm = "3zKYYQT7LhCWLLnzbRMhTZJKmQdSwGzEghRrTyT4jdCL"
+
+[programs.devnet]
+swd_amm = "3zKYYQT7LhCWLLnzbRMhTZJKmQdSwGzEghRrTyT4jdCL"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+# "Phase 3" (Pyth oracle guard + dynamic fee, added 2026-09-23) — these two
+# entries pre-load the local validator with the fixture PriceUpdateV2
+# accounts `scripts/gen-pyth-fixtures.js` generates. RUN THAT SCRIPT
+# BEFORE `anchor test` (see its own header comment for why it can't just
+# run as part of the ts-mocha suite) — without it, these two JSON files
+# won't exist yet and `anchor test` will fail immediately with a missing
+# account file error. `yarn test` (see package.json) runs both for you.
+# Explicit bind_address (added 2026-09-24, after the first real `anchor
+# test` run on the user's own machine panicked with
+# `UnspecifiedIpAddr(0.0.0.0)` inside solana-gossip's `Node::new_with_
+# external_ip`): without this, Anchor invokes `solana-test-validator
+# --bind-address 0.0.0.0` (its own default), which makes the validator
+# try to auto-detect a real external-facing IP for its gossip service.
+# That auto-detection has no route to succeed on this machine (WSL2's
+# network setup), so it panics instead of falling back to loopback.
+# Binding explicitly to 127.0.0.1 skips that auto-detection entirely —
+# correct for local single-machine test validators, which never need a
+# real external IP.
+[test.validator]
+bind_address = "127.0.0.1"
+# "Phase 2b" (Squads multisig LIVE on-chain verification, added 2026-09-24)
+# — `url` here is what lets `[[test.validator.clone]]` below actually pull
+# real account/program bytes at validator startup (Anchor silently skips
+# cloning if this is unset). Points at mainnet-beta because that is the
+# ONLY cluster this pass could directly confirm the Squads v4 program is
+# actually deployed at (docs.squads.so gives just the mainnet-beta address,
+# SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf — no devnet address was
+# found). The public endpoint below is rate-limited and NOT guaranteed to
+# tolerate cloning a whole program's executable data reliably — if
+# `anchor test` fails at validator startup with a clone/RPC timeout, swap
+# this for a private RPC endpoint (Helius/Triton/QuickNode/etc) instead of
+# retrying the public one.
+url = "https://api.mainnet-beta.solana.com"
+
+[[test.validator.account]]
+address = "7CSX26gEAc7Usyiqpse21fJ5uC2yi5AyMqaUePCKa1mZ"
+filename = "tests/fixtures/pyth-price-a.json"
+
+[[test.validator.account]]
+address = "AQbYtZkh2MxCjRK6yjthMJWiqNDVptxeSqEFv7XtAFkf"
+filename = "tests/fixtures/pyth-price-b.json"
+
+# "Legacy pool" fixtures (added 2026-09-24) — porting the 28 pre-Phase-3
+# tests in tests/swd_amm.ts/tests/dlmm.ts/tests/governance.ts to work
+# under the mandatory oracle guard. Three more price pairs, one per
+# distinct pool ratio those tests actually use — see
+# scripts/gen-pyth-fixtures.js's "Legacy pool fixtures" section and
+# tests/oracle-fixtures.ts's matching exports for the full rationale.
+[[test.validator.account]]
+address = "Fr98GVvdxRm49w1oxQe8oAx8tQMjVk6j5rHk1KduQuh9"
+filename = "tests/fixtures/pyth-price-legacy-ratio1-a.json"
+
+[[test.validator.account]]
+address = "BC5bKXETwoqRjZ6oxWF9mDic5vKub5cRXKVjsEC9bnJA"
+filename = "tests/fixtures/pyth-price-legacy-ratio1-b.json"
+
+[[test.validator.account]]
+address = "BLTCv1KejCnqmTUk6dPRwojPR8A9tzGBm8GoumVFMfS4"
+filename = "tests/fixtures/pyth-price-legacy-ratio4-a.json"
+
+[[test.validator.account]]
+address = "GBVL4EABY9zWnUUfuQFWxA9zuk8wgFndUyRAXJqj3GnG"
+filename = "tests/fixtures/pyth-price-legacy-ratio4-b.json"
+
+[[test.validator.account]]
+address = "AcUymjVcyoLs5U6P1m8VLRVMQybcwjbF5ikbz2HeVHcN"
+filename = "tests/fixtures/pyth-price-legacy-ratiohalf-a.json"
+
+[[test.validator.account]]
+address = "FMroTTnKPWzrzQVdfZn6iqxLbdwBZscMojoRr4U5qdyQ"
+filename = "tests/fixtures/pyth-price-legacy-ratiohalf-b.json"
+
+# "Phase 2b" (Squads multisig LIVE on-chain verification, added 2026-09-24)
+# — clones the REAL Squads v4 program and its ProgramConfig singleton from
+# mainnet-beta (see the `url` comment above) so tests/z-squads-live-
+# verification.ts can create a genuine multisig with the official
+# `@sqds/multisig` SDK and exercise governance.rs's `verify_governance_
+# multisig` against a REAL account, not a hand-rolled mock. The
+# ProgramConfig PDA below (`BSTq9w3k...`) was computed offline from the
+# ACTUAL installed `@sqds/multisig` v2.1.1 package's own compiled
+# `getProgramConfigPda` source (node_modules/@sqds/multisig/lib/index.js —
+# seeds = ["multisig", "program_config"]), not guessed — see that test
+# file's header comment for the full derivation.
+[[test.validator.clone]]
+address = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf"
+
+[[test.validator.clone]]
+address = "BSTq9w3kZwNwpBXJEvTZz2G9ZTNyKBvoSeXMvwb4cNZr"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

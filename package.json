@@ -1,0 +1,21 @@
+{
+  "name": "swd-amm",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node scripts/gen-pyth-fixtures.js && anchor test",
+    "pretest:pyth-fixtures": "node scripts/gen-pyth-fixtures.js",
+    "governance": "ts-node scripts/governance.ts",
+    "localnet": "rm -rf .anchor/test-ledger && node scripts/gen-pyth-fixtures.js --publish-ahead-hours 24 && anchor localnet"
+  },
+  "devDependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@solana/spl-token": "^0.4.8",
+    "@solana/web3.js": "^1.95.3",
+    "@sqds/multisig": "^2.1.1",
+    "chai": "^4.3.10",
+    "mocha": "^10.4.0",
+    "ts-mocha": "^10.0.0",
+    "typescript": "^5.4.5"
+  }
+}

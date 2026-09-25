@@ -1,0 +1,78 @@
+[package]
+name = "swd_amm"
+version = "0.1.0"
+description = "SWD constant-product AMM — UNAUDITED, see SECURITY.md before any mainnet use"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "swd_amm"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+
+[dependencies]
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+# Token-2022 support (added alongside the governance layer, per the user's
+# "SWDMM" scope list — see architecture-and-decisions.md): `token_2022`
+# pulls in `anchor_spl::token_interface` (the InterfaceAccount<Mint>/
+# InterfaceAccount<TokenAccount>/Interface<TokenInterface> types that
+# accept EITHER the legacy Token program OR Token-2022, so existing pools
+# built against classic SPL Token mints keep working unchanged).
+# `token_2022_extensions` additionally re-exports `spl_token_2022`'s own
+# `extension` module, which `assert_mint_extensions_safe` (lib.rs) needs
+# to enumerate a Token-2022 mint's extensions and reject the ones this
+# program's reserve-accounting math isn't safe against yet (transfer fee,
+# transfer hook, confidential transfer, permanent delegate — see that
+# function's doc comment for the full list and why each one is unsafe).
+anchor-spl = { version = "0.31.1", features = ["token_2022", "token_2022_extensions"] }
+# Required by the new DLMM `#[zero_copy]` accounts (BinArray/Bin) added in
+# dlmm.rs: Anchor's zero_copy macro expands to `unsafe impl
+# bytemuck::Pod`/`Zeroable` in the CALLING crate, so `bytemuck` must be a
+# direct dependency here (not just a transitive one via anchor-lang) or
+# `anchor build` fails to resolve the `bytemuck::` path. Version/features
+# match Anchor's own documented zero_copy examples.
+#
+# `min_const_generics` is NOT optional here: without it, bytemuck's
+# hand-written `Pod`/`Zeroable` impls for arrays only go up to length 32
+# elements — and `BinArray.bins` is `[Bin; 201]`. The first real `cargo
+# test` run (2026-09-09) confirmed this exact failure ("the trait bound
+# `[Bin; 201]: Zeroable`/`Pod` is not satisfied") before this feature was
+# added — this is the fix.
+bytemuck = { version = "1.4.0", features = ["derive", "min_const_generics"] }
+# Pyth pull-oracle guard + dynamic fee ("Phase 3", added 2026-09-23) — see
+# src/oracle.rs's module doc comment.
+#
+# HISTORY (2026-09-24, after real `cargo test -p swd_amm` runs on the
+# user's own machine — see SECURITY.md/chat history for the full story):
+# this dependency used to be `pyth-solana-receiver-sdk`, pinned first to
+# "2.0.0" then to "=1.0.1" with an explicit `pythnet-sdk = "=2.0.0"`
+# alongside it. Both attempts hit real, reproducible dependency conflicts
+# between this program's anchor-lang 0.31.1 (pre-Anchor-1.0) and every
+# published version of that SDK: 2.0.0 requires anchor-lang's newer 1.0.x
+# line outright; 1.0.1 avoids that but hard-requires `pythnet-sdk
+# >=2.3.1`, whose `PriceFeedMessage` type is written against borsh 1.x,
+# which anchor-lang 0.31.1's own `#[account]` macro cannot satisfy
+# (needs borsh 0.10.x) — confirmed via `cargo`'s own resolver error
+# ("failed to select a version for `pythnet-sdk`... versions that meet
+# the requirements `^2.3.1` are: 2.3.1"), not a guess. There is no
+# published version of the official SDK that works with anchor-lang
+# 0.31.1 without upgrading this entire program to Anchor 1.0.x — a much
+# larger, separately-scoped change the user explicitly declined for this
+# phase (see the AskUserQuestion this decision came from).
+#
+# THE FIX: this program no longer depends on `pyth-solana-receiver-sdk` or
+# `pythnet-sdk` at all. `PriceUpdateV2`/`PriceFeedMessage`/
+# `VerificationLevel` and a `get_price_no_older_than` equivalent are now
+# hand-implemented directly in src/oracle.rs against anchor-lang 0.31.1's
+# own traits (`Owner`, `Discriminator`, `AccountSerialize`/
+# `AccountDeserialize`) — see that file's module doc comment for the full
+# byte-layout cross-check and the security tradeoff this represents (not
+# reusing Pyth's own audited SDK code). Zero cross-version dependency
+# conflicts as a result, at the cost of this program owning that byte
+# layout by hand going forward.

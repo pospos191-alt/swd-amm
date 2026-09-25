@@ -1,0 +1,13 @@
+{
+  "name": "swd-amm-test-ui-tests",
+  "private": true,
+  "type": "module",
+  "description": "CI checks for test-ui/index.html — see smoke.mjs and check-syntax.mjs",
+  "scripts": {
+    "check": "node check-syntax.mjs",
+    "smoke": "node smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.49.1"
+  }
+}
