@@ -117,6 +117,17 @@ try {
         await page.keyboard.press("Escape");
       }
     }],
+    ["My Limit Orders / My DCA Plans hidden without a wallet", async () => {
+      const shown = await page.evaluate(() => ["lo-list-container", "dca-list-container"].filter((id) => document.getElementById(id)?.offsetParent !== null));
+      if (shown.length) throw new Error(`visible without wallet: ${shown.join(", ")}`);
+      const onWithWallet = await page.evaluate(() => {
+        document.documentElement.dataset.wallet = "1";
+        const v = ["lo-list-container", "dca-list-container"].every((id) => document.getElementById(id)?.offsetParent !== null);
+        delete document.documentElement.dataset.wallet;
+        return v;
+      });
+      if (!onWithWallet) throw new Error("lists stay hidden even with a wallet connected");
+    }],
     ["open Portfolio tab", () => page.click('.tab-nav-btn[data-tab="portfolio"]', { timeout: 5000 })],
     ["switch language to Thai", () => page.selectOption("#lang-select", "th")],
     ["switch network to Devnet", () => page.selectOption("#network-select", "devnet")],

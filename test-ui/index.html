@@ -344,6 +344,9 @@
   /* Popups act on the active pair (the pair card on the Trade tab), so
      their own pair pickers are gone (build 2026-09-29k). */
   .pair-picker-removed { display: none !important; }
+  /* My Limit Orders / My DCA Plans only appear once a wallet is connected
+     (build 2026-09-29l); <html data-wallet="1"> is set on connect. */
+  html:not([data-wallet="1"]) .wallet-only { display: none !important; }
   .need-pair-hint { color: var(--warn, #d18b2c); margin-bottom: 10px; }
   .popup-open-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
   .popup-open-btn svg { flex-shrink: 0; }
@@ -1182,7 +1185,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29k</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29l</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -2951,14 +2954,14 @@
 
 
 
-<div class="panel wide" data-tab="tools">
+<div class="panel wide wallet-only" data-tab="tools">
   <div class="panel-toolbar orders-panel-head" data-icon="clipboard">
     <h2 style="margin:0;" data-i18n="myLimitOrdersListTitle">My Limit Orders</h2>
   </div>
   <div id="lo-list-container" style="margin-top:14px;"><div class="empty-state-compact" data-icon="clipboard"><span data-i18n="loEmpty">No limit orders yet.</span></div></div>
 </div>
 
-<div class="panel wide" data-tab="tools">
+<div class="panel wide wallet-only" data-tab="tools">
   <div class="panel-toolbar orders-panel-head" data-icon="trending">
     <h2 style="margin:0;" data-i18n="myDcaListTitle">My DCA Plans</h2>
   </div>
@@ -12187,6 +12190,7 @@ async function connectWithProvider(provider, opts = {}) {
     // no per-wallet branching here.
     const resp = eager ? await provider.connect({ onlyIfTrusted: true, silent: true }) : await provider.connect();
     state.wallet = wrapWalletForToasts(provider);
+    document.documentElement.dataset.wallet = "1";
     recordRecent(RECENT_WALLETS_KEY, resp.publicKey.toBase58());
     document.getElementById("wallet-status").textContent = resp.publicKey.toBase58().slice(0, 4) + "…" + resp.publicKey.toBase58().slice(-4);
     document.getElementById("wallet-status").className = "status-pill connected";
@@ -12240,6 +12244,7 @@ async function connectWithProvider(provider, opts = {}) {
 async function disconnectWallet() {
   try { await state.wallet?.disconnect?.(); } catch {}
   state.wallet = null;
+  delete document.documentElement.dataset.wallet;
   try { localStorage.removeItem(WALLET_AUTOCONNECT_KEY); } catch {}
   document.getElementById("wallet-status").textContent = t("walletDisconnected");
   document.getElementById("wallet-status").className = "status-pill disconnected";
