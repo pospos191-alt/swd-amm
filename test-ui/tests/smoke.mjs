@@ -52,6 +52,7 @@ try {
     if (u.includes("esm.sh/@solana/web3.js")) return js(stub("web3.js"));
     if (u.includes("esm.sh/@coral-xyz/anchor")) return js(stub("anchor.js"));
     if (u.includes("esm.sh/@solana/spl-token")) return js(stub("spl-token.js"));
+    if (u.includes("esm.sh/buffer")) return js(stub("buffer.js"));
     if (u.includes("klinecharts")) {
       return js("window.klinecharts={init(){return new Proxy({}, {get:()=>()=>null})},dispose(){},registerOverlay(){},registerIndicator(){},getSupportedOverlays(){return []}};");
     }

@@ -1148,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29g</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29h</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -2954,6 +2954,14 @@ import {
   getAccount,
   unpackMint,
 } from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4";
+import { Buffer as BufferPolyfill } from "https://esm.sh/buffer@6.0.3";
+
+// Browsers have no global Buffer, yet this page uses Buffer.from(...) for
+// PDA seeds. Until 2026-09-29 it only worked because the MetaMask SDK
+// (loaded later, asynchronously) happened to install a global Buffer —
+// anything that ran before that (the Governance status card at startup)
+// failed with "Buffer is not defined". Install it ourselves, first thing.
+if (typeof globalThis.Buffer === "undefined") globalThis.Buffer = BufferPolyfill;
 
 const { PublicKey, Connection, Transaction, SystemProgram, Keypair, ComputeBudgetProgram } = web3;
 
@@ -4023,6 +4031,7 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "เว้นว่าง = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "เลือก Pyth feed จริง (Devnet/Mainnet)…",
     lpfNoPool: "คู่นี้ยังไม่มีพูล constant-product — สร้างพูลก่อนแล้วจึงประมาณค่าธรรมเนียมได้",
+    logBatchResign: "Blockhash หมดอายุ/ไม่พบระหว่างส่ง — ขอเซ็นใหม่สำหรับ {n} ขั้นที่เหลือ (กดยืนยันในกระเป๋าอีกครั้ง)",
     statusGovLoadError: "อ่านข้อมูลไม่สำเร็จ (RPC): {e} — กดรีเฟรชอีกครั้ง",
     logFaucetWebFallback: "หน้านี้ไม่มี faucet ของเซิร์ฟเวอร์ และ RPC ไม่ยอม airdrop — คัดลอก address {addr} ให้แล้ว เปิด {url} แล้ววางเพื่อขอ SOL",
     toastFaucetWebFallback: "คัดลอก address แล้ว — เปิด faucet.solana.com แล้ววาง {addr}",
@@ -4998,6 +5007,7 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "Pick a real Pyth feed (Devnet/Mainnet)…",
     lpfNoPool: "No constant-product pool for this pair yet — create one first, then fees can be estimated.",
+    logBatchResign: "Blockhash expired/not found while sending — re-signing the remaining {n} step(s) (approve once more in your wallet).",
     statusGovLoadError: "Couldn't read it (RPC): {e} — press Refresh to try again.",
     logFaucetWebFallback: "This host has no faucet function and the RPC refused an airdrop — copied {addr}; open {url} and paste it to get SOL.",
     toastFaucetWebFallback: "Address copied — open faucet.solana.com and paste {addr}",
@@ -13279,38 +13289,76 @@ function friendlierTxError(e) {
 // earlier ones create). steps: [{ tx, label, signers?: Keypair[], onConfirmed?: (sig) => void }].
 // Note: the wallet's own preview may say it can't simulate the later
 // transactions — expected, since they depend on the earlier ones landing first.
-async function sendStepsWithOneApproval(steps) {
-  const { blockhash, lastValidBlockHeight } = await state.connection.getLatestBlockhash("confirmed");
-  for (const step of steps) {
+// Blockhash problems on a busy public RPC (2026-09-29): "Blockhash not
+// found" (the node that simulates is behind the one that handed out the
+// blockhash) or the blockhash expiring while earlier steps wait out rate
+// limits. Blockhashes now come from `finalized` (known to every node), and
+// if a step still hits one of these, the steps not yet on chain are
+// re-signed with a fresh blockhash (one more wallet approval) and resumed.
+function isBlockhashProblem(e) {
+  const txt = `${(e && e.name) || ""} ${(e && e.message) || e}`;
+  return /Blockhash not found|BlockhashNotFound|block height exceeded|BlockheightExceeded|has expired/i.test(txt);
+}
+
+async function signBatchSteps(list) {
+  const { blockhash, lastValidBlockHeight } = await state.connection.getLatestBlockhash("finalized");
+  for (const step of list) {
+    step.tx.signatures = [];
     step.tx.feePayer = state.wallet.publicKey;
     step.tx.recentBlockhash = blockhash;
     if (step.signers && step.signers.length) step.tx.partialSign(...step.signers);
   }
   let signed;
   if (typeof state.wallet.signAllTransactions === "function") {
-    signed = await state.wallet.signAllTransactions(steps.map((s) => s.tx));
+    signed = await state.wallet.signAllTransactions(list.map((s) => s.tx));
   } else {
     signed = [];
-    for (const step of steps) signed.push(await state.wallet.signTransaction(step.tx));
+    for (const step of list) signed.push(await state.wallet.signTransaction(step.tx));
   }
+  return { signed, blockhash, lastValidBlockHeight };
+}
+
+async function sendStepsWithOneApproval(steps) {
+  let { signed, blockhash, lastValidBlockHeight } = await signBatchSteps(steps);
   const sigs = [];
-  for (let i = 0; i < steps.length; i++) {
+  let resigns = 0;
+  for (let i = 0; i < steps.length; ) {
     showPendingToast(t("toastBatchProgress", { i: i + 1, n: steps.length, label: steps[i].label }));
-    let sig;
+    let sig = null;
     try {
-      sig = await state.connection.sendRawTransaction(signed[i].serialize());
+      sig = await state.connection.sendRawTransaction(signed[i].serialize(), { preflightCommitment: "confirmed", maxRetries: 5 });
+      const res = await state.connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+      if (res.value.err) {
+        const tx = await state.connection.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }).catch(() => null);
+        const parsed = friendlierTxError({ logs: tx?.meta?.logMessages });
+        throw parsed?.error ? parsed : new Error(`${steps[i].label}: ${JSON.stringify(res.value.err)}`);
+      }
     } catch (e) {
-      throw friendlierTxError(e);
-    }
-    const res = await state.connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
-    if (res.value.err) {
-      const tx = await state.connection.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }).catch(() => null);
-      const parsed = friendlierTxError({ logs: tx?.meta?.logMessages });
-      throw parsed?.error ? parsed : new Error(`${steps[i].label}: ${JSON.stringify(res.value.err)}`);
+      if (!isBlockhashProblem(e) || resigns >= 2) throw friendlierTxError(e);
+      // Expired while confirming? It may have landed after all.
+      if (sig) {
+        const st = await state.connection.getSignatureStatus(sig, { searchTransactionHistory: true }).catch(() => null);
+        if (st?.value && !st.value.err && st.value.confirmationStatus) {
+          logTx(steps[i].label, sig, { toast: false });
+          try { steps[i].onConfirmed?.(sig); } catch (err) { console.error(err); }
+          sigs.push(sig);
+          i++;
+          continue;
+        }
+      }
+      resigns++;
+      log(t("logBatchResign", { n: steps.length - i }), "info");
+      const rest = steps.slice(i);
+      const again = await signBatchSteps(rest);
+      signed = [...signed.slice(0, i), ...again.signed];
+      blockhash = again.blockhash;
+      lastValidBlockHeight = again.lastValidBlockHeight;
+      continue; // retry step i with the fresh signature
     }
     logTx(steps[i].label, sig, { toast: false });
     try { steps[i].onConfirmed?.(sig); } catch (e) { console.error(e); }
     sigs.push(sig);
+    i++;
   }
   return sigs;
 }
