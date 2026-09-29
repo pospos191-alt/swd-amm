@@ -1148,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29c</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29d</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -4023,6 +4023,7 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "เว้นว่าง = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "เลือก Pyth feed จริง (Devnet/Mainnet)…",
     lpfNoPool: "คู่นี้ยังไม่มีพูล constant-product — สร้างพูลก่อนแล้วจึงประมาณค่าธรรมเนียมได้",
+    logLegacyAccountsSkipped: "ข้ามบัญชี {kind} {n} บัญชีที่สร้างจากโปรแกรมเวอร์ชันเก่า (โครงสร้างข้อมูลไม่ตรงกับเวอร์ชันปัจจุบันแล้ว)",
     errWalletChainUnsupported: "{wallet} ยังเซ็นธุรกรรมบน {chain} ไม่ได้ (รองรับ: {list}) — ถ้าเป็น MetaMask บน Devnet ให้เปิด Settings → Advanced → Show test networks แล้วเชื่อมกระเป๋าใหม่ ส่วน Localnet ให้ใช้ Phantom หรือ Solflare",
     logDevnetDefaultFeeds: "ไม่ได้อยู่บน Localnet — ใช้ Pyth USDC/USD + USDT/USD จริงเป็น oracle ของพูลนี้ (ราคาใกล้ 1:1 จึงเหมาะกับการฝากสองฝั่งเท่ากัน)",
     errOracleFeedIdFormat: "กรอก Pyth feed id เป็น hex 64 ตัวอักษร (จะมีหรือไม่มี 0x นำหน้าก็ได้)",
@@ -4993,6 +4994,7 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "Pick a real Pyth feed (Devnet/Mainnet)…",
     lpfNoPool: "No constant-product pool for this pair yet — create one first, then fees can be estimated.",
+    logLegacyAccountsSkipped: "Skipped {n} {kind} account(s) created by an older program version (their layout no longer matches).",
     errWalletChainUnsupported: "{wallet} can't sign for {chain} (it offers: {list}). For MetaMask on Devnet, turn on Settings → Advanced → Show test networks and reconnect; for Localnet, use Phantom or Solflare.",
     logDevnetDefaultFeeds: "Not on Localnet — using the real Pyth USDC/USD + USDT/USD feeds as this pool's oracle (priced ~1:1, so equal deposits on both sides fit the guard).",
     errOracleFeedIdFormat: "Enter a 64-character hex Pyth feed id (with or without a leading 0x).",
@@ -14033,6 +14035,46 @@ function renderPairPickers() {
 }
 renderQuickPoolPickers();
 
+// ---------------------------------------------------------------------
+// Program-account listing that survives old accounts (2026-09-29). Anchor's
+// `.all()` decodes every matching account and rejects the WHOLE call if
+// even one fails — and on Devnet the program was upgraded in place, so
+// accounts written by the older version (smaller layout, before the oracle
+// fields) sit next to new ones and made every list fail with "Trying to
+// access beyond buffer length". Same query as `.all()`, but each account is
+// decoded on its own and the ones that don't fit the current layout are
+// skipped (and reported once).
+// ---------------------------------------------------------------------
+var legacyAccountsReported = new Set(); // var: hoisted, no TDZ if a list runs during startup
+async function safeAllAccounts(ns, extraFilters = []) {
+  const client = state.program.account[ns];
+  // Anchor 0.31 keeps the IDL entry on `_idlAccount` (no public getter).
+  const name = client && ((client._idlAccount && client._idlAccount.name) || (client.idlAccount && client.idlAccount.name));
+  const coder = client && client.coder;
+  if (!name || !coder || !coder.accounts || typeof coder.accounts.memcmp !== "function") {
+    return client.all(extraFilters);
+  }
+  const raw = await state.connection.getProgramAccounts(state.program.programId, {
+    commitment: "confirmed",
+    filters: [{ memcmp: coder.accounts.memcmp(name) }, ...extraFilters],
+  });
+  const out = [];
+  let skipped = 0;
+  for (const { pubkey, account } of raw) {
+    try {
+      out.push({ publicKey: pubkey, account: coder.accounts.decode(name, account.data) });
+    } catch {
+      skipped++;
+    }
+  }
+  const key = `${state.network}|${ns}|${skipped}`;
+  if (skipped && !legacyAccountsReported.has(key)) {
+    legacyAccountsReported.add(key);
+    log(t("logLegacyAccountsSkipped", { n: skipped, kind: name }), "info");
+  }
+  return out;
+}
+
 async function refreshPoolList() {
   const container = document.getElementById("pool-list-container");
   showLoadingUnlessPopulated(container, "poolListLoading");
@@ -14040,8 +14082,8 @@ async function refreshPoolList() {
   showLoadingUnlessPopulated(mktContainer, "poolListLoading");
   try {
     const [cpPools, dlmmPools] = await Promise.all([
-      state.program.account.pool.all(),
-      state.program.account.dlmmPool.all(),
+      safeAllAccounts("pool"),
+      safeAllAccounts("dlmmPool"),
     ]);
 
     poolListLoadedOnce = true;
@@ -16347,9 +16389,9 @@ async function collectKnownTokens() {
     state.wallet?.publicKey
       ? state.connection.getParsedTokenAccountsByOwner(state.wallet.publicKey, { programId: TOKEN_PROGRAM_ID }).then((r) => r.value).catch(() => [])
       : [],
-    state.program.account.allowedMint.all().catch(() => []),
-    state.program.account.pool.all().catch(() => []),
-    state.program.account.dlmmPool.all().catch(() => []),
+    safeAllAccounts("allowedMint").catch(() => []),
+    safeAllAccounts("pool").catch(() => []),
+    safeAllAccounts("dlmmPool").catch(() => []),
   ]);
   const lpMints = new Set(cpPools.map(({ account }) => derivePool(account.mintA, account.mintB).lpMint.toBase58()));
   for (const { account } of walletAccs) {
@@ -17808,8 +17850,8 @@ async function refreshMyPositions() {
       : "";
 
     const [cpPools, dlmmPools, tokenAccounts] = await Promise.all([
-      state.program.account.pool.all(),
-      state.program.account.dlmmPool.all(),
+      safeAllAccounts("pool"),
+      safeAllAccounts("dlmmPool"),
       state.connection.getParsedTokenAccountsByOwner(owner, { programId: TOKEN_PROGRAM_ID }),
     ]);
 
@@ -17883,7 +17925,7 @@ async function refreshMyPositions() {
     // so every position this wallet holds shows up without already
     // knowing its bin range.
     const OWNER_FIELD_OFFSET = 8 + 32;
-    const positions = await state.program.account.position.all([
+    const positions = await safeAllAccounts("position", [
       { memcmp: { offset: OWNER_FIELD_OFFSET, bytes: owner.toBase58() } },
     ]);
     const dlmmPoolByKey = new Map(dlmmPools.map(({ publicKey, account }) => [publicKey.toBase58(), account]));
@@ -20357,8 +20399,8 @@ function edgeSideAIs(e, a) {
 // getProgramAccounts-equivalent call per candidate.
 async function buildSwapEdges() {
   const [cpPools, dlmmPools] = await Promise.all([
-    state.program.account.pool.all(),
-    state.program.account.dlmmPool.all(),
+    safeAllAccounts("pool"),
+    safeAllAccounts("dlmmPool"),
   ]);
   const notBroken = ({ publicKey }) => !oracleHealthIsBlocking(poolOracleHealth.get(publicKey.toBase58()));
   return [
