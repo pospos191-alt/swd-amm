@@ -1148,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29a</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29b</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -4022,6 +4022,7 @@ const STRINGS = {
     btnUseLocalnetFixtures: "ใช้ Localnet test fixtures",
     oracleFeedIdPlaceholder: "เว้นว่าง = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "เลือก Pyth feed จริง (Devnet/Mainnet)…",
+    lpfNoPool: "คู่นี้ยังไม่มีพูล constant-product — สร้างพูลก่อนแล้วจึงประมาณค่าธรรมเนียมได้",
     logDevnetDefaultFeeds: "ไม่ได้อยู่บน Localnet — ใช้ Pyth USDC/USD + USDT/USD จริงเป็น oracle ของพูลนี้ (ราคาใกล้ 1:1 จึงเหมาะกับการฝากสองฝั่งเท่ากัน)",
     errOracleFeedIdFormat: "กรอก Pyth feed id เป็น hex 64 ตัวอักษร (จะมีหรือไม่มี 0x นำหน้าก็ได้)",
     errOracleFeedUnregistered: "ยังไม่มีบัญชี price_update ที่ลงทะเบียนไว้สำหรับ feed {feed}… — ใช้ \"Use Localnet test fixtures\" หรือลงทะเบียนเองก่อนใน Dev Tools",
@@ -4990,6 +4991,7 @@ const STRINGS = {
     btnUseLocalnetFixtures: "Use Localnet test fixtures",
     oracleFeedIdPlaceholder: "blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "Pick a real Pyth feed (Devnet/Mainnet)…",
+    lpfNoPool: "No constant-product pool for this pair yet — create one first, then fees can be estimated.",
     logDevnetDefaultFeeds: "Not on Localnet — using the real Pyth USDC/USD + USDT/USD feeds as this pool's oracle (priced ~1:1, so equal deposits on both sides fit the guard).",
     errOracleFeedIdFormat: "Enter a 64-character hex Pyth feed id (with or without a leading 0x).",
     errOracleFeedUnregistered: "No price_update account registered for feed {feed}… — use \"Use Localnet test fixtures\" or register one in Dev Tools first.",
@@ -18683,6 +18685,12 @@ async function runLpfEstimate() {
       <div class="hint" style="margin-top:8px; grid-column: 1 / -1;">${t("lpfAprHint")}</div>
     `;
   } catch (e) {
+    // The pair just has no constant-product pool yet (freshly created test
+    // mints, a DLMM-only pair) — that's a normal state, not an error to log.
+    if (/does not exist|has no data|Account not found/i.test(String(e && e.message))) {
+      resultKv.innerHTML = `<div class="empty-state">${t("lpfNoPool")}</div>`;
+      return;
+    }
     resultKv.innerHTML = `<div class="empty-state">${t("lpfError")}</div>`;
     logErr(t("panelLpFeeTitle"), e, { toast: false });
   }
