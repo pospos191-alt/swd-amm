@@ -1148,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29d</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29e</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -10991,6 +10991,7 @@ function friendlyErrorHint(msg) {
 }
 
 function logTx(label, sig, opts = {}) {
+  try { invalidateAccountLists(); } catch {}
   log(`✅ ${label} — <a href="${explorerLink(sig)}" target="_blank" rel="noopener">${sig.slice(0, 20)}…</a>`, "ok");
   awardPointsForTx();
   scheduleChartRefreshAfterTx();
@@ -14046,7 +14047,40 @@ renderQuickPoolPickers();
 // skipped (and reported once).
 // ---------------------------------------------------------------------
 var legacyAccountsReported = new Set(); // var: hoisted, no TDZ if a list runs during startup
+// getProgramAccounts is the call public RPCs (api.devnet.solana.com)
+// rate-limit hardest — HTTP 429 "Too many requests for a specific RPC
+// call" — and several panels list the same accounts at once. So identical
+// queries share one in-flight request and a short-lived result, and a 429
+// is retried with backoff instead of failing the panel.
+var gpaCache = new Map(); // key -> { at, promise }
+var GPA_CACHE_MS = 15000;
+function isRateLimitError(e) {
+  return /\b429\b|Too many requests/i.test(String((e && e.message) || e));
+}
+async function withRateLimitRetry(fn) {
+  const waits = [1500, 3000, 6000];
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!isRateLimitError(e) || i >= waits.length) throw e;
+      await new Promise((r) => setTimeout(r, waits[i] + Math.random() * 500));
+    }
+  }
+}
 async function safeAllAccounts(ns, extraFilters = []) {
+  const key = `${state.network}|${state.customRpc || ""}|${ns}|${JSON.stringify(extraFilters)}`;
+  const hit = gpaCache.get(key);
+  if (hit && Date.now() - hit.at < GPA_CACHE_MS) return hit.promise;
+  const promise = withRateLimitRetry(() => safeAllAccountsUncached(ns, extraFilters));
+  gpaCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => gpaCache.delete(key)); // never cache a failure
+  return promise;
+}
+// Call after a transaction that creates/changes pools or positions, so the
+// next list reflects it immediately instead of waiting out the cache.
+function invalidateAccountLists() { gpaCache.clear(); }
+async function safeAllAccountsUncached(ns, extraFilters = []) {
   const client = state.program.account[ns];
   // Anchor 0.31 keeps the IDL entry on `_idlAccount` (no public getter).
   const name = client && ((client._idlAccount && client._idlAccount.name) || (client.idlAccount && client.idlAccount.name));
@@ -14178,6 +14212,7 @@ async function refreshPoolList() {
 }
 
 document.getElementById("refresh-pools-btn").addEventListener("click", () => {
+  try { invalidateAccountLists(); } catch {}
   if (!state.program) {
     logErr(t("panelPoolListTitle"), new Error(t("errNotReady")));
     return;
