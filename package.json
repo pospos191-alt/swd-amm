@@ -5,7 +5,7 @@
   "scripts": {
     "test": "node scripts/gen-pyth-fixtures.js && anchor test",
     "pretest:pyth-fixtures": "node scripts/gen-pyth-fixtures.js",
-    "governance": "ts-node scripts/governance.ts",
+    "governance": "ts-node --transpile-only scripts/governance.ts",
     "localnet": "rm -rf .anchor/test-ledger && node scripts/gen-pyth-fixtures.js --publish-ahead-hours 24 && anchor localnet"
   },
   "devDependencies": {

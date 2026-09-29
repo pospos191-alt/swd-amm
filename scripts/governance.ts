@@ -159,7 +159,7 @@ async function main() {
 
   switch (command) {
     case "status": {
-      const config = await program.account.globalConfig.fetch(configPda);
+      const config = await (program.account as any).globalConfig.fetch(configPda);
       console.log("GlobalConfig:");
       console.log(`  governance_authority: ${(config.governanceAuthority as PublicKey).toBase58()}`);
       console.log(`  emergency_authority:  ${(config.emergencyAuthority as PublicKey).toBase58()}`);
@@ -189,7 +189,7 @@ async function main() {
     case "set-authorities": {
       const newGovernanceAuthority = parsePubkey(rest[0], "newGovernanceAuthority");
       const newEmergencyAuthority = parsePubkey(rest[1], "newEmergencyAuthority");
-      const config = await program.account.globalConfig.fetch(configPda);
+      const config = await (program.account as any).globalConfig.fetch(configPda);
       await confirmOrDryRun(
         () => {
           console.log("Would call set_authorities with:");
