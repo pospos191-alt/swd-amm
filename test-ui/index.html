@@ -1148,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29f</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29g</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -4023,6 +4023,9 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "เว้นว่าง = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "เลือก Pyth feed จริง (Devnet/Mainnet)…",
     lpfNoPool: "คู่นี้ยังไม่มีพูล constant-product — สร้างพูลก่อนแล้วจึงประมาณค่าธรรมเนียมได้",
+    statusGovLoadError: "อ่านข้อมูลไม่สำเร็จ (RPC): {e} — กดรีเฟรชอีกครั้ง",
+    logFaucetWebFallback: "หน้านี้ไม่มี faucet ของเซิร์ฟเวอร์ และ RPC ไม่ยอม airdrop — คัดลอก address {addr} ให้แล้ว เปิด {url} แล้ววางเพื่อขอ SOL",
+    toastFaucetWebFallback: "คัดลอก address แล้ว — เปิด faucet.solana.com แล้ววาง {addr}",
     tbPairNotOnNetwork: "คู่ที่เลือกยังไม่มีบนเครือข่ายนี้ (mint หรือพูลไม่มีอยู่) — เลือกคู่จากรายการด้านบน หรือสร้างพูลก่อน",
     logLegacyAccountsSkipped: "ข้ามบัญชี {kind} {n} บัญชีที่สร้างจากโปรแกรมเวอร์ชันเก่า (โครงสร้างข้อมูลไม่ตรงกับเวอร์ชันปัจจุบันแล้ว)",
     errWalletChainUnsupported: "{wallet} ยังเซ็นธุรกรรมบน {chain} ไม่ได้ (รองรับ: {list}) — ถ้าเป็น MetaMask บน Devnet ให้เปิด Settings → Advanced → Show test networks แล้วเชื่อมกระเป๋าใหม่ ส่วน Localnet ให้ใช้ Phantom หรือ Solflare",
@@ -4995,6 +4998,9 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "Pick a real Pyth feed (Devnet/Mainnet)…",
     lpfNoPool: "No constant-product pool for this pair yet — create one first, then fees can be estimated.",
+    statusGovLoadError: "Couldn't read it (RPC): {e} — press Refresh to try again.",
+    logFaucetWebFallback: "This host has no faucet function and the RPC refused an airdrop — copied {addr}; open {url} and paste it to get SOL.",
+    toastFaucetWebFallback: "Address copied — open faucet.solana.com and paste {addr}",
     tbPairNotOnNetwork: "The selected pair isn't on this network (its mints or pool don't exist here) — pick a pair from the list above, or create a pool first.",
     logLegacyAccountsSkipped: "Skipped {n} {kind} account(s) created by an older program version (their layout no longer matches).",
     errWalletChainUnsupported: "{wallet} can't sign for {chain} (it offers: {list}). For MetaMask on Devnet, turn on Settings → Advanced → Show test networks and reconnect; for Localnet, use Phantom or Solflare.",
@@ -11558,7 +11564,9 @@ function createThrottledConnection(conn, opts) {
   // itself. Such calls are retried with backoff, and the whole gate slows
   // down (1 request at a time, 700ms apart) for 30s after any 429.
   let slowUntil = 0;
-  const isRateLimited = (e) => /\b429\b|Too many requests|rate limit/i.test(String((e && e.message) || e));
+  // "Failed to fetch": a 429 sent without CORS headers reaches the page as a
+  // bare network error, so treat transient network failures the same way.
+  const isRateLimited = (e) => /\b429\b|Too many requests|rate limit|Failed to fetch|NetworkError|fetch failed|ECONNRESET/i.test(String((e && e.message) || e));
   const curConcurrent = () => (Date.now() < slowUntil ? 1 : maxConcurrent);
   const curSpacing = () => (Date.now() < slowUntil ? Math.max(700, minSpacingMs) : minSpacingMs);
 
@@ -12428,6 +12436,12 @@ document.getElementById("faucet-btn").addEventListener("click", async () => {
       body: JSON.stringify({ address: state.wallet.publicKey.toBase58() }),
     });
     const data = await resp.json().catch(() => ({}));
+    if (resp.status === 404 || resp.status === 405 || resp.status === 501) {
+      // No faucet function on this host (e.g. the local serve.py) — fall
+      // back to the cluster's own airdrop, then to the web faucet.
+      await faucetFallback();
+      return;
+    }
     if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
     log(`✅ ${t("logFaucetOk", { amount: data.amountSol, sig: String(data.signature).slice(0, 20) + "…" })}`, "ok");
     refreshBalance();
@@ -12437,6 +12451,25 @@ document.getElementById("faucet-btn").addEventListener("click", async () => {
     btn.disabled = false;
   }
 });
+
+async function faucetFallback() {
+  const addr = state.wallet.publicKey.toBase58();
+  if (state.network === "devnet" || state.network === "localnet") {
+    try {
+      const sig = await state.connection.requestAirdrop(state.wallet.publicKey, 1_000_000_000);
+      await state.connection.confirmTransaction(sig, "confirmed");
+      log(`✅ ${t("logFaucetOk", { amount: 1, sig: String(sig).slice(0, 20) + "…" })}`, "ok");
+      refreshBalance();
+      return;
+    } catch (e) {
+      console.warn("requestAirdrop fallback failed", e);
+    }
+  }
+  const url = "https://faucet.solana.com";
+  log(t("logFaucetWebFallback", { addr, url: `<a href="${url}" target="_blank" rel="noopener">${url}</a>` }), "info");
+  showToast({ kind: "err", title: t("labelFaucet"), message: t("toastFaucetWebFallback", { addr }) });
+  try { await navigator.clipboard.writeText(addr); } catch {}
+}
 
 // ---------------------------------------------------------------------
 // PDA derivation (must mirror lib.rs's seeds exactly)
@@ -19262,7 +19295,10 @@ async function renderGovStatus() {
       <div class="k">${t("labelPoolCreationPaused")}</div><div class="v">${info.poolCreationPaused ? t("yes") : t("no")}</div>
     `;
   } catch (e) {
-    kv.innerHTML = `<div class="k">${t("labelStatus")}</div><div class="v">${t("statusGovNotInitialized")}</div>`;
+    // Only a missing account means "not initialized"; an RPC failure
+    // (rate limit, network) used to be shown as "not initialized" too.
+    const missing = /does not exist|has no data|Account not found/i.test(String(e && e.message));
+    kv.innerHTML = `<div class="k">${t("labelStatus")}</div><div class="v">${missing ? t("statusGovNotInitialized") : escapeHtmlText(t("statusGovLoadError", { e: String((e && e.message) || e).slice(0, 160) }))}</div>`;
   }
 }
 document.getElementById("gov-refresh-status-btn").addEventListener("click", renderGovStatus);
