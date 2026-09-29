@@ -1148,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29h</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29i</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -15154,7 +15154,17 @@ function binPointsToCandles(points, bucketMs) {
     c.close = p.price;
     c.volumeB += p.volumeB;
   }
-  return Array.from(buckets.values()).sort((a, b) => a.t - b.t);
+  const out = Array.from(buckets.values()).sort((a, b) => a.t - b.t);
+  // Each candle opens where the previous one closed (standard OHLC), so a
+  // candle's colour shows the move since the last period, not only within
+  // its own bucket.
+  for (let i = 1; i < out.length; i++) {
+    const c = out[i];
+    c.open = out[i - 1].close;
+    c.high = Math.max(c.high, c.open);
+    c.low = Math.min(c.low, c.open);
+  }
+  return out;
 }
 
 // Candlestick price chart — same W/H/padding conventions as
@@ -15318,6 +15328,10 @@ function renderTradingBoardTrades(data) {
 // only re-buckets the cached points into new candles rather than refetching.
 // Reads the page's own dark/light theme tokens so the chart always matches
 // whichever theme is active, including after the user flips theme-toggle-btn.
+const MARKET_UP = "#16c784";
+const MARKET_DOWN = "#ea3943";
+const MARKET_UP_VOL = "rgba(22,199,132,0.75)";
+const MARKET_DOWN_VOL = "rgba(234,57,67,0.75)";
 function klineThemeStyles() {
   const cs = getComputedStyle(document.documentElement);
   const v = (name, fallback) => (cs.getPropertyValue(name) || "").trim() || fallback;
@@ -15329,16 +15343,32 @@ function klineThemeStyles() {
   const panel = v("--panel", "#171a21");
   return {
     grid: { horizontal: { color: border }, vertical: { color: border } },
+    // Market colours (2026-09-29): green up / red down for candles AND the
+    // volume bars, the convention traders read at a glance. A candle with
+    // no price change counts as up (green), so flat stablecoin pools don't
+    // render as grey dashes.
     candle: {
       bar: {
-        upColor: accent, downColor: danger, noChangeColor: textDim,
-        upBorderColor: accent, downBorderColor: danger, noChangeBorderColor: textDim,
-        upWickColor: accent, downWickColor: danger, noChangeWickColor: textDim,
+        upColor: MARKET_UP, downColor: MARKET_DOWN, noChangeColor: MARKET_UP,
+        upBorderColor: MARKET_UP, downBorderColor: MARKET_DOWN, noChangeBorderColor: MARKET_UP,
+        upWickColor: MARKET_UP, downWickColor: MARKET_DOWN, noChangeWickColor: MARKET_UP,
       },
-      priceMark: { last: { show: true, line: { show: true, color: accent } } },
+      priceMark: {
+        last: {
+          show: true,
+          upColor: MARKET_UP, downColor: MARKET_DOWN, noChangeColor: MARKET_UP,
+          line: { show: true },
+        },
+      },
       tooltip: { text: { color: text } },
     },
-    indicator: { tooltip: { text: { color: text } } },
+    indicator: {
+      bars: [{
+        style: "fill", borderStyle: "solid", borderSize: 1, borderDashedValue: [2, 2],
+        upColor: MARKET_UP_VOL, downColor: MARKET_DOWN_VOL, noChangeColor: MARKET_UP_VOL,
+      }],
+      tooltip: { text: { color: text } },
+    },
     xAxis: { axisLine: { color: border }, tickLine: { color: border }, tickText: { color: textDim } },
     yAxis: { axisLine: { color: border }, tickLine: { color: border }, tickText: { color: textDim } },
     separator: { color: border },
