@@ -1,0 +1,6 @@
+# Not part of the deployed site (local dev server + CI-only page tests)
+serve.py
+tests/
+index-1.html
+index-2.html
+_scratch_*
