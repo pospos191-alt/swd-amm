@@ -303,7 +303,10 @@ jobs:
       - name: Deploy / upgrade on Devnet
         run: |
           anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/devnet-deployer.json
-          solana program show "$(solana-keygen pubkey target/deploy/swd_amm-keypair.json)" --url devnet
+          # `solana program show` still loads a default signer, and this runner
+          # has no ~/.config/solana/id.json, so point it at the deployer key.
+          solana program show "$(solana-keygen pubkey target/deploy/swd_amm-keypair.json)" --url devnet \
+            --keypair ~/.config/solana/devnet-deployer.json
 
       - name: Remove key files
         if: always()
