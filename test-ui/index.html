@@ -522,6 +522,7 @@
   .ach-card.locked { opacity: 0.45; filter: grayscale(1); }
   /* Portfolio side cards (2026-09-25n): long lists scroll inside the card
      (mouse wheel / touch), so one long list no longer stretches the whole row. */
+  .pyth-preset-select { margin-top: 6px; width: 100%; font-size: 13.5px; padding: 6px 10px; }
   .scroll-card { max-height: 300px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--panel-border) transparent; padding-right: 4px; margin-right: -4px; }
   .scroll-card::-webkit-scrollbar { width: 6px; height: 6px; }
   .scroll-card::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 999px; }
@@ -1147,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-25r</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29a</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -1482,8 +1483,8 @@
             <details class="manual-mint-details" style="margin-top:8px;">
               <summary data-i18n="summaryOracleGuard">Oracle guard (Pyth) — required</summary>
               <div class="row" style="margin-top:8px;">
-                <div class="field"><label data-i18n="labelPythFeedA">Pyth feed id — Base (hex, 64 chars)</label><input id="cpw-pyth-feed-a" data-i18n-placeholder="oracleFeedIdPlaceholder" placeholder="leave blank to use Localnet test fixtures" /></div>
-                <div class="field"><label data-i18n="labelPythFeedB">Pyth feed id — Quote (hex, 64 chars)</label><input id="cpw-pyth-feed-b" data-i18n-placeholder="oracleFeedIdPlaceholder" placeholder="leave blank to use Localnet test fixtures" /></div>
+                <div class="field"><label data-i18n="labelPythFeedA">Pyth feed id — Base (hex, 64 chars)</label><input id="cpw-pyth-feed-a" data-i18n-placeholder="oracleFeedIdPlaceholder" placeholder="blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD" /></div>
+                <div class="field"><label data-i18n="labelPythFeedB">Pyth feed id — Quote (hex, 64 chars)</label><input id="cpw-pyth-feed-b" data-i18n-placeholder="oracleFeedIdPlaceholder" placeholder="blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD" /></div>
               </div>
               <div class="row">
                 <div class="field" style="max-width:200px;"><label data-i18n="labelOracleStaleness">Max staleness (secs)</label><input id="cpw-oracle-staleness" value="300" /></div>
@@ -1524,8 +1525,8 @@
             <details class="manual-mint-details" style="margin-top:8px;">
               <summary data-i18n="summaryOracleGuard">Oracle guard (Pyth) — required</summary>
               <div class="row" style="margin-top:8px;">
-                <div class="field"><label data-i18n="labelPythFeedA">Pyth feed id — Base (hex, 64 chars)</label><input id="dcw-pyth-feed-a" data-i18n-placeholder="oracleFeedIdPlaceholder" placeholder="leave blank to use Localnet test fixtures" /></div>
-                <div class="field"><label data-i18n="labelPythFeedB">Pyth feed id — Quote (hex, 64 chars)</label><input id="dcw-pyth-feed-b" data-i18n-placeholder="oracleFeedIdPlaceholder" placeholder="leave blank to use Localnet test fixtures" /></div>
+                <div class="field"><label data-i18n="labelPythFeedA">Pyth feed id — Base (hex, 64 chars)</label><input id="dcw-pyth-feed-a" data-i18n-placeholder="oracleFeedIdPlaceholder" placeholder="blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD" /></div>
+                <div class="field"><label data-i18n="labelPythFeedB">Pyth feed id — Quote (hex, 64 chars)</label><input id="dcw-pyth-feed-b" data-i18n-placeholder="oracleFeedIdPlaceholder" placeholder="blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD" /></div>
               </div>
               <div class="row">
                 <div class="field" style="max-width:200px;"><label data-i18n="labelOracleStaleness">Max staleness (secs)</label><input id="dcw-oracle-staleness" value="300" /></div>
@@ -4019,7 +4020,9 @@ const STRINGS = {
     labelOracleDeviation: "ส่วนเบี่ยงเบนสูงสุด (bps)",
     labelMaxFeeBps: "ค่าธรรมเนียมสูงสุด (bps)",
     btnUseLocalnetFixtures: "ใช้ Localnet test fixtures",
-    oracleFeedIdPlaceholder: "เว้นว่างไว้เพื่อใช้ Localnet test fixtures",
+    oracleFeedIdPlaceholder: "เว้นว่าง = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
+    pythPresetPlaceholder: "เลือก Pyth feed จริง (Devnet/Mainnet)…",
+    logDevnetDefaultFeeds: "ไม่ได้อยู่บน Localnet — ใช้ Pyth USDC/USD + USDT/USD จริงเป็น oracle ของพูลนี้ (ราคาใกล้ 1:1 จึงเหมาะกับการฝากสองฝั่งเท่ากัน)",
     errOracleFeedIdFormat: "กรอก Pyth feed id เป็น hex 64 ตัวอักษร (จะมีหรือไม่มี 0x นำหน้าก็ได้)",
     errOracleFeedUnregistered: "ยังไม่มีบัญชี price_update ที่ลงทะเบียนไว้สำหรับ feed {feed}… — ใช้ \"Use Localnet test fixtures\" หรือลงทะเบียนเองก่อนใน Dev Tools",
     logLocalnetFixturesFilled: "กรอกและลงทะเบียน Localnet Pyth test fixtures แล้ว (ราคา 1:1 — ฝากทั้งสองฝั่งเท่ากัน ไม่งั้นการ swap จะติดตัวกันราคาเบี่ยงเกิน 5%)",
@@ -4985,7 +4988,9 @@ const STRINGS = {
     labelOracleDeviation: "Max deviation (bps)",
     labelMaxFeeBps: "Max fee (bps)",
     btnUseLocalnetFixtures: "Use Localnet test fixtures",
-    oracleFeedIdPlaceholder: "leave blank to use Localnet test fixtures",
+    oracleFeedIdPlaceholder: "blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
+    pythPresetPlaceholder: "Pick a real Pyth feed (Devnet/Mainnet)…",
+    logDevnetDefaultFeeds: "Not on Localnet — using the real Pyth USDC/USD + USDT/USD feeds as this pool's oracle (priced ~1:1, so equal deposits on both sides fit the guard).",
     errOracleFeedIdFormat: "Enter a 64-character hex Pyth feed id (with or without a leading 0x).",
     errOracleFeedUnregistered: "No price_update account registered for feed {feed}… — use \"Use Localnet test fixtures\" or register one in Dev Tools first.",
     logLocalnetFixturesFilled: "Localnet Pyth test fixtures filled in and registered (priced 1:1 — deposit equal amounts on both sides, or swaps will trip the 5% oracle-deviation guard).",
@@ -12558,6 +12563,48 @@ function hexToFeedIdArray(hex) {
   return out;
 }
 
+// Pyth push-oracle ("sponsored") feeds (added 2026-09-29, for Devnet). Their
+// price account is a fixed PDA of the feed id — seeds [shard_id u16 LE,
+// feed_id] under Pyth's Push Oracle program — so any real feed can be
+// resolved without a manual registry entry. Checked live on Devnet with
+// scripts/check-pyth-feeds.mjs (all five: Full verification, updated within
+// minutes). Localnet has none of these accounts; it keeps using fixtures.
+const PYTH_PUSH_ORACLE_PROGRAM_ID = "pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT";
+const PYTH_SPONSORED_FEEDS = [
+  { label: "SOL/USD", hex: "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d" },
+  { label: "USDC/USD", hex: "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a" },
+  { label: "USDT/USD", hex: "2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b" },
+  { label: "BTC/USD", hex: "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43" },
+  { label: "ETH/USD", hex: "ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace" },
+];
+// Quick Setup / blank-field default off Localnet: two ~$1 stablecoins, so
+// the 1:1 pools Quick Setup creates (equal 6dp deposits, DLMM bin 0) sit
+// within the 5% guard and stay there — no arbitrageurs on Devnet to pull a
+// volatile pair (e.g. SOL/USDC) back once its real price moves.
+const DEVNET_DEFAULT_FEED_A_HEX = "eaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a"; // USDC/USD
+const DEVNET_DEFAULT_FEED_B_HEX = "2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b"; // USDT/USD
+// Sponsored feeds on Devnet refresh every few minutes, so the real-feed
+// default of 300s would make swaps fail between updates; use the
+// program's ceiling (oracle.rs MAX_ORACLE_STALENESS_SECS).
+const REAL_FEED_MAX_STALENESS_SECS = 3600;
+
+function pythPushFeedAccount(feedIdHex) {
+  return PublicKey.findProgramAddressSync(
+    [new Uint8Array(2), Uint8Array.from(hexToFeedIdArray(feedIdHex))],
+    new PublicKey(PYTH_PUSH_ORACLE_PROGRAM_ID),
+  )[0];
+}
+
+// Registry first (Localnet fixtures, or anything the user registered by
+// hand), then — off Localnet — the feed's push-oracle account.
+function resolvePriceUpdateAddress(feedIdHex) {
+  const hex = feedIdHex.trim().toLowerCase().replace(/^0x/i, "");
+  const reg = loadOracleFeedRegistry();
+  if (reg[hex]) return reg[hex];
+  if (state.network === "localnet") return null;
+  try { return pythPushFeedAccount(hex).toBase58(); } catch { return null; }
+}
+
 function registerOracleFeed(feedIdHex, priceUpdatePubkeyStr) {
   const reg = loadOracleFeedRegistry();
   reg[feedIdHex.trim().toLowerCase().replace(/^0x/i, "")] = priceUpdatePubkeyStr.trim();
@@ -12571,8 +12618,7 @@ function registerOracleFeed(feedIdHex, priceUpdatePubkeyStr) {
 // if nothing is registered yet.
 function lookupPriceUpdateAccount(feedIdBytes) {
   const hex = feedIdBytesToHex(feedIdBytes);
-  const reg = loadOracleFeedRegistry();
-  const addr = reg[hex];
+  const addr = resolvePriceUpdateAddress(hex);
   if (!addr) {
     throw new Error(t("errOracleFeedUnregistered", { feed: hex.slice(0, 8) }));
   }
@@ -12639,12 +12685,11 @@ async function chainNowSecs() {
 
 // entries: [{ poolStr, feedA, feedB, maxDevBps, maxStaleSecs, poolRawPrice (null = no liquidity), decA, decB }]
 async function computeOracleHealth(entries) {
-  const reg = loadOracleFeedRegistry();
   const pending = [];
   const keys = new Map();
   for (const e of entries) {
     const hexA = feedIdBytesToHex(e.feedA), hexB = feedIdBytesToHex(e.feedB);
-    const addrA = reg[hexA], addrB = reg[hexB];
+    const addrA = resolvePriceUpdateAddress(hexA), addrB = resolvePriceUpdateAddress(hexB);
     if (!addrA || !addrB) {
       poolOracleHealth.set(e.poolStr, { status: "unregistered", at: Date.now() });
       continue;
@@ -12814,6 +12859,19 @@ function fillLocalnetFixtureOracleFields(prefix) {
 // LOCALNET_FIXTURE_ORACLE's own comment). Not meaningful against a real
 // Devnet RPC — same caveat as everywhere else this fixture is used.
 function defaultLocalnetOracleGuardArgs(feeBps) {
+  if (state.network !== "localnet") {
+    // Localnet fixtures don't exist here — use real Pyth USDC/USD + USDT/USD
+    // (see DEVNET_DEFAULT_FEED_A_HEX). Their price accounts resolve
+    // automatically (resolvePriceUpdateAddress), nothing to register.
+    log(t("logDevnetDefaultFeeds"), "info");
+    return {
+      pythFeedIdA: hexToFeedIdArray(DEVNET_DEFAULT_FEED_A_HEX),
+      pythFeedIdB: hexToFeedIdArray(DEVNET_DEFAULT_FEED_B_HEX),
+      oracleMaxStalenessSecs: REAL_FEED_MAX_STALENESS_SECS,
+      oracleMaxDeviationBps: 500,
+      maxFeeBps: Math.min(1000, Math.max(feeBps * 2, 100)),
+    };
+  }
   registerOracleFeed(LOCALNET_FIXTURE_ORACLE.feedIdAHex, LOCALNET_FIXTURE_ORACLE.priceUpdateA);
   registerOracleFeed(LOCALNET_FIXTURE_ORACLE.feedIdBHex, LOCALNET_FIXTURE_ORACLE.priceUpdateB);
   return {
@@ -15477,6 +15535,41 @@ function iselOpenFor(sel) {
 }
 
 setTimeout(enhanceIconSelects, 0);
+// Pyth feed presets (2026-09-29): a picker under each wizard feed-id field.
+// Picking one fills the hex id; off Localnet it also raises the staleness
+// bound to REAL_FEED_MAX_STALENESS_SECS (see there for why).
+(function wirePythFeedPresets() {
+  ["cpw", "dcw"].forEach((prefix) => {
+    ["a", "b"].forEach((side) => {
+      const input = document.getElementById(`${prefix}-pyth-feed-${side}`);
+      if (!input || input.dataset.presetWired) return;
+      input.dataset.presetWired = "1";
+      const sel = document.createElement("select");
+      sel.className = "pyth-preset-select";
+      sel.setAttribute("aria-label", t("pythPresetPlaceholder"));
+      const render = () => {
+        sel.innerHTML = `<option value="">${escapeHtmlText(t("pythPresetPlaceholder"))}</option>` +
+          PYTH_SPONSORED_FEEDS.map((f) => `<option value="${f.hex}">Pyth ${f.label}</option>`).join("");
+        const cur = input.value.trim().toLowerCase().replace(/^0x/, "");
+        sel.value = PYTH_SPONSORED_FEEDS.some((f) => f.hex === cur) ? cur : "";
+      };
+      render();
+      sel.addEventListener("change", () => {
+        if (!sel.value) return;
+        input.value = sel.value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        if (state.network !== "localnet") {
+          const st = document.getElementById(`${prefix}-oracle-staleness`);
+          if (st && Number(st.value) < REAL_FEED_MAX_STALENESS_SECS) st.value = String(REAL_FEED_MAX_STALENESS_SECS);
+        }
+      });
+      input.addEventListener("input", () => { if (document.activeElement === input) render(); });
+      document.getElementById("lang-select")?.addEventListener("change", () => setTimeout(render, 0));
+      input.insertAdjacentElement("afterend", sel);
+    });
+  });
+})();
+
 // Portfolio side cards (2026-09-25n) — the list inside each card scrolls
 // on its own; a soft fade at the bottom shows there's more below.
 (function wireScrollCards() {
