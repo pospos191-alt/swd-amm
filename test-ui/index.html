@@ -969,7 +969,25 @@
   .tf-btn-group { display: inline-flex; gap: 4px; }
   #tb-chart-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
   #tb-chart-toolbar select { min-width: 150px; }
-  #tb-chart-container { width: 100%; height: 420px; }
+  #tb-chart-container { width: 100%; height: var(--tb-chart-h, 460px); }
+  .tb-ind-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 8px; min-height: 30px; position: relative; }
+  .tb-ind-chips-label { font-size: 12.5px; color: var(--text-dim); margin-right: 2px; }
+  .tb-ind-empty { font-size: 12.5px; color: var(--text-dim); }
+  .tb-ind-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 10px; border: 1px solid var(--panel-border); border-radius: 999px; background: var(--panel-alt); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .tb-ind-chip.flash { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .tb-ind-chip-name { font-weight: 700; }
+  .tb-ind-chip-params { color: var(--text-dim); }
+  .tb-ind-chip-where { font-size: 11px; color: var(--text-dim); border-left: 1px solid var(--panel-border); padding-left: 6px; margin-left: 4px; }
+  .tb-ind-chip button { width: 24px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 999px; background: transparent; color: var(--text-dim); cursor: pointer; }
+  .tb-ind-chip button:hover, .tb-ind-chip button:focus-visible { background: var(--panel-border); color: var(--text); }
+  .tb-ind-chip button.tb-ind-remove:hover { color: var(--danger); }
+  .tb-ind-chip button .icon { width: 14px; height: 14px; }
+  .tb-ind-editor { position: absolute; z-index: 30; top: 100%; margin-top: 4px; background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius-sm); box-shadow: 0 10px 30px rgba(0,0,0,0.35); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-width: 220px; }
+  .tb-ind-editor-title { font-weight: 700; font-size: 13px; }
+  .tb-ind-editor-fields { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tb-ind-editor-fields input { width: 64px; padding: 4px 6px; font-variant-numeric: tabular-nums; }
+  .tb-ind-editor-actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .tb-ind-editor-actions button { padding: 4px 12px; height: auto; font-size: 13px; }
 
   /* Trading Board toolbar redesign: a cohesive pill-style bar (icon
      buttons + dividers) above the chart, plus a left icon rail for the
@@ -1148,7 +1166,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29i</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29j</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -2823,11 +2841,13 @@
   <div id="tb-chart-toolbar" class="chart-toolbar-bar">
     <select id="tb-indicator-select">
       <option value="" data-i18n="tbAddIndicator">+ Add indicator</option>
+      <option value="" disabled data-i18n="tbIndGroupMain">— On the price chart —</option>
       <option value="MA">MA</option>
       <option value="EMA">EMA</option>
       <option value="BOLL">BOLL</option>
       <option value="SAR">SAR</option>
       <option value="BBI">BBI</option>
+      <option value="" disabled data-i18n="tbIndGroupSub">— Panels below the chart —</option>
       <option value="VOL">VOL</option>
       <option value="MACD">MACD</option>
       <option value="KDJ">KDJ</option>
@@ -2864,10 +2884,15 @@
       <option value="circle">Circle</option>
       <option value="triangle">Triangle</option>
     </select>
+    <button type="button" class="secondary btn-icon-text" id="tb-delete-overlay-btn" data-icon="trash" data-tip="tbDrawHint" disabled><span data-i18n="tbDeleteDrawing">Delete selected</span></button>
     <button type="button" class="secondary btn-icon-text" id="tb-clear-overlays-btn" data-icon="x" data-tip="tbClearDrawings"><span data-i18n="tbClearDrawings">Clear drawings</span></button>
     <div class="toolbar-divider" aria-hidden="true"></div>
     <button type="button" class="icon-btn" id="tb-fullscreen-btn" data-icon="expand" data-tip="tbFullscreenChart" aria-label="Fullscreen chart" aria-pressed="false"></button>
   </div>
+  <!-- Active indicators (build 2026-09-29j): one chip per indicator with
+       settings (periods) and remove, like the legend controls on common
+       trading sites. Rendered by tbRefreshIndicatorUi(). -->
+  <div id="tb-indicator-chips" class="tb-ind-chips" aria-live="polite"></div>
   <div class="chart-body-row">
     <aside class="draw-tool-rail" role="group" aria-label="Quick drawing tools">
       <button type="button" class="icon-btn draw-tool-btn" data-overlay-value="segment" data-icon="lineDiagonal" data-tip="drawToolTrendLine" aria-label="Trend line"></button>
@@ -3796,6 +3821,20 @@ const STRINGS = {
     tbAddDrawing: "+ เครื่องมือวาดกราฟ",
     tbClearIndicators: "ล้างอินดิเคเตอร์",
     tbClearDrawings: "ล้างเส้นที่วาด",
+    tbIndGroupMain: "— บนกราฟราคา —",
+    tbIndGroupSub: "— หน้าต่างใต้กราฟ —",
+    tbIndChipsLabel: "อินดิเคเตอร์:",
+    tbIndNone: "ยังไม่มีอินดิเคเตอร์ — เลือกเพิ่มจาก \"+ เพิ่มอินดิเคเตอร์\"",
+    tbIndOnPrice: "บนราคา",
+    tbIndBelow: "ใต้กราฟ",
+    tbIndRemove: "ลบ {name}",
+    tbIndSettings: "ตั้งค่า {name}",
+    tbIndParams: "ค่าพารามิเตอร์ของ {name}",
+    tbIndApply: "ใช้ค่านี้",
+    tbIndDefault: "ค่าเริ่มต้น",
+    tbIndCancel: "ยกเลิก",
+    tbDeleteDrawing: "ลบเส้นที่เลือก",
+    tbDrawHint: "คลิกเส้นที่วาดเพื่อเลือก แล้วกด Delete หรือปุ่มนี้",
     statPrice: "ราคา",
     statLiquidity: "สภาพคล่อง",
     statChange: "เปลี่ยนแปลง",
@@ -4772,6 +4811,20 @@ const STRINGS = {
     tbAddDrawing: "+ Drawing tool",
     tbClearIndicators: "Clear indicators",
     tbClearDrawings: "Clear drawings",
+    tbIndGroupMain: "— On the price chart —",
+    tbIndGroupSub: "— Panels below the chart —",
+    tbIndChipsLabel: "Indicators:",
+    tbIndNone: "No indicators — add one from \"+ Add indicator\"",
+    tbIndOnPrice: "on price",
+    tbIndBelow: "below",
+    tbIndRemove: "Remove {name}",
+    tbIndSettings: "{name} settings",
+    tbIndParams: "{name} parameters",
+    tbIndApply: "Apply",
+    tbIndDefault: "Default",
+    tbIndCancel: "Cancel",
+    tbDeleteDrawing: "Delete selected",
+    tbDrawHint: "Click a drawing to select it, then press Delete or this button",
     statPrice: "Price",
     statLiquidity: "Liquidity",
     statChange: "Change",
@@ -10623,6 +10676,8 @@ const ICON_PATHS = {
   receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/>',
   search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
   x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
   lineDiagonal: '<line x1="4" y1="20" x2="20" y2="4"/>',
   lineHorizontal: '<line x1="3" y1="12" x2="21" y2="12"/>',
   rectangleTool: '<rect x="4" y="6" width="16" height="12" rx="1"/>',
@@ -10778,6 +10833,7 @@ function applyLang(lang) {
   // that first call is a no-op we can safely skip.
   try { renderQuickPoolPickers(); } catch {}
   try { renderIlReferenceTable(lastIlHighlightRatio); } catch {}
+  try { tbRefreshIndicatorUi(); } catch {}
   const sel = document.getElementById("lang-select");
   if (sel && sel.value !== lang) sel.value = lang;
   try { localStorage.setItem("swd-amm-lang", lang); } catch {}
@@ -14151,13 +14207,15 @@ renderQuickPoolPickers();
 // decoded on its own and the ones that don't fit the current layout are
 // skipped (and reported once).
 // ---------------------------------------------------------------------
-var legacyAccountsReported = new Set(); // var: hoisted, no TDZ if a list runs during startup
+var legacyAccountsReported = legacyAccountsReported || new Set(); // var + lazy: a list can run during startup, before this line
 // getProgramAccounts is the call public RPCs (api.devnet.solana.com)
 // rate-limit hardest — HTTP 429 "Too many requests for a specific RPC
 // call" — and several panels list the same accounts at once. So identical
 // queries share one in-flight request and a short-lived result, and a 429
 // is retried with backoff instead of failing the panel.
-var gpaCache = new Map(); // key -> { at, promise }
+// `var` + lazy init: initReadOnlyProgram() lists pools during module
+// evaluation, before this line runs (it threw "reading 'get'" at startup).
+var gpaCache = gpaCache || new Map(); // key -> { at, promise }
 var GPA_CACHE_MS = 15000;
 function isRateLimitError(e) {
   return /\b429\b|Too many requests/i.test(String((e && e.message) || e));
@@ -14175,8 +14233,9 @@ async function withRateLimitRetry(fn) {
 }
 async function safeAllAccounts(ns, extraFilters = []) {
   const key = `${state.network}|${state.customRpc || ""}|${ns}|${JSON.stringify(extraFilters)}`;
+  if (!gpaCache) gpaCache = new Map();
   const hit = gpaCache.get(key);
-  if (hit && Date.now() - hit.at < GPA_CACHE_MS) return hit.promise;
+  if (hit && Date.now() - hit.at < (GPA_CACHE_MS || 15000)) return hit.promise;
   const promise = withRateLimitRetry(() => safeAllAccountsUncached(ns, extraFilters));
   gpaCache.set(key, { at: Date.now(), promise });
   promise.catch(() => gpaCache.delete(key)); // never cache a failure
@@ -14184,7 +14243,7 @@ async function safeAllAccounts(ns, extraFilters = []) {
 }
 // Call after a transaction that creates/changes pools or positions, so the
 // next list reflects it immediately instead of waiting out the cache.
-function invalidateAccountLists() { gpaCache.clear(); }
+function invalidateAccountLists() { if (gpaCache) gpaCache.clear(); }
 async function safeAllAccountsUncached(ns, extraFilters = []) {
   const client = state.program.account[ns];
   // Anchor 0.31 keeps the IDL entry on `_idlAccount` (no public getter).
@@ -14207,6 +14266,7 @@ async function safeAllAccountsUncached(ns, extraFilters = []) {
     }
   }
   const key = `${state.network}|${ns}|${skipped}`;
+  if (!legacyAccountsReported) legacyAccountsReported = new Set();
   if (skipped && !legacyAccountsReported.has(key)) {
     legacyAccountsReported.add(key);
     log(t("logLegacyAccountsSkipped", { n: skipped, kind: name }), "info");
@@ -15139,7 +15199,7 @@ async function fetchPoolReserves(type, poolPk) {
 // Buckets trade points into OHLC candles for the candlestick chart. Each
 // point already carries a price (see fetchPoolTradeHistory above); volumeB
 // rolls up per-bucket the same way the bar chart already summed it.
-function binPointsToCandles(points, bucketMs) {
+function binPointsToCandles(points, bucketMs, opts = {}) {
   if (points.length === 0) return [];
   const buckets = new Map();
   for (const p of points) {
@@ -15164,7 +15224,39 @@ function binPointsToCandles(points, bucketMs) {
     c.high = Math.max(c.high, c.open);
     c.low = Math.min(c.low, c.open);
   }
-  return out;
+  if (!opts.fillGaps || out.length === 0) return out;
+  // Continuous series (build 2026-09-29j): an AMM's price only moves when
+  // someone trades, so every empty period between trades is a flat candle
+  // at the previous close with 0 volume, and the series runs on to the
+  // current period (opts.untilMs). This is what trading sites show, and it
+  // keeps MA/EMA/BOLL lines unbroken and on a real time axis. Capped at
+  // opts.maxCandles (latest periods kept).
+  const maxCandles = opts.maxCandles || 1500;
+  const lastT = out[out.length - 1].t;
+  const endT = opts.untilMs ? Math.max(lastT, Math.floor(opts.untilMs / bucketMs) * bucketMs) : lastT;
+  const startT = Math.max(out[0].t, endT - (maxCandles - 1) * bucketMs);
+  const filled = [];
+  let j = 0;
+  let prev = null;
+  while (j < out.length && out[j].t < startT) { prev = out[j]; j++; }
+  for (let tt = startT; tt <= endT; tt += bucketMs) {
+    if (j < out.length && out[j].t === tt) {
+      const c = { ...out[j] };
+      if (prev) {
+        c.open = prev.close;
+        c.high = Math.max(c.high, c.open);
+        c.low = Math.min(c.low, c.open);
+      }
+      filled.push(c);
+      prev = c;
+      j++;
+    } else if (prev) {
+      const f = { t: tt, open: prev.close, high: prev.close, low: prev.close, close: prev.close, volumeB: 0 };
+      filled.push(f);
+      prev = f;
+    }
+  }
+  return filled;
 }
 
 // Candlestick price chart — same W/H/padding conventions as
@@ -15381,7 +15473,224 @@ function klineThemeStyles() {
 
 let tbChart = null;
 let tbChartLibFailed = false;
-let tbAddedIndicators = []; // [{ name, paneId }] — so "Clear indicators" can remove exactly what was added
+// Indicators (build 2026-09-29j), set up the way common trading sites do:
+// MA/EMA/BOLL/SAR/BBI draw ON the candles (candle_pane), everything else
+// gets its own panel below; each one is listed as a chip with settings and
+// remove; the chosen set and periods are remembered in this browser.
+// `var` so these exist even if ensureTbChart() runs before this line.
+var TB_MAIN_INDICATORS = ["MA", "EMA", "BOLL", "SAR", "BBI"];
+var TB_INDICATOR_DEFAULT_PARAMS = { MA: [7, 25, 99], EMA: [7, 25, 99] };
+var TB_DEFAULT_INDICATORS = [{ name: "MA" }, { name: "VOL" }];
+var TB_INDICATORS_KEY = "swd-amm-tb-indicators";
+var TB_CANDLE_PANE = "candle_pane";
+var tbIndicators = []; // [{ name, paneId, calcParams }]
+var tbSelectedOverlayId = null;
+var tbLastCandleT = null;
+var tbPrecision = null; // { price, volume } last applied (see tbPrecisionFor)
+
+function tbIsMainIndicator(name) { return TB_MAIN_INDICATORS.includes(name); }
+
+// Axis/tooltip decimals from the data itself (KLineChart defaults to 2 for
+// price and 0 for volume, which showed a 0.32 volume as "0" and turned a
+// 0.99–1.02 range into repeated "1.00" labels).
+function tbPrecisionFor(candles) {
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  if (!candles.length) return { price: 4, volume: 4 };
+  let lo = Infinity, hi = -Infinity, maxVol = 0;
+  for (const c of candles) {
+    lo = Math.min(lo, c.low); hi = Math.max(hi, c.high);
+    maxVol = Math.max(maxVol, c.volumeB || 0);
+  }
+  const last = Math.abs(candles[candles.length - 1].close) || 1;
+  const step = hi > lo ? (hi - lo) / 10 : last * 1e-4;
+  const price = clamp(Math.ceil(-Math.log10(step)), 2, 10);
+  const volume = maxVol > 0 ? clamp(Math.ceil(-Math.log10(maxVol / 1000)), 0, 8) : 2;
+  return { price, volume };
+}
+
+function tbLoadSavedIndicators() {
+  try {
+    const v = JSON.parse(localStorage.getItem(TB_INDICATORS_KEY) || "null");
+    if (Array.isArray(v)) return v.filter((x) => x && typeof x.name === "string");
+  } catch {}
+  return null;
+}
+
+function tbSaveIndicators() {
+  try {
+    localStorage.setItem(TB_INDICATORS_KEY, JSON.stringify(tbIndicators.map(({ name, calcParams }) => ({ name, calcParams }))));
+  } catch {}
+}
+
+function tbIndicatorParams(rec) {
+  try {
+    const ind = tbChart && tbChart.getIndicatorByPaneId(rec.paneId, rec.name);
+    if (ind && Array.isArray(ind.calcParams)) return ind.calcParams;
+  } catch {}
+  return rec.calcParams || [];
+}
+
+// Sub-panels stack under the candles, so the chart grows with them rather
+// than squashing the price panel.
+function tbFitChartHeight() {
+  const el = document.getElementById("tb-chart-container");
+  if (!el) return;
+  const subs = tbIndicators.filter((r) => !tbIsMainIndicator(r.name)).length;
+  el.style.setProperty("--tb-chart-h", `${Math.min(900, 360 + subs * 100)}px`);
+  if (tbChart) { try { tbChart.resize(); } catch {} }
+}
+
+function tbAddIndicator(name, calcParams, opts = {}) {
+  const chart = ensureTbChart();
+  if (!chart || !name) return false;
+  if (tbIndicators.some((r) => r.name === name)) {
+    if (!opts.silent) tbFlashChip(name);
+    return false;
+  }
+  const params = Array.isArray(calcParams) && calcParams.length ? calcParams : (TB_INDICATOR_DEFAULT_PARAMS[name] || null);
+  const create = params ? { name, calcParams: params } : name;
+  let paneId = null;
+  try {
+    paneId = tbIsMainIndicator(name)
+      ? chart.createIndicator(create, true, { id: TB_CANDLE_PANE })
+      : chart.createIndicator(create, false, { height: 100, minHeight: 60 });
+  } catch (err) {
+    console.error("createIndicator failed:", name, err);
+    return false;
+  }
+  if (!paneId) return false;
+  // A new indicator starts at the library's default 2 decimals, which
+  // stretches the price axis of a ~1.00 pair to ±5%; re-apply the pair's
+  // precision (tbFitChartHeight's resize below then rebuilds the axis).
+  if (tbPrecision) { try { chart.setPriceVolumePrecision(tbPrecision.price, tbPrecision.volume); } catch {} }
+  tbIndicators.push({ name, paneId, calcParams: params });
+  if (!opts.noSave) tbSaveIndicators();
+  tbRefreshIndicatorUi();
+  tbFitChartHeight();
+  return true;
+}
+
+function tbRemoveIndicator(name) {
+  const i = tbIndicators.findIndex((r) => r.name === name);
+  if (i < 0) return;
+  const { paneId } = tbIndicators[i];
+  // KLineChart 9.x signature is removeIndicator(paneId, name) — the
+  // object form belongs to v10 and silently did nothing here before.
+  try { tbChart && tbChart.removeIndicator(paneId, name); } catch (e) { console.error(e); }
+  tbIndicators.splice(i, 1);
+  tbSaveIndicators();
+  tbCloseIndicatorEditor();
+  tbRefreshIndicatorUi();
+  tbFitChartHeight();
+}
+
+function tbClearIndicators() {
+  for (const r of tbIndicators.slice()) {
+    try { tbChart && tbChart.removeIndicator(r.paneId, r.name); } catch (e) { console.error(e); }
+  }
+  tbIndicators = [];
+  tbSaveIndicators();
+  tbCloseIndicatorEditor();
+  tbRefreshIndicatorUi();
+  tbFitChartHeight();
+}
+
+function tbApplyIndicatorParams(name, calcParams) {
+  const rec = tbIndicators.find((r) => r.name === name);
+  if (!rec || !tbChart) return;
+  try { tbChart.overrideIndicator({ name, calcParams }, rec.paneId); } catch (e) { console.error(e); return; }
+  rec.calcParams = calcParams;
+  tbSaveIndicators();
+  tbRefreshIndicatorUi();
+}
+
+function tbFlashChip(name) {
+  const chip = document.querySelector(`.tb-ind-chip[data-name="${name}"]`);
+  if (!chip) return;
+  chip.classList.add("flash");
+  setTimeout(() => chip.classList.remove("flash"), 900);
+}
+
+function tbCloseIndicatorEditor() {
+  document.querySelectorAll(".tb-ind-editor").forEach((el) => el.remove());
+}
+
+function tbOpenIndicatorEditor(name, chip) {
+  tbCloseIndicatorEditor();
+  const rec = tbIndicators.find((r) => r.name === name);
+  const box = document.getElementById("tb-indicator-chips");
+  if (!rec || !box) return;
+  const params = tbIndicatorParams(rec);
+  const ed = document.createElement("div");
+  ed.className = "tb-ind-editor";
+  ed.setAttribute("role", "dialog");
+  ed.setAttribute("aria-label", t("tbIndParams", { name }));
+  ed.innerHTML = `<div class="tb-ind-editor-title">${escapeHtmlText(t("tbIndParams", { name }))}</div>
+    <div class="tb-ind-editor-fields">${params.map((v, i) => `<input type="number" step="any" min="0" value="${Number(v)}" aria-label="${escapeHtmlText(name)} ${i + 1}">`).join("")}</div>
+    <div class="tb-ind-editor-actions">
+      <button type="button" class="secondary" data-act="default">${escapeHtmlText(t("tbIndDefault"))}</button>
+      <button type="button" class="secondary" data-act="cancel">${escapeHtmlText(t("tbIndCancel"))}</button>
+      <button type="button" data-act="apply">${escapeHtmlText(t("tbIndApply"))}</button>
+    </div>`;
+  ed.style.left = `${Math.max(0, chip.offsetLeft)}px`;
+  box.appendChild(ed);
+  const apply = () => {
+    const vals = Array.from(ed.querySelectorAll("input")).map((x) => Number(x.value));
+    if (vals.some((v) => !Number.isFinite(v) || v <= 0)) {
+      ed.querySelectorAll("input").forEach((x) => { x.style.borderColor = Number(x.value) > 0 ? "" : "var(--danger)"; });
+      return;
+    }
+    tbApplyIndicatorParams(name, vals);
+    tbCloseIndicatorEditor();
+  };
+  ed.addEventListener("click", (e) => {
+    const act = e.target.closest("button")?.dataset.act;
+    if (act === "apply") apply();
+    else if (act === "cancel") tbCloseIndicatorEditor();
+    else if (act === "default") {
+      tbCloseIndicatorEditor();
+      // Re-create with the library/default periods.
+      const defaults = TB_INDICATOR_DEFAULT_PARAMS[name] || null;
+      if (defaults) { tbApplyIndicatorParams(name, defaults); return; }
+      tbRemoveIndicator(name);
+      tbAddIndicator(name, null);
+    }
+  });
+  ed.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); apply(); }
+    else if (e.key === "Escape") { e.stopPropagation(); tbCloseIndicatorEditor(); chip.querySelector(".tb-ind-settings")?.focus(); }
+  });
+  ed.querySelector("input")?.focus();
+}
+
+function tbRefreshIndicatorUi() {
+  const box = document.getElementById("tb-indicator-chips");
+  if (box) {
+    const chips = tbIndicators.map((r) => {
+      const params = tbIndicatorParams(r);
+      const where = tbIsMainIndicator(r.name) ? t("tbIndOnPrice") : t("tbIndBelow");
+      return `<span class="tb-ind-chip" data-name="${escapeHtmlText(r.name)}">` +
+        `<span class="tb-ind-chip-name">${escapeHtmlText(r.name)}</span>` +
+        (params.length ? `<span class="tb-ind-chip-params">(${escapeHtmlText(params.join(", "))})</span>` : "") +
+        `<span class="tb-ind-chip-where">${escapeHtmlText(where)}</span>` +
+        (params.length ? `<button type="button" class="tb-ind-settings" aria-label="${escapeHtmlText(t("tbIndSettings", { name: r.name }))}" title="${escapeHtmlText(t("tbIndSettings", { name: r.name }))}">${iconSvg("sliders")}</button>` : "") +
+        `<button type="button" class="tb-ind-remove" aria-label="${escapeHtmlText(t("tbIndRemove", { name: r.name }))}" title="${escapeHtmlText(t("tbIndRemove", { name: r.name }))}">${iconSvg("x")}</button>` +
+        `</span>`;
+    }).join("");
+    box.innerHTML = `<span class="tb-ind-chips-label">${escapeHtmlText(t("tbIndChipsLabel"))}</span>` +
+      (chips || `<span class="tb-ind-empty">${escapeHtmlText(t("tbIndNone"))}</span>`);
+  }
+  // Tick the indicators already on the chart in the "+ Add indicator" menu.
+  const sel = document.getElementById("tb-indicator-select");
+  if (sel) {
+    const active = new Set(tbIndicators.map((r) => r.name));
+    Array.from(sel.options).forEach((o) => {
+      if (!o.value) return;
+      const want = active.has(o.value) ? `${o.value} ✓` : o.value;
+      if (o.textContent !== want) o.textContent = want;
+    });
+  }
+}
 
 // Creates the KLineChart instance the first time it's needed and leaves it
 // mounted afterwards — called once on page load (below) so the chart, its
@@ -15397,11 +15706,18 @@ function ensureTbChart() {
   }
   try {
     tbChart = klinecharts.init("tb-chart-container", { styles: klineThemeStyles() });
-    tbChart.createIndicator("VOL", false);
   } catch (e) {
     console.error("KLineChart init failed, falling back to the built-in SVG chart:", e);
     tbChartLibFailed = true;
     tbChart = null;
+  }
+  if (tbChart) {
+    const saved = tbLoadSavedIndicators();
+    for (const r of (saved || TB_DEFAULT_INDICATORS)) {
+      if (!tbIndicators.some((x) => x.name === r.name)) tbAddIndicator(r.name, r.calcParams, { silent: true, noSave: true });
+    }
+    tbRefreshIndicatorUi();
+    tbFitChartHeight();
   }
   return tbChart;
 }
@@ -15415,13 +15731,25 @@ function renderTradingBoard() {
   if (!tbLastData) return;
   const { points, pricePoints } = tbLastData;
   renderTradingBoardStats(tbLastData);
-  const candles = binPointsToCandles(pricePoints || points, tbCurrentTf);
+  const candles = binPointsToCandles(pricePoints || points, tbCurrentTf, { fillGaps: true, untilMs: Date.now() });
+  tbLastCandleT = candles.length ? candles[candles.length - 1].t : null;
   const chart = ensureTbChart();
   if (chart) {
+    try {
+      const prec = tbPrecisionFor(candles);
+      tbPrecision = prec;
+      chart.setPriceVolumePrecision(prec.price, prec.volume);
+    } catch (e) { console.error(e); }
     try {
       chart.applyNewData(candles.map((c) => ({
         timestamp: c.t, open: c.open, high: c.high, low: c.low, close: c.close, volume: c.volumeB,
       })));
+      // KLineChart sizes the price axis from the visible range it had at
+      // applyNewData time, which can still be the previous (tiny) range;
+      // one resize after layout settles rebuilds the axis over all bars.
+      const settle = () => { try { chart.resize(); } catch {} };
+      requestAnimationFrame(settle);
+      setTimeout(settle, 250);
     } catch (e) {
       console.error("KLineChart applyNewData failed:", e);
     }
@@ -15852,34 +16180,85 @@ document.getElementById("tb-indicator-select").addEventListener("change", (e) =>
   const name = e.target.value;
   e.target.value = "";
   if (!name) return;
-  const chart = ensureTbChart();
-  if (!chart) return;
-  try {
-    const paneId = chart.createIndicator(name, true);
-    tbAddedIndicators.push({ name, paneId });
-  } catch (err) {
-    console.error("createIndicator failed:", name, err);
-  }
+  tbAddIndicator(name, null);
 });
 document.getElementById("tb-clear-indicators-btn").addEventListener("click", () => {
-  if (!tbChart) return;
-  for (const { name, paneId } of tbAddedIndicators) {
-    try { tbChart.removeIndicator({ paneId, name }); } catch (e) { console.error(e); }
-  }
-  tbAddedIndicators = [];
+  tbClearIndicators();
 });
+document.getElementById("tb-indicator-chips").addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  const chip = e.target.closest(".tb-ind-chip");
+  if (!btn || !chip) return;
+  const name = chip.dataset.name;
+  if (btn.classList.contains("tb-ind-remove")) tbRemoveIndicator(name);
+  else if (btn.classList.contains("tb-ind-settings")) {
+    const open = document.querySelector(".tb-ind-editor");
+    if (open && open.getAttribute("aria-label") === t("tbIndParams", { name })) tbCloseIndicatorEditor();
+    else tbOpenIndicatorEditor(name, chip);
+  }
+});
+document.addEventListener("mousedown", (e) => {
+  if (!e.target.closest(".tb-ind-editor") && !e.target.closest(".tb-ind-settings")) tbCloseIndicatorEditor();
+});
+
+// Drawings: click one to select it, then Delete/Backspace or the
+// "Delete selected" button removes it; "Clear drawings" removes them all.
+function tbSetSelectedOverlay(id) {
+  tbSelectedOverlayId = id || null;
+  const btn = document.getElementById("tb-delete-overlay-btn");
+  if (btn) btn.disabled = !tbSelectedOverlayId;
+}
+function tbDeleteSelectedOverlay() {
+  if (!tbChart || !tbSelectedOverlayId) return false;
+  try { tbChart.removeOverlay(tbSelectedOverlayId); } catch (e) { console.error(e); }
+  tbSetSelectedOverlay(null);
+  return true;
+}
 document.getElementById("tb-overlay-select").addEventListener("change", (e) => {
   const name = e.target.value;
   e.target.value = "";
   if (!name) return;
   const chart = ensureTbChart();
   if (!chart) return;
-  try { chart.createOverlay(name); } catch (err) { console.error("createOverlay failed:", name, err); }
+  try {
+    chart.createOverlay({
+      name,
+      onSelected: (ev) => { tbSetSelectedOverlay(ev && ev.overlay && ev.overlay.id); return false; },
+      onDeselected: (ev) => { if (ev && ev.overlay && ev.overlay.id === tbSelectedOverlayId) tbSetSelectedOverlay(null); return false; },
+      onRemoved: (ev) => { if (ev && ev.overlay && ev.overlay.id === tbSelectedOverlayId) tbSetSelectedOverlay(null); return false; },
+    });
+  } catch (err) { console.error("createOverlay failed:", name, err); }
+});
+document.getElementById("tb-delete-overlay-btn").addEventListener("click", () => { tbDeleteSelectedOverlay(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Delete" && e.key !== "Backspace") return;
+  if (!tbSelectedOverlayId) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || "";
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || document.activeElement?.isContentEditable) return;
+  if (tbDeleteSelectedOverlay()) e.preventDefault();
 });
 document.getElementById("tb-clear-overlays-btn").addEventListener("click", () => {
   if (!tbChart) return;
   try { tbChart.removeOverlay(); } catch (e) { console.error(e); }
+  tbSetSelectedOverlay(null);
 });
+
+// Keep the last candle current: every 20s, if a new period has started
+// since the last render, append flat candles up to now (no refetch).
+setInterval(() => {
+  if (!tbChart || !tbLastData || tbLastCandleT === null) return;
+  const nowT = Math.floor(Date.now() / tbCurrentTf) * tbCurrentTf;
+  if (nowT <= tbLastCandleT) return;
+  try {
+    const list = tbChart.getDataList ? tbChart.getDataList() : null;
+    const last = list && list.length ? list[list.length - 1] : null;
+    if (!last) return;
+    for (let tt = tbLastCandleT + tbCurrentTf; tt <= nowT; tt += tbCurrentTf) {
+      tbChart.updateData({ timestamp: tt, open: last.close, high: last.close, low: last.close, close: last.close, volume: 0 });
+    }
+    tbLastCandleT = nowT;
+  } catch (e) { console.error(e); }
+}, 20000);
 window.addEventListener("resize", () => {
   if (tbChart) { try { tbChart.resize(); } catch {} }
 });
