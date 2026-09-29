@@ -8,3 +8,4 @@ export const MINT_SIZE = 82;
 export async function getAssociatedTokenAddress(m,o){return PublicKey.findProgramAddressSync([o.toBytes(),m.toBytes()],ASSOCIATED_TOKEN_PROGRAM_ID)[0];}
 export function createAssociatedTokenAccountIdempotentInstruction(){return {};} export function createInitializeMint2Instruction(){return {};} export function createMintToInstruction(){return {};}
 export async function getMint(){return {decimals:6,supply:0n};} export async function getAccount(){throw new Error("TokenAccountNotFoundError");} export function unpackMint(){return {decimals:6};}
+export function createTransferCheckedInstruction(){return {};} export function createCloseAccountInstruction(){return {};}

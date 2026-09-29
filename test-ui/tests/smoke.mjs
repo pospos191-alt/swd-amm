@@ -97,6 +97,26 @@ try {
     ["open Trade tab", () => page.click('.tab-nav-btn[data-tab="tools"]', { timeout: 5000 })],
     ["open Swap popup", () => page.click("#tools-nav-swap", { timeout: 5000 })],
     ["close popup (Escape)", () => page.keyboard.press("Escape")],
+    ["Multi-hop fills mint in/out from the active pair", async () => {
+      await page.click("#tools-nav-mh", { timeout: 5000 });
+      const v = await page.evaluate(() => [document.getElementById("mh-mint-in").value, document.getElementById("mh-mint-out").value]);
+      if (v[0] !== A || v[1] !== B) throw new Error(`mint in/out = ${v.join(" / ")}`);
+      await page.click("#mh-direction-flip-btn", { timeout: 5000 });
+      const f = await page.evaluate(() => [document.getElementById("mh-mint-in").value, document.getElementById("mh-mint-out").value]);
+      if (f[0] !== B || f[1] !== A) throw new Error(`after flip mint in/out = ${f.join(" / ")}`);
+      await page.keyboard.press("Escape");
+    }],
+    ["popups show no pair pickers", async () => {
+      for (const id of ["#tools-nav-swap", "#tools-nav-lo", "#tools-nav-dca"]) {
+        await page.click(id, { timeout: 5000 });
+        const visible = await page.evaluate(() => Array.from(document.querySelectorAll("#form-popup-body select, #form-popup-body .isel-btn, #form-popup-body [data-open-pair-drawer]"))
+          .filter((el) => el.offsetParent !== null && /pair-select|pool-type|isel|pair-drawer/.test(el.id + " " + el.className + " " + (el.getAttribute("data-open-pair-drawer") !== null ? "pair-drawer" : ""))).map((el) => el.id || el.className));
+        if (visible.length) throw new Error(`${id}: visible ${visible.join(", ")}`);
+        const opened = await page.evaluate(() => document.querySelectorAll("#form-popup-body select").length);
+        if (!opened) throw new Error(`${id}: popup did not open`);
+        await page.keyboard.press("Escape");
+      }
+    }],
     ["open Portfolio tab", () => page.click('.tab-nav-btn[data-tab="portfolio"]', { timeout: 5000 })],
     ["switch language to Thai", () => page.selectOption("#lang-select", "th")],
     ["switch network to Devnet", () => page.selectOption("#network-select", "devnet")],
