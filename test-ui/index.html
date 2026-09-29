@@ -1148,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29e</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29f</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -4023,6 +4023,7 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "เว้นว่าง = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "เลือก Pyth feed จริง (Devnet/Mainnet)…",
     lpfNoPool: "คู่นี้ยังไม่มีพูล constant-product — สร้างพูลก่อนแล้วจึงประมาณค่าธรรมเนียมได้",
+    tbPairNotOnNetwork: "คู่ที่เลือกยังไม่มีบนเครือข่ายนี้ (mint หรือพูลไม่มีอยู่) — เลือกคู่จากรายการด้านบน หรือสร้างพูลก่อน",
     logLegacyAccountsSkipped: "ข้ามบัญชี {kind} {n} บัญชีที่สร้างจากโปรแกรมเวอร์ชันเก่า (โครงสร้างข้อมูลไม่ตรงกับเวอร์ชันปัจจุบันแล้ว)",
     errWalletChainUnsupported: "{wallet} ยังเซ็นธุรกรรมบน {chain} ไม่ได้ (รองรับ: {list}) — ถ้าเป็น MetaMask บน Devnet ให้เปิด Settings → Advanced → Show test networks แล้วเชื่อมกระเป๋าใหม่ ส่วน Localnet ให้ใช้ Phantom หรือ Solflare",
     logDevnetDefaultFeeds: "ไม่ได้อยู่บน Localnet — ใช้ Pyth USDC/USD + USDT/USD จริงเป็น oracle ของพูลนี้ (ราคาใกล้ 1:1 จึงเหมาะกับการฝากสองฝั่งเท่ากัน)",
@@ -4994,6 +4995,7 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "Pick a real Pyth feed (Devnet/Mainnet)…",
     lpfNoPool: "No constant-product pool for this pair yet — create one first, then fees can be estimated.",
+    tbPairNotOnNetwork: "The selected pair isn't on this network (its mints or pool don't exist here) — pick a pair from the list above, or create a pool first.",
     logLegacyAccountsSkipped: "Skipped {n} {kind} account(s) created by an older program version (their layout no longer matches).",
     errWalletChainUnsupported: "{wallet} can't sign for {chain} (it offers: {list}). For MetaMask on Devnet, turn on Settings → Advanced → Show test networks and reconnect; for Localnet, use Phantom or Solflare.",
     logDevnetDefaultFeeds: "Not on Localnet — using the real Pyth USDC/USD + USDT/USD feeds as this pool's oracle (priced ~1:1, so equal deposits on both sides fit the guard).",
@@ -11550,13 +11552,22 @@ function createThrottledConnection(conn, opts) {
   let lastDispatch = 0;
   let pumpTimer = null;
   const queue = [];
+  // Rate-limit handling (2026-09-29): public RPCs (api.devnet.solana.com)
+  // answer bursts with 429 "Connection rate limits exceeded" / "Too many
+  // requests", often as a JSON-RPC error that web3.js does not retry
+  // itself. Such calls are retried with backoff, and the whole gate slows
+  // down (1 request at a time, 700ms apart) for 30s after any 429.
+  let slowUntil = 0;
+  const isRateLimited = (e) => /\b429\b|Too many requests|rate limit/i.test(String((e && e.message) || e));
+  const curConcurrent = () => (Date.now() < slowUntil ? 1 : maxConcurrent);
+  const curSpacing = () => (Date.now() < slowUntil ? Math.max(700, minSpacingMs) : minSpacingMs);
 
   function tryPump() {
-    if (pumpTimer || active >= maxConcurrent || queue.length === 0) return;
-    const wait = Math.max(0, lastDispatch + minSpacingMs - Date.now());
+    if (pumpTimer || active >= curConcurrent() || queue.length === 0) return;
+    const wait = Math.max(0, lastDispatch + curSpacing() - Date.now());
     pumpTimer = setTimeout(() => {
       pumpTimer = null;
-      if (active >= maxConcurrent || queue.length === 0) return;
+      if (active >= curConcurrent() || queue.length === 0) return;
       const job = queue.shift();
       active++;
       lastDispatch = Date.now();
@@ -11565,7 +11576,7 @@ function createThrottledConnection(conn, opts) {
     }, wait);
   }
 
-  function schedule(fn) {
+  function scheduleOnce(fn) {
     return new Promise((resolve, reject) => {
       queue.push(() => {
         Promise.resolve()
@@ -11575,6 +11586,19 @@ function createThrottledConnection(conn, opts) {
       });
       tryPump();
     });
+  }
+
+  async function schedule(fn) {
+    const waits = [1000, 2500, 5000, 9000];
+    for (let i = 0; ; i++) {
+      try {
+        return await scheduleOnce(fn);
+      } catch (e) {
+        if (!isRateLimited(e) || i >= waits.length) throw e;
+        slowUntil = Date.now() + 30000;
+        await new Promise((r) => setTimeout(r, waits[i] + Math.random() * 400));
+      }
+    }
   }
 
   return new Proxy(conn, {
@@ -15352,9 +15376,12 @@ async function loadTradingBoard(opts = {}) {
     buyBtn.disabled = false;
     sellBtn.disabled = false;
   } catch (e) {
-    statsContainer.innerHTML = `<div class="empty-state">${t("poolDetailError")}</div>`;
+    // The selected pair's mints/pool simply don't exist on this network
+    // (e.g. Localnet mints still selected after switching to Devnet).
+    const missing = (e && e.name === "TokenAccountNotFoundError") || /TokenAccountNotFound|does not exist|has no data/i.test(String(e && e.message));
+    statsContainer.innerHTML = `<div class="empty-state">${t(missing ? "tbPairNotOnNetwork" : "poolDetailError")}</div>`;
     resetTbChartDisplay();
-    logErr(t("panelTradingBoardTitle"), e, quiet ? { toast: false } : {});
+    if (!missing) logErr(t("panelTradingBoardTitle"), e, quiet ? { toast: false } : {});
     tbLastData = null;
     buyBtn.disabled = true;
     sellBtn.disabled = true;
@@ -16804,8 +16831,12 @@ async function autoLoadTradingBoard() {
   const a = document.getElementById("swap-mint-a")?.value.trim();
   const b = document.getElementById("swap-mint-b")?.value.trim();
   if (!state.program || !a || !b) return;
+  // Only auto-load once the pool list is in, and only for a pair that has
+  // a pool on this network — otherwise a pair left over from another
+  // network just produces an error.
+  if (!poolListLoadedOnce) return;
   const typeSel = document.getElementById("tb-pool-type");
-  if (typeSel && lastPoolListRows.length) {
+  if (typeSel) {
     const has = (type) => lastPoolListRows.some((r) => r.type === type && r.mintA.toBase58() === a && r.mintB.toBase58() === b);
     if (!has(typeSel.value)) {
       const other = typeSel.value === "cp" ? "dlmm" : "cp";
