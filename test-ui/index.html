@@ -1148,7 +1148,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29b</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29c</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -4023,6 +4023,7 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "เว้นว่าง = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "เลือก Pyth feed จริง (Devnet/Mainnet)…",
     lpfNoPool: "คู่นี้ยังไม่มีพูล constant-product — สร้างพูลก่อนแล้วจึงประมาณค่าธรรมเนียมได้",
+    errWalletChainUnsupported: "{wallet} ยังเซ็นธุรกรรมบน {chain} ไม่ได้ (รองรับ: {list}) — ถ้าเป็น MetaMask บน Devnet ให้เปิด Settings → Advanced → Show test networks แล้วเชื่อมกระเป๋าใหม่ ส่วน Localnet ให้ใช้ Phantom หรือ Solflare",
     logDevnetDefaultFeeds: "ไม่ได้อยู่บน Localnet — ใช้ Pyth USDC/USD + USDT/USD จริงเป็น oracle ของพูลนี้ (ราคาใกล้ 1:1 จึงเหมาะกับการฝากสองฝั่งเท่ากัน)",
     errOracleFeedIdFormat: "กรอก Pyth feed id เป็น hex 64 ตัวอักษร (จะมีหรือไม่มี 0x นำหน้าก็ได้)",
     errOracleFeedUnregistered: "ยังไม่มีบัญชี price_update ที่ลงทะเบียนไว้สำหรับ feed {feed}… — ใช้ \"Use Localnet test fixtures\" หรือลงทะเบียนเองก่อนใน Dev Tools",
@@ -4992,6 +4993,7 @@ const STRINGS = {
     oracleFeedIdPlaceholder: "blank = Localnet: test fixtures / Devnet: Pyth USDC/USD + USDT/USD",
     pythPresetPlaceholder: "Pick a real Pyth feed (Devnet/Mainnet)…",
     lpfNoPool: "No constant-product pool for this pair yet — create one first, then fees can be estimated.",
+    errWalletChainUnsupported: "{wallet} can't sign for {chain} (it offers: {list}). For MetaMask on Devnet, turn on Settings → Advanced → Show test networks and reconnect; for Localnet, use Phantom or Solflare.",
     logDevnetDefaultFeeds: "Not on Localnet — using the real Pyth USDC/USD + USDT/USD feeds as this pool's oracle (priced ~1:1, so equal deposits on both sides fit the guard).",
     errOracleFeedIdFormat: "Enter a 64-character hex Pyth feed id (with or without a leading 0x).",
     errOracleFeedUnregistered: "No price_update account registered for feed {feed}… — use \"Use Localnet test fixtures\" or register one in Dev Tools first.",
@@ -11874,6 +11876,19 @@ window.dispatchEvent(
   }
 })();
 
+// Which cluster a Wallet Standard wallet should sign for (2026-09-29).
+// Without a `chain` on solana:signTransaction, MetaMask assumes Solana
+// Mainnet: it simulated our Devnet transactions against Mainnet ("reverted
+// during simulation") and labelled the request "Solana Mainnet".
+function walletStandardChain() {
+  if (state.network === "devnet") return "solana:devnet";
+  if (state.network === "localnet") return "solana:localnet";
+  const u = (state.customRpc || "").toLowerCase();
+  if (u.includes("devnet")) return "solana:devnet";
+  if (u.includes("testnet")) return "solana:testnet";
+  return "solana:mainnet";
+}
+
 // Wraps a raw Wallet Standard wallet so the rest of this app can treat it
 // exactly like a Phantom-style provider: .connect() resolving to
 // {publicKey}, plus .publicKey / .signTransaction / .signAllTransactions for
@@ -11894,19 +11909,33 @@ function wrapStandardWallet(wallet) {
       const feature = wallet.features["standard:disconnect"];
       if (feature) await feature.disconnect();
     },
+    // Refuse up front (clear message) instead of letting the wallet sign
+    // for a cluster it can't see — e.g. MetaMask on Localnet, or on Devnet
+    // before its test networks are turned on.
+    chainOrThrow() {
+      const chain = walletStandardChain();
+      const chains = (account && account.chains && account.chains.length ? account.chains : wallet.chains) || [];
+      if (chains.length && !chains.includes(chain)) {
+        throw new Error(t("errWalletChainUnsupported", { wallet: wallet.name || "wallet", chain, list: chains.join(", ") }));
+      }
+      return chain;
+    },
     async signTransaction(tx) {
       const feature = wallet.features["solana:signTransaction"];
       if (!feature) throw new Error("Wallet does not support signTransaction");
+      const chain = this.chainOrThrow();
       const transaction = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
-      const [{ signedTransaction }] = await feature.signTransaction({ transaction, account });
+      const [{ signedTransaction }] = await feature.signTransaction({ transaction, account, chain });
       return Transaction.from(signedTransaction);
     },
     async signAllTransactions(txs) {
       const feature = wallet.features["solana:signTransaction"];
       if (!feature) throw new Error("Wallet does not support signTransaction");
+      const chain = this.chainOrThrow();
       const inputs = txs.map((tx) => ({
         transaction: tx.serialize({ requireAllSignatures: false, verifySignatures: false }),
         account,
+        chain,
       }));
       const outputs = await feature.signTransaction(...inputs);
       return outputs.map((o) => Transaction.from(o.signedTransaction));
