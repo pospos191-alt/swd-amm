@@ -128,6 +128,14 @@ try {
       });
       if (!onWithWallet) throw new Error("lists stay hidden even with a wallet connected");
     }],
+    ["SWDMM v2 tab: pools, create form (with fee chart), governance render", async () => {
+      await page.click('.tab-nav-btn[data-tab="v2"]', { timeout: 5000 });
+      await page.click('[data-v2-view="create"]', { timeout: 5000 });
+      await page.click('#v2c-mode button[data-val="1"]', { timeout: 5000 });
+      await page.waitForFunction(() => document.querySelector("#v2c-fee-chart svg path") && document.querySelector("#v2c-range-chart svg"), null, { timeout: 5000 });
+      await page.click('[data-v2-view="gov"]', { timeout: 5000 });
+      await page.click('[data-v2-view="pools"]', { timeout: 5000 });
+    }],
     ["open Portfolio tab", () => page.click('.tab-nav-btn[data-tab="portfolio"]', { timeout: 5000 })],
     ["switch language to Thai", () => page.selectOption("#lang-select", "th")],
     ["switch network to Devnet", () => page.selectOption("#network-select", "devnet")],

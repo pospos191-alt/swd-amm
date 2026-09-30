@@ -156,6 +156,16 @@ pub use governance::*;
 mod oracle;
 pub use oracle::*;
 
+// SWDMM v2 (added 2026-09-29): Meteora-DAMM-v2-style pools. Pure math in
+// swdmm_math.rs (host-tested with plain `rustc --test`), accounts and
+// instructions in swdmm_v2.rs, timelocked governance / protocol fees /
+// mint policy in timelock.rs. Same glob re-export reasoning as above.
+pub mod swdmm_math;
+mod swdmm_v2;
+pub use swdmm_v2::*;
+mod timelock;
+pub use timelock::*;
+
 // TODO(before build): replace with the real program id.
 // Generate one with `solana-keygen new -o target/deploy/swd_amm-keypair.json`
 // after `anchor build` creates the target/ directory, then run
@@ -207,6 +217,11 @@ pub const MAX_FEE_BPS: u16 = 1_000; // 10%
 // SWD pairs against a mint with drastically different decimals than the
 // ~1,000,000-raw-unit assumption baked in here (see SECURITY.md).
 pub const MIN_INITIAL_DEPOSIT: u64 = 1_000_000;
+
+// Price-impact cap for constant-product swaps (added 2026-09-29, SWDMM
+// spec): a single swap may not push more than half of the input-side
+// reserve through the curve (impact = x / (reserve_in + x) <= 50%).
+pub const CP_MAX_PRICE_IMPACT_BPS: u128 = 5_000;
 
 #[program]
 pub mod swd_amm {
@@ -801,6 +816,13 @@ pub mod swd_amm {
             .checked_div(10_000)
             .ok_or(SwdAmmError::MathOverflow)?;
 
+        let impact_bps = amount_in_after_fee
+            .checked_mul(10_000)
+            .ok_or(SwdAmmError::MathOverflow)?
+            .checked_div((reserve_in as u128).checked_add(amount_in_after_fee).ok_or(SwdAmmError::MathOverflow)?)
+            .ok_or(SwdAmmError::MathOverflow)?;
+        require!(impact_bps <= CP_MAX_PRICE_IMPACT_BPS, SwdAmmError::PriceImpactTooHigh);
+
         // Constant product: (reserve_in + amount_in_after_fee) * (reserve_out - amount_out) = reserve_in * reserve_out
         let k = (reserve_in as u128)
             .checked_mul(reserve_out as u128)
@@ -1026,6 +1048,96 @@ pub mod swd_amm {
         a_to_b: bool,
     ) -> Result<()> {
         dlmm::swap_dlmm(ctx, amount_in, min_amount_out, a_to_b)
+    }
+
+    // -----------------------------------------------------------------
+    // Governance v2 — timelock, protocol fee settings, mint policy
+    // (timelock.rs)
+    // -----------------------------------------------------------------
+
+    pub fn initialize_governance_settings(
+        ctx: Context<InitializeGovernanceSettings>,
+        timelock_delay_secs: i64,
+        protocol_fee_share_bps: u16,
+        treasury: Pubkey,
+    ) -> Result<()> {
+        timelock::initialize_governance_settings(ctx, timelock_delay_secs, protocol_fee_share_bps, treasury)
+    }
+
+    pub fn propose_gov_action(ctx: Context<ProposeAction>, action: GovAction) -> Result<()> {
+        timelock::propose_action(ctx, action)
+    }
+
+    pub fn cancel_gov_action(ctx: Context<CancelAction>) -> Result<()> {
+        timelock::cancel_action(ctx)
+    }
+
+    pub fn execute_unpause_pool(ctx: Context<ExecuteUnpausePool>) -> Result<()> {
+        timelock::execute_unpause_pool(ctx)
+    }
+
+    pub fn execute_unpause_dlmm_pool(ctx: Context<ExecuteUnpauseDlmmPool>) -> Result<()> {
+        timelock::execute_unpause_dlmm_pool(ctx)
+    }
+
+    pub fn execute_v2_pool_action(ctx: Context<ExecuteV2PoolAction>) -> Result<()> {
+        timelock::execute_v2_pool_action(ctx)
+    }
+
+    pub fn execute_settings_action(ctx: Context<ExecuteSettingsAction>) -> Result<()> {
+        timelock::execute_settings_action(ctx)
+    }
+
+    pub fn execute_withdraw_protocol_fees(ctx: Context<ExecuteWithdrawProtocolFees>) -> Result<()> {
+        timelock::execute_withdraw_protocol_fees(ctx)
+    }
+
+    pub fn set_mint_policy(ctx: Context<SetMintPolicy>, enabled: bool, token_2022_reviewed: bool) -> Result<()> {
+        timelock::set_mint_policy(ctx, enabled, token_2022_reviewed)
+    }
+
+    // -----------------------------------------------------------------
+    // SWDMM v2 pools (swdmm_v2.rs)
+    // -----------------------------------------------------------------
+
+    pub fn initialize_v2_pool(ctx: Context<InitializeV2Pool>, params: InitializeV2PoolParams) -> Result<()> {
+        swdmm_v2::initialize_v2_pool(ctx, params)
+    }
+
+    pub fn create_v2_position(ctx: Context<CreateV2Position>) -> Result<()> {
+        swdmm_v2::create_v2_position(ctx)
+    }
+
+    pub fn add_v2_liquidity(ctx: Context<ModifyV2Liquidity>, max_a: u64, max_b: u64, min_liquidity: u128) -> Result<()> {
+        swdmm_v2::add_v2_liquidity(ctx, max_a, max_b, min_liquidity)
+    }
+
+    pub fn remove_v2_liquidity(ctx: Context<ModifyV2Liquidity>, liquidity: u128, min_a: u64, min_b: u64) -> Result<()> {
+        swdmm_v2::remove_v2_liquidity(ctx, liquidity, min_a, min_b)
+    }
+
+    pub fn claim_v2_fees(ctx: Context<ModifyV2Liquidity>) -> Result<()> {
+        swdmm_v2::claim_v2_fees(ctx)
+    }
+
+    pub fn lock_v2_liquidity(ctx: Context<LockV2Liquidity>, liquidity: u128) -> Result<()> {
+        swdmm_v2::lock_v2_liquidity(ctx, liquidity)
+    }
+
+    pub fn transfer_v2_position(ctx: Context<OwnV2Position>, new_owner: Pubkey) -> Result<()> {
+        swdmm_v2::transfer_v2_position(ctx, new_owner)
+    }
+
+    pub fn close_v2_position(ctx: Context<CloseV2Position>) -> Result<()> {
+        swdmm_v2::close_v2_position(ctx)
+    }
+
+    pub fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64, a_to_b: bool) -> Result<()> {
+        swdmm_v2::swap_v2(ctx, amount_in, min_amount_out, a_to_b)
+    }
+
+    pub fn emergency_pause_v2_pool(ctx: Context<EmergencyPauseV2Pool>, pause_swap: bool, pause_deposit: bool, pause_withdraw: bool) -> Result<()> {
+        swdmm_v2::emergency_pause_v2_pool(ctx, pause_swap, pause_deposit, pause_withdraw)
     }
 }
 
@@ -1445,6 +1557,8 @@ pub enum SwdAmmError {
     WithdrawPaused,
     #[msg("This Token-2022 mint carries an extension this program does not yet support (transfer fee, transfer hook, confidential transfer, non-transferable, or permanent delegate)")]
     UnsupportedMintExtension,
+    #[msg("Price impact exceeds the 50% cap for a single swap")]
+    PriceImpactTooHigh,
 }
 
 // ---------------------------------------------------------------------

@@ -61,6 +61,44 @@
 //       Governance-only (NOT emergency_authority — see governance.rs's
 //       module doc comment for why that split is deliberate).
 //
+//   --- Governance v2 (timelock.rs / swdmm_v2.rs, added 2026-09-29) ---
+//
+//   init-settings <timelockDelaySecs> <protocolFeeShareBps> <treasury>
+//       One-time. Delay must be 5s-48h on a devnet build, 24h-48h on a
+//       `--features mainnet` build. Share is capped at 2000 (20%).
+//
+//   settings
+//       Read-only: GovernanceSettings plus every governance action and its
+//       status (pending / ready / executed / cancelled).
+//
+//   set-mint-policy <mint> <true|false> [reviewed]
+//       SWDMM v2 allowlist. Pass "reviewed" to confirm a Token-2022 mint
+//       was reviewed (required to enable one).
+//
+//   propose-unpause-cp   <mintA> <mintB> <swap> <deposit> <withdraw>
+//   propose-unpause-dlmm <mintA> <mintB> <swap> <deposit> <withdraw>
+//   propose-unpause-v2   <pool> <swap> <deposit> <withdraw>
+//   propose-protocol-fee-share <bps>
+//   propose-timelock-delay <secs>
+//   propose-treasury <pubkey>
+//   propose-v2-params <pool> <maxPriceImpactBps> <dynamicFeeEnabled>
+//   propose-withdraw-protocol-fees <pool>
+//       Governance-only: queue a timelocked action. Prints its id and the
+//       earliest time it can be executed.
+//
+//   execute <actionId>
+//       Anyone, after the delay. Builds the right accounts for the action
+//       kind (for protocol-fee withdrawals it creates the treasury's token
+//       accounts if needed).
+//
+//   cancel <actionId>
+//       Governance-only, before execution.
+//
+//   emergency-pause-v2-pool <pool> <pauseSwap> <pauseDeposit> <pauseWithdraw>
+//
+//   NOTE: governed-unpause-pool / governed-unpause-dlmm-pool below now
+//   always fail on-chain (UseTimelockedUnpause) — use propose-unpause-*.
+//
 //   verify-multisig <squadsMultisigPubkey> <vaultIndex>
 //       Permissionless, read-only in effect (emits an event, writes
 //       nothing). Confirms the given Squads Multisig account's vault at
@@ -80,7 +118,11 @@ import * as path from "path";
 const GLOBAL_CONFIG_SEED = Buffer.from("global-config");
 const ALLOWED_MINT_SEED = Buffer.from("allowed-mint");
 const POOL_SEED = Buffer.from("pool");
-const DLMM_POOL_SEED = Buffer.from("dlmm-pool");
+const DLMM_POOL_SEED = Buffer.from("dlmm_pool"); // fixed 2026-09-29: the program seed is "dlmm_pool"
+const GOV_SETTINGS_SEED = Buffer.from("gov_settings");
+const GOV_ACTION_SEED = Buffer.from("gov_action");
+const MINT_POLICY_SEED = Buffer.from("mint_policy");
+const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
 function loadProgram(): anchor.Program<anchor.Idl> {
   const provider = anchor.AnchorProvider.env();
@@ -136,6 +178,11 @@ async function main() {
   const provider = program.provider as anchor.AnchorProvider;
   const wallet = provider.wallet.publicKey;
   const configPda = pda([GLOBAL_CONFIG_SEED], program.programId);
+  const actionPda = (id: number) => {
+    const b = Buffer.alloc(8);
+    b.writeBigUInt64LE(BigInt(id));
+    return pda([GOV_ACTION_SEED, b], program.programId);
+  };
 
   console.log(`# swd-amm governance CLI`);
   console.log(`# cluster:    ${provider.connection.rpcEndpoint}`);
@@ -295,6 +342,170 @@ async function main() {
       break;
     }
 
+    case "init-settings": {
+      const delay = Number(rest[0]);
+      const share = Number(rest[1]);
+      const treasury = parsePubkey(rest[2], "treasury");
+      const settings = pda([GOV_SETTINGS_SEED], program.programId);
+      await confirmOrDryRun(
+        () => console.log(`Would call initialize_governance_settings(delay=${delay}s, protocolFeeShare=${share}bps, treasury=${treasury.toBase58()})`),
+        () =>
+          program.methods
+            .initializeGovernanceSettings(new anchor.BN(delay), share, treasury)
+            .accounts({ config: configPda, governanceAuthority: wallet, settings, payer: wallet, systemProgram: SystemProgram.programId })
+            .rpc()
+      );
+      break;
+    }
+
+    case "settings": {
+      const settingsPda = pda([GOV_SETTINGS_SEED], program.programId);
+      const st: any = await (program.account as any).governanceSettings.fetchNullable(settingsPda);
+      if (!st) {
+        console.log("GovernanceSettings not initialized yet — run init-settings.");
+        break;
+      }
+      console.log("GovernanceSettings:");
+      console.log(`  timelock_delay_secs:    ${st.timelockDelaySecs.toString()}`);
+      console.log(`  protocol_fee_share_bps: ${st.protocolFeeShareBps}`);
+      console.log(`  treasury:               ${st.treasury.toBase58()}`);
+      console.log(`  actions proposed:       ${st.nextActionId.toString()}`);
+      const now = Math.floor(Date.now() / 1000);
+      for (let i = 0; i < Number(st.nextActionId); i++) {
+        const a: any = await (program.account as any).pendingAction.fetchNullable(actionPda(i));
+        if (!a) continue;
+        const status = a.executed ? "executed" : a.cancelled ? "cancelled" : now >= Number(a.executeAfter) ? "READY" : `pending until ${new Date(Number(a.executeAfter) * 1000).toISOString()}`;
+        console.log(`  #${i} ${JSON.stringify(a.action, (_k, v) => (v instanceof PublicKey ? v.toBase58() : v))} — ${status}`);
+      }
+      break;
+    }
+
+    case "set-mint-policy": {
+      const mint = parsePubkey(rest[0], "mint");
+      const enabled = parseBool(rest[1], "enabled");
+      const reviewed = rest[2] === "reviewed";
+      const info = await provider.connection.getAccountInfo(mint);
+      if (!info) { console.error("Mint not found on this cluster."); process.exit(1); }
+      const tokenProgram = info.owner;
+      const mintPolicy = pda([MINT_POLICY_SEED, mint.toBuffer()], program.programId);
+      await confirmOrDryRun(
+        () => console.log(`Would call set_mint_policy(enabled=${enabled}, token_2022_reviewed=${reviewed}) for ${mint.toBase58()} (token program ${tokenProgram.toBase58()})`),
+        () =>
+          program.methods
+            .setMintPolicy(enabled, reviewed)
+            .accounts({ config: configPda, governanceAuthority: wallet, mint, tokenProgram, mintPolicy, payer: wallet, systemProgram: SystemProgram.programId })
+            .rpc()
+      );
+      break;
+    }
+
+    case "propose-unpause-cp":
+    case "propose-unpause-dlmm":
+    case "propose-unpause-v2":
+    case "propose-protocol-fee-share":
+    case "propose-timelock-delay":
+    case "propose-treasury":
+    case "propose-v2-params":
+    case "propose-withdraw-protocol-fees": {
+      let action: any;
+      if (command === "propose-unpause-cp" || command === "propose-unpause-dlmm") {
+        const mintA = parsePubkey(rest[0], "mintA");
+        const mintB = parsePubkey(rest[1], "mintB");
+        const seed = command === "propose-unpause-cp" ? POOL_SEED : DLMM_POOL_SEED;
+        const pool = pda([seed, mintA.toBuffer(), mintB.toBuffer()], program.programId);
+        const body = { pool, swap: parseBool(rest[2], "swap"), deposit: parseBool(rest[3], "deposit"), withdraw: parseBool(rest[4], "withdraw") };
+        action = command === "propose-unpause-cp" ? { unpauseCpPool: body } : { unpauseDlmmPool: body };
+      } else if (command === "propose-unpause-v2") {
+        action = { unpauseV2Pool: { pool: parsePubkey(rest[0], "pool"), swap: parseBool(rest[1], "swap"), deposit: parseBool(rest[2], "deposit"), withdraw: parseBool(rest[3], "withdraw") } };
+      } else if (command === "propose-protocol-fee-share") {
+        action = { setProtocolFeeShare: { bps: Number(rest[0]) } };
+      } else if (command === "propose-timelock-delay") {
+        action = { setTimelockDelay: { secs: new anchor.BN(Number(rest[0])) } };
+      } else if (command === "propose-treasury") {
+        action = { setTreasury: { treasury: parsePubkey(rest[0], "treasury") } };
+      } else if (command === "propose-v2-params") {
+        action = { setV2PoolParams: { pool: parsePubkey(rest[0], "pool"), maxPriceImpactBps: Number(rest[1]), dynamicFeeEnabled: parseBool(rest[2], "dynamicFeeEnabled") } };
+      } else {
+        action = { withdrawV2ProtocolFees: { pool: parsePubkey(rest[0], "pool") } };
+      }
+      const settingsPda = pda([GOV_SETTINGS_SEED], program.programId);
+      const st: any = await (program.account as any).governanceSettings.fetch(settingsPda);
+      const id = Number(st.nextActionId);
+      const pending = actionPda(id);
+      await confirmOrDryRun(
+        () => {
+          console.log(`Would propose governance action #${id}:`);
+          console.log(`  ${JSON.stringify(action, (_k, v) => (v instanceof PublicKey ? v.toBase58() : v))}`);
+          console.log(`  executable after ~${st.timelockDelaySecs.toString()}s (timelock)`);
+        },
+        () =>
+          program.methods
+            .proposeGovAction(action)
+            .accounts({ config: configPda, governanceAuthority: wallet, settings: settingsPda, pending, payer: wallet, systemProgram: SystemProgram.programId })
+            .rpc()
+      );
+      break;
+    }
+
+    case "execute":
+    case "cancel": {
+      const id = Number(rest[0]);
+      const pending = actionPda(id);
+      const a: any = await (program.account as any).pendingAction.fetch(pending);
+      const kind = Object.keys(a.action)[0];
+      const body = a.action[kind];
+      if (command === "cancel") {
+        await confirmOrDryRun(
+          () => console.log(`Would cancel action #${id} (${kind})`),
+          () => program.methods.cancelGovAction().accounts({ config: configPda, governanceAuthority: wallet, pending }).rpc()
+        );
+        break;
+      }
+      const settingsPda = pda([GOV_SETTINGS_SEED], program.programId);
+      let builder: any;
+      if (kind === "unpauseCpPool") builder = program.methods.executeUnpausePool().accounts({ pending, pool: body.pool });
+      else if (kind === "unpauseDlmmPool") builder = program.methods.executeUnpauseDlmmPool().accounts({ pending, pool: body.pool });
+      else if (kind === "unpauseV2Pool" || kind === "setV2PoolParams") builder = program.methods.executeV2PoolAction().accounts({ pending, pool: body.pool });
+      else if (kind === "withdrawV2ProtocolFees") {
+        const st: any = await (program.account as any).governanceSettings.fetch(settingsPda);
+        const pool: any = await (program.account as any).swdmmV2Pool.fetch(body.pool);
+        const ataOf = (mint: PublicKey, owner: PublicKey, prog: PublicKey) =>
+          PublicKey.findProgramAddressSync([owner.toBuffer(), prog.toBuffer(), mint.toBuffer()], ATA_PROGRAM)[0];
+        const ta = ataOf(pool.mintA, st.treasury, pool.tokenProgramA);
+        const tb = ataOf(pool.mintB, st.treasury, pool.tokenProgramB);
+        const createAta = (ata: PublicKey, mint: PublicKey, prog: PublicKey) => new anchor.web3.TransactionInstruction({
+          programId: ATA_PROGRAM,
+          keys: [
+            { pubkey: wallet, isSigner: true, isWritable: true },
+            { pubkey: ata, isSigner: false, isWritable: true },
+            { pubkey: st.treasury, isSigner: false, isWritable: false },
+            { pubkey: mint, isSigner: false, isWritable: false },
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: prog, isSigner: false, isWritable: false },
+          ],
+          data: Buffer.from([1]), // CreateIdempotent
+        });
+        builder = program.methods.executeWithdrawProtocolFees()
+          .accounts({ pending, settings: settingsPda, pool: body.pool, mintA: pool.mintA, mintB: pool.mintB, vaultA: pool.vaultA, vaultB: pool.vaultB, treasuryTokenA: ta, treasuryTokenB: tb, tokenProgramA: pool.tokenProgramA, tokenProgramB: pool.tokenProgramB })
+          .preInstructions([createAta(ta, pool.mintA, pool.tokenProgramA), createAta(tb, pool.mintB, pool.tokenProgramB)]);
+      } else builder = program.methods.executeSettingsAction().accounts({ pending, settings: settingsPda });
+      await confirmOrDryRun(
+        () => console.log(`Would execute action #${id} (${kind}); earliest execution ${new Date(Number(a.executeAfter) * 1000).toISOString()}`),
+        () => builder.rpc()
+      );
+      break;
+    }
+
+    case "emergency-pause-v2-pool": {
+      const pool = parsePubkey(rest[0], "pool");
+      const f = [parseBool(rest[1], "pauseSwap"), parseBool(rest[2], "pauseDeposit"), parseBool(rest[3], "pauseWithdraw")];
+      await confirmOrDryRun(
+        () => console.log(`Would call emergency_pause_v2_pool(${f.join(", ")}) on ${pool.toBase58()} (signer must be emergency_authority)`),
+        () => program.methods.emergencyPauseV2Pool(f[0], f[1], f[2]).accounts({ config: configPda, emergencyAuthority: wallet, pool }).rpc()
+      );
+      break;
+    }
+
     case "verify-multisig": {
       const squadsMultisig = parsePubkey(rest[0], "squadsMultisigPubkey");
       const vaultIndex = Number(rest[1] ?? "0");
@@ -305,15 +516,19 @@ async function main() {
         .accounts({ config: configPda, squadsMultisig })
         .rpc();
       console.log(`Confirmed: ${sig}`);
-      const tx = await provider.connection.getTransaction(sig, { maxSupportedTransactionVersion: 0 });
+      const tx = await provider.connection.getTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 });
       const logs = tx?.meta?.logMessages ?? [];
-      const eventLog = logs.find((l) => l.includes("GovernanceMultisigVerified"));
-      console.log(
-        eventLog
-          ? `Program log: ${eventLog}`
-          : "(could not find the GovernanceMultisigVerified event in this transaction's logs — check the " +
-              "signature above directly on an explorer instead.)"
-      );
+      const parser = new anchor.EventParser(program.programId, new anchor.BorshCoder(program.idl));
+      const ev = Array.from(parser.parseLogs(logs)).find((e) => e.name === "governanceMultisigVerified" || e.name === "GovernanceMultisigVerified");
+      if (ev) {
+        const d: any = ev.data;
+        console.log("GovernanceMultisigVerified:");
+        console.log(`  squads_multisig:      ${d.squadsMultisig?.toBase58?.() ?? d.squads_multisig?.toBase58?.()}`);
+        console.log(`  governance_authority: ${(d.governanceAuthority ?? d.governance_authority)?.toBase58?.()}`);
+        console.log(`  threshold:            ${d.threshold} of ${d.memberCount ?? d.member_count}`);
+      } else {
+        console.log("(no GovernanceMultisigVerified event found in this transaction's logs — check the signature on an explorer)");
+      }
       break;
     }
 

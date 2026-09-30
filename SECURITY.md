@@ -172,6 +172,42 @@ a funded, experienced team.
 **Treat every number and every line in this program as unverified until you
 have personally confirmed it — do not take "it looks right" as sufficient.**
 
+## SWDMM v2 + governance v2 — added 2026-09-29
+
+**New code (unaudited):** `swdmm_v2.rs` (Meteora-DAMM-v2-style pools),
+`swdmm_math.rs` (pure math), `timelock.rs` (timelocked governance, protocol
+fee settings, per-mint policy). See `docs/SWDMM_V2.md`,
+`docs/AUDIT_SCOPE.md` and `docs/MAINNET_RUNBOOK.md`.
+
+What changed for security:
+
+- **Timelock.** Unpausing any pool, changing the protocol fee share, the
+  timelock delay, the treasury, SWDMM v2 pool risk parameters, and
+  withdrawing protocol fees all go through `propose_gov_action` → wait →
+  `execute_*` (anyone can execute; governance can cancel). Delay: 24–48h on
+  a `--features mainnet` build, 5s–48h otherwise. The old instant
+  `governed_unpause_pool` / `governed_unpause_dlmm_pool` now always fail
+  with `UseTimelockedUnpause`.
+- **Protocol fee** (≤ 20% of SWDMM v2 trading fees) accrues per pool and only
+  leaves to the treasury through a matured timelocked action.
+- **Price-impact cap.** Constant-product swaps: max 50% per swap
+  (`PriceImpactTooHigh`). SWDMM v2: per-pool cap ≤ 50%.
+- **MintPolicy** for SWDMM v2: governance allowlist that pins the token
+  program; Token-2022 needs an explicit reviewed flag plus the extension
+  gate; transfer-fee mints are refused.
+- **SWDMM v2 first deposit** (sets the price) is restricted to the pool
+  creator.
+- **CI:** `cargo audit` job (0 vulnerabilities, 3 transitive warnings as of
+  2026-09-29), proptest property suite, `--features mainnet` compile check.
+
+Verified 2026-09-29 in a local toolchain (Anchor 0.31.1, Solana 3.1.10):
+`cargo test` (42 unit + 4 proptest × 20,000 cases), the full `anchor test`
+suite including `tests/swdmm_v2.ts`, and a browser end-to-end run of the
+SWDMM v2 page (create pool → swap both ways → deposit → claim → withdraw
+→ lock → timelocked protocol-fee withdrawal) against a local validator.
+Still required before mainnet: gates 4–9 in `docs/MAINNET_RUNBOOK.md`
+(independent audit, fresh hardware keys, Squads 2-of-3, mainnet build).
+
 ## What this is (and isn't)
 
 This is **one pool type**: a classic constant-product (x·y=k) AMM, similar

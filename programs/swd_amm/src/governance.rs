@@ -365,67 +365,31 @@ pub(crate) fn emergency_pause_dlmm_pool(
 /// unpaused on just swap, leaving deposit paused, in one call or two —
 /// caller's choice).
 pub(crate) fn governed_unpause_pool(
-    ctx: Context<GovernancePausePool>,
-    unpause_swap: bool,
-    unpause_deposit: bool,
-    unpause_withdraw: bool,
+    _ctx: Context<GovernancePausePool>,
+    _unpause_swap: bool,
+    _unpause_deposit: bool,
+    _unpause_withdraw: bool,
 ) -> Result<()> {
-    require!(
-        unpause_swap || unpause_deposit || unpause_withdraw,
-        GovernanceError::EmergencyPauseRequestEmpty
-    );
-
-    let pool = &mut ctx.accounts.pool;
-    if unpause_swap {
-        pool.swap_paused = false;
-    }
-    if unpause_deposit {
-        pool.deposit_paused = false;
-    }
-    if unpause_withdraw {
-        pool.withdraw_paused = false;
-    }
-
-    emit!(PoolUnpaused {
-        pool: pool.key(),
-        swap_paused: pool.swap_paused,
-        deposit_paused: pool.deposit_paused,
-        withdraw_paused: pool.withdraw_paused,
-    });
-    Ok(())
+    // Since 2026-09-29 (SWDMM spec) unpausing must go through the
+    // timelocked propose/execute flow in timelock.rs. This instant path is
+    // kept only so old clients get a clear error instead of an unknown
+    // instruction.
+    err!(crate::timelock::TimelockError::UseTimelockedUnpause)
 }
 
 /// DLMM-pool counterpart to `governed_unpause_pool` — see that function's
 /// doc comment.
 pub(crate) fn governed_unpause_dlmm_pool(
-    ctx: Context<GovernancePauseDlmmPool>,
-    unpause_swap: bool,
-    unpause_deposit: bool,
-    unpause_withdraw: bool,
+    _ctx: Context<GovernancePauseDlmmPool>,
+    _unpause_swap: bool,
+    _unpause_deposit: bool,
+    _unpause_withdraw: bool,
 ) -> Result<()> {
-    require!(
-        unpause_swap || unpause_deposit || unpause_withdraw,
-        GovernanceError::EmergencyPauseRequestEmpty
-    );
-
-    let pool = &mut ctx.accounts.pool;
-    if unpause_swap {
-        pool.swap_paused = false;
-    }
-    if unpause_deposit {
-        pool.deposit_paused = false;
-    }
-    if unpause_withdraw {
-        pool.withdraw_paused = false;
-    }
-
-    emit!(DlmmPoolUnpaused {
-        pool: pool.key(),
-        swap_paused: pool.swap_paused,
-        deposit_paused: pool.deposit_paused,
-        withdraw_paused: pool.withdraw_paused,
-    });
-    Ok(())
+    // Since 2026-09-29 (SWDMM spec) unpausing must go through the
+    // timelocked propose/execute flow in timelock.rs. This instant path is
+    // kept only so old clients get a clear error instead of an unknown
+    // instruction.
+    err!(crate::timelock::TimelockError::UseTimelockedUnpause)
 }
 
 /// Permissionless, read-only (in effect — it only emits an event, never

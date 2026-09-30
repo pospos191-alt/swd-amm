@@ -128,6 +128,37 @@ describe("swd_amm governance", () => {
     return { poolPda, vaultAPda, vaultBPda, lpMintPda };
   }
 
+
+  // ---- Timelock helpers (timelock.rs, added 2026-09-29) ----
+  const [govSettingsPda] = PublicKey.findProgramAddressSync([Buffer.from("gov_settings")], program.programId);
+  async function ensureGovSettings(): Promise<PublicKey> {
+    try {
+      await program.methods
+        .initializeGovernanceSettings(new BN(5), 1_000, payer.publicKey)
+        .accounts({ config: globalConfigPda, governanceAuthority: payer.publicKey, settings: govSettingsPda, payer: payer.publicKey, systemProgram: SystemProgram.programId })
+        .rpc();
+    } catch (e) {
+      if (!String(e).includes("already in use")) throw e;
+    }
+    return govSettingsPda;
+  }
+  async function proposeAction(action: any): Promise<PublicKey> {
+    const s: any = await program.account.governanceSettings.fetch(govSettingsPda);
+    const [pending] = PublicKey.findProgramAddressSync(
+      [Buffer.from("gov_action"), new BN(s.nextActionId).toArrayLike(Buffer, "le", 8)],
+      program.programId
+    );
+    await program.methods
+      .proposeGovAction(action)
+      .accounts({ config: globalConfigPda, governanceAuthority: payer.publicKey, settings: govSettingsPda, pending, payer: payer.publicKey, systemProgram: SystemProgram.programId })
+      .rpc();
+    return pending;
+  }
+  async function waitForTimelock(_settings: PublicKey) {
+    const s: any = await program.account.governanceSettings.fetch(govSettingsPda);
+    await new Promise((r) => setTimeout(r, (Number(s.timelockDelaySecs) + 2) * 1000));
+  }
+
   async function ensureGlobalConfig() {
     try {
       await program.methods
@@ -440,12 +471,28 @@ describe("swd_amm governance", () => {
     }, "governed_unpause_pool signed by emergency_authority instead of governance_authority");
     console.log("  (emergency_authority attempting unpause rejected with:", errorCode(emergencyUnpauseErr) ?? String(emergencyUnpauseErr?.message ?? emergencyUnpauseErr).split("\n")[0], ")");
 
-    // Only governance_authority (payer, in this test setup) can actually
-    // unpause.
-    await program.methods
-      .governedUnpausePool(true, false, false)
-      .accounts({ config: globalConfigPda, governanceAuthority: payer.publicKey, pool: poolPda })
-      .rpc();
+    // Since 2026-09-29 the instant path is closed even for
+    // governance_authority: unpausing must go through the timelock.
+    const instantErr = await expectThrows(async () => {
+      await program.methods
+        .governedUnpausePool(true, false, false)
+        .accounts({ config: globalConfigPda, governanceAuthority: payer.publicKey, pool: poolPda })
+        .rpc();
+    }, "instant governed_unpause_pool");
+    assert.equal(errorCode(instantErr), "UseTimelockedUnpause");
+
+    const settingsPda = await ensureGovSettings();
+    const pending = await proposeAction({ unpauseCpPool: { pool: poolPda, swap: true, deposit: false, withdraw: false } });
+    const earlyErr = await expectThrows(async () => {
+      await program.methods.executeUnpausePool().accounts({ pending, pool: poolPda }).rpc();
+    }, "executing the unpause before the timelock elapsed");
+    assert.equal(errorCode(earlyErr), "TimelockNotElapsed");
+    await waitForTimelock(settingsPda);
+    await program.methods.executeUnpausePool().accounts({ pending, pool: poolPda }).rpc();
+    const again = await expectThrows(async () => {
+      await program.methods.executeUnpausePool().accounts({ pending, pool: poolPda }).rpc();
+    }, "executing the same action twice");
+    assert.equal(errorCode(again), "ActionNotPending");
 
     await program.methods
       .swap(new BN(1_000), new BN(0), true)
