@@ -8,6 +8,7 @@
 #                 full `anchor test` localnet suite (the same `yarn test` you
 #                 run in WSL). First run ~20-30 min (compiling), later runs
 #                 are faster thanks to the caches.
+#   audit         every push / PR — cargo audit against the RustSec database.
 #   deploy-devnet ONLY when started by hand (Actions → CI → Run workflow →
 #                 tick "deploy to Devnet") AND both jobs above passed. Needs
 #                 the two repository secrets described on that job. Never
@@ -176,8 +177,11 @@ jobs:
             echo "MAINNET_RPC_URL not set — using the public mainnet-beta RPC (may rate-limit)"
           fi
 
-      - name: cargo test (unit + property tests, no validator)
+      - name: cargo test (unit + proptest property tests, no validator)
         run: cargo test -p swd_amm
+
+      - name: mainnet build flags compile (24h-48h timelock)
+        run: cargo check -p swd_amm --features mainnet
 
       - name: anchor build (SBF program + IDL)
         run: anchor build
@@ -208,9 +212,28 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  audit:
+    name: cargo audit (RustSec advisories)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # Fails the job on any known vulnerability in Cargo.lock. "Unmaintained"
+      # / "unsound" notices on transitive Solana/Anchor crates are printed as
+      # warnings (they are not ours to fix) and do not fail the job.
+      - name: cargo audit
+        run: cargo audit
+
   deploy-devnet:
     name: deploy to Devnet (manual)
-    needs: [test-ui, program]
+    needs: [test-ui, program, audit]
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_devnet
     runs-on: ubuntu-24.04
     timeout-minutes: 45
