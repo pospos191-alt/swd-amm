@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* Theme (build 2026-10-07c): trading-terminal dark — Binance-style
+  /* Theme (build 2026-10-07d): trading-terminal dark — Binance-style
      density and green/red market colours, with a violet→cyan "gem" brand
      gradient. To retheme, change the values in this block (and the light
      block below); every colour on the page and in the chart reads them.
@@ -1331,7 +1331,7 @@
   }
 
   /* =====================================================================
-     Theme layer (build 2026-10-07c) — trading-site look and phone layout.
+     Theme layer (build 2026-10-07d) — trading-site look and phone layout.
      Styling only: no element, id or class in the page changed, every rule
      below restyles what is already there. Colours come from the tokens at
      the top of this stylesheet.
@@ -1373,7 +1373,7 @@
   .pf-hero-title { background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; }
   .form-popup-box::before { background: var(--brand-grad); opacity: 1; }
 
-  /* App header (build 2026-10-07c): one sticky row — brand, nav, actions */
+  /* App header (build 2026-10-07d): one sticky row — brand, nav, actions */
   body { padding-top: 0; }
   .app-header {
     position: sticky; top: 0; z-index: 900;
@@ -1435,7 +1435,8 @@
   .trade-dock-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
   .trade-dock-head h3 { margin: 0; font-size: 17px; }
   .trade-dock-sub { font-size: 12px; color: var(--text-dim); }
-  .trade-dock #swap-btn, .trade-dock #dlmm-swap-btn { background: var(--up); color: #fff; }
+  #swap-btn, #dlmm-swap-btn { background: var(--up); color: #fff; }
+  #swap-btn:hover:not(:disabled), #dlmm-swap-btn:hover:not(:disabled) { background: var(--up); filter: brightness(1.08); }
 
   /* Trade tools row */
   .tools-nav-btn.active { background: rgba(var(--accent-rgb),0.12); color: var(--text); }
@@ -1473,6 +1474,33 @@
   /* Popups (forms, pool detail, confirm) */
   .modal-overlay { background: rgba(5,6,10,0.68); }
   .modal-box { border-color: var(--panel-border); }
+
+
+  /* Easy swap (build 2026-10-07d): token amounts, balance, token picker */
+  .raw-amount-hidden { display: none !important; }
+  .row:has(> .easy-amount-field) { flex-direction: column; gap: 4px; }
+  .row:has(> .easy-amount-field) > .field { width: 100%; flex: 0 0 auto !important; }
+  .easy-amount-input { flex: 1; min-width: 0; font-size: 24px; font-weight: 700; font-family: var(--mono); padding: 12px 64px 12px 14px; letter-spacing: -0.01em; }
+  .easy-amount-input.invalid { border-color: var(--down); box-shadow: 0 0 0 3px rgba(var(--down-rgb),0.2); }
+  .easy-amount-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; min-height: 28px; font-size: 12.5px; color: var(--text-dim); }
+  .easy-bal { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+  .easy-bal b { color: var(--text); font-weight: 600; }
+  .easy-pcts { display: inline-flex; gap: 4px; }
+  .easy-pcts button { padding: 3px 9px; font-size: 12px; border-radius: 999px; }
+  .easy-token-side { cursor: pointer; border-radius: var(--radius-sm); padding: 4px 6px; margin: -4px -6px; transition: background-color 0.15s var(--ease); }
+  .easy-token-side:hover, .easy-token-side:focus-visible { background: rgba(var(--accent-rgb),0.10); outline: none; }
+  .easy-token-side .dir-flip-side-value::after { content: " ▾"; font-size: 12px; color: var(--text-dim); }
+  #swap-form-content .manual-mint-details, #dlmm-swap-form-content .manual-mint-details,
+  #swap-form-content .field:has(> #swap-min-out), #dlmm-swap-form-content .field:has(> #dlmm-swap-min-out) { display: none; }
+  #swap-estimate, #dlmm-swap-estimate { margin: 4px 0 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--panel-alt); border: 1px solid var(--panel-border-soft); color: var(--text); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .token-picker-box { width: 440px; max-width: 96vw; display: flex; flex-direction: column; gap: 10px; max-height: 80vh; }
+  .token-picker-box h3 { margin: 0; }
+  #token-picker-search { width: 100%; font-family: var(--font-body); }
+  .token-picker-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; min-height: 120px; }
+  .token-picker-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 10px 10px; background: transparent; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--text); font-weight: 600; text-align: left; box-shadow: none; }
+  .token-picker-row:hover:not(:disabled) { background: var(--row-hover); transform: none; }
+  .token-picker-row.current { border-color: rgba(var(--accent-rgb),0.5); }
+  .token-picker-row .tp-sub { font-size: 12px; color: var(--text-dim); font-weight: 400; white-space: nowrap; }
 
   /* ------------------------------ Phones ------------------------------ */
   @media (hover: none), (max-width: 900px) {
@@ -1562,7 +1590,7 @@
 </head>
 <body>
 
-<!-- App header (build 2026-10-07c): one row like Binance/Raydium/Meteora —
+<!-- App header (build 2026-10-07d): one row like Binance/Raydium/Meteora —
      brand, primary nav, then network / alerts / settings / wallet. Every
      control keeps its id, so all existing wiring is unchanged; the less
      used ones moved into the Settings popover. -->
@@ -2838,7 +2866,7 @@
     </div>
   </div>
 
-  <!-- Trade layout (build 2026-10-07c): chart on the left, the Swap form
+  <!-- Trade layout (build 2026-10-07d): chart on the left, the Swap form
        docked on the right on wide screens (as on Raydium/Meteora/Binance),
        so a trade needs no popup. On narrower screens the dock is empty
        and Swap opens as before (bottom sheet on phones). -->
@@ -2880,7 +2908,7 @@
         <button type="button" class="popup-open-btn btn-icon-text" id="swap-open-popup-btn" data-icon="swap" data-tip="btnOpenSwapForm"><span data-i18n="btnOpenSwapForm">Open Swap</span></button>
       </div>
         <div id="swap-form-content" hidden>
-      <div class="hint need-pair-hint" data-need-pair hidden data-i18n="popupNeedPair">Pick a pair first: click the pair card on the Trade tab.</div>
+      <div class="hint need-pair-hint" data-need-pair hidden data-i18n="swapNeedTokens">Pick a pair first: click the pair card on the Trade tab.</div>
       <div class="field pair-picker-removed" aria-hidden="true">
         <select id="swap-pair-select" tabindex="-1"><option value="" data-i18n="quickPairPickerEmpty">No pools loaded yet — refresh the Liquidity tab first</option></select>
       </div>
@@ -2942,7 +2970,7 @@
       <button id="swap-btn" data-i18n="panel6Btn">Swap</button>
     </div>
         <div id="dlmm-swap-form-content" hidden>
-      <div class="hint need-pair-hint" data-need-pair hidden data-i18n="popupNeedPair">Pick a pair first: click the pair card on the Trade tab.</div>
+      <div class="hint need-pair-hint" data-need-pair hidden data-i18n="swapNeedTokens">Pick a pair first: click the pair card on the Trade tab.</div>
       <div class="field pair-picker-removed" aria-hidden="true">
         <select id="dlmm-swap-pair-select" tabindex="-1"><option value="" data-i18n="quickPairPickerEmpty">No pools loaded yet — refresh the Liquidity tab first</option></select>
       </div>
@@ -3548,7 +3576,7 @@
 <div id="log"><div class="line" data-i18n="logReady">Ready — connect your wallet to begin</div></div>
 <footer class="app-footer">
 <div class="sub app-footer-line">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07c</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07d</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 </footer>
@@ -3915,11 +3943,11 @@ const STRINGS = {
     labelSlippage: "ระดับความคลาดเคลื่อนที่ยอมรับได้ (slippage)",
     optCustomSlippage: "กำหนดเอง…",
     labelSlippageCustom: "Slippage กำหนดเอง (%)",
-    estimateNoInput: "กรอก mint และจำนวนเพื่อดูยอดที่คาดว่าจะได้รับ",
+    estimateNoInput: "เลือกเหรียญและใส่จำนวน เพื่อดูยอดที่จะได้รับ",
     estimateNoLiquidity: "พูลนี้ยังไม่มีสภาพคล่อง — ยังประเมินไม่ได้",
     estimateError: "ประเมินยอดไม่ได้ — ตรวจสอบ mint/พูลอีกครั้ง",
     estimateOutput: "คาดว่าจะได้รับ ≈ {amount} (ขั้นต่ำตามระดับ slippage: {min}) — คำนวณจากสูตรบนเชนตรงๆ",
-    estimateDlmmNoInput: "กรอก mint และจำนวนเพื่อดูยอดที่คาดว่าจะได้รับ (ประมาณการจาก bin ปัจจุบันเท่านั้น)",
+    estimateDlmmNoInput: "เลือกเหรียญและใส่จำนวน เพื่อดูยอดที่จะได้รับ (ประมาณจาก bin ปัจจุบัน)",
     estimateOutputDlmm: "คาดว่าจะได้รับ ≈ {amount} (ขั้นต่ำตามระดับ slippage: {min}) — ประมาณการจากราคา bin ที่ active อยู่ตอนนี้เท่านั้น ถ้า order ใหญ่จน cross ไป bin อื่น ยอดจริงอาจต่างจากนี้",
 
     panelTokenLabelsTitle: "F. ตั้งชื่อเล่นโทเคน",
@@ -4509,6 +4537,17 @@ const STRINGS = {
     navLaunchlabTitle: "โปรแกรมนี้ไม่รองรับ Launchlab — swd_amm ไม่มีโมดูลออกโทเคนใหม่",
     navMarketplace: "ตลาดซื้อขาย",
     navMore: "เพิ่มเติม ▾",
+    swapYouPay: "คุณจ่าย",
+    swapNeedTokens: "เลือกเหรียญที่จะแลก: แตะ \"คุณส่ง\" หรือ \"คุณได้รับ\" ด้านล่าง",
+    swapAmountPlaceholder: "0.0",
+    swapBalance: "ยอดคงเหลือ",
+    swapMinReceive: "ได้รับอย่างน้อย",
+    pickerTitle: "เลือกเหรียญ",
+    pickerSearch: "ค้นหาชื่อ หรือวางที่อยู่เหรียญ",
+    pickerEmpty: "ยังไม่มีพูลบนเครือข่ายนี้ — รอโหลดรายการพูล หรือเปลี่ยนเครือข่าย",
+    pickerNoMatch: "ไม่พบเหรียญที่ค้นหา",
+    pickerPairs: "{n} คู่",
+    pickerOpenTip: "กดเพื่อเลือกเหรียญ",
     hdrBadge: "Devnet · ยังไม่ audit",
     hdrBadgeTip: "ใช้บน Solana Devnet เท่านั้น เหรียญไม่มีมูลค่าจริง และ program ยังไม่ผ่าน security audit ห้ามใช้กับเงินจริง — คลิกเพื่อดูคำเตือนเต็ม",
     hdrSettings: "ตั้งค่า",
@@ -4941,11 +4980,11 @@ const STRINGS = {
     labelSlippage: "Slippage tolerance",
     optCustomSlippage: "Custom…",
     labelSlippageCustom: "Custom slippage (%)",
-    estimateNoInput: "Enter mints and an amount to see an estimated output.",
+    estimateNoInput: "Pick the tokens and enter an amount to see what you will receive.",
     estimateNoLiquidity: "This pool has no liquidity yet — nothing to estimate.",
     estimateError: "Couldn't estimate — double-check the mints/pool.",
     estimateOutput: "Estimated output ≈ {amount} (min at this slippage: {min}) — computed from the exact on-chain formula.",
-    estimateDlmmNoInput: "Enter mints and an amount to see an estimated output (active-bin approximation).",
+    estimateDlmmNoInput: "Pick the tokens and enter an amount to see what you will receive (active-bin estimate).",
     estimateOutputDlmm: "Estimated output ≈ {amount} (min at this slippage: {min}) — priced at the current active bin only. Large orders that cross into other bins may get a different actual amount.",
 
     panelTokenLabelsTitle: "F. Token Labels",
@@ -5535,6 +5574,17 @@ const STRINGS = {
     navLaunchlabTitle: "Not supported by swd_amm — this program has no token-launch module.",
     navMarketplace: "Marketplace",
     navMore: "More ▾",
+    swapYouPay: "You pay",
+    swapNeedTokens: "Choose the tokens to swap: tap \"You send\" or \"You receive\" below.",
+    swapAmountPlaceholder: "0.0",
+    swapBalance: "Balance",
+    swapMinReceive: "You receive at least",
+    pickerTitle: "Select a token",
+    pickerSearch: "Search name or paste address",
+    pickerEmpty: "No pools on this network yet — wait for the pool list to load, or switch network.",
+    pickerNoMatch: "No token matches your search",
+    pickerPairs: "{n} pairs",
+    pickerOpenTip: "Click to choose a token",
     hdrBadge: "Devnet · Unaudited",
     hdrBadgeTip: "Solana Devnet only — tokens have no real value, and the program has not passed a security audit. Do not use with real funds. Click to show the full warning.",
     hdrSettings: "Settings",
@@ -11562,7 +11612,7 @@ document.querySelectorAll(".tab-nav-btn").forEach((btn) => {
 // "More ▾" dropdown — a plain show/hide toggle, closed automatically by
 // switchTab() above whenever any nav item (including one inside this menu)
 // is clicked, and by clicking anywhere outside it.
-// Header Settings popover (build 2026-10-07c): language, theme, priority
+// Header Settings popover (build 2026-10-07d): language, theme, priority
 // fee, confirm-before-send, auto-refresh, faucet, command palette.
 (function initSettingsPopover() {
   const btn = document.getElementById("settings-btn");
@@ -13057,7 +13107,7 @@ function bestPoolTypeForActivePair() {
   if (dlmmExists && !cpExists) return "dlmm";
   return "cp";
 }
-// Swap dock (build 2026-10-07c): on wide screens the Swap form sits next
+// Swap dock (build 2026-10-07d): on wide screens the Swap form sits next
 // to the Trading Board chart, the way Raydium / Meteora / Binance show
 // the order box beside the chart. Same reparenting trick as the popup —
 // the real form (ids, listeners) moves into #trade-dock-body and back.
@@ -14932,6 +14982,272 @@ wireDirectionFlip("dca", "dca-mint-a", "dca-mint-b");
 wireDirectionFlip("bpf", "bpf-mint-a", "bpf-mint-b");
 wireDirectionFlip("mh", "swap-mint-a", "swap-mint-b");
 
+// ---------------------------------------------------------------------
+// Easy swap (build 2026-10-07d) — a presentation layer over the Swap
+// forms, the same idea as the direction widget above. The raw-unit
+// <input id="X-amount-in"> stays the single source of truth for every
+// existing listener, estimate, MAX button and auto-route; on top of it:
+//   - people type token amounts ("1.5"), written into the raw field
+//   - their balance of the token being sent, with 25% / 50% / MAX
+//   - tokens picked by name from a searchable list (click "You send" or
+//     "You receive"), which sets the pair and direction for them
+// ---------------------------------------------------------------------
+const NATIVE_INPUT_VALUE = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+
+function easySwapMints(prefix) {
+  const a = document.getElementById(`${prefix}-mint-a`)?.value.trim() || "";
+  const b = document.getElementById(`${prefix}-mint-b`)?.value.trim() || "";
+  const aToB = document.getElementById(`${prefix}-direction`)?.value !== "false";
+  return { a, b, aToB, inMint: aToB ? a : b, outMint: aToB ? b : a };
+}
+async function easyDecimals(mintStr) {
+  if (!mintStr) return null;
+  try { return await getMintDecimalsCached(new PublicKey(mintStr)); } catch { return null; }
+}
+// Exact decimal string for a raw amount (no float rounding).
+function rawToTokenString(raw, dec) {
+  let s = BigInt(raw).toString();
+  if (!dec) return s;
+  s = s.padStart(dec + 1, "0");
+  const whole = s.slice(0, s.length - dec);
+  const frac = s.slice(s.length - dec).replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : whole;
+}
+
+function wireEasySwap(prefix) {
+  const raw = document.getElementById(`${prefix}-amount-in`);
+  const wrap = raw?.closest(".amount-input-wrap");
+  const field = raw?.closest(".field");
+  if (!raw || !wrap || !field) return;
+  field.classList.add("easy-amount-field");
+  const label = field.querySelector("label");
+  if (label) { label.setAttribute("data-i18n", "swapYouPay"); label.textContent = t("swapYouPay"); }
+
+  const ui = document.createElement("input");
+  ui.id = `${prefix}-amount-ui`;
+  ui.className = "easy-amount-input";
+  ui.inputMode = "decimal";
+  ui.autocomplete = "off";
+  ui.placeholder = "0.0";
+  ui.setAttribute("data-i18n-placeholder", "swapAmountPlaceholder");
+  wrap.insertBefore(ui, raw);
+  raw.classList.add("raw-amount-hidden");
+  raw.tabIndex = -1;
+  raw.setAttribute("aria-hidden", "true");
+
+  const meta = document.createElement("div");
+  meta.className = "easy-amount-meta";
+  meta.innerHTML = `<span class="easy-bal"></span><span class="easy-pcts"><button type="button" class="secondary" data-pct="25">25%</button><button type="button" class="secondary" data-pct="50">50%</button></span>`;
+  wrap.insertAdjacentElement("afterend", meta);
+  const balEl = meta.querySelector(".easy-bal");
+
+  // raw -> token amount: every place that sets the raw value (MAX,
+  // auto-route carrying the amount to the other form, ...) updates the
+  // visible field too.
+  let writingFromUi = false;
+  Object.defineProperty(raw, "value", {
+    configurable: true,
+    get() { return NATIVE_INPUT_VALUE.get.call(this); },
+    set(v) { NATIVE_INPUT_VALUE.set.call(this, v); if (!writingFromUi) syncUiFromRaw(); },
+  });
+  async function syncUiFromRaw() {
+    const r = NATIVE_INPUT_VALUE.get.call(raw).trim();
+    if (!r) { ui.value = ""; return; }
+    let big;
+    try { big = BigInt(r); } catch { return; }
+    const dec = await easyDecimals(easySwapMints(prefix).inMint);
+    if (dec != null) ui.value = rawToTokenString(big, dec);
+  }
+
+  // token amount -> raw, then the same "change" the raw field always got
+  let timer = null;
+  async function pushUiToRaw() {
+    const txt = ui.value.trim().replace(/,/g, ".");
+    let rawStr = "";
+    if (txt) {
+      const dec = await easyDecimals(easySwapMints(prefix).inMint);
+      if (dec == null) return;
+      const v = v2ParseUnits(txt, dec);
+      if (v == null) { ui.classList.add("invalid"); return; }
+      rawStr = v.toString();
+    }
+    ui.classList.remove("invalid");
+    if (NATIVE_INPUT_VALUE.get.call(raw) === rawStr) return;
+    writingFromUi = true;
+    raw.value = rawStr;
+    writingFromUi = false;
+    raw.dispatchEvent(new Event("change"));
+  }
+  ui.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(pushUiToRaw, 350); });
+  ui.addEventListener("change", () => { clearTimeout(timer); pushUiToRaw(); });
+  ui.addEventListener("focus", refreshBalance);
+
+  let lastBal = null;
+  async function refreshBalance() {
+    const { inMint } = easySwapMints(prefix);
+    if (!state.wallet?.publicKey || !inMint) { balEl.textContent = ""; lastBal = null; return; }
+    try {
+      const mint = new PublicKey(inMint);
+      const [dec, ata] = await Promise.all([easyDecimals(inMint), getAssociatedTokenAddress(mint, state.wallet.publicKey)]);
+      let amount = 0n;
+      try { amount = BigInt((await getAccount(state.connection, ata)).amount.toString()); } catch { /* no token account yet */ }
+      if (easySwapMints(prefix).inMint !== inMint) return; // pair changed meanwhile
+      lastBal = amount;
+      balEl.innerHTML = `${escapeHtmlText(t("swapBalance"))}: <b>${fmtAmt(amount, dec ?? 0)}</b> ${labelForIcon(inMint, 14)}`;
+    } catch { balEl.textContent = ""; }
+  }
+  meta.querySelectorAll("[data-pct]").forEach((btn) => btn.addEventListener("click", async () => {
+    await refreshBalance();
+    if (lastBal == null) return;
+    raw.value = ((lastBal * BigInt(btn.dataset.pct)) / 100n).toString();
+    raw.dispatchEvent(new Event("change"));
+  }));
+
+  // The token being sent changed: keep the number the person typed (now
+  // in the new token) and show the new balance.
+  const onSideChange = () => { setTimeout(() => { pushUiToRaw(); refreshBalance(); }, 0); };
+  document.getElementById(`${prefix}-direction`)?.addEventListener("change", onSideChange);
+  document.addEventListener("swd-mint-sync", (e) => {
+    if (e.detail?.suffix === "-mint-a" || e.detail?.suffix === "-mint-b") onSideChange();
+  });
+  new MutationObserver(refreshBalance).observe(document.documentElement, { attributes: true, attributeFilter: ["data-wallet"] });
+  setInterval(() => { if (ui.offsetParent && state.wallet?.publicKey) refreshBalance(); }, 30000);
+
+  // "You send" / "You receive" open the token list.
+  const form = document.getElementById(`${prefix}-form-content`);
+  form?.querySelectorAll(".dir-flip-side").forEach((sideEl) => {
+    const side = sideEl.classList.contains("dir-flip-side-to") ? "out" : "in";
+    sideEl.classList.add("easy-token-side");
+    sideEl.setAttribute("role", "button");
+    sideEl.tabIndex = 0;
+    sideEl.setAttribute("data-tip", "pickerOpenTip");
+    const open = () => openTokenPicker(prefix, side);
+    sideEl.addEventListener("click", open);
+    sideEl.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+  });
+}
+
+// ---- token picker ----------------------------------------------------
+function easyTokenIndex() {
+  const map = new Map();
+  for (const r of lastPoolListRows) {
+    const a = r.mintA.toBase58(), b = r.mintB.toBase58();
+    if (!map.has(a)) map.set(a, new Set());
+    if (!map.has(b)) map.set(b, new Set());
+    map.get(a).add(b);
+    map.get(b).add(a);
+  }
+  return map;
+}
+function easyFindPool(x, y, preferType) {
+  const rows = lastPoolListRows.filter((r) => {
+    const a = r.mintA.toBase58(), b = r.mintB.toBase58();
+    return (a === x && b === y) || (a === y && b === x);
+  });
+  return rows.find((r) => r.type === preferType) || rows[0] || null;
+}
+function applyTokenChoice(prefix, side, x) {
+  const cur = easySwapMints(prefix);
+  let send = side === "in" ? x : cur.inMint;
+  let recv = side === "out" ? x : cur.outMint;
+  if (send && send === recv) {
+    // Picked the token on the other side: swap the two sides.
+    if (side === "in") recv = cur.inMint; else send = cur.outMint;
+  }
+  const preferType = prefix === "dlmm-swap" ? "dlmm" : "cp";
+  let row = send && recv ? easyFindPool(send, recv, preferType) : null;
+  if (!row) {
+    // No pool between the two: pair the chosen token with one it trades with.
+    const partners = easyTokenIndex().get(x);
+    const other = partners && [...partners][0];
+    if (!other) return;
+    if (side === "in") recv = other; else send = other;
+    row = easyFindPool(send, recv, preferType);
+  }
+  if (!row) return;
+  setActivePair(row.mintA.toBase58(), row.mintB.toBase58());
+  const aToB = String(row.mintA.toBase58() === send);
+  for (const p of ["swap", "dlmm-swap"]) {
+    const d = document.getElementById(`${p}-direction`);
+    if (d && d.value !== aToB) { d.value = aToB; d.dispatchEvent(new Event("change")); }
+  }
+}
+let tokenPickerCtx = null;
+function ensureTokenPicker() {
+  let overlay = document.getElementById("token-picker-overlay");
+  if (overlay) return overlay;
+  overlay = document.createElement("div");
+  overlay.id = "token-picker-overlay";
+  overlay.className = "modal-overlay";
+  overlay.hidden = true;
+  overlay.innerHTML = `<div class="modal-box token-picker-box" role="dialog" aria-modal="true" aria-labelledby="token-picker-title">
+    <button type="button" class="modal-close" id="token-picker-close" aria-label="Close">✕</button>
+    <h3 id="token-picker-title" data-i18n="pickerTitle">${escapeHtmlText(t("pickerTitle"))}</h3>
+    <input type="search" id="token-picker-search" autocomplete="off" spellcheck="false" data-i18n-placeholder="pickerSearch" placeholder="${escapeHtmlText(t("pickerSearch"))}" />
+    <div class="token-picker-list" id="token-picker-list" role="listbox"></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const close = () => { overlay.hidden = true; tokenPickerCtx = null; };
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  overlay.querySelector("#token-picker-close").addEventListener("click", close);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !overlay.hidden) close(); });
+  overlay.querySelector("#token-picker-search").addEventListener("input", renderTokenPicker);
+  overlay.querySelector("#token-picker-list").addEventListener("click", (e) => {
+    const row = e.target.closest("[data-mint]");
+    if (!row || !tokenPickerCtx) return;
+    const { prefix, side } = tokenPickerCtx;
+    close();
+    applyTokenChoice(prefix, side, row.dataset.mint);
+  });
+  return overlay;
+}
+function renderTokenPicker() {
+  const list = document.getElementById("token-picker-list");
+  if (!list || !tokenPickerCtx) return;
+  const q = (document.getElementById("token-picker-search").value || "").trim().toLowerCase();
+  const idx = easyTokenIndex();
+  const { inMint, outMint } = easySwapMints(tokenPickerCtx.prefix);
+  const current = tokenPickerCtx.side === "in" ? inMint : outMint;
+  const other = tokenPickerCtx.side === "in" ? outMint : inMint;
+  const items = [...idx.keys()]
+    .map((m) => ({ m, name: (labelFor(m) || "").toString() }))
+    .filter(({ m, name }) => !q || m.toLowerCase().includes(q) || name.toLowerCase().includes(q))
+    // tokens that trade with the other side first, then by name
+    .sort((x, y) => (Number(idx.get(y.m).has(other)) - Number(idx.get(x.m).has(other))) || x.name.localeCompare(y.name));
+  if (!idx.size) { list.innerHTML = `<div class="empty-state">${escapeHtmlText(t("pickerEmpty"))}</div>`; return; }
+  if (!items.length) { list.innerHTML = `<div class="empty-state">${escapeHtmlText(t("pickerNoMatch"))}</div>`; return; }
+  list.innerHTML = items.map(({ m }) => {
+    const pairs = idx.get(m).size;
+    return `<button type="button" class="token-picker-row${m === current ? " current" : ""}" data-mint="${m}" role="option" aria-selected="${m === current}">
+      <span class="tp-main">${labelForIcon(m, 28)}</span>
+      <span class="tp-sub mono">${shortPk(m)} · ${escapeHtmlText(t("pickerPairs", { n: pairs }))}</span>
+    </button>`;
+  }).join("");
+}
+function openTokenPicker(prefix, side) {
+  const overlay = ensureTokenPicker();
+  tokenPickerCtx = { prefix, side };
+  const search = document.getElementById("token-picker-search");
+  search.value = "";
+  renderTokenPicker();
+  overlay.hidden = false;
+  setTimeout(() => search.focus(), 30);
+}
+
+wireEasySwap("swap");
+wireEasySwap("dlmm-swap");
+
+// Confirm dialog for swaps: token amounts instead of raw units.
+async function swapConfirmRows(mintA, mintB, aToB, amountIn, minOut) {
+  const [decA, decB] = await Promise.all([getMintDecimalsCached(mintA), getMintDecimalsCached(mintB)]);
+  const inMint = aToB ? mintA : mintB;
+  const outMint = aToB ? mintB : mintA;
+  return [
+    [t("swapYouPay"), `<b>${fmtAmt(amountIn, aToB ? decA : decB)}</b> ${labelForIcon(inMint, 18)}`],
+    [t("swapMinReceive"), `<b>${fmtAmt(minOut, aToB ? decB : decA)}</b> ${labelForIcon(outMint, 18)}`],
+  ];
+}
+
 // Multi-hop (build 2026-09-29k): mint in/out come from the active pair and
 // the flip button — no pickers. Filling them re-runs Find Route when an
 // amount is already entered.
@@ -15976,10 +16292,10 @@ function cpMarkPrices(records, reserves, decA, decB) {
 //
 // `price` is what the trader got (amount out / amount in, fee included) —
 // shown in the trades table and CSV. `mark` is the pool's own price right
-// after the trade, which is what the charts plot (build 2026-10-07c): a
+// after the trade, which is what the charts plot (build 2026-10-07d): a
 // trade's execution price sits a fee away from the market on alternating
 // sides for buys and sells, which drew fake wicks on every candle, and the
-// last candle never matched the Price stat. Also since 2026-10-07c: failed
+// last candle never matched the Price stat. Also since 2026-10-07d: failed
 // transactions are skipped (their logs still carry the events of the
 // instructions that ran before the failure), events of OTHER pools in the
 // same transaction (multi-hop) are dropped, and trades in the same second
@@ -16369,7 +16685,7 @@ const MARKET_UP = "#0ecb81";
 const MARKET_DOWN = "#f6465d";
 const TB_NARROW_QUERY = "(max-width: 640px)";
 
-// Trading-terminal chart theme (build 2026-10-07c): faint grid, dashed
+// Trading-terminal chart theme (build 2026-10-07d): faint grid, dashed
 // crosshair with labelled axes, high/low marks, a dashed last-price line,
 // green/red candles with translucent volume, MA lines in the usual
 // yellow / pink / violet, numbers in the monospace font.
@@ -21436,11 +21752,7 @@ document.getElementById("swap-btn").addEventListener("click", async () => {
     const { pool, vaultA, vaultB } = derivePool(mintA, mintB);
 
     const ok = await confirmAction([
-      [t("labelDirection"), aToB ? t("optAtoB") : t("optBtoA")],
-      [t("labelMintA"), labelForIcon(mintA, 20)],
-      [t("labelMintB"), labelForIcon(mintB, 20)],
-      [t("labelAmountInRaw"), fmtRawInt(amountIn.toString())],
-      [t("labelMinOut"), fmtRawInt(minOut.toString())],
+      ...(await swapConfirmRows(mintA, mintB, aToB, amountIn, minOut)),
     ]);
     if (!ok) return;
     setBtnBusy("swap-btn", true);
@@ -21847,11 +22159,7 @@ document.getElementById("dlmm-swap-btn").addEventListener("click", async () => {
     const { pool, binArray, vaultA, vaultB } = deriveDlmmPool(mintA, mintB);
 
     const ok = await confirmAction([
-      [t("labelDirection"), aToB ? t("optAtoB") : t("optBtoA")],
-      [t("labelMintA"), labelForIcon(mintA, 20)],
-      [t("labelMintB"), labelForIcon(mintB, 20)],
-      [t("labelAmountInRaw"), fmtRawInt(amountIn.toString())],
-      [t("labelMinOut"), fmtRawInt(minOut.toString())],
+      ...(await swapConfirmRows(mintA, mintB, aToB, amountIn, minOut)),
     ]);
     if (!ok) return;
     setBtnBusy("dlmm-swap-btn", true);

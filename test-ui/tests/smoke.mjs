@@ -113,6 +113,24 @@ try {
       const popupOpen = await page.evaluate(() => !document.getElementById("form-popup-overlay").hidden);
       if (popupOpen) throw new Error("Swap opened a popup instead of using the dock");
     }],
+    // Easy swap (build 2026-10-07d): token amounts in, raw units underneath.
+    ["Swap takes token amounts (1.5 -> 1500000 raw at 6 decimals) and back", async () => {
+      await page.fill("#swap-amount-ui", "1.5");
+      await page.waitForFunction(() => document.getElementById("swap-amount-in").value === "1500000", null, { timeout: 3000 })
+        .catch(() => { throw new Error("raw amount not written from the token amount"); });
+      await page.evaluate(() => { document.getElementById("swap-amount-in").value = "2500000"; });
+      await page.waitForFunction(() => document.getElementById("swap-amount-ui").value === "2.5", null, { timeout: 3000 })
+        .catch(() => { throw new Error("token amount not updated when the raw amount is set (MAX / auto-route path)"); });
+      await page.fill("#swap-amount-ui", "");
+    }],
+    ["Token picker opens from You send and closes", async () => {
+      await page.click("#swap-form-content .dir-flip-side:not(.dir-flip-side-to)", { timeout: 5000 });
+      const open = await page.evaluate(() => !document.getElementById("token-picker-overlay").hidden);
+      if (!open) throw new Error("token picker did not open");
+      await page.keyboard.press("Escape");
+      const closed = await page.evaluate(() => document.getElementById("token-picker-overlay").hidden);
+      if (!closed) throw new Error("token picker did not close on Escape");
+    }],
     ["Settings popover opens and closes", async () => {
       await page.click("#settings-btn", { timeout: 5000 });
       const open = await page.evaluate(() => !document.getElementById("settings-pop").hidden);
