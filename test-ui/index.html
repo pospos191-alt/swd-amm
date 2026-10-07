@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* Theme (build 2026-10-07e): trading-terminal dark — Binance-style
+  /* Theme (build 2026-10-07f): trading-terminal dark — Binance-style
      density and green/red market colours, with a violet→cyan "gem" brand
      gradient. To retheme, change the values in this block (and the light
      block below); every colour on the page and in the chart reads them.
@@ -1331,7 +1331,7 @@
   }
 
   /* =====================================================================
-     Theme layer (build 2026-10-07e) — trading-site look and phone layout.
+     Theme layer (build 2026-10-07f) — trading-site look and phone layout.
      Styling only: no element, id or class in the page changed, every rule
      below restyles what is already there. Colours come from the tokens at
      the top of this stylesheet.
@@ -1373,7 +1373,7 @@
   .pf-hero-title { background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; }
   .form-popup-box::before { background: var(--brand-grad); opacity: 1; }
 
-  /* App header (build 2026-10-07e): one sticky row — brand, nav, actions */
+  /* App header (build 2026-10-07f): one sticky row — brand, nav, actions */
   body { padding-top: 0; }
   .app-header {
     position: sticky; top: 0; z-index: 900;
@@ -1476,8 +1476,10 @@
   .modal-box { border-color: var(--panel-border); }
 
 
-  /* Easy swap (build 2026-10-07e): token amounts, balance, token picker */
+  /* Easy swap (build 2026-10-07f): token amounts, balance, token picker */
   .raw-amount-hidden { display: none !important; }
+  .easy-usd { margin-top: 4px; font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; min-height: 0; }
+  .easy-usd:empty { display: none; }
   .row:has(> .easy-amount-field) { flex-direction: column; gap: 4px; }
   .row:has(> .easy-amount-field) > .field { width: 100%; flex: 0 0 auto !important; }
   .easy-amount-input { flex: 1; min-width: 0; font-size: 24px; font-weight: 700; font-family: var(--mono); padding: 12px 64px 12px 14px; letter-spacing: -0.01em; }
@@ -1504,6 +1506,53 @@
   .token-picker-row:hover:not(:disabled) { background: var(--row-hover); transform: none; }
   .token-picker-row.current { border-color: rgba(var(--accent-rgb),0.5); }
   .token-picker-row .tp-sub { font-size: 12px; color: var(--text-dim); font-weight: 400; white-space: nowrap; }
+
+
+  /* Pools switch + Developer mode (build 2026-10-07f) */
+  html:not([data-dev="1"]) .dev-only { display: none !important; }
+  .grid[data-active-tab="liquidity"] > .pools-switch-row, .grid[data-active-tab="v2"] > .pools-switch-row { display: flex; }
+  .pools-switch-row { grid-column: 1 / -1; gap: 4px; padding: 4px; width: fit-content; background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius-md); }
+  .pools-switch-btn { background: transparent; color: var(--text-dim); border: none; box-shadow: none; padding: 8px 16px; font-size: 14px; border-radius: var(--radius-sm); }
+  .pools-switch-btn:hover:not(:disabled):not(.active) { background: var(--panel-alt); color: var(--text); transform: none; }
+  .pools-switch-btn.active { background: rgba(var(--accent-rgb),0.16); color: var(--text); }
+
+
+  /* Pair bar + trades (build 2026-10-07f) */
+  .pair-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 22px; padding: 4px 2px 14px; margin-bottom: 12px; border-bottom: 1px solid var(--panel-border-soft); }
+  .pb-stats { flex-wrap: wrap; row-gap: 8px; }
+  .pair-bar::-webkit-scrollbar { display: none; }
+  .pb-pair { display: inline-flex; align-items: center; gap: 10px; flex: none; background: transparent; border: none; box-shadow: none; color: var(--text); padding: 4px 6px; margin-left: -6px; font-size: 18px; }
+  .pb-pair:hover:not(:disabled) { background: var(--panel-alt); transform: none; }
+  .pb-sym b { font-weight: 800; }
+  .pb-sym span { color: var(--text-dim); font-weight: 600; }
+  .pb-pair .pill-type { font-size: 11px; }
+  .pb-chev { color: var(--text-dim); font-size: 12px; }
+  .pb-price { display: flex; flex-direction: column; flex: none; font-variant-numeric: tabular-nums; }
+  .pb-last { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--text); }
+  .pb-price.up .pb-last { color: var(--up); }
+  .pb-price.down .pb-last { color: var(--down); }
+  .pb-usd { font-size: 12px; color: var(--text-dim); }
+  .pb-stats { display: flex; gap: 22px; flex: none; }
+  .pb-stat { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
+  .pb-k { font-size: 11.5px; color: var(--text-dim); }
+  .pb-v { font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .pb-v small { color: var(--text-dim); margin-left: 4px; }
+  .pb-v.up { color: var(--up); }
+  .pb-v.down { color: var(--down); }
+  .tb-trades { max-height: 420px; }
+  .stat-usd { color: var(--text-dim); font-size: 0.8em; font-weight: 500; }
+  .tb-trades td { font-size: 13px; }
+  .tb-trades .tr-buy .tr-side, .tb-trades .tr-buy .tr-price { color: var(--up); }
+  .tb-trades .tr-sell .tr-side, .tb-trades .tr-sell .tr-price { color: var(--down); }
+  .tb-trades .tr-side { font-weight: 700; }
+  .tb-trades a { text-decoration: none; }
+  @media (max-width: 640px) {
+    .pair-bar { gap: 8px 16px; }
+    .pb-stats { flex-wrap: nowrap; width: 100%; overflow-x: auto; scrollbar-width: none; gap: 18px; padding-bottom: 2px; }
+    .pb-stats::-webkit-scrollbar { display: none; }
+    .pb-pair { font-size: 16px; }
+    .pb-last { font-size: 18px; }
+  }
 
   /* ------------------------------ Phones ------------------------------ */
   @media (hover: none), (max-width: 900px) {
@@ -1593,7 +1642,7 @@
 </head>
 <body>
 
-<!-- App header (build 2026-10-07e): one row like Binance/Raydium/Meteora —
+<!-- App header (build 2026-10-07f): one row like Binance/Raydium/Meteora —
      brand, primary nav, then network / alerts / settings / wallet. Every
      control keeps its id, so all existing wiring is unchanged; the less
      used ones moved into the Settings popover. -->
@@ -1606,17 +1655,16 @@
   <div class="rd-nav">
     <div class="rd-nav-links" role="tablist">
       <button type="button" class="tab-nav-btn rd-nav-link" data-tab="tools" data-i18n="navSwap">Swap</button>
-      <button type="button" class="tab-nav-btn rd-nav-link" data-tab="liquidity" data-i18n="navLiquidity">Liquidity</button>
-      <button type="button" class="tab-nav-btn rd-nav-link" data-tab="v2">SWDMM v2</button>
+      <button type="button" class="tab-nav-btn rd-nav-link" data-tab="liquidity" data-also-tabs="v2" data-i18n="navPools">Pools</button>
       <button type="button" class="tab-nav-btn rd-nav-link" data-tab="portfolio" data-i18n="navPortfolio">Portfolio</button>
       <button type="button" class="tab-nav-btn rd-nav-link" data-tab="marketplace" data-i18n="navMarketplace">Marketplace</button>
       <div class="rd-nav-more">
         <button type="button" class="rd-nav-link" id="rd-more-btn" data-i18n="navMore" aria-haspopup="true" aria-expanded="false">More ▾</button>
         <div class="rd-nav-more-menu" id="rd-more-menu" hidden>
           <button type="button" class="rd-more-item tab-nav-btn" data-tab="explore" data-i18n="navExplore">Explore &amp; Dashboard</button>
-          <button type="button" class="rd-more-item tab-nav-btn" data-tab="amm" data-i18n="navAdvAmm">Advanced: AMM panels</button>
-          <button type="button" class="rd-more-item tab-nav-btn" data-tab="dlmm" data-i18n="navAdvDlmm">Advanced: DLMM panels</button>
-          <button type="button" class="rd-more-item tab-nav-btn" data-tab="devtools" data-i18n="navDevTools">Dev Tools</button>
+          <button type="button" class="rd-more-item tab-nav-btn dev-only" data-tab="amm" data-i18n="navAdvAmm">Advanced: AMM panels</button>
+          <button type="button" class="rd-more-item tab-nav-btn dev-only" data-tab="dlmm" data-i18n="navAdvDlmm">Advanced: DLMM panels</button>
+          <button type="button" class="rd-more-item tab-nav-btn dev-only" data-tab="devtools" data-i18n="navDevTools">Dev Tools</button>
         </div>
       </div>
       <a class="rd-nav-cta btn-icon-text" id="rd-nav-create-token" href="https://swd-claim-site.vercel.app/create-token" data-icon="coin" title="Create your own token" data-i18n-title="navCreateTokenTitle">
@@ -1675,6 +1723,8 @@
     <input id="priority-fee-custom" data-i18n-placeholder="priorityFeeCustomPlaceholder" placeholder="µlamports per compute unit" style="display:none; width:180px;" />
     <div class="settings-row settings-check"><input type="checkbox" id="confirm-before-send-toggle" checked style="width:auto; padding:0;" />
     <label for="confirm-before-send-toggle" style="font-size:14px; color:var(--text-dim); cursor:pointer;" data-i18n="labelConfirmBeforeSend">Confirm before sending</label></div>
+    <div class="settings-row settings-check"><input type="checkbox" id="dev-mode-toggle" style="width:auto; padding:0;" />
+    <label for="dev-mode-toggle" style="font-size:14px; color:var(--text-dim); cursor:pointer;" data-i18n="devModeLabel">Developer mode (Advanced AMM / DLMM panels, Dev Tools)</label></div>
     <div class="settings-row settings-check"><input type="checkbox" id="auto-refresh-toggle" style="width:auto; padding:0;" />
     <label for="auto-refresh-toggle" style="font-size:14px; color:var(--text-dim); cursor:pointer;" data-i18n="labelAutoRefreshToggle">Auto-refresh (every 45s)</label></div>
     <div class="settings-actions"><button id="faucet-btn" class="secondary" data-i18n="faucetBtn">Request Devnet SOL</button><button id="cmdk-open-btn" class="secondary" type="button" title="Command palette (Ctrl/Cmd+K)" data-i18n-title="cmdkOpenBtnTitle">⌘K</button></div>
@@ -1839,6 +1889,12 @@
     <div class="kv" id="auto-settings-status-kv"></div>
   </div>
 
+  <!-- Pools (build 2026-10-07f): Liquidity and SWDMM v2 are one page in
+       the nav; this switch picks which kind of pool is shown. -->
+  <div class="pools-switch-row" data-tab="liquidity" role="tablist" aria-label="Pool type">
+    <button type="button" class="pools-switch-btn" data-pools-tab="liquidity" role="tab"><span data-i18n="poolsClassic">Classic &amp; DLMM</span></button>
+    <button type="button" class="pools-switch-btn" data-pools-tab="v2" role="tab"><span>SWDMM v2</span></button>
+  </div>
   <div class="section-header" style="border-top: none; padding-top: 0;" data-tab="liquidity">
     <div class="lq-hero">
       <div>
@@ -2869,12 +2925,13 @@
     </div>
   </div>
 
-  <!-- Trade layout (build 2026-10-07e): chart on the left, the Swap form
+  <!-- Trade layout (build 2026-10-07f): chart on the left, the Swap form
        docked on the right on wide screens (as on Raydium/Meteora/Binance),
        so a trade needs no popup. On narrower screens the dock is empty
        and Swap opens as before (bottom sheet on phones). -->
   <div class="trade-layout" data-tab="tools">
   <div class="panel trade-main">
+  <div class="pair-bar" id="tb-pair-bar" aria-live="polite"></div>
   <div class="trade-header-row">
     <h2 style="margin:0; display:flex; align-items:center; gap:8px;" data-icon="chart"><span data-i18n="panelTradingBoardTitle">Trading Board</span><span class="info-dot" tabindex="0" data-tip="panelTradingBoardHint" aria-label="Info">i</span></h2>
     <div class="trade-header-controls">
@@ -2887,6 +2944,8 @@
         <button type="button" class="secondary tf-btn" id="tb-tf-5m" data-tf="300000" data-i18n="tf5m">5m</button>
         <button type="button" class="secondary tf-btn" id="tb-tf-15m" data-tf="900000" data-i18n="tf15m">15m</button>
         <button type="button" class="secondary tf-btn" id="tb-tf-1h" data-tf="3600000" data-i18n="tf1h">1h</button>
+        <button type="button" class="secondary tf-btn" id="tb-tf-4h" data-tf="14400000">4h</button>
+        <button type="button" class="secondary tf-btn" id="tb-tf-1d" data-tf="86400000">1D</button>
       </div>
       <button type="button" class="secondary" id="tb-load-btn" data-i18n="btnLoadTradingBoard">Load Trading Board</button>
     </div>
@@ -3579,7 +3638,7 @@
 <div id="log"><div class="line" data-i18n="logReady">Ready — connect your wallet to begin</div></div>
 <footer class="app-footer">
 <div class="sub app-footer-line">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07e</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07f</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 </footer>
@@ -3741,6 +3800,18 @@ function labelForFull(mintOrStr) {
 // ---------------------------------------------------------------------
 const STRINGS = {
   th: {
+    pb24hChange: "เปลี่ยนแปลง 24 ชม.",
+    pb24hHigh: "สูงสุด 24 ชม.",
+    pb24hLow: "ต่ำสุด 24 ชม.",
+    pb24hVol: "วอลุ่ม 24 ชม.",
+    pbLiquidity: "สภาพคล่อง",
+    pbFee: "ค่าธรรมเนียม",
+    thTime: "เวลา",
+    thValue: "มูลค่า",
+    thTvl: "TVL",
+    navPools: "พูล",
+    poolsClassic: "Classic และ DLMM",
+    devModeLabel: "โหมดนักพัฒนา (แผง AMM / DLMM ขั้นสูง และ Dev Tools)",
     amtA: "จำนวน A",
     amtB: "จำนวน B",
     amtLp: "จำนวน LP",
@@ -4487,7 +4558,7 @@ const STRINGS = {
     btnUseThisPair: "ใช้คู่นี้",
     logQuickPairApplied: "เลือกพูลแบบเร็ว: เปลี่ยนไปใช้คู่ {p} แล้ว",
     panelTradingBoardTitle: "กระดานเทรด",
-    panelTradingBoardHint: "ใช้ Mint A / Mint B เดียวกับแผง Swap ด้านล่าง (กรอกที่นั่นก่อน หรือใช้ Quick Pick ด้านบน) ทุกตัวเลขในกระดานนี้แสดงเป็นหน่วยเหรียญทดสอบทั้งสองตัวเอง — AMM บน devnet นี้ไม่มี price oracle และไม่ใช่สินทรัพย์จริง จึงไม่มีราคา/สภาพคล่อง/มูลค่าตลาดเป็นดอลลาร์ให้แสดง แสดงเฉพาะการสวอปล่าสุดที่ถอดรหัสตรงจากเชน ไม่ใช่ข้อมูลเรียลไทม์",
+    panelTradingBoardHint: "กราฟ ราคา และรายการเทรดของคู่ที่เลือกในกล่อง Swap อ่านตรงจากเชน (100 รายการล่าสุด) มูลค่าเป็น $ มาจากราคา Pyth เมื่อพูลมีราคาให้",
     btnLoadTradingBoard: "โหลดกระดานเทรด",
     tradingBoardEmpty: "เลือกคู่เหรียญ (หรือเปิด \"คู่เหรียญทั้งหมด\") แล้วข้อมูลจะขึ้นที่นี่ทันที",
     tf1m: "1 นาที",
@@ -4587,7 +4658,7 @@ const STRINGS = {
     lqPageSub: "เพิ่มสภาพคล่อง เรียกดูพูลที่มีอยู่บนโปรแกรมนี้ทั้งหมด หรือสร้างพูลใหม่ — อ่านข้อมูลจากเชนโดยตรง ไม่มี indexer",
     lqStatTotalPools: "พูลทั้งหมด",
     lqStatYourPositions: "โพซิชันของคุณ",
-    lqNoIndexerHint: "นี่คือโปรแกรมบนเดฟเน็ตที่ไม่มี price oracle หรือ indexer ดังนั้น — ต่างจาก DEX บนเมนเน็ต — จึงไม่มีตัวเลข USD TVL/ปริมาณเทรด/APR ให้แสดงที่นี่ ทุกตัวเลขมาจากสิ่งที่อ่านได้จริงบนเชนตอนนี้เท่านั้น",
+    lqNoIndexerHint: "มูลค่าเป็น $ มาจากราคา Pyth ที่แต่ละพูลตั้งไว้ (เหรียญที่ไม่มีราคา Pyth จะคำนวณผ่านพูลที่จับคู่กับเหรียญที่มีราคา) เป็นค่าประมาณสำหรับแสดงผล ส่วนวอลุ่มและประวัติอ่านตรงจากเชน",
     lqFilterAll: "ทั้งหมด",
     lqFilterStandard: "Standard AMM",
     lqFilterConcentrated: "Concentrated (DLMM)",
@@ -4785,6 +4856,18 @@ const STRINGS = {
     logLocalnetFixturesFilled: "กรอกและลงทะเบียน Localnet Pyth test fixtures แล้ว (ราคา 1:1 — ฝากทั้งสองฝั่งเท่ากัน ไม่งั้นการ swap จะติดตัวกันราคาเบี่ยงเกิน 5%)",
   },
   en: {
+    pb24hChange: "24h change",
+    pb24hHigh: "24h high",
+    pb24hLow: "24h low",
+    pb24hVol: "24h volume",
+    pbLiquidity: "Liquidity",
+    pbFee: "Fee",
+    thTime: "Time",
+    thValue: "Value",
+    thTvl: "TVL",
+    navPools: "Pools",
+    poolsClassic: "Classic & DLMM",
+    devModeLabel: "Developer mode (Advanced AMM / DLMM panels, Dev Tools)",
     amtA: "Amount A",
     amtB: "Amount B",
     amtLp: "LP amount",
@@ -5531,7 +5614,7 @@ const STRINGS = {
     btnUseThisPair: "Use This Pair",
     logQuickPairApplied: "Quick pair picker: switched to {p}.",
     panelTradingBoardTitle: "Trading Board",
-    panelTradingBoardHint: "Uses the same Mint A / Mint B as the Swap panels below (fill those in first, or use Quick Pick above). Everything here is denominated in the two test tokens themselves — this devnet AMM has no price oracle and these aren't real assets, so there's no USD price/liquidity/market cap to show. Recent swaps only, decoded straight from the chain, not a live feed.",
+    panelTradingBoardHint: "Chart, price and trades for the pair picked in the Swap box, decoded straight from the chain (latest 100 transactions). $ values come from Pyth price feeds where the pool has them.",
     btnLoadTradingBoard: "Load Trading Board",
     tradingBoardEmpty: "Pick a pair (or open \"All pairs\") and its stats show up here right away.",
     tf1m: "1m",
@@ -5631,7 +5714,7 @@ const STRINGS = {
     lqPageSub: "Provide liquidity, browse every live pool on this program, or create a new one — read directly from the chain, no indexer.",
     lqStatTotalPools: "Total Pools",
     lqStatYourPositions: "Your Positions",
-    lqNoIndexerHint: "This is a devnet program with no price oracle or indexer, so — unlike a mainnet DEX — there's no USD TVL/volume/APR to show here; every figure comes straight from what's actually readable on chain right now.",
+    lqNoIndexerHint: "Values in $ come from the Pyth price feeds each pool is set up with (a token without one is priced through its pool against a priced token). They are display estimates; volume and history are read straight from the chain.",
     lqFilterAll: "All",
     lqFilterStandard: "Standard AMM",
     lqFilterConcentrated: "Concentrated (DLMM)",
@@ -5829,6 +5912,18 @@ const STRINGS = {
     logLocalnetFixturesFilled: "Localnet Pyth test fixtures filled in and registered (priced 1:1 — deposit equal amounts on both sides, or swaps will trip the 5% oracle-deviation guard).",
   },
   zh: {
+    pb24hChange: "24小时涨跌",
+    pb24hHigh: "24小时最高",
+    pb24hLow: "24小时最低",
+    pb24hVol: "24小时成交量",
+    pbLiquidity: "流动性",
+    pbFee: "手续费",
+    thTime: "时间",
+    thValue: "价值",
+    thTvl: "TVL",
+    navPools: "资金池",
+    poolsClassic: "经典与 DLMM",
+    devModeLabel: "开发者模式（高级 AMM / DLMM 面板、开发工具）",
     hdrBadge: "Devnet · 未审计",
     hdrBadgeTip: "仅限 Solana Devnet — 代币没有真实价值，程序尚未通过安全审计。请勿使用真实资金。点击查看完整警告。",
     hdrSettings: "设置",
@@ -6270,7 +6365,7 @@ const STRINGS = {
     lqFilterConcentrated: "集中流动性（DLMM）",
     lqFilterEmpty: "没有符合此筛选条件的资金池。",
     lqFilterStandard: "Standard AMM",
-    lqNoIndexerHint: "这是一个没有价格预言机或索引器的 devnet 程序，因此 — 与主网 DEX 不同 — 这里不会显示美元 TVL/交易量/APR；所有数字均直接来自当前链上可读取的数据。",
+    lqNoIndexerHint: "美元价值来自每个池子配置的 Pyth 价格源（没有价格源的代币通过与有价格代币的池子计算）。仅为显示用的估算；成交量和历史直接读取链上数据。",
     lqPageSub: "提供流动性、浏览本程序上所有活跃的资金池，或创建新的资金池 — 直接从链上读取，无索引器。",
     lqPageTitle: "流动性资金池",
     lqSearchPlaceholder: "按昵称或 mint 地址搜索…",
@@ -6422,7 +6517,7 @@ const STRINGS = {
     panelTopPoolsChartTitle: "活跃度最高的资金池",
     panelTopPoolsHint: "根据与上方市场交易相同的数据抓取结果排名（程序最近的交易，而非全部历史），按该时间窗口内的 swap 次数排序 — 而非按 TVL 排序，因为此测试界面没有价格预言机可将资金池换算成同一种货币。",
     panelTopPoolsTitle: "U. 热门资金池",
-    panelTradingBoardHint: "使用与下方 Swap 面板相同的 Mint A / Mint B（请先在那里填写，或使用上方的 Quick Pick）。此处所有数字均以两种测试代币本身计价 — 此 devnet AMM 没有价格预言机，这些也不是真实资产，因此没有美元价格/流动性/市值可显示。仅显示最近的 swap，直接从链上解码，非实时 feed。",
+    panelTradingBoardHint: "兑换框所选交易对的图表、价格和成交，直接从链上解码（最近 100 笔交易）。美元价值来自池子配置的 Pyth 价格源。",
     panelTradingBoardTitle: "交易看板",
     panelWhatIfHint: "仅限 constant-product 池 — 在实际发送交易之前，预览存款将获得的 LP 代币和池份额，使用标准 constant-product AMM 公式（按比例铸造，或新池使用 sqrt(A×B)）。这只是一个通用近似值，并非读取本程序自身的内部账本 — 请务必以 Pool Info 的实际结果为准。金额为原始单位，与 Add Liquidity 面板的约定相同。",
     panelWhatIfTitle: "添加流动性模拟器（What-If）",
@@ -6491,6 +6586,18 @@ const STRINGS = {
     pwFeeSettleSingle: "单一代币",
   },
   ja: {
+    pb24hChange: "24時間変動",
+    pb24hHigh: "24時間高値",
+    pb24hLow: "24時間安値",
+    pb24hVol: "24時間出来高",
+    pbLiquidity: "流動性",
+    pbFee: "手数料",
+    thTime: "時間",
+    thValue: "価値",
+    thTvl: "TVL",
+    navPools: "プール",
+    poolsClassic: "クラシック & DLMM",
+    devModeLabel: "開発者モード（高度な AMM / DLMM パネル、開発ツール）",
     hdrBadge: "Devnet · 未監査",
     hdrBadgeTip: "Solana Devnet 専用 — トークンに実際の価値はなく、プログラムはセキュリティ監査を受けていません。実際の資金では使用しないでください。クリックで警告全文を表示。",
     hdrSettings: "設定",
@@ -6932,7 +7039,7 @@ const STRINGS = {
     lqFilterConcentrated: "集中流動性（DLMM）",
     lqFilterEmpty: "このフィルターに一致するプールがありません。",
     lqFilterStandard: "Standard AMM",
-    lqNoIndexerHint: "これは価格オラクルやインデクサーのない devnet プログラムです。そのため — メインネットの DEX とは異なり — USD 建ての TVL/取引量/APR はここに表示されません。すべての数値は現在チェーン上で実際に読み取れるものから直接取得されています。",
+    lqNoIndexerHint: "$ 表示は各プールに設定された Pyth 価格フィードによるものです（フィードのないトークンは価格のあるトークンとのプール経由で算出）。表示用の概算で、出来高と履歴はチェーンから直接読み取ります。",
     lqPageSub: "流動性を提供し、このプログラム上のすべての稼働中プールを閲覧するか、新しいプールを作成できます — インデクサーなしでチェーンから直接読み取ります。",
     lqPageTitle: "流動性プール",
     lqSearchPlaceholder: "ニックネームまたは mint アドレスで検索…",
@@ -7084,7 +7191,7 @@ const STRINGS = {
     panelTopPoolsChartTitle: "アクティビティ別トッププール",
     panelTopPoolsHint: "上のマーケット取引と同じ取得結果（全期間の履歴ではなく、プログラムの最近の取引）から、その期間内のスワップ数でランク付けされています — TVL順ではありません。このテストUIには、プールを1つの共通通貨で評価する価格オラクルがないためです。",
     panelTopPoolsTitle: "U. トッププール",
-    panelTradingBoardHint: "下のスワップパネルと同じ Mint A / Mint B を使用します（先にそちらに入力するか、上の Quick Pick を使用してください）。ここでのすべての数値は2つのテストトークン自体で表示されます — この devnet AMM には価格オラクルがなく、これらは実際の資産ではないため、表示できる USD 価格/流動性/時価総額はありません。チェーンから直接デコードされた最近のスワップのみで、リアルタイムフィードではありません。",
+    panelTradingBoardHint: "スワップで選んだペアのチャート・価格・取引をチェーンから直接デコード（直近 100 件）。$ 表示はプールに Pyth 価格フィードがある場合のものです。",
     panelTradingBoardTitle: "トレーディングボード",
     panelWhatIfHint: "Constant-product プールのみ対応 — 実際に送信する前に、標準的な constant-product AMM 方式（比例ミント、または新規プールでは sqrt(A×B)）を使って、入金した場合に得られる LP トークンとプールシェアをプレビューします。これは一般的な近似値であり、本プログラム自体の内部会計を直接読み取ったものではありません — 実際の結果は必ず Pool Info で確認してください。金額は Add Liquidity パネルと同じ raw units です。",
     panelWhatIfTitle: "流動性追加シミュレーター（What-If）",
@@ -7153,6 +7260,18 @@ const STRINGS = {
     pwFeeSettleSingle: "片方のトークン",
   },
   ko: {
+    pb24hChange: "24시간 변동",
+    pb24hHigh: "24시간 최고",
+    pb24hLow: "24시간 최저",
+    pb24hVol: "24시간 거래량",
+    pbLiquidity: "유동성",
+    pbFee: "수수료",
+    thTime: "시간",
+    thValue: "가치",
+    thTvl: "TVL",
+    navPools: "풀",
+    poolsClassic: "클래식 & DLMM",
+    devModeLabel: "개발자 모드 (고급 AMM / DLMM 패널, 개발 도구)",
     hdrBadge: "Devnet · 미감사",
     hdrBadgeTip: "Solana Devnet 전용 — 토큰에는 실제 가치가 없으며 프로그램은 보안 감사를 받지 않았습니다. 실제 자금으로 사용하지 마세요. 클릭하면 전체 경고를 볼 수 있습니다.",
     hdrSettings: "설정",
@@ -7594,7 +7713,7 @@ const STRINGS = {
     lqFilterConcentrated: "집중형(DLMM)",
     lqFilterEmpty: "이 필터와 일치하는 풀이 없습니다.",
     lqFilterStandard: "Standard AMM",
-    lqNoIndexerHint: "이것은 가격 오라클이나 인덱서가 없는 devnet 프로그램이므로 — 메인넷 DEX와 달리 — 여기에는 USD 기준 TVL/거래량/APR이 표시되지 않습니다. 모든 수치는 현재 체인에서 실제로 읽을 수 있는 데이터에서 바로 가져옵니다.",
+    lqNoIndexerHint: "$ 값은 각 풀에 설정된 Pyth 가격 피드에서 가져옵니다(피드가 없는 토큰은 가격이 있는 토큰과의 풀을 통해 계산). 표시용 추정치이며 거래량과 내역은 체인에서 직접 읽습니다.",
     lqPageSub: "유동성을 제공하거나, 이 프로그램의 모든 활성 풀을 둘러보거나, 새 풀을 생성하세요 — 인덱서 없이 체인에서 직접 읽어옵니다.",
     lqPageTitle: "유동성 풀",
     lqSearchPlaceholder: "닉네임 또는 mint 주소로 검색…",
@@ -7746,7 +7865,7 @@ const STRINGS = {
     panelTopPoolsChartTitle: "활동 기준 상위 풀",
     panelTopPoolsHint: "위의 마켓 거래와 동일한 조회 결과(전체 기록이 아닌 프로그램의 최근 거래)에서, 해당 기간의 스왑 횟수를 기준으로 순위가 매겨집니다 — TVL 기준이 아닙니다. 이 테스트 UI에는 풀을 하나의 공통 통화로 평가할 가격 오라클이 없기 때문입니다.",
     panelTopPoolsTitle: "U. 상위 풀",
-    panelTradingBoardHint: "아래 스왑 패널과 동일한 Mint A / Mint B를 사용합니다(먼저 그곳에 입력하거나 위의 Quick Pick을 사용하세요). 여기의 모든 수치는 두 테스트 토큰 자체로 표시됩니다 — 이 devnet AMM에는 가격 오라클이 없고 이들은 실제 자산이 아니므로 표시할 USD 가격/유동성/시가총액이 없습니다. 체인에서 직접 디코딩된 최근 스왑만 표시하며, 실시간 피드가 아닙니다.",
+    panelTradingBoardHint: "스왑 상자에서 선택한 페어의 차트, 가격, 거래를 체인에서 직접 디코딩합니다(최근 100건). $ 값은 풀에 Pyth 가격 피드가 있을 때 표시됩니다.",
     panelTradingBoardTitle: "트레이딩 보드",
     panelWhatIfHint: "Constant-product 풀 전용 — 실제로 트랜잭션을 보내기 전에, 표준 constant-product AMM 공식(비례 발행, 신규 풀의 경우 sqrt(A×B))을 사용해 입금 시 받게 될 LP 토큰과 풀 지분을 미리 보여줍니다. 이는 일반적인 근사치일 뿐, 이 프로그램 자체의 내부 회계를 직접 읽은 값이 아닙니다 — 실제 결과는 반드시 Pool Info에서 다시 확인하세요. 금액은 Add Liquidity 패널과 동일하게 raw units 기준입니다.",
     panelWhatIfTitle: "유동성 추가 시뮬레이터 (What-If)",
@@ -7815,6 +7934,18 @@ const STRINGS = {
     pwFeeSettleSingle: "한쪽 토큰",
   },
   vi: {
+    pb24hChange: "Thay đổi 24h",
+    pb24hHigh: "Cao nhất 24h",
+    pb24hLow: "Thấp nhất 24h",
+    pb24hVol: "Khối lượng 24h",
+    pbLiquidity: "Thanh khoản",
+    pbFee: "Phí",
+    thTime: "Thời gian",
+    thValue: "Giá trị",
+    thTvl: "TVL",
+    navPools: "Pool",
+    poolsClassic: "Cổ điển & DLMM",
+    devModeLabel: "Chế độ nhà phát triển (bảng AMM / DLMM nâng cao, Dev Tools)",
     hdrBadge: "Devnet · Chưa kiểm toán",
     hdrBadgeTip: "Chỉ dùng trên Solana Devnet — token không có giá trị thực và chương trình chưa qua kiểm toán bảo mật. Không dùng với tiền thật. Bấm để xem cảnh báo đầy đủ.",
     hdrSettings: "Cài đặt",
@@ -8256,7 +8387,7 @@ const STRINGS = {
     lqFilterConcentrated: "Tập trung (DLMM)",
     lqFilterEmpty: "Không có pool nào khớp với bộ lọc này.",
     lqFilterStandard: "Standard AMM",
-    lqNoIndexerHint: "Đây là chương trình devnet không có price oracle hay indexer, vì vậy — khác với DEX trên mainnet — không có TVL/khối lượng/APR bằng USD để hiển thị ở đây; mọi con số đều lấy trực tiếp từ những gì thực sự đọc được trên chuỗi ngay bây giờ.",
+    lqNoIndexerHint: "Giá trị $ lấy từ nguồn giá Pyth mà mỗi pool được cấu hình (token không có nguồn giá được tính qua pool với token có giá). Đây là ước tính để hiển thị; khối lượng và lịch sử đọc trực tiếp từ chuỗi.",
     lqPageSub: "Cung cấp thanh khoản, duyệt qua mọi pool đang hoạt động trên chương trình này, hoặc tạo một pool mới — đọc trực tiếp từ chuỗi, không có indexer.",
     lqPageTitle: "Các Pool Thanh khoản",
     lqSearchPlaceholder: "Tìm theo biệt danh hoặc địa chỉ mint…",
@@ -8408,7 +8539,7 @@ const STRINGS = {
     panelTopPoolsChartTitle: "Top Pool theo Hoạt động",
     panelTopPoolsHint: "Được xếp hạng từ cùng dữ liệu lấy về như Giao dịch Thị trường ở trên (các giao dịch gần đây nhất của chương trình, không phải lịch sử toàn thời gian), theo số lượng swap trong cửa sổ đó — không theo TVL, vì giao diện thử nghiệm này không có price oracle để định giá các pool bằng một loại tiền chung.",
     panelTopPoolsTitle: "U. Top Pool",
-    panelTradingBoardHint: "Sử dụng cùng Mint A / Mint B như các bảng Swap bên dưới (điền vào đó trước, hoặc dùng Quick Pick ở trên). Mọi thứ ở đây được tính theo chính hai token thử nghiệm — AMM devnet này không có price oracle và đây không phải tài sản thực, vì vậy không có giá/thanh khoản/vốn hóa thị trường USD để hiển thị. Chỉ các swap gần đây, được giải mã trực tiếp từ chuỗi, không phải feed trực tiếp.",
+    panelTradingBoardHint: "Biểu đồ, giá và giao dịch của cặp đã chọn trong ô Swap, giải mã trực tiếp từ chuỗi (100 giao dịch gần nhất). Giá trị $ lấy từ nguồn giá Pyth khi pool có.",
     panelTradingBoardTitle: "Bảng Giao dịch",
     panelWhatIfHint: "Chỉ áp dụng cho pool constant-product — xem trước số LP token và tỷ lệ sở hữu pool bạn sẽ nhận được TRƯỚC KHI thực sự gửi giao dịch, sử dụng công thức AMM constant-product tiêu chuẩn (mint theo tỷ lệ, hoặc sqrt(A×B) cho pool hoàn toàn mới). Đây chỉ là một ước tính chung, không phải là đọc trực tiếp từ hệ thống kế toán nội bộ của chương trình này — luôn kiểm tra lại với Pool Info để biết kết quả thực tế. Số lượng tính theo raw units, cùng quy ước với bảng Add Liquidity.",
     panelWhatIfTitle: "Trình mô phỏng Thêm thanh khoản (What-If)",
@@ -8477,6 +8608,18 @@ const STRINGS = {
     pwFeeSettleSingle: "Một token",
   },
   id: {
+    pb24hChange: "Perubahan 24j",
+    pb24hHigh: "Tertinggi 24j",
+    pb24hLow: "Terendah 24j",
+    pb24hVol: "Volume 24j",
+    pbLiquidity: "Likuiditas",
+    pbFee: "Biaya",
+    thTime: "Waktu",
+    thValue: "Nilai",
+    thTvl: "TVL",
+    navPools: "Pool",
+    poolsClassic: "Klasik & DLMM",
+    devModeLabel: "Mode pengembang (panel AMM / DLMM lanjutan, Dev Tools)",
     hdrBadge: "Devnet · Belum diaudit",
     hdrBadgeTip: "Hanya Solana Devnet — token tidak bernilai nyata dan program belum lolos audit keamanan. Jangan gunakan dana sungguhan. Klik untuk melihat peringatan lengkap.",
     hdrSettings: "Pengaturan",
@@ -8918,7 +9061,7 @@ const STRINGS = {
     lqFilterConcentrated: "Terkonsentrasi (DLMM)",
     lqFilterEmpty: "Tidak ada pool yang cocok dengan filter ini.",
     lqFilterStandard: "Standard AMM",
-    lqNoIndexerHint: "Ini adalah program devnet tanpa price oracle atau indexer, jadi — tidak seperti DEX di mainnet — tidak ada TVL/volume/APR dalam USD yang ditampilkan di sini; setiap angka berasal langsung dari apa yang benar-benar dapat dibaca di chain saat ini.",
+    lqNoIndexerHint: "Nilai $ berasal dari feed harga Pyth yang dipasang di setiap pool (token tanpa feed dihitung lewat pool dengan token yang punya harga). Ini perkiraan untuk tampilan; volume dan riwayat dibaca langsung dari chain.",
     lqPageSub: "Sediakan likuiditas, jelajahi setiap pool aktif di program ini, atau buat yang baru — dibaca langsung dari chain, tanpa indexer.",
     lqPageTitle: "Pool Likuiditas",
     lqSearchPlaceholder: "Cari berdasarkan nama panggilan atau alamat mint…",
@@ -9070,7 +9213,7 @@ const STRINGS = {
     panelTopPoolsChartTitle: "Pool Teratas berdasarkan Aktivitas",
     panelTopPoolsHint: "Diperingkat dari pengambilan data yang sama dengan Perdagangan Pasar di atas (transaksi terbaru program, bukan riwayat sepanjang masa), berdasarkan jumlah swap dalam jendela waktu itu — bukan berdasarkan TVL, karena UI uji ini tidak memiliki price oracle untuk menilai pool dalam satu mata uang bersama.",
     panelTopPoolsTitle: "U. Pool Teratas",
-    panelTradingBoardHint: "Menggunakan Mint A / Mint B yang sama dengan panel Swap di bawah (isi itu dulu, atau gunakan Quick Pick di atas). Semuanya di sini dinyatakan dalam kedua token uji itu sendiri — AMM devnet ini tidak memiliki price oracle dan ini bukan aset nyata, jadi tidak ada harga/likuiditas/kapitalisasi pasar USD untuk ditampilkan. Hanya swap terbaru, didekode langsung dari chain, bukan feed langsung.",
+    panelTradingBoardHint: "Grafik, harga, dan transaksi untuk pasangan yang dipilih di kotak Swap, didekode langsung dari chain (100 transaksi terakhir). Nilai $ dari feed harga Pyth bila pool memilikinya.",
     panelTradingBoardTitle: "Papan Perdagangan",
     panelWhatIfHint: "Hanya untuk pool constant-product — melihat pratinjau LP token dan porsi pool yang akan Anda dapatkan SEBELUM benar-benar mengirim transaksi, menggunakan rumus AMM constant-product standar (mint proporsional, atau sqrt(A×B) untuk pool yang benar-benar baru). Ini hanyalah perkiraan umum, bukan pembacaan langsung dari pencatatan internal program ini — selalu periksa ulang di Pool Info untuk hasil sebenarnya. Jumlah dalam raw units, sama seperti panel Add Liquidity.",
     panelWhatIfTitle: "Simulator Tambah Likuiditas (What-If)",
@@ -9139,6 +9282,18 @@ const STRINGS = {
     pwFeeSettleSingle: "Satu Token",
   },
   es: {
+    pb24hChange: "Cambio 24h",
+    pb24hHigh: "Máximo 24h",
+    pb24hLow: "Mínimo 24h",
+    pb24hVol: "Volumen 24h",
+    pbLiquidity: "Liquidez",
+    pbFee: "Comisión",
+    thTime: "Hora",
+    thValue: "Valor",
+    thTvl: "TVL",
+    navPools: "Pools",
+    poolsClassic: "Clásico y DLMM",
+    devModeLabel: "Modo desarrollador (paneles avanzados AMM / DLMM, Dev Tools)",
     hdrBadge: "Devnet · Sin auditar",
     hdrBadgeTip: "Solo Solana Devnet: los tokens no tienen valor real y el programa no ha pasado una auditoría de seguridad. No lo uses con fondos reales. Haz clic para ver la advertencia completa.",
     hdrSettings: "Ajustes",
@@ -9580,7 +9735,7 @@ const STRINGS = {
     lqFilterConcentrated: "Concentrado (DLMM)",
     lqFilterEmpty: "Ningún pool coincide con este filtro.",
     lqFilterStandard: "Standard AMM",
-    lqNoIndexerHint: "Este es un programa de devnet sin oráculo de precios ni indexador, así que — a diferencia de un DEX de mainnet — no hay TVL/volumen/APR en USD para mostrar aquí; cada cifra proviene directamente de lo que realmente se puede leer en la cadena ahora mismo.",
+    lqNoIndexerHint: "Los valores en $ vienen de los feeds de precio de Pyth configurados en cada pool (un token sin feed se valora a través de su pool con un token que sí tiene precio). Son estimaciones para mostrar; el volumen y el historial se leen directamente de la cadena.",
     lqPageSub: "Aporta liquidez, explora todos los pools activos de este programa, o crea uno nuevo — leído directamente de la cadena, sin indexador.",
     lqPageTitle: "Pools de Liquidez",
     lqSearchPlaceholder: "Buscar por apodo o dirección de mint…",
@@ -9732,7 +9887,7 @@ const STRINGS = {
     panelTopPoolsChartTitle: "Pools Principales por Actividad",
     panelTopPoolsHint: "Clasificados a partir de la misma obtención de datos que Operaciones de Mercado arriba (las transacciones más recientes del programa, no el historial de todos los tiempos), por número de swaps en esa ventana — no por TVL, ya que esta interfaz de prueba no tiene oráculo de precios para valorar los pools en una moneda común.",
     panelTopPoolsTitle: "U. Pools Principales",
-    panelTradingBoardHint: "Usa el mismo Mint A / Mint B que los paneles de Swap de abajo (complétalos primero, o usa Quick Pick arriba). Todo aquí está denominado en los dos tokens de prueba mismos — este AMM de devnet no tiene oráculo de precios y estos no son activos reales, así que no hay precio/liquidez/capitalización de mercado en USD para mostrar. Solo swaps recientes, decodificados directamente de la cadena, no un feed en vivo.",
+    panelTradingBoardHint: "Gráfico, precio y operaciones del par elegido en el cuadro Swap, decodificados directamente de la cadena (últimas 100 transacciones). Los valores en $ vienen de los feeds de Pyth cuando el pool los tiene.",
     panelTradingBoardTitle: "Panel de Trading",
     panelWhatIfHint: "Solo para pools constant-product — previsualiza los tokens LP y la participación en el pool que obtendrías ANTES de enviar realmente la transacción, usando la fórmula estándar de AMM constant-product (acuñación proporcional, o sqrt(A×B) para un pool completamente nuevo). Esto es una aproximación general, no una lectura de la contabilidad interna de este programa — verifica siempre el resultado real en Pool Info. Los montos están en raw units, la misma convención que el panel Add Liquidity.",
     panelWhatIfTitle: "Simulador de Añadir Liquidez (What-If)",
@@ -9801,6 +9956,18 @@ const STRINGS = {
     pwFeeSettleSingle: "Un Solo Token",
   },
   pt: {
+    pb24hChange: "Variação 24h",
+    pb24hHigh: "Máxima 24h",
+    pb24hLow: "Mínima 24h",
+    pb24hVol: "Volume 24h",
+    pbLiquidity: "Liquidez",
+    pbFee: "Taxa",
+    thTime: "Hora",
+    thValue: "Valor",
+    thTvl: "TVL",
+    navPools: "Pools",
+    poolsClassic: "Clássico e DLMM",
+    devModeLabel: "Modo desenvolvedor (painéis avançados AMM / DLMM, Dev Tools)",
     hdrBadge: "Devnet · Não auditado",
     hdrBadgeTip: "Apenas Solana Devnet — os tokens não têm valor real e o programa não passou por auditoria de segurança. Não use com fundos reais. Clique para ver o aviso completo.",
     hdrSettings: "Configurações",
@@ -10242,7 +10409,7 @@ const STRINGS = {
     lqFilterConcentrated: "Concentrado (DLMM)",
     lqFilterEmpty: "Nenhum pool corresponde a este filtro.",
     lqFilterStandard: "Standard AMM",
-    lqNoIndexerHint: "Este é um programa devnet sem oráculo de preços ou indexador, então — diferente de um DEX de mainnet — não há TVL/volume/APR em USD para mostrar aqui; cada número vem diretamente do que é realmente legível na chain agora.",
+    lqNoIndexerHint: "Os valores em $ vêm dos feeds de preço Pyth configurados em cada pool (um token sem feed é precificado pelo seu pool com um token que tem preço). São estimativas para exibição; volume e histórico são lidos direto da chain.",
     lqPageSub: "Forneça liquidez, navegue por todos os pools ativos deste programa, ou crie um novo — lido diretamente da chain, sem indexador.",
     lqPageTitle: "Pools de Liquidez",
     lqSearchPlaceholder: "Buscar por apelido ou endereço de mint…",
@@ -10394,7 +10561,7 @@ const STRINGS = {
     panelTopPoolsChartTitle: "Pools Principais por Atividade",
     panelTopPoolsHint: "Classificados a partir da mesma busca de dados que Negociações do Mercado acima (as transações mais recentes do programa, não o histórico de todos os tempos), pelo número de swaps naquela janela — não pelo TVL, já que esta interface de teste não tem oráculo de preços para avaliar pools em uma moeda comum.",
     panelTopPoolsTitle: "U. Pools Principais",
-    panelTradingBoardHint: "Usa o mesmo Mint A / Mint B que os painéis de Swap abaixo (preencha-os primeiro, ou use o Quick Pick acima). Tudo aqui é denominado nos próprios dois tokens de teste — este AMM devnet não tem oráculo de preços e estes não são ativos reais, então não há preço/liquidez/capitalização de mercado em USD para mostrar. Apenas swaps recentes, decodificados diretamente da chain, não um feed ao vivo.",
+    panelTradingBoardHint: "Gráfico, preço e negociações do par escolhido na caixa Swap, decodificados direto da chain (últimas 100 transações). Valores em $ vêm dos feeds Pyth quando o pool os tem.",
     panelTradingBoardTitle: "Painel de Negociação",
     panelWhatIfHint: "Apenas para pools constant-product — mostra uma prévia dos tokens LP e da participação no pool que você receberia ANTES de realmente enviar a transação, usando a fórmula padrão de AMM constant-product (cunhagem proporcional, ou sqrt(A×B) para um pool totalmente novo). É apenas uma aproximação geral, não uma leitura da contabilidade interna deste programa — sempre confira o resultado real em Pool Info. Os valores estão em raw units, a mesma convenção do painel Add Liquidity.",
     panelWhatIfTitle: "Simulador de Adicionar Liquidez (What-If)",
@@ -10463,6 +10630,20 @@ const STRINGS = {
     pwFeeSettleSingle: "Um Único Token",
   },
   fr: {
+    panelTradingBoardHint: "Graphique, prix et échanges de la paire choisie dans le Swap, décodés directement depuis la chaîne (100 dernières transactions). Les valeurs en $ viennent des flux Pyth lorsque le pool en a.",
+    lqNoIndexerHint: "Les valeurs en $ proviennent des flux de prix Pyth configurés pour chaque pool (un jeton sans flux est valorisé via son pool avec un jeton qui a un prix). Ce sont des estimations d’affichage ; volume et historique sont lus directement sur la chaîne.",
+    pb24hChange: "Variation 24 h",
+    pb24hHigh: "Plus haut 24 h",
+    pb24hLow: "Plus bas 24 h",
+    pb24hVol: "Volume 24 h",
+    pbLiquidity: "Liquidité",
+    pbFee: "Frais",
+    thTime: "Heure",
+    thValue: "Valeur",
+    thTvl: "TVL",
+    navPools: "Pools",
+    poolsClassic: "Classique et DLMM",
+    devModeLabel: "Mode développeur (panneaux AMM / DLMM avancés, Dev Tools)",
     hdrBadge: "Devnet · Non audité",
     hdrBadgeTip: "Solana Devnet uniquement — les jetons n’ont aucune valeur réelle et le programme n’a pas passé d’audit de sécurité. Ne l’utilisez pas avec de vrais fonds. Cliquez pour voir l’avertissement complet.",
     hdrSettings: "Paramètres",
@@ -10670,6 +10851,20 @@ const STRINGS = {
     cmdkRefreshExplore: "Actualiser les données Explore",
   },
   de: {
+    panelTradingBoardHint: "Chart, Preis und Trades des im Swap gewählten Paars, direkt von der Chain dekodiert (letzte 100 Transaktionen). $-Werte stammen aus Pyth-Feeds, wo der Pool welche hat.",
+    lqNoIndexerHint: "$-Werte stammen aus den Pyth-Preisfeeds, mit denen jeder Pool eingerichtet ist (ein Token ohne Feed wird über seinen Pool mit einem bepreisten Token bewertet). Es sind Anzeige-Schätzungen; Volumen und Verlauf werden direkt von der Chain gelesen.",
+    pb24hChange: "24h-Änderung",
+    pb24hHigh: "24h-Hoch",
+    pb24hLow: "24h-Tief",
+    pb24hVol: "24h-Volumen",
+    pbLiquidity: "Liquidität",
+    pbFee: "Gebühr",
+    thTime: "Zeit",
+    thValue: "Wert",
+    thTvl: "TVL",
+    navPools: "Pools",
+    poolsClassic: "Klassisch & DLMM",
+    devModeLabel: "Entwicklermodus (erweiterte AMM- / DLMM-Panels, Dev Tools)",
     hdrBadge: "Devnet · Nicht auditiert",
     hdrBadgeTip: "Nur Solana Devnet — Tokens haben keinen echten Wert und das Programm hat kein Sicherheitsaudit bestanden. Nicht mit echtem Geld verwenden. Klicken für die vollständige Warnung.",
     hdrSettings: "Einstellungen",
@@ -10877,6 +11072,20 @@ const STRINGS = {
     cmdkRefreshExplore: "Explore-Daten aktualisieren",
   },
   ru: {
+    panelTradingBoardHint: "График, цена и сделки по паре из блока обмена, декодированные напрямую из сети (последние 100 транзакций). Значения в $ — из фидов Pyth, если они есть у пула.",
+    lqNoIndexerHint: "Значения в $ берутся из ценовых фидов Pyth, настроенных для каждого пула (токен без фида оценивается через пул с токеном, у которого есть цена). Это оценки для отображения; объём и история читаются напрямую из сети.",
+    pb24hChange: "Изменение 24ч",
+    pb24hHigh: "Макс. 24ч",
+    pb24hLow: "Мин. 24ч",
+    pb24hVol: "Объём 24ч",
+    pbLiquidity: "Ликвидность",
+    pbFee: "Комиссия",
+    thTime: "Время",
+    thValue: "Стоимость",
+    thTvl: "TVL",
+    navPools: "Пулы",
+    poolsClassic: "Классические и DLMM",
+    devModeLabel: "Режим разработчика (расширенные панели AMM / DLMM, Dev Tools)",
     hdrBadge: "Devnet · Без аудита",
     hdrBadgeTip: "Только Solana Devnet — токены не имеют реальной ценности, программа не прошла аудит безопасности. Не используйте реальные средства. Нажмите, чтобы увидеть полное предупреждение.",
     hdrSettings: "Настройки",
@@ -11084,6 +11293,20 @@ const STRINGS = {
     cmdkRefreshExplore: "Обновить данные Explore",
   },
   ar: {
+    panelTradingBoardHint: "الرسم البياني والسعر والصفقات للزوج المختار في صندوق المبادلة، مفكوكة مباشرة من السلسلة (آخر 100 معاملة). القيم بالدولار من مصادر Pyth عند توفرها للمجمع.",
+    lqNoIndexerHint: "القيم بالدولار مأخوذة من مصادر أسعار Pyth المضبوطة لكل مجمع (الرمز بلا مصدر سعر يُسعَّر عبر مجمعه مع رمز له سعر). هي تقديرات للعرض فقط؛ الحجم والسجل يُقرآن مباشرة من السلسلة.",
+    pb24hChange: "تغيّر 24 س",
+    pb24hHigh: "أعلى 24 س",
+    pb24hLow: "أدنى 24 س",
+    pb24hVol: "حجم 24 س",
+    pbLiquidity: "السيولة",
+    pbFee: "الرسوم",
+    thTime: "الوقت",
+    thValue: "القيمة",
+    thTvl: "TVL",
+    navPools: "المجمعات",
+    poolsClassic: "الكلاسيكية و DLMM",
+    devModeLabel: "وضع المطوّر (لوحات AMM / DLMM المتقدمة، أدوات المطوّر)",
     hdrBadge: "Devnet · غير مدقق",
     hdrBadgeTip: "على Solana Devnet فقط — الرموز بلا قيمة حقيقية ولم يجتز البرنامج تدقيقًا أمنيًا. لا تستخدمه بأموال حقيقية. انقر لعرض التحذير كاملًا.",
     hdrSettings: "الإعدادات",
@@ -11291,6 +11514,20 @@ const STRINGS = {
     cmdkRefreshExplore: "تحديث بيانات Explore",
   },
   hi: {
+    panelTradingBoardHint: "स्वैप बॉक्स में चुने गए जोड़े का चार्ट, कीमत और ट्रेड, सीधे चेन से डिकोड (पिछले 100 ट्रांज़ैक्शन)। $ मान Pyth फ़ीड से, जहाँ पूल में उपलब्ध हों।",
+    lqNoIndexerHint: "$ मान हर पूल में सेट Pyth प्राइस फ़ीड से आते हैं (बिना फ़ीड वाले टोकन की कीमत किसी कीमत वाले टोकन के साथ उसके पूल से निकाली जाती है)। ये केवल दिखाने के लिए अनुमान हैं; वॉल्यूम और इतिहास सीधे चेन से पढ़े जाते हैं।",
+    pb24hChange: "24घं बदलाव",
+    pb24hHigh: "24घं उच्च",
+    pb24hLow: "24घं निम्न",
+    pb24hVol: "24घं वॉल्यूम",
+    pbLiquidity: "लिक्विडिटी",
+    pbFee: "शुल्क",
+    thTime: "समय",
+    thValue: "मूल्य",
+    thTvl: "TVL",
+    navPools: "पूल",
+    poolsClassic: "क्लासिक और DLMM",
+    devModeLabel: "डेवलपर मोड (उन्नत AMM / DLMM पैनल, Dev Tools)",
     hdrBadge: "Devnet · ऑडिट नहीं",
     hdrBadgeTip: "केवल Solana Devnet — टोकन का कोई वास्तविक मूल्य नहीं है और प्रोग्राम ने सुरक्षा ऑडिट पास नहीं किया है। असली पैसे के साथ उपयोग न करें। पूरी चेतावनी देखने के लिए क्लिक करें।",
     hdrSettings: "सेटिंग्स",
@@ -11498,6 +11735,20 @@ const STRINGS = {
     cmdkRefreshExplore: "Explore डेटा रीफ्रेश करें",
   },
   tr: {
+    panelTradingBoardHint: "Swap kutusunda seçilen çiftin grafiği, fiyatı ve işlemleri, doğrudan zincirden çözülür (son 100 işlem). $ değerleri, havuzda varsa Pyth fiyat akışlarından gelir.",
+    lqNoIndexerHint: "$ değerleri her havuzun ayarlandığı Pyth fiyat akışlarından gelir (akışı olmayan token, fiyatı olan bir tokenla havuzu üzerinden fiyatlanır). Gösterim amaçlı tahminlerdir; hacim ve geçmiş doğrudan zincirden okunur.",
+    pb24hChange: "24s değişim",
+    pb24hHigh: "24s en yüksek",
+    pb24hLow: "24s en düşük",
+    pb24hVol: "24s hacim",
+    pbLiquidity: "Likidite",
+    pbFee: "Ücret",
+    thTime: "Zaman",
+    thValue: "Değer",
+    thTvl: "TVL",
+    navPools: "Havuzlar",
+    poolsClassic: "Klasik ve DLMM",
+    devModeLabel: "Geliştirici modu (gelişmiş AMM / DLMM panelleri, Dev Tools)",
     hdrBadge: "Devnet · Denetlenmedi",
     hdrBadgeTip: "Yalnızca Solana Devnet — tokenların gerçek değeri yok ve program güvenlik denetiminden geçmedi. Gerçek parayla kullanmayın. Tam uyarıyı görmek için tıklayın.",
     hdrSettings: "Ayarlar",
@@ -11917,12 +12168,24 @@ function applyLang(lang) {
 // call switchTab() first, or the scroll target is display:none and the
 // scroll is a no-op.
 // ---------------------------------------------------------------------
+// Advanced AMM / DLMM panels and Dev Tools are only reachable in Developer
+// mode (Settings). Anything that asks for them otherwise lands on Swap —
+// the Portfolio +/- buttons still work, their form opens as a popup.
+const DEV_TABS = ["amm", "dlmm", "devtools"];
+function isDevMode() { return document.documentElement.dataset.dev === "1"; }
 function switchTab(tabName) {
   const grid = document.querySelector(".grid");
   if (!grid) return;
+  if (DEV_TABS.includes(tabName) && !isDevMode()) tabName = "tools";
   grid.dataset.activeTab = tabName;
   document.querySelectorAll(".tab-nav-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tab === tabName);
+    const also = (btn.dataset.alsoTabs || "").split(" ");
+    btn.classList.toggle("active", btn.dataset.tab === tabName || also.includes(tabName));
+  });
+  document.querySelectorAll(".pools-switch-btn").forEach((btn) => {
+    const on = btn.dataset.poolsTab === tabName;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-selected", String(on));
   });
   document.getElementById("rd-more-menu")?.setAttribute("hidden", "");
   document.getElementById("rd-more-btn")?.setAttribute("aria-expanded", "false");
@@ -11931,6 +12194,22 @@ function switchTab(tabName) {
 document.querySelectorAll(".tab-nav-btn").forEach((btn) => {
   btn.addEventListener("click", () => switchTab(btn.dataset.tab));
 });
+(function initDevMode() {
+  let on = false;
+  try { on = localStorage.getItem("swd-amm-dev-mode") === "1"; } catch {}
+  if (on) document.documentElement.dataset.dev = "1";
+  const toggle = document.getElementById("dev-mode-toggle");
+  if (!toggle) return;
+  toggle.checked = on;
+  toggle.addEventListener("change", () => {
+    if (toggle.checked) document.documentElement.dataset.dev = "1";
+    else delete document.documentElement.dataset.dev;
+    try { localStorage.setItem("swd-amm-dev-mode", toggle.checked ? "1" : "0"); } catch {}
+    const cur = document.querySelector(".grid")?.dataset.activeTab;
+    if (!toggle.checked && DEV_TABS.includes(cur)) switchTab("tools");
+  });
+})();
+document.querySelectorAll(".pools-switch-btn").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.poolsTab)));
 (function initTab() {
   let initial = "tools";
   try { initial = localStorage.getItem("swd-amm-active-tab") || "tools"; } catch {}
@@ -11941,7 +12220,7 @@ document.querySelectorAll(".tab-nav-btn").forEach((btn) => {
 // "More ▾" dropdown — a plain show/hide toggle, closed automatically by
 // switchTab() above whenever any nav item (including one inside this menu)
 // is clicked, and by clicking anywhere outside it.
-// Header Settings popover (build 2026-10-07e): language, theme, priority
+// Header Settings popover (build 2026-10-07f): language, theme, priority
 // fee, confirm-before-send, auto-refresh, faucet, command palette.
 (function initSettingsPopover() {
   const btn = document.getElementById("settings-btn");
@@ -13436,7 +13715,7 @@ function bestPoolTypeForActivePair() {
   if (dlmmExists && !cpExists) return "dlmm";
   return "cp";
 }
-// Swap dock (build 2026-10-07e): on wide screens the Swap form sits next
+// Swap dock (build 2026-10-07f): on wide screens the Swap form sits next
 // to the Trading Board chart, the way Raydium / Meteora / Binance show
 // the order box beside the chart. Same reparenting trick as the popup —
 // the real form (ids, listeners) moves into #trade-dock-body and back.
@@ -14060,6 +14339,101 @@ async function computeOracleHealth(entries) {
     poolOracleHealth.set(e.poolStr, { ...base, status, deviationBps, ageSecs });
   }
 }
+
+// ---------------------------------------------------------------------
+// USD prices (build 2026-10-07f). Every CP / DLMM pool names a Pyth USD
+// feed for each of its tokens; those PriceUpdateV2 accounts are read in
+// one batch. A token without a live feed gets its price through a pool
+// against a token that has one (deepest pool first), the way aggregators
+// price long-tail tokens. Prices older than a day are ignored. Values are
+// estimates for display only — nothing here feeds a transaction.
+// ---------------------------------------------------------------------
+const usdPrices = new Map(); // mint base58 -> { usd, source: "pyth" | "pool", via? }
+const USD_MAX_AGE_SECS = 24 * 60 * 60;
+let usdRefreshing = null;
+
+function usdPriceOf(mint) {
+  const k = mint && (typeof mint === "string" ? mint : mint.toBase58());
+  return (k && usdPrices.get(k)?.usd) || null;
+}
+// Raw token amount -> USD number (or null when the token has no price).
+function usdValueOfRaw(raw, mint, decimals) {
+  const p = usdPriceOf(mint);
+  if (p == null || decimals == null) return null;
+  return (Number(raw) / 10 ** decimals) * p;
+}
+function fmtUsd(v) {
+  if (v == null || !Number.isFinite(v)) return "";
+  const a = Math.abs(v);
+  if (a >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
+  if (a >= 1e4) return `$${(v / 1e3).toFixed(1)}K`;
+  if (a >= 1) return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (a === 0) return "$0.00";
+  return `$${v.toPrecision(3)}`;
+}
+
+async function refreshUsdPrices(rows = lastPoolListRows) {
+  if (usdRefreshing) return usdRefreshing;
+  usdRefreshing = (async () => {
+    try {
+      if (!state.connection || !rows?.length) return;
+      const feeds = new Map(); // mint -> feed hex
+      for (const r of rows) {
+        const e = r.oracleEntry;
+        if (!e) continue;
+        const ha = feedIdBytesToHex(e.feedA), hb = feedIdBytesToHex(e.feedB);
+        if (ha && /[1-9a-f]/.test(ha) && !feeds.has(r.mintA.toBase58())) feeds.set(r.mintA.toBase58(), ha);
+        if (hb && /[1-9a-f]/.test(hb) && !feeds.has(r.mintB.toBase58())) feeds.set(r.mintB.toBase58(), hb);
+      }
+      const addrOf = new Map();
+      for (const [m, h] of feeds) { const a = resolvePriceUpdateAddress(h); if (a) addrOf.set(m, { a, h }); }
+      const addrs = [...new Set([...addrOf.values()].map((x) => x.a))];
+      const decoded = new Map();
+      for (let i = 0; i < addrs.length; i += 100) {
+        const chunk = addrs.slice(i, i + 100);
+        const infos = await state.connection.getMultipleAccountsInfo(chunk.map((a) => new PublicKey(a)));
+        chunk.forEach((a, j) => decoded.set(a, infos[j] ? decodePriceUpdateV2(infos[j].data) : null));
+      }
+      const now = Math.floor(Date.now() / 1000);
+      const next = new Map();
+      for (const [m, { a, h }] of addrOf) {
+        const p = decoded.get(a);
+        if (!p || p.feedHex !== h || p.price <= 0n || now - p.publishTime > USD_MAX_AGE_SECS) continue;
+        next.set(m, { usd: Number(p.price) * 10 ** p.expo, source: "pyth" });
+      }
+      // One hop through pools, deepest first, until nothing new is priced.
+      const priced = rows
+        .filter((r) => r.oracleEntry && r.oracleEntry.poolRawPrice > 0 && BigInt(r.reserveA?.toString?.() ?? 0) > 0n && BigInt(r.reserveB?.toString?.() ?? 0) > 0n)
+        .map((r) => ({ r, uiPriceBperA: r.oracleEntry.poolRawPrice * 10 ** (r.oracleEntry.decA - r.oracleEntry.decB) }));
+      for (let pass = 0; pass < 3; pass++) {
+        let added = false;
+        const depth = ({ r }) => {
+          const pa = next.get(r.mintA.toBase58())?.usd, pb = next.get(r.mintB.toBase58())?.usd;
+          if (pa) return (Number(r.reserveA) / 10 ** r.oracleEntry.decA) * pa;
+          if (pb) return (Number(r.reserveB) / 10 ** r.oracleEntry.decB) * pb;
+          return 0;
+        };
+        for (const x of priced.slice().sort((p, q) => depth(q) - depth(p))) {
+          const a = x.r.mintA.toBase58(), b = x.r.mintB.toBase58();
+          const pa = next.get(a)?.usd, pb = next.get(b)?.usd;
+          if (pa && !pb && x.uiPriceBperA > 0) { next.set(b, { usd: pa / x.uiPriceBperA, source: "pool", via: a }); added = true; }
+          else if (pb && !pa) { next.set(a, { usd: pb * x.uiPriceBperA, source: "pool", via: b }); added = true; }
+        }
+        if (!added) break;
+      }
+      usdPrices.clear();
+      for (const [k, v] of next) usdPrices.set(k, v);
+      document.dispatchEvent(new CustomEvent("swd-usd-prices"));
+    } catch (e) {
+      console.error("usd prices", e);
+    } finally {
+      usdRefreshing = null;
+    }
+  })();
+  return usdRefreshing;
+}
+setInterval(() => { if (document.visibilityState === "visible" && lastPoolListRows.length) refreshUsdPrices(); }, 60000);
 
 function oracleEntryFromAccount(type, poolPk, account, decA, decB, reserveA, reserveB) {
   let poolRawPrice = null;
@@ -15312,7 +15686,7 @@ wireDirectionFlip("bpf", "bpf-mint-a", "bpf-mint-b");
 wireDirectionFlip("mh", "swap-mint-a", "swap-mint-b");
 
 // ---------------------------------------------------------------------
-// Easy swap (build 2026-10-07e) — a presentation layer over the Swap
+// Easy swap (build 2026-10-07f) — a presentation layer over the Swap
 // forms, the same idea as the direction widget above. The raw-unit
 // <input id="X-amount-in"> stays the single source of truth for every
 // existing listener, estimate, MAX button and auto-route; on top of it:
@@ -15356,7 +15730,7 @@ function hookValueSetter(el, after) {
   });
 }
 
-// Token-amount field (build 2026-10-07e): puts a token-amount input in
+// Token-amount field (build 2026-10-07f): puts a token-amount input in
 // front of a raw-unit input, which stays the value every existing handler
 // reads. opts:
 //   mint()          mint (base58) the amount is in, or "" if not known yet
@@ -15401,6 +15775,24 @@ function wireTokenAmountField(rawId, opts = {}) {
     balEl = meta.querySelector(".easy-bal");
   }
 
+  // "≈ $1.23" under the amount, when the token has a USD price
+  let usdEl = null;
+  if (opts.usd) {
+    usdEl = document.createElement("div");
+    usdEl.className = "easy-usd";
+    (meta || raw.closest(".amount-input-wrap") || raw).insertAdjacentElement(meta ? "beforebegin" : "afterend", usdEl);
+  }
+  function updateUsd() {
+    if (!usdEl) return;
+    const n = parseFloat(ui.value.replace(/,/g, "."));
+    const p = usdPriceOf(mintOf());
+    usdEl.textContent = n > 0 && p ? `≈ ${fmtUsd(n * p)}` : "";
+  }
+  if (usdEl) {
+    ui.addEventListener("input", updateUsd);
+    document.addEventListener("swd-usd-prices", updateUsd);
+  }
+
   const decimalsNow = async () => {
     const d = await easyDecimals(mintOf());
     return d != null ? d : (opts.fallbackDecimals ?? null);
@@ -15418,6 +15810,7 @@ function wireTokenAmountField(rawId, opts = {}) {
     if (big === 0n) { ui.value = "0"; return; }
     const dec = await decimalsNow();
     if (dec != null) ui.value = rawToTokenString(big, dec);
+    updateUsd();
   }
 
   // token amount -> raw, then the same "change" the raw field always got
@@ -15481,6 +15874,7 @@ function wireTokenAmountField(rawId, opts = {}) {
     setTimeout(async () => {
       if (recomputePending) { recomputePending = false; await pushUiToRaw(); }
       refreshBalance();
+      updateUsd();
     }, 0);
   };
   for (const id of opts.watch || []) {
@@ -15503,7 +15897,7 @@ const lpMintOf = (prefix) => () => {
 
 function wireEasySwap(prefix) {
   const watch = [`${prefix}-mint-a`, `${prefix}-mint-b`, `${prefix}-direction`];
-  if (!wireTokenAmountField(`${prefix}-amount-in`, { mint: sendingMint(prefix), watch, labelKey: "swapYouPay", balance: true, pcts: [25, 50], big: true })) return;
+  if (!wireTokenAmountField(`${prefix}-amount-in`, { mint: sendingMint(prefix), watch, labelKey: "swapYouPay", balance: true, pcts: [25, 50], big: true, usd: true })) return;
 
   // "You send" / "You receive" open the token list.
   const form = document.getElementById(`${prefix}-form-content`);
@@ -15628,16 +16022,16 @@ function openTokenPicker(prefix, side) {
 
 wireEasySwap("swap");
 wireEasySwap("dlmm-swap");
-// Every other form that used to take raw units (build 2026-10-07e).
+// Every other form that used to take raw units (build 2026-10-07f).
 const mintOfField = (id) => () => fieldVal(id);
-wireTokenAmountField("mh-amount-in", { mint: mintOfField("mh-mint-in"), watch: ["mh-mint-in"], labelKey: "amtSend", balance: true, pcts: [25, 50], big: true });
-wireTokenAmountField("lo-amount-in", { mint: sendingMint("lo"), watch: ["lo-mint-a", "lo-mint-b", "lo-direction"], labelKey: "amtSend", balance: true, pcts: [25, 50, 100] });
-wireTokenAmountField("dca-amount-per-run", { mint: sendingMint("dca"), watch: ["dca-mint-a", "dca-mint-b", "dca-direction"], labelKey: "amtPerRun", balance: true });
+wireTokenAmountField("mh-amount-in", { mint: mintOfField("mh-mint-in"), watch: ["mh-mint-in"], labelKey: "amtSend", balance: true, pcts: [25, 50], big: true, usd: true });
+wireTokenAmountField("lo-amount-in", { mint: sendingMint("lo"), watch: ["lo-mint-a", "lo-mint-b", "lo-direction"], labelKey: "amtSend", balance: true, pcts: [25, 50, 100], usd: true });
+wireTokenAmountField("dca-amount-per-run", { mint: sendingMint("dca"), watch: ["dca-mint-a", "dca-mint-b", "dca-direction"], labelKey: "amtPerRun", balance: true, usd: true });
 wireTokenAmountField("bpf-amount-in", { mint: sendingMint("bpf"), watch: ["bpf-mint-a", "bpf-mint-b", "bpf-direction"], labelKey: "amtSend" });
 wireTokenAmountField("sim-amount-a", { mint: mintOfField("sim-mint-a"), watch: ["sim-mint-a"], labelKey: "amtA" });
 wireTokenAmountField("sim-amount-b", { mint: mintOfField("sim-mint-b"), watch: ["sim-mint-b"], labelKey: "amtB" });
-wireTokenAmountField("add-amount-a", { mint: mintOfField("add-mint-a"), watch: ["add-mint-a"], labelKey: "amtA", balance: true, pcts: [25, 50, 100] });
-wireTokenAmountField("add-amount-b", { mint: mintOfField("add-mint-b"), watch: ["add-mint-b"], labelKey: "amtB", balance: true, pcts: [25, 50, 100] });
+wireTokenAmountField("add-amount-a", { mint: mintOfField("add-mint-a"), watch: ["add-mint-a"], labelKey: "amtA", balance: true, pcts: [25, 50, 100], usd: true });
+wireTokenAmountField("add-amount-b", { mint: mintOfField("add-mint-b"), watch: ["add-mint-b"], labelKey: "amtB", balance: true, pcts: [25, 50, 100], usd: true });
 wireTokenAmountField("add-min-lp", { mint: lpMintOf("add"), watch: ["add-mint-a", "add-mint-b"], fallbackDecimals: 6 });
 wireTokenAmountField("rm-lp-amount", { mint: lpMintOf("rm"), watch: ["rm-mint-a", "rm-mint-b"], labelKey: "amtLp", balance: true, pcts: [25, 50, 100], fallbackDecimals: 6, balanceIcon: false });
 wireTokenAmountField("rm-min-a", { mint: mintOfField("rm-mint-a"), watch: ["rm-mint-a"] });
@@ -15923,6 +16317,7 @@ async function refreshPoolList() {
 
     lastPoolListRows = rows;
     knownTokenListAt = 0; // pool set changed — token list is stale
+    refreshUsdPrices(rows);
     setTimeout(() => {
       if (dockedSwapId) syncSwapDock();
       if (!tbLastData) scheduleTradingBoardAutoLoad(true);
@@ -15959,6 +16354,18 @@ document.getElementById("refresh-pools-btn").addEventListener("click", () => {
 let poolListFilterType = "all"; // "all" | "cp" | "dlmm"
 let poolListSearchQuery = "";
 
+// Pool TVL in USD: both sides when both are priced; a constant-product
+// pool holds equal value on each side, so one priced side counts twice.
+function poolTvlUsd(r, decOf) {
+  const va = usdValueOfRaw(r.reserveA, r.mintA, decOf(r.mintA));
+  const vb = usdValueOfRaw(r.reserveB, r.mintB, decOf(r.mintB));
+  if (va != null && vb != null) return va + vb;
+  if (r.type === "cp" && (va != null || vb != null)) return 2 * (va ?? vb);
+  return va ?? vb;
+}
+document.addEventListener("swd-usd-prices", () => {
+  try { if (document.getElementById("pool-list-container")?.dataset.hasData) renderPoolListTable(); } catch (e) { console.error(e); }
+});
 function renderPoolListTable() {
   const container = document.getElementById("pool-list-container");
   if (!container) return;
@@ -15995,6 +16402,7 @@ function renderPoolListTable() {
         <td class="mono" title="${r.pool.toBase58()}">${pairLabel}${oracleHealthBadgeHtml(poolOracleHealth.get(r.pool.toBase58()))}</td>
         <td><span class="pill-type ${r.type}">${typeLabel}</span></td>
         <td class="mono">${(r.feeBps / 100).toFixed(2)}%</td>
+        <td class="mono">${fmtUsd(poolTvlUsd(r, decOf)) || "—"}</td>
         <td class="mono">${fmtAmt(r.reserveA, decOf(r.mintA))}</td>
         <td class="mono">${fmtAmt(r.reserveB, decOf(r.mintB))}</td>
         <td class="actions">
@@ -16013,11 +16421,12 @@ function renderPoolListTable() {
           <th data-i18n="thPair">Pair</th>
           <th data-i18n="thType">Type</th>
           <th data-i18n="thFee">Fee</th>
+          <th data-i18n="thTvl">TVL</th>
           <th data-i18n="thReserveA">Reserve A</th>
           <th data-i18n="thReserveB">Reserve B</th>
           <th data-i18n="thActions">Actions</th>
         </tr></thead>
-        <tbody>${rowsHtml}${lazySentinelHtml(container, loadedCount < rows.length, "poolListLoading", { colspan: 7 })}</tbody>
+        <tbody>${rowsHtml}${lazySentinelHtml(container, loadedCount < rows.length, "poolListLoading", { colspan: 8 })}</tbody>
       </table>
     </div>`;
   container.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.getAttribute("data-i18n")); });
@@ -16710,10 +17119,10 @@ function cpMarkPrices(records, reserves, decA, decB) {
 //
 // `price` is what the trader got (amount out / amount in, fee included) —
 // shown in the trades table and CSV. `mark` is the pool's own price right
-// after the trade, which is what the charts plot (build 2026-10-07e): a
+// after the trade, which is what the charts plot (build 2026-10-07f): a
 // trade's execution price sits a fee away from the market on alternating
 // sides for buys and sells, which drew fake wicks on every candle, and the
-// last candle never matched the Price stat. Also since 2026-10-07e: failed
+// last candle never matched the Price stat. Also since 2026-10-07f: failed
 // transactions are skipped (their logs still carry the events of the
 // instructions that ran before the failure), events of OTHER pools in the
 // same transaction (multi-hop) are dropped, and trades in the same second
@@ -16809,6 +17218,7 @@ async function fetchPoolTradeHistory(poolPk, decA, decB, poolType) {
       // compare on one consistent axis for the volume chart.
       const p = {
         t: r.blockTime * 1000,
+        sig: r.signature,
         price,
         mark,
         volumeB: amtB,
@@ -17010,6 +17420,10 @@ let tbCurrentTf = 60000;
 // "Buy A" = B → A (spend B, receive A); "Sell A" = A → B (spend A, receive
 // B) — matching the Swap panel's own "A → B (send A, receive B)" labeling,
 // with mint A treated as the pair's base token throughout this board.
+// " · $1.23" after a stat value when a USD figure is known.
+function usdSuffix(v) {
+  return v != null && Number.isFinite(v) && v > 0 ? ` <span class="stat-usd">· ${fmtUsd(v)}</span>` : "";
+}
 function renderTradingBoardStats(data) {
   const container = document.getElementById("tb-stats-container");
   const { points, decA, decB, reserveA, reserveB } = data;
@@ -17039,11 +17453,11 @@ function renderTradingBoardStats(data) {
   // pair-wide numbers, then buy-side / sell-side figures split into their
   // own muted teal / muted red columns (per the market-data redesign).
   const overviewCards = [
-    { label: t("statPrice"), value: price !== null ? `1 ${icA} ≈ ${price.toPrecision(6)} ${icB}` : "—" },
-    { label: t("statLiquidity"), value: liquidity },
+    { label: t("statPrice"), value: price !== null ? `1 ${icA} ≈ ${price.toPrecision(6)} ${icB}${usdSuffix(data.mintB ? usdPriceOf(data.mintB) * price : null)}` : "—" },
+    { label: t("statLiquidity"), value: `${liquidity}${usdSuffix(reserveA > 0n && data.mintA ? poolTvlUsd({ type: data.poolType, reserveA, reserveB, mintA: data.mintA, mintB: data.mintB }, (m) => (m.toBase58() === data.mintA.toBase58() ? decA : decB)) : null)}` },
     { label: t("statChange"), value: changeText, color: changeColor },
     { label: t("statTxns"), value: String(points.length) },
-    { label: t("statVolume"), value: (buyVol + sellVol).toPrecision(6) },
+    { label: t("statVolume"), value: `${(buyVol + sellVol).toPrecision(6)}${usdSuffix(data.mintB && usdPriceOf(data.mintB) ? (buyVol + sellVol) * usdPriceOf(data.mintB) : null)}` },
     { label: t("statTraders"), value: String(traderSet.size) },
   ];
   const buyCards = [
@@ -17077,21 +17491,122 @@ function renderTradingBoardStats(data) {
 
 function renderTradingBoardTrades(data) {
   const container = document.getElementById("tb-trades-container");
-  const { points } = data;
+  const { points, mintA, mintB } = data;
   if (points.length === 0) {
     container.innerHTML = `<div class="empty-state-compact">${iconSvg("receipt")}<span>${t("tbNoTradesYet")}</span></div>`;
     return;
   }
-  const rows = points.slice().reverse().slice(0, 20).map((p) => {
-    const cls = p.aToB ? "remove" : "add";
-    const sideLabel = p.aToB ? t("tbSideSell") : t("tbSideBuy");
-    const when = new Date(p.t).toLocaleString();
+  const symA = mintA ? escapeHtmlText(labelFor(mintA)) : "A";
+  const symB = mintB ? escapeHtmlText(labelFor(mintB)) : "B";
+  const usdB = mintB ? usdPriceOf(mintB) : null;
+  // Exchange-style list: newest first, side in green / red, amount in the
+  // base token, value in USD when the quote token has a price.
+  const rows = points.slice().reverse().slice(0, 50).map((p) => {
+    const buy = !p.aToB;
+    const amountA = p.price > 0 ? p.volumeB / p.price : 0;
+    const value = usdB ? fmtUsd(p.volumeB * usdB) : `${p.volumeB.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symB}`;
     const traderText = p.trader ? shortPk(p.trader) : "—";
-    return `<tr><td>${when}</td><td><span class="pill-event ${cls}">${sideLabel}</span></td><td class="mono">${p.price.toPrecision(6)}</td><td class="mono">${p.volumeB.toPrecision(6)}</td><td class="mono">${traderText}</td></tr>`;
+    const tx = p.sig ? `<a href="${explorerLink(p.sig)}" target="_blank" rel="noopener" title="${escapeHtmlText(p.sig)}">↗</a>` : "";
+    return `<tr class="${buy ? "tr-buy" : "tr-sell"}">
+      <td title="${escapeHtmlText(new Date(p.t).toLocaleString())}">${escapeHtmlText(fmtTimeAgo(p.t))}</td>
+      <td class="tr-side">${buy ? t("tbSideBuy") : t("tbSideSell")}</td>
+      <td class="mono tr-price">${fmtPrice(p.price)}</td>
+      <td class="mono">${amountA.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symA}</td>
+      <td class="mono">${value}</td>
+      <td class="mono">${traderText}</td>
+      <td>${tx}</td>
+    </tr>`;
   }).join("");
-  container.innerHTML = `<div class="table-scroll"><table class="data-table"><thead><tr><th data-i18n="thDate">Date</th><th data-i18n="thType">Type</th><th data-i18n="kvPrice">Price</th><th data-i18n="thAmount">Amount</th><th data-i18n="thTrader">Trader</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  container.innerHTML = `<div class="table-scroll tb-trades"><table class="data-table"><thead><tr><th data-i18n="thTime">Time</th><th data-i18n="thType">Type</th><th>${escapeHtmlText(t("kvPrice"))} (${symB})</th><th data-i18n="thAmount">Amount</th><th data-i18n="thValue">Value</th><th data-i18n="thTrader">Trader</th><th>Tx</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   container.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.getAttribute("data-i18n")); });
 }
+
+// Pair bar (build 2026-10-07f): the strip above the chart that exchanges
+// show — pair, last price (+ USD), 24h change / high / low / volume,
+// liquidity (+ USD TVL), fee. Built from the same on-chain history and
+// reserves the chart uses (24h figures cover the trades that history
+// holds, see TRADE_HISTORY_SIGNATURES).
+function fmtPrice(v) {
+  if (v == null || !Number.isFinite(v)) return "—";
+  if (v === 0) return "0";
+  const a = Math.abs(v);
+  if (a >= 1000) return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (a >= 1) return v.toLocaleString(undefined, { maximumFractionDigits: 4 });
+  return v.toPrecision(4);
+}
+function fmtTimeAgo(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  let rtf;
+  try { rtf = new Intl.RelativeTimeFormat(state.lang || "en", { numeric: "auto", style: "narrow" }); } catch { rtf = new Intl.RelativeTimeFormat("en", { style: "narrow" }); }
+  if (s < 60) return rtf.format(-s, "second");
+  if (s < 3600) return rtf.format(-Math.floor(s / 60), "minute");
+  if (s < 86400) return rtf.format(-Math.floor(s / 3600), "hour");
+  return rtf.format(-Math.floor(s / 86400), "day");
+}
+function pairBarStats(data) {
+  const { pricePoints = [], points = [], decA, decB, reserveA, reserveB, poolType } = data;
+  const series = pricePoints.length ? pricePoints : points;
+  let last = series.length ? series[series.length - 1].price : null;
+  if (poolType === "cp" && reserveA > 0n && reserveB > 0n) last = (Number(reserveB) / 10 ** decB) / (Number(reserveA) / 10 ** decA);
+  const since = Date.now() - 24 * 3600 * 1000;
+  const inWin = series.filter((p) => p.t >= since);
+  const before = series.filter((p) => p.t < since);
+  const ref = before.length ? before[before.length - 1].price : (inWin[0]?.price ?? null);
+  const window = ref != null ? [ref, ...inWin.map((p) => p.price)] : inWin.map((p) => p.price);
+  if (last != null) window.push(last);
+  const vol24B = points.filter((p) => p.t >= since).reduce((s, p) => s + p.volumeB, 0);
+  return {
+    last,
+    change: ref && last != null ? ((last - ref) / ref) * 100 : null,
+    high: window.length ? Math.max(...window) : null,
+    low: window.length ? Math.min(...window) : null,
+    vol24B,
+  };
+}
+function renderPairBar(data) {
+  const el = document.getElementById("tb-pair-bar");
+  if (!el) return;
+  const mintA = data?.mintA?.toBase58?.() || document.getElementById("swap-mint-a")?.value.trim();
+  const mintB = data?.mintB?.toBase58?.() || document.getElementById("swap-mint-b")?.value.trim();
+  if (!mintA || !mintB) {
+    el.innerHTML = `<button type="button" class="pb-pair" data-open-pair-drawer>${escapeHtmlText(t("pairDrawerBrowse"))} ▾</button>`;
+    return;
+  }
+  const pairHtml = `<button type="button" class="pb-pair" data-open-pair-drawer title="${escapeHtmlText(t("pairDrawerBrowse"))}">
+      <span class="token-pair-icons">${tokenIconHtml(mintA, 26)}${tokenIconHtml(mintB, 26)}</span>
+      <span class="pb-sym"><b>${escapeHtmlText(labelFor(mintA))}</b><span>/${escapeHtmlText(labelFor(mintB))}</span></span>
+      ${data?.poolType ? `<span class="pill-type ${data.poolType}">${data.poolType === "cp" ? t("poolTypeCp") : t("poolTypeDlmm")}</span>` : ""}
+      <span class="pb-chev">▾</span>
+    </button>`;
+  if (!data) { el.innerHTML = pairHtml; return; }
+  const st = pairBarStats(data);
+  const usdB = usdPriceOf(mintB);
+  const usdA = usdPriceOf(mintA) ?? (st.last != null && usdB ? st.last * usdB : null);
+  const dir = st.change == null ? "" : st.change >= 0 ? "up" : "down";
+  const symB = escapeHtmlText(labelFor(mintB));
+  const decOf = (m) => (m.toBase58() === data.mintA.toBase58() ? data.decA : data.decB);
+  const tvl = data.reserveA > 0n ? poolTvlUsd({ type: data.poolType, reserveA: data.reserveA, reserveB: data.reserveB, mintA: data.mintA, mintB: data.mintB }, decOf) : null;
+  const stat = (k, v, cls = "") => `<div class="pb-stat"><span class="pb-k">${escapeHtmlText(t(k))}</span><span class="pb-v ${cls}">${v}</span></div>`;
+  el.innerHTML = `${pairHtml}
+    <div class="pb-price ${dir}"><span class="pb-last">${fmtPrice(st.last)}</span><span class="pb-usd">${usdA != null ? `≈ ${fmtUsd(usdA)}` : symB}</span></div>
+    <div class="pb-stats">
+      ${stat("pb24hChange", st.change == null ? "—" : `${st.change >= 0 ? "+" : ""}${st.change.toFixed(2)}%`, dir)}
+      ${stat("pb24hHigh", fmtPrice(st.high))}
+      ${stat("pb24hLow", fmtPrice(st.low))}
+      ${stat("pb24hVol", `${st.vol24B.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${symB}${usdB ? ` <small>${fmtUsd(st.vol24B * usdB)}</small>` : ""}`)}
+      ${stat("pbLiquidity", tvl != null ? fmtUsd(tvl) : (data.reserveA > 0n ? `${fmtAmt(data.reserveA, data.decA)} / ${fmtAmt(data.reserveB, data.decB)}` : "—"))}
+      ${stat("pbFee", data.feeBps != null ? `${(Number(data.feeBps) / 100).toFixed(2)}%` : "—")}
+    </div>`;
+}
+document.addEventListener("swd-usd-prices", () => {
+  try {
+    renderPairBar(tbLastData);
+    if (tbLastData) { renderTradingBoardStats(tbLastData); renderTradingBoardTrades(tbLastData); }
+  } catch (e) { console.error(e); }
+});
+document.addEventListener("swd-mint-sync", () => { if (!tbLastData) setTimeout(() => renderPairBar(null), 0); });
+setTimeout(() => renderPairBar(null), 0);
+
 
 // Re-renders everything from tbLastData (the last fetch) — called after a
 // fresh load AND after a timeframe-button click, so switching 1m/5m/15m/1h
@@ -17103,7 +17618,7 @@ const MARKET_UP = "#0ecb81";
 const MARKET_DOWN = "#f6465d";
 const TB_NARROW_QUERY = "(max-width: 640px)";
 
-// Trading-terminal chart theme (build 2026-10-07e): faint grid, dashed
+// Trading-terminal chart theme (build 2026-10-07f): faint grid, dashed
 // crosshair with labelled axes, high/low marks, a dashed last-price line,
 // green/red candles with translucent volume, MA lines in the usual
 // yellow / pink / violet, numbers in the monospace font.
@@ -17438,6 +17953,7 @@ function applyTbChartTheme() {
 function renderTradingBoard() {
   if (!tbLastData) return;
   const { points, pricePoints } = tbLastData;
+  renderPairBar(tbLastData);
   renderTradingBoardStats(tbLastData);
   const candles = binPointsToCandles(pricePoints || points, tbCurrentTf, { fillGaps: true, untilMs: Date.now() });
   tbLastCandleT = candles.length ? candles[candles.length - 1].t : null;
@@ -22148,6 +22664,10 @@ async function updateSwapEstimate() {
     const [decA, decB] = await Promise.all([getMintDecimalsCached(mintA), getMintDecimalsCached(mintB)]);
     const outDec = aToB ? decB : decA;
     estEl.textContent = t("estimateOutput", { amount: fmtAmt(amountOut, outDec), min: fmtAmt(minOut, outDec) });
+    {
+      const usdOut = usdValueOfRaw(amountOut, aToB ? mintB : mintA, outDec);
+      if (usdOut != null) estEl.textContent += ` (≈ ${fmtUsd(usdOut)})`;
+    }
   } catch (e) {
     estEl.textContent = t("estimateError");
     hideSuggest();
@@ -22555,6 +23075,10 @@ async function updateDlmmSwapEstimate() {
     const [decA, decB] = await Promise.all([getMintDecimalsCached(mintA), getMintDecimalsCached(mintB)]);
     const outDec = aToB ? decB : decA;
     estEl.textContent = t("estimateOutputDlmm", { amount: fmtAmt(amountOut, outDec), min: fmtAmt(minOut, outDec) });
+    {
+      const usdOut = usdValueOfRaw(amountOut, aToB ? mintB : mintA, outDec);
+      if (usdOut != null) estEl.textContent += ` (≈ ${fmtUsd(usdOut)})`;
+    }
   } catch (e) {
     estEl.textContent = t("estimateError");
     hideSuggestDlmm();

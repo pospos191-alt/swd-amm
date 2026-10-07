@@ -178,12 +178,41 @@ try {
       if (!onWithWallet) throw new Error("lists stay hidden even with a wallet connected");
     }],
     ["SWDMM v2 tab: pools, create form (with fee chart), governance render", async () => {
-      await page.click('.tab-nav-btn[data-tab="v2"]', { timeout: 5000 });
+      await page.click('.tab-nav-btn[data-tab="liquidity"]', { timeout: 5000 });
+      await page.click('.pools-switch-btn[data-pools-tab="v2"]', { timeout: 5000 });
+      const navActive = await page.evaluate(() => document.querySelector('.tab-nav-btn[data-tab="liquidity"]').classList.contains("active"));
+      if (!navActive) throw new Error("Pools nav item is not highlighted on the SWDMM v2 page");
       await page.click('[data-v2-view="create"]', { timeout: 5000 });
       await page.click('#v2c-mode button[data-val="1"]', { timeout: 5000 });
       await page.waitForFunction(() => document.querySelector("#v2c-fee-chart svg path") && document.querySelector("#v2c-range-chart svg"), null, { timeout: 5000 });
       await page.click('[data-v2-view="gov"]', { timeout: 5000 });
       await page.click('[data-v2-view="pools"]', { timeout: 5000 });
+    }],
+    ["Developer mode hides / shows Advanced and Dev Tools", async () => {
+      const r = await page.evaluate(() => {
+        const vis = () => ["amm", "dlmm", "devtools"].map((t) => getComputedStyle(document.querySelector(`.rd-more-item[data-tab="${t}"]`)).display !== "none");
+        const before = vis();
+        document.querySelector('.rd-more-item[data-tab="amm"]').click();
+        const landed = document.querySelector(".grid").dataset.activeTab;
+        const tg = document.getElementById("dev-mode-toggle"); tg.checked = true; tg.dispatchEvent(new Event("change"));
+        const after = vis();
+        document.querySelector('.rd-more-item[data-tab="amm"]').click();
+        const landedDev = document.querySelector(".grid").dataset.activeTab;
+        tg.checked = false; tg.dispatchEvent(new Event("change"));
+        const back = document.querySelector(".grid").dataset.activeTab;
+        return { before, landed, after, landedDev, back };
+      });
+      if (r.before.some(Boolean)) throw new Error("dev items visible without Developer mode");
+      if (r.landed !== "tools") throw new Error(`Advanced AMM opened without Developer mode (${r.landed})`);
+      if (!r.after.every(Boolean) || r.landedDev !== "amm") throw new Error("Developer mode did not unlock Advanced AMM");
+      if (r.back !== "tools") throw new Error("turning Developer mode off left a dev page open");
+    }],
+    ["Swap page: pair bar and 4h / 1D timeframes", async () => {
+      await page.click('.tab-nav-btn[data-tab="tools"]', { timeout: 5000 });
+      const ok = await page.evaluate(() => !!document.querySelector("#tb-pair-bar .pb-pair") && !!document.getElementById("tb-tf-4h") && !!document.getElementById("tb-tf-1d"));
+      if (!ok) throw new Error("pair bar or 4h / 1D buttons missing");
+      await page.click("#tb-tf-1d", { timeout: 5000 });
+      await page.click("#tb-tf-1m", { timeout: 5000 });
     }],
     ["open Portfolio tab", () => page.click('.tab-nav-btn[data-tab="portfolio"]', { timeout: 5000 })],
     ["switch language to Thai", async () => { await page.click("#settings-btn"); await page.selectOption("#lang-select", "th"); await page.keyboard.press("Escape"); }],
