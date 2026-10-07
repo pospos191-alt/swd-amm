@@ -239,7 +239,7 @@
   }
   .field input, .field select { width: 100%; max-width: 100%; }
   .row { display: flex; gap: 10px; }
-  .row .field { flex: 1; }
+  .row .field { flex: 1; min-width: 0; }
   .status-pill {
     display: inline-block;
     padding: 2px 8px;
@@ -403,6 +403,7 @@
   .pill-type { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.02em; }
   .pill-type.cp { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
   .pill-type.dlmm { background: rgba(var(--link-rgb),0.15); color: var(--link); }
+  .pill-type.v2 { background: linear-gradient(90deg, rgba(var(--accent-rgb),0.18), rgba(var(--link-rgb),0.18)); color: var(--text); box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb),0.35); }
   .pill-event { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
   .pill-event.swap { background: rgba(var(--warn-rgb),0.15); color: var(--warn); }
   .pill-event.add { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
@@ -536,7 +537,7 @@
      harmless at the small counts most wallets will actually have. */
   table.data-table tbody tr { content-visibility: auto; contain-intrinsic-size: auto 44px; }
   .pf-position-card { content-visibility: auto; contain-intrinsic-size: auto 100px; }
-  .mkt-card { content-visibility: auto; contain-intrinsic-size: auto 170px; }
+  .mkt-card { content-visibility: auto; contain-intrinsic-size: auto 215px; }
   .notif-item { padding: 8px 2px; border-bottom: 1px solid var(--panel-border); font-size: 15px; }
   .notif-item:last-child { border-bottom: none; }
   .notif-item.unread { background: rgba(var(--accent-rgb),0.06); }
@@ -690,6 +691,9 @@
   .grid[data-active-tab="liquidity"] > [data-tab="liquidity"] { display: block; }
   .grid[data-active-tab="portfolio"] > [data-tab="portfolio"] { display: block; }
   .grid[data-active-tab="marketplace"] > [data-tab="marketplace"] { display: block; }
+  /* An explicitly hidden panel stays hidden on its tab (the pool wizard
+     replaces the pool list; it used to show under it all the time). */
+  .grid > [data-tab][hidden] { display: none !important; }
 
   /* --- Raydium-style primary nav --- */
   .rd-nav { display: flex; align-items: center; gap: 26px; margin-bottom: 10px; padding: 10px 4px; border-bottom: 1px solid var(--panel-border); flex-wrap: wrap; }
@@ -843,7 +847,11 @@
   .mkt-bar-track { height: 6px; border-radius: 999px; background: var(--panel-border); overflow: hidden; margin-bottom: 8px; }
   .mkt-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--link)); }
   .mkt-bar-fill.dlmm { background: linear-gradient(90deg, var(--link), var(--accent)); }
-  .mkt-card-foot { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-dim); }
+  .mkt-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-dim); }
+  .mkt-bar-fill.v2 { background: linear-gradient(90deg, var(--accent), var(--up)); }
+  .mkt-card-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .mkt-card-actions button { flex: 1 1 0; min-width: 0; padding: 8px 10px; font-size: 14px; }
+  .mkt-card-actions .mkt-swap-btn { background: var(--brand-grad, var(--accent)); color: var(--btn-text); border: none; font-weight: 700; }
 
   /* --- "I want to..." create-pool modal --- */
   .cpm-option { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--panel-border); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 10px; cursor: pointer; position: relative; }
@@ -999,6 +1007,81 @@
   .pf-minus-btn, .pf-plus-btn { width: 32px; padding: 6px 0 !important; text-align: center; }
   .pf-stake-btn { opacity: 0.45; cursor: not-allowed; background: var(--panel-border); color: var(--text-dim); }
   .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  /* Easy liquidity (build 2026-10-07g): range picker + previews */
+  .rp { border: 1px solid var(--panel-border); border-radius: var(--radius-md); padding: 12px; margin: 4px 0 12px; background: var(--panel-alt); min-width: 0; }
+  .rp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .rp-title { font-weight: 700; font-size: 14.5px; }
+  .rp-now { font-size: 13px; color: var(--text-dim); }
+  .rp-now b { color: var(--text); font-family: var(--mono); }
+  .rp-modes { display: flex; gap: 4px; padding: 3px; border-radius: var(--radius-sm); background: var(--field-bg); border: 1px solid var(--panel-border); margin-bottom: 10px; }
+  .rp-modes button { flex: 1 1 0; min-width: 0; background: transparent; color: var(--text-dim); border: none; box-shadow: none; padding: 7px 6px; font-size: 13px; font-weight: 600; border-radius: var(--radius-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rp-modes button:hover:not(.active) { color: var(--text); background: transparent; transform: none; }
+  .rp-modes button.active { background: rgba(var(--accent-rgb),0.18); color: var(--text); }
+  .rp-panel, .rp-side { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .rp-panel[hidden], .rp-side[hidden] { display: none; }
+  .rp-chip { flex: 1 1 0; min-width: 72px; display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--field-bg); color: var(--text); border: 1px solid var(--panel-border); box-shadow: none; padding: 8px 6px; border-radius: var(--radius-sm); font-size: 13px; text-align: center; }
+  .rp-chip small { color: var(--text-dim); font-size: 11px; font-weight: 500; line-height: 1.25; }
+  .rp-chip:hover:not(.active) { border-color: var(--accent); background: var(--field-bg); transform: none; }
+  .rp-chip.active { border-color: var(--accent); background: rgba(var(--accent-rgb),0.14); box-shadow: 0 0 0 2px rgba(var(--accent-rgb),0.18); }
+  .rp-side .rp-chip { flex-direction: row; justify-content: center; font-size: 12.5px; min-width: 96px; }
+  .rp-hint { width: 100%; font-size: 12.5px; color: var(--text-dim); }
+  .rp-nudge { display: flex; gap: 6px; width: 100%; flex-wrap: wrap; }
+  .rp-nudge button { flex: 1 1 0; min-width: 70px; padding: 7px 6px; font-size: 12.5px; white-space: nowrap; }
+  .rp-chart { position: relative; height: 120px; border-radius: var(--radius-sm); background: var(--field-bg); border: 1px solid var(--panel-border); touch-action: none; cursor: ew-resize; user-select: none; overflow: hidden; }
+  .rp-chart[hidden] { display: none; }
+  .rp-chart:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-glow); }
+  .rp-bars { position: absolute; inset: 6px 0 4px; width: 100%; height: calc(100% - 10px); }
+  .rp-bar-liq { fill: var(--text-dim); opacity: 0.28; }
+  .rp-bar-liq.in { opacity: 0.5; }
+  .rp-bar-you.a { fill: var(--accent); } .rp-bar-you.b { fill: var(--link); } .rp-bar-you.ab { fill: var(--up); }
+  .rp-shade { position: absolute; top: 0; bottom: 0; background: rgba(var(--accent-rgb),0.13); border-left: 1px solid rgba(var(--accent-rgb),0.5); border-right: 1px solid rgba(var(--accent-rgb),0.5); pointer-events: none; }
+  .rp-now-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 2px dashed var(--warn, #e0a030); pointer-events: none; }
+  .rp-handle { position: absolute; top: 0; bottom: 0; width: 0; pointer-events: none; }
+  .rp-handle span { position: absolute; top: 50%; left: -9px; width: 18px; height: 34px; margin-top: -17px; border-radius: 6px; background: var(--accent); box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+  .rp-handle span::before, .rp-handle span::after { content: ""; position: absolute; top: 9px; bottom: 9px; width: 2px; border-radius: 1px; background: var(--btn-text, #fff); opacity: 0.85; }
+  .rp-handle span::before { left: 5px; } .rp-handle span::after { right: 5px; }
+  .rp-chart.dragging .rp-handle span { transform: scale(1.08); }
+  .rp-scale { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--text-dim); margin-top: 6px; }
+  .rp-scale b { color: var(--text); font-family: var(--mono); }
+  .rp-scale [data-rp-n] { text-align: center; }
+  .rp-note { font-size: 12.5px; color: var(--text-dim); margin-top: 6px; }
+  .rp-advanced { margin: 0 0 10px; font-size: 13px; }
+  .rp-advanced summary { cursor: pointer; color: var(--text-dim); }
+  .liq-preview { border: 1px dashed rgba(var(--accent-rgb),0.55); border-radius: var(--radius-md); padding: 10px 12px; margin: 10px 0; background: rgba(var(--accent-rgb),0.05); font-size: 13.5px; }
+  .liq-preview:empty { display: none; }
+  .lp-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+  .lp-rows { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; }
+  .lp-k { color: var(--text-dim); }
+  .lp-v { text-align: right; font-family: var(--mono); overflow-wrap: anywhere; }
+  .lp-usd { color: var(--text-dim); font-size: 12px; }
+  .lp-note { margin-top: 8px; font-size: 12.5px; color: var(--text-dim); }
+  .lp-note.warn { color: var(--warn, #e0a030); }
+  @media (max-width: 640px) { .rp-modes button { font-size: 12px; } .rp-chip { min-width: 0; } .rp-side .rp-chip { min-width: 0; flex-basis: 100%; } }
+  /* Dashboard charts (build 2026-10-07g) */
+  .dash-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .dash-chart-card { background: var(--panel-alt); border: 1px solid var(--panel-border); border-radius: var(--radius-md); padding: 14px; min-width: 0; }
+  .dash-chart-card.span2 { grid-column: span 2; }
+  .dash-chart-title { font-size: 13px; color: var(--text-dim); font-weight: 600; margin-bottom: 10px; }
+  .dash-mini-stats { display: grid; gap: 10px; align-content: start; }
+  .dash-mini-stats .stat-card { background: transparent; border: none; box-shadow: none; padding: 0; }
+  .mini-donut-wrap { display: flex; align-items: center; gap: 14px; min-width: 0; }
+  .mini-donut { flex: 0 0 auto; }
+  .mini-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; font-size: 13px; min-width: 0; flex: 1 1 auto; }
+  .mini-legend li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .mini-legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .mini-legend .lbl { min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
+  .mini-legend .val { margin-left: auto; font-family: var(--mono); font-weight: 700; color: var(--text); }
+  .hbar-list { display: flex; flex-direction: column; gap: 9px; }
+  .hbar-row { display: grid; grid-template-columns: minmax(0, 40%) minmax(40px, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+  .hbar-label { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; min-width: 0; color: var(--text); }
+  .hbar-rank { color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+  .hbar-track { position: relative; height: 10px; border-radius: 999px; background: rgba(var(--accent-rgb),0.10); overflow: hidden; }
+  .hbar-track.div::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--text-dim); opacity: 0.5; }
+  .hbar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--brand-grad, var(--accent)); }
+  .hbar-fill.up { background: var(--up); } .hbar-fill.down { background: var(--down); }
+  .hbar-val { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+  .hbar-val.up { color: var(--up); } .hbar-val.down { color: var(--down); }
+  @media (max-width: 640px) { .dash-chart-card.span2 { grid-column: auto; } .dash-charts { grid-template-columns: minmax(0, 1fr); } }
   .stat-card { background: var(--panel-alt); border: 1px solid var(--panel-border); border-radius: var(--radius-sm); padding: 10px 12px; box-shadow: var(--shadow-sm); }
   .stat-card-label { font-size: 12.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 4px; }
   .stat-card-value { font-size: 18.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -1427,6 +1510,15 @@
 
   /* Trade layout: chart + docked Swap form */
   .grid[data-active-tab="tools"] > .trade-layout { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 1099px) { .trade-dock { order: -1; } }
+  .trade-main .tools-layout { display: none; } /* only holds the forms the dock borrows */
+  .dock-tabs { display: flex; gap: 2px; margin: -4px 0 12px; border-bottom: 1px solid var(--panel-border-soft); overflow-x: auto; scrollbar-width: none; }
+  .dock-tabs::-webkit-scrollbar { display: none; }
+  .dock-tab { flex: none; background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; box-shadow: none; color: var(--text-dim); padding: 8px 10px 10px; font-size: 14px; font-weight: 700; }
+  .dock-tab:hover:not(:disabled):not(.active) { color: var(--text); background: transparent; transform: none; }
+  .dock-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .dock-hint { margin: -4px 0 12px; font-size: 12.5px; line-height: 1.45; }
+  .dock-hint.dock-hint-warn { color: var(--warn); }
   .trade-dock[hidden] { display: none; }
   @media (min-width: 1100px) {
     .grid[data-active-tab="tools"] > .trade-layout:has(.trade-dock:not([hidden])) { grid-template-columns: minmax(0, 1fr) 380px; }
@@ -1508,13 +1600,8 @@
   .token-picker-row .tp-sub { font-size: 12px; color: var(--text-dim); font-weight: 400; white-space: nowrap; }
 
 
-  /* Pools switch + Developer mode (build 2026-10-07f) */
+  /* Developer mode (build 2026-10-07f) */
   html:not([data-dev="1"]) .dev-only { display: none !important; }
-  .grid[data-active-tab="liquidity"] > .pools-switch-row, .grid[data-active-tab="v2"] > .pools-switch-row { display: flex; }
-  .pools-switch-row { grid-column: 1 / -1; gap: 4px; padding: 4px; width: fit-content; background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius-md); }
-  .pools-switch-btn { background: transparent; color: var(--text-dim); border: none; box-shadow: none; padding: 8px 16px; font-size: 14px; border-radius: var(--radius-sm); }
-  .pools-switch-btn:hover:not(:disabled):not(.active) { background: var(--panel-alt); color: var(--text); transform: none; }
-  .pools-switch-btn.active { background: rgba(var(--accent-rgb),0.16); color: var(--text); }
 
 
   /* Pair bar + trades (build 2026-10-07f) */
@@ -1552,6 +1639,40 @@
     .pb-stats::-webkit-scrollbar { display: none; }
     .pb-pair { font-size: 16px; }
     .pb-last { font-size: 18px; }
+  }
+
+
+  /* Header fit (build 2026-10-07g): never overlap — wrap to a 2nd row on
+     narrow desktops, bottom tab bar up to tablet width; no Connect button
+     once a wallet is connected. */
+  html[data-wallet="1"] #connect-btn { display: none; }
+  .settings-rpc:has(#custom-rpc[style*="none"]) { display: none; }
+  .settings-rpc #custom-rpc { flex: 1; min-width: 0; font-size: 13px; padding: 6px 8px; }
+  .app-header { flex-wrap: wrap; row-gap: 4px; }
+  .app-header .rd-nav { flex: 1 1 auto; min-width: max-content; }
+  .hdr-actions { margin-left: auto; }
+  .rd-more-cta { display: none !important; text-decoration: none; }
+  .modal-box:has(> .modal-close) > h3:first-of-type { padding-right: 34px; }
+  @media (max-width: 1024px) {
+    body { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+    .app-header { flex-wrap: nowrap; }
+    .app-header .rd-nav {
+      position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 950; min-width: 0;
+      margin: 0; padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
+      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+      border-top: 1px solid var(--panel-border); background: var(--panel); box-shadow: 0 -8px 24px rgba(0,0,0,0.28);
+    }
+    .app-header .rd-nav::-webkit-scrollbar { display: none; }
+    .app-header .rd-nav-links { flex-wrap: nowrap; gap: 2px; min-width: max-content; margin: 0 auto; }
+    .app-header .rd-nav-link { font-size: 13px; padding: 12px 11px 10px; border-bottom: none; border-top: 2px solid transparent; border-radius: 0; }
+    .app-header .rd-nav-link.active { border-top-color: var(--accent); color: var(--text); }
+    .rd-nav-more-menu { position: fixed; top: auto; left: auto; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom)); margin: 0; min-width: 220px; }
+    #back-to-top-btn { bottom: calc(76px + env(safe-area-inset-bottom)); }
+    .toast-stack { top: auto; bottom: calc(76px + env(safe-area-inset-bottom)); }
+    .hdr-wallet .hint, #sol-balance-sparkline { display: none; }
+    /* the bottom bar keeps to the 5 tabs; Create Token moves into More */
+    .app-header .rd-nav-cta { display: none; }
+    .rd-more-cta { display: block !important; }
   }
 
   /* ------------------------------ Phones ------------------------------ */
@@ -1665,6 +1786,7 @@
           <button type="button" class="rd-more-item tab-nav-btn dev-only" data-tab="amm" data-i18n="navAdvAmm">Advanced: AMM panels</button>
           <button type="button" class="rd-more-item tab-nav-btn dev-only" data-tab="dlmm" data-i18n="navAdvDlmm">Advanced: DLMM panels</button>
           <button type="button" class="rd-more-item tab-nav-btn dev-only" data-tab="devtools" data-i18n="navDevTools">Dev Tools</button>
+          <a class="rd-more-item rd-more-cta" href="https://swd-claim-site.vercel.app/create-token" data-i18n="navCreateToken">Create Token</a>
         </div>
       </div>
       <a class="rd-nav-cta btn-icon-text" id="rd-nav-create-token" href="https://swd-claim-site.vercel.app/create-token" data-icon="coin" title="Create your own token" data-i18n-title="navCreateTokenTitle">
@@ -1679,7 +1801,6 @@
           <option value="devnet" data-i18n="optDevnet" selected>Devnet</option>
           <option value="custom" data-i18n="optCustom">Custom RPC…</option>
         </select>
-      <input id="custom-rpc" placeholder="https://your-rpc-url" style="display:none; width:260px;" />
     </div>
     <button id="notif-bell-btn" class="secondary" type="button" style="position:relative;" title="Notifications" data-i18n-title="notifBellTitle">
     🔔<span id="notif-badge" style="display:none; position:absolute; top:-4px; right:-4px; background:var(--danger); color:#fff; border-radius:999px; font-size:11.5px; line-height:1; padding:3px 5px; min-width:14px; text-align:center;"></span>
@@ -1695,6 +1816,7 @@
   </div>
   <div class="settings-pop" id="settings-pop" role="dialog" aria-labelledby="settings-pop-title" hidden>
     <div class="settings-pop-title" id="settings-pop-title" data-i18n="hdrSettings">Settings</div>
+    <div class="settings-row settings-rpc"><label for="custom-rpc" data-i18n="settingsCustomRpc">Custom RPC URL</label><input id="custom-rpc" placeholder="https://your-rpc-url" style="display:none;" /></div>
     <div class="settings-row"><label for="lang-select">🌐 <span data-i18n="settingsLanguage">Language</span></label><select id="lang-select">
       <option value="th">ไทย</option>
       <option value="en" selected>English</option>
@@ -1805,6 +1927,13 @@
         <div class="cpm-option-sub" data-i18n="cpmOptDlmmSub">Custom bin ranges, increased capital efficiency — this program's DLMM pool type.</div>
       </div>
     </label>
+    <label class="cpm-option" id="cpm-option-v2">
+      <input type="radio" name="cpm-pool-type" value="v2" />
+      <div>
+        <div class="cpm-option-title"><span>SWDMM v2</span><span class="cpm-option-badge" data-i18n="cpmNew">New</span></div>
+        <div class="cpm-option-sub" data-i18n="cpmOptV2Sub">Next-gen standard pool: fee that steps down over time (anti-sniper), dynamic fee, liquidity lock and fee collection modes.</div>
+      </div>
+    </label>
     <label class="cpm-option" id="cpm-option-cp-standard">
       <input type="radio" name="cpm-pool-type" value="cp" />
       <div>
@@ -1889,12 +2018,9 @@
     <div class="kv" id="auto-settings-status-kv"></div>
   </div>
 
-  <!-- Pools (build 2026-10-07f): Liquidity and SWDMM v2 are one page in
-       the nav; this switch picks which kind of pool is shown. -->
-  <div class="pools-switch-row" data-tab="liquidity" role="tablist" aria-label="Pool type">
-    <button type="button" class="pools-switch-btn" data-pools-tab="liquidity" role="tab"><span data-i18n="poolsClassic">Classic &amp; DLMM</span></button>
-    <button type="button" class="pools-switch-btn" data-pools-tab="v2" role="tab"><span>SWDMM v2</span></button>
-  </div>
+  <!-- Pools (build 2026-10-07g): SWDMM v2 pools are rows of the pool table
+       below (filter chip "SWDMM v2"); the v2 page opens from a row, from
+       Create, or from Developer mode tools. -->
   <div class="section-header" style="border-top: none; padding-top: 0;" data-tab="liquidity">
     <div class="lq-hero">
       <div>
@@ -1920,6 +2046,7 @@
       <button type="button" class="lq-chip active" id="lq-filter-all" data-filter="all" data-i18n="lqFilterAll">All</button>
       <button type="button" class="lq-chip" id="lq-filter-cp" data-filter="cp" data-i18n="lqFilterStandard">Standard AMM</button>
       <button type="button" class="lq-chip" id="lq-filter-dlmm" data-filter="dlmm" data-i18n="lqFilterConcentrated">Concentrated (DLMM)</button>
+      <button type="button" class="lq-chip" id="lq-filter-v2" data-filter="v2">SWDMM v2</button>
       <input id="lq-search-input" class="lq-search-input" data-i18n-placeholder="lqSearchPlaceholder" placeholder="Search by nickname or mint address…" />
       <span class="rd-nav-spacer"></span>
       <button id="refresh-pools-btn" class="secondary" data-i18n="btnRefreshPools">Refresh</button>
@@ -2295,6 +2422,7 @@
       <button type="button" class="mkt-chip active" id="mkt-filter-all" data-filter="all" data-i18n="lqFilterAll">All</button>
       <button type="button" class="mkt-chip" id="mkt-filter-cp" data-filter="cp" data-i18n="lqFilterStandard">Standard AMM</button>
       <button type="button" class="mkt-chip" id="mkt-filter-dlmm" data-filter="dlmm" data-i18n="lqFilterConcentrated">Concentrated (DLMM)</button>
+      <button type="button" class="mkt-chip" id="mkt-filter-v2" data-filter="v2">SWDMM v2</button>
       <input id="mkt-search-input" class="lq-search-input" data-i18n-placeholder="lqSearchPlaceholder" placeholder="Search by nickname or mint address…" />
       <select id="mkt-sort-select" class="mkt-sort-select">
         <option value="desc" data-i18n="mktSortTrending">Trending (largest first)</option>
@@ -2951,17 +3079,6 @@
     </div>
   </div>
   <div class="tools-layout">
-    <div class="tools-nav-row">
-    <nav class="tools-nav" role="tablist" aria-label="Trading tools">
-      <button type="button" class="tools-nav-btn active" data-tool-nav="swap" data-icon="swap" role="tab" aria-selected="true" aria-controls="tools-panel-swap" id="tools-nav-swap"><span data-i18n="toolNavSwap">Swap</span></button>
-      <button type="button" class="tools-nav-btn" data-tool-nav="mh" data-icon="route" role="tab" aria-selected="false" aria-controls="tools-panel-mh" id="tools-nav-mh"><span data-i18n="toolNavMultiHop">H. Multi-hop Swap</span></button>
-      <button type="button" class="tools-nav-btn" data-tool-nav="lo" data-icon="clipboard" role="tab" aria-selected="false" aria-controls="tools-panel-lo" id="tools-nav-lo"><span data-i18n="toolNavLimit">G. Limit Orders (client-side)</span></button>
-      <button type="button" class="tools-nav-btn" data-tool-nav="dca" data-icon="trending" role="tab" aria-selected="false" aria-controls="tools-panel-dca" id="tools-nav-dca"><span data-i18n="toolNavDca">K. DCA Orders (client-side)</span></button>
-      <button type="button" class="tools-nav-btn" data-tool-nav="bpf" data-icon="search" role="tab" aria-selected="false" aria-controls="tools-panel-bpf" id="tools-nav-bpf"><span data-i18n="toolNavBpf">O. Best Price Finder</span></button>
-    </nav>
-    <!-- The pair the swap tools act on: coin images, symbols, price, balances (2026-09-25l). Click = browse pairs. -->
-    <div class="tools-pair-info" id="tools-pair-info" aria-live="polite"></div>
-    </div>
     <div class="tools-panel-area">
       <div class="tools-panel" id="tools-panel-swap" data-tool-panel="swap" role="tabpanel" aria-labelledby="tools-nav-swap">
         <h3 data-i18n="panel6Title">Swap</h3>
@@ -3425,10 +3542,14 @@
   <div id="tb-trades-container"></div>
 </div>
   <aside class="panel trade-dock" id="trade-dock" aria-labelledby="trade-dock-title" hidden>
-    <div class="trade-dock-head">
-      <h3 id="trade-dock-title" data-i18n="panel6Title">Swap</h3>
-      <span class="trade-dock-sub" data-i18n="dockSub">Best route picked automatically</span>
+    <div class="dock-tabs" role="tablist" aria-label="Trading tools" id="trade-dock-title">
+      <button type="button" class="dock-tab active" data-dock-tool="swap" role="tab" aria-selected="true"><span data-i18n="toolNavSwap">Swap</span></button>
+      <button type="button" class="dock-tab" data-dock-tool="mh" role="tab" aria-selected="false"><span data-i18n="toolNavMultiHop">Multi-hop</span></button>
+      <button type="button" class="dock-tab" data-dock-tool="lo" role="tab" aria-selected="false"><span data-i18n="toolNavLimit">Limit</span></button>
+      <button type="button" class="dock-tab" data-dock-tool="dca" role="tab" aria-selected="false"><span data-i18n="toolNavDca">DCA</span></button>
+      <button type="button" class="dock-tab" data-dock-tool="bpf" role="tab" aria-selected="false"><span data-i18n="toolNavBpf">Best price</span></button>
     </div>
+    <div class="hint dock-hint" id="trade-dock-hint" hidden></div>
     <div id="trade-dock-body"></div>
   </aside>
   </div>
@@ -3455,7 +3576,7 @@
   <div class="v2-topbar">
     <div class="v2-brand"><span class="v2-brand-mark">SWDMM</span><span class="v2-brand-ver">v2</span></div>
     <nav class="v2-subnav" role="tablist" aria-label="SWDMM v2">
-      <button type="button" class="v2-subnav-btn active" data-v2-view="pools" role="tab" data-v2t="navPools">Pools</button>
+      <button type="button" class="v2-subnav-btn active" data-v2-view="pools" role="tab"><span aria-hidden="true">← </span><span data-v2t="navPools">Pools</span></button>
       <button type="button" class="v2-subnav-btn" data-v2-view="create" role="tab" data-v2t="navCreate">Create pool</button>
       <button type="button" class="v2-subnav-btn" data-v2-view="pool" role="tab" id="v2-subnav-pool" hidden data-v2t="navPool">Pool</button>
       <button type="button" class="v2-subnav-btn" data-v2-view="gov" role="tab" data-v2t="navGov">Governance</button>
@@ -3638,7 +3759,7 @@
 <div id="log"><div class="line" data-i18n="logReady">Ready — connect your wallet to begin</div></div>
 <footer class="app-footer">
 <div class="sub app-footer-line">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07f</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07g</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 </footer>
@@ -3800,6 +3921,62 @@ function labelForFull(mintOrStr) {
 // ---------------------------------------------------------------------
 const STRINGS = {
   th: {
+    settingsCustomRpc: "ที่อยู่ RPC เอง",
+    rpTitle: "ช่วงราคา",
+    rpModePreset: "เลือกด่วน",
+    rpModeDrag: "ลากบนกราฟ",
+    rpModePct: "ตาม % ราคา",
+    rp_narrow: "แคบ",
+    rp_narrowSub: "ค่าธรรมเนียมมาก แต่หลุดช่วงเร็ว",
+    rp_balanced: "สมดุล",
+    rp_balancedSub: "แนะนำสำหรับคนทั่วไป",
+    rp_wide: "กว้าง",
+    rp_wideSub: "ปลอดภัยกว่า ได้ค่าธรรมเนียมต่อเทรดน้อยลง",
+    rpDragHint: "ลากที่จับทั้งสองข้างบนกราฟ หรือกดปุ่มด้านล่าง",
+    rpShiftLeft: "ต่ำลง",
+    rpShiftRight: "สูงขึ้น",
+    rpNarrower: "แคบลง",
+    rpWider: "กว้างขึ้น",
+    rpSideBoth: "รอบราคาปัจจุบัน ({a} + {b})",
+    rpSideAbove: "เหนือราคา (เฉพาะ {a})",
+    rpSideBelow: "ต่ำกว่าราคา (เฉพาะ {b})",
+    rpCurrentPrice: "ราคาตอนนี้",
+    rpLoading: "กำลังโหลดพูล…",
+    rpNoPool: "ยังไม่มีพูล DLMM ของคู่นี้ — เลือกคู่ก่อน",
+    rpBins: "{n} ช่องราคา",
+    rpRangeIncludes: "ครอบคลุมราคาปัจจุบัน — ได้ค่าธรรมเนียมทันที",
+    rpRangeAbove: "อยู่เหนือราคาปัจจุบัน — ถือแค่ {a} และจะค่อยๆ ขายเมื่อราคาขึ้น",
+    rpRangeBelow: "อยู่ต่ำกว่าราคาปัจจุบัน — ถือแค่ {b} และจะซื้อ {a} เมื่อราคาลง",
+    rpMaxBins: "สูงสุด 20 ช่องต่อโพซิชัน",
+    rpAdvanced: "ขั้นสูง: Bin ID",
+    pvTitle: "ตัวอย่างก่อนยืนยัน",
+    pvRange: "ช่วงราคา",
+    pvEnterAmount: "ใส่จำนวนเพื่อดูตัวอย่าง",
+    pvDeposit: "คุณจะฝาก",
+    pvPerBin: "ต่อช่องราคา",
+    pvUnusedA: "{a} จะไม่ถูกใช้ — ช่วงนี้อยู่ต่ำกว่าราคา",
+    pvUnusedB: "{b} จะไม่ถูกใช้ — ช่วงนี้อยู่เหนือราคา",
+    pvActiveNeedsBoth: "ช่องที่ราคาปัจจุบันต้องใช้ทั้งสองโทเคน — จะข้ามช่องนั้นไป",
+    pvTooSmall: "จำนวนต่อช่องน้อยเกินไป — เพิ่มจำนวนหรือใช้ช่วงแคบลง",
+    pvPrice: "ราคาพูล",
+    pvNeedMoreB: "ต้องใช้ {b} อีก — รวม {n}",
+    pvFirstDeposit: "ฝากครั้งแรก — สัดส่วนที่ใส่จะกำหนดราคาเริ่มต้น",
+    pvLpEst: "LP ที่จะได้ (ประมาณ)",
+    pvShare: "ส่วนแบ่งของคุณในพูล",
+    pvAutoRatio: "{b} ถูกเติมให้อัตโนมัติตามราคาพูล",
+    dcwStartPrice: "ราคาเริ่มต้น (1 {a} = ? {b})",
+    dcwStartPriceHint: "ปัดเข้าช่องราคาที่ใกล้ที่สุด: {p}",
+    pvStartPrice: "ราคาเริ่มต้น",
+    pvValue: "มูลค่ารวม",
+    amtTotalA: "จำนวน A ทั้งหมด",
+    amtTotalB: "จำนวน B ทั้งหมด",
+    dashChartPoolTypes: "พูลแยกตามประเภท",
+    dashChartTvl: "พูลที่ใหญ่ที่สุด (มูลค่า $)",
+    dashChartTvlEmpty: "ยังไม่มีราคาเป็นดอลลาร์ของโทเคนในพูล — กด Refresh ในหน้า Pools",
+    statsChartActions: "สิ่งที่คุณทำ",
+    statsChartTotal: "รายการ",
+    cpmOptV2Sub: "พูลมาตรฐานรุ่นใหม่: ค่าธรรมเนียมลดตามเวลา (กันบอทซื้อดักหน้า), ค่าธรรมเนียมไดนามิก, ล็อกสภาพคล่อง และเลือกวิธีเก็บค่าธรรมเนียมได้",
+    cpmNew: "ใหม่",
     pb24hChange: "เปลี่ยนแปลง 24 ชม.",
     pb24hHigh: "สูงสุด 24 ชม.",
     pb24hLow: "ต่ำสุด 24 ชม.",
@@ -4856,6 +5033,62 @@ const STRINGS = {
     logLocalnetFixturesFilled: "กรอกและลงทะเบียน Localnet Pyth test fixtures แล้ว (ราคา 1:1 — ฝากทั้งสองฝั่งเท่ากัน ไม่งั้นการ swap จะติดตัวกันราคาเบี่ยงเกิน 5%)",
   },
   en: {
+    settingsCustomRpc: "Custom RPC URL",
+    rpTitle: "Price range",
+    rpModePreset: "Quick pick",
+    rpModeDrag: "Drag on chart",
+    rpModePct: "By price %",
+    rp_narrow: "Narrow",
+    rp_narrowSub: "more fees, leaves range sooner",
+    rp_balanced: "Balanced",
+    rp_balancedSub: "good for most people",
+    rp_wide: "Wide",
+    rp_wideSub: "safer, earns less per trade",
+    rpDragHint: "Drag the two handles on the chart, or use these buttons.",
+    rpShiftLeft: "Lower",
+    rpShiftRight: "Higher",
+    rpNarrower: "Narrower",
+    rpWider: "Wider",
+    rpSideBoth: "Around the price ({a} + {b})",
+    rpSideAbove: "Above the price (only {a})",
+    rpSideBelow: "Below the price (only {b})",
+    rpCurrentPrice: "Current price",
+    rpLoading: "Loading pool…",
+    rpNoPool: "No DLMM pool for this pair — pick a pair first.",
+    rpBins: "{n} bins",
+    rpRangeIncludes: "Includes the current price — earns fees right away.",
+    rpRangeAbove: "Above the current price — holds only {a}, sold as the price rises.",
+    rpRangeBelow: "Below the current price — holds only {b}, buys {a} as the price falls.",
+    rpMaxBins: "max 20 bins per position",
+    rpAdvanced: "Advanced: Bin IDs",
+    pvTitle: "Preview — check before you confirm",
+    pvRange: "Price range",
+    pvEnterAmount: "Enter an amount to see the preview.",
+    pvDeposit: "You deposit",
+    pvPerBin: "Per bin",
+    pvUnusedA: "{a} won't be used — this range is below the price.",
+    pvUnusedB: "{b} won't be used — this range is above the price.",
+    pvActiveNeedsBoth: "The bin at the current price needs both tokens — it will be skipped.",
+    pvTooSmall: "Amount per bin is too small — add more or pick a narrower range.",
+    pvPrice: "Pool price",
+    pvNeedMoreB: "Needs more {b}: {n} in total.",
+    pvFirstDeposit: "First deposit — the amounts you enter set the starting price.",
+    pvLpEst: "LP tokens you get (estimate)",
+    pvShare: "Your share of the pool",
+    pvAutoRatio: "{b} is filled in for you at the pool's price.",
+    dcwStartPrice: "Starting price (1 {a} = ? {b})",
+    dcwStartPriceHint: "Rounded to the nearest price bin: {p}",
+    pvStartPrice: "Starting price",
+    pvValue: "Total value",
+    amtTotalA: "Total amount A",
+    amtTotalB: "Total amount B",
+    dashChartPoolTypes: "Pools by type",
+    dashChartTvl: "Biggest pools (value in $)",
+    dashChartTvlEmpty: "No dollar prices for these pool tokens yet — press Refresh on Pools.",
+    statsChartActions: "What you did",
+    statsChartTotal: "actions",
+    cpmOptV2Sub: "Next-gen standard pool: fee that steps down over time (anti-sniper), dynamic fee, liquidity lock and fee collection modes.",
+    cpmNew: "New",
     pb24hChange: "24h change",
     pb24hHigh: "24h high",
     pb24hLow: "24h low",
@@ -5912,6 +6145,62 @@ const STRINGS = {
     logLocalnetFixturesFilled: "Localnet Pyth test fixtures filled in and registered (priced 1:1 — deposit equal amounts on both sides, or swaps will trip the 5% oracle-deviation guard).",
   },
   zh: {
+    settingsCustomRpc: "自定义 RPC 地址",
+    rpTitle: "价格区间",
+    rpModePreset: "快速选择",
+    rpModeDrag: "在图上拖动",
+    rpModePct: "按价格 %",
+    rp_narrow: "窄",
+    rp_narrowSub: "手续费多，但更快出区间",
+    rp_balanced: "均衡",
+    rp_balancedSub: "适合大多数人",
+    rp_wide: "宽",
+    rp_wideSub: "更稳，每笔赚得少",
+    rpDragHint: "拖动图上的两个手柄，或使用下方按钮。",
+    rpShiftLeft: "更低",
+    rpShiftRight: "更高",
+    rpNarrower: "更窄",
+    rpWider: "更宽",
+    rpSideBoth: "围绕当前价（{a} + {b}）",
+    rpSideAbove: "高于当前价（仅 {a}）",
+    rpSideBelow: "低于当前价（仅 {b}）",
+    rpCurrentPrice: "当前价格",
+    rpLoading: "正在加载池…",
+    rpNoPool: "该交易对没有 DLMM 池 — 请先选择交易对。",
+    rpBins: "{n} 个价格格",
+    rpRangeIncludes: "包含当前价格 — 立即赚取手续费。",
+    rpRangeAbove: "高于当前价 — 只持有 {a}，价格上涨时卖出。",
+    rpRangeBelow: "低于当前价 — 只持有 {b}，价格下跌时买入 {a}。",
+    rpMaxBins: "每个仓位最多 20 格",
+    rpAdvanced: "高级：Bin ID",
+    pvTitle: "预览 — 确认前请检查",
+    pvRange: "价格区间",
+    pvEnterAmount: "输入数量以查看预览。",
+    pvDeposit: "你将存入",
+    pvPerBin: "每格",
+    pvUnusedA: "{a} 不会被使用 — 该区间低于当前价。",
+    pvUnusedB: "{b} 不会被使用 — 该区间高于当前价。",
+    pvActiveNeedsBoth: "当前价所在的格需要两种代币 — 将被跳过。",
+    pvTooSmall: "每格数量太少 — 请增加数量或缩小区间。",
+    pvPrice: "池价格",
+    pvNeedMoreB: "需要更多 {b}：共 {n}。",
+    pvFirstDeposit: "首次存入 — 你输入的数量决定起始价格。",
+    pvLpEst: "将获得的 LP（估计）",
+    pvShare: "你在池中的份额",
+    pvAutoRatio: "{b} 已按池价格自动填写。",
+    dcwStartPrice: "起始价格（1 {a} = ? {b}）",
+    dcwStartPriceHint: "取整到最近的价格格：{p}",
+    pvStartPrice: "起始价格",
+    pvValue: "总价值",
+    amtTotalA: "A 总数量",
+    amtTotalB: "B 总数量",
+    dashChartPoolTypes: "按类型划分的池",
+    dashChartTvl: "最大的池（美元价值）",
+    dashChartTvlEmpty: "这些池的代币暂无美元价格 — 在 Pools 页点击刷新。",
+    statsChartActions: "你的操作",
+    statsChartTotal: "次操作",
+    cpmOptV2Sub: "新一代标准池：随时间递减的手续费（防狙击）、动态手续费、流动性锁定和手续费领取方式。",
+    cpmNew: "新",
     pb24hChange: "24小时涨跌",
     pb24hHigh: "24小时最高",
     pb24hLow: "24小时最低",
@@ -6586,6 +6875,62 @@ const STRINGS = {
     pwFeeSettleSingle: "单一代币",
   },
   ja: {
+    settingsCustomRpc: "カスタム RPC URL",
+    rpTitle: "価格レンジ",
+    rpModePreset: "かんたん選択",
+    rpModeDrag: "チャートでドラッグ",
+    rpModePct: "価格 % で",
+    rp_narrow: "狭い",
+    rp_narrowSub: "手数料多め・早くレンジ外に",
+    rp_balanced: "バランス",
+    rp_balancedSub: "多くの人におすすめ",
+    rp_wide: "広い",
+    rp_wideSub: "安全・1取引あたりは少なめ",
+    rpDragHint: "チャートの2つのハンドルをドラッグするか、ボタンを使います。",
+    rpShiftLeft: "下へ",
+    rpShiftRight: "上へ",
+    rpNarrower: "狭く",
+    rpWider: "広く",
+    rpSideBoth: "現在価格の周り（{a} + {b}）",
+    rpSideAbove: "価格より上（{a} のみ）",
+    rpSideBelow: "価格より下（{b} のみ）",
+    rpCurrentPrice: "現在価格",
+    rpLoading: "プールを読み込み中…",
+    rpNoPool: "このペアの DLMM プールはありません — 先にペアを選んでください。",
+    rpBins: "{n} ビン",
+    rpRangeIncludes: "現在価格を含む — すぐに手数料を得られます。",
+    rpRangeAbove: "現在価格より上 — {a} のみ保有、価格上昇で売却。",
+    rpRangeBelow: "現在価格より下 — {b} のみ保有、下落で {a} を購入。",
+    rpMaxBins: "1ポジション最大20ビン",
+    rpAdvanced: "上級: Bin ID",
+    pvTitle: "プレビュー — 確定前に確認",
+    pvRange: "価格レンジ",
+    pvEnterAmount: "数量を入れるとプレビューが出ます。",
+    pvDeposit: "預け入れ",
+    pvPerBin: "ビンごと",
+    pvUnusedA: "{a} は使われません — レンジが価格より下です。",
+    pvUnusedB: "{b} は使われません — レンジが価格より上です。",
+    pvActiveNeedsBoth: "現在価格のビンには両方のトークンが必要 — スキップされます。",
+    pvTooSmall: "ビンごとの数量が少なすぎます — 増やすかレンジを狭めてください。",
+    pvPrice: "プール価格",
+    pvNeedMoreB: "{b} が足りません：合計 {n}。",
+    pvFirstDeposit: "最初の預け入れ — 入力した数量が開始価格になります。",
+    pvLpEst: "受け取る LP（概算）",
+    pvShare: "プール内のあなたのシェア",
+    pvAutoRatio: "{b} はプール価格に合わせて自動入力されます。",
+    dcwStartPrice: "開始価格（1 {a} = ? {b}）",
+    dcwStartPriceHint: "最も近いビンに丸め: {p}",
+    pvStartPrice: "開始価格",
+    pvValue: "合計価値",
+    amtTotalA: "A の合計",
+    amtTotalB: "B の合計",
+    dashChartPoolTypes: "タイプ別プール",
+    dashChartTvl: "最大のプール（$ 換算）",
+    dashChartTvlEmpty: "プールのトークンにまだドル価格がありません — Pools で更新を押してください。",
+    statsChartActions: "あなたの操作",
+    statsChartTotal: "件",
+    cpmOptV2Sub: "次世代の標準プール：時間とともに下がる手数料（スナイパー対策）、ダイナミック手数料、流動性ロック、手数料の受け取り方式。",
+    cpmNew: "新",
     pb24hChange: "24時間変動",
     pb24hHigh: "24時間高値",
     pb24hLow: "24時間安値",
@@ -7260,6 +7605,62 @@ const STRINGS = {
     pwFeeSettleSingle: "片方のトークン",
   },
   ko: {
+    settingsCustomRpc: "사용자 지정 RPC URL",
+    rpTitle: "가격 범위",
+    rpModePreset: "빠른 선택",
+    rpModeDrag: "차트에서 드래그",
+    rpModePct: "가격 % 기준",
+    rp_narrow: "좁게",
+    rp_narrowSub: "수수료↑, 범위 이탈 빠름",
+    rp_balanced: "균형",
+    rp_balancedSub: "대부분에게 추천",
+    rp_wide: "넓게",
+    rp_wideSub: "안전, 거래당 수익↓",
+    rpDragHint: "차트의 두 핸들을 드래그하거나 버튼을 사용하세요.",
+    rpShiftLeft: "낮게",
+    rpShiftRight: "높게",
+    rpNarrower: "좁히기",
+    rpWider: "넓히기",
+    rpSideBoth: "현재 가격 주변 ({a} + {b})",
+    rpSideAbove: "가격 위 ({a}만)",
+    rpSideBelow: "가격 아래 ({b}만)",
+    rpCurrentPrice: "현재 가격",
+    rpLoading: "풀 불러오는 중…",
+    rpNoPool: "이 페어의 DLMM 풀이 없습니다 — 먼저 페어를 고르세요.",
+    rpBins: "{n}개 빈",
+    rpRangeIncludes: "현재 가격 포함 — 바로 수수료를 받습니다.",
+    rpRangeAbove: "현재 가격 위 — {a}만 보유, 가격 상승 시 매도.",
+    rpRangeBelow: "현재 가격 아래 — {b}만 보유, 하락 시 {a} 매수.",
+    rpMaxBins: "포지션당 최대 20빈",
+    rpAdvanced: "고급: Bin ID",
+    pvTitle: "미리보기 — 확인 전에 점검",
+    pvRange: "가격 범위",
+    pvEnterAmount: "수량을 입력하면 미리보기가 나옵니다.",
+    pvDeposit: "예치 금액",
+    pvPerBin: "빈당",
+    pvUnusedA: "{a}는 사용되지 않습니다 — 범위가 가격 아래입니다.",
+    pvUnusedB: "{b}는 사용되지 않습니다 — 범위가 가격 위입니다.",
+    pvActiveNeedsBoth: "현재 가격의 빈은 두 토큰이 모두 필요 — 건너뜁니다.",
+    pvTooSmall: "빈당 수량이 너무 적습니다 — 늘리거나 범위를 좁히세요.",
+    pvPrice: "풀 가격",
+    pvNeedMoreB: "{b}가 더 필요합니다: 총 {n}.",
+    pvFirstDeposit: "첫 예치 — 입력한 수량이 시작 가격을 정합니다.",
+    pvLpEst: "받을 LP (예상)",
+    pvShare: "풀 내 내 지분",
+    pvAutoRatio: "{b}는 풀 가격에 맞춰 자동 입력됩니다.",
+    dcwStartPrice: "시작 가격 (1 {a} = ? {b})",
+    dcwStartPriceHint: "가장 가까운 빈으로 반올림: {p}",
+    pvStartPrice: "시작 가격",
+    pvValue: "총 가치",
+    amtTotalA: "A 총수량",
+    amtTotalB: "B 총수량",
+    dashChartPoolTypes: "유형별 풀",
+    dashChartTvl: "가장 큰 풀 ($ 가치)",
+    dashChartTvlEmpty: "아직 풀 토큰의 달러 가격이 없습니다 — Pools에서 새로고침을 누르세요.",
+    statsChartActions: "내 활동",
+    statsChartTotal: "건",
+    cpmOptV2Sub: "차세대 표준 풀: 시간에 따라 낮아지는 수수료(스나이퍼 방지), 동적 수수료, 유동성 잠금, 수수료 수령 방식.",
+    cpmNew: "신규",
     pb24hChange: "24시간 변동",
     pb24hHigh: "24시간 최고",
     pb24hLow: "24시간 최저",
@@ -7934,6 +8335,62 @@ const STRINGS = {
     pwFeeSettleSingle: "한쪽 토큰",
   },
   vi: {
+    settingsCustomRpc: "URL RPC tùy chỉnh",
+    rpTitle: "Khoảng giá",
+    rpModePreset: "Chọn nhanh",
+    rpModeDrag: "Kéo trên biểu đồ",
+    rpModePct: "Theo % giá",
+    rp_narrow: "Hẹp",
+    rp_narrowSub: "phí nhiều, sớm ra khỏi khoảng",
+    rp_balanced: "Cân bằng",
+    rp_balancedSub: "phù hợp đa số",
+    rp_wide: "Rộng",
+    rp_wideSub: "an toàn hơn, mỗi lệnh ít hơn",
+    rpDragHint: "Kéo hai tay nắm trên biểu đồ hoặc dùng các nút.",
+    rpShiftLeft: "Thấp hơn",
+    rpShiftRight: "Cao hơn",
+    rpNarrower: "Hẹp hơn",
+    rpWider: "Rộng hơn",
+    rpSideBoth: "Quanh giá ({a} + {b})",
+    rpSideAbove: "Trên giá (chỉ {a})",
+    rpSideBelow: "Dưới giá (chỉ {b})",
+    rpCurrentPrice: "Giá hiện tại",
+    rpLoading: "Đang tải pool…",
+    rpNoPool: "Không có pool DLMM cho cặp này — hãy chọn cặp trước.",
+    rpBins: "{n} bin",
+    rpRangeIncludes: "Bao gồm giá hiện tại — có phí ngay.",
+    rpRangeAbove: "Trên giá hiện tại — chỉ giữ {a}, bán khi giá tăng.",
+    rpRangeBelow: "Dưới giá hiện tại — chỉ giữ {b}, mua {a} khi giá giảm.",
+    rpMaxBins: "tối đa 20 bin mỗi vị thế",
+    rpAdvanced: "Nâng cao: Bin ID",
+    pvTitle: "Xem trước — kiểm tra trước khi xác nhận",
+    pvRange: "Khoảng giá",
+    pvEnterAmount: "Nhập số lượng để xem trước.",
+    pvDeposit: "Bạn nạp",
+    pvPerBin: "Mỗi bin",
+    pvUnusedA: "{a} sẽ không được dùng — khoảng này dưới giá.",
+    pvUnusedB: "{b} sẽ không được dùng — khoảng này trên giá.",
+    pvActiveNeedsBoth: "Bin tại giá hiện tại cần cả hai token — sẽ bỏ qua.",
+    pvTooSmall: "Số lượng mỗi bin quá nhỏ — tăng thêm hoặc chọn khoảng hẹp hơn.",
+    pvPrice: "Giá pool",
+    pvNeedMoreB: "Cần thêm {b}: tổng {n}.",
+    pvFirstDeposit: "Lần nạp đầu — số lượng bạn nhập đặt giá khởi điểm.",
+    pvLpEst: "LP nhận được (ước tính)",
+    pvShare: "Phần của bạn trong pool",
+    pvAutoRatio: "{b} được tự điền theo giá pool.",
+    dcwStartPrice: "Giá khởi điểm (1 {a} = ? {b})",
+    dcwStartPriceHint: "Làm tròn tới bin gần nhất: {p}",
+    pvStartPrice: "Giá khởi điểm",
+    pvValue: "Tổng giá trị",
+    amtTotalA: "Tổng số A",
+    amtTotalB: "Tổng số B",
+    dashChartPoolTypes: "Pool theo loại",
+    dashChartTvl: "Pool lớn nhất (giá trị $)",
+    dashChartTvlEmpty: "Chưa có giá USD cho token trong pool — bấm Làm mới ở Pools.",
+    statsChartActions: "Bạn đã làm gì",
+    statsChartTotal: "thao tác",
+    cpmOptV2Sub: "Pool tiêu chuẩn thế hệ mới: phí giảm dần theo thời gian (chống sniper), phí động, khóa thanh khoản và chế độ thu phí.",
+    cpmNew: "Mới",
     pb24hChange: "Thay đổi 24h",
     pb24hHigh: "Cao nhất 24h",
     pb24hLow: "Thấp nhất 24h",
@@ -8608,6 +9065,62 @@ const STRINGS = {
     pwFeeSettleSingle: "Một token",
   },
   id: {
+    settingsCustomRpc: "URL RPC kustom",
+    rpTitle: "Rentang harga",
+    rpModePreset: "Pilih cepat",
+    rpModeDrag: "Seret di grafik",
+    rpModePct: "Menurut % harga",
+    rp_narrow: "Sempit",
+    rp_narrowSub: "biaya lebih banyak, cepat keluar rentang",
+    rp_balanced: "Seimbang",
+    rp_balancedSub: "cocok untuk kebanyakan orang",
+    rp_wide: "Lebar",
+    rp_wideSub: "lebih aman, per trade lebih kecil",
+    rpDragHint: "Seret dua pegangan di grafik, atau gunakan tombol ini.",
+    rpShiftLeft: "Lebih rendah",
+    rpShiftRight: "Lebih tinggi",
+    rpNarrower: "Persempit",
+    rpWider: "Perlebar",
+    rpSideBoth: "Di sekitar harga ({a} + {b})",
+    rpSideAbove: "Di atas harga (hanya {a})",
+    rpSideBelow: "Di bawah harga (hanya {b})",
+    rpCurrentPrice: "Harga saat ini",
+    rpLoading: "Memuat pool…",
+    rpNoPool: "Belum ada pool DLMM untuk pasangan ini — pilih pasangan dulu.",
+    rpBins: "{n} bin",
+    rpRangeIncludes: "Mencakup harga saat ini — langsung dapat biaya.",
+    rpRangeAbove: "Di atas harga — hanya {a}, terjual saat harga naik.",
+    rpRangeBelow: "Di bawah harga — hanya {b}, membeli {a} saat harga turun.",
+    rpMaxBins: "maks 20 bin per posisi",
+    rpAdvanced: "Lanjutan: Bin ID",
+    pvTitle: "Pratinjau — periksa sebelum konfirmasi",
+    pvRange: "Rentang harga",
+    pvEnterAmount: "Masukkan jumlah untuk melihat pratinjau.",
+    pvDeposit: "Anda menyetor",
+    pvPerBin: "Per bin",
+    pvUnusedA: "{a} tidak dipakai — rentang di bawah harga.",
+    pvUnusedB: "{b} tidak dipakai — rentang di atas harga.",
+    pvActiveNeedsBoth: "Bin di harga saat ini butuh kedua token — akan dilewati.",
+    pvTooSmall: "Jumlah per bin terlalu kecil — tambah atau persempit rentang.",
+    pvPrice: "Harga pool",
+    pvNeedMoreB: "Perlu lebih banyak {b}: total {n}.",
+    pvFirstDeposit: "Setoran pertama — jumlah yang Anda masukkan menentukan harga awal.",
+    pvLpEst: "LP yang Anda terima (perkiraan)",
+    pvShare: "Bagian Anda di pool",
+    pvAutoRatio: "{b} diisi otomatis sesuai harga pool.",
+    dcwStartPrice: "Harga awal (1 {a} = ? {b})",
+    dcwStartPriceHint: "Dibulatkan ke bin terdekat: {p}",
+    pvStartPrice: "Harga awal",
+    pvValue: "Nilai total",
+    amtTotalA: "Total jumlah A",
+    amtTotalB: "Total jumlah B",
+    dashChartPoolTypes: "Pool menurut jenis",
+    dashChartTvl: "Pool terbesar (nilai $)",
+    dashChartTvlEmpty: "Belum ada harga dolar untuk token pool — tekan Refresh di Pools.",
+    statsChartActions: "Yang Anda lakukan",
+    statsChartTotal: "aksi",
+    cpmOptV2Sub: "Pool standar generasi baru: biaya yang turun seiring waktu (anti-sniper), biaya dinamis, kunci likuiditas, dan mode penagihan biaya.",
+    cpmNew: "Baru",
     pb24hChange: "Perubahan 24j",
     pb24hHigh: "Tertinggi 24j",
     pb24hLow: "Terendah 24j",
@@ -9282,6 +9795,62 @@ const STRINGS = {
     pwFeeSettleSingle: "Satu Token",
   },
   es: {
+    settingsCustomRpc: "URL de RPC personalizada",
+    rpTitle: "Rango de precio",
+    rpModePreset: "Elección rápida",
+    rpModeDrag: "Arrastrar en el gráfico",
+    rpModePct: "Por % de precio",
+    rp_narrow: "Estrecho",
+    rp_narrowSub: "más comisiones, sale antes del rango",
+    rp_balanced: "Equilibrado",
+    rp_balancedSub: "bueno para la mayoría",
+    rp_wide: "Amplio",
+    rp_wideSub: "más seguro, gana menos por operación",
+    rpDragHint: "Arrastra los dos tiradores del gráfico o usa estos botones.",
+    rpShiftLeft: "Más bajo",
+    rpShiftRight: "Más alto",
+    rpNarrower: "Más estrecho",
+    rpWider: "Más amplio",
+    rpSideBoth: "Alrededor del precio ({a} + {b})",
+    rpSideAbove: "Sobre el precio (solo {a})",
+    rpSideBelow: "Bajo el precio (solo {b})",
+    rpCurrentPrice: "Precio actual",
+    rpLoading: "Cargando pool…",
+    rpNoPool: "No hay pool DLMM para este par — elige un par primero.",
+    rpBins: "{n} bins",
+    rpRangeIncludes: "Incluye el precio actual — gana comisiones desde ya.",
+    rpRangeAbove: "Sobre el precio actual — solo {a}, se vende al subir.",
+    rpRangeBelow: "Bajo el precio actual — solo {b}, compra {a} al bajar.",
+    rpMaxBins: "máx. 20 bins por posición",
+    rpAdvanced: "Avanzado: Bin IDs",
+    pvTitle: "Vista previa — revisa antes de confirmar",
+    pvRange: "Rango de precio",
+    pvEnterAmount: "Introduce una cantidad para ver la vista previa.",
+    pvDeposit: "Depositas",
+    pvPerBin: "Por bin",
+    pvUnusedA: "{a} no se usará — el rango está bajo el precio.",
+    pvUnusedB: "{b} no se usará — el rango está sobre el precio.",
+    pvActiveNeedsBoth: "El bin del precio actual necesita ambos tokens — se omitirá.",
+    pvTooSmall: "Cantidad por bin demasiado pequeña — añade más o estrecha el rango.",
+    pvPrice: "Precio del pool",
+    pvNeedMoreB: "Se necesita más {b}: {n} en total.",
+    pvFirstDeposit: "Primer depósito — las cantidades fijan el precio inicial.",
+    pvLpEst: "LP que recibes (estimado)",
+    pvShare: "Tu parte del pool",
+    pvAutoRatio: "{b} se completa solo al precio del pool.",
+    dcwStartPrice: "Precio inicial (1 {a} = ? {b})",
+    dcwStartPriceHint: "Redondeado al bin más cercano: {p}",
+    pvStartPrice: "Precio inicial",
+    pvValue: "Valor total",
+    amtTotalA: "Cantidad total A",
+    amtTotalB: "Cantidad total B",
+    dashChartPoolTypes: "Pools por tipo",
+    dashChartTvl: "Pools más grandes (valor en $)",
+    dashChartTvlEmpty: "Aún no hay precios en dólares para estos tokens — pulsa Actualizar en Pools.",
+    statsChartActions: "Lo que hiciste",
+    statsChartTotal: "acciones",
+    cpmOptV2Sub: "Pool estándar de nueva generación: comisión que baja con el tiempo (anti-sniper), comisión dinámica, bloqueo de liquidez y modos de cobro.",
+    cpmNew: "Nuevo",
     pb24hChange: "Cambio 24h",
     pb24hHigh: "Máximo 24h",
     pb24hLow: "Mínimo 24h",
@@ -9956,6 +10525,62 @@ const STRINGS = {
     pwFeeSettleSingle: "Un Solo Token",
   },
   pt: {
+    settingsCustomRpc: "URL de RPC personalizada",
+    rpTitle: "Faixa de preço",
+    rpModePreset: "Escolha rápida",
+    rpModeDrag: "Arrastar no gráfico",
+    rpModePct: "Por % do preço",
+    rp_narrow: "Estreita",
+    rp_narrowSub: "mais taxas, sai da faixa antes",
+    rp_balanced: "Equilibrada",
+    rp_balancedSub: "bom para a maioria",
+    rp_wide: "Ampla",
+    rp_wideSub: "mais segura, ganha menos por trade",
+    rpDragHint: "Arraste as duas alças no gráfico ou use estes botões.",
+    rpShiftLeft: "Mais baixo",
+    rpShiftRight: "Mais alto",
+    rpNarrower: "Mais estreita",
+    rpWider: "Mais ampla",
+    rpSideBoth: "Em torno do preço ({a} + {b})",
+    rpSideAbove: "Acima do preço (só {a})",
+    rpSideBelow: "Abaixo do preço (só {b})",
+    rpCurrentPrice: "Preço atual",
+    rpLoading: "Carregando pool…",
+    rpNoPool: "Não há pool DLMM para este par — escolha um par primeiro.",
+    rpBins: "{n} bins",
+    rpRangeIncludes: "Inclui o preço atual — ganha taxas já.",
+    rpRangeAbove: "Acima do preço atual — só {a}, vendido quando o preço sobe.",
+    rpRangeBelow: "Abaixo do preço atual — só {b}, compra {a} quando cai.",
+    rpMaxBins: "máx. 20 bins por posição",
+    rpAdvanced: "Avançado: Bin IDs",
+    pvTitle: "Prévia — confira antes de confirmar",
+    pvRange: "Faixa de preço",
+    pvEnterAmount: "Digite um valor para ver a prévia.",
+    pvDeposit: "Você deposita",
+    pvPerBin: "Por bin",
+    pvUnusedA: "{a} não será usado — a faixa está abaixo do preço.",
+    pvUnusedB: "{b} não será usado — a faixa está acima do preço.",
+    pvActiveNeedsBoth: "O bin do preço atual precisa dos dois tokens — será pulado.",
+    pvTooSmall: "Valor por bin muito pequeno — aumente ou estreite a faixa.",
+    pvPrice: "Preço do pool",
+    pvNeedMoreB: "Precisa de mais {b}: {n} no total.",
+    pvFirstDeposit: "Primeiro depósito — os valores definem o preço inicial.",
+    pvLpEst: "LP que você recebe (estimado)",
+    pvShare: "Sua parte no pool",
+    pvAutoRatio: "{b} é preenchido pelo preço do pool.",
+    dcwStartPrice: "Preço inicial (1 {a} = ? {b})",
+    dcwStartPriceHint: "Arredondado para o bin mais próximo: {p}",
+    pvStartPrice: "Preço inicial",
+    pvValue: "Valor total",
+    amtTotalA: "Quantidade total A",
+    amtTotalB: "Quantidade total B",
+    dashChartPoolTypes: "Pools por tipo",
+    dashChartTvl: "Maiores pools (valor em $)",
+    dashChartTvlEmpty: "Ainda não há preços em dólar para esses tokens — clique em Atualizar em Pools.",
+    statsChartActions: "O que você fez",
+    statsChartTotal: "ações",
+    cpmOptV2Sub: "Pool padrão de nova geração: taxa que cai com o tempo (anti-sniper), taxa dinâmica, bloqueio de liquidez e modos de coleta.",
+    cpmNew: "Novo",
     pb24hChange: "Variação 24h",
     pb24hHigh: "Máxima 24h",
     pb24hLow: "Mínima 24h",
@@ -10630,6 +11255,62 @@ const STRINGS = {
     pwFeeSettleSingle: "Um Único Token",
   },
   fr: {
+    settingsCustomRpc: "URL RPC personnalisée",
+    rpTitle: "Plage de prix",
+    rpModePreset: "Choix rapide",
+    rpModeDrag: "Glisser sur le graphique",
+    rpModePct: "Par % de prix",
+    rp_narrow: "Étroite",
+    rp_narrowSub: "plus de frais, sort plus vite",
+    rp_balanced: "Équilibrée",
+    rp_balancedSub: "convient à la plupart",
+    rp_wide: "Large",
+    rp_wideSub: "plus sûr, gagne moins par trade",
+    rpDragHint: "Faites glisser les deux poignées ou utilisez ces boutons.",
+    rpShiftLeft: "Plus bas",
+    rpShiftRight: "Plus haut",
+    rpNarrower: "Plus étroite",
+    rpWider: "Plus large",
+    rpSideBoth: "Autour du prix ({a} + {b})",
+    rpSideAbove: "Au-dessus du prix ({a} seul)",
+    rpSideBelow: "Sous le prix ({b} seul)",
+    rpCurrentPrice: "Prix actuel",
+    rpLoading: "Chargement du pool…",
+    rpNoPool: "Pas de pool DLMM pour cette paire — choisissez d'abord une paire.",
+    rpBins: "{n} bins",
+    rpRangeIncludes: "Inclut le prix actuel — rapporte des frais tout de suite.",
+    rpRangeAbove: "Au-dessus du prix — uniquement {a}, vendu quand le prix monte.",
+    rpRangeBelow: "Sous le prix — uniquement {b}, achète {a} quand le prix baisse.",
+    rpMaxBins: "max 20 bins par position",
+    rpAdvanced: "Avancé : Bin IDs",
+    pvTitle: "Aperçu — vérifiez avant de confirmer",
+    pvRange: "Plage de prix",
+    pvEnterAmount: "Saisissez un montant pour voir l'aperçu.",
+    pvDeposit: "Vous déposez",
+    pvPerBin: "Par bin",
+    pvUnusedA: "{a} ne sera pas utilisé — plage sous le prix.",
+    pvUnusedB: "{b} ne sera pas utilisé — plage au-dessus du prix.",
+    pvActiveNeedsBoth: "Le bin au prix actuel exige les deux jetons — il sera ignoré.",
+    pvTooSmall: "Montant par bin trop faible — augmentez ou réduisez la plage.",
+    pvPrice: "Prix du pool",
+    pvNeedMoreB: "Il faut plus de {b} : {n} au total.",
+    pvFirstDeposit: "Premier dépôt — vos montants fixent le prix de départ.",
+    pvLpEst: "LP reçus (estimation)",
+    pvShare: "Votre part du pool",
+    pvAutoRatio: "{b} est rempli au prix du pool.",
+    dcwStartPrice: "Prix de départ (1 {a} = ? {b})",
+    dcwStartPriceHint: "Arrondi au bin le plus proche : {p}",
+    pvStartPrice: "Prix de départ",
+    pvValue: "Valeur totale",
+    amtTotalA: "Montant total A",
+    amtTotalB: "Montant total B",
+    dashChartPoolTypes: "Pools par type",
+    dashChartTvl: "Plus grands pools (valeur en $)",
+    dashChartTvlEmpty: "Pas encore de prix en dollars pour ces jetons — cliquez sur Actualiser dans Pools.",
+    statsChartActions: "Ce que vous avez fait",
+    statsChartTotal: "actions",
+    cpmOptV2Sub: "Pool standard nouvelle génération : frais dégressifs dans le temps (anti-sniper), frais dynamiques, verrouillage de liquidité et modes de collecte.",
+    cpmNew: "Nouveau",
     panelTradingBoardHint: "Graphique, prix et échanges de la paire choisie dans le Swap, décodés directement depuis la chaîne (100 dernières transactions). Les valeurs en $ viennent des flux Pyth lorsque le pool en a.",
     lqNoIndexerHint: "Les valeurs en $ proviennent des flux de prix Pyth configurés pour chaque pool (un jeton sans flux est valorisé via son pool avec un jeton qui a un prix). Ce sont des estimations d’affichage ; volume et historique sont lus directement sur la chaîne.",
     pb24hChange: "Variation 24 h",
@@ -10851,6 +11532,62 @@ const STRINGS = {
     cmdkRefreshExplore: "Actualiser les données Explore",
   },
   de: {
+    settingsCustomRpc: "Eigene RPC-URL",
+    rpTitle: "Preisspanne",
+    rpModePreset: "Schnellwahl",
+    rpModeDrag: "Im Diagramm ziehen",
+    rpModePct: "Nach Preis-%",
+    rp_narrow: "Eng",
+    rp_narrowSub: "mehr Gebühren, schneller außerhalb",
+    rp_balanced: "Ausgewogen",
+    rp_balancedSub: "für die meisten gut",
+    rp_wide: "Breit",
+    rp_wideSub: "sicherer, weniger pro Trade",
+    rpDragHint: "Ziehen Sie die zwei Griffe im Diagramm oder nutzen Sie die Tasten.",
+    rpShiftLeft: "Tiefer",
+    rpShiftRight: "Höher",
+    rpNarrower: "Enger",
+    rpWider: "Breiter",
+    rpSideBoth: "Um den Preis ({a} + {b})",
+    rpSideAbove: "Über dem Preis (nur {a})",
+    rpSideBelow: "Unter dem Preis (nur {b})",
+    rpCurrentPrice: "Aktueller Preis",
+    rpLoading: "Pool wird geladen…",
+    rpNoPool: "Kein DLMM-Pool für dieses Paar — zuerst ein Paar wählen.",
+    rpBins: "{n} Bins",
+    rpRangeIncludes: "Enthält den aktuellen Preis — verdient sofort Gebühren.",
+    rpRangeAbove: "Über dem Preis — nur {a}, wird bei steigendem Preis verkauft.",
+    rpRangeBelow: "Unter dem Preis — nur {b}, kauft {a} bei fallendem Preis.",
+    rpMaxBins: "max. 20 Bins pro Position",
+    rpAdvanced: "Erweitert: Bin-IDs",
+    pvTitle: "Vorschau — vor dem Bestätigen prüfen",
+    pvRange: "Preisspanne",
+    pvEnterAmount: "Betrag eingeben, um die Vorschau zu sehen.",
+    pvDeposit: "Sie zahlen ein",
+    pvPerBin: "Pro Bin",
+    pvUnusedA: "{a} wird nicht verwendet — Spanne liegt unter dem Preis.",
+    pvUnusedB: "{b} wird nicht verwendet — Spanne liegt über dem Preis.",
+    pvActiveNeedsBoth: "Der Bin am aktuellen Preis braucht beide Token — wird übersprungen.",
+    pvTooSmall: "Betrag pro Bin zu klein — mehr einzahlen oder Spanne verengen.",
+    pvPrice: "Pool-Preis",
+    pvNeedMoreB: "Mehr {b} nötig: insgesamt {n}.",
+    pvFirstDeposit: "Erste Einzahlung — Ihre Beträge legen den Startpreis fest.",
+    pvLpEst: "Erhaltene LP (Schätzung)",
+    pvShare: "Ihr Anteil am Pool",
+    pvAutoRatio: "{b} wird zum Pool-Preis ausgefüllt.",
+    dcwStartPrice: "Startpreis (1 {a} = ? {b})",
+    dcwStartPriceHint: "Auf den nächsten Bin gerundet: {p}",
+    pvStartPrice: "Startpreis",
+    pvValue: "Gesamtwert",
+    amtTotalA: "Gesamtbetrag A",
+    amtTotalB: "Gesamtbetrag B",
+    dashChartPoolTypes: "Pools nach Typ",
+    dashChartTvl: "Größte Pools (Wert in $)",
+    dashChartTvlEmpty: "Noch keine Dollarpreise für diese Pool-Token — in Pools auf Aktualisieren klicken.",
+    statsChartActions: "Was Sie getan haben",
+    statsChartTotal: "Aktionen",
+    cpmOptV2Sub: "Standard-Pool der nächsten Generation: mit der Zeit sinkende Gebühr (Anti-Sniper), dynamische Gebühr, Liquiditätssperre und Gebühren-Modi.",
+    cpmNew: "Neu",
     panelTradingBoardHint: "Chart, Preis und Trades des im Swap gewählten Paars, direkt von der Chain dekodiert (letzte 100 Transaktionen). $-Werte stammen aus Pyth-Feeds, wo der Pool welche hat.",
     lqNoIndexerHint: "$-Werte stammen aus den Pyth-Preisfeeds, mit denen jeder Pool eingerichtet ist (ein Token ohne Feed wird über seinen Pool mit einem bepreisten Token bewertet). Es sind Anzeige-Schätzungen; Volumen und Verlauf werden direkt von der Chain gelesen.",
     pb24hChange: "24h-Änderung",
@@ -11072,6 +11809,62 @@ const STRINGS = {
     cmdkRefreshExplore: "Explore-Daten aktualisieren",
   },
   ru: {
+    settingsCustomRpc: "Свой RPC URL",
+    rpTitle: "Ценовой диапазон",
+    rpModePreset: "Быстрый выбор",
+    rpModeDrag: "Перетащить на графике",
+    rpModePct: "По % цены",
+    rp_narrow: "Узкий",
+    rp_narrowSub: "больше комиссий, быстрее выходит",
+    rp_balanced: "Сбалансированный",
+    rp_balancedSub: "подходит большинству",
+    rp_wide: "Широкий",
+    rp_wideSub: "надёжнее, меньше за сделку",
+    rpDragHint: "Перетащите две ручки на графике или используйте кнопки.",
+    rpShiftLeft: "Ниже",
+    rpShiftRight: "Выше",
+    rpNarrower: "Уже",
+    rpWider: "Шире",
+    rpSideBoth: "Вокруг цены ({a} + {b})",
+    rpSideAbove: "Выше цены (только {a})",
+    rpSideBelow: "Ниже цены (только {b})",
+    rpCurrentPrice: "Текущая цена",
+    rpLoading: "Загрузка пула…",
+    rpNoPool: "Нет DLMM-пула для этой пары — сначала выберите пару.",
+    rpBins: "{n} бинов",
+    rpRangeIncludes: "Включает текущую цену — комиссии сразу.",
+    rpRangeAbove: "Выше цены — только {a}, продаётся при росте.",
+    rpRangeBelow: "Ниже цены — только {b}, покупает {a} при падении.",
+    rpMaxBins: "макс. 20 бинов на позицию",
+    rpAdvanced: "Дополнительно: Bin ID",
+    pvTitle: "Предпросмотр — проверьте перед подтверждением",
+    pvRange: "Диапазон цены",
+    pvEnterAmount: "Введите сумму, чтобы увидеть предпросмотр.",
+    pvDeposit: "Вы вносите",
+    pvPerBin: "На бин",
+    pvUnusedA: "{a} не будет использован — диапазон ниже цены.",
+    pvUnusedB: "{b} не будет использован — диапазон выше цены.",
+    pvActiveNeedsBoth: "Бину по текущей цене нужны оба токена — он будет пропущен.",
+    pvTooSmall: "Слишком мало на бин — увеличьте сумму или сузьте диапазон.",
+    pvPrice: "Цена пула",
+    pvNeedMoreB: "Нужно больше {b}: всего {n}.",
+    pvFirstDeposit: "Первый депозит — суммы задают стартовую цену.",
+    pvLpEst: "LP к получению (оценка)",
+    pvShare: "Ваша доля в пуле",
+    pvAutoRatio: "{b} заполняется по цене пула.",
+    dcwStartPrice: "Стартовая цена (1 {a} = ? {b})",
+    dcwStartPriceHint: "Округлено до ближайшего бина: {p}",
+    pvStartPrice: "Стартовая цена",
+    pvValue: "Общая стоимость",
+    amtTotalA: "Всего A",
+    amtTotalB: "Всего B",
+    dashChartPoolTypes: "Пулы по типам",
+    dashChartTvl: "Крупнейшие пулы (в $)",
+    dashChartTvlEmpty: "Пока нет цен в долларах для токенов пулов — нажмите «Обновить» в Pools.",
+    statsChartActions: "Ваши действия",
+    statsChartTotal: "действий",
+    cpmOptV2Sub: "Стандартный пул нового поколения: комиссия, снижающаяся со временем (анти-снайпер), динамическая комиссия, блокировка ликвидности и режимы сбора.",
+    cpmNew: "Новый",
     panelTradingBoardHint: "График, цена и сделки по паре из блока обмена, декодированные напрямую из сети (последние 100 транзакций). Значения в $ — из фидов Pyth, если они есть у пула.",
     lqNoIndexerHint: "Значения в $ берутся из ценовых фидов Pyth, настроенных для каждого пула (токен без фида оценивается через пул с токеном, у которого есть цена). Это оценки для отображения; объём и история читаются напрямую из сети.",
     pb24hChange: "Изменение 24ч",
@@ -11293,6 +12086,62 @@ const STRINGS = {
     cmdkRefreshExplore: "Обновить данные Explore",
   },
   ar: {
+    settingsCustomRpc: "عنوان RPC مخصص",
+    rpTitle: "نطاق السعر",
+    rpModePreset: "اختيار سريع",
+    rpModeDrag: "اسحب على الرسم",
+    rpModePct: "حسب نسبة السعر",
+    rp_narrow: "ضيق",
+    rp_narrowSub: "رسوم أكثر، يخرج من النطاق أسرع",
+    rp_balanced: "متوازن",
+    rp_balancedSub: "مناسب لمعظم الناس",
+    rp_wide: "واسع",
+    rp_wideSub: "أكثر أمانًا، أرباح أقل لكل صفقة",
+    rpDragHint: "اسحب المقبضين على الرسم أو استخدم هذه الأزرار.",
+    rpShiftLeft: "أدنى",
+    rpShiftRight: "أعلى",
+    rpNarrower: "أضيق",
+    rpWider: "أوسع",
+    rpSideBoth: "حول السعر ({a} + {b})",
+    rpSideAbove: "فوق السعر ({a} فقط)",
+    rpSideBelow: "تحت السعر ({b} فقط)",
+    rpCurrentPrice: "السعر الحالي",
+    rpLoading: "جارٍ تحميل المجمع…",
+    rpNoPool: "لا يوجد مجمع DLMM لهذا الزوج — اختر زوجًا أولاً.",
+    rpBins: "{n} خانات",
+    rpRangeIncludes: "يشمل السعر الحالي — يكسب الرسوم فورًا.",
+    rpRangeAbove: "فوق السعر الحالي — {a} فقط، يُباع مع ارتفاع السعر.",
+    rpRangeBelow: "تحت السعر الحالي — {b} فقط، يشتري {a} مع هبوط السعر.",
+    rpMaxBins: "حد أقصى 20 خانة لكل مركز",
+    rpAdvanced: "متقدم: معرّفات الخانات",
+    pvTitle: "معاينة — تحقق قبل التأكيد",
+    pvRange: "نطاق السعر",
+    pvEnterAmount: "أدخل كمية لرؤية المعاينة.",
+    pvDeposit: "ستودع",
+    pvPerBin: "لكل خانة",
+    pvUnusedA: "لن يُستخدم {a} — النطاق تحت السعر.",
+    pvUnusedB: "لن يُستخدم {b} — النطاق فوق السعر.",
+    pvActiveNeedsBoth: "خانة السعر الحالي تحتاج الرمزين — سيتم تخطيها.",
+    pvTooSmall: "الكمية لكل خانة صغيرة جدًا — زد الكمية أو ضيّق النطاق.",
+    pvPrice: "سعر المجمع",
+    pvNeedMoreB: "تحتاج المزيد من {b}: الإجمالي {n}.",
+    pvFirstDeposit: "أول إيداع — الكميات التي تدخلها تحدد سعر البداية.",
+    pvLpEst: "رموز LP التي ستحصل عليها (تقدير)",
+    pvShare: "حصتك في المجمع",
+    pvAutoRatio: "يتم ملء {b} تلقائيًا بسعر المجمع.",
+    dcwStartPrice: "سعر البداية (1 {a} = ? {b})",
+    dcwStartPriceHint: "مقرّب لأقرب خانة: {p}",
+    pvStartPrice: "سعر البداية",
+    pvValue: "القيمة الإجمالية",
+    amtTotalA: "إجمالي A",
+    amtTotalB: "إجمالي B",
+    dashChartPoolTypes: "المجمعات حسب النوع",
+    dashChartTvl: "أكبر المجمعات (القيمة بالدولار)",
+    dashChartTvlEmpty: "لا توجد أسعار بالدولار لرموز المجمعات بعد — اضغط تحديث في Pools.",
+    statsChartActions: "ما قمت به",
+    statsChartTotal: "إجراء",
+    cpmOptV2Sub: "مجمع قياسي من الجيل الجديد: رسوم تنخفض مع الوقت (ضد القنص)، رسوم ديناميكية، قفل السيولة وأوضاع تحصيل الرسوم.",
+    cpmNew: "جديد",
     panelTradingBoardHint: "الرسم البياني والسعر والصفقات للزوج المختار في صندوق المبادلة، مفكوكة مباشرة من السلسلة (آخر 100 معاملة). القيم بالدولار من مصادر Pyth عند توفرها للمجمع.",
     lqNoIndexerHint: "القيم بالدولار مأخوذة من مصادر أسعار Pyth المضبوطة لكل مجمع (الرمز بلا مصدر سعر يُسعَّر عبر مجمعه مع رمز له سعر). هي تقديرات للعرض فقط؛ الحجم والسجل يُقرآن مباشرة من السلسلة.",
     pb24hChange: "تغيّر 24 س",
@@ -11514,6 +12363,62 @@ const STRINGS = {
     cmdkRefreshExplore: "تحديث بيانات Explore",
   },
   hi: {
+    settingsCustomRpc: "कस्टम RPC URL",
+    rpTitle: "मूल्य सीमा",
+    rpModePreset: "त्वरित चयन",
+    rpModeDrag: "चार्ट पर खींचें",
+    rpModePct: "मूल्य % से",
+    rp_narrow: "संकीर्ण",
+    rp_narrowSub: "अधिक शुल्क, जल्दी सीमा से बाहर",
+    rp_balanced: "संतुलित",
+    rp_balancedSub: "अधिकांश के लिए अच्छा",
+    rp_wide: "चौड़ा",
+    rp_wideSub: "सुरक्षित, प्रति ट्रेड कम कमाई",
+    rpDragHint: "चार्ट पर दोनों हैंडल खींचें या इन बटनों का उपयोग करें।",
+    rpShiftLeft: "नीचे",
+    rpShiftRight: "ऊपर",
+    rpNarrower: "संकरा",
+    rpWider: "चौड़ा करें",
+    rpSideBoth: "मूल्य के आसपास ({a} + {b})",
+    rpSideAbove: "मूल्य से ऊपर (केवल {a})",
+    rpSideBelow: "मूल्य से नीचे (केवल {b})",
+    rpCurrentPrice: "वर्तमान मूल्य",
+    rpLoading: "पूल लोड हो रहा है…",
+    rpNoPool: "इस जोड़ी का DLMM पूल नहीं है — पहले जोड़ी चुनें।",
+    rpBins: "{n} बिन",
+    rpRangeIncludes: "वर्तमान मूल्य शामिल — तुरंत शुल्क कमाता है।",
+    rpRangeAbove: "वर्तमान मूल्य से ऊपर — केवल {a}, कीमत बढ़ने पर बिकता है।",
+    rpRangeBelow: "वर्तमान मूल्य से नीचे — केवल {b}, कीमत गिरने पर {a} खरीदता है।",
+    rpMaxBins: "प्रति पोज़िशन अधिकतम 20 बिन",
+    rpAdvanced: "उन्नत: Bin ID",
+    pvTitle: "पूर्वावलोकन — पुष्टि से पहले जाँचें",
+    pvRange: "मूल्य सीमा",
+    pvEnterAmount: "पूर्वावलोकन देखने के लिए राशि दर्ज करें।",
+    pvDeposit: "आप जमा करेंगे",
+    pvPerBin: "प्रति बिन",
+    pvUnusedA: "{a} उपयोग नहीं होगा — सीमा मूल्य से नीचे है।",
+    pvUnusedB: "{b} उपयोग नहीं होगा — सीमा मूल्य से ऊपर है।",
+    pvActiveNeedsBoth: "वर्तमान मूल्य वाले बिन को दोनों टोकन चाहिए — इसे छोड़ा जाएगा।",
+    pvTooSmall: "प्रति बिन राशि बहुत कम — बढ़ाएँ या सीमा संकरी करें।",
+    pvPrice: "पूल मूल्य",
+    pvNeedMoreB: "अधिक {b} चाहिए: कुल {n}।",
+    pvFirstDeposit: "पहली जमा — आपकी राशियाँ शुरुआती मूल्य तय करती हैं।",
+    pvLpEst: "मिलने वाले LP (अनुमान)",
+    pvShare: "पूल में आपका हिस्सा",
+    pvAutoRatio: "{b} पूल मूल्य पर अपने-आप भरा जाता है।",
+    dcwStartPrice: "शुरुआती मूल्य (1 {a} = ? {b})",
+    dcwStartPriceHint: "निकटतम बिन तक: {p}",
+    pvStartPrice: "शुरुआती मूल्य",
+    pvValue: "कुल मूल्य",
+    amtTotalA: "कुल राशि A",
+    amtTotalB: "कुल राशि B",
+    dashChartPoolTypes: "प्रकार के अनुसार पूल",
+    dashChartTvl: "सबसे बड़े पूल ($ मूल्य)",
+    dashChartTvlEmpty: "इन पूल टोकन के डॉलर मूल्य अभी नहीं हैं — Pools में Refresh दबाएँ।",
+    statsChartActions: "आपने क्या किया",
+    statsChartTotal: "कार्य",
+    cpmOptV2Sub: "नई पीढ़ी का स्टैंडर्ड पूल: समय के साथ घटने वाला शुल्क (एंटी-स्नाइपर), डायनेमिक शुल्क, लिक्विडिटी लॉक और शुल्क संग्रह मोड।",
+    cpmNew: "नया",
     panelTradingBoardHint: "स्वैप बॉक्स में चुने गए जोड़े का चार्ट, कीमत और ट्रेड, सीधे चेन से डिकोड (पिछले 100 ट्रांज़ैक्शन)। $ मान Pyth फ़ीड से, जहाँ पूल में उपलब्ध हों।",
     lqNoIndexerHint: "$ मान हर पूल में सेट Pyth प्राइस फ़ीड से आते हैं (बिना फ़ीड वाले टोकन की कीमत किसी कीमत वाले टोकन के साथ उसके पूल से निकाली जाती है)। ये केवल दिखाने के लिए अनुमान हैं; वॉल्यूम और इतिहास सीधे चेन से पढ़े जाते हैं।",
     pb24hChange: "24घं बदलाव",
@@ -11735,6 +12640,62 @@ const STRINGS = {
     cmdkRefreshExplore: "Explore डेटा रीफ्रेश करें",
   },
   tr: {
+    settingsCustomRpc: "Özel RPC URL'si",
+    rpTitle: "Fiyat aralığı",
+    rpModePreset: "Hızlı seçim",
+    rpModeDrag: "Grafikte sürükle",
+    rpModePct: "Fiyat %'sine göre",
+    rp_narrow: "Dar",
+    rp_narrowSub: "daha çok ücret, aralıktan erken çıkar",
+    rp_balanced: "Dengeli",
+    rp_balancedSub: "çoğu kişi için iyi",
+    rp_wide: "Geniş",
+    rp_wideSub: "daha güvenli, işlem başı daha az",
+    rpDragHint: "Grafikteki iki tutamacı sürükleyin veya bu düğmeleri kullanın.",
+    rpShiftLeft: "Daha düşük",
+    rpShiftRight: "Daha yüksek",
+    rpNarrower: "Daralt",
+    rpWider: "Genişlet",
+    rpSideBoth: "Fiyat çevresinde ({a} + {b})",
+    rpSideAbove: "Fiyatın üstü (yalnız {a})",
+    rpSideBelow: "Fiyatın altı (yalnız {b})",
+    rpCurrentPrice: "Güncel fiyat",
+    rpLoading: "Havuz yükleniyor…",
+    rpNoPool: "Bu çift için DLMM havuzu yok — önce bir çift seçin.",
+    rpBins: "{n} bin",
+    rpRangeIncludes: "Güncel fiyatı içerir — hemen ücret kazanır.",
+    rpRangeAbove: "Güncel fiyatın üstü — yalnız {a}, fiyat yükseldikçe satılır.",
+    rpRangeBelow: "Güncel fiyatın altı — yalnız {b}, fiyat düştükçe {a} alır.",
+    rpMaxBins: "pozisyon başına en fazla 20 bin",
+    rpAdvanced: "Gelişmiş: Bin ID",
+    pvTitle: "Önizleme — onaylamadan önce kontrol edin",
+    pvRange: "Fiyat aralığı",
+    pvEnterAmount: "Önizleme için bir miktar girin.",
+    pvDeposit: "Yatırdığınız",
+    pvPerBin: "Bin başına",
+    pvUnusedA: "{a} kullanılmayacak — aralık fiyatın altında.",
+    pvUnusedB: "{b} kullanılmayacak — aralık fiyatın üstünde.",
+    pvActiveNeedsBoth: "Güncel fiyattaki bin iki tokene de ihtiyaç duyar — atlanacak.",
+    pvTooSmall: "Bin başına miktar çok az — artırın veya aralığı daraltın.",
+    pvPrice: "Havuz fiyatı",
+    pvNeedMoreB: "Daha fazla {b} gerekli: toplam {n}.",
+    pvFirstDeposit: "İlk yatırma — girdiğiniz miktarlar başlangıç fiyatını belirler.",
+    pvLpEst: "Alacağınız LP (tahmini)",
+    pvShare: "Havuzdaki payınız",
+    pvAutoRatio: "{b} havuz fiyatına göre otomatik doldurulur.",
+    dcwStartPrice: "Başlangıç fiyatı (1 {a} = ? {b})",
+    dcwStartPriceHint: "En yakın bine yuvarlandı: {p}",
+    pvStartPrice: "Başlangıç fiyatı",
+    pvValue: "Toplam değer",
+    amtTotalA: "Toplam A",
+    amtTotalB: "Toplam B",
+    dashChartPoolTypes: "Türe göre havuzlar",
+    dashChartTvl: "En büyük havuzlar ($ değeri)",
+    dashChartTvlEmpty: "Bu havuz tokenları için henüz dolar fiyatı yok — Pools'ta Yenile'ye basın.",
+    statsChartActions: "Yaptıklarınız",
+    statsChartTotal: "işlem",
+    cpmOptV2Sub: "Yeni nesil standart havuz: zamanla düşen ücret (anti-sniper), dinamik ücret, likidite kilidi ve ücret toplama modları.",
+    cpmNew: "Yeni",
     panelTradingBoardHint: "Swap kutusunda seçilen çiftin grafiği, fiyatı ve işlemleri, doğrudan zincirden çözülür (son 100 işlem). $ değerleri, havuzda varsa Pyth fiyat akışlarından gelir.",
     lqNoIndexerHint: "$ değerleri her havuzun ayarlandığı Pyth fiyat akışlarından gelir (akışı olmayan token, fiyatı olan bir tokenla havuzu üzerinden fiyatlanır). Gösterim amaçlı tahminlerdir; hacim ve geçmiş doğrudan zincirden okunur.",
     pb24hChange: "24s değişim",
@@ -12182,11 +13143,8 @@ function switchTab(tabName) {
     const also = (btn.dataset.alsoTabs || "").split(" ");
     btn.classList.toggle("active", btn.dataset.tab === tabName || also.includes(tabName));
   });
-  document.querySelectorAll(".pools-switch-btn").forEach((btn) => {
-    const on = btn.dataset.poolsTab === tabName;
-    btn.classList.toggle("active", on);
-    btn.setAttribute("aria-selected", String(on));
-  });
+  // The SWDMM v2 page loads its pools the first time it is shown.
+  if (tabName === "v2" && typeof v2 !== "undefined" && v2 && !v2.poolsLoaded && state.program) setTimeout(() => v2Refresh(false), 0);
   document.getElementById("rd-more-menu")?.setAttribute("hidden", "");
   document.getElementById("rd-more-btn")?.setAttribute("aria-expanded", "false");
   try { localStorage.setItem("swd-amm-active-tab", tabName); } catch {}
@@ -12209,7 +13167,6 @@ document.querySelectorAll(".tab-nav-btn").forEach((btn) => {
     if (!toggle.checked && DEV_TABS.includes(cur)) switchTab("tools");
   });
 })();
-document.querySelectorAll(".pools-switch-btn").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.poolsTab)));
 (function initTab() {
   let initial = "tools";
   try { initial = localStorage.getItem("swd-amm-active-tab") || "tools"; } catch {}
@@ -12589,6 +13546,7 @@ function bn(input) {
 // ---------------------------------------------------------------------
 document.getElementById("lang-select").addEventListener("change", (e) => {
   applyLang(e.target.value);
+  document.dispatchEvent(new Event("swd-lang"));
 });
 
 (function initLang() {
@@ -12972,6 +13930,12 @@ document.getElementById("network-select").addEventListener("change", (e) => {
   state.network = e.target.value;
   try { localStorage.setItem(NETWORK_KEY, state.network); } catch {}
   document.getElementById("custom-rpc").style.display = state.network === "custom" ? "inline-block" : "none";
+  // The URL field lives in Settings: open it so the address can be typed.
+  if (state.network === "custom") {
+    const pop = document.getElementById("settings-pop");
+    if (pop?.hidden) document.getElementById("settings-btn")?.click();
+    setTimeout(() => document.getElementById("custom-rpc")?.focus(), 50);
+  }
   resetChainScopedCaches();
   setupConnectionAndProgram();
   refreshPoolList().catch(() => {});
@@ -13623,6 +14587,13 @@ let formPopupReturnNextSibling = null;
 function openFormPopup(contentElId, titleKey, hintKey, hintIsWarning) {
   const content = document.getElementById(contentElId);
   if (!content) return;
+  // Trading tools live in the dock beside the chart, not in a popup.
+  if (DOCK_TOOL_BY_CONTENT[contentElId] && swapDockAvailable()) {
+    switchTab("tools");
+    dockContent(contentElId);
+    document.getElementById("trade-dock")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    return;
+  }
   // If some other form popup is already open, put its content back first.
   closeFormPopup();
   formPopupReturnParent = content.parentNode;
@@ -13649,6 +14620,7 @@ function openFormPopup(contentElId, titleKey, hintKey, hintIsWarning) {
   body.appendChild(content);
   content.hidden = false;
   document.getElementById("form-popup-overlay").hidden = false;
+  document.dispatchEvent(new CustomEvent("swd-form-open", { detail: { id: contentElId } }));
 }
 function closeFormPopup() {
   const overlay = document.getElementById("form-popup-overlay");
@@ -13715,19 +14687,22 @@ function bestPoolTypeForActivePair() {
   if (dlmmExists && !cpExists) return "dlmm";
   return "cp";
 }
-// Swap dock (build 2026-10-07f): on wide screens the Swap form sits next
-// to the Trading Board chart, the way Raydium / Meteora / Binance show
-// the order box beside the chart. Same reparenting trick as the popup —
-// the real form (ids, listeners) moves into #trade-dock-body and back.
-const SWAP_DOCK_QUERY = "(min-width: 1100px)";
-let dockedSwapId = null;
+// Trade dock (build 2026-10-07g): the box beside the chart (above it on
+// narrow screens) that holds the active trading tool — Swap, Multi-hop,
+// Limit, DCA or Best price — picked with the tabs on top, the way
+// Jupiter / Raydium put them on their swap card. Same reparenting trick
+// as the popup: the real form (ids, listeners) moves into
+// #trade-dock-body and back.
+const DOCK_TOOL_CONTENT = { mh: "mh-form-content", lo: "lo-form-content", dca: "dca-form-content", bpf: "bpf-form-content" };
+const DOCK_TOOL_BY_CONTENT = { "swap-form-content": "swap", "dlmm-swap-form-content": "swap", "mh-form-content": "mh", "lo-form-content": "lo", "dca-form-content": "dca", "bpf-form-content": "bpf" };
+const DOCK_TOOL_HINT = { mh: ["panelMultiHopHint"], lo: ["panelLimitOrdersWarning", true], dca: ["panelDcaSessionHint", true], bpf: ["panelBpfHint"] };
+let dockedSwapId = null; // id of the form content currently in the dock
 let dockReturnParent = null;
 let dockReturnNext = null;
 function swapDockAvailable() {
-  return !!document.getElementById("trade-dock-body") && window.matchMedia(SWAP_DOCK_QUERY).matches;
+  return !!document.getElementById("trade-dock-body");
 }
-function dockSwapForm(poolType) {
-  const id = poolType === "dlmm" ? "dlmm-swap-form-content" : "swap-form-content";
+function dockContent(id) {
   if (dockedSwapId === id) return;
   undockSwapForm();
   const content = document.getElementById(id);
@@ -13739,7 +14714,26 @@ function dockSwapForm(poolType) {
   content.hidden = false;
   dockedSwapId = id;
   document.getElementById("trade-dock").hidden = false;
+  const tool = DOCK_TOOL_BY_CONTENT[id] || "swap";
+  document.querySelectorAll(".dock-tab").forEach((tab) => {
+    const on = tab.dataset.dockTool === tool;
+    tab.classList.toggle("active", on);
+    tab.setAttribute("aria-selected", String(on));
+  });
+  const hintEl = document.getElementById("trade-dock-hint");
+  const hint = DOCK_TOOL_HINT[tool];
+  if (hintEl) {
+    hintEl.hidden = !hint;
+    if (hint) {
+      hintEl.setAttribute("data-i18n", hint[0]);
+      hintEl.textContent = t(hint[0]);
+      hintEl.classList.toggle("dock-hint-warn", !!hint[1]);
+    } else hintEl.removeAttribute("data-i18n");
+  }
   try { refreshNeedPairHints(); } catch {}
+}
+function dockSwapForm(poolType) {
+  dockContent(poolType === "dlmm" ? "dlmm-swap-form-content" : "swap-form-content");
 }
 function undockSwapForm() {
   if (!dockedSwapId) return;
@@ -13751,18 +14745,21 @@ function undockSwapForm() {
   dockedSwapId = null;
   dockReturnParent = null;
   dockReturnNext = null;
-  const dock = document.getElementById("trade-dock");
-  if (dock) dock.hidden = true;
 }
-// Dock the form that fits the active pair (CP or DLMM), or undock on
-// narrow screens. Safe to call any time.
+function dockTool(tool) {
+  if (tool === "swap") dockSwapForm(bestPoolTypeForActivePair());
+  else if (DOCK_TOOL_CONTENT[tool]) dockContent(DOCK_TOOL_CONTENT[tool]);
+  if (tool === "mh") { try { syncMhFromActivePair(); } catch (e) { console.error(e); } }
+}
+document.querySelectorAll(".dock-tab").forEach((tab) => tab.addEventListener("click", () => dockTool(tab.dataset.dockTool)));
+// While Swap is the active tool, keep the form that fits the active pair
+// (CP or DLMM) docked. Never switches away from Multi-hop / Limit / ...
 function syncSwapDock() {
   try {
+    if (dockedSwapId && DOCK_TOOL_BY_CONTENT[dockedSwapId] !== "swap") return;
     if (swapDockAvailable()) dockSwapForm(bestPoolTypeForActivePair());
-    else undockSwapForm();
   } catch (e) { console.error(e); }
 }
-try { window.matchMedia(SWAP_DOCK_QUERY).addEventListener("change", syncSwapDock); } catch {}
 document.addEventListener("swd-mint-sync", () => { if (dockedSwapId) setTimeout(syncSwapDock, 0); });
 // After the whole module has run (bestPoolTypeForActivePair reads state
 // declared further down).
@@ -16036,8 +17033,8 @@ wireTokenAmountField("add-min-lp", { mint: lpMintOf("add"), watch: ["add-mint-a"
 wireTokenAmountField("rm-lp-amount", { mint: lpMintOf("rm"), watch: ["rm-mint-a", "rm-mint-b"], labelKey: "amtLp", balance: true, pcts: [25, 50, 100], fallbackDecimals: 6, balanceIcon: false });
 wireTokenAmountField("rm-min-a", { mint: mintOfField("rm-mint-a"), watch: ["rm-mint-a"] });
 wireTokenAmountField("rm-min-b", { mint: mintOfField("rm-mint-b"), watch: ["rm-mint-b"] });
-wireTokenAmountField("dlmm-add-amount-a", { mint: mintOfField("dlmm-add-mint-a"), watch: ["dlmm-add-mint-a"], labelKey: "amtPerBinA", balance: true });
-wireTokenAmountField("dlmm-add-amount-b", { mint: mintOfField("dlmm-add-mint-b"), watch: ["dlmm-add-mint-b"], labelKey: "amtPerBinB", balance: true });
+wireTokenAmountField("dlmm-add-amount-a", { mint: mintOfField("dlmm-add-mint-a"), watch: ["dlmm-add-mint-a"], labelKey: "amtTotalA", balance: true, pcts: [25, 50, 100], usd: true });
+wireTokenAmountField("dlmm-add-amount-b", { mint: mintOfField("dlmm-add-mint-b"), watch: ["dlmm-add-mint-b"], labelKey: "amtTotalB", balance: true, pcts: [25, 50, 100], usd: true });
 wireTokenAmountField("dlmm-rm-min-a", { mint: mintOfField("dlmm-rm-mint-a"), watch: ["dlmm-rm-mint-a"] });
 wireTokenAmountField("dlmm-rm-min-b", { mint: mintOfField("dlmm-rm-mint-b"), watch: ["dlmm-rm-mint-b"] });
 
@@ -16243,12 +17240,16 @@ async function refreshPoolList() {
     const [cpPools, dlmmPools] = await Promise.all([
       safeAllAccounts("pool"),
       safeAllAccounts("dlmmPool"),
+      // SWDMM v2 pools are listed in the same table (build 2026-10-07g).
+      v2LoadPools(false).catch((e) => console.error("v2 pools", e)),
     ]);
+    lastV2ListRows = v2ListRows();
 
     poolListLoadedOnce = true;
     if (cpPools.length === 0 && dlmmPools.length === 0) {
       container.innerHTML = `<div class="empty-state">${t("poolListEmpty")}</div>`;
       lastPoolListRows = [];
+      if (lastV2ListRows.length) { warmMintDecimalsCache(lastV2ListRows.flatMap((r) => [r.mintA, r.mintB])).then(() => renderPoolListTable()).catch(() => {}); }
       lastKnownMints = [];
       try { renderPairDrawerTokenFilter(); renderPairDrawer(); updateToolsPairInfo(); } catch {}
       renderQuickPoolPickers();
@@ -16265,6 +17266,10 @@ async function refreshPoolList() {
     for (const { account } of dlmmPools) {
       mintSet.set(account.mintA.toBase58(), account.mintA);
       mintSet.set(account.mintB.toBase58(), account.mintB);
+    }
+    for (const r of lastV2ListRows) {
+      if (!mintSet.has(r.mintA.toBase58())) mintSet.set(r.mintA.toBase58(), r.mintA);
+      if (!mintSet.has(r.mintB.toBase58())) mintSet.set(r.mintB.toBase58(), r.mintB);
     }
     await warmMintDecimalsCache(Array.from(mintSet.values()));
     lastKnownMints = Array.from(mintSet.values());
@@ -16351,8 +17356,35 @@ document.getElementById("refresh-pools-btn").addEventListener("click", () => {
 // DLMM) and the search box both re-render from lastPoolListRows already
 // fetched by refreshPoolList() above, with zero extra RPC calls, the same
 // pattern the Trading Board's timeframe buttons use.
-let poolListFilterType = "all"; // "all" | "cp" | "dlmm"
+let poolListFilterType = "all"; // "all" | "cp" | "dlmm" | "v2"
 let poolListSearchQuery = "";
+
+// SWDMM v2 pools as pool-list rows. Kept apart from lastPoolListRows, which
+// every Classic/DLMM tool (pair drawer, swap, trading board) reads.
+var lastV2ListRows = [];
+function v2ListRows() {
+  if (typeof v2 === "undefined" || !v2?.poolsLoaded) return [];
+  return v2.pools.map((p) => ({
+    type: "v2", pool: p.key, mintA: p.a.mintA, mintB: p.a.mintB,
+    feeBps: (() => { try { return v2FeeNow(p.a); } catch { return v2Num(p.a.baseFee?.floorFeeBps); } })(),
+    reserveA: p.a.reserveA, reserveB: p.a.reserveB,
+  }));
+}
+// Opens the SWDMM v2 page on one of its views, or on a pool.
+async function openV2Page(view, poolKey, act) {
+  switchTab("v2");
+  if (!v2.poolsLoaded && state.program) await v2Refresh(false).catch(() => {});
+  if (act) v2.act = act;
+  if (poolKey) await v2OpenPool(typeof poolKey === "string" ? poolKey : poolKey.toBase58());
+  else v2SetView(view || "create");
+  document.querySelector(".v2-shell")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function showPoolListFiltered(type) {
+  switchTab("liquidity");
+  try { closePoolWizard(); } catch {}
+  document.querySelector(`.lq-chip[data-filter="${type}"]`)?.click();
+  document.getElementById("pool-list-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 // Pool TVL in USD: both sides when both are priced; a constant-product
 // pool holds equal value on each side, so one priced side counts twice.
@@ -16370,12 +17402,20 @@ function renderPoolListTable() {
   const container = document.getElementById("pool-list-container");
   if (!container) return;
   container.dataset.hasData = "1";
-  if (lastPoolListRows.length === 0) {
+  if (lastPoolListRows.length === 0 && !(lastV2ListRows || []).length) {
     container.innerHTML = `<div class="empty-state">${t(state.program ? "poolListEmpty" : "poolListEmptyConnect")}</div>`;
     return;
   }
   const decOf = (m) => mintDecimalsCache.get(m.toBase58()) ?? 0;
-  const rows = lastPoolListRows.filter((r) => {
+  const allRows = (lastV2ListRows || []).length ? [...lastPoolListRows, ...(lastV2ListRows || [])].sort((a, b) => {
+    const aPinned = isWatchlisted(a.pool.toBase58()) ? 1 : 0;
+    const bPinned = isWatchlisted(b.pool.toBase58()) ? 1 : 0;
+    if (aPinned !== bPinned) return bPinned - aPinned;
+    const ua = poolTvlUsd(a, decOf), ub = poolTvlUsd(b, decOf);
+    if (ua != null || ub != null) return (ub ?? -1) - (ua ?? -1);
+    return (Number(b.reserveA) / 10 ** decOf(b.mintA)) - (Number(a.reserveA) / 10 ** decOf(a.mintA));
+  }) : lastPoolListRows;
+  const rows = allRows.filter((r) => {
     if (poolListFilterType !== "all" && r.type !== poolListFilterType) return false;
     if (poolListSearchQuery) {
       const q = poolListSearchQuery.toLowerCase();
@@ -16394,7 +17434,7 @@ function renderPoolListTable() {
   const visible = rows.slice(0, loadedCount);
   const rowsHtml = visible.map((r) => {
     const pairLabel = `${labelForIcon(r.mintA, 15)} / ${labelForIcon(r.mintB, 15)}`;
-    const typeLabel = r.type === "cp" ? t("poolTypeCp") : t("poolTypeDlmm");
+    const typeLabel = poolTypeLabel(r.type);
     const pinned = isWatchlisted(r.pool.toBase58());
     return `
       <tr>
@@ -16438,6 +17478,14 @@ function renderPoolListTable() {
     });
     const mintAStr = r.mintA.toBase58();
     const mintBStr = r.mintB.toBase58();
+    if (r.type === "v2") {
+      // SWDMM v2 pools have their own page (deposit / swap / lock / claim).
+      const go = (act) => () => { openV2Page("pool", r.pool, act); log(t("logPoolListJump", { p: shortPk(r.pool) })); };
+      document.getElementById(`pl-details-${r.pool.toBase58()}`)?.addEventListener("click", go(null));
+      document.getElementById(`pl-swap-${r.pool.toBase58()}`)?.addEventListener("click", go("swap"));
+      document.getElementById(`pl-add-${r.pool.toBase58()}`)?.addEventListener("click", go("deposit"));
+      return;
+    }
     document.getElementById(`pl-details-${r.pool.toBase58()}`)?.addEventListener("click", () => {
       openPoolDetail(r.type, r.pool, r.mintA, r.mintB);
     });
@@ -16737,7 +17785,7 @@ function renderMarketplaceGrid() {
   const container = document.getElementById("mkt-grid-container");
   if (!container) return;
   container.dataset.hasData = "1";
-  if (lastPoolListRows.length === 0) {
+  if (lastPoolListRows.length === 0 && !(lastV2ListRows || []).length) {
     container.innerHTML = `<div class="empty-state">${t(state.program ? "poolListEmpty" : "poolListEmptyConnect")}</div>`;
     return;
   }
@@ -16749,7 +17797,7 @@ function renderMarketplaceGrid() {
   // value in that side's units). It is NOT a dollar market cap: this
   // devnet program has no price oracle, so nothing here converts between
   // different mints. Disclosed in mktHonestyHint/mktLiqTooltip.
-  let enriched = lastPoolListRows.map((r) => ({
+  let enriched = [...lastPoolListRows, ...(lastV2ListRows || [])].map((r) => ({
     ...r,
     liqValue: Number(r.reserveB) / 10 ** decOf(r.mintB) * 2,
   }));
@@ -16773,7 +17821,7 @@ function renderMarketplaceGrid() {
   const mktVisible = enriched.slice(0, mktLoadedCount);
   const cardsHtml = mktVisible.map((r) => {
     const barPct = Math.max(2, Math.min(100, (r.liqValue / maxLiq) * 100));
-    const typeLabel = r.type === "cp" ? t("poolTypeCp") : t("poolTypeDlmm");
+    const typeLabel = poolTypeLabel(r.type);
     return `
       <article class="mkt-card" id="mkt-card-${r.pool.toBase58()}">
         <div class="mkt-card-head">
@@ -16782,7 +17830,6 @@ function renderMarketplaceGrid() {
             <div class="mkt-card-ticker" title="${labelFor(r.mintA)}">${labelFor(r.mintA)}</div>
             <div class="mkt-card-pair" title="${labelFor(r.mintB)}">/ ${labelFor(r.mintB)}</div>
           </div>
-          <span class="pill-type ${r.type}">${typeLabel}</span>
         </div>
         <div class="mkt-card-liq">
           <span class="mkt-liq-label" data-i18n="mktLiqLabel" title="${t("mktLiqTooltip")}">Liquidity</span>
@@ -16790,7 +17837,13 @@ function renderMarketplaceGrid() {
         </div>
         <div class="mkt-bar-track"><div class="mkt-bar-fill ${r.type}" style="width:${barPct}%;"></div></div>
         <div class="mkt-card-foot">
+          <span class="pill-type ${r.type}">${typeLabel}</span>
           <span>${t("thFee")}: ${(r.feeBps / 100).toFixed(2)}%</span>
+          ${fmtUsd(poolTvlUsd(r, decOf)) ? `<span>${t("thTvl")}: ${fmtUsd(poolTvlUsd(r, decOf))}</span>` : ""}
+        </div>
+        <div class="mkt-card-actions">
+          <button type="button" class="mkt-swap-btn" data-mkt-swap="${r.pool.toBase58()}">${t("toolNavSwap")}</button>
+          <button type="button" class="secondary mkt-details-btn" data-mkt-details="${r.pool.toBase58()}">${t("btnDetails")}</button>
         </div>
       </article>`;
   }).join("");
@@ -16798,8 +17851,17 @@ function renderMarketplaceGrid() {
   container.innerHTML = cardsHtml + lazySentinelHtml(container, mktLoadedCount < enriched.length, "poolListLoading");
   container.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.getAttribute("data-i18n")); });
   mktVisible.forEach((r) => {
-    document.getElementById(`mkt-card-${r.pool.toBase58()}`)?.addEventListener("click", () => {
-      openPoolDetail(r.type, r.pool, r.mintA, r.mintB);
+    const details = () => (r.type === "v2" ? openV2Page("pool", r.pool) : openPoolDetail(r.type, r.pool, r.mintA, r.mintB));
+    const card = document.getElementById(`mkt-card-${r.pool.toBase58()}`);
+    card?.addEventListener("click", (e) => {
+      if (e.target.closest("[data-mkt-swap]")) {
+        // Swap this pool's pair right away (Trade page, swap form ready).
+        if (r.type === "v2") return openV2Page("pool", r.pool, "swap");
+        setActivePair(r.mintA.toBase58(), r.mintB.toBase58());
+        openSwapPopup(r.type);
+        return;
+      }
+      details();
     });
   });
   wireLazySentinel(container, enriched.length, renderMarketplaceGrid);
@@ -19084,6 +20146,7 @@ document.getElementById("cpm-continue-btn").addEventListener("click", () => {
   const checked = document.querySelector('input[name="cpm-pool-type"]:checked');
   const poolType = checked ? checked.value : "dlmm";
   closeCreatePoolModal();
+  if (poolType === "v2") return openV2Page("create");
   openPoolWizard(poolType);
 });
 
@@ -19941,63 +21004,60 @@ let lastPositionsSummary = { cpCount: 0, dlmmCount: 0, loCount: 0, dcaCount: 0 }
 let lastTopPoolsRanked = [];
 let lastPnlCalcRows = null;
 
-// Single-hue categorical bar chart (magnitude, not identity — see the
-// dataviz convention this file already follows for its other charts:
-// one accent hue for a ranked/sequential quantity).
-function renderCategoryBarChartSvg(items) {
-  const W = 560, H = 170, padL = 34, padR = 12, padT = 16, padB = 54;
-  const n = items.length;
-  const maxV = Math.max(...items.map((i) => i.value), 0) || 1;
-  const colW = (W - padL - padR) / n;
-  const barW = Math.max(6, Math.min(40, colW * 0.55));
-  const baseline = H - padB;
-  const yTop = (v) => padT + (1 - v / maxV) * (baseline - padT);
-  const bars = items.map((it, i) => {
-    const cx = padL + colW * i + colW / 2;
-    const by = yTop(it.value);
-    const bh = Math.max(0, baseline - by);
-    const shortLabel = it.label.length > 16 ? it.label.slice(0, 15) + "…" : it.label;
-    const ly = baseline + 14;
-    return `
-      <rect x="${(cx - barW / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${bh.toFixed(1)}" fill="var(--accent)"><title>${it.label}: ${it.value}</title></rect>
-      <text x="${cx.toFixed(1)}" y="${(by - 4).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--text-dim)">${it.value}</text>
-      <text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-dim)" transform="rotate(-30 ${cx.toFixed(1)} ${ly.toFixed(1)})">${shortLabel}</text>`;
-  }).join("");
-  const gridVals = [0, maxV / 2, maxV];
-  const gridLines = gridVals.map((v) => `
-    <line x1="${padL}" y1="${yTop(v).toFixed(1)}" x2="${W - padR}" y2="${yTop(v).toFixed(1)}" stroke="var(--panel-border)" stroke-width="1" />`).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Top pools by swap count">${gridLines}${bars}</svg>`;
+// Small chart building blocks for the Dashboard (build 2026-10-07g):
+// HTML/SVG only, theme colours, labels that stay readable on phones.
+function miniDonutHtml(segments, centerValue, centerLabel) {
+  const total = segments.reduce((a, sg) => a + (sg.value > 0 ? sg.value : 0), 0);
+  const size = 112, c = size / 2, r = 42, sw = 16, circ = 2 * Math.PI * r;
+  let acc = 0;
+  const arcs = total > 0 ? segments.filter((sg) => sg.value > 0).map((sg) => {
+    const dash = (sg.value / total) * circ;
+    const arc = `<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${sg.color}" stroke-width="${sw}" stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" transform="rotate(-90 ${c} ${c})"><title>${escapeHtmlText(sg.label)}: ${sg.value}</title></circle>`;
+    acc += dash;
+    return arc;
+  }).join("") : "";
+  const legend = segments.map((sg) => `<li><span class="sw" style="background:${sg.color}"></span><span class="lbl">${escapeHtmlText(sg.label)}</span><span class="val">${sg.display ?? sg.value}</span></li>`).join("");
+  return `<div class="mini-donut-wrap">
+    <svg class="mini-donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="${escapeHtmlText(centerLabel || "")}">
+      <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--panel-border)" stroke-width="${sw}" />${arcs}
+      <text x="${c}" y="${c + 2}" text-anchor="middle" font-size="22" font-weight="800" fill="var(--text)">${escapeHtmlText(String(centerValue ?? total))}</text>
+      ${centerLabel ? `<text x="${c}" y="${c + 20}" text-anchor="middle" font-size="10" fill="var(--text-dim)">${escapeHtmlText(centerLabel)}</text>` : ""}
+    </svg>
+    <ul class="mini-legend">${legend}</ul>
+  </div>`;
 }
-
-// Diverging bar chart (two hues + a neutral zero baseline — positive vs.
-// negative PnL) — one bar per pair, each valued in that pair's OWN
-// token-A terms, deliberately never summed together across pairs (see the
-// hint text next to this chart for why).
-function renderPnlBarChartSvg(rows) {
-  const W = 560, H = 190, padL = 34, padR = 12, padT = 16, padB = 54;
-  const n = rows.length;
-  const maxAbs = Math.max(...rows.map((r) => Math.abs(r.approxPnlA)), 0) || 1;
-  const colW = (W - padL - padR) / n;
-  const barW = Math.max(6, Math.min(40, colW * 0.55));
-  const zeroY = padT + (H - padT - padB) / 2;
-  const halfH = (H - padT - padB) / 2;
-  const bars = rows.map((r, i) => {
-    const cx = padL + colW * i + colW / 2;
-    const frac = maxAbs > 0 ? r.approxPnlA / maxAbs : 0;
-    const barH = Math.abs(frac) * halfH;
-    const y = frac >= 0 ? zeroY - barH : zeroY;
-    const color = frac >= 0 ? "var(--up)" : "var(--down)";
-    const shortLabel = r.pairLabel.length > 16 ? r.pairLabel.slice(0, 15) + "…" : r.pairLabel;
-    const ly = (H - padB) + 14;
-    return `
-      <rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" fill="${color}"><title>${r.pairLabel}: ${r.approxPnlA >= 0 ? "+" : ""}${r.approxPnlA.toPrecision(6)} (A-terms)</title></rect>
-      <text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-dim)" transform="rotate(-30 ${cx.toFixed(1)} ${ly.toFixed(1)})">${shortLabel}</text>`;
-  }).join("");
-  return `
-    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Session PnL by pair">
-      <line x1="${padL}" y1="${zeroY.toFixed(1)}" x2="${W - padR}" y2="${zeroY.toFixed(1)}" stroke="var(--panel-border)" stroke-width="1" />
-      ${bars}
-    </svg>`;
+// Horizontal bars: [{label | labelHtml, value, display}] (largest first).
+function hbarListHtml(items) {
+  const maxV = Math.max(...items.map((it) => Math.abs(it.value)), 0) || 1;
+  return `<div class="hbar-list">${items.map((it, i) => `
+    <div class="hbar-row" title="${escapeHtmlText(it.label || "")}: ${escapeHtmlText(String(it.display ?? it.value))}">
+      <span class="hbar-label">${it.rank ? `<span class="hbar-rank">#${i + 1}</span>` : ""}${it.labelHtml || escapeHtmlText(it.label || "")}</span>
+      <span class="hbar-track"><span class="hbar-fill" style="width:${Math.max(2, (Math.abs(it.value) / maxV) * 100).toFixed(1)}%"></span></span>
+      <span class="hbar-val">${escapeHtmlText(String(it.display ?? it.value))}</span>
+    </div>`).join("")}</div>`;
+}
+// Gains right (green), losses left (red), from a centre line.
+function divergingBarListHtml(items) {
+  const maxAbs = Math.max(...items.map((it) => Math.abs(it.value)), 0) || 1;
+  return `<div class="hbar-list">${items.map((it) => {
+    const pct = (Math.abs(it.value) / maxAbs) * 50;
+    const pos = it.value >= 0;
+    return `<div class="hbar-row" title="${escapeHtmlText(it.label || "")}">
+      <span class="hbar-label">${it.labelHtml || escapeHtmlText(it.label || "")}</span>
+      <span class="hbar-track div"><span class="hbar-fill ${pos ? "up" : "down"}" style="${pos ? "left:50%" : `left:${(50 - pct).toFixed(1)}%`};width:${Math.max(1, pct).toFixed(1)}%"></span></span>
+      <span class="hbar-val ${pos ? "up" : "down"}">${escapeHtmlText(String(it.display ?? it.value))}</span>
+    </div>`;
+  }).join("")}</div>`;
+}
+function progressRingHtml(done, total, label) {
+  const size = 112, c = size / 2, r = 42, sw = 12, circ = 2 * Math.PI * r;
+  const frac = total > 0 ? Math.min(1, done / total) : 0;
+  return `<div class="mini-donut-wrap"><svg class="mini-donut" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="${escapeHtmlText(label)}">
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--panel-border)" stroke-width="${sw}" />
+    <circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="var(--up)" stroke-linecap="round" stroke-width="${sw}" stroke-dasharray="${(frac * circ).toFixed(2)} ${circ.toFixed(2)}" transform="rotate(-90 ${c} ${c})" />
+    <text x="${c}" y="${c + 2}" text-anchor="middle" font-size="22" font-weight="800" fill="var(--text)">${Math.round(frac * 100)}%</text>
+    <text x="${c}" y="${c + 20}" text-anchor="middle" font-size="10" fill="var(--text-dim)">${done} / ${total}</text>
+  </svg><ul class="mini-legend"><li><span class="lbl">${escapeHtmlText(label)}</span></li></ul></div>`;
 }
 
 function renderDashboardCards() {
@@ -20005,7 +21065,8 @@ function renderDashboardCards() {
   if (!container) return;
   const cpPoolCount = lastPoolListRows.filter((r) => r.type === "cp").length;
   const dlmmPoolCount = lastPoolListRows.filter((r) => r.type === "dlmm").length;
-  if (cpPoolCount === 0 && dlmmPoolCount === 0 && lastPositionsSummary.cpCount === 0 && lastPositionsSummary.dlmmCount === 0 && !state.wallet?.publicKey) {
+  const v2PoolCount = (lastV2ListRows || []).length;
+  if (cpPoolCount === 0 && dlmmPoolCount === 0 && v2PoolCount === 0 && lastPositionsSummary.cpCount === 0 && lastPositionsSummary.dlmmCount === 0 && !state.wallet?.publicKey) {
     container.innerHTML = `<div class="empty-state">${t("dashboardEmptyPrompt")}</div>`;
     return;
   }
@@ -20013,19 +21074,35 @@ function renderDashboardCards() {
   const achUnlocked = owner ? Object.keys(loadAchievementsStore()[owner] || {}).length : 0;
   const unreadNotifs = loadNotifications().filter((n) => !n.read).length;
   const solText = document.getElementById("sol-balance")?.textContent || "—";
-  const cards = [
-    { label: t("dashCardPools"), value: `${cpPoolCount} CP / ${dlmmPoolCount} DLMM` },
-    { label: t("dashCardPositions"), value: `${lastPositionsSummary.cpCount} CP / ${lastPositionsSummary.dlmmCount} DLMM` },
-    { label: t("dashCardOrders"), value: `${lastPositionsSummary.loCount} Limit / ${lastPositionsSummary.dcaCount} DCA` },
-    { label: t("dashCardAchievements"), value: `${achUnlocked} / ${ACHIEVEMENTS.length}` },
-    { label: t("dashCardBalance"), value: solText },
-    { label: t("dashCardNotifications"), value: String(unreadNotifs) },
-  ];
-  container.innerHTML = cards.map((c) => `
-    <div class="stat-card">
-      <div class="stat-card-label">${c.label}</div>
-      <div class="stat-card-value">${c.value}</div>
-    </div>`).join("");
+  const ps = lastPositionsSummary;
+  const decOf = (m) => mintDecimalsCache.get(m.toBase58()) ?? 0;
+  const tvlItems = [...lastPoolListRows, ...(lastV2ListRows || [])]
+    .map((r) => ({ r, usd: poolTvlUsd(r, decOf) }))
+    .filter((x) => x.usd != null && x.usd > 0)
+    .sort((a, b) => b.usd - a.usd).slice(0, 6)
+    .map(({ r, usd }) => ({ label: `${labelFor(r.mintA)} / ${labelFor(r.mintB)}`, labelHtml: pairIconHtml(r.mintA, r.mintB, 14), value: usd, display: fmtUsd(usd) }));
+  const card = (title, body, cls = "") => `<div class="dash-chart-card ${cls}"><div class="dash-chart-title">${escapeHtmlText(title)}</div>${body}</div>`;
+  container.classList.remove("stat-cards");
+  container.classList.add("dash-charts");
+  container.innerHTML = [
+    card(t("dashChartPoolTypes"), miniDonutHtml([
+      { label: t("lqFilterStandard"), value: cpPoolCount, color: "var(--accent)" },
+      { label: t("lqFilterConcentrated"), value: dlmmPoolCount, color: "var(--link)" },
+      { label: "SWDMM v2", value: v2PoolCount, color: "var(--up)" },
+    ], cpPoolCount + dlmmPoolCount + v2PoolCount, t("dashCardPools"))),
+    card(t("dashChartTvl"), tvlItems.length ? hbarListHtml(tvlItems) : `<div class="empty-state-compact">${t("dashChartTvlEmpty")}</div>`, "span2"),
+    card(t("dashCardPositions"), miniDonutHtml([
+      { label: t("pcCatCpLp"), value: ps.cpCount, color: "var(--accent)" },
+      { label: t("pcCatDlmmLp"), value: ps.dlmmCount, color: "var(--link)" },
+      { label: t("pcCatLimitOrders"), value: ps.loCount, color: "var(--warn)" },
+      { label: t("pcCatDcaPlans"), value: ps.dcaCount, color: "var(--danger)" },
+    ], ps.cpCount + ps.dlmmCount + ps.loCount + ps.dcaCount, t("pcTotalLabel"))),
+    card(t("dashCardAchievements"), progressRingHtml(achUnlocked, ACHIEVEMENTS.length, t("dashCardAchievements"))),
+    `<div class="dash-chart-card dash-mini-stats">
+      <div class="stat-card"><div class="stat-card-label">${t("dashCardBalance")}</div><div class="stat-card-value">${escapeHtmlText(solText)}</div></div>
+      <div class="stat-card"><div class="stat-card-label">${t("dashCardNotifications")}</div><div class="stat-card-value">${unreadNotifs}</div></div>
+    </div>`,
+  ].join("");
 }
 
 function renderDashboardTopPoolsChart() {
@@ -20035,11 +21112,11 @@ function renderDashboardTopPoolsChart() {
     container.innerHTML = `<div class="empty-state">${t("topPoolsEmpty")}</div>`;
     return;
   }
-  const items = lastTopPoolsRanked.slice(0, 8).map((r) => ({
+  container.innerHTML = hbarListHtml(lastTopPoolsRanked.slice(0, 8).map((r) => ({
     label: r.mints ? `${labelFor(r.mints.mintA)} / ${labelFor(r.mints.mintB)}` : shortPk(r.poolB58),
-    value: r.count,
-  }));
-  container.innerHTML = renderCategoryBarChartSvg(items);
+    labelHtml: r.mints ? pairIconHtml(r.mints.mintA, r.mints.mintB, 14) : null,
+    value: r.count, rank: true,
+  })));
 }
 
 function renderDashboardPnlChart() {
@@ -20049,7 +21126,10 @@ function renderDashboardPnlChart() {
     container.innerHTML = `<div class="empty-state">${t("dashboardPnlChartEmpty")}</div>`;
     return;
   }
-  container.innerHTML = renderPnlBarChartSvg(lastPnlCalcRows);
+  container.innerHTML = divergingBarListHtml(lastPnlCalcRows.map((r) => ({
+    label: r.pairLabel, labelHtml: r.pairHtml, value: r.approxPnlA,
+    display: `${r.approxPnlA >= 0 ? "+" : ""}${Number(r.approxPnlA.toPrecision(5))}`,
+  })));
 }
 
 function renderAutoSettingsStatus() {
@@ -20083,7 +21163,8 @@ function renderLiquidityStats() {
   const totalEl = document.getElementById("lq-stat-total-pools");
   const yoursEl = document.getElementById("lq-stat-your-positions");
   const mktTotalEl = document.getElementById("mkt-stat-total-pools");
-  const totalText = lastPoolListRows.length > 0 || state.program ? String(lastPoolListRows.length) : "—";
+  const nPools = lastPoolListRows.length + (lastV2ListRows?.length || 0);
+  const totalText = nPools > 0 || state.program ? String(nPools) : "—";
   if (mktTotalEl) mktTotalEl.textContent = totalText;
   if (!totalEl || !yoursEl) return;
   totalEl.textContent = totalText;
@@ -20100,29 +21181,12 @@ function renderTopPoolsLeaderboard(ranked, tradesAnalyzed) {
     container.innerHTML = `<div class="empty-state">${t("topPoolsEmpty")}</div>`;
     return;
   }
-  const rowsHtml = ranked.map((r, i) => {
-    const pairLabel = r.mints ? `${labelFor(r.mints.mintA)} / ${labelFor(r.mints.mintB)}` : shortPk(r.poolB58);
-    const pairHtml = r.mints ? pairIconHtml(r.mints.mintA, r.mints.mintB, 16) : pairLabel;
-    return `
-      <tr>
-        <td class="mono">#${i + 1}</td>
-        <td class="mono">${pairHtml}</td>
-        <td class="mono">${r.count}</td>
-      </tr>`;
-  }).join("");
-  container.innerHTML = `
-    <div class="table-scroll">
-      <table class="data-table">
-        <thead><tr>
-          <th data-i18n="thRank">Rank</th>
-          <th data-i18n="thPair">Pair</th>
-          <th data-i18n="thTradeCount">Swaps</th>
-        </tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-    </div>
+  container.innerHTML = `${hbarListHtml(ranked.map((r) => ({
+    label: r.mints ? `${labelFor(r.mints.mintA)} / ${labelFor(r.mints.mintB)}` : shortPk(r.poolB58),
+    labelHtml: r.mints ? pairIconHtml(r.mints.mintA, r.mints.mintB, 16) : null,
+    value: r.count, display: `${r.count} ${t("thTradeCount")}`, rank: true,
+  })))}
     <div class="hint" style="margin-top:8px;">${t("topPoolsScopeHint", { n: tradesAnalyzed })}</div>`;
-  container.querySelectorAll("[data-i18n]").forEach((el) => { el.textContent = t(el.getAttribute("data-i18n")); });
 }
 
 document.getElementById("mt-refresh-btn").addEventListener("click", () => {
@@ -20224,6 +21288,11 @@ function renderTradingStats() {
   }
   const s = lastTradingStats;
   container.innerHTML = `
+    <div class="dash-chart-card" style="margin-bottom:12px;"><div class="dash-chart-title">${t("statsChartActions")}</div>${miniDonutHtml([
+      { label: t("optFilterSwap"), value: s.swapCount, color: "var(--accent)" },
+      { label: t("optFilterAdd"), value: s.addCount, color: "var(--up)" },
+      { label: t("optFilterRemove"), value: s.removeCount, color: "var(--down)" },
+    ], s.swapCount + s.addCount + s.removeCount, t("statsChartTotal"))}</div>
     <div class="kv" style="margin-top:0;">
       <div class="k">${t("statsSwapCount")}</div><div class="v">${s.swapCount}</div>
       <div class="k">${t("statsAddRemoveCount")}</div><div class="v">${s.addCount} / ${s.removeCount}</div>
@@ -22821,26 +23890,33 @@ document.getElementById("add-dlmm-liq-btn").addEventListener("click", async () =
     const binIdUpper = intInput("dlmm-add-bin-upper");
     if (binIdUpper < binIdLower) throw new Error(t("errFieldEmpty", { f: "dlmm-add-bin-upper" }));
     setActiveBinRange(binIdLower, binIdUpper);
-    const amountA = bn("dlmm-add-amount-a");
-    const amountB = bn("dlmm-add-amount-b");
+    // Amounts are TOTALS (build 2026-10-07g), split per bin the way the
+    // program requires: A above the price, B below, both at the price.
+    const totalA = BigInt(document.getElementById("dlmm-add-amount-a").value.trim() || "0");
+    const totalB = BigInt(document.getElementById("dlmm-add-amount-b").value.trim() || "0");
+    if (totalA < 0n || totalB < 0n || (totalA === 0n && totalB === 0n)) throw new Error(t("errInvalidAmount"));
     const { pool, binArray, vaultA, vaultB } = deriveDlmmPool(mintA, mintB);
+    const poolAcc = await state.program.account.dlmmPool.fetch(pool);
+    const split = dlmmSplitTotals(totalA, totalB, binIdLower, binIdUpper, Number(poolAcc.activeBinId));
+    if (split.usedA === 0n && split.usedB === 0n) throw new Error(t("errInvalidAmount"));
     const position = deriveDlmmPosition(pool, state.wallet.publicKey, binIdLower, binIdUpper);
+    const [decA, decB] = await Promise.all([getMintDecimalsCached(mintA), getMintDecimalsCached(mintB)]);
+    const binStep = Number(poolAcc.binStepBps);
 
     const ok = await confirmAction([
       [t("labelMintA"), labelForIcon(mintA, 20)],
       [t("labelMintB"), labelForIcon(mintB, 20)],
-      [t("labelBinLower"), binIdLower],
-      [t("labelBinUpper"), binIdUpper],
-      [t("amtPerBinA"), await tokenAmountHtml(amountA, mintA)],
-      [t("amtPerBinB"), await tokenAmountHtml(amountB, mintB)],
+      [t("pvRange"), `${fmtPrice(dlmmBinPriceUi(binIdLower, binStep, decA, decB))} – ${fmtPrice(dlmmBinPriceUi(binIdUpper + 1, binStep, decA, decB))} · ${t("rpBins", { n: binIdUpper - binIdLower + 1 })}`],
+      [t("amtTotalA"), await tokenAmountHtml(new anchor.BN(split.usedA.toString()), mintA)],
+      [t("amtTotalB"), await tokenAmountHtml(new anchor.BN(split.usedB.toString()), mintB)],
+      [t("pvPerBin"), `${split.aBins ? `${fmtAmt(split.perA, decA)} × ${split.aBins}` : "—"} / ${split.bBins ? `${fmtAmt(split.perB, decB)} × ${split.bBins}` : "—"}`],
     ]);
     if (!ok) return;
 
     const depositorTokenA = await ensureAta(mintA, state.wallet.publicKey);
     const depositorTokenB = await ensureAta(mintB, state.wallet.publicKey);
 
-    const binCount = binIdUpper - binIdLower + 1;
-    const amounts = Array.from({ length: binCount }, () => ({ amountA, amountB }));
+    const amounts = split.bins.map((b) => ({ amountA: new anchor.BN(b.amountA.toString()), amountB: new anchor.BN(b.amountB.toString()) }));
 
     const sig = await state.program.methods
       .addDlmmLiquidity(binIdLower, binIdUpper, amounts)
@@ -22867,6 +23943,626 @@ document.getElementById("add-dlmm-liq-btn").addEventListener("click", async () =
     logErr(t("labelAddDlmmLiq"), e);
   }
 });
+
+// ---------------------------------------------------------------------
+// Easy liquidity (build 2026-10-07g)
+//   * DLMM price-range picker: no Bin IDs to type. Three ways to pick a
+//     range — Quick pick (Narrow / Balanced / Wide), Drag on chart (two
+//     handles over the pool's liquidity, plus nudge buttons) and By
+//     price % — all writing the same hidden -bin-lower/-bin-upper inputs.
+//   * DLMM amounts are TOTALS, split over the range the way the program
+//     requires (above the price: A only, below: B only, the bin at the
+//     price: both), instead of the same A and B in every bin, which the
+//     program rejects for any range that crosses the price.
+//   * A preview box on every add-liquidity form, before Confirm.
+// ---------------------------------------------------------------------
+const DLMM_MAX_POSITION_BINS = 20; // dlmm.rs MAX_POSITION_BINS
+const DLMM_MIN_BIN_LIQUIDITY = 10n; // dlmm.rs MIN_BIN_LIQUIDITY
+const RP_PRESETS = [
+  { key: "narrow", w: 2 },
+  { key: "balanced", w: 5 },
+  { key: "wide", w: 9 },
+];
+const RP_PCTS = [1, 2, 5, 10, 20];
+
+// Price (B per A, in tokens) of one bin.
+function dlmmBinPriceUi(binId, binStepBps, decA, decB) {
+  return Math.pow(1 + binStepBps / 10000, binId) * 10 ** (decA - decB);
+}
+
+// Per-bin amounts for a deposit of totals (raw BigInt) over [lo, hi]:
+// A goes to bins above the active bin, B to bins below, the active bin
+// takes both — only when both totals are > 0 (an empty active bin rejects
+// a one-sided first deposit). Remainders go to the bin nearest the price.
+function dlmmSplitTotals(totalA, totalB, lo, hi, active) {
+  const ids = [];
+  for (let id = lo; id <= hi; id++) ids.push(id);
+  const activeTakes = totalA > 0n && totalB > 0n && active >= lo && active <= hi;
+  const aBins = ids.filter((id) => id > active || (id === active && activeTakes));
+  const bBins = ids.filter((id) => id < active || (id === active && activeTakes));
+  const perA = aBins.length ? totalA / BigInt(aBins.length) : 0n;
+  const perB = bBins.length ? totalB / BigInt(bBins.length) : 0n;
+  const remA = aBins.length ? totalA - perA * BigInt(aBins.length) : 0n;
+  const remB = bBins.length ? totalB - perB * BigInt(bBins.length) : 0n;
+  const nearA = aBins.length ? aBins[0] : null; // lowest A bin = nearest the price
+  const nearB = bBins.length ? bBins[bBins.length - 1] : null;
+  const bins = ids.map((id) => ({
+    binId: id,
+    amountA: aBins.includes(id) ? perA + (id === nearA ? remA : 0n) : 0n,
+    amountB: bBins.includes(id) ? perB + (id === nearB ? remB : 0n) : 0n,
+  }));
+  const usedA = aBins.length ? totalA : 0n;
+  const usedB = bBins.length ? totalB : 0n;
+  return {
+    bins, aBins: aBins.length, bBins: bBins.length, perA, perB, usedA, usedB,
+    unusedA: totalA > 0n && !aBins.length, unusedB: totalB > 0n && !bBins.length,
+    activeSkipped: active >= lo && active <= hi && !activeTakes && (totalA > 0n || totalB > 0n),
+  };
+}
+
+function rpRangeFor(kind, w, side, active) {
+  const n = 2 * w + 1;
+  if (side === "above") return [active + 1, active + n];
+  if (side === "below") return [active - n, active - 1];
+  return [active - w, active + w];
+}
+function rpBinsForPct(pct, binStepBps) {
+  return Math.max(1, Math.ceil(Math.log(1 + pct / 100) / Math.log(1 + binStepBps / 10000)));
+}
+
+// A reusable range picker. `getCtx` resolves the pool facts:
+//   { activeBin, binStep, minBin, maxBin, decA, decB, mintA, mintB, liq: Map(binId -> value in B) | null }
+// or null (no pool). `onRange(lo, hi)` is called on every change.
+function createRangePicker(host, opts) {
+  const st = { ctx: null, lo: null, hi: null, mode: "preset", side: "both", preset: "balanced", pct: 5, win: null, drag: null, loading: false };
+  const symmetric = !!opts.symmetricOnly;
+  host.classList.add("rp");
+  host.innerHTML = `
+    <div class="rp-head"><span class="rp-title" data-i18n="rpTitle">${t("rpTitle")}</span><span class="rp-now" data-rp-now></span></div>
+    <div class="rp-modes" role="tablist">
+      <button type="button" role="tab" data-rp-mode="preset" data-i18n="rpModePreset">${t("rpModePreset")}</button>
+      <button type="button" role="tab" data-rp-mode="drag" data-i18n="rpModeDrag">${t("rpModeDrag")}</button>
+      <button type="button" role="tab" data-rp-mode="pct" data-i18n="rpModePct">${t("rpModePct")}</button>
+    </div>
+    <div class="rp-panel" data-rp-panel="preset">${RP_PRESETS.map((p) => `
+      <button type="button" class="rp-chip rp-preset" data-rp-preset="${p.key}"><b data-i18n="rp_${p.key}">${t(`rp_${p.key}`)}</b><small data-i18n="rp_${p.key}Sub">${t(`rp_${p.key}Sub`)}</small></button>`).join("")}
+    </div>
+    <div class="rp-panel" data-rp-panel="drag" hidden>
+      <div class="rp-hint" data-i18n="rpDragHint">${t("rpDragHint")}</div>
+      <div class="rp-nudge">
+        ${symmetric ? "" : `<button type="button" class="secondary" data-rp-nudge="left">◀ <span data-i18n="rpShiftLeft">${t("rpShiftLeft")}</span></button>`}
+        <button type="button" class="secondary" data-rp-nudge="narrow">− <span data-i18n="rpNarrower">${t("rpNarrower")}</span></button>
+        <button type="button" class="secondary" data-rp-nudge="wide">+ <span data-i18n="rpWider">${t("rpWider")}</span></button>
+        ${symmetric ? "" : `<button type="button" class="secondary" data-rp-nudge="right"><span data-i18n="rpShiftRight">${t("rpShiftRight")}</span> ▶</button>`}
+      </div>
+    </div>
+    <div class="rp-panel" data-rp-panel="pct" hidden>${RP_PCTS.map((p) => `
+      <button type="button" class="rp-chip" data-rp-pct="${p}"><b>±${p}%</b></button>`).join("")}
+    </div>
+    ${symmetric ? "" : `<div class="rp-side" data-rp-sidewrap>
+      <button type="button" class="rp-chip" data-rp-side="both"></button>
+      <button type="button" class="rp-chip" data-rp-side="above"></button>
+      <button type="button" class="rp-chip" data-rp-side="below"></button>
+    </div>`}
+    <div class="rp-chart" data-rp-chart tabindex="0" aria-label="${t("rpModeDrag")}">
+      <svg class="rp-bars" preserveAspectRatio="none" viewBox="0 0 100 100"></svg>
+      <div class="rp-shade" data-rp-shade></div>
+      <div class="rp-now-line" data-rp-nowline></div>
+      <div class="rp-handle" data-rp-handle="lo"><span></span></div>
+      <div class="rp-handle" data-rp-handle="hi"><span></span></div>
+    </div>
+    <div class="rp-scale"><span data-rp-lo></span><span data-rp-n></span><span data-rp-hi></span></div>
+    <div class="rp-note" data-rp-note></div>`;
+  const $ = (sel) => host.querySelector(sel);
+  const chart = $("[data-rp-chart]");
+
+  function clampRange(lo, hi) {
+    const c = st.ctx;
+    if (hi - lo + 1 > DLMM_MAX_POSITION_BINS) hi = lo + DLMM_MAX_POSITION_BINS - 1;
+    if (lo < c.minBin) { hi += c.minBin - lo; lo = c.minBin; }
+    if (hi > c.maxBin) { lo -= hi - c.maxBin; hi = c.maxBin; }
+    return [Math.max(lo, c.minBin), Math.min(hi, c.maxBin)];
+  }
+  function setRange(lo, hi, { keepWin = false } = {}) {
+    if (!st.ctx) return;
+    [st.lo, st.hi] = clampRange(lo, hi);
+    if (!keepWin) st.win = null;
+    render();
+    opts.onRange?.(st.lo, st.hi);
+  }
+  function applyMode() {
+    const c = st.ctx;
+    if (!c) return;
+    const side = symmetric ? "both" : st.side;
+    if (st.mode === "preset") {
+      const p = RP_PRESETS.find((x) => x.key === st.preset) || RP_PRESETS[1];
+      setRange(...rpRangeFor("preset", p.w, side, c.activeBin));
+    } else if (st.mode === "pct") {
+      const nb = rpBinsForPct(st.pct, c.binStep);
+      if (side === "both") { const w = Math.min(nb, (DLMM_MAX_POSITION_BINS - 2) / 2 | 0); setRange(c.activeBin - w, c.activeBin + w); }
+      else if (side === "above") setRange(c.activeBin + 1, c.activeBin + Math.min(nb, DLMM_MAX_POSITION_BINS));
+      else setRange(c.activeBin - Math.min(nb, DLMM_MAX_POSITION_BINS), c.activeBin - 1);
+    } else if (st.lo == null) {
+      setRange(...rpRangeFor("preset", 5, "both", c.activeBin));
+    } else render();
+  }
+  function windowFor() {
+    const c = st.ctx;
+    if (st.win) return st.win;
+    let lo = Math.min(st.lo, c.activeBin - 10) - 3;
+    let hi = Math.max(st.hi, c.activeBin + 10) + 3;
+    lo = Math.max(lo, c.minBin); hi = Math.min(hi, c.maxBin);
+    return [lo, hi];
+  }
+  function render() {
+    host.querySelectorAll("[data-rp-mode]").forEach((b) => { const on = b.dataset.rpMode === st.mode; b.classList.toggle("active", on); b.setAttribute("aria-selected", String(on)); });
+    host.querySelectorAll("[data-rp-panel]").forEach((p) => { p.hidden = p.dataset.rpPanel !== st.mode; });
+    host.querySelectorAll("[data-rp-preset]").forEach((b) => b.classList.toggle("active", st.mode === "preset" && b.dataset.rpPreset === st.preset));
+    host.querySelectorAll("[data-rp-pct]").forEach((b) => b.classList.toggle("active", st.mode === "pct" && Number(b.dataset.rpPct) === st.pct));
+    const sideWrap = $("[data-rp-sidewrap]");
+    if (sideWrap) sideWrap.hidden = st.mode === "drag";
+    const c = st.ctx;
+    const symA = c ? escapeHtmlText(labelFor(c.mintA)) : "A", symB = c ? escapeHtmlText(labelFor(c.mintB)) : "B";
+    host.querySelectorAll("[data-rp-side]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.rpSide === st.side);
+      b.innerHTML = t(b.dataset.rpSide === "both" ? "rpSideBoth" : b.dataset.rpSide === "above" ? "rpSideAbove" : "rpSideBelow", { a: symA, b: symB });
+    });
+    const nowEl = $("[data-rp-now]");
+    if (!c) {
+      nowEl.textContent = "";
+      chart.hidden = true;
+      $("[data-rp-lo]").textContent = ""; $("[data-rp-hi]").textContent = ""; $("[data-rp-n]").textContent = "";
+      $("[data-rp-note]").textContent = st.loading ? t("rpLoading") : t("rpNoPool");
+      return;
+    }
+    chart.hidden = false;
+    const price = (id) => dlmmBinPriceUi(id, c.binStep, c.decA, c.decB);
+    nowEl.innerHTML = `${t("rpCurrentPrice")}: <b>1 ${symA} = ${fmtPrice(price(c.activeBin))} ${symB}</b>`;
+    const [wLo, wHi] = windowFor();
+    const n = wHi - wLo + 1;
+    const xOf = (id) => ((id - wLo) / n) * 100;
+    // bars: existing liquidity (muted) + your range (A above / B below)
+    const vals = [];
+    for (let id = wLo; id <= wHi; id++) vals.push(c.liq?.get(id) || 0);
+    const maxV = Math.max(...vals, 0) || 1;
+    const bw = 100 / n;
+    let bars = "";
+    for (let i = 0; i < n; i++) {
+      const id = wLo + i;
+      const inRange = id >= st.lo && id <= st.hi;
+      const h = vals[i] > 0 ? Math.max(4, (vals[i] / maxV) * 78) : 0;
+      if (h) bars += `<rect x="${(i * bw + bw * 0.12).toFixed(3)}" y="${(84 - h).toFixed(2)}" width="${(bw * 0.76).toFixed(3)}" height="${h.toFixed(2)}" class="rp-bar-liq${inRange ? " in" : ""}"></rect>`;
+      if (inRange) {
+        const cls = id > c.activeBin ? "a" : id < c.activeBin ? "b" : "ab";
+        bars += `<rect x="${(i * bw + bw * 0.12).toFixed(3)}" y="88" width="${(bw * 0.76).toFixed(3)}" height="12" class="rp-bar-you ${cls}"></rect>`;
+      }
+    }
+    $(".rp-bars").innerHTML = bars;
+    const shade = $("[data-rp-shade]");
+    shade.style.left = `${xOf(st.lo)}%`;
+    shade.style.width = `${xOf(st.hi + 1) - xOf(st.lo)}%`;
+    const nowLine = $("[data-rp-nowline]");
+    nowLine.style.left = `${xOf(c.activeBin) + 50 / n}%`;
+    $('[data-rp-handle="lo"]').style.left = `${xOf(st.lo)}%`;
+    $('[data-rp-handle="hi"]').style.left = `${xOf(st.hi + 1)}%`;
+    // labels
+    const pLo = price(st.lo), pHi = price(st.hi + 1);
+    $("[data-rp-lo]").innerHTML = `<b>${fmtPrice(pLo)}</b> ${symB}`;
+    $("[data-rp-hi]").innerHTML = `<b>${fmtPrice(pHi)}</b> ${symB}`;
+    const nb = st.hi - st.lo + 1;
+    const pctLo = (pLo / price(c.activeBin) - 1) * 100, pctHi = (pHi / price(c.activeBin) - 1) * 100;
+    $("[data-rp-n]").textContent = `${t("rpBins", { n: nb })} · ${pctLo >= 0 ? "+" : ""}${pctLo.toFixed(1)}% … ${pctHi >= 0 ? "+" : ""}${pctHi.toFixed(1)}%`;
+    const where = st.lo > c.activeBin ? t("rpRangeAbove", { a: symA, b: symB }) : st.hi < c.activeBin ? t("rpRangeBelow", { a: symA, b: symB }) : t("rpRangeIncludes");
+    $("[data-rp-note]").innerHTML = `${where}${nb >= DLMM_MAX_POSITION_BINS ? ` · ${t("rpMaxBins")}` : ""}`;
+  }
+
+  // --- events ---
+  host.addEventListener("click", (e) => {
+    const m = e.target.closest("[data-rp-mode]");
+    if (m) { st.mode = m.dataset.rpMode; applyMode(); render(); return; }
+    const p = e.target.closest("[data-rp-preset]");
+    if (p) { st.preset = p.dataset.rpPreset; st.mode = "preset"; applyMode(); return; }
+    const pc = e.target.closest("[data-rp-pct]");
+    if (pc) { st.pct = Number(pc.dataset.rpPct); st.mode = "pct"; applyMode(); return; }
+    const sd = e.target.closest("[data-rp-side]");
+    if (sd) { st.side = sd.dataset.rpSide; applyMode(); return; }
+    const nd = e.target.closest("[data-rp-nudge]");
+    if (nd && st.ctx && st.lo != null) {
+      const k = nd.dataset.rpNudge;
+      if (symmetric) {
+        const a = st.ctx.activeBin, w = Math.max(1, Math.min(9, (st.hi - st.lo) / 2 + (k === "wide" ? 1 : k === "narrow" ? -1 : 0)));
+        setRange(a - w, a + w);
+      } else if (k === "left") setRange(st.lo - 1, st.hi - 1);
+      else if (k === "right") setRange(st.lo + 1, st.hi + 1);
+      else if (k === "narrow" && st.hi > st.lo) setRange(st.lo + (st.hi - st.lo >= 2 ? 1 : 0), st.hi - 1);
+      else if (k === "wide") setRange(st.lo - 1, Math.min(st.hi + 1, st.lo - 1 + DLMM_MAX_POSITION_BINS - 1));
+    }
+  });
+  const binAt = (clientX) => {
+    const r = chart.getBoundingClientRect();
+    const [wLo, wHi] = st.drag?.win || windowFor();
+    const n = wHi - wLo + 1;
+    const f = Math.min(0.9999, Math.max(0, (clientX - r.left) / r.width));
+    return { bin: wLo + Math.floor(f * n), edge: wLo + Math.round(f * n) };
+  };
+  chart.addEventListener("pointerdown", (e) => {
+    if (!st.ctx || st.lo == null) return;
+    e.preventDefault();
+    const { edge } = binAt(e.clientX);
+    // Grab the handle nearest the pointer (edges sit between bins).
+    const which = Math.abs(edge - st.lo) <= Math.abs(edge - (st.hi + 1)) ? "lo" : "hi";
+    st.drag = { which, win: windowFor() };
+    st.win = st.drag.win;
+    if (st.mode !== "drag") st.mode = "drag";
+    chart.setPointerCapture?.(e.pointerId);
+    chart.classList.add("dragging");
+    move(e);
+  });
+  function move(e) {
+    if (!st.drag) return;
+    const { edge } = binAt(e.clientX);
+    let lo = st.lo, hi = st.hi;
+    if (symmetric) {
+      // around the starting bin: both handles move together
+      const a = st.ctx.activeBin;
+      const w = Math.max(1, Math.min(9, st.drag.which === "lo" ? a - edge : edge - 1 - a));
+      if (a - w !== st.lo || a + w !== st.hi) setRange(a - w, a + w, { keepWin: true });
+      return;
+    }
+    if (st.drag.which === "lo") { lo = Math.min(edge, hi); if (hi - lo + 1 > DLMM_MAX_POSITION_BINS) hi = lo + DLMM_MAX_POSITION_BINS - 1; }
+    else { hi = Math.max(edge - 1, lo); if (hi - lo + 1 > DLMM_MAX_POSITION_BINS) lo = hi - DLMM_MAX_POSITION_BINS + 1; }
+    if (lo !== st.lo || hi !== st.hi) setRange(lo, hi, { keepWin: true });
+  }
+  chart.addEventListener("pointermove", move);
+  const end = () => { if (!st.drag) return; st.drag = null; chart.classList.remove("dragging"); st.win = null; render(); };
+  chart.addEventListener("pointerup", end);
+  chart.addEventListener("pointercancel", end);
+  chart.addEventListener("keydown", (e) => {
+    if (!st.ctx || st.lo == null) return;
+    if (symmetric) return;
+    if (e.key === "ArrowLeft") { e.preventDefault(); setRange(st.lo - 1, st.hi - 1); }
+    else if (e.key === "ArrowRight") { e.preventDefault(); setRange(st.lo + 1, st.hi + 1); }
+  });
+
+  let seq = 0;
+  async function refresh() {
+    const my = ++seq;
+    st.loading = true;
+    render();
+    let ctx = null;
+    try { ctx = await opts.getCtx(); } catch (e) { console.warn("range picker", e); }
+    if (my !== seq) return;
+    st.loading = false;
+    const changedPool = !st.ctx || !ctx || st.ctx.key !== ctx.key || st.ctx.activeBin !== ctx.activeBin;
+    st.ctx = ctx;
+    if (!ctx) { st.lo = st.hi = null; render(); opts.onRange?.(null, null); return; }
+    if (changedPool || st.lo == null) { st.win = null; applyMode(); }
+    else render();
+  }
+  render();
+  document.addEventListener("swd-lang", render);
+  return { refresh, get: () => (st.ctx && st.lo != null ? { lo: st.lo, hi: st.hi, ctx: st.ctx } : null), setRange, rerender: render };
+}
+
+// Pool facts for a DLMM pair (or null when there is no such pool).
+async function dlmmRangeCtx(mintAStr, mintBStr) {
+  if (!state.program || !PUBKEY_RE.test(mintAStr || "") || !PUBKEY_RE.test(mintBStr || "")) return null;
+  const mintA = new PublicKey(mintAStr), mintB = new PublicKey(mintBStr);
+  const { pool } = deriveDlmmPool(mintA, mintB);
+  let acc;
+  try { acc = await fetchPoolAccountCached("dlmmPool", pool); } catch { return null; }
+  if (!acc) return null;
+  const [decA, decB] = await Promise.all([getMintDecimalsCached(mintA), getMintDecimalsCached(mintB)]);
+  const step = Number(acc.binStepBps), active = Number(acc.activeBinId);
+  const liq = new Map();
+  try {
+    const ba = await state.program.account.binArray.fetch(acc.binArray);
+    const minId = Number(acc.minBinId);
+    ba.bins.forEach((bin, i) => {
+      const id = minId + i;
+      const a = Number(bin.reserveA.toString()) / 10 ** decA, b = Number(bin.reserveB.toString()) / 10 ** decB;
+      const v = a * dlmmBinPriceUi(id, step, decA, decB) + b;
+      if (v > 0) liq.set(id, v);
+    });
+  } catch { /* chart without existing liquidity */ }
+  return { key: pool.toBase58(), pool, activeBin: active, binStep: step, minBin: Number(acc.minBinId), maxBin: Number(acc.maxBinId), decA, decB, mintA: mintAStr, mintB: mintBStr, liq };
+}
+
+// --- preview box ------------------------------------------------------
+function liqPreviewHtml(rows, notes = []) {
+  if (!rows.length && !notes.length) return "";
+  return `<div class="lp-title">${t("pvTitle")}</div>
+    <div class="lp-rows">${rows.map(([k, v]) => `<div class="lp-k">${k}</div><div class="lp-v">${v}</div>`).join("")}</div>
+    ${notes.map((n) => `<div class="lp-note ${n.warn ? "warn" : ""}">${n.text}</div>`).join("")}`;
+}
+function ensurePreviewBox(beforeEl, id) {
+  let box = document.getElementById(id);
+  if (!box && beforeEl) {
+    box = document.createElement("div");
+    box.id = id;
+    box.className = "liq-preview";
+    box.setAttribute("aria-live", "polite");
+    beforeEl.insertAdjacentElement("beforebegin", box);
+  }
+  return box;
+}
+const fmtTok = (raw, dec, mint) => `${fmtAmt(raw, dec)} ${labelForIcon(mint, 14)}`;
+const usdOfRaw = (raw, mint, dec) => { const v = usdValueOfRaw(raw, new PublicKey(mint), dec); return v != null ? ` <span class="lp-usd">≈ ${fmtUsd(v)}</span>` : ""; };
+function rawOf(id) { try { const v = BigInt(document.getElementById(id)?.value.trim() || "0"); return v > 0n ? v : 0n; } catch { return 0n; } }
+
+// --- DLMM add form ------------------------------------------------------
+(function wireDlmmAddEasy() {
+  const content = document.getElementById("dlmm-add-form-content");
+  const lowerInput = document.getElementById("dlmm-add-bin-lower");
+  if (!content || !lowerInput) return;
+  const binRow = lowerInput.closest(".row");
+  // Bin ID inputs stay (source of truth, used by the Add handler) but fold
+  // away under "Advanced".
+  const adv = document.createElement("details");
+  adv.className = "rp-advanced";
+  adv.innerHTML = `<summary data-i18n="rpAdvanced">${t("rpAdvanced")}</summary>`;
+  binRow.parentNode.insertBefore(adv, binRow);
+  adv.appendChild(binRow);
+  const host = document.createElement("div");
+  host.id = "dlmm-add-rp";
+  adv.insertAdjacentElement("beforebegin", host);
+  const mintOf = (s) => document.getElementById(`dlmm-add-mint-${s}`)?.value.trim();
+  const picker = createRangePicker(host, {
+    getCtx: () => dlmmRangeCtx(mintOf("a"), mintOf("b")),
+    onRange: (lo, hi) => { if (lo != null) setActiveBinRange(lo, hi); updatePreview(); },
+  });
+  const box = ensurePreviewBox(document.getElementById("add-dlmm-liq-btn"), "dlmm-add-preview");
+  async function updatePreview() {
+    const sel = picker.get();
+    const totalA = rawOf("dlmm-add-amount-a"), totalB = rawOf("dlmm-add-amount-b");
+    if (!sel) { box.innerHTML = ""; return; }
+    const { lo, hi, ctx } = sel;
+    const symA = escapeHtmlText(labelFor(ctx.mintA)), symB = escapeHtmlText(labelFor(ctx.mintB));
+    const rows = [[t("pvRange"), `${fmtPrice(dlmmBinPriceUi(lo, ctx.binStep, ctx.decA, ctx.decB))} – ${fmtPrice(dlmmBinPriceUi(hi + 1, ctx.binStep, ctx.decA, ctx.decB))} ${symB} / ${symA} · ${t("rpBins", { n: hi - lo + 1 })}`]];
+    const notes = [];
+    if (totalA === 0n && totalB === 0n) {
+      notes.push({ text: t("pvEnterAmount") });
+    } else {
+      const sp = dlmmSplitTotals(totalA, totalB, lo, hi, ctx.activeBin);
+      const dep = [];
+      if (sp.usedA > 0n) dep.push(fmtTok(sp.usedA, ctx.decA, ctx.mintA) + usdOfRaw(sp.usedA, ctx.mintA, ctx.decA));
+      if (sp.usedB > 0n) dep.push(fmtTok(sp.usedB, ctx.decB, ctx.mintB) + usdOfRaw(sp.usedB, ctx.mintB, ctx.decB));
+      rows.push([t("pvDeposit"), dep.join("<br>") || "—"]);
+      const per = [];
+      if (sp.aBins) per.push(`${fmtAmt(sp.perA, ctx.decA)} ${symA} × ${sp.aBins}`);
+      if (sp.bBins) per.push(`${fmtAmt(sp.perB, ctx.decB)} ${symB} × ${sp.bBins}`);
+      rows.push([t("pvPerBin"), per.join("<br>") || "—"]);
+      if (sp.unusedA) notes.push({ warn: true, text: t("pvUnusedA", { a: symA }) });
+      if (sp.unusedB) notes.push({ warn: true, text: t("pvUnusedB", { b: symB }) });
+      if (sp.activeSkipped) notes.push({ warn: true, text: t("pvActiveNeedsBoth") });
+      if ((sp.aBins && sp.perA <= DLMM_MIN_BIN_LIQUIDITY) || (sp.bBins && sp.perB <= DLMM_MIN_BIN_LIQUIDITY)) notes.push({ warn: true, text: t("pvTooSmall") });
+    }
+    box.innerHTML = liqPreviewHtml(rows, notes);
+  }
+  const refresh = () => picker.refresh().then(updatePreview);
+  let timer = null;
+  const soon = () => { clearTimeout(timer); timer = setTimeout(refresh, 150); };
+  document.addEventListener("swd-mint-sync", (e) => { if (!e.detail || e.detail.suffix === "-mint-a" || e.detail.suffix === "-mint-b") soon(); });
+  document.addEventListener("swd-form-open", (e) => { if (e.detail?.id === "dlmm-add-form-content") soon(); });
+  ["dlmm-add-amount-a", "dlmm-add-amount-b"].forEach((id) => document.getElementById(id)?.addEventListener("input", updatePreview));
+  document.addEventListener("swd-usd-prices", updatePreview);
+  document.addEventListener("swd-lang", updatePreview);
+  soon();
+})();
+
+// --- Constant-product add form: B follows A at the pool's price ---------
+(function wireCpAddEasy() {
+  const btn = document.getElementById("add-liq-btn");
+  if (!btn) return;
+  const box = ensurePreviewBox(btn, "add-liq-preview");
+  let info = null; // { key, reserveA, reserveB, supply, decA, decB, lpDec, mintA, mintB }
+  let seq = 0;
+  async function load() {
+    const my = ++seq;
+    info = null;
+    const a = document.getElementById("add-mint-a")?.value.trim(), b = document.getElementById("add-mint-b")?.value.trim();
+    if (state.program && PUBKEY_RE.test(a || "") && PUBKEY_RE.test(b || "")) {
+      try {
+        const mintA = new PublicKey(a), mintB = new PublicKey(b);
+        const { pool, lpMint } = derivePool(mintA, mintB);
+        const [acc, decA, decB, lp] = await Promise.all([
+          fetchPoolAccountCached("pool", pool),
+          getMintDecimalsCached(mintA), getMintDecimalsCached(mintB),
+          getMint(state.connection, lpMint).catch(() => null),
+        ]);
+        if (my !== seq) return;
+        info = { key: pool.toBase58(), reserveA: BigInt(acc.reserveA.toString()), reserveB: BigInt(acc.reserveB.toString()), supply: lp ? BigInt(lp.supply.toString()) : 0n, lpDec: lp?.decimals ?? 6, decA, decB, mintA: a, mintB: b };
+      } catch { /* no pool yet: first deposit */ }
+    }
+    if (my === seq) update();
+  }
+  let filling = false;
+  function follow(from) {
+    if (filling || !info || info.reserveA === 0n || info.reserveB === 0n) return update();
+    const ra = rawOf("add-amount-a"), rb = rawOf("add-amount-b");
+    filling = true;
+    try {
+      if (from === "a" && ra > 0n) document.getElementById("add-amount-b").value = String((ra * info.reserveB + info.reserveA - 1n) / info.reserveA);
+      if (from === "b" && rb > 0n) document.getElementById("add-amount-a").value = String((rb * info.reserveA) / info.reserveB);
+    } finally { filling = false; }
+    update();
+  }
+  function update() {
+    const ra = rawOf("add-amount-a"), rb = rawOf("add-amount-b");
+    const a = document.getElementById("add-mint-a")?.value.trim(), b = document.getElementById("add-mint-b")?.value.trim();
+    if (!PUBKEY_RE.test(a || "") || !PUBKEY_RE.test(b || "")) { box.innerHTML = ""; return; }
+    const rows = [], notes = [];
+    if (info) {
+      const symA = escapeHtmlText(labelFor(a)), symB = escapeHtmlText(labelFor(b));
+      if (info.reserveA > 0n && info.reserveB > 0n) {
+        const p = (Number(info.reserveB) / Number(info.reserveA)) * 10 ** (info.decA - info.decB);
+        rows.push([t("pvPrice"), `1 ${symA} = ${fmtPrice(p)} ${symB}`]);
+      }
+      if (ra > 0n || rb > 0n) {
+        let useA = ra, useB = rb, lpOut = null;
+        if (info.reserveA > 0n && info.reserveB > 0n) {
+          useB = (ra * info.reserveB + info.reserveA - 1n) / info.reserveA;
+          if (info.supply > 0n) {
+            const lpA = (ra * info.supply) / info.reserveA, lpB = (useB * info.supply) / info.reserveB;
+            lpOut = lpA < lpB ? lpA : lpB;
+          }
+          if (useB > rb) notes.push({ warn: true, text: t("pvNeedMoreB", { b: symB, n: fmtAmt(useB, info.decB) }) });
+        } else {
+          const sq = v2Isqrt(ra * rb);
+          lpOut = sq > 1000n ? sq - 1000n : 0n;
+          notes.push({ text: t("pvFirstDeposit") });
+        }
+        rows.push([t("pvDeposit"), `${fmtTok(useA, info.decA, a)}${usdOfRaw(useA, a, info.decA)}<br>${fmtTok(useB, info.decB, b)}${usdOfRaw(useB, b, info.decB)}`]);
+        if (lpOut != null) {
+          rows.push([t("pvLpEst"), fmtAmt(lpOut, info.lpDec)]);
+          const after = info.supply + lpOut;
+          if (after > 0n) rows.push([t("pvShare"), `${((Number(lpOut) / Number(after)) * 100).toFixed(Number(lpOut) / Number(after) < 0.01 ? 4 : 2)}%`]);
+        } else if (info.reserveA > 0n && info.reserveB > 0n) {
+          // share from reserves when the LP mint can't be read
+          const sh = Number(ra) / (Number(info.reserveA) + Number(ra));
+          rows.push([t("pvShare"), `${(sh * 100).toFixed(sh < 0.0001 ? 4 : 2)}%`]);
+        }
+        if (info.reserveA > 0n && info.reserveB > 0n) notes.push({ text: t("pvAutoRatio", { b: symB }) });
+      } else notes.push({ text: t("pvEnterAmount") });
+    } else if (ra > 0n || rb > 0n) {
+      notes.push({ text: t("pvFirstDeposit") });
+    }
+    box.innerHTML = liqPreviewHtml(rows, notes);
+  }
+  document.getElementById("add-amount-a")?.addEventListener("input", () => follow("a"));
+  document.getElementById("add-amount-b")?.addEventListener("input", () => follow("b"));
+  let timer = null;
+  const soon = () => { clearTimeout(timer); timer = setTimeout(load, 150); };
+  document.addEventListener("swd-mint-sync", soon);
+  document.addEventListener("swd-form-open", (e) => { if (e.detail?.id === "add-form-content") soon(); });
+  document.addEventListener("swd-usd-prices", update);
+  document.addEventListener("swd-lang", update);
+  soon();
+})();
+
+// --- Create-pool wizard: easy range + previews --------------------------
+(function wireWizardEasy() {
+  const dcwBox = ensurePreviewBox(document.getElementById("dcw-steps"), "dcw-preview");
+  const cpwBox = ensurePreviewBox(document.getElementById("cpw-steps"), "cpw-preview");
+  // DLMM step 2: the range width is picked like the add form (symmetric
+  // around the starting bin), the starting price from a price, not a bin id.
+  const widthInput = document.getElementById("dcw-range-width");
+  const activeInput = document.getElementById("dcw-active-bin");
+  const stepInput = document.getElementById("dcw-bin-step");
+  if (widthInput && activeInput) {
+    const row = widthInput.closest(".row");
+    const adv = document.createElement("details");
+    adv.className = "rp-advanced";
+    adv.innerHTML = `<summary data-i18n="rpAdvanced">${t("rpAdvanced")}</summary>`;
+    row.parentNode.insertBefore(adv, row);
+    adv.appendChild(row);
+    const priceField = document.createElement("div");
+    priceField.className = "field";
+    priceField.innerHTML = `<label for="dcw-start-price" data-dcw-price-label></label><input id="dcw-start-price" inputmode="decimal" placeholder="1.0" autocomplete="off" /><div class="hint" data-dcw-price-hint></div>`;
+    adv.insertAdjacentElement("beforebegin", priceField);
+    const host = document.createElement("div");
+    host.id = "dcw-rp";
+    priceField.insertAdjacentElement("afterend", host);
+    const decs = async () => {
+      const a = document.getElementById("dcw-mint-a")?.value.trim(), b = document.getElementById("dcw-mint-b")?.value.trim();
+      const ok = (m) => PUBKEY_RE.test(m || "");
+      const [decA, decB] = await Promise.all([ok(a) ? getMintDecimalsCached(new PublicKey(a)).catch(() => 0) : 0, ok(b) ? getMintDecimalsCached(new PublicKey(b)).catch(() => 0) : 0]);
+      return { a, b, decA, decB };
+    };
+    const picker = createRangePicker(host, {
+      symmetricOnly: true,
+      getCtx: async () => {
+        const { a, b, decA, decB } = await decs();
+        const step = parseInt(stepInput?.value, 10) || 25;
+        const active = parseInt(activeInput.value, 10) || 0;
+        return { key: `new:${a}:${b}:${step}`, activeBin: active, binStep: step, minBin: active - 100, maxBin: active + 100, decA, decB, mintA: a || "", mintB: b || "", liq: null };
+      },
+      onRange: (lo, hi) => {
+        if (lo == null) return;
+        const active = parseInt(activeInput.value, 10) || 0;
+        const w = Math.max(1, Math.min(9, Math.max(active - lo, hi - active)));
+        if (widthInput.value !== String(w)) widthInput.value = String(w);
+        dcwPreview();
+      },
+    });
+    const priceInput = document.getElementById("dcw-start-price");
+    async function syncPriceLabel() {
+      const { a, b, decA, decB } = await decs();
+      const symA = escapeHtmlText(labelFor(a || "A")), symB = escapeHtmlText(labelFor(b || "B"));
+      host.parentNode.querySelector("[data-dcw-price-label]").innerHTML = t("dcwStartPrice", { a: symA, b: symB });
+      const step = parseInt(stepInput?.value, 10) || 25;
+      const active = parseInt(activeInput.value, 10) || 0;
+      if (document.activeElement !== priceInput) priceInput.value = String(Number(dlmmBinPriceUi(active, step, decA, decB).toPrecision(6)));
+      host.parentNode.querySelector("[data-dcw-price-hint]").textContent = t("dcwStartPriceHint", { p: fmtPrice(dlmmBinPriceUi(active, step, decA, decB)) });
+    }
+    priceInput.addEventListener("input", async () => {
+      const v = parseFloat(priceInput.value.replace(/,/g, "."));
+      if (!(v > 0)) return;
+      const { decA, decB } = await decs();
+      const step = parseInt(stepInput?.value, 10) || 25;
+      const bin = Math.round(Math.log(v / 10 ** (decA - decB)) / Math.log(1 + step / 10000));
+      if (Number.isFinite(bin) && String(bin) !== activeInput.value) {
+        activeInput.value = String(bin);
+        picker.refresh();
+        syncPriceLabel();
+        dcwPreview();
+      }
+    });
+    priceInput.addEventListener("change", syncPriceLabel);
+    const all = () => { syncPriceLabel(); picker.refresh(); dcwPreview(); };
+    [activeInput, stepInput, widthInput].forEach((el) => el?.addEventListener("input", all));
+    stepInput?.addEventListener("change", all);
+    document.addEventListener("swd-mint-sync", all);
+    document.getElementById("pw-step1-continue-btn")?.addEventListener("click", () => setTimeout(all, 0));
+    all();
+  }
+
+  async function dcwPreview() {
+    if (!dcwBox) return;
+    const a = document.getElementById("dcw-mint-a")?.value.trim(), b = document.getElementById("dcw-mint-b")?.value.trim();
+    const numA = parseFloat(document.getElementById("dcw-amount-a")?.value || ""), numB = parseFloat(document.getElementById("dcw-amount-b")?.value || "");
+    const step = parseInt(stepInput?.value, 10) || 25, active = parseInt(activeInput?.value, 10) || 0, w = parseInt(widthInput?.value, 10) || 0;
+    if (!PUBKEY_RE.test(a || "") || !PUBKEY_RE.test(b || "")) { dcwBox.innerHTML = ""; return; }
+    const [decA, decB] = await Promise.all([getMintDecimalsCached(new PublicKey(a)).catch(() => 0), getMintDecimalsCached(new PublicKey(b)).catch(() => 0)]);
+    const symA = escapeHtmlText(labelFor(a)), symB = escapeHtmlText(labelFor(b));
+    const rows = [
+      [t("pvStartPrice"), `1 ${symA} = ${fmtPrice(dlmmBinPriceUi(active, step, decA, decB))} ${symB}`],
+      [t("pvRange"), `${fmtPrice(dlmmBinPriceUi(active - w, step, decA, decB))} – ${fmtPrice(dlmmBinPriceUi(active + w + 1, step, decA, decB))} ${symB} · ${t("rpBins", { n: 2 * w + 1 })}`],
+    ];
+    const notes = [];
+    if (numA > 0 && numB > 0) {
+      // the wizard's amounts are per bin: A in w+1 bins, B in w+1 bins
+      rows.push([t("pvDeposit"), `${fmtCompact(numA * (w + 1))} ${symA}<br>${fmtCompact(numB * (w + 1))} ${symB}`]);
+      rows.push([t("pvPerBin"), `${numA} ${symA} × ${w + 1}<br>${numB} ${symB} × ${w + 1}`]);
+    } else notes.push({ text: t("pvEnterAmount") });
+    dcwBox.innerHTML = liqPreviewHtml(rows, notes);
+  }
+  ["dcw-amount-a", "dcw-amount-b"].forEach((id) => document.getElementById(id)?.addEventListener("input", dcwPreview));
+
+  async function cpwPreview() {
+    if (!cpwBox) return;
+    const a = document.getElementById("cpw-mint-a")?.value.trim(), b = document.getElementById("cpw-mint-b")?.value.trim();
+    const numA = parseFloat(document.getElementById("cpw-amount-a")?.value || ""), numB = parseFloat(document.getElementById("cpw-amount-b")?.value || "");
+    if (!PUBKEY_RE.test(a || "") || !PUBKEY_RE.test(b || "")) { cpwBox.innerHTML = ""; return; }
+    const symA = escapeHtmlText(labelFor(a)), symB = escapeHtmlText(labelFor(b));
+    const rows = [], notes = [];
+    if (numA > 0 && numB > 0) {
+      rows.push([t("pvStartPrice"), `1 ${symA} = ${fmtPrice(numB / numA)} ${symB}`]);
+      rows.push([t("pvDeposit"), `${numA} ${symA}<br>${numB} ${symB}`]);
+      const pa = usdPriceOf(a), pb = usdPriceOf(b);
+      const va = pa ? numA * pa : null, vb = pb ? numB * pb : null;
+      // equal value on both sides of a constant-product pool
+      const tot = va != null && vb != null ? va + vb : (va ?? vb) != null ? 2 * (va ?? vb) : null;
+      if (tot != null) rows.push([t("pvValue"), fmtUsd(tot)]);
+      rows.push([t("pvShare"), "100%"]);
+      notes.push({ text: t("pvFirstDeposit") });
+    } else notes.push({ text: t("pvEnterAmount") });
+    cpwBox.innerHTML = liqPreviewHtml(rows, notes);
+  }
+  ["cpw-amount-a", "cpw-amount-b"].forEach((id) => document.getElementById(id)?.addEventListener("input", cpwPreview));
+  document.addEventListener("swd-mint-sync", () => { cpwPreview(); dcwPreview(); });
+  document.getElementById("pw-step2-continue-btn")?.addEventListener("click", () => setTimeout(() => { cpwPreview(); dcwPreview(); }, 0));
+})();
 
 // ---------------------------------------------------------------------
 // 10. Load DLMM position
@@ -23617,7 +25313,7 @@ async function buildQuotedSwapIx(q, mintA, mintB, aToB, amountIn, slippageBps, t
 }
 
 function poolTypeLabel(ty) {
-  return ty === "cp" ? t("poolTypeCp") : ty === "dlmm" ? t("poolTypeDlmm") : t("poolTypeAuto");
+  return ty === "cp" ? t("poolTypeCp") : ty === "dlmm" ? t("poolTypeDlmm") : ty === "v2" ? "SWDMM v2" : t("poolTypeAuto");
 }
 
 function limitOrderStatusLabel(order) {
@@ -24883,6 +26579,13 @@ async function v2LoadPools(force = false) {
   v2.pools = rows.map(({ publicKey, account }) => ({ key: publicKey, a: account }));
   v2.poolsLoaded = true;
   await Promise.all(v2.pools.flatMap((p) => [v2MintInfo(p.a.mintA.toBase58()), v2MintInfo(p.a.mintB.toBase58())]).map((pr) => pr.catch(() => null)));
+  // Keep the Pools table's SWDMM v2 rows in step (e.g. right after a create).
+  try {
+    lastV2ListRows = v2ListRows();
+    if (document.getElementById("pool-list-container")?.dataset.hasData) renderPoolListTable();
+    if (document.getElementById("mkt-grid-container")?.dataset.hasData) renderMarketplaceGrid();
+    renderLiquidityStats();
+  } catch (e) { console.error(e); }
 }
 function v2PoolView(p) {
   const a = p.a;
@@ -25753,6 +27456,8 @@ async function v2Execute(id) {
   v2ApplyStatic();
   root.querySelectorAll(".v2-subnav-btn").forEach((b) => b.addEventListener("click", () => {
     if (b.dataset.v2View === "pool" && !v2.poolKey) return;
+    // "Pools" goes back to the one Pools table, filtered to SWDMM v2.
+    if (b.dataset.v2View === "pools") return showPoolListFiltered("v2");
     v2SetView(b.dataset.v2View);
   }));
   document.getElementById("v2-refresh-btn").addEventListener("click", () => v2Refresh(true));
