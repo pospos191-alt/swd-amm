@@ -84,7 +84,7 @@ pub struct DynamicFeeParams {
 }
 
 impl DynamicFeeParams {
-    fn to_math(self) -> m::DynamicFeeConfig {
+    pub(crate) fn to_math(self) -> m::DynamicFeeConfig {
         m::DynamicFeeConfig {
             enabled: self.enabled,
             max_dynamic_fee_bps: self.max_dynamic_fee_bps,

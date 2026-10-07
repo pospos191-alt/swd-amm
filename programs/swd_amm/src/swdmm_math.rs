@@ -245,6 +245,13 @@ pub fn validate_dynamic_fee(c: &DynamicFeeConfig) -> bool {
         && c.max_volatility_accumulator > 0
 }
 
+/// Whether `c` is a valid config to switch ON. A pool created with the
+/// dynamic fee disabled never had these fields validated, so turning it
+/// on later must check them as if `enabled` were true.
+pub fn can_enable_dynamic_fee(c: &DynamicFeeConfig) -> bool {
+    validate_dynamic_fee(&DynamicFeeConfig { enabled: true, ..*c })
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct VolatilityState {
     pub volatility_accumulator: u64,
@@ -664,6 +671,14 @@ mod tests {
         assert_eq!(s.volatility_reference, 0);
         let off = DynamicFeeConfig { enabled: false, ..c };
         assert_eq!(variable_fee_bps(&off, &s), 0);
+        // A disabled config is never validated, so enabling it must be.
+        assert!(can_enable_dynamic_fee(&off));
+        let zeros = DynamicFeeConfig { enabled: false, max_dynamic_fee_bps: 0, variable_fee_control: 0, filter_period: 0, decay_period: 0, reduction_factor: 0, max_volatility_accumulator: 0 };
+        assert!(validate_dynamic_fee(&zeros));
+        assert!(!can_enable_dynamic_fee(&zeros));
+        let too_high = DynamicFeeConfig { enabled: false, max_dynamic_fee_bps: u16::MAX, ..c };
+        assert!(validate_dynamic_fee(&too_high));
+        assert!(!can_enable_dynamic_fee(&too_high));
         assert_eq!(total_fee_bps(9_800, 500), MAX_TOTAL_FEE_BPS);
     }
 
