@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  /* Theme (build 2026-10-07b): trading-terminal dark — Binance-style
+  /* Theme (build 2026-10-07c): trading-terminal dark — Binance-style
      density and green/red market colours, with a violet→cyan "gem" brand
      gradient. To retheme, change the values in this block (and the light
      block below); every colour on the page and in the chart reads them.
@@ -1331,7 +1331,7 @@
   }
 
   /* =====================================================================
-     Theme layer (build 2026-10-07b) — trading-site look and phone layout.
+     Theme layer (build 2026-10-07c) — trading-site look and phone layout.
      Styling only: no element, id or class in the page changed, every rule
      below restyles what is already there. Colours come from the tokens at
      the top of this stylesheet.
@@ -1373,19 +1373,69 @@
   .pf-hero-title { background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; }
   .form-popup-box::before { background: var(--brand-grad); opacity: 1; }
 
-  /* Primary nav: sticky bar under the settings, active tab underlined */
-  .rd-nav {
+  /* App header (build 2026-10-07c): one sticky row — brand, nav, actions */
+  body { padding-top: 0; }
+  .app-header {
     position: sticky; top: 0; z-index: 900;
-    margin: 0 -24px 14px; padding: 6px 24px; gap: 22px;
-    background: rgba(11,13,20,0.86);
+    display: flex; align-items: center; gap: 18px;
+    margin: 0 -24px 16px; padding: 8px 24px; min-height: 60px;
+    background: rgba(11,13,20,0.88); border-bottom: 1px solid var(--panel-border);
     backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px);
   }
-  :root[data-theme="light"] .rd-nav { background: rgba(244,245,249,0.88); }
-  .rd-nav-brand { font-size: 18px; letter-spacing: -0.02em; background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .rd-nav-link { font-size: 15px; padding: 10px 0; }
+  :root[data-theme="light"] .app-header { background: rgba(244,245,249,0.9); }
+  .hdr-brand { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; flex: none; }
+  .hdr-brand img { width: 28px; height: 28px; border-radius: 50%; }
+  .hdr-brand-text { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hdr-badge { flex: none; cursor: pointer; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; color: var(--warn); background: rgba(var(--warn-rgb),0.12); border: 1px solid rgba(var(--warn-rgb),0.35); border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+  .app-header .rd-nav { margin: 0; padding: 0; border: none; gap: 0; flex: 1 1 auto; min-width: 0; }
+  .app-header .rd-nav-links { gap: 20px; flex-wrap: nowrap; }
+  .rd-nav-link { font-size: 15px; padding: 18px 0 16px; white-space: nowrap; }
   .rd-nav-link.active { color: var(--text); border-bottom-color: var(--accent); }
-  .rd-corner-logo { width: 40px; height: 40px; }
-  .rd-corner-logo img { padding: 5px; }
+  .rd-nav-cta { padding: 6px 14px; font-size: 14px; white-space: nowrap; }
+  .hdr-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+  .hdr-net { display: flex; align-items: center; gap: 6px; }
+  .hdr-actions select, .hdr-actions button { height: 38px; padding-top: 0; padding-bottom: 0; font-size: 14px; }
+  .hdr-actions #network-select { max-width: 180px; }
+  .hdr-actions .icon-btn { width: 38px; min-width: 38px; min-height: 38px; }
+  .hdr-actions .icon-btn .icon { width: 18px; height: 18px; }
+  .hdr-wallet { display: inline-flex; align-items: center; gap: 6px; }
+  .hdr-wallet #wallet-status.disconnected { display: none; }
+  .hdr-wallet .hint { margin: 0; font-family: var(--mono); font-size: 13px; }
+  #connect-btn { padding: 0 16px; }
+  .settings-pop {
+    position: absolute; top: calc(100% + 6px); right: 24px; z-index: 950;
+    width: 340px; max-width: calc(100vw - 24px); max-height: calc(100vh - 90px); overflow-y: auto;
+    padding: 14px; display: flex; flex-direction: column; gap: 10px;
+    background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+  }
+  .settings-pop[hidden] { display: none; }
+  .settings-pop-title { font-weight: 700; font-size: 15px; }
+  .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--text-dim); }
+  .settings-row select { max-width: 190px; padding: 6px 10px; font-size: 14px; }
+  .settings-row.settings-check { justify-content: flex-start; }
+  .settings-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .settings-actions button { flex: 1 1 auto; padding: 8px 12px; font-size: 14px; }
+  .settings-pop .hint { margin: 0; font-size: 12px; }
+  .warning-banner { position: relative; padding-right: 40px; }
+  .warning-banner[hidden] { display: none; }
+  .warning-dismiss { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; padding: 0; background: transparent; color: var(--warn-text); border: none; box-shadow: none; font-size: 18px; line-height: 1; }
+  .warning-dismiss:hover:not(:disabled) { background: rgba(var(--warn-rgb),0.15); transform: none; }
+  .app-footer { margin-top: 18px; }
+  .app-footer-line { font-size: 12px; margin: 0; }
+  .info-dot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--panel-border); color: var(--text-dim); font-size: 11px; font-weight: 700; font-family: var(--mono); cursor: help; }
+  .info-dot:hover, .info-dot:focus-visible { color: var(--text); border-color: var(--text-dim); outline: none; }
+
+  /* Trade layout: chart + docked Swap form */
+  .grid[data-active-tab="tools"] > .trade-layout { display: grid; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+  .trade-dock[hidden] { display: none; }
+  @media (min-width: 1100px) {
+    .grid[data-active-tab="tools"] > .trade-layout:has(.trade-dock:not([hidden])) { grid-template-columns: minmax(0, 1fr) 380px; }
+    .trade-dock { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow-y: auto; }
+  }
+  .trade-dock-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .trade-dock-head h3 { margin: 0; font-size: 17px; }
+  .trade-dock-sub { font-size: 12px; color: var(--text-dim); }
+  .trade-dock #swap-btn, .trade-dock #dlmm-swap-btn { background: var(--up); color: #fff; }
 
   /* Trade tools row */
   .tools-nav-btn.active { background: rgba(var(--accent-rgb),0.12); color: var(--text); }
@@ -1437,35 +1487,38 @@
     .grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
     .panel { padding: 14px; border-radius: var(--radius-md); }
 
-    /* Settings bar: one swipeable row instead of seven stacked rows */
-    .top-bar {
-      flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 8px 10px; margin-bottom: 12px;
-      scrollbar-width: none; -webkit-overflow-scrolling: touch;
-      -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
-      mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
-    }
-    .top-bar::-webkit-scrollbar { display: none; }
-    .top-bar > * { flex: 0 0 auto; }
-    .top-bar select, .top-bar button { padding: 7px 10px; font-size: 14px; }
-    .top-bar #network-select { max-width: 170px; }
-
-    /* Primary nav becomes a bottom tab bar */
-    .rd-nav {
+    /* Header: brand, badge, actions — nav moves to a bottom tab bar */
+    .app-header { margin: 0 -12px 12px; padding: 6px 12px; gap: 8px; min-height: 52px; background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none; }
+    :root[data-theme="light"] .app-header { background: var(--panel); }
+    .hdr-brand-text { font-size: 17px; }
+    .hdr-brand img + .hdr-brand-text { display: none; } /* logo only, when it loaded */
+    .hdr-badge { font-size: 0; padding: 3px 6px; }
+    .hdr-badge > span { display: none; }
+    .hdr-badge::before { content: "DEV"; font-size: 10px; }
+    .hdr-actions { margin-left: auto; gap: 5px; min-width: 0; }
+    .hdr-actions select, .hdr-actions button { height: 34px; font-size: 13px; }
+    .hdr-actions .icon-btn, .hdr-actions #notif-bell-btn { width: 34px; min-width: 34px; min-height: 34px; padding: 0; }
+    .hdr-actions #network-select { width: 84px; max-width: 84px; padding: 0 4px; font-size: 13px; }
+    #connect-btn, #disconnect-btn { padding: 0 9px; font-size: 12.5px; white-space: nowrap; }
+    .hdr-actions #custom-rpc { position: absolute; left: 12px; right: 12px; top: calc(100% + 4px); width: auto !important; z-index: 951; }
+    .hdr-wallet { display: none; }
+    .settings-pop { right: 8px; left: 8px; width: auto; }
+    .app-header .rd-nav {
       position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 950;
       margin: 0; padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
-      gap: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
-      border-bottom: none; border-top: 1px solid var(--panel-border);
-      background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none;
+      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+      border-top: 1px solid var(--panel-border);
+      background: var(--panel);
       box-shadow: 0 -8px 24px rgba(0,0,0,0.28);
     }
-    :root[data-theme="light"] .rd-nav { background: var(--panel); }
-    .rd-nav::-webkit-scrollbar { display: none; }
-    .rd-nav-brand, .rd-corner-logo, .rd-nav-link.rd-nav-disabled { display: none; }
-    .rd-nav-links { flex-wrap: nowrap; gap: 2px; min-width: max-content; margin: 0 auto; }
-    .rd-nav-link { font-size: 13px; padding: 12px 11px 10px; white-space: nowrap; border-bottom: none; border-top: 2px solid transparent; border-radius: 0; }
+    .app-header .rd-nav::-webkit-scrollbar { display: none; }
+    .app-header .rd-nav-links { flex-wrap: nowrap; gap: 2px; min-width: max-content; margin: 0 auto; }
+    .rd-nav-link { font-size: 13px; padding: 12px 11px 10px; border-bottom: none; border-top: 2px solid transparent; border-radius: 0; }
     .rd-nav-link.active { border-top-color: var(--accent); color: var(--text); }
-    .rd-nav-cta { padding: 7px 12px; font-size: 13px; margin-left: 4px; white-space: nowrap; }
+    .rd-nav-cta { padding: 7px 12px; font-size: 13px; margin-left: 4px; }
     .rd-nav-more-menu { position: fixed; top: auto; left: auto; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom)); margin: 0; min-width: 220px; }
+    /* Buy / Sell stay in reach, just above the bottom bar */
+    .tb-trade-bar { position: sticky; bottom: calc(58px + env(safe-area-inset-bottom)); z-index: 40; margin: 0 -14px 14px !important; padding: 8px 14px; background: var(--panel); border-top: 1px solid var(--panel-border-soft); }
     #back-to-top-btn { bottom: calc(76px + env(safe-area-inset-bottom)); right: 14px; }
     .toast-stack { bottom: calc(76px + env(safe-area-inset-bottom)); }
 
@@ -1498,36 +1551,72 @@
     .quick-pick-row select { min-width: 0; }
     .quick-pick-row > button { flex: 1 1 100%; }
   }
+  @media (max-width: 380px) {
+    .app-header { gap: 6px; }
+    .hdr-actions { gap: 4px; }
+    .hdr-actions #network-select { width: 66px; max-width: 66px; }
+    .hdr-actions .icon-btn, .hdr-actions #notif-bell-btn { width: 32px; min-width: 32px; }
+    #connect-btn, #disconnect-btn { padding: 0 7px; font-size: 12px; }
+  }
 </style>
 </head>
 <body>
 
-<div class="warning-banner">
-  ⚠️ <strong data-i18n="warnStrong">Devnet test tool</strong>
-  <span data-i18n="warnMid">— every transaction here runs on Solana Devnet only; tokens have no real value. This AMM program has not passed a security audit — do not use with real funds or mainnet until every item in</span>
-  <code class="inline">SECURITY.md</code>
-  <span data-i18n="warnEnd">is complete.</span>
-</div>
-
-<h1>SWD AMM — Test UI</h1>
-<div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07b</code> —
-  <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
-</div>
-
-<div class="top-bar">
-  <div>
-    <label for="network-select" style="font-size:14px;color:var(--text-dim);" data-i18n="networkLabel">Network</label>
-    <select id="network-select">
-      <option value="localnet" data-i18n="optLocalnet">Localnet (http://127.0.0.1:8899)</option>
-      <option value="devnet" data-i18n="optDevnet" selected>Devnet</option>
-      <option value="custom" data-i18n="optCustom">Custom RPC…</option>
-    </select>
+<!-- App header (build 2026-10-07c): one row like Binance/Raydium/Meteora —
+     brand, primary nav, then network / alerts / settings / wallet. Every
+     control keeps its id, so all existing wiring is unchanged; the less
+     used ones moved into the Settings popover. -->
+<header class="app-header" id="app-header">
+  <a class="hdr-brand" href="https://sawasdeecoin.com/" target="_blank" rel="noopener" title="SAWASDEE COIN">
+    <img src="https://swd-claim-site.vercel.app/api/swd-logo" alt="" width="28" height="28" loading="lazy" onerror="this.remove()" />
+    <span class="hdr-brand-text">SWD</span>
+  </a>
+  <span class="hdr-badge" data-tip="hdrBadgeTip" tabindex="0"><span data-i18n="hdrBadge">Devnet · Unaudited</span></span>
+  <div class="rd-nav">
+    <div class="rd-nav-links" role="tablist">
+      <button type="button" class="tab-nav-btn rd-nav-link" data-tab="tools" data-i18n="navSwap">Swap</button>
+      <button type="button" class="tab-nav-btn rd-nav-link" data-tab="liquidity" data-i18n="navLiquidity">Liquidity</button>
+      <button type="button" class="tab-nav-btn rd-nav-link" data-tab="v2">SWDMM v2</button>
+      <button type="button" class="tab-nav-btn rd-nav-link" data-tab="portfolio" data-i18n="navPortfolio">Portfolio</button>
+      <button type="button" class="tab-nav-btn rd-nav-link" data-tab="marketplace" data-i18n="navMarketplace">Marketplace</button>
+      <div class="rd-nav-more">
+        <button type="button" class="rd-nav-link" id="rd-more-btn" data-i18n="navMore" aria-haspopup="true" aria-expanded="false">More ▾</button>
+        <div class="rd-nav-more-menu" id="rd-more-menu" hidden>
+          <button type="button" class="rd-more-item tab-nav-btn" data-tab="explore" data-i18n="navExplore">Explore &amp; Dashboard</button>
+          <button type="button" class="rd-more-item tab-nav-btn" data-tab="amm" data-i18n="navAdvAmm">Advanced: AMM panels</button>
+          <button type="button" class="rd-more-item tab-nav-btn" data-tab="dlmm" data-i18n="navAdvDlmm">Advanced: DLMM panels</button>
+          <button type="button" class="rd-more-item tab-nav-btn" data-tab="devtools" data-i18n="navDevTools">Dev Tools</button>
+        </div>
+      </div>
+      <a class="rd-nav-cta btn-icon-text" id="rd-nav-create-token" href="https://swd-claim-site.vercel.app/create-token" data-icon="coin" title="Create your own token" data-i18n-title="navCreateTokenTitle">
+        <span data-i18n="navCreateToken">Create Token</span>
+      </a>
+    </div>
   </div>
-  <input id="custom-rpc" placeholder="https://your-rpc-url" style="display:none; width:260px;" />
-  <div>
-    <label for="lang-select" style="font-size:14px;color:var(--text-dim);">🌐</label>
-    <select id="lang-select">
+  <div class="hdr-actions">
+    <div class="hdr-net">
+      <select id="network-select">
+          <option value="localnet" data-i18n="optLocalnet">Localnet (http://127.0.0.1:8899)</option>
+          <option value="devnet" data-i18n="optDevnet" selected>Devnet</option>
+          <option value="custom" data-i18n="optCustom">Custom RPC…</option>
+        </select>
+      <input id="custom-rpc" placeholder="https://your-rpc-url" style="display:none; width:260px;" />
+    </div>
+    <button id="notif-bell-btn" class="secondary" type="button" style="position:relative;" title="Notifications" data-i18n-title="notifBellTitle">
+    🔔<span id="notif-badge" style="display:none; position:absolute; top:-4px; right:-4px; background:var(--danger); color:#fff; border-radius:999px; font-size:11.5px; line-height:1; padding:3px 5px; min-width:14px; text-align:center;"></span>
+  </button>
+    <button type="button" class="secondary icon-btn" id="settings-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-pop" data-tip="hdrSettings"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <span class="hdr-wallet">
+      <span id="sol-balance" class="hint"></span>
+      <span id="sol-balance-sparkline" title="SOL balance this session"></span>
+      <span id="wallet-status" class="status-pill disconnected" data-i18n="walletDisconnected">Wallet not connected</span>
+    </span>
+    <button id="connect-btn" data-i18n="connectBtn">Connect Wallet</button>
+    <button id="disconnect-btn" class="secondary" type="button" hidden data-i18n="disconnectBtn">Disconnect</button>
+  </div>
+  <div class="settings-pop" id="settings-pop" role="dialog" aria-labelledby="settings-pop-title" hidden>
+    <div class="settings-pop-title" id="settings-pop-title" data-i18n="hdrSettings">Settings</div>
+    <div class="settings-row"><label for="lang-select">🌐 <span data-i18n="settingsLanguage">Language</span></label><select id="lang-select">
       <option value="th">ไทย</option>
       <option value="en" selected>English</option>
       <option value="zh">中文</option>
@@ -1543,40 +1632,31 @@
       <option value="ar">العربية</option>
       <option value="hi">हिन्दी</option>
       <option value="tr">Türkçe</option>
-    </select>
-  </div>
-  <button id="connect-btn" data-i18n="connectBtn">Connect Wallet</button>
-  <span id="wallet-status" class="status-pill disconnected" data-i18n="walletDisconnected">Wallet not connected</span>
-  <button id="disconnect-btn" class="secondary" type="button" hidden data-i18n="disconnectBtn">Disconnect</button>
-  <span id="sol-balance" class="hint"></span>
-  <span id="sol-balance-sparkline" title="SOL balance this session"></span>
-  <button id="faucet-btn" class="secondary" data-i18n="faucetBtn">Request Devnet SOL</button>
-  <button id="theme-toggle-btn" class="secondary" type="button" title="Toggle light/dark theme" data-i18n-title="btnToggleTheme">🌙</button>
-  <button id="cmdk-open-btn" class="secondary" type="button" title="Command palette (Ctrl/Cmd+K)" data-i18n-title="cmdkOpenBtnTitle">⌘K</button>
-  <div style="display:flex; align-items:center; gap:6px;">
-    <input type="checkbox" id="confirm-before-send-toggle" checked style="width:auto; padding:0;" />
-    <label for="confirm-before-send-toggle" style="font-size:14px; color:var(--text-dim); cursor:pointer;" data-i18n="labelConfirmBeforeSend">Confirm before sending</label>
-  </div>
-  <div style="display:flex; align-items:center; gap:6px;">
-    <input type="checkbox" id="auto-refresh-toggle" style="width:auto; padding:0;" />
-    <label for="auto-refresh-toggle" style="font-size:14px; color:var(--text-dim); cursor:pointer;" data-i18n="labelAutoRefreshToggle">Auto-refresh (every 45s)</label>
-  </div>
-  <div>
-    <label for="priority-fee-select" style="font-size:14px;color:var(--text-dim);" data-i18n="labelPriorityFee">Priority fee</label>
-    <select id="priority-fee-select" title="Compute unit price added to manual swap/add/remove-liquidity transactions">
+    </select></div>
+    <div class="settings-row"><span data-i18n="settingsTheme">Theme</span><button id="theme-toggle-btn" class="secondary" type="button" title="Toggle light/dark theme" data-i18n-title="btnToggleTheme">🌙</button></div>
+    <div class="settings-row"><label for="priority-fee-select" data-i18n="labelPriorityFee">Priority fee</label><select id="priority-fee-select" title="Compute unit price added to manual swap/add/remove-liquidity transactions">
       <option value="0" data-i18n="optPriorityNone">None</option>
       <option value="1000" selected data-i18n="optPriorityLow">Low (1,000 µlamports)</option>
       <option value="10000" data-i18n="optPriorityMedium">Medium (10,000 µlamports)</option>
       <option value="100000" data-i18n="optPriorityHigh">High (100,000 µlamports)</option>
       <option value="custom" data-i18n="optPriorityCustom">Custom…</option>
-    </select>
+    </select></div>
+    <input id="priority-fee-custom" data-i18n-placeholder="priorityFeeCustomPlaceholder" placeholder="µlamports per compute unit" style="display:none; width:180px;" />
+    <div class="settings-row settings-check"><input type="checkbox" id="confirm-before-send-toggle" checked style="width:auto; padding:0;" />
+    <label for="confirm-before-send-toggle" style="font-size:14px; color:var(--text-dim); cursor:pointer;" data-i18n="labelConfirmBeforeSend">Confirm before sending</label></div>
+    <div class="settings-row settings-check"><input type="checkbox" id="auto-refresh-toggle" style="width:auto; padding:0;" />
+    <label for="auto-refresh-toggle" style="font-size:14px; color:var(--text-dim); cursor:pointer;" data-i18n="labelAutoRefreshToggle">Auto-refresh (every 45s)</label></div>
+    <div class="settings-actions"><button id="faucet-btn" class="secondary" data-i18n="faucetBtn">Request Devnet SOL</button><button id="cmdk-open-btn" class="secondary" type="button" title="Command palette (Ctrl/Cmd+K)" data-i18n-title="cmdkOpenBtnTitle">⌘K</button></div>
+    <div class="hint" data-i18n="shortcutsHint">Keyboard shortcuts: 1-8 switch tabs (1 Explore, 2 AMM, 3 DLMM, 4 Swap, 5 Dev Tools, 6 Liquidity, 7 Portfolio, 8 Marketplace), R refreshes Explore data (not while typing in a field).</div>
   </div>
-  <input id="priority-fee-custom" data-i18n-placeholder="priorityFeeCustomPlaceholder" placeholder="µlamports per compute unit" style="display:none; width:180px;" />
-  <button id="notif-bell-btn" class="secondary" type="button" style="position:relative;" title="Notifications" data-i18n-title="notifBellTitle">
-    🔔<span id="notif-badge" style="display:none; position:absolute; top:-4px; right:-4px; background:var(--danger); color:#fff; border-radius:999px; font-size:11.5px; line-height:1; padding:3px 5px; min-width:14px; text-align:center;"></span>
-  </button>
+</header>
+<div class="warning-banner" id="devnet-warning">
+  ⚠️ <strong data-i18n="warnStrong">Devnet test tool</strong>
+  <span data-i18n="warnMid">— every transaction here runs on Solana Devnet only; tokens have no real value. This AMM program has not passed a security audit — do not use with real funds or mainnet until every item in</span>
+  <code class="inline">SECURITY.md</code>
+  <span data-i18n="warnEnd">is complete.</span>
+  <button type="button" class="warning-dismiss" id="devnet-warning-dismiss" aria-label="Dismiss" data-i18n-title="warnDismiss" title="Hide">×</button>
 </div>
-<div class="hint" data-i18n="shortcutsHint">Keyboard shortcuts: 1-8 switch tabs (1 Explore, 2 AMM, 3 DLMM, 4 Swap, 5 Dev Tools, 6 Liquidity, 7 Portfolio, 8 Marketplace), R refreshes Explore data (not while typing in a field).</div>
 
 <div id="wallet-modal-overlay" class="modal-overlay" hidden>
   <div class="modal-box">
@@ -1686,32 +1766,7 @@
   </div>
 </div>
 
-<div class="rd-nav">
-  <div class="rd-nav-brand">SWD</div>
-  <div class="rd-nav-links" role="tablist">
-    <button type="button" class="tab-nav-btn rd-nav-link" data-tab="tools" data-i18n="navSwap">Swap</button>
-    <button type="button" class="tab-nav-btn rd-nav-link" data-tab="liquidity" data-i18n="navLiquidity">Liquidity</button>
-    <button type="button" class="tab-nav-btn rd-nav-link" data-tab="v2">SWDMM v2</button>
-    <button type="button" class="tab-nav-btn rd-nav-link" data-tab="portfolio" data-i18n="navPortfolio">Portfolio</button>
-    <button type="button" class="rd-nav-link rd-nav-disabled" disabled data-i18n="navPerps" data-i18n-title="navPerpsTitle" title="Not supported by swd_amm — this program has no perpetuals module.">Perpetuals</button>
-    <button type="button" class="tab-nav-btn rd-nav-link" data-tab="marketplace" data-i18n="navMarketplace">Marketplace</button>
-    <div class="rd-nav-more">
-      <button type="button" class="rd-nav-link" id="rd-more-btn" data-i18n="navMore" aria-haspopup="true" aria-expanded="false">More ▾</button>
-      <div class="rd-nav-more-menu" id="rd-more-menu" hidden>
-        <button type="button" class="rd-more-item tab-nav-btn" data-tab="explore" data-i18n="navExplore">Explore &amp; Dashboard</button>
-        <button type="button" class="rd-more-item tab-nav-btn" data-tab="amm" data-i18n="navAdvAmm">Advanced: AMM panels</button>
-        <button type="button" class="rd-more-item tab-nav-btn" data-tab="dlmm" data-i18n="navAdvDlmm">Advanced: DLMM panels</button>
-        <button type="button" class="rd-more-item tab-nav-btn" data-tab="devtools" data-i18n="navDevTools">Dev Tools</button>
-      </div>
-    </div>
-    <a class="rd-nav-cta btn-icon-text" id="rd-nav-create-token" href="https://swd-claim-site.vercel.app/create-token" data-icon="coin" title="Create your own token" data-i18n-title="navCreateTokenTitle">
-      <span data-i18n="navCreateToken">Create Token</span>
-    </a>
-  </div>
-  <a class="rd-corner-logo" href="https://sawasdeecoin.com/" target="_blank" rel="noopener" title="SAWASDEE COIN">
-    <img src="https://swd-claim-site.vercel.app/api/swd-logo" alt="SWD" width="52" height="52" loading="lazy" />
-  </a>
-</div>
+
 
 <div class="grid">
 
@@ -2764,7 +2819,6 @@
   </div>
 
   <div class="section-header" style="border-top: none; padding-top: 0;" data-tab="tools">
-    <h2 data-i18n="sectionToolsTitle">Trade</h2>
     <!-- Every pair in the system, inline (replaced the two quick-pick dropdowns, 2026-09-25). Same renderer and state as the slide-in drawer. -->
     <div class="pd-inline pd-scope" id="pd-inline">
       <div class="pd-controls">
@@ -2784,9 +2838,14 @@
     </div>
   </div>
 
-  <div class="panel wide" data-tab="tools">
+  <!-- Trade layout (build 2026-10-07c): chart on the left, the Swap form
+       docked on the right on wide screens (as on Raydium/Meteora/Binance),
+       so a trade needs no popup. On narrower screens the dock is empty
+       and Swap opens as before (bottom sheet on phones). -->
+  <div class="trade-layout" data-tab="tools">
+  <div class="panel trade-main">
   <div class="trade-header-row">
-    <h2 style="margin:0; display:flex; align-items:center; gap:8px;" data-icon="chart"><span data-i18n="panelTradingBoardTitle">Trading Board</span></h2>
+    <h2 style="margin:0; display:flex; align-items:center; gap:8px;" data-icon="chart"><span data-i18n="panelTradingBoardTitle">Trading Board</span><span class="info-dot" tabindex="0" data-tip="panelTradingBoardHint" aria-label="Info">i</span></h2>
     <div class="trade-header-controls">
       <select id="tb-pool-type" style="min-width:160px;">
         <option value="cp" data-i18n="optPoolTypeCp">Constant-product</option>
@@ -2800,9 +2859,6 @@
       </div>
       <button type="button" class="secondary" id="tb-load-btn" data-i18n="btnLoadTradingBoard">Load Trading Board</button>
     </div>
-  </div>
-  <div class="callout callout-info" data-icon="info">
-    <div data-i18n="panelTradingBoardHint">Uses the same Mint A / Mint B as the Swap panels below (fill those in first, or use Quick Pick above). Everything here is denominated in the two test tokens themselves — this devnet AMM has no price oracle and these aren't real assets, so there's no USD price/liquidity/market cap to show. Recent swaps only, decoded straight from the chain, not a live feed.</div>
   </div>
   <div class="tools-layout">
     <div class="tools-nav-row">
@@ -3264,7 +3320,7 @@
     </aside>
     <div id="tb-chart-container"></div>
   </div>
-  <div class="row" style="gap:10px; margin-bottom:14px;">
+  <div class="row tb-trade-bar" style="gap:10px; margin-bottom:14px;">
     <button type="button" id="tb-buy-btn" class="tb-buy-btn btn-icon-text" style="flex:1;" disabled data-icon="arrowUpCircle" data-tip="btnBuyGeneric"><span data-i18n="btnBuyGeneric">Buy</span></button>
     <button type="button" id="tb-sell-btn" class="tb-sell-btn btn-icon-text" style="flex:1;" disabled data-icon="arrowDownCircle" data-tip="btnSellGeneric"><span data-i18n="btnSellGeneric">Sell</span></button>
   </div>
@@ -3278,6 +3334,14 @@
   </div>
   <div id="tb-trades-container"></div>
 </div>
+  <aside class="panel trade-dock" id="trade-dock" aria-labelledby="trade-dock-title" hidden>
+    <div class="trade-dock-head">
+      <h3 id="trade-dock-title" data-i18n="panel6Title">Swap</h3>
+      <span class="trade-dock-sub" data-i18n="dockSub">Best route picked automatically</span>
+    </div>
+    <div id="trade-dock-body"></div>
+  </aside>
+  </div>
 
 
 
@@ -3482,6 +3546,12 @@
 </div>
 
 <div id="log"><div class="line" data-i18n="logReady">Ready — connect your wallet to begin</div></div>
+<footer class="app-footer">
+<div class="sub app-footer-line">
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07c</code> —
+  <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
+</div>
+</footer>
 
 <!-- KLineChart: candlestick charting engine for the Trading Board (indicators + drawing tools), loaded from a public CDN. The Trading Board falls back to the page's own lightweight SVG chart if this fails to load (see ensureTbChart()). -->
 <script src="https://cdn.jsdelivr.net/npm/klinecharts@9/dist/klinecharts.min.js"></script>
@@ -4439,6 +4509,13 @@ const STRINGS = {
     navLaunchlabTitle: "โปรแกรมนี้ไม่รองรับ Launchlab — swd_amm ไม่มีโมดูลออกโทเคนใหม่",
     navMarketplace: "ตลาดซื้อขาย",
     navMore: "เพิ่มเติม ▾",
+    hdrBadge: "Devnet · ยังไม่ audit",
+    hdrBadgeTip: "ใช้บน Solana Devnet เท่านั้น เหรียญไม่มีมูลค่าจริง และ program ยังไม่ผ่าน security audit ห้ามใช้กับเงินจริง — คลิกเพื่อดูคำเตือนเต็ม",
+    hdrSettings: "ตั้งค่า",
+    settingsLanguage: "ภาษา",
+    settingsTheme: "ธีม",
+    warnDismiss: "ซ่อน (กดป้าย Devnet ด้านบนเพื่อแสดงอีกครั้ง)",
+    dockSub: "เลือกเส้นทางที่ดีที่สุดให้อัตโนมัติ",
     navCreateToken: "สร้างโทเคน",
     navCreateTokenTitle: "สร้างโทเคนของคุณเอง",
     navExplore: "สำรวจ & แดชบอร์ด",
@@ -5458,6 +5535,13 @@ const STRINGS = {
     navLaunchlabTitle: "Not supported by swd_amm — this program has no token-launch module.",
     navMarketplace: "Marketplace",
     navMore: "More ▾",
+    hdrBadge: "Devnet · Unaudited",
+    hdrBadgeTip: "Solana Devnet only — tokens have no real value, and the program has not passed a security audit. Do not use with real funds. Click to show the full warning.",
+    hdrSettings: "Settings",
+    settingsLanguage: "Language",
+    settingsTheme: "Theme",
+    warnDismiss: "Hide (click the Devnet badge at the top to show it again)",
+    dockSub: "Best route picked automatically",
     navCreateToken: "Create Token",
     navCreateTokenTitle: "Create your own token",
     navExplore: "Explore & Dashboard",
@@ -11478,6 +11562,49 @@ document.querySelectorAll(".tab-nav-btn").forEach((btn) => {
 // "More ▾" dropdown — a plain show/hide toggle, closed automatically by
 // switchTab() above whenever any nav item (including one inside this menu)
 // is clicked, and by clicking anywhere outside it.
+// Header Settings popover (build 2026-10-07c): language, theme, priority
+// fee, confirm-before-send, auto-refresh, faucet, command palette.
+(function initSettingsPopover() {
+  const btn = document.getElementById("settings-btn");
+  const pop = document.getElementById("settings-pop");
+  if (!btn || !pop) return;
+  const close = () => { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const open = pop.hidden;
+    pop.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (e) => {
+    if (!pop.hidden && !pop.contains(e.target) && !btn.contains(e.target)) close();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !pop.hidden) { close(); btn.focus(); }
+  });
+  document.getElementById("cmdk-open-btn")?.addEventListener("click", close);
+})();
+
+// Devnet warning: can be hidden once read; the "Devnet · Unaudited" badge
+// in the header stays and brings it back when clicked.
+(function initDevnetWarning() {
+  const box = document.getElementById("devnet-warning");
+  const KEY = "swd-amm-devnet-warning-hidden";
+  if (!box) return;
+  try { if (localStorage.getItem(KEY) === "1") box.hidden = true; } catch {}
+  document.getElementById("devnet-warning-dismiss")?.addEventListener("click", () => {
+    box.hidden = true;
+    try { localStorage.setItem(KEY, "1"); } catch {}
+  });
+  const badge = document.querySelector(".hdr-badge");
+  const show = () => {
+    box.hidden = false;
+    try { localStorage.removeItem(KEY); } catch {}
+    box.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+  badge?.addEventListener("click", show);
+  badge?.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); } });
+})();
+
 (function initMoreMenu() {
   const btn = document.getElementById("rd-more-btn");
   const menu = document.getElementById("rd-more-menu");
@@ -12897,6 +13024,14 @@ document.getElementById("form-popup-overlay").addEventListener("click", (e) => {
 function openSwapPopup(poolType) {
   switchTab("tools");
   const prefix = poolType === "dlmm" ? "dlmm-swap" : "swap";
+  // Wide screens: the form lives in the dock beside the chart instead.
+  if (swapDockAvailable()) {
+    dockSwapForm(poolType === "dlmm" ? "dlmm" : "cp");
+    document.getElementById("trade-dock")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    setTimeout(() => document.getElementById(`${prefix}-amount-in`)?.focus({ preventScroll: true }), 50);
+    updateSwapOracleWarning(prefix, poolType === "dlmm" ? "dlmm" : "cp");
+    return;
+  }
   // Both forms share ONE generic title now ("panel6Title") — Swap is
   // presented as a single button with no AMM/DLMM choice shown, so the
   // popup never labels which underlying pool type is active, even
@@ -12922,6 +13057,58 @@ function bestPoolTypeForActivePair() {
   if (dlmmExists && !cpExists) return "dlmm";
   return "cp";
 }
+// Swap dock (build 2026-10-07c): on wide screens the Swap form sits next
+// to the Trading Board chart, the way Raydium / Meteora / Binance show
+// the order box beside the chart. Same reparenting trick as the popup —
+// the real form (ids, listeners) moves into #trade-dock-body and back.
+const SWAP_DOCK_QUERY = "(min-width: 1100px)";
+let dockedSwapId = null;
+let dockReturnParent = null;
+let dockReturnNext = null;
+function swapDockAvailable() {
+  return !!document.getElementById("trade-dock-body") && window.matchMedia(SWAP_DOCK_QUERY).matches;
+}
+function dockSwapForm(poolType) {
+  const id = poolType === "dlmm" ? "dlmm-swap-form-content" : "swap-form-content";
+  if (dockedSwapId === id) return;
+  undockSwapForm();
+  const content = document.getElementById(id);
+  if (!content) return;
+  if (content.parentNode && content.parentNode.id === "form-popup-body") closeFormPopup();
+  dockReturnParent = content.parentNode;
+  dockReturnNext = content.nextSibling;
+  document.getElementById("trade-dock-body").appendChild(content);
+  content.hidden = false;
+  dockedSwapId = id;
+  document.getElementById("trade-dock").hidden = false;
+  try { refreshNeedPairHints(); } catch {}
+}
+function undockSwapForm() {
+  if (!dockedSwapId) return;
+  const content = document.getElementById(dockedSwapId);
+  if (content && dockReturnParent) {
+    content.hidden = true;
+    dockReturnParent.insertBefore(content, dockReturnNext);
+  }
+  dockedSwapId = null;
+  dockReturnParent = null;
+  dockReturnNext = null;
+  const dock = document.getElementById("trade-dock");
+  if (dock) dock.hidden = true;
+}
+// Dock the form that fits the active pair (CP or DLMM), or undock on
+// narrow screens. Safe to call any time.
+function syncSwapDock() {
+  try {
+    if (swapDockAvailable()) dockSwapForm(bestPoolTypeForActivePair());
+    else undockSwapForm();
+  } catch (e) { console.error(e); }
+}
+try { window.matchMedia(SWAP_DOCK_QUERY).addEventListener("change", syncSwapDock); } catch {}
+document.addEventListener("swd-mint-sync", () => { if (dockedSwapId) setTimeout(syncSwapDock, 0); });
+// After the whole module has run (bestPoolTypeForActivePair reads state
+// declared further down).
+setTimeout(syncSwapDock, 0);
 document.getElementById("swap-open-popup-btn").addEventListener("click", () => openSwapPopup(bestPoolTypeForActivePair()));
 document.getElementById("mh-open-popup-btn").addEventListener("click", () => {
   openFormPopup("mh-form-content", "panelMultiHopTitle", "panelMultiHopHint");
@@ -15003,6 +15190,7 @@ async function refreshPoolList() {
     lastPoolListRows = rows;
     knownTokenListAt = 0; // pool set changed — token list is stale
     setTimeout(() => {
+      if (dockedSwapId) syncSwapDock();
       if (!tbLastData) scheduleTradingBoardAutoLoad(true);
       renderPairDrawerTokenFilter();
       renderPairDrawer();
@@ -15788,10 +15976,10 @@ function cpMarkPrices(records, reserves, decA, decB) {
 //
 // `price` is what the trader got (amount out / amount in, fee included) —
 // shown in the trades table and CSV. `mark` is the pool's own price right
-// after the trade, which is what the charts plot (build 2026-10-07b): a
+// after the trade, which is what the charts plot (build 2026-10-07c): a
 // trade's execution price sits a fee away from the market on alternating
 // sides for buys and sells, which drew fake wicks on every candle, and the
-// last candle never matched the Price stat. Also since 2026-10-07b: failed
+// last candle never matched the Price stat. Also since 2026-10-07c: failed
 // transactions are skipped (their logs still carry the events of the
 // instructions that ran before the failure), events of OTHER pools in the
 // same transaction (multi-hop) are dropped, and trades in the same second
@@ -16181,7 +16369,7 @@ const MARKET_UP = "#0ecb81";
 const MARKET_DOWN = "#f6465d";
 const TB_NARROW_QUERY = "(max-width: 640px)";
 
-// Trading-terminal chart theme (build 2026-10-07b): faint grid, dashed
+// Trading-terminal chart theme (build 2026-10-07c): faint grid, dashed
 // crosshair with labelled axes, high/low marks, a dashed last-price line,
 // green/red candles with translucent volume, MA lines in the usual
 // yellow / pink / violet, numbers in the monospace font.

@@ -106,13 +106,28 @@ try {
       if (f[0] !== B || f[1] !== A) throw new Error(`after flip mint in/out = ${f.join(" / ")}`);
       await page.keyboard.press("Escape");
     }],
+    // Swap is docked beside the chart on wide screens (build 2026-10-07c).
+    ["Swap form is docked beside the chart (1440px)", async () => {
+      const docked = await page.evaluate(() => !document.getElementById("trade-dock").hidden && !!document.querySelector("#trade-dock-body #swap-btn, #trade-dock-body #dlmm-swap-btn"));
+      if (!docked) throw new Error("no Swap form in #trade-dock-body");
+      const popupOpen = await page.evaluate(() => !document.getElementById("form-popup-overlay").hidden);
+      if (popupOpen) throw new Error("Swap opened a popup instead of using the dock");
+    }],
+    ["Settings popover opens and closes", async () => {
+      await page.click("#settings-btn", { timeout: 5000 });
+      const open = await page.evaluate(() => !document.getElementById("settings-pop").hidden);
+      if (!open) throw new Error("settings popover did not open");
+      await page.keyboard.press("Escape");
+      const closed = await page.evaluate(() => document.getElementById("settings-pop").hidden);
+      if (!closed) throw new Error("settings popover did not close on Escape");
+    }],
     ["popups show no pair pickers", async () => {
       for (const id of ["#tools-nav-swap", "#tools-nav-lo", "#tools-nav-dca"]) {
         await page.click(id, { timeout: 5000 });
-        const visible = await page.evaluate(() => Array.from(document.querySelectorAll("#form-popup-body select, #form-popup-body .isel-btn, #form-popup-body [data-open-pair-drawer]"))
+        const visible = await page.evaluate(() => Array.from(document.querySelectorAll("#form-popup-body select, #form-popup-body .isel-btn, #form-popup-body [data-open-pair-drawer], #trade-dock-body select, #trade-dock-body .isel-btn, #trade-dock-body [data-open-pair-drawer]"))
           .filter((el) => el.offsetParent !== null && /pair-select|pool-type|isel|pair-drawer/.test(el.id + " " + el.className + " " + (el.getAttribute("data-open-pair-drawer") !== null ? "pair-drawer" : ""))).map((el) => el.id || el.className));
         if (visible.length) throw new Error(`${id}: visible ${visible.join(", ")}`);
-        const opened = await page.evaluate(() => document.querySelectorAll("#form-popup-body select").length);
+        const opened = await page.evaluate(() => document.querySelectorAll("#form-popup-body select, #trade-dock-body select").length);
         if (!opened) throw new Error(`${id}: popup did not open`);
         await page.keyboard.press("Escape");
       }
@@ -137,7 +152,7 @@ try {
       await page.click('[data-v2-view="pools"]', { timeout: 5000 });
     }],
     ["open Portfolio tab", () => page.click('.tab-nav-btn[data-tab="portfolio"]', { timeout: 5000 })],
-    ["switch language to Thai", () => page.selectOption("#lang-select", "th")],
+    ["switch language to Thai", async () => { await page.click("#settings-btn"); await page.selectOption("#lang-select", "th"); await page.keyboard.press("Escape"); }],
     ["switch network to Devnet", () => page.selectOption("#network-select", "devnet")],
     ["switch network back to Localnet", () => page.selectOption("#network-select", "localnet")],
   ];
