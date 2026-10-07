@@ -6,83 +6,112 @@
 <title>SWD AMM — Devnet Test UI</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+  /* Theme (build 2026-10-07b): trading-terminal dark — Binance-style
+     density and green/red market colours, with a violet→cyan "gem" brand
+     gradient. To retheme, change the values in this block (and the light
+     block below); every colour on the page and in the chart reads them.
+     The *-rgb tokens are the same colours as "r,g,b" for rgba(). */
   :root {
-    --bg: #0b0d11;
-    --bg-glow: radial-gradient(1100px 560px at 12% -8%, rgba(94,230,192,0.10), transparent 60%),
-               radial-gradient(900px 520px at 100% 0%, rgba(124,196,240,0.07), transparent 55%);
-    --panel: #171a21;
-    --panel-alt: rgba(127,127,127,0.06);
-    --panel-border: #262b35;
-    --panel-border-soft: #1e222b;
-    --text: #eceef1;
-    --text-dim: #9398a3;
-    --accent: #5ee6c0;
-    --accent-dark: #2b7a63;
-    --accent-hover: #7cf0d1;
-    --accent-glow: rgba(94,230,192,0.35);
-    --btn-text: #06231c;
-    --danger: #ff6b6b;
-    --warn: #f0b429;
-    --warn-bg: #3a2a0a;
-    --warn-text: #ffd88a;
-    --field-bg: #0d0f13;
-    --field-bg-hover: #11151c;
-    --log-bg: #0a0c0f;
-    --log-line-border: #1a1d24;
-    --link: #7cc4f0;
+    --bg: #0b0d14;
+    --bg-glow: radial-gradient(1200px 600px at 8% -12%, rgba(var(--accent-rgb),0.10), transparent 60%),
+               radial-gradient(900px 520px at 100% 0%, rgba(var(--link-rgb),0.07), transparent 55%);
+    --panel: #121520;
+    --panel-alt: rgba(255,255,255,0.025);
+    --panel-border: #232838;
+    --panel-border-soft: #1b1f2c;
+    --text: #eaecef;
+    --text-dim: #8a92a6;
+    --accent: #7c6cff;
+    --accent-rgb: 124,108,255;
+    --accent-dark: #5b4be0;
+    --accent-hover: #9284ff;
+    --accent-glow: rgba(124,108,255,0.35);
+    --btn-text: #ffffff;
+    --brand-grad: linear-gradient(135deg, #7c6cff 0%, #3fc8ff 100%);
+    --up: #0ecb81;
+    --up-rgb: 14,203,129;
+    --down: #f6465d;
+    --down-rgb: 246,70,93;
+    --danger: #f6465d;
+    --danger-rgb: 246,70,93;
+    --warn: #f0b90b;
+    --warn-rgb: 240,185,11;
+    --warn-bg: #241e0a;
+    --warn-text: #f8d57e;
+    --field-bg: #0c0f17;
+    --field-bg-hover: #10141e;
+    --log-bg: #0a0c12;
+    --log-line-border: #191d29;
+    --link: #3fc8ff;
+    --link-rgb: 63,200,255;
+    --chart-bg: #0e1119;
+    --chart-grid: rgba(138,146,166,0.08);
+    --chart-label-bg: #2a3040;
     --mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    --font-display: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    --font-body: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --radius-sm: 8px;
     --radius-md: 12px;
-    --radius-lg: 18px;
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.24), 0 1px 1px rgba(0,0,0,0.12);
-    --shadow-md: 0 8px 24px rgba(0,0,0,0.30), 0 2px 8px rgba(0,0,0,0.18);
-    --shadow-lg: 0 24px 64px rgba(0,0,0,0.44), 0 8px 20px rgba(0,0,0,0.24);
-    --shadow-glow: 0 0 0 1px rgba(94,230,192,0.16), 0 8px 28px rgba(94,230,192,0.14);
+    --radius-lg: 16px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.24);
+    --shadow-md: 0 8px 24px rgba(0,0,0,0.32), 0 2px 8px rgba(0,0,0,0.18);
+    --shadow-lg: 0 24px 64px rgba(0,0,0,0.48), 0 8px 20px rgba(0,0,0,0.26);
+    --shadow-glow: 0 0 0 1px rgba(var(--accent-rgb),0.22), 0 8px 28px rgba(var(--accent-rgb),0.18);
     --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
     /* How tall a scrollable list panel (.table-scroll, and the
        Marketplace/Positions card grids) is allowed to grow before it
        gets its own internal scrollbar instead of pushing the rest of
        the page down — keeps a long list fitted to the screen. */
     --list-max-height: 70vh;
-    --row-hover: rgba(94,230,192,0.07);
+    --row-hover: rgba(var(--accent-rgb),0.07);
   }
   /* Light theme — an explicit choice via the toggle button stamps
      data-theme="light" on <html>; everything else stays the dark
      palette above by default (this test tool has no OS-theme auto
      detection, only the explicit toggle). */
   :root[data-theme="light"] {
-    --bg: #f6f7f9;
-    --bg-glow: radial-gradient(1100px 560px at 12% -8%, rgba(31,157,124,0.08), transparent 60%),
-               radial-gradient(900px 520px at 100% 0%, rgba(11,107,173,0.06), transparent 55%);
+    --bg: #f4f5f9;
+    --bg-glow: radial-gradient(1200px 600px at 8% -12%, rgba(var(--accent-rgb),0.07), transparent 60%),
+               radial-gradient(900px 520px at 100% 0%, rgba(var(--link-rgb),0.06), transparent 55%);
     --panel: #ffffff;
-    --panel-alt: rgba(31,42,68,0.035);
-    --panel-border: #dee2e8;
-    --panel-border-soft: #e7eaee;
-    --text: #1a1d24;
-    --text-dim: #5b6270;
-    --accent: #1f9d7c;
-    --accent-dark: #167a5f;
-    --accent-hover: #24b58e;
-    --accent-glow: rgba(31,157,124,0.22);
+    --panel-alt: rgba(20,22,40,0.03);
+    --panel-border: #e3e6ee;
+    --panel-border-soft: #eceef4;
+    --text: #14161f;
+    --text-dim: #5d6478;
+    --accent: #5b4be0;
+    --accent-rgb: 91,75,224;
+    --accent-dark: #4636c4;
+    --accent-hover: #6c5df0;
+    --accent-glow: rgba(91,75,224,0.22);
     --btn-text: #ffffff;
-    --danger: #c62f2f;
-    --warn: #9a6600;
-    --warn-bg: #fff3d6;
+    --brand-grad: linear-gradient(135deg, #5b4be0 0%, #0a9be0 100%);
+    --up: #03a66d;
+    --up-rgb: 3,166,109;
+    --down: #cf304a;
+    --down-rgb: 207,48,74;
+    --danger: #cf304a;
+    --danger-rgb: 207,48,74;
+    --warn: #a86d00;
+    --warn-rgb: 168,109,0;
+    --warn-bg: #fff4d8;
     --warn-text: #6b4600;
-    --field-bg: #eef1f4;
-    --field-bg-hover: #e3e7ec;
-    --log-bg: #eef1f4;
-    --log-line-border: #dde2e8;
-    --link: #0b6bad;
-    --shadow-sm: 0 1px 2px rgba(30,40,60,0.06), 0 1px 1px rgba(30,40,60,0.04);
+    --field-bg: #f0f2f7;
+    --field-bg-hover: #e7eaf2;
+    --log-bg: #f0f2f7;
+    --log-line-border: #e1e4ec;
+    --link: #0a8fd6;
+    --link-rgb: 10,143,214;
+    --chart-bg: #ffffff;
+    --chart-grid: rgba(20,22,31,0.06);
+    --chart-label-bg: #2b3139;
+    --shadow-sm: 0 1px 2px rgba(30,40,60,0.06);
     --shadow-md: 0 8px 24px rgba(30,40,60,0.10), 0 2px 8px rgba(30,40,60,0.06);
     --shadow-lg: 0 24px 64px rgba(30,40,60,0.16), 0 8px 20px rgba(30,40,60,0.08);
-    --shadow-glow: 0 0 0 1px rgba(31,157,124,0.14), 0 8px 28px rgba(31,157,124,0.12);
-    --row-hover: rgba(31,157,124,0.06);
+    --shadow-glow: 0 0 0 1px rgba(var(--accent-rgb),0.16), 0 8px 28px rgba(var(--accent-rgb),0.12);
+    --row-hover: rgba(var(--accent-rgb),0.06);
   }
   * { box-sizing: border-box; }
   @media (prefers-reduced-motion: reduce) {
@@ -171,7 +200,7 @@
     color: var(--text);
     box-shadow: none;
   }
-  button.secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: rgba(94,230,192,0.08); box-shadow: none; transform: translateY(-1px); }
+  button.secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); background: rgba(var(--accent-rgb),0.08); box-shadow: none; transform: translateY(-1px); }
   /* Flat controls: nav links, menu items, filter chips and tab pills read as
      navigation/selection, not calls-to-action — they keep the base button's
      color transitions but opt out of the raised/lift/glow treatment so only
@@ -218,8 +247,8 @@
     font-size: 14px;
     font-weight: 600;
   }
-  .status-pill.connected { background: rgba(94,230,192,0.15); color: var(--accent); }
-  .status-pill.disconnected { background: rgba(255,107,107,0.15); color: var(--danger); }
+  .status-pill.connected { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
+  .status-pill.disconnected { background: rgba(var(--danger-rgb),0.15); color: var(--danger); }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 15px; margin-top: 10px; }
   .kv .k { color: var(--text-dim); }
   .kv .v { font-family: var(--mono); word-break: break-all; }
@@ -372,13 +401,13 @@
   table.data-table td.actions { display: flex; gap: 6px; flex-wrap: wrap; }
   table.data-table td.actions button { padding: 5px 9px; font-size: 14px; }
   .pill-type { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 700; letter-spacing: 0.02em; }
-  .pill-type.cp { background: rgba(94,230,192,0.15); color: var(--accent); }
-  .pill-type.dlmm { background: rgba(124,196,240,0.15); color: var(--link); }
+  .pill-type.cp { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
+  .pill-type.dlmm { background: rgba(var(--link-rgb),0.15); color: var(--link); }
   .pill-event { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
-  .pill-event.swap { background: rgba(240,180,41,0.15); color: var(--warn); }
-  .pill-event.add { background: rgba(94,230,192,0.15); color: var(--accent); }
-  .pill-event.remove { background: rgba(255,107,107,0.15); color: var(--danger); }
-  .pill-event.init { background: rgba(124,196,240,0.15); color: var(--link); }
+  .pill-event.swap { background: rgba(var(--warn-rgb),0.15); color: var(--warn); }
+  .pill-event.add { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
+  .pill-event.remove { background: rgba(var(--danger-rgb),0.15); color: var(--danger); }
+  .pill-event.init { background: rgba(var(--link-rgb),0.15); color: var(--link); }
   .empty-state { color: var(--text-dim); font-size: 15px; padding: 18px 4px; text-align: center; }
   /* Transaction toasts — one stack, top-right on desktop, bottom on phones. */
   .toast-stack { position: fixed; top: 16px; right: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; width: min(380px, calc(100vw - 32px)); pointer-events: none; }
@@ -404,10 +433,10 @@
   @keyframes toast-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .toast { animation: none; } .toast-spinner { animation: none; } .toast.leaving { transition: none; } }
   .oracle-badge { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; font-family: var(--font-body); font-size: 12px; font-weight: 700; white-space: nowrap; cursor: help; }
-  .oracle-badge.bad { background: rgba(255,107,107,0.14); color: var(--danger); }
-  .oracle-badge.warn { background: rgba(240,180,41,0.16); color: var(--warn); }
-  .oracle-swap-warning { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--danger); background: rgba(255,107,107,0.08); color: var(--text); font-size: 14px; line-height: 1.5; }
-  .oracle-swap-warning.warn { border-color: var(--warn); background: rgba(240,180,41,0.10); }
+  .oracle-badge.bad { background: rgba(var(--danger-rgb),0.14); color: var(--danger); }
+  .oracle-badge.warn { background: rgba(var(--warn-rgb),0.16); color: var(--warn); }
+  .oracle-swap-warning { margin: 10px 0; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--danger); background: rgba(var(--danger-rgb),0.08); color: var(--text); font-size: 14px; line-height: 1.5; }
+  .oracle-swap-warning.warn { border-color: var(--warn); background: rgba(var(--warn-rgb),0.10); }
   .oracle-swap-warning strong { color: var(--danger); }
   .oracle-swap-warning.warn strong { color: var(--warn); }
   /* Pair drawer — slides in from the left, lists every pair in the system. */
@@ -469,7 +498,7 @@
   .chip-btn .chip-label { color: var(--text); font-weight: 600; margin-right: 4px; }
   .chip-btn .token-icon-label { pointer-events: none; }
   .chip-btn-action { font-family: inherit; border-style: dashed; color: var(--accent); border-color: var(--accent); }
-  .chip-btn-action:hover { background: rgba(94,230,192,0.1); }
+  .chip-btn-action:hover { background: rgba(var(--accent-rgb),0.1); }
 
   /* Infinite scroll — shared by every list panel that can grow large
      (Explore Pools, Marketplace, My Positions CP/DLMM, My Activity,
@@ -510,7 +539,7 @@
   .mkt-card { content-visibility: auto; contain-intrinsic-size: auto 170px; }
   .notif-item { padding: 8px 2px; border-bottom: 1px solid var(--panel-border); font-size: 15px; }
   .notif-item:last-child { border-bottom: none; }
-  .notif-item.unread { background: rgba(94,230,192,0.06); }
+  .notif-item.unread { background: rgba(var(--accent-rgb),0.06); }
   .notif-kind { font-size: 12.5px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
   .notif-time { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
   .step-list { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -563,8 +592,8 @@
 
   /* --- DLMM Position Health badge --- */
   .health-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
-  .health-badge.in-range { background: rgba(94,230,192,0.15); color: var(--accent); }
-  .health-badge.out-range { background: rgba(255,107,107,0.15); color: var(--danger); }
+  .health-badge.in-range { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
+  .health-badge.out-range { background: rgba(var(--danger-rgb),0.15); color: var(--danger); }
 
   /* --- Command Palette (Phase 5, Ctrl/Cmd+K) --- */
   #cmdk-overlay { align-items: flex-start; padding-top: 12vh; }
@@ -579,8 +608,8 @@
   .cmdk-item .cmdk-item-icon { flex: none; width: 18px; text-align: center; opacity: 0.85; }
   .cmdk-item .cmdk-item-label { flex: 1; }
   .cmdk-item .cmdk-item-group { font-size: 11.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; flex: none; }
-  .cmdk-item.active { background: rgba(94,230,192,0.12); }
-  .cmdk-item:hover { background: rgba(94,230,192,0.08); }
+  .cmdk-item.active { background: rgba(var(--accent-rgb),0.12); }
+  .cmdk-item:hover { background: rgba(var(--accent-rgb),0.08); }
   .cmdk-empty { padding: 24px 12px; text-align: center; color: var(--text-dim); font-size: 14.5px; }
 
   /* --- Multi-hop Route Visualization (Phase 5) --- */
@@ -601,7 +630,7 @@
   .il-ref-table th, .il-ref-table td { padding: 5px 10px; text-align: right; border-bottom: 1px solid var(--panel-border-soft); font-variant-numeric: tabular-nums; }
   .il-ref-table th:first-child, .il-ref-table td:first-child { text-align: left; }
   .il-ref-table th { color: var(--text-dim); font-weight: 600; text-transform: uppercase; font-size: 11.5px; letter-spacing: 0.03em; }
-  .il-ref-table tr.il-ref-current { background: rgba(94,230,192,0.08); }
+  .il-ref-table tr.il-ref-current { background: rgba(var(--accent-rgb),0.08); }
 
   /* --- MAX button (Phase 5) --- */
   .amount-input-wrap { position: relative; display: flex; }
@@ -611,27 +640,27 @@
   .amount-input-wrap .max-btn:disabled { opacity: 0.5; cursor: default; }
 
   /* --- Smart Route (Phase 4) --- */
-  .smart-route-hint { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm, 8px); background: rgba(94,230,192,0.08); border: 1px solid rgba(94,230,192,0.25); color: var(--text); margin-top: 6px; }
+  .smart-route-hint { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 10px; border-radius: var(--radius-sm, 8px); background: rgba(var(--accent-rgb),0.08); border: 1px solid rgba(var(--accent-rgb),0.25); color: var(--text); margin-top: 6px; }
   .smart-route-hint button { padding: 3px 12px; height: auto; font-size: 13px; }
   .smart-route-hint .sr-both-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--accent); font-weight: 700; }
 
   /* --- Real-time Price Impact Warning (Phase 4) --- */
   .price-impact-warning { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm, 8px); margin-top: 6px; font-weight: 600; }
   .price-impact-warning .pi-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .price-impact-warning.impact-low { background: rgba(94,230,192,0.08); border: 1px solid rgba(94,230,192,0.2); color: var(--text-dim); font-weight: 400; }
+  .price-impact-warning.impact-low { background: rgba(var(--accent-rgb),0.08); border: 1px solid rgba(var(--accent-rgb),0.2); color: var(--text-dim); font-weight: 400; }
   .price-impact-warning.impact-low .pi-dot { background: var(--accent); }
   .price-impact-warning.impact-caution { background: rgba(209,139,44,0.10); border: 1px solid rgba(209,139,44,0.3); color: #d18b2c; }
   .price-impact-warning.impact-caution .pi-dot { background: #d18b2c; }
   .price-impact-warning.impact-high { background: rgba(255,140,66,0.12); border: 1px solid rgba(255,140,66,0.35); color: #ff8c42; }
   .price-impact-warning.impact-high .pi-dot { background: #ff8c42; }
-  .price-impact-warning.impact-severe { background: rgba(255,107,107,0.14); border: 1px solid rgba(255,107,107,0.4); color: var(--danger); }
+  .price-impact-warning.impact-severe { background: rgba(var(--danger-rgb),0.14); border: 1px solid rgba(var(--danger-rgb),0.4); color: var(--danger); }
   .price-impact-warning.impact-severe .pi-dot { background: var(--danger); }
 
   /* --- Transaction Simulation preview (Phase 4) --- */
   .sim-preview-row { display: flex; align-items: center; gap: 8px; }
   .sim-preview-row .sim-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; }
-  .sim-badge.sim-ok { background: rgba(94,230,192,0.15); color: var(--accent); }
-  .sim-badge.sim-fail { background: rgba(255,107,107,0.15); color: var(--danger); }
+  .sim-badge.sim-ok { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
+  .sim-badge.sim-fail { background: rgba(var(--danger-rgb),0.15); color: var(--danger); }
   .sim-badge.sim-unknown { background: rgba(148,163,184,0.15); color: var(--text-dim); }
 
   /* --- Recent Pairs Quick-Switch (V) --- */
@@ -819,7 +848,7 @@
   /* --- "I want to..." create-pool modal --- */
   .cpm-option { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--panel-border); border-radius: var(--radius-md); padding: 12px 14px; margin-bottom: 10px; cursor: pointer; position: relative; }
   .cpm-option:hover:not(.cpm-disabled) { border-color: var(--accent); }
-  .cpm-option.selected { border-color: var(--accent); background: rgba(94,230,192,0.06); }
+  .cpm-option.selected { border-color: var(--accent); background: rgba(var(--accent-rgb),0.06); }
   .cpm-disabled { opacity: 0.5; cursor: not-allowed; }
   .cpm-option input[type="radio"] { margin-top: 3px; width: auto; }
   .cpm-option-title { font-weight: 700; font-size: 15.5px; color: var(--text); }
@@ -1033,7 +1062,7 @@
     color: var(--text-dim); border-radius: var(--radius-sm); box-shadow: none;
   }
   .icon-btn:hover:not(:disabled) { background: var(--panel-alt); color: var(--text); border-color: var(--text-dim); box-shadow: none; transform: none; }
-  .icon-btn.danger-hover:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); background: rgba(255,107,107,0.08); }
+  .icon-btn.danger-hover:hover:not(:disabled) { color: var(--danger); border-color: var(--danger); background: rgba(var(--danger-rgb),0.08); }
   .btn-icon-text { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
   .btn-icon-text .icon { width: 17px; height: 17px; }
 
@@ -1051,7 +1080,7 @@
 
   .callout { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 13px; line-height: 1.5; margin-bottom: 12px; }
   .callout .icon { margin-top: 2px; }
-  .callout-info { background: rgba(124,196,240,0.08); border: 1px solid rgba(124,196,240,0.25); color: var(--text-dim); }
+  .callout-info { background: rgba(var(--link-rgb),0.08); border: 1px solid rgba(var(--link-rgb),0.25); color: var(--text-dim); }
   .callout-info .icon { color: var(--link); }
   .callout-warn { background: var(--warn-bg); border: 1px solid var(--warn); color: var(--warn-text); }
   .callout-warn .icon { color: var(--warn); }
@@ -1067,8 +1096,8 @@
   .market-side-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   @media (max-width: 560px) { .market-side-cols { grid-template-columns: 1fr; } }
   .market-side-col { border-radius: var(--radius-md); padding: 12px 14px; border: 1px solid var(--panel-border); }
-  .market-side-col.buy { background: rgba(94,230,192,0.07); border-color: rgba(94,230,192,0.25); }
-  .market-side-col.sell { background: rgba(255,107,107,0.07); border-color: rgba(255,107,107,0.25); }
+  .market-side-col.buy { background: rgba(var(--accent-rgb),0.07); border-color: rgba(var(--accent-rgb),0.25); }
+  .market-side-col.sell { background: rgba(var(--danger-rgb),0.07); border-color: rgba(var(--danger-rgb),0.25); }
   .market-side-head { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14.5px; margin-bottom: 10px; }
   .market-side-col.buy .market-side-head { color: var(--accent); }
   .market-side-col.sell .market-side-head { color: var(--danger); }
@@ -1131,8 +1160,8 @@
     text-align: left; box-shadow: none; border: none;
   }
   .tools-nav-btn:hover:not(.active):not(:disabled) { background: var(--panel-alt); color: var(--text); box-shadow: none; transform: none; }
-  .tools-nav-btn.active { background: rgba(94,230,192,0.10); color: var(--accent); box-shadow: none; }
-  .tools-nav-btn.active:hover { background: rgba(94,230,192,0.10); transform: none; box-shadow: none; }
+  .tools-nav-btn.active { background: rgba(var(--accent-rgb),0.10); color: var(--accent); box-shadow: none; }
+  .tools-nav-btn.active:hover { background: rgba(var(--accent-rgb),0.10); transform: none; box-shadow: none; }
   .tools-nav-btn.active::before {
     content: ""; position: absolute; left: 10px; right: 10px; top: auto; bottom: 3px; width: auto; height: 4px;
     border-radius: 999px; background: var(--accent);
@@ -1152,9 +1181,9 @@
   .tools-nav-row .tpi-tokens { font-size: 11.5px; gap: 2px; padding-left: 10px; }
   .panel-info-btn.icon-btn {
     width: 46px; height: 46px; min-width: 46px; min-height: 46px;
-    background: rgba(94,230,192,0.12); border-color: var(--accent); color: var(--accent);
+    background: rgba(var(--accent-rgb),0.12); border-color: var(--accent); color: var(--accent);
   }
-  .panel-info-btn.icon-btn:hover:not(:disabled) { background: rgba(94,230,192,0.20); border-color: var(--accent); color: var(--accent); }
+  .panel-info-btn.icon-btn:hover:not(:disabled) { background: rgba(var(--accent-rgb),0.20); border-color: var(--accent); color: var(--accent); }
   .panel-info-btn .icon { width: 26px; height: 26px; }
   .pf-tab { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 8px 14px; }
   .pf-tab .icon { width: 19px; height: 19px; }
@@ -1300,6 +1329,175 @@
   @media (max-width: 900px) {
     .v2-create, .v2-pool-grid { grid-template-columns: 1fr; }
   }
+
+  /* =====================================================================
+     Theme layer (build 2026-10-07b) — trading-site look and phone layout.
+     Styling only: no element, id or class in the page changed, every rule
+     below restyles what is already there. Colours come from the tokens at
+     the top of this stylesheet.
+     ===================================================================== */
+  body { font-feature-settings: "tnum" 1, "cv11" 1; letter-spacing: -0.005em; }
+  h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; color: transparent; width: fit-content; }
+  h2 { color: var(--text); font-weight: 700; }
+  .section-header h2 { font-size: 20px; }
+  .sub { font-size: 13.5px; }
+  .warning-banner { font-size: 13.5px; padding: 9px 14px; border-radius: var(--radius-sm); border-color: rgba(var(--warn-rgb),0.45); }
+  .warning-banner code.inline { word-break: normal; white-space: nowrap; }
+  a { color: var(--link); }
+
+  /* Controls */
+  select, input, textarea { border-color: var(--panel-border); }
+  button { border-radius: var(--radius-sm); }
+  button:hover:not(:disabled) { box-shadow: none; }
+  button.secondary { background: var(--panel-alt); border-color: var(--panel-border); }
+  button.secondary:hover:not(:disabled) { background: rgba(var(--accent-rgb),0.10); border-color: rgba(var(--accent-rgb),0.6); color: var(--text); }
+  .status-pill.connected { background: rgba(var(--up-rgb),0.14); color: var(--up); }
+  .status-pill.disconnected { background: rgba(var(--down-rgb),0.12); color: var(--down); }
+
+  /* Surfaces: flat panels with a hairline border, like an exchange */
+  .panel, .tools-layout { background: var(--panel); background-image: none; box-shadow: none; }
+  .top-bar { background: var(--panel); box-shadow: none; padding: 10px 14px; }
+  .modal-box { background-image: none; }
+  .stat-card { background: var(--panel-alt); box-shadow: none; border-color: var(--panel-border-soft); }
+  .stat-card-label { font-size: 11.5px; letter-spacing: 0.04em; }
+  .stat-card-value { font-size: 17px; }
+  .lq-hero-stat, .pf-card, .mkt-card, .ach-card { box-shadow: none; }
+  .mkt-card:hover { box-shadow: var(--shadow-glow); }
+  table.data-table { font-size: 14px; }
+  table.data-table th { font-size: 11.5px; letter-spacing: 0.05em; }
+  table.data-table th, table.data-table td { border-bottom-color: var(--panel-border-soft); }
+  #log { font-size: 13px; }
+
+  /* Brand gradient on the brand-only spots */
+  .rd-logo, .rd-nav-cta, .cpm-option-badge { background: var(--brand-grad); }
+  .pf-hero-title { background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; }
+  .form-popup-box::before { background: var(--brand-grad); opacity: 1; }
+
+  /* Primary nav: sticky bar under the settings, active tab underlined */
+  .rd-nav {
+    position: sticky; top: 0; z-index: 900;
+    margin: 0 -24px 14px; padding: 6px 24px; gap: 22px;
+    background: rgba(11,13,20,0.86);
+    backdrop-filter: saturate(140%) blur(12px); -webkit-backdrop-filter: saturate(140%) blur(12px);
+  }
+  :root[data-theme="light"] .rd-nav { background: rgba(244,245,249,0.88); }
+  .rd-nav-brand { font-size: 18px; letter-spacing: -0.02em; background: var(--brand-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .rd-nav-link { font-size: 15px; padding: 10px 0; }
+  .rd-nav-link.active { color: var(--text); border-bottom-color: var(--accent); }
+  .rd-corner-logo { width: 40px; height: 40px; }
+  .rd-corner-logo img { padding: 5px; }
+
+  /* Trade tools row */
+  .tools-nav-btn.active { background: rgba(var(--accent-rgb),0.12); color: var(--text); }
+  .tools-nav-btn.active::before { background: var(--accent); }
+
+  /* Market colours: buy = green, sell = red, everywhere */
+  .tb-buy-btn { background: var(--up); color: #fff; }
+  .tb-buy-btn:hover:not(:disabled) { background: var(--up); filter: brightness(1.08); }
+  .tb-sell-btn { background: var(--down); color: #fff; }
+  .tb-sell-btn:hover:not(:disabled) { background: var(--down); opacity: 1; filter: brightness(1.08); }
+  .market-side-col.buy { background: rgba(var(--up-rgb),0.06); border-color: rgba(var(--up-rgb),0.22); }
+  .market-side-col.sell { background: rgba(var(--down-rgb),0.06); border-color: rgba(var(--down-rgb),0.22); }
+  .market-side-col.buy .market-side-head, .market-side-col.buy .market-side-head .icon { color: var(--up); }
+  .market-side-col.sell .market-side-head, .market-side-col.sell .market-side-head .icon { color: var(--down); }
+  .pill-event.add { background: rgba(var(--up-rgb),0.14); color: var(--up); }
+  .pill-event.remove { background: rgba(var(--down-rgb),0.14); color: var(--down); }
+  .v2-table .buy { color: var(--up); }
+  .v2-table .sell { color: var(--down); }
+  .health-badge.in-range, .sim-badge.sim-ok { background: rgba(var(--up-rgb),0.14); color: var(--up); }
+  #log .line.ok, .v2-checks .ok, .step-list li.done { color: var(--up); }
+  .toast.ok { border-left-color: var(--up); }
+  .toast.ok .toast-icon { color: var(--up); }
+
+  /* Trading Board: terminal-style chart area */
+  #tb-chart-container { background: var(--chart-bg); border: 1px solid var(--panel-border-soft); border-radius: var(--radius-sm); overflow: hidden; }
+  .chart-toolbar-bar { background: var(--panel); border-color: var(--panel-border-soft); padding: 4px 6px; }
+  .chart-toolbar-bar select, .chart-toolbar-bar button { font-size: 13px; padding: 6px 10px; }
+  .draw-tool-rail { background: var(--panel); border-color: var(--panel-border-soft); }
+  .tf-btn-group { padding: 3px; gap: 2px; background: var(--field-bg); border: 1px solid var(--panel-border-soft); border-radius: var(--radius-sm); }
+  .tf-btn { background: transparent; border: none; color: var(--text-dim); font-family: var(--mono); font-weight: 600; padding: 4px 10px; border-radius: 6px; box-shadow: none; }
+  .tf-btn:hover:not(:disabled):not(.active) { background: var(--panel-alt); color: var(--text); transform: none; }
+  .tf-btn.active { background: rgba(var(--accent-rgb),0.16); color: var(--text); border: none; }
+  .tb-ind-chip { font-size: 12px; }
+
+  /* Popups (forms, pool detail, confirm) */
+  .modal-overlay { background: rgba(5,6,10,0.68); }
+  .modal-box { border-color: var(--panel-border); }
+
+  /* ------------------------------ Phones ------------------------------ */
+  @media (hover: none), (max-width: 900px) {
+    [data-i18n="shortcutsHint"] { display: none; }
+  }
+  @media (max-width: 640px) {
+    body { padding: 12px 12px calc(84px + env(safe-area-inset-bottom)); }
+    input, select, textarea { font-size: 16px; } /* no iOS zoom-on-focus */
+    .warning-banner { font-size: 12.5px; line-height: 1.45; padding: 8px 10px; margin-bottom: 12px; }
+    h1 { font-size: 19px; }
+    .sub { font-size: 12px; margin-bottom: 12px; }
+    .grid { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .panel { padding: 14px; border-radius: var(--radius-md); }
+
+    /* Settings bar: one swipeable row instead of seven stacked rows */
+    .top-bar {
+      flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 8px 10px; margin-bottom: 12px;
+      scrollbar-width: none; -webkit-overflow-scrolling: touch;
+      -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+      mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+    }
+    .top-bar::-webkit-scrollbar { display: none; }
+    .top-bar > * { flex: 0 0 auto; }
+    .top-bar select, .top-bar button { padding: 7px 10px; font-size: 14px; }
+    .top-bar #network-select { max-width: 170px; }
+
+    /* Primary nav becomes a bottom tab bar */
+    .rd-nav {
+      position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 950;
+      margin: 0; padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
+      gap: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+      border-bottom: none; border-top: 1px solid var(--panel-border);
+      background: var(--panel); backdrop-filter: none; -webkit-backdrop-filter: none;
+      box-shadow: 0 -8px 24px rgba(0,0,0,0.28);
+    }
+    :root[data-theme="light"] .rd-nav { background: var(--panel); }
+    .rd-nav::-webkit-scrollbar { display: none; }
+    .rd-nav-brand, .rd-corner-logo, .rd-nav-link.rd-nav-disabled { display: none; }
+    .rd-nav-links { flex-wrap: nowrap; gap: 2px; min-width: max-content; margin: 0 auto; }
+    .rd-nav-link { font-size: 13px; padding: 12px 11px 10px; white-space: nowrap; border-bottom: none; border-top: 2px solid transparent; border-radius: 0; }
+    .rd-nav-link.active { border-top-color: var(--accent); color: var(--text); }
+    .rd-nav-cta { padding: 7px 12px; font-size: 13px; margin-left: 4px; white-space: nowrap; }
+    .rd-nav-more-menu { position: fixed; top: auto; left: auto; right: 8px; bottom: calc(60px + env(safe-area-inset-bottom)); margin: 0; min-width: 220px; }
+    #back-to-top-btn { bottom: calc(76px + env(safe-area-inset-bottom)); right: 14px; }
+    .toast-stack { bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+    /* Popups become bottom sheets */
+    .modal-overlay:not(#cmdk-overlay) { align-items: flex-end; padding: 0; }
+    .modal-overlay:not(#cmdk-overlay) > .modal-box {
+      width: 100% !important; max-width: 100% !important; max-height: 92vh !important;
+      overflow-y: auto; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+      border-bottom: none;
+    }
+    .dash-popup-box { height: 92vh !important; }
+
+    /* Trading Board */
+    #tb-chart-toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    #tb-chart-toolbar::-webkit-scrollbar { display: none; }
+    #tb-chart-toolbar > * { flex: 0 0 auto; }
+    #tb-chart-toolbar select { min-width: 0; }
+    #tb-chart-container { height: min(var(--tb-chart-h, 460px), 58vh); min-height: 300px; }
+    .draw-tool-rail { padding: 4px; }
+    .tools-nav-row .tools-nav-btn { height: 38px; padding: 0 12px; font-size: 13.5px; }
+    .stat-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .market-overview-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    table.data-table { font-size: 13px; }
+    table.data-table th, table.data-table td { padding: 7px 8px; }
+    /* Form rows wrap instead of running off the screen (Create-pool wizard
+       token pickers, Advanced AMM/DLMM quick pick) */
+    .row { flex-wrap: wrap; }
+    .row > .field { flex: 1 1 140px; min-width: 0; }
+    .quick-pick-row select { min-width: 0; }
+    .quick-pick-row > button { flex: 1 1 100%; }
+  }
 </style>
 </head>
 <body>
@@ -1313,7 +1511,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07a</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07b</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -12166,7 +12364,7 @@ function renderSolBalanceSparkline() {
   const points = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const last = vals[vals.length - 1];
   const first = vals[0];
-  const color = last >= first ? "var(--accent)" : "var(--danger)";
+  const color = last >= first ? "var(--up)" : "var(--down)";
   el.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="SOL balance trend this session">
       <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
@@ -15531,93 +15729,202 @@ function downloadCsv(filename, rows) {
 
 let currentPoolDetailMints = null; // set on every open, read by the Copy Pool Link button
 
-// Recent swap history for ONE specific pool account, turned into
-// {t, price, volumeB, aToB, trader} points for renderPriceChartSvg /
+// How many of the pool's latest signatures the charts read. Decoded
+// transactions are cached (see tradeTxCache), so a refresh only fetches the
+// ones that are new since the last load.
+const TRADE_HISTORY_SIGNATURES = 100;
+const tradeTxCache = new Map(); // `${network}|${signature}` -> { logs, blockTime } (null = not ours / failed)
+
+function eventPoolIs(ev, poolStr) {
+  const p = ev?.data?.pool;
+  if (!p) return true; // older layouts without a pool field: keep
+  return (typeof p.toBase58 === "function" ? p.toBase58() : String(p)) === poolStr;
+}
+
+// Pool price after every reserve-changing event of a constant-product pool,
+// rebuilt from the pool's reserves at a known slot: events up to that slot
+// are undone newest-first, later ones are applied forward. Returns a
+// Map(event record -> price) or null when the history doesn't add up (e.g.
+// a transfer-fee mint, where amount_in is not what reached the vault).
+function cpMarkPrices(records, reserves, decA, decB) {
+  if (!reserves) return null;
+  const scale = 10 ** (decA - decB);
+  const price = (ra, rb) => (ra > 0n && rb > 0n ? (Number(rb) / Number(ra)) * scale : NaN);
+  const apply = (r, ev, dir) => {
+    const d = ev.data;
+    if (ev.name === "SwapExecuted") {
+      const inn = BigInt(d.amountIn.toString()) * dir, out = BigInt(d.amountOut.toString()) * dir;
+      if (d.aToB) { r.a += inn; r.b -= out; } else { r.b += inn; r.a -= out; }
+    } else if (ev.name === "LiquidityAdded") {
+      r.a += BigInt(d.amountA.toString()) * dir; r.b += BigInt(d.amountB.toString()) * dir;
+    } else if (ev.name === "LiquidityRemoved") {
+      r.a -= BigInt(d.amountA.toString()) * dir; r.b -= BigInt(d.amountB.toString()) * dir;
+    }
+    return r.a >= 0n && r.b >= 0n;
+  };
+  const marks = new Map();
+  const before = records.filter((r) => r.slot <= reserves.slot);
+  const after = records.filter((r) => r.slot > reserves.slot);
+  let st = { a: reserves.reserveA, b: reserves.reserveB };
+  for (let i = before.length - 1; i >= 0; i--) {
+    marks.set(before[i], price(st.a, st.b));
+    if (!apply(st, before[i].event, -1n)) return null;
+  }
+  st = { a: reserves.reserveA, b: reserves.reserveB };
+  for (const r of after) {
+    if (!apply(st, r.event, 1n)) return null;
+    marks.set(r, price(st.a, st.b));
+  }
+  return marks;
+}
+
+// Recent history for ONE specific pool account, turned into
+// {t, price, mark, volumeB, aToB, trader} points for renderPriceChartSvg /
 // renderVolumeChartSvg / binPointsToCandles / the Trading Board's stats and
 // recent-trades table. Not scoped to any one wallet — every trader's swap
 // touches the same pool account. Shared by the Pool Detail modal and the
-// Trade tab's Trading Board below, so this fetch-and-decode logic (25
-// signatures, up to 25 getTransaction calls, log parsing) only lives in one
-// place.
-async function fetchPoolTradeHistory(poolPk, decA, decB) {
-  const sigs = await state.connection.getSignaturesForAddress(poolPk, { limit: 25 }).catch(() => []);
+// Trade tab's Trading Board below, so this fetch-and-decode logic only
+// lives in one place.
+//
+// `price` is what the trader got (amount out / amount in, fee included) —
+// shown in the trades table and CSV. `mark` is the pool's own price right
+// after the trade, which is what the charts plot (build 2026-10-07b): a
+// trade's execution price sits a fee away from the market on alternating
+// sides for buys and sells, which drew fake wicks on every candle, and the
+// last candle never matched the Price stat. Also since 2026-10-07b: failed
+// transactions are skipped (their logs still carry the events of the
+// instructions that ran before the failure), events of OTHER pools in the
+// same transaction (multi-hop) are dropped, and trades in the same second
+// keep their on-chain order (they used to come out newest-first, so a
+// candle's close was its oldest trade).
+async function fetchPoolTradeHistory(poolPk, decA, decB, poolType) {
+  const poolStr = poolPk.toBase58();
+  // CP reserves are read BEFORE the signatures, so every transaction up to
+  // the reserves' slot is in the list (see cpMarkPrices).
+  const cpReservesPromise = (async () => {
+    if (poolType === "dlmm") return null;
+    const client = state.program.account.pool;
+    if (!client || typeof client.fetchNullableAndContext !== "function") return null;
+    const r = await client.fetchNullableAndContext(poolPk, "confirmed");
+    if (!r || !r.data) return null;
+    return { reserveA: BigInt(r.data.reserveA.toString()), reserveB: BigInt(r.data.reserveB.toString()), slot: r.context.slot };
+  })().catch(() => null);
+  const cpReserves = await cpReservesPromise;
+  const sigs = await state.connection.getSignaturesForAddress(poolPk, { limit: TRADE_HISTORY_SIGNATURES }, "confirmed").catch(() => []);
   const parser = getEventParser();
   const allEvents = [];
+  const records = [];
   const CONCURRENCY = 5;
-  for (let i = 0; i < sigs.length; i += CONCURRENCY) {
-    const batch = sigs.slice(i, i + CONCURRENCY);
+  const cacheKey = (s) => `${state.network}|${s.signature}`;
+  const todo = sigs.filter((s) => !s.err && !tradeTxCache.has(cacheKey(s)));
+  for (let i = 0; i < todo.length; i += CONCURRENCY) {
+    const batch = todo.slice(i, i + CONCURRENCY);
     const txs = await Promise.all(
-      batch.map((s) => state.connection.getTransaction(s.signature, { maxSupportedTransactionVersion: 0 }).catch(() => null))
+      batch.map((s) => state.connection.getTransaction(s.signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" }).catch(() => undefined))
     );
-    for (let j = 0; j < batch.length; j++) {
-      const tx = txs[j]; const sigInfo = batch[j];
-      if (!tx?.meta?.logMessages?.some((l) => l.includes(PROGRAM_ID))) continue;
-      let events;
-      try { events = Array.from(parser.parseLogs(tx.meta.logMessages)); } catch { continue; }
-      for (const ev of events) allEvents.push({ event: ev, signature: sigInfo.signature, blockTime: sigInfo.blockTime ?? tx.blockTime ?? null });
+    batch.forEach((s, j) => {
+      const tx = txs[j];
+      if (tx == null) return; // RPC error or not visible yet: not cached, retried next load
+      const ours = !tx.meta?.err && tx.meta?.logMessages?.some((l) => l.includes(PROGRAM_ID));
+      tradeTxCache.set(cacheKey(s), ours ? { logs: tx.meta.logMessages, blockTime: tx.blockTime ?? null } : null);
+    });
+  }
+  // Oldest first: the RPC lists signatures newest-first, including within
+  // one slot, so walking it backwards gives on-chain order.
+  for (let i = sigs.length - 1; i >= 0; i--) {
+    const sigInfo = sigs[i];
+    if (sigInfo.err) continue;
+    const cached = tradeTxCache.get(cacheKey(sigInfo));
+    if (!cached) continue;
+    let events;
+    try { events = Array.from(parser.parseLogs(cached.logs)); } catch { continue; }
+    const blockTime = sigInfo.blockTime ?? cached.blockTime ?? null;
+    for (const ev of events) {
+      if (!eventPoolIs(ev, poolStr)) continue;
+      const rec = { event: ev, signature: sigInfo.signature, blockTime, slot: sigInfo.slot ?? 0 };
+      allEvents.push(rec);
+      records.push(rec);
     }
   }
   // One console line per load, so an empty chart can be told apart from
   // "no signatures", "events not decoded" and "no block times".
-  console.info("[trade-history]", poolPk.toBase58(), {
+  console.info("[trade-history]", poolStr, {
     signatures: sigs.length,
     events: allEvents.length,
     names: allEvents.reduce((m, r) => ((m[r.event.name] = (m[r.event.name] || 0) + 1), m), {}),
     missingBlockTime: allEvents.filter((r) => !r.blockTime).length,
   });
-  const tradeEvents = allEvents
+
+  // Pool price after each event. DLMM: the swap's final active bin, exact.
+  // Constant-product: rebuilt from the reserves (cpMarkPrices).
+  let dlmmBinStepBps = null;
+  if (records.some((r) => r.event.name.startsWith("Dlmm"))) {
+    const init = records.find((r) => r.event.name === "DlmmPoolInitialized");
+    if (init) dlmmBinStepBps = Number(init.event.data.binStepBps);
+    else {
+      try { dlmmBinStepBps = Number((await fetchPoolAccountCached("dlmmPool", poolPk)).binStepBps); } catch { /* skip DLMM marks */ }
+    }
+  }
+  const binPrice = (binId) => (dlmmBinStepBps != null ? Math.pow(1 + dlmmBinStepBps / 10000, binId) * 10 ** (decA - decB) : NaN);
+  const CP_EVENTS = ["SwapExecuted", "LiquidityAdded", "LiquidityRemoved"];
+  const cpMarks = cpMarkPrices(records.filter((r) => CP_EVENTS.includes(r.event.name)), cpReserves, decA, decB);
+
+  const chartByRec = new Map(); // record -> chart point, to merge in on-chain order below
+  const points = records
     .filter((r) => (r.event.name === "SwapExecuted" || r.event.name === "DlmmSwapExecuted") && r.blockTime)
-    .sort((a, b) => a.blockTime - b.blockTime);
-  const points = tradeEvents.map((r) => {
-    const d = r.event.data;
-    const price = d.aToB
-      ? (Number(d.amountOut) / 10 ** decB) / (Number(d.amountIn) / 10 ** decA)
-      : (Number(d.amountIn) / 10 ** decB) / (Number(d.amountOut) / 10 ** decA);
-    // Every trade's size, denominated in mint B, so A→B and B→A trades
-    // compare on one consistent axis for the volume chart.
-    const volumeB = d.aToB ? Number(d.amountOut) / 10 ** decB : Number(d.amountIn) / 10 ** decB;
-    return {
-      t: r.blockTime * 1000,
-      price,
-      volumeB,
-      aToB: d.aToB,
-      trader: d.trader ? (typeof d.trader.toBase58 === "function" ? d.trader.toBase58() : String(d.trader)) : null,
-    };
-  }).filter((p) => Number.isFinite(p.price) && p.price > 0);
+    .map((r) => {
+      const d = r.event.data;
+      const amtA = Number(d.aToB ? d.amountIn : d.amountOut) / 10 ** decA;
+      const amtB = Number(d.aToB ? d.amountOut : d.amountIn) / 10 ** decB;
+      const price = amtB / amtA;
+      let mark = r.event.name === "DlmmSwapExecuted" ? binPrice(Number(d.finalActiveBinId)) : cpMarks?.get(r);
+      if (!Number.isFinite(mark) || mark <= 0) {
+        // No reserve history: the execution price without the pool fee.
+        const keep = 1 - Number(d.feeBps ?? 0) / 10000;
+        mark = d.aToB ? amtB / (amtA * keep) : (amtB * keep) / amtA;
+      }
+      // Every trade's size, denominated in mint B, so A→B and B→A trades
+      // compare on one consistent axis for the volume chart.
+      const p = {
+        t: r.blockTime * 1000,
+        price,
+        mark,
+        volumeB: amtB,
+        aToB: d.aToB,
+        trader: d.trader ? (typeof d.trader.toBase58 === "function" ? d.trader.toBase58() : String(d.trader)) : null,
+      };
+      if (Number.isFinite(p.price) && p.price > 0) chartByRec.set(r, { ...p, price: mark });
+      return p;
+    }).filter((p) => Number.isFinite(p.price) && p.price > 0);
 
   // Liquidity changes as price points too, so a pool shows on the price /
   // candle charts from its first deposit instead of only after 2 swaps.
-  // Constant-product: a deposit/withdrawal always moves both sides at the
-  // pool's own ratio (the first deposit SETS it), so amount_b/amount_a is
-  // the price at that moment. DLMM: only a single-bin change pins a price
-  // (that bin's fixed price); multi-bin ranges are skipped rather than
-  // guessed. These points carry volumeB 0 and are NOT added to `points`,
-  // so trade counts, volume and the trades table stay swap-only.
+  // Constant-product: the pool price after the change (or amount_b/amount_a,
+  // the ratio every deposit/withdrawal moves at). DLMM: only a single-bin
+  // change or the pool's creation pins a price. These points carry
+  // volumeB 0 and are NOT added to `points`, so trade counts, volume and
+  // the trades table stay swap-only.
   const LIQ_EVENTS = ["LiquidityAdded", "LiquidityRemoved", "DlmmLiquidityAdded", "DlmmLiquidityRemoved", "DlmmPoolInitialized"];
-  const liqEvents = allEvents.filter((r) => LIQ_EVENTS.includes(r.event.name) && r.blockTime);
-  let dlmmBinStepBps = null;
-  if (liqEvents.some((r) => r.event.name.startsWith("Dlmm"))) {
-    try { dlmmBinStepBps = (await fetchPoolAccountCached("dlmmPool", poolPk)).binStepBps; } catch { /* skip DLMM points */ }
-  }
-  const liquidityPoints = liqEvents.map((r) => {
+  records.filter((r) => LIQ_EVENTS.includes(r.event.name) && r.blockTime).forEach((r) => {
     const d = r.event.data;
     let price = NaN;
     if (r.event.name === "DlmmPoolInitialized") {
-      // A DLMM pool has a price from the moment it's created: its active bin's.
-      price = Math.pow(1 + Number(d.binStepBps) / 10000, Number(d.activeBinId)) * 10 ** (decA - decB);
+      price = binPrice(Number(d.activeBinId));
     } else if (r.event.name.startsWith("Dlmm")) {
       const lower = Number(d.binIdLower), upper = Number(d.binIdUpper);
-      if (dlmmBinStepBps != null && lower === upper) {
-        price = Math.pow(1 + dlmmBinStepBps / 10000, lower) * 10 ** (decA - decB);
-      }
+      if (lower === upper) price = binPrice(lower);
     } else {
-      const a = Number(d.amountA) / 10 ** decA;
-      const b = Number(d.amountB) / 10 ** decB;
-      if (a > 0 && b > 0) price = b / a;
+      price = cpMarks?.get(r);
+      if (!Number.isFinite(price) || price <= 0) {
+        const a = Number(d.amountA) / 10 ** decA;
+        const b = Number(d.amountB) / 10 ** decB;
+        if (a > 0 && b > 0) price = b / a;
+      }
     }
-    return { t: r.blockTime * 1000, price, volumeB: 0, aToB: false, trader: null, kind: "liquidity" };
-  }).filter((p) => Number.isFinite(p.price) && p.price > 0);
-  const pricePoints = [...points, ...liquidityPoints].sort((x, y) => x.t - y.t);
+    if (Number.isFinite(price) && price > 0) chartByRec.set(r, { t: r.blockTime * 1000, price, volumeB: 0, aToB: false, trader: null, kind: "liquidity" });
+  });
+  // Chart series: trades at their mark plus liquidity points, in on-chain order.
+  const pricePoints = records.map((r) => chartByRec.get(r)).filter(Boolean);
   return { points, pricePoints, allEvents };
 }
 
@@ -15737,7 +16044,7 @@ function renderCandlestickChartSvg(candles) {
   const wicks = candles.map((c) => {
     const cx = x(c.t);
     const up = c.close >= c.open;
-    const color = up ? "var(--accent)" : "var(--danger)";
+    const color = up ? "var(--up)" : "var(--down)";
     const bodyTop = y(Math.max(c.open, c.close));
     const bodyBottom = y(Math.min(c.open, c.close));
     const bodyH = Math.max(1, bodyBottom - bodyTop);
@@ -15771,7 +16078,7 @@ function renderCandlestickChartSvg(candles) {
 // either Swap panel all feed this the same pair), derives whichever pool
 // type the dropdown asks for, and reuses fetchPoolTradeHistory — the same
 // fetch Pool Detail uses. Manual "Load Trading Board" button rather than
-// firing on every keystroke, since this is a ~25-transaction fetch plus a
+// firing on every keystroke, since this is a fetch of up to TRADE_HISTORY_SIGNATURES transactions (cached) plus a
 // pool-account fetch, not a cheap one. The timeframe buttons only re-bucket
 // the already-fetched points client-side (see renderTradingBoard) — they do
 // not refetch, so switching timeframes is instant.
@@ -15798,10 +16105,12 @@ function renderTradingBoardStats(data) {
   const buyerSet = new Set(buyPoints.map((p) => p.trader).filter(Boolean));
   const sellerSet = new Set(sellPoints.map((p) => p.trader).filter(Boolean));
   let changePct = null;
-  if (points.length >= 2 && points[0].price > 0) {
-    changePct = ((points[points.length - 1].price - points[0].price) / points[0].price) * 100;
+  // Pool price after the first vs. the last trade (see fetchPoolTradeHistory's `mark`).
+  const markOf = (p) => p.mark ?? p.price;
+  if (points.length >= 2 && markOf(points[0]) > 0) {
+    changePct = ((markOf(points[points.length - 1]) - markOf(points[0])) / markOf(points[0])) * 100;
   }
-  const changeColor = changePct === null ? "" : (changePct >= 0 ? "var(--accent)" : "var(--danger)");
+  const changeColor = changePct === null ? "" : (changePct >= 0 ? "var(--up)" : "var(--down)");
   const changeText = changePct === null ? "—" : `${changePct >= 0 ? "+" : ""}${changePct.toFixed(2)}%`;
 
   // Same 12 figures as before, just regrouped: an overview strip for the
@@ -15867,53 +16176,81 @@ function renderTradingBoardTrades(data) {
 // only re-buckets the cached points into new candles rather than refetching.
 // Reads the page's own dark/light theme tokens so the chart always matches
 // whichever theme is active, including after the user flips theme-toggle-btn.
-const MARKET_UP = "#16c784";
-const MARKET_DOWN = "#ea3943";
-const MARKET_UP_VOL = "rgba(22,199,132,0.75)";
-const MARKET_DOWN_VOL = "rgba(234,57,67,0.75)";
+// Fallbacks only — the live colours come from the --up / --down tokens.
+const MARKET_UP = "#0ecb81";
+const MARKET_DOWN = "#f6465d";
+const TB_NARROW_QUERY = "(max-width: 640px)";
+
+// Trading-terminal chart theme (build 2026-10-07b): faint grid, dashed
+// crosshair with labelled axes, high/low marks, a dashed last-price line,
+// green/red candles with translucent volume, MA lines in the usual
+// yellow / pink / violet, numbers in the monospace font.
 function klineThemeStyles() {
   const cs = getComputedStyle(document.documentElement);
   const v = (name, fallback) => (cs.getPropertyValue(name) || "").trim() || fallback;
-  const accent = v("--accent", "#5ee6c0");
-  const danger = v("--danger", "#ff6b6b");
-  const textDim = v("--text-dim", "#9398a3");
-  const text = v("--text", "#eceef1");
-  const border = v("--panel-border", "#262b35");
-  const panel = v("--panel", "#171a21");
+  const up = v("--up", MARKET_UP);
+  const down = v("--down", MARKET_DOWN);
+  const upRgb = v("--up-rgb", "14,203,129");
+  const downRgb = v("--down-rgb", "246,70,93");
+  const textDim = v("--text-dim", "#848e9c");
+  const text = v("--text", "#eaecef");
+  const grid = v("--chart-grid", "rgba(132,142,156,0.08)");
+  const axis = v("--panel-border", "#262b35");
+  const tipBg = v("--chart-label-bg", "#2b3139");
+  const mono = v("--mono", "monospace");
+  const lineColors = [v("--chart-ma1", "#f0b90b"), v("--chart-ma2", "#e86bcb"), v("--chart-ma3", "#8b7cff"), v("--chart-ma4", "#2dc08e"), v("--chart-ma5", "#4aa8ff")];
+  const axisText = { color: textDim, size: 11, family: mono, weight: "normal" };
+  const crossText = { color: "#ffffff", backgroundColor: tipBg, borderColor: tipBg, size: 11, family: mono, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 2 };
+  const crossLine = { style: "dashed", dashedValue: [4, 3], size: 1, color: textDim };
+  // Phones: the OHLC / indicator legends only while touching the chart, as
+  // trading apps do — always-on they wrap over the candles.
+  const legendRule = window.matchMedia(TB_NARROW_QUERY).matches ? "follow_cross" : "always";
   return {
-    grid: { horizontal: { color: border }, vertical: { color: border } },
-    // Market colours (2026-09-29): green up / red down for candles AND the
-    // volume bars, the convention traders read at a glance. A candle with
-    // no price change counts as up (green), so flat stablecoin pools don't
-    // render as grey dashes.
+    grid: {
+      show: true,
+      horizontal: { show: true, size: 1, color: grid, style: "solid" },
+      vertical: { show: true, size: 1, color: grid, style: "solid" },
+    },
+    // Market colours: green up / red down for candles AND the volume bars.
+    // A candle with no price change counts as up (green), so flat
+    // stablecoin pools don't render as grey dashes.
     candle: {
+      type: "candle_solid",
       bar: {
-        upColor: MARKET_UP, downColor: MARKET_DOWN, noChangeColor: MARKET_UP,
-        upBorderColor: MARKET_UP, downBorderColor: MARKET_DOWN, noChangeBorderColor: MARKET_UP,
-        upWickColor: MARKET_UP, downWickColor: MARKET_DOWN, noChangeWickColor: MARKET_UP,
+        upColor: up, downColor: down, noChangeColor: up,
+        upBorderColor: up, downBorderColor: down, noChangeBorderColor: up,
+        upWickColor: up, downWickColor: down, noChangeWickColor: up,
       },
       priceMark: {
+        show: true,
+        high: { show: true, color: textDim, textSize: 10, textFamily: mono, textWeight: "normal" },
+        low: { show: true, color: textDim, textSize: 10, textFamily: mono, textWeight: "normal" },
         last: {
           show: true,
-          upColor: MARKET_UP, downColor: MARKET_DOWN, noChangeColor: MARKET_UP,
-          line: { show: true },
+          upColor: up, downColor: down, noChangeColor: up,
+          line: { show: true, style: "dashed", dashedValue: [4, 4], size: 1 },
+          text: { show: true, size: 11, family: mono, weight: "normal", color: "#ffffff", paddingLeft: 5, paddingRight: 5, paddingTop: 3, paddingBottom: 3, borderRadius: 2 },
         },
       },
-      tooltip: { text: { color: text } },
+      tooltip: { showRule: legendRule, showType: "standard", text: { color: text, size: 11, family: mono, weight: "normal" } },
     },
     indicator: {
+      ohlc: { upColor: up, downColor: down, noChangeColor: up },
       bars: [{
         style: "fill", borderStyle: "solid", borderSize: 1, borderDashedValue: [2, 2],
-        upColor: MARKET_UP_VOL, downColor: MARKET_DOWN_VOL, noChangeColor: MARKET_UP_VOL,
+        upColor: `rgba(${upRgb},0.55)`, downColor: `rgba(${downRgb},0.55)`, noChangeColor: `rgba(${upRgb},0.55)`,
       }],
-      tooltip: { text: { color: text } },
+      lines: lineColors.map((color) => ({ style: "solid", smooth: false, size: 1, dashedValue: [2, 2], color })),
+      lastValueMark: { show: false },
+      tooltip: { showRule: legendRule, showType: "standard", showName: true, showParams: true, text: { color: textDim, size: 11, family: mono, weight: "normal" } },
     },
-    xAxis: { axisLine: { color: border }, tickLine: { color: border }, tickText: { color: textDim } },
-    yAxis: { axisLine: { color: border }, tickLine: { color: border }, tickText: { color: textDim } },
-    separator: { color: border },
+    xAxis: { axisLine: { show: true, color: axis, size: 1 }, tickLine: { show: true, color: axis, size: 1, length: 3 }, tickText: axisText },
+    yAxis: { axisLine: { show: true, color: axis, size: 1 }, tickLine: { show: true, color: axis, size: 1, length: 3 }, tickText: axisText },
+    separator: { size: 1, color: axis, fill: true, activeBackgroundColor: `rgba(${upRgb},0.08)` },
     crosshair: {
-      horizontal: { line: { color: textDim }, text: { backgroundColor: panel, color: text, borderColor: border } },
-      vertical: { line: { color: textDim }, text: { backgroundColor: panel, color: text, borderColor: border } },
+      show: true,
+      horizontal: { show: true, line: { show: true, ...crossLine }, text: { show: true, ...crossText } },
+      vertical: { show: true, line: { show: true, ...crossLine }, text: { show: true, ...crossText } },
     },
   };
 }
@@ -16152,7 +16489,9 @@ function ensureTbChart() {
     return null;
   }
   try {
-    tbChart = klinecharts.init("tb-chart-container", { styles: klineThemeStyles() });
+    // decimalFoldThreshold above tbPrecisionFor's 10-decimal cap: show
+    // 0.0004403, not KLineChart's folded "0.0{3}4403".
+    tbChart = klinecharts.init("tb-chart-container", { styles: klineThemeStyles(), decimalFoldThreshold: 12 });
   } catch (e) {
     console.error("KLineChart init failed, falling back to the built-in SVG chart:", e);
     tbChartLibFailed = true;
@@ -16251,7 +16590,7 @@ async function loadTradingBoard(opts = {}) {
     const { pool: poolPk } = poolType === "cp" ? derivePool(mintA, mintB) : deriveDlmmPool(mintA, mintB);
     const [decA, decB] = await Promise.all([getMintDecimalsCached(mintA), getMintDecimalsCached(mintB)]);
     const [{ points, pricePoints }, reserves] = await Promise.all([
-      fetchPoolTradeHistory(poolPk, decA, decB),
+      fetchPoolTradeHistory(poolPk, decA, decB, poolType),
       fetchPoolReserves(poolType, poolPk).catch(() => ({ reserveA: 0n, reserveB: 0n, feeBps: 0 })),
     ]);
     tbLastData = { points, pricePoints, decA, decB, mintA, mintB, poolType, ...reserves };
@@ -16710,6 +17049,8 @@ setInterval(() => {
 window.addEventListener("resize", () => {
   if (tbChart) { try { tbChart.resize(); } catch {} }
 });
+// Legend behaviour differs on phones (see klineThemeStyles).
+try { window.matchMedia(TB_NARROW_QUERY).addEventListener("change", () => applyTbChartTheme()); } catch {}
 
 // Left drawing-tool rail — quick-access shortcuts for the most common
 // overlays. They drive the SAME #tb-overlay-select element the full
@@ -16750,7 +17091,7 @@ document.querySelectorAll(".draw-tool-btn[data-overlay-value]").forEach((btn) =>
 
 // CSV export of the Trading Board's Recent Trades (Phase 5) — exports the
 // same on-chain-decoded points fetchPoolTradeHistory() already fetched for
-// this pool (up to the last 25 signatures), reusing the same downloadCsv()
+// this pool (up to the last TRADE_HISTORY_SIGNATURES signatures), reusing the same downloadCsv()
 // helper as My Activity's export. This is per-POOL trade history, distinct
 // from My Activity's export which is scoped to the connected wallet only.
 document.getElementById("tb-export-csv-btn").addEventListener("click", () => {
@@ -16887,7 +17228,7 @@ async function openPoolDetail(type, poolPk, mintA, mintB) {
 
     // Recent history for THIS pool account specifically — not scoped to any
     // one wallet, since every trader's swap touches the same pool account.
-    const { points, pricePoints, allEvents } = await fetchPoolTradeHistory(poolPk, decA, decB);
+    const { points, pricePoints, allEvents } = await fetchPoolTradeHistory(poolPk, decA, decB, type);
 
     // A single deposit is one point; for a constant-product pool, add
     // "now" at the current reserve price so the line still draws.
@@ -18207,7 +18548,7 @@ function renderPnlBarChartSvg(rows) {
     const frac = maxAbs > 0 ? r.approxPnlA / maxAbs : 0;
     const barH = Math.abs(frac) * halfH;
     const y = frac >= 0 ? zeroY - barH : zeroY;
-    const color = frac >= 0 ? "var(--accent)" : "var(--danger)";
+    const color = frac >= 0 ? "var(--up)" : "var(--down)";
     const shortLabel = r.pairLabel.length > 16 ? r.pairLabel.slice(0, 15) + "…" : r.pairLabel;
     const ly = (H - padB) + 14;
     return `
@@ -18675,7 +19016,7 @@ document.getElementById("pnl-calc-btn").addEventListener("click", async () => {
         <td class="mono">${r.pairHtml || r.pairLabel}</td>
         <td class="mono">${r.netA >= 0 ? "+" : ""}${r.netA.toPrecision(6)}</td>
         <td class="mono">${r.netB >= 0 ? "+" : ""}${r.netB.toPrecision(6)}</td>
-        <td class="mono" style="color:${r.approxPnlA >= 0 ? "var(--accent)" : "var(--danger)"};">${r.approxPnlA >= 0 ? "+" : ""}${r.approxPnlA.toPrecision(6)}</td>
+        <td class="mono" style="color:${r.approxPnlA >= 0 ? "var(--up)" : "var(--down)"};">${r.approxPnlA >= 0 ? "+" : ""}${r.approxPnlA.toPrecision(6)}</td>
       </tr>`).join("");
     container.innerHTML = `
       <div class="table-scroll">
@@ -19859,7 +20200,7 @@ document.getElementById("bpf-find-btn").addEventListener("click", async () => {
       const isBest = rows.length > 1 && r.amountOut === bestOut;
       const typeLabel = r.poolType === "cp" ? t("poolTypeCp") : t("poolTypeDlmm");
       return `
-        <tr${isBest ? ' style="background:rgba(31,157,124,0.08);"' : ""}>
+        <tr${isBest ? ' style="background:rgba(var(--accent-rgb),0.08);"' : ""}>
           <td><span class="pill-type ${r.poolType}">${typeLabel}</span>${isBest ? ` <span class="pill-event ok">${t("bpfBestBadge")}</span>` : ""}</td>
           <td class="mono">${fmtAmt(r.amountOut, decOut)}</td>
           <td class="mono">${(r.feeBps / 100).toFixed(2)}%</td>
@@ -23498,11 +23839,12 @@ async function v2LoadTrades(key) {
     const batch = sigs.slice(i, i + 5);
     const txs = await Promise.all(batch.map((s) => state.connection.getTransaction(s.signature, { maxSupportedTransactionVersion: 0 }).catch(() => null)));
     txs.forEach((tx, j) => {
-      if (!tx?.meta?.logMessages) return;
+      // A failed transaction still logs the events emitted before it failed.
+      if (!tx?.meta?.logMessages || tx.meta.err) return;
       let evs = [];
       try { evs = Array.from(parser.parseLogs(tx.meta.logMessages)); } catch { return; }
       for (const ev of evs) {
-        if (ev.name !== "V2Swapped") continue;
+        if (ev.name !== "V2Swapped" || !eventPoolIs(ev, key.toBase58())) continue;
         trades.push({ sig: batch[j].signature, ts: v2Num(ev.data.ts), aToB: !!ev.data.aToB, amountIn: v2Big(ev.data.amountIn), amountOut: v2Big(ev.data.amountOut), fee: v2Big(ev.data.fee), feeInB: !!ev.data.feeInB, feeBps: v2Num(ev.data.feeBps), trader: ev.data.trader?.toBase58?.() });
       }
     });
