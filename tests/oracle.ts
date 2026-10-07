@@ -28,7 +28,9 @@
 //   1. A pool deposited at EXACTLY the oracle-implied ratio (zero deviation)
 //      swaps normally, charging exactly the pool's base fee_bps.
 //   2. A pool deposited at a ratio wildly off the oracle price, under a
-//      tight guard, has its swap rejected with PriceDeviationTooLarge.
+//      tight guard, has a swap that moves the price further away rejected
+//      with PriceDeviationTooLarge — while a swap back toward the oracle
+//      still goes through, at max_fee_bps (see oracle.rs's guard_allows).
 //   3. A pool deposited at a ratio producing a known, moderate deviation
 //      (within the guard) charges the exact dynamically-scaled fee the
 //      on-chain linear formula computes — validated end-to-end via balance
@@ -310,9 +312,9 @@ describe("oracle guard + dynamic fee (Phase 3)", () => {
       .rpc();
   }
 
-  function swap(p: PoolFixture, amountIn: bigint, minAmountOut: bigint) {
+  function swap(p: PoolFixture, amountIn: bigint, minAmountOut: bigint, aToB = true) {
     return program.methods
-      .swap(new BN(amountIn.toString()), new BN(minAmountOut.toString()), true)
+      .swap(new BN(amountIn.toString()), new BN(minAmountOut.toString()), aToB)
       .accounts({
         trader: payer.publicKey,
         pool: p.pool,
@@ -320,8 +322,8 @@ describe("oracle guard + dynamic fee (Phase 3)", () => {
         vaultB: p.vaultB,
         mintA: p.mintA,
         mintB: p.mintB,
-        traderTokenIn: p.traderTokenA,
-        traderTokenOut: p.traderTokenB,
+        traderTokenIn: aToB ? p.traderTokenA : p.traderTokenB,
+        traderTokenOut: aToB ? p.traderTokenB : p.traderTokenA,
         tokenProgramA: TOKEN_PROGRAM_ID,
         tokenProgramB: TOKEN_PROGRAM_ID,
         priceUpdateA: PRICE_UPDATE_A,
@@ -420,13 +422,48 @@ describe("oracle guard + dynamic fee (Phase 3)", () => {
       `test fixture's deviation (${devBps} bps) should exceed the guard (${ORACLE_MAX_DEVIATION_BPS} bps) — adjust reserves`
     );
 
+    // The pool prices A at 1.0 B against the oracle's 0.2, so buying A
+    // (B -> A) pushes the price even further away: rejected.
     const err = await expectThrows(
-      () => swap(p, 10_000n, 0n),
+      () => swap(p, 10_000n, 0n, false),
       "swap on a pool whose price deviates from the oracle beyond its guard"
     );
     const code = errorCode(err);
     console.log("  (oracle-deviation-guard rejection returned error code:", code, ")");
     if (code) assert.equal(code, "PriceDeviationTooLarge");
+  });
+
+  it("still allows a swap that moves an out-of-guard pool back toward the oracle, at max_fee_bps", async () => {
+    // Before 2026-10-07 the guard only looked at the pre-trade price, so a
+    // pool outside the guard could never trade again — not even the
+    // arbitrage that would fix its price. See oracle.rs's guard_allows.
+    const FEE_BPS = 30;
+    const MAX_FEE_BPS = 300;
+    const ORACLE_MAX_DEVIATION_BPS = 200;
+
+    const reserveA = 5_000_000n;
+    const reserveB = 5_000_000n;
+
+    const p = await setUpPool({
+      feeBps: FEE_BPS,
+      maxFeeBps: MAX_FEE_BPS,
+      oracleMaxDeviationBps: ORACLE_MAX_DEVIATION_BPS,
+    });
+    await deposit(p, reserveA, reserveB);
+
+    // Selling A (A -> B) lowers the pool's B-per-A price toward the oracle.
+    const amountIn = 10_000n;
+    const expectedOut = expectedSwapOut(reserveA, reserveB, amountIn, BigInt(MAX_FEE_BPS));
+    const traderBBefore = await getAccount(provider.connection, p.traderTokenB);
+
+    await swap(p, amountIn, 0n, true);
+
+    const traderBAfter = await getAccount(provider.connection, p.traderTokenB);
+    assert.equal(
+      (BigInt(traderBAfter.amount.toString()) - BigInt(traderBBefore.amount.toString())).toString(),
+      expectedOut.toString(),
+      "a swap out of the guard band toward the oracle should succeed and pay max_fee_bps"
+    );
   });
 
   it("scales the swap fee linearly with a known, moderate oracle deviation", async () => {

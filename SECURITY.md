@@ -897,9 +897,21 @@ stored feed id, and `age <= oracle_max_staleness_secs`), then the fee
 charged scales linearly between the pool's flat `fee_bps` and
 `max_fee_bps` based on how far the pool's own reserve ratio has drifted
 from the oracle price (`deviation_bps`) — at exactly zero deviation the
-fee is exactly `fee_bps` (unchanged from before this feature), and at or
-beyond `oracle_max_deviation_bps` the swap is rejected outright with
-`PriceDeviationTooLarge`.
+fee is exactly `fee_bps` (unchanged from before this feature), and
+beyond `oracle_max_deviation_bps` the fee is `max_fee_bps` and the swap
+is rejected with `PriceDeviationTooLarge` unless it moves the pool's
+price strictly closer to the oracle price.
+
+**Fixed 2026-10-07 — oracle guard could freeze a pool.** The guard used to
+check only the pool's PRE-trade price. A swap that started inside the
+guard could push the price past it (up to the 50% price-impact cap), and
+after that every swap in either direction was rejected — including the
+arbitrage that would bring the price back — so the pool stayed frozen
+until the oracle itself moved to the pool's price. Anyone with enough
+capital could do this on purpose. Now `oracle::guard_allows` also accepts
+a swap whose POST-trade deviation is lower than its pre-trade deviation
+(CP, DLMM and SWDMM v2 all call `OracleFeeResult::enforce_guard` after
+computing the new price).
 
 **Two real bugs found and fixed via the user's own `anchor test` runs on
 their WSL machine** (same "write blind, verify via a human's real run,

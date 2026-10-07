@@ -1330,6 +1330,9 @@ pub(crate) fn swap_dlmm(ctx: Context<SwapDlmm>, amount_in: u64, min_amount_out: 
     require!(total_amount_out >= min_amount_out, SwdAmmError::SlippageExceeded);
     drop(bin_array);
 
+    // Oracle guard on the post-trade price (see oracle::guard_allows).
+    oracle_result.enforce_guard(bin_price_q64(active_bin_id, bin_step_bps)?)?;
+
     ctx.accounts.pool.active_bin_id = active_bin_id;
 
     anchor_spl::token::transfer(

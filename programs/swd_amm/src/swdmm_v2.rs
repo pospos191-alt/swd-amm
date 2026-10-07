@@ -493,13 +493,14 @@ pub(crate) fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64,
 
     let price_before = m::price_q64(pool.reserve_a, pool.reserve_b).ok_or(SwdmmV2Error::MathOverflow)?;
 
-    // Optional Pyth guard: refuse to trade while the pool is too far
-    // from the oracle price.
-    if pool.oracle.enabled {
+    // Optional Pyth guard: refuse a trade that leaves the pool too far
+    // from the oracle price, unless it moves the price back toward it
+    // (enforced below, once the post-trade price is known).
+    let oracle_result = if pool.oracle.enabled {
         let (Some(pa), Some(pb)) = (&ctx.accounts.price_update_a, &ctx.accounts.price_update_b) else {
             return err!(SwdmmV2Error::OracleAccountsMissing);
         };
-        oracle::evaluate_oracle_and_fee(
+        Some(oracle::evaluate_oracle_and_fee(
             pa,
             pb,
             &pool.oracle.pyth_feed_id_a,
@@ -512,8 +513,10 @@ pub(crate) fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64,
             0,
             pool.oracle.max_deviation_bps,
             &Clock::get()?,
-        )?;
-    }
+        )?)
+    } else {
+        None
+    };
 
     // Fee = scheduled base fee + volatility fee.
     let base_bps = pool.current_base_fee_bps(now)?;
@@ -560,6 +563,11 @@ pub(crate) fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64,
     pool.reserve_a = r.new_reserve_a;
     pool.reserve_b = r.new_reserve_b;
     pool.swap_count = pool.swap_count.saturating_add(1);
+
+    if let Some(o) = &oracle_result {
+        let price_after = m::price_q64(pool.reserve_a, pool.reserve_b).ok_or(SwdmmV2Error::MathOverflow)?;
+        o.enforce_guard(price_after)?;
+    }
 
     // This swap's own move feeds the next swap's volatility fee.
     if dyn_cfg.enabled {

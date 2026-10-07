@@ -900,6 +900,10 @@ pub mod swd_amm {
                 .ok_or(SwdAmmError::MathOverflow)?;
         }
 
+        // Oracle guard on the post-trade price (see oracle::guard_allows).
+        let post_price_q64 = dlmm::q64_div_amount(pool.reserve_b, pool.reserve_a as u128)?;
+        oracle_result.enforce_guard(post_price_q64)?;
+
         emit!(SwapExecuted {
             pool: ctx.accounts.pool.key(),
             trader: ctx.accounts.trader.key(),

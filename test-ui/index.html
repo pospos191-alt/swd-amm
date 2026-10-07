@@ -1313,7 +1313,7 @@
 
 <h1>SWD AMM — Test UI</h1>
 <div class="sub">
-  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-09-29m</code> —
+  <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-07a</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
 
@@ -4375,11 +4375,11 @@ const STRINGS = {
     toastBatchProgress: "กำลังส่งธุรกรรม {i}/{n}: {label}",
     toastBatchCount: "ยืนยันครั้งเดียว ส่ง {n} ธุรกรรม",
     logGovBatchOk: "ตั้งค่า Governance และ allowlist มินต์สำเร็จ",
-    oracleBadgeMismatch: "⚠ ราคาอ้างอิงไม่ตรง — swap ไม่ได้",
+    oracleBadgeMismatch: "⚠ ราคาอ้างอิงไม่ตรง — swap ได้เฉพาะทิศที่ดึงราคากลับ",
     oracleBadgeStale: "⚠ ราคาอ้างอิงหมดอายุ — swap ไม่ได้",
     oracleBadgeUnavailable: "⚠ อ่านราคาอ้างอิงไม่ได้",
     oracleBadgeUnregistered: "ยังไม่รู้จักราคาอ้างอิงของพูลนี้",
-    oracleTipMismatch: "ราคาในพูลต่างจากราคาอ้างอิง (Pyth) ที่พูลนี้ผูกไว้ {pct} เกินเพดาน {max} ที่พูลยอมรับ ทุก swap จะถูกปฏิเสธ และราคาอ้างอิงแก้ภายหลังไม่ได้ ให้ใช้พูลอื่นแทน",
+    oracleTipMismatch: "ราคาในพูลต่างจากราคาอ้างอิง (Pyth) ที่พูลนี้ผูกไว้ {pct} เกินเพดาน {max} ที่พูลยอมรับ swap ที่ดันราคาห่างออกไปอีกจะถูกปฏิเสธ ส่วน swap ที่ดึงราคากลับเข้าใกล้ราคาอ้างอิงทำได้ แต่เสียค่าธรรมเนียมสูงสุดของพูล",
     oracleTipStale: "ราคาอ้างอิงล่าสุดเก่า {age} วินาที เกินที่พูลนี้ยอมรับ ({maxAge} วินาที) swap จะถูกปฏิเสธจนกว่าราคาจะอัปเดต บน localnet ให้ restart validator ด้วย yarn localnet (ราคาทดสอบใช้ได้ 24 ชั่วโมง) แล้วสร้างพูลใหม่",
     oracleTipUnavailable: "หาบัญชีราคาอ้างอิงของพูลนี้บนเครือข่ายที่เลือกไม่เจอ หรือข้อมูลไม่ตรงกับที่พูลผูกไว้ swap จะถูกปฏิเสธ",
     oracleTipUnregistered: "เบราว์เซอร์นี้ยังไม่รู้ว่าราคาอ้างอิงของพูลนี้อยู่บัญชีไหน จึงยัง swap จากหน้านี้ไม่ได้ ถ้าเป็นพูลทดสอบบน localnet ให้กด \"ใช้ Localnet test fixtures\" หนึ่งครั้ง",
@@ -4393,7 +4393,7 @@ const STRINGS = {
     toastHintRejected: "คุณกดยกเลิกในกระเป๋า ไม่มีการเปลี่ยนแปลงใด ๆ",
     toastHintNoSol: "SOL ในกระเป๋าไม่พอจ่ายค่าธรรมเนียม บน localnet ใช้ solana airdrop เติมได้",
     toastHintStale: "ราคาอ้างอิง (Pyth) เก่าเกินกว่าที่พูลนี้ยอมรับ บน localnet ให้ restart validator ด้วย yarn localnet (ราคาทดสอบใช้ได้ 24 ชั่วโมง) แล้วสร้างพูลใหม่",
-    toastHintDeviation: "ราคาในพูลต่างจากราคาอ้างอิงเกินเพดานของพูล ลองแลกจำนวนน้อยลง หรือใช้พูลที่ราคาอ้างอิงตรงกับอัตราส่วนในพูล",
+    toastHintDeviation: "ราคาในพูลต่างจากราคาอ้างอิงเกินเพดานของพูล และ swap นี้ดันราคาห่างออกไปอีก ลองสลับทิศ แลกจำนวนน้อยลง หรือใช้พูลอื่น",
     toastHintNoLiquidity: "พูลนี้ยังไม่มีสภาพคล่องในทิศทางนี้ ให้ฝากสภาพคล่องก่อน",
     toastHintMinDeposit: "การฝากครั้งแรกต้องมีอย่างน้อย 1,000,000 หน่วยดิบ (1 เหรียญที่ 6 ทศนิยม) ต่อฝั่ง",
     toastHintSlippage: "ได้รับน้อยกว่าค่า Min amount out ที่ตั้งไว้ ลองลดจำนวนหรือลดค่า Min amount out",
@@ -5394,11 +5394,11 @@ const STRINGS = {
     toastBatchProgress: "Sending transaction {i}/{n}: {label}",
     toastBatchCount: "one approval, {n} transactions",
     logGovBatchOk: "Governance setup and mint allowlist done",
-    oracleBadgeMismatch: "⚠ Reference price mismatch — can't swap",
+    oracleBadgeMismatch: "⚠ Reference price mismatch — only swaps toward it",
     oracleBadgeStale: "⚠ Reference price expired — can't swap",
     oracleBadgeUnavailable: "⚠ Reference price unreadable",
     oracleBadgeUnregistered: "Reference price not known here",
-    oracleTipMismatch: "This pool's price is {pct} away from the Pyth reference price it was created with, over its {max} limit. Every swap will be rejected, and the reference can't be changed after creation. Use another pool.",
+    oracleTipMismatch: "This pool's price is {pct} away from the Pyth reference price it was created with, over its {max} limit. A swap that pushes the price further away is rejected; a swap that moves it back toward the reference goes through, at the pool's maximum fee.",
     oracleTipStale: "The latest reference price is {age}s old, older than this pool accepts ({maxAge}s). Swaps are rejected until it updates. On localnet, restart the validator with yarn localnet (test prices then last 24 hours) and create a new pool.",
     oracleTipUnavailable: "This pool's reference price account wasn't found on the selected network, or doesn't match the feed the pool was created with. Swaps will be rejected.",
     oracleTipUnregistered: "This browser doesn't know which account holds this pool's reference price yet, so swaps from this page won't work. For a localnet test pool, press \"Use Localnet test fixtures\" once.",
@@ -5412,7 +5412,7 @@ const STRINGS = {
     toastHintRejected: "You cancelled in your wallet. Nothing changed.",
     toastHintNoSol: "Not enough SOL for fees. On localnet, top up with solana airdrop.",
     toastHintStale: "The Pyth reference price is older than this pool accepts. On localnet, restart the validator with yarn localnet (test prices then last 24 hours) and create a new pool.",
-    toastHintDeviation: "The pool price is too far from the reference price. Try a smaller amount, or use a pool whose reference price matches its ratio.",
+    toastHintDeviation: "The pool price is too far from the reference price and this swap would move it further away. Try the other direction, a smaller amount, or another pool.",
     toastHintNoLiquidity: "This pool has no liquidity in that direction yet. Add liquidity first.",
     toastHintMinDeposit: "A pool's first deposit needs at least 1,000,000 raw units (1 token at 6 decimals) per side.",
     toastHintSlippage: "You'd receive less than your Min amount out. Try a smaller amount or a lower minimum.",
@@ -13373,11 +13373,12 @@ async function updateSwapOracleWarning(prefix, type) {
   } catch { box.hidden = true; if (btnEl) btnEl.disabled = false; return; }
   const h = await getPoolOracleHealth(type, poolPk);
   if (seq !== swapOracleCheckSeq[prefix]) return;
-  // Mismatch and stale are certain on-chain rejections (same math as
-  // oracle.rs, checked against the chain's own clock), so the Swap button
-  // is disabled for those instead of letting a doomed transaction go out.
+  // A stale price is a certain on-chain rejection (checked against the
+  // chain's own clock), so the Swap button is disabled for it. A mismatch
+  // is not: since 2026-10-07 a swap that moves the pool back toward the
+  // reference price is allowed (oracle.rs guard_allows), so it only warns.
   const swapBtn = document.getElementById(prefix === "dlmm-swap" ? "dlmm-swap-btn" : "swap-btn");
-  const block = !!h && (h.status === "mismatch" || h.status === "stale");
+  const block = !!h && h.status === "stale";
   if (swapBtn) {
     swapBtn.disabled = block;
     swapBtn.title = block ? oracleHealthText(h, "badge") : "";
