@@ -115,13 +115,29 @@ try {
     }],
     // Easy swap (build 2026-10-07d): token amounts in, raw units underneath.
     ["Swap takes token amounts (1.5 -> 1500000 raw at 6 decimals) and back", async () => {
-      await page.fill("#swap-amount-ui", "1.5");
+      await page.fill("#swap-amount-in-ui", "1.5");
       await page.waitForFunction(() => document.getElementById("swap-amount-in").value === "1500000", null, { timeout: 3000 })
         .catch(() => { throw new Error("raw amount not written from the token amount"); });
       await page.evaluate(() => { document.getElementById("swap-amount-in").value = "2500000"; });
-      await page.waitForFunction(() => document.getElementById("swap-amount-ui").value === "2.5", null, { timeout: 3000 })
+      await page.waitForFunction(() => document.getElementById("swap-amount-in-ui").value === "2.5", null, { timeout: 3000 })
         .catch(() => { throw new Error("token amount not updated when the raw amount is set (MAX / auto-route path)"); });
-      await page.fill("#swap-amount-ui", "");
+      await page.fill("#swap-amount-in-ui", "");
+    }],
+    ["Every amount field takes token amounts (Limit, DCA, Multi-hop, liquidity, ...)", async () => {
+      const bad = await page.evaluate(async () => {
+        const ids = ["mh-amount-in", "lo-amount-in", "dca-amount-per-run", "bpf-amount-in", "sim-amount-a", "add-amount-a", "add-min-lp", "rm-lp-amount", "rm-min-a", "dlmm-add-amount-a", "dlmm-rm-min-a"];
+        const out = [];
+        for (const id of ids) {
+          const ui = document.getElementById(`${id}-ui`);
+          if (!ui) { out.push(`${id}: no token-amount field`); continue; }
+          const raw = document.getElementById(id);
+          raw.value = "2500000";
+          await new Promise((r) => setTimeout(r, 60));
+          if (ui.value !== "2.5") out.push(`${id}: raw 2500000 shows "${ui.value}"`);
+        }
+        return out;
+      });
+      if (bad.length) throw new Error(bad.join("; "));
     }],
     ["Token picker opens from You send and closes", async () => {
       await page.click("#swap-form-content .dir-flip-side:not(.dir-flip-side-to)", { timeout: 5000 });
