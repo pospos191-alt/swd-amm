@@ -39,7 +39,7 @@ import {
 } from "@solana/spl-token";
 import { PublicKey, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { assert } from "chai";
-import { LEGACY_POOLS, LEGACY_ORACLE_MAX_DEVIATION_BPS, LEGACY_MAX_FEE_BPS, TEST_ORACLE_MAX_STALENESS_SECS } from "./oracle-fixtures";
+import { LEGACY_POOLS, LEGACY_ORACLE_MAX_DEVIATION_BPS, LEGACY_MAX_FEE_BPS, TEST_ORACLE_MAX_STALENESS_SECS, mintFeedPda, registerFeeds } from "./oracle-fixtures";
 
 // TODO: once `anchor build` has generated target/types/swd_amm.ts, replace
 // `anchor.Program<any>` with `Program<SwdAmm>` and uncomment this import for full
@@ -85,8 +85,11 @@ function expectedSwapOut(
   const amountInAfterFee = (amountIn * feeMultiplier) / 10_000n;
   const k = reserveIn * reserveOut;
   const newReserveIn = reserveIn + amountInAfterFee;
-  const newReserveOutFloor = k / newReserveIn;
-  return reserveOut - newReserveOutFloor;
+  // The pool keeps ceil(k / newReserveIn): the payout rounds DOWN, in the
+  // pool's favour (lib.rs swap, fixed 2026-10-08 — see
+  // security/attack-tests attack_rounding_drain_with_dust_swaps).
+  const newReserveOutCeil = (k + newReserveIn - 1n) / newReserveIn;
+  return reserveOut - newReserveOutCeil;
 }
 
 /**
@@ -275,7 +278,7 @@ describe("swd_amm", () => {
         .initializeGlobalConfig(payer.publicKey, emergencyAuthority.publicKey)
         .accounts({
           config: globalConfigPda,
-          payer: payer.publicKey,
+          programData: PublicKey.findProgramAddressSync([program.programId.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"))[0], payer: payer.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -333,6 +336,10 @@ describe("swd_amm", () => {
     const allowedMintAPda = await ensureAllowlisted(mA);
     const allowedMintBPda = await ensureAllowlisted(mB);
     const { poolPda, vaultAPda, vaultBPda, lpMintPda } = derivePoolAddresses(mA, mB);
+    await registerFeeds(program, payer, globalConfigPda, [
+      [mA, oracleFeed.feedIdA],
+      [mB, oracleFeed.feedIdB],
+    ]);
     await program.methods
       .initializePool(
         feeBps,
@@ -349,6 +356,8 @@ describe("swd_amm", () => {
         config: globalConfigPda,
         allowedMintA: allowedMintAPda,
         allowedMintB: allowedMintBPda,
+        mintFeedA: mintFeedPda(program.programId, mA),
+        mintFeedB: mintFeedPda(program.programId, mB),
         pool: poolPda,
         vaultA: vaultAPda,
         vaultB: vaultBPda,

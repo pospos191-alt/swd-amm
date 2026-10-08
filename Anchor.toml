@@ -22,6 +22,15 @@ url = "https://api.apr.dev"
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
+# Deploy the program under test as UPGRADEABLE, with the provider wallet
+# as its upgrade authority (2026-10-08). initialize_global_config only
+# accepts the program's upgrade authority (governance.rs — closes a deploy
+# front-run found by security/attack-tests); without this, `anchor test`
+# loads the program with upgrades disabled, so nobody could initialise
+# governance and every suite's before() hook failed with Unauthorized.
+[test]
+upgradeable = true
+
 # "Phase 3" (Pyth oracle guard + dynamic fee, added 2026-09-23) — these two
 # entries pre-load the local validator with the fixture PriceUpdateV2
 # accounts `scripts/gen-pyth-fixtures.js` generates. RUN THAT SCRIPT

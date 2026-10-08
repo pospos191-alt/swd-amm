@@ -97,7 +97,7 @@ describe("squads multisig — live on-chain verification (Phase 2b)", () => {
         .initializeGlobalConfig(payer.publicKey, emergencyAuthority.publicKey)
         .accounts({
           config: globalConfigPda,
-          payer: payer.publicKey,
+          programData: PublicKey.findProgramAddressSync([program.programId.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"))[0], payer: payer.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();

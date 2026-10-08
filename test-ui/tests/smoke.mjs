@@ -95,10 +95,10 @@ try {
 
   const steps = [
     ["open Trade tab", () => page.click('.tab-nav-btn[data-tab="tools"]', { timeout: 5000 })],
-    ["open Swap popup", () => page.click("#tools-nav-swap", { timeout: 5000 })],
+    ["open Swap (dock tab)", () => page.click('.dock-tab[data-dock-tool="swap"]', { timeout: 5000 })],
     ["close popup (Escape)", () => page.keyboard.press("Escape")],
     ["Multi-hop fills mint in/out from the active pair", async () => {
-      await page.click("#tools-nav-mh", { timeout: 5000 });
+      await page.click('.dock-tab[data-dock-tool="mh"]', { timeout: 5000 });
       const v = await page.evaluate(() => [document.getElementById("mh-mint-in").value, document.getElementById("mh-mint-out").value]);
       if (v[0] !== A || v[1] !== B) throw new Error(`mint in/out = ${v.join(" / ")}`);
       await page.click("#mh-direction-flip-btn", { timeout: 5000 });
@@ -106,13 +106,73 @@ try {
       if (f[0] !== B || f[1] !== A) throw new Error(`after flip mint in/out = ${f.join(" / ")}`);
       await page.keyboard.press("Escape");
     }],
+    // Swap is docked beside the chart on wide screens (build 2026-10-07c).
+    ["Dock tabs switch tools in place (no popup)", async () => {
+      for (const tool of ["lo", "dca", "bpf", "mh", "swap"]) {
+        await page.click(`.dock-tab[data-dock-tool="${tool}"]`, { timeout: 5000 });
+        const r = await page.evaluate((tool) => {
+          const ids = { lo: "lo-create-btn", dca: "dca-create-btn", bpf: "bpf-find-btn", mh: "mh-swap-btn", swap: "swap-btn" };
+          const btn = document.querySelector(`#trade-dock-body #${ids[tool]}`) || (tool === "swap" && document.querySelector("#trade-dock-body #dlmm-swap-btn"));
+          return { docked: !!btn, popup: !document.getElementById("form-popup-overlay").hidden, active: document.querySelector(".dock-tab.active")?.dataset.dockTool };
+        }, tool);
+        if (!r.docked || r.popup || r.active !== tool) throw new Error(`${tool}: ${JSON.stringify(r)}`);
+      }
+    }],
+    ["Swap form is docked beside the chart (1440px)", async () => {
+      const docked = await page.evaluate(() => !document.getElementById("trade-dock").hidden && !!document.querySelector("#trade-dock-body #swap-btn, #trade-dock-body #dlmm-swap-btn"));
+      if (!docked) throw new Error("no Swap form in #trade-dock-body");
+      const popupOpen = await page.evaluate(() => !document.getElementById("form-popup-overlay").hidden);
+      if (popupOpen) throw new Error("Swap opened a popup instead of using the dock");
+    }],
+    // Easy swap (build 2026-10-07d): token amounts in, raw units underneath.
+    ["Swap takes token amounts (1.5 -> 1500000 raw at 6 decimals) and back", async () => {
+      await page.fill("#swap-amount-in-ui", "1.5");
+      await page.waitForFunction(() => document.getElementById("swap-amount-in").value === "1500000", null, { timeout: 3000 })
+        .catch(() => { throw new Error("raw amount not written from the token amount"); });
+      await page.evaluate(() => { document.getElementById("swap-amount-in").value = "2500000"; });
+      await page.waitForFunction(() => document.getElementById("swap-amount-in-ui").value === "2.5", null, { timeout: 3000 })
+        .catch(() => { throw new Error("token amount not updated when the raw amount is set (MAX / auto-route path)"); });
+      await page.fill("#swap-amount-in-ui", "");
+    }],
+    ["Every amount field takes token amounts (Limit, DCA, Multi-hop, liquidity, ...)", async () => {
+      const bad = await page.evaluate(async () => {
+        const ids = ["mh-amount-in", "lo-amount-in", "dca-amount-per-run", "bpf-amount-in", "sim-amount-a", "add-amount-a", "add-min-lp", "rm-lp-amount", "rm-min-a", "dlmm-add-amount-a", "dlmm-rm-min-a"];
+        const out = [];
+        for (const id of ids) {
+          const ui = document.getElementById(`${id}-ui`);
+          if (!ui) { out.push(`${id}: no token-amount field`); continue; }
+          const raw = document.getElementById(id);
+          raw.value = "2500000";
+          await new Promise((r) => setTimeout(r, 60));
+          if (ui.value !== "2.5") out.push(`${id}: raw 2500000 shows "${ui.value}"`);
+        }
+        return out;
+      });
+      if (bad.length) throw new Error(bad.join("; "));
+    }],
+    ["Token picker opens from You send and closes", async () => {
+      await page.click("#swap-form-content .dir-flip-side:not(.dir-flip-side-to)", { timeout: 5000 });
+      const open = await page.evaluate(() => !document.getElementById("token-picker-overlay").hidden);
+      if (!open) throw new Error("token picker did not open");
+      await page.keyboard.press("Escape");
+      const closed = await page.evaluate(() => document.getElementById("token-picker-overlay").hidden);
+      if (!closed) throw new Error("token picker did not close on Escape");
+    }],
+    ["Settings popover opens and closes", async () => {
+      await page.click("#settings-btn", { timeout: 5000 });
+      const open = await page.evaluate(() => !document.getElementById("settings-pop").hidden);
+      if (!open) throw new Error("settings popover did not open");
+      await page.keyboard.press("Escape");
+      const closed = await page.evaluate(() => document.getElementById("settings-pop").hidden);
+      if (!closed) throw new Error("settings popover did not close on Escape");
+    }],
     ["popups show no pair pickers", async () => {
-      for (const id of ["#tools-nav-swap", "#tools-nav-lo", "#tools-nav-dca"]) {
+      for (const id of ['.dock-tab[data-dock-tool="swap"]', '.dock-tab[data-dock-tool="lo"]', '.dock-tab[data-dock-tool="dca"]']) {
         await page.click(id, { timeout: 5000 });
-        const visible = await page.evaluate(() => Array.from(document.querySelectorAll("#form-popup-body select, #form-popup-body .isel-btn, #form-popup-body [data-open-pair-drawer]"))
+        const visible = await page.evaluate(() => Array.from(document.querySelectorAll("#form-popup-body select, #form-popup-body .isel-btn, #form-popup-body [data-open-pair-drawer], #trade-dock-body select, #trade-dock-body .isel-btn, #trade-dock-body [data-open-pair-drawer]"))
           .filter((el) => el.offsetParent !== null && /pair-select|pool-type|isel|pair-drawer/.test(el.id + " " + el.className + " " + (el.getAttribute("data-open-pair-drawer") !== null ? "pair-drawer" : ""))).map((el) => el.id || el.className));
         if (visible.length) throw new Error(`${id}: visible ${visible.join(", ")}`);
-        const opened = await page.evaluate(() => document.querySelectorAll("#form-popup-body select").length);
+        const opened = await page.evaluate(() => document.querySelectorAll("#form-popup-body select, #trade-dock-body select").length);
         if (!opened) throw new Error(`${id}: popup did not open`);
         await page.keyboard.press("Escape");
       }
@@ -128,16 +188,60 @@ try {
       });
       if (!onWithWallet) throw new Error("lists stay hidden even with a wallet connected");
     }],
-    ["SWDMM v2 tab: pools, create form (with fee chart), governance render", async () => {
-      await page.click('.tab-nav-btn[data-tab="v2"]', { timeout: 5000 });
-      await page.click('[data-v2-view="create"]', { timeout: 5000 });
+    ["Pools: SWDMM v2 filter chip; Create → SWDMM v2 opens the v2 create form", async () => {
+      await page.click('.tab-nav-btn[data-tab="liquidity"]', { timeout: 5000 });
+      await page.click("#lq-filter-v2", { timeout: 5000 });
+      const wizardHidden = await page.evaluate(() => getComputedStyle(document.getElementById("pool-wizard-panel")).display === "none");
+      if (!wizardHidden) throw new Error("create-pool wizard shows under the pool list");
+      await page.click("#lq-create-btn", { timeout: 5000 });
+      await page.click("#cpm-option-v2", { timeout: 5000 });
+      await page.click("#cpm-continue-btn", { timeout: 5000 });
+      await page.waitForFunction(() => document.querySelector(".grid").dataset.activeTab === "v2", null, { timeout: 5000 });
+      const navActive = await page.evaluate(() => document.querySelector('.tab-nav-btn[data-tab="liquidity"]').classList.contains("active"));
+      if (!navActive) throw new Error("Pools nav item is not highlighted on the SWDMM v2 page");
       await page.click('#v2c-mode button[data-val="1"]', { timeout: 5000 });
       await page.waitForFunction(() => document.querySelector("#v2c-fee-chart svg path") && document.querySelector("#v2c-range-chart svg"), null, { timeout: 5000 });
       await page.click('[data-v2-view="gov"]', { timeout: 5000 });
       await page.click('[data-v2-view="pools"]', { timeout: 5000 });
+      await page.waitForFunction(() => document.querySelector(".grid").dataset.activeTab === "liquidity" && document.querySelector("#lq-filter-v2.active"), null, { timeout: 5000 });
+    }],
+    ["DLMM add: range picker (3 modes, no Bin ID typing) + preview box", async () => {
+      await page.evaluate(() => { document.querySelector('.tab-nav-btn[data-tab="portfolio"]').click(); });
+      const r = await page.evaluate(() => {
+        const host = document.getElementById("dlmm-add-rp");
+        const adv = document.getElementById("dlmm-add-bin-lower")?.closest("details.rp-advanced");
+        return { host: !!host, modes: host ? host.querySelectorAll("[data-rp-mode]").length : 0, adv: !!adv, preview: !!document.getElementById("dlmm-add-preview"), cpPreview: !!document.getElementById("add-liq-preview") };
+      });
+      if (!r.host || r.modes !== 3 || !r.adv || !r.preview || !r.cpPreview) throw new Error(JSON.stringify(r));
+    }],
+    ["Developer mode hides / shows Advanced and Dev Tools", async () => {
+      const r = await page.evaluate(() => {
+        const vis = () => ["amm", "dlmm", "devtools"].map((t) => getComputedStyle(document.querySelector(`.rd-more-item[data-tab="${t}"]`)).display !== "none");
+        const before = vis();
+        document.querySelector('.rd-more-item[data-tab="amm"]').click();
+        const landed = document.querySelector(".grid").dataset.activeTab;
+        const tg = document.getElementById("dev-mode-toggle"); tg.checked = true; tg.dispatchEvent(new Event("change"));
+        const after = vis();
+        document.querySelector('.rd-more-item[data-tab="amm"]').click();
+        const landedDev = document.querySelector(".grid").dataset.activeTab;
+        tg.checked = false; tg.dispatchEvent(new Event("change"));
+        const back = document.querySelector(".grid").dataset.activeTab;
+        return { before, landed, after, landedDev, back };
+      });
+      if (r.before.some(Boolean)) throw new Error("dev items visible without Developer mode");
+      if (r.landed !== "tools") throw new Error(`Advanced AMM opened without Developer mode (${r.landed})`);
+      if (!r.after.every(Boolean) || r.landedDev !== "amm") throw new Error("Developer mode did not unlock Advanced AMM");
+      if (r.back !== "tools") throw new Error("turning Developer mode off left a dev page open");
+    }],
+    ["Swap page: pair bar and 4h / 1D timeframes", async () => {
+      await page.click('.tab-nav-btn[data-tab="tools"]', { timeout: 5000 });
+      const ok = await page.evaluate(() => !!document.querySelector("#tb-pair-bar .pb-pair") && !!document.getElementById("tb-tf-4h") && !!document.getElementById("tb-tf-1d"));
+      if (!ok) throw new Error("pair bar or 4h / 1D buttons missing");
+      await page.click("#tb-tf-1d", { timeout: 5000 });
+      await page.click("#tb-tf-1m", { timeout: 5000 });
     }],
     ["open Portfolio tab", () => page.click('.tab-nav-btn[data-tab="portfolio"]', { timeout: 5000 })],
-    ["switch language to Thai", () => page.selectOption("#lang-select", "th")],
+    ["switch language to Thai", async () => { await page.click("#settings-btn"); await page.selectOption("#lang-select", "th"); await page.keyboard.press("Escape"); }],
     ["switch network to Devnet", () => page.selectOption("#network-select", "devnet")],
     ["switch network back to Localnet", () => page.selectOption("#network-select", "localnet")],
   ];

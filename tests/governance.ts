@@ -56,7 +56,7 @@ import {
 } from "@solana/spl-token";
 import { PublicKey, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { assert } from "chai";
-import { LEGACY_POOLS, LEGACY_ORACLE_MAX_DEVIATION_BPS, LEGACY_MAX_FEE_BPS, TEST_ORACLE_MAX_STALENESS_SECS } from "./oracle-fixtures";
+import { LEGACY_POOLS, LEGACY_ORACLE_MAX_DEVIATION_BPS, LEGACY_MAX_FEE_BPS, TEST_ORACLE_MAX_STALENESS_SECS, mintFeedPda, registerFeeds } from "./oracle-fixtures";
 
 async function expectThrows(fn: () => Promise<unknown>, label: string) {
   try {
@@ -165,7 +165,7 @@ describe("swd_amm governance", () => {
         .initializeGlobalConfig(payer.publicKey, emergencyAuthority.publicKey)
         .accounts({
           config: globalConfigPda,
-          payer: payer.publicKey,
+          programData: PublicKey.findProgramAddressSync([program.programId.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"))[0], payer: payer.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -198,6 +198,10 @@ describe("swd_amm governance", () => {
     allowedMintBPda: PublicKey
   ) {
     const { poolPda, vaultAPda, vaultBPda, lpMintPda } = derivePoolAddresses(mA, mB);
+    await registerFeeds(program, payer, globalConfigPda, [
+      [mA, LEGACY_POOLS.ratioOne.feedIdA],
+      [mB, LEGACY_POOLS.ratioOne.feedIdB],
+    ]);
     await program.methods
       .initializePool(
         FEE_BPS,
@@ -214,6 +218,8 @@ describe("swd_amm governance", () => {
         config: globalConfigPda,
         allowedMintA: allowedMintAPda,
         allowedMintB: allowedMintBPda,
+        mintFeedA: mintFeedPda(program.programId, mA),
+        mintFeedB: mintFeedPda(program.programId, mB),
         pool: poolPda,
         vaultA: vaultAPda,
         vaultB: vaultBPda,
@@ -251,7 +257,7 @@ describe("swd_amm governance", () => {
         .initializeGlobalConfig(payer.publicKey, emergencyAuthority.publicKey)
         .accounts({
           config: globalConfigPda,
-          payer: payer.publicKey,
+          programData: PublicKey.findProgramAddressSync([program.programId.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"))[0], payer: payer.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();

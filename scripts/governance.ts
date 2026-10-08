@@ -48,6 +48,13 @@
 //       Governance-only. Enables/disables a mint for NEW pool creation
 //       (existing pools using this mint are unaffected either way).
 //
+//   set-mint-feed <mintPubkey> <pythFeedIdHex>
+//       Governance-only (added 2026-10-08). Registers the Pyth feed id
+//       (64 hex chars, with or without 0x) for a mint. New CP/DLMM pools —
+//       and oracle-enabled SWDMM v2 pools — must name exactly these feeds,
+//       so nobody can create a pool for a mint with another asset's feed.
+//       Can be called again to change it; existing pools keep their feeds.
+//
 //   emergency-pause-pool <mintA> <mintB> <pauseSwap> <pauseDeposit> <pauseWithdraw>
 //   emergency-pause-dlmm-pool <mintA> <mintB> <pauseSwap> <pauseDeposit> <pauseWithdraw>
 //       Emergency-authority-only, instant, pause-only. <mintA>/<mintB>
@@ -227,7 +234,7 @@ async function main() {
         () =>
           program.methods
             .initializeGlobalConfig(governanceAuthority, emergencyAuthority)
-            .accounts({ config: configPda, payer: wallet, systemProgram: SystemProgram.programId })
+            .accounts({ config: configPda, programData: PublicKey.findProgramAddressSync([program.programId.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"))[0], payer: wallet, systemProgram: SystemProgram.programId })
             .rpc()
       );
       break;
@@ -294,6 +301,37 @@ async function main() {
               governanceAuthority: wallet,
               mint,
               allowedMint: allowedMintPda,
+              payer: wallet,
+              systemProgram: SystemProgram.programId,
+            })
+            .rpc()
+      );
+      break;
+    }
+
+    case "set-mint-feed": {
+      const mint = parsePubkey(rest[0], "mintPubkey");
+      const hex = (rest[1] ?? "").replace(/^0x/i, "");
+      if (!/^[0-9a-fA-F]{64}$/.test(hex) || /^0+$/.test(hex)) {
+        console.error("pythFeedIdHex must be 64 hex characters and not all zero.");
+        process.exit(1);
+      }
+      const feedId = Array.from(Buffer.from(hex, "hex"));
+      const mintFeedPda = pda([Buffer.from("mint-feed"), mint.toBuffer()], program.programId);
+      await confirmOrDryRun(
+        () => {
+          console.log(`Would call set_mint_feed(0x${hex.toLowerCase()}) for:`);
+          console.log(`  mint:      ${mint.toBase58()}`);
+          console.log(`  mint_feed: ${mintFeedPda.toBase58()}`);
+        },
+        () =>
+          program.methods
+            .setMintFeed(feedId)
+            .accounts({
+              config: configPda,
+              governanceAuthority: wallet,
+              mint,
+              mintFeed: mintFeedPda,
               payer: wallet,
               systemProgram: SystemProgram.programId,
             })

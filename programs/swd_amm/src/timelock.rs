@@ -20,7 +20,7 @@
 //      - SWDMM v2 pool risk parameters (price-impact cap, dynamic fee on/off)
 //      - withdraw accrued SWDMM v2 protocol fees to the treasury
 //    The old instant `governed_unpause_pool` / `governed_unpause_dlmm_pool`
-//    are refused once GovernanceSettings exists (see governance.rs).
+//    always refuse with UseTimelockedUnpause (see governance.rs).
 // 3. MintPolicy (per-mint PDA "mint_policy"): allowlist entry that also
 //    pins the mint's token program and, for Token-2022 mints, requires an
 //    explicit "reviewed" flag plus the extension safety gate. SWDMM v2
@@ -37,7 +37,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::governance::{GlobalConfig, GovernanceError, GLOBAL_CONFIG_SEED};
-use crate::swdmm_v2::{SwdmmV2Pool, V2_POOL_SEED};
+use crate::swdmm_v2::{SwdmmV2Error, SwdmmV2Pool, V2_POOL_SEED};
 use crate::{DlmmPool, Pool, DLMM_POOL_SEED, POOL_SEED};
 
 pub const GOV_SETTINGS_SEED: &[u8] = b"gov_settings";
@@ -167,7 +167,20 @@ pub(crate) fn execute_v2_pool_action(ctx: Context<ExecuteV2PoolAction>) -> Resul
         GovAction::SetV2PoolParams { pool, max_price_impact_bps, dynamic_fee_enabled } => {
             require_keys_eq!(pool, pool_key, TimelockError::ActionAccountMismatch);
             p.max_price_impact_bps = max_price_impact_bps;
-            p.dynamic_fee.enabled = dynamic_fee_enabled && p.dynamic_fee.max_dynamic_fee_bps > 0;
+            if dynamic_fee_enabled && !p.dynamic_fee.enabled {
+                // Parameters of a pool created with the dynamic fee off were
+                // never validated (e.g. max_dynamic_fee_bps above the 10% cap).
+                require!(
+                    crate::swdmm_math::can_enable_dynamic_fee(&p.dynamic_fee.to_math()),
+                    SwdmmV2Error::InvalidDynamicFee
+                );
+                // Start from a clean volatility state, not one left over
+                // from before the fee was switched off.
+                p.volatility_accumulator = 0;
+                p.volatility_reference = 0;
+                p.price_reference_q64 = 0;
+            }
+            p.dynamic_fee.enabled = dynamic_fee_enabled;
         }
         _ => return err!(TimelockError::WrongActionKind),
     }

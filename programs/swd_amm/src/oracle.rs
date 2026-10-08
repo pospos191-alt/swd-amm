@@ -24,7 +24,9 @@
 //   - The GUARD (`oracle_max_deviation_bps`) is a hard circuit breaker —
 //     if this pool's own current spot price has drifted from the oracle
 //     price by more than this many basis points, the swap is rejected
-//     outright (`OracleError::PriceDeviationTooLarge`). This is what
+//     (`OracleError::PriceDeviationTooLarge`) unless it moves the price
+//     back toward the oracle — see `guard_allows` for why that exception
+//     is needed (without it one large swap could freeze a pool). This is what
 //     actually protects LPs from the classic "drain a thinly-traded pool
 //     via a huge price-impact trade, profit on a healthier venue"
 //     attack — no fee surcharge, however large, fully closes that hole
@@ -204,15 +206,28 @@ impl anchor_lang::AccountSerialize for PriceUpdateV2 {
 }
 
 impl anchor_lang::AccountDeserialize for PriceUpdateV2 {
+    /// Checks the discriminator, like the `#[account]` macro's generated
+    /// impl does. (Fixed 2026-10-08: the trait's DEFAULT `try_deserialize`
+    /// does NOT check it — it just calls `try_deserialize_unchecked` — so
+    /// before this only the owner check stood between a swap and any other
+    /// account type the Pyth receiver owns.)
+    fn try_deserialize(buf: &mut &[u8]) -> Result<Self> {
+        let disc = <Self as anchor_lang::Discriminator>::DISCRIMINATOR;
+        if buf.len() < disc.len() {
+            return Err(anchor_lang::error::ErrorCode::AccountDiscriminatorNotFound.into());
+        }
+        if &buf[..disc.len()] != disc {
+            return Err(anchor_lang::error::ErrorCode::AccountDiscriminatorMismatch.into());
+        }
+        Self::try_deserialize_unchecked(buf)
+    }
+
     fn try_deserialize_unchecked(buf: &mut &[u8]) -> Result<Self> {
-        // Mirrors the `#[account]` macro's own generated
-        // `try_deserialize_unchecked` exactly (same verification as
-        // `AccountSerialize` above) — strip the discriminator prefix, then
-        // Borsh-decode the rest. The default `try_deserialize` (provided
-        // by the `AccountDeserialize` trait itself, not reimplemented
-        // here) already checks the discriminator bytes match before ever
-        // calling this.
+        // Strip the discriminator prefix, then Borsh-decode the rest.
         let disc_len = <Self as anchor_lang::Discriminator>::DISCRIMINATOR.len();
+        if buf.len() < disc_len {
+            return Err(anchor_lang::error::ErrorCode::AccountDidNotDeserialize.into());
+        }
         let mut data: &[u8] = &buf[disc_len..];
         AnchorDeserialize::deserialize(&mut data)
             .map_err(|_| anchor_lang::error::ErrorCode::AccountDidNotDeserialize.into())
@@ -326,11 +341,20 @@ pub const MAX_ORACLE_DEVIATION_GUARD_BPS: u16 = 5_000;
 /// no longer meaningfully protective. 3,600s = 1 hour.
 pub const MAX_ORACLE_STALENESS_SECS: u32 = 3_600;
 
+/// Widest Pyth confidence interval a price may have to be used, as a share
+/// of the price (2026-10-08). Pyth's guidance is to refuse prices whose
+/// `conf` is large relative to `price` — in a fast or illiquid market the
+/// "price" is then mostly noise.
+pub const MAX_ORACLE_CONF_BPS: u128 = 200; // 2%
+
 // ---------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------
 
-#[error_code]
+// Own code range (2026-10-08): lib.rs 6000+, dlmm 6100+, governance
+// 6200+, oracle 6300+, swdmm_v2 8000+, timelock 8500+. They all used to
+// start at 6000, so a raw error number did not say which error it was.
+#[error_code(offset = 6300)]
 pub enum OracleError {
     #[msg("Pyth price is missing, for the wrong feed, or older than this pool's configured maximum staleness")]
     PriceUnavailable,
@@ -354,6 +378,8 @@ pub enum OracleError {
     IdenticalFeeds,
     #[msg("Math overflow in oracle price/fee computation")]
     MathOverflow,
+    #[msg("Oracle price confidence interval is too wide to use")]
+    PriceConfidenceTooWide,
 }
 
 // ---------------------------------------------------------------------
@@ -465,10 +491,10 @@ pub fn deviation_bps(pool_price_q64: u128, oracle_price_q64: u128) -> Result<u64
 
 /// Linearly scales this swap's fee from `base_fee_bps` (at zero
 /// deviation) up to `max_fee_bps` (at `max_deviation_bps` deviation —
-/// the guard threshold itself). Callers are expected to have already
-/// rejected `deviation_bps > max_deviation_bps` before reaching this
-/// function (see `evaluate_oracle_and_fee`); the clamp here is a second,
-/// defensive line, not the primary enforcement.
+/// the guard threshold itself). Beyond the threshold it returns
+/// `max_fee_bps`: such a swap is only allowed when it moves the price
+/// back toward the oracle (see `guard_allows`), and it pays the maximum
+/// fee to do so.
 pub fn dynamic_fee_bps(
     base_fee_bps: u16,
     max_fee_bps: u16,
@@ -497,15 +523,54 @@ pub fn dynamic_fee_bps(
 // `swap_dlmm`, once each, before either pool's own fee/output math runs.
 // ---------------------------------------------------------------------
 
+/// `conf <= price * MAX_ORACLE_CONF_BPS / 10_000` (and a positive price).
+pub fn confidence_ok(p: &Price) -> bool {
+    p.price > 0 && (p.conf as u128) * 10_000 <= (p.price as u128) * MAX_ORACLE_CONF_BPS
+}
+
 pub struct OracleFeeResult {
     pub fee_bps: u16,
+    /// Deviation of the pool's PRE-trade price from the oracle.
     pub deviation_bps: u64,
     pub oracle_price_q64: u128,
+    pub max_deviation_bps: u16,
+}
+
+/// The guard rule. A swap is allowed when the pool's POST-trade price is
+/// within the guard, OR when it moves the price strictly closer to the
+/// oracle (so arbitrage can always pull a pool that is outside the guard
+/// back, e.g. after the oracle itself jumped).
+///
+/// History: until 2026-10-07 only the pre-trade price was checked, so one
+/// large swap could push a pool past the guard and every later swap —
+/// including the arbitrage back — was rejected. The 2026-10-07 fix then
+/// allowed any swap that STARTED inside the guard, which let a single swap
+/// end arbitrarily far outside it (found 2026-10-08 by the attack suite,
+/// `security/attack-tests`, attack_price_manipulation_beyond_oracle_guard).
+pub fn guard_allows(pre_deviation_bps: u64, post_deviation_bps: u64, max_deviation_bps: u16) -> bool {
+    post_deviation_bps <= max_deviation_bps as u64 || post_deviation_bps < pre_deviation_bps
+}
+
+impl OracleFeeResult {
+    /// Enforces the guard once the swap's POST-trade pool price is known
+    /// (see `guard_allows`). Must be called by every swap path after it
+    /// has computed the new price and before it returns.
+    pub fn enforce_guard(&self, post_pool_price_q64: u128) -> Result<()> {
+        let post = deviation_bps(post_pool_price_q64, self.oracle_price_q64)?;
+        require!(
+            guard_allows(self.deviation_bps, post, self.max_deviation_bps),
+            OracleError::PriceDeviationTooLarge
+        );
+        Ok(())
+    }
 }
 
 /// Reads and validates both Pyth price updates, computes the oracle
-/// price and this pool's deviation from it, enforces the guard, and
-/// returns the fee this swap should use. `pool_price_q64` is the
+/// price and this pool's deviation from it, and returns the fee this
+/// swap should use (`max_fee_bps` when the pool is outside the guard).
+/// It does NOT reject on deviation by itself: the caller must call
+/// `OracleFeeResult::enforce_guard` with the post-trade price.
+/// `pool_price_q64` is the
 /// caller's own pool-type-specific spot price (constant-product:
 /// `reserve_b/reserve_a`; DLMM: `bin_price_q64(active_bin_id,
 /// bin_step_bps)`), already in this module's shared Q64.64 convention —
@@ -533,6 +598,7 @@ pub fn evaluate_oracle_and_fee(
         price_update_a.get_price_no_older_than(clock, oracle_max_staleness_secs as u64, pyth_feed_id_a)?;
     let price_b =
         price_update_b.get_price_no_older_than(clock, oracle_max_staleness_secs as u64, pyth_feed_id_b)?;
+    require!(confidence_ok(&price_a) && confidence_ok(&price_b), OracleError::PriceConfidenceTooWide);
 
     let oracle_q64 = oracle_price_q64(
         price_a.price,
@@ -543,16 +609,13 @@ pub fn evaluate_oracle_and_fee(
         decimals_b,
     )?;
     let dev_bps = deviation_bps(pool_price_q64, oracle_q64)?;
-    require!(
-        dev_bps <= oracle_max_deviation_bps as u64,
-        OracleError::PriceDeviationTooLarge
-    );
     let fee_bps = dynamic_fee_bps(base_fee_bps, max_fee_bps, dev_bps, oracle_max_deviation_bps)?;
 
     Ok(OracleFeeResult {
         fee_bps,
         deviation_bps: dev_bps,
         oracle_price_q64: oracle_q64,
+        max_deviation_bps: oracle_max_deviation_bps,
     })
 }
 
@@ -640,11 +703,41 @@ mod oracle_math_tests {
 
     #[test]
     fn dynamic_fee_bps_beyond_guard_threshold_still_clamps_to_max_fee() {
-        // Should never actually happen in `evaluate_oracle_and_fee` (the
-        // guard itself rejects the swap first) — but this function's own
-        // contract should stay safe standalone, e.g. if a caller reuses
-        // it differently in the future.
+        // A pool outside the guard pays the max fee on the swap that
+        // brings it back (see `guard_allows`).
         assert_eq!(dynamic_fee_bps(30, 300, 10_000, 500).unwrap(), 300);
+    }
+
+    #[test]
+    fn guard_inside_allows_swaps_that_stay_inside() {
+        assert!(guard_allows(0, 0, 500));
+        assert!(guard_allows(100, 500, 500));
+        assert!(!guard_allows(500, 900, 500), "a swap may not push the pool out of the guard");
+        assert!(!guard_allows(0, 2_000, 500));
+    }
+
+    #[test]
+    fn guard_outside_only_allows_moving_toward_the_oracle() {
+        // Pool stuck at 20% off the oracle with a 5% guard.
+        assert!(guard_allows(2_000, 1_500, 500), "a swap back toward the oracle must be allowed");
+        assert!(guard_allows(2_000, 100, 500));
+        assert!(!guard_allows(2_000, 2_000, 500), "no improvement");
+        assert!(!guard_allows(2_000, 2_500, 500), "a swap further away must be rejected");
+    }
+
+    #[test]
+    fn enforce_guard_uses_post_trade_price() {
+        let oracle = Q64_ONE;
+        let stuck = OracleFeeResult { fee_bps: 300, deviation_bps: 2_000, oracle_price_q64: oracle, max_deviation_bps: 500 };
+        // post price 10% above oracle: closer than 20% -> allowed
+        assert!(stuck.enforce_guard(Q64_ONE + Q64_ONE / 10).is_ok());
+        // post price 30% above: further -> rejected
+        assert!(stuck.enforce_guard(Q64_ONE + Q64_ONE * 3 / 10).is_err());
+        // overshooting to 25% below is still further than 20% -> rejected
+        assert!(stuck.enforce_guard(Q64_ONE - Q64_ONE / 4).is_err());
+        let inside = OracleFeeResult { deviation_bps: 100, ..stuck };
+        assert!(inside.enforce_guard(Q64_ONE + Q64_ONE / 50).is_ok(), "stays inside the 5% guard");
+        assert!(inside.enforce_guard(Q64_ONE * 2).is_err(), "may not push the pool out of the guard");
     }
 
     #[test]

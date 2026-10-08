@@ -297,6 +297,11 @@ pub mod swd_amm {
             ctx.accounts.mint_b.key(),
             SwdAmmError::MintNotAllowlisted
         );
+        require!(
+            ctx.accounts.mint_feed_a.pyth_feed_id == pyth_feed_id_a
+                && ctx.accounts.mint_feed_b.pyth_feed_id == pyth_feed_id_b,
+            SwdAmmError::OracleFeedNotRegistered
+        );
         // Token-2022 extension gate — see `assert_mint_extensions_safe`'s
         // own doc comment for exactly what this rejects and why. A no-op
         // for classic SPL Token mints (they can't carry extensions at all).
@@ -831,11 +836,19 @@ pub mod swd_amm {
             .checked_add(amount_in_after_fee)
             .ok_or(SwdAmmError::MathOverflow)?;
         require!(new_reserve_in > 0, SwdAmmError::MathOverflow);
-        let new_reserve_out_floor = k
+        // The pool keeps ceil(k / new_reserve_in), so the payout rounds
+        // DOWN (in the pool's favour). It used to keep floor(k / ...),
+        // which rounded the payout up: a 2-raw-unit swap could pay out a
+        // whole raw unit of a far more valuable token, repeatable many
+        // times per transaction (attack suite, 2026-10-08:
+        // attack_rounding_drain_with_dust_swaps).
+        let new_reserve_out_ceil = k
+            .checked_add(new_reserve_in - 1)
+            .ok_or(SwdAmmError::MathOverflow)?
             .checked_div(new_reserve_in)
             .ok_or(SwdAmmError::MathOverflow)?;
         let amount_out_u128 = (reserve_out as u128)
-            .checked_sub(new_reserve_out_floor)
+            .checked_sub(new_reserve_out_ceil)
             .ok_or(SwdAmmError::MathOverflow)?;
         let amount_out = u64::try_from(amount_out_u128).map_err(|_| SwdAmmError::MathOverflow)?;
 
@@ -900,6 +913,10 @@ pub mod swd_amm {
                 .ok_or(SwdAmmError::MathOverflow)?;
         }
 
+        // Oracle guard on the post-trade price (see oracle::guard_allows).
+        let post_price_q64 = dlmm::q64_div_amount(pool.reserve_b, pool.reserve_a as u128)?;
+        oracle_result.enforce_guard(post_price_q64)?;
+
         emit!(SwapExecuted {
             pool: ctx.accounts.pool.key(),
             trader: ctx.accounts.trader.key(),
@@ -943,6 +960,10 @@ pub mod swd_amm {
 
     pub fn set_allowed_mint(ctx: Context<SetAllowedMint>, enabled: bool) -> Result<()> {
         governance::set_allowed_mint(ctx, enabled)
+    }
+
+    pub fn set_mint_feed(ctx: Context<SetMintFeed>, pyth_feed_id: [u8; 32]) -> Result<()> {
+        governance::set_mint_feed(ctx, pyth_feed_id)
     }
 
     pub fn emergency_pause_pool(
@@ -1104,8 +1125,8 @@ pub mod swd_amm {
         swdmm_v2::initialize_v2_pool(ctx, params)
     }
 
-    pub fn create_v2_position(ctx: Context<CreateV2Position>) -> Result<()> {
-        swdmm_v2::create_v2_position(ctx)
+    pub fn create_v2_position(ctx: Context<CreateV2Position>, nonce: u64, index: u64) -> Result<()> {
+        swdmm_v2::create_v2_position(ctx, nonce, index)
     }
 
     pub fn add_v2_liquidity(ctx: Context<ModifyV2Liquidity>, max_a: u64, max_b: u64, min_liquidity: u128) -> Result<()> {
@@ -1177,6 +1198,12 @@ pub struct InitializePool<'info> {
 
     #[account(seeds = [governance::ALLOWED_MINT_SEED, mint_b.key().as_ref()], bump = allowed_mint_b.bump)]
     pub allowed_mint_b: Box<Account<'info, governance::AllowedMint>>,
+
+    /// Governance-registered Pyth feed of each mint (see set_mint_feed).
+    #[account(seeds = [governance::MINT_FEED_SEED, mint_a.key().as_ref()], bump = mint_feed_a.bump)]
+    pub mint_feed_a: Box<Account<'info, governance::MintFeed>>,
+    #[account(seeds = [governance::MINT_FEED_SEED, mint_b.key().as_ref()], bump = mint_feed_b.bump)]
+    pub mint_feed_b: Box<Account<'info, governance::MintFeed>>,
 
     #[account(
         init,
@@ -1559,6 +1586,8 @@ pub enum SwdAmmError {
     UnsupportedMintExtension,
     #[msg("Price impact exceeds the 50% cap for a single swap")]
     PriceImpactTooHigh,
+    #[msg("Pyth feed ids must match the feeds governance registered for these mints (set_mint_feed)")]
+    OracleFeedNotRegistered,
 }
 
 // ---------------------------------------------------------------------

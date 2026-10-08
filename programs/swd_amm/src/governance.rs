@@ -143,6 +143,8 @@ use crate::{Pool, DLMM_POOL_SEED, POOL_SEED};
 
 pub const GLOBAL_CONFIG_SEED: &[u8] = b"global-config";
 pub const ALLOWED_MINT_SEED: &[u8] = b"allowed-mint";
+/// Per-mint Pyth feed registry (2026-10-08) — see `set_mint_feed`.
+pub const MINT_FEED_SEED: &[u8] = b"mint-feed";
 
 // ---------------------------------------------------------------------
 // Squads v4 constants — see the module doc comment's "SQUADS MULTISIG
@@ -185,16 +187,33 @@ const SQUADS_MULTISIG_MIN_LEN: usize = 100;
 
 /// One-time bootstrap. Can only ever run once per deployment — the `init`
 /// constraint on `config` fails on a second call, there is no
-/// re-initialize/overwrite path. Whoever pays for this call fixes the
-/// initial governance_authority/emergency_authority; changing either
-/// afterward requires a new instruction signed by the CURRENT
-/// governance_authority (see `set_authorities`), never just by paying rent
-/// again.
+/// re-initialize/overwrite path. Changing either authority afterward
+/// requires a new instruction signed by the CURRENT governance_authority
+/// (see `set_authorities`), never just by paying rent again.
+///
+/// SECURITY (2026-10-08, attack suite `security/attack-tests`): the payer
+/// must be the program's UPGRADE AUTHORITY, read from the program's own
+/// ProgramData account. Before this, ANY wallet could call it first after
+/// a deploy and make itself governance_authority (a deploy front-run: the
+/// config is a singleton PDA, so the first caller wins for good).
 pub(crate) fn initialize_global_config(
     ctx: Context<InitializeGlobalConfig>,
     governance_authority: Pubkey,
     emergency_authority: Pubkey,
 ) -> Result<()> {
+    let (expected_program_data, _) = Pubkey::find_program_address(
+        &[crate::ID.as_ref()],
+        &anchor_lang::solana_program::bpf_loader_upgradeable::ID,
+    );
+    require_keys_eq!(
+        ctx.accounts.program_data.key(),
+        expected_program_data,
+        GovernanceError::Unauthorized
+    );
+    require!(
+        ctx.accounts.program_data.upgrade_authority_address == Some(ctx.accounts.payer.key()),
+        GovernanceError::Unauthorized
+    );
     require_keys_neq!(
         governance_authority,
         emergency_authority,
@@ -277,6 +296,22 @@ pub(crate) fn set_allowed_mint(ctx: Context<SetAllowedMint>, enabled: bool) -> R
         mint: allowed.mint,
         enabled,
     });
+    Ok(())
+}
+
+/// Records which Pyth feed prices `mint` (governance only). Pool creation
+/// (CP, DLMM, and SWDMM v2 with its oracle guard on) must name exactly the
+/// registered feeds. Added 2026-10-08: pool addresses are one per mint pair
+/// (per fee tier for v2) and their oracle feeds are fixed at creation, so
+/// whoever created a pair's pool first could bind it to the wrong asset's
+/// price — or to a feed that never updates — for good.
+pub(crate) fn set_mint_feed(ctx: Context<SetMintFeed>, pyth_feed_id: [u8; 32]) -> Result<()> {
+    require!(pyth_feed_id != [0u8; 32], GovernanceError::InvalidFeedId);
+    let f = &mut ctx.accounts.mint_feed;
+    f.mint = ctx.accounts.mint.key();
+    f.pyth_feed_id = pyth_feed_id;
+    f.bump = ctx.bumps.mint_feed;
+    emit!(MintFeedSet { mint: f.mint, pyth_feed_id });
     Ok(())
 }
 
@@ -505,6 +540,11 @@ pub struct InitializeGlobalConfig<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
 
+    /// This program's ProgramData (PDA of the BPF upgradeable loader,
+    /// seeds = [program id]); its upgrade authority must be `payer` —
+    /// checked in `initialize_global_config`.
+    pub program_data: Account<'info, ProgramData>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -553,6 +593,31 @@ pub struct SetAllowedMint<'info> {
         bump
     )]
     pub allowed_mint: Account<'info, AllowedMint>,
+
+    #[account(mut)]
+    pub payer: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct SetMintFeed<'info> {
+    #[account(seeds = [GLOBAL_CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, GlobalConfig>,
+
+    #[account(constraint = governance_authority.key() == config.governance_authority @ GovernanceError::Unauthorized)]
+    pub governance_authority: Signer<'info>,
+
+    pub mint: InterfaceAccount<'info, Token2022Mint>,
+
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = 8 + MintFeed::SIZE,
+        seeds = [MINT_FEED_SEED, mint.key().as_ref()],
+        bump
+    )]
+    pub mint_feed: Account<'info, MintFeed>,
 
     #[account(mut)]
     pub payer: Signer<'info>,
@@ -674,6 +739,17 @@ impl AllowedMint {
     pub const SIZE: usize = 32 + 1 + 1;
 }
 
+#[account]
+pub struct MintFeed {
+    pub mint: Pubkey,
+    pub pyth_feed_id: [u8; 32],
+    pub bump: u8,
+}
+
+impl MintFeed {
+    pub const SIZE: usize = 32 + 32 + 1;
+}
+
 // ---------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------
@@ -702,6 +778,12 @@ pub struct PoolCreationPausedSet {
 pub struct AllowedMintUpdated {
     pub mint: Pubkey,
     pub enabled: bool,
+}
+
+#[event]
+pub struct MintFeedSet {
+    pub mint: Pubkey,
+    pub pyth_feed_id: [u8; 32],
 }
 
 #[event]
@@ -754,7 +836,10 @@ pub struct GovernanceMultisigVerified {
 // Errors
 // ---------------------------------------------------------------------
 
-#[error_code]
+// Own code range (2026-10-08): lib.rs 6000+, dlmm 6100+, governance
+// 6200+, oracle 6300+, swdmm_v2 8000+, timelock 8500+. They all used to
+// start at 6000, so a raw error number did not say which error it was.
+#[error_code(offset = 6200)]
 pub enum GovernanceError {
     #[msg("Signer does not match the required authority")]
     Unauthorized,
@@ -768,4 +853,6 @@ pub enum GovernanceError {
     MultisigAccountTooShort,
     #[msg("The given multisig account's vault at this index does not match governance_authority")]
     MultisigVaultMismatch,
+    #[msg("A Pyth feed id cannot be all zeros")]
+    InvalidFeedId,
 }

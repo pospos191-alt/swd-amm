@@ -505,7 +505,10 @@ impl Position {
 // Errors
 // ---------------------------------------------------------------------
 
-#[error_code]
+// Own code range (2026-10-08): lib.rs 6000+, dlmm 6100+, governance
+// 6200+, oracle 6300+, swdmm_v2 8000+, timelock 8500+. They all used to
+// start at 6000, so a raw error number did not say which error it was.
+#[error_code(offset = 6100)]
 pub enum DlmmError {
     #[msg("bin_step_bps exceeds the maximum allowed")]
     BinStepTooHigh,
@@ -621,6 +624,12 @@ pub struct InitializeDlmmPool<'info> {
 
     #[account(seeds = [crate::governance::ALLOWED_MINT_SEED, mint_b.key().as_ref()], bump = allowed_mint_b.bump)]
     pub allowed_mint_b: Box<Account<'info, crate::governance::AllowedMint>>,
+
+    /// Governance-registered Pyth feed of each mint (see set_mint_feed).
+    #[account(seeds = [crate::governance::MINT_FEED_SEED, mint_a.key().as_ref()], bump = mint_feed_a.bump)]
+    pub mint_feed_a: Box<Account<'info, crate::governance::MintFeed>>,
+    #[account(seeds = [crate::governance::MINT_FEED_SEED, mint_b.key().as_ref()], bump = mint_feed_b.bump)]
+    pub mint_feed_b: Box<Account<'info, crate::governance::MintFeed>>,
 
     #[account(
         init,
@@ -842,22 +851,25 @@ pub(crate) fn initialize_dlmm_pool(
     require!(ctx.accounts.allowed_mint_b.enabled, SwdAmmError::MintNotAllowlisted);
     require_keys_eq!(ctx.accounts.allowed_mint_a.mint, ctx.accounts.mint_a.key(), SwdAmmError::MintNotAllowlisted);
     require_keys_eq!(ctx.accounts.allowed_mint_b.mint, ctx.accounts.mint_b.key(), SwdAmmError::MintNotAllowlisted);
-    // No separate bound check on `active_bin_id` itself is needed here: the
-    // `checked_sub`/`checked_add` below already reject any active_bin_id
-    // close enough to i32::MIN/MAX that +/- HALF_RANGE would overflow, and
-    // `bin_price_q64` independently re-checks every bin_id it's ever asked
-    // to price against `[-HALF_RANGE, HALF_RANGE]` relative to bin 0 — the
-    // real, load-bearing range check lives there, not here. (An earlier
-    // draft had a dead `require!` in this spot that looked like a range
-    // check but was actually always--100-or-more and caught nothing real;
-    // removed rather than left as misleading dead code.)
-
+    // Feeds must be the ones governance registered for these mints (2026-10-08).
+    require!(
+        ctx.accounts.mint_feed_a.pyth_feed_id == pyth_feed_id_a && ctx.accounts.mint_feed_b.pyth_feed_id == pyth_feed_id_b,
+        SwdAmmError::OracleFeedNotRegistered
+    );
     let min_bin_id = active_bin_id
         .checked_sub(HALF_RANGE)
         .ok_or(SwdAmmError::MathOverflow)?;
     let max_bin_id = active_bin_id
         .checked_add(HALF_RANGE)
         .ok_or(SwdAmmError::MathOverflow)?;
+    // SECURITY (2026-10-08, attack suite): every bin of the array must be
+    // priceable. `bin_price_q64` has no fixed range of its own any more,
+    // so an `active_bin_id` whose edge prices overflow Q64.64 (or round to
+    // zero) created a pool on which every swap failed — and its PDA can
+    // never be created again. Prices are monotonic in the bin id, so
+    // checking both edges covers every bin in between.
+    require!(bin_price_q64(min_bin_id, bin_step_bps)? > 0, SwdAmmError::MathOverflow);
+    bin_price_q64(max_bin_id, bin_step_bps)?;
 
     let pool = &mut ctx.accounts.pool;
     pool.mint_a = ctx.accounts.mint_a.key();
@@ -993,6 +1005,11 @@ pub(crate) fn add_dlmm_liquidity(
             continue; // legal no-op for this bin — e.g. skipping ahead within a wide range
         }
 
+        // What this bin actually takes. Equal to the requested amounts
+        // except in a non-empty active bin, where only the B the bin's
+        // current ratio requires is taken (see below).
+        let take_a = amt.amount_a;
+        let mut take_b = amt.amount_b;
         let shares_minted: u128 = if bin.total_shares == 0 {
             // First deposit into this specific bin.
             let raw_shares = if is_active {
@@ -1018,6 +1035,12 @@ pub(crate) fn add_dlmm_liquidity(
             require!(required_b <= amt.amount_b, SwdAmmError::SlippageExceeded);
             let shares_from_a = mul_div_shares(amt.amount_a, bin.total_shares, bin.reserve_a)?;
             let shares_from_b = mul_div_shares(required_b, bin.total_shares, bin.reserve_b)?;
+            // SECURITY (2026-10-08, attack suite): shares are priced on
+            // `required_b`, so only `required_b` may be taken. Taking the
+            // whole `amount_b` handed the excess to the bin's existing
+            // shareholders — and a holder could sandwich a deposit with a
+            // swap inside the bin to make that excess large.
+            take_b = required_b;
             shares_from_a.min(shares_from_b)
         } else if amt.amount_a > 0 {
             require!(bin.reserve_a > 0, DlmmError::NoLiquidityAvailable);
@@ -1032,15 +1055,15 @@ pub(crate) fn add_dlmm_liquidity(
             .total_shares
             .checked_add(shares_minted)
             .ok_or(SwdAmmError::MathOverflow)?;
-        bin.reserve_a = bin.reserve_a.checked_add(amt.amount_a).ok_or(SwdAmmError::MathOverflow)?;
-        bin.reserve_b = bin.reserve_b.checked_add(amt.amount_b).ok_or(SwdAmmError::MathOverflow)?;
+        bin.reserve_a = bin.reserve_a.checked_add(take_a).ok_or(SwdAmmError::MathOverflow)?;
+        bin.reserve_b = bin.reserve_b.checked_add(take_b).ok_or(SwdAmmError::MathOverflow)?;
 
         position.shares[i] = position.shares[i]
             .checked_add(shares_minted)
             .ok_or(SwdAmmError::MathOverflow)?;
 
-        total_a = total_a.checked_add(amt.amount_a).ok_or(SwdAmmError::MathOverflow)?;
-        total_b = total_b.checked_add(amt.amount_b).ok_or(SwdAmmError::MathOverflow)?;
+        total_a = total_a.checked_add(take_a).ok_or(SwdAmmError::MathOverflow)?;
+        total_b = total_b.checked_add(take_b).ok_or(SwdAmmError::MathOverflow)?;
     }
 
     require!(total_a > 0 || total_b > 0, SwdAmmError::ZeroAmount);
@@ -1316,19 +1339,31 @@ pub(crate) fn swap_dlmm(ctx: Context<SwapDlmm>, amount_in: u64, min_amount_out: 
                 .checked_sub(gross_in_this_step)
                 .ok_or(SwdAmmError::MathOverflow)?;
 
-            active_bin_id = if a_to_b { active_bin_id - 1 } else { active_bin_id + 1 };
-            bins_crossed = bins_crossed.checked_add(1).ok_or(SwdAmmError::MathOverflow)?;
-            require!(bins_crossed <= MAX_BINS_CROSSED_PER_SWAP, DlmmError::PriceLimitReached);
-
+            // SECURITY (2026-10-08, attack suite): never leave the active
+            // bin outside the bin array. Draining the edge bin with an
+            // exact input used to store min_bin_id-1 / max_bin_id+1, after
+            // which every swap reverted forever (nothing can reset it).
+            let next_bin_id = if a_to_b { active_bin_id - 1 } else { active_bin_id + 1 };
+            let next_in_range = next_bin_id >= bin_array.min_bin_id && next_bin_id <= bin_array.max_bin_id;
             if amount_in_remaining == 0 {
+                if next_in_range {
+                    active_bin_id = next_bin_id;
+                }
                 break;
             }
+            require!(next_in_range, DlmmError::NoLiquidityAvailable);
+            active_bin_id = next_bin_id;
+            bins_crossed = bins_crossed.checked_add(1).ok_or(SwdAmmError::MathOverflow)?;
+            require!(bins_crossed <= MAX_BINS_CROSSED_PER_SWAP, DlmmError::PriceLimitReached);
         }
     }
 
     require!(total_amount_out > 0, SwdAmmError::ZeroAmount);
     require!(total_amount_out >= min_amount_out, SwdAmmError::SlippageExceeded);
     drop(bin_array);
+
+    // Oracle guard on the post-trade price (see oracle::guard_allows).
+    oracle_result.enforce_guard(bin_price_q64(active_bin_id, bin_step_bps)?)?;
 
     ctx.accounts.pool.active_bin_id = active_bin_id;
 

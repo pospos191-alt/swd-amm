@@ -172,6 +172,70 @@ a funded, experienced team.
 **Treat every number and every line in this program as unverified until you
 have personally confirmed it — do not take "it looks right" as sufficient.**
 
+## Attack suite — added 2026-10-08
+
+`security/attack-tests/` (Rust, solana-program-test) plays the attacker
+against the real program: 47 attack tests (plus 3 honest-path baselines) across CP, DLMM, SWDMM v2,
+governance, timelock and the Pyth guard. `test-ui/tests/faucet-attacks.mjs`
+does the same for the devnet faucet API. Both run in CI on every push (see
+the suite's README for how to run them locally). The DLMM part needs the
+SBF build, so CI runs it after `anchor build`.
+
+### Found and fixed by this round
+
+Every test below FAILED against the code before this round, and passes now.
+
+| # | Severity | Where | Problem | Fix |
+|---|---|---|---|---|
+| 1 | High | governance.rs `initialize_global_config` | Any wallet could call it first after a deploy and become governance + emergency authority (deploy front-run; the config is a singleton, first caller wins for good). | The payer must be the program's upgrade authority, read from its ProgramData account (address checked as the loader PDA). New account `program_data` — every client passes it. |
+| 2 | Medium | lib.rs `swap` | Payout rounded UP (`reserve_out - floor(k / new_in)`). With unequal raw-unit values (e.g. a 9-decimal $0.001 token vs a 6-decimal $1000 token) a 2-raw-unit swap paid 1 raw unit of the expensive side, ~5e8x its value, repeatable 20x per transaction. | The pool keeps `ceil(k / new_in)`, so the payout rounds down. Clients' quote math updated (tests, web UI `cpCeilDiv`). |
+| 3 | Medium | oracle.rs `guard_allows` / `enforce_guard` | A swap that STARTED inside the deviation guard could END anywhere (the 2026-10-07 fix only looked at the pre-trade price), so one swap could push a pool 20%+ off the oracle under a 5% guard. | Allowed iff the post-trade price is inside the guard OR strictly closer to the oracle. Applies to CP, DLMM and SWDMM v2. |
+| 4 | Medium | dlmm.rs `add_dlmm_liquidity` | In a non-empty active bin, shares were priced on `required_b` but the FULL `amount_b` was taken; the excess went to the bin's existing holders (and a holder could enlarge it with a swap inside the bin). | Only `required_b` is taken. |
+| 5 | Medium (DoS) | dlmm.rs `swap_dlmm` | Draining the edge bin with an exact input stored `active_bin_id` one past the bin array; every later swap reverted forever (nothing can reset it). | The active bin never leaves the array. |
+| 6 | Low (DoS) | dlmm.rs `initialize_dlmm_pool` | An `active_bin_id` whose edge prices overflow Q64.64 created a pool no swap could ever use, squatting the pair's only DLMM address. | Both edge bins must be priceable at creation. |
+| 7 | Low | swdmm_v2.rs `claim_v2_fees` | Fee claims ignored `withdraw_paused`, so fees kept leaving the vault during an incident. | Claims honour the withdraw pause. |
+| 8 | Info | oracle.rs `PriceUpdateV2` | The hand-written `AccountDeserialize` relied on the trait's default `try_deserialize`, which does NOT check the discriminator (only the owner check protected it); also panicked on a < 8-byte buffer. | Discriminator and length checked. |
+| 9 | Medium (web) | test-ui/api/devnet-faucet.js | `?diag=1` returned the raw error, and a malformed `DEVNET_FAUCET_SECRET_KEY` makes `JSON.parse` quote part of the secret. The client IP came from `X-Forwarded-For` first, and there was no global cap, so many IPs could empty the reserve. | Generic diag error. Vercel's own IP headers first. Global hourly cap (30). Address length limit. |
+| 10 | Hardening (web) | test-ui/vercel.json | No security headers. | CSP (script hosts limited to esm.sh / jsdelivr, `object-src 'none'`, `frame-ancestors 'none'`), X-Frame-Options, nosniff, HSTS, Referrer-Policy, Permissions-Policy, COOP. Checked: the page boots with no CSP violations. |
+
+Program changes need a new program deploy to reach Devnet (CI
+workflow_dispatch `deploy_devnet`). The existing Devnet GlobalConfig is
+already initialised, so fix 1 changes nothing there.
+
+### Known risks — fixed later on 2026-10-08
+
+The risks this round first left open were then fixed. Tests:
+`security/attack-tests/tests/hardening_attacks.rs`.
+
+| Risk | Fix |
+|---|---|
+| **Pool squatting with another asset's oracle feed.** Pool creation checked only that the two feed ids differ, so whoever created a CP or DLMM pool first could tie it to any feed. | New governance-only `set_mint_feed(mint, pyth_feed_id)` stores the feed in a `MintFeed` PDA (`["mint-feed", mint]`). `initialize_pool` and `initialize_dlmm_pool` take `mint_feed_a/b` and require the given feed ids to match (`OracleFeedNotRegistered`). An oracle-enabled SWDMM v2 pool needs the same (`mint_feed_a/b` are optional accounts, required when `oracle.enabled`). CLI: `scripts/governance.ts set-mint-feed <mint> <feedHex>`. |
+| **SWDMM v2 position-index griefing.** Position PDAs used `pool.position_count`, so anyone could take the index an honest `create_v2_position` was about to use. | `create_v2_position(nonce, index)` requires `index == sha256("swdmm_v2_position_index" ‖ owner ‖ nonce)[..8]` (`PositionIndexMismatch`), so only the owner can reach an index. Existing positions keep their sequential index (every other instruction checks seeds against the stored `position.index`). `position_count` is now only a counter. |
+| **SWDMM v2 price-impact cap was per instruction.** Several `swap_v2` calls in one transaction or slot were never compared. | The first swap of a slot records the pool price (`impact_slot`, `impact_ref_price_q64`, taken from the reserved bytes, so the account size is unchanged). Later swaps in that slot must stay within `max_price_impact_bps` of it, or move back toward it. |
+| **Oracle confidence not checked.** | Prices with `conf` wider than 2% of the price are refused (`PriceConfidenceTooWide`, `MAX_ORACLE_CONF_BPS = 200`). |
+| **Error codes collided.** lib.rs, dlmm.rs, governance.rs and oracle.rs all started at 6000. | lib 6000+, dlmm 6100+, governance 6200+, oracle 6300+, SWDMM v2 8000+, timelock 8500+. Clients that matched raw numbers must use the new ones (the web UI and tests match error names). |
+
+**Deploy note.** After the program upgrade, governance must call
+`set_mint_feed` for each mint before anyone can create a new CP or DLMM
+pool with it. Existing pools are not affected. The web UI adds the
+`set_mint_feed` calls itself when the connected wallet is governance.
+
+### Accepted risks — still open, decide before mainnet
+
+- **Fee squatting.** Whoever creates a CP / DLMM pool (one per ordered mint
+  pair) or a SWDMM v2 pool (one per pair + floor fee) first fixes its fee
+  settings for good. The oracle feeds can no longer be chosen. To close it
+  fully, gate pool creation through governance.
+- **Choice of Pyth update.** A trader can still pick any genuine update
+  inside the pool's staleness window (up to 3600 s). Use a short window
+  (≤ 60 s) for real pools.
+- **Dynamic-fee holding (v2).** Dust swaps more often than `filter_period` keep
+  the volatility reference frozen, so the dynamic fee stays high (≤ its max)
+  while the price sits away from the frozen reference. This is how the
+  Meteora-style design works: it costs the holder fees on every dust swap
+  and only raises the fee other traders pay, up to the cap the pool
+  creator chose.
+
 ## SWDMM v2 + governance v2 — added 2026-09-29
 
 **New code (unaudited):** `swdmm_v2.rs` (Meteora-DAMM-v2-style pools),
@@ -897,9 +961,21 @@ stored feed id, and `age <= oracle_max_staleness_secs`), then the fee
 charged scales linearly between the pool's flat `fee_bps` and
 `max_fee_bps` based on how far the pool's own reserve ratio has drifted
 from the oracle price (`deviation_bps`) — at exactly zero deviation the
-fee is exactly `fee_bps` (unchanged from before this feature), and at or
-beyond `oracle_max_deviation_bps` the swap is rejected outright with
-`PriceDeviationTooLarge`.
+fee is exactly `fee_bps` (unchanged from before this feature), and
+beyond `oracle_max_deviation_bps` the fee is `max_fee_bps` and the swap
+is rejected with `PriceDeviationTooLarge` unless it moves the pool's
+price strictly closer to the oracle price.
+
+**Fixed 2026-10-07 — oracle guard could freeze a pool.** The guard used to
+check only the pool's PRE-trade price. A swap that started inside the
+guard could push the price past it (up to the 50% price-impact cap), and
+after that every swap in either direction was rejected — including the
+arbitrage that would bring the price back — so the pool stayed frozen
+until the oracle itself moved to the pool's price. Anyone with enough
+capital could do this on purpose. Now `oracle::guard_allows` also accepts
+a swap whose POST-trade deviation is lower than its pre-trade deviation
+(CP, DLMM and SWDMM v2 all call `OracleFeeResult::enforce_guard` after
+computing the new price).
 
 **Two real bugs found and fixed via the user's own `anchor test` runs on
 their WSL machine** (same "write blind, verify via a human's real run,
