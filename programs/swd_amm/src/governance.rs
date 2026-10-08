@@ -185,16 +185,33 @@ const SQUADS_MULTISIG_MIN_LEN: usize = 100;
 
 /// One-time bootstrap. Can only ever run once per deployment — the `init`
 /// constraint on `config` fails on a second call, there is no
-/// re-initialize/overwrite path. Whoever pays for this call fixes the
-/// initial governance_authority/emergency_authority; changing either
-/// afterward requires a new instruction signed by the CURRENT
-/// governance_authority (see `set_authorities`), never just by paying rent
-/// again.
+/// re-initialize/overwrite path. Changing either authority afterward
+/// requires a new instruction signed by the CURRENT governance_authority
+/// (see `set_authorities`), never just by paying rent again.
+///
+/// SECURITY (2026-10-08, attack suite `security/attack-tests`): the payer
+/// must be the program's UPGRADE AUTHORITY, read from the program's own
+/// ProgramData account. Before this, ANY wallet could call it first after
+/// a deploy and make itself governance_authority (a deploy front-run: the
+/// config is a singleton PDA, so the first caller wins for good).
 pub(crate) fn initialize_global_config(
     ctx: Context<InitializeGlobalConfig>,
     governance_authority: Pubkey,
     emergency_authority: Pubkey,
 ) -> Result<()> {
+    let (expected_program_data, _) = Pubkey::find_program_address(
+        &[crate::ID.as_ref()],
+        &anchor_lang::solana_program::bpf_loader_upgradeable::ID,
+    );
+    require_keys_eq!(
+        ctx.accounts.program_data.key(),
+        expected_program_data,
+        GovernanceError::Unauthorized
+    );
+    require!(
+        ctx.accounts.program_data.upgrade_authority_address == Some(ctx.accounts.payer.key()),
+        GovernanceError::Unauthorized
+    );
     require_keys_neq!(
         governance_authority,
         emergency_authority,
@@ -504,6 +521,11 @@ pub struct InitializeGlobalConfig<'info> {
 
     #[account(mut)]
     pub payer: Signer<'info>,
+
+    /// This program's ProgramData (PDA of the BPF upgradeable loader,
+    /// seeds = [program id]); its upgrade authority must be `payer` —
+    /// checked in `initialize_global_config`.
+    pub program_data: Account<'info, ProgramData>,
 
     pub system_program: Program<'info, System>,
 }

@@ -227,7 +227,7 @@ async function main() {
         () =>
           program.methods
             .initializeGlobalConfig(governanceAuthority, emergencyAuthority)
-            .accounts({ config: configPda, payer: wallet, systemProgram: SystemProgram.programId })
+            .accounts({ config: configPda, programData: PublicKey.findProgramAddressSync([program.programId.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"))[0], payer: wallet, systemProgram: SystemProgram.programId })
             .rpc()
       );
       break;

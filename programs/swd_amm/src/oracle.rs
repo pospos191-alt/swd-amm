@@ -206,15 +206,28 @@ impl anchor_lang::AccountSerialize for PriceUpdateV2 {
 }
 
 impl anchor_lang::AccountDeserialize for PriceUpdateV2 {
+    /// Checks the discriminator, like the `#[account]` macro's generated
+    /// impl does. (Fixed 2026-10-08: the trait's DEFAULT `try_deserialize`
+    /// does NOT check it — it just calls `try_deserialize_unchecked` — so
+    /// before this only the owner check stood between a swap and any other
+    /// account type the Pyth receiver owns.)
+    fn try_deserialize(buf: &mut &[u8]) -> Result<Self> {
+        let disc = <Self as anchor_lang::Discriminator>::DISCRIMINATOR;
+        if buf.len() < disc.len() {
+            return Err(anchor_lang::error::ErrorCode::AccountDiscriminatorNotFound.into());
+        }
+        if &buf[..disc.len()] != disc {
+            return Err(anchor_lang::error::ErrorCode::AccountDiscriminatorMismatch.into());
+        }
+        Self::try_deserialize_unchecked(buf)
+    }
+
     fn try_deserialize_unchecked(buf: &mut &[u8]) -> Result<Self> {
-        // Mirrors the `#[account]` macro's own generated
-        // `try_deserialize_unchecked` exactly (same verification as
-        // `AccountSerialize` above) — strip the discriminator prefix, then
-        // Borsh-decode the rest. The default `try_deserialize` (provided
-        // by the `AccountDeserialize` trait itself, not reimplemented
-        // here) already checks the discriminator bytes match before ever
-        // calling this.
+        // Strip the discriminator prefix, then Borsh-decode the rest.
         let disc_len = <Self as anchor_lang::Discriminator>::DISCRIMINATOR.len();
+        if buf.len() < disc_len {
+            return Err(anchor_lang::error::ErrorCode::AccountDidNotDeserialize.into());
+        }
         let mut data: &[u8] = &buf[disc_len..];
         AnchorDeserialize::deserialize(&mut data)
             .map_err(|_| anchor_lang::error::ErrorCode::AccountDidNotDeserialize.into())
@@ -507,15 +520,19 @@ pub struct OracleFeeResult {
     pub max_deviation_bps: u16,
 }
 
-/// The guard rule (fixed 2026-10-07). A swap is allowed when the pool's
-/// pre-trade price is within the guard, OR when it moves the price
-/// strictly closer to the oracle. Before this, only the pre-trade price
-/// was checked: one large swap could push a pool past the guard and then
-/// every later swap — including the arbitrage that would pull the price
-/// back — was rejected, leaving the pool stuck until the oracle itself
-/// moved to the pool's price.
+/// The guard rule. A swap is allowed when the pool's POST-trade price is
+/// within the guard, OR when it moves the price strictly closer to the
+/// oracle (so arbitrage can always pull a pool that is outside the guard
+/// back, e.g. after the oracle itself jumped).
+///
+/// History: until 2026-10-07 only the pre-trade price was checked, so one
+/// large swap could push a pool past the guard and every later swap —
+/// including the arbitrage back — was rejected. The 2026-10-07 fix then
+/// allowed any swap that STARTED inside the guard, which let a single swap
+/// end arbitrarily far outside it (found 2026-10-08 by the attack suite,
+/// `security/attack-tests`, attack_price_manipulation_beyond_oracle_guard).
 pub fn guard_allows(pre_deviation_bps: u64, post_deviation_bps: u64, max_deviation_bps: u16) -> bool {
-    pre_deviation_bps <= max_deviation_bps as u64 || post_deviation_bps < pre_deviation_bps
+    post_deviation_bps <= max_deviation_bps as u64 || post_deviation_bps < pre_deviation_bps
 }
 
 impl OracleFeeResult {
@@ -523,9 +540,6 @@ impl OracleFeeResult {
     /// (see `guard_allows`). Must be called by every swap path after it
     /// has computed the new price and before it returns.
     pub fn enforce_guard(&self, post_pool_price_q64: u128) -> Result<()> {
-        if self.deviation_bps <= self.max_deviation_bps as u64 {
-            return Ok(());
-        }
         let post = deviation_bps(post_pool_price_q64, self.oracle_price_q64)?;
         require!(
             guard_allows(self.deviation_bps, post, self.max_deviation_bps),
@@ -678,9 +692,11 @@ mod oracle_math_tests {
     }
 
     #[test]
-    fn guard_allows_any_swap_that_starts_inside_the_guard() {
+    fn guard_inside_allows_swaps_that_stay_inside() {
         assert!(guard_allows(0, 0, 500));
-        assert!(guard_allows(500, 900, 500));
+        assert!(guard_allows(100, 500, 500));
+        assert!(!guard_allows(500, 900, 500), "a swap may not push the pool out of the guard");
+        assert!(!guard_allows(0, 2_000, 500));
     }
 
     #[test]
@@ -703,7 +719,8 @@ mod oracle_math_tests {
         // overshooting to 25% below is still further than 20% -> rejected
         assert!(stuck.enforce_guard(Q64_ONE - Q64_ONE / 4).is_err());
         let inside = OracleFeeResult { deviation_bps: 100, ..stuck };
-        assert!(inside.enforce_guard(Q64_ONE * 2).is_ok());
+        assert!(inside.enforce_guard(Q64_ONE + Q64_ONE / 50).is_ok(), "stays inside the 5% guard");
+        assert!(inside.enforce_guard(Q64_ONE * 2).is_err(), "may not push the pool out of the guard");
     }
 
     #[test]

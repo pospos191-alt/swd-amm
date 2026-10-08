@@ -427,6 +427,10 @@ pub(crate) fn remove_v2_liquidity(ctx: Context<ModifyV2Liquidity>, liquidity: u1
 }
 
 pub(crate) fn claim_v2_fees(ctx: Context<ModifyV2Liquidity>) -> Result<()> {
+    // A withdraw pause stops every outflow to LPs, fees included
+    // (2026-10-08): if the incident is a fee-accounting bug, claims are
+    // exactly what must stop.
+    require!(!ctx.accounts.pool.withdraw_paused, SwdmmV2Error::WithdrawPaused);
     let pool = &mut ctx.accounts.pool;
     let position = &mut ctx.accounts.position;
     position.settle(pool)?;

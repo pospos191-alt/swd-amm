@@ -172,6 +172,61 @@ a funded, experienced team.
 **Treat every number and every line in this program as unverified until you
 have personally confirmed it — do not take "it looks right" as sufficient.**
 
+## Attack suite — added 2026-10-08
+
+`security/attack-tests/` (Rust, solana-program-test) plays the attacker
+against the real program: 40 attack tests (plus 3 honest-path baselines) across CP, DLMM, SWDMM v2,
+governance, timelock and the Pyth guard. `test-ui/tests/faucet-attacks.mjs`
+does the same for the devnet faucet API. Both run in CI on every push (see
+the suite's README for how to run them locally). The DLMM part needs the
+SBF build, so CI runs it after `anchor build`.
+
+### Found and fixed by this round
+
+Every test below FAILED against the code before this round, and passes now.
+
+| # | Severity | Where | Problem | Fix |
+|---|---|---|---|---|
+| 1 | High | governance.rs `initialize_global_config` | Any wallet could call it first after a deploy and become governance + emergency authority (deploy front-run; the config is a singleton, first caller wins for good). | The payer must be the program's upgrade authority, read from its ProgramData account (address checked as the loader PDA). New account `program_data` — every client passes it. |
+| 2 | Medium | lib.rs `swap` | Payout rounded UP (`reserve_out - floor(k / new_in)`). With unequal raw-unit values (e.g. a 9-decimal $0.001 token vs a 6-decimal $1000 token) a 2-raw-unit swap paid 1 raw unit of the expensive side, ~5e8x its value, repeatable 20x per transaction. | The pool keeps `ceil(k / new_in)`, so the payout rounds down. Clients' quote math updated (tests, web UI `cpCeilDiv`). |
+| 3 | Medium | oracle.rs `guard_allows` / `enforce_guard` | A swap that STARTED inside the deviation guard could END anywhere (the 2026-10-07 fix only looked at the pre-trade price), so one swap could push a pool 20%+ off the oracle under a 5% guard. | Allowed iff the post-trade price is inside the guard OR strictly closer to the oracle. Applies to CP, DLMM and SWDMM v2. |
+| 4 | Medium | dlmm.rs `add_dlmm_liquidity` | In a non-empty active bin, shares were priced on `required_b` but the FULL `amount_b` was taken; the excess went to the bin's existing holders (and a holder could enlarge it with a swap inside the bin). | Only `required_b` is taken. |
+| 5 | Medium (DoS) | dlmm.rs `swap_dlmm` | Draining the edge bin with an exact input stored `active_bin_id` one past the bin array; every later swap reverted forever (nothing can reset it). | The active bin never leaves the array. |
+| 6 | Low (DoS) | dlmm.rs `initialize_dlmm_pool` | An `active_bin_id` whose edge prices overflow Q64.64 created a pool no swap could ever use, squatting the pair's only DLMM address. | Both edge bins must be priceable at creation. |
+| 7 | Low | swdmm_v2.rs `claim_v2_fees` | Fee claims ignored `withdraw_paused`, so fees kept leaving the vault during an incident. | Claims honour the withdraw pause. |
+| 8 | Info | oracle.rs `PriceUpdateV2` | The hand-written `AccountDeserialize` relied on the trait's default `try_deserialize`, which does NOT check the discriminator (only the owner check protected it); also panicked on a < 8-byte buffer. | Discriminator and length checked. |
+| 9 | Medium (web) | test-ui/api/devnet-faucet.js | `?diag=1` returned the raw error, and a malformed `DEVNET_FAUCET_SECRET_KEY` makes `JSON.parse` quote part of the secret. The client IP came from `X-Forwarded-For` first, and there was no global cap, so many IPs could empty the reserve. | Generic diag error. Vercel's own IP headers first. Global hourly cap (30). Address length limit. |
+| 10 | Hardening (web) | test-ui/vercel.json | No security headers. | CSP (script hosts limited to esm.sh / jsdelivr, `object-src 'none'`, `frame-ancestors 'none'`), X-Frame-Options, nosniff, HSTS, Referrer-Policy, Permissions-Policy, COOP. Checked: the page boots with no CSP violations. |
+
+Program changes need a new program deploy to reach Devnet (CI
+workflow_dispatch `deploy_devnet`). The existing Devnet GlobalConfig is
+already initialised, so fix 1 changes nothing there.
+
+### Known risks — not fixed, decide before mainnet
+
+- **Pool squatting.** CP and DLMM have one PDA per ordered mint pair, and
+  SWDMM v2 one per pair + floor fee. Pool creation is open once both mints
+  are allowlisted. Whoever creates a pool first fixes its fee, oracle feed
+  ids (only checked to differ, never tied to the mints) and v2 fee schedule
+  for good. Options: store the Pyth feed id in each AllowedMint / MintPolicy
+  and require it to match, or gate pool creation through governance.
+- **SWDMM v2 position-index griefing.** Position PDAs are seeded by
+  `pool.position_count`. Anyone can front-run `create_v2_position` (and get
+  the rent back with `close_v2_position`), so an honest create built
+  against the old count fails and must be retried. Fix: seed by
+  `[pool, owner, nonce]`.
+- **SWDMM v2 price-impact cap is per instruction.** Several `swap_v2` calls in
+  one transaction are not compared against each other.
+- **Oracle confidence is not checked.** `conf` is read but never compared with
+  the price. A trader can also pick any genuine Pyth update inside the
+  staleness window (up to 3600 s).
+- **Error codes collide.** lib.rs, dlmm.rs, governance.rs and oracle.rs all
+  start at 6000, so a raw code alone does not tell which error it is (v2
+  and timelock use 8000 / 8500).
+- **Dynamic-fee holding (v2).** Dust swaps more often than `filter_period` keep
+  the volatility reference frozen, so the dynamic fee stays high (≤ its max)
+  while the price sits away from the frozen reference.
+
 ## SWDMM v2 + governance v2 — added 2026-09-29
 
 **New code (unaudited):** `swdmm_v2.rs` (Meteora-DAMM-v2-style pools),

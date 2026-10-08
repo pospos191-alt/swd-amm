@@ -1,0 +1,23 @@
+[package]
+name = "swd_amm_attack_tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Attack simulation suite for swd_amm: runs the real program natively in solana-program-test and checks that every attack is rejected."
+
+# Its own workspace and Cargo.lock on purpose: the test runtime pulls in a
+# lot of crates, and none of them may change the program's own Cargo.lock
+# (what `anchor build` compiles for SBF).
+[workspace]
+
+[dependencies]
+swd_amm = { path = "../../programs/swd_amm", features = ["no-entrypoint"] }
+anchor-lang = "0.31.1"
+anchor-spl = { version = "0.31.1", features = ["token_2022"] }
+
+[dev-dependencies]
+solana-program-test = "2.3"
+solana-sdk = "2.3"
+spl-token = { version = "7", features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "6", features = ["no-entrypoint"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

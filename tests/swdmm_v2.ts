@@ -58,7 +58,7 @@ describe("SWDMM v2 pools", () => {
   async function ensureGlobals() {
     try {
       await program.methods.initializeGlobalConfig(payer.publicKey, emergencyAuthority.publicKey)
-        .accounts({ config: globalConfig, payer: payer.publicKey, systemProgram: SystemProgram.programId }).rpc();
+        .accounts({ config: globalConfig, programData: PublicKey.findProgramAddressSync([program.programId.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"))[0], payer: payer.publicKey, systemProgram: SystemProgram.programId }).rpc();
     } catch (e) { if (!String(e).includes("already in use")) throw e; }
     try {
       await program.methods.initializeGovernanceSettings(new BN(5), 1_000, payer.publicKey)

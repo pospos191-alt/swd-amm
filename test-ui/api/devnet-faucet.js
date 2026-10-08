@@ -36,6 +36,9 @@ const FAUCET_AMOUNT_SOL = 0.15;
 const WALLET_COOLDOWN_SECONDS = 24 * 60 * 60; // 1 request per wallet per day
 const IP_COOLDOWN_SECONDS = 60 * 60; // 1 request per IP per hour
 const MIN_RESERVE_BALANCE_SOL = 0.05; // stop dispensing before the reserve hits zero
+// Whole-faucet cap per hour (2026-10-08): the wallet/IP limits alone let
+// anyone with many IPs (a botnet, rotating proxies) empty the reserve.
+const GLOBAL_MAX_PER_HOUR = 30;
 
 function getReserveKeypair() {
   const raw = process.env.DEVNET_FAUCET_SECRET_KEY;
@@ -44,10 +47,13 @@ function getReserveKeypair() {
   return Keypair.fromSecretKey(Uint8Array.from(parsed));
 }
 
+// Vercel's own headers first: those are set by its edge, while a client
+// can send any X-Forwarded-For it likes (a fake one per request would
+// sidestep the per-IP limit wherever the proxy keeps the client's value).
 function clientIp(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.length > 0) {
-    return forwarded.split(",")[0].trim();
+  for (const h of ["x-vercel-forwarded-for", "x-real-ip", "x-forwarded-for"]) {
+    const v = req.headers[h];
+    if (typeof v === "string" && v.length > 0) return v.split(",")[0].trim().slice(0, 64);
   }
   return req.socket?.remoteAddress || "unknown";
 }
@@ -72,7 +78,10 @@ module.exports = async (req, res) => {
         balanceSol: balance / 1e9,
       });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      // Never echo the error: a malformed DEVNET_FAUCET_SECRET_KEY makes
+      // JSON.parse quote part of the secret in its message.
+      console.error("devnet-faucet diag error:", err?.name);
+      res.status(500).json({ error: "Faucet is not configured correctly" });
     }
     return;
   }
@@ -90,7 +99,7 @@ module.exports = async (req, res) => {
     }
   }
   const address = body?.address;
-  if (!address || typeof address !== "string") {
+  if (!address || typeof address !== "string" || address.length > 64) {
     res.status(400).json({ error: "Missing address" });
     return;
   }
@@ -120,6 +129,16 @@ module.exports = async (req, res) => {
   if (!ipLocked) {
     await kv.del(walletKey);
     res.status(429).json({ error: "Too many requests from this network. Please try again later." });
+    return;
+  }
+
+  const globalKey = `devnet-faucet:global:${Math.floor(Date.now() / 3_600_000)}`;
+  const served = await kv.incr(globalKey);
+  if (served === 1) await kv.expire(globalKey, 2 * 60 * 60);
+  if (served > GLOBAL_MAX_PER_HOUR) {
+    await kv.del(walletKey);
+    await kv.del(ipKey);
+    res.status(429).json({ error: "The faucet is busy right now. Please try again in an hour, or use the public Solana faucet." });
     return;
   }
 

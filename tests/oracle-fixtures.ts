@@ -160,6 +160,9 @@ export function expectedSwapOut(reserveIn: bigint, reserveOut: bigint, amountIn:
   const amountInAfterFee = (amountIn * feeMultiplier) / 10_000n;
   const k = reserveIn * reserveOut;
   const newReserveIn = reserveIn + amountInAfterFee;
-  const newReserveOutFloor = k / newReserveIn;
-  return reserveOut - newReserveOutFloor;
+  // The pool keeps ceil(k / newReserveIn): the payout rounds DOWN, in the
+  // pool's favour (lib.rs swap, fixed 2026-10-08 — see
+  // security/attack-tests attack_rounding_drain_with_dust_swaps).
+  const newReserveOutCeil = (k + newReserveIn - 1n) / newReserveIn;
+  return reserveOut - newReserveOutCeil;
 }

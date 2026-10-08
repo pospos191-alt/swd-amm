@@ -831,11 +831,19 @@ pub mod swd_amm {
             .checked_add(amount_in_after_fee)
             .ok_or(SwdAmmError::MathOverflow)?;
         require!(new_reserve_in > 0, SwdAmmError::MathOverflow);
-        let new_reserve_out_floor = k
+        // The pool keeps ceil(k / new_reserve_in), so the payout rounds
+        // DOWN (in the pool's favour). It used to keep floor(k / ...),
+        // which rounded the payout up: a 2-raw-unit swap could pay out a
+        // whole raw unit of a far more valuable token, repeatable many
+        // times per transaction (attack suite, 2026-10-08:
+        // attack_rounding_drain_with_dust_swaps).
+        let new_reserve_out_ceil = k
+            .checked_add(new_reserve_in - 1)
+            .ok_or(SwdAmmError::MathOverflow)?
             .checked_div(new_reserve_in)
             .ok_or(SwdAmmError::MathOverflow)?;
         let amount_out_u128 = (reserve_out as u128)
-            .checked_sub(new_reserve_out_floor)
+            .checked_sub(new_reserve_out_ceil)
             .ok_or(SwdAmmError::MathOverflow)?;
         let amount_out = u64::try_from(amount_out_u128).map_err(|_| SwdAmmError::MathOverflow)?;
 

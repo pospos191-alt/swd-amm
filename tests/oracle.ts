@@ -176,7 +176,7 @@ describe("oracle guard + dynamic fee (Phase 3)", () => {
         .initializeGlobalConfig(payer.publicKey, emergencyAuthority.publicKey)
         .accounts({
           config: globalConfigPda,
-          payer: payer.publicKey,
+          programData: PublicKey.findProgramAddressSync([program.programId.toBuffer()], new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111"))[0], payer: payer.publicKey,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
