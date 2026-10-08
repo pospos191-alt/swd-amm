@@ -994,7 +994,7 @@ pub(crate) fn add_dlmm_liquidity(
         // What this bin actually takes. Equal to the requested amounts
         // except in a non-empty active bin, where only the B the bin's
         // current ratio requires is taken (see below).
-        let mut take_a = amt.amount_a;
+        let take_a = amt.amount_a;
         let mut take_b = amt.amount_b;
         let shares_minted: u128 = if bin.total_shares == 0 {
             // First deposit into this specific bin.
