@@ -114,11 +114,17 @@ async fn attack_squat_someone_elses_v2_position_address() {
     let victim = env.wallet().await;
     let att = env.wallet().await;
     // the address the victim is about to create
-    let victim_pos = v2_position_pda(&v.pool, swd_amm::v2_position_index(&victim.pubkey(), 0));
+    let victim_idx = swd_amm::v2_position_index(&victim.pubkey(), 0);
+    let victim_pos = v2_position_pda(&v.pool, victim_idx);
     for nonce in [0u64, 1, 7] {
+        // the attacker's own index doesn't lead to that address...
         let ix = env.ix_v2_create_position(&v, &att.pubkey(), &victim_pos, nonce);
         let r = env.send(&[ix], &[&att]).await;
         assert_rejected(&r, "attacker creates the victim's position address first");
+        // ...and naming the victim's index outright is refused
+        let ix = env.ix_v2_create_position_at(&v, &att.pubkey(), &victim_pos, nonce, victim_idx);
+        let r = env.send(&[ix], &[&att]).await;
+        assert_rejected_with(&r, code(SwdmmV2Error::PositionIndexMismatch), "attacker passes the victim's index");
     }
     // spamming its own positions doesn't get in the victim's way either
     for nonce in 0..3u64 {

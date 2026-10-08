@@ -1125,8 +1125,8 @@ pub mod swd_amm {
         swdmm_v2::initialize_v2_pool(ctx, params)
     }
 
-    pub fn create_v2_position(ctx: Context<CreateV2Position>, nonce: u64) -> Result<()> {
-        swdmm_v2::create_v2_position(ctx, nonce)
+    pub fn create_v2_position(ctx: Context<CreateV2Position>, nonce: u64, index: u64) -> Result<()> {
+        swdmm_v2::create_v2_position(ctx, nonce, index)
     }
 
     pub fn add_v2_liquidity(ctx: Context<ModifyV2Liquidity>, max_a: u64, max_b: u64, min_liquidity: u128) -> Result<()> {

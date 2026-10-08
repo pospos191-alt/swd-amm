@@ -339,9 +339,9 @@ pub fn v2_position_index(owner: &Pubkey, nonce: u64) -> u64 {
     u64::from_le_bytes(b)
 }
 
-pub(crate) fn create_v2_position(ctx: Context<CreateV2Position>, nonce: u64) -> Result<()> {
+pub(crate) fn create_v2_position(ctx: Context<CreateV2Position>, nonce: u64, index: u64) -> Result<()> {
+    require!(index == v2_position_index(&ctx.accounts.owner.key(), nonce), SwdmmV2Error::PositionIndexMismatch);
     let pool = &mut ctx.accounts.pool;
-    let index = v2_position_index(&ctx.accounts.owner.key(), nonce);
     // now just a count of positions ever created
     pool.position_count = pool.position_count.checked_add(1).ok_or(SwdmmV2Error::MathOverflow)?;
     let p = &mut ctx.accounts.position;
@@ -845,7 +845,7 @@ pub struct InitializeV2Pool<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(nonce: u64)]
+#[instruction(nonce: u64, index: u64)]
 pub struct CreateV2Position<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -861,7 +861,9 @@ pub struct CreateV2Position<'info> {
         init,
         payer = owner,
         space = 8 + SwdmmV2Position::INIT_SPACE,
-        seeds = [V2_POSITION_SEED, pool.key().as_ref(), &v2_position_index(&owner.key(), nonce).to_le_bytes()],
+        // `index` must equal v2_position_index(owner, nonce), checked in the
+        // handler (a plain arg keeps the seeds readable by the IDL builder).
+        seeds = [V2_POSITION_SEED, pool.key().as_ref(), &index.to_le_bytes()],
         bump
     )]
     pub position: Box<Account<'info, SwdmmV2Position>>,
@@ -1182,4 +1184,6 @@ pub enum SwdmmV2Error {
     MathOverflow,
     #[msg("Pyth feed ids must match the feeds governance registered for these mints (set_mint_feed)")]
     OracleFeedNotRegistered,
+    #[msg("Position index must be v2_position_index(owner, nonce)")]
+    PositionIndexMismatch,
 }

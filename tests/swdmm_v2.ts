@@ -47,8 +47,7 @@ describe("SWDMM v2 pools", () => {
   // Position addresses are bound to their owner (swdmm_v2.rs
   // v2_position_index), so nobody can create the address someone else's
   // transaction is about to use.
-  const ownerPosition = (pool: PublicKey, owner: PublicKey, nonce: number) =>
-    v2Position(pool, new BN(v2PositionIndex(owner, nonce).toString()));
+  const ownerIndex = (owner: PublicKey, nonce: number) => new BN(v2PositionIndex(owner, nonce).toString());
 
   const FIXED_1PCT = { mode: 0, decay: 0, cliffFeeBps: 100, floorFeeBps: 100, numberOfPeriods: 0, periodFrequency: new BN(0), reductionFactor: new BN(0) };
   const NO_DYNAMIC = { enabled: false, maxDynamicFeeBps: 0, variableFeeControl: 0, filterPeriod: 0, decayPeriod: 0, reductionFactor: 0, maxVolatilityAccumulator: new BN(0) };
@@ -111,8 +110,9 @@ describe("SWDMM v2 pools", () => {
   async function newPosition(pool: PublicKey, owner: Keypair) {
     const p: any = await program.account.swdmmV2Pool.fetch(pool);
     const nonce = p.positionCount.toNumber();
-    const position = ownerPosition(pool, owner.publicKey, nonce);
-    await program.methods.createV2Position(new BN(nonce)).accounts({ owner: owner.publicKey, pool, position, systemProgram: SystemProgram.programId }).signers([owner]).rpc();
+    const index = ownerIndex(owner.publicKey, nonce);
+    const position = v2Position(pool, index);
+    await program.methods.createV2Position(new BN(nonce), index).accounts({ owner: owner.publicKey, pool, position, systemProgram: SystemProgram.programId }).signers([owner]).rpc();
     return position;
   }
 

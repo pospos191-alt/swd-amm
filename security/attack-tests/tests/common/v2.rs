@@ -126,10 +126,15 @@ impl Env {
     }
 
     pub fn ix_v2_create_position(&self, v: &V2, owner: &Pubkey, position: &Pubkey, nonce: u64) -> Instruction {
+        self.ix_v2_create_position_at(v, owner, position, nonce, swd_amm::v2_position_index(owner, nonce))
+    }
+
+    /// Same, with an explicit (possibly wrong) index.
+    pub fn ix_v2_create_position_at(&self, v: &V2, owner: &Pubkey, position: &Pubkey, nonce: u64, index: u64) -> Instruction {
         Instruction {
             program_id: swd_amm::ID,
             accounts: swd_amm::accounts::CreateV2Position { owner: *owner, pool: v.pool, position: *position, system_program: anchor_lang::system_program::ID }.to_account_metas(None),
-            data: swd_amm::instruction::CreateV2Position { nonce }.data(),
+            data: swd_amm::instruction::CreateV2Position { nonce, index }.data(),
         }
     }
 
