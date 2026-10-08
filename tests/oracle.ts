@@ -63,6 +63,8 @@ import {
   deviationBps,
   dynamicFeeBps,
   expectedSwapOut,
+  mintFeedPda,
+  registerFeeds,
 } from "./oracle-fixtures";
 
 // Must match the fixture's baked-in mint decimals exactly — the on-chain
@@ -236,6 +238,10 @@ describe("oracle guard + dynamic fee (Phase 3)", () => {
     const allowedMintBPda = await ensureAllowlisted(mintB);
 
     const { poolPda, vaultAPda, vaultBPda, lpMintPda } = derivePoolAddresses(mintA, mintB);
+    await registerFeeds(program, payer, globalConfigPda, [
+      [mintA, FEED_ID_A],
+      [mintB, FEED_ID_B],
+    ]);
 
     await program.methods
       .initializePool(
@@ -253,6 +259,8 @@ describe("oracle guard + dynamic fee (Phase 3)", () => {
         config: globalConfigPda,
         allowedMintA: allowedMintAPda,
         allowedMintB: allowedMintBPda,
+        mintFeedA: mintFeedPda(program.programId, mintA),
+        mintFeedB: mintFeedPda(program.programId, mintB),
         pool: poolPda,
         vaultA: vaultAPda,
         vaultB: vaultBPda,

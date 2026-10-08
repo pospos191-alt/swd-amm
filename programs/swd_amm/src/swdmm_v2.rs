@@ -175,7 +175,12 @@ pub struct SwdmmV2Pool {
     pub position_count: u64,
     pub created_at: i64,
     pub bump: u8,
-    pub _reserved: [u8; 64],
+    /// Slot of the first swap counted in the per-slot impact cap, and the
+    /// pool price before it (2026-10-08). Taken from the old 64 reserved
+    /// bytes, so the account size is unchanged.
+    pub impact_slot: u64,
+    pub impact_ref_price_q64: u128,
+    pub _reserved: [u8; 40],
 }
 
 impl SwdmmV2Pool {
@@ -276,6 +281,12 @@ pub(crate) fn initialize_v2_pool(ctx: Context<InitializeV2Pool>, params: Initial
             0,
             0,
         )?;
+        // the feeds governance registered for these mints (2026-10-08)
+        let ok = match (&ctx.accounts.mint_feed_a, &ctx.accounts.mint_feed_b) {
+            (Some(fa), Some(fb)) => fa.pyth_feed_id == params.oracle.pyth_feed_id_a && fb.pyth_feed_id == params.oracle.pyth_feed_id_b,
+            _ => false,
+        };
+        require!(ok, SwdmmV2Error::OracleFeedNotRegistered);
     }
 
     let now = Clock::get()?.unix_timestamp;
@@ -314,10 +325,25 @@ pub(crate) fn initialize_v2_pool(ctx: Context<InitializeV2Pool>, params: Initial
     Ok(())
 }
 
-pub(crate) fn create_v2_position(ctx: Context<CreateV2Position>) -> Result<()> {
+/// Position index for `owner` and a caller-chosen `nonce` (2026-10-08):
+/// the first 8 bytes (LE) of sha256("swdmm_v2_position_index" || owner ||
+/// nonce LE). Positions used to take the next `position_count`, so anyone
+/// could create (and close for the rent) the index an honest create was
+/// about to use and make it fail. Now an index is reachable only by its
+/// owner. Earlier positions keep their sequential indexes — every other
+/// instruction checks seeds against the stored `position.index`.
+pub fn v2_position_index(owner: &Pubkey, nonce: u64) -> u64 {
+    let h = anchor_lang::solana_program::hash::hashv(&[b"swdmm_v2_position_index", owner.as_ref(), &nonce.to_le_bytes()]);
+    let mut b = [0u8; 8];
+    b.copy_from_slice(&h.to_bytes()[..8]);
+    u64::from_le_bytes(b)
+}
+
+pub(crate) fn create_v2_position(ctx: Context<CreateV2Position>, nonce: u64) -> Result<()> {
     let pool = &mut ctx.accounts.pool;
-    let index = pool.position_count;
-    pool.position_count = index.checked_add(1).ok_or(SwdmmV2Error::MathOverflow)?;
+    let index = v2_position_index(&ctx.accounts.owner.key(), nonce);
+    // now just a count of positions ever created
+    pool.position_count = pool.position_count.checked_add(1).ok_or(SwdmmV2Error::MathOverflow)?;
     let p = &mut ctx.accounts.position;
     p.pool = pool.key();
     p.owner = ctx.accounts.owner.key();
@@ -497,6 +523,17 @@ pub(crate) fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64,
 
     let price_before = m::price_q64(pool.reserve_a, pool.reserve_b).ok_or(SwdmmV2Error::MathOverflow)?;
 
+    // Per-slot impact cap (2026-10-08): the per-swap cap below only saw one
+    // instruction, so several swaps in one transaction or slot could move
+    // the price without limit. The first swap of a slot records the price;
+    // later swaps in that slot are checked against it after they run.
+    let slot = Clock::get()?.slot;
+    let same_slot = pool.impact_slot == slot && pool.impact_ref_price_q64 > 0;
+    if !same_slot {
+        pool.impact_slot = slot;
+        pool.impact_ref_price_q64 = price_before;
+    }
+
     // Optional Pyth guard: refuse a trade that leaves the pool too far
     // from the oracle price, unless it moves the price back toward it
     // (enforced below, once the post-trade price is known).
@@ -567,6 +604,14 @@ pub(crate) fn swap_v2(ctx: Context<SwapV2>, amount_in: u64, min_amount_out: u64,
     pool.reserve_a = r.new_reserve_a;
     pool.reserve_b = r.new_reserve_b;
     pool.swap_count = pool.swap_count.saturating_add(1);
+
+    if same_slot {
+        let price_after = m::price_q64(pool.reserve_a, pool.reserve_b).ok_or(SwdmmV2Error::MathOverflow)?;
+        require!(
+            m::slot_impact_allows(pool.impact_ref_price_q64, price_before, price_after, pool.max_price_impact_bps as u64),
+            SwdmmV2Error::PriceImpactTooHigh
+        );
+    }
 
     if let Some(o) = &oracle_result {
         let price_after = m::price_q64(pool.reserve_a, pool.reserve_b).ok_or(SwdmmV2Error::MathOverflow)?;
@@ -756,6 +801,13 @@ pub struct InitializeV2Pool<'info> {
     #[account(seeds = [MINT_POLICY_SEED, mint_b.key().as_ref()], bump = mint_policy_b.bump)]
     pub mint_policy_b: Box<Account<'info, MintPolicy>>,
 
+    /// Governance-registered Pyth feeds (see governance::set_mint_feed);
+    /// required only when the pool turns its oracle guard on.
+    #[account(seeds = [crate::governance::MINT_FEED_SEED, mint_a.key().as_ref()], bump = mint_feed_a.bump)]
+    pub mint_feed_a: Option<Box<Account<'info, crate::governance::MintFeed>>>,
+    #[account(seeds = [crate::governance::MINT_FEED_SEED, mint_b.key().as_ref()], bump = mint_feed_b.bump)]
+    pub mint_feed_b: Option<Box<Account<'info, crate::governance::MintFeed>>>,
+
     #[account(
         init,
         payer = creator,
@@ -793,6 +845,7 @@ pub struct InitializeV2Pool<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(nonce: u64)]
 pub struct CreateV2Position<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -808,7 +861,7 @@ pub struct CreateV2Position<'info> {
         init,
         payer = owner,
         space = 8 + SwdmmV2Position::INIT_SPACE,
-        seeds = [V2_POSITION_SEED, pool.key().as_ref(), &pool.position_count.to_le_bytes()],
+        seeds = [V2_POSITION_SEED, pool.key().as_ref(), &v2_position_index(&owner.key(), nonce).to_le_bytes()],
         bump
     )]
     pub position: Box<Account<'info, SwdmmV2Position>>,
@@ -1127,4 +1180,6 @@ pub enum SwdmmV2Error {
     OracleAccountsMissing,
     #[msg("Math overflow")]
     MathOverflow,
+    #[msg("Pyth feed ids must match the feeds governance registered for these mints (set_mint_feed)")]
+    OracleFeedNotRegistered,
 }

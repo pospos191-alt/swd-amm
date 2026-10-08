@@ -39,7 +39,7 @@ import {
 } from "@solana/spl-token";
 import { PublicKey, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { assert } from "chai";
-import { LEGACY_POOLS, LEGACY_ORACLE_MAX_DEVIATION_BPS, LEGACY_MAX_FEE_BPS, TEST_ORACLE_MAX_STALENESS_SECS } from "./oracle-fixtures";
+import { LEGACY_POOLS, LEGACY_ORACLE_MAX_DEVIATION_BPS, LEGACY_MAX_FEE_BPS, TEST_ORACLE_MAX_STALENESS_SECS, mintFeedPda, registerFeeds } from "./oracle-fixtures";
 
 // TODO: once `anchor build` has generated target/types/swd_amm.ts, replace
 // `anchor.Program<any>` with `Program<SwdAmm>` and uncomment this import for full
@@ -336,6 +336,10 @@ describe("swd_amm", () => {
     const allowedMintAPda = await ensureAllowlisted(mA);
     const allowedMintBPda = await ensureAllowlisted(mB);
     const { poolPda, vaultAPda, vaultBPda, lpMintPda } = derivePoolAddresses(mA, mB);
+    await registerFeeds(program, payer, globalConfigPda, [
+      [mA, oracleFeed.feedIdA],
+      [mB, oracleFeed.feedIdB],
+    ]);
     await program.methods
       .initializePool(
         feeBps,
@@ -352,6 +356,8 @@ describe("swd_amm", () => {
         config: globalConfigPda,
         allowedMintA: allowedMintAPda,
         allowedMintB: allowedMintBPda,
+        mintFeedA: mintFeedPda(program.programId, mA),
+        mintFeedB: mintFeedPda(program.programId, mB),
         pool: poolPda,
         vaultA: vaultAPda,
         vaultB: vaultBPda,

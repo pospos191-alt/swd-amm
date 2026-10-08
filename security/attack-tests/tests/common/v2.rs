@@ -87,6 +87,8 @@ impl Env {
                 mint_b: v.mint_b,
                 mint_policy_a: mint_policy_pda(&v.mint_a),
                 mint_policy_b: mint_policy_pda(&v.mint_b),
+                mint_feed_a: None,
+                mint_feed_b: None,
                 pool: v.pool,
                 vault_a: v.vault_a,
                 vault_b: v.vault_b,
@@ -123,15 +125,19 @@ impl Env {
         self.anchor_account(key).await
     }
 
-    /// Creates the next position for `owner`; returns its address.
-    pub async fn v2_new_position(&mut self, v: &V2, owner: &Keypair) -> Pubkey {
-        let count = self.v2_state(v).await.position_count;
-        let position = v2_position_pda(&v.pool, count);
-        let ix = Instruction {
+    pub fn ix_v2_create_position(&self, v: &V2, owner: &Pubkey, position: &Pubkey, nonce: u64) -> Instruction {
+        Instruction {
             program_id: swd_amm::ID,
-            accounts: swd_amm::accounts::CreateV2Position { owner: owner.pubkey(), pool: v.pool, position, system_program: anchor_lang::system_program::ID }.to_account_metas(None),
-            data: swd_amm::instruction::CreateV2Position {}.data(),
-        };
+            accounts: swd_amm::accounts::CreateV2Position { owner: *owner, pool: v.pool, position: *position, system_program: anchor_lang::system_program::ID }.to_account_metas(None),
+            data: swd_amm::instruction::CreateV2Position { nonce }.data(),
+        }
+    }
+
+    /// Creates a position for `owner` (nonce = position_count); returns its address.
+    pub async fn v2_new_position(&mut self, v: &V2, owner: &Keypair) -> Pubkey {
+        let nonce = self.v2_state(v).await.position_count;
+        let position = v2_position_pda(&v.pool, swd_amm::v2_position_index(&owner.pubkey(), nonce));
+        let ix = self.ix_v2_create_position(v, &owner.pubkey(), &position, nonce);
         self.send(&[ix], &[owner]).await.expect("create_v2_position");
         position
     }

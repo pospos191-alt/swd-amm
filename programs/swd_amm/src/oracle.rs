@@ -341,11 +341,20 @@ pub const MAX_ORACLE_DEVIATION_GUARD_BPS: u16 = 5_000;
 /// no longer meaningfully protective. 3,600s = 1 hour.
 pub const MAX_ORACLE_STALENESS_SECS: u32 = 3_600;
 
+/// Widest Pyth confidence interval a price may have to be used, as a share
+/// of the price (2026-10-08). Pyth's guidance is to refuse prices whose
+/// `conf` is large relative to `price` — in a fast or illiquid market the
+/// "price" is then mostly noise.
+pub const MAX_ORACLE_CONF_BPS: u128 = 200; // 2%
+
 // ---------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------
 
-#[error_code]
+// Own code range (2026-10-08): lib.rs 6000+, dlmm 6100+, governance
+// 6200+, oracle 6300+, swdmm_v2 8000+, timelock 8500+. They all used to
+// start at 6000, so a raw error number did not say which error it was.
+#[error_code(offset = 6300)]
 pub enum OracleError {
     #[msg("Pyth price is missing, for the wrong feed, or older than this pool's configured maximum staleness")]
     PriceUnavailable,
@@ -369,6 +378,8 @@ pub enum OracleError {
     IdenticalFeeds,
     #[msg("Math overflow in oracle price/fee computation")]
     MathOverflow,
+    #[msg("Oracle price confidence interval is too wide to use")]
+    PriceConfidenceTooWide,
 }
 
 // ---------------------------------------------------------------------
@@ -512,6 +523,11 @@ pub fn dynamic_fee_bps(
 // `swap_dlmm`, once each, before either pool's own fee/output math runs.
 // ---------------------------------------------------------------------
 
+/// `conf <= price * MAX_ORACLE_CONF_BPS / 10_000` (and a positive price).
+pub fn confidence_ok(p: &Price) -> bool {
+    p.price > 0 && (p.conf as u128) * 10_000 <= (p.price as u128) * MAX_ORACLE_CONF_BPS
+}
+
 pub struct OracleFeeResult {
     pub fee_bps: u16,
     /// Deviation of the pool's PRE-trade price from the oracle.
@@ -582,6 +598,7 @@ pub fn evaluate_oracle_and_fee(
         price_update_a.get_price_no_older_than(clock, oracle_max_staleness_secs as u64, pyth_feed_id_a)?;
     let price_b =
         price_update_b.get_price_no_older_than(clock, oracle_max_staleness_secs as u64, pyth_feed_id_b)?;
+    require!(confidence_ok(&price_a) && confidence_ok(&price_b), OracleError::PriceConfidenceTooWide);
 
     let oracle_q64 = oracle_price_q64(
         price_a.price,

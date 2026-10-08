@@ -505,7 +505,10 @@ impl Position {
 // Errors
 // ---------------------------------------------------------------------
 
-#[error_code]
+// Own code range (2026-10-08): lib.rs 6000+, dlmm 6100+, governance
+// 6200+, oracle 6300+, swdmm_v2 8000+, timelock 8500+. They all used to
+// start at 6000, so a raw error number did not say which error it was.
+#[error_code(offset = 6100)]
 pub enum DlmmError {
     #[msg("bin_step_bps exceeds the maximum allowed")]
     BinStepTooHigh,
@@ -621,6 +624,12 @@ pub struct InitializeDlmmPool<'info> {
 
     #[account(seeds = [crate::governance::ALLOWED_MINT_SEED, mint_b.key().as_ref()], bump = allowed_mint_b.bump)]
     pub allowed_mint_b: Box<Account<'info, crate::governance::AllowedMint>>,
+
+    /// Governance-registered Pyth feed of each mint (see set_mint_feed).
+    #[account(seeds = [crate::governance::MINT_FEED_SEED, mint_a.key().as_ref()], bump = mint_feed_a.bump)]
+    pub mint_feed_a: Box<Account<'info, crate::governance::MintFeed>>,
+    #[account(seeds = [crate::governance::MINT_FEED_SEED, mint_b.key().as_ref()], bump = mint_feed_b.bump)]
+    pub mint_feed_b: Box<Account<'info, crate::governance::MintFeed>>,
 
     #[account(
         init,
@@ -842,6 +851,11 @@ pub(crate) fn initialize_dlmm_pool(
     require!(ctx.accounts.allowed_mint_b.enabled, SwdAmmError::MintNotAllowlisted);
     require_keys_eq!(ctx.accounts.allowed_mint_a.mint, ctx.accounts.mint_a.key(), SwdAmmError::MintNotAllowlisted);
     require_keys_eq!(ctx.accounts.allowed_mint_b.mint, ctx.accounts.mint_b.key(), SwdAmmError::MintNotAllowlisted);
+    // Feeds must be the ones governance registered for these mints (2026-10-08).
+    require!(
+        ctx.accounts.mint_feed_a.pyth_feed_id == pyth_feed_id_a && ctx.accounts.mint_feed_b.pyth_feed_id == pyth_feed_id_b,
+        SwdAmmError::OracleFeedNotRegistered
+    );
     let min_bin_id = active_bin_id
         .checked_sub(HALF_RANGE)
         .ok_or(SwdAmmError::MathOverflow)?;

@@ -82,6 +82,34 @@ pub fn price_change_bps(price: u128, reference: u128) -> Option<u64> {
     Some(u64::try_from(bps).unwrap_or(u64::MAX))
 }
 
+/// min/max as Q64.64 (<= 1.0). Both inputs are Q64.64 prices.
+pub fn ratio_q64(a: u128, b: u128) -> Option<u128> {
+    let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+    if hi == 0 {
+        return None;
+    }
+    // shift both down until lo fits 64 bits, so lo << 64 cannot overflow
+    let k = 64u32.saturating_sub(lo.leading_zeros());
+    Some(((lo >> k) << 64) / (hi >> k).max(1))
+}
+
+/// Cumulative price-impact cap inside one slot (2026-10-08). A single
+/// constant-product swap with input impact i moves the price by a factor
+/// of 1/(1-i)^2, so a cap of `max_bps` allows `after` to differ from the
+/// slot's reference price by at most that factor. A swap that brings the
+/// price back toward the reference is always allowed.
+pub fn slot_impact_allows(reference: u128, before: u128, after: u128, max_bps: u64) -> bool {
+    let (Some(r_after), Some(r_before)) = (ratio_q64(after, reference), ratio_q64(before, reference)) else {
+        return false;
+    };
+    if r_after > r_before {
+        return true; // closer to the slot's reference price
+    }
+    let keep = FEE_DENOMINATOR.saturating_sub(max_bps) as u128; // 1 - i, in bps
+    // r_after >= (1 - i)^2  <=>  r_after * 1e8 >= keep^2 * 2^64
+    r_after.saturating_mul((FEE_DENOMINATOR as u128) * (FEE_DENOMINATOR as u128)) >= keep * keep * Q64
+}
+
 /// Q64.64 power by squaring: base^exp, base <= 1.0 in practice.
 pub fn pow_q64(mut base: u128, mut exp: u64) -> Option<u128> {
     let mut acc: u128 = Q64;
@@ -502,6 +530,25 @@ pub fn pending_fee(global_q64: u128, checkpoint_q64: u128, liquidity: u128) -> O
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn slot_impact_cap_matches_one_capped_swap() {
+        let one = Q64;
+        // cap 5000 bps (50%) allows a price factor of 1/(1-0.5)^2 = 4x
+        assert!(slot_impact_allows(one, one, one * 4, 5_000));
+        assert!(slot_impact_allows(one, one, one / 4, 5_000));
+        assert!(!slot_impact_allows(one, one, one * 4 + one / 100, 5_000));
+        assert!(!slot_impact_allows(one, one, one / 5, 5_000));
+        // 10% cap: ~1.2346x
+        assert!(slot_impact_allows(one, one, one * 12_345 / 10_000, 1_000));
+        assert!(!slot_impact_allows(one, one, one * 12_400 / 10_000, 1_000));
+        // moving back toward the reference is always fine
+        assert!(slot_impact_allows(one, one * 10, one * 8, 1_000));
+        // huge prices don't overflow
+        assert!(slot_impact_allows(u128::MAX / 2, u128::MAX / 2, u128::MAX / 2, 1));
+        assert_eq!(ratio_q64(one, one), Some(one));
+    }
+
     use super::*;
 
     struct Rng(u64);

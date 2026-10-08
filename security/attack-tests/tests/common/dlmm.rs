@@ -52,6 +52,8 @@ impl Env {
         self.allow_mint(&mint_a).await;
         self.allow_mint(&mint_b).await;
         let (feed_a, feed_b) = (feed_id(11), feed_id(12));
+        self.register_feed(&mint_a, feed_a).await;
+        self.register_feed(&mint_b, feed_b).await;
         let (price_a, price_b) = (Pubkey::new_unique(), Pubkey::new_unique());
         self.set_price(&price_a, feed_a, 100_000_000, -8).await;
         self.set_price(&price_b, feed_b, 100_000_000, -8).await;
@@ -72,6 +74,8 @@ impl Env {
                 config: self.config(),
                 allowed_mint_a: Self::allowed_mint_pda(&d.mint_a),
                 allowed_mint_b: Self::allowed_mint_pda(&d.mint_b),
+                mint_feed_a: Self::mint_feed_pda(&d.mint_a),
+                mint_feed_b: Self::mint_feed_pda(&d.mint_b),
                 pool: d.pool,
                 bin_array: d.bin_array,
                 vault_a: d.vault_a,

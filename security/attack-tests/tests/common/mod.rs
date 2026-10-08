@@ -249,6 +249,33 @@ impl Env {
 
     // --------------------------------------------------------- governance
 
+    pub fn mint_feed_pda(mint: &Pubkey) -> Pubkey {
+        Pubkey::find_program_address(&[b"mint-feed", mint.as_ref()], &swd_amm::ID).0
+    }
+
+    pub fn ix_set_mint_feed(&self, signer: &Pubkey, mint: &Pubkey, feed: [u8; 32]) -> Instruction {
+        Instruction {
+            program_id: swd_amm::ID,
+            accounts: swd_amm::accounts::SetMintFeed {
+                config: self.config(),
+                governance_authority: *signer,
+                mint: *mint,
+                mint_feed: Self::mint_feed_pda(mint),
+                payer: *signer,
+                system_program: anchor_lang::system_program::ID,
+            }
+            .to_account_metas(None),
+            data: swd_amm::instruction::SetMintFeed { pyth_feed_id: feed }.data(),
+        }
+    }
+
+    /// Governance registers `feed` as the Pyth feed of `mint`.
+    pub async fn register_feed(&mut self, mint: &Pubkey, feed: [u8; 32]) {
+        let gov = self.gov.insecure_clone();
+        let ix = self.ix_set_mint_feed(&gov.pubkey(), mint, feed);
+        self.send(&[ix], &[&gov]).await.expect("set_mint_feed");
+    }
+
     pub fn allowed_mint_pda(mint: &Pubkey) -> Pubkey {
         Pubkey::find_program_address(&[b"allowed-mint", mint.as_ref()], &swd_amm::ID).0
     }

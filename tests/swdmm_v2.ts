@@ -14,6 +14,7 @@ import {
 } from "@solana/spl-token";
 import { PublicKey, Keypair, SystemProgram, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { assert } from "chai";
+import { v2PositionIndex } from "./oracle-fixtures";
 
 async function expectThrows(fn: () => Promise<unknown>, label: string): Promise<any> {
   try {
@@ -43,6 +44,11 @@ describe("SWDMM v2 pools", () => {
   const v2Pool = (a: PublicKey, b: PublicKey, floor: number) => pda(Buffer.from("swdmm_v2_pool"), a.toBuffer(), b.toBuffer(), u16le(floor));
   const v2Vault = (pool: PublicKey, m: PublicKey) => pda(Buffer.from("swdmm_v2_vault"), pool.toBuffer(), m.toBuffer());
   const v2Position = (pool: PublicKey, i: number | BN) => pda(Buffer.from("swdmm_v2_position"), pool.toBuffer(), u64le(i));
+  // Position addresses are bound to their owner (swdmm_v2.rs
+  // v2_position_index), so nobody can create the address someone else's
+  // transaction is about to use.
+  const ownerPosition = (pool: PublicKey, owner: PublicKey, nonce: number) =>
+    v2Position(pool, new BN(v2PositionIndex(owner, nonce).toString()));
 
   const FIXED_1PCT = { mode: 0, decay: 0, cliffFeeBps: 100, floorFeeBps: 100, numberOfPeriods: 0, periodFrequency: new BN(0), reductionFactor: new BN(0) };
   const NO_DYNAMIC = { enabled: false, maxDynamicFeeBps: 0, variableFeeControl: 0, filterPeriod: 0, decayPeriod: 0, reductionFactor: 0, maxVolatilityAccumulator: new BN(0) };
@@ -96,6 +102,7 @@ describe("SWDMM v2 pools", () => {
         creator: payer.publicKey, config: globalConfig, settings, mintA: a, mintB: b,
         mintPolicyA: mintPolicy(a), mintPolicyB: mintPolicy(b), pool,
         vaultA: v2Vault(pool, a), vaultB: v2Vault(pool, b),
+        mintFeedA: null, mintFeedB: null,
         tokenProgramA: TOKEN_PROGRAM_ID, tokenProgramB: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId,
       }).rpc();
     return pool;
@@ -103,8 +110,9 @@ describe("SWDMM v2 pools", () => {
 
   async function newPosition(pool: PublicKey, owner: Keypair) {
     const p: any = await program.account.swdmmV2Pool.fetch(pool);
-    const position = v2Position(pool, p.positionCount);
-    await program.methods.createV2Position().accounts({ owner: owner.publicKey, pool, position, systemProgram: SystemProgram.programId }).signers([owner]).rpc();
+    const nonce = p.positionCount.toNumber();
+    const position = ownerPosition(pool, owner.publicKey, nonce);
+    await program.methods.createV2Position(new BN(nonce)).accounts({ owner: owner.publicKey, pool, position, systemProgram: SystemProgram.programId }).signers([owner]).rpc();
     return position;
   }
 

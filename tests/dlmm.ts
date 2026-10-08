@@ -49,7 +49,7 @@ import {
 } from "@solana/spl-token";
 import { PublicKey, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { assert } from "chai";
-import { LEGACY_POOLS, LEGACY_ORACLE_MAX_DEVIATION_BPS, LEGACY_MAX_FEE_BPS, TEST_ORACLE_MAX_STALENESS_SECS } from "./oracle-fixtures";
+import { LEGACY_POOLS, LEGACY_ORACLE_MAX_DEVIATION_BPS, LEGACY_MAX_FEE_BPS, TEST_ORACLE_MAX_STALENESS_SECS, mintFeedPda, registerFeeds } from "./oracle-fixtures";
 
 // TODO: once `anchor build` has generated target/types/swd_amm.ts, replace
 // `anchor.Program<any>` with `Program<SwdAmm>` for full type safety on
@@ -249,6 +249,10 @@ describe("swd_amm — dlmm", () => {
   });
 
   it("initializes a DLMM pool", async () => {
+    await registerFeeds(program, payer, globalConfigPda, [
+      [mintA, LEGACY_POOLS.ratioOne.feedIdA],
+      [mintB, LEGACY_POOLS.ratioOne.feedIdB],
+    ]);
     await program.methods
       .initializeDlmmPool(
         BIN_STEP_BPS,
@@ -267,6 +271,8 @@ describe("swd_amm — dlmm", () => {
         config: globalConfigPda,
         allowedMintA: deriveAllowedMintPda(mintA),
         allowedMintB: deriveAllowedMintPda(mintB),
+        mintFeedA: mintFeedPda(program.programId, mintA),
+        mintFeedB: mintFeedPda(program.programId, mintB),
         pool,
         binArray,
         vaultA,

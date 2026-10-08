@@ -166,3 +166,45 @@ export function expectedSwapOut(reserveIn: bigint, reserveOut: bigint, amountIn:
   const newReserveOutCeil = (k + newReserveIn - 1n) / newReserveIn;
   return reserveOut - newReserveOutCeil;
 }
+
+// ---------------------------------------------------------------------
+// Mint → Pyth feed registry (2026-10-08). Pool creation must name the
+// feeds governance registered for its mints (governance.rs set_mint_feed),
+// so every suite registers them right before it creates a pool.
+// ---------------------------------------------------------------------
+export function mintFeedPda(programId: PublicKey, mint: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync([Buffer.from("mint-feed"), mint.toBuffer()], programId)[0];
+}
+
+export async function registerFeeds(
+  program: any,
+  governance: { publicKey: PublicKey },
+  config: PublicKey,
+  pairs: Array<[PublicKey, number[] | Uint8Array]>
+) {
+  for (const [mint, feed] of pairs) {
+    await program.methods
+      .setMintFeed(Array.from(feed))
+      .accounts({
+        config,
+        governanceAuthority: governance.publicKey,
+        mint,
+        mintFeed: mintFeedPda(program.programId, mint),
+        payer: governance.publicKey,
+        systemProgram: new PublicKey("11111111111111111111111111111111"),
+      })
+      .rpc();
+  }
+}
+
+// SWDMM v2 position index for (owner, nonce): first 8 bytes (LE) of
+// sha256("swdmm_v2_position_index" || owner || nonce LE) — swdmm_v2.rs
+// v2_position_index.
+export function v2PositionIndex(owner: PublicKey, nonce: number | bigint): bigint {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createHash } = require("crypto");
+  const n = Buffer.alloc(8);
+  n.writeBigUInt64LE(BigInt(nonce));
+  const h: Buffer = createHash("sha256").update(Buffer.from("swdmm_v2_position_index")).update(owner.toBuffer()).update(n).digest();
+  return h.readBigUInt64LE(0);
+}
