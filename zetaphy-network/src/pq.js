@@ -3,12 +3,11 @@
 // Signatures are FIPS 204 pure ML-DSA with an empty context, which is what
 // ZETAPHY's precompile at 0x…0900 verifies.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { keccak256, hexlify, getBytes } from 'ethers';
-import { HOME } from './keys.js';
+import { HOME, loadOrCreateSecret, sealExisting } from './keys.js';
 
 export const VARIANT = 44;
 
@@ -22,13 +21,10 @@ export function pqFromSeed(seedHex) {
 }
 
 export function loadOrCreatePq(file = join(HOME, 'pq.seed')) {
-  let created = false;
-  if (!existsSync(file)) {
-    mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-    writeFileSync(file, hexlify(randomBytes(32)) + '\n', { mode: 0o600 });
-    created = true;
-  }
-  const seed = readFileSync(file, 'utf8').trim();
-  if (!/^0x[0-9a-fA-F]{64}$/.test(seed)) throw new Error(`${file} is not a seed file`);
-  return { ...pqFromSeed(seed), created, file };
+  // Plain pq.seed, or pq.seed.json (scrypt + AES-GCM) when ZETAPHY_PASSPHRASE is set.
+  const r = loadOrCreateSecret(file, () => hexlify(randomBytes(32)));
+  if (!/^0x[0-9a-fA-F]{64}$/.test(r.value)) throw new Error(`${r.file} is not a seed file`);
+  return { ...pqFromSeed(r.value), created: r.created, file: r.file, encrypted: r.encrypted };
 }
+
+export const sealPqSeed = (file = join(HOME, 'pq.seed')) => sealExisting(file);

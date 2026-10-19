@@ -13,12 +13,25 @@ pragma solidity 0.8.26;
 ///
 ///         Payouts are credited, then pulled with withdraw() (no ETH is pushed
 ///         to arbitrary addresses inside the job logic).
+///
+///         Seats are not first-come: per job, a lottery weighted by bond
+///         decides who may commit (eligible()). Its seed comes from the
+///         request (requester, chain, target, time, the requester's own
+///         counter), which nobody else can change, and only runners that
+///         registered before the job count. Splitting one bond over many
+///         addresses does not raise the odds. Pool rewards are capped at a
+///         quarter of the fee per winner and per day, so requesting jobs for
+///         oneself does not pay. (zetaphyd has no usable on-chain
+///         randomness: BLOCKHASH returns 0 and PREVRANDAO is constant.)
 contract NeuroJobs {
     uint8 public constant SEATS = 3;
     uint8 public constant QUORUM = 2;
     /// Share of the bond a runner loses for a verdict the quorum rejected,
     /// or for committing and then never revealing (basis points).
     uint16 public constant PENALTY_BPS = 1000;
+    /// Expected number of eligible runners when a job opens. It doubles each
+    /// third of the commit window so seats still fill when some are offline.
+    uint256 public constant COMMITTEE = 6;
 
     uint256 public immutable workerBond;
     uint256 public immutable jobReward;
@@ -26,6 +39,7 @@ contract NeuroJobs {
     uint64 public immutable commitWindow;
     uint64 public immutable jobTimeout;
     uint64 public immutable unbondDelay;
+    uint256 public immutable dailyRewardCap;
 
     enum Status { None, Open, Done, Failed }
 
@@ -35,6 +49,7 @@ contract NeuroJobs {
         bool active;
         uint32 agreed;
         uint32 rejected;
+        uint64 since;    // when it last became active; only later jobs count
     }
 
     struct Job {
@@ -46,6 +61,7 @@ contract NeuroJobs {
         bytes32 chain;
         uint256 fee;
         bytes32 result;
+        bytes32 seed;
         string target;
         address[3] seat;
         bytes32[3] commitOf;
@@ -55,6 +71,10 @@ contract NeuroJobs {
 
     uint256 public rewardPool;
     uint256 public activeWorkers;
+    uint256 public totalActiveBond;
+    uint64 public rewardDay;
+    uint256 public rewardedToday;
+    mapping(address => uint256) public requestCount;
     mapping(address => Worker) public workers;
     mapping(address => uint256) public credit;
     Job[] internal jobs;
@@ -78,8 +98,9 @@ contract NeuroJobs {
     error TooEarly();
     error BadReveal();
     error Nothing();
+    error NotChosen();
 
-    constructor(uint256 bond_, uint256 reward_, uint256 minFee_, uint64 commitWindow_, uint64 timeout_, uint64 unbondDelay_) {
+    constructor(uint256 bond_, uint256 reward_, uint256 minFee_, uint64 commitWindow_, uint64 timeout_, uint64 unbondDelay_, uint256 dailyRewardCap_) {
         if (bond_ == 0 || commitWindow_ == 0 || timeout_ <= commitWindow_ || unbondDelay_ < timeout_) revert BadValue();
         workerBond = bond_;
         jobReward = reward_;
@@ -87,6 +108,7 @@ contract NeuroJobs {
         commitWindow = commitWindow_;
         jobTimeout = timeout_;
         unbondDelay = unbondDelay_;
+        dailyRewardCap = dailyRewardCap_;
     }
 
     // ---- pool and runners ----
@@ -105,7 +127,9 @@ contract NeuroJobs {
         if (bond < workerBond) revert BadValue();
         w.bond = uint128(bond);
         w.active = true;
+        w.since = uint64(block.timestamp);
         activeWorkers += 1;
+        totalActiveBond += bond;
         emit Registered(msg.sender, bond);
     }
 
@@ -117,6 +141,7 @@ contract NeuroJobs {
         w.active = false;
         w.unbondAt = uint64(block.timestamp) + unbondDelay;
         activeWorkers -= 1;
+        totalActiveBond -= w.bond;
         emit UnbondRequested(msg.sender, w.unbondAt);
     }
 
@@ -158,6 +183,8 @@ contract NeuroJobs {
         Job storage j = jobs.push();
         j.requester = requester;
         j.created = uint64(block.timestamp);
+        // Not the job id: jobs slipped in first must not move the seed.
+        j.seed = keccak256(abi.encode(requester, chain, target, block.timestamp, requestCount[requester]++));
         j.status = Status.Open;
         j.chain = chain;
         j.target = target;
@@ -170,6 +197,7 @@ contract NeuroJobs {
         Job storage j = _open(id);
         if (!workers[msg.sender].active) revert NotWorker();
         if (block.timestamp >= j.created + commitWindow || j.commits == SEATS) revert NoSeat();
+        if (!eligible(id, msg.sender)) revert NotChosen();
         for (uint8 i = 0; i < j.commits; i++) if (j.seat[i] == msg.sender) revert AlreadyIn();
         j.seat[j.commits] = msg.sender;
         j.commitOf[j.commits] = commitment;
@@ -220,6 +248,21 @@ contract NeuroJobs {
         return (j.requester, j.created, j.status, j.chain, j.target, j.fee, j.result, j.commits, j.reveals, j.seat);
     }
 
+    /// May `w` take a seat on job `id` right now? A bond-weighted lottery:
+    /// about COMMITTEE runners qualify at first, twice as many after each
+    /// third of the commit window. Only runners active since before the job.
+    function eligible(uint256 id, address w) public view returns (bool) {
+        if (id >= jobs.length) return false;
+        Job storage j = jobs[id];
+        Worker storage wk = workers[w];
+        uint256 total = totalActiveBond;
+        if (!wk.active || wk.since >= j.created || total == 0) return false;
+        uint256 stage = ((block.timestamp - j.created) * 3) / commitWindow; // 0, 1, 2 inside the window
+        uint256 k = COMMITTEE << (stage > 2 ? 2 : stage);
+        uint256 x = uint256(keccak256(abi.encode(j.seed, w))) % 1e18;
+        return x * total < k * uint256(wk.bond) * 1e18;
+    }
+
     function seatOf(uint256 id, address worker) external view returns (bool seated, bool revealed_) {
         if (id >= jobs.length) revert BadJob();
         Job storage j = jobs[id];
@@ -247,11 +290,20 @@ contract NeuroJobs {
         for (uint8 i = 0; i < j.commits; i++) if (j.revealed[i] && j.verdictOf[i] == verdict) winners++;
         uint256 share = j.fee / winners;
         uint256 dust = j.fee - share * winners;
+        // Pool reward per winner: at most jobReward and at most a quarter of
+        // the fee, within the daily cap.
+        uint256 reward = jobReward < j.fee / 4 ? jobReward : j.fee / 4;
+        uint64 today = uint64(block.timestamp / 1 days);
+        if (rewardDay != today) { rewardDay = today; rewardedToday = 0; }
         for (uint8 i = 0; i < j.commits; i++) {
             address w = j.seat[i];
             if (j.revealed[i] && j.verdictOf[i] == verdict) {
                 uint256 pay = share;
-                if (rewardPool >= jobReward) { rewardPool -= jobReward; pay += jobReward; }
+                if (reward > 0 && rewardPool >= reward && rewardedToday + reward <= dailyRewardCap) {
+                    rewardPool -= reward;
+                    rewardedToday += reward;
+                    pay += reward;
+                }
                 credit[w] += pay;
                 workers[w].agreed += 1;
             } else if (j.revealed[i]) {
@@ -280,11 +332,13 @@ contract NeuroJobs {
         if (cut == 0) return;
         wk.bond -= uint128(cut);
         rewardPool += cut;
+        if (wk.active) totalActiveBond -= cut;
         emit Penalized(w, cut);
         // Below the bond: stop taking new jobs until topped up.
         if (wk.active && wk.bond < workerBond) {
             wk.active = false;
             activeWorkers -= 1;
+            totalActiveBond -= wk.bond;
         }
     }
 }

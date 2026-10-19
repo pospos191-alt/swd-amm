@@ -48,6 +48,11 @@ new = re.sub(r'(?m)^enable = .*', 'enable = true', sec)
 new = re.sub(r'(?m)^address = .*', f'address = "127.0.0.1:{port}"', new)
 new = re.sub(r'(?m)^ws-address = .*', f'ws-address = "127.0.0.1:{port+1}"', new)
 new = re.sub(r'(?m)^api = .*', 'api = "eth,net,web3,txpool"', new)
+# Same RPC limits as zetaphy-chain/setup-node.sh, so tests meet them too.
+for k, v in {'allow-insecure-unlock': 'false', 'gas-cap': '10000000', 'evm-timeout': '"3s"', 'logs-cap': '2000',
+             'block-range-cap': '2000', 'max-open-connections': '200', 'batch-request-limit': '50',
+             'batch-response-max-size': '5000000', 'http-body-limit': '1048576'}.items():
+    new = re.sub(r'(?m)^' + re.escape(k) + r' = .*', k + ' = ' + v, new)
 s = s.replace(sec, new)
 s = re.sub(r'(?ms)(^\[grpc\].*?^address = )"[^"]*"', rf'\1"127.0.0.1:{port+102}"', s)
 s = re.sub(r'(?ms)(^\[api\].*?^address = )"[^"]*"', rf'\1"tcp://127.0.0.1:{port+103}"', s)

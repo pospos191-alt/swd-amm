@@ -130,10 +130,12 @@ contract BridgeAirlock {
 
 /// @title DecoyBridge: looks like a bridge, holds nothing, marks who pokes it
 /// @notice Attackers scan for bridge contracts and try their functions. Any
-///         state-changing call here marks the caller (tx.origin too, to catch
-///         helper contracts) in the airlock, so their transfers are never
-///         released. It does NOT pause anything: otherwise anyone could stop
-///         the bridges by calling a decoy.
+///         state-changing call here marks the direct caller (msg.sender) in
+///         the airlock, so its transfers are never released. Only the direct
+///         caller: marking tx.origin would let anyone get an innocent user
+///         marked by luring them into a contract that pokes the decoy.
+///         It does NOT pause anything: otherwise anyone could stop the
+///         bridges by calling a decoy.
 contract DecoyBridge {
     BridgeAirlock public immutable airlock;
     string public name;
@@ -147,7 +149,6 @@ contract DecoyBridge {
     function _mark() private {
         trips += 1;
         airlock.trip(msg.sender);
-        if (tx.origin != msg.sender) airlock.trip(tx.origin);
     }
 
     // The usual entry points of bridge contracts.

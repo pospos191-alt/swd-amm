@@ -16,6 +16,7 @@ const a = (n) => c.acct[n].toString();
 
 async function provenRunners(names) {
   for (const w of names) await jobs.send(w, 'register', [], 100n * ZETA);
+  c.advance(1);
   const V = '0x' + '11'.repeat(32);
   for (let i = 0; i < names.length; i += 2) {
     const seats = [names[i], names[(i + 1) % names.length], names[(i + 2) % names.length]];
@@ -29,7 +30,7 @@ async function provenRunners(names) {
 
 beforeEach(async () => {
   c = await createChain(['gov', 'user', 'r1', 'r2', 'r3', 'r4', 'hyperlane', 'guardian', 'alice', 'attacker']);
-  jobs = await c.deploy('NeuroJobs', [100n * ZETA, ZETA, ZETA / 10n, 120, 600, 3600], 'gov');
+  jobs = await c.deploy('NeuroJobs', [100n * ZETA, ZETA, ZETA / 10n, 120, 600, 3600, 1000n * ZETA], 'gov');
   await provenRunners(['r1', 'r2', 'r3', 'r4']);
   guard = await c.deploy('BridgeGuard', [a('gov')], 'gov');
   await guard.send('gov', 'createToken', ['USD Coin (bridged)', 'USDC', 6]);
@@ -111,4 +112,16 @@ test('only lanes attest; only proven runners speak for the Neuro lane; BridgeGua
   await airlock.send('hyperlane', 'attest', t); await neuro(t);
   c.advance(Q);
   await assert.rejects(airlock.send('user', 'release', t)); // OverLimit inside BridgeGuard
+});
+
+test('a decoy marks only its direct caller, so nobody can get an innocent user marked', async () => {
+  // A lure contract that pokes the decoy when someone calls it.
+  const decoyIface = art('DecoyBridge');
+  await c.sendTo('alice', decoy.address, decoyIface, 'withdraw', [1]);
+  assert.equal(await airlock.call('tripped', [a('alice')]), true); // calling it directly does mark you
+  await airlock.send('gov', 'untrip', [a('alice')]);
+  const lure = await c.deploy('Lure', [decoy.address], 'attacker');
+  await c.sendTo('alice', lure.address, art('Lure'), 'claimAirdrop', []);
+  assert.equal(await airlock.call('tripped', [a('alice')]), false);
+  assert.equal(await airlock.call('tripped', [lure.address]), true);
 });

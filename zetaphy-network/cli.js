@@ -12,17 +12,19 @@
 //                                      pay in test USDC/USDT through a relay: no ZETAPHY needed
 //   zetaphy faucet <usdc|usdt> --relay URL   test stablecoins for this wallet (the relay pays gas)
 //   zetaphy relay start [--port 8080 --min-tip 0.01]   serve users who pay in stablecoins
+//   zetaphy keys encrypt               encrypt ~/.zetaphy keys with ZETAPHY_PASSPHRASE (removes the plain files)
 //   zetaphy gate                       progress toward gate 1 (30 days, no stalls, 10+ runners)
 //   zetaphy pq new [--hybrid]          quantum-safe wallet (ML-DSA); --hybrid also needs this machine's ECDSA key
 //   zetaphy pq address                 the wallet's address (fund it before or after it exists)
 //   zetaphy pq send <to> <amount>      move ZETAPHY out of it, signed with ML-DSA
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
-//   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x...]
+//   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
+//   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>]
 //                                      BridgeGuard + BridgeAirlock + NeuroLane + a DecoyBridge
 //   zetaphy bridge watch --source-rpc URL --lockbox 0x... [--confirmations 12 --release]
 //                                      be one voice of the Neuro bridge
-//   zetaphy deploy [--bond 100 --reward 1 --min-fee 0.1 --window 120 --timeout 600 --unbond 3600]
-//   zetaphy deploy-stable [--price 0.01 --reserve 1000]  test USDC/USDT + StableGateway
+//   zetaphy deploy [--bond 100 --reward 1 --min-fee 0.1 --window 120 --timeout 600 --unbond 3600 --daily-reward-cap 100]
+//   zetaphy deploy-stable [--price 0.01 --reserve 1000 --governance 0x<multisig>]  test USDC/USDT + StableGateway
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
 // (NeuroJobs address). They are saved to ~/.zetaphy/config.json on first use.
@@ -31,12 +33,12 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JsonRpcProvider, Contract, ContractFactory, formatEther, parseEther, parseUnits, formatUnits, encodeBytes32String, NonceManager, Signature } from 'ethers';
-import { HOME, loadOrCreateKey } from './src/keys.js';
+import { HOME, loadOrCreateKey, sealWorkerKey } from './src/keys.js';
 import { detectHardware, pickProfile } from './src/hardware.js';
 import { createWorker } from './src/worker.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
-import { loadOrCreatePq, VARIANT as PQ_VARIANT } from './src/pq.js';
+import { loadOrCreatePq, sealPqSeed, VARIANT as PQ_VARIANT } from './src/pq.js';
 import { createLaneWatcher } from './src/lane.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -45,7 +47,15 @@ const STABLE = art('TestStable');
 const GATEWAY = art('StableGateway');
 const QWALLET = art('QuantumWallet');
 const QFACTORY = art('QuantumWalletFactory');
-const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'DecoyBridge', 'LockBox', 'BridgedToken'].map((n) => [n, art(n)]));
+const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'DecoyBridge', 'LockBox', 'BridgedToken', 'SimpleMultisig'].map((n) => [n, art(n)]));
+const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+/** --governance: who takes over the admin role after setup (a multisig). */
+function governanceOf(opt, write) {
+  const g = opt.governance;
+  if (g == null) { write('warning: no --governance given, so this key stays the only admin (fine for a quick test, not beyond)'); return null; }
+  if (!ADDR_RE.test(String(g))) throw new Error('--governance must be a 0x address (e.g. from deploy-multisig)');
+  return String(g);
+}
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 const STATUS = ['none', 'open', 'done', 'failed'];
 const EVM_CHAIN_ID = 77390n;
@@ -175,7 +185,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const p = (k, d) => opt[k] ?? d;
     const factory = new ContractFactory(ART.abi, ART.bytecode, c.signer);
     const contract = await factory.deploy(parseEther(String(p('bond', 100))), parseEther(String(p('reward', 1))), parseEther(String(p('min-fee', 0.1))),
-      BigInt(p('window', 120)), BigInt(p('timeout', 600)), BigInt(p('unbond', 3600)));
+      BigInt(p('window', 120)), BigInt(p('timeout', 600)), BigInt(p('unbond', 3600)), parseEther(String(p('daily-reward-cap', 100))));
     await contract.waitForDeployment();
     const address = await contract.getAddress();
     if (opt.fund) await (await new Contract(address, ART.abi, c.signer).fund({ value: parseEther(String(opt.fund)) })).wait();
@@ -235,6 +245,22 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     }
   }
 
+  if (group === 'keys' && cmd === 'encrypt') {
+    const done = [sealWorkerKey() && 'worker.key', sealPqSeed() && 'pq.seed'].filter(Boolean);
+    write(done.length ? `encrypted: ${done.join(', ')} (keep ZETAPHY_PASSPHRASE safe: without it the keys are lost)` : 'no plain key files to encrypt');
+    return 0;
+  }
+
+  if (group === 'deploy-multisig') {
+    const owners = String(opt.owners ?? '').split(',').filter(Boolean);
+    if (owners.length < 2 || !owners.every((o) => ADDR_RE.test(o))) throw new Error('usage: zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]');
+    const c = await connect(s, { needJobs: false });
+    const k = await new ContractFactory(B.SimpleMultisig.abi, B.SimpleMultisig.bytecode, c.signer).deploy(owners, Number(opt.threshold ?? 2));
+    await k.waitForDeployment();
+    write(`SimpleMultisig ${await k.getAddress()} (${opt.threshold ?? 2} of ${owners.length})`);
+    return 0;
+  }
+
   if (group === 'deploy-bridge') {
     const c = await connect(s);
     const deploy = async (a, args) => { const k = await new ContractFactory(a.abi, a.bytecode, c.signer).deploy(...args); await k.waitForDeployment(); return new Contract(await k.getAddress(), a.abi, c.signer); };
@@ -243,11 +269,18 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     await (await guard.createToken(String(opt['token-name'] ?? 'USD Coin (bridged, testnet)'), String(opt['token-symbol'] ?? 'USDC'), Number(opt.decimals ?? 18))).wait();
     const airlock = await deploy(B.BridgeAirlock, [guard.target, route, c.me, Number(opt.threshold ?? 2), BigInt(opt.quarantine ?? 3600)]);
     await (await guard.setRoute(route, airlock.target, parseEther(String(opt['daily-limit'] ?? 100000)), true)).wait();
-    const lane = await deploy(B.NeuroLane, [s.jobs, airlock.target, Number(opt.quorum ?? 2), Number(opt['min-agreed'] ?? 1)]);
+    // A runner needs this many accepted verdicts (won by lottery) before it speaks for the bridge.
+    const lane = await deploy(B.NeuroLane, [s.jobs, airlock.target, Number(opt.quorum ?? 2), Number(opt['min-agreed'] ?? 5)]);
     const decoy = await deploy(B.DecoyBridge, [airlock.target, 'ZETAPHY Bridge']);
     for (const tx of [airlock.setLane(lane.target, true), airlock.setVetoer(lane.target, true), airlock.setDecoy(decoy.target, true)]) await (await tx).wait();
     for (const l of [].concat(opt.lane ?? [])) await (await airlock.setLane(l, true)).wait();
     for (const g of [].concat(opt.guardian ?? [])) { await (await airlock.setVetoer(g, true)).wait(); await (await guard.setGuardian(g, true)).wait(); }
+    const gov = governanceOf(opt, write);
+    if (gov) {
+      await (await guard.setGovernance(gov)).wait();
+      await (await airlock.setGovernance(gov)).wait();
+      write(`admin of BridgeGuard and BridgeAirlock handed to ${gov}`);
+    }
     settings({ ...opt, airlock: airlock.target, neuroLane: lane.target, bridgeGuard: guard.target }, {});
     write(`BridgeGuard ${guard.target}\nBridgedToken ${await guard.token()}\nBridgeAirlock ${airlock.target}\nNeuroLane ${lane.target}\nDecoyBridge ${decoy.target}`);
     return 0;
@@ -287,6 +320,8 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     await (await gw.setPrice(usdc, price)).wait();
     await (await gw.setPrice(usdt, price)).wait();
     await (await c.signer.sendTransaction({ to: gwAddr, value: parseEther(String(opt.reserve ?? 1000)) })).wait();
+    const gov = governanceOf(opt, write);
+    if (gov) { await (await gw.setOwner(gov)).wait(); write(`StableGateway owner handed to ${gov}`); }
     settings({ ...opt, gateway: gwAddr, usdc, usdt }, {});
     write(`tUSDC ${usdc}\ntUSDT ${usdt}\nStableGateway ${gwAddr} (price ${formatUnits(price, 6)} per ZETAPHY, reserve ${opt.reserve ?? 1000} ZETAPHY)`);
     return 0;

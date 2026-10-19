@@ -8,6 +8,7 @@ import { AbiCoder, keccak256 } from 'ethers';
 
 const load = (f) => (existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : { fromBlock: 0, pending: [] });
 function save(f, s) { writeFileSync(f + '.tmp', JSON.stringify(s, null, 2), { mode: 0o600 }); renameSync(f + '.tmp', f); }
+const LOG_CHUNK = 1000;
 const voteKey = (id) => keccak256(AbiCoder.defaultAbiCoder().encode(['string', 'bytes32'], ['attest', id]));
 
 /**
@@ -31,10 +32,14 @@ export function createLaneWatcher({ lockbox, lane, airlock, me, srcChainId, conf
     const head = await lockbox.runner.provider.getBlockNumber();
     const safe = head - confirmations;
     if (safe >= state.fromBlock) {
-      const events = await lockbox.queryFilter(lockbox.filters.Locked(), state.fromBlock, safe);
-      for (const e of events) state.pending.push([srcChainId, lockbox.target, e.args.nonce, e.args.sender, e.args.to, e.args.amount].map(String));
-      state.fromBlock = safe + 1;
-      save(stateFile, state);
+      // Chunks: public nodes cap the block span of one eth_getLogs (2,000 on ZETAPHY).
+      for (let from = state.fromBlock; from <= safe; from += LOG_CHUNK) {
+        const to = Math.min(from + LOG_CHUNK - 1, safe);
+        const events = await lockbox.queryFilter(lockbox.filters.Locked(), from, to);
+        for (const e of events) state.pending.push([srcChainId, lockbox.target, e.args.nonce, e.args.sender, e.args.to, e.args.amount].map(String));
+        state.fromBlock = to + 1;
+        save(stateFile, state);
+      }
     }
     const threshold = release ? await airlock.threshold() : 0n;
     const now = release ? await chainTime() : 0n;
