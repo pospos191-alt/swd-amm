@@ -25,3 +25,11 @@ test('selectors seen in the NEWZETA dispatcher (BNB Chain) have names', () => {
   };
   for (const [sel, sig] of Object.entries(seen)) assert.equal(SELECTORS[sel]?.sig, sig, sel);
 });
+
+test('NEWZETA tax setter and tax wallet are classified', () => {
+  assert.equal(SELECTORS['233e8700'].sig, 'lowerTaxes(uint16,uint16)');
+  assert.equal(SELECTORS['233e8700'].cat, 'fee');
+  assert.equal(SELECTORS['12f16a07'].sig, 'maxWalletBps()');
+  // setTaxWallet chooses who receives the tax; it exempts no one.
+  assert.equal(SIGNATURES.find(([s]) => s === 'setTaxWallet(address)')[1], 'taxWallet');
+});

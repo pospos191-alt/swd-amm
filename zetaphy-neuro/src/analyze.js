@@ -119,6 +119,7 @@ export function analyze(input) {
     add(p.id, severity, params);
   }
   if (cats.has('feeExempt')) add('fee-exempt', 'info', { functions: sigsIn('feeExempt') });
+  if (cats.has('taxWallet')) add('tax-wallet', 'info', { functions: sigsIn('taxWallet') });
 
   // Functions we cannot name. With someone still in control they may be
   // privileged (a tax or limit setter under an unusual name), so never claim
