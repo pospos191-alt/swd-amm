@@ -6,6 +6,8 @@ import { SELECTORS } from './selectors.generated.js';
 
 const OP = {
   STOP: 0x00,
+  EQ: 0x14,
+  DUP2: 0x81,
   PUSH1: 0x60,
   PUSH32: 0x7f,
   INVALID: 0xfe,
@@ -50,6 +52,7 @@ export function minimalProxyTarget(code) {
 /**
  * Scans bytecode. Returns:
  *  - functions: known functions found in the dispatcher [{selector, sig, cat}]
+ *  - unknownSelectors: dispatcher selectors we have no name for (sorted hex)
  *  - opcodes: flags for dangerous opcodes that appear as real instructions
  *  - size: code size in bytes
  */
@@ -57,6 +60,7 @@ export function scanBytecode(codeHex) {
   const code = hexToBytes(codeHex);
   const end = codeLengthWithoutMetadata(code);
   const found = new Map();
+  const dispatched = new Set();
   const opcodes = { selfdestruct: false, delegatecall: false, callcode: false, create2: false };
 
   for (let pc = 0; pc < end; pc++) {
@@ -68,6 +72,10 @@ export function scanBytecode(codeHex) {
         const sel = toHex(code.subarray(pc + 1, pc + 1 + n)).padStart(8, '0');
         const known = SELECTORS[sel];
         if (known && !found.has(sel)) found.set(sel, { selector: sel, ...known });
+        // The function dispatcher compares the call's selector with each
+        // function's: PUSH4 <sel> EQ, or PUSH4 <sel> DUP2 EQ (optimized).
+        const next = code[pc + n + 1];
+        if (n === 4 && (next === OP.EQ || (next === OP.DUP2 && code[pc + n + 2] === OP.EQ))) dispatched.add(sel);
       }
       pc += n;
       continue;
@@ -78,5 +86,6 @@ export function scanBytecode(codeHex) {
     else if (op === OP.CREATE2) opcodes.create2 = true;
   }
 
-  return { size: code.length, functions: [...found.values()], opcodes };
+  const unknownSelectors = [...dispatched].filter((s) => !SELECTORS[s]).sort();
+  return { size: code.length, functions: [...found.values()], unknownSelectors, opcodes };
 }

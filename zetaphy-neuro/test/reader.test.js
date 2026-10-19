@@ -34,6 +34,18 @@ for (const optimize of [true, false]) {
       assert.equal(sev(r, 'can-mint'), 'high');
     });
 
+    test('unnamed dispatcher functions are reported instead of "nothing found"', async () => {
+      const a = await chain.deploy('ZetaStyleToken', '0'.repeat(63) + '1' + '0'.repeat(63) + '5');
+      const r = await read(a);
+      const f = r.analysis.findings.find((x) => x.id === 'unknown-functions');
+      assert.equal(f.severity, 'low', 'an owner still controls it');
+      assert.ok(f.params.count >= 1);
+      assert.ok(!ids(r).includes('nothing-found'));
+      assert.deepEqual(r.unknownSelectors, f.params.selectors);
+      const clean = await read(await chain.deploy('CleanToken'));
+      assert.ok(!ids(clean).includes('unknown-functions'), 'all ERC-20 functions are named');
+    });
+
     test('renounced owner lowers owner powers to low', async () => {
       const r = await read(await chain.deploy('RenouncedToken'));
       assert.equal(r.analysis.control, 'renounced');
