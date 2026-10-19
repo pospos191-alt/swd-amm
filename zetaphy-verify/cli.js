@@ -3,6 +3,7 @@
 //
 //   node cli.js watch [--chain bsc] [--from-block N] [--to-block N]
 //   node cli.js verify <chain> <address> [--tx 0x...]
+//   node cli.js export <ContractName> [--out dir]   (files for the free web form)
 //
 // Env: ETHERSCAN_API_KEY (optional; Sourcify needs no key).
 
@@ -14,6 +15,7 @@ import { loadBuildDir } from './src/build-info.js';
 import { sourcify, etherscan } from './src/explorers.js';
 import { verifyAddress } from './src/verify.js';
 import { watchChain } from './src/watch.js';
+import { findContract, exportForWebForm } from './src/export.js';
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const TX = /^0x[0-9a-fA-F]{64}$/;
@@ -46,8 +48,8 @@ function summarize(rows, write) {
 
 export async function main(argv = process.argv.slice(2), env = process.env, write = console.log) {
   const { cmd, pos, opt } = parse(argv);
-  if (cmd !== 'watch' && cmd !== 'verify') {
-    write('usage: node cli.js watch [--chain bsc] [--from-block N] [--to-block N]\n       node cli.js verify <chain> <address> [--tx 0x...]');
+  if (!['watch', 'verify', 'export'].includes(cmd)) {
+    write('usage: node cli.js watch [--chain bsc] [--from-block N] [--to-block N]\n       node cli.js verify <chain> <address> [--tx 0x...]\n       node cli.js export <ContractName> [--out dir]');
     return 2;
   }
   const buildDir = fileURLToPath(new URL('./build-info/', import.meta.url));
@@ -55,6 +57,13 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (!builds.contracts.length) {
     write('No build-info found in zetaphy-verify/build-info/. Copy the launcher\'s build-info there first (see build-info/README.md).');
     return 0; // nothing to do yet is not an error
+  }
+  if (cmd === 'export') {
+    const contract = findContract(builds, pos[0] ?? '');
+    const { file, form } = exportForWebForm(contract, opt.out ?? fileURLToPath(new URL('./out/', import.meta.url)));
+    write(`Wrote ${file}\nIn the explorer's "Verify and Publish" form:`);
+    for (const [k, v] of Object.entries(form)) write(`  ${k}: ${v}`);
+    return 0;
   }
   const explorers = [sourcify(), etherscan({ apiKey: env.ETHERSCAN_API_KEY })];
   if (!explorers[1]) write('ETHERSCAN_API_KEY not set: publishing to Sourcify only.');

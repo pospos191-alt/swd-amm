@@ -4,6 +4,12 @@
 #   zetaphy-neuro every push / PR — Neuro ZETAPHY tier 1 unit + browser tests. ~2 min.
 #   zetaphy-verify every push / PR — tests for the explorer auto-verifier
 #                 (its own scheduled run is zetaphy-verify.yml). ~1 min.
+#
+# Free-tier budget: GitHub Free gives private repos 2,000 Actions minutes a
+# month. The `changes` job runs each test job ONLY when its own files changed
+# (a Neuro-only PR costs ~3 min instead of ~17). A manual run tests
+# everything; the weekly scheduled run only re-checks cargo audit, because
+# new advisories appear without any code change.
 #   test-ui       every push / PR — syntax check + a headless-browser smoke
 #                 test of test-ui/index.html (catches a page that freezes on
 #                 load, like build 2026-09-25o). ~2 min.
@@ -35,6 +41,8 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  schedule:
+    - cron: '23 4 * * 1' # Mondays: cargo audit only
   workflow_dispatch:
     inputs:
       deploy_devnet:
@@ -62,8 +70,56 @@ env:
 # proven on 24.04. Bump deliberately, in its own commit, when ready.
 
 jobs:
+  changes:
+    name: what changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      program: ${{ steps.f.outputs.program }}
+      audit: ${{ steps.f.outputs.audit }}
+      ui: ${{ steps.f.outputs.ui }}
+      neuro: ${{ steps.f.outputs.neuro }}
+      verify: ${{ steps.f.outputs.verify }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Pick the jobs this change needs
+        id: f
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          range=""
+          if [ "$EVENT" = pull_request ]; then
+            range="$BASE...HEAD"
+          elif [ "$EVENT" = push ] && [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            range="$BEFORE..HEAD"
+          fi
+          # Manual run, first push of a branch, or unknown history: test everything.
+          if [ -n "$range" ]; then files=$(git diff --name-only "$range"); else files="ALL"; fi
+          echo "$files"
+          wf='^\.github/workflows/security\.yml$'
+          out() {
+            if [ "$EVENT" = schedule ]; then v=false; [ "$1" = audit ] && v=true
+            elif [ "$files" = ALL ] || echo "$files" | grep -qE "$2|$wf"; then v=true
+            else v=false; fi
+            echo "$1=$v" >> "$GITHUB_OUTPUT"
+            echo "$1=$v"
+          }
+          out program '^(programs/|tests/|security/|scripts/|Anchor\.toml$|Cargo\.(toml|lock)$|package\.json$|yarn\.lock$|tsconfig\.json$)'
+          out audit '^(programs/|security/|Cargo\.(toml|lock)$)'
+          out ui '^test-ui/'
+          out neuro '^zetaphy-neuro/'
+          out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
+
   test-ui:
     name: test-ui (syntax + page smoke test)
+    needs: changes
+    if: needs.changes.outputs.ui == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -93,6 +149,8 @@ jobs:
 
   zetaphy-neuro:
     name: zetaphy-neuro (unit + browser tests)
+    needs: changes
+    if: needs.changes.outputs.neuro == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -121,6 +179,8 @@ jobs:
 
   zetaphy-verify:
     name: zetaphy-verify (unit tests)
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
@@ -143,6 +203,8 @@ jobs:
 
   program:
     name: program (cargo test + anchor test)
+    needs: changes
+    if: needs.changes.outputs.program == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -282,6 +344,8 @@ jobs:
 
   audit:
     name: cargo audit (RustSec advisories)
+    needs: changes
+    if: needs.changes.outputs.audit == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

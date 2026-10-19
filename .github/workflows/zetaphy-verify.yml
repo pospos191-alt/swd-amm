@@ -1,13 +1,16 @@
 # Publishes the source of every ZETAPHY launcher token on block explorers.
 #
-# Every 3 hours it reads the last ~4 hours of TokenDeployed events from each
+# Every 6 hours it reads the last ~8 hours of TokenDeployed events from each
 # ZETAPHY factory (zetaphy-verify/src/config.js) on every chain and verifies
 # the factory and each new token:
 #   - Sourcify: free, every chain, no key needed.
-#   - Etherscan family (bscscan, basescan, arbiscan, etherscan): only when the
-#     repository secret ETHERSCAN_API_KEY is set. Etherscan's free tier skips
-#     some chains (BNB Chain and Base when this was written); those show
-#     "plan-required" and do not fail the run.
+#   - Etherscan family (etherscan, arbiscan; bscscan/basescan need a paid
+#     plan): only when the repository secret ETHERSCAN_API_KEY is set. A free
+#     key is enough for Ethereum and Arbitrum; chains the free tier skips show
+#     "plan-required" and do not fail the run. For BscScan / BaseScan use the
+#     free web form once (README: "BscScan for free").
+#
+# Cost: ~120 of the 2,000 free GitHub Actions minutes a month.
 # Already-verified contracts are skipped, so overlapping runs are harmless.
 #
 # It only submits code that matches a contract in zetaphy-verify/build-info/
@@ -20,7 +23,7 @@ name: ZETAPHY verify
 
 on:
   schedule:
-    - cron: '17 */3 * * *'
+    - cron: '17 */6 * * *'
   push:
     branches: [main]
     paths: ['zetaphy-verify/build-info/**', 'zetaphy-verify/src/config.js']
@@ -32,7 +35,7 @@ on:
         options: [all, bsc, base, arbitrum, eth]
         default: all
       from_block:
-        description: 'Start block for a backfill (empty = last ~4 hours)'
+        description: 'Start block for a backfill (empty = last ~8 hours)'
         required: false
       to_block:
         description: 'End block (empty = latest)'

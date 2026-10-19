@@ -1,6 +1,6 @@
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { keccak_256 } from '@noble/hashes/sha3';
@@ -216,4 +216,22 @@ test('cli: without build-info it explains what to do and exits 0', async () => {
   const lines = [];
   assert.equal(await main(['watch'], {}, (l) => lines.push(l)), 0);
   assert.match(lines.join('\n'), /No build-info/);
+});
+
+describe('export for the free web form', async () => {
+  const { findContract, exportForWebForm } = await import('../src/export.js');
+  test('writes the Standard-JSON-Input and the form values', () => {
+    const c = findContract(builds, 'LaunchToken');
+    assert.equal(c.fqn, TOKEN);
+    const dir = mkdtempSync(join(tmpdir(), 'zv-out-'));
+    const { file, form } = exportForWebForm(c, dir);
+    assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), bi.input);
+    assert.equal(form['Compiler Version'], `v${LONG_VERSION}`);
+    assert.equal(form['Compiler Type'], 'Solidity (Standard-Json-Input)');
+    assert.match(form['Open Source License Type'], /MIT/);
+    assert.match(form.Optimizer, /on, 200 runs/);
+  });
+  test('names the contracts it has when the name is wrong', () => {
+    assert.throws(() => findContract(builds, 'Nope'), /LaunchToken/);
+  });
 });
