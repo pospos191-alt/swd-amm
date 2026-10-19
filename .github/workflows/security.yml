@@ -1,6 +1,7 @@
 # CI/CD for swd-amm (rewritten 2026-09-25; first version 2026-09-24).
 #
 # What runs, and when:
+#   zetaphy-neuro every push / PR — Neuro ZETAPHY tier 1 unit + browser tests. ~2 min.
 #   test-ui       every push / PR — syntax check + a headless-browser smoke
 #                 test of test-ui/index.html (catches a page that freezes on
 #                 load, like build 2026-09-25o). ~2 min.
@@ -87,6 +88,34 @@ jobs:
 
       - name: Faucet attack tests (rate limits, spoofed IPs, secret leaks)
         run: node test-ui/tests/faucet-attacks.mjs
+
+  zetaphy-neuro:
+    name: zetaphy-neuro (unit + browser tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zetaphy-neuro
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Unit tests (real compiled contracts on an in-memory EVM)
+        run: npm test
+
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Browser test (web page, RPC answered locally)
+        run: npm run test:web
 
   program:
     name: program (cargo test + anchor test)
