@@ -41,7 +41,31 @@ export async function createChain(names = [], fundAddresses = {}) {
 
   return {
     acct,
+    /** Puts runtime code at an address (e.g. a precompile stand-in). */
+    async putCode(addressHex, runtimeHex) {
+      await sm.putContractCode(Address.fromString(addressHex), hexToBytes(runtimeHex));
+    },
     advance(seconds) { time += BigInt(seconds); },
+    async transfer(from, to, value) {
+      const r = await exec(from, Address.fromString(to), '0x', value);
+      if (r.execResult.exceptionError) throw new Error('transfer failed');
+    },
+    /** send/call on any address with a given interface (e.g. a factory-made contract). */
+    async sendTo(from, toHex, iface, fn, args = [], value = 0n) {
+      const res = await exec(from, Address.fromString(toHex), iface.encodeFunctionData(fn, args), value);
+      if (res.execResult.exceptionError) {
+        let name = 'revert';
+        try { name = iface.parseError(bytesToHex(res.execResult.returnValue))?.name ?? name; } catch {}
+        throw new Error(name);
+      }
+      return res;
+    },
+    async callAt(toHex, iface, fn, args = []) {
+      const res = await exec(acct[names[0]], Address.fromString(toHex), iface.encodeFunctionData(fn, args));
+      if (res.execResult.exceptionError) throw new Error('call reverted');
+      const out = iface.decodeFunctionResult(fn, bytesToHex(res.execResult.returnValue));
+      return out.length === 1 ? out[0] : out;
+    },
     now: () => time,
     balance: async (who) => (await sm.getAccount(acct[who] ?? who))?.balance ?? 0n,
     async deploy(artifactName, args, from) {

@@ -34,6 +34,7 @@ const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|xyz|app|sit
  * @param {{symbol:string,issuer:string,kind:string,address:string}|null} [input.known]  official token at this exact address
  * @param {{symbol:string,issuer:string,address:string}|null} [input.lookalike]  official token whose symbol this one copies
  * @param {string[]} [input.unknownSelectors]  dispatcher functions with no known name
+ * @param {{flagged: boolean, reason?: string}|null} [input.threat]  ZETAPHY ThreatRegistry verdict for this code
  * @returns {{level:'high'|'medium'|'low'|'info', control:string, findings:Array}}
  */
 export function analyze(input) {
@@ -76,6 +77,8 @@ export function analyze(input) {
     add('name-has-link', 'high', { name: t.name, symbol: t.symbol });
   }
   if (known) add('known-issuer', 'good', { symbol: known.symbol, issuer: known.issuer, kind: known.kind });
+  // Neuro runners voted this exact code dangerous (immune system, stage 4).
+  if (input.threat?.flagged) add('network-flagged', 'high', { reason: input.threat.reason });
   if (input.lookalike) {
     add('lookalike', 'high', { symbol: t.symbol, official: input.lookalike.address, issuer: input.lookalike.issuer });
   }

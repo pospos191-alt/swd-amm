@@ -13,6 +13,10 @@
 //   zetaphy faucet <usdc|usdt> --relay URL   test stablecoins for this wallet (the relay pays gas)
 //   zetaphy relay start [--port 8080 --min-tip 0.01]   serve users who pay in stablecoins
 //   zetaphy gate                       progress toward gate 1 (30 days, no stalls, 10+ runners)
+//   zetaphy pq new [--hybrid]          quantum-safe wallet (ML-DSA); --hybrid also needs this machine's ECDSA key
+//   zetaphy pq address                 the wallet's address (fund it before or after it exists)
+//   zetaphy pq send <to> <amount>      move ZETAPHY out of it, signed with ML-DSA
+//   zetaphy deploy-pq                  deploy the QuantumWalletFactory
 //   zetaphy deploy [--bond 100 --reward 1 --min-fee 0.1 --window 120 --timeout 600 --unbond 3600]
 //   zetaphy deploy-stable [--price 0.01 --reserve 1000]  test USDC/USDT + StableGateway
 //
@@ -28,11 +32,15 @@ import { detectHardware, pickProfile } from './src/hardware.js';
 import { createWorker } from './src/worker.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
+import { loadOrCreatePq, VARIANT as PQ_VARIANT } from './src/pq.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
 const ART = art('NeuroJobs');
 const STABLE = art('TestStable');
 const GATEWAY = art('StableGateway');
+const QWALLET = art('QuantumWallet');
+const QFACTORY = art('QuantumWalletFactory');
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 const STATUS = ['none', 'open', 'done', 'failed'];
 const EVM_CHAIN_ID = 77390n;
 
@@ -49,7 +57,8 @@ function settings(opt, env) {
   const file = join(HOME, 'config.json');
   const saved = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const s = { ...saved, rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
-  for (const k of ['gateway', 'usdc', 'usdt']) if (opt[k]) s[k] = opt[k];
+  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory']) if (opt[k]) s[k] = opt[k];
+  if (opt.hybrid) s.pqHybrid = true;
   if (JSON.stringify(s) !== JSON.stringify(saved)) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
     writeFileSync(file, JSON.stringify(s, null, 2));
@@ -175,6 +184,49 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     write(`gate 1 at block ${r.height}: ${r.passed ? 'PASSED (still confirm the runners are different people)' : 'not yet'}`);
     for (const ch of r.checks) write(`  ${ch.ok ? '✓' : '·'} ${ch.name}: ${ch.value}`);
     return 0;
+  }
+
+  if (group === 'deploy-pq') {
+    const c = await connect(s, { needJobs: false });
+    const k = await new ContractFactory(QFACTORY.abi, QFACTORY.bytecode, c.signer).deploy();
+    await k.waitForDeployment();
+    const address = await k.getAddress();
+    settings({ ...opt, pqFactory: address }, {});
+    write(`QuantumWalletFactory ${address}`);
+    return 0;
+  }
+
+  if (group === 'pq') {
+    if (!s.pqFactory) throw new Error('no QuantumWalletFactory yet: --pqFactory 0x... or "zetaphy deploy-pq"');
+    const c = await connect(s, { needJobs: false });
+    const pq = loadOrCreatePq();
+    const ecdsaOwner = s.pqHybrid ? c.me : ZERO_ADDR;
+    const factory = new Contract(s.pqFactory, QFACTORY.abi, c.signer);
+    const address = await factory.predict(ecdsaOwner, PQ_VARIANT, pq.keyHash);
+    const deployed = (await c.provider.getCode(address)) !== '0x';
+    const mode = s.pqHybrid ? 'hybrid: ML-DSA + ECDSA' : 'post-quantum only: ML-DSA';
+    if (cmd === 'new' || cmd === 'address') {
+      write(`quantum-safe wallet: ${address} (${mode}, ML-DSA-${PQ_VARIANT})${deployed ? '' : ' - not deployed yet; it can receive funds already'}`);
+      if (pq.created) write(`new ML-DSA seed saved to ${pq.file} (keep a backup; it is the only way to move funds)`);
+      write(`balance: ${zeta(await c.provider.getBalance(address))}`);
+      return 0;
+    }
+    if (cmd === 'send') {
+      const [to, amount] = rest;
+      if (!/^0x[0-9a-fA-F]{40}$/.test(to ?? '') || !amount) throw new Error('usage: zetaphy pq send <0x address> <amount>');
+      if (!deployed) await (await factory.create(ecdsaOwner, PQ_VARIANT, pq.keyHash)).wait();
+      const wallet = new Contract(address, QWALLET.abi, c.signer);
+      const value = parseEther(String(amount));
+      const deadline = BigInt((await c.provider.getBlock('latest')).timestamp) + 600n;
+      const digest = await wallet.digest(to, value, '0x', deadline);
+      const ecdsaSig = s.pqHybrid ? c.signer.signer.signingKey.sign(digest).serialized : '0x';
+      const args = [to, value, '0x', deadline, [pq.publicKey, pq.sign(digest), ecdsaSig]];
+      // Cosmos EVM charges at least half the gas limit, so ask for what it needs, not a round number.
+      const gasLimit = (await wallet.execute.estimateGas(...args)) * 12n / 10n;
+      const rc = await (await wallet.execute(...args, { gasLimit })).wait();
+      write(`sent ${zeta(value)} to ${to} from ${address}, signed with ML-DSA-${PQ_VARIANT} (gas ${rc.gasUsed})`);
+      return 0;
+    }
   }
 
   if (group === 'deploy-stable') {

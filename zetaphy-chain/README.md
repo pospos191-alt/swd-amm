@@ -90,3 +90,15 @@
 - เผาค่าธรรมเนียมแบบ EIP-1559, จ่ายค่าธรรมเนียมเป็น USDC
 - โปรแกรม `zetaphy node start` สำหรับคนรันร่าง Neuro
 - ลายเซ็นต้านควอนตัม, สะพานเชื่อมเชน
+
+## ขั้น 5: ลายเซ็นต้านควอนตัม (ML-DSA)
+
+`setup-node.sh` ใส่ patch ไว้ท้ายไฟล์ ตอน build จะทำ 3 อย่าง:
+1. เพิ่ม precompile ตรวจลายเซ็น ML-DSA (FIPS 204) ที่ `0x0000000000000000000000000000000000000900` ใช้ Cloudflare CIRCL v1.6.3
+2. รันชุดทดสอบของ precompile ก่อน build ถ้าไม่ผ่าน การติดตั้งจะหยุด
+3. เปิดใช้ precompile นี้ใน genesis
+
+กระเป๋าที่ใช้ precompile นี้ได้แก่ `QuantumWallet` ใน `zetaphy-network` (คำสั่ง `zetaphy pq`)
+
+เครื่องที่ติดตั้งก่อนหน้านี้ต้อง build ใหม่: `FORCE_BUILD=1 bash setup-node.sh`
+- ถ้าเชนรันอยู่แล้ว การเปิด precompile ใหม่ต้องผ่านการโหวตอัปเกรดด้วย `gov.sh`

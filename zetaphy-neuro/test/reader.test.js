@@ -130,3 +130,15 @@ test('chainConfig reads a chain the website does not list', async () => {
   await assert.rejects(readContract('zetaphy', 'not-an-address', { rpc: chain.rpc, chainConfig: { kind: 'evm', id: 77390, rpcs: [] } }), /invalid address/);
   await assert.rejects(readContract('zetaphy', addr, { rpc: chain.rpc }), /unknown chain/);
 });
+
+test('a fingerprint flagged by the network is a high finding; an unreachable registry is ignored', async () => {
+  const chain = await createLocalChain();
+  const addr = await chain.deploy('CleanToken');
+  const seen = [];
+  const flagged = await readContract('bsc', addr, { rpc: chain.rpc, threatLookup: async (fp) => { seen.push(fp); return { flagged: true, reason: 'drainer' }; } });
+  assert.match(seen[0], /^fp1:[0-9a-f]{64}$/);
+  assert.equal(flagged.analysis.level, 'high');
+  assert.ok(flagged.analysis.findings.some((f) => f.id === 'network-flagged' && f.params.reason === 'drainer'));
+  const down = await readContract('bsc', addr, { rpc: chain.rpc, threatLookup: async () => { throw new Error('rpc down'); } });
+  assert.equal(down.analysis.level, 'info');
+});
