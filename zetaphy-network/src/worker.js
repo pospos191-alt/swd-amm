@@ -83,6 +83,9 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
 
       if (!seat) {
         if (job.commits >= 3n || windowOver) continue;
+        // Seats go by a bond-weighted lottery; the pool of eligible runners
+        // widens during the window, so check again on later ticks.
+        if (!(await jobs.eligible(id, me))) continue;
         try {
           done.push(`job ${id}: ${await tryCommit(id, job, now)}`);
         } catch (e) {

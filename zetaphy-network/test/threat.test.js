@@ -13,8 +13,9 @@ const addr = (w) => c.acct[w].toString();
 
 beforeEach(async () => {
   c = await createChain(['owner', 'user', 'w1', 'w2', 'w3', 'w4', 'newbie']);
-  jobs = await c.deploy('NeuroJobs', [BOND, ZETA, ZETA / 10n, 120, 600, 3600], 'owner');
+  jobs = await c.deploy('NeuroJobs', [BOND, ZETA, ZETA / 10n, 120, 600, 3600, 1000n * ZETA], 'owner');
   for (const w of ['w1', 'w2', 'w3', 'w4', 'newbie']) await jobs.send(w, 'register', [], BOND);
+  c.advance(1);
   // w1..w4 earn a track record: one job where all four... only 3 seats, so two jobs.
   for (const seats of [['w1', 'w2', 'w3'], ['w4', 'w1', 'w2']]) {
     await jobs.send('user', 'request', [encodeBytes32String('bsc'), '0xabc'], ZETA / 10n);

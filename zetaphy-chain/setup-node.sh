@@ -183,6 +183,20 @@ new = re.sub(r'(?m)^enable = .*', 'enable = true', sec)
 new = re.sub(r'(?m)^address = .*', 'address = \"0.0.0.0:8545\"', new)
 new = re.sub(r'(?m)^ws-address = .*', 'ws-address = \"127.0.0.1:8546\"', new)
 new = re.sub(r'(?m)^api = .*', 'api = \"eth,net,web3,txpool\"', new)
+# The port is public: keep one caller from tying the node up.
+limits = {
+    'allow-insecure-unlock': 'false',         # no account unlocking over RPC
+    'gas-cap': '10000000',                    # eth_call / estimateGas gas ceiling
+    'evm-timeout': '\"3s\"',                  # eth_call wall-clock ceiling
+    'logs-cap': '2000',                       # eth_getLogs results per call
+    'block-range-cap': '2000',                # eth_getLogs block span per call
+    'max-open-connections': '200',            # 0 meant unlimited
+    'batch-request-limit': '50',
+    'batch-response-max-size': '5000000',
+    'http-body-limit': '1048576',             # 1 MB requests
+}
+for k, v in limits.items():
+    new = re.sub(r'(?m)^' + re.escape(k) + r' = .*', k + ' = ' + v, new)
 open(p, 'w').write(s.replace(sec, new))
 PY"
 
@@ -397,10 +411,10 @@ index 0000000..a291984
 +}
 diff --git a/precompiles/mldsa/mldsa_test.go b/precompiles/mldsa/mldsa_test.go
 new file mode 100644
-index 0000000..77697eb
+index 0000000..7f61111
 --- /dev/null
 +++ b/precompiles/mldsa/mldsa_test.go
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,117 @@
 +package mldsa
 +
 +import (
@@ -463,6 +477,59 @@ index 0000000..77697eb
 +	var p Precompile
 +	if p.RequiredGas([]byte{44}) != VerifyGas44 || p.RequiredGas([]byte{65}) != VerifyGas65 || p.RequiredGas(nil) != InvalidInputGas {
 +		t.Fatal("gas")
++	}
++}
++
++// FuzzVerify: no input, however malformed, may panic (a panic in a
++// precompile would halt the chain) or be accepted without a valid signature.
++func FuzzVerify(f *testing.F) {
++	pk, sk, _ := mldsa44.GenerateKey(rand.Reader)
++	pkb, _ := pk.MarshalBinary()
++	msg := make([]byte, 32)
++	sig := make([]byte, mldsa44.SignatureSize)
++	_ = mldsa44.SignTo(sk, msg, nil, false, sig)
++	good := pack(44, msg, pkb, sig)
++	f.Add(good)
++	f.Add([]byte{})
++	f.Add([]byte{65})
++	f.Add(good[:100])
++	f.Fuzz(func(t *testing.T, in []byte) {
++		ok := Verify(in) // must not panic
++		if ok && len(in) != len(good) {
++			t.Fatalf("accepted an input of the wrong size (%d bytes)", len(in))
++		}
++	})
++}
++
++// Measures verification time, to keep the gas price honest. For scale: the
++// ECRECOVER precompile costs 3,000 gas for roughly 25-50 microseconds.
++func BenchmarkVerify44(b *testing.B) {
++	pk, sk, _ := mldsa44.GenerateKey(rand.Reader)
++	pkb, _ := pk.MarshalBinary()
++	msg := make([]byte, 32)
++	sig := make([]byte, mldsa44.SignatureSize)
++	_ = mldsa44.SignTo(sk, msg, nil, false, sig)
++	in := pack(44, msg, pkb, sig)
++	b.ResetTimer()
++	for i := 0; i < b.N; i++ {
++		if !Verify(in) {
++			b.Fatal("rejected")
++		}
++	}
++}
++
++func BenchmarkVerify65(b *testing.B) {
++	pk, sk, _ := mldsa65.GenerateKey(rand.Reader)
++	pkb, _ := pk.MarshalBinary()
++	msg := make([]byte, 32)
++	sig := make([]byte, mldsa65.SignatureSize)
++	_ = mldsa65.SignTo(sk, msg, nil, false, sig)
++	in := pack(65, msg, pkb, sig)
++	b.ResetTimer()
++	for i := 0; i < b.N; i++ {
++		if !Verify(in) {
++			b.Fatal("rejected")
++		}
 +	}
 +}
 diff --git a/precompiles/types/defaults.go b/precompiles/types/defaults.go

@@ -13,7 +13,7 @@ const alice = Wallet.createRandom();
 let c, jobs, usdc, gw;
 beforeEach(async () => {
   c = await createChain(['owner', 'relayer', 'w1'], { alice: alice.address });
-  jobs = await c.deploy('NeuroJobs', [BOND, ZETA, MIN_FEE, 120, 600, 3600], 'owner');
+  jobs = await c.deploy('NeuroJobs', [BOND, ZETA, MIN_FEE, 120, 600, 3600, 1000n * ZETA], 'owner');
   usdc = await c.deploy('TestStable', ['Test USDC', 'tUSDC'], 'owner');
   gw = await c.deploy('StableGateway', [jobs.address], 'owner');
   await gw.send('owner', 'setPrice', [usdc.address, PRICE]);

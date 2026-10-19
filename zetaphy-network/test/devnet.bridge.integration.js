@@ -56,7 +56,7 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   }
   assert.equal((await jobs.getJob(0)).status, 2n, 'runners need one accepted verdict first');
 
-  const b = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address]);
+  const b = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1']);
   assert.equal(b.code, 0, b.out);
   cfg = Object.fromEntries([...b.out.matchAll(/^(\w+) (0x[0-9a-fA-F]{40})$/gm)].map((m) => [m[1], m[2]]));
 

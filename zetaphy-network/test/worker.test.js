@@ -19,6 +19,8 @@ function fakeJobs({ window = 100n } = {}) {
     jobs,
     add(chain, target, created = 0n) { jobs.push({ chain: encodeBytes32String(chain), target, created, status: 1n, commits: 0n, commitOf: {}, reveals: {} }); },
     commitWindow: async () => window,
+    notEligible: new Set(),
+    async eligible(id) { return !this.notEligible.has(Number(id)); },
     jobCount: async () => BigInt(jobs.length),
     getJob: async (id) => jobs[Number(id)],
     commit: tx((id, c) => { const j = jobs[Number(id)]; if (j.failCommit) throw new Error('NoSeat'); j.commitOf[ME] = c; j.commits += 1n; }),
@@ -104,4 +106,16 @@ test('hardware profile: GPU with 8 GB+ is heavy, otherwise light', async () => {
   const hw = await detectHardware({ exec: (_c, _a, _o, cb) => cb(null, 'NVIDIA A10, 23028\n') });
   assert.deepEqual(hw.gpus, [{ name: 'NVIDIA A10', memoryMB: 23028 }]);
   assert.deepEqual((await detectHardware({ exec: (_c, _a, _o, cb) => cb(new Error('not found')) })).gpus, []);
+});
+
+test('a runner the lottery did not pick for a job leaves it alone', async () => {
+  const { jobs, w, reads } = setup();
+  jobs.add('bsc', T);
+  jobs.notEligible.add(0);
+  await w.tick();
+  assert.deepEqual(reads, []);
+  assert.equal(w.state.cursor, 0); // looked at again later: the lottery widens
+  jobs.notEligible.clear();
+  await w.tick();
+  assert.deepEqual(reads, [['bsc', T]]);
 });

@@ -12,8 +12,9 @@ let c, jobs, market;
 const a = (n) => c.acct[n].toString();
 beforeEach(async () => {
   c = await createChain(['owner', 'user', 'gpu', 'w2', 'w3', 'fresh']);
-  jobs = await c.deploy('NeuroJobs', [BOND, ZETA, ZETA / 10n, 120, 600, 3600], 'owner');
+  jobs = await c.deploy('NeuroJobs', [BOND, ZETA, ZETA / 10n, 120, 600, 3600, 1000n * ZETA], 'owner');
   for (const w of ['gpu', 'w2', 'w3', 'fresh']) await jobs.send(w, 'register', [], BOND);
+  c.advance(1); // runners must be registered before a job is requested
   // gpu, w2, w3 build a track record on one tier-1 job
   await jobs.send('user', 'request', [encodeBytes32String('bsc'), '0xabc'], ZETA / 10n);
   const V = '0x' + '11'.repeat(32), salts = {};

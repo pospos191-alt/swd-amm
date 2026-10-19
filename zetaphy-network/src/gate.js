@@ -11,7 +11,7 @@ export const GATE1 = { days: 30, runners: 10, blockSeconds: 5, maxGapSeconds: 60
  * @param {import('ethers').Contract} jobs  NeuroJobs (read-only is fine)
  * @param {{sampleEvery?: number, logChunk?: number}} [o]
  */
-export async function gate1(provider, jobs, { sampleEvery = 2000, logChunk = 5000, gate = GATE1 } = {}) {
+export async function gate1(provider, jobs, { sampleEvery = 2000, logChunk = 1000, gate = GATE1 } = {}) {
   const latest = await provider.getBlock('latest');
   const first = await provider.getBlock(1);
   const days = (latest.timestamp - first.timestamp) / 86400;
