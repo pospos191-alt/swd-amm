@@ -8,6 +8,7 @@ import { explain } from '../src/explain.js';
 import { readContract } from '../src/reader.js';
 import { CHAINS } from '../src/chains.js';
 import { createLocalChain } from './helpers/local-chain.js';
+import { pubkeyBytes } from '../src/solana.js';
 
 // EIP-55: a mixed-case address encodes its own checksum, so a typo is caught.
 function toChecksum(addr) {
@@ -16,10 +17,13 @@ function toChecksum(addr) {
   return '0x' + [...a].map((c, i) => (parseInt(h[i], 16) >= 8 ? c.toUpperCase() : c)).join('');
 }
 
-test('every registered address has a valid EIP-55 checksum and a known chain', () => {
+test('every registered address is well-formed for its chain (EIP-55 checksum / 32-byte base58)', () => {
   for (const [chain, list] of Object.entries(KNOWN_TOKENS)) {
     assert.ok(CHAINS[chain], `unknown chain ${chain}`);
-    for (const t of list) assert.equal(t.address, toChecksum(t.address), `${chain} ${t.symbol} address typo?`);
+    for (const t of list) {
+      if (CHAINS[chain].kind === 'solana') assert.equal(pubkeyBytes(t.address).length, 32, `${chain} ${t.symbol}`);
+      else assert.equal(t.address, toChecksum(t.address), `${chain} ${t.symbol} address typo?`);
+    }
   }
 });
 

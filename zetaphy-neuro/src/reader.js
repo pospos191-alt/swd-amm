@@ -1,8 +1,9 @@
 // Neuro ZETAPHY tier 1: reads one contract and produces a report.
 // Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call.
 
-import { CHAINS } from './chains.js';
-import { createRpc } from './rpc.js';
+import { CHAINS, isChainAddress } from './chains.js';
+import { createRpc, createSolanaRpc } from './rpc.js';
+import { readSolanaAccount, analyzeSolana } from './solana.js';
 import { scanBytecode, minimalProxyTarget, hexToBytes } from './bytecode.js';
 import { decodeAddress, decodeUint, decodeString, cleanText } from './abi.js';
 import { analyze } from './analyze.js';
@@ -50,7 +51,8 @@ function canonical(v) {
 export async function readContract(chainKey, address, opts = {}) {
   const chain = CHAINS[chainKey];
   if (!chain) throw new Error(`unknown chain: ${chainKey}`);
-  if (!isAddress(address)) throw new Error('invalid address');
+  if (!isChainAddress(chainKey, address)) throw new Error('invalid address');
+  if (chain.kind === 'solana') return readSolana(chainKey, chain, address, opts);
   const addr = address.toLowerCase();
   const rpc = opts.rpc ?? createRpc(chain.rpcs, chain.id, { fetchImpl: opts.fetchImpl });
 
@@ -131,6 +133,28 @@ export async function readContract(chainKey, address, opts = {}) {
   const lookalike = isTokenContract(functions) ? lookalikeOf(chainKey, addr, token.symbol) : null;
   report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike });
   report.functions = functions.map((f) => f.sig).sort();
+  report.reportHash = await sha256Hex(canonical(report));
+  return report;
+}
+
+async function readSolana(chainKey, chain, address, opts) {
+  const rpc = opts.rpc ?? createSolanaRpc(chain.rpcs, chain.genesisHash, { fetchImpl: opts.fetchImpl });
+  const m = await readSolanaAccount(rpc, address);
+  const report = { version: REPORT_VERSION, chain: chainKey, address };
+  if (m.kind === 'mint') {
+    report.token = m.token;
+    report.solana = {
+      program: m.program2022 ? 'Token-2022' : 'SPL Token',
+      mintAuthority: m.mintAuthority,
+      freezeAuthority: m.freezeAuthority,
+      extensions: Object.keys(m.extensions).sort(),
+    };
+  } else if (m.kind === 'program') {
+    report.solana = { program: 'upgradeable-loader', upgradeAuthority: m.upgradeAuthority };
+  }
+  const known = m.kind === 'mint' ? knownToken(chainKey, address) : null;
+  const lookalike = m.kind === 'mint' ? lookalikeOf(chainKey, address, m.token.symbol) : null;
+  report.analysis = analyzeSolana(m, { known, lookalike });
   report.reportHash = await sha256Hex(canonical(report));
   return report;
 }

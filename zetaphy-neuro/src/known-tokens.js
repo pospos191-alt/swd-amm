@@ -14,6 +14,12 @@
 // issuer's own site AND the chain's explorer.
 
 export const KNOWN_TOKENS = {
+  eth: [
+    { address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', symbol: 'USDT', issuer: 'Tether', kind: 'stablecoin' },
+    { address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', symbol: 'USDC', issuer: 'Circle', kind: 'stablecoin' },
+    { address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', symbol: 'DAI', issuer: 'Sky (MakerDAO)', kind: 'stablecoin' },
+    { address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', symbol: 'WETH', issuer: 'WETH9 contract', kind: 'wrapped' },
+  ],
   bsc: [
     { address: '0x55d398326f99059fF775485246999027B3197955', symbol: 'USDT', issuer: 'Tether (Binance-Peg)', kind: 'stablecoin' },
     { address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d', symbol: 'USDC', issuer: 'Circle (Binance-Peg)', kind: 'stablecoin' },
@@ -32,6 +38,12 @@ export const KNOWN_TOKENS = {
     { address: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', symbol: 'WETH', issuer: 'Arbitrum', kind: 'wrapped' },
     { address: '0x912CE59144191C1204E64559FE8253a0e49E6548', symbol: 'ARB', issuer: 'Arbitrum Foundation', kind: 'governance' },
   ],
+  // Solana mint addresses are base58 and case-sensitive.
+  sol: [
+    { address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', symbol: 'USDC', issuer: 'Circle', kind: 'stablecoin' },
+    { address: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', symbol: 'USDT', issuer: 'Tether', kind: 'stablecoin' },
+    { address: 'So11111111111111111111111111111111111111112', symbol: 'SOL', issuer: 'Solana (wrapped SOL)', kind: 'wrapped' },
+  ],
 };
 
 // Symbols a scammer copies. Compared case-insensitively, ignoring spaces,
@@ -40,8 +52,9 @@ const norm = (s) => String(s ?? '').toUpperCase().replace(/[\s.\-_]/g, '');
 
 /** Official entry for this exact chain + address, or null. */
 export function knownToken(chain, address) {
-  const a = String(address).toLowerCase();
-  return (KNOWN_TOKENS[chain] ?? []).find((t) => t.address.toLowerCase() === a) ?? null;
+  // EVM hex is case-insensitive; Solana base58 is not.
+  const same = (x) => (x.startsWith('0x') ? x.toLowerCase() === String(address).toLowerCase() : x === address);
+  return (KNOWN_TOKENS[chain] ?? []).find((t) => same(t.address)) ?? null;
 }
 
 /**

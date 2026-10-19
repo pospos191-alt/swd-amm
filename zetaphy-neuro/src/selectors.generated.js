@@ -34,6 +34,9 @@ export const SELECTORS = {
   'b515566a': { sig: 'setBots(address[])', cat: 'blacklist' },
   '00b8cf2a': { sig: 'blockBots(address[])', cat: 'blacklist' },
   'd34628cc': { sig: 'addBots(address[])', cat: 'blacklist' },
+  '0ecb93c0': { sig: 'addBlackList(address)', cat: 'blacklist' },
+  'e4997dc5': { sig: 'removeBlackList(address)', cat: 'blacklist' },
+  'f3bdc228': { sig: 'destroyBlackFunds(address)', cat: 'blacklist' },
   '69fe0e2d': { sig: 'setFee(uint256)', cat: 'fee' },
   '0b78f9c0': { sig: 'setFees(uint256,uint256)', cat: 'fee' },
   'c4081a4c': { sig: 'setTaxFee(uint256)', cat: 'fee' },
@@ -58,4 +61,5 @@ export const SELECTORS = {
   '3659cfe6': { sig: 'upgradeTo(address)', cat: 'upgrade' },
   '4f1ef286': { sig: 'upgradeToAndCall(address,bytes)', cat: 'upgrade' },
   '5c60da1b': { sig: 'implementation()', cat: 'upgrade' },
+  '0753c30c': { sig: 'deprecate(address)', cat: 'upgrade' },
 };

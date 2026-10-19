@@ -53,6 +53,31 @@ const T = {
     'delegatecall': () => 'โค้ดเรียกใช้โค้ดของสัญญาอื่นแทนตัวเองได้ (DELEGATECALL) โค้ดที่ทำงานจริงจึงอาจไม่ใช่โค้ดที่เห็นตรงนี้',
     'nothing-found': () => 'ไม่พบสิทธิ์พิเศษหรือคำสั่งอันตรายตามกฎที่ตรวจ',
     'bytecode-only': () => 'ตรวจจากโค้ดบนเชนด้วยกฎตายตัว อาจพลาดกลโกงที่ซ่อนชื่อฟังก์ชันแปลกๆ ไม่ใช่คำแนะนำการลงทุน',
+    // Solana
+    'sol-not-found': () => 'ไม่พบบัญชีนี้บน Solana อาจพิมพ์ผิด หรือเลือกเชนผิด',
+    'sol-not-token': (p) => `ที่อยู่นี้ไม่ใช่เหรียญ (mint) บน Solana เป็นบัญชีของโปรแกรม ${p.owner}`,
+    'sol-token': (p) => `เป็นเหรียญ ${p.program} ชื่อ "${p.name ?? '?'}" (${p.symbol ?? '?'}) จำนวนทั้งหมด ${fmtSupply(p.totalSupply, p.decimals)} เหรียญ`,
+    'sol-mint-authority': (p) => (p.issuer
+      ? `${p.issuer} สร้างเหรียญเพิ่มได้ (mint authority: ${p.authority}) เพื่อออกเหรียญตามเงินที่รับฝาก ปกติของเหรียญประเภทนี้`
+      : `ยังสร้างเหรียญเพิ่มได้ (mint authority: ${p.authority}) ทำให้เหรียญที่คุณถือมีสัดส่วนลดลง หรือถูกเทขายจนราคาตก`),
+    'sol-mint-renounced': () => 'สละสิทธิ์สร้างเหรียญเพิ่มแล้ว จำนวนเหรียญเพิ่มไม่ได้อีก',
+    'sol-freeze-authority': (p) => (p.issuer
+      ? `${p.issuer} อายัดบัญชีบางบัญชีได้ (freeze authority) มักใช้กับเงินที่ถูกขโมยหรือตามคำสั่งทางกฎหมาย`
+      : `ยังอายัดบัญชีได้ (freeze authority: ${p.authority}) ถ้าบัญชีคุณถูกอายัด จะขายหรือโอนไม่ได้ เป็นกลโกงที่พบบ่อยบน Solana`),
+    'sol-freeze-renounced': () => 'สละสิทธิ์อายัดบัญชีแล้ว ไม่มีใครอายัดเหรียญในกระเป๋าคุณได้',
+    'sol-permanent-delegate': (p) => (p.issuer
+      ? `${p.issuer} ย้ายหรือเผาเหรียญจากบัญชีใดก็ได้ (permanent delegate) ใช้กับการยึดเงินตามกฎหมาย`
+      : `มีผู้ถือสิทธิ์ถาวร (permanent delegate: ${p.delegate}) ที่ย้ายหรือเผาเหรียญจากกระเป๋าของทุกคนได้โดยไม่ต้องขออนุญาต อันตรายมาก`),
+    'sol-transfer-fee': (p) => `เก็บภาษีทุกครั้งที่โอน ${p.percent}%${p.authority ? ` และผู้ดูแล (${p.authority}) ปรับขึ้นได้สูงสุดถึง 100%` : ''}`,
+    'sol-transfer-hook': (p) => `ทุกการโอนต้องผ่านโปรแกรมเสริม (transfer hook: ${p.programId}) ซึ่งเขียนกฎได้เอง เช่น ห้ามขาย`,
+    'sol-default-frozen': () => 'บัญชีใหม่ของเหรียญนี้ถูกอายัดตั้งแต่เริ่ม ซื้อแล้วอาจโอนหรือขายไม่ได้จนกว่าผู้ดูแลจะปลดให้',
+    'sol-pausable': (p) => `หยุดการโอนทั้งหมดได้ (pausable)${p.paused ? ' และตอนนี้กำลังหยุดอยู่' : ''}`,
+    'sol-close-authority': (p) => `ปิดบัญชีเหรียญ (mint) แล้วสร้างใหม่ที่ที่อยู่เดิมได้ (close authority: ${p.authority})`,
+    'sol-non-transferable': () => 'เหรียญนี้โอนไม่ได้ (non-transferable) ใช้เป็นตราหรือสิทธิ์ ไม่ใช่เหรียญซื้อขาย',
+    'sol-metadata-mutable': (p) => `ชื่อ สัญลักษณ์ และรูปของเหรียญยังแก้ไขได้ (update authority: ${p.authority}) อาจเปลี่ยนให้เหมือนเหรียญอื่นภายหลัง`,
+    'sol-program-upgradeable': (p) => `เป็นโปรแกรมที่อัปเกรดได้ ผู้ถือสิทธิ์ (${p.authority}) เปลี่ยนโค้ดได้ทุกเมื่อ`,
+    'sol-program-immutable': () => 'เป็นโปรแกรมที่อัปเกรดไม่ได้แล้ว โค้ดเปลี่ยนไม่ได้อีก',
+    'sol-caveat': () => 'ตรวจจากข้อมูลบัญชีบนเชนด้วยกฎตายตัว ไม่ได้ตรวจสภาพคล่องหรือการถือครอง ไม่ใช่คำแนะนำการลงทุน',
   },
   en: {
     'no-code': () => 'This address has no contract code. It may be a plain wallet, or the wrong chain is selected.',
@@ -90,15 +115,40 @@ const T = {
     'delegatecall': () => 'The code can run another contract\'s code as its own (DELEGATECALL), so the code that really runs may not be the code shown here.',
     'nothing-found': () => 'No special powers or dangerous instructions found by these rules.',
     'bytecode-only': () => 'Checked from on-chain code with fixed rules. Scams that hide behind unusual function names can be missed. Not investment advice.',
+    // Solana
+    'sol-not-found': () => 'No account at this address on Solana. It may be mistyped, or the wrong chain is selected.',
+    'sol-not-token': (p) => `This address is not a token mint on Solana; it is an account of program ${p.owner}.`,
+    'sol-token': (p) => `${p.program} token "${p.name ?? '?'}" (${p.symbol ?? '?'}), total supply ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'sol-mint-authority': (p) => (p.issuer
+      ? `${p.issuer} can mint (mint authority: ${p.authority}) to issue tokens against deposits, as expected for this kind of token.`
+      : `New tokens can still be minted (mint authority: ${p.authority}), diluting holders or flooding the market.`),
+    'sol-mint-renounced': () => 'Mint authority is renounced: the supply can never grow.',
+    'sol-freeze-authority': (p) => (p.issuer
+      ? `${p.issuer} can freeze accounts (freeze authority), usually for stolen funds or legal orders.`
+      : `Accounts can still be frozen (freeze authority: ${p.authority}). A frozen account cannot sell or transfer, a common Solana scam.`),
+    'sol-freeze-renounced': () => 'Freeze authority is renounced: nobody can freeze your tokens.',
+    'sol-permanent-delegate': (p) => (p.issuer
+      ? `${p.issuer} can move or burn tokens from any account (permanent delegate), used for legal seizures.`
+      : `A permanent delegate (${p.delegate}) can move or burn tokens from EVERY wallet without permission. Very dangerous.`),
+    'sol-transfer-fee': (p) => `Charges ${p.percent}% on every transfer${p.authority ? `, and the fee authority (${p.authority}) can raise it as high as 100%` : ''}.`,
+    'sol-transfer-hook': (p) => `Every transfer runs an extra program (transfer hook: ${p.programId}) that can enforce its own rules, such as blocking sells.`,
+    'sol-default-frozen': () => 'New accounts for this token start frozen: after buying you may be unable to move or sell until unfrozen.',
+    'sol-pausable': (p) => `All transfers can be paused (pausable)${p.paused ? ', and they are paused right now' : ''}.`,
+    'sol-close-authority': (p) => `The mint can be closed and re-created at the same address (close authority: ${p.authority}).`,
+    'sol-non-transferable': () => 'This token cannot be transferred (non-transferable): a badge or right, not a tradable coin.',
+    'sol-metadata-mutable': (p) => `Name, symbol and image can still be changed (update authority: ${p.authority}), e.g. later made to imitate another token.`,
+    'sol-program-upgradeable': (p) => `Upgradeable program: the authority (${p.authority}) can replace its code at any time.`,
+    'sol-program-immutable': () => 'This program can no longer be upgraded; its code is fixed.',
+    'sol-caveat': () => 'Checked from on-chain account data with fixed rules; liquidity and holder distribution are not checked. Not investment advice.',
   },
 };
 
 // What the contract is comes first, then the most serious findings, the caveat last.
-const IDENTITY = new Set(['no-code', 'erc20', 'not-erc20']);
+const IDENTITY = new Set(['no-code', 'erc20', 'not-erc20', 'sol-token', 'sol-not-found', 'sol-not-token']);
 const ORDER = { high: 0, medium: 1, low: 2, good: 3, info: 4 };
 // Who issued it (or that it copies someone) belongs right under what it is.
 const ISSUER = new Set(['known-issuer', 'lookalike']);
-const rank = (f) => (IDENTITY.has(f.id) ? -2 : ISSUER.has(f.id) ? -1 : f.id === 'bytecode-only' ? 9 : ORDER[f.severity] ?? 5);
+const rank = (f) => (IDENTITY.has(f.id) ? -2 : ISSUER.has(f.id) ? -1 : (f.id === 'bytecode-only' || f.id === 'sol-caveat') ? 9 : ORDER[f.severity] ?? 5);
 
 /** Report -> { title, lines: [{severity, text}] } in the chosen language. */
 export function explain(report, lang = 'th') {

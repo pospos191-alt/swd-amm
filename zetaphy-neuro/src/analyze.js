@@ -51,9 +51,10 @@ export function analyze(input) {
   const cats = new Set(input.functions.map((f) => f.cat));
   const sigsIn = (cat) => input.functions.filter((f) => f.cat === cat).map((f) => f.sig);
   const proxy = input.proxy ?? { kind: null };
-  // implementation() alone is only a getter; upgradeTo* is what swaps the code.
+  // implementation() alone is only a getter; upgradeTo* (or USDT's deprecate,
+  // which forwards all calls to a new contract) is what swaps the code.
   const upgradeable = proxy.kind === 'eip1967' || proxy.kind === 'beacon'
-    || sigsIn('upgrade').some((s) => s.startsWith('upgradeTo'));
+    || sigsIn('upgrade').some((s) => s.startsWith('upgradeTo') || s === 'deprecate(address)');
 
   // Who controls the contract?
   let control;

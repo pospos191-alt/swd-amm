@@ -51,6 +51,9 @@ export const SIGNATURES = [
   ['setBots(address[])', 'blacklist'],
   ['blockBots(address[])', 'blacklist'],
   ['addBots(address[])', 'blacklist'],
+  ['addBlackList(address)', 'blacklist'],      // USDT on Ethereum
+  ['removeBlackList(address)', 'blacklist'],
+  ['destroyBlackFunds(address)', 'blacklist'],
 
   // Changing buy/sell tax
   ['setFee(uint256)', 'fee'],
@@ -85,4 +88,5 @@ export const SIGNATURES = [
   ['upgradeTo(address)', 'upgrade'],
   ['upgradeToAndCall(address,bytes)', 'upgrade'],
   ['implementation()', 'upgrade'],
+  ['deprecate(address)', 'upgrade'],           // USDT: forwards every call to a new contract
 ];
