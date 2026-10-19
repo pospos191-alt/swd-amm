@@ -9,12 +9,12 @@ const UI = {
   th: { subtitle: 'อ่านและอธิบายสัญญา · ชั้น 1 อ่านอย่างเดียว', chain: 'เชน', address: 'ที่อยู่สัญญา', check: 'ตรวจสัญญา',
     details: 'รายละเอียด', reading: 'กำลังอ่านสัญญาจากเชน…', badAddress: 'ที่อยู่ไม่ถูกต้อง: เชน EVM ต้องขึ้นต้นด้วย 0x ยาว 42 ตัวอักษร ส่วน Solana เป็นตัวอักษร 32–44 ตัว',
     failed: 'อ่านไม่สำเร็จ: ', footer: 'ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม อ่านข้อมูลจากเชนผ่าน RPC สาธารณะเท่านั้น ผลตรวจไม่ใช่คำแนะนำการลงทุน', stats: 'สถิติการใช้งาน',
-    m: { chain: 'เชน', address: 'ที่อยู่', proxy: 'Proxy', implementation: 'โค้ดหลัก', owner: 'เจ้าของ', functions: 'ฟังก์ชันที่รู้จัก', report: 'รหัสรายงาน', explorer: 'ดูบน explorer',
+    m: { chain: 'เชน', address: 'ที่อยู่', proxy: 'Proxy', implementation: 'โค้ดหลัก', owner: 'เจ้าของ', functions: 'ฟังก์ชันที่รู้จัก', report: 'รหัสรายงาน', explorer: 'ดูบน explorer', fingerprint: 'ลายนิ้วมือโค้ด (ใช้ลงทะเบียนแม่แบบ)',
       program: 'โปรแกรมเหรียญ', mintAuth: 'สิทธิ์สร้างเหรียญ', freezeAuth: 'สิทธิ์อายัด', extensions: 'ส่วนเสริม', upgradeAuth: 'สิทธิ์อัปเกรด', none: 'ไม่มี' } },
   en: { subtitle: 'Reads and explains contracts · tier 1, read-only', chain: 'Chain', address: 'Contract address', check: 'Check contract',
     details: 'Details', reading: 'Reading the contract from the chain…', badAddress: 'Invalid address: EVM chains need 0x + 40 hex characters; Solana needs a 32–44 character base58 address',
     failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data only. Not investment advice.', stats: 'Usage stats',
-    m: { chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer',
+    m: { chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)',
       program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none' } },
 };
 
@@ -64,6 +64,7 @@ function render(report) {
     if (sol.extensions?.length) rows.push([m.extensions, sol.extensions.join(', ')]);
     if ('upgradeAuthority' in sol) rows.push([m.upgradeAuth, sol.upgradeAuthority ?? m.none]);
   }
+  if (report.fingerprint) rows.push([m.fingerprint, report.fingerprint]);
   rows.push([m.report, report.reportHash]);
   const dl = $('meta');
   dl.replaceChildren();
