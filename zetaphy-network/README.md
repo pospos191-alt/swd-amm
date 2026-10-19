@@ -1,4 +1,15 @@
-# zetaphy-network: ตลาดงาน Neuro (ขั้น 1–2, testnet)
+# zetaphy-network: ขั้น 1–2 ของ ZETAPHY (testnet)
+
+| ขั้นในแผน | สิ่งที่มีให้แล้ว |
+|---|---|
+| 1 · ทุกคนรันร่างได้ | `zetaphy node start` ตรวจเครื่องเองแล้วรับงานจากตลาดงาน NeuroJobs ตรวจคำตอบแบบ 2 ใน 3 และจ่ายรางวัลเป็น ZETAPHY |
+| 2 · ZETAPHY จ่ายค่า AI | ผู้ใช้จ่ายค่าตรวจสัญญาเป็น ZETAPHY ให้คนรันร่าง |
+| 2 · จ่ายค่าธรรมเนียมเป็น USDC/USDT | StableGateway + relay: คนที่ไม่มี ZETAPHY เลยก็ใช้งานได้ โดยจ่ายเป็น test USDC/USDT |
+| 2 · โหวตอัปเกรดในตัว | `zetaphy-chain/gov.sh` เสนอและโหวตอัปเกรดบนเชน |
+| 2 · เตรียมแจกให้คนถือ SWD | `airdrop/`: snapshot ผู้ถือ SWD, แบ่งสัดส่วน และทำ Merkle root |
+| ประตู 1 | `zetaphy gate` รายงานความคืบหน้าจากข้อมูลบนเชน |
+
+ทั้งหมดนี้ผ่านการทดสอบบนเชน ZETAPHY จริงแล้ว (`npm run test:devnet`)
 
 ใครก็รัน Neuro ได้ด้วยคำสั่งเดียว แล้วรับรางวัลเป็น ZETAPHY บน testnet
 
@@ -45,10 +56,71 @@ zetaphy job get 0
 
 เชนที่รองรับ: `eth`, `bsc`, `base`, `arbitrum`, `sol` และ `zetaphy` (ตัว ZETAPHY testnet เอง)
 
+## ผู้ใช้ที่ไม่มี ZETAPHY: จ่ายเป็น test USDC/USDT (ขั้น 2)
+
+```
+zetaphy faucet usdc --relay http://<relay>:8080                       # รับ 1,000 tUSDC ต่อวัน (relay จ่ายค่า gas ให้)
+zetaphy job request-stable bsc 0x... --relay http://<relay>:8080      # ส่งงาน จ่ายเป็น tUSDC
+```
+
+1. กระเป๋าของผู้ใช้เซ็น 2 อย่าง ได้แก่ คำขอส่งงาน (EIP-712) และ permit อนุญาตให้หักเหรียญ (EIP-2612)
+2. relay ส่งธุรกรรมขึ้นเชนให้และจ่ายค่า gas เอง แล้วได้ทิปเป็น tUSDC ตามจำนวนที่ผู้ใช้ตกลงไว้
+3. StableGateway หัก tUSDC ตามราคาที่ตั้งไว้ (testnet: 1 ZETAPHY = 0.01 tUSDC)
+4. Gateway จ่ายค่างานเป็น ZETAPHY จากเงินสำรองของตัวเอง ถ้างานไม่สำเร็จ ZETAPHY จะคืนให้ผู้ใช้
+
+ข้อควรรู้:
+- ผู้ใช้กำหนดยอดสูงสุดที่ยอมจ่ายไว้ใน `maxCost` ได้
+- relay ใช้คำขอซ้ำ แก้คำขอ หรือใช้คำขอที่หมดเวลาแล้วไม่ได้
+- คนรันร่างคนไหนก็เปิด relay ได้: `zetaphy relay start --port 8080`
+- USDC/USDT ตัวจริงจะมาผ่านสะพานในขั้น 3
+
+## โหวตอัปเกรดเชน (ขั้น 2)
+
+บนโหนด: `zetaphy-chain/gov.sh`
+
+```
+gov.sh propose-upgrade v2 <ความสูงบล็อก> "สรุป"   # มัดจำ 1,000 ZETAPHY
+gov.sh vote 1 yes
+gov.sh status 1
+gov.sh plan
+```
+
+## เตรียมแจก ZETAPHY ให้คนถือ SWD (ขั้น 2: เตรียม ยังไม่แจกจริง)
+
+```
+node airdrop/cli.js snapshot --mint <SWD mint> --exclude <ที่อยู่ vault ของ pool,...> > snapshot.json
+node airdrop/cli.js allocate snapshot.json --min 1000000 --cap-bps 100 > allocations.json
+node airdrop/cli.js merkle allocations.json > merkle.json
+```
+
+- **snapshot** รวมยอด SWD ของทุกบัญชี (SPL และ Token-2022) ต่อเจ้าของกระเป๋า อ่านจาก Solana อย่างเดียว
+  - ใส่ที่อยู่ vault ของ pool ใน `--exclude` ด้วย เพราะเหรียญใน pool เป็นของผู้ให้สภาพคล่อง ไม่ใช่ของ PDA
+- **allocate** แบ่ง 200,000,000 ZETAPHY ตามสัดส่วน
+  - กรองยอดเล็กมากทิ้งด้วย `--min`
+  - จำกัดส่วนแบ่งต่อคนได้ด้วย `--cap-bps` (100 = 1%) ส่วนที่เกินเพดานจะแบ่งให้คนที่เหลือ
+  - เศษจากการปัดจะแสดงใน `dust` ไม่หายไป
+- **merkle** สร้าง root ขนาด 32 ไบต์ พร้อม proof ของแต่ละคน
+  - root นี้ใช้กับสัญญาแจกเหรียญในขั้น 3
+  - สัญญานั้นต้องตรวจลายเซ็น Solana ของเจ้าของกระเป๋า และต้องผ่าน audit ก่อน
+
+## ประตู 1
+
+```
+zetaphy gate
+```
+
+รายงาน:
+- เชนรันมาแล้วกี่วัน
+- บล็อกเคยค้างไหม
+- คนรันร่างที่เปิดคำตอบในรอบ 30 วันมีกี่ที่อยู่
+
+ข้อมูลบนเชนบอกไม่ได้ว่า "คนละคนกันจริง" ตัวเลขนี้จึงเป็นเพดานบน ต้องให้คนตรวจยืนยันอีกที
+
 ## ผู้ดูแล: ติดตั้งสัญญา
 
 ```
 zetaphy deploy --fund 100000      # ใช้กุญแจของบัญชี rewards และเติมกองรางวัลให้ด้วย
+zetaphy deploy-stable --reserve 1000   # tUSDC, tUSDT และ StableGateway (เงินสำรอง 1,000 ZETAPHY)
 ```
 
 ค่าเริ่มต้น:
@@ -68,6 +140,9 @@ zetaphy deploy --fund 100000      # ใช้กุญแจของบัญ�
 - `npm run test:devnet`: ทดสอบบนเชน ZETAPHY จริง ต้องมี `zetaphyd`
   - สคริปต์ตั้งเชน 1 โหนด (บล็อกละ 1 วินาที)
   - คนรันร่าง 3 คนรับงานจริงจนได้ผลตรวจ 2 ใน 3 และได้รับเงิน
+  - ผู้ใช้ที่มี 0 ZETAPHY จ่ายค่างานเป็น tUSDC ผ่าน relay ได้
+  - โหวตอัปเกรดผ่าน และเชนตั้งเวลาอัปเกรดไว้
+  - `zetaphy gate` อ่านข้อมูลจากเชนได้
 
 ## ข้อจำกัดที่รู้แล้ว (testnet)
 

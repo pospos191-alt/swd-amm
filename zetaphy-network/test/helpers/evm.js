@@ -9,7 +9,8 @@ import { readFileSync } from 'node:fs';
 
 export const ZETA = 10n ** 18n;
 
-export async function createChain(names = []) {
+/** @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds */
+export async function createChain(names = [], fundAddresses = {}) {
   const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }) });
   const sm = evm.stateManager;
   let time = 1_800_000_000n;
@@ -17,6 +18,11 @@ export async function createChain(names = []) {
   const acct = {};
   for (const [i, n] of names.entries()) {
     const a = Address.fromString('0x' + (i + 1).toString(16).padStart(40, '0').replace(/^0/, 'a'));
+    await sm.putAccount(a, new Account(0n, 1_000_000n * ZETA));
+    acct[n] = a;
+  }
+  for (const [n, hex] of Object.entries(fundAddresses)) {
+    const a = Address.fromString(hex);
     await sm.putAccount(a, new Account(0n, 1_000_000n * ZETA));
     acct[n] = a;
   }
@@ -52,7 +58,11 @@ export async function createChain(names = []) {
         async send(from, fn, args = [], value = 0n) {
           const res = await exec(from, address, iface.encodeFunctionData(fn, args), value);
           if (res.execResult.exceptionError) throw new Error(decodeError(res.execResult.returnValue));
-          return (res.execResult.logs ?? []).map(([, topics, data]) => iface.parseLog({ topics: topics.map(bytesToHex), data: bytesToHex(data) }));
+          return (res.execResult.logs ?? []).map(([, topics, data]) => { try { return iface.parseLog({ topics: topics.map(bytesToHex), data: bytesToHex(data) }); } catch { return null; } });
+        },
+        async sendValue(from, value) {
+          const res = await exec(from, address, '0x', value);
+          if (res.execResult.exceptionError) throw new Error(decodeError(res.execResult.returnValue));
         },
         async call(fn, args = []) {
           const res = await exec(acct[names[0]], address, iface.encodeFunctionData(fn, args));

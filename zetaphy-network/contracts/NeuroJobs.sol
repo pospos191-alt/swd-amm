@@ -142,10 +142,21 @@ contract NeuroJobs {
     /// @param chain   chain key as bytes32, e.g. "bsc"
     /// @param target  address on that chain (EVM hex or Solana base58), at most 64 bytes
     function request(bytes32 chain, string calldata target) external payable returns (uint256 id) {
+        return _request(msg.sender, chain, target);
+    }
+
+    /// Same as request(), but a refund goes to `refundTo`. Used by StableGateway,
+    /// which pays the fee for a user who paid it in a stablecoin.
+    function requestFor(address refundTo, bytes32 chain, string calldata target) external payable returns (uint256 id) {
+        if (refundTo == address(0)) revert BadValue();
+        return _request(refundTo, chain, target);
+    }
+
+    function _request(address requester, bytes32 chain, string calldata target) private returns (uint256 id) {
         if (msg.value < minFee || chain == bytes32(0) || bytes(target).length == 0 || bytes(target).length > 64) revert BadValue();
         id = jobs.length;
         Job storage j = jobs.push();
-        j.requester = msg.sender;
+        j.requester = requester;
         j.created = uint64(block.timestamp);
         j.status = Status.Open;
         j.chain = chain;

@@ -1,0 +1,430 @@
+{
+  "contractName": "TestStable",
+  "sourceName": "contracts/TestStable.sol",
+  "solcLongVersion": "0.8.26+commit.8a97fa7a",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name_",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "symbol_",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "spender",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "Approval",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "Transfer",
+      "type": "event"
+    },
+    {
+      "inputs": [],
+      "name": "DOMAIN_SEPARATOR",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "FAUCET_AMOUNT",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "FAUCET_EVERY",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "PERMIT_TYPEHASH",
+      "outputs": [
+        {
+          "internalType": "bytes32",
+          "name": "",
+          "type": "bytes32"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "allowance",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "spender",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "approve",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "balanceOf",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "decimals",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "faucet",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        }
+      ],
+      "name": "faucetTo",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "lastFaucet",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "name",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "nonces",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "spender",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "deadline",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint8",
+          "name": "v",
+          "type": "uint8"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "r",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "s",
+          "type": "bytes32"
+        }
+      ],
+      "name": "permit",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "symbol",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "totalSupply",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "transfer",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "transferFrom",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x60c060405234801561000f575f80fd5b5060405161117038038061117083398101604081905261002e916101a8565b5f6100398382610291565b5060016100468282610291565b504660805261005361005e565b60a052506103bc9050565b5f7f8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f5f60405161008e919061034b565b60408051918290038220828201825260018352603160f81b6020938401528151928301939093528101919091527fc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc660608201524660808201523060a082015260c00160405160208183030381529060405280519060200120905090565b634e487b7160e01b5f52604160045260245ffd5b5f82601f83011261012e575f80fd5b81516001600160401b038111156101475761014761010b565b604051601f8201601f19908116603f011681016001600160401b03811182821017156101755761017561010b565b60405281815283820160200185101561018c575f80fd5b8160208501602083015e5f918101602001919091529392505050565b5f80604083850312156101b9575f80fd5b82516001600160401b038111156101ce575f80fd5b6101da8582860161011f565b602085015190935090506001600160401b038111156101f7575f80fd5b6102038582860161011f565b9150509250929050565b600181811c9082168061022157607f821691505b60208210810361023f57634e487b7160e01b5f52602260045260245ffd5b50919050565b601f82111561028c57805f5260205f20601f840160051c8101602085101561026a5750805b601f840160051c820191505b81811015610289575f8155600101610276565b50505b505050565b81516001600160401b038111156102aa576102aa61010b565b6102be816102b8845461020d565b84610245565b6020601f8211600181146102f0575f83156102d95750848201515b5f19600385901b1c1916600184901b178455610289565b5f84815260208120601f198516915b8281101561031f57878501518255602094850194600190920191016102ff565b508482101561033c57868401515f19600387901b60f8161c191681555b50505050600190811b01905550565b5f8083546103588161020d565b60018216801561036f5760018114610384576103b1565b60ff19831686528115158202860193506103b1565b865f5260205f205f5b838110156103a95781548882015260019091019060200161038d565b505081860193505b509195945050505050565b60805160a051610d936103dd5f395f61048b01525f6104560152610d935ff3fe608060405234801561000f575f80fd5b5060043610610111575f3560e01c806370a082311161009e57806395d89b411161006e57806395d89b411461024c578063a9059cbb14610254578063d505accf14610267578063dd62ed3e1461027a578063de5f72fd146102a4575f80fd5b806370a08231146101ee578063766976401461020d5780637ecebe001461021857806393492d2514610237575f80fd5b806323b872dd116100e457806323b872dd1461017357806330adf81f14610186578063313ce567146101ad5780633644e515146101c75780634799e212146101cf575f80fd5b806302f0cebd1461011557806306fdde0314610132578063095ea7b31461014757806318160ddd1461016a575b5f80fd5b61011f6201518081565b6040519081526020015b60405180910390f35b61013a6102ac565b6040516101299190610ac7565b61015a610155366004610b17565b610337565b6040519015158152602001610129565b61011f60025481565b61015a610181366004610b3f565b6103a3565b61011f7f6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c981565b6101b5600681565b60405160ff9091168152602001610129565b61011f610453565b61011f6101dd366004610b79565b60066020525f908152604090205481565b61011f6101fc366004610b79565b60036020525f908152604090205481565b61011f633b9aca0081565b61011f610226366004610b79565b60056020525f908152604090205481565b61024a610245366004610b79565b6104ad565b005b61013a6104b9565b61015a610262366004610b17565b6104c6565b61024a610275366004610b99565b6104db565b61011f610288366004610c06565b600460209081525f928352604080842090915290825290205481565b61024a610797565b5f80546102b890610c37565b80601f01602080910402602001604051908101604052809291908181526020018280546102e490610c37565b801561032f5780601f106103065761010080835404028352916020019161032f565b820191905f5260205f20905b81548152906001019060200180831161031257829003601f168201915b505050505081565b335f8181526004602090815260408083206001600160a01b038716808552925280832085905551919290917f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925906103919086815260200190565b60405180910390a35060015b92915050565b6001600160a01b0383165f9081526004602090815260408083203384529091528120545f19811461043d578281101561040f5760405162461bcd60e51b8152602060048201526009602482015268616c6c6f77616e636560b81b60448201526064015b60405180910390fd5b6104198382610c83565b6001600160a01b0386165f9081526004602090815260408083203384529091529020555b6104488585856107a2565b506001949350505050565b5f7f00000000000000000000000000000000000000000000000000000000000000004614610488576104836108c4565b905090565b507f000000000000000000000000000000000000000000000000000000000000000090565b6104b681610971565b50565b600180546102b890610c37565b5f6104d23384846107a2565b50600192915050565b8342111561051d5760405162461bcd60e51b815260206004820152600f60248201526e1c195c9b5a5d0e88195e1c1a5c9959608a1b6044820152606401610406565b5f610526610453565b6001600160a01b0389165f90815260056020526040812080547f6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9928c928c928c9290919061057383610c96565b909155506040805160208101969096526001600160a01b0394851690860152929091166060840152608083015260a082015260c0810187905260e001604051602081830303815290604052805190602001206040516020016105ec92919061190160f01b81526002810192909252602282015260420190565b6040516020818303038152906040528051906020012090507f7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0825f1c11156106665760405162461bcd60e51b815260206004820152600d60248201526c7065726d69743a20626164207360981b6044820152606401610406565b604080515f8082526020820180845284905260ff871692820192909252606081018590526080810184905260019060a0016020604051602081039080840390855afa1580156106b7573d5f803e3d5ffd5b5050604051601f1901519150506001600160a01b038116158015906106ed5750886001600160a01b0316816001600160a01b0316145b6107315760405162461bcd60e51b81526020600482015260156024820152747065726d69743a20626164207369676e617475726560581b6044820152606401610406565b6001600160a01b038981165f818152600460209081526040808320948d16808452948252918290208b905590518a81527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925910160405180910390a3505050505050505050565b6107a033610971565b565b6001600160a01b0382166107e25760405162461bcd60e51b8152602060048201526007602482015266746f207a65726f60c81b6044820152606401610406565b6001600160a01b0383165f90815260036020526040902054818110156108345760405162461bcd60e51b815260206004820152600760248201526662616c616e636560c81b6044820152606401610406565b6001600160a01b038085165f9081526003602052604080822085850390559185168152908120805484929061086a908490610cae565b92505081905550826001600160a01b0316846001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef846040516108b691815260200190565b60405180910390a350505050565b5f7f8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f5f6040516108f49190610cc1565b60408051918290038220828201825260018352603160f81b6020938401528151928301939093528101919091527fc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc660608201524660808201523060a082015260c00160405160208183030381529060405280519060200120905090565b6001600160a01b0381166109b15760405162461bcd60e51b8152602060048201526007602482015266746f207a65726f60c81b6044820152606401610406565b6001600160a01b0381165f908152600660205260409020546109d7906201518090610cae565b421015610a1b5760405162461bcd60e51b81526020600482015260126024820152716661756365743a206f6e636520612064617960701b6044820152606401610406565b6001600160a01b0381165f90815260066020526040812042905560028054633b9aca009290610a4b908490610cae565b90915550506001600160a01b0381165f9081526003602052604081208054633b9aca009290610a7b908490610cae565b9091555050604051633b9aca0081526001600160a01b038216905f907fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef9060200160405180910390a350565b602081525f82518060208401528060208501604085015e5f604082850101526040601f19601f83011684010191505092915050565b80356001600160a01b0381168114610b12575f80fd5b919050565b5f8060408385031215610b28575f80fd5b610b3183610afc565b946020939093013593505050565b5f805f60608486031215610b51575f80fd5b610b5a84610afc565b9250610b6860208501610afc565b929592945050506040919091013590565b5f60208284031215610b89575f80fd5b610b9282610afc565b9392505050565b5f805f805f805f60e0888a031215610baf575f80fd5b610bb888610afc565b9650610bc660208901610afc565b95506040880135945060608801359350608088013560ff81168114610be9575f80fd5b9699959850939692959460a0840135945060c09093013592915050565b5f8060408385031215610c17575f80fd5b610c2083610afc565b9150610c2e60208401610afc565b90509250929050565b600181811c90821680610c4b57607f821691505b602082108103610c6957634e487b7160e01b5f52602260045260245ffd5b50919050565b634e487b7160e01b5f52601160045260245ffd5b8181038181111561039d5761039d610c6f565b5f60018201610ca757610ca7610c6f565b5060010190565b8082018082111561039d5761039d610c6f565b5f8083545f8160011c90506001821680610cdc57607f821691505b602082108103610cfa57634e487b7160e01b5f52602260045260245ffd5b808015610d0e5760018114610d2357610d51565b60ff1984168752821515830287019450610d51565b5f888152602090205f5b84811015610d4957815489820152600190910190602001610d2d565b505082870194505b5092969550505050505056fea264697066735822122062f4e04f6f9d84e018521584a214cabd7fa43dbdcc04edce1c0557083ab7308064736f6c634300081a0033",
+  "deployedBytecode": "0x608060405234801561000f575f80fd5b5060043610610111575f3560e01c806370a082311161009e57806395d89b411161006e57806395d89b411461024c578063a9059cbb14610254578063d505accf14610267578063dd62ed3e1461027a578063de5f72fd146102a4575f80fd5b806370a08231146101ee578063766976401461020d5780637ecebe001461021857806393492d2514610237575f80fd5b806323b872dd116100e457806323b872dd1461017357806330adf81f14610186578063313ce567146101ad5780633644e515146101c75780634799e212146101cf575f80fd5b806302f0cebd1461011557806306fdde0314610132578063095ea7b31461014757806318160ddd1461016a575b5f80fd5b61011f6201518081565b6040519081526020015b60405180910390f35b61013a6102ac565b6040516101299190610ac7565b61015a610155366004610b17565b610337565b6040519015158152602001610129565b61011f60025481565b61015a610181366004610b3f565b6103a3565b61011f7f6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c981565b6101b5600681565b60405160ff9091168152602001610129565b61011f610453565b61011f6101dd366004610b79565b60066020525f908152604090205481565b61011f6101fc366004610b79565b60036020525f908152604090205481565b61011f633b9aca0081565b61011f610226366004610b79565b60056020525f908152604090205481565b61024a610245366004610b79565b6104ad565b005b61013a6104b9565b61015a610262366004610b17565b6104c6565b61024a610275366004610b99565b6104db565b61011f610288366004610c06565b600460209081525f928352604080842090915290825290205481565b61024a610797565b5f80546102b890610c37565b80601f01602080910402602001604051908101604052809291908181526020018280546102e490610c37565b801561032f5780601f106103065761010080835404028352916020019161032f565b820191905f5260205f20905b81548152906001019060200180831161031257829003601f168201915b505050505081565b335f8181526004602090815260408083206001600160a01b038716808552925280832085905551919290917f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925906103919086815260200190565b60405180910390a35060015b92915050565b6001600160a01b0383165f9081526004602090815260408083203384529091528120545f19811461043d578281101561040f5760405162461bcd60e51b8152602060048201526009602482015268616c6c6f77616e636560b81b60448201526064015b60405180910390fd5b6104198382610c83565b6001600160a01b0386165f9081526004602090815260408083203384529091529020555b6104488585856107a2565b506001949350505050565b5f7f00000000000000000000000000000000000000000000000000000000000000004614610488576104836108c4565b905090565b507f000000000000000000000000000000000000000000000000000000000000000090565b6104b681610971565b50565b600180546102b890610c37565b5f6104d23384846107a2565b50600192915050565b8342111561051d5760405162461bcd60e51b815260206004820152600f60248201526e1c195c9b5a5d0e88195e1c1a5c9959608a1b6044820152606401610406565b5f610526610453565b6001600160a01b0389165f90815260056020526040812080547f6e71edae12b1b97f4d1f60370fef10105fa2faae0126114a169c64845d6126c9928c928c928c9290919061057383610c96565b909155506040805160208101969096526001600160a01b0394851690860152929091166060840152608083015260a082015260c0810187905260e001604051602081830303815290604052805190602001206040516020016105ec92919061190160f01b81526002810192909252602282015260420190565b6040516020818303038152906040528051906020012090507f7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0825f1c11156106665760405162461bcd60e51b815260206004820152600d60248201526c7065726d69743a20626164207360981b6044820152606401610406565b604080515f8082526020820180845284905260ff871692820192909252606081018590526080810184905260019060a0016020604051602081039080840390855afa1580156106b7573d5f803e3d5ffd5b5050604051601f1901519150506001600160a01b038116158015906106ed5750886001600160a01b0316816001600160a01b0316145b6107315760405162461bcd60e51b81526020600482015260156024820152747065726d69743a20626164207369676e617475726560581b6044820152606401610406565b6001600160a01b038981165f818152600460209081526040808320948d16808452948252918290208b905590518a81527f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925910160405180910390a3505050505050505050565b6107a033610971565b565b6001600160a01b0382166107e25760405162461bcd60e51b8152602060048201526007602482015266746f207a65726f60c81b6044820152606401610406565b6001600160a01b0383165f90815260036020526040902054818110156108345760405162461bcd60e51b815260206004820152600760248201526662616c616e636560c81b6044820152606401610406565b6001600160a01b038085165f9081526003602052604080822085850390559185168152908120805484929061086a908490610cae565b92505081905550826001600160a01b0316846001600160a01b03167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef846040516108b691815260200190565b60405180910390a350505050565b5f7f8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f5f6040516108f49190610cc1565b60408051918290038220828201825260018352603160f81b6020938401528151928301939093528101919091527fc89efdaa54c0f20c7adf612882df0950f5a951637e0307cdcb4c672f298b8bc660608201524660808201523060a082015260c00160405160208183030381529060405280519060200120905090565b6001600160a01b0381166109b15760405162461bcd60e51b8152602060048201526007602482015266746f207a65726f60c81b6044820152606401610406565b6001600160a01b0381165f908152600660205260409020546109d7906201518090610cae565b421015610a1b5760405162461bcd60e51b81526020600482015260126024820152716661756365743a206f6e636520612064617960701b6044820152606401610406565b6001600160a01b0381165f90815260066020526040812042905560028054633b9aca009290610a4b908490610cae565b90915550506001600160a01b0381165f9081526003602052604081208054633b9aca009290610a7b908490610cae565b9091555050604051633b9aca0081526001600160a01b038216905f907fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef9060200160405180910390a350565b602081525f82518060208401528060208501604085015e5f604082850101526040601f19601f83011684010191505092915050565b80356001600160a01b0381168114610b12575f80fd5b919050565b5f8060408385031215610b28575f80fd5b610b3183610afc565b946020939093013593505050565b5f805f60608486031215610b51575f80fd5b610b5a84610afc565b9250610b6860208501610afc565b929592945050506040919091013590565b5f60208284031215610b89575f80fd5b610b9282610afc565b9392505050565b5f805f805f805f60e0888a031215610baf575f80fd5b610bb888610afc565b9650610bc660208901610afc565b95506040880135945060608801359350608088013560ff81168114610be9575f80fd5b9699959850939692959460a0840135945060c09093013592915050565b5f8060408385031215610c17575f80fd5b610c2083610afc565b9150610c2e60208401610afc565b90509250929050565b600181811c90821680610c4b57607f821691505b602082108103610c6957634e487b7160e01b5f52602260045260245ffd5b50919050565b634e487b7160e01b5f52601160045260245ffd5b8181038181111561039d5761039d610c6f565b5f60018201610ca757610ca7610c6f565b5060010190565b8082018082111561039d5761039d610c6f565b5f8083545f8160011c90506001821680610cdc57607f821691505b602082108103610cfa57634e487b7160e01b5f52602260045260245ffd5b808015610d0e5760018114610d2357610d51565b60ff1984168752821515830287019450610d51565b5f888152602090205f5b84811015610d4957815489820152600190910190602001610d2d565b505082870194505b5092969550505050505056fea264697066735822122062f4e04f6f9d84e018521584a214cabd7fa43dbdcc04edce1c0557083ab7308064736f6c634300081a0033",
+  "input": {
+    "language": "Solidity",
+    "sources": {
+      "contracts/NeuroJobs.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @title NeuroJobs: the Neuro ZETAPHY job market (testnet, stage 1-2)\n/// @notice Someone asks for a contract to be checked and pays a fee in ZETAPHY.\n///         Up to three bonded node runners each compute Neuro's verdict on their\n///         own machine. The verdict stands once two of them agree, and those two\n///         share the fee plus a reward from the pool.\n///\n///         Commit-reveal stops a runner from copying another's answer: runners\n///         first post keccak256(verdict, runner, salt), and reveal only after\n///         all seats are taken or the commit window closes.\n///\n///         Payouts are credited, then pulled with withdraw() (no ETH is pushed\n///         to arbitrary addresses inside the job logic).\ncontract NeuroJobs {\n    uint8 public constant SEATS = 3;\n    uint8 public constant QUORUM = 2;\n    /// Share of the bond a runner loses for a verdict the quorum rejected,\n    /// or for committing and then never revealing (basis points).\n    uint16 public constant PENALTY_BPS = 1000;\n\n    uint256 public immutable workerBond;\n    uint256 public immutable jobReward;\n    uint256 public immutable minFee;\n    uint64 public immutable commitWindow;\n    uint64 public immutable jobTimeout;\n    uint64 public immutable unbondDelay;\n\n    enum Status { None, Open, Done, Failed }\n\n    struct Worker {\n        uint128 bond;\n        uint64 unbondAt; // 0 while active\n        bool active;\n        uint32 agreed;\n        uint32 rejected;\n    }\n\n    struct Job {\n        address requester;\n        uint64 created;\n        Status status;\n        uint8 commits;\n        uint8 reveals;\n        bytes32 chain;\n        uint256 fee;\n        bytes32 result;\n        string target;\n        address[3] seat;\n        bytes32[3] commitOf;\n        bytes32[3] verdictOf;\n        bool[3] revealed;\n    }\n\n    uint256 public rewardPool;\n    uint256 public activeWorkers;\n    mapping(address => Worker) public workers;\n    mapping(address => uint256) public credit;\n    Job[] internal jobs;\n\n    event Funded(address indexed from, uint256 amount);\n    event Registered(address indexed worker, uint256 bond);\n    event UnbondRequested(address indexed worker, uint64 at);\n    event JobRequested(uint256 indexed id, bytes32 indexed chain, string target, uint256 fee);\n    event Committed(uint256 indexed id, address indexed worker);\n    event Revealed(uint256 indexed id, address indexed worker, bytes32 verdict);\n    event Finalized(uint256 indexed id, bytes32 verdict);\n    event JobFailed(uint256 indexed id);\n    event Penalized(address indexed worker, uint256 amount);\n\n    error BadValue();\n    error BadJob();\n    error NotWorker();\n    error Closed();\n    error AlreadyIn();\n    error NoSeat();\n    error TooEarly();\n    error BadReveal();\n    error Nothing();\n\n    constructor(uint256 bond_, uint256 reward_, uint256 minFee_, uint64 commitWindow_, uint64 timeout_, uint64 unbondDelay_) {\n        if (bond_ == 0 || commitWindow_ == 0 || timeout_ <= commitWindow_ || unbondDelay_ < timeout_) revert BadValue();\n        workerBond = bond_;\n        jobReward = reward_;\n        minFee = minFee_;\n        commitWindow = commitWindow_;\n        jobTimeout = timeout_;\n        unbondDelay = unbondDelay_;\n    }\n\n    // ---- pool and runners ----\n\n    function fund() external payable {\n        if (msg.value == 0) revert BadValue();\n        rewardPool += msg.value;\n        emit Funded(msg.sender, msg.value);\n    }\n\n    function register() external payable {\n        Worker storage w = workers[msg.sender];\n        if (w.active) revert AlreadyIn();\n        if (w.unbondAt != 0) revert TooEarly(); // finish leaving first\n        uint256 bond = uint256(w.bond) + msg.value;\n        if (bond < workerBond) revert BadValue();\n        w.bond = uint128(bond);\n        w.active = true;\n        activeWorkers += 1;\n        emit Registered(msg.sender, bond);\n    }\n\n    /// Leaving takes unbondDelay, so a runner cannot escape a penalty on a job\n    /// it is still part of.\n    function requestUnbond() external {\n        Worker storage w = workers[msg.sender];\n        if (!w.active) revert NotWorker();\n        w.active = false;\n        w.unbondAt = uint64(block.timestamp) + unbondDelay;\n        activeWorkers -= 1;\n        emit UnbondRequested(msg.sender, w.unbondAt);\n    }\n\n    function withdrawBond() external {\n        Worker storage w = workers[msg.sender];\n        if (w.active || w.unbondAt == 0 || block.timestamp < w.unbondAt) revert TooEarly();\n        uint256 amount = w.bond;\n        w.bond = 0;\n        w.unbondAt = 0;\n        credit[msg.sender] += amount;\n    }\n\n    function withdraw() external {\n        uint256 amount = credit[msg.sender];\n        if (amount == 0) revert Nothing();\n        credit[msg.sender] = 0;\n        (bool ok,) = msg.sender.call{value: amount}(\"\");\n        require(ok, \"transfer failed\");\n    }\n\n    // ---- jobs ----\n\n    /// @param chain   chain key as bytes32, e.g. \"bsc\"\n    /// @param target  address on that chain (EVM hex or Solana base58), at most 64 bytes\n    function request(bytes32 chain, string calldata target) external payable returns (uint256 id) {\n        return _request(msg.sender, chain, target);\n    }\n\n    /// Same as request(), but a refund goes to `refundTo`. Used by StableGateway,\n    /// which pays the fee for a user who paid it in a stablecoin.\n    function requestFor(address refundTo, bytes32 chain, string calldata target) external payable returns (uint256 id) {\n        if (refundTo == address(0)) revert BadValue();\n        return _request(refundTo, chain, target);\n    }\n\n    function _request(address requester, bytes32 chain, string calldata target) private returns (uint256 id) {\n        if (msg.value < minFee || chain == bytes32(0) || bytes(target).length == 0 || bytes(target).length > 64) revert BadValue();\n        id = jobs.length;\n        Job storage j = jobs.push();\n        j.requester = requester;\n        j.created = uint64(block.timestamp);\n        j.status = Status.Open;\n        j.chain = chain;\n        j.target = target;\n        j.fee = msg.value;\n        emit JobRequested(id, chain, target, msg.value);\n    }\n\n    /// @param commitment keccak256(abi.encode(verdict, msg.sender, salt))\n    function commit(uint256 id, bytes32 commitment) external {\n        Job storage j = _open(id);\n        if (!workers[msg.sender].active) revert NotWorker();\n        if (block.timestamp >= j.created + commitWindow || j.commits == SEATS) revert NoSeat();\n        for (uint8 i = 0; i < j.commits; i++) if (j.seat[i] == msg.sender) revert AlreadyIn();\n        j.seat[j.commits] = msg.sender;\n        j.commitOf[j.commits] = commitment;\n        j.commits += 1;\n        emit Committed(id, msg.sender);\n    }\n\n    function reveal(uint256 id, bytes32 verdict, bytes32 salt) external {\n        Job storage j = _open(id);\n        if (j.commits < SEATS && block.timestamp < j.created + commitWindow) revert TooEarly();\n        uint8 s = _seatOf(j, msg.sender);\n        if (j.revealed[s]) revert AlreadyIn();\n        if (keccak256(abi.encode(verdict, msg.sender, salt)) != j.commitOf[s]) revert BadReveal();\n        j.revealed[s] = true;\n        j.verdictOf[s] = verdict;\n        j.reveals += 1;\n        emit Revealed(id, msg.sender, verdict);\n\n        // Quorum: this verdict matches QUORUM-1 earlier reveals.\n        uint8 same = 0;\n        for (uint8 i = 0; i < j.commits; i++) if (j.revealed[i] && j.verdictOf[i] == verdict) same++;\n        if (same >= QUORUM) _finalize(id, j, verdict);\n        else if (j.reveals == j.commits && (j.commits == SEATS || block.timestamp >= j.created + commitWindow)) {\n            // Everyone who committed has revealed and no two agree.\n            _fail(id, j, false);\n        }\n    }\n\n    /// Anyone can close a job that ran out of time without a quorum.\n    function expire(uint256 id) external {\n        Job storage j = _open(id);\n        if (block.timestamp < j.created + jobTimeout) revert TooEarly();\n        _fail(id, j, true);\n    }\n\n    // ---- views ----\n\n    function jobCount() external view returns (uint256) {\n        return jobs.length;\n    }\n\n    function getJob(uint256 id) external view returns (\n        address requester, uint64 created, Status status, bytes32 chain, string memory target,\n        uint256 fee, bytes32 result, uint8 commits, uint8 reveals, address[3] memory seat\n    ) {\n        if (id >= jobs.length) revert BadJob();\n        Job storage j = jobs[id];\n        return (j.requester, j.created, j.status, j.chain, j.target, j.fee, j.result, j.commits, j.reveals, j.seat);\n    }\n\n    function seatOf(uint256 id, address worker) external view returns (bool seated, bool revealed_) {\n        if (id >= jobs.length) revert BadJob();\n        Job storage j = jobs[id];\n        for (uint8 i = 0; i < j.commits; i++) if (j.seat[i] == worker) return (true, j.revealed[i]);\n        return (false, false);\n    }\n\n    // ---- internals ----\n\n    function _open(uint256 id) private view returns (Job storage j) {\n        if (id >= jobs.length) revert BadJob();\n        j = jobs[id];\n        if (j.status != Status.Open) revert Closed();\n    }\n\n    function _seatOf(Job storage j, address w) private view returns (uint8) {\n        for (uint8 i = 0; i < j.commits; i++) if (j.seat[i] == w) return i;\n        revert NoSeat();\n    }\n\n    function _finalize(uint256 id, Job storage j, bytes32 verdict) private {\n        j.status = Status.Done;\n        j.result = verdict;\n        uint8 winners = 0;\n        for (uint8 i = 0; i < j.commits; i++) if (j.revealed[i] && j.verdictOf[i] == verdict) winners++;\n        uint256 share = j.fee / winners;\n        uint256 dust = j.fee - share * winners;\n        for (uint8 i = 0; i < j.commits; i++) {\n            address w = j.seat[i];\n            if (j.revealed[i] && j.verdictOf[i] == verdict) {\n                uint256 pay = share;\n                if (rewardPool >= jobReward) { rewardPool -= jobReward; pay += jobReward; }\n                credit[w] += pay;\n                workers[w].agreed += 1;\n            } else if (j.revealed[i]) {\n                workers[w].rejected += 1;\n                _penalize(w);\n            }\n            // A seat that has not revealed yet is judged when the job would\n            // have timed out; after a quorum it simply earns nothing.\n        }\n        rewardPool += dust;\n        emit Finalized(id, verdict);\n    }\n\n    function _fail(uint256 id, Job storage j, bool timedOut) private {\n        j.status = Status.Failed;\n        credit[j.requester] += j.fee;\n        if (timedOut) {\n            for (uint8 i = 0; i < j.commits; i++) if (!j.revealed[i]) _penalize(j.seat[i]);\n        }\n        emit JobFailed(id);\n    }\n\n    function _penalize(address w) private {\n        Worker storage wk = workers[w];\n        uint256 cut = (uint256(wk.bond) * PENALTY_BPS) / 10_000;\n        if (cut == 0) return;\n        wk.bond -= uint128(cut);\n        rewardPool += cut;\n        emit Penalized(w, cut);\n        // Below the bond: stop taking new jobs until topped up.\n        if (wk.active && wk.bond < workerBond) {\n            wk.active = false;\n            activeWorkers -= 1;\n        }\n    }\n}\n"
+      },
+      "contracts/StableGateway.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\ninterface IERC20Permit {\n    function transferFrom(address from, address to, uint256 value) external returns (bool);\n    function transfer(address to, uint256 value) external returns (bool);\n    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external;\n}\n\ninterface INeuroJobs {\n    function requestFor(address refundTo, bytes32 chain, string calldata target) external payable returns (uint256);\n}\n\n/// @title StableGateway: use the Neuro network paying only in a stablecoin\n/// @notice A user who holds a stablecoin but no ZETAPHY signs a job request.\n///         Anyone (a \"relayer\") submits it and pays the gas; in the same\n///         transaction the gateway takes the user's stablecoin (the cost of\n///         the ZETAPHY fee at a fixed testnet price, plus the relayer's tip)\n///         and pays the job fee in ZETAPHY from its own reserve.\n///         Testnet: the price is set by the operator, not a market.\ncontract StableGateway {\n    INeuroJobs public immutable jobs;\n    address public owner;\n\n    /// stablecoin base units charged per 1 ZETAPHY (1e18 wei); 0 = not accepted\n    mapping(address => uint256) public pricePerZeta;\n    mapping(address => uint256) public nonces;\n\n    bytes32 public constant REQUEST_TYPEHASH = keccak256(\n        \"JobRequest(address user,address token,bytes32 chain,string target,uint256 fee,uint256 tip,uint256 maxCost,uint256 nonce,uint256 deadline)\");\n    uint256 private immutable _chainId;\n    bytes32 private immutable _domain;\n\n    struct JobRequest {\n        address user;\n        address token;\n        bytes32 chain;\n        string target;\n        uint256 fee;      // ZETAPHY (wei) the job pays\n        uint256 tip;      // stablecoin units to the relayer\n        uint256 maxCost;  // the most stablecoin the user agrees to spend (cost + tip)\n        uint256 nonce;\n        uint256 deadline;\n    }\n\n    struct Permit { uint256 value; uint256 deadline; uint8 v; bytes32 r; bytes32 s; }\n\n    event PriceSet(address indexed token, uint256 pricePerZeta);\n    event Paid(uint256 indexed jobId, address indexed user, address indexed token, uint256 cost, uint256 tip, address relayer);\n    event OwnerChanged(address owner);\n\n    error NotOwner();\n    error Expired();\n    error BadNonce();\n    error BadSignature();\n    error NotAccepted();\n    error TooExpensive();\n    error ReserveLow();\n\n    constructor(INeuroJobs jobs_) {\n        jobs = jobs_;\n        owner = msg.sender;\n        _chainId = block.chainid;\n        _domain = _buildDomain();\n    }\n\n    receive() external payable {} // ZETAPHY reserve top-up\n\n    modifier onlyOwner() {\n        if (msg.sender != owner) revert NotOwner();\n        _;\n    }\n\n    function setOwner(address o) external onlyOwner {\n        owner = o;\n        emit OwnerChanged(o);\n    }\n\n    function setPrice(address token, uint256 price) external onlyOwner {\n        pricePerZeta[token] = price;\n        emit PriceSet(token, price);\n    }\n\n    /// Stablecoin proceeds go to the treasury the operator names.\n    function sweep(address token, address to, uint256 amount) external onlyOwner {\n        require(IERC20Permit(token).transfer(to, amount), \"transfer failed\");\n    }\n\n    function withdrawReserve(address payable to, uint256 amount) external onlyOwner {\n        (bool ok,) = to.call{value: amount}(\"\");\n        require(ok, \"transfer failed\");\n    }\n\n    /// Stablecoin cost of a job fee, rounded up.\n    function quote(address token, uint256 fee) public view returns (uint256) {\n        uint256 p = pricePerZeta[token];\n        if (p == 0) revert NotAccepted();\n        return (fee * p + 1e18 - 1) / 1e18;\n    }\n\n    function DOMAIN_SEPARATOR() public view returns (bytes32) {\n        return block.chainid == _chainId ? _domain : _buildDomain();\n    }\n\n    function hashRequest(JobRequest calldata q) public view returns (bytes32) {\n        return keccak256(abi.encodePacked(\"\\x19\\x01\", DOMAIN_SEPARATOR(), keccak256(abi.encode(\n            REQUEST_TYPEHASH, q.user, q.token, q.chain, keccak256(bytes(q.target)), q.fee, q.tip, q.maxCost, q.nonce, q.deadline))));\n    }\n\n    /// The user already approved this gateway for the stablecoin.\n    function request(JobRequest calldata q, bytes calldata sig) external returns (uint256) {\n        return _request(q, sig);\n    }\n\n    /// Same, with an EIP-2612 permit so the user needs no approve transaction (no gas at all).\n    function requestWithPermit(JobRequest calldata q, bytes calldata sig, Permit calldata p) external returns (uint256) {\n        // A failed permit is fine if an allowance already exists (e.g. someone front-ran the permit).\n        try IERC20Permit(q.token).permit(q.user, address(this), p.value, p.deadline, p.v, p.r, p.s) {} catch {}\n        return _request(q, sig);\n    }\n\n    function _request(JobRequest calldata q, bytes calldata sig) private returns (uint256 jobId) {\n        if (block.timestamp > q.deadline) revert Expired();\n        if (q.nonce != nonces[q.user]) revert BadNonce();\n        if (_recover(hashRequest(q), sig) != q.user) revert BadSignature();\n        nonces[q.user] = q.nonce + 1;\n\n        uint256 cost = quote(q.token, q.fee);\n        if (cost + q.tip > q.maxCost) revert TooExpensive();\n        if (address(this).balance < q.fee) revert ReserveLow();\n\n        require(IERC20Permit(q.token).transferFrom(q.user, address(this), cost), \"payment failed\");\n        if (q.tip > 0) require(IERC20Permit(q.token).transferFrom(q.user, msg.sender, q.tip), \"tip failed\");\n        jobId = jobs.requestFor{value: q.fee}(q.user, q.chain, q.target);\n        emit Paid(jobId, q.user, q.token, cost, q.tip, msg.sender);\n    }\n\n    function _recover(bytes32 digest, bytes calldata sig) private pure returns (address) {\n        if (sig.length != 65) revert BadSignature();\n        bytes32 r = bytes32(sig[0:32]);\n        bytes32 s = bytes32(sig[32:64]);\n        uint8 v = uint8(sig[64]);\n        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) revert BadSignature();\n        address a = ecrecover(digest, v, r, s);\n        if (a == address(0)) revert BadSignature();\n        return a;\n    }\n\n    function _buildDomain() private view returns (bytes32) {\n        return keccak256(abi.encode(\n            keccak256(\"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)\"),\n            keccak256(bytes(\"ZETAPHY StableGateway\")), keccak256(bytes(\"1\")), block.chainid, address(this)));\n    }\n}\n"
+      },
+      "contracts/TestStable.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @title TestStable: testnet-only stand-in for USDC / USDT on ZETAPHY testnet\n/// @notice Worthless by design. Anyone can take 1,000 from the faucet once a\n///         day. Real USDC arrives only through the bridge in stage 3.\n///         ERC-20 + EIP-2612 permit, 6 decimals like USDC/USDT.\ncontract TestStable {\n    string public name;\n    string public symbol;\n    uint8 public constant decimals = 6;\n    uint256 public constant FAUCET_AMOUNT = 1_000 * 10 ** 6;\n    uint256 public constant FAUCET_EVERY = 1 days;\n\n    uint256 public totalSupply;\n    mapping(address => uint256) public balanceOf;\n    mapping(address => mapping(address => uint256)) public allowance;\n    mapping(address => uint256) public nonces;\n    mapping(address => uint256) public lastFaucet;\n\n    bytes32 public constant PERMIT_TYPEHASH =\n        keccak256(\"Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)\");\n    uint256 private immutable _chainId;\n    bytes32 private immutable _domain;\n\n    event Transfer(address indexed from, address indexed to, uint256 value);\n    event Approval(address indexed owner, address indexed spender, uint256 value);\n\n    constructor(string memory name_, string memory symbol_) {\n        name = name_;\n        symbol = symbol_;\n        _chainId = block.chainid;\n        _domain = _buildDomain();\n    }\n\n    function faucet() external {\n        _drip(msg.sender);\n    }\n\n    /// Lets a relay pay the gas for someone who has no ZETAPHY yet.\n    function faucetTo(address to) external {\n        _drip(to);\n    }\n\n    function _drip(address to) private {\n        require(to != address(0), \"to zero\");\n        require(block.timestamp >= lastFaucet[to] + FAUCET_EVERY, \"faucet: once a day\");\n        lastFaucet[to] = block.timestamp;\n        totalSupply += FAUCET_AMOUNT;\n        balanceOf[to] += FAUCET_AMOUNT;\n        emit Transfer(address(0), to, FAUCET_AMOUNT);\n    }\n\n    function DOMAIN_SEPARATOR() public view returns (bytes32) {\n        return block.chainid == _chainId ? _domain : _buildDomain();\n    }\n\n    function approve(address spender, uint256 value) external returns (bool) {\n        allowance[msg.sender][spender] = value;\n        emit Approval(msg.sender, spender, value);\n        return true;\n    }\n\n    function transfer(address to, uint256 value) external returns (bool) {\n        _move(msg.sender, to, value);\n        return true;\n    }\n\n    function transferFrom(address from, address to, uint256 value) external returns (bool) {\n        uint256 a = allowance[from][msg.sender];\n        if (a != type(uint256).max) {\n            require(a >= value, \"allowance\");\n            allowance[from][msg.sender] = a - value;\n        }\n        _move(from, to, value);\n        return true;\n    }\n\n    function permit(address owner, address spender, uint256 value, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external {\n        require(block.timestamp <= deadline, \"permit: expired\");\n        bytes32 digest = keccak256(abi.encodePacked(\"\\x19\\x01\", DOMAIN_SEPARATOR(),\n            keccak256(abi.encode(PERMIT_TYPEHASH, owner, spender, value, nonces[owner]++, deadline))));\n        require(uint256(s) <= 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0, \"permit: bad s\");\n        address signer = ecrecover(digest, v, r, s);\n        require(signer != address(0) && signer == owner, \"permit: bad signature\");\n        allowance[owner][spender] = value;\n        emit Approval(owner, spender, value);\n    }\n\n    function _move(address from, address to, uint256 value) private {\n        require(to != address(0), \"to zero\");\n        uint256 b = balanceOf[from];\n        require(b >= value, \"balance\");\n        unchecked { balanceOf[from] = b - value; }\n        balanceOf[to] += value;\n        emit Transfer(from, to, value);\n    }\n\n    function _buildDomain() private view returns (bytes32) {\n        return keccak256(abi.encode(\n            keccak256(\"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)\"),\n            keccak256(bytes(name)), keccak256(bytes(\"1\")), block.chainid, address(this)));\n    }\n}\n"
+      }
+    },
+    "settings": {
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "evmVersion": "cancun",
+      "outputSelection": {
+        "*": {
+          "*": [
+            "abi",
+            "evm.bytecode.object",
+            "evm.deployedBytecode.object"
+          ]
+        }
+      }
+    }
+  }
+}
