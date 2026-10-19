@@ -52,6 +52,7 @@ const T = {
     'selfdestruct': () => 'โค้ดมีคำสั่งทำลายสัญญา (SELFDESTRUCT) ถ้าถูกเรียกใช้ อาจลบหรือย้ายเงินในสัญญาได้',
     'delegatecall': () => 'โค้ดเรียกใช้โค้ดของสัญญาอื่นแทนตัวเองได้ (DELEGATECALL) โค้ดที่ทำงานจริงจึงอาจไม่ใช่โค้ดที่เห็นตรงนี้',
     'nothing-found': () => 'ไม่พบสิทธิ์พิเศษหรือคำสั่งอันตรายตามกฎที่ตรวจ',
+    'unknown-functions': (p) => `มีอีก ${p.count} ฟังก์ชันที่ Neuro ไม่รู้จักชื่อ (${(p.selectors ?? []).map((x) => '0x' + x).join(', ')}) ตรวจไม่ได้ว่าทำอะไร ถ้าเจ้าของยังคุมสัญญาอยู่ อาจเป็นสิทธิ์พิเศษ เช่น ตั้งภาษีหรือเพดานการซื้อขาย`,
     'bytecode-only': () => 'ตรวจจากโค้ดบนเชนด้วยกฎตายตัว อาจพลาดกลโกงที่ซ่อนชื่อฟังก์ชันแปลกๆ ไม่ใช่คำแนะนำการลงทุน',
     // Solana
     'sol-not-found': () => 'ไม่พบบัญชีนี้บน Solana อาจพิมพ์ผิด หรือเลือกเชนผิด',
@@ -114,6 +115,7 @@ const T = {
     'selfdestruct': () => 'The code contains SELFDESTRUCT. If triggered, it can wipe the contract or move its funds.',
     'delegatecall': () => 'The code can run another contract\'s code as its own (DELEGATECALL), so the code that really runs may not be the code shown here.',
     'nothing-found': () => 'No special powers or dangerous instructions found by these rules.',
+    'unknown-functions': (p) => `${p.count} more function(s) Neuro cannot name (${(p.selectors ?? []).map((x) => '0x' + x).join(', ')}), so what they do is unknown. While an owner still controls the contract, they may be privileged, e.g. setting a tax or trading limits.`,
     'bytecode-only': () => 'Checked from on-chain code with fixed rules. Scams that hide behind unusual function names can be missed. Not investment advice.',
     // Solana
     'sol-not-found': () => 'No account at this address on Solana. It may be mistyped, or the wrong chain is selected.',

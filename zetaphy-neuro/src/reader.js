@@ -102,6 +102,7 @@ export async function readContract(chainKey, address, opts = {}) {
     if (logicCode && logicCode !== '0x') logic = scanBytecode(logicCode);
   }
   const functions = [...new Map([...own.functions, ...logic.functions].map((f) => [f.selector, f])).values()];
+  const unknownSelectors = [...new Set([...own.unknownSelectors, ...logic.unknownSelectors])].sort();
   const has = (sig) => functions.some((f) => f.sig === sig);
 
   // Token details (calls go to the address itself; a proxy forwards them)
@@ -131,8 +132,9 @@ export async function readContract(chainKey, address, opts = {}) {
     && (!t.chains || t.chains.includes(chainKey))) ?? null;
   const known = knownToken(chainKey, addr);
   const lookalike = isTokenContract(functions) ? lookalikeOf(chainKey, addr, token.symbol) : null;
-  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike });
+  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike, unknownSelectors });
   report.functions = functions.map((f) => f.sig).sort();
+  if (unknownSelectors.length) report.unknownSelectors = unknownSelectors;
   report.reportHash = await sha256Hex(canonical(report));
   return report;
 }

@@ -62,6 +62,7 @@ test('scam token shows high risk in Thai, then English', async () => {
   const items = await page.$$eval('#findings li', (els) => els.map((e) => e.textContent));
   assert.ok(items.some((t) => t.includes('สร้างเหรียญเพิ่มได้')));
   assert.ok(page.url().includes(`address=${addr}`), 'shareable link');
+  assert.match(await page.textContent('#meta'), /fp1:[0-9a-f]{64}/, 'fingerprint shown for template registration');
   if (shots) await page.screenshot({ path: `${shots}/neuro-scam-th.png`, fullPage: true });
   await page.click('#lang');
   assert.equal(await page.textContent('#title'), 'High risk');

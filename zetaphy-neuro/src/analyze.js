@@ -33,6 +33,7 @@ const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|xyz|app|sit
  * @param {{project:string,name:string,guarantees?:string[]}|null} [input.template]  registered template this code matches
  * @param {{symbol:string,issuer:string,kind:string,address:string}|null} [input.known]  official token at this exact address
  * @param {{symbol:string,issuer:string,address:string}|null} [input.lookalike]  official token whose symbol this one copies
+ * @param {string[]} [input.unknownSelectors]  dispatcher functions with no known name
  * @returns {{level:'high'|'medium'|'low'|'info', control:string, findings:Array}}
  */
 export function analyze(input) {
@@ -118,6 +119,15 @@ export function analyze(input) {
     add(p.id, severity, params);
   }
   if (cats.has('feeExempt')) add('fee-exempt', 'info', { functions: sigsIn('feeExempt') });
+
+  // Functions we cannot name. With someone still in control they may be
+  // privileged (a tax or limit setter under an unusual name), so never claim
+  // "nothing found" over them.
+  const unknown = input.unknownSelectors ?? [];
+  if (unknown.length) {
+    const controlled = control !== 'renounced';
+    add('unknown-functions', controlled ? issuerCap('low') : 'info', { count: unknown.length, selectors: unknown.slice(0, 12) });
+  }
 
   // Dangerous instructions in the logic contract
   if (input.opcodes?.selfdestruct) add('selfdestruct', 'high');
