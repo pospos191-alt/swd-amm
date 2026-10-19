@@ -129,3 +129,22 @@ contract UpgradeableToken {
         assembly { sstore(0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc, n) }
     }
 }
+
+// Launcher-style token following ZETAPHY's rules: tax can only go down, no
+// mint, no blacklist, no pause. Constructor values are immutables, so two
+// tokens from this template differ in bytecode but share a fingerprint.
+contract ZetaStyleToken is BaseToken, Owned {
+    uint256 public immutable initialSupply;
+    address public immutable launcher = msg.sender;
+    uint256 public tax;
+
+    constructor(uint256 supply, uint256 initialTax) BaseToken("Zeta Style", "ZST", supply) {
+        initialSupply = supply;
+        tax = initialTax;
+    }
+
+    function setTax(uint256 t) external onlyOwner {
+        require(t <= tax, "tax can only go down");
+        tax = t;
+    }
+}

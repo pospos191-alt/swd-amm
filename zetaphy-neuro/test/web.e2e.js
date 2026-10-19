@@ -74,6 +74,26 @@ test('phishing token name is shown as text, never as HTML', async () => {
   await page.close();
 });
 
+test('each successful check is counted, and the stats page shows it', async () => {
+  const before = await (await fetch(`http://localhost:${PORT}/api/usage`)).json();
+  const addr = await chain.deploy('CleanToken');
+  const { page, errors } = await openPage('light');
+  await page.fill('#address', addr);
+  const counted = page.waitForResponse((r) => r.url().endsWith('/api/usage') && r.request().method() === 'POST');
+  await page.click('#go');
+  assert.equal((await counted).status(), 202);
+  await page.click('a[href="./stats.html"]');
+  await page.waitForFunction(() => document.getElementById('users').textContent !== '–');
+  const users = Number((await page.textContent('#users')).replace(/,/g, ''));
+  const checks = Number((await page.textContent('#checks')).replace(/,/g, ''));
+  assert.equal(users, 1, 'one visitor (same IP and browser) across all tests');
+  assert.equal(checks, before.checks + 1);
+  assert.match(await page.textContent('#pct'), /^\d+%$/);
+  if (shots) await page.screenshot({ path: `${shots}/neuro-stats.png`, fullPage: true });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 test('bad address shows an error without any RPC call', async () => {
   const { page } = await openPage('light');
   let calls = 0;

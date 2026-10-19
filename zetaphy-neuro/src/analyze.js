@@ -16,6 +16,9 @@ const POWERS = [
   { cat: 'limit', id: 'can-limit', base: 'medium' },
 ];
 
+// Template guarantee -> the power category it rules out.
+const GUARANTEED_ABSENT = { 'no-mint': 'mint', 'no-blacklist': 'blacklist', 'no-pause': 'pause' };
+
 // A name like "Claim at reward-site.xyz" is a common phishing airdrop trick.
 const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|xyz|app|site|top|vip|pro|finance|claims?|gift|live|online|info)\b|t\.me\/)/i;
 
@@ -27,6 +30,7 @@ const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|xyz|app|sit
  * @param {{kind:'eip1967'|'beacon'|'eip1167'|null, implementation?:string, admin?:string}} input.proxy
  * @param {{name?:string,symbol?:string,decimals?:number,totalSupply?:string}} input.token
  * @param {string|null|undefined} input.owner  undefined = no owner() found or call failed
+ * @param {{project:string,name:string,guarantees?:string[]}|null} [input.template]  registered template this code matches
  * @returns {{level:'high'|'medium'|'low'|'info', control:string, findings:Array}}
  */
 export function analyze(input) {
@@ -77,13 +81,29 @@ export function analyze(input) {
   if (control === 'roles') add('roles', 'medium');
   if (control === 'unknown' && POWERS.some((p) => cats.has(p.cat))) add('owner-unknown', 'medium');
 
+  // Registered template (e.g. a ZETAPHY launcher token)
+  const tpl = input.template ?? null;
+  const promised = new Set(tpl?.guarantees ?? []);
+  if (tpl) add('template-match', 'good', { project: tpl.project, name: tpl.name });
+  for (const [key, cat] of Object.entries(GUARANTEED_ABSENT)) {
+    // The registry says this power cannot exist, yet the code has it: the
+    // registry entry is wrong or the template changed. Never trust it silently.
+    if (promised.has(key) && cats.has(cat)) add('template-mismatch', 'high', { project: tpl.project, functions: sigsIn(cat) });
+  }
+
   // Powers held by whoever controls it. Renounced ownership lowers them to
   // "low": the code is still there, but the usual onlyOwner guard can no
   // longer be passed (we cannot prove every function uses that guard).
   for (const p of POWERS) {
     if (!cats.has(p.cat)) continue;
-    const severity = control === 'renounced' ? 'low' : p.base;
-    add(p.id, severity, { functions: sigsIn(p.cat) });
+    let severity = control === 'renounced' ? 'low' : p.base;
+    const params = { functions: sigsIn(p.cat) };
+    if (p.cat === 'fee' && promised.has('tax-decrease-only')) {
+      severity = 'low';
+      params.decreaseOnly = true;
+      params.project = tpl.project;
+    }
+    add(p.id, severity, params);
   }
   if (cats.has('feeExempt')) add('fee-exempt', 'info', { functions: sigsIn('feeExempt') });
 

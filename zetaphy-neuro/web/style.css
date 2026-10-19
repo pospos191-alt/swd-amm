@@ -39,3 +39,10 @@ dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
 a { color: var(--accent); }
 footer { margin-top: 24px; color: var(--muted); font-size: .85rem; }
+footer p { margin: 4px 0; }
+.stats { display: grid; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+.big { font-size: 2.2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.meter { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.meter > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 999px; }
+.row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .92rem; }
+.row b { color: var(--text); font-variant-numeric: tabular-nums; }

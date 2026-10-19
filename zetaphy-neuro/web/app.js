@@ -8,11 +8,11 @@ const $ = (id) => document.getElementById(id);
 const UI = {
   th: { subtitle: 'อ่านและอธิบายสัญญา · ชั้น 1 อ่านอย่างเดียว', chain: 'เชน', address: 'ที่อยู่สัญญา', check: 'ตรวจสัญญา',
     details: 'รายละเอียด', reading: 'กำลังอ่านสัญญาจากเชน…', badAddress: 'ที่อยู่ไม่ถูกต้อง ต้องขึ้นต้นด้วย 0x และยาว 42 ตัวอักษร',
-    failed: 'อ่านไม่สำเร็จ: ', footer: 'ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม อ่านข้อมูลจากเชนผ่าน RPC สาธารณะเท่านั้น ผลตรวจไม่ใช่คำแนะนำการลงทุน',
+    failed: 'อ่านไม่สำเร็จ: ', footer: 'ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม อ่านข้อมูลจากเชนผ่าน RPC สาธารณะเท่านั้น ผลตรวจไม่ใช่คำแนะนำการลงทุน', stats: 'สถิติการใช้งาน',
     m: { chain: 'เชน', address: 'ที่อยู่', proxy: 'Proxy', implementation: 'โค้ดหลัก', owner: 'เจ้าของ', functions: 'ฟังก์ชันที่รู้จัก', report: 'รหัสรายงาน', explorer: 'ดูบน explorer' } },
   en: { subtitle: 'Reads and explains contracts · tier 1, read-only', chain: 'Chain', address: 'Contract address', check: 'Check contract',
     details: 'Details', reading: 'Reading the contract from the chain…', badAddress: 'Invalid address: it must start with 0x and be 42 characters long',
-    failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data only. Not investment advice.',
+    failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data only. Not investment advice.', stats: 'Usage stats',
     m: { chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer' } },
 };
 
@@ -69,6 +69,17 @@ function render(report) {
   $('result').hidden = false;
 }
 
+// Counts one "check" toward the monthly user goal. Sends nothing about the
+// contract or the visitor; skipped when the browser asks not to be tracked.
+function reportUsage() {
+  if (navigator.doNotTrack === '1' || navigator.globalPrivacyControl === true) return;
+  if (!/^https?:$/.test(location.protocol)) return;
+  fetch('/api/usage', {
+    method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ event: 'check' }),
+  }).catch(() => { /* counter is optional */ });
+}
+
 async function run(chain, address) {
   if (!isAddress(address)) { status(UI[lang].badAddress, true); return; }
   $('go').disabled = true;
@@ -78,6 +89,7 @@ async function run(chain, address) {
     last = await readContract(chain, address);
     render(last);
     status('');
+    reportUsage();
     const u = new URL(location.href);
     u.searchParams.set('chain', chain); u.searchParams.set('address', address);
     history.replaceState(null, '', u);

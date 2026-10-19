@@ -6,6 +6,8 @@ import { createRpc } from './rpc.js';
 import { scanBytecode, minimalProxyTarget, hexToBytes } from './bytecode.js';
 import { decodeAddress, decodeUint, decodeString, cleanText } from './abi.js';
 import { analyze } from './analyze.js';
+import { codeFingerprint } from './fingerprint.js';
+import { TEMPLATES } from './templates.js';
 
 export const REPORT_VERSION = 1;
 
@@ -39,7 +41,8 @@ function canonical(v) {
 /**
  * @param {string} chainKey  'bsc' | 'base' | 'arbitrum'
  * @param {string} address
- * @param {{rpc?: {call: Function}, fetchImpl?: Function}} [opts]  inject an rpc for tests
+ * @param {{rpc?: {call: Function}, fetchImpl?: Function, templates?: Array}} [opts]
+ *   rpc/fetchImpl: inject for tests; templates: defaults to src/templates.js
  */
 export async function readContract(chainKey, address, opts = {}) {
   const chain = CHAINS[chainKey];
@@ -117,7 +120,11 @@ export async function readContract(chainKey, address, opts = {}) {
   report.owner = owner;
   report.codeHash = await sha256Hex(code.toLowerCase());
   if (logicCode) report.logicCodeHash = await sha256Hex(logicCode.toLowerCase());
-  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner });
+  // Template match uses the code that actually runs (the implementation behind a proxy).
+  report.fingerprint = await codeFingerprint(logicCode && logicCode !== '0x' ? logicCode : code);
+  const template = (opts.templates ?? TEMPLATES).find((t) => t.fingerprint === report.fingerprint
+    && (!t.chains || t.chains.includes(chainKey))) ?? null;
+  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template });
   report.functions = functions.map((f) => f.sig).sort();
   report.reportHash = await sha256Hex(canonical(report));
   return report;

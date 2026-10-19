@@ -31,7 +31,11 @@ const T = {
     'can-mint': (p) => `สร้างเหรียญเพิ่มได้ (${list(p.functions)}) ทำให้เหรียญที่คุณถือมีสัดส่วนลดลง หรือถูกเทขายจนราคาตก`,
     'can-blacklist': (p) => `บล็อกกระเป๋าบางใบได้ (${list(p.functions)}) ถ้ากระเป๋าคุณถูกบล็อก อาจขายหรือโอนไม่ได้`,
     'can-pause': (p) => `หยุดการโอนทั้งหมดได้ (${list(p.functions)}) ทุกคนอาจขายไม่ได้ชั่วคราวหรือถาวร`,
-    'can-change-fee': (p) => `เปลี่ยนภาษีซื้อขายได้ (${list(p.functions)}) ถ้าตั้งภาษีขายสูงมาก จะขายแล้วแทบไม่เหลือเงิน`,
+    'can-change-fee': (p) => (p.decreaseOnly
+      ? `ปรับภาษีได้ (${list(p.functions)}) แต่ตามแม่แบบ ${p.project} ลดได้อย่างเดียว ขึ้นไม่ได้`
+      : `เปลี่ยนภาษีซื้อขายได้ (${list(p.functions)}) ถ้าตั้งภาษีขายสูงมาก จะขายแล้วแทบไม่เหลือเงิน`),
+    'template-match': (p) => `ตรงกับแม่แบบเหรียญ ${p.project} ที่ลงทะเบียนไว้ (${p.name}) กติกาของแม่แบบนี้ยังไม่ผ่าน audit`,
+    'template-mismatch': (p) => `โค้ดตรงกับแม่แบบ ${p.project} แต่มีสิทธิ์ที่แม่แบบบอกว่าไม่มี (${list(p.functions)}) ข้อมูลแม่แบบอาจผิด อย่าเชื่อจนกว่าจะตรวจ`,
     'trading-switch': (p) => `มีสวิตช์เปิดปิดการเทรด (${list(p.functions)}) ก่อนเปิด อาจซื้อได้แต่ขายไม่ได้`,
     'can-limit': (p) => `กำหนดเพดานต่อรายการหรือต่อกระเป๋าได้ (${list(p.functions)}) ถ้าตั้งต่ำมาก อาจขายไม่ได้`,
     'fee-exempt': (p) => `ยกเว้นภาษีให้บางกระเป๋าได้ (${list(p.functions)}) เป็นเรื่องปกติของเหรียญที่มีภาษี แต่ทำให้บางคนได้เปรียบ`,
@@ -54,7 +58,11 @@ const T = {
     'can-mint': (p) => `Can create new tokens (${list(p.functions)}), diluting holders or flooding the market.`,
     'can-blacklist': (p) => `Can block specific wallets (${list(p.functions)}). A blocked wallet may be unable to sell or transfer.`,
     'can-pause': (p) => `Can freeze all transfers (${list(p.functions)}). Nobody may be able to sell.`,
-    'can-change-fee': (p) => `Can change the buy/sell tax (${list(p.functions)}). A very high sell tax means selling returns almost nothing.`,
+    'can-change-fee': (p) => (p.decreaseOnly
+      ? `Can adjust the tax (${list(p.functions)}), but the ${p.project} template only allows lowering it.`
+      : `Can change the buy/sell tax (${list(p.functions)}). A very high sell tax means selling returns almost nothing.`),
+    'template-match': (p) => `Matches the registered ${p.project} token template (${p.name}). The template's rules are not audited yet.`,
+    'template-mismatch': (p) => `Code matches the ${p.project} template but has a power the template says it lacks (${list(p.functions)}). The template record may be wrong; do not trust it until checked.`,
     'trading-switch': (p) => `Has a trading on/off switch (${list(p.functions)}). Before it is on, you may be able to buy but not sell.`,
     'can-limit': (p) => `Can set per-transaction or per-wallet limits (${list(p.functions)}). Very low limits can block selling.`,
     'fee-exempt': (p) => `Can exempt chosen wallets from tax (${list(p.functions)}). Common in taxed tokens, but it gives some wallets an edge.`,

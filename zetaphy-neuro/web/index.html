@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src https:; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https:; img-src 'self' data:; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Neuro ZETAPHY</title>
 <link rel="stylesheet" href="./style.css">
@@ -37,7 +37,10 @@
     </details>
   </section>
 
-  <footer data-i18n="footer">ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม อ่านข้อมูลจากเชนผ่าน RPC สาธารณะเท่านั้น ผลตรวจไม่ใช่คำแนะนำการลงทุน</footer>
+  <footer>
+    <p data-i18n="footer">ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม อ่านข้อมูลจากเชนผ่าน RPC สาธารณะเท่านั้น ผลตรวจไม่ใช่คำแนะนำการลงทุน</p>
+    <p><a href="./stats.html" data-i18n="stats">สถิติการใช้งาน</a></p>
+  </footer>
 </main>
 <script type="module" src="./app.js"></script>
 </body>
