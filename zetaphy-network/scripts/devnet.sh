@@ -9,7 +9,7 @@
 set -euo pipefail
 HOME_DIR=$1; PORT=$2; shift 2
 BIN=${ZETAPHYD:-zetaphyd}
-DENOM=azetaphy; CHAIN_ID=zetaphy-local-1; EVM_CHAIN_ID=77390
+DENOM=azetaphy; CHAIN_ID=${COSMOS_CHAIN_ID:-zetaphy-local-1}; EVM_CHAIN_ID=${EVM_CHAIN_ID:-77390}
 K="--keyring-backend test --home $HOME_DIR"
 rm -rf "$HOME_DIR"; mkdir -p "$HOME_DIR"
 
