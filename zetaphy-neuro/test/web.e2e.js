@@ -27,7 +27,9 @@ before(async () => {
 });
 after(async () => { await browser?.close(); server?.kill(); });
 
-async function openPage(scheme) {
+const SOL_GENESIS = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
+
+async function openPage(scheme, solanaAccounts = {}) {
   const page = await browser.newPage({ colorScheme: scheme });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -36,7 +38,11 @@ async function openPage(scheme) {
     const { id, method, params } = JSON.parse(route.request().postData());
     let body;
     try {
-      body = { jsonrpc: '2.0', id, result: method === 'eth_chainId' ? '0x38' : await chain.rpc.call(method, params) };
+      let result;
+      if (method === 'getGenesisHash') result = SOL_GENESIS;
+      else if (method === 'getAccountInfo') result = { value: solanaAccounts[params[0]] ?? null };
+      else result = method === 'eth_chainId' ? '0x38' : await chain.rpc.call(method, params);
+      body = { jsonrpc: '2.0', id, result };
     } catch (e) {
       body = { jsonrpc: '2.0', id, error: { code: 3, message: e.message } };
     }
@@ -90,6 +96,30 @@ test('each successful check is counted, and the stats page shows it', async () =
   assert.equal(checks, before.checks + 1);
   assert.match(await page.textContent('#pct'), /^\d+%$/);
   if (shots) await page.screenshot({ path: `${shots}/neuro-stats.png`, fullPage: true });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('Solana: a token with a permanent delegate is shown as high risk', async () => {
+  const mint = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
+  const { page, errors } = await openPage('light', {
+    [mint]: { owner: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb', data: { program: 'spl-token-2022', parsed: { type: 'mint', info: {
+      decimals: 6, supply: '1000000000', mintAuthority: null, freezeAuthority: null, isInitialized: true,
+      extensions: [
+        { extension: 'permanentDelegate', state: { delegate: mint } },
+        { extension: 'tokenMetadata', state: { updateAuthority: null, mint, name: 'Sneaky', symbol: 'SNK', uri: '', additionalMetadata: [] } },
+      ] } } } },
+  });
+  await page.selectOption('#chain', 'sol');
+  assert.equal(await page.getAttribute('#address', 'placeholder'), 'EPjFWdd5…');
+  await page.fill('#address', mint);
+  await page.click('#go');
+  await page.waitForSelector('#result:not([hidden])');
+  assert.equal(await page.textContent('#title'), 'เสี่ยงสูง');
+  const items = await page.$$eval('#findings li', (els) => els.map((e) => e.textContent));
+  assert.ok(items[0].includes('Sneaky'));
+  assert.ok(items.some((t) => t.includes('permanent delegate')));
+  if (shots) await page.screenshot({ path: `${shots}/neuro-solana.png`, fullPage: true });
   assert.deepEqual(errors, []);
   await page.close();
 });

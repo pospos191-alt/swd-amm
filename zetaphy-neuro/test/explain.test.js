@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { explain } from '../src/explain.js';
 
-test('every finding id used by analyze.js has Thai and English text', () => {
-  const src = readFileSync(new URL('../src/analyze.js', import.meta.url), 'utf8');
+test('every finding id used by analyze.js and solana.js has Thai and English text', () => {
+  const src = readFileSync(new URL('../src/analyze.js', import.meta.url), 'utf8')
+    + readFileSync(new URL('../src/solana.js', import.meta.url), 'utf8');
   const used = new Set([...src.matchAll(/(?:add\(|id: )'([a-z0-9-]+)'/g)].map((m) => m[1]));
   assert.ok(used.size > 10);
   for (const id of used) {

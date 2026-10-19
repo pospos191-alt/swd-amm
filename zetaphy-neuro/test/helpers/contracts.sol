@@ -148,3 +148,9 @@ contract ZetaStyleToken is BaseToken, Owned {
         tax = t;
     }
 }
+
+// Copies USDT's name and symbol at an unofficial address.
+contract FakeUSDT is BaseToken, Owned {
+    constructor() BaseToken("Tether USD", "USDT", 1e24) {}
+    function mint(address to, uint256 v) external onlyOwner { _mint(to, v); }
+}

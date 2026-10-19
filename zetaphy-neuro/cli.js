@@ -20,6 +20,7 @@ function usage() {
 }
 
 async function fingerprint(chain, address) {
+  if (CHAINS[chain]?.kind === 'solana') throw new Error('fingerprints are for EVM contracts; Solana tokens are recognised by their mint settings');
   const r = await readContract(chain, address);
   if (!r.fingerprint) throw new Error('no contract code at this address');
   const has = (id) => r.analysis.findings.some((f) => f.id === id);

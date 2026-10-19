@@ -31,11 +31,17 @@ const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|xyz|app|sit
  * @param {{name?:string,symbol?:string,decimals?:number,totalSupply?:string}} input.token
  * @param {string|null|undefined} input.owner  undefined = no owner() found or call failed
  * @param {{project:string,name:string,guarantees?:string[]}|null} [input.template]  registered template this code matches
+ * @param {{symbol:string,issuer:string,kind:string,address:string}|null} [input.known]  official token at this exact address
+ * @param {{symbol:string,issuer:string,address:string}|null} [input.lookalike]  official token whose symbol this one copies
  * @returns {{level:'high'|'medium'|'low'|'info', control:string, findings:Array}}
  */
 export function analyze(input) {
   const findings = [];
   const add = (id, severity, params = {}) => findings.push({ id, severity, params });
+  const known = input.known ?? null;
+  // For an official issuer's own contract, powers the issuer is expected to
+  // hold are about trusting the issuer, not hidden code: cap them at "low".
+  const issuerCap = (severity) => (known && RANK[severity] > RANK.low ? 'low' : severity);
 
   if (!input.hasCode) {
     add('no-code', 'info');
@@ -45,9 +51,10 @@ export function analyze(input) {
   const cats = new Set(input.functions.map((f) => f.cat));
   const sigsIn = (cat) => input.functions.filter((f) => f.cat === cat).map((f) => f.sig);
   const proxy = input.proxy ?? { kind: null };
-  // implementation() alone is only a getter; upgradeTo* is what swaps the code.
+  // implementation() alone is only a getter; upgradeTo* (or USDT's deprecate,
+  // which forwards all calls to a new contract) is what swaps the code.
   const upgradeable = proxy.kind === 'eip1967' || proxy.kind === 'beacon'
-    || sigsIn('upgrade').some((s) => s.startsWith('upgradeTo'));
+    || sigsIn('upgrade').some((s) => s.startsWith('upgradeTo') || s === 'deprecate(address)');
 
   // Who controls the contract?
   let control;
@@ -67,19 +74,23 @@ export function analyze(input) {
   if ((t.name && LINK_RE.test(t.name)) || (t.symbol && LINK_RE.test(t.symbol))) {
     add('name-has-link', 'high', { name: t.name, symbol: t.symbol });
   }
+  if (known) add('known-issuer', 'good', { symbol: known.symbol, issuer: known.issuer, kind: known.kind });
+  if (input.lookalike) {
+    add('lookalike', 'high', { symbol: t.symbol, official: input.lookalike.address, issuer: input.lookalike.issuer });
+  }
 
   // Proxy / upgrade
   if (proxy.kind === 'eip1167') {
     add('proxy-minimal', 'info', { implementation: proxy.implementation });
   } else if (upgradeable) {
-    add('proxy-upgradeable', 'high', { implementation: proxy.implementation, admin: proxy.admin, kind: proxy.kind });
+    add('proxy-upgradeable', issuerCap('high'), { implementation: proxy.implementation, admin: proxy.admin, kind: proxy.kind, issuer: known?.issuer });
   }
 
   // Control
   if (control === 'owner') add('owner-active', 'info', { owner: input.owner });
   if (control === 'renounced') add('owner-renounced', 'good');
-  if (control === 'roles') add('roles', 'medium');
-  if (control === 'unknown' && POWERS.some((p) => cats.has(p.cat))) add('owner-unknown', 'medium');
+  if (control === 'roles') add('roles', issuerCap('medium'));
+  if (control === 'unknown' && POWERS.some((p) => cats.has(p.cat))) add('owner-unknown', issuerCap('medium'));
 
   // Registered template (e.g. a ZETAPHY launcher token)
   const tpl = input.template ?? null;
@@ -96,8 +107,9 @@ export function analyze(input) {
   // longer be passed (we cannot prove every function uses that guard).
   for (const p of POWERS) {
     if (!cats.has(p.cat)) continue;
-    let severity = control === 'renounced' ? 'low' : p.base;
+    let severity = issuerCap(control === 'renounced' ? 'low' : p.base);
     const params = { functions: sigsIn(p.cat) };
+    if (known) params.issuer = known.issuer;
     if (p.cat === 'fee' && promised.has('tax-decrease-only')) {
       severity = 'low';
       params.decreaseOnly = true;

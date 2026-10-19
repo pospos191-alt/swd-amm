@@ -105,5 +105,5 @@ for (const optimize of [true, false]) {
 test('rejects bad input before touching the network', async () => {
   const rpc = { call: async () => { throw new Error('should not be called'); } };
   await assert.rejects(readContract('bsc', '0x123', { rpc }), /invalid address/);
-  await assert.rejects(readContract('eth', '0x' + '00'.repeat(20), { rpc }), /unknown chain/);
+  await assert.rejects(readContract('polygon', '0x' + '00'.repeat(20), { rpc }), /unknown chain/);
 });

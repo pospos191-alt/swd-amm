@@ -1,16 +1,16 @@
-// Minimal JSON-RPC client. Read-only methods only: this module has no way to
+// Minimal JSON-RPC clients. Read-only methods only: this module has no way to
 // sign or send a transaction, by design (Neuro tier 1 never moves funds).
 
-const ALLOWED = new Set(['eth_chainId', 'eth_getCode', 'eth_getStorageAt', 'eth_call']);
+const EVM_ALLOWED = new Set(['eth_chainId', 'eth_getCode', 'eth_getStorageAt', 'eth_call']);
+const SOLANA_ALLOWED = new Set(['getGenesisHash', 'getAccountInfo']);
 
 export class RpcError extends Error {}
 
 /**
- * Makes an RPC client over a list of URLs. `fetchImpl` is injectable for tests.
- * Checks eth_chainId once per URL so a misconfigured endpoint for another chain
- * is never trusted.
+ * Shared client: tries each URL in order, and before trusting a URL checks
+ * once (via `identify`) that it really serves the expected chain.
  */
-export function createRpc(urls, expectedChainId, { fetchImpl = globalThis.fetch, timeoutMs = 15000 } = {}) {
+function makeClient(urls, { allowed, identify, fetchImpl = globalThis.fetch, timeoutMs = 15000 }) {
   const verified = new Set();
   let id = 0;
 
@@ -34,13 +34,12 @@ export function createRpc(urls, expectedChainId, { fetchImpl = globalThis.fetch,
   }
 
   async function call(method, params) {
-    if (!ALLOWED.has(method)) throw new RpcError(`method not allowed: ${method}`);
+    if (!allowed.has(method)) throw new RpcError(`method not allowed: ${method}`);
     let lastErr;
     for (const url of urls) {
       try {
         if (!verified.has(url)) {
-          const cid = parseInt(await post(url, 'eth_chainId', []), 16);
-          if (cid !== expectedChainId) throw new RpcError(`wrong chain ${cid} at ${url}`);
+          await identify((m, p) => post(url, m, p), url);
           verified.add(url);
         }
         return await post(url, method, params);
@@ -52,4 +51,28 @@ export function createRpc(urls, expectedChainId, { fetchImpl = globalThis.fetch,
   }
 
   return { call };
+}
+
+/** EVM client; refuses endpoints whose eth_chainId differs from `expectedChainId`. */
+export function createRpc(urls, expectedChainId, opts = {}) {
+  return makeClient(urls, {
+    ...opts,
+    allowed: EVM_ALLOWED,
+    identify: async (post, url) => {
+      const cid = parseInt(await post('eth_chainId', []), 16);
+      if (cid !== expectedChainId) throw new RpcError(`wrong chain ${cid} at ${url}`);
+    },
+  });
+}
+
+/** Solana client; refuses endpoints whose genesis hash is not `genesisHash`. */
+export function createSolanaRpc(urls, genesisHash, opts = {}) {
+  return makeClient(urls, {
+    ...opts,
+    allowed: SOLANA_ALLOWED,
+    identify: async (post, url) => {
+      const g = await post('getGenesisHash', []);
+      if (g !== genesisHash) throw new RpcError(`wrong cluster ${g} at ${url}`);
+    },
+  });
 }
