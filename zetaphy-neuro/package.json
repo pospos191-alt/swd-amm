@@ -1,0 +1,27 @@
+{
+  "name": "zetaphy-neuro",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Neuro ZETAPHY tier 1: read-only smart-contract reader and explainer for BNB Chain, Base and Arbitrum",
+  "type": "module",
+  "bin": {
+    "zetaphy-neuro": "./cli.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "selectors": "node scripts/build-selectors.js",
+    "web": "node scripts/serve.js",
+    "test:web": "node --test test/web.e2e.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@ethereumjs/common": "^4.4.0",
+    "@ethereumjs/evm": "^3.1.1",
+    "@ethereumjs/util": "^9.1.0",
+    "@noble/hashes": "1.5.0",
+    "playwright-core": "^1.56.1",
+    "solc": "0.8.26"
+  }
+}

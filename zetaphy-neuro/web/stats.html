@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Neuro Usage</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Neuro ZETAPHY</h1>
+      <p class="sub" data-i18n="subtitle">ผู้ใช้ต่อเดือน เทียบกับเป้าก่อนเริ่มขั้น 2</p>
+    </div>
+    <button id="lang" type="button" aria-label="Language">EN</button>
+  </header>
+
+  <section class="stats" id="stats" aria-live="polite">
+    <div>
+      <div class="row"><span id="monthLabel"></span><span id="pct"></span></div>
+      <div class="big" id="users">–</div>
+      <div class="row"><span data-i18n="usersLabel">ผู้ใช้เดือนนี้ (โดยประมาณ)</span><span><span data-i18n="goal">เป้า</span> <b id="goal">1,000</b></span></div>
+    </div>
+    <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="meter"><span id="bar"></span></div>
+    <div class="row"><span data-i18n="checks">จำนวนครั้งที่ตรวจสัญญา</span><b id="checks">–</b></div>
+    <div class="row"><span data-i18n="last">เดือนก่อน</span><b id="prev">–</b></div>
+  </section>
+  <p id="status" role="status"></p>
+
+  <footer>
+    <p data-i18n="privacy">นับแบบไม่เก็บ IP หรือข้อมูลส่วนตัว ตัวเลขเป็นค่าประมาณ</p>
+    <p><a href="./" data-i18n="back">กลับไปหน้าตรวจสัญญา</a></p>
+  </footer>
+</main>
+<script type="module" src="./stats.js"></script>
+</body>
+</html>

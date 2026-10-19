@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https:; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Neuro ZETAPHY</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Neuro ZETAPHY</h1>
+      <p class="sub" data-i18n="subtitle">อ่านและอธิบายสัญญา · ชั้น 1 อ่านอย่างเดียว</p>
+    </div>
+    <button id="lang" type="button" aria-label="Language">EN</button>
+  </header>
+
+  <form id="form" autocomplete="off">
+    <label for="chain" data-i18n="chain">เชน</label>
+    <select id="chain"></select>
+    <label for="address" data-i18n="address">ที่อยู่สัญญา</label>
+    <input id="address" spellcheck="false" placeholder="0x…" inputmode="text" maxlength="42" required>
+    <button id="go" type="submit" data-i18n="check">ตรวจสัญญา</button>
+  </form>
+
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <section id="result" hidden>
+    <div id="verdict" class="verdict"><span class="dot"></span><strong id="title"></strong></div>
+    <ul id="findings"></ul>
+    <details>
+      <summary data-i18n="details">รายละเอียด</summary>
+      <dl id="meta"></dl>
+    </details>
+  </section>
+
+  <footer>
+    <p data-i18n="footer">ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม อ่านข้อมูลจากเชนผ่าน RPC สาธารณะเท่านั้น ผลตรวจไม่ใช่คำแนะนำการลงทุน</p>
+    <p><a href="./stats.html" data-i18n="stats">สถิติการใช้งาน</a></p>
+  </footer>
+</main>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
