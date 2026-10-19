@@ -15,3 +15,13 @@ test('well-known selectors', () => {
   assert.equal(SELECTORS['8da5cb5b'].sig, 'owner()');
   assert.equal(SELECTORS['40c10f19'].sig, 'mint(address,uint256)');
 });
+
+test('selectors seen in the NEWZETA dispatcher (BNB Chain) have names', () => {
+  // Read from the bytecode BscScan shows for 0xc1ed4b78071e7c9a84958d8be0215a10984fc28f.
+  const seen = {
+    cffd129c: 'sellTaxBps()', aa4bde28: 'maxWalletAmount()', ad5dff73: 'isExempt(address)',
+    a8aa1b31: 'pair()', c45a0155: 'factory()', ca72a4e7: 'openTrading(address)',
+    d505accf: 'permit(address,address,uint256,uint256,uint8,bytes32,bytes32)', '5c19a95c': 'delegate(address)',
+  };
+  for (const [sel, sig] of Object.entries(seen)) assert.equal(SELECTORS[sel]?.sig, sig, sel);
+});

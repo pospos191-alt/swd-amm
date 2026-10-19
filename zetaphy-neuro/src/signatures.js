@@ -104,6 +104,7 @@ export const SIGNATURES = [
   ['setTradingEnabled(bool)', 'trading'],
   ['setTrading(bool)', 'trading'],
   ['startTrading()', 'trading'],
+  ['openTrading(address)', 'trading'],         // ZETAPHY launcher tokens (seen on NEWZETA, BNB Chain)
 
   // Common read-only getters: named so they are not reported as unknown.
   ['tradingOpen()', 'view'],
@@ -122,6 +123,32 @@ export const SIGNATURES = [
   ['uniswapV2Pair()', 'view'],
   ['uniswapV2Router()', 'view'],
   ['isExcludedFromFee(address)', 'view'],
+  // Getters seen on ZETAPHY launcher tokens (NEWZETA, BNB Chain).
+  ['buyTaxBps()', 'view'],
+  ['sellTaxBps()', 'view'],
+  ['transferTaxBps()', 'view'],
+  ['maxWalletAmount()', 'view'],
+  ['maxTxAmount()', 'view'],
+  ['isExempt(address)', 'view'],
+  ['pair()', 'view'],
+  ['factory()', 'view'],
+
+  // Holder-side extensions: signed approvals (ERC-2612) and voting power
+  // (ERC20Votes). Each holder controls only their own tokens with these.
+  ['permit(address,address,uint256,uint256,uint8,bytes32,bytes32)', 'holder'],
+  ['nonces(address)', 'holder'],
+  ['DOMAIN_SEPARATOR()', 'holder'],
+  ['eip712Domain()', 'holder'],
+  ['delegate(address)', 'holder'],
+  ['delegateBySig(address,uint256,uint256,uint8,bytes32,bytes32)', 'holder'],
+  ['delegates(address)', 'holder'],
+  ['getVotes(address)', 'holder'],
+  ['getPastVotes(address,uint256)', 'holder'],
+  ['getPastTotalSupply(uint256)', 'holder'],
+  ['numCheckpoints(address)', 'holder'],
+  ['checkpoints(address,uint32)', 'holder'],
+  ['clock()', 'holder'],
+  ['CLOCK_MODE()', 'holder'],
 
   // Upgradeable proxies
   ['upgradeTo(address)', 'upgrade'],
