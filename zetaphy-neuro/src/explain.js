@@ -23,17 +23,27 @@ const T = {
     'not-erc20': () => 'ไม่พบฟังก์ชันมาตรฐานของเหรียญ ERC-20 สัญญานี้อาจไม่ใช่เหรียญ',
     'name-has-link': () => 'ชื่อหรือสัญลักษณ์เหรียญมีลิงก์หรือชื่อเว็บ เป็นกลลวงที่พบบ่อย (เหรียญแจกฟรีที่ล่อให้เข้าเว็บปลอม) อย่าเข้าเว็บนั้นและอย่าเชื่อมกระเป๋า',
     'proxy-minimal': (p) => `เป็นสำเนาขนาดเล็ก (EIP-1167) ที่ชี้ไปยังโค้ดหลักที่ ${p.implementation} แบบตายตัว เปลี่ยนโค้ดไม่ได้`,
-    'proxy-upgradeable': (p) => `สัญญาอัปเกรดได้: ผู้ดูแล${p.admin ? ` (${p.admin})` : ''} เปลี่ยนโค้ดทั้งหมดได้ทุกเมื่อ กฎที่ตรวจวันนี้อาจไม่จริงในวันพรุ่งนี้`,
+    'proxy-upgradeable': (p) => (p.issuer
+      ? `${p.issuer} อัปเกรดโค้ดของสัญญาได้ เป็นวิธีปกติที่ผู้ออกใช้แก้ไขหรือเพิ่มความสามารถ`
+      : `สัญญาอัปเกรดได้: ผู้ดูแล${p.admin ? ` (${p.admin})` : ''} เปลี่ยนโค้ดทั้งหมดได้ทุกเมื่อ กฎที่ตรวจวันนี้อาจไม่จริงในวันพรุ่งนี้`),
     'owner-active': (p) => `มีเจ้าของคุมสัญญาอยู่: ${p.owner}`,
     'owner-renounced': () => 'เจ้าของสละสิทธิ์แล้ว (owner เป็นที่อยู่ศูนย์) ฟังก์ชันที่จำกัดเฉพาะเจ้าของจะไม่มีใครเรียกได้อีก',
     'owner-unknown': () => 'ไม่พบฟังก์ชัน owner() จึงบอกไม่ได้ว่าใครคุมสิทธิ์พิเศษด้านล่าง ให้ถือว่ายังมีคนคุมอยู่',
     'roles': () => 'ใช้ระบบสิทธิ์แบบหลายบทบาท (roles) อาจมีหลายที่อยู่ที่มีสิทธิ์พิเศษ ตรวจจากโค้ดอย่างเดียวไม่ได้ว่าใครถืออยู่',
-    'can-mint': (p) => `สร้างเหรียญเพิ่มได้ (${list(p.functions)}) ทำให้เหรียญที่คุณถือมีสัดส่วนลดลง หรือถูกเทขายจนราคาตก`,
-    'can-blacklist': (p) => `บล็อกกระเป๋าบางใบได้ (${list(p.functions)}) ถ้ากระเป๋าคุณถูกบล็อก อาจขายหรือโอนไม่ได้`,
-    'can-pause': (p) => `หยุดการโอนทั้งหมดได้ (${list(p.functions)}) ทุกคนอาจขายไม่ได้ชั่วคราวหรือถาวร`,
+    'can-mint': (p) => (p.issuer
+      ? `${p.issuer} สร้างเหรียญเพิ่มได้ (${list(p.functions)}) เพื่อออกเหรียญตามเงินที่รับฝาก ปกติของเหรียญประเภทนี้`
+      : `สร้างเหรียญเพิ่มได้ (${list(p.functions)}) ทำให้เหรียญที่คุณถือมีสัดส่วนลดลง หรือถูกเทขายจนราคาตก`),
+    'can-blacklist': (p) => (p.issuer
+      ? `${p.issuer} อายัดกระเป๋าบางใบได้ (${list(p.functions)}) มักใช้กับเงินที่ถูกขโมยหรือตามคำสั่งทางกฎหมาย`
+      : `บล็อกกระเป๋าบางใบได้ (${list(p.functions)}) ถ้ากระเป๋าคุณถูกบล็อก อาจขายหรือโอนไม่ได้`),
+    'can-pause': (p) => (p.issuer
+      ? `${p.issuer} หยุดการโอนทั้งหมดได้ (${list(p.functions)}) ใช้ในกรณีฉุกเฉิน`
+      : `หยุดการโอนทั้งหมดได้ (${list(p.functions)}) ทุกคนอาจขายไม่ได้ชั่วคราวหรือถาวร`),
     'can-change-fee': (p) => (p.decreaseOnly
       ? `ปรับภาษีได้ (${list(p.functions)}) แต่ตามแม่แบบ ${p.project} ลดได้อย่างเดียว ขึ้นไม่ได้`
       : `เปลี่ยนภาษีซื้อขายได้ (${list(p.functions)}) ถ้าตั้งภาษีขายสูงมาก จะขายแล้วแทบไม่เหลือเงิน`),
+    'known-issuer': (p) => `เป็นสัญญาทางการของ ${p.symbol} ออกโดย ${p.issuer} (ตรงกับที่อยู่ที่ลงทะเบียนไว้) สิทธิ์พิเศษด้านล่างเป็นของผู้ออกเหรียญ ความเสี่ยงหลักคือความน่าเชื่อถือของผู้ออก ไม่ใช่โค้ดแอบแฝง`,
+    'lookalike': (p) => `ใช้สัญลักษณ์ ${p.symbol} เหมือนเหรียญของ ${p.issuer} แต่ไม่ใช่ที่อยู่ทางการ (${p.official}) อาจเป็นเหรียญปลอม อย่าซื้อหรือรับโอนจนกว่าจะตรวจที่อยู่`,
     'template-match': (p) => `ตรงกับแม่แบบเหรียญ ${p.project} ที่ลงทะเบียนไว้ (${p.name}) กติกาของแม่แบบนี้ยังไม่ผ่าน audit`,
     'template-mismatch': (p) => `โค้ดตรงกับแม่แบบ ${p.project} แต่มีสิทธิ์ที่แม่แบบบอกว่าไม่มี (${list(p.functions)}) ข้อมูลแม่แบบอาจผิด อย่าเชื่อจนกว่าจะตรวจ`,
     'trading-switch': (p) => `มีสวิตช์เปิดปิดการเทรด (${list(p.functions)}) ก่อนเปิด อาจซื้อได้แต่ขายไม่ได้`,
@@ -50,17 +60,27 @@ const T = {
     'not-erc20': () => 'No standard ERC-20 functions found. This contract may not be a token.',
     'name-has-link': () => 'The token name or symbol contains a link or website name, a common scam (free "airdrop" tokens that lure you to a fake site). Do not visit it or connect your wallet.',
     'proxy-minimal': (p) => `Minimal clone (EIP-1167) that always runs the code at ${p.implementation}. The code cannot be changed.`,
-    'proxy-upgradeable': (p) => `Upgradeable: the admin${p.admin ? ` (${p.admin})` : ''} can replace all of the code at any time. What is checked today may not hold tomorrow.`,
+    'proxy-upgradeable': (p) => (p.issuer
+      ? `${p.issuer} can upgrade the contract's code, the usual way issuers fix or extend it.`
+      : `Upgradeable: the admin${p.admin ? ` (${p.admin})` : ''} can replace all of the code at any time. What is checked today may not hold tomorrow.`),
     'owner-active': (p) => `An owner controls this contract: ${p.owner}`,
     'owner-renounced': () => 'Ownership is renounced (owner is the zero address). Owner-only functions can no longer be called.',
     'owner-unknown': () => 'No owner() function found, so it is unclear who holds the special powers below. Assume someone does.',
     'roles': () => 'Uses role-based permissions. Several addresses may hold special powers; the code alone does not show who.',
-    'can-mint': (p) => `Can create new tokens (${list(p.functions)}), diluting holders or flooding the market.`,
-    'can-blacklist': (p) => `Can block specific wallets (${list(p.functions)}). A blocked wallet may be unable to sell or transfer.`,
-    'can-pause': (p) => `Can freeze all transfers (${list(p.functions)}). Nobody may be able to sell.`,
+    'can-mint': (p) => (p.issuer
+      ? `${p.issuer} can mint (${list(p.functions)}) to issue tokens against deposits, as expected for this kind of token.`
+      : `Can create new tokens (${list(p.functions)}), diluting holders or flooding the market.`),
+    'can-blacklist': (p) => (p.issuer
+      ? `${p.issuer} can freeze specific wallets (${list(p.functions)}), usually for stolen funds or legal orders.`
+      : `Can block specific wallets (${list(p.functions)}). A blocked wallet may be unable to sell or transfer.`),
+    'can-pause': (p) => (p.issuer
+      ? `${p.issuer} can pause all transfers (${list(p.functions)}) in an emergency.`
+      : `Can freeze all transfers (${list(p.functions)}). Nobody may be able to sell.`),
     'can-change-fee': (p) => (p.decreaseOnly
       ? `Can adjust the tax (${list(p.functions)}), but the ${p.project} template only allows lowering it.`
       : `Can change the buy/sell tax (${list(p.functions)}). A very high sell tax means selling returns almost nothing.`),
+    'known-issuer': (p) => `Official ${p.symbol} contract issued by ${p.issuer} (matches the registered address). The powers below belong to the issuer; the main risk is trust in the issuer, not hidden code.`,
+    'lookalike': (p) => `Uses the symbol ${p.symbol} like ${p.issuer}'s token but is NOT the official address (${p.official}). Possibly a fake; do not buy or accept it until you check the address.`,
     'template-match': (p) => `Matches the registered ${p.project} token template (${p.name}). The template's rules are not audited yet.`,
     'template-mismatch': (p) => `Code matches the ${p.project} template but has a power the template says it lacks (${list(p.functions)}). The template record may be wrong; do not trust it until checked.`,
     'trading-switch': (p) => `Has a trading on/off switch (${list(p.functions)}). Before it is on, you may be able to buy but not sell.`,
@@ -76,7 +96,9 @@ const T = {
 // What the contract is comes first, then the most serious findings, the caveat last.
 const IDENTITY = new Set(['no-code', 'erc20', 'not-erc20']);
 const ORDER = { high: 0, medium: 1, low: 2, good: 3, info: 4 };
-const rank = (f) => (IDENTITY.has(f.id) ? -1 : f.id === 'bytecode-only' ? 9 : ORDER[f.severity] ?? 5);
+// Who issued it (or that it copies someone) belongs right under what it is.
+const ISSUER = new Set(['known-issuer', 'lookalike']);
+const rank = (f) => (IDENTITY.has(f.id) ? -2 : ISSUER.has(f.id) ? -1 : f.id === 'bytecode-only' ? 9 : ORDER[f.severity] ?? 5);
 
 /** Report -> { title, lines: [{severity, text}] } in the chosen language. */
 export function explain(report, lang = 'th') {

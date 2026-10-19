@@ -8,6 +8,7 @@ import { decodeAddress, decodeUint, decodeString, cleanText } from './abi.js';
 import { analyze } from './analyze.js';
 import { codeFingerprint } from './fingerprint.js';
 import { TEMPLATES } from './templates.js';
+import { knownToken, lookalikeOf } from './known-tokens.js';
 
 export const REPORT_VERSION = 1;
 
@@ -20,6 +21,8 @@ const SEL = {
   name: '0x06fdde03', symbol: '0x95d89b41', decimals: '0x313ce567', totalSupply: '0x18160ddd',
   owner: '0x8da5cb5b', getOwner: '0x893d20e8', implementation: '0x5c60da1b',
 };
+
+const isTokenContract = (functions) => functions.some((f) => f.cat === 'erc20');
 
 export const isAddress = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
 
@@ -124,7 +127,9 @@ export async function readContract(chainKey, address, opts = {}) {
   report.fingerprint = await codeFingerprint(logicCode && logicCode !== '0x' ? logicCode : code);
   const template = (opts.templates ?? TEMPLATES).find((t) => t.fingerprint === report.fingerprint
     && (!t.chains || t.chains.includes(chainKey))) ?? null;
-  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template });
+  const known = knownToken(chainKey, addr);
+  const lookalike = isTokenContract(functions) ? lookalikeOf(chainKey, addr, token.symbol) : null;
+  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike });
   report.functions = functions.map((f) => f.sig).sort();
   report.reportHash = await sha256Hex(canonical(report));
   return report;
