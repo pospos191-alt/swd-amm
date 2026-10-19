@@ -45,13 +45,19 @@ function canonical(v) {
 /**
  * @param {string} chainKey  'bsc' | 'base' | 'arbitrum'
  * @param {string} address
- * @param {{rpc?: {call: Function}, fetchImpl?: Function, templates?: Array}} [opts]
- *   rpc/fetchImpl: inject for tests; templates: defaults to src/templates.js
+ * @param {{rpc?: {call: Function}, fetchImpl?: Function, templates?: Array, chainConfig?: object}} [opts]
+ *   rpc/fetchImpl: inject for tests; templates: defaults to src/templates.js;
+ *   chainConfig: {kind:'evm', id, name, rpcs} for a chain not in CHAINS
  */
 export async function readContract(chainKey, address, opts = {}) {
-  const chain = CHAINS[chainKey];
+  // opts.chainConfig lets a caller read a chain the website does not list
+  // (e.g. a node runner reading the ZETAPHY testnet itself).
+  const chain = opts.chainConfig ?? CHAINS[chainKey];
   if (!chain) throw new Error(`unknown chain: ${chainKey}`);
-  if (!isChainAddress(chainKey, address)) throw new Error('invalid address');
+  const validAddress = opts.chainConfig
+    ? (chain.kind === 'evm' && isAddress(address))
+    : isChainAddress(chainKey, address);
+  if (!validAddress) throw new Error('invalid address');
   if (chain.kind === 'solana') return readSolana(chainKey, chain, address, opts);
   const addr = address.toLowerCase();
   const rpc = opts.rpc ?? createRpc(chain.rpcs, chain.id, { fetchImpl: opts.fetchImpl });
