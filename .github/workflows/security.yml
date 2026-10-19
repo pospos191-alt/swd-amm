@@ -4,6 +4,9 @@
 #   zetaphy-neuro every push / PR — Neuro ZETAPHY tier 1 unit + browser tests. ~2 min.
 #   zetaphy-verify every push / PR — tests for the explorer auto-verifier
 #                 (its own scheduled run is zetaphy-verify.yml). ~1 min.
+#   zetaphy-network every push / PR — NeuroJobs contract + node runner tests.
+#                 The real-chain test (npm run test:devnet) needs zetaphyd and
+#                 is run by hand. ~1 min.
 #
 # Free-tier budget: GitHub Free gives private repos 2,000 Actions minutes a
 # month. The `changes` job runs each test job ONLY when its own files changed
@@ -80,6 +83,7 @@ jobs:
       ui: ${{ steps.f.outputs.ui }}
       neuro: ${{ steps.f.outputs.neuro }}
       verify: ${{ steps.f.outputs.verify }}
+      network: ${{ steps.f.outputs.network }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -115,6 +119,7 @@ jobs:
           out ui '^test-ui/'
           out neuro '^zetaphy-neuro/'
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
+          out network '^(zetaphy-network/|zetaphy-neuro/src/)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -199,6 +204,35 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Unit tests (solc-compiled launcher, simulated chain and explorers)
+        run: npm test
+
+  zetaphy-network:
+    name: zetaphy-network (contract + runner tests)
+    needs: changes
+    if: needs.changes.outputs.network == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: zetaphy-network
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Committed contract artifacts match the sources
+        run: |
+          npm run build
+          git diff --exit-code -- artifacts/
+
+      - name: Unit tests (NeuroJobs on an in-memory EVM, runner loop)
         run: npm test
 
   program:

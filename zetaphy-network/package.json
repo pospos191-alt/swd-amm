@@ -1,0 +1,27 @@
+{
+  "name": "zetaphy-network",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZETAPHY stage 1-2: Neuro job market contract, node runner CLI and worker",
+  "type": "module",
+  "bin": {
+    "zetaphy": "./cli.js"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test test/*.test.js",
+    "test:devnet": "node --test test/devnet.integration.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ethers": "6.16.0"
+  },
+  "devDependencies": {
+    "@ethereumjs/common": "^4.4.0",
+    "@ethereumjs/evm": "^3.1.1",
+    "@ethereumjs/util": "^9.1.0",
+    "solc": "0.8.26"
+  }
+}

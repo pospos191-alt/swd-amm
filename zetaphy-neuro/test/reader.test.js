@@ -119,3 +119,14 @@ test('rejects bad input before touching the network', async () => {
   await assert.rejects(readContract('bsc', '0x123', { rpc }), /invalid address/);
   await assert.rejects(readContract('polygon', '0x' + '00'.repeat(20), { rpc }), /unknown chain/);
 });
+
+test('chainConfig reads a chain the website does not list', async () => {
+  const chain = await createLocalChain();
+  const addr = await chain.deploy('CleanToken');
+  const r = await readContract('zetaphy', addr, { rpc: chain.rpc, chainConfig: { kind: 'evm', id: 77390, name: 'ZETAPHY testnet', rpcs: [] } });
+  assert.equal(r.chain, 'zetaphy');
+  assert.equal(r.chainId, 77390);
+  assert.ok(r.analysis.findings.some((f) => f.id === 'erc20'));
+  await assert.rejects(readContract('zetaphy', 'not-an-address', { rpc: chain.rpc, chainConfig: { kind: 'evm', id: 77390, rpcs: [] } }), /invalid address/);
+  await assert.rejects(readContract('zetaphy', addr, { rpc: chain.rpc }), /unknown chain/);
+});
