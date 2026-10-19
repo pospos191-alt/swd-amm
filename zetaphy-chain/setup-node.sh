@@ -177,7 +177,9 @@ PY"
 
 step "7/8 service"
 START="$BIN start --home $NODE_HOME --chain-id $CHAIN_ID --json-rpc.api eth,net,web3,txpool"
-if [ -z "$NO_SYSTEMD" ] && command -v systemctl >/dev/null; then
+# Use systemd only when it is actually running (it may be installed but off,
+# e.g. on WSL without systemd=true); otherwise start the node in the background.
+if [ -z "$NO_SYSTEMD" ] && [ -d /run/systemd/system ]; then
   cat > /etc/systemd/system/zetaphyd.service <<UNIT
 [Unit]
 Description=ZETAPHY testnet node
