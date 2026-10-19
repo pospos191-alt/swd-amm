@@ -113,6 +113,9 @@ if [ ! -f "$NODE_HOME/config/genesis.json" ]; then
 
   jqg ".app_state.staking.params.bond_denom=\"$DENOM\""
   jqg ".app_state.gov.params.min_deposit[0].denom=\"$DENOM\" | .app_state.gov.params.expedited_min_deposit[0].denom=\"$DENOM\""
+  # Deposit to open a proposal: 1,000 ZETAPHY (5,000 expedited). The SDK
+  # default is a few atto-units, which would let anyone spam proposals.
+  jqg '.app_state.gov.params.min_deposit[0].amount="1000000000000000000000" | .app_state.gov.params.expedited_min_deposit[0].amount="5000000000000000000000"'
   jqg ".app_state.evm.params.evm_denom=\"$DENOM\" | .app_state.mint.params.mint_denom=\"$DENOM\""
   # Fixed supply: no inflation. Rewards come from the rewards pool in a later step.
   jqg '.app_state.mint.minter.inflation="0.000000000000000000" | .app_state.mint.params.inflation_rate_change="0.000000000000000000" | .app_state.mint.params.inflation_max="0.000000000000000000" | .app_state.mint.params.inflation_min="0.000000000000000000"'

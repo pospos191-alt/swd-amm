@@ -5,7 +5,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, execFile } from 'node:child_process';
+import { execFileSync, execFile, spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,7 +14,11 @@ import { Wallet, JsonRpcProvider, Contract, formatEther } from 'ethers';
 const PORT = 18645;
 const RPC = `http://127.0.0.1:${PORT}`;
 const root = mkdtempSync(join(tmpdir(), 'zetaphy-devnet-'));
-const actors = Object.fromEntries(['deployer', 'user', 'w1', 'w2', 'w3'].map((n) => [n, Wallet.createRandom()]));
+const actors = Object.fromEntries(['deployer', 'user', 'w1', 'w2', 'w3', 'relay'].map((n) => [n, Wallet.createRandom()]));
+// 'poor' holds no ZETAPHY at all: it is NOT funded at genesis.
+const poor = Wallet.createRandom();
+const RELAY_PORT = PORT + 7;
+let jobsAddr;
 const ART = JSON.parse(readFileSync(new URL('../artifacts/NeuroJobs.json', import.meta.url), 'utf8'));
 
 function cli(actor, args) {
@@ -27,7 +31,7 @@ function cli(actor, args) {
 }
 
 before(() => {
-  for (const [n, w] of Object.entries(actors)) {
+  for (const [n, w] of Object.entries({ ...actors, poor })) {
     mkdirSync(join(root, n), { recursive: true, mode: 0o700 });
     writeFileSync(join(root, n, 'worker.key'), w.privateKey + '\n', { mode: 0o600 });
   }
@@ -43,7 +47,7 @@ after(() => {
 test('a job goes from request to a paid 2-of-3 verdict on a real ZETAPHY chain', { timeout: 300_000 }, async () => {
   const d = await cli('deployer', ['deploy', '--fund', '1000', '--window', '10', '--timeout', '60', '--unbond', '120']);
   assert.equal(d.code, 0, d.out);
-  const jobsAddr = /deployed at (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
+  jobsAddr = /deployed at (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
   const withJobs = (a) => [...a, '--jobs', jobsAddr];
 
   for (const w of ['w1', 'w2', 'w3']) {
@@ -88,4 +92,82 @@ test('a job goes from request to a paid 2-of-3 verdict on a real ZETAPHY chain',
     assert.ok(gained > credit - 10n ** 16n, `withdrew ${formatEther(gained)} of ${formatEther(credit)}`);
   }
   console.log(`job 0 verdict ${job.result}, ${paid} runners paid`);
+});
+
+async function runUntilDone(id, jobs) {
+  const logs = [];
+  for (let round = 0; round < 40; round++) {
+    const outs = await Promise.all(['w1', 'w2', 'w3'].map((w) => cli(w, ['node', 'start', '--once', '--jobs', jobsAddr])));
+    logs.push(...outs.map((o) => o.out));
+    const job = await jobs.getJob(id);
+    if (job.status !== 1n) return { job, logs };
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return { job: await jobs.getJob(id), logs };
+}
+
+test('stage 2: a user with no ZETAPHY pays in test USDC through a relay', { timeout: 300_000 }, async () => {
+  const d = await cli('deployer', ['deploy-stable', '--jobs', jobsAddr, '--reserve', '100']);
+  assert.equal(d.code, 0, d.out);
+  const gateway = /StableGateway (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
+  const usdc = /tUSDC (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
+  const usdt = /tUSDT (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
+
+  const relay = spawn(process.execPath, [new URL('../cli.js', import.meta.url).pathname, 'relay', 'start', '--rpc', RPC,
+    '--gateway', gateway, '--usdc', usdc, '--usdt', usdt, '--port', String(RELAY_PORT), '--host', '127.0.0.1'],
+  { env: { ...process.env, ZETAPHY_HOME: join(root, 'relay'), NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' } });
+  try {
+    await new Promise((resolve, reject) => {
+      relay.stdout.on('data', (b) => { if (/relay for/.test(String(b))) resolve(); });
+      relay.on('exit', (code) => reject(new Error(`relay exited ${code}`)));
+    });
+    const URL_ = `http://127.0.0.1:${RELAY_PORT}`;
+    const provider = new JsonRpcProvider(RPC, undefined, { staticNetwork: true });
+    assert.equal(await provider.getBalance(poor.address), 0n);
+
+    const f = await cli('poor', ['faucet', 'usdc', '--relay', URL_]);
+    assert.equal(f.code, 0, f.out);
+    const r = await cli('poor', ['job', 'request-stable', 'zetaphy', jobsAddr, '--relay', URL_, '--fee', '0.5', '--jobs', jobsAddr]);
+    assert.equal(r.code, 0, r.out);
+    const id = BigInt(/job (\d+) requested/.exec(r.out)[1]);
+
+    const jobs = new Contract(jobsAddr, ART.abi, provider);
+    const { job, logs } = await runUntilDone(id, jobs);
+    assert.equal(job.status, 2n, logs.join('\n'));
+    assert.equal(job.requester, poor.address);
+    assert.equal(await provider.getBalance(poor.address), 0n, 'the user never needed ZETAPHY');
+    console.log(`stage 2: job ${id} paid in tUSDC by an address with 0 ZETAPHY, verdict ${job.result}`);
+  } finally {
+    relay.kill();
+  }
+});
+
+test('stage 2: an upgrade is proposed, voted on chain and scheduled', { timeout: 120_000 }, async () => {
+  const chainHome = join(root, 'chain');
+  const env = { ...process.env, ZETAPHYD: 'zetaphyd', NODE_HOME: chainHome, KEYS_DIR: chainHome, NODE: `tcp://127.0.0.1:${PORT + 100}`, CHAIN_ID: 'zetaphy-local-1' };
+  const gov = (...a) => execFileSync(new URL('../../zetaphy-chain/gov.sh', import.meta.url).pathname, a, { env, encoding: 'utf8' });
+  const status = JSON.parse(execFileSync('zetaphyd', ['status', '--node', env.NODE], { encoding: 'utf8' }));
+  const height = Number(status.sync_info.latest_block_height) + 100000;
+  const out = gov('propose-upgrade', 'v2-devnet', String(height), 'Integration test upgrade');
+  const id = /proposal (\d+) submitted/.exec(out)[1];
+  assert.match(gov('vote', id, 'yes'), /voted yes/);
+  let st;
+  for (let i = 0; i < 40; i++) {
+    st = JSON.parse(gov('status', id));
+    if (st.status !== 'PROPOSAL_STATUS_VOTING_PERIOD') break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  assert.equal(st.status, 'PROPOSAL_STATUS_PASSED');
+  const plan = JSON.parse(gov('plan'));
+  assert.equal(plan.plan.name, 'v2-devnet');
+  assert.equal(plan.plan.height, String(height));
+});
+
+test('gate 1 report reads the chain and counts revealing runners', { timeout: 60_000 }, async () => {
+  const r = await cli('w1', ['gate', '--jobs', jobsAddr, '--block-seconds', '1']);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /gate 1 at block \d+: not yet/);
+  assert.match(r.out, /· running 30\+ days/);
+  assert.match(r.out, /✓ no stalled blocks/);
+  assert.match(r.out, /3 addresses|2 addresses/);
 });

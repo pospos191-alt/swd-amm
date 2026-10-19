@@ -8,7 +8,13 @@
 //   zetaphy node unbond | withdraw-bond
 //   zetaphy job request <chain> <address> [--fee N]   ask the network to check a contract
 //   zetaphy job get <id>
+//   zetaphy job request-stable <chain> <address> --relay URL [--token usdc --fee 0.1 --tip 0.01]
+//                                      pay in test USDC/USDT through a relay: no ZETAPHY needed
+//   zetaphy faucet <usdc|usdt> --relay URL   test stablecoins for this wallet (the relay pays gas)
+//   zetaphy relay start [--port 8080 --min-tip 0.01]   serve users who pay in stablecoins
+//   zetaphy gate                       progress toward gate 1 (30 days, no stalls, 10+ runners)
 //   zetaphy deploy [--bond 100 --reward 1 --min-fee 0.1 --window 120 --timeout 600 --unbond 3600]
+//   zetaphy deploy-stable [--price 0.01 --reserve 1000]  test USDC/USDT + StableGateway
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
 // (NeuroJobs address). They are saved to ~/.zetaphy/config.json on first use.
@@ -16,12 +22,17 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JsonRpcProvider, Contract, ContractFactory, formatEther, parseEther, encodeBytes32String, NonceManager } from 'ethers';
+import { JsonRpcProvider, Contract, ContractFactory, formatEther, parseEther, parseUnits, formatUnits, encodeBytes32String, NonceManager, Signature } from 'ethers';
 import { HOME, loadOrCreateKey } from './src/keys.js';
 import { detectHardware, pickProfile } from './src/hardware.js';
 import { createWorker } from './src/worker.js';
+import { createRelay } from './src/relay.js';
+import { gate1 } from './src/gate.js';
 
-const ART = JSON.parse(readFileSync(new URL('./artifacts/NeuroJobs.json', import.meta.url), 'utf8'));
+const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
+const ART = art('NeuroJobs');
+const STABLE = art('TestStable');
+const GATEWAY = art('StableGateway');
 const STATUS = ['none', 'open', 'done', 'failed'];
 const EVM_CHAIN_ID = 77390n;
 
@@ -37,8 +48,9 @@ function parse(argv) {
 function settings(opt, env) {
   const file = join(HOME, 'config.json');
   const saved = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
-  const s = { rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
-  if (s.rpc !== saved.rpc || s.jobs !== saved.jobs) {
+  const s = { ...saved, rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
+  for (const k of ['gateway', 'usdc', 'usdt']) if (opt[k]) s[k] = opt[k];
+  if (JSON.stringify(s) !== JSON.stringify(saved)) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
     writeFileSync(file, JSON.stringify(s, null, 2));
   }
@@ -154,6 +166,88 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     if (opt.fund) await (await new Contract(address, ART.abi, c.signer).fund({ value: parseEther(String(opt.fund)) })).wait();
     settings({ ...opt, jobs: address }, {});
     write(`NeuroJobs deployed at ${address}${opt.fund ? `, reward pool ${opt.fund} ZETAPHY` : ''}`);
+    return 0;
+  }
+
+  if (group === 'gate') {
+    const c = await connect(s);
+    const r = await gate1(c.provider, c.jobs, opt['block-seconds'] ? { gate: { days: 30, runners: 10, maxGapSeconds: 60, blockSeconds: Number(opt['block-seconds']) } } : {});
+    write(`gate 1 at block ${r.height}: ${r.passed ? 'PASSED (still confirm the runners are different people)' : 'not yet'}`);
+    for (const ch of r.checks) write(`  ${ch.ok ? '✓' : '·'} ${ch.name}: ${ch.value}`);
+    return 0;
+  }
+
+  if (group === 'deploy-stable') {
+    const c = await connect(s);
+    const deploy = async (a, args) => { const k = await new ContractFactory(a.abi, a.bytecode, c.signer).deploy(...args); await k.waitForDeployment(); return k.getAddress(); };
+    const usdc = await deploy(STABLE, ['Test USDC (ZETAPHY testnet)', 'tUSDC']);
+    const usdt = await deploy(STABLE, ['Test USDT (ZETAPHY testnet)', 'tUSDT']);
+    const gwAddr = await deploy(GATEWAY, [s.jobs]);
+    const gw = new Contract(gwAddr, GATEWAY.abi, c.signer);
+    const price = parseUnits(String(opt.price ?? '0.01'), 6); // stablecoin per 1 ZETAPHY
+    await (await gw.setPrice(usdc, price)).wait();
+    await (await gw.setPrice(usdt, price)).wait();
+    await (await c.signer.sendTransaction({ to: gwAddr, value: parseEther(String(opt.reserve ?? 1000)) })).wait();
+    settings({ ...opt, gateway: gwAddr, usdc, usdt }, {});
+    write(`tUSDC ${usdc}\ntUSDT ${usdt}\nStableGateway ${gwAddr} (price ${formatUnits(price, 6)} per ZETAPHY, reserve ${opt.reserve ?? 1000} ZETAPHY)`);
+    return 0;
+  }
+
+  if (group === 'relay' && cmd === 'start') {
+    if (!s.gateway) throw new Error('no StableGateway yet: run "zetaphy deploy-stable" or pass --gateway 0x...');
+    const c = await connect(s, { needJobs: false });
+    const gateway = new Contract(s.gateway, GATEWAY.abi, c.signer);
+    const tokens = {};
+    for (const k of ['usdc', 'usdt']) if (s[k]) tokens[k] = new Contract(s[k], STABLE.abi, c.signer);
+    const server = createRelay({ gateway, tokens, minTip: parseUnits(String(opt['min-tip'] ?? '0.01'), 6), log: (l) => write(`${new Date().toISOString()} ${l}`) });
+    const port = Number(opt.port ?? 8080);
+    await new Promise((r) => server.listen(port, opt.host ?? '0.0.0.0', r));
+    write(`relay for ${s.gateway} on port ${port}; relay wallet ${c.me} pays the gas`);
+    if (opt.once) { server.close(); return 0; }
+    return new Promise(() => {}); // runs until stopped
+  }
+
+  if (group === 'faucet') {
+    if (!opt.relay) throw new Error('usage: zetaphy faucet <usdc|usdt> --relay URL');
+    const { wallet } = loadOrCreateKey();
+    const r = await fetch(new URL('/faucet', opt.relay), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: cmd, address: wallet.address }) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(`faucet: ${body.error}`);
+    write(`1,000 test ${cmd.toUpperCase()} sent to ${wallet.address}`);
+    return 0;
+  }
+
+  if (group === 'job' && cmd === 'request-stable') {
+    const [chainKey, target] = rest;
+    if (!chainKey || !target || !opt.relay) throw new Error('usage: zetaphy job request-stable <chain> <address> --relay URL [--token usdc --fee 0.1 --tip 0.01]');
+    const info = await (await fetch(new URL('/info', opt.relay))).json();
+    const tokenKey = String(opt.token ?? 'usdc');
+    const token = info.tokens?.[tokenKey];
+    if (!token) throw new Error(`relay does not take ${tokenKey}`);
+    const c = await connect(s, { needJobs: false });
+    const gw = new Contract(info.gateway, GATEWAY.abi, c.provider);
+    const stable = new Contract(token, STABLE.abi, c.provider);
+    const net = await c.provider.getNetwork();
+    const fee = parseEther(String(opt.fee ?? '0.1'));
+    const tip = opt.tip ? parseUnits(String(opt.tip), 6) : BigInt(info.minTip);
+    const cost = await gw.quote(token, fee);
+    const deadline = BigInt((await c.provider.getBlock('latest')).timestamp) + 600n;
+    const wallet = c.signer.signer; // the plain Wallet under the NonceManager
+    const q = { user: c.me, token, chain: encodeBytes32String(chainKey), target, fee, tip, maxCost: cost + tip, nonce: await gw.nonces(c.me), deadline };
+    const signature = await wallet.signTypedData(
+      { name: 'ZETAPHY StableGateway', version: '1', chainId: net.chainId, verifyingContract: info.gateway },
+      { JobRequest: [{ name: 'user', type: 'address' }, { name: 'token', type: 'address' }, { name: 'chain', type: 'bytes32' }, { name: 'target', type: 'string' },
+        { name: 'fee', type: 'uint256' }, { name: 'tip', type: 'uint256' }, { name: 'maxCost', type: 'uint256' }, { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' }] }, q);
+    const ps = Signature.from(await wallet.signTypedData(
+      { name: await stable.name(), version: '1', chainId: net.chainId, verifyingContract: token },
+      { Permit: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'nonce', type: 'uint256' }, { name: 'deadline', type: 'uint256' }] },
+      { owner: c.me, spender: info.gateway, value: q.maxCost, nonce: await stable.nonces(c.me), deadline }));
+    const str = (o) => JSON.parse(JSON.stringify(o, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)));
+    const r = await fetch(new URL('/request', opt.relay), { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(str({ request: q, signature, permit: { value: q.maxCost, deadline, v: ps.v, r: ps.r, s: ps.s } })) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(`relay refused: ${body.error}`);
+    write(`job ${body.jobId} requested: ${chainKey} ${target}, paid ${formatUnits(cost + tip, 6)} ${tokenKey.toUpperCase()} (no ZETAPHY used)`);
     return 0;
   }
 

@@ -24,6 +24,7 @@ for (const w of (out.errors ?? []).filter((e) => e.severity === 'warning')) cons
 mkdirSync(new URL('../artifacts/', import.meta.url), { recursive: true });
 for (const [source, byName] of Object.entries(out.contracts)) {
   for (const [name, c] of Object.entries(byName)) {
+    if (!c.evm.bytecode.object) continue; // interfaces
     const art = { contractName: name, sourceName: source, solcLongVersion: solc.version().replace(/\.Emscripten.*$/, ''),
       abi: c.abi, bytecode: '0x' + c.evm.bytecode.object, deployedBytecode: '0x' + c.evm.deployedBytecode.object, input };
     writeFileSync(new URL(`../artifacts/${name}.json`, import.meta.url), JSON.stringify(art, null, 2) + '\n');

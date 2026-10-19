@@ -21,6 +21,7 @@ jqg ".app_state.staking.params.bond_denom=\"$DENOM\" | .app_state.gov.params.min
 jqg ".app_state.bank.denom_metadata=[{\"description\":\"ZETAPHY (devnet)\",\"denom_units\":[{\"denom\":\"$DENOM\",\"exponent\":0},{\"denom\":\"zetaphy\",\"exponent\":18}],\"base\":\"$DENOM\",\"display\":\"zetaphy\",\"name\":\"ZETAPHY\",\"symbol\":\"ZETAPHY\"}]"
 jqg ".app_state.erc20.native_precompiles=[\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\"] | .app_state.erc20.token_pairs=[{contract_owner:1,erc20_address:\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\",denom:\"$DENOM\",enabled:true}]"
 jqg '.consensus.params.block.max_gas="30000000" | .app_state.gov.params.voting_period="20s" | .app_state.gov.params.expedited_voting_period="10s" | .app_state.gov.params.max_deposit_period="20s"'
+jqg '.app_state.gov.params.min_deposit[0].amount="1000000000000000000000" | .app_state.gov.params.expedited_min_deposit[0].amount="5000000000000000000000"'
 
 $BIN genesis add-genesis-account "$($BIN keys show validator -a $K)" "100000000000000000000000000$DENOM" --home "$HOME_DIR"
 for a in "$@"; do

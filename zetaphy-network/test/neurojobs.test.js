@@ -150,3 +150,13 @@ test('rewards stop when the pool is empty; fees still pay', async () => {
   for (const w of ['w1', 'w2']) await j2.send(w, 'reveal', [0, V1, s[w]]);
   assert.equal(await j2.call('credit', [c2.acct.w1.toString()]), ZETA / 2n);
 });
+
+test('requestFor sends a refund to the named user, not the payer', async () => {
+  await jobs.send('owner', 'requestFor', [addr('user'), CHAIN, TARGET], ZETA);
+  const id = (await jobs.call('jobCount')) - 1n;
+  c.advance(TIMEOUT);
+  await jobs.send('w4', 'expire', [id]);
+  assert.equal(await jobs.call('credit', [addr('user')]), ZETA);
+  assert.equal(await jobs.call('credit', [addr('owner')]), 0n);
+  await assert.rejects(jobs.send('owner', 'requestFor', ['0x' + '00'.repeat(20), CHAIN, TARGET], ZETA), /BadValue/);
+});
