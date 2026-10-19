@@ -17,6 +17,10 @@
 //   zetaphy pq address                 the wallet's address (fund it before or after it exists)
 //   zetaphy pq send <to> <amount>      move ZETAPHY out of it, signed with ML-DSA
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
+//   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x...]
+//                                      BridgeGuard + BridgeAirlock + NeuroLane + a DecoyBridge
+//   zetaphy bridge watch --source-rpc URL --lockbox 0x... [--confirmations 12 --release]
+//                                      be one voice of the Neuro bridge
 //   zetaphy deploy [--bond 100 --reward 1 --min-fee 0.1 --window 120 --timeout 600 --unbond 3600]
 //   zetaphy deploy-stable [--price 0.01 --reserve 1000]  test USDC/USDT + StableGateway
 //
@@ -33,6 +37,7 @@ import { createWorker } from './src/worker.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
 import { loadOrCreatePq, VARIANT as PQ_VARIANT } from './src/pq.js';
+import { createLaneWatcher } from './src/lane.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
 const ART = art('NeuroJobs');
@@ -40,6 +45,7 @@ const STABLE = art('TestStable');
 const GATEWAY = art('StableGateway');
 const QWALLET = art('QuantumWallet');
 const QFACTORY = art('QuantumWalletFactory');
+const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'DecoyBridge', 'LockBox', 'BridgedToken'].map((n) => [n, art(n)]));
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 const STATUS = ['none', 'open', 'done', 'failed'];
 const EVM_CHAIN_ID = 77390n;
@@ -57,7 +63,7 @@ function settings(opt, env) {
   const file = join(HOME, 'config.json');
   const saved = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const s = { ...saved, rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
-  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory']) if (opt[k]) s[k] = opt[k];
+  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'bridgeGuard']) if (opt[k]) s[k] = opt[k];
   if (opt.hybrid) s.pqHybrid = true;
   if (JSON.stringify(s) !== JSON.stringify(saved)) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
@@ -226,6 +232,47 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       const rc = await (await wallet.execute(...args, { gasLimit })).wait();
       write(`sent ${zeta(value)} to ${to} from ${address}, signed with ML-DSA-${PQ_VARIANT} (gas ${rc.gasUsed})`);
       return 0;
+    }
+  }
+
+  if (group === 'deploy-bridge') {
+    const c = await connect(s);
+    const deploy = async (a, args) => { const k = await new ContractFactory(a.abi, a.bytecode, c.signer).deploy(...args); await k.waitForDeployment(); return new Contract(await k.getAddress(), a.abi, c.signer); };
+    const route = encodeBytes32String('airlock');
+    const guard = await deploy(B.BridgeGuard, [c.me]);
+    await (await guard.createToken(String(opt['token-name'] ?? 'USD Coin (bridged, testnet)'), String(opt['token-symbol'] ?? 'USDC'), Number(opt.decimals ?? 18))).wait();
+    const airlock = await deploy(B.BridgeAirlock, [guard.target, route, c.me, Number(opt.threshold ?? 2), BigInt(opt.quarantine ?? 3600)]);
+    await (await guard.setRoute(route, airlock.target, parseEther(String(opt['daily-limit'] ?? 100000)), true)).wait();
+    const lane = await deploy(B.NeuroLane, [s.jobs, airlock.target, Number(opt.quorum ?? 2), Number(opt['min-agreed'] ?? 1)]);
+    const decoy = await deploy(B.DecoyBridge, [airlock.target, 'ZETAPHY Bridge']);
+    for (const tx of [airlock.setLane(lane.target, true), airlock.setVetoer(lane.target, true), airlock.setDecoy(decoy.target, true)]) await (await tx).wait();
+    for (const l of [].concat(opt.lane ?? [])) await (await airlock.setLane(l, true)).wait();
+    for (const g of [].concat(opt.guardian ?? [])) { await (await airlock.setVetoer(g, true)).wait(); await (await guard.setGuardian(g, true)).wait(); }
+    settings({ ...opt, airlock: airlock.target, neuroLane: lane.target, bridgeGuard: guard.target }, {});
+    write(`BridgeGuard ${guard.target}\nBridgedToken ${await guard.token()}\nBridgeAirlock ${airlock.target}\nNeuroLane ${lane.target}\nDecoyBridge ${decoy.target}`);
+    return 0;
+  }
+
+  if (group === 'bridge' && cmd === 'watch') {
+    if (!opt['source-rpc'] || !opt.lockbox) throw new Error('usage: zetaphy bridge watch --source-rpc URL --lockbox 0x... [--confirmations 12 --release]');
+    if (!s.airlock || !s.neuroLane) throw new Error('set --airlock and --neuroLane (or run deploy-bridge)');
+    const c = await connect(s, { needJobs: false });
+    const src = new JsonRpcProvider(String(opt['source-rpc']));
+    const srcChainId = (await src.getNetwork()).chainId;
+    const watcher = createLaneWatcher({
+      lockbox: new Contract(String(opt.lockbox), B.LockBox.abi, src),
+      lane: new Contract(s.neuroLane, B.NeuroLane.abi, c.signer),
+      airlock: new Contract(s.airlock, B.BridgeAirlock.abi, c.signer),
+      me: c.me, srcChainId, confirmations: Number(opt.confirmations ?? 12), release: !!opt.release,
+      stateFile: join(HOME, `lane-${srcChainId}-${String(opt.lockbox).toLowerCase()}.json`),
+      chainTime: async () => BigInt((await c.provider.getBlock('latest')).timestamp),
+      log: (l) => write(`${new Date().toISOString()} ${l}`),
+    });
+    const every = Number(opt.every ?? 5) * 1000;
+    for (;;) {
+      try { await watcher.tick(); } catch (e) { write(`tick failed: ${e.shortMessage ?? e.message}`); }
+      if (opt.once) return 0;
+      await new Promise((r) => setTimeout(r, every));
     }
   }
 
