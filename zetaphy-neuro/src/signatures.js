@@ -20,6 +20,8 @@ export const SIGNATURES = [
   ['getOwner()', 'ownership'],
   ['transferOwnership(address)', 'ownership'],
   ['renounceOwnership()', 'ownership'],
+  ['pendingOwner()', 'ownership'],             // two-step transfer (Ownable2Step)
+  ['acceptOwnership()', 'ownership'],
 
   // Role-based access
   ['grantRole(bytes32,address)', 'roles'],
@@ -84,6 +86,7 @@ export const SIGNATURES = [
   ['excludeFromFee(address)', 'feeExempt'],
   ['includeInFee(address)', 'feeExempt'],
   ['setExcludedFromFee(address,bool)', 'feeExempt'],
+  ['setExempt(address,bool)', 'feeExempt'],    // ZETAPHY launcher tokens
 
   // Transaction / wallet size limits
   ['setMaxTxAmount(uint256)', 'limit'],
@@ -99,6 +102,7 @@ export const SIGNATURES = [
   ['setLimits(uint256,uint256)', 'limit'],
   ['setAntiWhale(bool)', 'limit'],
   ['setLimitsEnabled(bool)', 'limit'],
+  ['relaxLimits(uint16,uint16)', 'limit'],     // ZETAPHY launcher tokens
 
   // Trading on/off switch
   ['enableTrading()', 'trading'],
@@ -131,6 +135,13 @@ export const SIGNATURES = [
   ['transferTaxBps()', 'view'],
   ['maxWalletAmount()', 'view'],
   ['maxWalletBps()', 'view'],
+  ['maxTxBps()', 'view'],
+  ['MIN_MAX_WALLET_BPS()', 'view'],
+  ['MIN_MAX_TX_BPS()', 'view'],
+  ['MAX_TOTAL_TAX_BPS()', 'view'],
+  ['BPS()', 'view'],
+  ['DEAD()', 'view'],
+  ['daoFactory()', 'view'],
   ['maxTxAmount()', 'view'],
   ['isExempt(address)', 'view'],
   ['pair()', 'view'],
