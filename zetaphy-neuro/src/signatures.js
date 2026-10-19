@@ -73,8 +73,10 @@ export const SIGNATURES = [
   ['reduceFee(uint256)', 'fee'],
   ['reduceTaxes(uint256,uint256)', 'fee'],
   ['lowerTaxes(uint256,uint256)', 'fee'],
-  ['setTaxWallet(address)', 'feeExempt'],
-  ['setMarketingWallet(address)', 'feeExempt'],
+  ['lowerTaxes(uint16,uint16)', 'fee'],          // ZETAPHY launcher tokens (NEWZETA)
+  // Where the tax goes
+  ['setTaxWallet(address)', 'taxWallet'],
+  ['setMarketingWallet(address)', 'taxWallet'],
   ['setBuyTax(uint256)', 'fee'],
   ['setSellTax(uint256)', 'fee'],
 
@@ -128,6 +130,7 @@ export const SIGNATURES = [
   ['sellTaxBps()', 'view'],
   ['transferTaxBps()', 'view'],
   ['maxWalletAmount()', 'view'],
+  ['maxWalletBps()', 'view'],
   ['maxTxAmount()', 'view'],
   ['isExempt(address)', 'view'],
   ['pair()', 'view'],
