@@ -47,7 +47,8 @@ function canonical(v) {
  * @param {string} address
  * @param {{rpc?: {call: Function}, fetchImpl?: Function, templates?: Array, chainConfig?: object}} [opts]
  *   rpc/fetchImpl: inject for tests; templates: defaults to src/templates.js;
- *   chainConfig: {kind:'evm', id, name, rpcs} for a chain not in CHAINS
+ *   chainConfig: {kind:'evm', id, name, rpcs} for a chain not in CHAINS;
+ *   threatLookup: async (fingerprint) => ({flagged, reason}) from the ZETAPHY ThreatRegistry
  */
 export async function readContract(chainKey, address, opts = {}) {
   // opts.chainConfig lets a caller read a chain the website does not list
@@ -138,7 +139,13 @@ export async function readContract(chainKey, address, opts = {}) {
     && (!t.chains || t.chains.includes(chainKey))) ?? null;
   const known = knownToken(chainKey, addr);
   const lookalike = isTokenContract(functions) ? lookalikeOf(chainKey, addr, token.symbol) : null;
-  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike, unknownSelectors });
+  // Immune system: ask the ZETAPHY ThreatRegistry about this exact code, if
+  // the caller wired a lookup. A registry that cannot be reached is skipped.
+  let threat = null;
+  if (opts.threatLookup) {
+    try { threat = await opts.threatLookup(report.fingerprint); } catch { threat = null; }
+  }
+  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike, unknownSelectors, threat });
   report.functions = functions.map((f) => f.sig).sort();
   if (unknownSelectors.length) report.unknownSelectors = unknownSelectors;
   report.reportHash = await sha256Hex(canonical(report));

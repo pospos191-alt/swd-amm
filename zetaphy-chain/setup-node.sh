@@ -86,6 +86,13 @@ elif [ ! -x "$BIN" ] || [ -n "${FORCE_BUILD:-}" ]; then
   # Addresses start with "zetaphy1..." instead of "cosmos1...".
   as_node "sed -i 's/Bech32Prefix = \"cosmos\"/Bech32Prefix = \"zetaphy\"/' '$src/evmd/config/bech32.go'"
   grep -q 'Bech32Prefix = "zetaphy"' "$src/evmd/config/bech32.go" || { echo "address prefix patch did not apply"; exit 1; }
+  # Stage 5: post-quantum ML-DSA (FIPS 204) signature check as an EVM precompile
+  # at 0x...0900 (Cloudflare CIRCL v1.6.3). The patch is below, in this file.
+  # Its own test runs before the build; a failure stops the setup.
+  sed -n '/^: <<.ZETAPHY_PQ_PATCH.$/,/^ZETAPHY_PQ_PATCH$/p' "$0" | sed '1d;$d' > /tmp/zetaphy-pq.patch
+  chmod 644 /tmp/zetaphy-pq.patch
+  as_node "cd '$src' && git apply /tmp/zetaphy-pq.patch"
+  as_node "cd '$src' && PATH=$(dirname "$GO"):\$PATH GOTOOLCHAIN=go${GO_VERSION} go test ./precompiles/mldsa/"
   as_node "cd '$src' && PATH=$(dirname "$GO"):\$PATH GOTOOLCHAIN=go${GO_VERSION} make install"
   install -m 755 "/home/${NODE_USER}/go/bin/evmd" "$BIN"
 fi
@@ -120,7 +127,8 @@ if [ ! -f "$NODE_HOME/config/genesis.json" ]; then
   # Fixed supply: no inflation. Rewards come from the rewards pool in a later step.
   jqg '.app_state.mint.minter.inflation="0.000000000000000000" | .app_state.mint.params.inflation_rate_change="0.000000000000000000" | .app_state.mint.params.inflation_max="0.000000000000000000" | .app_state.mint.params.inflation_min="0.000000000000000000"'
   jqg ".app_state.bank.denom_metadata=[{\"description\":\"ZETAPHY Chain native token (testnet)\",\"denom_units\":[{\"denom\":\"$DENOM\",\"exponent\":0,\"aliases\":[\"attozetaphy\"]},{\"denom\":\"zetaphy\",\"exponent\":18,\"aliases\":[]}],\"base\":\"$DENOM\",\"display\":\"zetaphy\",\"name\":\"ZETAPHY\",\"symbol\":\"ZETAPHY\",\"uri\":\"\",\"uri_hash\":\"\"}]"
-  jqg '.app_state.evm.params.active_static_precompiles=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000400","0x0000000000000000000000000000000000000800","0x0000000000000000000000000000000000000801","0x0000000000000000000000000000000000000802","0x0000000000000000000000000000000000000803","0x0000000000000000000000000000000000000804","0x0000000000000000000000000000000000000805","0x0000000000000000000000000000000000000806","0x0000000000000000000000000000000000000807"]'
+  # Sorted ascending (genesis validation requires it); 0x...0900 = ML-DSA (stage 5).
+  jqg '.app_state.evm.params.active_static_precompiles=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000400","0x0000000000000000000000000000000000000800","0x0000000000000000000000000000000000000801","0x0000000000000000000000000000000000000802","0x0000000000000000000000000000000000000803","0x0000000000000000000000000000000000000804","0x0000000000000000000000000000000000000805","0x0000000000000000000000000000000000000806","0x0000000000000000000000000000000000000807","0x0000000000000000000000000000000000000900"]'
   jqg ".app_state.erc20.native_precompiles=[\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\"] | .app_state.erc20.token_pairs=[{contract_owner:1,erc20_address:\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\",denom:\"$DENOM\",enabled:true}]"
   jqg '.consensus.params.block.max_gas="30000000"'
   # Testnet: short votes so upgrade proposals can be tried quickly.
@@ -228,3 +236,291 @@ ZETAPHY testnet node is starting.
   Genesis keys:        $KEYS_DIR (testnet only; MNEMONICS-KEEP-SECRET.txt)
   Logs:                journalctl -u zetaphyd -f
 INFO
+
+exit 0
+
+# ---- ML-DSA precompile patch (applied in step 4; never executed as shell) ----
+: <<'ZETAPHY_PQ_PATCH'
+diff --git a/evmd/go.mod b/evmd/go.mod
+index e503386..dc04366 100644
+--- a/evmd/go.mod
++++ b/evmd/go.mod
+@@ -88,6 +88,7 @@ require (
+ 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
+ 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+ 	github.com/chzyer/readline v1.5.1 // indirect
++	github.com/cloudflare/circl v1.6.3 // indirect
+ 	github.com/cloudwego/base64x v0.1.6 // indirect
+ 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
+ 	github.com/cockroachdb/errors v1.13.0 // indirect
+diff --git a/evmd/go.sum b/evmd/go.sum
+index 92d6f82..4ce53b3 100644
+--- a/evmd/go.sum
++++ b/evmd/go.sum
+@@ -220,6 +220,8 @@ github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6D
+ github.com/circonus-labs/circonusllhist v0.1.3/go.mod h1:kMXHVDlOchFAehlya5ePtbp5jckzBHf4XRpQvBOLI+I=
+ github.com/clbanning/x2j v0.0.0-20191024224557-825249438eec/go.mod h1:jMjuTZXRI4dUb/I5gc9Hdhagfvm9+RyrPryS/auMzxE=
+ github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
++github.com/cloudflare/circl v1.6.3 h1:9GPOhQGF9MCYUeXyMYlqTR6a5gTrgR/fBLXvUgtVcg8=
++github.com/cloudflare/circl v1.6.3/go.mod h1:2eXP6Qfat4O/Yhh8BznvKnJ+uzEoTQ6jVKJRn81BiS4=
+ github.com/cloudwego/base64x v0.1.6 h1:t11wG9AECkCDk5fMSoxmufanudBtJ+/HemLstXDLI2M=
+ github.com/cloudwego/base64x v0.1.6/go.mod h1:OFcloc187FXDaYHvrNIjxSe8ncn0OOM8gEHfghB2IPU=
+ github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
+diff --git a/go.mod b/go.mod
+index 777e52d..c4797ba 100644
+--- a/go.mod
++++ b/go.mod
+@@ -119,6 +119,7 @@ require (
+ 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
+ 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+ 	github.com/chzyer/readline v1.5.1 // indirect
++	github.com/cloudflare/circl v1.6.3 // indirect
+ 	github.com/cloudwego/base64x v0.1.6 // indirect
+ 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
+ 	github.com/cockroachdb/errors v1.13.0 // indirect
+diff --git a/go.sum b/go.sum
+index 11f8f59..bbea7b7 100644
+--- a/go.sum
++++ b/go.sum
+@@ -215,6 +215,8 @@ github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6D
+ github.com/circonus-labs/circonusllhist v0.1.3/go.mod h1:kMXHVDlOchFAehlya5ePtbp5jckzBHf4XRpQvBOLI+I=
+ github.com/clbanning/x2j v0.0.0-20191024224557-825249438eec/go.mod h1:jMjuTZXRI4dUb/I5gc9Hdhagfvm9+RyrPryS/auMzxE=
+ github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
++github.com/cloudflare/circl v1.6.3 h1:9GPOhQGF9MCYUeXyMYlqTR6a5gTrgR/fBLXvUgtVcg8=
++github.com/cloudflare/circl v1.6.3/go.mod h1:2eXP6Qfat4O/Yhh8BznvKnJ+uzEoTQ6jVKJRn81BiS4=
+ github.com/cloudwego/base64x v0.1.6 h1:t11wG9AECkCDk5fMSoxmufanudBtJ+/HemLstXDLI2M=
+ github.com/cloudwego/base64x v0.1.6/go.mod h1:OFcloc187FXDaYHvrNIjxSe8ncn0OOM8gEHfghB2IPU=
+ github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
+diff --git a/precompiles/mldsa/mldsa.go b/precompiles/mldsa/mldsa.go
+new file mode 100644
+index 0000000..a291984
+--- /dev/null
++++ b/precompiles/mldsa/mldsa.go
+@@ -0,0 +1,98 @@
++// Package mldsa adds post-quantum signature verification to the EVM:
++// ML-DSA (FIPS 204, the NIST standard formerly called CRYSTALS-Dilithium).
++// ZETAPHY stage 5: smart wallets can require a signature that a quantum
++// computer cannot forge, alongside (or instead of) secp256k1 ECDSA.
++//
++// Input:  1 byte  parameter set: 44 (ML-DSA-44) or 65 (ML-DSA-65)
++//
++//	32 bytes message (usually a hash the wallet signed)
++//	public key  (1312 bytes for 44, 1952 for 65)
++//	signature   (2420 bytes for 44, 3309 for 65)
++//
++// Output: 32 bytes ending in 0x01 when the signature is valid; empty
++//
++//	otherwise (the same convention as the P256 precompile, RIP-7212).
++//
++// Pure ML-DSA with an empty context string, as FIPS 204 section 5.2.
++package mldsa
++
++import (
++	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
++	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/core/vm"
++
++	evmtypes "github.com/cosmos/evm/x/vm/types"
++)
++
++var _ vm.PrecompiledContract = &Precompile{}
++
++const (
++	// Gas per verification. Verifying takes roughly the time of a few
++	// ECDSA recoveries; the large input already pays calldata gas.
++	VerifyGas44 uint64 = 30_000
++	VerifyGas65 uint64 = 45_000
++	// InvalidInputGas is charged when the input has no valid shape.
++	InvalidInputGas uint64 = 3_000
++
++	Variant44 byte = 44
++	Variant65 byte = 65
++)
++
++type Precompile struct{}
++
++func (Precompile) Name() string { return "mldsa" }
++
++func (Precompile) Address() common.Address {
++	return common.HexToAddress(evmtypes.MLDSAPrecompileAddress)
++}
++
++func (Precompile) RequiredGas(input []byte) uint64 {
++	if len(input) > 0 {
++		switch input[0] {
++		case Variant44:
++			return VerifyGas44
++		case Variant65:
++			return VerifyGas65
++		}
++	}
++	return InvalidInputGas
++}
++
++var valid = common.LeftPadBytes([]byte{1}, 32)
++
++func (p *Precompile) Run(_ *vm.EVM, contract *vm.Contract, _ bool) ([]byte, error) {
++	if Verify(contract.Input) {
++		return valid, nil
++	}
++	return nil, nil
++}
++
++// Verify checks one packed input as described in the package comment.
++func Verify(in []byte) bool {
++	if len(in) < 33 {
++		return false
++	}
++	variant, msg, rest := in[0], in[1:33], in[33:]
++	switch variant {
++	case Variant44:
++		if len(rest) != mldsa44.PublicKeySize+mldsa44.SignatureSize {
++			return false
++		}
++		var pk mldsa44.PublicKey
++		if pk.UnmarshalBinary(rest[:mldsa44.PublicKeySize]) != nil {
++			return false
++		}
++		return mldsa44.Verify(&pk, msg, nil, rest[mldsa44.PublicKeySize:])
++	case Variant65:
++		if len(rest) != mldsa65.PublicKeySize+mldsa65.SignatureSize {
++			return false
++		}
++		var pk mldsa65.PublicKey
++		if pk.UnmarshalBinary(rest[:mldsa65.PublicKeySize]) != nil {
++			return false
++		}
++		return mldsa65.Verify(&pk, msg, nil, rest[mldsa65.PublicKeySize:])
++	}
++	return false
++}
+diff --git a/precompiles/mldsa/mldsa_test.go b/precompiles/mldsa/mldsa_test.go
+new file mode 100644
+index 0000000..77697eb
+--- /dev/null
++++ b/precompiles/mldsa/mldsa_test.go
+@@ -0,0 +1,64 @@
++package mldsa
++
++import (
++	"crypto/rand"
++	"testing"
++
++	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
++	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
++)
++
++func pack(variant byte, msg, pk, sig []byte) []byte {
++	out := append([]byte{variant}, msg...)
++	out = append(out, pk...)
++	return append(out, sig...)
++}
++
++func TestMLDSA44(t *testing.T) {
++	pk, sk, err := mldsa44.GenerateKey(rand.Reader)
++	if err != nil {
++		t.Fatal(err)
++	}
++	msg := make([]byte, 32)
++	_, _ = rand.Read(msg)
++	sig := make([]byte, mldsa44.SignatureSize)
++	if err := mldsa44.SignTo(sk, msg, nil, false, sig); err != nil {
++		t.Fatal(err)
++	}
++	pkb, _ := pk.MarshalBinary()
++	if !Verify(pack(44, msg, pkb, sig)) {
++		t.Fatal("valid signature rejected")
++	}
++	bad := append([]byte{}, msg...)
++	bad[0] ^= 1
++	if Verify(pack(44, bad, pkb, sig)) {
++		t.Fatal("signature over another message accepted")
++	}
++	sig[10] ^= 1
++	if Verify(pack(44, msg, pkb, sig)) {
++		t.Fatal("tampered signature accepted")
++	}
++	if Verify(pack(65, msg, pkb, sig)) || Verify(pack(44, msg, pkb, sig[:100])) || Verify([]byte{44}) || Verify(nil) {
++		t.Fatal("malformed input accepted")
++	}
++}
++
++func TestMLDSA65(t *testing.T) {
++	pk, sk, _ := mldsa65.GenerateKey(rand.Reader)
++	msg := make([]byte, 32)
++	sig := make([]byte, mldsa65.SignatureSize)
++	if err := mldsa65.SignTo(sk, msg, nil, true, sig); err != nil {
++		t.Fatal(err)
++	}
++	pkb, _ := pk.MarshalBinary()
++	if !Verify(pack(65, msg, pkb, sig)) {
++		t.Fatal("valid signature rejected")
++	}
++}
++
++func TestGas(t *testing.T) {
++	var p Precompile
++	if p.RequiredGas([]byte{44}) != VerifyGas44 || p.RequiredGas([]byte{65}) != VerifyGas65 || p.RequiredGas(nil) != InvalidInputGas {
++		t.Fatal("gas")
++	}
++}
+diff --git a/precompiles/types/defaults.go b/precompiles/types/defaults.go
+index cd68986..f192838 100644
+--- a/precompiles/types/defaults.go
++++ b/precompiles/types/defaults.go
+@@ -79,6 +79,7 @@ func DefaultStaticPrecompiles(
+ 	precompiles := NewStaticPrecompiles().
+ 		WithPraguePrecompiles().
+ 		WithP256Precompile().
++		WithMLDSAPrecompile().
+ 		WithBech32Precompile().
+ 		WithStakingPrecompile(stakingKeeper, bankKeeper, opts...).
+ 		WithDistributionPrecompile(distributionKeeper, stakingKeeper, bankKeeper, opts...).
+diff --git a/precompiles/types/static_precompiles.go b/precompiles/types/static_precompiles.go
+index 7f19b35..ec74b76 100644
+--- a/precompiles/types/static_precompiles.go
++++ b/precompiles/types/static_precompiles.go
+@@ -15,6 +15,7 @@ import (
+ 	govprecompile "github.com/cosmos/evm/precompiles/gov"
+ 	ics02precompile "github.com/cosmos/evm/precompiles/ics02"
+ 	ics20precompile "github.com/cosmos/evm/precompiles/ics20"
++	"github.com/cosmos/evm/precompiles/mldsa"
+ 	"github.com/cosmos/evm/precompiles/p256"
+ 	slashingprecompile "github.com/cosmos/evm/precompiles/slashing"
+ 	stakingprecompile "github.com/cosmos/evm/precompiles/staking"
+@@ -46,6 +47,12 @@ func (s StaticPrecompiles) WithP256Precompile() StaticPrecompiles {
+ 	return s
+ }
+ 
++func (s StaticPrecompiles) WithMLDSAPrecompile() StaticPrecompiles {
++	mldsaPrecompile := &mldsa.Precompile{}
++	s[mldsaPrecompile.Address()] = mldsaPrecompile
++	return s
++}
++
+ func (s StaticPrecompiles) WithBech32Precompile() StaticPrecompiles {
+ 	bech32Precompile, err := bech32.NewPrecompile(bech32PrecompileBaseGas)
+ 	if err != nil {
+diff --git a/x/vm/types/precompiles.go b/x/vm/types/precompiles.go
+index a7e058a..d3819ff 100644
+--- a/x/vm/types/precompiles.go
++++ b/x/vm/types/precompiles.go
+@@ -3,6 +3,8 @@ package types
+ const (
+ 	P256PrecompileAddress   = "0x0000000000000000000000000000000000000100"
+ 	Bech32PrecompileAddress = "0x0000000000000000000000000000000000000400"
++	// MLDSAPrecompileAddress: post-quantum ML-DSA (FIPS 204) verification (ZETAPHY).
++	MLDSAPrecompileAddress = "0x0000000000000000000000000000000000000900"
+ )
+ 
+ const (
+@@ -23,6 +25,7 @@ const (
+ var AvailableStaticPrecompiles = []string{
+ 	P256PrecompileAddress,
+ 	Bech32PrecompileAddress,
++	MLDSAPrecompileAddress,
+ 	StakingPrecompileAddress,
+ 	DistributionPrecompileAddress,
+ 	ICS20PrecompileAddress,
+ZETAPHY_PQ_PATCH

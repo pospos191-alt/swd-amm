@@ -10,12 +10,14 @@
   "scripts": {
     "build": "node scripts/build.js",
     "test": "node --test test/*.test.js",
-    "test:devnet": "node --test test/devnet.integration.js"
+    "test:devnet": "node --test test/devnet.integration.js",
+    "test:devnet:pq": "node --test test/devnet.pq.integration.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@noble/post-quantum": "^0.6.1",
     "ethers": "6.16.0"
   },
   "devDependencies": {
