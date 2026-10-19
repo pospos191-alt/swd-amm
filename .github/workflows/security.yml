@@ -2,6 +2,8 @@
 #
 # What runs, and when:
 #   zetaphy-neuro every push / PR — Neuro ZETAPHY tier 1 unit + browser tests. ~2 min.
+#   zetaphy-verify every push / PR — tests for the explorer auto-verifier
+#                 (its own scheduled run is zetaphy-verify.yml). ~1 min.
 #   test-ui       every push / PR — syntax check + a headless-browser smoke
 #                 test of test-ui/index.html (catches a page that freezes on
 #                 load, like build 2026-09-25o). ~2 min.
@@ -116,6 +118,28 @@ jobs:
 
       - name: Browser test (web page, RPC answered locally)
         run: npm run test:web
+
+  zetaphy-verify:
+    name: zetaphy-verify (unit tests)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: zetaphy-verify
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Unit tests (solc-compiled launcher, simulated chain and explorers)
+        run: npm test
 
   program:
     name: program (cargo test + anchor test)

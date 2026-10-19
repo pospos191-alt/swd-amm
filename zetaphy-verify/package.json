@@ -1,0 +1,19 @@
+{
+  "name": "zetaphy-verify",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Publishes the source of every ZETAPHY launcher token on each chain's explorer (Sourcify, and Etherscan-family when a key is set)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "watch": "node cli.js watch",
+    "verify": "node cli.js verify"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@noble/hashes": "1.5.0",
+    "solc": "0.8.26"
+  }
+}

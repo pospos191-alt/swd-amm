@@ -1,0 +1,84 @@
+# Publishes the source of every ZETAPHY launcher token on block explorers.
+#
+# Every 3 hours it reads the last ~4 hours of TokenDeployed events from each
+# ZETAPHY factory (zetaphy-verify/src/config.js) on every chain and verifies
+# the factory and each new token:
+#   - Sourcify: free, every chain, no key needed.
+#   - Etherscan family (bscscan, basescan, arbiscan, etherscan): only when the
+#     repository secret ETHERSCAN_API_KEY is set. Etherscan's free tier skips
+#     some chains (BNB Chain and Base when this was written); those show
+#     "plan-required" and do not fail the run.
+# Already-verified contracts are skipped, so overlapping runs are harmless.
+#
+# It only submits code that matches a contract in zetaphy-verify/build-info/
+# (by code fingerprint), so it can never publish the wrong source.
+#
+# Run by hand (Actions → ZETAPHY verify → Run workflow) to backfill older
+# tokens with a start block, or to verify one address.
+
+name: ZETAPHY verify
+
+on:
+  schedule:
+    - cron: '17 */3 * * *'
+  push:
+    branches: [main]
+    paths: ['zetaphy-verify/build-info/**', 'zetaphy-verify/src/config.js']
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: 'Chain (all = every chain in config)'
+        type: choice
+        options: [all, bsc, base, arbitrum, eth]
+        default: all
+      from_block:
+        description: 'Start block for a backfill (empty = last ~4 hours)'
+        required: false
+      to_block:
+        description: 'End block (empty = latest)'
+        required: false
+      address:
+        description: 'Verify just this address instead (needs a chain other than all)'
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zetaphy-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: verify ZETAPHY contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # No install step: the verifier has no runtime dependencies.
+      - name: Verify
+        env:
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+          CHAIN: ${{ inputs.chain || 'all' }}
+          FROM_BLOCK: ${{ inputs.from_block }}
+          TO_BLOCK: ${{ inputs.to_block }}
+          ADDRESS: ${{ inputs.address }}
+        run: |
+          args=()
+          if [ -n "$ADDRESS" ]; then
+            if [ "$CHAIN" = all ]; then echo "Pick a chain to verify one address." >&2; exit 1; fi
+            args=(verify "$CHAIN" "$ADDRESS")
+          else
+            args=(watch)
+            if [ "$CHAIN" != all ]; then args+=(--chain "$CHAIN"); fi
+            if [ -n "$FROM_BLOCK" ]; then args+=(--from-block "$FROM_BLOCK"); fi
+            if [ -n "$TO_BLOCK" ]; then args+=(--to-block "$TO_BLOCK"); fi
+          fi
+          node zetaphy-verify/cli.js "${args[@]}"
