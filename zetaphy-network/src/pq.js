@@ -17,6 +17,9 @@ export function pqFromSeed(seedHex) {
     publicKey: hexlify(publicKey),
     keyHash: keccak256(publicKey),
     sign: (digestHex) => hexlify(ml_dsa44.sign(getBytes(digestHex), secretKey)),
+    // Raw bytes in and out, for native PQ accounts (src/pqtx.js).
+    publicKeyBytes: publicKey,
+    signBytes: (bytes) => ml_dsa44.sign(bytes, secretKey),
   };
 }
 

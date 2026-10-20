@@ -22,6 +22,9 @@ MONIKER="${MONIKER:-zetaphy-validator-0}"
 COSMOS_EVM_TAG="v0.7.3"
 COSMOS_EVM_COMMIT="c3ae9067a7eadcdea55a5192226916deb44c71c4"
 GO_VERSION="1.25.9"                # what cosmos/evm v0.7.3 go.mod requires
+# IBC rate limits: ibc-apps rate-limiting, ported to ibc-go v11 by the patch below.
+RATELIMIT_MOD="github.com/cosmos/ibc-apps/modules/rate-limiting/v10@v10.7.0"
+RATELIMIT_SUM="h1:5X2o/xT1x1fltUrkhvDCOpFaRJK5/1M36/SCh873VOc="
 
 NODE_USER="zetaphy"
 NODE_HOME="/home/${NODE_USER}/.zetaphy"          # chain data + config (no keys)
@@ -32,6 +35,48 @@ LOG="/var/log/zetaphy-setup.log"
 # Test hooks (leave unset on Oracle): ZETAPHYD_BIN=<prebuilt evmd>, NO_SYSTEMD=1
 ZETAPHYD_BIN="${ZETAPHYD_BIN:-}"
 NO_SYSTEMD="${NO_SYSTEMD:-}"
+
+# ---- The ZETAPHY changes to the Cosmos EVM source -------------------------
+# Used in step 4 below, and by CI: setup-node.sh --patch-source <cosmos/evm checkout>
+# Runs as the user who owns the checkout, with Go (and jq) on PATH.
+#  - addresses start with "zetaphy1..." instead of "cosmos1...";
+#  - stage 5: post-quantum ML-DSA (FIPS 204) signature check as an EVM
+#    precompile at 0x...0900 (Cloudflare CIRCL v1.6.3);
+#  - stage 5: accounts whose only key is ML-DSA-44 (crypto/mldsa44): plain
+#    Cosmos txs signed post-quantum, sent through the JSON-RPC methods
+#    zetaphy_pqAccount / zetaphy_sendCosmosTx (evmd/zetaphy_rpc.go);
+#  - stage 2: half of each block's fees is burned (evmd/zetaphy_feeburn.go),
+#    like EIP-1559's base fee; validators get the other half;
+#  - stage 3: IBC rate limits (x/ratelimit): governance caps how much of a
+#    denom may cross a channel per window (e.g. USDC from Noble). The code is
+#    the published ibc-apps module (hash pinned above, checked by Go's
+#    checksum database too), ported to ibc-go v11 by ZETAPHY_RL_PATCH.
+# The patches are at the end of this file. Their tests (zetaphy-chain/fork-tests
+# on GitHub, kept out of this file so it fits Oracle's size limit) run in CI
+# on every change, against this same patching.
+zetaphy_patch_source() {
+  local src=$1 self rl rldir part
+  self=$(readlink -f "$0")
+  sed -i 's/Bech32Prefix = "cosmos"/Bech32Prefix = "zetaphy"/' "$src/evmd/config/bech32.go"
+  grep -q 'Bech32Prefix = "zetaphy"' "$src/evmd/config/bech32.go" || { echo "address prefix patch did not apply"; return 1; }
+  rl=$(cd /tmp && GOFLAGS=-mod=mod go mod download -json "$RATELIMIT_MOD")
+  [ "$(echo "$rl" | jq -r .Sum)" = "$RATELIMIT_SUM" ] || { echo "rate-limiting module hash mismatch"; return 1; }
+  rldir=$(echo "$rl" | jq -r .Dir)
+  mkdir -p "$src/x/ratelimit"
+  (cd "$rldir" && cp -r keeper types client v2 migrations ibc_middleware.go module.go LICENSE "$src/x/ratelimit/")
+  chmod -R u+w "$src/x/ratelimit"
+  find "$src/x/ratelimit" -name '*_test.go' -delete
+  find "$src/x/ratelimit" -name '*.go' -exec sed -i \
+    -e 's#github.com/cosmos/ibc-apps/modules/rate-limiting/v10#github.com/cosmos/evm/x/ratelimit#g' \
+    -e 's#github.com/cosmos/ibc-go/v10#github.com/cosmos/ibc-go/v11#g' \
+    -e 's#"cosmossdk.io/store/#"github.com/cosmos/cosmos-sdk/store/v2/#g' \
+    -e 's#"cosmossdk.io/log"#"cosmossdk.io/log/v2"#g' {} +
+  for part in RL PQ; do
+    sed -n "/^: <<.ZETAPHY_${part}_PATCH.\$/,/^ZETAPHY_${part}_PATCH\$/p" "$self" | sed '1d;$d' | (cd "$src" && git apply -)
+  done
+  (cd "$src" && go vet ./precompiles/mldsa/ ./crypto/mldsa44/ ./x/ratelimit/...)
+}
+if [ "${1:-}" = "--patch-source" ]; then zetaphy_patch_source "$2"; exit 0; fi
 
 touch "$LOG" && chmod 640 "$LOG"
 exec > >(tee -a "$LOG") 2>&1
@@ -83,19 +128,10 @@ elif [ ! -x "$BIN" ] || [ -n "${FORCE_BUILD:-}" ]; then
   as_node "rm -rf '$src' && git clone -q --depth 1 --branch '$COSMOS_EVM_TAG' https://github.com/cosmos/evm.git '$src'"
   got=$(as_node "git -C '$src' rev-parse HEAD")
   [ "$got" = "$COSMOS_EVM_COMMIT" ] || { echo "source commit $got != pinned $COSMOS_EVM_COMMIT"; exit 1; }
-  # Addresses start with "zetaphy1..." instead of "cosmos1...".
-  as_node "sed -i 's/Bech32Prefix = \"cosmos\"/Bech32Prefix = \"zetaphy\"/' '$src/evmd/config/bech32.go'"
-  grep -q 'Bech32Prefix = "zetaphy"' "$src/evmd/config/bech32.go" || { echo "address prefix patch did not apply"; exit 1; }
-  # The ZETAPHY patch (below, in this file) adds:
-  #  - stage 5: post-quantum ML-DSA (FIPS 204) signature check as an EVM
-  #    precompile at 0x...0900 (Cloudflare CIRCL v1.6.3);
-  #  - stage 2: half of each block's fees is burned (evmd/zetaphy_feeburn.go),
-  #    like EIP-1559's base fee; validators get the other half.
-  # The ML-DSA test runs before the build; a failure stops the setup.
-  sed -n '/^: <<.ZETAPHY_PQ_PATCH.$/,/^ZETAPHY_PQ_PATCH$/p' "$0" | sed '1d;$d' > /tmp/zetaphy-pq.patch
-  chmod 644 /tmp/zetaphy-pq.patch
-  as_node "cd '$src' && git apply /tmp/zetaphy-pq.patch"
-  as_node "cd '$src' && PATH=$(dirname "$GO"):\$PATH GOTOOLCHAIN=go${GO_VERSION} go test ./precompiles/mldsa/"
+  goenv="PATH=$(dirname "$GO"):\$PATH GOTOOLCHAIN=go${GO_VERSION}"
+  # The ZETAPHY changes (zetaphy_patch_source, above), as the node user.
+  install -m 644 "$0" /tmp/zetaphy-setup-node.sh
+  as_node "cd '$src' && $goenv bash /tmp/zetaphy-setup-node.sh --patch-source '$src'"
   as_node "cd '$src' && PATH=$(dirname "$GO"):\$PATH GOTOOLCHAIN=go${GO_VERSION} make install"
   install -m 755 "/home/${NODE_USER}/go/bin/evmd" "$BIN"
 fi
@@ -185,7 +221,7 @@ sec = re.search(r'(?ms)^\[json-rpc\].*?(?=^\[|\Z)', s).group(0)
 new = re.sub(r'(?m)^enable = .*', 'enable = true', sec)
 new = re.sub(r'(?m)^address = .*', 'address = \"0.0.0.0:8545\"', new)
 new = re.sub(r'(?m)^ws-address = .*', 'ws-address = \"127.0.0.1:8546\"', new)
-new = re.sub(r'(?m)^api = .*', 'api = \"eth,net,web3,txpool\"', new)
+new = re.sub(r'(?m)^api = .*', 'api = \"eth,net,web3,txpool,zetaphy\"', new)
 # The port is public: keep one caller from tying the node up.
 limits = {
     'allow-insecure-unlock': 'false',         # no account unlocking over RPC
@@ -204,7 +240,7 @@ open(p, 'w').write(s.replace(sec, new))
 PY"
 
 step "7/8 service"
-START="$BIN start --home $NODE_HOME --chain-id $CHAIN_ID --json-rpc.api eth,net,web3,txpool"
+START="$BIN start --home $NODE_HOME --chain-id $CHAIN_ID --json-rpc.api eth,net,web3,txpool,zetaphy"
 # Use systemd only when it is actually running (it may be installed but off,
 # e.g. on WSL without systemd=true); otherwise start the node in the background.
 if [ -z "$NO_SYSTEMD" ] && [ -d /run/systemd/system ]; then
@@ -256,13 +292,844 @@ INFO
 
 exit 0
 
-# ---- ML-DSA precompile patch (applied in step 4; never executed as shell) ----
+# ---- ZETAPHY patches (applied in step 4; never executed as shell) ----
+: <<'ZETAPHY_RL_PATCH'
+diff --git a/x/ratelimit/ibc_middleware.go b/x/ratelimit/ibc_middleware.go
+index 2bd59d8..5d6a8ab 100644
+--- a/x/ratelimit/ibc_middleware.go
++++ b/x/ratelimit/ibc_middleware.go
+@@ -18,18 +18,36 @@ var _ porttypes.Middleware = (*IBCMiddleware)(nil)
+ 
+ type IBCMiddleware struct {
+ 	app    porttypes.IBCModule
+-	keeper keeper.Keeper
++	keeper *keeper.Keeper
+ }
+ 
+-func NewIBCMiddleware(k keeper.Keeper, app porttypes.IBCModule) IBCMiddleware {
+-	return IBCMiddleware{
++// NewIBCMiddleware wraps app. ZETAPHY port to ibc-go v11: the keeper is held
++// by pointer so SetICS4Wrapper reaches the keeper the packets go through.
++func NewIBCMiddleware(k *keeper.Keeper, app porttypes.IBCModule) *IBCMiddleware {
++	return &IBCMiddleware{
+ 		app:    app,
+ 		keeper: k,
+ 	}
+ }
+ 
++// SetICS4Wrapper sets the wrapper below this middleware (core IBC for sends).
++func (im *IBCMiddleware) SetICS4Wrapper(wrapper porttypes.ICS4Wrapper) {
++	if wrapper == nil {
++		panic("ICS4Wrapper cannot be nil")
++	}
++	im.keeper.SetICS4Wrapper(wrapper)
++}
++
++// SetUnderlyingApplication sets the application this middleware wraps.
++func (im *IBCMiddleware) SetUnderlyingApplication(app porttypes.IBCModule) {
++	if app == nil {
++		panic("underlying application cannot be nil")
++	}
++	im.app = app
++}
++
+ // OnChanOpenInit implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnChanOpenInit(ctx sdk.Context,
++func (im *IBCMiddleware) OnChanOpenInit(ctx sdk.Context,
+ 	order channeltypes.Order,
+ 	connectionHops []string,
+ 	portID string,
+@@ -49,7 +67,7 @@ func (im IBCMiddleware) OnChanOpenInit(ctx sdk.Context,
+ }
+ 
+ // OnChanOpenTry implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnChanOpenTry(
++func (im *IBCMiddleware) OnChanOpenTry(
+ 	ctx sdk.Context,
+ 	order channeltypes.Order,
+ 	connectionHops []string,
+@@ -62,7 +80,7 @@ func (im IBCMiddleware) OnChanOpenTry(
+ }
+ 
+ // OnChanOpenAck implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnChanOpenAck(
++func (im *IBCMiddleware) OnChanOpenAck(
+ 	ctx sdk.Context,
+ 	portID,
+ 	channelID string,
+@@ -73,7 +91,7 @@ func (im IBCMiddleware) OnChanOpenAck(
+ }
+ 
+ // OnChanOpenConfirm implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnChanOpenConfirm(
++func (im *IBCMiddleware) OnChanOpenConfirm(
+ 	ctx sdk.Context,
+ 	portID,
+ 	channelID string,
+@@ -82,7 +100,7 @@ func (im IBCMiddleware) OnChanOpenConfirm(
+ }
+ 
+ // OnChanCloseInit implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnChanCloseInit(
++func (im *IBCMiddleware) OnChanCloseInit(
+ 	ctx sdk.Context,
+ 	portID,
+ 	channelID string,
+@@ -91,7 +109,7 @@ func (im IBCMiddleware) OnChanCloseInit(
+ }
+ 
+ // OnChanCloseConfirm implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnChanCloseConfirm(
++func (im *IBCMiddleware) OnChanCloseConfirm(
+ 	ctx sdk.Context,
+ 	portID,
+ 	channelID string,
+@@ -100,7 +118,7 @@ func (im IBCMiddleware) OnChanCloseConfirm(
+ }
+ 
+ // OnRecvPacket implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnRecvPacket(
++func (im *IBCMiddleware) OnRecvPacket(
+ 	ctx sdk.Context,
+ 	channelVersion string,
+ 	packet channeltypes.Packet,
+@@ -129,37 +147,43 @@ func (im IBCMiddleware) OnRecvPacket(
+ }
+ 
+ // OnAcknowledgementPacket implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnAcknowledgementPacket(
++func (im *IBCMiddleware) OnAcknowledgementPacket(
+ 	ctx sdk.Context,
+ 	channelVersion string,
+ 	packet channeltypes.Packet,
+ 	acknowledgement []byte,
+ 	relayer sdk.AccAddress,
+ ) error {
+-	if err := im.keeper.AcknowledgeRateLimitedPacket(ctx, packet, acknowledgement); err != nil {
+-		im.keeper.Logger(ctx).Error(fmt.Sprintf("ICS20 RateLimited OnAckPacket failed: %s", err.Error()))
+-		return err
++	// A packet that is not ICS-20 data was never counted on send: leave it
++	// to the application below (ZETAPHY port).
++	if _, perr := keeper.ParsePacketInfo(packet, types.PACKET_SEND); perr == nil {
++		if err := im.keeper.AcknowledgeRateLimitedPacket(ctx, packet, acknowledgement); err != nil {
++			im.keeper.Logger(ctx).Error(fmt.Sprintf("ICS20 RateLimited OnAckPacket failed: %s", err.Error()))
++			return err
++		}
+ 	}
+ 	return im.app.OnAcknowledgementPacket(ctx, channelVersion, packet, acknowledgement, relayer)
+ }
+ 
+ // OnTimeoutPacket implements the IBCMiddleware interface
+-func (im IBCMiddleware) OnTimeoutPacket(
++func (im *IBCMiddleware) OnTimeoutPacket(
+ 	ctx sdk.Context,
+ 	channelVersion string,
+ 	packet channeltypes.Packet,
+ 	relayer sdk.AccAddress,
+ ) error {
+-	if err := im.keeper.TimeoutRateLimitedPacket(ctx, packet); err != nil {
+-		im.keeper.Logger(ctx).Error(fmt.Sprintf("ICS20 RateLimited OnTimeoutPacket failed: %s", err.Error()))
+-		return err
++	if _, perr := keeper.ParsePacketInfo(packet, types.PACKET_SEND); perr == nil {
++		if err := im.keeper.TimeoutRateLimitedPacket(ctx, packet); err != nil {
++			im.keeper.Logger(ctx).Error(fmt.Sprintf("ICS20 RateLimited OnTimeoutPacket failed: %s", err.Error()))
++			return err
++		}
+ 	}
+ 	return im.app.OnTimeoutPacket(ctx, channelVersion, packet, relayer)
+ }
+ 
+ // SendPacket implements the ICS4 Wrapper interface
+ // Rate-limited SendPacket found in RateLimit Keeper
+-func (im IBCMiddleware) SendPacket(
++func (im *IBCMiddleware) SendPacket(
+ 	ctx sdk.Context,
+ 	sourcePort string,
+ 	sourceChannel string,
+@@ -178,7 +202,7 @@ func (im IBCMiddleware) SendPacket(
+ }
+ 
+ // WriteAcknowledgement implements the ICS4 Wrapper interface.
+-func (im IBCMiddleware) WriteAcknowledgement(
++func (im *IBCMiddleware) WriteAcknowledgement(
+ 	ctx sdk.Context,
+ 	packet exported.PacketI,
+ 	ack exported.Acknowledgement,
+@@ -187,6 +211,6 @@ func (im IBCMiddleware) WriteAcknowledgement(
+ }
+ 
+ // GetAppVersion returns the application version of the underlying application
+-func (i IBCMiddleware) GetAppVersion(ctx sdk.Context, portID, channelID string) (string, bool) {
++func (i *IBCMiddleware) GetAppVersion(ctx sdk.Context, portID, channelID string) (string, bool) {
+ 	return i.keeper.GetAppVersion(ctx, portID, channelID)
+ }
+diff --git a/x/ratelimit/keeper/keeper.go b/x/ratelimit/keeper/keeper.go
+index b7db0a2..e1bf9eb 100644
+--- a/x/ratelimit/keeper/keeper.go
++++ b/x/ratelimit/keeper/keeper.go
+@@ -11,14 +11,12 @@ import (
+ 
+ 	"github.com/cosmos/cosmos-sdk/codec"
+ 	sdk "github.com/cosmos/cosmos-sdk/types"
+-	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
+ )
+ 
+ type (
+ 	Keeper struct {
+ 		cdc          codec.BinaryCodec
+ 		storeService store.KVStoreService
+-		paramstore   paramtypes.Subspace
+ 		authority    string
+ 		Schema       collections.Schema
+ 
+@@ -41,7 +39,6 @@ type (
+ func NewKeeper(
+ 	cdc codec.BinaryCodec,
+ 	storeService store.KVStoreService,
+-	ps paramtypes.Subspace,
+ 	authority string,
+ 	bankKeeper types.BankKeeper,
+ 	channelKeeper types.ChannelKeeper,
+@@ -53,7 +50,6 @@ func NewKeeper(
+ 	k := Keeper{
+ 		cdc:          cdc,
+ 		storeService: storeService,
+-		paramstore:   ps,
+ 		authority:    authority,
+ 
+ 		PendingSendPackets:    collections.NewKeySet(sb, types.PendingSendPacketsKey, "pending_send_packets", pendingPacketKeyCodec),
+@@ -81,6 +77,11 @@ func (k Keeper) GetAuthority() string {
+ 
+ // SetIBCKeepers allows us to set the relevant IBC keepers post dependency
+ // injection, as IBC doesn't support dependency injection yet.
++// SetICS4Wrapper sets where rate-limited packets are sent next.
++func (k *Keeper) SetICS4Wrapper(ics4Wrapper types.ICS4Wrapper) {
++	k.ics4Wrapper = ics4Wrapper
++}
++
+ func (k *Keeper) SetIBCKeepers(channelKeeper types.ChannelKeeper, clientKeeper types.ClientKeeper, ics4Wrapper types.ICS4Wrapper) {
+ 	k.channelKeeper = channelKeeper
+ 	k.clientKeeper = clientKeeper
+diff --git a/x/ratelimit/keeper/params.go b/x/ratelimit/keeper/params.go
+index 90a3b5c..0c15141 100644
+--- a/x/ratelimit/keeper/params.go
++++ b/x/ratelimit/keeper/params.go
+@@ -11,7 +11,5 @@ func (k Keeper) GetParams(ctx sdk.Context) types.Params {
+ 	return types.NewParams()
+ }
+ 
+-// SetParams set the params
+-func (k Keeper) SetParams(ctx sdk.Context, params types.Params) {
+-	k.paramstore.SetParamSet(ctx, &params)
+-}
++// SetParams is a no-op: the module has no parameters (ZETAPHY port: no x/params).
++func (k Keeper) SetParams(ctx sdk.Context, params types.Params) {}
+diff --git a/x/ratelimit/module.go b/x/ratelimit/module.go
+index f06ec14..98f8abe 100644
+--- a/x/ratelimit/module.go
++++ b/x/ratelimit/module.go
+@@ -170,7 +170,8 @@ func (am AppModule) EndBlock(_ sdk.Context) ([]abci.ValidatorUpdate, error) {
+ 	return []abci.ValidatorUpdate{}, nil
+ }
+ 
+-// IsAppModule implements module.AppModule.
+-func (am AppModule) IsAppModule() {
+-	panic("unimplemented")
+-}
++// IsAppModule implements the appmodule.AppModule interface.
++func (am AppModule) IsAppModule() {}
++
++// IsOnePerModuleType implements the depinject.OnePerModuleType interface.
++func (am AppModule) IsOnePerModuleType() {}
+ZETAPHY_RL_PATCH
 : <<'ZETAPHY_PQ_PATCH'
+diff --git a/ante/sigverify.go b/ante/sigverify.go
+index 2710573..f3d89ce 100644
+--- a/ante/sigverify.go
++++ b/ante/sigverify.go
+@@ -4,6 +4,7 @@ import (
+ 	"fmt"
+ 
+ 	"github.com/cosmos/evm/crypto/ethsecp256k1"
++	"github.com/cosmos/evm/crypto/mldsa44"
+ 
+ 	errorsmod "cosmossdk.io/errors"
+ 
+@@ -21,6 +22,10 @@ var _ authante.SignatureVerificationGasConsumer = SigVerificationGasConsumer
+ 
+ const (
+ 	Secp256k1VerifyCost uint64 = 21000
++	// MLDSA44VerifyCost matches the ML-DSA-44 precompile (about 80 µs per
++	// verification); the 1312-byte key and 2420-byte signature also pay
++	// the per-byte transaction size gas.
++	MLDSA44VerifyCost uint64 = 30000
+ )
+ 
+ // SigVerificationGasConsumer is the Cosmos EVM implementation of SignatureVerificationGasConsumer. It consumes gas
+@@ -45,6 +50,13 @@ func SigVerificationGasConsumer(
+ 		// Ethereum keys
+ 		meter.ConsumeGas(Secp256k1VerifyCost, "ante verify: eth_secp256k1")
+ 		return nil
++	case *mldsa44.PubKey:
++		// ZETAPHY post-quantum accounts
++		meter.ConsumeGas(MLDSA44VerifyCost, "ante verify: mldsa44")
++		if !pubkey.Valid() {
++			return errorsmod.Wrap(errortypes.ErrInvalidPubKey, "invalid ML-DSA-44 public key")
++		}
++		return nil
+ 	case *secp256k1.PubKey:
+ 		// Cosmos keys
+ 		meter.ConsumeGas(params.SigVerifyCostSecp256k1, "ante verify: secp256k1")
+diff --git a/crypto/codec/amino.go b/crypto/codec/amino.go
+index 7d39df3..e0f69ae 100644
+--- a/crypto/codec/amino.go
++++ b/crypto/codec/amino.go
+@@ -2,6 +2,7 @@ package codec
+ 
+ import (
+ 	"github.com/cosmos/evm/crypto/ethsecp256k1"
++	"github.com/cosmos/evm/crypto/mldsa44"
+ 
+ 	"github.com/cosmos/cosmos-sdk/codec"
+ 	"github.com/cosmos/cosmos-sdk/codec/legacy"
+@@ -16,6 +17,7 @@ func RegisterCrypto(cdc *codec.LegacyAmino) {
+ 		ethsecp256k1.PubKeyName, nil)
+ 	cdc.RegisterConcrete(&ethsecp256k1.PrivKey{},
+ 		ethsecp256k1.PrivKeyName, nil)
++	cdc.RegisterConcrete(&mldsa44.PubKey{}, mldsa44.PubKeyName, nil)
+ 
+ 	keyring.RegisterLegacyAminoCodec(cdc)
+ 	cryptocodec.RegisterCrypto(cdc)
+diff --git a/crypto/codec/codec.go b/crypto/codec/codec.go
+index 2a938cf..2f3b613 100644
+--- a/crypto/codec/codec.go
++++ b/crypto/codec/codec.go
+@@ -2,6 +2,7 @@ package codec
+ 
+ import (
+ 	"github.com/cosmos/evm/crypto/ethsecp256k1"
++	"github.com/cosmos/evm/crypto/mldsa44"
+ 
+ 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+ 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
+@@ -10,5 +11,7 @@ import (
+ // RegisterInterfaces register the Cosmos EVM key concrete types.
+ func RegisterInterfaces(registry codectypes.InterfaceRegistry) {
+ 	registry.RegisterImplementations((*cryptotypes.PubKey)(nil), &ethsecp256k1.PubKey{})
++	// ZETAPHY: accounts controlled by a post-quantum ML-DSA-44 key alone.
++	registry.RegisterImplementations((*cryptotypes.PubKey)(nil), &mldsa44.PubKey{})
+ 	registry.RegisterImplementations((*cryptotypes.PrivKey)(nil), &ethsecp256k1.PrivKey{})
+ }
+diff --git a/crypto/mldsa44/descriptor.go b/crypto/mldsa44/descriptor.go
+new file mode 100644
+index 0000000..4cddc32
+--- /dev/null
++++ b/crypto/mldsa44/descriptor.go
+@@ -0,0 +1,52 @@
++package mldsa44
++
++import (
++	"bytes"
++	"compress/gzip"
++
++	protov2 "google.golang.org/protobuf/proto"
++	"google.golang.org/protobuf/types/descriptorpb"
++)
++
++const (
++	protoFile = "zetaphy/crypto/mldsa44/keys.proto"
++	// ProtoName is the full protobuf name; the Any type URL is "/" + ProtoName.
++	ProtoName = "zetaphy.crypto.mldsa44.PubKey"
++)
++
++// fileDescriptor is the gzipped FileDescriptorProto of keys.proto, as
++// protoc-gen-gogo would embed it. The Cosmos SDK transaction decoder needs it
++// to resolve the public key's Any type URL.
++var fileDescriptor = buildDescriptor()
++
++func buildDescriptor() []byte {
++	fd := &descriptorpb.FileDescriptorProto{
++		Name:    protov2.String(protoFile),
++		Package: protov2.String("zetaphy.crypto.mldsa44"),
++		Syntax:  protov2.String("proto3"),
++		Options: &descriptorpb.FileOptions{GoPackage: protov2.String("github.com/cosmos/evm/crypto/mldsa44")},
++		MessageType: []*descriptorpb.DescriptorProto{{
++			Name: protov2.String("PubKey"),
++			Field: []*descriptorpb.FieldDescriptorProto{{
++				Name:     protov2.String("key"),
++				JsonName: protov2.String("key"),
++				Number:   protov2.Int32(1),
++				Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
++				Type:     descriptorpb.FieldDescriptorProto_TYPE_BYTES.Enum(),
++			}},
++		}},
++	}
++	raw, err := protov2.MarshalOptions{Deterministic: true}.Marshal(fd)
++	if err != nil {
++		panic(err)
++	}
++	var buf bytes.Buffer
++	w, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
++	if _, err := w.Write(raw); err != nil {
++		panic(err)
++	}
++	if err := w.Close(); err != nil {
++		panic(err)
++	}
++	return buf.Bytes()
++}
+diff --git a/crypto/mldsa44/keys.pb.go b/crypto/mldsa44/keys.pb.go
+new file mode 100644
+index 0000000..c0bc0f9
+--- /dev/null
++++ b/crypto/mldsa44/keys.pb.go
+@@ -0,0 +1,273 @@
++// Hand-written gogoproto code for zetaphy/crypto/mldsa44/keys.proto:
++//
++//	syntax = "proto3";
++//	package zetaphy.crypto.mldsa44;
++//	message PubKey { bytes key = 1; }
++//
++// The file descriptor is built in code (see descriptor.go) instead of being
++// generated, so no protoc toolchain is needed to build the chain.
++
++package mldsa44
++
++import (
++	fmt "fmt"
++	io "io"
++	math_bits "math/bits"
++
++	proto "github.com/cosmos/gogoproto/proto"
++)
++
++// PubKey is an ML-DSA-44 (FIPS 204) public key: the raw 1312-byte encoding.
++type PubKey struct {
++	Key []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
++}
++
++func (m *PubKey) Reset()      { *m = PubKey{} }
++func (*PubKey) ProtoMessage() {}
++func (*PubKey) Descriptor() ([]byte, []int) {
++	return fileDescriptor, []int{0}
++}
++func (m *PubKey) XXX_Unmarshal(b []byte) error { return m.Unmarshal(b) }
++func (m *PubKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
++	b = b[:cap(b)]
++	n, err := m.MarshalToSizedBuffer(b)
++	if err != nil {
++		return nil, err
++	}
++	return b[:n], nil
++}
++func (m *PubKey) XXX_Merge(src proto.Message) { xxx_messageInfo_PubKey.Merge(m, src) }
++func (m *PubKey) XXX_Size() int               { return m.Size() }
++func (m *PubKey) XXX_DiscardUnknown()         { xxx_messageInfo_PubKey.DiscardUnknown(m) }
++
++var xxx_messageInfo_PubKey proto.InternalMessageInfo
++
++func (m *PubKey) GetKey() []byte {
++	if m != nil {
++		return m.Key
++	}
++	return nil
++}
++
++func init() {
++	proto.RegisterType((*PubKey)(nil), ProtoName)
++	proto.RegisterFile(protoFile, fileDescriptor)
++}
++
++func (m *PubKey) Marshal() (dAtA []byte, err error) {
++	size := m.Size()
++	dAtA = make([]byte, size)
++	n, err := m.MarshalToSizedBuffer(dAtA[:size])
++	if err != nil {
++		return nil, err
++	}
++	return dAtA[:n], nil
++}
++
++func (m *PubKey) MarshalTo(dAtA []byte) (int, error) {
++	size := m.Size()
++	return m.MarshalToSizedBuffer(dAtA[:size])
++}
++
++func (m *PubKey) MarshalToSizedBuffer(dAtA []byte) (int, error) {
++	i := len(dAtA)
++	if len(m.Key) > 0 {
++		i -= len(m.Key)
++		copy(dAtA[i:], m.Key)
++		i = encodeVarint(dAtA, i, uint64(len(m.Key)))
++		i--
++		dAtA[i] = 0xa
++	}
++	return len(dAtA) - i, nil
++}
++
++func encodeVarint(dAtA []byte, offset int, v uint64) int {
++	offset -= sov(v)
++	base := offset
++	for v >= 1<<7 {
++		dAtA[offset] = uint8(v&0x7f | 0x80)
++		v >>= 7
++		offset++
++	}
++	dAtA[offset] = uint8(v)
++	return base
++}
++
++func (m *PubKey) Size() (n int) {
++	if m == nil {
++		return 0
++	}
++	if l := len(m.Key); l > 0 {
++		n += 1 + l + sov(uint64(l))
++	}
++	return n
++}
++
++func sov(x uint64) (n int) { return (math_bits.Len64(x|1) + 6) / 7 }
++
++func (m *PubKey) Unmarshal(dAtA []byte) error {
++	l := len(dAtA)
++	iNdEx := 0
++	for iNdEx < l {
++		var wire uint64
++		for shift := uint(0); ; shift += 7 {
++			if shift >= 64 {
++				return errIntOverflow
++			}
++			if iNdEx >= l {
++				return io.ErrUnexpectedEOF
++			}
++			b := dAtA[iNdEx]
++			iNdEx++
++			wire |= uint64(b&0x7F) << shift
++			if b < 0x80 {
++				break
++			}
++		}
++		fieldNum := int32(wire >> 3)
++		wireType := int(wire & 0x7)
++		if wireType == 4 {
++			return fmt.Errorf("proto: PubKey: wiretype end group for non-group")
++		}
++		if fieldNum <= 0 {
++			return fmt.Errorf("proto: PubKey: illegal tag %d (wire type %d)", fieldNum, wire)
++		}
++		switch fieldNum {
++		case 1:
++			if wireType != 2 {
++				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
++			}
++			var byteLen int
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return errIntOverflow
++				}
++				if iNdEx >= l {
++					return io.ErrUnexpectedEOF
++				}
++				b := dAtA[iNdEx]
++				iNdEx++
++				byteLen |= int(b&0x7F) << shift
++				if b < 0x80 {
++					break
++				}
++			}
++			if byteLen < 0 {
++				return errInvalidLength
++			}
++			postIndex := iNdEx + byteLen
++			if postIndex < 0 {
++				return errInvalidLength
++			}
++			if postIndex > l {
++				return io.ErrUnexpectedEOF
++			}
++			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
++			if m.Key == nil {
++				m.Key = []byte{}
++			}
++			iNdEx = postIndex
++		default:
++			iNdEx--
++			skippy, err := skip(dAtA[iNdEx:])
++			if err != nil {
++				return err
++			}
++			if (skippy < 0) || (iNdEx+skippy) < 0 {
++				return errInvalidLength
++			}
++			if (iNdEx + skippy) > l {
++				return io.ErrUnexpectedEOF
++			}
++			iNdEx += skippy
++		}
++	}
++	if iNdEx > l {
++		return io.ErrUnexpectedEOF
++	}
++	return nil
++}
++
++var (
++	errInvalidLength = fmt.Errorf("proto: negative length found during unmarshaling")
++	errIntOverflow   = fmt.Errorf("proto: integer overflow")
++)
++
++// skip returns the length of the unknown field at the start of dAtA.
++func skip(dAtA []byte) (n int, err error) {
++	l := len(dAtA)
++	iNdEx := 0
++	depth := 0
++	for iNdEx < l {
++		var wire uint64
++		for shift := uint(0); ; shift += 7 {
++			if shift >= 64 {
++				return 0, errIntOverflow
++			}
++			if iNdEx >= l {
++				return 0, io.ErrUnexpectedEOF
++			}
++			b := dAtA[iNdEx]
++			iNdEx++
++			wire |= (uint64(b) & 0x7F) << shift
++			if b < 0x80 {
++				break
++			}
++		}
++		switch int(wire & 0x7) {
++		case 0:
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return 0, errIntOverflow
++				}
++				if iNdEx >= l {
++					return 0, io.ErrUnexpectedEOF
++				}
++				iNdEx++
++				if dAtA[iNdEx-1] < 0x80 {
++					break
++				}
++			}
++		case 1:
++			iNdEx += 8
++		case 2:
++			var length int
++			for shift := uint(0); ; shift += 7 {
++				if shift >= 64 {
++					return 0, errIntOverflow
++				}
++				if iNdEx >= l {
++					return 0, io.ErrUnexpectedEOF
++				}
++				b := dAtA[iNdEx]
++				iNdEx++
++				length |= (int(b) & 0x7F) << shift
++				if b < 0x80 {
++					break
++				}
++			}
++			if length < 0 {
++				return 0, errInvalidLength
++			}
++			iNdEx += length
++		case 3:
++			depth++
++		case 4:
++			if depth == 0 {
++				return 0, fmt.Errorf("proto: unexpected end group")
++			}
++			depth--
++		case 5:
++			iNdEx += 4
++		default:
++			return 0, fmt.Errorf("proto: illegal wireType %d", int(wire&0x7))
++		}
++		if iNdEx < 0 {
++			return 0, errInvalidLength
++		}
++		if depth == 0 {
++			return iNdEx, nil
++		}
++	}
++	return 0, io.ErrUnexpectedEOF
++}
+diff --git a/crypto/mldsa44/mldsa44.go b/crypto/mldsa44/mldsa44.go
+new file mode 100644
+index 0000000..15ee4a6
+--- /dev/null
++++ b/crypto/mldsa44/mldsa44.go
+@@ -0,0 +1,68 @@
++// Package mldsa44 lets an account on the chain be controlled by an
++// ML-DSA-44 (FIPS 204) key alone: a post-quantum signature on ordinary
++// Cosmos transactions, with no ECDSA key anywhere.
++//
++// The address is the first 20 bytes of sha256(public key). Signatures are
++// pure ML-DSA with an empty context over the SIGN_MODE_DIRECT sign bytes.
++package mldsa44
++
++import (
++	"bytes"
++	"crypto/sha256"
++	"crypto/subtle"
++	"fmt"
++
++	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
++
++	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
++)
++
++const (
++	// KeyType is the PubKey.Type() string.
++	KeyType = "mldsa44"
++	// PubKeyName is the amino name.
++	PubKeyName = "zetaphy/PubKeyMLDSA44"
++	// PubKeySize and SignatureSize are fixed by FIPS 204 for ML-DSA-44.
++	PubKeySize    = mldsa44.PublicKeySize
++	SignatureSize = mldsa44.SignatureSize
++)
++
++var _ cryptotypes.PubKey = &PubKey{}
++
++// Address is sha256(key)[:20].
++func (m *PubKey) Address() cryptotypes.Address {
++	h := sha256.Sum256(m.Key)
++	return cryptotypes.Address(h[:20])
++}
++
++func (m *PubKey) Bytes() []byte { return m.Key }
++
++func (m *PubKey) String() string { return fmt.Sprintf("PubKeyMLDSA44{%X}", m.Key) }
++
++func (m *PubKey) Type() string { return KeyType }
++
++func (m *PubKey) Equals(other cryptotypes.PubKey) bool {
++	o, ok := other.(*PubKey)
++	return ok && len(m.Key) == len(o.Key) && subtle.ConstantTimeCompare(m.Key, o.Key) == 1
++}
++
++// VerifySignature checks a pure ML-DSA-44 signature (empty context) over msg.
++func (m *PubKey) VerifySignature(msg, sig []byte) bool {
++	if len(m.Key) != PubKeySize || len(sig) != SignatureSize {
++		return false
++	}
++	var pk mldsa44.PublicKey
++	if pk.UnmarshalBinary(m.Key) != nil {
++		return false
++	}
++	return mldsa44.Verify(&pk, msg, nil, sig)
++}
++
++// Valid reports whether the key has the right size and decodes.
++func (m *PubKey) Valid() bool {
++	if len(m.Key) != PubKeySize {
++		return false
++	}
++	var pk mldsa44.PublicKey
++	return pk.UnmarshalBinary(bytes.Clone(m.Key)) == nil
++}
 diff --git a/evmd/app.go b/evmd/app.go
-index 204345c..3287179 100644
+index 204345c..bda8b86 100644
 --- a/evmd/app.go
 +++ b/evmd/app.go
-@@ -842,6 +842,7 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
+@@ -36,6 +36,10 @@ import (
+ 	feemarketkeeper "github.com/cosmos/evm/x/feemarket/keeper"
+ 	feemarkettypes "github.com/cosmos/evm/x/feemarket/types"
+ 	ibccallbackskeeper "github.com/cosmos/evm/x/ibc/callbacks/keeper"
++	"github.com/cosmos/evm/x/ratelimit"
++	ratelimitkeeper "github.com/cosmos/evm/x/ratelimit/keeper"
++	ratelimittypes "github.com/cosmos/evm/x/ratelimit/types"
++	ratelimitv2 "github.com/cosmos/evm/x/ratelimit/v2"
+ 	"github.com/cosmos/evm/x/vm"
+ 	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
+ 	vmrunner "github.com/cosmos/evm/x/vm/runner"
+@@ -179,6 +183,8 @@ type EVMD struct {
+ 	IBCKeeper      *ibckeeper.Keeper // IBC Keeper must be a pointer in the app, so we can SetRouter on it correctly
+ 	TransferKeeper *transferkeeper.Keeper
+ 	CallbackKeeper ibccallbackskeeper.ContractKeeper
++	// ZETAPHY: per-denom, per-channel IBC flow limits set by governance
++	RateLimitKeeper *ratelimitkeeper.Keeper
+ 
+ 	// Cosmos EVM keepers
+ 	FeeMarketKeeper feemarketkeeper.Keeper
+@@ -238,7 +244,7 @@ func NewExampleApp(
+ 		govtypes.StoreKey, consensusparamtypes.StoreKey,
+ 		upgradetypes.StoreKey, feegrant.StoreKey, evidencetypes.StoreKey, authzkeeper.StoreKey,
+ 		// ibc keys
+-		ibcexported.StoreKey, ibctransfertypes.StoreKey,
++		ibcexported.StoreKey, ibctransfertypes.StoreKey, ratelimittypes.StoreKey,
+ 		// Cosmos EVM store keys
+ 		evmtypes.StoreKey, feemarkettypes.StoreKey, erc20types.StoreKey,
+ 	)
+@@ -530,9 +536,29 @@ func NewExampleApp(
+ 	callbacksMiddleware.SetUnderlyingApplication(transferStack)
+ 	transferStack = callbacksMiddleware
+ 
++	// ZETAPHY: IBC rate limits (x/ratelimit, ported from ibc-apps to ibc-go
++	// v11) on top of the stack. Governance sets a cap per denom and channel
++	// (e.g. USDC from Noble) as a share of supply per time window; a packet
++	// that would go over it is refused. Sends from the transfer keeper (and
++	// the ICS-20 precompile, which uses it) pass through the same check.
++	app.RateLimitKeeper = ratelimitkeeper.NewKeeper(
++		appCodec,
++		runtime.NewKVStoreService(keys[ratelimittypes.StoreKey]),
++		authAddr,
++		app.BankKeeper,
++		app.IBCKeeper.ChannelKeeper,
++		app.IBCKeeper.ClientKeeper,
++		app.IBCKeeper.ChannelKeeper,
++	)
++	rateLimitMiddleware := ratelimit.NewIBCMiddleware(app.RateLimitKeeper, transferStack)
++	app.TransferKeeper.WithICS4Wrapper(rateLimitMiddleware)
++	transferStack = rateLimitMiddleware
++
+ 	var transferStackV2 ibcapi.IBCModule
+ 	transferStackV2 = transferv2.NewIBCModule(app.TransferKeeper)
+ 	transferStackV2 = erc20v2.NewIBCMiddleware(transferStackV2, app.Erc20Keeper)
++	rateLimitV2 := ratelimitv2.NewIBCMiddleware(*app.RateLimitKeeper, transferStackV2)
++	transferStackV2 = &rateLimitV2
+ 
+ 	// Create static IBC router, add transfer route, then set and seal it
+ 	ibcRouter := porttypes.NewRouter()
+@@ -579,6 +605,7 @@ func NewExampleApp(
+ 		ibc.NewAppModule(app.IBCKeeper),
+ 		ibctm.NewAppModule(tmLightClientModule),
+ 		transferModule,
++		ratelimit.NewAppModule(appCodec, *app.RateLimitKeeper),
+ 		// Cosmos EVM modules
+ 		vmModule,
+ 		feemarket.NewAppModule(app.FeeMarketKeeper),
+@@ -618,7 +645,7 @@ func NewExampleApp(
+ 		minttypes.ModuleName,
+ 
+ 		// IBC modules
+-		ibcexported.ModuleName, ibctransfertypes.ModuleName,
++		ibcexported.ModuleName, ibctransfertypes.ModuleName, ratelimittypes.ModuleName,
+ 
+ 		// Cosmos EVM BeginBlockers
+ 		erc20types.ModuleName, feemarkettypes.ModuleName,
+@@ -645,7 +672,7 @@ func NewExampleApp(
+ 		evmtypes.ModuleName, erc20types.ModuleName, feemarkettypes.ModuleName,
+ 
+ 		// no-ops
+-		ibcexported.ModuleName, ibctransfertypes.ModuleName,
++		ibcexported.ModuleName, ibctransfertypes.ModuleName, ratelimittypes.ModuleName,
+ 		distrtypes.ModuleName,
+ 		slashingtypes.ModuleName, minttypes.ModuleName,
+ 		genutiltypes.ModuleName, evidencetypes.ModuleName, authz.ModuleName,
+@@ -670,7 +697,7 @@ func NewExampleApp(
+ 		feemarkettypes.ModuleName,
+ 		erc20types.ModuleName,
+ 
+-		ibctransfertypes.ModuleName,
++		ibctransfertypes.ModuleName, ratelimittypes.ModuleName,
+ 		genutiltypes.ModuleName, evidencetypes.ModuleName, authz.ModuleName,
+ 		feegrant.ModuleName, upgradetypes.ModuleName, vestingtypes.ModuleName,
+ 	}
+@@ -842,6 +869,7 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
  
  // BeginBlocker application updates every begin block
  func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
@@ -343,6 +1210,139 @@ index 0000000..96d0ea8
 +	}
 +	write()
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_fee_burn", sdk.NewAttribute("amount", coins.String())))
++}
+diff --git a/evmd/zetaphy_rpc.go b/evmd/zetaphy_rpc.go
+new file mode 100644
+index 0000000..80496f6
+--- /dev/null
++++ b/evmd/zetaphy_rpc.go
+@@ -0,0 +1,127 @@
++package evmd
++
++// ZETAPHY JSON-RPC namespace "zetaphy" on the public EVM endpoint (8545),
++// so wallets can use post-quantum (ML-DSA-44) accounts without any other
++// port being open:
++//
++//	zetaphy_pqAccount(address)  account number and sequence to sign with
++//	zetaphy_sendCosmosTx(0x…)   broadcast a signed Cosmos tx (CheckTx only)
++//
++// Neither method holds keys or signs: like eth_sendRawTransaction, the
++// second only passes on bytes the user already signed.
++
++import (
++	"context"
++	"fmt"
++	"strings"
++
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/common/hexutil"
++	gethrpc "github.com/ethereum/go-ethereum/rpc"
++	"google.golang.org/grpc/codes"
++	"google.golang.org/grpc/status"
++
++	evmrpc "github.com/cosmos/evm/rpc"
++	"github.com/cosmos/evm/rpc/backend"
++	"github.com/cosmos/evm/rpc/stream"
++	evmtypes "github.com/cosmos/evm/x/vm/types"
++
++	"github.com/cosmos/cosmos-sdk/client"
++	"github.com/cosmos/cosmos-sdk/server"
++	sdk "github.com/cosmos/cosmos-sdk/types"
++	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
++)
++
++const (
++	ZetaphyNamespace = "zetaphy"
++	maxCosmosTxBytes = 64 * 1024
++)
++
++func init() {
++	if err := evmrpc.RegisterAPINamespace(ZetaphyNamespace, func(_ *server.Context, clientCtx client.Context, _ *stream.RPCStream, _ backend.BackendI) []gethrpc.API {
++		return []gethrpc.API{{Namespace: ZetaphyNamespace, Version: "1.0", Service: &ZetaphyAPI{clientCtx: clientCtx}, Public: true}}
++	}); err != nil {
++		panic(err)
++	}
++}
++
++// ZetaphyAPI is the "zetaphy" JSON-RPC service.
++type ZetaphyAPI struct {
++	clientCtx client.Context
++}
++
++// PQAccount is what a wallet needs to sign a transaction for an account.
++type PQAccount struct {
++	Address       string  `json:"address"`
++	Hex           string  `json:"hex"`
++	ChainID       string  `json:"chainId"`
++	Denom         string  `json:"denom"`
++	Exists        bool    `json:"exists"`
++	AccountNumber *string `json:"accountNumber"`
++	Sequence      *string `json:"sequence"`
++	PubKeyType    *string `json:"pubKeyType"`
++}
++
++func parseAccount(s string) (sdk.AccAddress, error) {
++	s = strings.TrimSpace(s)
++	if common.IsHexAddress(s) {
++		return sdk.AccAddress(common.HexToAddress(s).Bytes()), nil
++	}
++	return sdk.AccAddressFromBech32(s)
++}
++
++// PqAccount (zetaphy_pqAccount) returns the account number and sequence of
++// an account, given as zetaphy1… or 0x….
++func (a *ZetaphyAPI) PqAccount(ctx context.Context, address string) (*PQAccount, error) {
++	addr, err := parseAccount(address)
++	if err != nil {
++		return nil, fmt.Errorf("invalid address: %w", err)
++	}
++	out := &PQAccount{
++		Address: addr.String(),
++		Hex:     common.BytesToAddress(addr).Hex(),
++		ChainID: a.clientCtx.ChainID,
++		Denom:   evmtypes.GetEVMCoinDenom(),
++	}
++	res, err := authtypes.NewQueryClient(a.clientCtx).Account(ctx, &authtypes.QueryAccountRequest{Address: out.Address})
++	if status.Code(err) == codes.NotFound {
++		return out, nil
++	}
++	if err != nil {
++		return nil, err
++	}
++	var acc sdk.AccountI
++	if err := a.clientCtx.InterfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
++		return nil, err
++	}
++	num, seq := fmt.Sprint(acc.GetAccountNumber()), fmt.Sprint(acc.GetSequence())
++	out.Exists, out.AccountNumber, out.Sequence = true, &num, &seq
++	if pk := acc.GetPubKey(); pk != nil {
++		t := pk.Type()
++		out.PubKeyType = &t
++	}
++	return out, nil
++}
++
++// CosmosTxResult is the CheckTx outcome of a broadcast.
++type CosmosTxResult struct {
++	TxHash string `json:"txHash"`
++	Code   uint32 `json:"code"`
++	Log    string `json:"log"`
++}
++
++// SendCosmosTx (zetaphy_sendCosmosTx) broadcasts signed TxRaw bytes and
++// returns the CheckTx result. EVM transactions go through eth_sendRawTransaction.
++func (a *ZetaphyAPI) SendCosmosTx(txBytes hexutil.Bytes) (*CosmosTxResult, error) {
++	if len(txBytes) == 0 || len(txBytes) > maxCosmosTxBytes {
++		return nil, fmt.Errorf("tx must be 1 to %d bytes", maxCosmosTxBytes)
++	}
++	if _, err := a.clientCtx.TxConfig.TxDecoder()(txBytes); err != nil {
++		return nil, fmt.Errorf("not a Cosmos transaction: %w", err)
++	}
++	res, err := a.clientCtx.BroadcastTxSync(txBytes)
++	if err != nil {
++		return nil, err
++	}
++	return &CosmosTxResult{TxHash: res.TxHash, Code: res.Code, Log: res.RawLog}, nil
 +}
 diff --git a/go.mod b/go.mod
 index 777e52d..c4797ba 100644
@@ -472,129 +1472,6 @@ index 0000000..a291984
 +		return mldsa65.Verify(&pk, msg, nil, rest[mldsa65.PublicKeySize:])
 +	}
 +	return false
-+}
-diff --git a/precompiles/mldsa/mldsa_test.go b/precompiles/mldsa/mldsa_test.go
-new file mode 100644
-index 0000000..7f61111
---- /dev/null
-+++ b/precompiles/mldsa/mldsa_test.go
-@@ -0,0 +1,117 @@
-+package mldsa
-+
-+import (
-+	"crypto/rand"
-+	"testing"
-+
-+	"github.com/cloudflare/circl/sign/mldsa/mldsa44"
-+	"github.com/cloudflare/circl/sign/mldsa/mldsa65"
-+)
-+
-+func pack(variant byte, msg, pk, sig []byte) []byte {
-+	out := append([]byte{variant}, msg...)
-+	out = append(out, pk...)
-+	return append(out, sig...)
-+}
-+
-+func TestMLDSA44(t *testing.T) {
-+	pk, sk, err := mldsa44.GenerateKey(rand.Reader)
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	msg := make([]byte, 32)
-+	_, _ = rand.Read(msg)
-+	sig := make([]byte, mldsa44.SignatureSize)
-+	if err := mldsa44.SignTo(sk, msg, nil, false, sig); err != nil {
-+		t.Fatal(err)
-+	}
-+	pkb, _ := pk.MarshalBinary()
-+	if !Verify(pack(44, msg, pkb, sig)) {
-+		t.Fatal("valid signature rejected")
-+	}
-+	bad := append([]byte{}, msg...)
-+	bad[0] ^= 1
-+	if Verify(pack(44, bad, pkb, sig)) {
-+		t.Fatal("signature over another message accepted")
-+	}
-+	sig[10] ^= 1
-+	if Verify(pack(44, msg, pkb, sig)) {
-+		t.Fatal("tampered signature accepted")
-+	}
-+	if Verify(pack(65, msg, pkb, sig)) || Verify(pack(44, msg, pkb, sig[:100])) || Verify([]byte{44}) || Verify(nil) {
-+		t.Fatal("malformed input accepted")
-+	}
-+}
-+
-+func TestMLDSA65(t *testing.T) {
-+	pk, sk, _ := mldsa65.GenerateKey(rand.Reader)
-+	msg := make([]byte, 32)
-+	sig := make([]byte, mldsa65.SignatureSize)
-+	if err := mldsa65.SignTo(sk, msg, nil, true, sig); err != nil {
-+		t.Fatal(err)
-+	}
-+	pkb, _ := pk.MarshalBinary()
-+	if !Verify(pack(65, msg, pkb, sig)) {
-+		t.Fatal("valid signature rejected")
-+	}
-+}
-+
-+func TestGas(t *testing.T) {
-+	var p Precompile
-+	if p.RequiredGas([]byte{44}) != VerifyGas44 || p.RequiredGas([]byte{65}) != VerifyGas65 || p.RequiredGas(nil) != InvalidInputGas {
-+		t.Fatal("gas")
-+	}
-+}
-+
-+// FuzzVerify: no input, however malformed, may panic (a panic in a
-+// precompile would halt the chain) or be accepted without a valid signature.
-+func FuzzVerify(f *testing.F) {
-+	pk, sk, _ := mldsa44.GenerateKey(rand.Reader)
-+	pkb, _ := pk.MarshalBinary()
-+	msg := make([]byte, 32)
-+	sig := make([]byte, mldsa44.SignatureSize)
-+	_ = mldsa44.SignTo(sk, msg, nil, false, sig)
-+	good := pack(44, msg, pkb, sig)
-+	f.Add(good)
-+	f.Add([]byte{})
-+	f.Add([]byte{65})
-+	f.Add(good[:100])
-+	f.Fuzz(func(t *testing.T, in []byte) {
-+		ok := Verify(in) // must not panic
-+		if ok && len(in) != len(good) {
-+			t.Fatalf("accepted an input of the wrong size (%d bytes)", len(in))
-+		}
-+	})
-+}
-+
-+// Measures verification time, to keep the gas price honest. For scale: the
-+// ECRECOVER precompile costs 3,000 gas for roughly 25-50 microseconds.
-+func BenchmarkVerify44(b *testing.B) {
-+	pk, sk, _ := mldsa44.GenerateKey(rand.Reader)
-+	pkb, _ := pk.MarshalBinary()
-+	msg := make([]byte, 32)
-+	sig := make([]byte, mldsa44.SignatureSize)
-+	_ = mldsa44.SignTo(sk, msg, nil, false, sig)
-+	in := pack(44, msg, pkb, sig)
-+	b.ResetTimer()
-+	for i := 0; i < b.N; i++ {
-+		if !Verify(in) {
-+			b.Fatal("rejected")
-+		}
-+	}
-+}
-+
-+func BenchmarkVerify65(b *testing.B) {
-+	pk, sk, _ := mldsa65.GenerateKey(rand.Reader)
-+	pkb, _ := pk.MarshalBinary()
-+	msg := make([]byte, 32)
-+	sig := make([]byte, mldsa65.SignatureSize)
-+	_ = mldsa65.SignTo(sk, msg, nil, false, sig)
-+	in := pack(65, msg, pkb, sig)
-+	b.ResetTimer()
-+	for i := 0; i < b.N; i++ {
-+		if !Verify(in) {
-+			b.Fatal("rejected")
-+		}
-+	}
 +}
 diff --git a/precompiles/types/defaults.go b/precompiles/types/defaults.go
 index cd68986..f192838 100644

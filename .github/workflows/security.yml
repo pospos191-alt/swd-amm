@@ -4,9 +4,19 @@
 #   zetaphy-neuro every push / PR — Neuro ZETAPHY tier 1 unit + browser tests. ~2 min.
 #   zetaphy-verify every push / PR — tests for the explorer auto-verifier
 #                 (its own scheduled run is zetaphy-verify.yml). ~1 min.
-#   zetaphy-network every push / PR — NeuroJobs contract + node runner tests.
+#   zetaphy-network every push / PR — NeuroJobs contract + node runner tests,
+#                 and native PQ account txs (test/pqtx.test.js, decoded with
+#                 the official Cosmos SDK protobuf types).
 #                 The real-chain test (npm run test:devnet) needs zetaphyd and
 #                 is run by hand. ~1 min.
+#   zetaphy-wallet every push / PR — the PQ web wallet: committed bundle
+#                 matches its sources + a headless-browser test. ~2 min.
+#   zetaphy-chain every push / PR that touches the node setup — applies
+#                 setup-node.sh's patches to the pinned Cosmos EVM source
+#                 the same way the server does, runs their Go tests (ML-DSA,
+#                 IBC transfers + rate limits), builds zetaphyd and runs the
+#                 native/contract PQ tests on a real devnet; also checks
+#                 cloud-init.sh is setup-node.sh packed. ~15-25 min.
 #
 # Free-tier budget: GitHub Free gives private repos 2,000 Actions minutes a
 # month. The `changes` job runs each test job ONLY when its own files changed
@@ -84,6 +94,8 @@ jobs:
       neuro: ${{ steps.f.outputs.neuro }}
       verify: ${{ steps.f.outputs.verify }}
       network: ${{ steps.f.outputs.network }}
+      wallet: ${{ steps.f.outputs.wallet }}
+      chain: ${{ steps.f.outputs.chain }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -120,6 +132,8 @@ jobs:
           out neuro '^zetaphy-neuro/'
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
           out network '^(zetaphy-network/|zetaphy-neuro/src/)'
+          out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$)'
+          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|cli\.js|scripts/devnet\.sh|test/devnet\.pq\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -232,8 +246,99 @@ jobs:
           npm run build
           git diff --exit-code -- artifacts/
 
-      - name: Unit tests (NeuroJobs on an in-memory EVM, runner loop)
+      - name: Unit tests (NeuroJobs on an in-memory EVM, runner loop, native PQ txs)
         run: npm test
+
+  zetaphy-wallet:
+    name: zetaphy-wallet (bundle + browser test)
+    needs: changes
+    if: needs.changes.outputs.wallet == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: zetaphy-wallet
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # Vercel serves vendor/pqwallet.js as committed, so it must be the
+      # build of zetaphy-network/src/pqtx.js and the locked @noble versions.
+      - name: Committed bundle matches the sources
+        run: |
+          npm run build
+          git diff --exit-code -- vendor/
+
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Browser test (create key, encrypt/unlock, send to a mocked RPC)
+        run: npm test
+
+  zetaphy-chain:
+    name: zetaphy-chain (patched node + PQ devnet)
+    needs: changes
+    if: needs.changes.outputs.chain == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SRC: ${{ github.workspace }}/../cosmos-evm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: cloud-init.sh is setup-node.sh, packed, and small enough for Oracle
+        run: zetaphy-chain/pack-cloud-init.sh --check
+
+      - name: Set up Go (the version setup-node.sh pins)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.9'
+          cache: false
+
+      - name: Pinned Cosmos EVM source + the ZETAPHY patches (as on the server)
+        run: |
+          tag=$(sed -n 's/^COSMOS_EVM_TAG="\(.*\)"/\1/p' zetaphy-chain/setup-node.sh)
+          commit=$(sed -n 's/^COSMOS_EVM_COMMIT="\(.*\)"/\1/p' zetaphy-chain/setup-node.sh)
+          git clone -q --depth 1 --branch "$tag" https://github.com/cosmos/evm.git "$SRC"
+          [ "$(git -C "$SRC" rev-parse HEAD)" = "$commit" ]
+          bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
+          cp -r zetaphy-chain/fork-tests/. "$SRC/"
+
+      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys)
+        working-directory: ${{ env.SRC }}
+        run: go test ./precompiles/mldsa/ ./crypto/mldsa44/
+
+      - name: Build zetaphyd
+        working-directory: ${{ env.SRC }}/evmd
+        run: go build -o "$RUNNER_TEMP/zetaphyd" ./cmd/evmd
+
+      # ibc-go's test app expects "cosmos1" addresses, so these run with the
+      # stock prefix (after the build above, which keeps "zetaphy1").
+      - name: IBC tests (transfers through the stack, rate limits enforced)
+        working-directory: ${{ env.SRC }}/evmd
+        run: |
+          sed -i 's/Bech32Prefix = "zetaphy"/Bech32Prefix = "cosmos"/' config/bech32.go
+          go test -tags=test ./tests/ibc/...
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: PQ wallets and native ML-DSA accounts on a real devnet
+        working-directory: zetaphy-network
+        run: |
+          npm ci --no-audit --no-fund
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pq
 
   program:
     name: program (cargo test + anchor test)

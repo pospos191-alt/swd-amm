@@ -13,7 +13,7 @@
 | 3 · หลายสะพาน + Neuro เป็นสะพาน + สะพานหลอก | `BridgeAirlock` + `NeuroLane` + `DecoyBridge` + `zetaphy bridge watch` |
 | 4 · ระบบภูมิคุ้มกัน | `ThreatRegistry`: คนรันร่างที่มีผลงานโหวตว่าโค้ดไหนอันตราย Neuro จะเตือนโค้ดนั้นทุกที่ |
 | 4 · ตลาดพลัง AI จ่ายเป็น ZETAPHY | `ComputeMarket`: วางเงินมัดจำงาน AI ไว้กับสัญญาจนกว่าจะส่งงานและยอมรับ |
-| 5 · ต้านควอนตัม | precompile ML-DSA (FIPS 204) ในเชน + `QuantumWallet` + `zetaphy pq` |
+| 5 · ต้านควอนตัม | precompile ML-DSA (FIPS 204) ในเชน + `QuantumWallet` + `zetaphy pq` + บัญชี PQ แท้ (`zetaphy pq native`) |
 
 **ยังไม่มีเงินจริงในขั้นไหนเลย:** ขั้น 3 ขึ้นไปบน mainnet ต้องผ่านประตูในหัวข้อ "ก่อนเงินจริง" ท้ายไฟล์ก่อน
 
@@ -148,7 +148,7 @@ zetaphy gate
 - **guardian** กดหยุดสะพานได้ทันที แต่เปิดคืนไม่ได้และโยกเงินไม่ได้
   - คนที่เปิดคืนได้คือ governance เท่านั้น (gov module หรือ multisig)
   - การหยุดสะพานไม่ทำให้เชนหยุด
-- ฝั่ง IBC (USDC ของแท้ผ่าน Noble) ต้องใช้ rate-limit middleware ระดับเชนด้วย ซึ่งยังไม่ได้ทำ
+- ฝั่ง IBC (USDC ของแท้ผ่าน Noble) มีเพดานระดับเชนด้วย (`x/ratelimit`) ตั้งโดย governance ด้วย `zetaphy-chain/gov.sh propose-ratelimit` (ดู zetaphy-chain/README.md ขั้น 3)
 
 ### ด่านก่อนเข้า ZETAPHY: หลายสะพาน, Neuro เป็นสะพาน, สะพานหลอก
 
@@ -215,9 +215,32 @@ zetaphy pq send 0x... 1.5
 - seed 32 ไบต์เก็บที่ `~/.zetaphy/pq.seed` (0600) หรือแบบเข้ารหัสที่ `pq.seed.json` เมื่อตั้ง `ZETAPHY_PASSPHRASE`
   - ถ้าหาย ย้ายเงินออกไม่ได้ ต้องสำรองไว้
 - ทดสอบแล้วว่าลายเซ็นจาก JavaScript (@noble/post-quantum) ผ่านการตรวจของ Go (CIRCL) บนเชนจริง
-- ยังไม่ได้ทำ:
-  - ใช้ ML-DSA เป็นลายเซ็นหลักของธุรกรรมทั้งเชน (ต้องแก้ Cosmos SDK ระดับลึก)
-  - แอปกระเป๋าบนเว็บ
+
+### บัญชี PQ แท้ (native): ไม่มีกุญแจ ECDSA และไม่ต้องมีคนจ่ายค่าแก๊สแทน
+
+`zetaphy pq new|address|send` ข้างบนเป็นสัญญาบน EVM จึงยังต้องมีบัญชี ECDSA จ่ายค่าแก๊ส
+บัญชีแบบ native ต่างออกไป: เป็นบัญชี Cosmos ธรรมดาที่เชนตรวจลายเซ็น ML-DSA-44 เอง
+
+```
+zetaphy pq native                              # ที่อยู่ zetaphy1… และ 0x… (บัญชีเดียวกัน) + ยอดเงิน
+zetaphy pq native send zetaphy1... 1.5         # หรือ 0x... ก็ได้
+zetaphy pq native send 0x... 1.5 --gas 500000  # ค่าเริ่มต้น 400000
+```
+
+- ใช้ seed เดียวกับ `zetaphy pq` (`~/.zetaphy/pq.seed` หรือ `pq.seed.json`)
+- ที่อยู่ = `sha256(public key)[0:20]`
+  - เขียนได้ทั้ง `zetaphy1…` และ `0x…` เพราะเป็น 20 ไบต์เดียวกัน
+- บัญชีจะมีบนเชนหลังได้รับเงินครั้งแรกเท่านั้น
+  - ถ้ายังไม่มี คำสั่งจะบอกให้โอน ZETAPHY เข้าที่อยู่นี้ก่อน
+- ธุรกรรมเป็น `MsgSend` ของ Cosmos SDK เซ็นแบบ SIGN_MODE_DIRECT ด้วย ML-DSA-44 (pubkey `/zetaphy.crypto.mldsa44.PubKey`)
+  - ส่งผ่าน JSON-RPC พอร์ต 8545 เดิม (`zetaphy_pqAccount`, `zetaphy_sendCosmosTx`)
+- ค่าธรรมเนียม = gas limit × (`eth_gasPrice` × 1.2) หน่วย `azetaphy`
+- โค้ดอยู่ที่ `src/pqtx.js` (ใช้ได้ทั้ง Node และเบราว์เซอร์)
+  - ทดสอบโดยถอดรหัสด้วย protobuf ทางการของ Cosmos SDK (`cosmjs-types`) และตรวจลายเซ็นทุกครั้ง
+- กระเป๋าบนเว็บสำหรับบัญชีแบบนี้อยู่ที่ `zetaphy-wallet/` (แยกจาก zetaphy-neuro ซึ่งสัญญาว่าไม่แตะกุญแจ)
+- ทดสอบบนเชนจริงแล้ว (`npm run test:devnet:pq`, รันใน CI ด้วย): ส่งได้ และเชนปฏิเสธธุรกรรมที่ใช้กุญแจอื่นสวมบัญชี ลายเซ็นที่ถูกแก้ และธุรกรรมเก่าที่ส่งซ้ำ
+- เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy-testnet-1`): ตั้ง `ZETAPHY_CHAIN_ID`
+- ยังไม่ได้ทำ: ธุรกรรม EVM และกุญแจของ validator ยังใช้ ECDSA / ed25519 เหมือนเดิม
 
 ## จุดอ่อนที่แก้แล้ว (ตรวจเอง 19 ต.ค. 2026)
 
