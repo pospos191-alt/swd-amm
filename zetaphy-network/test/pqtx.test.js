@@ -131,7 +131,7 @@ test('the tx decodes with the official Cosmos SDK types, field by field', () => 
   assert.deepEqual(SignDoc.encode(doc).finish(), tx.signDocBytes, 'SignDoc is canonical');
   assert.deepEqual(doc.bodyBytes, raw.bodyBytes);
   assert.deepEqual(doc.authInfoBytes, raw.authInfoBytes);
-  assert.equal(doc.chainId, 'zetaphy-testnet-1');
+  assert.equal(doc.chainId, 'zetaphy_77390-1');
   assert.equal(doc.accountNumber, 7n);
   // The chain rebuilds the SignDoc itself; our bytes must equal its encoding.
   assert.deepEqual(SignDoc.encode(SignDoc.fromPartial({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: CHAIN_ID, accountNumber: 7n })).finish(), tx.signDocBytes);

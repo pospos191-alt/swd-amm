@@ -1,0 +1,47 @@
+{
+  "chainId": "zetaphy_77390-1",
+  "chainName": "ZETAPHY Testnet",
+  "rpc": "https://HOST/rpc",
+  "rest": "https://HOST/rest",
+  "bip44": {
+    "coinType": 60
+  },
+  "bech32Config": {
+    "bech32PrefixAccAddr": "zetaphy",
+    "bech32PrefixAccPub": "zetaphypub",
+    "bech32PrefixValAddr": "zetaphyvaloper",
+    "bech32PrefixValPub": "zetaphyvaloperpub",
+    "bech32PrefixConsAddr": "zetaphyvalcons",
+    "bech32PrefixConsPub": "zetaphyvalconspub"
+  },
+  "currencies": [
+    {
+      "coinDenom": "ZETAPHY",
+      "coinMinimalDenom": "azetaphy",
+      "coinDecimals": 18
+    }
+  ],
+  "feeCurrencies": [
+    {
+      "coinDenom": "ZETAPHY",
+      "coinMinimalDenom": "azetaphy",
+      "coinDecimals": 18,
+      "gasPriceStep": {
+        "low": 1000000000,
+        "average": 2000000000,
+        "high": 4000000000
+      }
+    }
+  ],
+  "stakeCurrency": {
+    "coinDenom": "ZETAPHY",
+    "coinMinimalDenom": "azetaphy",
+    "coinDecimals": 18
+  },
+  "features": ["eth-address-gen", "eth-key-sign", "eth-secp256k1-cosmos", "force-enable-evm-ledger"],
+  "evm": {
+    "chainId": 77390,
+    "rpc": "https://HOST"
+  },
+  "isTestnet": true
+}

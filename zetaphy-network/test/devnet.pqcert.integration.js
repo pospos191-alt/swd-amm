@@ -123,7 +123,7 @@ test('both validators register vote keys; recent blocks are certified by both', 
   const viaB = await verifyBlock(RPC_B, tip - 1);
   assert.equal(viaB.ok, true, viaB.problems.join('\n'));
   // Signatures bind the chain id.
-  const other = await verifyBlock(RPC, tip - 1, { chainId: 'zetaphy-testnet-1' });
+  const other = await verifyBlock(RPC, tip - 1, { chainId: 'zetaphy_77390-1' });
   assert.equal(other.ok, false);
   assert.equal(other.signedPower, 0n);
 

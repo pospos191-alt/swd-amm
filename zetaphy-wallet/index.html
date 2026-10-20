@@ -7,6 +7,8 @@
 <meta name="referrer" content="no-referrer">
 <!-- The MetaMask Snap this page asks for (npm:… once published; local:http://localhost:8080 in development). -->
 <meta name="zetaphy-snap-id" content="npm:@zetaphy/snap">
+<!-- WalletConnect (Reown) projectId, 32 hex characters from cloud.reown.com. Empty: the WalletConnect option stays off. -->
+<meta name="zetaphy-walletconnect-project-id" content="">
 <title>ZETAPHY PQ Wallet</title>
 <link rel="stylesheet" href="./style.css">
 <script type="module" src="./app.js"></script>
@@ -79,6 +81,7 @@
       <input id="snap-id" spellcheck="false" autocomplete="off">
       <p class="hint" data-i18n="snapIdHint">บัญชีขึ้นกับ snap ID</p>
     </details>
+    <p class="hint using"><span class="using-text"></span> <a href="#wallets-card" data-i18n="changeWallet">เปลี่ยนกระเป๋า</a></p>
     <button id="snap-connect" type="button" data-i18n="snapConnect">เชื่อม MetaMask</button>
   </section>
 
@@ -268,6 +271,7 @@
         <li id="mm-warn-seed" data-i18n="mmWarnSeed">ถ้า seed ของกระเป๋านี้หาย บัญชีที่ล็อกไว้ก็หายไปด้วย ดาวน์โหลดไฟล์สำรอง seed ก่อน</li>
         <li data-i18n="mmWarnTx">กระเป๋านี้ต้องเคยส่งธุรกรรมบนเชนแล้วอย่างน้อยหนึ่งครั้ง (ให้เชนรู้กุญแจสาธารณะ ML-DSA-44)</li>
       </ul>
+      <p class="hint using"><span class="using-text"></span> <a href="#wallets-card" data-i18n="changeWallet">เปลี่ยนกระเป๋า</a></p>
       <label class="check"><input id="mm-ok" type="checkbox"> <span data-i18n="mmOk">เข้าใจแล้วว่าการล็อกเป็นแบบถาวร</span></label>
       <button id="mm-lock" type="button" disabled data-i18n="mmLock">เชื่อม MetaMask แล้วล็อก</button>
       <p id="mm-result" class="ok" hidden><span data-i18n="mmSentLabel">MetaMask ส่งคำสั่งล็อกแล้ว tx hash:</span> <code id="mm-hash"></code></p>
@@ -281,6 +285,77 @@
       <p class="hint" data-i18n="backupCli">ไฟล์นี้ใช้เป็น ~/.zetaphy/pq.seed ของคำสั่ง zetaphy pq native ได้เลย</p>
       <button id="lock" type="button" class="ghost" data-i18n="lock">ล็อกกระเป๋า</button>
     </div>
+  </section>
+
+  <section class="card" id="wallets-card">
+    <h2 data-i18n="walletsTitle">ใช้ ZETAPHY กับกระเป๋าอื่น</h2>
+    <p class="hint" data-i18n="walletsIntro">เพิ่มเครือข่าย ZETAPHY Testnet ในกระเป๋าที่คุณใช้อยู่</p>
+    <p id="wallet-env" class="hint" hidden></p>
+    <ul id="open-in-app" class="links" hidden></ul>
+
+    <h3 data-i18n="evmWalletsTitle">กระเป๋า EVM ในเบราว์เซอร์นี้</h3>
+    <ul id="evm-wallets" class="wallets"></ul>
+    <p id="evm-none" class="hint" data-i18n="evmNone" hidden>ไม่พบกระเป๋า EVM ในเบราว์เซอร์นี้</p>
+    <p id="evm-note" class="warn-text" hidden></p>
+    <div class="row actions">
+      <button id="evm-add" type="button" data-i18n="evmAdd">เพิ่ม ZETAPHY ในกระเป๋านี้</button>
+      <button id="evm-connect" type="button" class="ghost" data-i18n="evmConnect">เชื่อมกระเป๋า</button>
+      <button id="wc-connect" type="button" class="ghost" disabled data-i18n="wcConnect">WalletConnect</button>
+    </div>
+    <p id="wc-hint" class="hint" data-i18n="wcOff">WalletConnect ยังไม่เปิด</p>
+    <div id="evm-account" class="acting" hidden>
+      <p><strong id="evm-wallet-name"></strong></p>
+      <div class="addr-row"><code id="evm-addr-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="evm-addr-hex" data-i18n="copy">คัดลอก</button></div>
+      <div class="addr-row"><code id="evm-addr-bech32" class="addr"></code><button type="button" class="ghost copy" data-copy="evm-addr-bech32" data-i18n="copy">คัดลอก</button></div>
+      <p id="evm-chain" class="hint"></p>
+    </div>
+
+    <details id="manual">
+      <summary data-i18n="manualTitle">เพิ่มเครือข่ายเอง: ค่าที่ต้องใส่</summary>
+      <dl class="kv">
+        <dt data-i18n="mNetwork">ชื่อเครือข่าย</dt><dd><code id="m-name"></code></dd>
+        <dt data-i18n="mRpc">RPC URL</dt><dd><code id="m-rpc"></code> <button type="button" class="ghost copy" data-copy="m-rpc" data-i18n="copy">คัดลอก</button></dd>
+        <dt data-i18n="mChainId">Chain ID</dt><dd><code id="m-chain"></code></dd>
+        <dt data-i18n="mSymbol">สัญลักษณ์เหรียญ</dt><dd><code id="m-symbol"></code></dd>
+        <dt data-i18n="mDecimals">ทศนิยม</dt><dd><code id="m-decimals"></code></dd>
+        <dt data-i18n="mExplorer">Block explorer</dt><dd data-i18n="mNone">ไม่มี (เว้นว่าง)</dd>
+      </dl>
+      <p class="hint" id="m-symbol-note"></p>
+    </details>
+
+    <h3 data-i18n="cosmosTitle">กระเป๋า Cosmos</h3>
+    <p class="hint" data-i18n="cosmosIntro">Keplr, Leap และ Cosmostation</p>
+    <div class="row actions">
+      <button id="keplr-add" type="button" class="cosmos-add" data-cosmos="keplr" data-i18n="keplrAdd">เพิ่มใน Keplr</button>
+      <button id="leap-add" type="button" class="cosmos-add" data-cosmos="leap" data-i18n="leapAdd">เพิ่มใน Leap</button>
+      <button id="cosmostation-add" type="button" class="cosmos-add" data-cosmos="cosmostation" data-i18n="cosmostationAdd">เพิ่มใน Cosmostation</button>
+    </div>
+    <div id="cosmos-account" class="acting" hidden>
+      <p><strong id="cosmos-wallet-name"></strong></p>
+      <div class="addr-row"><code id="cosmos-addr" class="addr"></code><button type="button" class="ghost copy" data-copy="cosmos-addr" data-i18n="copy">คัดลอก</button></div>
+      <div class="addr-row"><code id="cosmos-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="cosmos-hex" data-i18n="copy">คัดลอก</button></div>
+    </div>
+
+    <details>
+      <summary data-i18n="supportTitle">กระเป๋าไหนใช้ได้บ้าง</summary>
+      <ul class="support">
+        <li data-i18n="supWorks">ใช้ได้</li>
+        <li data-i18n="supMaybe">อาจใช้ได้</li>
+        <li data-i18n="supNot">ยังใช้ไม่ได้</li>
+        <li data-i18n="supNever">ใช้ไม่ได้</li>
+        <li data-i18n="supPq">ต้านควอนตัม</li>
+      </ul>
+    </details>
+
+    <details>
+      <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
+      <label for="wc-id" data-i18n="wcIdLabel">WalletConnect projectId</label>
+      <div class="row">
+        <input id="wc-id" spellcheck="false" autocomplete="off" placeholder="0123456789abcdef0123456789abcdef">
+        <button id="wc-save" type="button" data-i18n="rpcSave">บันทึก</button>
+      </div>
+      <p class="hint" data-i18n="wcIdHint">projectId ฟรีจาก cloud.reown.com</p>
+    </details>
   </section>
 
   <p id="status" role="status" aria-live="polite"></p>

@@ -9,10 +9,16 @@ import {
   DEFAULT_GAS_LIMIT, DEFAULT_STAKING_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT,
   DEFAULT_PRECOMPILE_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, PUBLIC_KEY_BYTES, quantumLockTx,
 } from './vendor/pqwallet.js';
+import {
+  CHAIN_ID, CHAIN_NAME, EVM_CHAIN_ID_HEX, EVM_SYMBOL, DECIMALS, nodeEndpoints, evmChainParams, keplrChainInfo,
+  discoverWallets, mayRunSnaps, openInAppLinks,
+} from './wallets.js';
 
 const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 'zetaphy-wallet:lang', token: 'zetaphy-wallet:token',
   owners: 'zetaphy-wallet:owners:v1:', // + this wallet's zetaphy1… address
-  snap: 'zetaphy-wallet:snap:v1' }; // the snap ID last connected (no key: MetaMask holds it)
+  snap: 'zetaphy-wallet:snap:v1', // the snap ID last connected (no key: MetaMask holds it)
+  evmWallet: 'zetaphy-wallet:evm-wallet', // the EVM wallet picked (its EIP-6963 rdns, or which injected object)
+  wcId: 'zetaphy-wallet:walletconnect-project-id' };
 const KDF_ITERATIONS = 600000;
 const EVM_CHAIN_ID = 77390n;
 
@@ -200,6 +206,68 @@ const T = {
     deployedAt: 'ที่อยู่สัญญาใหม่:',
     badInitCode: 'bytecode ต้องเป็น hex (0x…) ที่ไม่ว่าง',
     deploySent: 'ส่งแล้ว โหนดรับธุรกรรมแล้ว สัญญาจะมีเมื่อธุรกรรมเข้าบล็อก',
+    // other wallets
+    walletsTitle: 'ใช้ ZETAPHY กับกระเป๋าอื่น',
+    walletsIntro: 'เพิ่มเครือข่าย ZETAPHY Testnet ในกระเป๋าที่คุณใช้อยู่ (MetaMask, Rabby, Trust, OKX, Coinbase, Keplr, Leap ฯลฯ) ด้วยปุ่มด้านล่าง หรือใส่ค่าเอง ทุกค่ามาจากที่อยู่ RPC ด้านบน',
+    evmWalletsTitle: 'กระเป๋า EVM ในเบราว์เซอร์นี้',
+    evmNone: 'ไม่พบกระเป๋า EVM ในเบราว์เซอร์นี้ ติดตั้งส่วนขยาย (MetaMask, Rabby, Trust, OKX, Coinbase Wallet ฯลฯ) หรือบนมือถือ เปิดหน้านี้ในเบราว์เซอร์ของแอปกระเป๋า',
+    evmAdd: 'เพิ่ม ZETAPHY ในกระเป๋านี้',
+    evmConnect: 'เชื่อมกระเป๋านี้',
+    wcConnect: 'WalletConnect',
+    wcOff: 'WalletConnect (กระเป๋าบนมือถือที่เปิดหน้านี้จากเบราว์เซอร์อื่น เช่น Binance Wallet) ยังปิดอยู่: ต้องใส่ projectId ของ Reown ก่อน',
+    wcOn: 'มี projectId แล้ว แต่หน้านี้ยังไม่มีโค้ด WalletConnect (เป็นขั้นต่อไป)',
+    wcNotYet: 'หน้านี้ยังไม่มี WalletConnect (เป็นขั้นต่อไป) ระหว่างนี้บนมือถือให้เปิดหน้านี้ในเบราว์เซอร์ของแอปกระเป๋า',
+    wcIdLabel: 'WalletConnect projectId (จาก Reown, hex 32 ตัว)',
+    wcIdHint: 'สมัครฟรีที่ cloud.reown.com ใส่ที่นี่ (จำไว้ในเบราว์เซอร์นี้) หรือใส่ใน meta zetaphy-walletconnect-project-id ของ index.html ให้ทุกคน',
+    wcSaved: 'บันทึก projectId แล้ว',
+    wcBadId: 'projectId ต้องเป็น hex 32 ตัว',
+    manualTitle: 'เพิ่มเครือข่ายเอง: ค่าที่ต้องใส่ในกระเป๋า',
+    mNetwork: 'ชื่อเครือข่าย',
+    mRpc: 'RPC URL',
+    mChainId: 'Chain ID',
+    mSymbol: 'สัญลักษณ์เหรียญ',
+    mDecimals: 'ทศนิยม',
+    mExplorer: 'Block explorer',
+    mNone: 'ไม่มี (เว้นว่าง)',
+    mRpcUnset: '(ใส่ที่อยู่ RPC แบบ https ด้านบนก่อน)',
+    mSymbolNote: '{sym} คือ ZETAPHY: MetaMask และ chainlist รับสัญลักษณ์ได้ไม่เกิน 6 ตัวอักษร กระเป๋า EVM จึงแสดงยอดเป็น {sym} ไม่ต้อง import โทเคนที่ {precompile} เพราะเป็นเหรียญเดียวกัน (จะเห็นยอดซ้ำ)',
+    cosmosTitle: 'กระเป๋า Cosmos (Keplr, Leap, Cosmostation)',
+    cosmosIntro: 'ได้ที่อยู่ zetaphy1… ของบัญชีเดียวกับในกระเป๋า EVM (กุญแจ eth_secp256k1, coin type 60) ต้องใช้ที่อยู่ https ของโหนดที่มี /rpc และ /rest (โหนดที่ติดตั้งด้วย setup-node.sh มีให้แล้ว)',
+    keplrAdd: 'เพิ่มใน Keplr',
+    leapAdd: 'เพิ่มใน Leap',
+    cosmostationAdd: 'เพิ่มใน Cosmostation',
+    supportTitle: 'กระเป๋าไหนใช้ได้บ้าง',
+    supWorks: 'ใช้ได้เลย (เพิ่มเครือข่ายเองได้): MetaMask, Rabby, Trust, OKX, Coinbase Wallet, Brave, Rainbow, Zerion, Frame และ Ledger/Trezor ผ่านกระเป๋าเหล่านี้ ส่วน Keplr, Leap, Cosmostation ใช้ปุ่มด้านบน',
+    supMaybe: 'อาจใช้ได้ (ยังไม่ได้ยืนยัน): Binance Wallet ในแอป Binance ถ้ากระเป๋ายอมรับเครือข่ายใหม่ นอกแอปต้องใช้ WalletConnect',
+    supNot: 'ยังใช้ไม่ได้จนกว่ากระเป๋าจะรองรับ ZETAPHY เอง: Phantom และกระเป๋าที่มีรายชื่อเชนตายตัว',
+    supNever: 'ใช้ไม่ได้เลย: กระเป๋าที่มีแต่ Solana หรือ Bitcoin เพราะไม่ใช่กระเป๋า EVM หรือ Cosmos',
+    supPq: 'ต้านควอนตัม: เฉพาะกุญแจ ML-DSA-44 ของหน้านี้และ ZETAPHY Snap กระเป๋าอื่นทั้งหมดเซ็นด้วย ECDSA (secp256k1) ซึ่งคอมพิวเตอร์ควอนตัมที่ใหญ่พอถอดได้ ป้องกันได้ด้วยการล็อกบัญชีนั้นให้กระเป๋านี้',
+    usingWallet: 'กระเป๋าที่ใช้: {name}',
+    usingNone: 'ยังไม่พบกระเป๋า EVM ในเบราว์เซอร์นี้',
+    changeWallet: 'เลือกกระเป๋าอื่น',
+    inApp: 'หน้านี้เปิดอยู่ในเบราว์เซอร์ของแอป {name} ใช้ปุ่มด้านล่างได้เลย',
+    mobileNoWallet: 'บนมือถือ: เปิดหน้านี้ในเบราว์เซอร์ของแอปกระเป๋า (กดลิงก์ด้านล่าง หรือคัดลอกที่อยู่หน้านี้ไปวางในแท็บ Browser ของแอป)',
+    phantomNote: 'Phantom ไม่ให้เพิ่มเครือข่ายเอง รองรับเฉพาะเชนที่ Phantom เลือกไว้ จึงใช้กับ ZETAPHY ไม่ได้จนกว่า Phantom จะเพิ่มให้ ใช้กระเป๋าอื่นแทน (MetaMask, Rabby, Trust, OKX, Coinbase)',
+    binanceNote: 'Binance Wallet อาจยังไม่รับเครือข่ายใหม่ ถ้าเพิ่มไม่ได้ ให้ใส่ค่าด้านล่างเองหรือใช้กระเป๋าอื่น',
+    evmMissing: 'ไม่พบกระเป๋า EVM ในเบราว์เซอร์นี้',
+    evmRejected: 'ยกเลิกในกระเป๋าแล้ว',
+    evmDenied: 'กระเป๋าไม่อนุญาตให้เชื่อมบัญชี',
+    chainNeedHttps: 'กระเป๋ารับเฉพาะ RPC แบบ https (หรือ localhost) ใส่ที่อยู่ https ของโหนดด้านบน เช่น https://1-2-3-4.sslip.io',
+    chainAdding: 'ยืนยันการเพิ่ม ZETAPHY Testnet ในหน้าต่างของ {name}…',
+    chainAdded: 'เพิ่ม ZETAPHY Testnet ใน {name} และสลับไปใช้แล้ว',
+    chainAddedNoSwitch: 'เพิ่ม ZETAPHY Testnet ใน {name} แล้ว แต่ยังไม่ได้สลับ เลือกเครือข่ายเองในกระเป๋า',
+    addChainUnsupported: '{name} ไม่ได้เพิ่มเครือข่าย ({why}) กระเป๋านี้อาจยังไม่รับเครือข่ายใหม่ ใส่ค่าที่แสดงด้านล่างเองในกระเป๋า หรือใช้กระเป๋าอื่น',
+    evmConnected: 'เชื่อม {name} แล้ว',
+    evmOnZetaphy: 'อยู่บน ZETAPHY Testnet',
+    evmOtherChain: 'อยู่บนเครือข่ายอื่น (chain id {id}): กด "เพิ่ม ZETAPHY ในกระเป๋านี้"',
+    evmBalance: 'ยอดเงิน {amount} ZETAPHY',
+    cosmosMissing: 'ไม่พบ {name} ในเบราว์เซอร์นี้',
+    cosmosAdding: 'ยืนยันในหน้าต่างของ {name}…',
+    cosmosRejected: '{name} ไม่ได้เพิ่มเครือข่าย ({why})',
+    cosmosAdded: 'เพิ่ม ZETAPHY Testnet ใน {name} แล้ว ที่อยู่ของคุณอยู่ด้านล่าง',
+    cosmosBadAddress: 'กระเป๋าตอบที่อยู่ที่ไม่ใช่ zetaphy1… จึงไม่ใช้',
+    walletPicked: 'เลือก {name} แล้ว',
+    snapNotMetaMask: '{name} ใช้ MetaMask Snap ไม่ได้ เลือก MetaMask (หรือ MetaMask Flask) ในส่วน "ใช้ ZETAPHY กับกระเป๋าอื่น" ด้านล่าง',
   },
   en: {
     subtitle: 'Quantum-safe wallet (ML-DSA-44) · no ECDSA key',
@@ -377,6 +445,67 @@ const T = {
     deployedAt: 'New contract address:',
     badInitCode: 'The bytecode must be non-empty hex (0x…).',
     deploySent: 'Sent. The node accepted it; the contract exists once the tx is in a block.',
+    walletsTitle: 'Use ZETAPHY in other wallets',
+    walletsIntro: 'Add the ZETAPHY Testnet network to the wallet you already use (MetaMask, Rabby, Trust, OKX, Coinbase, Keplr, Leap, …) with the buttons below, or type the values in yourself. Everything comes from the RPC URL above.',
+    evmWalletsTitle: 'EVM wallets in this browser',
+    evmNone: 'No EVM wallet found in this browser. Install an extension (MetaMask, Rabby, Trust, OKX, Coinbase Wallet, …), or on a phone open this page in your wallet app\'s browser.',
+    evmAdd: 'Add ZETAPHY to this wallet',
+    evmConnect: 'Connect this wallet',
+    wcConnect: 'WalletConnect',
+    wcOff: 'WalletConnect (phone wallets when this page is open in another browser, e.g. Binance Wallet) is off: it needs a Reown projectId first.',
+    wcOn: 'A projectId is set, but this page does not include WalletConnect yet (it is the next step).',
+    wcNotYet: 'This page does not include WalletConnect yet (it is the next step). Meanwhile, on a phone open this page in your wallet app\'s browser.',
+    wcIdLabel: 'WalletConnect projectId (from Reown, 32 hex digits)',
+    wcIdHint: 'Free at cloud.reown.com. Set it here (remembered in this browser), or for everyone in index.html\'s zetaphy-walletconnect-project-id meta tag.',
+    wcSaved: 'projectId saved.',
+    wcBadId: 'The projectId must be 32 hex digits.',
+    manualTitle: 'Add the network by hand: the values to type in',
+    mNetwork: 'Network name',
+    mRpc: 'RPC URL',
+    mChainId: 'Chain ID',
+    mSymbol: 'Currency symbol',
+    mDecimals: 'Decimals',
+    mExplorer: 'Block explorer',
+    mNone: 'none (leave empty)',
+    mRpcUnset: '(enter an https RPC URL above first)',
+    mSymbolNote: '{sym} is ZETAPHY: MetaMask and chainlist take a symbol of at most 6 letters, so EVM wallets show the balance as {sym}. Do not import the token at {precompile}: it is the same coin (you would see the balance twice).',
+    cosmosTitle: 'Cosmos wallets (Keplr, Leap, Cosmostation)',
+    cosmosIntro: 'They show the zetaphy1… address of the same account as in an EVM wallet (eth_secp256k1 key, coin type 60). They need the node\'s https address, which serves /rpc and /rest (nodes set up with setup-node.sh do).',
+    keplrAdd: 'Add to Keplr',
+    leapAdd: 'Add to Leap',
+    cosmostationAdd: 'Add to Cosmostation',
+    supportTitle: 'Which wallets work',
+    supWorks: 'Work now (custom networks): MetaMask, Rabby, Trust, OKX, Coinbase Wallet, Brave, Rainbow, Zerion, Frame, and Ledger/Trezor through them. Keplr, Leap and Cosmostation with the buttons above.',
+    supMaybe: 'May work (not confirmed): Binance Wallet, inside the Binance app, if it accepts the network; outside the app it needs WalletConnect.',
+    supNot: 'Not until the wallet adds ZETAPHY itself: Phantom, and wallets with a fixed list of chains.',
+    supNever: 'Never: Solana-only or Bitcoin-only wallets. They are not EVM or Cosmos wallets.',
+    supPq: 'Quantum-safe: only this page\'s own ML-DSA-44 key and the ZETAPHY Snap. Every other wallet signs with ECDSA (secp256k1), which a large enough quantum computer can break; lock such an account to this wallet to protect it.',
+    usingWallet: 'Wallet used: {name}',
+    usingNone: 'No EVM wallet found in this browser yet.',
+    changeWallet: 'Pick another wallet',
+    inApp: 'This page is open in {name}\'s in-app browser: the buttons below use it.',
+    mobileNoWallet: 'On a phone: open this page in your wallet app\'s browser (use a link below, or copy this page\'s address into the app\'s Browser tab).',
+    phantomNote: 'Phantom does not let anyone add networks: it supports only the chains Phantom chose, so it cannot use ZETAPHY until Phantom adds it. Use another wallet (MetaMask, Rabby, Trust, OKX, Coinbase).',
+    binanceNote: 'Binance Wallet may not accept new networks yet. If adding fails, type the values below in by hand, or use another wallet.',
+    evmMissing: 'No EVM wallet was found in this browser.',
+    evmRejected: 'Cancelled in the wallet.',
+    evmDenied: 'The wallet did not allow connecting an account.',
+    chainNeedHttps: 'Wallets take only an https RPC URL (or localhost). Enter the node\'s https address above, e.g. https://1-2-3-4.sslip.io',
+    chainAdding: 'Approve adding ZETAPHY Testnet in {name}\'s window…',
+    chainAdded: 'ZETAPHY Testnet added to {name} and selected.',
+    chainAddedNoSwitch: 'ZETAPHY Testnet added to {name}, but not selected: pick the network in the wallet.',
+    addChainUnsupported: '{name} did not add the network ({why}). It may not accept new networks yet: type the values below into the wallet by hand, or use another wallet.',
+    evmConnected: 'Connected to {name}.',
+    evmOnZetaphy: 'On ZETAPHY Testnet.',
+    evmOtherChain: 'On another network (chain id {id}): press "Add ZETAPHY to this wallet".',
+    evmBalance: 'Balance {amount} ZETAPHY',
+    cosmosMissing: '{name} was not found in this browser.',
+    cosmosAdding: 'Approve in {name}\'s window…',
+    cosmosRejected: '{name} did not add the network ({why}).',
+    cosmosAdded: 'ZETAPHY Testnet added to {name}. Your address is below.',
+    cosmosBadAddress: 'The wallet answered with an address that is not zetaphy1…, so it is not used.',
+    walletPicked: '{name} picked.',
+    snapNotMetaMask: '{name} cannot run MetaMask Snaps. Pick MetaMask (or MetaMask Flask) under "Use ZETAPHY in other wallets" below.',
   },
 };
 
@@ -402,6 +531,7 @@ function applyLang() {
   $('lang').lang = lang === 'th' ? 'en' : 'th';
   if (lastStatus) status(...lastStatus);
   if (wallet) { showAccount(); showToken(); showOwned(); }
+  if (discovery) { renderWallets(); showManual(); showEvmAccount(); }
 }
 
 /** status(key, vars, isError, extra): extra is raw text (e.g. a node's log). */
@@ -506,7 +636,7 @@ const client = pqClient(checkedCall);
 /** Shows any error in the user's language where we know it. */
 function showError(e) {
   const m = String(e?.message ?? e);
-  if (T.en[m]) return fail(m, e.vars);
+  if (T.en[m]) { if (e.manual) $('manual').open = true; return fail(m, e.vars); }
   if (/does not exist on chain yet/.test(m)) return fail('notFunded');
   const callFails = /the call would fail, so nothing was sent: (.*)$/.exec(m);
   if (callFails) return fail('callFails', {}, T.en[callFails[1]] ? t(callFails[1]) : callFails[1]);
@@ -1081,8 +1211,7 @@ async function stopActing() {
 // ---- quantum lock from MetaMask: an EVM tx to 0x…5051 with this wallet's address as data ----
 async function metamaskLock() {
   if (!wallet || !$('mm-ok').checked) return;
-  const eth = window.ethereum;
-  if (!eth || typeof eth.request !== 'function') throw new Error('mmMissing');
+  const eth = ethereum(); // the EVM wallet picked under "other wallets" (MetaMask or any other)
   status('working');
   // The chain only accepts an ML-DSA-44 controller whose public key it knows.
   await client.checkController(wallet.addr.bech32);
@@ -1123,15 +1252,19 @@ async function metamaskLock() {
 const DEFAULT_SNAP_ID = document.querySelector('meta[name="zetaphy-snap-id"]')?.content || 'npm:@zetaphy/snap';
 const SNAP_ID_RE = /^(?:npm:(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*|local:https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?\/?)$/;
 
+/** The provider of the EVM wallet picked under "other wallets" (window.ethereum when it is the only one). */
 function ethereum() {
-  const eth = window.ethereum;
-  if (!eth || typeof eth.request !== 'function') throw new Error('mmMissing');
-  return eth;
+  const w = pickedWallet();
+  if (!w) throw new Error('mmMissing');
+  return w.provider;
 }
 
-async function invokeSnap(snapId, method, params) {
+/** A wallet's "this method does not exist" answer. */
+const unsupported = (e) => e?.code === -32601 || e?.code === 4200 || /does not exist|not supported|not available|unsupported/i.test(e?.message ?? '');
+
+async function invokeSnap(snapId, method, params, eth = wallet?.snapProvider ?? ethereum()) {
   try {
-    return await ethereum().request({ method: 'wallet_invokeSnap', params: { snapId, request: params === undefined ? { method } : { method, params } } });
+    return await eth.request({ method: 'wallet_invokeSnap', params: { snapId, request: params === undefined ? { method } : { method, params } } });
   } catch (e) {
     if (e?.code === 4001) throw new Error('snapRejected');
     throw new Error(e?.message ?? String(e));
@@ -1144,18 +1277,24 @@ const snapSignTx = (request) => invokeSnap(wallet.snapId, 'zetaphy_signTx', { ..
 async function connectSnap() {
   const snapId = $('snap-id').value.trim() || DEFAULT_SNAP_ID;
   if (!SNAP_ID_RE.test(snapId)) return fail('snapBadId');
+  const picked = pickedWallet();
   const eth = ethereum();
   status('working');
+  // Snaps run only in MetaMask (Flask until the snap is allowlisted): ask the wallet first.
+  const noSnaps = () => (mayRunSnaps(picked.kind) ? new Error('snapUnsupported') : Object.assign(new Error('snapNotMetaMask'), { vars: { name: picked.name } }));
+  try { await eth.request({ method: 'wallet_getSnaps' }); } catch (e) {
+    if (unsupported(e)) throw noSnaps();
+  }
   let snaps;
   try {
     snaps = await eth.request({ method: 'wallet_requestSnaps', params: { [snapId]: {} } });
   } catch (e) {
     if (e?.code === 4001) throw new Error('snapDenied');
-    if (e?.code === -32601 || /does not exist|not supported|not available|unsupported/i.test(e?.message ?? '')) throw new Error('snapUnsupported');
+    if (unsupported(e)) throw noSnaps();
     throw new Error(e?.message ?? String(e));
   }
   if (!snaps?.[snapId] || snaps[snapId].error) throw new Error(snaps?.[snapId]?.error?.message ?? 'snapDenied');
-  const a = await invokeSnap(snapId, 'zetaphy_getAccount');
+  const a = await invokeSnap(snapId, 'zetaphy_getAccount', undefined, eth);
   // The address is derived here from the public key, never taken from the snap's word.
   let publicKey;
   try { publicKey = hexToBytes(a?.publicKey); } catch { throw new Error('snapBadAccount'); }
@@ -1163,7 +1302,7 @@ async function connectSnap() {
   const addr = pqAddress(publicKey);
   if (a.address !== addr.bech32 || String(a.hex).toLowerCase() !== addr.hex.toLowerCase()) throw new Error('snapBadAccount');
   if (wallet) lock();
-  wallet = { kind: 'snap', snapId, publicKey, addr };
+  wallet = { kind: 'snap', snapId, publicKey, addr, snapProvider: eth }; // signing stays with this wallet if another is picked later
   store.set(KEYS.snap, snapId);
   account = null;
   render();
@@ -1188,6 +1327,214 @@ function downloadBackup() {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   status('backupDone');
+}
+
+// ---- other wallets (wallets.js): EVM wallets found with EIP-6963 or injected, Keplr / Leap /
+// Cosmostation, WalletConnect (off until a Reown projectId is set; not bundled yet) ----
+let discovery = null; // { list() }
+let pickedId = store.get(KEYS.evmWallet);
+let evmAccount = null; // { name, provider, address, chain, balance } after "connect this wallet"
+const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const WC_META_ID = document.querySelector('meta[name="zetaphy-walletconnect-project-id"]')?.content.trim() ?? '';
+const WC_ID_RE = /^[0-9a-f]{32}$/i;
+const NATIVE_PRECOMPILE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'; // ZETAPHY as an ERC-20: the same coin
+/** A wallet's error text, shown as plain text: no control or bidi characters, not too long. */
+const clean = (s) => String(s ?? '').replace(/\p{C}/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+
+/** The EVM wallet the page uses: the one picked, else MetaMask, else the first found. */
+function pickedWallet() {
+  const list = discovery?.list() ?? [];
+  return list.find((w) => w.id === pickedId) ?? list.find((w) => w.kind === 'metamask' || w.kind === 'flask') ?? list[0] ?? null;
+}
+
+function pickWallet(id) {
+  pickedId = id;
+  store.set(KEYS.evmWallet, id);
+  evmAccount = null;
+  renderWallets();
+  showEvmAccount();
+  const w = pickedWallet();
+  if (w) status('walletPicked', { name: w.name });
+}
+
+function renderWallets() {
+  const list = discovery.list();
+  const picked = pickedWallet();
+  $('evm-wallets').replaceChildren(...list.map((w) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.dataset.wallet = w.id;
+    const on = w.id === picked?.id; // injected wallets are new objects on each list()
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+    if (w.icon) { // a data:image/… URI only (safeIcon), set as a property: never markup
+      const img = document.createElement('img');
+      img.src = w.icon;
+      img.alt = '';
+      img.width = 24; img.height = 24;
+      b.append(img);
+    } else {
+      const i = document.createElement('span');
+      i.className = 'wallet-icon';
+      i.setAttribute('aria-hidden', 'true');
+      i.textContent = w.name.slice(0, 1).toUpperCase();
+      b.append(i);
+    }
+    const name = document.createElement('span');
+    name.textContent = w.name;
+    b.append(name);
+    b.addEventListener('click', () => pickWallet(w.id));
+    const li = document.createElement('li');
+    li.append(b);
+    return li;
+  }));
+  $('evm-none').hidden = list.length > 0;
+  // Before anything is asked of them: wallets that may refuse a new network.
+  const note = picked?.kind === 'phantom' ? 'phantomNote' : picked?.kind === 'binance' ? 'binanceNote' : null;
+  $('evm-note').hidden = !note;
+  if (note) setI18n($('evm-note'), note);
+  for (const el of document.querySelectorAll('.using-text')) el.textContent = picked ? t('usingWallet', { name: picked.name }) : t('usingNone');
+  // Phones: inside a wallet app's browser its provider is injected, so it is in the list.
+  $('wallet-env').hidden = !MOBILE;
+  $('wallet-env').textContent = !MOBILE ? '' : picked ? t('inApp', { name: picked.name }) : t('mobileNoWallet');
+  const links = $('open-in-app');
+  links.hidden = !MOBILE || !!picked;
+  if (!links.hidden && !links.childElementCount) {
+    links.replaceChildren(...openInAppLinks(location.href).map(({ name, href }) => {
+      const a = document.createElement('a');
+      a.href = href;
+      a.rel = 'noopener noreferrer';
+      a.textContent = name;
+      const li = document.createElement('li');
+      li.append(a);
+      return li;
+    }));
+  }
+}
+
+/** The values to type into any EVM wallet by hand. */
+function showManual() {
+  let rpc = null;
+  try { rpc = nodeEndpoints($('rpc').value).evm; } catch { /* not set yet, or not https */ }
+  $('m-name').textContent = CHAIN_NAME;
+  $('m-rpc').textContent = rpc ?? t('mRpcUnset');
+  $('m-rpc').nextElementSibling.hidden = !rpc;
+  $('m-chain').textContent = `${EVM_CHAIN_ID} (${EVM_CHAIN_ID_HEX})`;
+  $('m-symbol').textContent = EVM_SYMBOL;
+  $('m-decimals').textContent = String(DECIMALS);
+  $('m-symbol-note').textContent = t('mSymbolNote', { sym: EVM_SYMBOL, precompile: NATIVE_PRECOMPILE });
+}
+
+/** The node's endpoints, from the RPC URL above (https, or localhost). */
+const endpoints = () => nodeEndpoints(rpcUrl());
+
+/** A wallet refused: say so with its own words, and open the manual values. */
+const walletError = (key, w, e) => Object.assign(new Error(key), {
+  vars: { name: w.name, why: clean(e?.message) || (e?.code != null ? `code ${e.code}` : '?') }, manual: true,
+});
+
+/** EIP-3085: wallet_addEthereumChain, then wallet_switchEthereumChain. */
+async function addEvmChain() {
+  const w = pickedWallet();
+  if (!w) throw new Error('evmMissing');
+  const params = evmChainParams(endpoints());
+  status('chainAdding', { name: w.name });
+  try {
+    await w.provider.request({ method: 'wallet_addEthereumChain', params: [params] });
+  } catch (e) {
+    if (e?.code === 4001) throw new Error('evmRejected');
+    throw walletError('addChainUnsupported', w, e); // e.g. 4200 (unsupported), or the chain refused
+  }
+  try {
+    await w.provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: EVM_CHAIN_ID_HEX }] });
+  } catch (e) {
+    if (e?.code === 4001) return status('chainAddedNoSwitch', { name: w.name });
+    throw walletError('addChainUnsupported', w, e);
+  }
+  status('chainAdded', { name: w.name });
+  if (evmAccount?.provider === w.provider) { evmAccount.chain = EVM_CHAIN_ID; showEvmAccount(); }
+}
+
+/** eth_requestAccounts: shows the wallet's account in both forms (the same 20 bytes). */
+async function connectEvm() {
+  const w = pickedWallet();
+  if (!w) throw new Error('evmMissing');
+  status('working');
+  let accounts;
+  try { accounts = await w.provider.request({ method: 'eth_requestAccounts' }); } catch (e) { throw new Error(e?.code === 4001 ? 'evmRejected' : 'evmDenied'); }
+  if (!Array.isArray(accounts) || !accounts.length) throw new Error('evmDenied');
+  let address;
+  try { address = normalizeAddress(String(accounts[0]).toLowerCase()); } catch { throw new Error('evmDenied'); }
+  let chain = null;
+  try { chain = BigInt(await w.provider.request({ method: 'eth_chainId' })); } catch { /* not shown */ }
+  evmAccount = { name: w.name, provider: w.provider, address, chain, balance: null };
+  showEvmAccount();
+  status('evmConnected', { name: w.name });
+  if (!$('rpc').value.trim()) return;
+  try {
+    const balance = await client.balance(address.hex);
+    if (evmAccount?.address === address) { evmAccount.balance = balance; showEvmAccount(); }
+  } catch { /* the node is not reachable: no balance shown */ }
+}
+
+function showEvmAccount() {
+  const a = evmAccount;
+  $('evm-account').hidden = !a;
+  if (!a) return;
+  $('evm-wallet-name').textContent = a.name;
+  $('evm-addr-hex').textContent = a.address.hex;
+  $('evm-addr-bech32').textContent = a.address.bech32;
+  const parts = [];
+  if (a.chain != null) parts.push(a.chain === EVM_CHAIN_ID ? t('evmOnZetaphy') : t('evmOtherChain', { id: a.chain }));
+  if (a.balance != null) parts.push(t('evmBalance', { amount: formatZeta(a.balance) }));
+  $('evm-chain').textContent = parts.join(' · ');
+}
+
+// Keplr's interface: experimentalSuggestChain, enable, getKey. Cosmostation offers it too.
+const COSMOS = {
+  keplr: { name: 'Keplr', get: () => window.keplr },
+  leap: { name: 'Leap', get: () => window.leap },
+  cosmostation: { name: 'Cosmostation', get: () => window.cosmostation?.providers?.keplr },
+};
+
+async function addCosmos(id) {
+  const c = COSMOS[id];
+  let w = null;
+  try { w = c.get(); } catch { /* a getter that throws: not there */ }
+  if (!w || typeof w.experimentalSuggestChain !== 'function' || typeof w.enable !== 'function' || typeof w.getKey !== 'function') {
+    throw Object.assign(new Error('cosmosMissing'), { vars: { name: c.name } });
+  }
+  const info = keplrChainInfo(endpoints());
+  status('cosmosAdding', { name: c.name });
+  let key;
+  try {
+    await w.experimentalSuggestChain(info);
+    await w.enable(CHAIN_ID);
+    key = await w.getKey(CHAIN_ID);
+  } catch (e) {
+    throw Object.assign(new Error('cosmosRejected'), { vars: { name: c.name, why: clean(e?.message) || '?' } });
+  }
+  const reported = String(key?.bech32Address ?? '');
+  let address;
+  try { address = normalizeAddress(reported); } catch { throw new Error('cosmosBadAddress'); }
+  if (!reported.toLowerCase().startsWith('zetaphy1')) throw new Error('cosmosBadAddress');
+  $('cosmos-wallet-name').textContent = c.name;
+  $('cosmos-addr').textContent = address.bech32;
+  $('cosmos-hex').textContent = address.hex;
+  $('cosmos-account').hidden = false;
+  status('cosmosAdded', { name: c.name });
+}
+
+/** The projectId set in this browser, else the page's meta tag; '' when neither is valid. */
+function wcProjectId() {
+  const id = store.get(KEYS.wcId) || WC_META_ID;
+  return WC_ID_RE.test(id) ? id : '';
+}
+
+function showWalletConnect() {
+  const on = !!wcProjectId();
+  $('wc-connect').disabled = !on;
+  setI18n($('wc-hint'), on ? 'wcOn' : 'wcOff');
 }
 
 // ---- wiring ----
@@ -1249,11 +1596,26 @@ function init() {
       try { await navigator.clipboard.writeText($(b.dataset.copy).textContent); status('copied'); } catch { /* clipboard not allowed */ }
     });
   }
+  // Other wallets. A wallet may announce itself while discoverWallets runs, before `discovery` is set.
+  discovery = discoverWallets(window, () => { if (discovery) renderWallets(); });
+  $('evm-add').addEventListener('click', () => busy($('evm-add'), addEvmChain));
+  $('evm-connect').addEventListener('click', () => busy($('evm-connect'), connectEvm));
+  for (const b of document.querySelectorAll('.cosmos-add')) b.addEventListener('click', () => busy(b, () => addCosmos(b.dataset.cosmos)));
+  $('wc-id').value = store.get(KEYS.wcId) ?? '';
+  $('wc-save').addEventListener('click', () => {
+    const id = $('wc-id').value.trim();
+    if (id && !WC_ID_RE.test(id)) return fail('wcBadId');
+    if (id) store.set(KEYS.wcId, id); else store.del(KEYS.wcId);
+    showWalletConnect();
+    status('wcSaved');
+  });
+  $('wc-connect').addEventListener('click', () => status('wcNotYet'));
   // The typed URL is used right away; Save also remembers it.
-  $('rpc').addEventListener('input', () => { checkedRpc = null; });
+  $('rpc').addEventListener('input', () => { checkedRpc = null; showManual(); });
   applyLang();
   setMode('new');
   render();
+  showWalletConnect();
 }
 
 init();

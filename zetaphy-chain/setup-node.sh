@@ -18,7 +18,7 @@ JOIN="${JOIN:-}"
 set -euo pipefail
 
 # ---- Fixed parameters (decided 19 Oct 2026) --------------------------------
-CHAIN_ID="zetaphy-testnet-1"
+CHAIN_ID="zetaphy_77390-1"
 EVM_CHAIN_ID=77390                 # free in ethereum-lists/chains as of 19 Oct 2026
 DENOM="azetaphy"                   # 1 ZETAPHY = 10^18 azetaphy
 MONIKER="${MONIKER:-zetaphy-validator-0}"
@@ -211,6 +211,10 @@ elif [ ! -f "$NODE_HOME/config/genesis.json" ]; then
   jqg '.app_state.evm.params.active_static_precompiles=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000400","0x0000000000000000000000000000000000000800","0x0000000000000000000000000000000000000801","0x0000000000000000000000000000000000000802","0x0000000000000000000000000000000000000803","0x0000000000000000000000000000000000000804","0x0000000000000000000000000000000000000805","0x0000000000000000000000000000000000000806","0x0000000000000000000000000000000000000807","0x0000000000000000000000000000000000000900"]'
   jqg ".app_state.erc20.native_precompiles=[\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\"] | .app_state.erc20.token_pairs=[{contract_owner:1,erc20_address:\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\",denom:\"$DENOM\",enabled:true}]"
   jqg '.consensus.params.block.max_gas="30000000" | .consensus.params.abci.vote_extensions_enable_height="1"'
+  # Price a signature in simulate the same as the real check (eth_secp256k1
+  # costs 21000). With the SDK default of 1000, wallets that simulate before
+  # the account has a public key (Keplr) under-estimate gas by ~20000.
+  jqg '.app_state.auth.params.sig_verify_cost_secp256k1="21000"'
   # Testnet: short votes so upgrade proposals can be tried quickly.
   jqg '.app_state.gov.params.voting_period="600s" | .app_state.gov.params.expedited_voting_period="300s" | .app_state.gov.params.max_deposit_period="600s"'
 
@@ -269,7 +273,8 @@ if [ -f "$NODE_HOME/config/seed-peer" ]; then
   as_node "sed -i -E 's/^persistent_peers = .*/persistent_peers = \"$peer\"/' '$C'"
 fi
 # Public: EVM JSON-RPC 8545 (read + send signed txs) and P2P 26656.
-# Local only: CometBFT RPC 26657, REST 1317, gRPC 9090 (defaults).
+# Local only: CometBFT RPC 26657, REST 1317, gRPC 9090 (defaults). Cosmos
+# wallets (Keplr, Leap, Cosmostation) reach RPC and REST through Caddy (https).
 as_node "python3 - '$A' <<'PY'
 import re, sys
 p = sys.argv[1]; s = open(p).read()
@@ -292,7 +297,12 @@ limits = {
 }
 for k, v in limits.items():
     new = re.sub(r'(?m)^' + re.escape(k) + r' = .*', k + ' = ' + v, new)
-open(p, 'w').write(s.replace(sec, new))
+s = s.replace(sec, new)
+api = re.search(r'(?ms)^\[api\].*?(?=^\[|\Z)', s).group(0)
+new = re.sub(r'(?m)^enable = .*', 'enable = true', api)
+new = re.sub(r'(?m)^address = .*', 'address = \"tcp://127.0.0.1:1317\"', new)
+new = re.sub(r'(?m)^enabled-unsafe-cors = .*', 'enabled-unsafe-cors = false', new)  # Caddy adds CORS
+open(p, 'w').write(s.replace(api, new))
 PY"
 
 step "7/8 service"
@@ -353,9 +363,48 @@ host="${ip//./-}.sslip.io"
 pub=/var/lib/zetaphy-public
 mkdir -p $pub && install -m 644 "$NODE_HOME/config/genesis.json" $pub/ && install -m 644 "$0" $pub/setup-node.sh
 echo "$(z comet show-node-id --home "$NODE_HOME")@$ip:26656" > $pub/peer
+# Wallet settings for this node, for one-click "add network" buttons.
+jq -n --arg h "https://$host" --arg c "$CHAIN_ID" --arg d "$DENOM" '
+  {denom: $d, cur: {coinDenom: "ZETAPHY", coinMinimalDenom: $d, coinDecimals: 18}} as $x |
+  {chainId: $c, chainName: "ZETAPHY Testnet", rpc: ($h + "/rpc"), rest: ($h + "/rest"), bip44: {coinType: 60},
+   bech32Config: {bech32PrefixAccAddr: "zetaphy", bech32PrefixAccPub: "zetaphypub", bech32PrefixValAddr: "zetaphyvaloper",
+     bech32PrefixValPub: "zetaphyvaloperpub", bech32PrefixConsAddr: "zetaphyvalcons", bech32PrefixConsPub: "zetaphyvalconspub"},
+   currencies: [$x.cur], stakeCurrency: $x.cur,
+   feeCurrencies: [$x.cur + {gasPriceStep: {low: 1000000000, average: 2000000000, high: 4000000000}}],
+   features: ["eth-address-gen", "eth-key-sign", "eth-secp256k1-cosmos", "force-enable-evm-ledger"], isTestnet: true, evm: {chainId: '"$EVM_CHAIN_ID"', rpc: $h}}' > $pub/keplr.json
+jq -n --arg h "https://$host" --arg id "$(printf '0x%x' "$EVM_CHAIN_ID")" \
+  '{chainId: $id, chainName: "ZETAPHY Testnet", nativeCurrency: {name: "ZETAPHY", symbol: "ZTPHY", decimals: 18}, rpcUrls: [$h]}' > $pub/evm-chain.json
+chmod 644 $pub/keplr.json $pub/evm-chain.json
 if [ -z "$NO_SYSTEMD" ] && [ -d /run/systemd/system ] && [[ "$ip" =~ ^[0-9.]+$ ]]; then
-  { apt-get install -y caddy >/dev/null && printf '%s {\n\thandle_path /zetaphy/* {\n\t\troot * %s\n\t\tfile_server\n\t}\n\thandle {\n\t\treverse_proxy 127.0.0.1:8545\n\t}\n}\n' "$host" $pub > /etc/caddy/Caddyfile \
-    && systemctl restart caddy; } || echo "https setup failed; the RPC still works over http"
+  # https://$host/        EVM JSON-RPC (MetaMask and other EVM wallets)
+  # https://$host/rpc/    CometBFT RPC   } Keplr, Leap, Cosmostation
+  # https://$host/rest/   Cosmos REST    }
+  # https://$host/zetaphy/  files: genesis, peer, setup script, wallet configs
+  { apt-get install -y caddy >/dev/null && cat > /etc/caddy/Caddyfile <<CADDY
+$host {
+	header ?Access-Control-Allow-Origin *
+	header ?Access-Control-Allow-Headers "Content-Type"
+	header ?Access-Control-Allow-Methods "GET, POST, OPTIONS"
+	route {
+		@preflight method OPTIONS
+		respond @preflight 204
+		@heavy path /rpc/dump_consensus_state* /rpc/unsafe* /rpc/genesis*
+		respond @heavy 403
+		handle_path /zetaphy/* {
+			root * $pub
+			file_server
+		}
+		handle_path /rest/* {
+			reverse_proxy 127.0.0.1:1317
+		}
+		handle_path /rpc/* {
+			reverse_proxy 127.0.0.1:26657
+		}
+		reverse_proxy 127.0.0.1:8545
+	}
+}
+CADDY
+    systemctl restart caddy; } || echo "https setup failed; the RPC still works over http"
 fi
 # A joined node asks the faucet of the node it joined for 10 ZETAPHY.
 if [ -n "$JOIN" ]; then
@@ -370,6 +419,8 @@ ZETAPHY testnet node is starting.
   Chain ID (EVM):      $EVM_CHAIN_ID
   MetaMask RPC URL:    http://$ip:8545
   HTTPS RPC (wallet):  https://$host  (needs ports 80 and 443 open)
+  Keplr / Leap:        RPC https://$host/rpc  REST https://$host/rest
+                       (chain settings: https://$host/zetaphy/keplr.json)
   Others join with:    JOIN=$host in setup-node.sh, then --become-validator 9
   Currency symbol:     ZETAPHY
   Genesis keys:        $KEYS_DIR (testnet only; MNEMONICS-KEEP-SECRET.txt)
@@ -2582,6 +2633,30 @@ index 74c2f89..61f856c 100644
  
  		// we push the tx onto the evm insert queue so the tx will be inserted
  		// at a later point. We get back a subscription that the insert queue
+diff --git a/mempool/mempool_handlers.go b/mempool/mempool_handlers.go
+index 2484d04..cfc6fbb 100644
+--- a/mempool/mempool_handlers.go
++++ b/mempool/mempool_handlers.go
+@@ -11,6 +11,7 @@ import (
+ 	errorsmod "cosmossdk.io/errors"
+ 
+ 	sdk "github.com/cosmos/cosmos-sdk/types"
++	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+ )
+ 
+ const (
+@@ -77,7 +78,10 @@ func (m *Mempool) NewCheckTxHandler(txDecoder sdk.TxDecoder, timeout time.Durati
+ 
+ 		tx, err := txDecoder(req.GetTx())
+ 		if err != nil {
+-			return nil, fmt.Errorf("decoding tx: %w", err)
++			// ZETAPHY: answer with an error code. Returning a Go error makes
++			// CometBFT's AppMempool drop the request without calling the RPC
++			// callback, so broadcast_tx_sync and REST would hang forever.
++			return ErrAsCheckTxResponse(errorsmod.Wrap(sdkerrors.ErrTxDecode, err.Error())), nil
+ 		}
+ 
+ 		err = m.Insert(ctx, tx)
 diff --git a/mempool/recheck_pool.go b/mempool/recheck_pool.go
 index 5a38319..508ebac 100644
 --- a/mempool/recheck_pool.go

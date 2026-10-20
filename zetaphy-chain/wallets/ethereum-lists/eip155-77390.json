@@ -1,0 +1,17 @@
+{
+  "name": "ZETAPHY Testnet",
+  "chain": "ZETAPHY",
+  "rpc": ["https://HOST"],
+  "faucets": [],
+  "nativeCurrency": {
+    "name": "ZETAPHY",
+    "symbol": "ZTPHY",
+    "decimals": 18
+  },
+  "features": [{ "name": "EIP155" }, { "name": "EIP1559" }],
+  "infoURL": "https://github.com/pospos191-alt/zetaphy-chain",
+  "shortName": "zetaphy-testnet",
+  "chainId": 77390,
+  "networkId": 77390,
+  "slip44": 1
+}

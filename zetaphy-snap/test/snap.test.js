@@ -28,7 +28,7 @@ const TOKEN = '0x3333333333333333333333333333333333333333';
 const OWNER = 'zetaphy1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zy4seeq9'; // 0x4444…44, a locked MetaMask account
 const OWNER_HEX = '0x4444444444444444444444444444444444444444';
 const NEW_CTRL = 'zetaphy1242424242424242424242424242424248wwy4h'; // 0x5555…55
-const BASE = { chainId: 'zetaphy-testnet-1', accountNumber: '12', sequence: '4', gasLimit: '400000', gasPrice: '1200000000' };
+const BASE = { chainId: 'zetaphy_77390-1', accountNumber: '12', sequence: '4', gasLimit: '400000', gasPrice: '1200000000' };
 const word = (v) => BigInt(v).toString(16).padStart(64, '0');
 
 /** SIP-6, written out: what snap_getEntropy gives this snap for an SRP (BIP-32 secp256k1 under m/1399742832'). */
@@ -148,7 +148,7 @@ describe('zetaphy_signTx', () => {
     expect(text).toContain('Gas limit × price: 400000 × 1200000000 azetaphy');
     expect(text).toContain('Your account pays (ZETAPHY amounts + max fee): 1.25048 ZETAPHY');
     expect(text).toContain('Memo: rent');
-    expect(text).toContain('Chain: zetaphy-testnet-1');
+    expect(text).toContain('Chain: zetaphy_77390-1');
     expect(text).toContain('Account number / sequence: 12 / 4');
     expect(text).toContain(me.address);
     expect(text).not.toMatch(/Not ZETAPHY testnet/);
@@ -165,7 +165,7 @@ describe('zetaphy_signTx', () => {
     const { text, response } = await sign(snap, { ...BASE, chainId: 'zetaphy-local-1', messages: [{ type: 'send', to: TO, amount: 42, denom: 'ibc/27394FB092D2ECCD' }] });
     expect(text).toContain('Amount: 42 ibc/27394FB092D2ECCD');
     expect(text).toContain('Not ZETAPHY testnet');
-    expect(text).toContain('This transaction is for the chain zetaphy-local-1, not zetaphy-testnet-1.');
+    expect(text).toContain('This transaction is for the chain zetaphy-local-1, not zetaphy_77390-1.');
     expect(text).toContain('Your account pays (ZETAPHY amounts + max fee): 0.00048 ZETAPHY');
     const { msg } = decodeSigned(response.response.result, { chainId: 'zetaphy-local-1' });
     expect(MsgSend.decode(msg.value).amount).toEqual([{ denom: 'ibc/27394FB092D2ECCD', amount: '42' }]);

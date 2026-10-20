@@ -1,0 +1,103 @@
+{
+  "$schema": "../../chain.schema.json",
+  "chain_name": "zetaphytestnet",
+  "status": "live",
+  "network_type": "testnet",
+  "website": "https://github.com/pospos191-alt/zetaphy-chain",
+  "pretty_name": "ZETAPHY Testnet",
+  "chain_type": "cosmos",
+  "chain_id": "zetaphy_77390-1",
+  "bech32_prefix": "zetaphy",
+  "daemon_name": "zetaphyd",
+  "node_home": "$HOME/.zetaphy",
+  "key_algos": [
+    "ethsecp256k1"
+  ],
+  "extra_codecs": [
+    "ethermint"
+  ],
+  "slip44": 60,
+  "fees": {
+    "fee_tokens": [
+      {
+        "denom": "azetaphy",
+        "fixed_min_gas_price": 1000000000,
+        "low_gas_price": 1000000000,
+        "average_gas_price": 2000000000,
+        "high_gas_price": 4000000000
+      }
+    ]
+  },
+  "staking": {
+    "staking_tokens": [
+      {
+        "denom": "azetaphy"
+      }
+    ]
+  },
+  "codebase": {
+    "git_repo": "https://github.com/pospos191-alt/zetaphy-chain",
+    "language": {
+      "type": "go",
+      "version": "1.25.9"
+    },
+    "sdk": {
+      "type": "cosmos",
+      "version": "v0.54.3"
+    },
+    "consensus": {
+      "type": "cometbft",
+      "version": "v0.39.3"
+    },
+    "ibc": {
+      "type": "go",
+      "version": "v11.0.0"
+    },
+    "genesis": {
+      "genesis_url": "https://HOST/zetaphy/genesis.json"
+    }
+  },
+  "images": [
+    {
+      "svg": "https://raw.githubusercontent.com/cosmos/chain-registry/master/testnets/zetaphytestnet/images/zetaphy.svg"
+    }
+  ],
+  "logo_URIs": {
+    "svg": "https://raw.githubusercontent.com/cosmos/chain-registry/master/testnets/zetaphytestnet/images/zetaphy.svg"
+  },
+  "description": "ZETAPHY Testnet is a Cosmos SDK chain with an EVM (github.com/cosmos/evm v0.7.3) and post-quantum accounts: besides eth_secp256k1 keys, accounts can be controlled by ML-DSA-44 (FIPS 204) keys. Test coins only, no value.",
+  "peers": {
+    "persistent_peers": [
+      {
+        "id": "NODE_ID",
+        "address": "HOST:26656",
+        "provider": "ZETAPHY"
+      }
+    ]
+  },
+  "apis": {
+    "rpc": [
+      {
+        "address": "https://HOST/rpc",
+        "provider": "ZETAPHY"
+      }
+    ],
+    "rest": [
+      {
+        "address": "https://HOST/rest",
+        "provider": "ZETAPHY"
+      }
+    ],
+    "evm-http-jsonrpc": [
+      {
+        "address": "https://HOST",
+        "provider": "ZETAPHY"
+      }
+    ]
+  },
+  "keywords": [
+    "testnet",
+    "evm",
+    "post-quantum"
+  ]
+}

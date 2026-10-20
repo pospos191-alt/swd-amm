@@ -193,8 +193,11 @@ test('stage 2: half of every fee is burned, so the supply shrinks', { timeout: 6
   await new Promise((r) => setTimeout(r, 3000)); // let earlier fees settle
   const before = supply();
   let fees = 0n;
+  // Count nonces here: right after a block the node's pending nonce can lag
+  // by one, and ethers would then reuse a spent nonce ("nonce too low").
+  const nonce = await provider.getTransactionCount(w.address, 'latest');
   for (let i = 0; i < 3; i++) {
-    const r = await (await w.sendTransaction({ to: Wallet.createRandom().address, value: 1n })).wait();
+    const r = await (await w.sendTransaction({ to: Wallet.createRandom().address, value: 1n, nonce: nonce + i })).wait();
     fees += r.gasUsed * r.gasPrice;
   }
   await new Promise((r) => setTimeout(r, 4000));

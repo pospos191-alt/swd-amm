@@ -29,7 +29,7 @@ NODE_HOME=${NODE_HOME:-$HOME/.zetaphy}
 KEYS_DIR=${KEYS_DIR:-$HOME/.zetaphy-genesis-keys}
 FROM=${FROM:-validator}
 NODE=${NODE:-tcp://127.0.0.1:26657}
-CHAIN_ID=${CHAIN_ID:-zetaphy-testnet-1}
+CHAIN_ID=${CHAIN_ID:-zetaphy_77390-1}
 DEPOSIT=${DEPOSIT:-1000000000000000000000azetaphy}   # 1,000 ZETAPHY
 
 # Flags go after the subcommand: zetaphyd rejects tx/query flags placed before it.
