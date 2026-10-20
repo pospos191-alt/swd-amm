@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Chuỗi', address: 'Địa chỉ', proxy: 'Proxy', implementation: 'Mã thực thi', owner: 'Chủ sở hữu', functions: 'Hàm đã nhận diện', report: 'Mã báo cáo', explorer: 'Mở trên explorer', fingerprint: 'Dấu vân tay mã (để đăng ký mẫu)', unknown: 'Hàm chưa rõ tên',
     program: 'Chương trình token', mintAuth: 'Quyền tạo token (mint authority)', freezeAuth: 'Quyền đóng băng (freeze authority)', extensions: 'Tiện ích mở rộng', upgradeAuth: 'Quyền nâng cấp', none: 'không có',
     package: 'Gói', standard: 'Tiêu chuẩn', admin: 'Quản trị viên', holders: 'Số người nắm giữ', listed: 'Danh sách tonapi', raw: 'Địa chỉ gốc (raw)',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ',
   },
 };
 
@@ -155,7 +155,11 @@ export const T = {
       : `Một quản trị viên (${p.admin}) vẫn có thể đổi tên và logo, và nếu mã hợp đồng không theo chuẩn, có thể còn nắm những quyền khác mà lần kiểm tra này không thấy được.`),
     'ton-admin-dropped': () => 'Vai trò quản trị viên đã bị bỏ: không ai có thể tạo thêm token hay thay đổi dữ liệu của token nữa.',
     'ton-mint-flag': () => 'Hợp đồng vẫn ghi là có thể tạo thêm token, nhưng không có quản trị viên nào để làm việc đó.',
-    'ton-caveat': () => 'Kiểm tra từ dữ liệu hợp đồng do tonapi.io giải mã theo các quy tắc cố định. Chưa kiểm tra mã ví của người nắm giữ (vì lý do này, một số token có thể mua được nhưng không bán được). Không phải lời khuyên đầu tư.',
+    'ton-caveat': () => 'Kiểm tra từ dữ liệu hợp đồng do tonapi.io giải mã theo các quy tắc cố định; ví của người nắm giữ được kiểm tra theo những gì tonapi nhận diện, không đọc từng dòng mã. Không phải lời khuyên đầu tư.',
+    'ton-wallet-standard': (p) => `Token của người nắm giữ nằm trong ví jetton tiêu chuẩn mà tonapi.io nhận diện được (${list(p.interfaces)}).`,
+    'ton-wallet-custom': (p) => (p.issuer
+      ? `${p.issuer} dùng mã ví jetton riêng, điều bình thường với token này.`
+      : `Token của người nắm giữ nằm trong mã ví mà tonapi.io không nhận diện là ví jetton tiêu chuẩn${p.compiler ? ` (${p.compiler})` : ''}. Mã ví tùy chỉnh có thể từ chối chuyển đi, nên bạn có thể mua được nhưng không bán được. Mã băm: ${p.codeHash ?? '?'}.`),
     // Solana programs (Anchor IDL)
     'sol-idl': (p) => `Chương trình này được viết bằng Rust (Anchor) và công bố danh sách lệnh của nó trên chuỗi: ${p.name ?? '?'}, ${p.count ?? '?'} lệnh.`,
     'sol-admin-instructions': (p) => `Các lệnh cần chữ ký của quản trị viên (${list(p.functions)}). Quản trị viên có thể dùng chúng để thay đổi cách chương trình hoạt động.`,

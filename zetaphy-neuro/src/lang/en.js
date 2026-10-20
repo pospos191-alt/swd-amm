@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)', unknown: 'Unnamed functions',
     program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none',
     package: 'Package', standard: 'Standard', admin: 'Admin', holders: 'Holders', listed: 'tonapi list', raw: 'Raw address',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code',
   },
 };
 
@@ -155,7 +155,11 @@ export const T = {
       : `An admin (${p.admin}) can still change the name and logo, and if the contract code is not standard, may hold other powers this check cannot see.`),
     'ton-admin-dropped': () => 'The admin role was dropped: nobody can mint or change the token\'s data any more.',
     'ton-mint-flag': () => 'The contract still says it is mintable, but there is no admin to mint.',
-    'ton-caveat': () => 'Checked from contract data decoded by tonapi.io with fixed rules. Holder wallet code is not checked (some tokens can be bought but not sold because of it). Not investment advice.',
+    'ton-caveat': () => 'Checked from contract data decoded by tonapi.io with fixed rules; the holders\' wallet is checked by what tonapi recognises, not read line by line. Not investment advice.',
+    'ton-wallet-standard': (p) => `Holders' tokens live in a standard jetton wallet that tonapi.io recognises (${list(p.interfaces)}).`,
+    'ton-wallet-custom': (p) => (p.issuer
+      ? `${p.issuer} uses its own jetton wallet code, as expected for this token.`
+      : `Holders' tokens live in wallet code that tonapi.io does not recognise as a standard jetton wallet${p.compiler ? ` (${p.compiler})` : ''}. Custom wallet code can refuse to send, so you may be able to buy but not sell. Code hash: ${p.codeHash ?? '?'}.`),
     // Solana programs (Anchor IDL)
     'sol-idl': (p) => `This program is written in Rust (Anchor) and publishes its instruction list on chain: ${p.name ?? '?'}, ${p.count ?? '?'} instructions.`,
     'sol-admin-instructions': (p) => `Instructions that need an admin's signature (${list(p.functions)}). The admin can use them to change how the program behaves.`,

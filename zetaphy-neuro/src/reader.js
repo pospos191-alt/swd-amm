@@ -327,6 +327,7 @@ async function readTon(chainKey, chain, address, opts) {
   if (m.kind === 'jetton') {
     report.token = m.token;
     report.ton = { admin: m.admin, mintable: m.mintable, verification: m.verification };
+    if (m.wallet) report.ton.wallet = { address: m.wallet.address, interfaces: m.wallet.interfaces, codeHash: m.wallet.codeHash, compiler: m.wallet.compiler };
   }
   const known = m.kind === 'jetton' ? knownToken(chainKey, raw) : null;
   const lookalike = m.kind === 'jetton' ? lookalikeOf(chainKey, raw, m.token.symbol) : null;

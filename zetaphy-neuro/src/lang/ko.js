@@ -13,7 +13,7 @@ export const UI = {
     chain: '체인', address: '주소', proxy: 'Proxy', implementation: '실제 코드 (implementation)', owner: '소유자', functions: '알려진 함수', report: '보고서 ID', explorer: 'explorer에서 열기', fingerprint: '코드 지문 (템플릿 등록용)', unknown: '이름을 알 수 없는 함수',
     program: '토큰 프로그램', mintAuth: '발행 권한', freezeAuth: '동결 권한', extensions: '확장 기능', upgradeAuth: '업그레이드 권한', none: '없음',
     package: '패키지', standard: '표준', admin: '관리자', holders: '보유자 수', listed: 'tonapi 목록', raw: '원본 주소 (raw)',
-    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드',
+    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드',
   },
 };
 
@@ -155,7 +155,11 @@ export const T = {
       : `관리자(${p.admin})가 아직 이름과 로고를 바꿀 수 있습니다. 컨트랙트 코드가 표준이 아니라면, 이 검사로는 볼 수 없는 다른 권한도 가지고 있을 수 있습니다.`),
     'ton-admin-dropped': () => '관리자 권한이 포기되었습니다. 이제 아무도 토큰을 발행하거나 토큰 정보를 바꿀 수 없습니다.',
     'ton-mint-flag': () => '컨트랙트에는 아직 발행 가능으로 표시되어 있지만, 발행할 관리자가 없습니다.',
-    'ton-caveat': () => 'tonapi.io가 해석한 컨트랙트 데이터를 정해진 규칙으로 검사했습니다. 보유자 지갑 코드는 검사하지 않았습니다 (이 때문에 살 수는 있어도 팔 수 없는 토큰도 있습니다). 투자 조언이 아닙니다.',
+    'ton-caveat': () => 'tonapi.io가 해석한 컨트랙트 데이터를 정해진 규칙으로 검사했습니다. 보유자 지갑은 tonapi의 인식 결과로 검사했으며 코드를 한 줄씩 읽지는 않았습니다. 투자 조언이 아닙니다.',
+    'ton-wallet-standard': (p) => `보유자의 토큰은 tonapi.io가 인식하는 표준 jetton 지갑에 들어 있습니다 (${list(p.interfaces)}).`,
+    'ton-wallet-custom': (p) => (p.issuer
+      ? `${p.issuer}는(은) 자체 jetton 지갑 코드를 사용합니다. 이 토큰에서는 정상입니다.`
+      : `보유자의 토큰이 tonapi.io가 표준 jetton 지갑으로 인식하지 못하는 코드에 들어 있습니다${p.compiler ? ` (${p.compiler})` : ''}. 사용자 정의 지갑 코드는 전송을 거부할 수 있어, 살 수는 있어도 팔지 못할 수 있습니다. 코드 해시: ${p.codeHash ?? '?'}.`),
     // Solana programs (Anchor IDL)
     'sol-idl': (p) => `이 프로그램은 Rust(Anchor)로 작성되었으며 명령어 목록을 체인에 공개합니다: ${p.name ?? '?'}, 명령어 ${p.count ?? '?'}개입니다.`,
     'sol-admin-instructions': (p) => `관리자 서명이 필요한 명령어가 있습니다 (${list(p.functions)}). 관리자는 이 명령어로 프로그램의 동작을 바꿀 수 있습니다.`,

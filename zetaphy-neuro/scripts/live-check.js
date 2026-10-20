@@ -38,9 +38,9 @@ const SAMPLES = [
   { chain: 'aptos', address: '0x1::aptos_coin::AptosCoin', label: 'APT', expect: ['apt-token', 'known-issuer'] },
   { chain: 'aptos', address: '0x357b0b74bc833e95a115ad22604854d6b0fca151cecd94111770e5d6ffc9dc2b', label: 'USDt Aptos', expect: ['apt-token', 'known-issuer'] },
   // FunC / Tact
-  { chain: 'ton', address: 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs', label: 'USDT TON', expect: ['ton-jetton', 'known-issuer'] },
-  { chain: 'ton', address: 'EQAvlWFDxGF2lXm67y4yzC17wYKD9A0guwPkMs1gOsM__NOT', label: 'Notcoin', expect: ['ton-jetton'] },
-  { chain: 'ton', address: 'EQCvxJy4eG8hyHBFsZ7eePxrRsUQSFE_jpptRAYBmcG_DOGS', label: 'DOGS', expect: ['ton-jetton'] },
+  { chain: 'ton', address: 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs', label: 'USDT TON', expect: ['ton-jetton', 'known-issuer', 'ton-wallet-standard'] },
+  { chain: 'ton', address: 'EQAvlWFDxGF2lXm67y4yzC17wYKD9A0guwPkMs1gOsM__NOT', label: 'Notcoin', expect: ['ton-jetton', 'ton-wallet-standard'] },
+  { chain: 'ton', address: 'EQCvxJy4eG8hyHBFsZ7eePxrRsUQSFE_jpptRAYBmcG_DOGS', label: 'DOGS', expect: ['ton-jetton', 'ton-wallet-standard'] },
   // Rust: CosmWasm
   { chain: 'neutron', address: 'neutron1hptk0k5kng7hjy35vmh009qd5m6l33609nypgf2yc6nqnewduqasxplt4e', label: 'Astroport factory (CosmWasm)', expect: ['cw-contract', 'cw-admin'] },
   { chain: 'neutron', address: 'factory/neutron1ug740qrkquxzrk2hh29qrlx3sktkfml3je7juusc2te7xmvsscns0n2wry/wstETH', label: 'wstETH Neutron (Token Factory)', expect: ['tf-token'] },
@@ -57,7 +57,8 @@ async function checkOne(s) {
       ...s.expect.filter((id) => !ids.includes(id)),
       ...(s.absent ?? []).filter((id) => ids.includes(id)).map((id) => `unexpected ${id}`),
     ];
-    return { ...s, ok: missing.length === 0, missing, level: r.analysis.level, ids, ms: Date.now() - t0, lines: explain(r, 'en').lines.map((l) => `${l.severity}: ${l.text}`) };
+    const extra = r.ton?.wallet ? [`wallet: ${JSON.stringify(r.ton.wallet)}`] : [];
+    return { ...s, ok: missing.length === 0, missing, level: r.analysis.level, ids, ms: Date.now() - t0, lines: [...explain(r, 'en').lines.map((l) => `${l.severity}: ${l.text}`), ...extra] };
   } catch (e) {
     return { ...s, ok: false, error: e.message, ms: Date.now() - t0 };
   }

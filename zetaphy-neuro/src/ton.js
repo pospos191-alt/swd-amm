@@ -71,6 +71,7 @@ export async function readTonAccount(api, address) {
   if (!j) return { kind: 'other', raw, interfaces: interfaces.slice(0, 6), wallet: false, accountScam, frozen: false };
   const md = j.metadata ?? {};
   const dec = Number(md.decimals ?? 9);
+  const wallet = await readHolderWallet(api, raw);
   return {
     kind: 'jetton',
     raw,
@@ -87,8 +88,40 @@ export async function readTonAccount(api, address) {
     verification: ['whitelist', 'blacklist', 'none'].includes(j.verification) ? j.verification : 'none',
     accountScam,
     frozen: acc.status === 'frozen',
+    wallet,
   };
 }
+
+/**
+ * The code every holder's tokens actually live in. A jetton's master can
+ * look perfect while its wallet code refuses to send (a "can buy, cannot
+ * sell" trap), so read the wallet of the largest holder: what tonapi
+ * recognises it as and its code hash.
+ * Returns null when there is no holder yet or the lookup fails.
+ */
+async function readHolderWallet(api, masterRaw) {
+  try {
+    const h = await api.get(`/v2/jettons/${encodeURIComponent(masterRaw)}/holders?limit=1`);
+    const w = h?.addresses?.[0]?.address;
+    if (typeof w !== 'string') return null;
+    const [acc, insp] = await Promise.all([
+      api.get(`/v2/accounts/${encodeURIComponent(w)}`),
+      api.get(`/v2/blockchain/accounts/${encodeURIComponent(w)}/inspect`),
+    ]);
+    const interfaces = Array.isArray(acc?.interfaces) ? acc.interfaces.filter((x) => typeof x === 'string').slice(0, 8) : [];
+    return {
+      address: w,
+      interfaces,
+      codeHash: typeof insp?.code_hash === 'string' ? insp.code_hash.slice(0, 64) : null,
+      compiler: typeof insp?.compiler === 'string' ? insp.compiler.slice(0, 10) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** tonapi names a recognised jetton wallet "jetton_wallet", "jetton_wallet_v2", … */
+const isKnownWallet = (w) => w.interfaces.some((i) => /^jetton_wallet/.test(i));
 
 export function analyzeTon(m, ctx = {}) {
   const findings = [];
@@ -111,6 +144,10 @@ export function analyzeTon(m, ctx = {}) {
     if (m.accountScam || m.adminScam || m.verification === 'blacklist') add('ton-scam', 'high');
     else if (m.verification === 'whitelist') add('ton-listed', 'good');
     if (m.frozen) add('ton-frozen', 'high');
+    if (m.wallet) {
+      if (isKnownWallet(m.wallet)) add('ton-wallet-standard', 'good', { interfaces: m.wallet.interfaces });
+      else add('ton-wallet-custom', cap('high'), { codeHash: m.wallet.codeHash, compiler: m.wallet.compiler, ...issuer });
+    }
     if (m.admin) {
       if (m.mintable) add('ton-mintable', cap('high'), { admin: m.admin, ...issuer });
       add('ton-admin', cap('medium'), { admin: m.admin, ...issuer });

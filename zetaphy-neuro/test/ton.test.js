@@ -105,6 +105,39 @@ test('wallets, jetton wallets and missing accounts are explained', async () => {
   assert.ok(ids(none).includes('ton-not-found'));
 });
 
+test('the largest holder\'s wallet code: recognised standard wallet vs custom code', async () => {
+  const WALLET = `0:${'ee'.repeat(32)}`;
+  const holders = { addresses: [{ address: WALLET, owner: { address: ADMIN, is_scam: false, is_wallet: true }, balance: '5' }], total: 1 };
+  const world = (interfaces, compiler) => {
+    const api = fakeTon({ [OTHER_RAW]: master, [WALLET]: { status: 'active', interfaces, get_methods: ['get_wallet_data'], is_wallet: false } }, { [OTHER_RAW]: jetton({ admin: undefined, mintable: false }) });
+    const get = api.get;
+    api.get = async (path) => {
+      if (path === `/v2/jettons/${encodeURIComponent(OTHER_RAW)}/holders?limit=1`) return holders;
+      if (path === `/v2/blockchain/accounts/${encodeURIComponent(WALLET)}/inspect`) return { code: 'b5ee', code_hash: 'f'.repeat(64), methods: [{ id: 1, method: 'get_wallet_data' }], compiler };
+      return get(path);
+    };
+    return api;
+  };
+  const ok = await readContract('ton', OTHER_RAW, { api: world(['jetton_wallet_v2'], 'func') });
+  assert.ok(ids(ok).includes('ton-wallet-standard'));
+  assert.equal(ok.ton.wallet.address, WALLET);
+  assert.equal(ok.analysis.level, 'info');
+  const bad = await readContract('ton', OTHER_RAW, { api: world([], 'tact') });
+  assert.equal(find(bad, 'ton-wallet-custom').severity, 'high');
+  assert.equal(find(bad, 'ton-wallet-custom').params.compiler, 'tact');
+  assert.match(explain(bad, 'en').lines.find((l) => l.id === 'ton-wallet-custom').text, /buy but not sell/);
+  // no holders yet: nothing is claimed either way
+  const none = await readContract('ton', OTHER_RAW, { api: fakeTon({ [OTHER_RAW]: master }, { [OTHER_RAW]: jetton() }) });
+  assert.ok(!ids(none).some((i) => i.startsWith('ton-wallet')));
+});
+
+test('client spaces requests about a second apart (free tier)', async () => {
+  const at = [];
+  const api = createTonApi(['https://ton.example'], { fetchImpl: async () => { at.push(Date.now()); return { ok: true, status: 200, json: async () => ({}) }; }, spacingMs: 200 });
+  await Promise.all([api.get('/a'), api.get('/b'), api.get('/c')]);
+  assert.ok(at[1] - at[0] >= 190 && at[2] - at[1] >= 190, String(at.map((t) => t - at[0])));
+});
+
 test('client retries once on the free tier\'s rate limit', async () => {
   let n = 0;
   const fetchImpl = async (url, init) => {
