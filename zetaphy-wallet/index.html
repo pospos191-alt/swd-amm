@@ -81,8 +81,26 @@
       <p id="acct-status" class="hint"></p>
     </div>
 
+    <div class="card" id="owned-card">
+      <h2 data-i18n="ownedTitle">บัญชีที่กระเป๋านี้ควบคุม</h2>
+      <p class="hint" data-i18n="ownedHint">บัญชี ECDSA (เช่น MetaMask) ที่ล็อกควอนตัมให้กระเป๋านี้แล้ว กุญแจเดิมของบัญชีนั้นใช้ไม่ได้อีก กระเป๋านี้โอน โอนโทเคน และ stake แทนได้ (เซ็นด้วย ML-DSA-44 และจ่ายค่าธรรมเนียมจากกระเป๋านี้)</p>
+      <label for="owner" data-i18n="ownerLabel">ที่อยู่บัญชีที่ล็อกไว้ (0x… หรือ zetaphy1…)</label>
+      <div class="row">
+        <input id="owner" spellcheck="false" autocomplete="off" placeholder="0x…">
+        <button id="owner-use" type="button" data-i18n="ownerUse">ทำรายการในนามบัญชีนี้</button>
+      </div>
+      <ul id="owned-list" class="owned"></ul>
+      <div id="acting" class="acting" hidden>
+        <p><span data-i18n="actingAs">กำลังทำรายการในนามของ</span> <code id="acting-addr"></code></p>
+        <div class="balance"><span data-i18n="ownerBalance">ยอดเงินของบัญชีนั้น</span> <strong id="acting-balance">–</strong></div>
+        <p class="hint" data-i18n="actingHint">โอน ZETAPHY โอนโทเคน และ stake ด้านล่างจะทำในนามบัญชีนี้ (as_owner) ค่าธรรมเนียมหักจากกระเป๋านี้</p>
+        <button id="owner-stop" type="button" class="ghost" data-i18n="ownerStop">กลับไปใช้บัญชีของฉัน</button>
+      </div>
+    </div>
+
     <div class="card">
       <h2 data-i18n="sendTitle">โอน ZETAPHY</h2>
+      <p class="as-tag" hidden></p>
       <form id="send-form" autocomplete="off">
         <label for="to" data-i18n="toLabel">ถึง (0x… หรือ zetaphy1…)</label>
         <input id="to" spellcheck="false" autocomplete="off">
@@ -103,6 +121,7 @@
           <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="c-fee"></dd>
           <dt data-i18n="cTotal">รวม</dt><dd id="c-total"></dd>
         </dl>
+        <p class="as-note hint" hidden></p>
         <div class="row">
           <button id="confirm-send" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
           <button id="cancel-send" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
@@ -113,6 +132,7 @@
 
     <div class="card" id="token-card">
       <h2 data-i18n="tokenTitle">โทเคน ERC-20</h2>
+      <p class="as-tag" hidden></p>
       <label for="token" data-i18n="tokenLabel">ที่อยู่สัญญาโทเคน (0x…)</label>
       <div class="row">
         <input id="token" spellcheck="false" autocomplete="off" placeholder="0x…">
@@ -145,6 +165,7 @@
           <dt data-i18n="cAmount">จำนวน</dt><dd id="t-amount"></dd>
           <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="t-fee"></dd>
         </dl>
+        <p class="as-note hint" hidden></p>
         <p class="hint" data-i18n="tokenChecked">จำลองการโอนกับโหนดแล้ว ผ่าน (จะจำลองซ้ำอีกครั้งก่อนเซ็น)</p>
         <div class="row">
           <button id="confirm-token" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
@@ -157,6 +178,7 @@
 
     <div class="card" id="stake-card">
       <h2 data-i18n="stakeTitle">Stake ZETAPHY</h2>
+      <p class="as-tag" hidden></p>
       <form id="stake-form" autocomplete="off">
         <label for="validator" data-i18n="validatorLabel">validator (zetaphyvaloper1…)</label>
         <input id="validator" spellcheck="false" autocomplete="off" placeholder="zetaphyvaloper1…">
@@ -181,6 +203,7 @@
           <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="s-fee"></dd>
           <dt data-i18n="cTotal">รวม</dt><dd id="s-total"></dd>
         </dl>
+        <p class="as-note hint" hidden></p>
         <p id="unbond-note" class="hint" data-i18n="unbondNote" hidden>เงินที่ถอน stake จะกลับเข้าบัญชีหลังพ้นช่วง unbonding ของเชน ระหว่างนั้นใช้ไม่ได้และไม่ได้รางวัล</p>
         <div class="row">
           <button id="confirm-stake" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
@@ -188,6 +211,19 @@
         </div>
       </div>
       <p id="stake-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="stake-hash"></code></p>
+    </div>
+
+    <div class="card" id="mm-card">
+      <h2 data-i18n="mmTitle">ล็อกบัญชี MetaMask ให้กระเป๋านี้</h2>
+      <p data-i18n="mmIntro">ย้ายการควบคุมบัญชี ECDSA ใน MetaMask มาไว้ที่กระเป๋าต้านควอนตัมนี้ ที่อยู่ ยอดเงิน โทเคน และ stake ของบัญชีนั้นอยู่ที่เดิม แต่จากนี้ไปสั่งได้ผ่านกระเป๋านี้เท่านั้น</p>
+      <ul class="warn-text">
+        <li data-i18n="mmWarnPermanent">ถาวร ยกเลิกไม่ได้: หลังล็อก เชนจะปฏิเสธทุกธุรกรรมที่กุญแจ MetaMask ของบัญชีนั้นเซ็น และลายเซ็นของกุญแจนั้นใช้กับสัญญา (เช่น permit) ไม่ได้อีก</li>
+        <li data-i18n="mmWarnSeed">ถ้า seed ของกระเป๋านี้หาย บัญชีที่ล็อกไว้ก็หายไปด้วย ดาวน์โหลดไฟล์สำรอง seed ก่อน</li>
+        <li data-i18n="mmWarnTx">กระเป๋านี้ต้องเคยส่งธุรกรรมบนเชนแล้วอย่างน้อยหนึ่งครั้ง (ให้เชนรู้กุญแจสาธารณะ ML-DSA-44)</li>
+      </ul>
+      <label class="check"><input id="mm-ok" type="checkbox"> <span data-i18n="mmOk">เข้าใจแล้วว่าการล็อกเป็นแบบถาวร</span></label>
+      <button id="mm-lock" type="button" disabled data-i18n="mmLock">เชื่อม MetaMask แล้วล็อก</button>
+      <p id="mm-result" class="ok" hidden><span data-i18n="mmSentLabel">MetaMask ส่งคำสั่งล็อกแล้ว tx hash:</span> <code id="mm-hash"></code></p>
     </div>
 
     <div class="card">

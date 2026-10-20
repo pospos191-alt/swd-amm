@@ -236,6 +236,9 @@ zetaphy pq native token-send 0x<token> 0x... 12.5          # โอน ERC-20 (�
 zetaphy pq native stake zetaphyvaloper1... 100             # --gas ค่าเริ่มต้น 500000
 zetaphy pq native unstake zetaphyvaloper1... 40            # ได้คืนหลังพ้นช่วง unbonding
 zetaphy pq native rewards zetaphyvaloper1...               # ถอนรางวัล stake
+
+# สร้างสัญญาใหม่ (deploy) ด้วยบัญชีนี้ พิมพ์ที่อยู่สัญญาที่ได้
+zetaphy pq native deploy 0x<init code> [--value 0.5] [--gas 3000000]
 ```
 
 **ใช้สัญญา EVM และ stake ได้โดยไม่มีกุญแจ ECDSA เลย**
@@ -255,7 +258,42 @@ zetaphy pq native rewards zetaphyvaloper1...               # ถอนราง�
 - ข้อจำกัด
   - log ของ EVM จากคำสั่งเหล่านี้ **ไม่ขึ้นใน `eth_getLogs`** เพราะเป็นธุรกรรม Cosmos ไม่ใช่ธุรกรรม EVM
     - ยอดเงินและยอด token ถูกต้องเสมอ แต่หน้าเว็บหรือ indexer ที่ดูจาก event `Transfer` จะไม่เห็นรายการนี้
-  - สร้างสัญญาใหม่ (deploy) ยังต้องใช้ธุรกรรม EVM (กุญแจ ECDSA) เพราะ `MsgEVMCall` ต้องมีที่อยู่ปลายทางเสมอ
+- `deploy` คือ `MsgEVMCall` ที่ไม่มี `to` (data = init code) ธุรกรรมละหนึ่งสัญญา
+  - ที่อยู่สัญญา = `CREATE(บัญชีนี้, nonce)` โดย nonce = sequence ที่เซ็น + 1 (ante handler เพิ่มให้ก่อน) CLI คำนวณและพิมพ์ให้
+  - การสร้างใช้ nonce นั้นไปด้วย sequence ของบัญชีจึงจบที่ sequence ที่เซ็น + 2 (CLI อ่าน sequence จาก `zetaphy_pqAccount` ทุกครั้งก่อนเซ็น)
+  - กับ `--as` ที่อยู่ = `CREATE(บัญชีที่ล็อก, sequence ปัจจุบันของบัญชีนั้น)`
+  - event `zetaphy_evm_call` ของธุรกรรมมี attribute `created` เป็นที่อยู่เดียวกัน
+
+### ล็อกควอนตัม: ยกบัญชี ECDSA (MetaMask) ให้บัญชี ML-DSA-44 ดูแล แบบถาวร
+
+บัญชี ECDSA เดิม (ที่อยู่, ยอดเงิน, token, stake, สิทธิ์ในสัญญา) อยู่ที่เดิม แต่จากนี้ไปมีแต่บัญชี ML-DSA-44 ที่เป็นผู้ควบคุม (controller) ที่สั่งได้
+
+```
+# ล็อกกุญแจ ECDSA ของเครื่องนี้ (~/.zetaphy/worker.key) ให้บัญชี pq native ของเครื่องนี้ (หรือบัญชีที่ระบุ)
+zetaphy pq native lock-ecdsa [zetaphy1<controller>] --yes      # ถาวร! ไม่มี --yes จะแสดงคำเตือนแล้วไม่ส่งอะไร
+
+# ผู้ควบคุมทำรายการแทนบัญชีที่ล็อก: เติม --as <ที่อยู่บัญชีนั้น>
+zetaphy pq native --as 0x<owner>                               # ยอดเงิน และล็อกให้ใคร (quantumLockedTo)
+zetaphy pq native send 0x... 1.5 --as 0x<owner>                # โอน ZETAPHY ออกจากบัญชีนั้น
+zetaphy pq native token-send 0x<token> 0x... 12.5 --as 0x<owner>
+zetaphy pq native stake zetaphyvaloper1... 100 --as 0x<owner>  # ผ่าน staking precompile 0x…0800
+zetaphy pq native rewards zetaphyvaloper1... --as 0x<owner>    # ผ่าน distribution precompile 0x…0801
+zetaphy pq native call|deploy|unstake|token-balance ... --as 0x<owner>
+
+# ยกการควบคุมต่อให้บัญชี ML-DSA-44 อีกบัญชี (ผู้ควบคุมปัจจุบันเป็นคนเซ็น)
+zetaphy pq native handover 0x<owner> zetaphy1<controller ใหม่>
+```
+
+- ล็อกจาก MetaMask: ส่งธุรกรรม EVM ไปที่ `0x0000000000000000000000000000000000005051` value 0 และ data = ที่อยู่ 20 ไบต์ของผู้ควบคุม (ไม่มี selector)
+  - กระเป๋าเว็บ (`zetaphy-wallet`) ทำให้ได้ผ่าน `window.ethereum`
+  - ล้มเหลวถ้า data/value ผิด, ผู้ควบคุมไม่ใช่บัญชี ML-DSA-44 ที่เคยส่งธุรกรรมแล้ว, เป็นบัญชีตัวเอง หรือถูกล็อกอยู่
+  - ล็อกบัญชี ML-DSA-44 ไม่ได้ (ต้านควอนตัมอยู่แล้ว)
+- หลังล็อก เชนปฏิเสธทุกธุรกรรมที่กุญแจ ECDSA นั้นเซ็น (EVM, Cosmos, authorization ของ EIP-7702) ตั้งแต่ตอนส่ง (`eth_sendRawTransaction` ตอบ error ที่มีคำว่า quantum-locked) และ `ecrecover` คืน `address(0)` สำหรับลายเซ็นของกุญแจนั้น (permit, meta-transaction ใช้ไม่ได้)
+- ผู้ควบคุมทำรายการแทนด้วย `MsgEVMCall` ที่มี `as_owner` = บัญชีที่ล็อก (`msg.sender` = บัญชีนั้น) ค่าธรรมเนียมจ่ายจากผู้ควบคุม
+  - กับ `--as`, `--gas` คือ gas ฝั่ง EVM เสมอ; stake/unstake/rewards ค่าเริ่มต้น 300,000 (ราว 1.5 เท่าของ `eth_estimateGas` ที่วัดบน devnet: undelegate ~190k, delegate ~114–154k, rewards ~98k)
+- ดูสถานะ: `zetaphy_pqAccount(ที่อยู่).quantumLockedTo` (ที่อยู่ `zetaphy1…` ของผู้ควบคุม หรือ null)
+  - เชนเก็บสำเนาไว้ใน storage ของ `0x…5051` ด้วย: slot = ที่อยู่บัญชี (เติม 0 ข้างหน้าเป็น 32 ไบต์), ค่า = ผู้ควบคุม
+- ถ้า seed ของผู้ควบคุมหาย บัญชีที่ล็อกก็หายด้วย
 
 - ใช้ seed เดียวกับ `zetaphy pq` (`~/.zetaphy/pq.seed` หรือ `pq.seed.json`)
 - ที่อยู่ = `sha256("zetaphy/mldsa44\0" + public key)[0:20]` (มีคำนำหน้าเพื่อไม่ให้ซ้ำกับที่อยู่แบบอื่นของ Cosmos SDK)

@@ -11,7 +11,12 @@
 //               /cosmos.staking.v1beta1.MsgDelegate, MsgUndelegate
 //               /cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward
 //               /zetaphy.pq.v1.MsgEVMCall: call an EVM contract as the account (msg.sender =
-//                 the same 20 bytes); its EVM gas is charged on the Cosmos gas meter
+//                 the same 20 bytes), or create one (empty `to`); its EVM gas is charged on
+//                 the Cosmos gas meter. as_owner: act for a quantum-locked account instead
+//               /zetaphy.pq.v1.MsgQuantumLock: the controller of a locked account hands it on
+//   quantum lock an ECDSA (MetaMask) account sends an EVM tx to PQ_LOCK_ADDRESS with no value
+//                and the controller's 20-byte address as data; from then on its own key is
+//                refused and only that ML-DSA-44 account acts for it (MsgEVMCall.as_owner)
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
@@ -26,12 +31,28 @@ export const MSG_DELEGATE_TYPE_URL = '/cosmos.staking.v1beta1.MsgDelegate';
 export const MSG_UNDELEGATE_TYPE_URL = '/cosmos.staking.v1beta1.MsgUndelegate';
 export const MSG_WITHDRAW_REWARD_TYPE_URL = '/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward';
 export const MSG_EVM_CALL_TYPE_URL = '/zetaphy.pq.v1.MsgEVMCall';
+export const MSG_QUANTUM_LOCK_TYPE_URL = '/zetaphy.pq.v1.MsgQuantumLock';
+/** An EVM tx to here (value 0, data = the controller's 20 bytes) quantum-locks its sender. */
+export const PQ_LOCK_ADDRESS = '0x0000000000000000000000000000000000005051';
+/** Cosmos EVM's staking and distribution precompiles (how a locked account stakes, through as_owner). */
+export const STAKING_PRECOMPILE = '0x0000000000000000000000000000000000000800';
+export const DISTRIBUTION_PRECOMPILE = '0x0000000000000000000000000000000000000801';
+/** zetaphy_pqAccount's pubKeyType for an ML-DSA-44 account. */
+export const MLDSA_PUBKEY_TYPE = 'mldsa44';
 export const SIGN_MODE_DIRECT = 1;
 export const DEFAULT_GAS_LIMIT = 400000n;
 /** Tx gas for one staking or rewards message (more state is touched than in a send). */
 export const DEFAULT_STAKING_GAS_LIMIT = 500000n;
 /** EVM gas for a MsgEVMCall when none is given. */
 export const DEFAULT_EVM_GAS_LIMIT = 200000n;
+/** EVM gas for a contract creation when none is given. */
+export const DEFAULT_DEPLOY_GAS_LIMIT = 3000000n;
+/**
+ * EVM gas for a staking or distribution precompile call (as_owner) when none is given:
+ * about 1.5x the largest eth_estimateGas measured on a devnet (undelegate ~190k,
+ * delegate onto an existing delegation ~154k, withdrawDelegatorRewards ~98k).
+ */
+export const DEFAULT_PRECOMPILE_GAS_LIMIT = 300000n;
 /** Tx gas = EVM gas + this: the ML-DSA signature check, tx size and the Cosmos side of the call. */
 export const EVM_CALL_GAS_OVERHEAD = 400000n;
 /** The chain's bounds on a MsgEVMCall's gas_limit (an EVM tx needs 21000; the node caps calls at 10M). */
@@ -117,11 +138,17 @@ export const encodeMsgWithdrawDelegatorReward = ({ delegatorAddress, validatorAd
 
 /**
  * zetaphy.pq.v1.MsgEVMCall { string sender = 1; string to = 2; string value = 3;
- * bytes data = 4; uint64 gas_limit = 5; }  value is azetaphy in decimal, left out when 0.
+ * bytes data = 4; uint64 gas_limit = 5; string as_owner = 6; }  value is azetaphy in
+ * decimal, left out when 0. An empty `to` creates a contract (data = init code);
+ * as_owner runs the call with msg.sender = that quantum-locked account.
  */
-export const encodeMsgEVMCall = ({ sender, to, value = 0n, data = new Uint8Array(), gasLimit }) =>
+export const encodeMsgEVMCall = ({ sender, to = '', value = 0n, data = new Uint8Array(), gasLimit, asOwner = '' }) =>
   msg(pb.string(1, sender), pb.string(2, to), pb.string(3, BigInt(value) === 0n ? '' : BigInt(value).toString()),
-    pb.bytes(4, data), pb.uint(5, gasLimit));
+    pb.bytes(4, data), pb.uint(5, gasLimit), pb.string(6, asOwner));
+
+/** zetaphy.pq.v1.MsgQuantumLock { string signer = 1; string owner = 2; string controller = 3; } */
+export const encodeMsgQuantumLock = ({ signer, owner, controller }) =>
+  msg(pb.string(1, signer), pb.string(2, owner), pb.string(3, controller));
 
 export const encodeTxBody = ({ messages, memo = '', timeoutHeight = 0n }) =>
   msg(pb.repeatedMessage(1, messages.map((m) => encodeAny(m.typeUrl, m.value))), pb.string(2, memo), pb.uint(3, timeoutHeight));
@@ -302,16 +329,115 @@ export function msgWithdrawRewards({ delegator, validator, prefix = PREFIX }) {
     value: encodeMsgWithdrawDelegatorReward({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: validatorAddress(validator, prefix + 'valoper') }) };
 }
 
-/** An EVM call (never a contract creation: `to` is required). `to` is sent EIP-55 checksummed. */
-export function msgEVMCall({ sender, to, value = 0n, data = new Uint8Array(), gasLimit = DEFAULT_EVM_GAS_LIMIT, prefix = PREFIX }) {
-  if (to == null || String(to).trim() === '') throw new Error('an EVM call needs a "to" address (contract creation is not supported)');
-  const toBytes = addressBytes(to, prefix);
+function evmMsg({ sender, to, value, data, gasLimit, asOwner, prefix }) {
   const v = BigInt(value);
   if (v < 0n) throw new Error('value must not be negative');
   const gas = BigInt(gasLimit);
   if (gas < MIN_EVM_GAS_LIMIT || gas > MAX_EVM_GAS_LIMIT) throw new Error(`EVM gas limit must be between ${MIN_EVM_GAS_LIMIT} and ${MAX_EVM_GAS_LIMIT}`);
-  return { typeUrl: MSG_EVM_CALL_TYPE_URL, spend: v,
-    value: encodeMsgEVMCall({ sender: accountBech32(sender, prefix), to: toChecksumHex(toBytes), value: v, data: asBytes(data, 'data'), gasLimit: gas }) };
+  const from = accountBech32(sender, prefix);
+  const owner = asOwner == null || asOwner === '' ? '' : accountBech32(asOwner, prefix);
+  if (owner && owner === from) throw new Error('as_owner is the sender itself: leave it out');
+  // With as_owner the value leaves the owner; the signer pays only the fee.
+  return { typeUrl: MSG_EVM_CALL_TYPE_URL, spend: owner ? 0n : v, ownerSpend: owner ? v : 0n, asOwner: owner || undefined,
+    value: encodeMsgEVMCall({ sender: from, to, value: v, data: asBytes(data, 'data'), gasLimit: gas, asOwner: owner }) };
+}
+
+/**
+ * An EVM call (never a contract creation: `to` is required, see msgEVMDeploy). `to` is sent
+ * EIP-55 checksummed. asOwner (0x… or zetaphy1…): act for that quantum-locked account; the
+ * sender must be its controller.
+ */
+export function msgEVMCall({ sender, to, value = 0n, data = new Uint8Array(), gasLimit = DEFAULT_EVM_GAS_LIMIT, asOwner, prefix = PREFIX }) {
+  if (to == null || String(to).trim() === '') throw new Error('an EVM call needs a "to" address (use msgEVMDeploy to create a contract)');
+  const toBytes = addressBytes(to, prefix);
+  return evmMsg({ sender, to: toChecksumHex(toBytes), value, data, gasLimit, asOwner, prefix });
+}
+
+/** A contract creation: MsgEVMCall with an empty `to` and the init code as data. */
+export function msgEVMDeploy({ sender, initCode, value = 0n, gasLimit = DEFAULT_DEPLOY_GAS_LIMIT, asOwner, prefix = PREFIX }) {
+  const code = asBytes(initCode ?? new Uint8Array(), 'initCode');
+  if (code.length === 0) throw new Error('a contract creation needs init code');
+  return evmMsg({ sender, to: '', value, data: code, gasLimit, asOwner, prefix });
+}
+
+/**
+ * MsgQuantumLock: the current controller (signer) of a locked owner hands control to
+ * another ML-DSA-44 account. An unlocked ECDSA account may also lock itself with it
+ * (signer = owner); an ML-DSA-44 account cannot be locked ("post-quantum already").
+ */
+export function msgQuantumLock({ signer, owner, controller, prefix = PREFIX }) {
+  const s = accountBech32(signer, prefix); const o = accountBech32(owner, prefix); const c = accountBech32(controller, prefix);
+  if (c === o) throw new Error('the controller must be another account than the owner');
+  return { typeUrl: MSG_QUANTUM_LOCK_TYPE_URL, spend: 0n, value: encodeMsgQuantumLock({ signer: s, owner: o, controller: c }) };
+}
+
+/**
+ * The EVM tx that quantum-locks its sender (e.g. a MetaMask account) to `controller`:
+ * { to: PQ_LOCK_ADDRESS, value: 0, data: the controller's 20 bytes }. Permanent.
+ */
+export function quantumLockTx(controller, prefix = PREFIX) {
+  return { to: PQ_LOCK_ADDRESS, value: 0n, data: '0x' + bytesToHex(addressBytes(controller, prefix)) };
+}
+
+// ---- contract creation address: keccak256(rlp([sender, nonce]))[12:] ----
+
+const rlpBytes = (b) => (b.length === 1 && b[0] < 0x80 ? b : concat([Uint8Array.of(0x80 + b.length), b]));
+function uintBytes(n) {
+  let v = BigInt(n);
+  if (v < 0n || v > MAX_UINT64) throw new Error('nonce must be a uint64');
+  const out = [];
+  while (v > 0n) { out.unshift(Number(v & 0xffn)); v >>= 8n; }
+  return Uint8Array.from(out); // 0 is the empty string
+}
+
+/** The address CREATE gives a contract made by `sender` at `nonce` (EIP-55). */
+export function createAddress(sender, nonce, prefix = PREFIX) {
+  const payload = concat([rlpBytes(addressBytes(sender, prefix)), rlpBytes(uintBytes(nonce))]);
+  return toChecksumHex(keccak_256(concat([Uint8Array.of(0xc0 + payload.length), payload])).slice(12));
+}
+
+// ---- staking and distribution precompiles (calldata; ABI from cosmos/evm precompiles/*/abi.json) ----
+
+const abiWord = (v) => {
+  const x = BigInt(v);
+  if (x < 0n || x >= 2n ** 256n) throw new Error('value out of uint256 range');
+  return hexToBytes(x.toString(16).padStart(64, '0'));
+};
+/** ABI-encodes a call; args are [type, value] with type address, uint256, uint32 or string. */
+function abiCall(signature, args) {
+  const head = []; const tail = [];
+  let tailLen = 32 * args.length;
+  for (const [type, value] of args) {
+    if (type === 'string') {
+      const b = utf8(String(value));
+      const padded = new Uint8Array(Math.ceil(b.length / 32) * 32); padded.set(b);
+      head.push(abiWord(tailLen));
+      tail.push(abiWord(b.length), padded);
+      tailLen += 32 + padded.length;
+    } else if (type === 'address') {
+      head.push(concat([new Uint8Array(12), addressBytes(value)]));
+    } else head.push(abiWord(value));
+  }
+  return concat([keccak_256(utf8(signature)).slice(0, 4), ...head, ...tail]);
+}
+
+const STAKING_CALLS = {
+  delegate: 'delegate(address,string,uint256)',
+  undelegate: 'undelegate(address,string,uint256)',
+  withdrawRewards: 'withdrawDelegatorRewards(address,string)',
+};
+
+/**
+ * { to, data } for the staking precompile (delegate, undelegate) or the distribution
+ * precompile (withdrawRewards), with `delegator` as the delegator. The precompiles
+ * require msg.sender = delegator, so a controller sends it with as_owner = delegator.
+ */
+export function stakingCall({ action, delegator, validator, amount, prefix = PREFIX }) {
+  const sig = STAKING_CALLS[action];
+  if (!sig) throw new Error(`unknown staking action ${action}`);
+  const args = [['address', toChecksumHex(addressBytes(delegator, prefix))], ['string', validatorAddress(validator, prefix + 'valoper')]];
+  if (action !== 'withdrawRewards') args.push(['uint256', positive(amount, 'amount')]);
+  return { to: action === 'withdrawRewards' ? DISTRIBUTION_PRECOMPILE : STAKING_PRECOMPILE, data: abiCall(sig, args) };
 }
 
 // ---- build and sign ----
@@ -407,56 +533,167 @@ export function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = 
     return { txHash: r.txHash || tx.txHash, from: q.address, value: spend, fee, gasLimit: q.gasLimit, gasPrice: usePrice, sequence: q.account.sequence, checked };
   }
 
-  async function send({ publicKey, sign, to, amount, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = '' }) {
-    const toAddr = normalizeAddress(to, prefix);
-    const value = positive(amount, 'amount');
-    const me = pqAddress(publicKey, prefix);
-    const r = await sendMsgs({ publicKey, sign, messages: [msgSend({ from: me.bech32, to: toAddr.bech32, amount: value, denom, prefix })], gasLimit, gasPrice: price, memo });
-    return { txHash: r.txHash, from: r.from, to: toAddr, amount: value, fee: r.fee, gasLimit: r.gasLimit, gasPrice: r.gasPrice, sequence: r.sequence };
+  /**
+   * Checks that `owner` is quantum-locked to `me` (both 0x… or zetaphy1…); returns
+   * the owner's account (with its balance). Throws a clear error otherwise.
+   */
+  async function ownedBy(owner, me) {
+    const o = normalizeAddress(owner, prefix); const m = normalizeAddress(me, prefix);
+    const [acct, bal] = await Promise.all([account(o.bech32), balance(o.hex)]);
+    if (acct.quantumLockedTo !== m.bech32) {
+      throw new Error(acct.quantumLockedTo
+        ? `${o.bech32} is quantum-locked to ${acct.quantumLockedTo}, not to ${m.bech32}`
+        : `${o.bech32} is not quantum-locked to ${m.bech32}, so it cannot act for it`);
+    }
+    return { ...acct, address: o, balance: bal };
   }
 
   /**
-   * Call an EVM contract (or pay a plain address) as this account. The call is
-   * first run with eth_call from the account, so a call that would revert is
-   * refused before anything is signed; checkResult(returnHex) may refuse too.
-   * Tx gas defaults to evmGasLimit + EVM_CALL_GAS_OVERHEAD.
+   * What the chain asks of a quantum-lock controller: an ML-DSA-44 account that has
+   * already sent a tx (its public key is on chain), is not locked itself, and is not
+   * the owner. Returns the controller's account; throws a clear error otherwise.
    */
-  async function callEVM({ publicKey, sign, to, data = '0x', value = 0n, evmGasLimit = DEFAULT_EVM_GAS_LIMIT, gasLimit,
-    gasPrice: price, memo = '', check = true, checkResult }) {
+  async function checkController(controller, owner) {
+    const c = normalizeAddress(controller, prefix);
+    if (owner != null && normalizeAddress(owner, prefix).bech32 === c.bech32) throw new Error('the controller must be another account than the owner');
+    const a = await account(c.bech32);
+    if (!a.exists || a.pubKeyType == null) throw new Error(`the controller ${c.bech32} has no ML-DSA-44 public key on chain: it must be an ML-DSA-44 account that has already sent a transaction`);
+    if (a.pubKeyType !== MLDSA_PUBKEY_TYPE) throw new Error(`the controller ${c.bech32} is not an ML-DSA-44 account (its key is ${a.pubKeyType})`);
+    if (a.quantumLockedTo) throw new Error(`the controller ${c.bech32} is itself quantum-locked (to ${a.quantumLockedTo})`);
+    return { ...a, address: c };
+  }
+
+  async function send({ publicKey, sign, to, amount, gasLimit, gasPrice: price, memo = '', asOwner, evmGasLimit = DEFAULT_EVM_GAS_LIMIT, check = true }) {
+    const toAddr = normalizeAddress(to, prefix);
+    const value = positive(amount, 'amount');
     const me = pqAddress(publicKey, prefix);
-    const m = msgEVMCall({ sender: me.bech32, to, value, data, gasLimit: evmGasLimit, prefix });
-    const evmGas = BigInt(evmGasLimit);
-    const txGas = gasLimit == null ? evmGas + EVM_CALL_GAS_OVERHEAD : BigInt(gasLimit);
-    if (txGas <= evmGas) throw new Error('the tx gas limit must be more than the EVM gas limit (the chain charges the EVM gas on the tx)');
-    const toHex = toChecksumHex(addressBytes(to, prefix));
-    const dataHex = '0x' + bytesToHex(asBytes(data, 'data'));
-    const preflight = check ? async () => {
+    if (asOwner) {
+      // A locked account sends with an EVM call carrying the value (msg.sender = the owner).
+      const r = await callEVM({ publicKey, sign, to: toAddr.hex, value, evmGasLimit, gasLimit, gasPrice: price, memo, asOwner, check });
+      return { txHash: r.txHash, from: r.from, asOwner: r.asOwner, to: toAddr, amount: value, fee: r.fee, gasLimit: r.gasLimit, gasPrice: r.gasPrice, sequence: r.sequence };
+    }
+    const r = await sendMsgs({ publicKey, sign, messages: [msgSend({ from: me.bech32, to: toAddr.bech32, amount: value, denom, prefix })], gasLimit: gasLimit ?? DEFAULT_GAS_LIMIT, gasPrice: price, memo });
+    return { txHash: r.txHash, from: r.from, to: toAddr, amount: value, fee: r.fee, gasLimit: r.gasLimit, gasPrice: r.gasPrice, sequence: r.sequence };
+  }
+
+  /** The eth_call checks before an EVM message is signed (as the owner, with asOwner). */
+  function evmPreflight({ me, m, call, check, checkResult }) {
+    if (!check) return undefined;
+    return async () => {
+      let owner;
+      if (m.asOwner) {
+        owner = await ownedBy(m.asOwner, me.bech32);
+        if (m.ownerSpend > owner.balance) throw new Error(`${owner.address.bech32} does not have enough ZETAPHY: it needs ${formatZeta(m.ownerSpend)}, it has ${formatZeta(owner.balance)}`);
+      }
       let ret;
       try {
-        const call = { from: me.hex, to: toHex, data: dataHex, gas: qty(evmGas) };
-        if (BigInt(value) > 0n) call.value = qty(value);
-        ret = await rpcCall('eth_call', [call, 'latest']);
+        ret = await rpcCall('eth_call', [{ from: owner ? owner.address.hex : me.hex, ...call }, 'latest']);
       } catch (e) {
         throw new Error(`the call would fail, so nothing was sent: ${e.shortMessage ?? e.message}`);
       }
       if (checkResult) checkResult(ret);
-      return ret;
-    } : undefined;
-    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight });
-    return { ...r, to: toHex, data: dataHex, evmGasLimit: evmGas, result: r.checked };
+      return { ret, owner };
+    };
   }
 
-  const staking = (build, defaultGas) => async ({ publicKey, sign, validator, amount, gasLimit = defaultGas, gasPrice: price, memo = '' }) => {
+  const txGasFor = (evmGas, gasLimit) => {
+    const txGas = gasLimit == null ? evmGas + EVM_CALL_GAS_OVERHEAD : BigInt(gasLimit);
+    if (txGas <= evmGas) throw new Error('the tx gas limit must be more than the EVM gas limit (the chain charges the EVM gas on the tx)');
+    return txGas;
+  };
+
+  /**
+   * Call an EVM contract (or pay a plain address) as this account, or with asOwner as a
+   * quantum-locked account this one controls. The call is first run with eth_call from
+   * that account, so a call that would revert is refused before anything is signed;
+   * checkResult(returnHex) may refuse too. Tx gas defaults to evmGasLimit + EVM_CALL_GAS_OVERHEAD.
+   */
+  async function callEVM({ publicKey, sign, to, data = '0x', value = 0n, evmGasLimit = DEFAULT_EVM_GAS_LIMIT, gasLimit,
+    gasPrice: price, memo = '', check = true, checkResult, asOwner }) {
     const me = pqAddress(publicKey, prefix);
-    const m = build({ delegator: me.bech32, validator, amount, denom, prefix });
-    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit, gasPrice: price, memo });
-    return { ...r, validator: validatorAddress(validator, prefix + 'valoper'), amount: amount == null ? undefined : BigInt(amount) };
+    const m = msgEVMCall({ sender: me.bech32, to, value, data, gasLimit: evmGasLimit, asOwner, prefix });
+    const evmGas = BigInt(evmGasLimit);
+    const txGas = txGasFor(evmGas, gasLimit);
+    const toHex = toChecksumHex(addressBytes(to, prefix));
+    const dataHex = '0x' + bytesToHex(asBytes(data, 'data'));
+    const call = { to: toHex, data: dataHex, gas: qty(evmGas) };
+    if (BigInt(value) > 0n) call.value = qty(value);
+    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight: evmPreflight({ me, m, call, check, checkResult }) });
+    return { ...r, to: toHex, data: dataHex, evmGasLimit: evmGas, result: r.checked?.ret, asOwner: m.asOwner ? normalizeAddress(m.asOwner, prefix) : undefined };
+  }
+
+  /**
+   * Create a contract (initCode: its creation bytecode with any constructor arguments)
+   * as this account, or with asOwner as an account it controls. The init code is first
+   * run with eth_call. `created` is the new contract's address, CREATE(account, nonce):
+   *   - as this account: nonce = the signed sequence + 1 (the ante handler has already
+   *     moved the sequence past the signed one); the creation consumes that nonce too, so
+   *     the account's sequence ends at signed + 2
+   *   - with asOwner: nonce = the owner's sequence (it signs nothing); it ends one higher
+   * The next tx is signed with the sequence zetaphy_pqAccount reports (sendMsgs reads it
+   * every time), never one counted up here.
+   */
+  async function deploy({ publicKey, sign, initCode, value = 0n, evmGasLimit = DEFAULT_DEPLOY_GAS_LIMIT, gasLimit,
+    gasPrice: price, memo = '', check = true, asOwner }) {
+    const me = pqAddress(publicKey, prefix);
+    const m = msgEVMDeploy({ sender: me.bech32, initCode, value, gasLimit: evmGasLimit, asOwner, prefix });
+    const evmGas = BigInt(evmGasLimit);
+    const txGas = txGasFor(evmGas, gasLimit);
+    const call = { data: '0x' + bytesToHex(asBytes(initCode, 'initCode')), gas: qty(evmGas) };
+    if (BigInt(value) > 0n) call.value = qty(value);
+    const pre = evmPreflight({ me, m, call, check });
+    // The owner's nonce is read just before signing, whether or not the call is checked.
+    const preflight = async (q) => {
+      const p = pre ? await pre(q) : {};
+      return { ...p, ownerAcct: m.asOwner ? p.owner ?? await account(m.asOwner) : undefined };
+    };
+    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight });
+    const owner = m.asOwner ? normalizeAddress(m.asOwner, prefix) : undefined;
+    const created = owner ? createAddress(owner.hex, r.checked.ownerAcct.sequence ?? 0n, prefix) : createAddress(me.hex, r.sequence + 1n, prefix);
+    return { ...r, created, evmGasLimit: evmGas, asOwner: owner };
+  }
+
+  /**
+   * MsgQuantumLock signed by this account, the current controller of `owner`: hands control
+   * of it to `controller` (another ML-DSA-44 account that has sent a tx). Checked first.
+   */
+  async function quantumLockHandover({ publicKey, sign, owner, controller, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = '', check = true }) {
+    const me = pqAddress(publicKey, prefix);
+    const m = msgQuantumLock({ signer: me.bech32, owner, controller, prefix });
+    const preflight = check ? async () => { await ownedBy(owner, me.bech32); await checkController(controller, owner); } : undefined;
+    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit, gasPrice: price, memo, preflight });
+    return { ...r, owner: normalizeAddress(owner, prefix), controller: normalizeAddress(controller, prefix) };
+  }
+
+  /**
+   * delegate / undelegate / withdrawRewards. Without asOwner: the Cosmos message, tx gas
+   * gasLimit (default 500000). With asOwner: the staking or distribution precompile, called
+   * as the owner (MsgEVMCall.as_owner), EVM gas evmGasLimit (default 300000).
+   */
+  const staking = (build, action) => async ({ publicKey, sign, validator, amount, gasLimit, gasPrice: price, memo = '', asOwner, evmGasLimit = DEFAULT_PRECOMPILE_GAS_LIMIT, check = true }) => {
+    const me = pqAddress(publicKey, prefix);
+    const val = validatorAddress(validator, prefix + 'valoper');
+    const amt = amount == null ? undefined : BigInt(amount);
+    if (asOwner) {
+      const owner = normalizeAddress(asOwner, prefix);
+      const c = stakingCall({ action, delegator: owner.hex, validator: val, amount: amt, prefix });
+      const m = msgEVMCall({ sender: me.bech32, to: c.to, data: c.data, gasLimit: evmGasLimit, asOwner: owner.bech32, prefix });
+      // A delegation takes ZETAPHY from the owner (the EVM value stays 0).
+      if (action === 'delegate') m.ownerSpend = amt;
+      const evmGas = BigInt(evmGasLimit);
+      const preflight = evmPreflight({ me, m, call: { to: c.to, data: '0x' + bytesToHex(c.data), gas: qty(evmGas) }, check });
+      const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: txGasFor(evmGas, gasLimit), gasPrice: price, memo, preflight });
+      return { ...r, validator: val, amount: amt, asOwner: owner, evmGasLimit: evmGas };
+    }
+    const m = build({ delegator: me.bech32, validator: val, amount, denom, prefix });
+    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: gasLimit ?? DEFAULT_STAKING_GAS_LIMIT, gasPrice: price, memo });
+    return { ...r, validator: val, amount: amt };
   };
 
   return {
-    account, gasPrice, balance, quote, sendMsgs, send, callEVM,
-    delegate: staking(msgDelegate, DEFAULT_STAKING_GAS_LIMIT),
-    undelegate: staking(msgUndelegate, DEFAULT_STAKING_GAS_LIMIT),
-    withdrawRewards: staking(msgWithdrawRewards, DEFAULT_STAKING_GAS_LIMIT),
+    account, gasPrice, balance, quote, sendMsgs, send, callEVM, deploy, quantumLockHandover, ownedBy, checkController,
+    delegate: staking(msgDelegate, 'delegate'),
+    undelegate: staking(msgUndelegate, 'undelegate'),
+    withdrawRewards: staking(msgWithdrawRewards, 'withdrawRewards'),
   };
 }

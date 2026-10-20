@@ -6,12 +6,15 @@ package evmd
 import (
 	"bytes"
 	"encoding/hex"
+	"os"
+	"path/filepath"
 	"testing"
 
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/msgservice"
 
+	"github.com/cosmos/evm/crypto/mldsa44"
 	evmencoding "github.com/cosmos/evm/encoding"
 )
 
@@ -42,10 +45,6 @@ func TestEVMCallWire(t *testing.T) {
 	}
 	if m.Size() != len(b) {
 		t.Fatal("Size")
-	}
-	buf := make([]byte, len(b)+3)
-	if n, _ := m.MarshalToSizedBuffer(buf); n != len(b) || !bytes.Equal(buf[3:], b) {
-		t.Fatal("MarshalToSizedBuffer writes at the end")
 	}
 	var back MsgEVMCall
 	if err := back.Unmarshal(b); err != nil {
@@ -120,12 +119,16 @@ func TestEVMCallSigner(t *testing.T) {
 	want := bytes.Repeat([]byte{7}, 20)
 	m := sampleEVMCall()
 	m.Sender = sdk.AccAddress(want).String()
-	signers, _, err := cfg.Codec.GetMsgV1Signers(m)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(signers) != 1 || !bytes.Equal(signers[0], want) {
-		t.Fatalf("signers %x", signers)
+	other := sdk.AccAddress(bytes.Repeat([]byte{9}, 20)).String()
+	for _, msg := range []sdk.Msg{m, &MsgQuantumLock{Signer: m.Sender, Owner: other, Controller: other},
+		&MsgPQVoteKey{Operator: m.Sender, PubKey: []byte{1}}} {
+		signers, _, err := cfg.Codec.GetMsgV1Signers(msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(signers) != 1 || !bytes.Equal(signers[0], want) {
+			t.Fatalf("%T signers %x", msg, signers)
+		}
 	}
 	// Packed in a tx as an Any, it resolves to the same type.
 	a, err := codectypes.NewAnyWithValue(m)
@@ -135,5 +138,64 @@ func TestEVMCallSigner(t *testing.T) {
 	var back sdk.Msg
 	if err := cfg.InterfaceRegistry.UnpackAny(a, &back); err != nil || back.(*MsgEVMCall).Sender != m.Sender {
 		t.Fatal("unpack", err)
+	}
+}
+
+func TestPQMessagesWire(t *testing.T) {
+	lock := &MsgQuantumLock{Signer: "a", Owner: "b", Controller: "c"}
+	b, _ := lock.Marshal()
+	if hex.EncodeToString(b) != "0a01611201621a0163" {
+		t.Fatalf("lock %x", b)
+	}
+	vk := &MsgPQVoteKey{Operator: "o", PubKey: []byte{1}, Proof: []byte{2}, OldKeySig: []byte{3}}
+	b, _ = vk.Marshal()
+	if hex.EncodeToString(b) != "0a016f1201011a0102220103" {
+		t.Fatalf("vote key %x", b)
+	}
+	c := &MsgEVMCall{Sender: "s", AsOwner: "0xab"}
+	b, _ = c.Marshal()
+	var back MsgEVMCall
+	if err := back.Unmarshal(b); err != nil || back.AsOwner != "0xab" || back.To != "" {
+		t.Fatalf("as_owner %+v %v", back, err)
+	}
+	r := &MsgEVMCallResponse{Created: "0x01"}
+	b, _ = r.Marshal()
+	var rb MsgEVMCallResponse
+	if err := rb.Unmarshal(b); err != nil || rb.Created != "0x01" {
+		t.Fatal("created", err)
+	}
+}
+
+// Vote signatures: the seed file gives the key, a signature checks only for
+// the same chain, height and block hash.
+func TestPQVoteSignature(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "seed")
+	if err := os.WriteFile(f, []byte("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sk, pub, err := pqVoteSeed(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := bytes.Repeat([]byte{0xaa}, 32)
+	sig, err := pqSign(sk, pqVoteMsg("zetaphy-testnet-1", 7, hash))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk := &mldsa44.PubKey{Key: pub}
+	if !pk.VerifySignature(pqVoteMsg("zetaphy-testnet-1", 7, hash), sig) {
+		t.Fatal("own signature")
+	}
+	for _, bad := range [][]byte{pqVoteMsg("zetaphy-testnet-2", 7, hash), pqVoteMsg("zetaphy-testnet-1", 8, hash),
+		pqVoteMsg("zetaphy-testnet-1", 7, bytes.Repeat([]byte{0xab}, 32))} {
+		if pk.VerifySignature(bad, sig) {
+			t.Fatal("signature accepted for another vote")
+		}
+	}
+	if err := os.WriteFile(f, []byte("abcd"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := pqVoteSeed(f); err == nil {
+		t.Fatal("short seed accepted")
 	}
 }

@@ -15,6 +15,8 @@
 #   gov.sh ratelimits                                    the IBC limits in force
 #   gov.sh delegate <zetaphyvaloper1…> <ZETAPHY> [key]   stake from a fund (default community)
 #   gov.sh validators                                    who validates, and their share
+#   gov.sh quantum-lock <ML-DSA controller>              hand the FROM account to a PQ account, for good
+#   gov.sh vote-key                                      register or replace this node's ML-DSA vote key
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -113,6 +115,18 @@ case "${1:-}" in
     $ZETAPHYD q staking validators $QF | jq -r '[.validators[] | select(.status=="BOND_STATUS_BONDED")] as $v
       | ($v | map(.tokens | tonumber) | add) as $t
       | $v[] | "\(.operator_address)  \(.description.moniker)  \((.tokens | tonumber) / $t * 100 | floor)%"' ;;
+  quantum-lock)
+    # Afterwards the FROM key is refused; the controller acts for the account
+    # (zetaphy pq native ... --as <this account>).
+    ctrl=${2:?controller: zetaphy1… or 0x… of an ML-DSA-44 account that has sent a tx}
+    send tx quantum-lock "$ctrl"
+    echo "$FROM is now controlled by $ctrl" ;;
+  vote-key)
+    # To replace the key: move pq_vote_key.seed to pq_vote_key.seed.old, put
+    # the new seed in pq_vote_key.seed (64 hex characters), then run this.
+    TXF=${TXF/--gas auto --gas-adjustment 1.5/--gas 600000}
+    send tx pq-vote-key
+    echo "vote key registered" ;;
   *)
-    sed -n '8,17p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,19p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

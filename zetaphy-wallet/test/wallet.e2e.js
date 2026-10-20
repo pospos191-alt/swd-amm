@@ -1,7 +1,8 @@
 // Browser test for the wallet: serves the static site with its real CSP,
 // answers the node's JSON-RPC from a mock (Playwright route, no network) and
 // checks key creation, encrypt/unlock, a signed send, ERC-20 transfers
-// (MsgEVMCall, simulated with eth_call first) and staking.
+// (MsgEVMCall, simulated with eth_call first), staking, a quantum lock from
+// MetaMask (window.ethereum mocked) and acting for a locked account (as_owner).
 //   npm test            (uses Playwright's Chromium)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,6 +16,7 @@ import { MsgSend } from 'cosmjs-types/cosmos/bank/v1beta1/tx';
 import { MsgDelegate, MsgUndelegate } from 'cosmjs-types/cosmos/staking/v1beta1/tx';
 import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1beta1/tx';
 import { BinaryReader } from 'cosmjs-types/binary';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 
 const PORT = 18090;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -47,9 +49,28 @@ before(async () => {
 after(async () => { await browser?.close(); server?.kill(); });
 
 /** A page whose node RPC is answered by `node` (mutable state). */
-async function openPage(node = {}) {
+async function openPage(node = {}, { ethereum } = {}) {
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
+  // A mock MetaMask: window.ethereum.request, its calls recorded in window.__eth.
+  if (ethereum) {
+    await page.addInitScript((cfg) => {
+      window.__eth = [];
+      window.__ethCfg = cfg;
+      window.ethereum = {
+        isMetaMask: true,
+        request: async ({ method, params }) => {
+          window.__eth.push({ method, params });
+          const c = window.__ethCfg;
+          if (c.reject === method) throw Object.assign(new Error('User rejected the request.'), { code: 4001 });
+          if (method === 'eth_requestAccounts') return [c.account];
+          if (method === 'eth_chainId') return c.chainId;
+          if (method === 'eth_sendTransaction') return '0x' + 'ab'.repeat(32);
+          throw new Error(`unexpected ${method}`);
+        },
+      };
+    }, ethereum);
+  }
   const errors = []; const outside = []; const sent = []; const calls = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
@@ -63,7 +84,9 @@ async function openPage(node = {}) {
       // A mock ERC-20 at TOKEN: TUSD, 6 decimals.
       calls.push(params[0]);
       const sel = params[0].data.slice(2, 10);
-      if (sel === '313ce567') result = '0x' + word(6);
+      if (params[0].to === '0x0000000000000000000000000000000000000800' || params[0].to === '0x0000000000000000000000000000000000000801') result = '0x' + word(1);
+      else if (!params[0].data || params[0].data === '0x') result = '0x'; // a plain value transfer
+      else if (sel === '313ce567') result = '0x' + word(6);
       else if (sel === '95d89b41') result = abiString('TUSD');
       else if (sel === '70a08231') result = '0x' + word(node.tokenBalance ?? 12_500_000n);
       else if (sel === 'a9059cbb' && node.revert) error = { code: 3, message: 'execution reverted: ERC20: transfer amount exceeds balance' };
@@ -71,10 +94,15 @@ async function openPage(node = {}) {
       else error = { code: -32000, message: 'execution reverted' };
     }
     else if (method === 'eth_gasPrice') result = '0x3b9aca00'; // 1 gwei
-    else if (method === 'eth_getBalance') result = '0x' + (node.balance ?? 10n ** 19n).toString(16);
+    else if (method === 'eth_getBalance') result = '0x' + (node.balances?.[params[0].toLowerCase()] ?? node.balance ?? 10n ** 19n).toString(16);
     else if (method === 'zetaphy_pqAccount') {
-      result = { address: SEED_BECH32, hex: SEED_HEX_ADDR, chainId: 'zetaphy-testnet-1', denom: 'azetaphy', exists: !!node.exists,
-        accountNumber: node.exists ? '12' : null, sequence: node.exists ? '4' : null };
+      // Other accounts (locked owners, by lower-case 0x or zetaphy1…) from node.accounts.
+      const other = node.accounts?.[params[0].toLowerCase()];
+      result = other ? { chainId: 'zetaphy-testnet-1', denom: 'azetaphy', exists: true, accountNumber: '30', sequence: '2', pubKeyType: 'eth_secp256k1', quantumLockedTo: null, ...other }
+        : params[0] !== SEED_BECH32 && params[0].toLowerCase() !== SEED_HEX_ADDR.toLowerCase()
+          ? { chainId: 'zetaphy-testnet-1', denom: 'azetaphy', exists: false, accountNumber: null, sequence: null, pubKeyType: null, quantumLockedTo: null }
+          : { address: SEED_BECH32, hex: SEED_HEX_ADDR, chainId: 'zetaphy-testnet-1', denom: 'azetaphy', exists: !!node.exists,
+            accountNumber: node.exists ? '12' : null, sequence: node.exists ? '4' : null, pubKeyType: node.exists ? (node.pubKeyType === undefined ? 'mldsa44' : node.pubKeyType) : null, quantumLockedTo: null };
     } else if (method === 'zetaphy_sendCosmosTx') {
       sent.push(params[0]);
       result = { txHash: createHash('sha256').update(Buffer.from(params[0].slice(2), 'hex')).digest('hex').toUpperCase(), code: node.code ?? 0, log: node.log ?? '' };
@@ -86,8 +114,8 @@ async function openPage(node = {}) {
 }
 
 /** English page with the test seed imported and the mock RPC saved. */
-async function importedPage(node) {
-  const p = await openPage(node);
+async function importedPage(node, opts) {
+  const p = await openPage(node, opts);
   const { page } = p;
   await page.click('#lang');
   await page.click('#mode-import');
@@ -102,7 +130,7 @@ async function importedPage(node) {
   return p;
 }
 
-const statusMatches = (page, re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById('status').textContent), re.source);
+const statusMatches = (page, re) => page.waitForFunction((src) => new RegExp(src).test(document.getElementById("status").textContent), re.source, { timeout: 5000 }).catch(async (e) => { throw new Error(`status is "${await page.textContent("#status")}", wanted ${re}`); });
 
 /** The single message of a broadcast tx, after checking its ML-DSA-44 signature. */
 function decodeSent(hex) {
@@ -126,13 +154,14 @@ function decodeMsgEVMCall(bytes) {
       case 3: m.value = r.string(); break;
       case 4: m.data = r.bytes(); break;
       case 5: m.gasLimit = r.uint64(); break;
+      case 6: m.asOwner = r.string(); break;
       default: r.skipType(tag & 7);
     }
   }
   return m;
 }
 
-const visible = (page, sel) => page.waitForSelector(`${sel}:not([hidden])`);
+const visible = (page, sel) => page.waitForSelector(`${sel}:not([hidden])`, { timeout: 8000 }).catch(async (e) => { throw new Error(`${sel} not shown; status "${await page.textContent('#status')}"`); });
 
 test('page loads in Thai with warnings and its CSP, then switches to English', async () => {
   const { page, context, errors, outside, res } = await openPage();
@@ -453,6 +482,206 @@ test('staking: stake, unstake and claim rewards as signed Cosmos messages', asyn
   // Thai labels follow the language switch.
   await page.click('#lang');
   assert.equal(await page.textContent('#claim'), 'รับรางวัล');
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// ---- quantum lock ----
+const OWNER = '0x4444444444444444444444444444444444444444'; // a MetaMask account
+const OWNER_BECH32 = 'zetaphy1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zy4seeq9';
+const OTHER_LOCKED = '0x5555555555555555555555555555555555555555'; // locked to someone else
+const OTHER_LOCKED_BECH32 = 'zetaphy1242424242424242424242424242424248wwy4h';
+const ELSEWHERE = 'zetaphy1venxvenxvenxvenxvenxvenxvenxvenxgntzaq';
+/** node.accounts entries under both forms of an address (the wallet asks with either). */
+const both = (hex, bech32, v) => ({ [hex]: v, [bech32]: v });
+const ethCalls = (page) => page.evaluate(() => window.__eth.map((c) => c.method));
+
+test('quantum lock: lock a MetaMask account to this wallet (window.ethereum), only after the warnings', async () => {
+  // First without MetaMask in the browser.
+  const bare = await importedPage({ exists: true });
+  await bare.page.check('#mm-ok');
+  await bare.page.click('#mm-lock');
+  await statusMatches(bare.page, /MetaMask \(window\.ethereum\) was not found/);
+  await bare.context.close();
+
+  const node = { exists: true, pubKeyType: null, accounts: {} };
+  const { page, context, errors, outside, sent } = await importedPage(node, { ethereum: { account: OWNER, chainId: '0x12e4e' } });
+  assert.match(await page.textContent('#mm-card'), /Permanent, no undo/);
+  assert.match(await page.textContent('#mm-card'), /lose this wallet's seed, the locked account is lost too/);
+  assert.ok(await page.isDisabled('#mm-lock'), 'needs the warning ticked');
+  await page.check('#mm-ok');
+  assert.ok(await page.isEnabled('#mm-lock'));
+
+  // This wallet has not sent a tx yet: the chain would refuse it as a controller.
+  await page.click('#mm-lock');
+  await statusMatches(page, /has not sent a transaction yet/);
+  assert.deepEqual(await ethCalls(page), [], 'MetaMask not even asked');
+
+  // MetaMask on another chain.
+  node.pubKeyType = 'mldsa44';
+  await page.evaluate(() => { window.__ethCfg.chainId = '0x1'; });
+  await page.click('#mm-lock');
+  await statusMatches(page, /MetaMask is not on ZETAPHY testnet \(chain id 1\)/);
+  await page.evaluate(() => { window.__ethCfg.chainId = '0x12e4e'; });
+
+  // The last confirmation names both accounts; dismissing it sends nothing.
+  const dialogs = [];
+  let accept = false;
+  page.on('dialog', (d) => { dialogs.push(d.message()); (accept ? d.accept() : d.dismiss()); });
+  await page.click('#mm-lock');
+  await statusMatches(page, /Cancelled\. Nothing was sent/);
+  assert.match(dialogs[0], new RegExp(`${OWNER}[\\s\\S]*${SEED_BECH32}[\\s\\S]*never work on ZETAPHY again`));
+  assert.ok(!(await ethCalls(page)).includes('eth_sendTransaction'));
+
+  // Rejected in MetaMask.
+  accept = true;
+  await page.evaluate(() => { window.__ethCfg.reject = 'eth_sendTransaction'; });
+  await page.click('#mm-lock');
+  await statusMatches(page, /Rejected in MetaMask/);
+  await page.evaluate(() => { window.__ethCfg.reject = null; });
+
+  // Sent: to 0x…5051, no value, this wallet's 20-byte address as data.
+  await page.click('#mm-lock');
+  await visible(page, '#mm-result');
+  assert.equal(await page.textContent('#mm-hash'), '0x' + 'ab'.repeat(32));
+  const tx = await page.evaluate(() => window.__eth.filter((c) => c.method === 'eth_sendTransaction').at(-1).params[0]);
+  assert.deepEqual(tx, { from: OWNER, to: '0x0000000000000000000000000000000000005051', value: '0x0', data: SEED_HEX_ADDR.toLowerCase() });
+  assert.deepEqual((await ethCalls(page)).slice(0, 2), ['eth_requestAccounts', 'eth_chainId']);
+  assert.ok(await page.isDisabled('#mm-lock'), 'the warning must be ticked again for another lock');
+  assert.match(await page.textContent('#status'), /MetaMask sent the lock/);
+  assert.match(await page.textContent('#owned-list'), new RegExp(OWNER));
+
+  // Once the chain shows the lock, the list says so; locking it again is not needed.
+  Object.assign(node.accounts, both(OWNER, OWNER_BECH32, { quantumLockedTo: SEED_BECH32 }));
+  await page.click('#refresh');
+  await page.waitForFunction(() => /locked to this wallet/.test(document.getElementById('owned-list').textContent));
+  await page.check('#mm-ok');
+  const n = (await ethCalls(page)).filter((m) => m === 'eth_sendTransaction').length;
+  await page.click('#mm-lock');
+  await statusMatches(page, /already locked to this wallet/);
+  assert.equal((await ethCalls(page)).filter((m) => m === 'eth_sendTransaction').length, n);
+  // Locked to someone else.
+  await page.evaluate((a) => { window.__ethCfg.account = a; }, OTHER_LOCKED);
+  Object.assign(node.accounts, both(OTHER_LOCKED, OTHER_LOCKED_BECH32, { quantumLockedTo: ELSEWHERE }));
+  await page.click('#mm-lock');
+  await statusMatches(page, new RegExp(`already locked to ${ELSEWHERE}`));
+
+  // Thai strings follow the language switch.
+  await page.click('#lang');
+  assert.equal(await page.textContent('#mm-card h2'), 'ล็อกบัญชี MetaMask ให้กระเป๋านี้');
+  assert.equal(sent.length, 0, 'no Cosmos tx from this wallet');
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('act for a locked account: send, token send and stake go out as MsgEVMCall with as_owner', async () => {
+  const node = { exists: true, accounts: { ...both(OWNER, OWNER_BECH32, { quantumLockedTo: SEED_BECH32 }), ...both(OTHER_LOCKED, OTHER_LOCKED_BECH32, { quantumLockedTo: ELSEWHERE }) },
+    balances: { [OWNER]: 5n * 10n ** 18n } };
+  const { page, context, errors, outside, sent, calls } = await importedPage(node);
+
+  // Only an account locked to this wallet can be used.
+  await page.fill('#owner', '0x6666666666666666666666666666666666666666');
+  await page.click('#owner-use');
+  await statusMatches(page, /not quantum-locked to this wallet/);
+  await page.fill('#owner', OTHER_LOCKED);
+  await page.click('#owner-use');
+  await statusMatches(page, new RegExp(`locked to another account \\(${ELSEWHERE}\\)`));
+  await page.fill('#owner', SEED_BECH32);
+  await page.click('#owner-use');
+  await statusMatches(page, /this wallet's own account/);
+  assert.ok(await page.isHidden('#acting'));
+
+  await page.fill('#owner', OWNER_BECH32);
+  await page.click('#owner-use');
+  await visible(page, '#acting');
+  assert.match(await page.textContent('#acting-addr'), new RegExp(OWNER));
+  assert.equal(await page.textContent('#acting-balance'), '5 ZETAPHY');
+  assert.match(await page.textContent('#status'), /Now acting as/);
+  for (const tag of await page.$$('.as-tag')) assert.equal(await tag.textContent(), `For ${OWNER}`);
+  assert.deepEqual(JSON.parse(await page.evaluate((k) => localStorage.getItem(k), `zetaphy-wallet:owners:v1:${SEED_BECH32}`)), [OWNER]);
+
+  // Send: the owner's balance pays the amount, this wallet the fee.
+  await page.fill('#to', TO);
+  await page.fill('#amount', '6');
+  await page.click('#review');
+  await statusMatches(page, /That account does not have enough: needs 6 ZETAPHY, has 5/);
+  await page.fill('#amount', '1.25');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  assert.equal(await page.textContent('#c-fee'), '0.00072 ZETAPHY', '(200000 EVM + 400000) gas x 1.2 gwei');
+  assert.match(await page.textContent('#confirm .as-note'), new RegExp(`For ${OWNER}, which is quantum-locked to this wallet`));
+  await page.click('#confirm-send');
+  await visible(page, '#tx-result');
+  let { msg, auth } = decodeSent(sent[0]);
+  assert.equal(msg.typeUrl, '/zetaphy.pq.v1.MsgEVMCall');
+  assert.deepEqual(decodeMsgEVMCall(msg.value), { sender: SEED_BECH32, to: '0x1111111111111111111111111111111111111111', value: '1250000000000000000', data: new Uint8Array(), gasLimit: 200000n, asOwner: OWNER_BECH32 });
+  assert.equal(auth.fee.gasLimit, 600000n);
+  assert.equal(calls.filter((c) => !c.data || c.data === '0x').at(-1).from, OWNER, 'simulated as the owner');
+
+  // ERC-20: the owner's balance, simulated from the owner, sent with as_owner.
+  await page.fill('#token', TOKEN);
+  await page.click('#token-load');
+  await visible(page, '#token-info');
+  assert.equal(calls.filter((c) => c.data.startsWith('0x70a08231')).at(-1).data, '0x70a08231' + word(OWNER), 'balanceOf(owner)');
+  await page.fill('#token-to', TO);
+  await page.fill('#token-amount', '2.5');
+  await page.click('#token-review');
+  await visible(page, '#token-confirm');
+  assert.ok(await page.isVisible('#token-confirm .as-note'));
+  await page.click('#confirm-token');
+  await visible(page, '#token-result');
+  for (const c of calls.filter((x) => x.data.startsWith('0xa9059cbb'))) assert.equal(c.from, OWNER);
+  ({ msg } = decodeSent(sent[1]));
+  const tcall = decodeMsgEVMCall(msg.value);
+  assert.equal(tcall.asOwner, OWNER_BECH32);
+  assert.equal(tcall.to, TOKEN);
+
+  // Stake: the staking precompile with delegator = owner.
+  await page.fill('#validator', VALOPER);
+  await page.fill('#stake-amount', '3');
+  await page.click('#stake');
+  await visible(page, '#stake-confirm');
+  assert.equal(await page.textContent('#s-fee'), '0.00084 ZETAPHY', '(300000 EVM + 400000) gas x 1.2 gwei');
+  assert.ok(await page.isVisible('#stake-confirm .as-note'));
+  await page.click('#confirm-stake');
+  await visible(page, '#stake-result');
+  ({ msg, auth } = decodeSent(sent[2]));
+  const scall = decodeMsgEVMCall(msg.value);
+  assert.equal(scall.to, '0x0000000000000000000000000000000000000800');
+  assert.equal(scall.asOwner, OWNER_BECH32);
+  assert.equal(scall.gasLimit, 300000n);
+  assert.equal(auth.fee.gasLimit, 700000n);
+  const data = Buffer.from(scall.data).toString('hex');
+  assert.equal(data.slice(0, 8), Buffer.from(keccak_256(Buffer.from('delegate(address,string,uint256)'))).toString('hex').slice(0, 8), 'delegate selector');
+  assert.equal(data.slice(8, 72), word(OWNER), 'delegator = the owner');
+  assert.equal(BigInt('0x' + data.slice(136, 200)), 3n * 10n ** 18n);
+  assert.match(Buffer.from(data.slice(264), 'hex').toString(), new RegExp(VALOPER));
+
+  // Back to this wallet's own account: a plain MsgSend again.
+  await page.click('#owner-stop');
+  await statusMatches(page, /Back to your own account/);
+  assert.ok(await page.isHidden('#acting'));
+  for (const tag of await page.$$('.as-tag')) assert.ok(await tag.isHidden());
+  await page.fill('#amount', '1');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  assert.ok(await page.isHidden('#confirm .as-note'));
+  await page.click('#confirm-send');
+  await statusMatches(page, /^Sent\./);
+  assert.equal(decodeSent(sent[3]).msg.typeUrl, '/cosmos.bank.v1beta1.MsgSend');
+
+  // The remembered account comes back after unlocking, with a button to act as it.
+  await page.reload();
+  await page.fill('#unlock-pass', PASS);
+  await page.click('#unlock');
+  await visible(page, '#wallet');
+  await page.waitForFunction(() => /locked to this wallet/.test(document.getElementById('owned-list').textContent));
+  await page.click('#owned-list button');
+  await visible(page, '#acting');
+  await page.click('#lang');
+  assert.match(await page.textContent('#acting'), /กำลังทำรายการในนามของ/);
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
   await context.close();

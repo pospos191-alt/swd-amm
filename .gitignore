@@ -21,3 +21,6 @@ test-ui/_scratch_*
 .github/workflows/_write_test.txt
 test-ui/tests/node_modules/
 test-ui/tests/test-results/
+
+# zetaphy-chain/pack-cloud-init.sh output, published to github.com/pospos191-alt/zetaphy-chain
+zetaphy-chain/public/

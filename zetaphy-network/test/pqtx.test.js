@@ -14,8 +14,10 @@ import { MsgSend } from 'cosmjs-types/cosmos/bank/v1beta1/tx';
 import { PubKey } from 'cosmjs-types/cosmos/crypto/secp256k1/keys';
 import { MsgDelegate, MsgUndelegate } from 'cosmjs-types/cosmos/staking/v1beta1/tx';
 import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1beta1/tx';
-import { Interface } from 'ethers';
+import { Interface, getCreateAddress } from 'ethers';
 import {
+  msgEVMDeploy, msgQuantumLock, encodeMsgQuantumLock, createAddress, stakingCall, quantumLockTx, MSG_QUANTUM_LOCK_TYPE_URL, PQ_LOCK_ADDRESS,
+  STAKING_PRECOMPILE, DISTRIBUTION_PRECOMPILE, DEFAULT_DEPLOY_GAS_LIMIT, DEFAULT_PRECOMPILE_GAS_LIMIT,
   buildSendTx, buildTx, msgSend, msgDelegate, msgUndelegate, msgWithdrawRewards, msgEVMCall, encodeMsgEVMCall, validatorAddress,
   MSG_DELEGATE_TYPE_URL, MSG_UNDELEGATE_TYPE_URL, MSG_WITHDRAW_REWARD_TYPE_URL, MSG_EVM_CALL_TYPE_URL, VALOPER_PREFIX,
   DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, DEFAULT_STAKING_GAS_LIMIT, pqAddress, pqClient, toBech32, fromBech32, addressBytes, normalizeAddress, varint, bytesToHex, hexToBytes,
@@ -222,7 +224,8 @@ function decodeFields(bytes) {
 }
 function decodeMsgEVMCall(bytes) {
   const m = { sender: '', to: '', value: '', data: new Uint8Array(), gasLimit: 0n };
-  const want = { 1: ['sender', 2], 2: ['to', 2], 3: ['value', 2], 4: ['data', 4], 5: ['gasLimit', 0] };
+  // as_owner (6) is only in the result when it is set.
+  const want = { 1: ['sender', 2], 2: ['to', 2], 3: ['value', 2], 4: ['data', 4], 5: ['gasLimit', 0], 6: ['asOwner', 2] };
   let last = 0;
   for (const f of decodeFields(bytes)) {
     assert.ok(want[f.field], `unknown field ${f.field}`);
@@ -279,8 +282,8 @@ test('MsgEVMCall: golden vector built by hand, and a hand-written decoder round 
 });
 
 test('MsgEVMCall refuses bad input', () => {
-  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: '' }), /contract creation is not supported/);
-  assert.throws(() => msgEVMCall({ sender: ME.bech32 }), /contract creation is not supported/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: '' }), /use msgEVMDeploy to create a contract/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32 }), /use msgEVMDeploy to create a contract/);
   assert.throws(() => msgEVMCall({ sender: ME.bech32, to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD' }), /checksum/);
   assert.throws(() => msgEVMCall({ sender: ME.bech32, to: OTHER, value: -1n }), /negative/);
   assert.throws(() => msgEVMCall({ sender: ME.bech32, to: OTHER, data: '0x123' }), /invalid hex/);
@@ -329,7 +332,10 @@ const TOKEN = '0x' + '22'.repeat(20);
 const ERC20 = new Interface(['function transfer(address to, uint256 value) returns (bool)', 'function balanceOf(address) view returns (uint256)',
   'function decimals() view returns (uint8)', 'function symbol() view returns (string)']);
 const TOKEN_BALANCE = 1234500000n;
+const RUNTIME = '0x6080'; // what eth_call answers for any init code
 function fakeEthCall({ to, data }) {
+  if (!to) return RUNTIME; // a contract creation returns the runtime code
+  if (to === STAKING_PRECOMPILE || to === DISTRIBUTION_PRECOMPILE) return '0x' + '00'.repeat(31) + '01';
   if (to.toLowerCase() !== TOKEN) return '0x';
   const tx = ERC20.parseTransaction({ data });
   if (tx.name === 'decimals') return ERC20.encodeFunctionResult('decimals', [6]);
@@ -339,7 +345,8 @@ function fakeEthCall({ to, data }) {
   return ERC20.encodeFunctionResult('transfer', [true]);
 }
 
-function fakeNode({ exists = true, code = 0, log = '', balance = 10n ** 20n, chainId = CHAIN_ID, ethCall = fakeEthCall } = {}) {
+/** accounts: zetaphy_pqAccount fields per bech32 address (e.g. quantumLockedTo, pubKeyType, sequence), over the defaults. */
+function fakeNode({ exists = true, code = 0, log = '', balance = 10n ** 20n, chainId = CHAIN_ID, ethCall = fakeEthCall, accounts = {} } = {}) {
   const calls = [];
   const rpcCall = async (method, params) => {
     calls.push({ method, params });
@@ -347,7 +354,8 @@ function fakeNode({ exists = true, code = 0, log = '', balance = 10n ** 20n, cha
     if (method === 'eth_getCode') return params[0].toLowerCase() === TOKEN ? '0x6000' : '0x';
     if (method === 'zetaphy_pqAccount') {
       const a = normalizeAddress(params[0]);
-      return { address: a.bech32, hex: a.hex, chainId, denom: DENOM, exists, accountNumber: exists ? '42' : null, sequence: exists ? '5' : null };
+      return { address: a.bech32, hex: a.hex, chainId, denom: DENOM, exists, accountNumber: exists ? '42' : null, sequence: exists ? '5' : null,
+        pubKeyType: exists ? 'mldsa44' : null, quantumLockedTo: null, ...accounts[a.bech32] };
     }
     if (method === 'eth_gasPrice') return '0x' + (10n ** 9n).toString(16);
     if (method === 'eth_getBalance') return '0x' + balance.toString(16);
@@ -654,6 +662,339 @@ test('CLI: pq native call, token-send, token-balance, stake, unstake, rewards', 
     t = lastTx();
     assert.deepEqual(MsgWithdrawDelegatorReward.decode(t.body.messages[0].value), { delegatorAddress: ME.bech32, validatorAddress: VALOPER });
     assert.match(lines.join('\n'), /withdrew staking rewards/);
+  } finally {
+    server.close();
+  }
+});
+
+// ---- quantum lock, as_owner and contract creation ----
+
+const OWNER = 'zetaphy1yg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zcpxmne'; // 0x2222…22, an ECDSA account locked to ME
+const OWNER_HEX = '0x' + '22'.repeat(20);
+const NEW_CTRL = 'zetaphy1xvenxvenxvenxvenxvenxvenxvenxven2l3xxt'; // 0x3333…33, another ML-DSA-44 account
+const str = (s) => Buffer.from(s).toString('hex');
+
+function decodeMsgQuantumLock(bytes) {
+  const m = {};
+  const names = { 1: 'signer', 2: 'owner', 3: 'controller' };
+  for (const f of decodeFields(bytes)) {
+    assert.ok(names[f.field] && f.wire === 2, `field ${f.field}`);
+    m[names[f.field]] = new TextDecoder().decode(f.value);
+  }
+  return m;
+}
+
+test('MsgEVMCall as_owner (field 6) and contract creation (no field 2): golden vectors built by hand', () => {
+  // as_owner = field 6, length-delimited: tag 6 << 3 | 2 = 0x32.
+  assert.equal(bytesToHex(encodeMsgEVMCall({ sender: 'a', to: 'b', gasLimit: 1n, asOwner: 'c' })), '0a0161' + '120162' + '2801' + '320163');
+  // Without as_owner nothing changes (the existing chain vector above still holds).
+  assert.equal(bytesToHex(encodeMsgEVMCall({ sender: 'a', to: 'b', gasLimit: 1n })), '0a0161120162' + '2801');
+  // A real one: value 7, gas 21000 (0x5208: 0x08|0x80, 0xa4 = 0x24|0x80, 0x01), owner given as 0x, sent as zetaphy1….
+  const m = msgEVMCall({ sender: ME.hex, to: OTHER, value: 7n, gasLimit: 21000n, asOwner: OWNER_HEX });
+  assert.equal(bytesToHex(m.value),
+    '0a2e' + str(ME.bech32) + '122a' + str('0x1111111111111111111111111111111111111111') + '1a01' + '37' + '28' + '88a401' + '322e' + str(OWNER));
+  assert.equal(OWNER.length, 0x2e);
+  assert.equal(m.spend, 0n, 'the value leaves the owner, not the signer');
+  assert.equal(m.ownerSpend, 7n);
+  assert.deepEqual(decodeMsgEVMCall(m.value), { sender: ME.bech32, to: '0x1111111111111111111111111111111111111111', value: '7', data: new Uint8Array(), gasLimit: 21000n, asOwner: OWNER });
+
+  // Creation: field 2 left out (empty to), init code as data, 3,000,000 EVM gas by default (0x2dc6c0 -> c0 8d b7 01).
+  const d = msgEVMDeploy({ sender: ME.bech32, initCode: '0x6000' });
+  assert.equal(bytesToHex(d.value), '0a2e' + str(ME.bech32) + '2202' + '6000' + '28' + 'c08db701');
+  assert.equal(DEFAULT_DEPLOY_GAS_LIMIT, 3000000n);
+  assert.deepEqual(decodeFields(d.value).map((f) => f.field), [1, 4, 5]);
+  assert.equal(d.spend, 0n);
+  assert.equal(msgEVMDeploy({ sender: ME.bech32, initCode: '0x6000', value: 9n }).spend, 9n);
+  assert.equal(decodeMsgEVMCall(msgEVMDeploy({ sender: ME.bech32, initCode: '0x6000', asOwner: OWNER }).value).asOwner, OWNER);
+
+  assert.throws(() => msgEVMDeploy({ sender: ME.bech32, initCode: '0x' }), /needs init code/);
+  assert.throws(() => msgEVMDeploy({ sender: ME.bech32 }), /needs init code/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: OTHER, asOwner: ME.hex }), /as_owner is the sender itself/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: OTHER, asOwner: 'zetaphy1bad' }), /invalid address/);
+});
+
+test('MsgQuantumLock: golden vectors, all three addresses as zetaphy1…', () => {
+  assert.equal(MSG_QUANTUM_LOCK_TYPE_URL, '/zetaphy.pq.v1.MsgQuantumLock');
+  // signer = 1 (0a), owner = 2 (12), controller = 3 (1a), each a 1-byte string.
+  assert.equal(bytesToHex(encodeMsgQuantumLock({ signer: 'a', owner: 'b', controller: 'c' })), '0a01611201621a0163');
+  const m = msgQuantumLock({ signer: ME.hex, owner: OWNER_HEX, controller: NEW_CTRL.toUpperCase() });
+  assert.equal(m.typeUrl, MSG_QUANTUM_LOCK_TYPE_URL);
+  assert.equal(bytesToHex(m.value), '0a2e' + str(ME.bech32) + '122e' + str(OWNER) + '1a2e' + str(NEW_CTRL));
+  assert.deepEqual(decodeMsgQuantumLock(m.value), { signer: ME.bech32, owner: OWNER, controller: NEW_CTRL });
+  assert.equal(m.spend, 0n);
+  assert.throws(() => msgQuantumLock({ signer: ME.hex, owner: OWNER, controller: OWNER_HEX }), /another account than the owner/);
+  assert.throws(() => msgQuantumLock({ signer: ME.hex, owner: OWNER, controller: '0x1234' }), /40 hex/);
+});
+
+test('quantumLockTx: an EVM tx to 0x…5051 with no value and the controller\'s 20 bytes as data', () => {
+  assert.equal(PQ_LOCK_ADDRESS, '0x0000000000000000000000000000000000005051');
+  assert.deepEqual(quantumLockTx(ME.bech32), { to: PQ_LOCK_ADDRESS, value: 0n, data: '0x' + bytesToHex(ME.bytes) });
+  assert.equal(quantumLockTx(ME.hex).data, '0x6da134ebfcb035273e87954f0641bd920ed073ba');
+  assert.equal((quantumLockTx(ME.hex).data.length - 2) / 2, 20, 'exactly 20 bytes, no selector');
+  assert.throws(() => quantumLockTx('zetaphy1bad'), /invalid address/);
+});
+
+test('createAddress: keccak256(rlp([sender, nonce]))[12:], known vectors and ethers agree', () => {
+  // Widely used vectors for CREATE.
+  assert.equal(createAddress('0x6ac7ea33f8831ea9dcc53393aaa88b25a785dbf0', 0).toLowerCase(), '0xcd234a471b72ba2f1ccf0a70fcaba648a5eecd8d');
+  assert.equal(createAddress('0x6ac7ea33f8831ea9dcc53393aaa88b25a785dbf0', 1).toLowerCase(), '0x343c43a37d37dff08ae8c4a11544c718abb4fcf8');
+  assert.equal(createAddress('0x6ac7ea33f8831ea9dcc53393aaa88b25a785dbf0', 2).toLowerCase(), '0xf778b86fa74e846c4f0a1fbd1335fe81c00a0c91');
+  // RLP edge cases: 0 is the empty string, 1..127 one byte, 128 needs a length prefix.
+  for (const n of [0, 1, 0x7f, 0x80, 0xff, 0x100, 0xffff, 0x10000, 2 ** 32, 2 ** 53 - 1]) {
+    assert.equal(createAddress(ME.hex, n), getCreateAddress({ from: ME.hex, nonce: n }), `nonce ${n}`);
+  }
+  assert.equal(createAddress(ME.bech32, 5n), getCreateAddress({ from: ME.hex, nonce: 5 }), 'zetaphy1… works too');
+  assert.throws(() => createAddress(ME.hex, -1n), /uint64/);
+  assert.throws(() => createAddress(ME.hex, 2n ** 64n), /uint64/);
+});
+
+test('stakingCall: calldata for the staking and distribution precompiles matches ethers', () => {
+  const S = new Interface(['function delegate(address delegatorAddress, string validatorAddress, uint256 amount) returns (bool)',
+    'function undelegate(address delegatorAddress, string validatorAddress, uint256 amount) returns (int64)']);
+  const D = new Interface(['function withdrawDelegatorRewards(address delegatorAddress, string validatorAddress) returns (tuple(string denom, uint256 amount)[])']);
+  assert.equal(STAKING_PRECOMPILE, '0x0000000000000000000000000000000000000800');
+  assert.equal(DISTRIBUTION_PRECOMPILE, '0x0000000000000000000000000000000000000801');
+  const d = stakingCall({ action: 'delegate', delegator: OWNER, validator: VALOPER.toUpperCase(), amount: 3n * 10n ** 18n });
+  assert.equal(d.to, STAKING_PRECOMPILE);
+  assert.equal('0x' + bytesToHex(d.data), S.encodeFunctionData('delegate', [OWNER_HEX, VALOPER, 3n * 10n ** 18n]));
+  // Hand check of the layout: selector, address word, string offset (0x60), amount, then length and bytes.
+  const hex = bytesToHex(d.data);
+  assert.equal(hex.slice(0, 8), S.getFunction('delegate').selector.slice(2));
+  assert.equal(hex.slice(8, 72), '0'.repeat(24) + '22'.repeat(20));
+  assert.equal(BigInt('0x' + hex.slice(72, 136)), 0x60n);
+  assert.equal(BigInt('0x' + hex.slice(200, 264)), BigInt(VALOPER.length));
+  const u = stakingCall({ action: 'undelegate', delegator: OWNER_HEX, validator: VALOPER, amount: 1n });
+  assert.equal('0x' + bytesToHex(u.data), S.encodeFunctionData('undelegate', [OWNER_HEX, VALOPER, 1n]));
+  const w = stakingCall({ action: 'withdrawRewards', delegator: OWNER_HEX, validator: VALOPER });
+  assert.equal(w.to, DISTRIBUTION_PRECOMPILE);
+  assert.equal('0x' + bytesToHex(w.data), D.encodeFunctionData('withdrawDelegatorRewards', [OWNER_HEX, VALOPER]));
+  assert.throws(() => stakingCall({ action: 'delegate', delegator: OWNER, validator: VALOPER, amount: 0n }), /more than 0/);
+  assert.throws(() => stakingCall({ action: 'delegate', delegator: OWNER, validator: OWNER, amount: 1n }), /zetaphyvaloper1/);
+  assert.throws(() => stakingCall({ action: 'redelegate', delegator: OWNER, validator: VALOPER, amount: 1n }), /unknown staking action/);
+});
+
+/** The last broadcast tx's single message, after checking its signature. */
+function lastSent(node) {
+  const raw = TxRaw.decode(hexToBytes(node.calls.filter((x) => x.method === 'zetaphy_sendCosmosTx').at(-1).params[0]));
+  assert.ok(ml_dsa44.verify(raw.signatures[0], encodeSignDoc({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: CHAIN_ID, accountNumber: 42n }), publicKey));
+  const body = TxBody.decode(raw.bodyBytes);
+  assert.equal(body.messages.length, 1);
+  return { msg: body.messages[0], auth: AuthInfo.decode(raw.authInfoBytes) };
+}
+const sentCount = (node) => node.calls.filter((x) => x.method === 'zetaphy_sendCosmosTx').length;
+const lockedToMe = { [OWNER]: { quantumLockedTo: ME.bech32, pubKeyType: 'eth_secp256k1', sequence: '3' } };
+
+test('client: as_owner send, call, token transfer and staking: checked against quantumLockedTo, run as the owner', async () => {
+  const node = fakeNode({ accounts: lockedToMe });
+  const c = pqClient(node.rpcCall);
+  // send: a MsgEVMCall to the recipient with the value; tx gas = EVM gas + overhead.
+  const s = await c.send({ publicKey, sign, to: OTHER, amount: 10n ** 18n, asOwner: OWNER_HEX });
+  assert.equal(s.asOwner.bech32, OWNER);
+  let { msg, auth } = lastSent(node);
+  assert.equal(msg.typeUrl, MSG_EVM_CALL_TYPE_URL);
+  assert.deepEqual(decodeMsgEVMCall(msg.value), { sender: ME.bech32, to: normalizeAddress(OTHER).hex, value: '1000000000000000000', data: new Uint8Array(), gasLimit: DEFAULT_EVM_GAS_LIMIT, asOwner: OWNER });
+  assert.equal(auth.fee.gasLimit, DEFAULT_EVM_GAS_LIMIT + EVM_CALL_GAS_OVERHEAD);
+  const sim = node.calls.filter((x) => x.method === 'eth_call').at(-1).params[0];
+  assert.equal(sim.from, normalizeAddress(OWNER).hex, 'simulated as the owner');
+  assert.equal(sim.value, '0xde0b6b3a7640000');
+  // The owner's balance pays the value: refused when the owner is short, even if the signer is rich.
+  await assert.rejects(pqClient(fakeNode({ accounts: lockedToMe, balance: 10n ** 18n }).rpcCall).send({ publicKey, sign, to: OTHER, amount: 2n * 10n ** 18n, asOwner: OWNER }),
+    new RegExp(`${OWNER} does not have enough ZETAPHY`));
+
+  // ERC-20 transfer as the owner.
+  const data = ERC20.encodeFunctionData('transfer', [OTHER, 5n]);
+  const r = await c.callEVM({ publicKey, sign, to: TOKEN, data, asOwner: OWNER });
+  assert.equal(r.result, ERC20.encodeFunctionResult('transfer', [true]));
+  ({ msg } = lastSent(node));
+  assert.equal(decodeMsgEVMCall(msg.value).asOwner, OWNER);
+  assert.equal(node.calls.filter((x) => x.method === 'eth_call').at(-1).params[0].from, normalizeAddress(OWNER).hex);
+
+  // Staking as the owner goes through the precompiles, with msg.sender = delegator = owner.
+  await c.delegate({ publicKey, sign, validator: VALOPER, amount: 3n, asOwner: OWNER });
+  ({ msg, auth } = lastSent(node));
+  let m = decodeMsgEVMCall(msg.value);
+  assert.equal(m.to, STAKING_PRECOMPILE);
+  assert.equal(m.value, '', 'a delegation carries no EVM value');
+  assert.deepEqual(m.data, stakingCall({ action: 'delegate', delegator: OWNER, validator: VALOPER, amount: 3n }).data);
+  assert.equal(m.gasLimit, DEFAULT_PRECOMPILE_GAS_LIMIT);
+  assert.equal(auth.fee.gasLimit, DEFAULT_PRECOMPILE_GAS_LIMIT + EVM_CALL_GAS_OVERHEAD);
+  await c.undelegate({ publicKey, sign, validator: VALOPER, amount: 2n, asOwner: OWNER, evmGasLimit: 400000n });
+  m = decodeMsgEVMCall(lastSent(node).msg.value);
+  assert.deepEqual(m.data, stakingCall({ action: 'undelegate', delegator: OWNER, validator: VALOPER, amount: 2n }).data);
+  assert.equal(m.gasLimit, 400000n);
+  await c.withdrawRewards({ publicKey, sign, validator: VALOPER, asOwner: OWNER });
+  m = decodeMsgEVMCall(lastSent(node).msg.value);
+  assert.equal(m.to, DISTRIBUTION_PRECOMPILE);
+  assert.equal(m.asOwner, OWNER);
+  // A delegation larger than the owner's balance is refused before signing.
+  await assert.rejects(pqClient(fakeNode({ accounts: lockedToMe, balance: 10n ** 18n }).rpcCall).delegate({ publicKey, sign, validator: VALOPER, amount: 10n ** 19n, asOwner: OWNER }), /does not have enough/);
+
+  // Not locked, or locked to someone else: refused before anything is signed.
+  const n = sentCount(node);
+  const notMine = fakeNode({ accounts: { [OWNER]: { quantumLockedTo: NEW_CTRL } } });
+  await assert.rejects(pqClient(notMine.rpcCall).send({ publicKey, sign, to: OTHER, amount: 1n, asOwner: OWNER }), new RegExp(`quantum-locked to ${NEW_CTRL}, not to ${ME.bech32}`));
+  await assert.rejects(pqClient(fakeNode().rpcCall).delegate({ publicKey, sign, validator: VALOPER, amount: 1n, asOwner: OWNER }), /is not quantum-locked to/);
+  assert.equal(sentCount(notMine), 0);
+  // check: false skips the checks (so a devnet test can see the chain refuse it).
+  await pqClient(notMine.rpcCall).send({ publicKey, sign, to: OTHER, amount: 1n, asOwner: OWNER, check: false });
+  assert.equal(sentCount(notMine), 1);
+  assert.equal(sentCount(node), n);
+});
+
+test('client: deploy predicts the address from the sequence; as the owner from the owner\'s sequence', async () => {
+  const node = fakeNode({ accounts: lockedToMe });
+  const c = pqClient(node.rpcCall);
+  const r = await c.deploy({ publicKey, sign, initCode: '0x60806040', value: 5n });
+  // Signed with sequence 5; the ante handler bumps it to 6 before the message runs, the
+  // creation takes nonce 6, and the account's sequence ends at 7.
+  assert.equal(r.sequence, 5n);
+  assert.equal(r.created, getCreateAddress({ from: ME.hex, nonce: 6 }));
+  const { msg, auth } = lastSent(node);
+  assert.deepEqual(decodeMsgEVMCall(msg.value), { sender: ME.bech32, to: '', value: '5', data: hexToBytes('60806040'), gasLimit: DEFAULT_DEPLOY_GAS_LIMIT });
+  assert.equal(auth.fee.gasLimit, DEFAULT_DEPLOY_GAS_LIMIT + EVM_CALL_GAS_OVERHEAD);
+  const sim = node.calls.filter((x) => x.method === 'eth_call').at(-1).params[0];
+  assert.deepEqual(sim, { from: ME.hex, data: '0x60806040', gas: '0x2dc6c0', value: '0x5' }, 'simulated as a creation (no to)');
+
+  const o = await c.deploy({ publicKey, sign, initCode: '0x6000', asOwner: OWNER, evmGasLimit: 1000000n });
+  assert.equal(o.created, getCreateAddress({ from: OWNER_HEX, nonce: 3 }), 'the owner\'s sequence, not bumped by this tx');
+  assert.equal(decodeMsgEVMCall(lastSent(node).msg.value).asOwner, OWNER);
+
+  // An init code that fails in eth_call is not sent.
+  const bad = fakeNode({ ethCall: () => { throw new Error('execution reverted'); } });
+  await assert.rejects(pqClient(bad.rpcCall).deploy({ publicKey, sign, initCode: '0xfe' }), /would fail, so nothing was sent/);
+  assert.equal(sentCount(bad), 0);
+});
+
+test('client: quantumLockHandover signs MsgQuantumLock after checking both accounts', async () => {
+  const accounts = { ...lockedToMe, [NEW_CTRL]: { pubKeyType: 'mldsa44' } };
+  const node = fakeNode({ accounts });
+  const c = pqClient(node.rpcCall);
+  const r = await c.quantumLockHandover({ publicKey, sign, owner: OWNER_HEX, controller: NEW_CTRL });
+  assert.equal(r.owner.bech32, OWNER);
+  assert.equal(r.controller.bech32, NEW_CTRL);
+  const { msg, auth } = lastSent(node);
+  assert.equal(msg.typeUrl, MSG_QUANTUM_LOCK_TYPE_URL);
+  assert.deepEqual(decodeMsgQuantumLock(msg.value), { signer: ME.bech32, owner: OWNER, controller: NEW_CTRL });
+  assert.equal(auth.fee.gasLimit, DEFAULT_GAS_LIMIT);
+
+  const refuse = async (acc, re) => {
+    const n = fakeNode({ accounts: acc });
+    await assert.rejects(pqClient(n.rpcCall).quantumLockHandover({ publicKey, sign, owner: OWNER, controller: NEW_CTRL }), re);
+    assert.equal(sentCount(n), 0);
+  };
+  await refuse({ [NEW_CTRL]: { pubKeyType: 'mldsa44' } }, /is not quantum-locked to/);
+  await refuse({ ...lockedToMe, [NEW_CTRL]: { pubKeyType: 'eth_secp256k1' } }, /not an ML-DSA-44 account/);
+  await refuse({ ...lockedToMe, [NEW_CTRL]: { pubKeyType: null } }, /no ML-DSA-44 public key on chain/);
+  await refuse({ ...lockedToMe, [NEW_CTRL]: { exists: false, pubKeyType: null } }, /no ML-DSA-44 public key on chain/);
+  await refuse({ ...lockedToMe, [NEW_CTRL]: { pubKeyType: 'mldsa44', quantumLockedTo: ME.bech32 } }, /itself quantum-locked/);
+  await assert.rejects(c.quantumLockHandover({ publicKey, sign, owner: OWNER, controller: OWNER_HEX }), /another account than the owner/);
+  // checkController on its own, as the CLI and the wallet use it before a MetaMask lock.
+  assert.equal((await c.checkController(NEW_CTRL, OWNER)).address.bech32, NEW_CTRL);
+  await assert.rejects(c.checkController(OWNER, OWNER), /another account/);
+});
+
+/** A local JSON-RPC server for cli.js, answering from `node`. */
+async function rpcServer(node) {
+  const answer = async ({ id, method, params }) => {
+    if (method === 'eth_chainId') return { jsonrpc: '2.0', id, result: '0x12e4e' };
+    try {
+      return { jsonrpc: '2.0', id, result: await node.rpcCall(method, params) };
+    } catch (e) {
+      return { jsonrpc: '2.0', id, error: { code: -32000, message: e.message } };
+    }
+  };
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const c of req) body += c;
+    const msg = JSON.parse(body);
+    const out = Array.isArray(msg) ? await Promise.all(msg.map(answer)) : await answer(msg);
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(out));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  return { server, rpc: `http://127.0.0.1:${server.address().port}` };
+}
+
+test('CLI: pq native deploy, --as, handover, lock-ecdsa refusals, and the lock shown in account info', async () => {
+  const node = fakeNode({ accounts: { ...lockedToMe, [NEW_CTRL]: { pubKeyType: 'mldsa44' } } });
+  const { server, rpc } = await rpcServer(node);
+  const { main } = await import('../cli.js');
+  const lines = [];
+  const write = (l) => lines.push(l);
+  const run = (...args) => main(['pq', 'native', ...args, '--rpc', rpc], {}, write);
+  try {
+    const bad = [
+      [['deploy'], /usage: zetaphy pq native deploy/],
+      [['deploy', '0x'], /must not be empty/],
+      [['deploy', '6000'], /init code must be 0x/],
+      [['deploy', '0x6000', '--gas', '20000'], /between 21000 and 10000000/],
+      [['send', OTHER, '1', '--as'], /--as needs the address/],
+      [['send', OTHER, '1', '--as', 'zetaphy1nope'], /invalid address/],
+      [['handover', OWNER], /usage: zetaphy pq native handover/],
+      [['handover', OWNER, NEW_CTRL, '--as', OWNER], /--as is not for "pq native handover"/],
+      [['stake', VALOPER, '1', '--as', OWNER, '--gas', '20000'], /--gas \(EVM gas\)/],
+      [['send', OTHER, '1', '--yes'], /--yes is only for/],
+      [['lock-ecdsa', NEW_CTRL, 'extra'], /usage: zetaphy pq native lock-ecdsa/],
+      [['token-send', TOKEN, OTHER, '1', '--value', '1'], /--value is only for/],
+    ];
+    for (const [args, re] of bad) await assert.rejects(run(...args), re, args.join(' '));
+    assert.equal(sentCount(node), 0);
+
+    // deploy prints the predicted address.
+    assert.equal(await run('deploy', '0x60806040', '--value', '0.5', '--gas', '2000000'), 0);
+    assert.match(lines.join('\n'), new RegExp(`created contract ${getCreateAddress({ from: ME.hex, nonce: 6 })} from ${ME.bech32}`));
+    let m = decodeMsgEVMCall(lastSent(node).msg.value);
+    assert.equal(m.to, '');
+    assert.equal(m.value, '500000000000000000');
+    assert.equal(m.gasLimit, 2000000n);
+
+    // --as on send, token-send, stake, unstake, rewards and token-balance.
+    lines.length = 0;
+    assert.equal(await run('send', OTHER, '1.5', '--as', OWNER_HEX), 0);
+    m = decodeMsgEVMCall(lastSent(node).msg.value);
+    assert.equal(m.asOwner, OWNER);
+    assert.equal(m.value, '1500000000000000000');
+    assert.match(lines.join('\n'), new RegExp(`sent 1\\.5 ZETAPHY .* from ${OWNER} \\(0x2222222222222222222222222222222222222222, quantum-locked to ${ME.bech32}, which signed\\)`));
+    assert.equal(await run('token-send', TOKEN, OTHER, '2', '--as', OWNER), 0);
+    m = decodeMsgEVMCall(lastSent(node).msg.value);
+    assert.equal(m.asOwner, OWNER);
+    assert.equal(ERC20.decodeFunctionData('transfer', m.data)[1], 2000000n);
+    lines.length = 0;
+    assert.equal(await run('token-balance', TOKEN, '--as', OWNER), 0);
+    assert.match(lines.join('\n'), new RegExp(`${OWNER} \\(0x2222222222222222222222222222222222222222\\) holds 1234\\.5 tUSD`));
+    assert.equal(await run('stake', VALOPER, '3', '--as', OWNER, '--gas', '900000'), 0);
+    m = decodeMsgEVMCall(lastSent(node).msg.value);
+    assert.equal(m.to, STAKING_PRECOMPILE);
+    assert.equal(m.gasLimit, 900000n, 'with --as, --gas is EVM gas');
+    assert.match(lines.join('\n'), /through the staking precompile/);
+    assert.equal(await run('unstake', VALOPER, '1', '--as', OWNER), 0);
+    assert.equal(decodeMsgEVMCall(lastSent(node).msg.value).gasLimit, DEFAULT_PRECOMPILE_GAS_LIMIT);
+    assert.equal(await run('rewards', VALOPER, '--as', OWNER), 0);
+    assert.equal(decodeMsgEVMCall(lastSent(node).msg.value).to, DISTRIBUTION_PRECOMPILE);
+    await assert.rejects(run('send', OTHER, '1', '--as', NEW_CTRL), /is not quantum-locked to/);
+
+    // handover.
+    lines.length = 0;
+    assert.equal(await run('handover', OWNER_HEX, NEW_CTRL), 0);
+    assert.deepEqual(decodeMsgQuantumLock(lastSent(node).msg.value), { signer: ME.bech32, owner: OWNER, controller: NEW_CTRL });
+    assert.match(lines.join('\n'), new RegExp(`handed control of ${OWNER} .* to ${NEW_CTRL}`));
+
+    // Account info shows the lock.
+    lines.length = 0;
+    assert.equal(await run('--as', OWNER), 0);
+    assert.match(lines.join('\n'), new RegExp(`quantum-locked to: ${ME.bech32} \\(this account`));
+    lines.length = 0;
+    assert.equal(await run('--as', NEW_CTRL), 0);
+    assert.match(lines.join('\n'), /not quantum-locked/);
+
+    // lock-ecdsa: warns, needs --yes, and checks the controller first. Nothing is sent here.
+    const n = sentCount(node);
+    lines.length = 0;
+    await assert.rejects(run('lock-ecdsa', NEW_CTRL), /run again with --yes/);
+    assert.match(lines.join('\n'), /PERMANENT/);
+    assert.ok(!/0x[0-9a-f]{64}\b/i.test(lines.join('\n').replace(/tx hash: \S+/g, '')), 'no key printed');
+    await assert.rejects(run('lock-ecdsa', OWNER, '--yes'), /quantum-locked|not an ML-DSA-44/);
+    assert.equal(sentCount(node), n);
+    assert.ok(!node.calls.some((x) => x.method === 'eth_sendRawTransaction'));
   } finally {
     server.close();
   }
