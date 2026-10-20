@@ -1064,7 +1064,7 @@ index 0000000..96d0ea8
 +}
 diff --git a/evmd/zetaphy_pqcall.go b/evmd/zetaphy_pqcall.go
 new file mode 100644
-index 0000000..131c042
+index 0000000..20b53f8
 --- /dev/null
 +++ b/evmd/zetaphy_pqcall.go
 @@ -0,0 +1,322 @@
@@ -1104,6 +1104,7 @@ index 0000000..131c042
 +
 +	msgv1 "cosmossdk.io/api/cosmos/msg/v1"
 +	errorsmod "cosmossdk.io/errors"
++	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 +
 +	sdk "github.com/cosmos/cosmos-sdk/types"
 +	errortypes "github.com/cosmos/cosmos-sdk/types/errors"
@@ -1353,9 +1354,17 @@ index 0000000..131c042
 +	if err != nil {
 +		return nil, err
 +	}
++	// A creation uses the nonce this tx's signature consumed (the ante handler
++	// already moved the sequence past it); the EVM then leaves the sequence
++	// where it is. An owner (as_owner) signs nothing, so its nonce is current.
++	if to == nil && m.AsOwner == "" && nonce > 0 {
++		nonce--
++	}
 +	sender := common.BytesToAddress(from)
-+	stateDB := statedb.New(ctx, app.EVMKeeper, statedb.NewEmptyTxConfig())
-+	res, err := app.EVMKeeper.ApplyMessage(ctx, stateDB, core.Message{
++	// Storage gas as in an EVM tx: the EVM gas below already prices it.
++	evmCtx := ctx.WithKVGasConfig(storetypes.GasConfig{}).WithTransientKVGasConfig(storetypes.GasConfig{})
++	stateDB := statedb.New(evmCtx, app.EVMKeeper, statedb.NewEmptyTxConfig())
++	res, err := app.EVMKeeper.ApplyMessage(evmCtx, stateDB, core.Message{
 +		From: sender, To: to, Nonce: nonce, Value: value, GasLimit: gas, Data: m.Data,
 +		GasPrice: new(big.Int), GasFeeCap: new(big.Int), GasTipCap: new(big.Int), AccessList: ethtypes.AccessList{},
 +	}, nil, true, false, false) // not internal: normal refund cap and minimum gas, like an EVM tx
@@ -1369,15 +1378,6 @@ index 0000000..131c042
 +	out := &MsgEVMCallResponse{Ret: res.Ret, GasUsed: res.GasUsed}
 +	if to == nil {
 +		out.Created = crypto.CreateAddress(sender, nonce).Hex()
-+		// The create bumped the EVM nonce, which is the account sequence the
-+		// ante handler already bumped for this tx: undo the second bump.
-+		if m.AsOwner == "" {
-+			acc := app.AccountKeeper.GetAccount(ctx, from)
-+			if err := acc.SetSequence(nonce); err != nil {
-+				return nil, err
-+			}
-+			app.AccountKeeper.SetAccount(ctx, acc)
-+		}
 +	}
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_evm_call", sdk.NewAttribute("from", sender.Hex()),
 +		sdk.NewAttribute("to", m.To), sdk.NewAttribute("created", out.Created), sdk.NewAttribute("value", value.String())))
@@ -1392,10 +1392,10 @@ index 0000000..131c042
 +}
 diff --git a/evmd/zetaphy_pqguard.go b/evmd/zetaphy_pqguard.go
 new file mode 100644
-index 0000000..10fc455
+index 0000000..bbb20e8
 --- /dev/null
 +++ b/evmd/zetaphy_pqguard.go
-@@ -0,0 +1,323 @@
+@@ -0,0 +1,322 @@
 +package evmd
 +
 +// ZETAPHY post-quantum guards.
@@ -1442,7 +1442,6 @@ index 0000000..10fc455
 +	"github.com/cosmos/cosmos-sdk/x/authz"
 +
 +	"github.com/cosmos/evm/crypto/mldsa44"
-+	evmkeeper "github.com/cosmos/evm/x/vm/keeper"
 +	evmtypes "github.com/cosmos/evm/x/vm/types"
 +)
 +
@@ -1501,7 +1500,7 @@ index 0000000..10fc455
 +
 +// PQLockAddress: an EVM tx (MetaMask) to this address with no value and the
 +// controller's 20-byte address as data locks the sender to that controller.
-+var PQLockAddress = evmkeeper.PQLockAddress
++var PQLockAddress = evmtypes.PQLockAddress
 +
 +type pqHooks struct{ app *EVMD }
 +
@@ -2011,6 +2010,56 @@ index 11f8f59..bbea7b7 100644
  github.com/cloudwego/base64x v0.1.6 h1:t11wG9AECkCDk5fMSoxmufanudBtJ+/HemLstXDLI2M=
  github.com/cloudwego/base64x v0.1.6/go.mod h1:OFcloc187FXDaYHvrNIjxSe8ncn0OOM8gEHfghB2IPU=
  github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
+diff --git a/mempool/mempool.go b/mempool/mempool.go
+index 74c2f89..e65270d 100644
+--- a/mempool/mempool.go
++++ b/mempool/mempool.go
+@@ -333,6 +333,9 @@ func (m *Mempool) insert(tx sdk.Tx) (<-chan error, error) {
+ 	switch {
+ 	case err == nil:
+ 		ethTx := ethMsg.AsTransaction()
++		if err := m.pqLockCheck(ethTx); err != nil {
++			return nil, err
++		}
+ 
+ 		// Reject txs below base fee up-front, which can never be included.
+ 		if baseFee := m.blockchain.CurrentBlock().BaseFee; baseFee != nil && ethTx.GasFeeCapIntCmp(baseFee) < 0 {
+diff --git a/mempool/zetaphy_lock.go b/mempool/zetaphy_lock.go
+new file mode 100644
+index 0000000..4e016ba
+--- /dev/null
++++ b/mempool/zetaphy_lock.go
+@@ -0,0 +1,30 @@
++package mempool
++
++import (
++	"fmt"
++
++	ethtypes "github.com/ethereum/go-ethereum/core/types"
++
++	evmtypes "github.com/cosmos/evm/x/vm/types"
++)
++
++// pqLockCheck (ZETAPHY) refuses, at submission, an EVM tx sent by a
++// quantum-locked account or carrying its EIP-7702 authorization, so the
++// wallet gets an error instead of a tx that stays pending. The ante handler
++// refuses them as well.
++func (m *Mempool) pqLockCheck(tx *ethtypes.Transaction) error {
++	st, err := m.blockchain.StateAt(m.blockchain.CurrentBlock().Hash())
++	if err != nil || st == nil {
++		return nil
++	}
++	from, err := ethtypes.Sender(ethtypes.LatestSignerForChainID(tx.ChainId()), tx)
++	if err == nil && evmtypes.PQLocked(st.GetState, from) {
++		return fmt.Errorf("%s is quantum-locked: only its ML-DSA-44 controller can act for it", from.Hex())
++	}
++	for _, a := range tx.SetCodeAuthorizations() {
++		if au, err := a.Authority(); err == nil && evmtypes.PQLocked(st.GetState, au) {
++			return fmt.Errorf("authorization signed by %s, which is quantum-locked", au.Hex())
++		}
++	}
++	return nil
++}
 diff --git a/precompiles/mldsa/mldsa.go b/precompiles/mldsa/mldsa.go
 new file mode 100644
 index 0000000..a291984
@@ -2169,25 +2218,23 @@ index ee26a8e..bd19281 100644
  	if precompile, found, err := k.GetStaticPrecompileInstance(&params, address); err != nil {
 diff --git a/x/vm/keeper/zetaphy_ecrecover.go b/x/vm/keeper/zetaphy_ecrecover.go
 new file mode 100644
-index 0000000..04743d3
+index 0000000..f078923
 --- /dev/null
 +++ b/x/vm/keeper/zetaphy_ecrecover.go
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,31 @@
 +package keeper
 +
 +import (
 +	"github.com/ethereum/go-ethereum/common"
 +	"github.com/ethereum/go-ethereum/core/vm"
++
++	"github.com/cosmos/evm/x/vm/types"
 +)
 +
 +// ZETAPHY: an ECDSA account handed to an ML-DSA-44 controller (quantum lock,
-+// evmd/zetaphy_pqguard.go) is marked in the storage of PQLockAddress (key =
-+// the account, value = its controller). Contracts check ECDSA signatures with
++// evmd/zetaphy_pqguard.go) is marked in the storage of types.PQLockAddress. Contracts check ECDSA signatures with
 +// ecrecover (0x01), so permits, Permit2 and meta-transactions signed by a
 +// locked account are treated as invalid signatures: ecrecover returns nothing.
-+
-+// PQLockAddress has no code; only the quantum lock writes its storage.
-+var PQLockAddress = common.HexToAddress("0x0000000000000000000000000000000000005051")
 +
 +var (
 +	ecrecoverAddress = common.BytesToAddress([]byte{1})
@@ -2201,7 +2248,7 @@ index 0000000..04743d3
 +func (pqEcrecover) Name() string                    { return gethEcrecover.Name() }
 +func (pqEcrecover) Run(evm *vm.EVM, c *vm.Contract, ro bool) ([]byte, error) {
 +	out, err := gethEcrecover.Run(evm, c, ro)
-+	if err == nil && len(out) == 32 && evm.StateDB.GetState(PQLockAddress, common.BytesToHash(out)) != (common.Hash{}) {
++	if err == nil && len(out) == 32 && types.PQLocked(evm.StateDB.GetState, common.BytesToAddress(out)) {
 +		return nil, nil
 +	}
 +	return out, err
@@ -2225,4 +2272,23 @@ index a7e058a..e64b909 100644
  	ICS02PrecompileAddress,
 +	MLDSAPrecompileAddress, // 0x…0900, last: the list must stay sorted
  }
+diff --git a/x/vm/types/zetaphy.go b/x/vm/types/zetaphy.go
+new file mode 100644
+index 0000000..8f5ded9
+--- /dev/null
++++ b/x/vm/types/zetaphy.go
+@@ -0,0 +1,13 @@
++package types
++
++import "github.com/ethereum/go-ethereum/common"
++
++// PQLockAddress (ZETAPHY): an EVM tx to it, with the controller's address as
++// data, quantum-locks the sender; its storage marks locked accounts (key =
++// account, value = controller). It has no code, so only the lock writes there.
++var PQLockAddress = common.HexToAddress("0x0000000000000000000000000000000000005051")
++
++// PQLocked reports whether a StateDB marks the account as quantum-locked.
++func PQLocked(get func(common.Address, common.Hash) common.Hash, account common.Address) bool {
++	return get(PQLockAddress, common.BytesToHash(account.Bytes())) != (common.Hash{})
++}
 ZETAPHY_PQ_PATCH
