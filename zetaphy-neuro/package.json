@@ -2,7 +2,7 @@
   "name": "zetaphy-neuro",
   "version": "0.1.0",
   "private": true,
-  "description": "Neuro ZETAPHY tier 1: read-only smart-contract reader and explainer for BNB Chain, Base and Arbitrum",
+  "description": "Neuro ZETAPHY tier 1: read-only token and contract reader and explainer for EVM chains, Solana, Sui, Aptos and TON, in 7 languages",
   "type": "module",
   "bin": {
     "zetaphy-neuro": "./cli.js"

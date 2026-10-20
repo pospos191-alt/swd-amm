@@ -110,7 +110,14 @@ test('timeout: anyone can expire; a runner that never revealed is penalized', as
 test('fee below the minimum, empty or oversized target are refused', async () => {
   await assert.rejects(jobs.send('user', 'request', [CHAIN, TARGET], MIN_FEE - 1n), /BadValue/);
   await assert.rejects(jobs.send('user', 'request', [CHAIN, ''], MIN_FEE), /BadValue/);
-  await assert.rejects(jobs.send('user', 'request', [CHAIN, 'x'.repeat(65)], MIN_FEE), /BadValue/);
+  await assert.rejects(jobs.send('user', 'request', [CHAIN, 'x'.repeat(331)], MIN_FEE), /BadValue/);
+});
+
+test('a Move coin type fits as a target', async () => {
+  const sui = `0x${'ab'.repeat(32)}::usdc::USDC`;
+  const before = await jobs.call('jobCount', []);
+  await jobs.send('user', 'request', [CHAIN, sui], MIN_FEE);
+  assert.equal(await jobs.call('jobCount', []), before + 1n);
 });
 
 test('only bonded runners take seats; leaving waits for the unbond delay', async () => {

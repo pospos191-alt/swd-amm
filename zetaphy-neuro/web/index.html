@@ -15,14 +15,14 @@
       <h1>Neuro ZETAPHY</h1>
       <p class="sub" data-i18n="subtitle">อ่านและอธิบายสัญญา · ชั้น 1 อ่านอย่างเดียว</p>
     </div>
-    <button id="lang" type="button" aria-label="Language">EN</button>
+    <select id="lang" aria-label="ภาษา"></select>
   </header>
 
   <form id="form" autocomplete="off">
     <label for="chain" data-i18n="chain">เชน</label>
     <select id="chain"></select>
-    <label for="address" data-i18n="address">ที่อยู่สัญญา</label>
-    <input id="address" spellcheck="false" placeholder="0x…" inputmode="text" maxlength="64" required>
+    <label for="address" data-i18n="address">ที่อยู่สัญญาหรือเหรียญ</label>
+    <input id="address" spellcheck="false" placeholder="0x…" inputmode="text" maxlength="300" required>
     <button id="go" type="submit" data-i18n="check">ตรวจสัญญา</button>
   </form>
 

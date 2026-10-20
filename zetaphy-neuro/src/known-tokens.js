@@ -44,6 +44,26 @@ export const KNOWN_TOKENS = {
     { address: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', symbol: 'USDT', issuer: 'Tether', kind: 'stablecoin' },
     { address: 'So11111111111111111111111111111111111111112', symbol: 'SOL', issuer: 'Solana (wrapped SOL)', kind: 'wrapped' },
   ],
+  // Move chains: coin types and Fungible Asset objects, addresses in their
+  // 64-digit form (test/known-tokens.test.js checks the format).
+  sui: [
+    { address: '0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI', symbol: 'SUI', issuer: 'Sui (native coin)', kind: 'native' },
+    { address: '0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC', symbol: 'USDC', issuer: 'Circle', kind: 'stablecoin' },
+    { address: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN', symbol: 'USDC', issuer: 'Wormhole (bridged USDC)', kind: 'bridged' },
+    { address: '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN', symbol: 'USDT', issuer: 'Wormhole (bridged USDT)', kind: 'bridged' },
+  ],
+  aptos: [
+    { address: '0x0000000000000000000000000000000000000000000000000000000000000001::aptos_coin::AptosCoin', symbol: 'APT', issuer: 'Aptos (native coin)', kind: 'native' },
+    { address: '0x000000000000000000000000000000000000000000000000000000000000000a', symbol: 'APT', issuer: 'Aptos (native coin)', kind: 'native' },
+    { address: '0x357b0b74bc833e95a115ad22604854d6b0fca151cecd94111770e5d6ffc9dc2b', symbol: 'USDt', issuer: 'Tether', kind: 'stablecoin' },
+    { address: '0xbae207659db88bea0cbead6da0ed00aac12edcdda169e591cd41c94180b46f3b', symbol: 'USDC', issuer: 'Circle', kind: 'stablecoin' },
+    { address: '0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa::asset::USDT', symbol: 'USDT', issuer: 'LayerZero (bridged USDT)', kind: 'bridged' },
+    { address: '0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa::asset::USDC', symbol: 'USDC', issuer: 'LayerZero (bridged USDC)', kind: 'bridged' },
+  ],
+  // TON: raw form (workchain:hash) for matching, `display` for people.
+  ton: [
+    { address: '0:b113a994b5024a16719f69139328eb759596c38a25f59028b146fecdc3621dfe', display: 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs', symbol: 'USDT', issuer: 'Tether', kind: 'stablecoin' },
+  ],
 };
 
 // Symbols a scammer copies. Compared case-insensitively, ignoring spaces,
@@ -52,8 +72,9 @@ const norm = (s) => String(s ?? '').toUpperCase().replace(/[\s.\-_]/g, '');
 
 /** Official entry for this exact chain + address, or null. */
 export function knownToken(chain, address) {
-  // EVM hex is case-insensitive; Solana base58 is not.
-  const same = (x) => (x.startsWith('0x') ? x.toLowerCase() === String(address).toLowerCase() : x === address);
+  // EVM, Move and raw TON hex are case-insensitive; Solana base58 is not.
+  const hexy = (x) => x.startsWith('0x') || /^-?\d:/.test(x);
+  const same = (x) => (hexy(x) ? x.toLowerCase() === String(address).toLowerCase() : x === address);
   return (KNOWN_TOKENS[chain] ?? []).find((t) => same(t.address)) ?? null;
 }
 

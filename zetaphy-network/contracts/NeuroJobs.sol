@@ -32,6 +32,8 @@ contract NeuroJobs {
     /// Expected number of eligible runners when a job opens. It doubles each
     /// third of the commit window so seats still fill when some are offline.
     uint256 public constant COMMITTEE = 6;
+    /// Longest target: a Move coin type (66-char address + two 128-char names + separators).
+    uint256 public constant MAX_TARGET = 330;
 
     uint256 public immutable workerBond;
     uint256 public immutable jobReward;
@@ -165,7 +167,8 @@ contract NeuroJobs {
     // ---- jobs ----
 
     /// @param chain   chain key as bytes32, e.g. "bsc"
-    /// @param target  address on that chain (EVM hex or Solana base58), at most 64 bytes
+    /// @param target  address on that chain (EVM hex, Solana base58, a Move coin
+    ///                type such as 0x…::module::NAME, or a TON address), at most MAX_TARGET bytes
     function request(bytes32 chain, string calldata target) external payable returns (uint256 id) {
         return _request(msg.sender, chain, target);
     }
@@ -178,7 +181,7 @@ contract NeuroJobs {
     }
 
     function _request(address requester, bytes32 chain, string calldata target) private returns (uint256 id) {
-        if (msg.value < minFee || chain == bytes32(0) || bytes(target).length == 0 || bytes(target).length > 64) revert BadValue();
+        if (msg.value < minFee || chain == bytes32(0) || bytes(target).length == 0 || bytes(target).length > MAX_TARGET) revert BadValue();
         id = jobs.length;
         Job storage j = jobs.push();
         j.requester = requester;

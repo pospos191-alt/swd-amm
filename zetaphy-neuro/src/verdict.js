@@ -16,7 +16,8 @@ export function verdictBody(report) {
   return {
     v: VERDICT_VERSION,
     chain: report.chain,
-    address: String(report.address ?? '').toLowerCase(),
+    // TON friendly addresses are case-sensitive base64: use the raw form.
+    address: String(report.raw ?? report.address ?? '').toLowerCase(),
     level: a.level ?? null,
     control: a.control ?? null,
     findings: (a.findings ?? []).map((f) => `${f.id}:${f.severity}`).sort(),
