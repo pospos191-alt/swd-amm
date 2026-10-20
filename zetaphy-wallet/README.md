@@ -57,7 +57,7 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
   - "เพิ่ม ZETAPHY ในกระเป๋านี้": `wallet_addEthereumChain` (EIP-3085) แล้ว `wallet_switchEthereumChain`
     - RPC มาจากช่อง RPC ด้านบน ต้องเป็น https หรือ localhost
     - ถ้ากระเป๋าปฏิเสธ (เช่น 4200 ใน Binance Wallet หรือ Phantom) บอกเหตุผลและเปิดค่าสำหรับเพิ่มเอง
-    - สัญลักษณ์ฝั่ง EVM คือ `ZPHY` เพราะ MetaMask และ chainlist รับได้ไม่เกิน 6 ตัว
+    - สัญลักษณ์ฝั่ง EVM คือ `ZTPHY` เพราะ MetaMask และ chainlist รับได้ไม่เกิน 6 ตัว
   - แสดงค่าสำหรับเพิ่มเองในกระเป๋าใดก็ได้: ชื่อเครือข่าย, RPC, chain ID, สัญลักษณ์, ทศนิยม
   - "เพิ่มใน Keplr / Leap / Cosmostation": `experimentalSuggestChain(chainInfo)` แล้ว `enable` และแสดงที่อยู่ `zetaphy1…` ที่กระเป๋าตอบ
     - rpc = `<host>/rpc`, rest = `<host>/rest` จาก host เดียวกับช่อง RPC

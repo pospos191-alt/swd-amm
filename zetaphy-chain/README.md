@@ -69,8 +69,8 @@
   - Network name: `ZETAPHY Testnet`
   - RPC URL: `http://<Public IP ของเครื่อง>:8545`
   - Chain ID: `77390`
-  - Currency symbol: `ZPHY` (MetaMask และ chainlist รับได้ไม่เกิน 6 ตัว ดู [`wallets/README.md`](./wallets/README.md))
-  ถ้าเพิ่มได้และเห็นยอด 1,000,000 ZPHY (= ZETAPHY, กรณีใส่ OWNER_EVM_ADDRESS) แปลว่าเชนทำงานแล้ว
+  - Currency symbol: `ZTPHY` (MetaMask และ chainlist รับได้ไม่เกิน 6 ตัว ดู [`wallets/README.md`](./wallets/README.md))
+  ถ้าเพิ่มได้และเห็นยอด 1,000,000 ZTPHY (= ZETAPHY, กรณีใส่ OWNER_EVM_ADDRESS) แปลว่าเชนทำงานแล้ว
   - กระเป๋าอื่น (Rabby, Trust, OKX, Coinbase, Keplr, Leap, Ledger, มือถือ) และการขึ้นรายชื่อ chainlist / Keplr: [`wallets/README.md`](./wallets/README.md)
 - **หรือใช้ Cloud Shell ของ Oracle** (ไอคอน `>_` มุมขวาบนของหน้าเว็บ Oracle) แล้ววาง:
   ```bash

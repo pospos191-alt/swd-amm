@@ -3,7 +3,7 @@
   "chainName": "ZETAPHY Testnet",
   "nativeCurrency": {
     "name": "ZETAPHY",
-    "symbol": "ZPHY",
+    "symbol": "ZTPHY",
     "decimals": 18
   },
   "rpcUrls": ["https://HOST"]

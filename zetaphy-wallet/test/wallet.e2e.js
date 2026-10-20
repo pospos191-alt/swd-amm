@@ -1075,9 +1075,9 @@ test('EIP-6963: two wallets announce themselves; the one picked is offered ZETAP
   assert.equal(await page.textContent('#m-name'), 'ZETAPHY Testnet');
   assert.equal(await page.textContent('#m-rpc'), 'https://rpc.zetaphy.test:8545');
   assert.equal(await page.textContent('#m-chain'), '77390 (0x12e4e)');
-  assert.equal(await page.textContent('#m-symbol'), 'ZPHY');
+  assert.equal(await page.textContent('#m-symbol'), 'ZTPHY');
   assert.equal(await page.textContent('#m-decimals'), '18');
-  assert.match(await page.textContent('#m-symbol-note'), /ZPHY is ZETAPHY.*at most 6 letters.*0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE/);
+  assert.match(await page.textContent('#m-symbol-note'), /ZTPHY is ZETAPHY.*at most 6 letters.*0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE/);
 
   // Pick the second one: only it is asked.
   await page.click('#evm-wallets button:has-text("Fake Trust")');
@@ -1087,7 +1087,7 @@ test('EIP-6963: two wallets announce themselves; the one picked is offered ZETAP
   await page.click('#evm-add');
   await statusMatches(page, /ZETAPHY Testnet added to Fake Trust and selected/);
   const params = template('evm-add-chain.template.json');
-  assert.deepEqual(params, { chainId: '0x12e4e', chainName: 'ZETAPHY Testnet', nativeCurrency: { name: 'ZETAPHY', symbol: 'ZPHY', decimals: 18 }, rpcUrls: ['https://rpc.zetaphy.test:8545'] });
+  assert.deepEqual(params, { chainId: '0x12e4e', chainName: 'ZETAPHY Testnet', nativeCurrency: { name: 'ZETAPHY', symbol: 'ZTPHY', decimals: 18 }, rpcUrls: ['https://rpc.zetaphy.test:8545'] });
   assert.deepEqual(await walletCalls(page, 'trust'), [
     { method: 'wallet_addEthereumChain', params: [params] },
     { method: 'wallet_switchEthereumChain', params: [{ chainId: '0x12e4e' }] },

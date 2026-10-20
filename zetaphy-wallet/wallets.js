@@ -20,7 +20,7 @@ export const DECIMALS = 18;
 // chainlist.org shows) refuses 7 or more, so it cannot be "ZETAPHY". Change it here,
 // in zetaphy-chain/wallets/evm-add-chain.template.json and in
 // zetaphy-chain/wallets/ethereum-lists/eip155-77390.json together.
-export const EVM_SYMBOL = 'ZPHY';
+export const EVM_SYMBOL = 'ZTPHY';
 export const GAS_PRICE_STEP = { low: 1000000000, average: 2000000000, high: 4000000000 };
 export const BECH32 = {
   bech32PrefixAccAddr: 'zetaphy',

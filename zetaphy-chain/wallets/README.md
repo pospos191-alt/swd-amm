@@ -17,7 +17,7 @@
 | ไฟล์ของโหนด | `https://HOST/zetaphy/` (`genesis.json`, `peer`, `keplr.json`, `evm-chain.json`) |
 | ชื่อเครือข่าย | `ZETAPHY Testnet` |
 | EVM chain ID | `77390` (`0x12e4e`) |
-| สัญลักษณ์เหรียญในกระเป๋า EVM | `ZPHY` (ดูหัวข้อถัดไป) |
+| สัญลักษณ์เหรียญในกระเป๋า EVM | `ZTPHY` (ดูหัวข้อถัดไป) |
 | ทศนิยม | 18 |
 | Cosmos chain-id | `zetaphy_77390-1` |
 | denom | `azetaphy` (1 ZETAPHY = 10^18 azetaphy) |
@@ -26,14 +26,14 @@
 | ค่าแก๊ส | ขั้นต่ำ 1 gwei (1000000000 azetaphy) แบบ EIP-1559 |
 | block explorer | ยังไม่มี (เว้นว่าง) |
 
-### ทำไมสัญลักษณ์ในกระเป๋า EVM เป็น `ZPHY` ไม่ใช่ `ZETAPHY`
+### ทำไมสัญลักษณ์ในกระเป๋า EVM เป็น `ZTPHY` ไม่ใช่ `ZETAPHY`
 
 `ZETAPHY` ยาว 7 ตัวอักษร แต่
 - MetaMask ปฏิเสธ `wallet_addEthereumChain` ที่ `nativeCurrency.symbol` ยาวเกิน 6 ตัว
   (`Expected 1-6 character string 'nativeCurrency.symbol'` ใน `app/scripts/lib/rpc-method-middleware/handlers/ethereum-chain-utils.ts` ของ metamask-extension)
 - ethereum-lists/chains (ที่ chainlist.org อ่าน) ไม่รับสัญลักษณ์ 7 ตัวขึ้นไป (`NativeCurrencySymbolMustHaveLessThan7Chars`)
 
-ปุ่มเพิ่มเครือข่ายและรายชื่อบน chainlist จึงใช้ `ZPHY` (ชื่อเหรียญยังเป็น `ZETAPHY`) ฝั่ง Cosmos (Keplr, Leap, chain-registry) ไม่มีข้อจำกัดนี้ จึงยังเป็น `ZETAPHY`
+ปุ่มเพิ่มเครือข่ายและรายชื่อบน chainlist จึงใช้ `ZTPHY` (ชื่อเหรียญยังเป็น `ZETAPHY`) ฝั่ง Cosmos (Keplr, Leap, chain-registry) ไม่มีข้อจำกัดนี้ จึงยังเป็น `ZETAPHY`
 - ถ้าจะใช้ตัวอื่น (ไม่เกิน 6 ตัว) แก้พร้อมกัน 3 ที่: `EVM_SYMBOL` ใน `zetaphy-wallet/wallets.js`, `evm-add-chain.template.json` และ `ethereum-lists/eip155-77390.json` (test ของกระเป๋าเว็บตรวจว่าตรงกัน)
 - ถ้าเพิ่มเครือข่ายเองใน MetaMask แล้วพิมพ์ `ZETAPHY` ก็ได้ แต่เมื่อ ZETAPHY อยู่บน chainlist แล้ว MetaMask จะเตือนว่าสัญลักษณ์ไม่ตรงกับรายชื่อ
 - ไม่ต้อง import โทเคนที่ `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` เพราะเป็นเหรียญ ZETAPHY ตัวเดียวกันในรูป ERC-20 (จะเห็นยอดซ้ำสองครั้ง)
@@ -89,7 +89,7 @@
 | Network name | `ZETAPHY Testnet` |
 | RPC URL | `https://HOST` |
 | Chain ID | `77390` |
-| Currency symbol | `ZPHY` |
+| Currency symbol | `ZTPHY` |
 | Block explorer URL | (เว้นว่าง) |
 
 ทางเข้าเมนูของแต่ละกระเป๋า (ชื่อเมนูอาจต่างไปตามรุ่น):
@@ -212,7 +212,7 @@ Phantom ให้เพิ่มเครือข่ายเองไม่ไ
 - `chain-registry/zetaphytestnet/chain.json` มี `NODE_ID` ด้วย คือส่วนหน้า `@` ในไฟล์ `https://HOST/zetaphy/peer`
 - หน้าเว็บ (`zetaphy-wallet/wallets.js`) สร้างค่าชุดเดียวกันเองจากที่อยู่ RPC ที่ผู้ใช้ใส่ test ตรวจว่าตรงกับ template ทุกช่อง
 - `keplr.json` และ `evm-chain.json` ที่ `setup-node.sh` เผยแพร่ควรตรงกับ template เหล่านี้
-  (สัญลักษณ์ `ZPHY`, `features` มี `eth-secp256k1-cosmos`, `isTestnet: true`)
+  (สัญลักษณ์ `ZTPHY`, `features` มี `eth-secp256k1-cosmos`, `isTestnet: true`)
 - ชื่อโฟลเดอร์คือ `zetaphytestnet` ไม่ใช่ `zetaphy-testnet` เพราะ chain-registry บังคับ:
   - `chain_name` ต้องตรงกับชื่อโฟลเดอร์
   - URL ของรูปต้องเป็น `[a-z0-9]+` (ทั้ง registry ไม่มีชื่อเชนที่มีขีด)
