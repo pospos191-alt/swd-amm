@@ -1,13 +1,14 @@
-// Neuro tier 1 for Bitcoin Runes. Read-only: GET /rune/<name or id> from the
-// JSON API of `ord`, the reference Runes indexer (ordinals.com, free, no key).
-// Hiro's Runes/BRC-20 APIs were shut down in March 2026; BRC-20 has no free
-// keyless API and is not read yet.
+// Neuro tier 1 for Bitcoin Runes. Read-only: GET /rune/<name or id> on
+// ordinals.com, which runs `ord`, the reference Runes indexer (free, no key).
+// Its JSON API is switched off (HTTP 406), so the page itself is read; its
+// layout is ord's templates/rune.html. Hiro's Runes/BRC-20 APIs were shut
+// down in March 2026; BRC-20 has no free keyless API and is not read yet.
 //
 // Bitcoin has no token contracts. A Rune is a set of rules written once, when
 // it is etched, and read by indexers. Nobody can freeze, blacklist, pause,
 // tax or upgrade it later. What still matters:
 //   open mint   anyone can still mint until the cap or end block, so the
-//               supply is still growing (without a cap or end: forever)
+//               supply is still growing
 //   premine     part of the supply went to the etcher at creation
 //   turbo       the etcher opted in to future protocol changes
 
@@ -33,41 +34,66 @@ const big = (v) => {
 };
 const pct = (part, whole) => (whole > 0n ? Number((part * 10000n) / whole) / 100 : 0);
 
+// ------------------------------------------------------------ the page
+const unescape = (t) => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+const text = (h) => unescape(h.replace(/<[^>]*>/g, '')).trim();
+
+/** ord prints amounts as "123.45 SYMBOL": back to raw units with `dec` decimals. */
+export function pileUnits(str, dec) {
+  const m = String(str ?? '').match(/^(\d+)(?:\.(\d+))?/);
+  if (!m || (m[2] ?? '').length > dec) return null;
+  return BigInt(m[1] + (m[2] ?? '').padEnd(dec, '0'));
+}
+
+/** The <dt>/<dd> pairs of an ord /rune/ page (the mint terms' inner list included), or null. */
+export function parseRunePage(html) {
+  const h1 = String(html).match(/<h1>([^<]*)<\/h1>/);
+  if (!h1) return null;
+  const f = {};
+  // A <dd> holding a nested <dl> (the mint terms) is skipped so its own pairs are read.
+  for (const m of String(html).matchAll(/<dt>([^<]+)<\/dt>\s*<dd[^>]*>((?:(?!<d[ltd][\s>]).)*?)<\/dd>/gs)) {
+    const k = m[1].trim();
+    if (!(k in f)) f[k] = text(m[2]);
+  }
+  if (!f.id || !RUNE_ID.test(f.id) || f.divisibility == null) return null;
+  return { name: text(h1[1]), f };
+}
+
 // ---------------------------------------------------------------- reader
-/** `api.get(path)` returns parsed JSON (large integers as strings), or null on 404. */
+/** `api.getText(path)` returns the page, or null on 404. */
 export async function readRune(api, input) {
   const q = parseRune(input);
   if (!q) return { kind: 'missing' };
-  const r = await api.get(`/rune/${encodeURIComponent(q)}`);
-  const e = r?.entry;
-  if (!e) return { kind: 'missing' };
+  const page = parseRunePage((await api.getText(`/rune/${encodeURIComponent(q)}`)) ?? '');
+  if (!page) return { kind: 'missing' };
+  const { f } = page;
 
-  const dec = Number(e.divisibility);
+  const dec = Number(f.divisibility);
   const d = Number.isInteger(dec) && dec >= 0 && dec <= 38 ? dec : 0;
-  const t = e.terms ?? null;
-  const premine = big(e.premine) ?? 0n;
-  const amount = big(t?.amount);
-  const cap = big(t?.cap);
-  const mints = big(e.mints) ?? 0n;
-  const supply = premine + mints * (amount ?? 0n);
+  const terms = 'mints' in f;
+  const premine = pileUnits(f.premine, d) ?? 0n;
+  const supply = pileUnits(f.supply, d) ?? 0n;
+  const amount = terms && f.amount !== 'none' ? pileUnits(f.amount, d) : null;
+  const cap = terms ? big(f.cap) ?? 0n : null;
+  const mints = terms ? big(f.mints) ?? 0n : 0n;
+  const end = terms && /^\d+$/.test(f.end ?? '') ? Number(f.end) : null;
+  // ord shows a missing cap as 0: then nobody can mint.
   const max = premine + (cap ?? 0n) * (amount ?? 0n);
-  const endHeight = t?.height?.[1] ?? (t?.offset?.[1] != null && e.block != null ? Number(e.block) + Number(t.offset[1]) : null);
   return {
     kind: 'rune',
-    id: String(r.id ?? q),
-    open: r.mintable === true,
-    unlimited: !!t && amount != null && cap == null && endHeight == null,
+    id: f.id,
+    open: f.mintable === 'true',
     mintedPct: cap ? pct(mints, cap) : null,
-    endHeight: endHeight ?? null,
+    endHeight: end,
     premineShare: max > 0n ? pct(premine, max) : 0,
-    turbo: e.turbo === true,
+    turbo: f.turbo === 'true',
     token: {
-      name: cleanText(String(e.spaced_rune ?? q), 40) ?? undefined,
-      symbol: e.symbol != null ? cleanText(String(e.symbol), 8) || undefined : undefined,
+      name: cleanText(page.name, 40) ?? undefined,
+      symbol: f.symbol ? cleanText(f.symbol, 8) || undefined : undefined,
       decimals: d,
       totalSupply: supply.toString(),
-      maxSupply: cap != null ? max.toString() : undefined,
-      burned: big(e.burned)?.toString(),
+      maxSupply: terms && cap ? max.toString() : undefined,
+      burned: pileUnits(f.burned, d)?.toString(),
     },
   };
 }
@@ -81,7 +107,8 @@ export function analyzeRune(m) {
     add('btc-rune', 'info', { name: t.name, symbol: t.symbol, decimals: t.decimals, totalSupply: t.totalSupply, id: m.id });
     if (t.name && LINK_RE.test(t.name)) add('name-has-link', 'high', { name: t.name, symbol: t.symbol });
     add('btc-no-admin', 'good');
-    if (m.open) add('btc-open-mint', m.unlimited ? 'medium' : 'info', { percent: m.mintedPct ?? undefined, end: m.endHeight ?? undefined, unlimited: m.unlimited, maxSupply: t.maxSupply, decimals: t.decimals });
+    // ord never lets an uncapped rune be minted, so an open mint always ends at its cap.
+    if (m.open) add('btc-open-mint', 'info', { percent: m.mintedPct ?? undefined, end: m.endHeight ?? undefined, maxSupply: t.maxSupply, decimals: t.decimals });
     if (m.premineShare >= 50) add('btc-premine', 'medium', { percent: m.premineShare });
     else if (m.premineShare >= 10) add('btc-premine', 'low', { percent: m.premineShare });
     if (m.turbo) add('btc-turbo', 'info');
