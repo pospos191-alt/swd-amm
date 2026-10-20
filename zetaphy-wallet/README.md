@@ -2,7 +2,7 @@
 
 กระเป๋าบนเว็บสำหรับ **บัญชี PQ แท้ (native)** บน ZETAPHY testnet
 - บัญชีคุมด้วยกุญแจ ML-DSA-44 (FIPS 204) อย่างเดียว ไม่มีกุญแจ ECDSA เลย
-- ธุรกรรมเป็น `MsgSend` ของ Cosmos SDK ที่เชนตรวจลายเซ็น ML-DSA เอง
+- ธุรกรรมเป็นข้อความ Cosmos SDK (`MsgSend`, `MsgDelegate`, `MsgEVMCall` ฯลฯ) ที่เชนตรวจลายเซ็น ML-DSA เอง
 - เป็นเว็บนิ่ง (static) ไม่มีโค้ดฝั่งเซิร์ฟเวอร์
 
 > **ใช้กับ testnet เท่านั้น ไม่ใช่เงินจริง**
@@ -17,6 +17,14 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 - สร้างกุญแจใหม่ (seed 32 ไบต์จาก `crypto.getRandomValues`) หรือนำเข้า seed (hex)
 - แสดงที่อยู่ `zetaphy1…` และ `0x…` (บัญชีเดียวกัน) และยอดเงิน
 - โอนไปที่อยู่ `0x…` หรือ `zetaphy1…` โดยแสดงจำนวนและค่าธรรมเนียมให้ยืนยันก่อนเซ็น
+- โทเคน ERC-20 (เหมือน `zetaphy pq native token-balance` / `token-send`)
+  - ใส่ที่อยู่สัญญา แสดง symbol, decimals และยอดของบัญชี อ่านด้วย `eth_call` ผ่าน RPC เดิม เบราว์เซอร์จำที่อยู่โทเคนล่าสุดไว้
+  - โอนเป็น `/zetaphy.pq.v1.MsgEVMCall` ที่เรียก `transfer(address,uint256)` (calldata เข้ารหัสในหน้าเว็บเอง ไม่ใช้ ethers)
+  - ถ้าสัญญา revert ธุรกรรมทั้งหมดล้มเหลวแต่ยังเสียค่าธรรมเนียม หน้าเว็บจึงจำลองด้วย `eth_call` ก่อนแสดงหน้ายืนยัน และ `callEVM` จำลองซ้ำก่อนเซ็น ถ้าจะ revert หรือ `transfer` คืน `false` จะไม่เซ็นและไม่ส่ง
+  - ค่าธรรมเนียม = (EVM gas, ค่าเริ่มต้น 200000 + 400000) × gas price จ่ายเป็น ZETAPHY
+- Stake (เหมือน `zetaphy pq native stake` / `unstake` / `rewards`)
+  - ใส่ validator `zetaphyvaloper1…` (ตรวจ checksum) แล้วกด Stake, ถอน stake หรือรับรางวัล ทุกปุ่มมีหน้ายืนยันก่อนเซ็น
+  - ยังไม่แสดงยอดที่ stake อยู่
 - ดาวน์โหลดไฟล์สำรอง seed
   - เป็น hex แบบไม่เข้ารหัส ใช้เป็น `~/.zetaphy/pq.seed` ของ `zetaphy pq native` ได้เลย
 - ภาษาไทย (ค่าเริ่มต้น) และอังกฤษ
@@ -57,7 +65,7 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 npm install
 npm run build     # สร้าง vendor/pqwallet.js ใหม่ แล้ว commit
 npm run serve     # http://localhost:8090/ (สำหรับนักพัฒนา)
-npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอนกับ RPC จำลอง
+npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอน, โอนโทเคน (และที่ถูกปฏิเสธ), stake กับ RPC จำลอง
 ```
 
 ถ้าแก้ `zetaphy-network/src/pqtx.js` ต้อง `npm run build` แล้ว commit `vendor/pqwallet.js` ด้วย CI ตรวจว่าไฟล์ที่ commit ตรงกับที่ build ใหม่
