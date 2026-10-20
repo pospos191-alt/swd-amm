@@ -33,6 +33,10 @@
 //   zetaphy pq native ... --as <owner 0x… or zetaphy1…>   act for a quantum-locked account this one controls
 //                                      (send, call, token-send, token-balance, stake, unstake, rewards, deploy; --gas is then EVM gas)
 //   zetaphy pq native handover <owner> <new controller>   hand control of a locked account to another ML-DSA-44 account
+//   zetaphy pq verify-block <height> [--rpc <CometBFT RPC, default http://127.0.0.1:26657>] [--keys pinned.json] [--chain-id ID] [--json]
+//                                      check block <height>'s ML-DSA-44 vote certificate (in block height+1); exits 1 if not verified.
+//                                      Without --keys the node is trusted for validator powers and vote keys
+//   zetaphy pq export-vote-keys [--height h] [--rpc <CometBFT RPC>] > pinned.json   validator powers and vote keys, to pin
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>]
@@ -62,6 +66,7 @@ import { loadOrCreatePq, sealPqSeed, VARIANT as PQ_VARIANT } from './src/pq.js';
 import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, formatZeta, quantumLockTx, DEFAULT_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT,
   DEFAULT_STAKING_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, DEFAULT_PRECOMPILE_GAS_LIMIT, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT } from './src/pqtx.js';
 import { createLaneWatcher } from './src/lane.js';
+import { verifyBlock, exportVoteKeys } from './src/pqcert.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
 const ART = art('NeuroJobs');
@@ -148,9 +153,48 @@ async function tokenInfo(provider, token) {
   return { decimals, symbol, balanceOf: async (who) => ERC20.decodeFunctionResult('balanceOf', await raw('balanceOf', [who]))[0] };
 }
 
+/**
+ * zetaphy pq verify-block | export-vote-keys: CometBFT RPC only. They run before
+ * settings(), so their --rpc (a CometBFT URL) never replaces the saved EVM RPC.
+ */
+async function pqBlockCommand(cmd, rest, opt, env, write) {
+  const rpc = String(opt.rpc ?? env.ZETAPHY_COMET_RPC ?? 'http://127.0.0.1:26657');
+  if (cmd === 'export-vote-keys') {
+    if (opt.height != null && !/^\d+$/.test(String(opt.height))) throw new Error('usage: zetaphy pq export-vote-keys [--height h] [--rpc <CometBFT RPC>] > pinned.json');
+    write(JSON.stringify(await exportVoteKeys(rpc, { height: opt.height == null ? undefined : String(opt.height) }), null, 2));
+    return 0;
+  }
+  const [height] = rest;
+  if (!/^\d+$/.test(height ?? '') || rest.length !== 1) throw new Error('usage: zetaphy pq verify-block <height> [--rpc <CometBFT RPC>] [--keys pinned.json] [--chain-id ID] [--json]');
+  let pinnedKeys;
+  if (opt.keys != null) {
+    try { pinnedKeys = JSON.parse(readFileSync(String(opt.keys), 'utf8')); } catch (e) { throw new Error(`--keys ${opt.keys}: ${e.message}`); }
+  }
+  const r = await verifyBlock(rpc, height, { chainId: opt['chain-id'] == null ? undefined : String(opt['chain-id']), pinnedKeys });
+  if (opt.json) {
+    write(JSON.stringify(r, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), 2));
+    return r.ok ? 0 : 1;
+  }
+  const verdict = !r.ok ? 'NOT VERIFIED'
+    : r.pqMajority ? 'VERIFIED post-quantum: validators with more than 2/3 of the power signed it with ML-DSA-44'
+      : r.required > 0n ? `VERIFIED by the chain's rule, but only partly post-quantum (${r.unregisteredPower} of the power has no vote key)`
+        : 'OK by the chain\'s rule, but NOT post-quantum: validators with a vote key hold less than 1/3 of the power, so no ML-DSA-44 signature is required';
+  write(`block ${r.height}: ${verdict}`);
+  write(`  hash:     ${r.hash}`);
+  write(`  chain:    ${r.chainId}`);
+  write(`  signed:   ${r.signedPower} of ${r.totalPower} voting power (${r.unregisteredPower} without a vote key); ${r.required > 0n ? `needs ${r.required} or more` : 'nothing required'}`);
+  write(`  keys:     ${r.keysFrom === 'pinned' ? `pinned in ${opt.keys} (the node is not trusted)` : `from the node ${rpc} (trusted for validator powers and keys; pin them with --keys)`}`);
+  for (const v of r.validators) {
+    write(`  ${v.signed ? '✓' : v.hasKey ? '✗' : '·'} ${v.address} power ${v.power}: ${v.signed ? 'signed' : v.hasKey ? 'no valid signature' : 'no vote key'}`);
+  }
+  for (const p of r.problems) write(`  - ${p}`);
+  return r.ok ? 0 : 1;
+}
+
 export async function main(argv = process.argv.slice(2), env = process.env, write = console.log) {
   const { pos, opt } = parse(argv);
   const [group, cmd, ...rest] = pos;
+  if (group === 'pq' && (cmd === 'verify-block' || cmd === 'export-vote-keys')) return pqBlockCommand(cmd, rest, opt, env, write);
   const s = settings(opt, env);
 
   if (group === 'node' && cmd === 'start') {

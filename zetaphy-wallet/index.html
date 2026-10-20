@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src *; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
+<!-- The MetaMask Snap this page asks for (npm:… once published; local:http://localhost:8080 in development). -->
+<meta name="zetaphy-snap-id" content="npm:@zetaphy/snap">
 <title>ZETAPHY PQ Wallet</title>
 <link rel="stylesheet" href="./style.css">
 <script type="module" src="./app.js"></script>
@@ -67,6 +69,19 @@
     <button id="forget" type="button" class="ghost danger" data-i18n="forget">ลบกระเป๋าออกจากเบราว์เซอร์นี้</button>
   </section>
 
+  <section class="card" id="snap-card" hidden>
+    <h2 data-i18n="snapTitle">ใช้ MetaMask (ZETAPHY Snap)</h2>
+    <p data-i18n="snapIntro">กุญแจ ML-DSA-44 สร้างใน MetaMask จาก Secret Recovery Phrase ของคุณ หน้านี้ไม่เห็นกุญแจเลย และ MetaMask แสดงทุกธุรกรรมเป็นคำอ่านง่ายให้ยืนยันก่อนเซ็น</p>
+    <p class="hint" data-i18n="snapFlask">ระหว่างที่ snap ยังไม่ได้เผยแพร่และยังไม่ผ่านการตรวจของ MetaMask จะติดตั้งได้เฉพาะใน MetaMask Flask (รุ่นสำหรับนักพัฒนา)</p>
+    <details>
+      <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
+      <label for="snap-id" data-i18n="snapIdLabel">snap ID</label>
+      <input id="snap-id" spellcheck="false" autocomplete="off">
+      <p class="hint" data-i18n="snapIdHint">บัญชีขึ้นกับ snap ID</p>
+    </details>
+    <button id="snap-connect" type="button" data-i18n="snapConnect">เชื่อม MetaMask</button>
+  </section>
+
   <section id="wallet" hidden>
     <div class="card">
       <h2 data-i18n="accountTitle">บัญชีของคุณ</h2>
@@ -79,6 +94,8 @@
         <button id="refresh" type="button" class="ghost" data-i18n="refresh">อัปเดต</button>
       </div>
       <p id="acct-status" class="hint"></p>
+      <p id="snap-mode" class="hint" data-i18n="snapMode" hidden>กุญแจอยู่ใน MetaMask (ZETAPHY Snap)</p>
+      <button id="snap-disconnect" type="button" class="ghost" data-i18n="snapDisconnect" hidden>เลิกใช้ MetaMask ในหน้านี้</button>
     </div>
 
     <div class="card" id="owned-card">
@@ -213,12 +230,42 @@
       <p id="stake-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="stake-hash"></code></p>
     </div>
 
+    <div class="card" id="deploy-card">
+      <h2 data-i18n="deployTitle">สร้างสัญญา (deploy)</h2>
+      <p class="as-tag" hidden></p>
+      <form id="deploy-form" autocomplete="off">
+        <label for="init-code" data-i18n="initCodeLabel">bytecode สำหรับสร้างสัญญา</label>
+        <textarea id="init-code" rows="4" spellcheck="false" autocomplete="off" placeholder="0x6080…"></textarea>
+        <details>
+          <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
+          <label for="deploy-gas" data-i18n="evmGasLabel">EVM gas limit</label>
+          <input id="deploy-gas" inputmode="numeric" value="3000000">
+        </details>
+        <button id="deploy-review" type="submit" data-i18n="review">ตรวจก่อนโอน</button>
+      </form>
+      <div id="deploy-confirm" class="confirm" hidden>
+        <h3 data-i18n="deployConfirmTitle">ยืนยันการสร้างสัญญา</h3>
+        <dl>
+          <dt data-i18n="cCodeSize">ขนาดโค้ด</dt><dd id="d-size"></dd>
+          <dt data-i18n="cCodeHash">hash ของโค้ด (keccak-256)</dt><dd><code id="d-hash"></code></dd>
+          <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="d-fee"></dd>
+        </dl>
+        <p class="as-note hint" hidden></p>
+        <p class="hint" data-i18n="deployChecked">จำลองการสร้างกับโหนดแล้ว ผ่าน</p>
+        <div class="row">
+          <button id="confirm-deploy" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
+          <button id="cancel-deploy" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
+        </div>
+      </div>
+      <p id="deploy-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="deploy-hash"></code><br><span data-i18n="deployedAt">ที่อยู่สัญญาใหม่:</span> <code id="deploy-address"></code></p>
+    </div>
+
     <div class="card" id="mm-card">
       <h2 data-i18n="mmTitle">ล็อกบัญชี MetaMask ให้กระเป๋านี้</h2>
       <p data-i18n="mmIntro">ย้ายการควบคุมบัญชี ECDSA ใน MetaMask มาไว้ที่กระเป๋าต้านควอนตัมนี้ ที่อยู่ ยอดเงิน โทเคน และ stake ของบัญชีนั้นอยู่ที่เดิม แต่จากนี้ไปสั่งได้ผ่านกระเป๋านี้เท่านั้น</p>
       <ul class="warn-text">
         <li data-i18n="mmWarnPermanent">ถาวร ยกเลิกไม่ได้: หลังล็อก เชนจะปฏิเสธทุกธุรกรรมที่กุญแจ MetaMask ของบัญชีนั้นเซ็น และลายเซ็นของกุญแจนั้นใช้กับสัญญา (เช่น permit) ไม่ได้อีก</li>
-        <li data-i18n="mmWarnSeed">ถ้า seed ของกระเป๋านี้หาย บัญชีที่ล็อกไว้ก็หายไปด้วย ดาวน์โหลดไฟล์สำรอง seed ก่อน</li>
+        <li id="mm-warn-seed" data-i18n="mmWarnSeed">ถ้า seed ของกระเป๋านี้หาย บัญชีที่ล็อกไว้ก็หายไปด้วย ดาวน์โหลดไฟล์สำรอง seed ก่อน</li>
         <li data-i18n="mmWarnTx">กระเป๋านี้ต้องเคยส่งธุรกรรมบนเชนแล้วอย่างน้อยหนึ่งครั้ง (ให้เชนรู้กุญแจสาธารณะ ML-DSA-44)</li>
       </ul>
       <label class="check"><input id="mm-ok" type="checkbox"> <span data-i18n="mmOk">เข้าใจแล้วว่าการล็อกเป็นแบบถาวร</span></label>
@@ -226,7 +273,7 @@
       <p id="mm-result" class="ok" hidden><span data-i18n="mmSentLabel">MetaMask ส่งคำสั่งล็อกแล้ว tx hash:</span> <code id="mm-hash"></code></p>
     </div>
 
-    <div class="card">
+    <div class="card" id="backup-card">
       <h2 data-i18n="backupTitle">สำรอง seed</h2>
       <p class="warn-text" data-i18n="backupWarn">ไฟล์สำรองเป็น seed แบบไม่เข้ารหัส ใครได้ไฟล์นี้ไปก็ย้ายเงินออกได้ เก็บไว้ในที่ปลอดภัยแบบออฟไลน์ ห้ามส่งให้ใคร</p>
       <label class="check"><input id="backup-ok" type="checkbox"> <span data-i18n="backupOk">เข้าใจแล้ว</span></label>

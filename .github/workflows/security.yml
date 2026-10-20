@@ -11,6 +11,9 @@
 #                 is run by hand. ~1 min.
 #   zetaphy-wallet every push / PR — the PQ web wallet: committed bundle
 #                 matches its sources + a headless-browser test. ~2 min.
+#   zetaphy-snap  every push / PR — the MetaMask Snap: builds, the committed
+#                 snap.manifest.json shasum matches the build, and the built
+#                 snap runs in snaps-jest's simulated MetaMask. ~2 min.
 #   zetaphy-chain every push / PR that touches the node setup — applies
 #                 setup-node.sh's patches to the pinned Cosmos EVM source
 #                 the same way the server does, runs their Go tests (ML-DSA,
@@ -95,6 +98,7 @@ jobs:
       verify: ${{ steps.f.outputs.verify }}
       network: ${{ steps.f.outputs.network }}
       wallet: ${{ steps.f.outputs.wallet }}
+      snap: ${{ steps.f.outputs.snap }}
       chain: ${{ steps.f.outputs.chain }}
     steps:
       - name: Checkout
@@ -133,6 +137,7 @@ jobs:
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
           out network '^(zetaphy-network/|zetaphy-neuro/src/)'
           out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$)'
+          out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
           out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|cli\.js|scripts/devnet\.sh|test/devnet\.pq\.integration\.js)$)'
 
   test-ui:
@@ -283,6 +288,42 @@ jobs:
       - name: Browser test (create key, encrypt/unlock, send to a mocked RPC)
         run: npm test
 
+  zetaphy-snap:
+    name: zetaphy-snap (MetaMask Snap build + simulated tests)
+    needs: changes
+    if: needs.changes.outputs.snap == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: zetaphy-snap
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # MetaMask installs the snap only if dist/bundle.js (+ manifest + icon) hashes
+      # to source.shasum in snap.manifest.json. mm-snap build rewrites the manifest
+      # when they differ, so a changed manifest here means the committed one is out
+      # of date: run `npm run build` in zetaphy-snap/ and commit snap.manifest.json.
+      - name: Build; the committed manifest shasum matches the build
+        run: |
+          npm run build
+          git diff --exit-code -- snap.manifest.json
+
+      - name: Manifest is valid (mm-snap manifest)
+        run: npx mm-snap manifest
+
+      - name: Tests (the built snap in snaps-jest's simulated MetaMask)
+        run: npm test
+
   zetaphy-chain:
     name: zetaphy-chain (patched node + PQ devnet)
     needs: changes
@@ -361,11 +402,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: PQ wallets and native ML-DSA accounts on a real devnet
+      - name: PQ wallets, native ML-DSA accounts and block certificates on real devnets
         working-directory: zetaphy-network
         run: |
           npm ci --no-audit --no-fund
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pq
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pqcert
 
   program:
     name: program (cargo test + anchor test)

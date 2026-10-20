@@ -12,7 +12,8 @@
     "test": "node --test test/*.test.js",
     "test:devnet": "node --test test/devnet.integration.js",
     "test:devnet:pq": "node --test test/devnet.pq.integration.js",
-    "test:devnet:bridge": "node --test test/devnet.bridge.integration.js"
+    "test:devnet:bridge": "node --test test/devnet.bridge.integration.js",
+    "test:devnet:pqcert": "node --test test/devnet.pqcert.integration.js"
   },
   "engines": {
     "node": ">=20"

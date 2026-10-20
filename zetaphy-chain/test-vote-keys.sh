@@ -6,29 +6,33 @@
 #   3. B's key restored and B restarted: blocks continue
 #   4. B replaces its key (old one kept as .old): blocks never stop
 #   5. replacing a key without the current key's signature is refused
+#   6. each block starts with the ML-DSA vote certificate of the block before
+#   7. a new full node catches up from genesis (blocksync checks certificates)
+#   8. a governance vote switches off slashing on ed25519-only evidence
 #   bash test-vote-keys.sh <zetaphyd> [workdir]
 set -euo pipefail
 BIN=$1; W=${2:-$(mktemp -d)}; CHAIN=zetaphy-ve-1; D=azetaphy
-trap 'for n in A B; do [ -f $W/$n/pid ] && kill $(cat $W/$n/pid) 2>/dev/null; done; true' EXIT
+trap '[ -n "${KEEP:-}" ] || for n in A B C; do [ -f $W/$n/pid ] && kill $(cat $W/$n/pid) 2>/dev/null; done; true' EXIT
 fail() { echo "FAIL: $*"; tail -5 $W/B/node.log; exit 1; }
 seed() { od -An -tx1 -N32 /dev/urandom | tr -d ' \n'; }
 rm -rf $W; mkdir -p $W
-for n in A B; do $BIN init $n --chain-id $CHAIN --home $W/$n >/dev/null 2>&1; done
+for n in A B C; do $BIN init $n --chain-id $CHAIN --home $W/$n >/dev/null 2>&1; done
 $BIN keys add valA --keyring-backend test --home $W/A --algo eth_secp256k1 >/dev/null 2>&1
 $BIN keys add valB --keyring-backend test --home $W/B --algo eth_secp256k1 >/dev/null 2>&1
 G=$W/A/config/genesis.json
 jq ".app_state.staking.params.bond_denom=\"$D\" | .app_state.evm.params.evm_denom=\"$D\" | .app_state.mint.params.mint_denom=\"$D\" | .app_state.gov.params.min_deposit[0].denom=\"$D\" | .app_state.gov.params.expedited_min_deposit[0].denom=\"$D\"
   | .app_state.bank.denom_metadata=[{description:\"ZETAPHY\",denom_units:[{denom:\"$D\",exponent:0},{denom:\"zetaphy\",exponent:18}],base:\"$D\",display:\"zetaphy\",name:\"ZETAPHY\",symbol:\"ZETAPHY\"}]
-  | .consensus.params.abci.vote_extensions_enable_height=\"1\"" $G > $G.t && mv $G.t $G
+  | .consensus.params.abci.vote_extensions_enable_height=\"1\"
+  | .app_state.gov.params.voting_period=\"8s\" | .app_state.gov.params.expedited_voting_period=\"4s\" | .app_state.gov.params.max_deposit_period=\"8s\"" $G > $G.t && mv $G.t $G
 for n in A B; do $BIN genesis add-genesis-account "$($BIN keys show val$n -a --keyring-backend test --home $W/$n)" "100000000000000000000000000$D" --home $W/A; done
 cp $G $W/B/config/genesis.json
 $BIN genesis gentx valA "6000000000000000000000000$D" --keyring-backend test --home $W/A --chain-id $CHAIN --gas-prices "1000000000$D" >/dev/null 2>&1
 $BIN genesis gentx valB "4000000000000000000000000$D" --keyring-backend test --home $W/B --chain-id $CHAIN --gas-prices "1000000000$D" >/dev/null 2>&1
 cp $W/B/config/gentx/*.json $W/A/config/gentx/
 $BIN genesis collect-gentxs --home $W/A >/dev/null 2>&1
-cp $G $W/B/config/genesis.json
+cp $G $W/B/config/genesis.json; cp $G $W/C/config/genesis.json
 P=28545
-for n in A B; do
+for n in A B C; do
   sed -i -E "s/^timeout_commit = .*/timeout_commit = \"1s\"/; s/^type = \"flood\"/type = \"app\"/; s#^laddr = \"tcp://127.0.0.1:26657\"#laddr = \"tcp://127.0.0.1:$((P+100))\"#; s#^laddr = \"tcp://0.0.0.0:26656\"#laddr = \"tcp://127.0.0.1:$((P+101))\"#; s/^addr_book_strict = .*/addr_book_strict = false/; s/^allow_duplicate_ip = .*/allow_duplicate_ip = true/; s#^proxy_app = .*#proxy_app = \"tcp://127.0.0.1:$((P+104))\"#; s#^pprof_laddr = .*#pprof_laddr = \"\"#" $W/$n/config/config.toml
   python3 - $W/$n/config/app.toml $P $D <<'PY'
 import re, sys
@@ -41,7 +45,7 @@ PY
   seed > $W/$n/config/pq_vote_key.seed
   P=$((P+110))
 done
-sed -i -E "s/^persistent_peers = .*/persistent_peers = \"$($BIN comet show-node-id --home $W/A)@127.0.0.1:28646\"/" $W/B/config/config.toml
+for n in B C; do sed -i -E "s/^persistent_peers = .*/persistent_peers = \"$($BIN comet show-node-id --home $W/A)@127.0.0.1:28646\"/" $W/$n/config/config.toml; done
 start() { nohup $BIN start --home $W/$1 --chain-id $CHAIN >> $W/$1/node.log 2>&1 & echo $! > $W/$1/pid; }
 start A; start B
 hgt() { curl -s 127.0.0.1:28645/status | jq -r '.result.sync_info.latest_block_height // 0'; }
@@ -65,3 +69,27 @@ moving 5 || fail "4: blocks stopped after rotation"; echo "ok 4 key replaced, bl
 seed > $W/B/config/pq_vote_key.seed.old
 [ "$(txcode $(votekey B))" != 0 ] || fail "5: replacement without the current key accepted"
 moving 4 || fail "5: blocks stopped"; echo "ok 5 replacement without the current key refused"
+h=$(( $(hgt) - 1 ))
+acts=$(curl -s "127.0.0.1:28645/block_results?height=$h" | jq -r '.result.txs_results[0].events[]? | select(.type=="message") | .attributes[] | select(.key=="action") | .value')
+echo "$acts" | grep -q "/zetaphy.pq.v1.MsgPQCertificate" || fail "6: block $h does not start with a vote certificate"
+size=$(curl -s "127.0.0.1:28645/block?height=$h" | jq -r '.result.block.data.txs[0]' | base64 -d | wc -c)
+[ "$size" -gt $((2 * 2440)) ] || fail "6: the certificate of block $h holds fewer than 2 signatures ($size bytes)"
+echo "ok 6 block $h starts with a vote certificate ($size bytes)"
+start C
+for _ in $(seq 1 90); do
+  [ "$(curl -s 127.0.0.1:28865/status | jq -r '.result.sync_info.catching_up // true')" = false ] && break; sleep 2
+done
+c=$(curl -s 127.0.0.1:28865/status | jq -r '.result.sync_info.latest_block_height // 0')
+[ "$c" -ge "$h" ] || fail "7: the new node stopped at $c (tip $h)"; echo "ok 7 a new node caught up to $c, checking every certificate"
+F="--keyring-backend test --chain-id $CHAIN --node tcp://127.0.0.1:28645 --gas 800000 --gas-prices 1000000000$D -y -o json"
+$BIN tx pq-evidence-proposal on --deposit "10000000$D" --from valA --home $W/A $F >/dev/null
+sleep 4
+id=$($BIN q gov proposals --node tcp://127.0.0.1:28645 -o json 2>/dev/null | jq -r '[.proposals[]?.id | tonumber] | max // empty')
+[ -n "$id" ] || fail "8: no proposal"
+for n in A B; do $BIN tx gov vote "$id" yes --from val$n --home $W/$n $F >/dev/null; done
+for _ in $(seq 1 20); do
+  v=$(curl -s "127.0.0.1:28645/abci_query?path=%22/store/zetaphypq/key%22&data=0x05" | jq -r '.result.response.value // empty')
+  [ "$v" = "AQ==" ] && break; sleep 2
+done
+[ "$v" = "AQ==" ] || fail "8: the switch is not on after the vote (proposal $id)"
+moving 3 || fail "8: blocks stopped after the switch"; echo "ok 8 governance turned the evidence switch on (proposal $id); blocks continue"

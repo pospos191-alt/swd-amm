@@ -1,8 +1,10 @@
 // Browser test for the wallet: serves the static site with its real CSP,
 // answers the node's JSON-RPC from a mock (Playwright route, no network) and
 // checks key creation, encrypt/unlock, a signed send, ERC-20 transfers
-// (MsgEVMCall, simulated with eth_call first), staking, a quantum lock from
-// MetaMask (window.ethereum mocked) and acting for a locked account (as_owner).
+// (MsgEVMCall, simulated with eth_call first), staking, contract creation, a
+// quantum lock from MetaMask (window.ethereum mocked), acting for a locked
+// account (as_owner), and the MetaMask Snap mode (a fake ZETAPHY Snap behind a
+// mocked window.ethereum: wallet_requestSnaps / wallet_invokeSnap).
 //   npm test            (uses Playwright's Chromium)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,6 +19,8 @@ import { MsgDelegate, MsgUndelegate } from 'cosmjs-types/cosmos/staking/v1beta1/
 import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1beta1/tx';
 import { BinaryReader } from 'cosmjs-types/binary';
 import { keccak_256 } from '@noble/hashes/sha3.js';
+// The fake snap builds and signs with the same code the real one bundles.
+import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress } from '../vendor/pqwallet.js';
 
 const PORT = 18090;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -48,10 +52,38 @@ before(async () => {
 });
 after(async () => { await browser?.close(); server?.kill(); });
 
-/** A page whose node RPC is answered by `node` (mutable state). */
-async function openPage(node = {}, { ethereum } = {}) {
+/**
+ * A fake ZETAPHY Snap, run in Node: the account of SEED_HEX, and zetaphy_signTx built
+ * from the intents with pqtx.js like the real snap. snap.approve = false: the user
+ * rejects; snap.tamper(intent): it signs something else; snap.lie: a wrong address.
+ */
+function fakeSnap(snap) {
+  const { publicKey, secretKey } = ml_dsa44.keygen(Buffer.from(SEED_HEX, 'hex'));
+  const me = pqAddress(publicKey);
+  snap.requests = [];
+  return async (snapId, { method, params }) => {
+    snap.requests.push({ snapId, method, params });
+    if (method === 'zetaphy_getAccount') return { publicKey: '0x' + bytesToHex(publicKey), address: me.bech32, hex: snap.lie ?? me.hex };
+    if (method !== 'zetaphy_signTx') throw Object.assign(new Error('method not found'), { code: -32601 });
+    if (snap.approve === false) throw Object.assign(new Error('Rejected in the ZETAPHY snap: nothing was signed.'), { code: 4001 });
+    const intents = snap.tamper ? params.messages.map(snap.tamper) : params.messages;
+    let signature;
+    const tx = buildTx({ publicKey, sign: (b) => (signature = ml_dsa44.sign(b, secretKey)), messages: intents.map((i) => messageFromIntent(i, me.bech32)),
+      chainId: params.chainId, accountNumber: params.accountNumber, sequence: params.sequence, gasLimit: params.gasLimit, gasPrice: params.gasPrice, memo: params.memo });
+    return { signature: '0x' + bytesToHex(signature), txHex: tx.txHex, txHash: tx.txHash };
+  };
+}
+
+/** A page whose node RPC is answered by `node` (mutable state). snap: a fake ZETAPHY Snap's state. */
+async function openPage(node = {}, { ethereum, snap } = {}) {
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
+  if (snap) {
+    const handle = fakeSnap(snap);
+    await page.exposeFunction('__snap', async (snapId, request) => {
+      try { return { result: await handle(snapId, request) }; } catch (e) { return { error: { code: e.code, message: e.message } }; }
+    });
+  }
   // A mock MetaMask: window.ethereum.request, its calls recorded in window.__eth.
   if (ethereum) {
     await page.addInitScript((cfg) => {
@@ -66,7 +98,16 @@ async function openPage(node = {}, { ethereum } = {}) {
           if (method === 'eth_requestAccounts') return [c.account];
           if (method === 'eth_chainId') return c.chainId;
           if (method === 'eth_sendTransaction') return '0x' + 'ab'.repeat(32);
-          throw new Error(`unexpected ${method}`);
+          if (method === 'wallet_requestSnaps' && c.snaps) {
+            const id = Object.keys(params)[0];
+            return { [id]: { id, version: '0.1.0', enabled: true, blocked: false } };
+          }
+          if (method === 'wallet_invokeSnap' && c.snaps) {
+            const r = await window.__snap(params.snapId, params.request);
+            if (r.error) throw Object.assign(new Error(r.error.message), { code: r.error.code });
+            return r.result;
+          }
+          throw Object.assign(new Error(`The method "${method}" does not exist / is not available.`), { code: -32601 });
         },
       };
     }, ethereum);
@@ -84,7 +125,8 @@ async function openPage(node = {}, { ethereum } = {}) {
       // A mock ERC-20 at TOKEN: TUSD, 6 decimals.
       calls.push(params[0]);
       const sel = params[0].data.slice(2, 10);
-      if (params[0].to === '0x0000000000000000000000000000000000000800' || params[0].to === '0x0000000000000000000000000000000000000801') result = '0x' + word(1);
+      if (!params[0].to) { if (node.deployRevert) error = { code: 3, message: 'execution reverted: constructor' }; else result = '0x6080'; } // a contract creation
+      else if (params[0].to === '0x0000000000000000000000000000000000000800' || params[0].to === '0x0000000000000000000000000000000000000801') result = '0x' + word(1);
       else if (!params[0].data || params[0].data === '0x') result = '0x'; // a plain value transfer
       else if (sel === '313ce567') result = '0x' + word(6);
       else if (sel === '95d89b41') result = abiString('TUSD');
@@ -683,6 +725,225 @@ test('act for a locked account: send, token send and stake go out as MsgEVMCall 
   await page.click('#lang');
   assert.match(await page.textContent('#acting'), /กำลังทำรายการในนามของ/);
   assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// ---- contract creation ----
+
+const INIT_CODE = '0x6080604052348015600f57600080fd5b50603f80601d6000396000f3fe';
+
+test('deploy: the code hash is shown, the creation is simulated, then sent as a MsgEVMCall with no "to"', async () => {
+  const node = { exists: true, deployRevert: true };
+  const { page, context, errors, outside, sent, calls } = await importedPage(node);
+  await page.fill('#init-code', '0x60zz');
+  await page.click('#deploy-review');
+  await statusMatches(page, /non-empty hex/);
+  await page.fill('#init-code', INIT_CODE);
+  await page.click('#deploy-review');
+  await statusMatches(page, /would fail.*constructor/);
+  assert.ok(await page.isHidden('#deploy-confirm'));
+
+  node.deployRevert = false;
+  await page.click('#deploy-review');
+  await visible(page, '#deploy-confirm');
+  assert.equal(await page.textContent('#d-size'), '29 bytes');
+  assert.equal(await page.textContent('#d-hash'), '0x' + Buffer.from(keccak_256(Buffer.from(INIT_CODE.slice(2), 'hex'))).toString('hex'));
+  assert.equal(await page.textContent('#d-fee'), '0.00408 ZETAPHY', '(3000000 EVM + 400000) gas x 1.2 gwei');
+  assert.deepEqual(calls.filter((c) => !c.to).at(-1), { from: SEED_HEX_ADDR, data: INIT_CODE, gas: '0x2dc6c0' });
+  assert.equal(sent.length, 0);
+  await page.click('#confirm-deploy');
+  await visible(page, '#deploy-result');
+  assert.match(await page.textContent('#status'), /contract exists once the tx is in a block/);
+  assert.equal(await page.textContent('#deploy-address'), createAddress(SEED_HEX_ADDR, 5n), 'CREATE(account, signed sequence + 1)');
+  const { msg, auth } = decodeSent(sent[0]);
+  assert.equal(msg.typeUrl, '/zetaphy.pq.v1.MsgEVMCall');
+  assert.deepEqual(decodeMsgEVMCall(msg.value), { sender: SEED_BECH32, to: '', value: '', data: new Uint8Array(Buffer.from(INIT_CODE.slice(2), 'hex')), gasLimit: 3000000n });
+  assert.equal(auth.fee.gasLimit, 3400000n);
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// ---- MetaMask Snap mode: the key is in MetaMask, this page only asks ----
+
+const SNAP_ID = 'npm:@zetaphy/snap';
+const LOCAL_SNAP_ID = 'local:http://localhost:8080';
+const snapCalls = (page) => page.evaluate(() => window.__eth.filter((c) => c.method.startsWith('wallet_')));
+
+/** English page connected to the fake snap, with the mock RPC saved. */
+async function snapPage(node, snap) {
+  const p = await openPage(node, { ethereum: { snaps: true }, snap });
+  const { page } = p;
+  await page.click('#lang');
+  await visible(page, '#snap-card');
+  await page.click('#snap-connect');
+  await visible(page, '#wallet');
+  await page.fill('#rpc', RPC);
+  await page.click('#rpc-save');
+  await page.waitForFunction(() => document.getElementById('balance').textContent.includes('ZETAPHY'));
+  return p;
+}
+
+test('snap: connect with wallet_requestSnaps; the address comes from the snap\'s public key; no seed in this page', async () => {
+  // Without MetaMask, and with a MetaMask that has no snaps.
+  const bare = await openPage({});
+  await bare.page.click('#lang');
+  await bare.page.click('#snap-connect');
+  await statusMatches(bare.page, /MetaMask \(window\.ethereum\) was not found/);
+  await bare.context.close();
+  const old = await openPage({}, { ethereum: { snaps: false } });
+  await old.page.click('#lang');
+  await old.page.click('#snap-connect');
+  await statusMatches(old.page, /cannot run snaps/);
+  await old.context.close();
+
+  const snap = {};
+  const { page, context, errors, outside } = await openPage({ exists: true }, { ethereum: { snaps: true }, snap });
+  await page.click('#lang');
+  await visible(page, '#snap-card');
+  assert.match(await page.textContent('#snap-card'), /MetaMask Flask/);
+  assert.equal(await page.inputValue('#snap-id'), SNAP_ID, 'from <meta name="zetaphy-snap-id">');
+  await page.click('#snap-card summary');
+  await page.fill('#snap-id', 'https://evil.example/snap.js');
+  await page.click('#snap-connect');
+  await statusMatches(page, /must be npm:<package> or local:/);
+  assert.deepEqual(await snapCalls(page), []);
+
+  // A snap whose address does not match its public key is not used.
+  snap.lie = '0x' + '77'.repeat(20);
+  await page.fill('#snap-id', LOCAL_SNAP_ID); // a development snap served by mm-snap serve
+  await page.click('#snap-connect');
+  await statusMatches(page, /does not match its public key/);
+  assert.ok(await page.isHidden('#wallet'));
+  delete snap.lie;
+
+  await page.click('#snap-connect');
+  await visible(page, '#wallet');
+  assert.match(await page.textContent('#status'), /Connected to MetaMask/);
+  assert.equal(await page.textContent('#addr-bech32'), SEED_BECH32);
+  assert.equal(await page.textContent('#addr-hex'), SEED_HEX_ADDR);
+  const calls = await snapCalls(page);
+  assert.deepEqual(calls.find((c) => c.method === 'wallet_requestSnaps').params, { [LOCAL_SNAP_ID]: {} });
+  assert.deepEqual(calls.at(-1).params, { snapId: LOCAL_SNAP_ID, request: { method: 'zetaphy_getAccount' } });
+  assert.ok(await page.isVisible('#snap-mode'));
+  assert.ok(await page.isHidden('#backup-card'), 'no seed backup: MetaMask\'s Secret Recovery Phrase is the backup');
+  assert.match(await page.textContent('#mm-card'), /lose your MetaMask Secret Recovery Phrase/);
+  assert.ok(await page.isHidden('#setup'));
+  assert.ok(await page.isHidden('#snap-card'));
+  const stored = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));
+  assert.equal(stored['zetaphy-wallet:snap:v1'], LOCAL_SNAP_ID);
+  assert.equal(stored['zetaphy-wallet:seed:v1'], undefined, 'no key stored');
+
+  // Disconnect: back to the start, the snap ID remembered for next time.
+  await page.click('#snap-disconnect');
+  await visible(page, '#setup');
+  assert.match(await page.textContent('#status'), /disconnected/);
+  assert.ok(await page.isHidden('#wallet'));
+  await page.reload();
+  await visible(page, '#snap-card');
+  assert.equal(await page.inputValue('#snap-id'), LOCAL_SNAP_ID);
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('snap: send, token send, stake and deploy are signed by the snap from the messages, then broadcast here', async () => {
+  const snap = {};
+  const node = { exists: true };
+  const { page, context, errors, outside, sent } = await snapPage(node, snap);
+  const signRequests = () => snap.requests.filter((r) => r.method === 'zetaphy_signTx');
+
+  // Send.
+  await page.fill('#to', TO);
+  await page.fill('#amount', '1.25');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  assert.equal(signRequests().length, 0, 'nothing asked of the snap before the confirm');
+  await page.click('#confirm-send');
+  await visible(page, '#tx-result');
+  assert.deepEqual(signRequests()[0], { snapId: SNAP_ID, method: 'zetaphy_signTx', params: {
+    chainId: 'zetaphy-testnet-1', accountNumber: '12', sequence: '4', gasLimit: '400000', gasPrice: '1200000000', memo: '', lang: 'en',
+    messages: [{ type: 'send', to: TO, amount: '1250000000000000000', denom: 'azetaphy' }] } });
+  let { msg, auth } = decodeSent(sent[0]);
+  assert.deepEqual(MsgSend.decode(msg.value), { fromAddress: SEED_BECH32, toAddress: TO, amount: [{ denom: 'azetaphy', amount: '1250000000000000000' }] });
+  assert.equal(auth.signerInfos[0].sequence, 4n);
+  assert.equal(await page.textContent('#tx-hash'), createHash('sha256').update(Buffer.from(sent[0].slice(2), 'hex')).digest('hex').toUpperCase());
+
+  // Token send.
+  await page.fill('#token', TOKEN);
+  await page.click('#token-load');
+  await visible(page, '#token-info');
+  await page.fill('#token-to', TO);
+  await page.fill('#token-amount', '2.5');
+  await page.click('#token-review');
+  await visible(page, '#token-confirm');
+  await page.click('#confirm-token');
+  await visible(page, '#token-result');
+  const transferData = '0xa9059cbb' + word('0x1111111111111111111111111111111111111111') + word(2_500_000);
+  assert.deepEqual(signRequests()[1].params.messages, [{ type: 'evmCall', to: TOKEN, data: transferData, value: '0', gasLimit: '200000' }]);
+  assert.equal(signRequests()[1].params.gasLimit, '600000');
+  ({ msg } = decodeSent(sent[1]));
+  assert.equal('0x' + Buffer.from(decodeMsgEVMCall(msg.value).data).toString('hex'), transferData);
+
+  // Stake.
+  await page.fill('#validator', VALOPER);
+  await page.fill('#stake-amount', '3');
+  await page.click('#stake');
+  await visible(page, '#stake-confirm');
+  await page.click('#confirm-stake');
+  await visible(page, '#stake-result');
+  assert.deepEqual(signRequests()[2].params.messages, [{ type: 'delegate', validator: VALOPER, amount: '3000000000000000000', denom: 'azetaphy' }]);
+  ({ msg } = decodeSent(sent[2]));
+  assert.deepEqual(MsgDelegate.decode(msg.value), { delegatorAddress: SEED_BECH32, validatorAddress: VALOPER, amount: { denom: 'azetaphy', amount: '3000000000000000000' } });
+
+  // Deploy.
+  await page.fill('#init-code', INIT_CODE);
+  await page.click('#deploy-review');
+  await visible(page, '#deploy-confirm');
+  await page.click('#confirm-deploy');
+  await visible(page, '#deploy-result');
+  assert.deepEqual(signRequests()[3].params.messages, [{ type: 'evmDeploy', initCode: INIT_CODE, value: '0', gasLimit: '3000000' }]);
+  ({ msg } = decodeSent(sent[3]));
+  assert.equal(decodeMsgEVMCall(msg.value).to, '');
+  assert.equal(await page.textContent('#deploy-address'), createAddress(SEED_HEX_ADDR, 5n));
+
+  // Only messages went to the snap, never bytes; Thai follows the page language.
+  assert.ok(signRequests().every((r) => !JSON.stringify(r.params).match(/bodyBytes|authInfo|signDoc/)));
+  await page.click('#lang');
+  await page.fill('#amount', '1');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  await page.click('#confirm-send');
+  await visible(page, '#tx-result');
+  assert.equal(signRequests()[4].params.lang, 'th');
+  assert.equal(sent.length, 5);
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('snap: rejected in MetaMask, or a snap that signs something else: nothing is broadcast', async () => {
+  const snap = {};
+  const { page, context, errors, sent } = await snapPage({ exists: true }, snap);
+  snap.approve = false;
+  await page.fill('#to', TO);
+  await page.fill('#amount', '1');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  await page.click('#confirm-send');
+  await statusMatches(page, /Rejected in MetaMask\. Nothing was signed or sent/);
+  assert.ok(await page.isHidden('#tx-result'));
+
+  // A snap that signs twice the amount: the tx it returns is not the one asked for.
+  snap.approve = true;
+  snap.tamper = (i) => ({ ...i, amount: String(BigInt(i.amount) * 2n) });
+  await page.click('#review');
+  await visible(page, '#confirm');
+  await page.click('#confirm-send');
+  await statusMatches(page, /signed a different transaction than the one asked for/);
+  assert.equal(sent.length, 0, 'nothing broadcast');
+  assert.equal(snap.requests.filter((r) => r.method === 'zetaphy_signTx').length, 2);
   assert.deepEqual(errors, []);
   await context.close();
 });

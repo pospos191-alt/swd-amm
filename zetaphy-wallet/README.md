@@ -15,6 +15,14 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 ## ทำอะไรได้
 
 - สร้างกุญแจใหม่ (seed 32 ไบต์จาก `crypto.getRandomValues`) หรือนำเข้า seed (hex)
+- หรือ **ใช้ MetaMask (ZETAPHY Snap)**: กุญแจ ML-DSA-44 อยู่ใน MetaMask ไม่ใช่ในหน้านี้ (ดู `zetaphy-snap/README.md`)
+  - กด "เชื่อม MetaMask": `wallet_requestSnaps` แล้ว `zetaphy_getAccount` หน้าเว็บคำนวณที่อยู่จาก public key เอง ไม่เชื่อที่อยู่ที่ snap บอก
+  - snap ID มาจาก `<meta name="zetaphy-snap-id">` ใน `index.html` (ค่าเริ่มต้น `npm:@zetaphy/snap`)
+    ตอนพัฒนาใส่ `local:http://localhost:8080` ใน "ตั้งค่าเพิ่มเติม" (บัญชีจะต่างจากของ npm)
+  - โอน, โอนโทเคน, stake และ deploy ส่งให้ snap เป็นข้อความ (`zetaphy_signTx`) snap แสดงรายละเอียดและเซ็นเมื่อผู้ใช้ยืนยัน
+    หน้าเว็บสร้าง tx รอบลายเซ็นเองแล้วเทียบกับที่ snap ส่งกลับ ถ้าไม่ตรงจะไม่ส่ง
+  - ไม่มีไฟล์สำรอง seed: Secret Recovery Phrase ของ MetaMask คือที่สำรอง
+  - ระหว่างที่ snap ยังไม่อยู่ใน allowlist ของ MetaMask ต้องใช้ MetaMask Flask
 - แสดงที่อยู่ `zetaphy1…` และ `0x…` (บัญชีเดียวกัน) และยอดเงิน
 - โอนไปที่อยู่ `0x…` หรือ `zetaphy1…` โดยแสดงจำนวนและค่าธรรมเนียมให้ยืนยันก่อนเซ็น
 - โทเคน ERC-20 (เหมือน `zetaphy pq native token-balance` / `token-send`)
@@ -25,6 +33,9 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 - Stake (เหมือน `zetaphy pq native stake` / `unstake` / `rewards`)
   - ใส่ validator `zetaphyvaloper1…` (ตรวจ checksum) แล้วกด Stake, ถอน stake หรือรับรางวัล ทุกปุ่มมีหน้ายืนยันก่อนเซ็น
   - ยังไม่แสดงยอดที่ stake อยู่
+- สร้างสัญญา (deploy เหมือน `zetaphy pq native deploy`)
+  - วาง creation bytecode (hex รวม constructor arguments) หน้ายืนยันแสดงขนาดและ keccak-256 ของโค้ด
+  - จำลองด้วย `eth_call` ก่อนแสดงหน้ายืนยัน และ `deploy` จำลองซ้ำก่อนเซ็น ส่งเป็น `MsgEVMCall` ที่ไม่มี `to` แล้วแสดงที่อยู่สัญญาใหม่
 - ล็อกบัญชี MetaMask ให้กระเป๋านี้ (ล็อกควอนตัม แบบถาวร)
   - ต้องติ๊กยอมรับคำเตือนก่อน แล้วกดยืนยันอีกครั้งที่หน้าต่างที่แสดงทั้งสองบัญชี
   - ใช้ `window.ethereum`: `eth_requestAccounts` แล้ว `eth_sendTransaction` `{to: 0x…5051, value: 0x0, data: ที่อยู่ 0x ของกระเป๋านี้}`
@@ -45,6 +56,7 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
   - PBKDF2-SHA256 600,000 รอบ จากรหัสผ่านที่ผู้ใช้พิมพ์ แล้วเข้ารหัสด้วย AES-256-GCM (WebCrypto)
 - seed และกุญแจลับอยู่ในหน่วยความจำเฉพาะตอนปลดล็อก กด "ล็อกกระเป๋า" แล้วล้างทิ้ง
 - สิ่งเดียวที่ส่งออกไปคือ JSON-RPC ไปยังโหนดที่ผู้ใช้ใส่เอง: ที่อยู่ ยอดเงิน และธุรกรรมที่เซ็นแล้ว ไม่มี seed
+- โหมด MetaMask Snap: หน้าเว็บไม่มี seed เลย ส่งให้ MetaMask (ผ่าน `window.ethereum` ในเครื่อง) แค่ข้อความธุรกรรมที่จะให้เซ็น
 - ไม่โหลดสคริปต์จาก CDN หรือที่อื่น โค้ดทั้งหมดอยู่ใน `app.js` และ `vendor/pqwallet.js`
 - `vercel.json` ตั้ง CSP เข้ม (`script-src 'self'`, `frame-ancestors 'none'`) และ `X-Content-Type-Options: nosniff`
   - `connect-src *` เพราะผู้ใช้ใส่ RPC ของโหนดตัวเอง
@@ -75,8 +87,9 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 npm install
 npm run build     # สร้าง vendor/pqwallet.js ใหม่ แล้ว commit
 npm run serve     # http://localhost:8090/ (สำหรับนักพัฒนา)
-npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอน, โอนโทเคน (และที่ถูกปฏิเสธ), stake,
-                  # ล็อกบัญชี MetaMask (window.ethereum จำลอง) และทำรายการแทนบัญชีที่ล็อก กับ RPC จำลอง
+npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอน, โอนโทเคน (และที่ถูกปฏิเสธ), stake, deploy,
+                  # ล็อกบัญชี MetaMask (window.ethereum จำลอง), ทำรายการแทนบัญชีที่ล็อก
+                  # และโหมด MetaMask Snap (snap ปลอมหลัง window.ethereum: wallet_requestSnaps / wallet_invokeSnap) กับ RPC จำลอง
 ```
 
 ถ้าแก้ `zetaphy-network/src/pqtx.js` ต้อง `npm run build` แล้ว commit `vendor/pqwallet.js` ด้วย CI ตรวจว่าไฟล์ที่ commit ตรงกับที่ build ใหม่

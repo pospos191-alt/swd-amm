@@ -2,14 +2,17 @@
 // The seed is kept only encrypted (PBKDF2-SHA256 600k + AES-256-GCM) in
 // localStorage. The only network traffic is JSON-RPC to the node the user
 // typed in: addresses, balances and signed transactions. Never the seed.
+// Or the key lives in MetaMask (the ZETAPHY Snap, zetaphy-snap/): this page then
+// knows only the public key, and the snap builds, shows and signs each tx.
 import {
-  ml_dsa44, pqAddress, pqClient, normalizeAddress, validatorAddress, parseZeta, formatZeta, bytesToHex, hexToBytes,
+  ml_dsa44, keccak_256, pqAddress, pqClient, normalizeAddress, validatorAddress, parseZeta, formatZeta, bytesToHex, hexToBytes,
   DEFAULT_GAS_LIMIT, DEFAULT_STAKING_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT,
-  DEFAULT_PRECOMPILE_GAS_LIMIT, quantumLockTx,
+  DEFAULT_PRECOMPILE_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, PUBLIC_KEY_BYTES, quantumLockTx,
 } from './vendor/pqwallet.js';
 
 const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 'zetaphy-wallet:lang', token: 'zetaphy-wallet:token',
-  owners: 'zetaphy-wallet:owners:v1:' }; // + this wallet's zetaphy1… address
+  owners: 'zetaphy-wallet:owners:v1:', // + this wallet's zetaphy1… address
+  snap: 'zetaphy-wallet:snap:v1' }; // the snap ID last connected (no key: MetaMask holds it)
 const KDF_ITERATIONS = 600000;
 const EVM_CHAIN_ID = 77390n;
 
@@ -59,7 +62,7 @@ const T = {
     backup: 'ดาวน์โหลดไฟล์สำรอง seed',
     backupCli: 'ไฟล์นี้ใช้เป็น ~/.zetaphy/pq.seed ของคำสั่ง zetaphy pq native ได้เลย',
     lock: 'ล็อกกระเป๋า',
-    footer: 'โค้ดทั้งหมดอยู่ในหน้านี้ ไม่โหลดสคริปต์จากที่อื่น · ธุรกรรมเซ็นในเบราว์เซอร์ด้วย ML-DSA-44 (FIPS 204)',
+    footer: 'โค้ดทั้งหมดอยู่ในหน้านี้ ไม่โหลดสคริปต์จากที่อื่น · ธุรกรรมเซ็นด้วย ML-DSA-44 (FIPS 204) ในเบราว์เซอร์ หรือใน MetaMask ผ่าน ZETAPHY Snap',
     // status messages
     working: 'กำลังทำงาน…',
     deriving: 'กำลังเข้ารหัส seed (ใช้เวลาสักครู่)…',
@@ -167,6 +170,36 @@ const T = {
     mmAlreadyMine: 'บัญชี MetaMask นี้ล็อกให้กระเป๋านี้อยู่แล้ว',
     mmCancelled: 'ยกเลิกแล้ว ไม่ได้ส่งอะไร',
     mmSent: 'MetaMask ส่งคำสั่งล็อกแล้ว เมื่อเข้าบล็อก บัญชีนั้นจะขึ้นในรายการด้านบน',
+    mmWarnSeedSnap: 'ถ้า Secret Recovery Phrase ของ MetaMask หาย บัญชีที่ล็อกไว้ก็หายไปด้วย',
+    // MetaMask Snap mode
+    snapTitle: 'ใช้ MetaMask (ZETAPHY Snap)',
+    snapIntro: 'กุญแจ ML-DSA-44 สร้างใน MetaMask จาก Secret Recovery Phrase ของคุณ หน้านี้ไม่เห็นกุญแจเลย และ MetaMask แสดงทุกธุรกรรมเป็นคำอ่านง่ายให้ยืนยันก่อนเซ็น',
+    snapFlask: 'ระหว่างที่ snap ยังไม่ได้เผยแพร่และยังไม่ผ่านการตรวจของ MetaMask จะติดตั้งได้เฉพาะใน MetaMask Flask (รุ่นสำหรับนักพัฒนา)',
+    snapIdLabel: 'snap ID (npm:@zetaphy/snap หรือ local:http://localhost:8080 ตอนพัฒนา)',
+    snapIdHint: 'บัญชีขึ้นกับ snap ID: snap ตัวเดียวกันให้บัญชีเดิมเสมอ (กู้คืนได้ด้วย Secret Recovery Phrase) แต่ snap แบบ local:… ให้บัญชีอื่น',
+    snapConnect: 'เชื่อม MetaMask',
+    snapConnected: 'เชื่อม MetaMask (ZETAPHY Snap) แล้ว',
+    snapMode: 'กุญแจอยู่ใน MetaMask (ZETAPHY Snap) ไม่ใช่ในหน้านี้ สำรองด้วย Secret Recovery Phrase ของ MetaMask',
+    snapDisconnect: 'เลิกใช้ MetaMask ในหน้านี้',
+    snapDisconnected: 'เลิกใช้ MetaMask ในหน้านี้แล้ว (snap ยังติดตั้งอยู่ใน MetaMask)',
+    snapBadId: 'snap ID ต้องเป็น npm:ชื่อแพ็กเกจ หรือ local:http://localhost:พอร์ต',
+    snapDenied: 'MetaMask ไม่ได้ติดตั้งหรือไม่อนุญาต snap',
+    snapUnsupported: 'MetaMask นี้ใช้ snap ไม่ได้ (ใช้ MetaMask Flask หรือรุ่นที่รองรับ snap)',
+    snapBadAccount: 'snap ตอบบัญชีที่ไม่ตรงกับกุญแจสาธารณะของมัน จึงไม่ใช้',
+    snapConfirm: 'ตรวจรายละเอียดและยืนยันในหน้าต่างของ MetaMask…',
+    snapRejected: 'ยกเลิกใน MetaMask แล้ว ไม่ได้เซ็นและไม่ได้ส่งอะไร',
+    snapMismatch: 'snap เซ็นธุรกรรมที่ไม่ตรงกับที่ขอ จึงไม่ได้ส่ง',
+    // deploy
+    deployTitle: 'สร้างสัญญา (deploy)',
+    initCodeLabel: 'bytecode สำหรับสร้างสัญญา (hex รวม constructor arguments)',
+    deployConfirmTitle: 'ยืนยันการสร้างสัญญา',
+    cCodeSize: 'ขนาดโค้ด',
+    cCodeHash: 'hash ของโค้ด (keccak-256)',
+    bytesN: '{n} ไบต์',
+    deployChecked: 'จำลองการสร้างกับโหนดแล้ว ผ่าน (จะจำลองซ้ำอีกครั้งก่อนเซ็น) เทียบ hash ของโค้ดกับที่ผู้เขียนสัญญาประกาศไว้',
+    deployedAt: 'ที่อยู่สัญญาใหม่:',
+    badInitCode: 'bytecode ต้องเป็น hex (0x…) ที่ไม่ว่าง',
+    deploySent: 'ส่งแล้ว โหนดรับธุรกรรมแล้ว สัญญาจะมีเมื่อธุรกรรมเข้าบล็อก',
   },
   en: {
     subtitle: 'Quantum-safe wallet (ML-DSA-44) · no ECDSA key',
@@ -213,7 +246,7 @@ const T = {
     backup: 'Download seed backup',
     backupCli: 'The file works as ~/.zetaphy/pq.seed for the zetaphy pq native command.',
     lock: 'Lock wallet',
-    footer: 'All code is in this page; no scripts from elsewhere · Transactions are signed in the browser with ML-DSA-44 (FIPS 204)',
+    footer: 'All code is in this page; no scripts from elsewhere · Transactions are signed with ML-DSA-44 (FIPS 204) in the browser, or in MetaMask with the ZETAPHY Snap',
     working: 'Working…',
     deriving: 'Encrypting the seed (takes a moment)…',
     created: 'Wallet created. Download the seed backup before receiving funds.',
@@ -316,6 +349,34 @@ const T = {
     mmAlreadyMine: 'That MetaMask account is already locked to this wallet.',
     mmCancelled: 'Cancelled. Nothing was sent.',
     mmSent: 'MetaMask sent the lock. Once it is in a block, the account shows up in the list above.',
+    mmWarnSeedSnap: 'If you lose your MetaMask Secret Recovery Phrase, the locked account is lost too.',
+    snapTitle: 'Use MetaMask (ZETAPHY Snap)',
+    snapIntro: 'The ML-DSA-44 key is made inside MetaMask from your Secret Recovery Phrase; this page never sees it. MetaMask shows every transaction in plain words before it signs.',
+    snapFlask: 'Until the snap is published and MetaMask has reviewed it, it installs only in MetaMask Flask (the developer build).',
+    snapIdLabel: 'Snap ID (npm:@zetaphy/snap, or local:http://localhost:8080 in development)',
+    snapIdHint: 'The account depends on the snap ID: the same snap always gives the same account (recoverable from the Secret Recovery Phrase), a local:… snap gives another one.',
+    snapConnect: 'Connect MetaMask',
+    snapConnected: 'Connected to MetaMask (ZETAPHY Snap).',
+    snapMode: 'The key is in MetaMask (ZETAPHY Snap), not in this page. Your MetaMask Secret Recovery Phrase is its backup.',
+    snapDisconnect: 'Disconnect MetaMask from this page',
+    snapDisconnected: 'MetaMask disconnected from this page (the snap stays installed in MetaMask).',
+    snapBadId: 'The snap ID must be npm:<package> or local:http://localhost:<port>.',
+    snapDenied: 'MetaMask did not install or allow the snap.',
+    snapUnsupported: 'This MetaMask cannot run snaps (use MetaMask Flask, or a version with snaps).',
+    snapBadAccount: 'The snap answered with an account that does not match its public key, so it is not used.',
+    snapConfirm: 'Check the details and approve in the MetaMask window…',
+    snapRejected: 'Rejected in MetaMask. Nothing was signed or sent.',
+    snapMismatch: 'The snap signed a different transaction than the one asked for, so nothing was sent.',
+    deployTitle: 'Deploy a contract',
+    initCodeLabel: 'Creation bytecode (hex, with any constructor arguments)',
+    deployConfirmTitle: 'Confirm the contract creation',
+    cCodeSize: 'Code size',
+    cCodeHash: 'Code hash (keccak-256)',
+    bytesN: '{n} bytes',
+    deployChecked: 'Simulated on the node: it succeeds (it is simulated again just before signing). Compare the code hash with the one the contract\'s author published.',
+    deployedAt: 'New contract address:',
+    badInitCode: 'The bytecode must be non-empty hex (0x…).',
+    deploySent: 'Sent. The node accepted it; the contract exists once the tx is in a block.',
   },
 };
 
@@ -383,21 +444,29 @@ const sealedBlob = () => { try { return JSON.parse(store.get(KEYS.seed)); } catc
 // ---- the unlocked key, in memory only ----
 let wallet = null;
 
+// wallet.kind: 'local' (the seed is in this page) or 'snap' (MetaMask holds the key).
 function openSeed(seed) {
   const { publicKey, secretKey } = ml_dsa44.keygen(seed);
-  wallet = { seed, publicKey, secretKey, addr: pqAddress(publicKey) };
+  wallet = { kind: 'local', seed, publicKey, secretKey, addr: pqAddress(publicKey) };
 }
 
 function lock() {
-  if (wallet) { wallet.seed.fill(0); wallet.secretKey.fill(0); }
+  if (wallet?.kind === 'local') { wallet.seed.fill(0); wallet.secretKey.fill(0); }
   wallet = null;
-  pending = null; tokenPending = null; stakePending = null;
+  pending = null; tokenPending = null; stakePending = null; deployPending = null;
   account = null;
   token = null;
   acting = null; owned = [];
-  for (const id of ['confirm', 'token-confirm', 'stake-confirm', 'tx-result', 'token-result', 'stake-result', 'mm-result']) $(id).hidden = true;
+  for (const id of ['confirm', 'token-confirm', 'stake-confirm', 'deploy-confirm', 'tx-result', 'token-result', 'stake-result', 'deploy-result', 'mm-result']) $(id).hidden = true;
   render();
 }
+
+/** What pqClient signs with: the key in this page, or the snap (it gets the messages, never bytes). */
+function signer() {
+  if (wallet.kind === 'snap') return { signTx: snapSignTx };
+  return { sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey) };
+}
+const signingStatus = () => status(wallet.kind === 'snap' ? 'snapConfirm' : 'signing');
 
 // ---- JSON-RPC to the user's node ----
 let rpcId = 0;
@@ -453,6 +522,7 @@ function showError(e) {
   if (/expected zetaphyvaloper1/.test(m)) return fail('badValidator');
   if (/invalid address/.test(m)) return fail('badAddress');
   if (/not an amount|decimal places|more than 0/.test(m)) return fail('badAmount');
+  if (/signed another transaction than the one asked for/.test(m)) return fail('snapMismatch');
   const rej = /rejected the transaction (.*)$/.exec(m);
   if (rej) return fail('rejected', {}, rej[1]);
   return fail('', {}, m);
@@ -463,8 +533,13 @@ function render() {
   const sealed = sealedBlob();
   $('setup').hidden = !!(wallet || sealed);
   $('locked').hidden = !!wallet || !sealed;
+  $('snap-card').hidden = !!wallet;
   $('wallet').hidden = !wallet;
   if (!wallet && sealed) $('locked-addr').textContent = sealed.address ?? '';
+  const snapMode = wallet?.kind === 'snap';
+  $('snap-mode').hidden = $('snap-disconnect').hidden = !snapMode;
+  $('backup-card').hidden = snapMode;
+  setI18n($('mm-warn-seed'), snapMode ? 'mmWarnSeedSnap' : 'mmWarnSeed');
   if (wallet) { if (!owned.length) loadOwned(); showAccount(); showToken(); showOwned(); }
 }
 
@@ -589,9 +664,9 @@ async function confirmSend() {
   const p = pending;
   pending = null;
   $('confirm').hidden = true;
-  status('signing');
+  signingStatus();
   const r = await client.send({
-    publicKey: wallet.publicKey, sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey),
+    publicKey: wallet.publicKey, ...signer(),
     to: p.to.bech32, amount: p.amount, gasLimit: p.gasLimit, gasPrice: p.gasPrice,
     ...(p.asOwner ? { asOwner: p.asOwner.bech32, evmGasLimit: DEFAULT_EVM_GAS_LIMIT } : {}),
   });
@@ -766,9 +841,9 @@ async function tokenConfirm() {
   const p = tokenPending;
   tokenPending = null;
   $('token-confirm').hidden = true;
-  status('signing');
+  signingStatus();
   const r = await client.callEVM({
-    publicKey: wallet.publicKey, sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey),
+    publicKey: wallet.publicKey, ...signer(),
     to: p.token, data: p.data, evmGasLimit: p.evmGas, gasLimit: p.txGas, gasPrice: p.gasPrice, checkResult: checkTransfer,
     ...(p.asOwner ? { asOwner: p.asOwner.bech32 } : {}),
   });
@@ -834,9 +909,9 @@ async function stakeConfirm() {
   const p = stakePending;
   stakePending = null;
   $('stake-confirm').hidden = true;
-  status('signing');
+  signingStatus();
   const r = await STAKE[p.action].run({
-    publicKey: wallet.publicKey, sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey),
+    publicKey: wallet.publicKey, ...signer(),
     validator: p.validator, amount: p.action === 'claim' ? undefined : p.amount, gasLimit: p.gasLimit, gasPrice: p.gasPrice,
     ...(p.asOwner ? { asOwner: p.asOwner.bech32, evmGasLimit: DEFAULT_PRECOMPILE_GAS_LIMIT } : {}),
   });
@@ -844,6 +919,61 @@ async function stakeConfirm() {
   $('stake-result').hidden = false;
   if (p.action !== 'claim') $('stake-amount').value = '';
   status(STAKE[p.action].done);
+  setTimeout(refresh, 6000);
+}
+
+// ---- deploy: a contract creation (MsgEVMCall with no `to`), simulated with eth_call first ----
+let deployPending = null;
+
+async function deployReview() {
+  deployPending = null;
+  $('deploy-confirm').hidden = true;
+  $('deploy-result').hidden = true;
+  const code = $('init-code').value.replace(/\s+/g, '');
+  if (!/^0x(?:[0-9a-fA-F]{2})+$/.test(code)) return fail('badInitCode');
+  const g = $('deploy-gas').value.trim() || String(DEFAULT_DEPLOY_GAS_LIMIT);
+  if (!/^\d{1,9}$/.test(g) || BigInt(g) < MIN_EVM_GAS_LIMIT || BigInt(g) > MAX_EVM_GAS_LIMIT) return fail('badEvmGas', { min: MIN_EVM_GAS_LIMIT, max: MAX_EVM_GAS_LIMIT });
+  const evmGas = BigInt(g);
+  const txGas = evmGas + EVM_CALL_GAS_OVERHEAD;
+  const as = acting;
+  status('working');
+  const q = await client.quote({ publicKey: wallet.publicKey, gasLimit: txGas });
+  account = { ...q.account, balance: q.balance };
+  showAccount();
+  if (!q.exists) return fail('notFunded');
+  if (q.fee > q.balance) return fail('notEnough', { need: formatZeta(q.fee), have: formatZeta(q.balance) });
+  // The same simulation client.deploy runs before signing.
+  try {
+    await checkedCall('eth_call', [{ from: (as ? as.address : wallet.addr).hex, data: code, gas: qty(evmGas) }, 'latest']);
+  } catch (e) {
+    if (T.en[e.message]) throw e;
+    return fail('callFails', {}, e.message);
+  }
+  const bytes = hexToBytes(code);
+  deployPending = { code, evmGas, txGas, gasPrice: q.gasPrice, asOwner: as?.address };
+  showAsNote($('deploy-confirm'), as);
+  $('d-size').textContent = t('bytesN', { n: bytes.length });
+  $('d-hash').textContent = '0x' + bytesToHex(keccak_256(bytes));
+  $('d-fee').textContent = `${formatZeta(q.fee)} ZETAPHY`;
+  $('deploy-confirm').hidden = false;
+  status('');
+}
+
+async function deployConfirm() {
+  if (!deployPending || !wallet) return;
+  const p = deployPending;
+  deployPending = null;
+  $('deploy-confirm').hidden = true;
+  signingStatus();
+  const r = await client.deploy({
+    publicKey: wallet.publicKey, ...signer(),
+    initCode: p.code, evmGasLimit: p.evmGas, gasLimit: p.txGas, gasPrice: p.gasPrice,
+    ...(p.asOwner ? { asOwner: p.asOwner.bech32 } : {}),
+  });
+  $('deploy-hash').textContent = r.txHash;
+  $('deploy-address').textContent = r.created;
+  $('deploy-result').hidden = false;
+  status('deploySent');
   setTimeout(refresh, 6000);
 }
 
@@ -918,8 +1048,8 @@ function showAsNote(box, as) {
 }
 
 function clearPending() {
-  pending = null; tokenPending = null; stakePending = null;
-  for (const id of ['confirm', 'token-confirm', 'stake-confirm']) $(id).hidden = true;
+  pending = null; tokenPending = null; stakePending = null; deployPending = null;
+  for (const id of ['confirm', 'token-confirm', 'stake-confirm', 'deploy-confirm']) $(id).hidden = true;
 }
 
 /** Act for a locked account: only if the chain says it is locked to this wallet. */
@@ -986,8 +1116,69 @@ async function metamaskLock() {
   setTimeout(() => { refreshOwned().catch(showError); }, 6000);
 }
 
+// ---- MetaMask Snap: the key in MetaMask (zetaphy-snap/), reached through window.ethereum ----
+// The page asks MetaMask to install/connect the snap (wallet_requestSnaps), reads the
+// account's public key, and hands each tx to it as messages (wallet_invokeSnap ->
+// zetaphy_signTx). The snap shows the tx in its own dialog and signs only if approved.
+const DEFAULT_SNAP_ID = document.querySelector('meta[name="zetaphy-snap-id"]')?.content || 'npm:@zetaphy/snap';
+const SNAP_ID_RE = /^(?:npm:(?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*|local:https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d{1,5})?\/?)$/;
+
+function ethereum() {
+  const eth = window.ethereum;
+  if (!eth || typeof eth.request !== 'function') throw new Error('mmMissing');
+  return eth;
+}
+
+async function invokeSnap(snapId, method, params) {
+  try {
+    return await ethereum().request({ method: 'wallet_invokeSnap', params: { snapId, request: params === undefined ? { method } : { method, params } } });
+  } catch (e) {
+    if (e?.code === 4001) throw new Error('snapRejected');
+    throw new Error(e?.message ?? String(e));
+  }
+}
+
+/** pqClient's signTx: the snap builds the tx from these messages, shows it, and signs it. */
+const snapSignTx = (request) => invokeSnap(wallet.snapId, 'zetaphy_signTx', { ...request, lang });
+
+async function connectSnap() {
+  const snapId = $('snap-id').value.trim() || DEFAULT_SNAP_ID;
+  if (!SNAP_ID_RE.test(snapId)) return fail('snapBadId');
+  const eth = ethereum();
+  status('working');
+  let snaps;
+  try {
+    snaps = await eth.request({ method: 'wallet_requestSnaps', params: { [snapId]: {} } });
+  } catch (e) {
+    if (e?.code === 4001) throw new Error('snapDenied');
+    if (e?.code === -32601 || /does not exist|not supported|not available|unsupported/i.test(e?.message ?? '')) throw new Error('snapUnsupported');
+    throw new Error(e?.message ?? String(e));
+  }
+  if (!snaps?.[snapId] || snaps[snapId].error) throw new Error(snaps?.[snapId]?.error?.message ?? 'snapDenied');
+  const a = await invokeSnap(snapId, 'zetaphy_getAccount');
+  // The address is derived here from the public key, never taken from the snap's word.
+  let publicKey;
+  try { publicKey = hexToBytes(a?.publicKey); } catch { throw new Error('snapBadAccount'); }
+  if (publicKey.length !== PUBLIC_KEY_BYTES) throw new Error('snapBadAccount');
+  const addr = pqAddress(publicKey);
+  if (a.address !== addr.bech32 || String(a.hex).toLowerCase() !== addr.hex.toLowerCase()) throw new Error('snapBadAccount');
+  if (wallet) lock();
+  wallet = { kind: 'snap', snapId, publicKey, addr };
+  store.set(KEYS.snap, snapId);
+  account = null;
+  render();
+  status('snapConnected');
+  if ($('rpc').value.trim()) refresh();
+}
+
+/** Forgets the account in this page; the snap ID stays filled in for the next connect. */
+function disconnectSnap() {
+  lock();
+  status('snapDisconnected');
+}
+
 function downloadBackup() {
-  if (!wallet || !$('backup-ok').checked) return;
+  if (wallet?.kind !== 'local' || !$('backup-ok').checked) return;
   const url = URL.createObjectURL(new Blob([`0x${bytesToHex(wallet.seed)}\n`], { type: 'text/plain' }));
   const a = document.createElement('a');
   a.href = url;
@@ -1003,6 +1194,7 @@ function downloadBackup() {
 function init() {
   $('rpc').value = store.get(KEYS.rpc) ?? '';
   $('token').value = store.get(KEYS.token) ?? '';
+  $('snap-id').value = store.get(KEYS.snap) ?? DEFAULT_SNAP_ID;
   $('lang').addEventListener('click', () => { lang = lang === 'th' ? 'en' : 'th'; store.set(KEYS.lang, lang); applyLang(); });
   $('rpc-save').addEventListener('click', () => {
     const u = $('rpc').value.trim();
@@ -1039,6 +1231,12 @@ function init() {
   $('stake-form').addEventListener('submit', (e) => e.preventDefault());
   $('confirm-stake').addEventListener('click', () => busy($('confirm-stake'), stakeConfirm));
   $('cancel-stake').addEventListener('click', () => { stakePending = null; $('stake-confirm').hidden = true; status(''); });
+  $('deploy-form').addEventListener('submit', (e) => { e.preventDefault(); busy($('deploy-review'), deployReview); });
+  $('confirm-deploy').addEventListener('click', () => busy($('confirm-deploy'), deployConfirm));
+  $('cancel-deploy').addEventListener('click', () => { deployPending = null; $('deploy-confirm').hidden = true; status(''); });
+  $('init-code').addEventListener('input', () => { deployPending = null; $('deploy-confirm').hidden = true; });
+  $('snap-connect').addEventListener('click', () => busy($('snap-connect'), connectSnap));
+  $('snap-disconnect').addEventListener('click', disconnectSnap);
   $('owner-use').addEventListener('click', () => busy($('owner-use'), () => useOwner($('owner').value)));
   $('owner-stop').addEventListener('click', () => busy($('owner-stop'), stopActing));
   $('mm-ok').addEventListener('change', () => { $('mm-lock').disabled = !$('mm-ok').checked; });

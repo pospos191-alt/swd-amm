@@ -1,0 +1,51 @@
+{
+  "name": "@zetaphy/snap",
+  "version": "0.1.0",
+  "description": "MetaMask Snap: a post-quantum ML-DSA-44 account on ZETAPHY, derived from the MetaMask Secret Recovery Phrase. Shows every transaction in plain words before signing.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pospos191-alt/swd-amm.git",
+    "directory": "zetaphy-snap"
+  },
+  "main": "./dist/bundle.js",
+  "files": [
+    "dist/",
+    "images/",
+    "snap.manifest.json"
+  ],
+  "scripts": {
+    "build": "mm-snap build",
+    "serve": "mm-snap serve",
+    "start": "mm-snap watch",
+    "manifest": "mm-snap manifest",
+    "test": "jest",
+    "prepublishOnly": "mm-snap build && mm-snap manifest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@metamask/snaps-sdk": "11.2.0",
+    "@noble/hashes": "2.2.0",
+    "@noble/post-quantum": "0.6.1"
+  },
+  "devDependencies": {
+    "@metamask/key-tree": "10.1.1",
+    "@metamask/snaps-cli": "8.4.1",
+    "@metamask/snaps-jest": "10.2.0",
+    "@swc/core": "1.11.31",
+    "@swc/jest": "0.2.39",
+    "cosmjs-types": "0.11.0",
+    "jest": "29.7.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "overrides": {
+    "@metamask/snaps-controllers": "21.1.1",
+    "@metamask/snaps-execution-environments": "11.3.1",
+    "@metamask/snaps-utils": "12.6.0"
+  }
+}
