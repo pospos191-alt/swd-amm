@@ -150,3 +150,15 @@ test('JSON-RPC clients try again once when every endpoint is rate-limited', asyn
   assert.deepEqual(await rpc.call('starknet_call', [{}, 'latest']), ['0x1']);
   assert.equal(n, 3);
 });
+
+test('a cap of u128::MAX (UNCOMMON•GOODS) is shown as no cap, only the end block', async () => {
+  const MAX = '340282366920938463463374607431768211455';
+  const page = runePage({ name: 'UNCOMMON•GOODS', id: '1:0', number: 0, divisibility: 0, symbol: '⧉', turbo: true, supply: `165577459${NB}⧉`, premine: `0${NB}⧉`,
+    terms: { start: 840000, end: 1050000, amount: `1${NB}⧉`, mints: 165577459, cap: MAX, mintable: true } });
+  const r = await readContract('bitcoin', 'UNCOMMON•GOODS', { api: fakeOrd({ '/rune/UNCOMMON%E2%80%A2GOODS': page }) });
+  const f = find(r, 'btc-open-mint');
+  assert.equal(f.params.maxSupply, undefined);
+  assert.equal(f.params.percent, undefined);
+  assert.match(explain(r, 'en').lines.find((l) => l.id === 'btc-open-mint').text, /until block 1050000 or the mint period ends\. /);
+  assert.ok(!ids(r).includes('btc-premine'));
+});

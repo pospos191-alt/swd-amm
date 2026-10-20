@@ -74,7 +74,9 @@ export async function readRune(api, input) {
   const premine = pileUnits(f.premine, d) ?? 0n;
   const supply = pileUnits(f.supply, d) ?? 0n;
   const amount = terms && f.amount !== 'none' ? pileUnits(f.amount, d) : null;
-  const cap = terms ? big(f.cap) ?? 0n : null;
+  // UNCOMMON•GOODS sets the cap to u128::MAX: no real cap, only the end block.
+  const rawCap = terms ? big(f.cap) ?? 0n : null;
+  const cap = rawCap != null && rawCap < 1n << 64n ? rawCap : null;
   const mints = terms ? big(f.mints) ?? 0n : 0n;
   const end = terms && /^\d+$/.test(f.end ?? '') ? Number(f.end) : null;
   // ord shows a missing cap as 0: then nobody can mint.
