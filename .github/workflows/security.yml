@@ -295,8 +295,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: cloud-init.sh is setup-node.sh, packed, and small enough for Oracle
+      - name: cloud-init.sh pins this setup-node.sh (SHA-256)
         run: zetaphy-chain/pack-cloud-init.sh --check
+
+      # cloud-init.sh downloads setup-node.sh from the public repo; warn while
+      # this version is not published there yet.
+      - name: setup-node.sh is published for cloud-init
+        run: |
+          url=$(grep -o 'https://raw.githubusercontent.com/[^"]*' zetaphy-chain/cloud-init.sh)
+          sha=$(sha256sum zetaphy-chain/setup-node.sh | cut -d' ' -f1)
+          got=$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1 || true)
+          [ "$got" = "$sha" ] && echo "published: $url" || echo "::warning::setup-node.sh $sha is not published at $url yet; Oracle installs need it"
 
       - name: Set up Go (the version setup-node.sh pins)
         uses: actions/setup-go@v5
@@ -319,7 +328,7 @@ jobs:
           go test ./precompiles/mldsa/ ./crypto/mldsa44/
           go test ./crypto/mldsa44/ -run '^$' -fuzz FuzzUnmarshalVerify -fuzztime 30s
           cd evmd
-          go test -run 'EVMCall' .
+          go test -run 'EVMCall|PQ' .
           go test -run '^$' -fuzz FuzzEVMCallUnmarshal -fuzztime 20s .
 
       # Static security checks on the code ZETAPHY added. G115 (int
@@ -335,6 +344,9 @@ jobs:
       - name: Build zetaphyd
         working-directory: ${{ env.SRC }}/evmd
         run: go build -o "$RUNNER_TEMP/zetaphyd" ./cmd/evmd
+
+      - name: ML-DSA vote signatures on a two-validator devnet
+        run: bash zetaphy-chain/test-vote-keys.sh "$RUNNER_TEMP/zetaphyd" "$RUNNER_TEMP/vote-keys"
 
       # ibc-go's test app expects "cosmos1" addresses, so these run with the
       # stock prefix (after the build above, which keeps "zetaphy1").

@@ -14,13 +14,15 @@ bash zetaphy-chain/setup-node.sh --patch-source "$PWD/src"
 cp -r zetaphy-chain/fork-tests/. src/          # the patches' tests
 ```
 
-## In scope (ZETAPHY code, ~1,550 lines)
+## In scope (ZETAPHY code, ~1,800 lines)
 
 | Area | Files (in the patched tree) | What to check |
 |---|---|---|
 | ML-DSA-44 account keys | `crypto/mldsa44/*`, `crypto/codec/*.go`, `ante/sigverify.go` | signature verification (pure ML-DSA, empty context, over SIGN_MODE_DIRECT bytes); address = sha256("zetaphy/mldsa44\0" ‖ key)[:20] and collisions with other key types; hand-written protobuf (`keys.pb.go`, runtime descriptor); gas per verification (30,000) vs CPU |
 | Public JSON-RPC methods | `evmd/zetaphy_rpc.go` | `zetaphy_pqAccount`, `zetaphy_sendCosmosTx` (64 KB cap, decode before broadcast), `zetaphy_faucet` (key file, rate limits, nonce handling) on the public port 8545 |
-| PQ accounts calling the EVM | `evmd/zetaphy_pqcall.go` (`MsgEVMCall`, registered in `evmd/app.go`) | signer = `sender` via the runtime descriptor; `msg.sender` = the signer's 0x address; nonce not bumped twice; value transfer and state undone on revert; EVM gas charged to the Cosmos gas meter (not internal: normal refund cap and minimum gas); 10M gas cap; no contract creation; interaction with authz `MsgExec` |
+| PQ accounts calling the EVM | `evmd/zetaphy_pqcall.go` (`MsgEVMCall`, registered in `evmd/app.go`) | signer = `sender` via the runtime descriptor; `msg.sender` = the signer's 0x address (or a locked owner, `as_owner`); the account sequence is not bumped twice on contract creation; value transfer and state undone on revert; EVM gas charged to the Cosmos gas meter (not internal: normal refund cap and minimum gas); 10M gas cap; interaction with authz `MsgExec` |
+| Quantum lock | `evmd/zetaphy_pqguard.go` (`pqLockAnte`, EVM post-tx hook on `0x…5051`, `MsgQuantumLock`), `as_owner` in `zetaphy_pqcall.go` | every path a locked ECDSA key could still act through (EVM txs, Cosmos txs, authz `MsgExec`, fee grants, ICA/IBC); controller must be an on-chain ML-DSA-44 account; hook only on successful top-level txs; contract creation nonce handling |
+| ML-DSA vote signatures | `setPQVoteHandlers`, `MsgPQVoteKey`, `PQVoteKeyCmd` in `zetaphy_pqguard.go`; `vote_extensions_enable_height` in genesis | liveness (a rejected precommit can stall a height: the node exits instead of signing with an unregistered key); key replacement needs the old key's signature; message binds chain id, height, block hash; validators without a key are not checked; blocksync and light clients do not check ML-DSA |
 | Fee burn | `evmd/zetaphy_feeburn.go`, wiring in `evmd/app.go` | burns 50% of the fee collector every block; rounding, other denoms, panics that would halt the chain |
 | ML-DSA precompile | `precompiles/mldsa/*`, `precompiles/types/*`, `x/vm/types/precompiles.go` | input parsing, gas vs CPU, read-only, no panics |
 | IBC rate limits | `x/ratelimit/*` (ibc-apps rate-limiting v10.7.0, hash-pinned) + `ZETAPHY_RL_PATCH`; wiring in `evmd/app.go` | the ibc-go v11 port (middleware setters, pointer receivers, ack/timeout of non-ICS-20 packets passed through, no x/params); both IBC v1 and v2 stacks and the ICS-20 precompile send path go through it |
