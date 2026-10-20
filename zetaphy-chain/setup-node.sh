@@ -86,9 +86,12 @@ elif [ ! -x "$BIN" ] || [ -n "${FORCE_BUILD:-}" ]; then
   # Addresses start with "zetaphy1..." instead of "cosmos1...".
   as_node "sed -i 's/Bech32Prefix = \"cosmos\"/Bech32Prefix = \"zetaphy\"/' '$src/evmd/config/bech32.go'"
   grep -q 'Bech32Prefix = "zetaphy"' "$src/evmd/config/bech32.go" || { echo "address prefix patch did not apply"; exit 1; }
-  # Stage 5: post-quantum ML-DSA (FIPS 204) signature check as an EVM precompile
-  # at 0x...0900 (Cloudflare CIRCL v1.6.3). The patch is below, in this file.
-  # Its own test runs before the build; a failure stops the setup.
+  # The ZETAPHY patch (below, in this file) adds:
+  #  - stage 5: post-quantum ML-DSA (FIPS 204) signature check as an EVM
+  #    precompile at 0x...0900 (Cloudflare CIRCL v1.6.3);
+  #  - stage 2: half of each block's fees is burned (evmd/zetaphy_feeburn.go),
+  #    like EIP-1559's base fee; validators get the other half.
+  # The ML-DSA test runs before the build; a failure stops the setup.
   sed -n '/^: <<.ZETAPHY_PQ_PATCH.$/,/^ZETAPHY_PQ_PATCH$/p' "$0" | sed '1d;$d' > /tmp/zetaphy-pq.patch
   chmod 644 /tmp/zetaphy-pq.patch
   as_node "cd '$src' && git apply /tmp/zetaphy-pq.patch"
@@ -255,6 +258,18 @@ exit 0
 
 # ---- ML-DSA precompile patch (applied in step 4; never executed as shell) ----
 : <<'ZETAPHY_PQ_PATCH'
+diff --git a/evmd/app.go b/evmd/app.go
+index 204345c..3287179 100644
+--- a/evmd/app.go
++++ b/evmd/app.go
+@@ -842,6 +842,7 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
+ 
+ // BeginBlocker application updates every begin block
+ func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
++	app.burnFees(ctx) // ZETAPHY: before distribution pays validators
+ 	return app.ModuleManager.BeginBlock(ctx)
+ }
+ 
 diff --git a/evmd/go.mod b/evmd/go.mod
 index e503386..dc04366 100644
 --- a/evmd/go.mod
@@ -280,6 +295,55 @@ index 92d6f82..4ce53b3 100644
  github.com/cloudwego/base64x v0.1.6 h1:t11wG9AECkCDk5fMSoxmufanudBtJ+/HemLstXDLI2M=
  github.com/cloudwego/base64x v0.1.6/go.mod h1:OFcloc187FXDaYHvrNIjxSe8ncn0OOM8gEHfghB2IPU=
  github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
+diff --git a/evmd/zetaphy_feeburn.go b/evmd/zetaphy_feeburn.go
+new file mode 100644
+index 0000000..96d0ea8
+--- /dev/null
++++ b/evmd/zetaphy_feeburn.go
+@@ -0,0 +1,43 @@
++package evmd
++
++import (
++	sdk "github.com/cosmos/cosmos-sdk/types"
++	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
++
++	evmtypes "github.com/cosmos/evm/x/vm/types"
++)
++
++// ZETAPHY: half of every block's transaction fees is burned, the other half
++// goes to validators as usual. Like EIP-1559's burned base fee, this makes
++// heavy use of the chain shrink the supply instead of only paying validators.
++//
++// It runs at the start of each block, before the distribution module pays
++// out what the fee collector received in the previous block. The fee
++// collector has no burn permission, so the coins move to the EVM module
++// (which has it) and are burned there, all-or-nothing in a cached context.
++const FeeBurnPercent = 50
++
++func (app *EVMD) burnFees(ctx sdk.Context) {
++	denom := evmtypes.GetEVMCoinDenom()
++	collector := app.AccountKeeper.GetModuleAddress(authtypes.FeeCollectorName)
++	if collector == nil || denom == "" {
++		return
++	}
++	bal := app.BankKeeper.GetBalance(ctx, collector, denom)
++	burn := bal.Amount.MulRaw(FeeBurnPercent).QuoRaw(100)
++	if !burn.IsPositive() {
++		return
++	}
++	coins := sdk.NewCoins(sdk.NewCoin(denom, burn))
++	cctx, write := ctx.CacheContext()
++	if err := app.BankKeeper.SendCoinsFromModuleToModule(cctx, authtypes.FeeCollectorName, evmtypes.ModuleName, coins); err != nil {
++		ctx.Logger().Error("fee burn: move to burner failed", "err", err)
++		return
++	}
++	if err := app.BankKeeper.BurnCoins(cctx, evmtypes.ModuleName, coins); err != nil {
++		ctx.Logger().Error("fee burn: burn failed", "err", err)
++		return
++	}
++	write()
++	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_fee_burn", sdk.NewAttribute("amount", coins.String())))
++}
 diff --git a/go.mod b/go.mod
 index 777e52d..c4797ba 100644
 --- a/go.mod

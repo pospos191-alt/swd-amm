@@ -183,3 +183,24 @@ test('stage 2: the reward pool sits in a vault that pays 10% a year', { timeout:
   const rel = await cli('w1', ['vault', 'release', '--vault', vault]);
   assert.match(rel.out, /nothing vested yet/, 'day 0: nothing to pay');
 });
+
+test('stage 2: half of every fee is burned, so the supply shrinks', { timeout: 60_000 }, async () => {
+  const chainHome = join(root, 'chain');
+  const supply = () => BigInt(JSON.parse(execFileSync(process.env.ZETAPHYD ?? 'zetaphyd', ['q', 'bank', 'total-supply-of', 'azetaphy',
+    '--node', `tcp://127.0.0.1:${PORT + 100}`, '-o', 'json', '--home', chainHome], { env: { ...process.env, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' } })).amount.amount);
+  const provider = new JsonRpcProvider(RPC);
+  const w = new Wallet(actors.user.privateKey, provider);
+  await new Promise((r) => setTimeout(r, 3000)); // let earlier fees settle
+  const before = supply();
+  let fees = 0n;
+  for (let i = 0; i < 3; i++) {
+    const r = await (await w.sendTransaction({ to: Wallet.createRandom().address, value: 1n })).wait();
+    fees += r.gasUsed * r.gasPrice;
+  }
+  await new Promise((r) => setTimeout(r, 4000));
+  const burned = before - supply();
+  assert.ok(burned > 0n, 'supply went down');
+  // Each block burns floor(fees/2): a few wei of rounding across blocks.
+  const half = fees / 2n;
+  assert.ok(burned >= half - 3n && burned <= half + 3n, `burned ${burned} of fees ${fees}`);
+});

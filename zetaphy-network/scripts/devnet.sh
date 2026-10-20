@@ -22,6 +22,8 @@ jqg ".app_state.bank.denom_metadata=[{\"description\":\"ZETAPHY (devnet)\",\"den
 jqg ".app_state.erc20.native_precompiles=[\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\"] | .app_state.erc20.token_pairs=[{contract_owner:1,erc20_address:\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\",denom:\"$DENOM\",enabled:true}]"
 jqg '.consensus.params.block.max_gas="30000000" | .app_state.gov.params.voting_period="20s" | .app_state.gov.params.expedited_voting_period="10s" | .app_state.gov.params.max_deposit_period="20s"'
 jqg '.app_state.gov.params.min_deposit[0].amount="1000000000000000000000" | .app_state.gov.params.expedited_min_deposit[0].amount="5000000000000000000000"'
+# Fixed supply, as on the testnet (setup-node.sh): no inflation.
+jqg '.app_state.mint.minter.inflation="0.000000000000000000" | .app_state.mint.params.inflation_rate_change="0.000000000000000000" | .app_state.mint.params.inflation_max="0.000000000000000000" | .app_state.mint.params.inflation_min="0.000000000000000000"'
 # PQ=1: a zetaphyd built with the ML-DSA patch; switch its precompile on (0x…0900).
 if [ -n "${PQ:-}" ]; then
   jqg '.app_state.evm.params.active_static_precompiles=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000900"]'
