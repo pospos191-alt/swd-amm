@@ -27,8 +27,10 @@ const NEW_IDL = {
   instructions: [
     { name: 'deposit', discriminator: [1], accounts: [{ name: 'user', signer: true, writable: true }], args: [] },
     { name: 'mint_tokens', discriminator: [2], accounts: [{ name: 'admin', signer: true }], args: [] },
-    { name: 'set_paused', discriminator: [3], accounts: [{ name: 'config', accounts: [{ name: 'authority', signer: true }] }], args: [] },
-    { name: 'withdraw_fees', discriminator: [4], accounts: [{ name: 'owner', signer: true }], args: [] },
+    { name: 'set_paused', discriminator: [3], accounts: [{ name: 'config', accounts: [{ name: 'pause_authority', signer: true }] }], args: [] },
+    { name: 'withdraw_fees', discriminator: [4], accounts: [{ name: 'fee_authority', signer: true }], args: [] },
+    // The user signing for their own tokens is not an admin (Jupiter's swaps).
+    { name: 'swap', discriminator: [6], accounts: [{ name: 'user_transfer_authority', signer: true }, { name: 'owner', signer: true }], args: [] },
     { name: 'bad name<script>', discriminator: [5], accounts: [], args: [] },
   ],
 };
@@ -59,7 +61,7 @@ test('IDL account is decoded and both IDL formats give the same kind of facts', 
   assert.equal(authority, auth);
   const f = idlFacts(idl);
   assert.equal(f.name, 'meme_vault');
-  assert.equal(f.instructions, 4, 'names that are not plain identifiers are dropped');
+  assert.equal(f.instructions, 5, 'names that are not plain identifiers are dropped');
   assert.deepEqual(f.admin, ['mint_tokens', 'set_paused', 'withdraw_fees'], 'nested account groups are searched');
   assert.deepEqual(f.powers.mint, ['meme_vault::mint_tokens']);
   assert.deepEqual(f.powers.pause, ['meme_vault::set_paused']);
@@ -81,7 +83,7 @@ test('a program with an IDL: admin instructions and powers are reported', async 
   const accounts = { [prog]: programAcc, [data]: b64(UPGRADEABLE_LOADER, programData), [idlAddr]: b64(prog, idlAccount(key(), NEW_IDL)) };
   const rpc = { call: async (m, [addr]) => ({ value: accounts[addr] ?? null }) };
   const r = await readContract('sol', prog, { rpc });
-  assert.equal(find(r, 'sol-idl').params.count, 4);
+  assert.equal(find(r, 'sol-idl').params.count, 5);
   assert.deepEqual(find(r, 'sol-admin-instructions').params.functions, ['mint_tokens', 'set_paused', 'withdraw_fees']);
   assert.ok(ids(r).includes('can-pause'));
   assert.equal(r.solana.idl.name, 'meme_vault');

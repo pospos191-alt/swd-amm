@@ -84,6 +84,17 @@ for (const optimize of [true, false]) {
       assert.ok(!ids(r).includes('delegatecall'), 'a proxy delegatecall is expected, not a finding');
     });
 
+    test('ZeppelinOS proxy (USDC style): implementation found through the old slots', async () => {
+      const impl = await chain.deploy('UpgradeableToken');
+      const proxy = await chain.deploy('ProxyZos', encodeAddressBytes(impl, '8129fc1c'));
+      const r = await read(proxy);
+      assert.equal(r.proxy.kind, 'zos');
+      assert.equal(r.proxy.implementation, impl.toLowerCase());
+      assert.equal(sev(r, 'proxy-upgradeable'), 'high');
+      assert.ok(ids(r).includes('erc20'), 'the token behind the proxy is read');
+      assert.ok(!ids(r).includes('delegatecall'));
+    });
+
     test('EIP-1167 clone: not upgradeable', async () => {
       const impl = await chain.deploy('CleanToken');
       const clone = '0x' + 'c1'.repeat(20);

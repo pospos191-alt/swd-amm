@@ -25,6 +25,9 @@ const ZERO = '0x0000000000000000000000000000000000000000';
 const SLOT_IMPL = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';
 const SLOT_ADMIN = '0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103';
 const SLOT_BEACON = '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50';
+// ZeppelinOS proxies (before EIP-1967), e.g. Circle's FiatTokenProxy behind USDC.
+const SLOT_ZOS_IMPL = '0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3';
+const SLOT_ZOS_ADMIN = '0x10d6a54a4754c8869d6886b5f5d7fbfa5b4522237ea5c60d11bc4e7a1ff9390b';
 const SEL = {
   name: '0x06fdde03', symbol: '0x95d89b41', decimals: '0x313ce567', totalSupply: '0x18160ddd',
   owner: '0x8da5cb5b', getOwner: '0x893d20e8', implementation: '0x5c60da1b',
@@ -141,8 +144,10 @@ export async function readContract(chainKey, address, opts = {}) {
   if (clone) {
     proxy = { kind: 'eip1167', implementation: clone };
   } else {
-    const [impl, admin, beacon] = await Promise.all([slot(SLOT_IMPL), slot(SLOT_ADMIN), slot(SLOT_BEACON)]);
+    const [impl, admin, beacon, zosImpl, zosAdmin] = await Promise.all([
+      slot(SLOT_IMPL), slot(SLOT_ADMIN), slot(SLOT_BEACON), slot(SLOT_ZOS_IMPL), slot(SLOT_ZOS_ADMIN)]);
     if (impl) proxy = { kind: 'eip1967', implementation: impl, admin: admin ?? undefined };
+    else if (zosImpl) proxy = { kind: 'zos', implementation: zosImpl, admin: zosAdmin ?? undefined };
     else if (beacon) {
       const beaconImpl = decodeAddress(await tryCall(beacon, SEL.implementation));
       proxy = { kind: 'beacon', beacon, implementation: beaconImpl ?? undefined, admin: admin ?? undefined };
@@ -209,6 +214,15 @@ export async function readContract(chainKey, address, opts = {}) {
     // The verified ABI names what the selector list could not.
     const abiFns = abiFunctions(source.abi);
     const cats = categorize(abiFns);
+    // A known selector in the code is not always a function of this contract:
+    // it may be a call it makes to another one (a pool calling its LP token's
+    // mint). The verified ABI says which functions it really offers. Behind a
+    // proxy the ABI is the implementation's, so the proxy's own stay.
+    const offered = new Set(abiFns.map((f) => f.selector));
+    const proxyOwn = new Set(proxy.implementation ? own.functions.map((f) => f.selector) : []);
+    for (let i = functions.length - 1; i >= 0; i--) {
+      if (!offered.has(functions[i].selector) && !proxyOwn.has(functions[i].selector)) functions.splice(i, 1);
+    }
     const have = new Set(functions.map((f) => f.selector));
     for (const f of abiFns) {
       if (have.has(f.selector)) continue;

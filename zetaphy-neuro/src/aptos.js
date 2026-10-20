@@ -225,7 +225,7 @@ export function analyzeAptos(m, ctx = {}) {
       if (m.refs.freeze.length) add('apt-freeze-power', cap('high'), { structs: m.refs.freeze, ...issuer });
       if (m.refs.burn.length) add('apt-burn-power', cap('high'), { structs: m.refs.burn, ...issuer });
       if (m.hooks?.length) add('apt-dispatch', cap('high'), { functions: m.hooks, ...issuer });
-      if (m.untransferable) add('apt-untransferable', 'medium');
+      if (m.untransferable) add('apt-untransferable', 'info');
       for (const p of m.packages ?? []) {
         if (p.upgradeable.length) add('apt-upgradeable', cap('high'), { address: p.address, packages: p.upgradeable, ...issuer });
         else if (p.immutable) add('apt-immutable', 'good', { address: p.address });

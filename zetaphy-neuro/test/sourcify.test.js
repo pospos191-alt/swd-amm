@@ -65,6 +65,15 @@ test('a verified ABI names hidden powers the selector list missed', async () => 
   assert.match(explain(r, 'en').lines.find((l) => l.id === 'source-verified').text, /byte for byte.*HiddenPowers, Solidity/);
 });
 
+test('with a verified ABI, a selector the contract only calls is not its power', async () => {
+  const lp = await chain.deploy('CleanToken');
+  const pool = await chain.deploy('PoolCallsMint', lp.slice(2).toLowerCase().padStart(64, '0'));
+  const plain = await readContract('eth', pool, { rpc: chain.rpc });
+  assert.ok(ids(plain).includes('can-mint'), 'without the ABI the PUSH4 of mint() looks like a power');
+  const r = await readContract('eth', pool, { rpc: chain.rpc, sourcify: async () => ({ match: 'exact', abi: abis().PoolCallsMint, url: 'u' }) });
+  assert.ok(!ids(r).includes('can-mint'));
+});
+
 test('unverified and unreachable Sourcify', async () => {
   const addr = await chain.deploy('CleanToken');
   const none = await readContract('eth', addr, { rpc: chain.rpc, sourcify: async () => null });

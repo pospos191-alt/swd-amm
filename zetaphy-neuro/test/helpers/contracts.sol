@@ -107,6 +107,37 @@ contract Proxy1967 {
     }
 }
 
+// ZeppelinOS-era proxy (Circle's FiatTokenProxy layout): same idea, older slots.
+contract ProxyZos {
+    bytes32 private constant IMPL = 0x7050c9e0f4ca769c69bd3a8ef740bc37934f8e2c036e5a723fd8ee048ed3f8c3;
+    bytes32 private constant ADMIN = 0x10d6a54a4754c8869d6886b5f5d7fbfa5b4522237ea5c60d11bc4e7a1ff9390b;
+
+    constructor(address impl, bytes memory init) {
+        assembly { sstore(IMPL, impl) sstore(ADMIN, caller()) }
+        (bool ok, ) = impl.delegatecall(init);
+        require(ok, "init failed");
+    }
+
+    fallback() external payable {
+        assembly {
+            let impl := sload(IMPL)
+            calldatacopy(0, 0, calldatasize())
+            let r := delegatecall(gas(), impl, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            switch r case 0 { revert(0, returndatasize()) } default { return(0, returndatasize()) }
+        }
+    }
+}
+
+// A pool that CALLS its LP token's mint(): the selector is in its code, but
+// mint is not one of its own functions.
+interface ILpToken { function mint(address to, uint256 v) external; }
+contract PoolCallsMint {
+    ILpToken public lp;
+    constructor(address t) { lp = ILpToken(t); }
+    function deposit(uint256 v) external { lp.mint(msg.sender, v); }
+}
+
 contract UpgradeableToken {
     string public name;
     string public symbol;
