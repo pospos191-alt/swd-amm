@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Jaringan', address: 'Alamat', proxy: 'Proxy', implementation: 'Kode utama (implementation)', owner: 'Pemilik', functions: 'Fungsi yang dikenali', report: 'ID laporan', explorer: 'Buka di explorer', fingerprint: 'Sidik jari kode (untuk pendaftaran templat)', unknown: 'Fungsi tanpa nama',
     program: 'Program token', mintAuth: 'Hak mencetak (mint authority)', freezeAuth: 'Hak membekukan (freeze authority)', extensions: 'Ekstensi', upgradeAuth: 'Hak upgrade (upgrade authority)', none: 'tidak ada',
     package: 'Paket', standard: 'Standar', admin: 'Admin', holders: 'Pemegang', listed: 'Daftar tonapi', raw: 'Alamat mentah (raw)',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang', nearKeys: 'Kunci akses penuh (full-access key)', codeHash: 'Hash kode',
   },
 };
 
@@ -188,4 +188,17 @@ export const T = {
     'tf-no-admin': () => 'Peran admin sudah dilepas: tidak ada lagi yang bisa mencetak.',
     'tf-hook': (p) => `Setiap transfer harus melewati kontrak ${p.contract} (before-send hook), yang dapat menerapkan aturannya sendiri, misalnya memblokir penjualan.`,
     'cw-caveat': () => 'Diperiksa dari data kontrak on-chain dengan aturan tetap. Kode Rust di dalamnya dan likuiditas tidak diperiksa. Bukan saran investasi.',
+    // NEAR
+    'near-not-found': () => 'Tidak ada akun dengan nama ini di NEAR. Mungkin salah ketik, atau jaringan yang dipilih salah.',
+    'near-no-contract': () => 'Akun NEAR ini adalah akun biasa tanpa kontrak. Ini bukan token.',
+    'near-token': (p) => `Token NEAR (NEP-141) "${p.name ?? '?'}" (${p.symbol ?? '?'}), total pasokan ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'near-contract': (p) => `Kontrak NEAR (kode WASM, misalnya dari Rust) dengan ${p.count ?? '?'} fungsi publik. Bukan token NEP-141.`,
+    'near-full-access': (p) => (p.issuer
+      ? `${p.issuer} masih memegang full-access key akun kontrak, sehingga dapat mengubah kodenya. Ini cara biasa penerbit memperbaiki atau menambah fitur.`
+      : `Akun kontrak masih memiliki ${p.count} full-access key: siapa pun yang memegangnya dapat memasang kode baru untuk menimpanya kapan saja. Hasil pemeriksaan hari ini belum tentu berlaku besok.`),
+    'near-locked': () => 'Akun kontrak tidak memiliki full-access key: tidak ada yang bisa memasang kode baru untuk menimpanya dari luar.',
+    'near-upgrade-method': (p) => (p.issuer
+      ? `${p.issuer} dapat meng-upgrade kode melalui fungsi kontrak (${list(p.functions)}).`
+      : `Kode ini memiliki fungsi yang dapat mengganti kodenya sendiri (${list(p.functions)}). Meskipun tanpa full-access key, siapa pun yang boleh memanggilnya dapat mengubah kode.`),
+    'near-caveat': () => 'Diperiksa dari nama fungsi di kode WASM dan data akun on-chain dengan aturan tetap. Isi fungsi tidak dibaca. Bukan saran investasi.',
 };

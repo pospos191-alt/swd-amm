@@ -60,6 +60,12 @@ export const KNOWN_TOKENS = {
     { address: '0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa::asset::USDT', symbol: 'USDT', issuer: 'LayerZero (bridged USDT)', kind: 'bridged' },
     { address: '0xf22bede237a07e121b56d91a491eb7bcdfd1f5907926a9e58338f964a01b17fa::asset::USDC', symbol: 'USDC', issuer: 'LayerZero (bridged USDC)', kind: 'bridged' },
   ],
+  // NEAR: account IDs (lowercase).
+  near: [
+    { address: 'usdt.tether-token.near', symbol: 'USDt', issuer: 'Tether', kind: 'stablecoin' },
+    { address: '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1', symbol: 'USDC', issuer: 'Circle', kind: 'stablecoin' },
+    { address: 'wrap.near', symbol: 'wNEAR', issuer: 'NEAR (wrapped NEAR)', kind: 'wrapped' },
+  ],
   // TON: raw form (workchain:hash) for matching, `display` for people.
   ton: [
     { address: '0:b113a994b5024a16719f69139328eb759596c38a25f59028b146fecdc3621dfe', display: 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs', symbol: 'USDT', issuer: 'Tether', kind: 'stablecoin' },

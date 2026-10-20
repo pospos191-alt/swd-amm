@@ -13,7 +13,7 @@ export const UI = {
     chain: '链', address: '地址', proxy: 'Proxy', implementation: '实际代码（Implementation）', owner: '所有者', functions: '已识别的函数', report: '报告编号', explorer: '在 explorer 中打开', fingerprint: '代码指纹（用于登记模板）', unknown: '无法识别名称的函数',
     program: '代币程序', mintAuth: '增发权限（mint authority）', freezeAuth: '冻结权限（freeze authority）', extensions: '扩展', upgradeAuth: '升级权限', none: '无',
     package: '代码包', standard: '标准', admin: '管理员', holders: '持有人数', listed: 'tonapi 名单', raw: '原始地址',
-    idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码', walletCode: '持有人钱包代码',
+    idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码', walletCode: '持有人钱包代码', nearKeys: '完全访问密钥（full-access key）', codeHash: '代码哈希',
   },
 };
 
@@ -188,4 +188,17 @@ export const T = {
     'tf-no-admin': () => '管理员角色已放弃：再也没有人能增发。',
     'tf-hook': (p) => `每笔转账都必须经过合约 ${p.contract}（before-send hook），它可以执行自己的规则，例如禁止卖出。`,
     'cw-caveat': () => '基于链上合约数据和固定规则检查。未检查其中的 Rust 代码，也未检查流动性。不构成投资建议。',
+    // NEAR
+    'near-not-found': () => 'NEAR 上没有这个名称的账户。可能名称输错了，或者选错了链。',
+    'near-no-contract': () => '这个 NEAR 账户是普通账户，没有合约。它不是代币。',
+    'near-token': (p) => `NEAR 代币（NEP-141）“${p.name ?? '?'}”（${p.symbol ?? '?'}），总供应量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
+    'near-contract': (p) => `NEAR 合约（WASM 代码，例如用 Rust 编写），有 ${p.count ?? '?'} 个公开函数。不是 NEP-141 代币。`,
+    'near-full-access': (p) => (p.issuer
+      ? `${p.issuer} 仍持有合约账户的 full-access key，因此可以修改代码，这是发行方修复或扩展功能的常规做法。`
+      : `合约账户仍有 ${p.count} 个 full-access key：持有者随时可以部署新代码覆盖它。今天的检查结果，明天未必仍然成立。`),
+    'near-locked': () => '合约账户没有任何 full-access key：没有人能从外部部署新代码覆盖它。',
+    'near-upgrade-method': (p) => (p.issuer
+      ? `${p.issuer} 可以通过合约函数（${list(p.functions)}）升级代码。`
+      : `代码中有可以替换自身代码的函数（${list(p.functions)}）。即使没有 full-access key，能调用这些函数的人也可以修改代码。`),
+    'near-caveat': () => '基于 WASM 代码中的函数名和链上账户数据，按固定规则检查。未读取函数内部逻辑。不构成投资建议。',
 };

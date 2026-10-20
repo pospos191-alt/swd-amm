@@ -21,8 +21,9 @@ const IDENTITY = new Set([
   'apt-token', 'apt-not-found', 'apt-not-token', 'apt-package',
   'ton-jetton', 'ton-not-found', 'ton-not-jetton',
   'cw20-token', 'cw-contract', 'cw-not-found', 'tf-token', 'eip7702',
+  'near-token', 'near-contract', 'near-not-found', 'near-no-contract',
 ]);
-const CAVEAT = new Set(['bytecode-only', 'sol-caveat', 'move-caveat', 'ton-caveat', 'cw-caveat']);
+const CAVEAT = new Set(['bytecode-only', 'sol-caveat', 'move-caveat', 'ton-caveat', 'cw-caveat', 'near-caveat']);
 const ORDER = { high: 0, medium: 1, low: 2, good: 3, info: 4 };
 // Who issued it (or that it copies someone) belongs right under what it is.
 const ISSUER = new Set(['known-issuer', 'lookalike']);

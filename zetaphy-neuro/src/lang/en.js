@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)', unknown: 'Unnamed functions',
     program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none',
     package: 'Package', standard: 'Standard', admin: 'Admin', holders: 'Holders', listed: 'tonapi list', raw: 'Raw address',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code', nearKeys: 'Full-access keys', codeHash: 'Code hash',
   },
 };
 
@@ -188,4 +188,17 @@ export const T = {
     'tf-no-admin': () => 'The admin role was dropped: nobody can mint more.',
     'tf-hook': (p) => `Every transfer must pass contract ${p.contract} (before-send hook), which can enforce its own rules, such as blocking sells.`,
     'cw-caveat': () => 'Checked from on-chain contract data with fixed rules. The Rust code inside and liquidity are not checked. Not investment advice.',
+    // NEAR
+    'near-not-found': () => 'No account with this name on NEAR. It may be mistyped, or the wrong chain is selected.',
+    'near-no-contract': () => 'This NEAR account is a plain account with no contract. It is not a token.',
+    'near-token': (p) => `NEAR token (NEP-141) "${p.name ?? '?'}" (${p.symbol ?? '?'}), total supply ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'near-contract': (p) => `A NEAR contract (WASM code, e.g. from Rust) with ${p.count ?? '?'} public functions. Not a NEP-141 token.`,
+    'near-full-access': (p) => (p.issuer
+      ? `${p.issuer} still holds a full-access key to the contract account, so it can change the code, the usual way issuers fix or extend it.`
+      : `The contract account still has ${p.count} full-access key(s): whoever holds one can deploy new code over it at any time. What is checked today may not hold tomorrow.`),
+    'near-locked': () => 'The contract account has no full-access keys: nobody can deploy new code over it from outside.',
+    'near-upgrade-method': (p) => (p.issuer
+      ? `${p.issuer} can upgrade the code through a contract function (${list(p.functions)}).`
+      : `The code has functions that can replace its own code (${list(p.functions)}). Even without a full-access key, whoever may call them can change it.`),
+    'near-caveat': () => 'Checked from the function names in the WASM code and on-chain account data with fixed rules. Function bodies are not read. Not investment advice.',
 };

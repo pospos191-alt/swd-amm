@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Chuỗi', address: 'Địa chỉ', proxy: 'Proxy', implementation: 'Mã thực thi', owner: 'Chủ sở hữu', functions: 'Hàm đã nhận diện', report: 'Mã báo cáo', explorer: 'Mở trên explorer', fingerprint: 'Dấu vân tay mã (để đăng ký mẫu)', unknown: 'Hàm chưa rõ tên',
     program: 'Chương trình token', mintAuth: 'Quyền tạo token (mint authority)', freezeAuth: 'Quyền đóng băng (freeze authority)', extensions: 'Tiện ích mở rộng', upgradeAuth: 'Quyền nâng cấp', none: 'không có',
     package: 'Gói', standard: 'Tiêu chuẩn', admin: 'Quản trị viên', holders: 'Số người nắm giữ', listed: 'Danh sách tonapi', raw: 'Địa chỉ gốc (raw)',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ', nearKeys: 'Khóa toàn quyền (full-access key)', codeHash: 'Mã băm của mã',
   },
 };
 
@@ -188,4 +188,17 @@ export const T = {
     'tf-no-admin': () => 'Vai trò quản trị viên đã bị bỏ: không ai có thể tạo thêm token nữa.',
     'tf-hook': (p) => `Mọi giao dịch chuyển token đều phải qua hợp đồng ${p.contract} (before-send hook), hợp đồng này có thể áp đặt quy tắc riêng, chẳng hạn như chặn bán.`,
     'cw-caveat': () => 'Kiểm tra từ dữ liệu hợp đồng trên chuỗi theo các quy tắc cố định. Chưa kiểm tra mã Rust bên trong và thanh khoản. Không phải lời khuyên đầu tư.',
+    // NEAR
+    'near-not-found': () => 'Không có tài khoản nào có tên này trên NEAR. Có thể bạn đã nhập sai, hoặc đã chọn sai chuỗi.',
+    'near-no-contract': () => 'Tài khoản NEAR này là tài khoản thường, không có hợp đồng. Đây không phải là token.',
+    'near-token': (p) => `Token NEAR (NEP-141) "${p.name ?? '?'}" (${p.symbol ?? '?'}), tổng cung ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'near-contract': (p) => `Một hợp đồng NEAR (mã WASM, ví dụ viết bằng Rust) có ${p.count ?? '?'} hàm công khai. Không phải token NEP-141.`,
+    'near-full-access': (p) => (p.issuer
+      ? `${p.issuer} vẫn giữ một full-access key của tài khoản hợp đồng, nên có thể thay đổi mã, cách thông thường để nhà phát hành sửa lỗi hoặc bổ sung tính năng.`
+      : `Tài khoản hợp đồng vẫn còn ${p.count} full-access key: ai giữ khóa có thể triển khai mã mới đè lên bất cứ lúc nào. Kết quả kiểm tra hôm nay có thể không còn đúng vào ngày mai.`),
+    'near-locked': () => 'Tài khoản hợp đồng không có full-access key nào: không ai có thể triển khai mã mới đè lên từ bên ngoài.',
+    'near-upgrade-method': (p) => (p.issuer
+      ? `${p.issuer} có thể nâng cấp mã thông qua một hàm của hợp đồng (${list(p.functions)}).`
+      : `Mã có các hàm có thể thay chính mã của nó (${list(p.functions)}). Dù không có full-access key, ai được phép gọi các hàm này vẫn có thể thay đổi mã.`),
+    'near-caveat': () => 'Kiểm tra từ tên hàm trong mã WASM và dữ liệu tài khoản trên chuỗi theo các quy tắc cố định. Chưa đọc nội dung hàm. Không phải lời khuyên đầu tư.',
 };

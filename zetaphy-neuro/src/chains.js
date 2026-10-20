@@ -7,6 +7,7 @@ import { isSuiInput, SUI_MAINNET } from './sui.js';
 import { isAptosInput, APTOS_MAINNET } from './aptos.js';
 import { isTonAddress } from './ton.js';
 import { isCosmwasmInput } from './cosmwasm.js';
+import { isNearAccount } from './near.js';
 
 export const CHAINS = {
   eth: {
@@ -78,6 +79,13 @@ export const CHAINS = {
     rpcs: ['https://rest-kralum.neutron-1.neutron.org', 'https://rest.cosmos.directory/neutron'],
     explorer: 'https://www.mintscan.io/neutron/address/',
   },
+  near: {
+    kind: 'near',
+    chainId: 'mainnet',
+    name: 'NEAR',
+    rpcs: ['https://free.rpc.fastnear.com', 'https://rpc.mainnet.near.org', 'https://near.lava.build'],
+    explorer: 'https://nearblocks.io/address/',
+  },
   ton: {
     kind: 'ton',
     name: 'TON',
@@ -100,6 +108,7 @@ export function isChainAddress(chainKey, address) {
     case 'aptos': return isAptosInput(address);
     case 'ton': return isTonAddress(address);
     case 'cosmwasm': return isCosmwasmInput(address, c.prefix);
+    case 'near': return isNearAccount(address);
     default: return EVM_ADDRESS.test(address);
   }
 }

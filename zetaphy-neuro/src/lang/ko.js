@@ -13,7 +13,7 @@ export const UI = {
     chain: '체인', address: '주소', proxy: 'Proxy', implementation: '실제 코드 (implementation)', owner: '소유자', functions: '알려진 함수', report: '보고서 ID', explorer: 'explorer에서 열기', fingerprint: '코드 지문 (템플릿 등록용)', unknown: '이름을 알 수 없는 함수',
     program: '토큰 프로그램', mintAuth: '발행 권한', freezeAuth: '동결 권한', extensions: '확장 기능', upgradeAuth: '업그레이드 권한', none: '없음',
     package: '패키지', standard: '표준', admin: '관리자', holders: '보유자 수', listed: 'tonapi 목록', raw: '원본 주소 (raw)',
-    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드',
+    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드', nearKeys: '전체 접근 키 (full-access key)', codeHash: '코드 해시',
   },
 };
 
@@ -188,4 +188,17 @@ export const T = {
     'tf-no-admin': () => '관리자 권한이 포기되었습니다. 이제 아무도 더 발행할 수 없습니다.',
     'tf-hook': (p) => `모든 전송은 컨트랙트 ${p.contract}(before-send hook)를 거쳐야 하며, 이 컨트랙트는 판매 차단 같은 자체 규칙을 적용할 수 있습니다.`,
     'cw-caveat': () => '체인의 컨트랙트 데이터를 정해진 규칙으로 검사했습니다. 내부의 Rust 코드와 유동성은 검사하지 않았습니다. 투자 조언이 아닙니다.',
+    // NEAR
+    'near-not-found': () => 'NEAR에 이 이름의 계정이 없습니다. 잘못 입력했거나 체인을 잘못 선택했을 수 있습니다.',
+    'near-no-contract': () => '이 NEAR 계정은 컨트랙트가 없는 일반 계정입니다. 토큰이 아닙니다.',
+    'near-token': (p) => `NEAR 토큰(NEP-141) "${p.name ?? '?'}" (${p.symbol ?? '?'}), 총 발행량 ${fmtSupply(p.totalSupply, p.decimals)}개입니다.`,
+    'near-contract': (p) => `공개 함수가 ${p.count ?? '?'}개 있는 NEAR 컨트랙트(WASM 코드, 예: Rust로 작성)입니다. NEP-141 토큰이 아닙니다.`,
+    'near-full-access': (p) => (p.issuer
+      ? `${p.issuer}이(가) 아직 컨트랙트 계정의 full-access key를 가지고 있어 코드를 변경할 수 있습니다. 발행사가 수정하거나 기능을 추가할 때 쓰는 일반적인 방식입니다.`
+      : `컨트랙트 계정에 아직 full-access key가 ${p.count}개 있습니다. 키를 가진 사람은 언제든지 새 코드를 덮어써서 배포할 수 있습니다. 오늘 검사한 내용이 내일은 맞지 않을 수 있습니다.`),
+    'near-locked': () => '컨트랙트 계정에 full-access key가 없습니다. 외부에서 아무도 새 코드를 덮어써서 배포할 수 없습니다.',
+    'near-upgrade-method': (p) => (p.issuer
+      ? `${p.issuer}이(가) 컨트랙트 함수(${list(p.functions)})를 통해 코드를 업그레이드할 수 있습니다.`
+      : `코드에 자기 코드를 교체할 수 있는 함수가 있습니다 (${list(p.functions)}). full-access key가 없어도 이 함수를 호출할 수 있는 사람은 코드를 변경할 수 있습니다.`),
+    'near-caveat': () => 'WASM 코드의 함수 이름과 체인의 계정 데이터를 정해진 규칙으로 검사했습니다. 함수 내부는 읽지 않았습니다. 투자 조언이 아닙니다.',
 };

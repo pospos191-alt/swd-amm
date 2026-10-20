@@ -2,8 +2,9 @@
 // Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call.
 
 import { CHAINS, isChainAddress } from './chains.js';
-import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest } from './rpc.js';
+import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc } from './rpc.js';
 import { readCosmwasmAccount, analyzeCosmwasm } from './cosmwasm.js';
+import { readNearAccount, analyzeNear } from './near.js';
 import { readSolanaAccount, analyzeSolana } from './solana.js';
 import { readAnchorIdl } from './anchor.js';
 import { readSuiAccount, analyzeSui } from './sui.js';
@@ -74,6 +75,7 @@ export async function readContract(chainKey, address, opts = {}) {
   if (chain.kind === 'aptos') return readAptos(chainKey, chain, address, opts);
   if (chain.kind === 'ton') return readTon(chainKey, chain, address, opts);
   if (chain.kind === 'cosmwasm') return readCosmwasm(chainKey, chain, address, opts);
+  if (chain.kind === 'near') return readNear(chainKey, chain, address, opts);
   const addr = address.toLowerCase();
   const rpc = opts.rpc ?? createRpc(chain.rpcs, chain.id, { fetchImpl: opts.fetchImpl });
 
@@ -346,5 +348,19 @@ async function readCosmwasm(chainKey, chain, address, opts) {
     report.cosmwasm = { creator: m.creator, admin: m.admin, hook: m.hook };
   }
   report.analysis = analyzeCosmwasm(m);
+  return finish(report);
+}
+
+async function readNear(chainKey, chain, address, opts) {
+  const rpc = opts.rpc ?? createNearRpc(chain.rpcs, chain.chainId, { fetchImpl: opts.fetchImpl });
+  const m = await readNearAccount(rpc, address);
+  const report = { version: REPORT_VERSION, chain: chainKey, address };
+  if (m.token) report.token = m.token;
+  if (m.kind === 'token' || m.kind === 'contract') {
+    report.near = { codeHash: m.codeHash, fullAccessKeys: m.fullAccess, methods: m.methods };
+  }
+  const known = m.kind === 'token' ? knownToken(chainKey, address) : null;
+  const lookalike = m.kind === 'token' ? lookalikeOf(chainKey, address, m.token.symbol) : null;
+  report.analysis = analyzeNear(m, { known, lookalike });
   return finish(report);
 }
