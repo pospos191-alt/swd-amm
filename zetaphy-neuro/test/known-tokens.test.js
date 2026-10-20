@@ -28,6 +28,8 @@ test('every registered address is well-formed for its chain (EIP-55 checksum / 3
       else if (kind === 'sui' || kind === 'aptos') {
         const canon = t.address.includes('::') ? normalizeType(t.address) : longAddress(t.address);
         assert.equal(t.address, canon, `${chain} ${t.symbol} must be stored in 64-digit form`);
+      } else if (kind === 'starknet') {
+        assert.match(t.address, /^0x[0-9a-f]{64}$/, `${chain} ${t.symbol}`);
       } else if (kind === 'near') {
         assert.ok(isChainAddress('near', t.address), `${chain} ${t.symbol}`);
       } else if (kind === 'ton') {

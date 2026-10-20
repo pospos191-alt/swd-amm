@@ -13,7 +13,7 @@ export const UI = {
     chain: 'チェーン', address: 'アドレス', proxy: 'Proxy', implementation: '実装コード', owner: 'オーナー', functions: '判明している関数', report: 'レポートID', explorer: 'explorer で開く', fingerprint: 'コードの指紋（テンプレート登録用）', unknown: '名前が不明な関数',
     program: 'トークンプログラム', mintAuth: '発行権限', freezeAuth: '凍結権限', extensions: '拡張機能', upgradeAuth: 'アップグレード権限', none: 'なし',
     package: 'パッケージ', standard: '規格', admin: '管理者', holders: '保有者数', listed: 'tonapi リスト', raw: 'raw アドレス',
-    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード', walletCode: '保有者ウォレットのコード', nearKeys: 'フルアクセスキー（full-access key）', codeHash: 'コードハッシュ',
+    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード', walletCode: '保有者ウォレットのコード', nearKeys: 'フルアクセスキー（full-access key）', codeHash: 'コードハッシュ', cairo: 'Cairo バージョン',
   },
 };
 
@@ -201,4 +201,12 @@ export const T = {
       ? `${p.issuer} はコントラクトの関数（${list(p.functions)}）を通じてコードをアップグレードできます。`
       : `コードには自分自身のコードを置き換えられる関数があります（${list(p.functions)}）。full-access key がなくても、これらを呼び出せる人はコードを変更できます。`),
     'near-caveat': () => 'WASM コード内の関数名とチェーン上のアカウントデータを決まったルールで確認した結果です。関数の中身は読んでいません。投資助言ではありません。',
+    // Starknet (Cairo)
+    'sn-not-found': () => 'Starknet 上のこのアドレスにコントラクトがありません。入力ミスか、チェーンの選択が間違っている可能性があります。',
+    'sn-token': (p) => `Starknet トークン「${p.name ?? '?'}」（${p.symbol ?? '?'}）、総供給量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
+    'sn-contract': (p) => `Starknet コントラクト（Cairo ${p.cairo === 1 ? '1' : '0'} で作成）で、ABI に関数が ${p.count ?? '?'} 個あります。トークンではありません。`,
+    'sn-upgradeable': (p) => (p.issuer
+      ? `${p.issuer} はコントラクトのコードをアップグレードできます。発行者が修正や機能追加をする通常の方法です。`
+      : `アップグレード可能${p.implementation ? `（コード ${p.implementation} を指す proxy）` : ''}${p.functions?.length ? `（${list(p.functions)} 経由）` : ''}: 権限を持つ人はコード全体を置き換えられます。今日の確認結果が明日も正しいとは限りません。`),
+    'sn-caveat': () => 'コントラクトがチェーン上で公開している ABI（関数名と、状態を変更するかどうか）を決まったルールで確認した結果です。関数の中身は読んでいません。投資助言ではありません。',
 };

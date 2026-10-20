@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Jaringan', address: 'Alamat', proxy: 'Proxy', implementation: 'Kode utama (implementation)', owner: 'Pemilik', functions: 'Fungsi yang dikenali', report: 'ID laporan', explorer: 'Buka di explorer', fingerprint: 'Sidik jari kode (untuk pendaftaran templat)', unknown: 'Fungsi tanpa nama',
     program: 'Program token', mintAuth: 'Hak mencetak (mint authority)', freezeAuth: 'Hak membekukan (freeze authority)', extensions: 'Ekstensi', upgradeAuth: 'Hak upgrade (upgrade authority)', none: 'tidak ada',
     package: 'Paket', standard: 'Standar', admin: 'Admin', holders: 'Pemegang', listed: 'Daftar tonapi', raw: 'Alamat mentah (raw)',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang', nearKeys: 'Kunci akses penuh (full-access key)', codeHash: 'Hash kode',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang', nearKeys: 'Kunci akses penuh (full-access key)', codeHash: 'Hash kode', cairo: 'Versi Cairo',
   },
 };
 
@@ -201,4 +201,12 @@ export const T = {
       ? `${p.issuer} dapat meng-upgrade kode melalui fungsi kontrak (${list(p.functions)}).`
       : `Kode ini memiliki fungsi yang dapat mengganti kodenya sendiri (${list(p.functions)}). Meskipun tanpa full-access key, siapa pun yang boleh memanggilnya dapat mengubah kode.`),
     'near-caveat': () => 'Diperiksa dari nama fungsi di kode WASM dan data akun on-chain dengan aturan tetap. Isi fungsi tidak dibaca. Bukan saran investasi.',
+    // Starknet (Cairo)
+    'sn-not-found': () => 'Tidak ada kontrak di alamat ini di Starknet. Mungkin salah ketik, atau jaringan yang dipilih salah.',
+    'sn-token': (p) => `Token Starknet "${p.name ?? '?'}" (${p.symbol ?? '?'}), total pasokan ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'sn-contract': (p) => `Kontrak Starknet (ditulis dengan Cairo ${p.cairo === 1 ? '1' : '0'}) dengan ${p.count ?? '?'} fungsi di ABI-nya. Bukan token.`,
+    'sn-upgradeable': (p) => (p.issuer
+      ? `${p.issuer} dapat meng-upgrade kode kontrak. Ini cara biasa penerbit memperbaiki atau menambah fitur.`
+      : `Bisa di-upgrade${p.implementation ? ` (proxy yang menunjuk ke kode ${p.implementation})` : ''}${p.functions?.length ? ` melalui ${list(p.functions)}` : ''}: siapa pun yang diizinkan dapat mengganti seluruh kode. Hasil pemeriksaan hari ini belum tentu berlaku besok.`),
+    'sn-caveat': () => 'Diperiksa dari ABI yang dipublikasikan kontrak on-chain (nama fungsi dan apakah fungsi mengubah state) dengan aturan tetap. Isi fungsi tidak dibaca. Bukan saran investasi.',
 };

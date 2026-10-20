@@ -8,6 +8,7 @@ import { isAptosInput, APTOS_MAINNET } from './aptos.js';
 import { isTonAddress } from './ton.js';
 import { isCosmwasmInput } from './cosmwasm.js';
 import { isNearAccount } from './near.js';
+import { isStarknetAddress, SN_MAIN } from './starknet.js';
 
 export const CHAINS = {
   eth: {
@@ -86,6 +87,13 @@ export const CHAINS = {
     rpcs: ['https://free.rpc.fastnear.com', 'https://rpc.mainnet.near.org', 'https://near.lava.build'],
     explorer: 'https://nearblocks.io/address/',
   },
+  starknet: {
+    kind: 'starknet',
+    chainId: SN_MAIN,
+    name: 'Starknet',
+    rpcs: ['https://rpc.starknet.lava.build', 'https://starknet.drpc.org', 'https://api.zan.top/public/starknet-mainnet'],
+    explorer: 'https://voyager.online/contract/',
+  },
   ton: {
     kind: 'ton',
     name: 'TON',
@@ -109,6 +117,7 @@ export function isChainAddress(chainKey, address) {
     case 'ton': return isTonAddress(address);
     case 'cosmwasm': return isCosmwasmInput(address, c.prefix);
     case 'near': return isNearAccount(address);
+    case 'starknet': return isStarknetAddress(address);
     default: return EVM_ADDRESS.test(address);
   }
 }

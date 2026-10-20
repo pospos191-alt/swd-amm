@@ -2,9 +2,10 @@
 // Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call.
 
 import { CHAINS, isChainAddress } from './chains.js';
-import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc } from './rpc.js';
+import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc, createStarknetRpc } from './rpc.js';
 import { readCosmwasmAccount, analyzeCosmwasm } from './cosmwasm.js';
 import { readNearAccount, analyzeNear } from './near.js';
+import { readStarknetAccount, analyzeStarknet, normalize as snNormalize } from './starknet.js';
 import { readSolanaAccount, analyzeSolana } from './solana.js';
 import { readAnchorIdl } from './anchor.js';
 import { readSuiAccount, analyzeSui } from './sui.js';
@@ -76,6 +77,7 @@ export async function readContract(chainKey, address, opts = {}) {
   if (chain.kind === 'ton') return readTon(chainKey, chain, address, opts);
   if (chain.kind === 'cosmwasm') return readCosmwasm(chainKey, chain, address, opts);
   if (chain.kind === 'near') return readNear(chainKey, chain, address, opts);
+  if (chain.kind === 'starknet') return readStarknet(chainKey, chain, address, opts);
   const addr = address.toLowerCase();
   const rpc = opts.rpc ?? createRpc(chain.rpcs, chain.id, { fetchImpl: opts.fetchImpl });
 
@@ -362,5 +364,21 @@ async function readNear(chainKey, chain, address, opts) {
   const known = m.kind === 'token' ? knownToken(chainKey, address) : null;
   const lookalike = m.kind === 'token' ? lookalikeOf(chainKey, address, m.token.symbol) : null;
   report.analysis = analyzeNear(m, { known, lookalike });
+  return finish(report);
+}
+
+async function readStarknet(chainKey, chain, address, opts) {
+  const rpc = opts.rpc ?? createStarknetRpc(chain.rpcs, chain.chainId, { fetchImpl: opts.fetchImpl });
+  const m = await readStarknetAccount(rpc, address);
+  const addr = snNormalize(address);
+  const report = { version: REPORT_VERSION, chain: chainKey, address: addr };
+  if (m.token) report.token = m.token;
+  if (m.kind !== 'missing') {
+    report.starknet = { cairo: m.cairo, functions: m.functions, implementation: m.proxy?.implementation };
+    if (m.owner !== undefined) report.owner = m.owner;
+  }
+  const known = m.kind === 'token' ? knownToken(chainKey, addr) : null;
+  const lookalike = m.kind === 'token' ? lookalikeOf(chainKey, addr, m.token.symbol) : null;
+  report.analysis = analyzeStarknet(m, { known, lookalike });
   return finish(report);
 }

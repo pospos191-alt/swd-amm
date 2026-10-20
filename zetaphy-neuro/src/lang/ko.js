@@ -13,7 +13,7 @@ export const UI = {
     chain: '체인', address: '주소', proxy: 'Proxy', implementation: '실제 코드 (implementation)', owner: '소유자', functions: '알려진 함수', report: '보고서 ID', explorer: 'explorer에서 열기', fingerprint: '코드 지문 (템플릿 등록용)', unknown: '이름을 알 수 없는 함수',
     program: '토큰 프로그램', mintAuth: '발행 권한', freezeAuth: '동결 권한', extensions: '확장 기능', upgradeAuth: '업그레이드 권한', none: '없음',
     package: '패키지', standard: '표준', admin: '관리자', holders: '보유자 수', listed: 'tonapi 목록', raw: '원본 주소 (raw)',
-    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드', nearKeys: '전체 접근 키 (full-access key)', codeHash: '코드 해시',
+    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드', nearKeys: '전체 접근 키 (full-access key)', codeHash: '코드 해시', cairo: 'Cairo 버전',
   },
 };
 
@@ -201,4 +201,12 @@ export const T = {
       ? `${p.issuer}이(가) 컨트랙트 함수(${list(p.functions)})를 통해 코드를 업그레이드할 수 있습니다.`
       : `코드에 자기 코드를 교체할 수 있는 함수가 있습니다 (${list(p.functions)}). full-access key가 없어도 이 함수를 호출할 수 있는 사람은 코드를 변경할 수 있습니다.`),
     'near-caveat': () => 'WASM 코드의 함수 이름과 체인의 계정 데이터를 정해진 규칙으로 검사했습니다. 함수 내부는 읽지 않았습니다. 투자 조언이 아닙니다.',
+    // Starknet (Cairo)
+    'sn-not-found': () => 'Starknet에서 이 주소의 컨트랙트를 찾지 못했습니다. 잘못 입력했거나 체인을 잘못 선택했을 수 있습니다.',
+    'sn-token': (p) => `Starknet 토큰 "${p.name ?? '?'}" (${p.symbol ?? '?'}), 총 발행량 ${fmtSupply(p.totalSupply, p.decimals)}개입니다.`,
+    'sn-contract': (p) => `ABI에 함수가 ${p.count ?? '?'}개 있는 Starknet 컨트랙트(Cairo ${p.cairo === 1 ? '1' : '0'}로 작성)입니다. 토큰이 아닙니다.`,
+    'sn-upgradeable': (p) => (p.issuer
+      ? `${p.issuer}이(가) 컨트랙트 코드를 업그레이드할 수 있습니다. 발행사가 수정하거나 기능을 추가할 때 쓰는 일반적인 방식입니다.`
+      : `업그레이드 가능${p.implementation ? ` (코드 ${p.implementation}을(를) 가리키는 proxy)` : ''}${p.functions?.length ? ` (함수: ${list(p.functions)})` : ''}: 권한이 있는 사람이 코드 전체를 교체할 수 있습니다. 오늘 확인한 내용이 내일은 달라질 수 있습니다.`),
+    'sn-caveat': () => '컨트랙트가 체인에 공개한 ABI(함수 이름과 상태 변경 여부)를 정해진 규칙으로 검사했습니다. 함수 내부는 읽지 않았습니다. 투자 조언이 아닙니다.',
 };
