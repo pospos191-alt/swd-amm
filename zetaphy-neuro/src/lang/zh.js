@@ -13,7 +13,7 @@ export const UI = {
     chain: '链', address: '地址', proxy: 'Proxy', implementation: '实际代码（Implementation）', owner: '所有者', functions: '已识别的函数', report: '报告编号', explorer: '在 explorer 中打开', fingerprint: '代码指纹（用于登记模板）', unknown: '无法识别名称的函数',
     program: '代币程序', mintAuth: '增发权限（mint authority）', freezeAuth: '冻结权限（freeze authority）', extensions: '扩展', upgradeAuth: '升级权限', none: '无',
     package: '代码包', standard: '标准', admin: '管理员', holders: '持有人数', listed: 'tonapi 名单', raw: '原始地址',
-    idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码',
+    idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码', walletCode: '持有人钱包代码',
   },
 };
 
@@ -155,7 +155,11 @@ export const T = {
       : `管理员（${p.admin}）仍然可以修改名称和图标；如果合约代码不是标准代码，还可能拥有本检查看不到的其他权限。`),
     'ton-admin-dropped': () => '管理员角色已放弃：再也没有人能增发或修改代币信息。',
     'ton-mint-flag': () => '合约仍标记为可增发，但已没有管理员可以执行增发。',
-    'ton-caveat': () => '基于 tonapi.io 解码的合约数据和固定规则检查。未检查持有人钱包的代码（有些代币因此可以买入却无法卖出）。不构成投资建议。',
+    'ton-caveat': () => '基于 tonapi.io 解码的合约数据和固定规则检查；持有人钱包按 tonapi 的识别结果检查，并未逐行阅读代码。不构成投资建议。',
+    'ton-wallet-standard': (p) => `持有人的代币存放在 tonapi.io 识别的标准 jetton 钱包中（${list(p.interfaces)}）。`,
+    'ton-wallet-custom': (p) => (p.issuer
+      ? `${p.issuer} 使用自己的 jetton 钱包代码，这对该代币属正常。`
+      : `持有人的代币存放在 tonapi.io 无法识别为标准 jetton 钱包的代码中${p.compiler ? ` (${p.compiler})` : ''}。自定义钱包代码可能拒绝转出，导致能买不能卖。代码哈希：${p.codeHash ?? '?'}。`),
     // Solana programs (Anchor IDL)
     'sol-idl': (p) => `该程序用 Rust（Anchor）编写，并在链上公开了指令列表：名称 ${p.name ?? '?'}，共 ${p.count ?? '?'} 条指令。`,
     'sol-admin-instructions': (p) => `需要管理员签名的指令（${list(p.functions)}）。管理员可以用它们改变程序的运行方式。`,

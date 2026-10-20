@@ -153,8 +153,21 @@ export function createAptosRest(urls, chainId, { fetchImpl = globalThis.fetch, t
 }
 
 /** TON client (tonapi.io REST, GET only). Mainnet is chosen by the URL. */
-export function createTonApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 15000 } = {}) {
+export function createTonApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 15000, spacingMs = 1050 } = {}) {
   const run = failover(urls, async () => {});
+  // Requests go out one at a time, at most about one per second.
+  let queue = Promise.resolve();
+  let last = 0;
+  const paced = (fn) => {
+    const p = queue.then(async () => {
+      const wait = last + spacingMs - Date.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      last = Date.now();
+      return fn();
+    });
+    queue = p.catch(() => {});
+    return p;
+  };
   // The free tier allows about one request per second: wait and retry once.
   const get1 = async (url, path) => {
     try {
@@ -165,7 +178,7 @@ export function createTonApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 1
       return fetchJson(fetchImpl, url + path, { method: 'GET' }, timeoutMs);
     }
   };
-  return { get: (path) => run((url) => get1(url, path)) };
+  return { get: (path) => paced(() => run((url) => get1(url, path))) };
 }
 
 /** Cosmos REST (LCD) client, GET only; refuses endpoints serving another chain id. */

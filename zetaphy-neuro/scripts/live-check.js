@@ -57,7 +57,8 @@ async function checkOne(s) {
       ...s.expect.filter((id) => !ids.includes(id)),
       ...(s.absent ?? []).filter((id) => ids.includes(id)).map((id) => `unexpected ${id}`),
     ];
-    return { ...s, ok: missing.length === 0, missing, level: r.analysis.level, ids, ms: Date.now() - t0, lines: explain(r, 'en').lines.map((l) => `${l.severity}: ${l.text}`) };
+    const extra = r.ton?.wallet ? [`wallet: ${JSON.stringify(r.ton.wallet)}`] : [];
+    return { ...s, ok: missing.length === 0, missing, level: r.analysis.level, ids, ms: Date.now() - t0, lines: [...explain(r, 'en').lines.map((l) => `${l.severity}: ${l.text}`), ...extra] };
   } catch (e) {
     return { ...s, ok: false, error: e.message, ms: Date.now() - t0 };
   }

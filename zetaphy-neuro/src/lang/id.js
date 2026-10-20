@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Jaringan', address: 'Alamat', proxy: 'Proxy', implementation: 'Kode utama (implementation)', owner: 'Pemilik', functions: 'Fungsi yang dikenali', report: 'ID laporan', explorer: 'Buka di explorer', fingerprint: 'Sidik jari kode (untuk pendaftaran templat)', unknown: 'Fungsi tanpa nama',
     program: 'Program token', mintAuth: 'Hak mencetak (mint authority)', freezeAuth: 'Hak membekukan (freeze authority)', extensions: 'Ekstensi', upgradeAuth: 'Hak upgrade (upgrade authority)', none: 'tidak ada',
     package: 'Paket', standard: 'Standar', admin: 'Admin', holders: 'Pemegang', listed: 'Daftar tonapi', raw: 'Alamat mentah (raw)',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang',
   },
 };
 
@@ -155,7 +155,11 @@ export const T = {
       : `Seorang admin (${p.admin}) masih dapat mengubah nama dan logo, dan jika kode kontraknya tidak standar, mungkin memegang kekuasaan lain yang tidak terlihat oleh pemeriksaan ini.`),
     'ton-admin-dropped': () => 'Peran admin sudah dilepas: tidak ada lagi yang bisa mencetak token atau mengubah data token.',
     'ton-mint-flag': () => 'Kontrak masih menyatakan token bisa dicetak, tetapi tidak ada admin yang bisa mencetaknya.',
-    'ton-caveat': () => 'Diperiksa dari data kontrak yang diurai oleh tonapi.io dengan aturan tetap. Kode dompet pemegang tidak diperiksa (karena itu, beberapa token bisa dibeli tetapi tidak bisa dijual). Bukan saran investasi.',
+    'ton-caveat': () => 'Diperiksa dari data kontrak yang diurai oleh tonapi.io dengan aturan tetap; dompet pemegang diperiksa berdasarkan apa yang dikenali tonapi, bukan dibaca baris demi baris. Bukan saran investasi.',
+    'ton-wallet-standard': (p) => `Token milik pemegang tersimpan di dompet jetton standar yang dikenali tonapi.io (${list(p.interfaces)}).`,
+    'ton-wallet-custom': (p) => (p.issuer
+      ? `${p.issuer} memakai kode dompet jetton sendiri, hal yang wajar untuk token ini.`
+      : `Token milik pemegang tersimpan di kode dompet yang tidak dikenali tonapi.io sebagai dompet jetton standar${p.compiler ? ` (${p.compiler})` : ''}. Kode dompet khusus bisa menolak pengiriman, sehingga Anda mungkin bisa membeli tetapi tidak bisa menjual. Hash kode: ${p.codeHash ?? '?'}.`),
     // Solana programs (Anchor IDL)
     'sol-idl': (p) => `Program ini ditulis dengan Rust (Anchor) dan menerbitkan daftar instruksinya di on-chain: ${p.name ?? '?'}, ${p.count ?? '?'} instruksi.`,
     'sol-admin-instructions': (p) => `Instruksi yang memerlukan tanda tangan admin (${list(p.functions)}). Admin dapat memakainya untuk mengubah cara kerja program.`,

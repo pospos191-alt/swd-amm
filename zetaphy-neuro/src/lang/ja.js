@@ -13,7 +13,7 @@ export const UI = {
     chain: 'チェーン', address: 'アドレス', proxy: 'Proxy', implementation: '実装コード', owner: 'オーナー', functions: '判明している関数', report: 'レポートID', explorer: 'explorer で開く', fingerprint: 'コードの指紋（テンプレート登録用）', unknown: '名前が不明な関数',
     program: 'トークンプログラム', mintAuth: '発行権限', freezeAuth: '凍結権限', extensions: '拡張機能', upgradeAuth: 'アップグレード権限', none: 'なし',
     package: 'パッケージ', standard: '規格', admin: '管理者', holders: '保有者数', listed: 'tonapi リスト', raw: 'raw アドレス',
-    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード',
+    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード', walletCode: '保有者ウォレットのコード',
   },
 };
 
@@ -155,7 +155,11 @@ export const T = {
       : `管理者（${p.admin}）はまだ名前やロゴを変更できます。コントラクトのコードが標準的でない場合、このチェックでは見えない他の権限を持っている可能性もあります。`),
     'ton-admin-dropped': () => '管理者の役割は放棄されています。もう誰もトークンを発行したり、情報を変更したりできません。',
     'ton-mint-flag': () => 'コントラクト上はまだ発行可能となっていますが、発行できる管理者はいません。',
-    'ton-caveat': () => 'tonapi.io が解読したコントラクトのデータを決まったルールで確認した結果です。保有者のウォレットのコードは確認していません（そのせいで買えても売れないトークンもあります）。投資助言ではありません。',
+    'ton-caveat': () => 'tonapi.io が解読したコントラクトのデータを決まったルールで確認した結果です。保有者のウォレットは tonapi の認識結果で確認しており、コードを一行ずつ読んではいません。投資助言ではありません。',
+    'ton-wallet-standard': (p) => `保有者のトークンは、tonapi.io が認識する標準の jetton ウォレットに入っています（${list(p.interfaces)}）。`,
+    'ton-wallet-custom': (p) => (p.issuer
+      ? `${p.issuer} は独自の jetton ウォレットコードを使っています。このトークンでは通常のことです。`
+      : `保有者のトークンは、tonapi.io が標準の jetton ウォレットと認識しないコードに入っています${p.compiler ? ` (${p.compiler})` : ''}。独自のウォレットコードは送金を拒否できるため、買えても売れない可能性があります。コードハッシュ：${p.codeHash ?? '?'}。`),
     // Solana programs (Anchor IDL)
     'sol-idl': (p) => `このプログラムは Rust（Anchor）で書かれており、命令の一覧をチェーン上で公開しています: ${p.name ?? '?'}、命令 ${p.count ?? '?'} 個。`,
     'sol-admin-instructions': (p) => `管理者の署名が必要な命令があります（${list(p.functions)}）。管理者はこれらを使ってプログラムの動作を変更できます。`,

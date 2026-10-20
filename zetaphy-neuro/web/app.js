@@ -78,6 +78,8 @@ function render(report) {
   if (report.ton) {
     rows.push([m.admin, report.ton.admin ?? m.none]);
     rows.push([m.listed, report.ton.verification]);
+    const w = report.ton.wallet;
+    if (w) rows.push([m.walletCode, `${w.interfaces.join(', ') || '?'} · ${w.codeHash ?? '?'}`]);
   }
   if (report.format) rows.push([m.format, report.format]);
   if (report.delegation) rows.push([m.delegation, report.delegation]);
