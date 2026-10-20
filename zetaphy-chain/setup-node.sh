@@ -839,7 +839,7 @@ index 0000000..62d63ad
 +	return pk.UnmarshalBinary(bytes.Clone(m.Key)) == nil
 +}
 diff --git a/evmd/app.go b/evmd/app.go
-index 204345c..5996614 100644
+index 204345c..3766b8a 100644
 --- a/evmd/app.go
 +++ b/evmd/app.go
 @@ -36,6 +36,10 @@ import (
@@ -939,7 +939,7 @@ index 204345c..5996614 100644
  		genutiltypes.ModuleName, evidencetypes.ModuleName, authz.ModuleName,
  		feegrant.ModuleName, upgradetypes.ModuleName, vestingtypes.ModuleName,
  	}
-@@ -684,6 +712,9 @@ func NewExampleApp(
+@@ -684,10 +712,14 @@ func NewExampleApp(
  	if err = app.ModuleManager.RegisterServices(app.configurator); err != nil {
  		panic(fmt.Sprintf("failed to register services in module manager: %s", err.Error()))
  	}
@@ -949,7 +949,23 @@ index 204345c..5996614 100644
  
  	// RegisterUpgradeHandlers is used for registering any on-chain upgrades.
  	// Make sure it's called after `app.ModuleManager` and `app.configurator` are set.
-@@ -812,7 +843,7 @@ func (app *EVMD) setAnteHandler(txConfig client.TxConfig, maxGasWanted uint64) {
+ 	app.RegisterUpgradeHandlers()
++	app.registerPQUpgrades() // ZETAPHY: evidence switch (zetaphy_pqcert.go)
+ 
+ 	autocliv1.RegisterQueryServer(app.GRPCQueryRouter(), runtimeservices.NewAutoCLIQueryService(app.ModuleManager.Modules))
+ 
+@@ -730,6 +762,10 @@ func NewExampleApp(
+ 	if err := app.configureEVMMempool(appOpts, logger); err != nil {
+ 		panic(fmt.Sprintf("failed to configure EVM mempool: %s", err.Error()))
+ 	}
++	if app.EVMMempool == nil { // ZETAPHY: the vote certificate is needed either way
++		h := baseapp.NewDefaultProposalHandler(sdkmempool.NoOpMempool{}, NewNoCheckProposalTxVerifier(app.BaseApp))
++		app.pqProposalHandlers(h.PrepareProposalHandler(), h.ProcessProposalHandler())
++	}
+ 
+ 	// In v0.46, the SDK introduces _postHandlers_. PostHandlers are like
+ 	// antehandlers, but are run _after_ the `runMsgs` execution. They are also
+@@ -812,7 +848,7 @@ func (app *EVMD) setAnteHandler(txConfig client.TxConfig, maxGasWanted uint64) {
  		panic(err)
  	}
  
@@ -958,7 +974,7 @@ index 204345c..5996614 100644
  }
  
  func (app *EVMD) onPendingTx(hash common.Hash) {
-@@ -842,7 +873,16 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
+@@ -842,7 +878,16 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
  
  // BeginBlocker application updates every begin block
  func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
@@ -967,7 +983,7 @@ index 204345c..5996614 100644
 +	// replaces the event manager, so keep the burn's events and add them.
 +	em := sdk.NewEventManager()
 +	app.burnFees(ctx.WithEventManager(em))
-+	bb, err := app.ModuleManager.BeginBlock(ctx)
++	bb, err := app.ModuleManager.BeginBlock(app.pqFilterEvidence(ctx))
 +	if err != nil {
 +		return bb, err
 +	}
@@ -976,7 +992,7 @@ index 204345c..5996614 100644
  }
  
  // EndBlocker application updates every end block
-@@ -869,6 +909,12 @@ func (app *EVMD) InitChainer(ctx sdk.Context, req *abci.RequestInitChain) (*abci
+@@ -869,10 +914,19 @@ func (app *EVMD) InitChainer(ctx sdk.Context, req *abci.RequestInitChain) (*abci
  		panic(err)
  	}
  
@@ -987,6 +1003,14 @@ index 204345c..5996614 100644
 +		delete(genesisState, pqStoreKey)
 +	}
  	return app.ModuleManager.InitGenesis(ctx, app.appCodec, genesisState)
+ }
+ 
+-func (app *EVMD) PreBlocker(ctx sdk.Context, _ *abci.RequestFinalizeBlock) (*sdk.ResponsePreBlock, error) {
++func (app *EVMD) PreBlocker(ctx sdk.Context, req *abci.RequestFinalizeBlock) (*sdk.ResponsePreBlock, error) {
++	if err := app.pqPreBlock(ctx, req); err != nil { // ZETAPHY: post-quantum vote certificate
++		return nil, err
++	}
+ 	return app.ModuleManager.PreBlock(ctx)
  }
  
 diff --git a/evmd/cmd/evmd/cmd/root.go b/evmd/cmd/evmd/cmd/root.go
@@ -1040,6 +1064,21 @@ index 92d6f82..4ce53b3 100644
  github.com/cloudwego/base64x v0.1.6 h1:t11wG9AECkCDk5fMSoxmufanudBtJ+/HemLstXDLI2M=
  github.com/cloudwego/base64x v0.1.6/go.mod h1:OFcloc187FXDaYHvrNIjxSe8ncn0OOM8gEHfghB2IPU=
  github.com/cncf/udpa/go v0.0.0-20191209042840-269d4d468f6f/go.mod h1:M8M6+tZqaGXZJjfX53e64911xZQV5JYwmTeXPW+k8Sc=
+diff --git a/evmd/mempool.go b/evmd/mempool.go
+index d6af75f..26d2cbf 100644
+--- a/evmd/mempool.go
++++ b/evmd/mempool.go
+@@ -61,8 +61,8 @@ func (app *EVMD) configureEVMMempool(appOpts servertypes.AppOptions, logger log.
+ 	checkTxHandler := mempool.NewCheckTxHandler(app.TxDecode, checkTxTimeout)
+ 
+ 	// set handlers and the mempool
+-	app.SetPrepareProposal(proposalHandler.PrepareProposalHandler())
+-	app.SetProcessProposal(proposalHandler.ProcessProposalHandler())
++	// ZETAPHY: with the post-quantum vote certificate (zetaphy_pqcert.go)
++	app.pqProposalHandlers(proposalHandler.PrepareProposalHandler(), proposalHandler.ProcessProposalHandler())
+ 	app.SetInsertTxHandler(insertTxHandler)
+ 	app.SetReapTxsHandler(reapTxsHandler)
+ 	app.SetCheckTxHandler(checkTxHandler)
 diff --git a/evmd/zetaphy_feeburn.go b/evmd/zetaphy_feeburn.go
 new file mode 100644
 index 0000000..96d0ea8
@@ -1091,10 +1130,10 @@ index 0000000..96d0ea8
 +}
 diff --git a/evmd/zetaphy_pqcall.go b/evmd/zetaphy_pqcall.go
 new file mode 100644
-index 0000000..123fcb7
+index 0000000..6e07d8e
 --- /dev/null
 +++ b/evmd/zetaphy_pqcall.go
-@@ -0,0 +1,321 @@
+@@ -0,0 +1,339 @@
 +package evmd
 +
 +// ZETAPHY post-quantum messages (zetaphy/pq/v1/tx.proto, built in code below):
@@ -1174,6 +1213,15 @@ index 0000000..123fcb7
 +
 +type MsgPQResponse struct{}
 +
++// MsgPQCertificate is put by the proposer as the first tx of a block: the
++// ML-DSA-44 vote signatures (20-byte validator address + signature, repeated)
++// for the previous block (zetaphy_pqcert.go). It is never signed or fee-paying.
++type MsgPQCertificate struct {
++	Signer       string
++	Height       uint64
++	Attestations []byte
++}
++
 +func (m *MsgEVMCall) Reset()                    { *m = MsgEVMCall{} }
 +func (m *MsgEVMCall) String() string            { return fmt.Sprintf("%+v", *m) }
 +func (*MsgEVMCall) ProtoMessage()               {}
@@ -1211,6 +1259,13 @@ index 0000000..123fcb7
 +func (m *MsgQuantumLock) Size() int                    { return pqSize(m) }
 +func (m *MsgPQVoteKey) Size() int                      { return pqSize(m) }
 +func (m *MsgPQResponse) Size() int                     { return 0 }
++func (m *MsgPQCertificate) Reset()                     { *m = MsgPQCertificate{} }
++func (m *MsgPQCertificate) String() string             { return fmt.Sprintf("MsgPQCertificate{%d}", m.Height) }
++func (*MsgPQCertificate) ProtoMessage()                {}
++func (*MsgPQCertificate) Descriptor() ([]byte, []int)  { return pqCallDescriptor, []int{5} }
++func (m *MsgPQCertificate) Marshal() ([]byte, error)   { return pqMarshal(5, m) }
++func (m *MsgPQCertificate) Unmarshal(b []byte) error   { return pqUnmarshal(5, b, m) }
++func (m *MsgPQCertificate) Size() int                  { return pqSize(m) }
 +
 +func pqSize(m interface{ Marshal() ([]byte, error) }) int { b, _ := m.Marshal(); return len(b) }
 +
@@ -1245,10 +1300,12 @@ index 0000000..123fcb7
 +	{"MsgQuantumLock", "signer", "signer:S owner:S controller:S"},
 +	{"MsgPQVoteKey", "operator", "operator:S pub_key:B proof:B old_key_sig:B validator_owner:S"},
 +	{"MsgPQResponse", "", ""},
++	{"MsgPQCertificate", "signer", "signer:S height:U attestations:B"},
 +}
 +
 +var pqMethods = [][3]string{{"EVMCall", "MsgEVMCall", "MsgEVMCallResponse"},
-+	{"QuantumLock", "MsgQuantumLock", "MsgPQResponse"}, {"PQVoteKey", "MsgPQVoteKey", "MsgPQResponse"}}
++	{"QuantumLock", "MsgQuantumLock", "MsgPQResponse"}, {"PQVoteKey", "MsgPQVoteKey", "MsgPQResponse"},
++	{"PQCertificate", "MsgPQCertificate", "MsgPQResponse"}}
 +
 +var pqCallProto = func() *descriptorpb.FileDescriptorProto {
 +	types := map[byte]descriptorpb.FieldDescriptorProto_Type{'S': descriptorpb.FieldDescriptorProto_TYPE_STRING,
@@ -1300,7 +1357,7 @@ index 0000000..123fcb7
 +}()
 +
 +func init() {
-+	for _, m := range []gogoproto.Message{&MsgEVMCall{}, &MsgEVMCallResponse{}, &MsgQuantumLock{}, &MsgPQVoteKey{}, &MsgPQResponse{}} {
++	for _, m := range []gogoproto.Message{&MsgEVMCall{}, &MsgEVMCallResponse{}, &MsgQuantumLock{}, &MsgPQVoteKey{}, &MsgPQResponse{}, &MsgPQCertificate{}} {
 +		gogoproto.RegisterType(m, "zetaphy.pq.v1."+reflect.TypeOf(m).Elem().Name())
 +	}
 +	gogoproto.RegisterFile(pqCallFile, pqCallDescriptor)
@@ -1326,7 +1383,7 @@ index 0000000..123fcb7
 +	ServiceName: pqCallService,
 +	HandlerType: (*any)(nil),
 +	Methods: []grpc.MethodDesc{pqMethod("EVMCall", (*EVMD).evmCall), pqMethod("QuantumLock", (*EVMD).quantumLock),
-+		pqMethod("PQVoteKey", (*EVMD).pqVoteKey)},
++		pqMethod("PQVoteKey", (*EVMD).pqVoteKey), pqMethod("PQCertificate", (*EVMD).pqCertificateMsg)},
 +	Metadata: pqCallFile,
 +}
 +
@@ -1412,16 +1469,252 @@ index 0000000..123fcb7
 +
 +// registerEVMCall wires the messages into the app (codec and message router).
 +func (app *EVMD) registerEVMCall() {
-+	app.interfaceRegistry.RegisterImplementations((*sdk.Msg)(nil), &MsgEVMCall{}, &MsgQuantumLock{}, &MsgPQVoteKey{})
++	app.interfaceRegistry.RegisterImplementations((*sdk.Msg)(nil), &MsgEVMCall{}, &MsgQuantumLock{}, &MsgPQVoteKey{}, &MsgPQCertificate{})
 +	msgservice.RegisterMsgServiceDesc(app.interfaceRegistry, &pqCallServiceDesc)
 +	app.MsgServiceRouter().RegisterService(&pqCallServiceDesc, app)
 +}
+diff --git a/evmd/zetaphy_pqcert.go b/evmd/zetaphy_pqcert.go
+new file mode 100644
+index 0000000..f850203
+--- /dev/null
++++ b/evmd/zetaphy_pqcert.go
+@@ -0,0 +1,230 @@
++package evmd
++
++// ZETAPHY post-quantum vote certificates.
++//
++// Validators sign each precommit with ML-DSA-44 (vote extensions,
++// zetaphy_pqguard.go). The proposer of block H+1 puts the signatures it got
++// for block H into H+1, as its first tx (MsgPQCertificate). Every node checks
++// them, in ProcessProposal and again in PreBlocker, which also runs when a
++// node catches up from peers (blocksync) without checking votes itself:
++//
++//	the validators of H with a valid ML-DSA-44 signature over (chain id, H,
++//	hash of H) must hold more than 2/3 of the power of H minus the power of
++//	validators without a registered key.
++//
++// While no key is registered the rule asks for nothing. Once validators with
++// more than 2/3 of the power have keys, a chain forged with ed25519 alone
++// (a quantum attack on CometBFT's signatures) is refused, and the
++// certificates let wallets and light clients check a block post-quantum.
++//
++// Evidence switch: CometBFT proves double-signing with ed25519 only, which a
++// quantum computer could forge to slash an honest validator. A governance
++// upgrade named "zetaphy-pq-evidence" turns on ignoring that evidence for
++// validators with a registered ML-DSA-44 key; "zetaphy-ed25519-evidence"
++// turns it off again.
++
++import (
++	"bytes"
++	"context"
++	"encoding/binary"
++	"fmt"
++
++	circl "github.com/cloudflare/circl/sign/mldsa/mldsa44"
++	abci "github.com/cometbft/cometbft/abci/types"
++	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
++	gogoproto "github.com/cosmos/gogoproto/proto"
++
++	"cosmossdk.io/core/comet"
++
++	sdk "github.com/cosmos/cosmos-sdk/types"
++	"github.com/cosmos/cosmos-sdk/types/module"
++	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
++	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
++
++	"github.com/cosmos/evm/crypto/mldsa44"
++)
++
++var (
++	pqEvidenceKey  = []byte{5}
++	pqLastBlockKey = []byte{6} // height (8 bytes) || hash of the last finalized block
++)
++
++const pqAttestationSize = 20 + circl.SignatureSize
++
++func pqHasCert(tx sdk.Tx) bool {
++	for _, m := range tx.GetMsgs() {
++		if _, ok := m.(*MsgPQCertificate); ok {
++			return true
++		}
++	}
++	return false
++}
++
++// pqCertificateMsg does nothing: the certificate was checked before the block ran.
++func (app *EVMD) pqCertificateMsg(sdk.Context, *MsgPQCertificate) (gogoproto.Message, error) {
++	return &MsgPQResponse{}, nil
++}
++
++// pqCertOf returns the certificate if txs[0] is one.
++func (app *EVMD) pqCertOf(txs [][]byte) *MsgPQCertificate {
++	if len(txs) == 0 {
++		return nil
++	}
++	tx, err := app.TxDecode(txs[0])
++	if err != nil || len(tx.GetMsgs()) != 1 {
++		return nil
++	}
++	c, _ := tx.GetMsgs()[0].(*MsgPQCertificate)
++	return c
++}
++
++// pqCheckCert applies the rule above to the certificate for block height-1.
++func (app *EVMD) pqCheckCert(ctx sdk.Context, height int64, votes []abci.VoteInfo, txs [][]byte) error {
++	last := ctx.KVStore(app.GetKey(pqStoreKey)).Get(pqLastBlockKey)
++	if len(last) != 8+32 || int64(binary.BigEndian.Uint64(last)) != height-1 { // #nosec G115 -- block heights
++		return nil // nothing to certify yet (first block, or state restored without it)
++	}
++	prev, hash := height-1, last[8:]
++	var total, unregistered int64
++	keys := map[string][]byte{}
++	power := map[string]int64{}
++	for _, v := range votes {
++		a := string(v.Validator.Address)
++		total += v.Validator.Power
++		if k := app.pqVoteKeyAt(ctx, v.Validator.Address, prev); k != nil {
++			keys[a], power[a] = k, v.Validator.Power
++		} else {
++			unregistered += v.Validator.Power
++		}
++	}
++	need := 2*total - 3*unregistered // signed power must be > need/3
++	if need < 0 {
++		return nil
++	}
++	var signed int64
++	if c := app.pqCertOf(txs); c != nil && c.Height == uint64(prev) && len(c.Attestations)%pqAttestationSize == 0 { // #nosec G115 -- block heights
++		msg := pqVoteMsg(ctx.ChainID(), prev, hash)
++		for i := 0; i < len(c.Attestations); i += pqAttestationSize {
++			a := string(c.Attestations[i : i+20])
++			if k, ok := keys[a]; ok && (&mldsa44.PubKey{Key: k}).VerifySignature(msg, c.Attestations[i+20:i+pqAttestationSize]) {
++				signed += power[a]
++				delete(keys, a) // count each validator once
++			}
++		}
++	}
++	if 3*signed <= need {
++		return fmt.Errorf("block %d: ML-DSA-44 vote signatures cover %d of %d voting power (%d without a key); not enough", prev, signed, total, unregistered)
++	}
++	return nil
++}
++
++// pqBuildCert makes the certificate tx from the votes that committed block height-1.
++func (app *EVMD) pqBuildCert(ctx sdk.Context, height int64, votes []abci.ExtendedVoteInfo) []byte {
++	var att []byte
++	for _, v := range votes {
++		if v.BlockIdFlag == cmtproto.BlockIDFlagCommit && len(v.VoteExtension) == circl.SignatureSize && len(v.Validator.Address) == 20 &&
++			app.pqVoteKeyAt(ctx, v.Validator.Address, height-1) != nil {
++			att = append(append(att, v.Validator.Address...), v.VoteExtension...)
++		}
++	}
++	if att == nil {
++		return nil
++	}
++	b := app.txConfig.NewTxBuilder()
++	if err := b.SetMsgs(&MsgPQCertificate{Signer: authtypes.NewModuleAddress(pqStoreKey).String(), Height: uint64(height - 1), Attestations: att}); err != nil { // #nosec G115 -- block heights
++		return nil
++	}
++	bz, err := app.txConfig.TxEncoder()(b.GetTx())
++	if err != nil {
++		return nil
++	}
++	return bz
++}
++
++// pqProposalHandlers wraps the proposal handlers: the proposer puts the
++// certificate first; everyone checks it and hands the rest on.
++func (app *EVMD) pqProposalHandlers(prepare sdk.PrepareProposalHandler, process sdk.ProcessProposalHandler) {
++	app.SetPrepareProposal(func(ctx sdk.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
++		cert := app.pqBuildCert(ctx, req.Height, req.LocalLastCommit.Votes)
++		r := *req
++		r.MaxTxBytes -= int64(len(cert)) + 16
++		res, err := prepare(ctx, &r)
++		if err != nil || cert == nil {
++			return res, err
++		}
++		res.Txs = append([][]byte{cert}, res.Txs...)
++		return res, nil
++	})
++	app.SetProcessProposal(func(ctx sdk.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
++		if err := app.pqCheckCert(ctx, req.Height, req.ProposedLastCommit.Votes, req.Txs); err != nil {
++			app.Logger().Info("ZETAPHY: rejecting proposal", "err", err)
++			return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
++		}
++		if app.pqCertOf(req.Txs) != nil {
++			r := *req
++			r.Txs = req.Txs[1:]
++			return process(ctx, &r)
++		}
++		return process(ctx, req)
++	})
++}
++
++// pqPreBlock checks the certificate when the block runs (also in blocksync)
++// and records this block for the next one.
++func (app *EVMD) pqPreBlock(ctx sdk.Context, req *abci.RequestFinalizeBlock) error {
++	if err := app.pqCheckCert(ctx, req.Height, req.DecidedLastCommit.Votes, req.Txs); err != nil {
++		return err
++	}
++	if len(req.Hash) == 32 { // CometBFT always sends it; some test harnesses do not
++		v := binary.BigEndian.AppendUint64(nil, uint64(req.Height)) // #nosec G115 -- block heights
++		ctx.KVStore(app.GetKey(pqStoreKey)).Set(pqLastBlockKey, append(v, req.Hash...))
++	}
++	return nil
++}
++
++// ---- evidence switch
++
++type pqEvidenceList []comet.Evidence
++
++func (l pqEvidenceList) Len() int                 { return len(l) }
++func (l pqEvidenceList) Get(i int) comet.Evidence { return l[i] }
++
++type pqBlockInfo struct {
++	comet.BlockInfo
++	evidence pqEvidenceList
++}
++
++func (b pqBlockInfo) GetEvidence() comet.EvidenceList { return b.evidence }
++
++// pqFilterEvidence drops ed25519-only double-sign evidence against validators
++// with an ML-DSA-44 vote key, once governance has switched that on.
++func (app *EVMD) pqFilterEvidence(ctx sdk.Context) sdk.Context {
++	info := ctx.CometInfo()
++	if info == nil || !bytes.Equal(ctx.KVStore(app.GetKey(pqStoreKey)).Get(pqEvidenceKey), []byte{1}) {
++		return ctx
++	}
++	ev := info.GetEvidence()
++	var keep pqEvidenceList
++	for i := 0; i < ev.Len(); i++ {
++		e := ev.Get(i)
++		if app.pqVoteKeyAt(ctx, e.Validator().Address(), e.Height()) != nil {
++			ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_evidence_ignored",
++				sdk.NewAttribute("validator", fmt.Sprintf("%X", e.Validator().Address())), sdk.NewAttribute("height", fmt.Sprint(e.Height()))))
++			continue
++		}
++		keep = append(keep, e)
++	}
++	return ctx.WithCometInfo(pqBlockInfo{info, keep})
++}
++
++// registerPQUpgrades: the evidence switch, as governance upgrades that need
++// no new binary (gov.sh propose-upgrade zetaphy-pq-evidence <height> "...").
++func (app *EVMD) registerPQUpgrades() {
++	for name, on := range map[string]byte{"zetaphy-pq-evidence": 1, "zetaphy-ed25519-evidence": 0} {
++		v := on
++		app.UpgradeKeeper.SetUpgradeHandler(name, func(ctx context.Context, _ upgradetypes.Plan, vm module.VersionMap) (module.VersionMap, error) {
++			sdk.UnwrapSDKContext(ctx).KVStore(app.GetKey(pqStoreKey)).Set(pqEvidenceKey, []byte{v})
++			return vm, nil
++		})
++	}
++}
 diff --git a/evmd/zetaphy_pqguard.go b/evmd/zetaphy_pqguard.go
 new file mode 100644
-index 0000000..7308c5b
+index 0000000..492eb69
 --- /dev/null
 +++ b/evmd/zetaphy_pqguard.go
-@@ -0,0 +1,400 @@
+@@ -0,0 +1,431 @@
 +package evmd
 +
 +// ZETAPHY post-quantum guards.
@@ -1479,6 +1772,23 @@ index 0000000..7308c5b
 +
 +func pqLockKey(owner []byte) []byte  { return append([]byte{1}, owner...) }
 +func pqVoteKeyOf(cons []byte) []byte { return append([]byte{2}, cons...) }
++
++// A vote key entry is since (8 bytes, the block that registered it) || key ||
++// the key it replaced (if any). Votes for height h are signed in the state
++// before h, so a key registered in block s signs votes from h = s+1 on.
++func (app *EVMD) pqVoteKeyAt(ctx sdk.Context, cons []byte, h int64) []byte {
++	v := ctx.KVStore(app.GetKey(pqStoreKey)).Get(pqVoteKeyOf(cons))
++	if len(v) < 8+mldsa44.PubKeySize {
++		return nil
++	}
++	if int64(binary.BigEndian.Uint64(v)) < h { // #nosec G115 -- block heights
++		return v[8 : 8+mldsa44.PubKeySize]
++	}
++	if len(v) == 8+2*mldsa44.PubKeySize {
++		return v[8+mldsa44.PubKeySize:]
++	}
++	return nil
++}
 +
 +// pqController is the ML-DSA account that controls a quantum-locked owner, or nil.
 +func (app *EVMD) pqController(ctx sdk.Context, owner []byte) []byte {
@@ -1555,6 +1865,12 @@ index 0000000..7308c5b
 +// too (x/vm/keeper/zetaphy_ecrecover.go).
 +func (app *EVMD) pqLockAnte(next sdk.AnteHandler) sdk.AnteHandler {
 +	return func(ctx sdk.Context, tx sdk.Tx, sim bool) (sdk.Context, error) {
++		if pqHasCert(tx) { // only the proposer's first tx, checked in ProcessProposal and PreBlocker
++			if len(tx.GetMsgs()) == 1 && ctx.ExecMode() == sdk.ExecModeFinalize {
++				return ctx, nil
++			}
++			return ctx, errorsmod.Wrap(errortypes.ErrUnauthorized, "a vote certificate is only valid as the first tx of a block")
++		}
 +		newCtx, err := next(ctx, tx, sim)
 +		if err != nil {
 +			return newCtx, err
@@ -1651,10 +1967,15 @@ index 0000000..7308c5b
 +	}
 +	st := ctx.KVStore(app.GetKey(pqStoreKey))
 +	// A jailed validator (e.g. down because its key was lost) may start over.
-+	if old := st.Get(pqVoteKeyOf(cons)); old != nil && !val.IsJailed() && !(&mldsa44.PubKey{Key: old}).VerifySignature(msg, m.OldKeySig) {
++	old := app.pqVoteKeyAt(ctx, cons, ctx.BlockHeight()+1)
++	if old != nil && !val.IsJailed() && !(&mldsa44.PubKey{Key: old}).VerifySignature(msg, m.OldKeySig) {
 +		return nil, errorsmod.Wrap(errortypes.ErrUnauthorized, "replacing a vote key needs a signature by the current one (or the validator jailed)")
 +	}
-+	st.Set(pqVoteKeyOf(cons), m.PubKey)
++	if len(m.PubKey) != mldsa44.PubKeySize {
++		return nil, errorsmod.Wrap(errortypes.ErrInvalidRequest, "pub_key size")
++	}
++	v := binary.BigEndian.AppendUint64(nil, uint64(ctx.BlockHeight())) // #nosec G115 -- block heights
++	st.Set(pqVoteKeyOf(cons), append(append(v, m.PubKey...), old...))
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_pq_vote_key", sdk.NewAttribute("validator", sdk.ValAddress(op).String())))
 +	return &MsgPQResponse{}, nil
 +}
@@ -1705,7 +2026,7 @@ index 0000000..7308c5b
 +		if err != nil {
 +			return nil, err
 +		}
-+		want := ctx.KVStore(app.GetKey(pqStoreKey)).Get(pqVoteKeyOf(cons))
++		want := app.pqVoteKeyAt(ctx, cons, req.Height)
 +		for _, f := range []string{seedFile, seedFile + ".old"} {
 +			sk, pub, err := pqVoteSeed(f)
 +			if err == nil && (want == nil || bytes.Equal(pub, want)) {
@@ -1722,7 +2043,7 @@ index 0000000..7308c5b
 +	})
 +	app.SetVerifyVoteExtensionHandler(func(ctx sdk.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
 +		ok := len(req.VoteExtension) == 0 || len(req.VoteExtension) == circl.SignatureSize
-+		if pk := ctx.KVStore(app.GetKey(pqStoreKey)).Get(pqVoteKeyOf(req.ValidatorAddress)); pk != nil {
++		if pk := app.pqVoteKeyAt(ctx, req.ValidatorAddress, req.Height); pk != nil {
 +			ok = (&mldsa44.PubKey{Key: pk}).VerifySignature(pqVoteMsg(ctx.ChainID(), req.Height, req.Hash), req.VoteExtension)
 +		}
 +		if ok {
@@ -1801,6 +2122,9 @@ index 0000000..7308c5b
 +	it := ctx.KVStore(app.GetKey(pqStoreKey)).Iterator(nil, nil)
 +	defer it.Close()
 +	for ; it.Valid(); it.Next() {
++		if it.Key()[0] == pqLastBlockKey[0] { // belongs to this chain's history only
++			continue
++		}
 +		out = append(out, pqGenesisEntry{hex.EncodeToString(it.Key()), hex.EncodeToString(it.Value())})
 +	}
 +	return json.Marshal(out)
@@ -1815,7 +2139,7 @@ index 0000000..7308c5b
 +	for _, e := range in {
 +		k, err1 := hex.DecodeString(e.Key)
 +		v, err2 := hex.DecodeString(e.Value)
-+		if err1 != nil || err2 != nil || len(k) == 0 || (k[0] != 1 && k[0] != 2) {
++		if err1 != nil || err2 != nil || len(k) == 0 || (k[0] != 1 && k[0] != 2 && k[0] != pqEvidenceKey[0]) {
 +			return fmt.Errorf("zetaphypq genesis: bad entry %q", e.Key)
 +		}
 +		st.Set(k, v)

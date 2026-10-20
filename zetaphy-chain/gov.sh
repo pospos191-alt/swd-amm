@@ -17,6 +17,10 @@
 #   gov.sh validators                                    who validates, and their share
 #   gov.sh quantum-lock <ML-DSA controller>              hand the FROM account to a PQ account, for good
 #   gov.sh vote-key                                      register or replace this node's ML-DSA vote key
+#   gov.sh propose-upgrade zetaphy-pq-evidence <height> "<why>"
+#                                                        stop slashing on ed25519-only double-sign
+#                                                        evidence for validators with an ML-DSA key
+#                                                        (zetaphy-ed25519-evidence switches it back)
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -128,5 +132,5 @@ case "${1:-}" in
     send tx pq-vote-key
     echo "vote key registered" ;;
   *)
-    sed -n '8,19p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,23p' "$0" | sed 's/^# //'; exit 2 ;;
 esac
