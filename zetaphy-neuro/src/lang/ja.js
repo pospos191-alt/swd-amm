@@ -13,7 +13,7 @@ export const UI = {
     chain: 'チェーン', address: 'アドレス', proxy: 'Proxy', implementation: '実装コード', owner: 'オーナー', functions: '判明している関数', report: 'レポートID', explorer: 'explorer で開く', fingerprint: 'コードの指紋（テンプレート登録用）', unknown: '名前が不明な関数',
     program: 'トークンプログラム', mintAuth: '発行権限', freezeAuth: '凍結権限', extensions: '拡張機能', upgradeAuth: 'アップグレード権限', none: 'なし',
     package: 'パッケージ', standard: '規格', admin: '管理者', holders: '保有者数', listed: 'tonapi リスト', raw: 'raw アドレス',
-    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード', walletCode: '保有者ウォレットのコード', nearKeys: 'フルアクセスキー（full-access key）', codeHash: 'コードハッシュ', cairo: 'Cairo バージョン', maxSupply: '最大供給量', topHolder: '最大の保有者', tokenId: 'トークン ID',
+    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード', walletCode: '保有者ウォレットのコード', nearKeys: 'フルアクセスキー（full-access key）', codeHash: 'コードハッシュ', cairo: 'Cairo バージョン', maxSupply: '最大供給量', tokenId: 'トークン ID',
   },
 };
 
@@ -210,17 +210,14 @@ export const T = {
       ? `${p.issuer} はコントラクトのコードをアップグレードできます。発行者が修正や機能追加をする通常の方法です。`
       : `アップグレード可能${p.implementation ? `（コード ${p.implementation} を指す proxy）` : ''}${p.functions?.length ? `（${list(p.functions)} 経由）` : ''}: 権限を持つ人はコード全体を置き換えられます。今日の確認結果が明日も正しいとは限りません。`),
     'sn-caveat': () => 'コントラクトがチェーン上で公開している ABI（関数名と、状態を変更するかどうか）を決まったルールで確認した結果です。関数の中身は読んでいません。投資助言ではありません。',
-    // Bitcoin (Runes, BRC-20)
-    'btc-not-found': () => 'Bitcoin 上にこの名前の Rune や BRC-20 トークンは見つかりません。Rune は DOG•GO•TO•THE•MOON のような名前か 840000:3 のような ID、BRC-20 トークンは ordi のような 4〜5 文字のティッカーです。',
+    // Bitcoin (Runes)
+    'btc-not-found': () => 'この名前または ID の Rune は Bitcoin 上に見つかりません。Rune の名前は DOG•GO•TO•THE•MOON、ID は 840000:3 のような形です。BRC-20 トークンはまだ読み取れません。',
     'btc-rune': (p) => `Bitcoin の Rune「${p.name ?? '?'}」${p.symbol ? `（${p.symbol}）` : ''}、ID ${p.id ?? '?'}、これまでの発行量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
-    'btc-brc20': (p) => `Bitcoin の BRC-20 トークン「${p.name ?? '?'}」、発行済み ${fmtSupply(p.totalSupply, p.decimals)}（上限 ${fmtSupply(p.maxSupply, p.decimals)}）${p.holders != null ? `、保有者 ${fmtSupply(p.holders, 0)} 人` : ''}。`,
     'btc-no-admin': () => 'Bitcoin のトークンにはコントラクトのコードもオーナーもありません。このトークンを凍結、ブロック、一時停止、課税、変更できる人はいません。ルールは作成時に固定されています。',
     'btc-open-mint': (p) => (p.unlimited
       ? '今も誰でも追加で mint できます。上限も終了日もないため、供給量は際限なく増え続ける可能性があります。'
       : `mint はまだ受付中です: ${p.end ? `ブロック ${p.end} に達するか、` : ''}${p.maxSupply ? `上限の ${fmtSupply(p.maxSupply, p.decimals)} に達する` : 'mint 期間が終わる'}まで誰でも追加で mint できます${p.percent != null ? `（現在 ${p.percent}% mint 済み）` : ''}。供給量はまだ増えています。`),
     'btc-premine': (p) => `トークン作成時に、最大供給量の ${p.percent}% が作成者に渡されました（premine）。作成者はいつでも売却できます。`,
     'btc-turbo': () => '作成者は Runes プロトコルの今後の変更を受け入れる設定（turbo）を選んでいます。そのため、このトークンの仕組みはプロトコルの新バージョンで変わる可能性があります。',
-    'btc-self-mint': (p) => `このトークンを mint できるのはデプロイした人（${p.deployer ?? '?'}）だけです（BRC-20 self-mint）${p.percent != null ? `。まだ ${Math.max(0, 100 - p.percent).toFixed(2)}% が mint されていません` : ''}。新しい供給がいつ出てくるかはデプロイした人が決めます。`,
-    'btc-top-holder': (p) => `最大の保有者${p.address ? `（${p.address}）` : ''}が供給量の ${p.share}% を持っており、売却すれば価格が暴落するおそれがあります。取引所やプールである可能性もあります。`,
-    'btc-caveat': () => 'Hiro のインデクサーのデータを決まったルールで確認した結果です。Runes と BRC-20 トークンは Bitcoin 上でインデクサーが読み取るルールとして存在しており、別のインデクサーでは数え方が異なる場合があります。流動性は確認していません。投資助言ではありません。',
+    'btc-caveat': () => 'Runes の基準となるインデクサー ord（ordinals.com）のデータを決まったルールで確認した結果です。Rune は Bitcoin 上でインデクサーが読み取るルールとして存在します。保有者と流動性は確認していません。投資助言ではありません。',
 };

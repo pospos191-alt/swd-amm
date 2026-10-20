@@ -21,7 +21,7 @@ const IDENTITY = new Set([
   'apt-token', 'apt-not-found', 'apt-not-token', 'apt-package',
   'ton-jetton', 'ton-not-found', 'ton-not-jetton',
   'cw20-token', 'cw-contract', 'cw-not-found', 'tf-token', 'eip7702',
-  'btc-rune', 'btc-brc20', 'btc-not-found', 'stylus-read',
+  'btc-rune', 'btc-not-found', 'stylus-read',
   'near-token', 'near-contract', 'near-not-found', 'near-no-contract',
   'sn-token', 'sn-contract', 'sn-not-found',
 ]);

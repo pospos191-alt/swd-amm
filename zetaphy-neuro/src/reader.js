@@ -2,10 +2,10 @@
 // Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call.
 
 import { CHAINS, isChainAddress } from './chains.js';
-import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc, createStarknetRpc, createHiroApi } from './rpc.js';
+import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc, createStarknetRpc, createOrdApi } from './rpc.js';
 import { readCosmwasmAccount, analyzeCosmwasm } from './cosmwasm.js';
 import { readNearAccount, analyzeNear } from './near.js';
-import { readBitcoinToken, analyzeBitcoin } from './bitcoin.js';
+import { readRune, analyzeRune } from './bitcoin.js';
 import { stylusWasm, scanWasm } from './stylus.js';
 import { readStarknetAccount, analyzeStarknet, normalize as snNormalize } from './starknet.js';
 import { readSolanaAccount, analyzeSolana } from './solana.js';
@@ -407,13 +407,12 @@ async function readStarknet(chainKey, chain, address, opts) {
 }
 
 async function readBitcoin(chainKey, chain, address, opts) {
-  const api = opts.api ?? createHiroApi(chain.rpcs, { fetchImpl: opts.fetchImpl });
-  const m = await readBitcoinToken(api, address);
-  // The address becomes the token's own name so the explorer link fits it.
-  const id = m.kind === 'rune' ? m.token.name : m.kind === 'brc20' ? `brc20:${m.id.toLowerCase()}` : address;
-  const report = { version: REPORT_VERSION, chain: chainKey, address: id };
+  const api = opts.api ?? createOrdApi(chain.rpcs, { fetchImpl: opts.fetchImpl });
+  const m = await readRune(api, address);
+  // The address becomes the rune's spaced name so the explorer link fits it.
+  const report = { version: REPORT_VERSION, chain: chainKey, address: m.kind === 'rune' ? m.token.name : address };
   if (m.token) report.token = m.token;
-  if (m.kind !== 'missing') report.bitcoin = { standard: m.kind === 'rune' ? 'Runes' : 'BRC-20', id: m.id, maxSupply: m.token.maxSupply, deployer: m.deployer, topHolder: m.top ?? undefined };
-  report.analysis = analyzeBitcoin(m);
+  if (m.kind === 'rune') report.bitcoin = { standard: 'Runes', id: m.id, maxSupply: m.token.maxSupply };
+  report.analysis = analyzeRune(m);
   return finish(report);
 }

@@ -47,10 +47,10 @@ const SAMPLES = [
   // Cairo on Starknet (ABI on chain)
   { chain: 'starknet', address: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d', label: 'STRK (Starknet, Cairo)', expect: ['sn-token', 'known-issuer'] },
   { chain: 'starknet', address: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7', label: 'ETH on Starknet', expect: ['sn-token', 'known-issuer'] },
-  // Bitcoin: Runes and BRC-20 (Hiro indexer)
+  // Bitcoin Runes (ord JSON API)
   { chain: 'bitcoin', address: 'UNCOMMON•GOODS', label: 'UNCOMMON•GOODS (first rune)', expect: ['btc-rune', 'btc-no-admin'] },
   { chain: 'bitcoin', address: 'DOG•GO•TO•THE•MOON', label: 'DOG (rune)', expect: ['btc-rune', 'btc-premine'] },
-  { chain: 'bitcoin', address: 'ordi', label: 'ordi (BRC-20)', expect: ['btc-brc20', 'btc-no-admin'], absent: ['btc-open-mint'] },
+  { chain: 'bitcoin', address: '840000:3', label: 'DOG by id', expect: ['btc-rune'] },
   // Rust: CosmWasm
   { chain: 'neutron', address: 'neutron1hptk0k5kng7hjy35vmh009qd5m6l33609nypgf2yc6nqnewduqasxplt4e', label: 'Astroport factory (CosmWasm)', expect: ['cw-contract', 'cw-admin'] },
   { chain: 'neutron', address: 'factory/neutron1ug740qrkquxzrk2hh29qrlx3sktkfml3je7juusc2te7xmvsscns0n2wry/wstETH', label: 'wstETH Neutron (Token Factory)', expect: ['tf-token'] },

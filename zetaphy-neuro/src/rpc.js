@@ -207,24 +207,32 @@ export function createTonApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 1
   return { get: (path) => paced(() => run((url) => get1(url, path))) };
 }
 
+/** JSON with integers of 16+ digits kept as strings (ord sends u128 amounts as numbers). */
+export function parseJsonBigInts(text) {
+  return JSON.parse(text.replace(/([:\[,]\s*)(-?\d{16,})(?=\s*[,\]}])/g, '$1"$2"'));
+}
+
 /**
- * Hiro indexer client for Bitcoin Runes and BRC-20: GET only, and only the
- * runes/v1 and ordinals/v1/brc-20 read paths. The free tier needs no key.
+ * Client for the JSON API of `ord` (Bitcoin Runes): GET only, /rune/ paths
+ * only. ordinals.com is free and needs no key.
  */
-export function createHiroApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 15000 } = {}) {
+export function createOrdApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 15000 } = {}) {
   const run = failover(urls, async () => {});
   const get1 = async (url, path) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
-      return await fetchJson(fetchImpl, url + path, { method: 'GET' }, timeoutMs);
-    } catch (e) {
-      if (!/HTTP 429/.test(e.message)) throw e;
-      await new Promise((r) => setTimeout(r, 1500));
-      return fetchJson(fetchImpl, url + path, { method: 'GET' }, timeoutMs);
+      const res = await fetchImpl(url + path, { method: 'GET', headers: { Accept: 'application/json' }, signal: ctrl.signal });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new RpcError(`HTTP ${res.status}`);
+      return parseJsonBigInts(await res.text());
+    } finally {
+      clearTimeout(timer);
     }
   };
   return {
     get(path) {
-      if (!/^\/(runes\/v1\/etchings|ordinals\/v1\/brc-20\/tokens)\//.test(path)) throw new RpcError(`path not allowed: ${path}`);
+      if (!/^\/rune\/[^/?#]+$/.test(path)) throw new RpcError(`path not allowed: ${path}`);
       return run((url) => get1(url, path));
     },
   };
