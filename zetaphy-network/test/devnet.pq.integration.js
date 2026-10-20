@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Wallet, JsonRpcProvider, concat, getBytes, hexlify, parseEther, keccak256, toBeHex } from 'ethers';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
+import { pqAddress, encodeTxBody, encodeMsgSend, encodeAuthInfo, encodeSignDoc, encodeTxRaw, bytesToHex, MSG_SEND_TYPE_URL } from '../src/pqtx.js';
 
 const PORT = 18845;
 const RPC = `http://127.0.0.1:${PORT}`;
@@ -19,7 +20,7 @@ const MLDSA = '0x0000000000000000000000000000000000000900';
 const root = mkdtempSync(join(tmpdir(), 'zetaphy-pq-'));
 const actors = Object.fromEntries(['deployer', 'alice', 'carol'].map((n) => [n, Wallet.createRandom()]));
 const bob = Wallet.createRandom().address;
-const env = { ...process.env, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' };
+const env = { ...process.env, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1', ZETAPHY_CHAIN_ID: 'zetaphy-local-1' };
 let provider;
 
 function cli(actor, args) {
@@ -81,4 +82,62 @@ test('hybrid wallet: ML-DSA and ECDSA together', { timeout: 120_000 }, async () 
   const s = await cli('carol', ['pq', 'send', bob, '0.5']);
   assert.equal(s.code, 0, s.out);
   assert.equal(await provider.getBalance(bob), parseEther('2'));
+});
+
+// Native PQ accounts: ordinary Cosmos transactions whose only key is
+// ML-DSA-44 (no ECDSA anywhere, no gas payer), checked by the chain's ante
+// handler and sent through zetaphy_sendCosmosTx on the public 8545 port.
+test('native PQ account: send with ML-DSA only; forged, tampered and replayed txs are refused', { timeout: 180_000 }, async () => {
+  const seed = (b) => '0x' + Buffer.alloc(32, b).toString('hex');
+  for (const [n, b] of [['dave', 7], ['eve', 8]]) {
+    mkdirSync(join(root, n), { recursive: true, mode: 0o700 });
+    writeFileSync(join(root, n, 'pq.seed'), seed(b) + '\n', { mode: 0o600 });
+  }
+  const dave = ml_dsa44.keygen(Buffer.alloc(32, 7));
+  const eve = ml_dsa44.keygen(Buffer.alloc(32, 8));
+  const daveAddr = pqAddress(dave.publicKey);
+  const to = Wallet.createRandom().address;
+
+  // Before it has funds the account does not exist.
+  const empty = await cli('dave', ['pq', 'native']);
+  assert.equal(empty.code, 0, empty.out);
+  assert.match(empty.out, /send ZETAPHY to this address first/);
+
+  await (await actors.deployer.connect(provider).sendTransaction({ to: daveAddr.hex, value: parseEther('10') })).wait();
+  for (const amount of ['1', '0.25']) {
+    const r = await cli('dave', ['pq', 'native', 'send', to, amount]);
+    assert.equal(r.code, 0, r.out);
+    assert.match(r.out, /signed with ML-DSA-44/);
+    await new Promise((res) => setTimeout(res, 2500)); // next sequence needs the block
+  }
+  assert.equal(await provider.getBalance(to), parseEther('1.25'));
+  const acct = await provider.send('zetaphy_pqAccount', [daveAddr.bech32]);
+  assert.equal(acct.pubKeyType, 'mldsa44');
+  assert.equal(acct.sequence, '2');
+
+  // Hand-built txs from dave's account for the attacks below.
+  const price = BigInt(await provider.send('eth_gasPrice', [])) * 2n;
+  const build = ({ signer, key, sequence = BigInt(acct.sequence), tamper = false }) => {
+    const bodyBytes = encodeTxBody({ messages: [{ typeUrl: MSG_SEND_TYPE_URL, value: encodeMsgSend({ fromAddress: daveAddr.bech32, toAddress: pqAddress(eve.publicKey).bech32, amount: [{ denom: 'azetaphy', amount: '1000' }] }) }] });
+    const authInfoBytes = encodeAuthInfo({ signerInfos: [{ publicKey: signer.publicKey, sequence }], fee: { amount: [{ denom: 'azetaphy', amount: String(400000n * price) }], gasLimit: 400000n } });
+    const sig = ml_dsa44.sign(encodeSignDoc({ bodyBytes, authInfoBytes, chainId: 'zetaphy-local-1', accountNumber: BigInt(acct.accountNumber) }), key.secretKey);
+    if (tamper) sig[100] ^= 1;
+    return '0x' + bytesToHex(encodeTxRaw({ bodyBytes, authInfoBytes, signatures: [sig] }));
+  };
+  const send = (hex) => provider.send('zetaphy_sendCosmosTx', [hex]);
+
+  // Eve signs with her own key but claims dave's account: wrong key for the account.
+  const forged = await send(build({ signer: eve, key: eve }));
+  assert.notEqual(forged.code, 0, 'forged tx accepted');
+  // Dave's key, but a flipped bit in the signature.
+  const tampered = await send(build({ signer: dave, key: dave, tamper: true }));
+  assert.notEqual(tampered.code, 0, 'tampered tx accepted');
+  assert.match(tampered.log, /signature verification failed/);
+  // A valid tx with an old sequence (a replay) is refused.
+  const replay = await send(build({ signer: dave, key: dave, sequence: 0n }));
+  assert.notEqual(replay.code, 0, 'replayed tx accepted');
+  assert.match(replay.log, /sequence/);
+  // Garbage is not passed on.
+  await assert.rejects(send('0x1234'), /not a Cosmos transaction/);
+  assert.equal(await provider.getBalance(to), parseEther('1.25'));
 });

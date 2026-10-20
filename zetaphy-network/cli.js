@@ -17,6 +17,8 @@
 //   zetaphy pq new [--hybrid]          quantum-safe wallet (ML-DSA); --hybrid also needs this machine's ECDSA key
 //   zetaphy pq address                 the wallet's address (fund it before or after it exists)
 //   zetaphy pq send <to> <amount>      move ZETAPHY out of it, signed with ML-DSA
+//   zetaphy pq native                  native PQ account (zetaphy1… / 0x…): Cosmos txs signed with ML-DSA only, no ECDSA key or gas payer
+//   zetaphy pq native send <0x… or zetaphy1…> <amount> [--gas 400000]   send from it (fund the account first)
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>]
@@ -30,6 +32,7 @@
 //   zetaphy vault status | release     what has vested; pay it out (anyone may; node start does it daily)
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
+// (ZETAPHY_CHAIN_ID: Cosmos chain id `pq native` expects, default zetaphy-testnet-1)
 // (NeuroJobs address). They are saved to ~/.zetaphy/config.json on first use.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -42,6 +45,7 @@ import { createWorker } from './src/worker.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
 import { loadOrCreatePq, sealPqSeed, VARIANT as PQ_VARIANT } from './src/pq.js';
+import { pqClient, pqAddress, normalizeAddress, parseZeta, formatZeta, DEFAULT_GAS_LIMIT } from './src/pqtx.js';
 import { createLaneWatcher } from './src/lane.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -86,11 +90,16 @@ function settings(opt, env) {
   return s;
 }
 
-async function connect(s, { needJobs = true } = {}) {
+async function connectRpc(s) {
   if (!s.rpc) throw new Error('set the ZETAPHY testnet RPC: --rpc http://<node>:8545 (or ZETAPHY_RPC)');
   const provider = new JsonRpcProvider(s.rpc, undefined, { staticNetwork: false, polling: true, pollingInterval: 1000 });
   const net = await provider.getNetwork();
   if (net.chainId !== EVM_CHAIN_ID) throw new Error(`that RPC is chain ${net.chainId}, not ZETAPHY testnet (${EVM_CHAIN_ID})`);
+  return provider;
+}
+
+async function connect(s, { needJobs = true } = {}) {
+  const provider = await connectRpc(s);
   const { wallet, created, file } = loadOrCreateKey();
   const signer = new NonceManager(wallet.connect(provider));
   const me = await wallet.getAddress();
@@ -226,6 +235,36 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const address = await k.getAddress();
     settings({ ...opt, pqFactory: address }, {});
     write(`QuantumWalletFactory ${address}`);
+    return 0;
+  }
+
+  if (group === 'pq' && cmd === 'native') {
+    // Native PQ account: the chain checks the ML-DSA-44 signature itself, so
+    // no ECDSA key, contract or gas payer is involved. Same seed as "pq new".
+    const [sub, to, amount] = rest;
+    if (sub && (sub !== 'send' || !to || !amount)) throw new Error('usage: zetaphy pq native send <0x… or zetaphy1…> <amount> [--gas N]');
+    if (sub) normalizeAddress(to);
+    if (opt.gas != null && !/^\d+$/.test(String(opt.gas))) throw new Error('--gas must be a whole number');
+    const value = sub ? parseZeta(amount) : 0n;
+    const provider = await connectRpc(s);
+    const pq = loadOrCreatePq();
+    // ZETAPHY_CHAIN_ID: the Cosmos chain id to expect (a local devnet is not zetaphy-testnet-1).
+    const client = pqClient((method, params) => provider.send(method, params), process.env.ZETAPHY_CHAIN_ID ? { chainId: process.env.ZETAPHY_CHAIN_ID } : {});
+    const me = pqAddress(pq.publicKeyBytes);
+    if (!sub) {
+      write(`native PQ account (ML-DSA-${PQ_VARIANT} only, no ECDSA key):`);
+      write(`  ${me.bech32}`);
+      write(`  ${me.hex} (same account, EVM form)`);
+      if (pq.created) write(`new ML-DSA seed saved to ${pq.file} (keep a backup; it is the only way to move funds)`);
+      const acct = await client.account(me.bech32);
+      write(`balance: ${zeta(await client.balance(me.hex))}`);
+      write(acct.exists ? `on chain: account ${acct.accountNumber}, ${acct.sequence} txs sent`
+        : 'not on chain yet: send ZETAPHY to this address first (either form works); then it can send');
+      return 0;
+    }
+    const r = await client.send({ publicKey: pq.publicKeyBytes, sign: pq.signBytes, to, amount: value, gasLimit: opt.gas != null ? BigInt(opt.gas) : DEFAULT_GAS_LIMIT });
+    write(`sent ${formatZeta(r.amount)} ZETAPHY to ${r.to.bech32} (${r.to.hex}) from ${r.from.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, signed with ML-DSA-${PQ_VARIANT}`);
+    write(`tx hash: ${r.txHash} (accepted by the node; it lands in a block within seconds)`);
     return 0;
   }
 

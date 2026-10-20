@@ -49,7 +49,7 @@ sec = re.search(r'(?ms)^\[json-rpc\].*?(?=^\[|\Z)', s).group(0)
 new = re.sub(r'(?m)^enable = .*', 'enable = true', sec)
 new = re.sub(r'(?m)^address = .*', f'address = "127.0.0.1:{port}"', new)
 new = re.sub(r'(?m)^ws-address = .*', f'ws-address = "127.0.0.1:{port+1}"', new)
-new = re.sub(r'(?m)^api = .*', 'api = "eth,net,web3,txpool"', new)
+new = re.sub(r'(?m)^api = .*', 'api = "eth,net,web3,txpool,zetaphy"', new)
 # Same RPC limits as zetaphy-chain/setup-node.sh, so tests meet them too.
 for k, v in {'allow-insecure-unlock': 'false', 'gas-cap': '10000000', 'evm-timeout': '"3s"', 'logs-cap': '2000',
              'block-range-cap': '2000', 'max-open-connections': '200', 'batch-request-limit': '50',
@@ -61,7 +61,7 @@ s = re.sub(r'(?ms)(^\[api\].*?^address = )"[^"]*"', rf'\1"tcp://127.0.0.1:{port+
 open(p, 'w').write(s)
 PY
 
-nohup $BIN start --home "$HOME_DIR" --chain-id $CHAIN_ID --json-rpc.api eth,net,web3,txpool > "$HOME_DIR/node.log" 2>&1 &
+nohup $BIN start --home "$HOME_DIR" --chain-id $CHAIN_ID --json-rpc.api eth,net,web3,txpool,zetaphy > "$HOME_DIR/node.log" 2>&1 &
 echo $! > "$HOME_DIR/node.pid"
 for i in $(seq 1 90); do
   if curl -s -m 2 -X POST -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "http://127.0.0.1:$PORT" | grep -q '"result":"0x[1-9a-f]'; then

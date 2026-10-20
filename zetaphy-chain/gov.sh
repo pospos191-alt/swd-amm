@@ -10,6 +10,9 @@
 #   gov.sh vote <id> yes|no|abstain|no_with_veto
 #   gov.sh status [id]                                   one proposal, or all of them
 #   gov.sh plan                                          the upgrade the chain is waiting for
+#   gov.sh propose-ratelimit <denom> <channel> <send%> <recv%> <hours>
+#                                                        cap IBC flow of a denom on a channel
+#   gov.sh ratelimits                                    the IBC limits in force
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -70,6 +73,24 @@ case "${1:-}" in
     else $ZETAPHYD q gov proposals $QF | jq -c '.proposals[] | {id, title, status}'; fi ;;
   plan)
     $ZETAPHYD q upgrade plan $QF 2>/dev/null || echo "no upgrade scheduled" ;;
+  propose-ratelimit)
+    # E.g. USDC from Noble: at most 10% of its supply on this chain may come
+    # in or go out through channel-0 per 24 hours; a packet that would go
+    # over is refused (the funds stay with the sender).
+    denom=${2:?denom}; channel=${3:?channel}; send=${4:?send percent}; recv=${5:?recv percent}; hours=${6:?hours}
+    [[ "$channel" =~ ^(channel-[0-9]+|[a-z0-9-]+-[0-9]+)$ ]] || { echo "channel: channel-N (or an IBC v2 client id)"; exit 1; }
+    for n in "$send" "$recv"; do [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -le 100 ] || { echo "percent: 0 to 100"; exit 1; }; done
+    [[ "$hours" =~ ^[1-9][0-9]*$ ]] || { echo "hours: a whole number above 0"; exit 1; }
+    gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
+    f=$(mktemp)
+    jq -n --arg gov "$gov" --arg dn "$denom" --arg ch "$channel" --arg s "$send" --arg r "$recv" --arg h "$hours" --arg d "$DEPOSIT" \
+      '{messages:[{"@type":"/ratelimit.v1.MsgAddRateLimit",authority:$gov,denom:$dn,channel_or_client_id:$ch,
+        max_percent_send:$s,max_percent_recv:$r,duration_hours:$h}],
+        metadata:"",deposit:$d,title:("IBC rate limit: " + $dn + " on " + $ch),
+        summary:("At most " + $s + "% out / " + $r + "% in of the supply of " + $dn + " through " + $ch + " every " + $h + " hours."),expedited:false}' > "$f"
+    submit "$f"; rm -f "$f" ;;
+  ratelimits)
+    $ZETAPHYD q ratelimit list-rate-limits $QF ;;
   *)
-    sed -n '8,13p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,15p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

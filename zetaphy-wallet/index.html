@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src *; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>ZETAPHY PQ Wallet</title>
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./app.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>ZETAPHY PQ Wallet</h1>
+      <p class="sub" data-i18n="subtitle">กระเป๋าต้านควอนตัม (ML-DSA-44) · ไม่มีกุญแจ ECDSA</p>
+    </div>
+    <button id="lang" type="button" class="ghost" lang="en">English</button>
+  </header>
+
+  <section class="warn" id="warning">
+    <strong data-i18n="warnTitle">ใช้กับ testnet เท่านั้น</strong>
+    <ul>
+      <li data-i18n="warnTestnet">ZETAPHY testnet ไม่ใช่เงินจริง ห้ามใส่ของที่มีมูลค่า</li>
+      <li data-i18n="warnSeed">seed คือกุญแจเดียวของกระเป๋า ถ้าหายหรือลืมรหัสผ่าน เงินในกระเป๋าหายถาวร ไม่มีใครกู้คืนให้ได้</li>
+      <li data-i18n="warnLocal">seed อยู่ในเบราว์เซอร์นี้เท่านั้น เก็บแบบเข้ารหัสด้วยรหัสผ่านของคุณ และไม่ถูกส่งไปที่ไหน</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <label for="rpc" data-i18n="rpcLabel">ที่อยู่ RPC ของโหนด ZETAPHY (JSON-RPC พอร์ต 8545)</label>
+    <div class="row">
+      <input id="rpc" type="url" spellcheck="false" autocomplete="off" placeholder="https://…:8545">
+      <button id="rpc-save" type="button" data-i18n="rpcSave">บันทึก</button>
+    </div>
+    <p class="hint" data-i18n="rpcHint">หน้านี้เปิดผ่าน https จึงต้องใช้ RPC ที่เป็น https ด้วย</p>
+  </section>
+
+  <section class="card" id="setup" hidden>
+    <h2 data-i18n="setupTitle">เริ่มใช้งาน</h2>
+    <div class="row tabs" role="group">
+      <button id="mode-new" type="button" class="tab on" data-i18n="modeNew">สร้างกุญแจใหม่</button>
+      <button id="mode-import" type="button" class="tab" data-i18n="modeImport">นำเข้า seed</button>
+    </div>
+    <form id="setup-form" autocomplete="off">
+      <div id="seed-row" hidden>
+        <label for="seed-in" data-i18n="seedLabel">seed (hex 64 ตัว, ขึ้นต้น 0x หรือไม่ก็ได้)</label>
+        <input id="seed-in" type="password" spellcheck="false" autocomplete="off">
+      </div>
+      <label for="pass1" data-i18n="pass1">ตั้งรหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</label>
+      <input id="pass1" type="password" autocomplete="new-password">
+      <label for="pass2" data-i18n="pass2">พิมพ์รหัสผ่านอีกครั้ง</label>
+      <input id="pass2" type="password" autocomplete="new-password">
+      <button id="save-key" type="submit" data-i18n="saveKey">สร้างกระเป๋า</button>
+    </form>
+  </section>
+
+  <section class="card" id="locked" hidden>
+    <h2 data-i18n="lockedTitle">กระเป๋าถูกล็อก</h2>
+    <p class="addr" id="locked-addr"></p>
+    <form id="unlock-form" autocomplete="off">
+      <label for="unlock-pass" data-i18n="unlockLabel">รหัสผ่าน</label>
+      <input id="unlock-pass" type="password" autocomplete="current-password">
+      <button id="unlock" type="submit" data-i18n="unlock">ปลดล็อก</button>
+    </form>
+    <button id="forget" type="button" class="ghost danger" data-i18n="forget">ลบกระเป๋าออกจากเบราว์เซอร์นี้</button>
+  </section>
+
+  <section id="wallet" hidden>
+    <div class="card">
+      <h2 data-i18n="accountTitle">บัญชีของคุณ</h2>
+      <p class="hint" data-i18n="sameAccount">สองแบบนี้คือบัญชีเดียวกัน รับเงินได้ทั้งสองแบบ</p>
+      <div class="addr-row"><code id="addr-bech32" class="addr"></code><button type="button" class="ghost copy" data-copy="addr-bech32" data-i18n="copy">คัดลอก</button></div>
+      <div class="addr-row"><code id="addr-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="addr-hex" data-i18n="copy">คัดลอก</button></div>
+      <div class="balance">
+        <span data-i18n="balance">ยอดเงิน</span>
+        <strong id="balance">–</strong>
+        <button id="refresh" type="button" class="ghost" data-i18n="refresh">อัปเดต</button>
+      </div>
+      <p id="acct-status" class="hint"></p>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="sendTitle">โอน ZETAPHY</h2>
+      <form id="send-form" autocomplete="off">
+        <label for="to" data-i18n="toLabel">ถึง (0x… หรือ zetaphy1…)</label>
+        <input id="to" spellcheck="false" autocomplete="off">
+        <label for="amount" data-i18n="amountLabel">จำนวน (ZETAPHY)</label>
+        <input id="amount" inputmode="decimal" autocomplete="off" placeholder="0.0">
+        <details>
+          <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
+          <label for="gas" data-i18n="gasLabel">gas limit</label>
+          <input id="gas" inputmode="numeric" value="400000">
+        </details>
+        <button id="review" type="submit" data-i18n="review">ตรวจก่อนโอน</button>
+      </form>
+      <div id="confirm" class="confirm" hidden>
+        <h3 data-i18n="confirmTitle">ยืนยันการโอน</h3>
+        <dl>
+          <dt data-i18n="cTo">ถึง</dt><dd><code id="c-to"></code></dd>
+          <dt data-i18n="cAmount">จำนวน</dt><dd id="c-amount"></dd>
+          <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="c-fee"></dd>
+          <dt data-i18n="cTotal">รวม</dt><dd id="c-total"></dd>
+        </dl>
+        <div class="row">
+          <button id="confirm-send" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
+          <button id="cancel-send" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
+        </div>
+      </div>
+      <p id="tx-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="tx-hash"></code></p>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="backupTitle">สำรอง seed</h2>
+      <p class="warn-text" data-i18n="backupWarn">ไฟล์สำรองเป็น seed แบบไม่เข้ารหัส ใครได้ไฟล์นี้ไปก็ย้ายเงินออกได้ เก็บไว้ในที่ปลอดภัยแบบออฟไลน์ ห้ามส่งให้ใคร</p>
+      <label class="check"><input id="backup-ok" type="checkbox"> <span data-i18n="backupOk">เข้าใจแล้ว</span></label>
+      <button id="backup" type="button" disabled data-i18n="backup">ดาวน์โหลดไฟล์สำรอง seed</button>
+      <p class="hint" data-i18n="backupCli">ไฟล์นี้ใช้เป็น ~/.zetaphy/pq.seed ของคำสั่ง zetaphy pq native ได้เลย</p>
+      <button id="lock" type="button" class="ghost" data-i18n="lock">ล็อกกระเป๋า</button>
+    </div>
+  </section>
+
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <footer>
+    <p data-i18n="footer">โค้ดทั้งหมดอยู่ในหน้านี้ ไม่โหลดสคริปต์จากที่อื่น · ธุรกรรมเซ็นในเบราว์เซอร์ด้วย ML-DSA-44 (FIPS 204)</p>
+  </footer>
+</main>
+</body>
+</html>
