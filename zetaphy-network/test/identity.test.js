@@ -338,7 +338,8 @@ test('bonded runners post Neuro verdicts on any identity; outsiders and new runn
   assert.equal(req.requestURI, `${WEB}?chain=bsc&address=${t.account}`);
   const res = ev(logs, 'ValidationResponse')[0].args;
   assert.deepEqual([res.validatorAddress, res.agentId, res.response, res.responseHash, res.tag], [addr('r1'), id, 20n, V, 'neuro-v1']);
-  const rh = await val.call('verdictRequestHash', [id, addr('r1'), V]);
+  const rh = await val.call('verdictRequestHash', [id, addr('r1')]);
+  assert.equal(rh.slice(0, 10), '0x4e564431'); // the postVerdict namespace ("NVD1")
   assert.equal(req.requestHash, rh);
   const st = await val.call('getValidationStatus', [rh]);
   assert.deepEqual([st[0], st[1], st[2], st[3], st[4]], [addr('r1'), id, 20n, V, 'neuro-v1']);
@@ -349,10 +350,17 @@ test('bonded runners post Neuro verdicts on any identity; outsiders and new runn
   assert.deepEqual([...await val.call('getSummary', [id, [], 'other'])], [0n, 0n]);
   assert.equal((await val.call('getAgentValidations', [id])).length, 2);
   assert.deepEqual([...await val.call('getValidatorRequests', [addr('r1')])], [rh]);
-  // the same runner, same verdict: an update, not a new entry
+  // the same runner again, same or another verdict: it replaces its one slot, never adds an entry
   await val.send('r1', 'postVerdict', [id, V, 40, '', 'neuro-v1']);
   assert.equal((await val.call('getAgentValidations', [id])).length, 2);
   assert.deepEqual([...await val.call('getSummary', [id, [], ''])], [2n, 35n]);
+  const V2 = '0x' + '22'.repeat(32);
+  const l2 = await val.send('r1', 'postVerdict', [id, V2, 60, '', 'neuro-v1']);
+  assert.equal(ev(l2, 'ValidationRequest').length, 0);
+  assert.equal(ev(l2, 'ValidationResponse')[0].args.requestHash, rh);
+  assert.equal((await val.call('getValidationStatus', [rh]))[3], V2);
+  assert.equal((await val.call('getAgentValidations', [id])).length, 2);
+  assert.deepEqual([...await val.call('getSummary', [id, [], ''])], [2n, 45n]);
 
   for (const w of ['newbie', 'mallory', 'squatter']) await assert.rejects(val.send(w, 'postVerdict', [id, V, 50, '', '']), /NotRunner/);
   await c.sendTo('admin', MOCK_ADDR.runners, MOCKS.MockRunners.iface, 'set', [addr('r2'), true, 1, 2]); // more rejected than agreed
@@ -381,4 +389,91 @@ test('spec request/response: only the agent\'s owner asks, only the named runner
   const RH2 = '0x' + '79'.repeat(32);
   await val.send('alice', 'validationRequest', [addr('mallory'), id, 'ipfs://req', RH2]);
   await assert.rejects(val.send('mallory', 'validationResponse', [RH2, 100, '', ZeroHash, '']), /NotRunner/);
+});
+
+// ------------------------------------------------------------------ security review fixes
+
+test('verdict squatting: verdict slots cannot be pre-created through validationRequest', async () => {
+  const scam = await registerTarget('squatter', 'bsc', '0x' + '5c'.repeat(20));
+  // the attacker's own free agent A, which it may open spec requests for
+  const A = ev(await idr.send('mallory', 'register()', []), 'Registered')[0].args.agentId;
+  const slot = await val.call('verdictRequestHash', [scam.id, addr('r1')]);
+  await assert.rejects(val.send('mallory', 'validationRequest', [addr('r1'), A, 'ipfs://x', slot]), /ReservedHash/);
+  // the whole tagged namespace is closed to spec requests, whatever follows the tag
+  await assert.rejects(val.send('mallory', 'validationRequest', [addr('r1'), A, 'ipfs://x', '0x4e564431' + '00'.repeat(28)]), /ReservedHash/);
+  assert.equal(await val.call('isVerdictHash', [slot]), true);
+  assert.equal(await val.call('isVerdictHash', ['0x' + '77'.repeat(32)]), false);
+  await assert.rejects(val.send('mallory', 'validationRequest', [addr('r1'), A, 'ipfs://x', ZeroHash]), /BadValue/);
+
+  // the runner's verdict lands on the scam target, and only there
+  await val.send('r1', 'postVerdict', [scam.id, '0x' + '11'.repeat(32), 5, '', 'neuro-v1']);
+  assert.equal((await val.call('getValidationStatus', [slot]))[1], scam.id);
+  assert.deepEqual([...await val.call('getSummary', [scam.id, [], ''])], [1n, 5n]);
+  assert.deepEqual([...await val.call('getSummary', [A, [], ''])], [0n, 0n]);
+  // slots are per (agent, runner): another agent or runner gets another slot
+  assert.notEqual(await val.call('verdictRequestHash', [A, addr('r1')]), slot);
+  assert.notEqual(await val.call('verdictRequestHash', [scam.id, addr('r2')]), slot);
+});
+
+test('getSummary counts each runner once per agent: its latest answer', async () => {
+  const { id } = await registerTarget('squatter', 'eth', MOCK_ADDR.token);
+  for (let i = 1; i <= 10; i++) await val.send('r1', 'postVerdict', [id, '0x' + i.toString(16).padStart(64, '0'), 100, '', 'neuro-v1']);
+  await val.send('r2', 'postVerdict', [id, '0x' + 'aa'.repeat(32), 0, '', 'neuro-v1']);
+  assert.equal((await val.call('getAgentValidations', [id])).length, 2); // bounded: one slot per runner
+  assert.equal((await val.call('getValidatorRequests', [addr('r1')])).length, 1);
+  assert.deepEqual([...await val.call('getSummary', [id, [], ''])], [2n, 50n]);
+
+  // spec requests answered by the same runner do not stack up either: its latest answer wins
+  await idr.send('alice', 'claim', [id]);
+  for (const [i, score] of [[1, 100], [2, 100], [3, 90]]) {
+    const RH = '0x' + String(i).repeat(64);
+    await val.send('alice', 'validationRequest', [addr('r2'), id, 'ipfs://req', RH]);
+    await val.send('r2', 'validationResponse', [RH, score, '', ZeroHash, 'neuro-v1']);
+  }
+  assert.equal((await val.call('getAgentValidations', [id])).length, 5);
+  assert.deepEqual([...await val.call('getSummary', [id, [], ''])], [2n, 95n]); // r1: 100, r2: 90
+  assert.deepEqual([...await val.call('getSummary', [id, [addr('r2')], ''])], [1n, 90n]);
+  // a runner's newer verdict replaces its spec answer in the summary too
+  await val.send('r2', 'postVerdict', [id, '0x' + 'bb'.repeat(32), 10, '', 'neuro-v1']);
+  assert.deepEqual([...await val.call('getSummary', [id, [], ''])], [2n, 55n]);
+});
+
+test('a claimed identity cannot be handed back to the registry to look unclaimed', async () => {
+  const { id } = await registerTarget('squatter', 'eth', MOCK_ADDR.token);
+  await idr.send('alice', 'claim', [id]);
+  await idr.send('alice', 'setAgentURI', [id, 'https://evil.example/fake-neuro.json']);
+  await assert.rejects(idr.send('alice', 'transferFrom', [addr('alice'), idr.address, id]), /RegistryCustody/);
+  await assert.rejects(idr.send('alice', 'safeTransferFrom(address,address,uint256)', [addr('alice'), idr.address, id]), /RegistryCustody/);
+  await assert.rejects(idr.send('alice', 'safeTransferFrom(address,address,uint256,bytes)', [addr('alice'), idr.address, id, '0x']), /RegistryCustody/);
+  // also through an approved operator
+  await idr.send('alice', 'setApprovalForAll', [addr('bob'), true]);
+  await assert.rejects(idr.send('bob', 'transferFrom', [addr('alice'), idr.address, id]), /RegistryCustody/);
+  assert.equal(await idr.call('ownerOf', [id]), addr('alice'));
+  assert.equal((await idr.call('getTarget', [id]))[5], true);
+  // plain agents cannot be parked there either
+  const p = ev(await idr.send('bob', 'register()', []), 'Registered')[0].args.agentId;
+  await assert.rejects(idr.send('bob', 'transferFrom', [addr('bob'), idr.address, p]), /RegistryCustody/);
+});
+
+test('one spelling on chain for Sui/Aptos (padded lowercase hex), Solana (base58) and escaped text', async () => {
+  const ONE = '0x' + '0'.repeat(63) + '2';
+  await idr.send('alice', 'registerTarget', ['sui', ONE + '::sui::SUI']);
+  await idr.send('alice', 'registerTarget', ['aptos', '0x' + 'ab'.repeat(32)]);
+  for (const bad of ['0x2::sui::SUI', '0x' + '0'.repeat(63) + 'A::sui::SUI', '0x' + 'AB'.repeat(32), ONE + '::sui', ONE + '::sui::', ONE + ':sui::SUI',
+    ONE + '::sui::SUI::x', ONE + '::1sui::SUI', ONE + '::sui::S-UI', ONE + '::sui::SUI%3C', '0X' + '0'.repeat(63) + '2', ONE + '0']) {
+    await assert.rejects(idr.send('alice', 'registerTarget', ['sui', bad]), /BadAccount/, bad);
+  }
+  const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  await idr.send('alice', 'registerTarget', ['sol', mint]);
+  for (const bad of [mint.replace('E', '%45'), mint.slice(0, 31), mint + 'abc', mint.replace('E', '0'), mint.replace('E', 'O'), mint.replace('E', 'l'), mint.replace('E', '_')]) {
+    await assert.rejects(idr.send('alice', 'registerTarget', ['sol', bad]), /BadAccount/, bad);
+  }
+  // text chains: an escape is only for a byte that needs one
+  await idr.send('alice', 'registerTarget', ['bitcoin', 'UNCOMMON%E2%80%A2GOODS']);
+  for (const bad of ['UNCOMMON%E2%80%A2GOOD%53', '%41BC', 'a%2Db', 'a%3Ab']) await assert.rejects(idr.send('alice', 'registerTarget', ['bitcoin', bad]), /BadAccount/, bad);
+  // the CLI refuses what the registry would, with a readable error
+  assert.throws(() => canonicalTarget('sui', '0x2::coin::Coin<0x2::sui::SUI>'), /not a sui address or coin type/);
+  assert.throws(() => canonicalTarget('aptos', 'hello'), /not a aptos address/);
+  assert.throws(() => canonicalTarget('sol', mint + '%'), /base58/);
+  assert.equal(canonicalTarget('aptos', '0xAB::Coin::Name').account, '0x' + '0'.repeat(62) + 'ab::Coin::Name');
 });

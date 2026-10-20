@@ -41,7 +41,11 @@ const word = (v) => BigInt(v).toString(16).padStart(64, '0');
 const TOKEN_CODE = '0x6080604052';
 const REGISTRY = '0x7777777777777777777777777777777777777777';
 const sel4 = (sig) => Buffer.from(keccak_256(Buffer.from(sig))).toString('hex').slice(0, 8);
-const REG_SEL = { fingerprint: sel4('isFlagged(bytes32)'), code: sel4('isCodeFlagged(bytes32)'), address: sel4('isAddressFlagged(uint256,address)') };
+// [warning view, enforcement view] for each kind of key.
+const REG_SEL = { fingerprint: [sel4('isFlagged(bytes32)'), sel4('isEnforced(bytes32)')], code: [sel4('isCodeFlagged(bytes32)'), sel4('isCodeEnforced(bytes32)')],
+  address: [sel4('isAddressFlagged(uint256,address)'), sel4('isAddressEnforced(uint256,address)')] };
+const SLOT_IMPL = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'; // EIP-1967
+const SLOT_BEACON = '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50';
 /** ABI encoding of a single string return value. */
 const abiString = (str) => { const h = Buffer.from(str).toString('hex'); return '0x' + word(32) + word(h.length / 2) + h.padEnd(64 * Math.ceil(h.length / 64), '0'); };
 let server; let browser;
@@ -183,18 +187,23 @@ async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
       // A mock ERC-20 at TOKEN: TUSD, 6 decimals.
       calls.push(params[0]);
       const sel = params[0].data.slice(2, 10);
-      // A mock ThreatRegistry at node.registry: node.flags = { fingerprint, code, address } lists (lower-case hex).
+      // A mock ThreatRegistry at node.registry: node.flags = { fingerprint, code, address } lists (lower-case hex);
+      // node.flags.warnOnly: flagged but not enforced yet (the enforcement views answer false).
       if (node.registry && params[0].to?.toLowerCase() === node.registry.toLowerCase()) {
         const arg = params[0].data.slice(10).toLowerCase();
-        const hit = sel === REG_SEL.fingerprint ? node.flags?.fingerprint?.includes('0x' + arg)
-          : sel === REG_SEL.code ? node.flags?.code?.includes('0x' + arg)
-            : sel === REG_SEL.address && BigInt('0x' + arg.slice(0, 64)) === 77390n ? node.flags?.address?.includes('0x' + arg.slice(64 + 24)) : undefined;
+        const kind = Object.keys(REG_SEL).find((k) => REG_SEL[k].includes(sel));
+        const enforcedView = kind && REG_SEL[kind][1] === sel;
+        let hit = kind === 'fingerprint' ? node.flags?.fingerprint?.includes('0x' + arg)
+          : kind === 'code' ? node.flags?.code?.includes('0x' + arg)
+            : kind === 'address' && BigInt('0x' + arg.slice(0, 64)) === 77390n ? node.flags?.address?.includes('0x' + arg.slice(64 + 24)) : undefined;
+        if (hit && enforcedView && node.flags?.warnOnly) hit = false;
         if (node.registryDown) error = { code: -32000, message: 'execution reverted' };
         else if (hit === undefined) error = { code: -32000, message: 'execution reverted' };
         else result = '0x' + word(hit ? 1 : 0) + word(hit ? node.flags.reason ?? 1 : 0);
       } else if (!params[0].to) { if (node.deployRevert) error = { code: 3, message: 'execution reverted: constructor' }; else result = '0x6080'; } // a contract creation
       else if (params[0].to === '0x0000000000000000000000000000000000000800' || params[0].to === '0x0000000000000000000000000000000000000801') result = '0x' + word(1);
       else if (!params[0].data || params[0].data === '0x') result = '0x'; // a plain value transfer
+      else if (sel === '5c60da1b' && node.beacons?.[params[0].to.toLowerCase()]) result = '0x' + word(node.beacons[params[0].to.toLowerCase()]); // implementation()
       else if (sel === '313ce567') result = '0x' + word(6);
       else if (sel === '95d89b41') result = abiString('TUSD');
       else if (sel === '70a08231') result = '0x' + word(node.tokenBalance ?? 12_500_000n);
@@ -202,6 +211,7 @@ async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
       else if (sel === 'a9059cbb') result = '0x' + word(node.transferResult ?? 1);
       else error = { code: -32000, message: 'execution reverted' };
     }
+    else if (method === 'eth_getStorageAt') result = '0x' + word(node.storage?.[params[0].toLowerCase()]?.[params[1].toLowerCase()] ?? 0);
     else if (method === 'eth_gasPrice') result = '0x3b9aca00'; // 1 gwei
     else if (method === 'eth_getBalance') result = '0x' + (node.balances?.[params[0].toLowerCase()] ?? node.balance ?? 10n ** 19n).toString(16);
     else if (method === 'zetaphy_pqAccount') {
@@ -1297,9 +1307,11 @@ test('vaccine: flagged code (fingerprint, code hash or address) is refused befor
 
   // What the page asked the registry: fp1 hash, keccak-256 of the code, (77390, address).
   const asked = calls.filter((c) => c.to.toLowerCase() === REGISTRY).map((c) => c.data);
-  assert.ok(asked.includes('0x' + REG_SEL.fingerprint + fp.slice(2)));
-  assert.ok(asked.includes('0x' + REG_SEL.code + codeHash.slice(2)));
-  assert.ok(asked.includes('0x' + REG_SEL.address + word(77390) + word(TOKEN)));
+  for (const i of [0, 1]) { // the warning view and the enforcement view
+    assert.ok(asked.includes('0x' + REG_SEL.fingerprint[i] + fp.slice(2)));
+    assert.ok(asked.includes('0x' + REG_SEL.code[i] + codeHash.slice(2)));
+    assert.ok(asked.includes('0x' + REG_SEL.address[i] + word(77390) + word(TOKEN)));
+  }
 
   // Not flagged: it goes through, and the confirm box says it was checked.
   node.flags = { fingerprint: [], code: [], address: [] };
@@ -1371,6 +1383,74 @@ test('vaccine (Thai, snap): a flagged destination is refused before the snap is 
   await page.click('#confirm-send');
   await visible(page, '#tx-result');
   assert.ok(snap.requests.some((r) => r.method === 'zetaphy_signTx'));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('vaccine (best effort): a clean proxy in front of flagged code is refused (EIP-1167, EIP-1967 implementation, EIP-1967 beacon)', async () => {
+  const IMPL = '0x4444444444444444444444444444444444444444';
+  const BEACON = '0x5555555555555555555555555555555555555555';
+  const IMPL_CODE = '0x60806040aa';
+  const implHash = '0x' + Buffer.from(keccak_256(Buffer.from(IMPL_CODE.slice(2), 'hex'))).toString('hex');
+  // The keccak of the slot names, minus one (EIP-1967).
+  const slot = (n) => '0x' + (BigInt('0x' + Buffer.from(keccak_256(Buffer.from(n))).toString('hex')) - 1n).toString(16).padStart(64, '0');
+  assert.equal(slot('eip1967.proxy.implementation'), SLOT_IMPL);
+  assert.equal(slot('eip1967.proxy.beacon'), SLOT_BEACON);
+  const node = { exists: true, registry: REGISTRY, flags: { fingerprint: [], code: [implHash], address: [], reason: 1 }, codes: { [IMPL]: IMPL_CODE, [BEACON]: '0x6080' } };
+  const { page, context, errors, sent } = await importedPage(node);
+  await setRegistry(page, REGISTRY);
+  // EIP-1167: the token is a fresh minimal proxy (clean code hash) whose target is the flagged code.
+  node.codes[TOKEN] = '0x363d3d373d3d3d363d73' + IMPL.slice(2) + '5af43d82803e903d91602b57fd5bf3';
+  await tokenTransferReview(page);
+  await statusMatches(page, /Not signed: 0x4444.* \(the code behind proxy 0x3333.*\) is flagged .*byte-for-byte flagged code/);
+  // EIP-1967 implementation slot.
+  node.codes[TOKEN] = TOKEN_CODE;
+  node.storage = { [TOKEN]: { [SLOT_IMPL]: IMPL } };
+  await page.click('#token-review');
+  await statusMatches(page, /Not signed: 0x4444.* \(the code behind proxy 0x3333.*\) is flagged/);
+  // EIP-1967 beacon: the beacon's implementation() is the flagged code.
+  node.storage = { [TOKEN]: { [SLOT_BEACON]: BEACON } };
+  node.beacons = { [BEACON]: IMPL };
+  await page.click('#token-review');
+  await statusMatches(page, /Not signed: 0x4444.* \(the code behind proxy 0x3333.*\) is flagged/);
+  assert.ok(await page.isHidden('#token-confirm'));
+  // The same proxy in front of clean code goes through.
+  node.flags = { fingerprint: [], code: [], address: [] };
+  await page.click('#token-review');
+  await visible(page, '#token-confirm');
+  assert.match(await page.textContent('#token-confirm .vaccine-note'), /best effort.*EIP-1967.*EIP-1167 proxy/);
+  await page.click('#confirm-token');
+  await visible(page, '#token-result');
+  assert.equal(sent.length, 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('vaccine: a flag not enforced yet is a warning (sending is the user\'s choice); a new one after review stops the signing; enforced refuses', async () => {
+  const node = { exists: true, registry: REGISTRY, flags: { fingerprint: [], code: [], address: [TOKEN], reason: 5, warnOnly: true } };
+  const { page, context, errors, sent } = await importedPage(node);
+  await setRegistry(page, REGISTRY);
+  await tokenTransferReview(page);
+  await visible(page, '#token-confirm');
+  assert.match(await page.textContent('#token-confirm .vaccine-note'), /Warning: 0x3333.* was flagged by Neuro runners \(this address is flagged · reason: phishing\), but the flag is not enforced yet/);
+  assert.ok(await page.$eval('#token-confirm .vaccine-note', (el) => el.classList.contains('unchecked')));
+  await page.click('#confirm-token'); // the user saw the warning and sends anyway
+  await visible(page, '#token-result');
+  assert.equal(sent.length, 1);
+  // Reviewed clean, then a (not yet enforced) flag lands before signing: not signed, review again.
+  node.flags = { fingerprint: [], code: [], address: [] };
+  await tokenTransferReview(page); // the form was cleared by the send
+  await visible(page, '#token-confirm');
+  node.flags = { fingerprint: [], code: [], address: [TOKEN], reason: 5, warnOnly: true };
+  await page.click('#confirm-token');
+  await statusMatches(page, /Not signed: 0x3333.* was flagged after you reviewed this/);
+  assert.equal(sent.length, 1);
+  // Enforced: refused at review.
+  node.flags.warnOnly = false;
+  await page.click('#token-review');
+  await statusMatches(page, /Not signed: 0x3333.* is flagged by the ZETAPHY immune system/);
+  assert.ok(await page.isHidden('#token-confirm'));
   assert.equal(sent.length, 1);
   assert.deepEqual(errors, []);
   await context.close();

@@ -129,8 +129,8 @@ test('a decoy marks only its direct caller, so nobody can get an innocent user m
 
 // ---- vaccine: the ThreatRegistry's flags hold transfers; clearing the flag lets them out ----
 const R = { Drainer: 1 };
-async function registry() {
-  const reg = await c.deploy('ThreatRegistry', [jobs.address, 2, 1], 'gov');
+async function registry(delay = 0) {
+  const reg = await c.deploy('ThreatRegistry', [jobs.address, 2, 1, a('gov'), delay], 'gov');
   await airlock.send('gov', 'setThreats', [reg.address]);
   const flag = async (key, on = true) => { for (const r of ['r1', 'r3']) await reg.send(r, 'vote', [key, on, on ? R.Drainer : 0]); };
   return { reg, flag };
@@ -200,4 +200,33 @@ test('NeuroLane attests nothing while Neuro is paused (NeuroControl), and again 
   await paused.send('r1', 'attest', tx(15));
   await paused.send('r2', 'attest', tx(15));
   assert.equal((await airlock.call('status', [id]))[0], 1n); // the lane's attestation reached the airlock
+});
+
+test('vaccine: a flag holds transfers only once it is enforceDelay old; the lane veto is the instant hold', async () => {
+  const { reg, flag } = await registry(3600);
+  const t = tx(20, 'alice', 4n, 'attacker');
+  await ready(t);
+  await flag(await reg.call('addressKey', [SRC, a('attacker')]));
+  assert.equal((await reg.call('isAddressFlagged', [SRC, a('attacker')]))[0], true); // Neuro warns at once
+  assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 0n); // not enforced yet
+  c.advance(3600);
+  assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 1n);
+  await assert.rejects(airlock.send('user', 'release', t), /ThreatFlagged/);
+});
+
+test('vaccine: governance protects the route\'s own keys (lockbox, airlock), so runners cannot hold every transfer', async () => {
+  const { reg, flag } = await registry(3600);
+  const lockboxKey = await reg.call('addressKey', [SRC, LOCKBOX]);
+  const airlockKey = await reg.call('addressKey', [1n, airlock.address]); // the test chain's id is 1
+  // Flagged before governance noticed: inside the delay nothing is held yet; protecting clears it.
+  await flag(lockboxKey);
+  await assert.rejects(reg.send('r1', 'setProtected', [[lockboxKey, airlockKey], true]), /NotGovernance/);
+  await reg.send('gov', 'setProtected', [[lockboxKey, airlockKey], true]);
+  c.advance(3600);
+  await assert.rejects(reg.send('r1', 'vote', [lockboxKey, true, R.Drainer]), /ProtectedKey/);
+  await assert.rejects(reg.send('r1', 'vote', [airlockKey, true, R.Drainer]), /ProtectedKey/);
+  const t = tx(21);
+  await ready(t);
+  await airlock.send('user', 'release', t);
+  assert.equal(await bal('alice'), 500n * 10n ** 6n);
 });

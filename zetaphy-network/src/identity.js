@@ -2,12 +2,16 @@
 // and the one canonical spelling of a target, so "1 contract = 1 identity"
 // holds even when people type an address differently.
 //
-// The registry enforces the strict form for EVM chains (0x + 40 lowercase hex)
-// and lowercase for bech32/NEAR/Starknet; for the other chains it takes the
-// spelling the CLI makes here.
+// The registry enforces the one spelling on chain for EVM (0x + 40 lowercase
+// hex), Sui/Aptos (0x + 64 lowercase hex [::module::Name]) and Solana (base58),
+// and lowercase for bech32/NEAR/Starknet. For text chains (Bitcoin runes, TON)
+// it refuses needless %XX escapes, but cannot tell two spellings of the same
+// TON address (EQ…/UQ…/raw) or rune (with/without spacers) apart: there it
+// takes the spelling the CLI makes here.
 
-// rule: 0 = text ([A-Za-z0-9._:-] and %XX), 1 = lowercase, 2 = EVM address
-export const RULE = { TEXT: 0, LOWER: 1, EVM: 2 };
+// rule: 0 = text ([A-Za-z0-9._:-] and %XX), 1 = lowercase, 2 = EVM address,
+// 3 = Move (0x + 64 hex [::module::Name]), 4 = base58 (Solana)
+export const RULE = { TEXT: 0, LOWER: 1, EVM: 2, MOVE: 3, BASE58: 4 };
 
 export const NEURO_CHAINS = {
   zetaphy: { caip2: 'eip155:77390', rule: RULE.EVM },
@@ -15,9 +19,9 @@ export const NEURO_CHAINS = {
   bsc: { caip2: 'eip155:56', rule: RULE.EVM },
   base: { caip2: 'eip155:8453', rule: RULE.EVM },
   arbitrum: { caip2: 'eip155:42161', rule: RULE.EVM },
-  sol: { caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', rule: RULE.TEXT },
-  sui: { caip2: 'sui:mainnet', rule: RULE.TEXT },
-  aptos: { caip2: 'aptos:1', rule: RULE.TEXT },
+  sol: { caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp', rule: RULE.BASE58 },
+  sui: { caip2: 'sui:mainnet', rule: RULE.MOVE },
+  aptos: { caip2: 'aptos:1', rule: RULE.MOVE },
   osmosis: { caip2: 'cosmos:osmosis-1', rule: RULE.LOWER },
   neutron: { caip2: 'cosmos:neutron-1', rule: RULE.LOWER },
   near: { caip2: 'near:mainnet', rule: RULE.LOWER },
@@ -58,10 +62,13 @@ export function canonicalTarget(chain, address) {
   } else if (key === 'starknet') {
     if (!/^0x[0-9a-fA-F]{1,64}$/.test(a)) throw new Error(`not a Starknet address: ${a}`);
     a = pad64(a);
-  } else if (key === 'sui' || key === 'aptos') {
+  } else if (c.rule === RULE.MOVE) {
     // 0x2::sui::SUI and 0x0000…0002::sui::SUI are the same coin type: pad the address part.
-    const m = /^(0x[0-9a-fA-F]{1,64})(::.*)?$/.exec(a);
-    if (m) a = pad64(m[1]) + (m[2] ?? '');
+    const m = /^(0x[0-9a-fA-F]{1,64})(::[A-Za-z_][A-Za-z0-9_]*::[A-Za-z_][A-Za-z0-9_]*)?$/.exec(a);
+    if (!m) throw new Error(`not a ${key} address or coin type (0x…[::module::Name]): ${a}`);
+    a = pad64(m[1]) + (m[2] ?? '');
+  } else if (c.rule === RULE.BASE58) {
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) throw new Error(`not a ${key} address (base58): ${a}`);
   } else if (c.rule === RULE.LOWER) {
     a = a.toLowerCase();
   }

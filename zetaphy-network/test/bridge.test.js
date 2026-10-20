@@ -66,12 +66,12 @@ test('a disabled route and settings changes by outsiders are refused', async () 
   await assert.rejects(guard.send('gov', 'createToken', ['x', 'x', 6]));
 });
 
-// ---- vaccine: no coins to, or out of, a flagged contract; none from a flagged adapter ----
+// ---- vaccine: no coins to, or out of, a flagged contract; adapters are governance's choice, not the runners' ----
 // Runner records stand-in: workers(any) -> (0, 0, active, agreed 1, rejected 0), so any account may vote here.
 const RUNNERS = '0x' + 'a7'.repeat(20);
 async function vaccinated() {
   await c.putCode(RUNNERS, '0x6001604052600160605260a06000f3');
-  const reg = await c.deploy('ThreatRegistry', [RUNNERS, 2, 1], 'gov');
+  const reg = await c.deploy('ThreatRegistry', [RUNNERS, 2, 1, a('gov'), 0], 'gov');
   await guard.send('gov', 'setThreats', [reg.address]);
   const flag = async (key, on = true) => { for (const v of ['alice', 'guardian']) await reg.send(v, 'vote', [key, on, on ? 1 : 0]); };
   // A contract with no immutables stands in for a drainer (code hash = keccak256 of its artifact's runtime code).
@@ -93,12 +93,28 @@ test('vaccine: coins are refused to and from a contract whose code is flagged, u
   assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [drainer]), 50n * USDC + 1n);
 });
 
-test('vaccine: a flagged adapter is refused; only governance sets the registry', async () => {
-  const { reg, flag } = await vaccinated();
+test('vaccine: an adapter cannot be blocked by a runner flag (code hash or address); only governance sets the registry', async () => {
+  const { reg, flag, codeKey, drainer } = await vaccinated();
   await assert.rejects(guard.send('attacker', 'setThreats', [reg.address]), /NotGovernance/);
+  // The adapter is a contract (as BridgeAirlock is); runners flag its code hash and its address.
+  const ADAPTER_CODE = '0x6000';
+  await c.putCode(a('hypAdapter'), ADAPTER_CODE);
+  await flag(await reg.call('codeKey', [keccak256(ADAPTER_CODE)]));
   await flag(await reg.call('addressKey', [1n, a('hypAdapter')])); // the test chain's id is 1
-  await assert.rejects(guard.send('hypAdapter', 'inbound', [HYP, a('alice'), 1n]), /FlaggedContract/);
-  await guard.send('ibcAdapter', 'inbound', [NOBLE, a('alice'), 1n]);
+  assert.equal((await reg.call('isContractEnforced', [a('hypAdapter')]))[0], true);
+  await guard.send('hypAdapter', 'inbound', [HYP, a('alice'), 1n]); // the route keeps working
+  await guard.send('hypAdapter', 'outbound', [HYP, a('alice'), 1n]);
+  await flag(codeKey); // a flagged recipient is still refused on that route
+  await assert.rejects(guard.send('hypAdapter', 'inbound', [HYP, drainer, 1n]), /FlaggedContract/);
   await guard.send('gov', 'setThreats', ['0x' + '00'.repeat(20)]); // zero: no check
-  await guard.send('hypAdapter', 'inbound', [HYP, a('alice'), 1n]);
+  await guard.send('hypAdapter', 'inbound', [HYP, drainer, 1n]);
+});
+
+test('vaccine: BridgeGuard refuses only once the flag is enforced (enforceDelay)', async () => {
+  const { reg, flag, drainer, codeKey } = await vaccinated();
+  await reg.send('gov', 'setEnforceDelay', [3600]);
+  await flag(codeKey);
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]); // warned, not enforced yet
+  c.advance(3600);
+  await assert.rejects(guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]), /FlaggedContract/);
 });

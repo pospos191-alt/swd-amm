@@ -11,9 +11,11 @@ const operator = Wallet.createRandom();
 const stranger = Wallet.createRandom();
 const RUNNERS = new Set([runner.address]);
 const OPERATORS = { 7: operator.address };
+const REGISTRY_HELD = new Set([12n]); // agent 12: an unclaimed contract's Neuro (ownerOf == registry)
 const checks = {
   isRunner: async (a) => RUNNERS.has(a),
   isOperator: async (agentId, a) => OPERATORS[agentId] === a,
+  isRegistryHeld: async (agentId) => REGISTRY_HELD.has(agentId),
 };
 const expect = { chainId: 77390, registry: REGISTRY };
 const V = '0x' + '11'.repeat(32);
@@ -43,12 +45,45 @@ test('the agent\'s registered operator may sign for it; a stranger may not', asy
   const notHisAgent = await verify(await sign(operator, { fromAgent: 8 }));
   assert.equal(notHisAgent.ok, false);
   const s = await verify(await sign(stranger));
-  assert.deepEqual([s.ok, s.reason, s.signer], [false, 'signer is neither a bonded runner nor the agent\'s operator', stranger.address]);
+  assert.deepEqual([s.ok, s.signer], [false, stranger.address]);
+  assert.match(s.reason, /^signer may not speak for agent 12/);
   // without any signer check, nothing is accepted
   const env = await sign(runner);
   const none = await verifyMessage(env, { expect, now: NOW + 10 });
   assert.equal(none.ok, false);
   assert.match(none.reason, /no way to check the signer/);
+});
+
+test('a runner may sign only for an unclaimed (registry-held) identity, never as a claimed or plain agent', async () => {
+  // agent 7 is claimed (its operator signs for it); agent 9 is a plain agent
+  for (const fromAgent of [7, 9]) {
+    const r = await verify(await sign(runner, { fromAgent }));
+    assert.equal(r.ok, false, `runner as agent ${fromAgent}`);
+    assert.match(r.reason, new RegExp(`^signer may not speak for agent ${fromAgent}`));
+    assert.equal(r.signer, runner.address);
+  }
+  // the operator of 7 still may, and the runner still may for unclaimed 12
+  assert.equal((await verify(await sign(operator, { fromAgent: 7 }))).role, 'operator');
+  assert.equal((await verify(await sign(runner))).role, 'runner');
+  // once 12 is claimed, the runner can no longer speak for it
+  const claimed = await verify(await sign(runner), { isRegistryHeld: async () => false });
+  assert.equal(claimed.ok, false);
+  // without isRegistryHeld, a runner is never accepted (only operators)
+  const noHeld = await verifyMessage(await sign(runner), { expect, now: NOW + 10, isRunner: checks.isRunner, isOperator: checks.isOperator });
+  assert.equal(noHeld.ok, false);
+  const onlyRunner = await verifyMessage(await sign(runner), { expect, now: NOW + 10, isRunner: checks.isRunner });
+  assert.match(onlyRunner.reason, /no way to check the signer/);
+  // a check that throws or answers something other than true is a no
+  assert.equal((await verify(await sign(runner), { isRegistryHeld: async () => { throw new Error('rpc down'); } })).reason, 'could not check the signer');
+  assert.equal((await verify(await sign(runner), { isRegistryHeld: async () => 'yes' })).ok, false);
+});
+
+test('the expected domain is required', async () => {
+  const env = await sign(runner);
+  const r = await verifyMessage(env, { now: NOW + 10, ...checks });
+  assert.deepEqual([r.ok, r.reason], [false, 'no expected domain (give expect: { chainId, registry })']);
+  assert.equal((await verify(env, { expect: { chainId: 77390, registry: 'nope' } })).reason, 'bad expected domain');
+  assert.equal((await verify(env, { expect: null })).ok, false);
 });
 
 test('tampering with any signed field, the payload or the domain is caught', async () => {

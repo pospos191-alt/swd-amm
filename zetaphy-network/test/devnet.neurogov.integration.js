@@ -6,6 +6,7 @@
 //   - the deployer key can no longer pause; a vote pauses Neuro
 //   - NeuroJobs refuses requests, coin transfers still work
 //   - a second vote unpauses it and requests work again
+//   - only chains on NeuroControl's allowlist take requests; a vote removes one
 // Needs a zetaphyd with MsgEVMCall: ZETAPHYD=/path/to/zetaphyd npm run test:devnet:neurogov
 
 import { test, before, after } from 'node:test';
@@ -14,7 +15,7 @@ import { execFileSync, execFile } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Wallet, JsonRpcProvider, Contract } from 'ethers';
+import { Wallet, JsonRpcProvider, Contract, encodeBytes32String } from 'ethers';
 
 const ZETAPHYD = process.env.ZETAPHYD || 'zetaphyd';
 const PORT = 21545; // EVM JSON-RPC; scripts/devnet.sh also uses +1 and +100..+103
@@ -90,6 +91,14 @@ test('deploy with --governance gov: the gov module owns NeuroControl, the voted 
   assert.equal(await control.activeSkill(), skill);
   const r = await cli('user', ['job', 'request', 'bsc', '0xc1ed4b78071e7c9a84958d8be0215a10984fc28f', '--jobs', jobsAddr]);
   assert.match(r.out, /job 0 requested/, r.out);
+  // setControl came right after NeuroJobs, and the deploy voted in the runner's chains only.
+  const jobs = new Contract(jobsAddr, art('NeuroJobs').abi, provider);
+  assert.equal((await jobs.control()).toLowerCase(), controlAddr.toLowerCase());
+  assert.equal(await control.chainAllowed(encodeBytes32String('zetaphy')), true);
+  const fake = await cli('user', ['job', 'request', 'nonexistent', '0xc1ed4b78071e7c9a84958d8be0215a10984fc28f', '--jobs', jobsAddr]);
+  assert.notEqual(fake.code, 0, fake.out);
+  assert.match(fake.out, /UnknownChain|revert/i, fake.out);
+  assert.equal(await jobs.jobCount(), 1n);
   // The deployer key handed governance over: it can no longer stop Neuro.
   const p = await cli('deployer', ['neuro', 'send', 'pause', '--jobs', jobsAddr]);
   assert.notEqual(p.code, 0, p.out);
@@ -133,4 +142,16 @@ test('a gov vote approves a defender and raises the body cap', { timeout: 300_00
   assert.equal(await control.defenderApproved(actors.user.address), true);
   await vote('set-max-bodies', '80', controlAddr);
   assert.equal(await control.maxBodies(), 80n);
+});
+
+test('a gov vote removes a chain key: requests for it are refused', { timeout: 300_000 }, async () => {
+  const provider = new JsonRpcProvider(RPC, undefined, { staticNetwork: true });
+  const control = new Contract(controlAddr, art('NeuroControl').abi, provider);
+  assert.equal(await control.chainAllowed(encodeBytes32String('ton')), true);
+  await vote('remove-chain', 'ton', controlAddr);
+  assert.equal(await control.chainAllowed(encodeBytes32String('ton')), false);
+  const r = await cli('user', ['job', 'request', 'ton', 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs', '--jobs', jobsAddr]);
+  assert.notEqual(r.code, 0, r.out);
+  const st = await cli('user', ['neuro', 'status', '--jobs', jobsAddr]);
+  assert.match(st.out, /not voted in: ton/, st.out);
 });

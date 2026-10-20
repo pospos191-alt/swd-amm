@@ -10,10 +10,14 @@
 //   - Free text has control, bidi and other invisible format characters
 //     stripped, and any "scheme://" is defanged. Nothing is fetched, opened,
 //     evaluated or run, and this module has no way to act on a message.
-//   - verifyMessage() also checks the signature, the expiry, the nonce (with a
-//     seen-set) and that the signer is a bonded runner or the sending agent's
-//     registered operator. What to do with a verified message is up to the
-//     reader, who should treat it like any other untrusted report.
+//   - verifyMessage() also checks the domain (the registry the reader trusts,
+//     always required), the signature, the expiry, the nonce (with a seen-set)
+//     and that the signer may speak for the sending agent: its owner, operator
+//     or agentWallet; or, only while that identity is still held by the
+//     registry (an unclaimed contract's Neuro, which nobody owns), a bonded
+//     runner. A runner can never sign as a claimed or plain agent. What to do
+//     with a verified message is up to the reader, who should treat it like
+//     any other untrusted report.
 
 import { TypedDataEncoder, verifyTypedData, keccak256, toUtf8Bytes, getAddress, isAddress } from 'ethers';
 import { randomBytes } from 'node:crypto';
@@ -253,9 +257,12 @@ export const messageDigest = (domain, message) => TypedDataEncoder.hash(domain, 
  * Verifies a message. Never throws on bad input; returns
  * { ok, reason?, signer?, role?, digest?, message?, data?, stripped? }.
  *
- * opts.expect      { chainId, registry }: the domain this reader trusts (recommended)
- * opts.isRunner    async (address) => bool       bonded NeuroJobs runner?
+ * opts.expect      { chainId, registry }: the domain this reader trusts (required)
  * opts.isOperator  async (agentId, address) => bool   owner/operator/agentWallet of fromAgent?
+ * opts.isRunner    async (address) => bool       bonded NeuroJobs runner?
+ * opts.isRegistryHeld async (agentId) => bool    is fromAgent still held by the registry
+ *                  (ownerOf == registry: an unclaimed Neuro identity)? A runner
+ *                  is accepted only for such an agent, so give both or neither.
  * opts.seen        createSeenSet() to refuse replays (the message is recorded on success)
  * opts.me          this reader's agentId: refuse messages addressed to another agent
  * opts.now         unix seconds
@@ -266,11 +273,12 @@ export async function verifyMessage(input, opts = {}) {
   try { p = parseMessage(input); } catch (e) { return { ok: false, reason: e instanceof MsgError ? e.message : 'unreadable message' }; }
   const { domain, message } = p;
   const base = { message, data: p.data, stripped: p.stripped };
-  if (opts.expect) {
-    if (BigInt(opts.expect.chainId) !== domain.chainId || getAddress(opts.expect.registry) !== domain.verifyingContract) {
-      return { ok: false, reason: 'signed for a different identity registry', ...base };
-    }
-  }
+  if (!opts.expect) return { ok: false, reason: 'no expected domain (give expect: { chainId, registry })', ...base };
+  let sameDomain;
+  try {
+    sameDomain = BigInt(opts.expect.chainId) === domain.chainId && getAddress(opts.expect.registry) === domain.verifyingContract;
+  } catch { return { ok: false, reason: 'bad expected domain', ...base }; }
+  if (!sameDomain) return { ok: false, reason: 'signed for a different identity registry', ...base };
   const expiry = Number(message.expiry);
   if (expiry <= now) return { ok: false, reason: 'expired', ...base };
   if (expiry - now > MAX_TTL_SECONDS) return { ok: false, reason: 'expiry too far in the future', ...base };
@@ -280,13 +288,20 @@ export async function verifyMessage(input, opts = {}) {
   let signer;
   try { signer = verifyTypedData(domain, MSG_TYPES, message, p.signature); } catch { return { ok: false, reason: 'bad signature', ...base }; }
   const digest = messageDigest(domain, message);
-  if (!opts.isRunner && !opts.isOperator) return { ok: false, reason: 'no way to check the signer (give isRunner or isOperator)', signer, digest, ...base };
+  const runnerCheck = !!(opts.isRunner && opts.isRegistryHeld);
+  if (!opts.isOperator && !runnerCheck) {
+    return { ok: false, reason: 'no way to check the signer (give isOperator, and/or isRunner with isRegistryHeld)', signer, digest, ...base };
+  }
+  const from = BigInt(message.fromAgent);
   let role = null;
   try {
-    if (opts.isOperator && await opts.isOperator(BigInt(message.fromAgent), signer)) role = 'operator';
-    else if (opts.isRunner && await opts.isRunner(signer)) role = 'runner';
+    if (opts.isOperator && await opts.isOperator(from, signer) === true) role = 'operator';
+    // A runner speaks only for an identity nobody owns yet (held by the registry).
+    else if (runnerCheck && await opts.isRegistryHeld(from) === true && await opts.isRunner(signer) === true) role = 'runner';
   } catch { return { ok: false, reason: 'could not check the signer', signer, digest, ...base }; }
-  if (!role) return { ok: false, reason: 'signer is neither a bonded runner nor the agent\'s operator', signer, digest, ...base };
+  if (!role) {
+    return { ok: false, reason: `signer may not speak for agent ${message.fromAgent} (not its owner/operator/agentWallet, and not a bonded runner signing for an unclaimed Neuro identity)`, signer, digest, ...base };
+  }
   if (opts.seen) {
     const key = opts.seen.key(signer, message.fromAgent, message.nonce);
     if (opts.seen.has(key)) return { ok: false, reason: 'replay: nonce already seen', signer, role, digest, ...base };

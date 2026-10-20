@@ -28,6 +28,22 @@ interface IIdentityRegistry {
 ///           a request, because an unclaimed contract identity has no owner to
 ///           ask, and an owner must not be able to keep Neuro's verdicts off
 ///           its identity. It emits the same two spec events.
+///         - Each runner has ONE verdict slot per agent, at
+///           `verdictRequestHash(agentId, runner)`. A newer verdict replaces the
+///           older one. Verdict slots live in their own namespace: their hash
+///           starts with VERDICT_TAG, and `validationRequest` refuses any hash
+///           that does, so nobody can pre-create a runner's slot under another
+///           agent and steal its verdicts.
+///         - `getSummary` counts each validator once per agent: its latest
+///           answer there (a verdict or a spec response). One runner cannot
+///           outweigh the others by answering many times.
+///         - A spec `requestHash` is first come, first served (the spec reads
+///           by the bare hash, so it cannot be bound to the requester). Make it
+///           commit to the request (e.g. keccak of agentId, validator and the
+///           request file); if someone takes it first, `validationRequest`
+///           reverts `Exists` and nothing of yours is written, so pick a new
+///           hash. Validators should check `getValidationStatus(h).agentId`
+///           before answering.
 contract NeuroValidation {
     struct ValidationStatus {
         address validatorAddress;
@@ -43,10 +59,15 @@ contract NeuroValidation {
     IValidationRunners public immutable runners;
     uint32 public immutable minAgreed;
     uint256 public constant MAX_TAG = 64;
+    /// First 4 bytes of every postVerdict slot hash ("NVD1"); spec requests may not use them.
+    bytes4 public constant VERDICT_TAG = 0x4e564431;
+    bytes32 private constant TAG_MASK = 0xffffffff00000000000000000000000000000000000000000000000000000000;
 
     mapping(bytes32 => ValidationStatus) private _validations;
     mapping(uint256 => bytes32[]) private _agentValidations;
     mapping(address => bytes32[]) private _validatorRequests;
+    /// agentId => validator => requestHash of its latest answer on that agent
+    mapping(uint256 => mapping(address => bytes32)) private _latest;
 
     event ValidationRequest(address indexed validatorAddress, uint256 indexed agentId, string requestURI, bytes32 indexed requestHash);
     event ValidationResponse(address indexed validatorAddress, uint256 indexed agentId, bytes32 indexed requestHash,
@@ -58,6 +79,7 @@ contract NeuroValidation {
     error Unknown();
     error NotValidator();
     error NotRunner();
+    error ReservedHash();
 
     constructor(address identityRegistry_, IValidationRunners runners_, uint32 minAgreed_) {
         if (identityRegistry_ == address(0) || address(runners_) == address(0) || minAgreed_ == 0) revert BadValue();
@@ -79,7 +101,8 @@ contract NeuroValidation {
     // ---------------------------------------------------------- ERC-8004
 
     function validationRequest(address validatorAddress, uint256 agentId, string calldata requestURI, bytes32 requestHash) external {
-        if (validatorAddress == address(0)) revert BadValue();
+        if (validatorAddress == address(0) || requestHash == bytes32(0)) revert BadValue();
+        if (isVerdictHash(requestHash)) revert ReservedHash();
         if (_validations[requestHash].validatorAddress != address(0)) revert Exists();
         IIdentityRegistry reg = IIdentityRegistry(identityRegistry);
         address owner = reg.ownerOf(agentId);
@@ -98,26 +121,36 @@ contract NeuroValidation {
     // ------------------------------------------------------------- Neuro
 
     /// A runner publishes Neuro's verdict on `agentId`: `verdictHash` is the
-    /// verdict (as in NeuroJobs), `score` 0-100 (100 = no problems found).
-    /// The same runner posting the same verdict again updates its score/tag.
+    /// verdict (as in NeuroJobs, stored as the responseHash), `score` 0-100
+    /// (100 = no problems found). A runner has one verdict slot per agent: a
+    /// new post replaces its previous verdict there.
     function postVerdict(uint256 agentId, bytes32 verdictHash, uint8 score, string calldata responseURI, string calldata tag)
         external returns (bytes32 requestHash)
     {
         if (!isRunner(msg.sender)) revert NotRunner();
         if (verdictHash == bytes32(0)) revert BadValue();
         IIdentityRegistry(identityRegistry).ownerOf(agentId); // reverts for an unknown agent
-        requestHash = verdictRequestHash(agentId, msg.sender, verdictHash);
+        requestHash = verdictRequestHash(agentId, msg.sender);
         ValidationStatus storage s = _validations[requestHash];
         if (s.validatorAddress == address(0)) {
             string memory uri;
             try IIdentityRegistry(identityRegistry).webEndpoint(agentId) returns (string memory u) { uri = u; } catch {}
             _open(msg.sender, agentId, uri, requestHash);
+        } else if (s.agentId != agentId || s.validatorAddress != msg.sender) {
+            revert NotAuthorized(); // unreachable while only postVerdict writes tagged slots; kept as a guard
         }
         _answer(s, requestHash, score, responseURI, verdictHash, tag);
     }
 
-    function verdictRequestHash(uint256 agentId, address runner, bytes32 verdictHash) public view returns (bytes32) {
-        return keccak256(abi.encode(address(this), agentId, runner, verdictHash));
+    /// The one verdict slot of `runner` on `agentId`. Its first 4 bytes are VERDICT_TAG.
+    function verdictRequestHash(uint256 agentId, address runner) public view returns (bytes32) {
+        bytes32 h = keccak256(abi.encode("neuro.verdict.v1", address(this), agentId, runner));
+        return (h & ~TAG_MASK) | bytes32(VERDICT_TAG);
+    }
+
+    /// Is `requestHash` in the postVerdict namespace (closed to validationRequest)?
+    function isVerdictHash(bytes32 requestHash) public pure returns (bool) {
+        return bytes4(requestHash) == VERDICT_TAG;
     }
 
     // ------------------------------------------------------------- reads
@@ -130,7 +163,9 @@ contract NeuroValidation {
         return (s.validatorAddress, s.agentId, s.response, s.responseHash, s.tag, s.lastUpdate);
     }
 
-    /// Average response of answered validations, optionally only from `validatorAddresses` and with `tag`.
+    /// Average response of answered validations, optionally only from
+    /// `validatorAddresses` and with `tag`. Each validator counts once per
+    /// agent: only its latest answer on that agent is read.
     function getSummary(uint256 agentId, address[] calldata validatorAddresses, string calldata tag)
         external view returns (uint64 count, uint8 averageResponse)
     {
@@ -140,6 +175,7 @@ contract NeuroValidation {
         for (uint256 i; i < list.length; i++) {
             ValidationStatus storage s = _validations[list[i]];
             if (!s.hasResponse) continue;
+            if (_latest[agentId][s.validatorAddress] != list[i]) continue; // superseded by a newer answer
             if (bytes(tag).length > 0 && keccak256(bytes(s.tag)) != tagHash) continue;
             if (validatorAddresses.length > 0) {
                 bool found;
@@ -179,6 +215,7 @@ contract NeuroValidation {
         s.tag = tag;
         s.lastUpdate = block.timestamp;
         s.hasResponse = true;
+        _latest[s.agentId][s.validatorAddress] = requestHash;
         emit ValidationResponse(s.validatorAddress, s.agentId, requestHash, response, responseURI, responseHash, tag);
     }
 }

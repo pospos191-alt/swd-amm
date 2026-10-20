@@ -157,3 +157,50 @@ test('pause: no new jobs while Neuro is paused, but seats already taken are reve
   assert.match(again.join('\n'), /running again/);
   assert.deepEqual(reads, ['a', 'b']);
 });
+
+test('after a quorum: a seat not yet revealed reveals inside the grace, then the runner settles the job', async () => {
+  const { jobs, w, setNow } = setup();
+  const settled = [];
+  jobs.jobInfo = async (id) => ({ skill: '0x' + '00'.repeat(32), settleAt: jobs.jobs[Number(id)].settleAt ?? 0n });
+  jobs.settle = async (id) => ({ wait: async () => settled.push(Number(id)) });
+  jobs.add('bsc', T);
+  jobs.add('bsc', T);
+  await w.tick(); // committed to both
+  // Job 0: the other two reached a quorum before this runner revealed; the grace runs to 50.
+  Object.assign(jobs.jobs[0], { status: 2n, commits: 3n, settleAt: 50n });
+  // Job 1: the quorum came, this runner was too late (grace over at 5): it just forgets the seat.
+  Object.assign(jobs.jobs[1], { status: 2n, commits: 3n, settleAt: 5n });
+  let out = await w.tick();
+  assert.ok(jobs.jobs[0].reveals[ME], 'revealed late, inside the grace');
+  assert.match(out.join('\n'), /job 0: revealed \(after the quorum/);
+  assert.match(out.join('\n'), /job 1: closed/);
+  assert.equal(jobs.jobs[1].reveals[ME], undefined);
+  assert.deepEqual(settled, []); // never settles a job it did not reveal on
+  out = await w.tick(); // grace still running: waits
+  assert.deepEqual(settled, []);
+  setNow(60n);
+  out = await w.tick();
+  assert.deepEqual(settled, [0]); // the third seat never revealed: settle penalizes it
+  assert.match(out.join('\n'), /job 0: settled/);
+  assert.deepEqual(w.state.seats, {});
+});
+
+test('jobs requested before NeuroJobs had a NeuroControl (skill 0) are skipped by a governed runner', async () => {
+  const MINE = '0x' + 'ab'.repeat(32);
+  const jobs = fakeJobs();
+  jobs.jobInfo = async (id) => ({ skill: jobs.jobs[Number(id)].skill ?? '0x' + '00'.repeat(32), settleAt: 0n });
+  const reads = [];
+  const w = createWorker({ jobs, me: ME, stateFile: join(mkdtempSync(join(tmpdir(), 'zw-')), 'state.json'), chainTime: async () => 10n,
+    read: async (chain, target) => { reads.push(target); return report; }, skill: MINE });
+  jobs.add('bsc', 'early');
+  const out = await w.tick();
+  assert.deepEqual(reads, []);
+  assert.match(out.join('\n'), /job 0: skip: skill 0x0000/);
+});
+
+test('SUPPORTED_CHAINS: zetaphy plus every chain the Neuro reader knows', async () => {
+  const { SUPPORTED_CHAINS } = await import('../src/worker.js');
+  const { CHAINS } = await import('../../zetaphy-neuro/src/chains.js');
+  assert.deepEqual(SUPPORTED_CHAINS, ['zetaphy', ...Object.keys(CHAINS)]);
+  for (const k of SUPPORTED_CHAINS) assert.ok(Buffer.byteLength(k) <= 31, k);
+});

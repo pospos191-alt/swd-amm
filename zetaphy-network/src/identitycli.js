@@ -160,7 +160,7 @@ export async function identityCommand({ group, cmd, rest, opt, env, write, s, co
       if (!v) throw new Error('set the NeuroValidation address: --validation 0x... (or ZETAPHY_VALIDATION)');
       const val = new Contract(v, art('NeuroValidation').abi, c.signer);
       await (await val.postVerdict(id, verdict, score, opt.uri ? String(opt.uri) : '', opt.tag ? String(opt.tag) : 'neuro-v1')).wait();
-      write(`verdict posted on agent ${id}: score ${score}/100 (as runner ${c.me})`);
+      write(`verdict posted on agent ${id}: score ${score}/100 (as runner ${c.me}; it replaces any earlier verdict of yours on this agent)`);
       return 0;
     }
   }
@@ -203,19 +203,25 @@ export async function identityCommand({ group, cmd, rest, opt, env, write, s, co
       const isOperator = async (agentId, a) => {
         try { return (await idr.isAuthorizedOrOwner(a, agentId)) || (await idr.getAgentWallet(agentId)) === a; } catch { return false; }
       };
+      // a runner may only speak for an identity nobody owns yet (held by the registry)
+      const registryAddr = await idr.getAddress();
+      const isRegistryHeld = async (agentId) => {
+        try { return (await idr.ownerOf(agentId)) === registryAddr; } catch { return false; }
+      };
       const seenFile = join(HOME, 'msg-seen.json');
       let entries = {};
       try { if (existsSync(seenFile)) entries = JSON.parse(readFileSync(seenFile, 'utf8')); } catch { entries = {}; }
       const seen = createSeenSet({ entries });
       seen.prune(Math.floor(Date.now() / 1000));
       const r = await verifyMessage(readFileSync(file, 'utf8'), {
-        expect: { chainId: EVM_CHAIN_ID, registry }, isRunner, isOperator, seen, me: opt.me ? agentArg(opt.me) : undefined,
+        expect: { chainId: EVM_CHAIN_ID, registry }, isRunner, isOperator, isRegistryHeld, seen, me: opt.me ? agentArg(opt.me) : undefined,
       });
       if (!r.ok) { write(`NOT VERIFIED: ${r.reason}${r.signer ? ` (signer ${r.signer})` : ''}`); return 1; }
       mkdirSync(HOME, { recursive: true, mode: 0o700 });
       writeFileSync(seenFile, JSON.stringify(seen));
       const m = r.message;
-      write(`VERIFIED: ${m.kind} from agent ${m.fromAgent} (signed by ${r.signer}, a ${r.role === 'runner' ? 'bonded runner' : "the agent's operator"})`);
+      write(`VERIFIED: ${m.kind} from agent ${m.fromAgent} (signed by ${r.signer}, ${r.role === 'runner'
+        ? 'a bonded runner speaking for this unclaimed Neuro identity' : "the agent's owner/operator/agentWallet"})`);
       write(`  to ${m.toAgent === '0' ? 'everyone (broadcast)' : `agent ${m.toAgent}`}, from chain ${m.sourceChain}, expires ${new Date(Number(m.expiry) * 1000).toISOString()}`);
       write(`  payload hash ${m.payloadHash}`);
       write(r.data ? `  data: ${JSON.stringify(r.data)}${r.stripped ? ' (invisible/control characters were removed)' : ''}` : '  data: not included (hash only)');

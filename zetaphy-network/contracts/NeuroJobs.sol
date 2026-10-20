@@ -11,6 +11,7 @@ interface INeuroKnobs {
     function maxBodies() external view returns (uint256);
     function maxRegrowPerHour() external view returns (uint256);
     function communityFund() external view returns (address);
+    function chainAllowed(bytes32) external view returns (bool);
 }
 
 /// @title NeuroJobs: the Neuro ZETAPHY job market (testnet, stage 1-2)
@@ -40,7 +41,8 @@ interface INeuroKnobs {
 ///         0x…dEaD, locked forever), 5% to the community fund (credited; it
 ///         withdraws like a runner). Rounding dust goes to the community
 ///         fund, so fee = runners + burned + community to the wei. A failed
-///         job refunds 100% of the fee.
+///         or expired job refunds the fee minus FAIL_BURN_BPS (5%), which is
+///         burned: whoever makes fake or unanswerable requests pays for them.
 ///
 ///         Bodies (runners eligible per job) are elastic:
 ///           bodies = DEFENDERS + ceil(requests per minute / CAPACITY_PER_BODY)
@@ -48,23 +50,48 @@ interface INeuroKnobs {
 ///         busiest recent minute, fading linearly to zero over DECAY_MINUTES:
 ///         N requests in a minute count as N*(30-age)/30 after `age` whole
 ///         minutes, so with no use the extra bodies shrink step by step and
-///         are gone after 30 minutes. Every request pays at least minFee,
-///         so forcing growth with fake requests costs the attacker.
+///         are gone after 30 minutes. Only requests that pass every check
+///         count, and with a NeuroControl only chains on its allowlist
+///         (chainAllowed) are accepted, so requests no runner can answer
+///         cannot inflate the bodies; even refunded ones lose 5%.
 ///
 ///         Immune system: 4 defender seats, filled by regrow() (anyone may
 ///         call it) from NeuroControl's voted roster, at most
 ///         maxRegrowPerHour refills per hour. Defenders are always eligible.
-///         A runner whose verdict is rejected QUARANTINE_AFTER times in a row
-///         is quarantined: no more commits, and its defender seat is
-///         vacated. Only governance (NeuroControl.release) lets it back.
+///         A defender that stays fit but goes offline keeps its seat (the
+///         lottery widens so jobs still fill); governance removes it from
+///         the roster (removeDefender) and the next regrow() vacates it.
+///
+///         Strikes: a rejected verdict, and a seat that committed but never
+///         revealed, each cost PENALTY_BPS of the bond and a strike.
+///         QUARANTINE_AFTER strikes within a runner's last STRIKE_WINDOW
+///         judged seats put it in quarantine (lying every other job does not
+///         reset it). A quarantined runner stops being active at once: it
+///         drops out of activeWorkers and totalActiveBond, so other
+///         contracts reading workers() no longer count it, and its bond
+///         starts unbonding (withdrawBond after unbondDelay, minus
+///         penalties). Seats it already holds can still be revealed. Its
+///         defender seat is vacated, and register() refuses the address
+///         until governance releases it (NeuroControl.release).
+///
+///         Unrevealed seats: once a quorum forms, a seat that has not
+///         revealed yet gets a grace of commitWindow seconds to reveal (it
+///         is judged like the others, but the fee is already shared). After
+///         the grace anyone may call settle(id): every seat still unrevealed
+///         gets the penalty and a strike. A job that times out (expire())
+///         does the same at once.
 ///
 ///         NeuroControl's paused() stops new requests and commits only;
 ///         reveals, expiry, refunds and withdrawals keep working. Each job
 ///         records the voted skill (activeSkill) it was requested under.
 ///
 ///         Without a NeuroControl (setControl never called) nothing is
-///         paused, jobs carry skill 0, there are no defenders, bodies are
-///         uncapped and the community share goes to the reward pool.
+///         paused, jobs carry skill 0, any chain key is accepted, there are
+///         no defenders, bodies are uncapped and the community share goes to
+///         the reward pool. `zetaphy deploy` calls setControl right after
+///         deploying, so only jobs slipped in during those blocks have skill
+///         0: runners that follow governance skip them, so they expire and
+///         refund (minus the 5% slice).
 contract NeuroJobs {
     uint8 public constant SEATS = 3;
     uint8 public constant QUORUM = 2;
@@ -81,8 +108,11 @@ contract NeuroJobs {
     uint256 public constant CAPACITY_PER_BODY = 6;
     /// Minutes for the extra bodies to fade out after the last busy minute.
     uint256 public constant DECAY_MINUTES = 30;
-    /// Rejected verdicts in a row that put a runner in quarantine (K).
+    /// Strikes within the last STRIKE_WINDOW judged seats that put a runner in quarantine (K).
     uint8 public constant QUARANTINE_AFTER = 2;
+    uint8 public constant STRIKE_WINDOW = 5;
+    /// Share of a failed or expired job's fee that is burned instead of refunded.
+    uint16 public constant FAIL_BURN_BPS = 500;
     /// Longest target: a Move coin type (66-char address + two 128-char names + separators).
     uint256 public constant MAX_TARGET = 330;
 
@@ -93,7 +123,7 @@ contract NeuroJobs {
     uint64 public immutable jobTimeout;
     uint64 public immutable unbondDelay;
     uint256 public immutable dailyRewardCap;
-    /// May call setControl() once, before the first job.
+    /// May call setControl() once.
     address public immutable deployer;
 
     enum Status { None, Open, Done, Failed }
@@ -105,7 +135,7 @@ contract NeuroJobs {
         uint32 agreed;
         uint32 rejected;
         uint64 since;    // when it last became active; only later jobs count
-        uint8 streak;    // rejected verdicts in a row
+        uint8 recent;    // last STRIKE_WINDOW judged seats, newest in bit 0; 1 = strike
         uint64 quarantinedAt; // 0 = never; see quarantined()
     }
 
@@ -127,6 +157,7 @@ contract NeuroJobs {
         bytes32 skill;   // NeuroControl.activeSkill() at request time
         uint16 bodies;   // bodies when requested
         uint16 drawn;    // of which drawn by lottery (bodies minus seated defenders)
+        uint64 settleAt; // quorum reached with seats unrevealed: grace ends here (0 = nothing pending)
     }
 
     uint256 public rewardPool;
@@ -166,6 +197,8 @@ contract NeuroJobs {
     event Quarantined(address indexed worker);
     event DefenderSeated(address indexed worker, uint256 seat);
     event DefenderVacated(address indexed worker, uint256 seat);
+    event Missed(uint256 indexed id, address indexed worker);
+    event Settled(uint256 indexed id);
 
     error BadValue();
     error BadJob();
@@ -181,6 +214,8 @@ contract NeuroJobs {
     error NoSkill();
     error NoControl();
     error NotDeployer();
+    error UnknownChain();
+    error InQuarantine();
 
     constructor(uint256 bond_, uint256 reward_, uint256 minFee_, uint64 commitWindow_, uint64 timeout_, uint64 unbondDelay_, uint256 dailyRewardCap_) {
         if (bond_ == 0 || commitWindow_ == 0 || timeout_ <= commitWindow_ || unbondDelay_ < timeout_) revert BadValue();
@@ -194,10 +229,12 @@ contract NeuroJobs {
         deployer = msg.sender;
     }
 
-    /// Wires in NeuroControl. Once, by the deployer, before any job exists.
+    /// Wires in NeuroControl. Once, by the deployer. Jobs requested before
+    /// it keep skill 0 (see above), so a request slipped in first cannot
+    /// block it.
     function setControl(INeuroKnobs control_) external {
         if (msg.sender != deployer) revert NotDeployer();
-        if (address(control) != address(0) || jobs.length != 0 || address(control_) == address(0)) revert BadValue();
+        if (address(control) != address(0) || address(control_) == address(0)) revert BadValue();
         control = control_;
         emit ControlSet(address(control_));
     }
@@ -214,6 +251,7 @@ contract NeuroJobs {
         Worker storage w = workers[msg.sender];
         if (w.active) revert AlreadyIn();
         if (w.unbondAt != 0) revert TooEarly(); // finish leaving first
+        if (quarantined(msg.sender)) revert InQuarantine();
         uint256 bond = uint256(w.bond) + msg.value;
         if (bond < workerBond) revert BadValue();
         w.bond = uint128(bond);
@@ -276,6 +314,7 @@ contract NeuroJobs {
             if (control.paused()) revert Paused();
             skill = control.activeSkill();
             if (skill == bytes32(0)) revert NoSkill();
+            if (!control.chainAllowed(chain)) revert UnknownChain();
         }
         _countRequest();
         id = jobs.length;
@@ -311,9 +350,16 @@ contract NeuroJobs {
         emit Committed(id, msg.sender);
     }
 
+    /// Also open after a quorum, until settleAt, for a seat that had not
+    /// revealed yet: it is judged against the result (no fee share).
     function reveal(uint256 id, bytes32 verdict, bytes32 salt) external {
-        Job storage j = _open(id);
-        if (j.commits < SEATS && block.timestamp < j.created + commitWindow) revert TooEarly();
+        if (id >= jobs.length) revert BadJob();
+        Job storage j = jobs[id];
+        if (j.status == Status.Open) {
+            if (j.commits < SEATS && block.timestamp < j.created + commitWindow) revert TooEarly();
+        } else if (j.settleAt == 0 || block.timestamp >= j.settleAt) {
+            revert Closed();
+        }
         uint8 s = _seatOf(j, msg.sender);
         if (j.revealed[s]) revert AlreadyIn();
         if (keccak256(abi.encode(verdict, msg.sender, salt)) != j.commitOf[s]) revert BadReveal();
@@ -321,6 +367,13 @@ contract NeuroJobs {
         j.verdictOf[s] = verdict;
         j.reveals += 1;
         emit Revealed(id, msg.sender, verdict);
+
+        if (j.status != Status.Open) {
+            // Late reveal inside the grace after a quorum.
+            _judge(msg.sender, verdict == j.result);
+            if (j.reveals == j.commits) { j.settleAt = 0; emit Settled(id); }
+            return;
+        }
 
         // Quorum: this verdict matches QUORUM-1 earlier reveals.
         uint8 same = 0;
@@ -337,6 +390,18 @@ contract NeuroJobs {
         Job storage j = _open(id);
         if (block.timestamp < j.created + jobTimeout) revert TooEarly();
         _fail(id, j, true);
+    }
+
+    /// Anyone, once the reveal grace after a quorum is over: every seat that
+    /// committed and still has not revealed gets the penalty and a strike.
+    function settle(uint256 id) external {
+        if (id >= jobs.length) revert BadJob();
+        Job storage j = jobs[id];
+        if (j.settleAt == 0) revert Nothing();
+        if (block.timestamp < j.settleAt) revert TooEarly();
+        j.settleAt = 0;
+        for (uint8 i = 0; i < j.commits; i++) if (!j.revealed[i]) _miss(id, j.seat[i]);
+        emit Settled(id);
     }
 
     // ---- views ----
@@ -376,11 +441,17 @@ contract NeuroJobs {
         return x * total < k * uint256(wk.bond) * 1e18;
     }
 
-    /// The skill a job was requested under, and its body counts.
-    function jobInfo(uint256 id) external view returns (bytes32 skill, uint256 bodies_, uint256 drawn) {
+    /// The skill a job was requested under, its body counts, and (after a
+    /// quorum with seats unrevealed) when the reveal grace ends, else 0.
+    function jobInfo(uint256 id) external view returns (bytes32 skill, uint256 bodies_, uint256 drawn, uint64 settleAt) {
         if (id >= jobs.length) revert BadJob();
         Job storage j = jobs[id];
-        return (j.skill, j.bodies, j.drawn);
+        return (j.skill, j.bodies, j.drawn, j.settleAt);
+    }
+
+    /// Strikes within the runner's last STRIKE_WINDOW judged seats.
+    function strikes(address w) public view returns (uint256 n) {
+        for (uint8 r = workers[w].recent; r != 0; r >>= 1) n += r & 1;
     }
 
     /// Requests per minute right now, times DECAY_MINUTES (the busiest
@@ -500,17 +571,13 @@ contract NeuroJobs {
                     pay += reward;
                 }
                 credit[w] += pay;
-                workers[w].agreed += 1;
-                workers[w].streak = 0;
+                _judge(w, true);
             } else if (j.revealed[i]) {
-                Worker storage wk = workers[w];
-                wk.rejected += 1;
-                wk.streak += 1;
-                _penalize(w);
-                if (wk.streak >= QUARANTINE_AFTER) _quarantine(w);
+                _judge(w, false);
+            } else {
+                // Not revealed yet: a grace to reveal, then settle() judges it.
+                j.settleAt = uint64(block.timestamp) + commitWindow;
             }
-            // A seat that has not revealed yet is judged when the job would
-            // have timed out; after a quorum it simply earns nothing.
         }
         if (address(control) != address(0)) credit[control.communityFund()] += fundCut;
         else rewardPool += fundCut;
@@ -526,17 +593,63 @@ contract NeuroJobs {
 
     function _fail(uint256 id, Job storage j, bool timedOut) private {
         j.status = Status.Failed;
-        credit[j.requester] += j.fee;
+        uint256 burnCut = (j.fee * FAIL_BURN_BPS) / 10_000;
+        credit[j.requester] += j.fee - burnCut;
         if (timedOut) {
-            for (uint8 i = 0; i < j.commits; i++) if (!j.revealed[i]) _penalize(j.seat[i]);
+            for (uint8 i = 0; i < j.commits; i++) if (!j.revealed[i]) _miss(id, j.seat[i]);
         }
+        totalBurned += burnCut;
+        emit FeeSplit(id, 0, burnCut, 0);
         emit JobFailed(id);
+        // Last: BURN has no code, so this cannot call back.
+        if (burnCut > 0) {
+            (bool ok,) = BURN.call{value: burnCut}("");
+            require(ok, "burn failed");
+        }
     }
 
+    /// A judged seat: `ok` = its verdict stood. A rejected verdict costs the
+    /// penalty and a strike.
+    function _judge(address w, bool ok) private {
+        Worker storage wk = workers[w];
+        if (ok) {
+            wk.agreed += 1;
+            _record(w, false);
+        } else {
+            wk.rejected += 1;
+            _penalize(w);
+            _record(w, true);
+        }
+    }
+
+    /// Committed, never revealed: penalty and a strike.
+    function _miss(uint256 id, address w) private {
+        emit Missed(id, w);
+        _penalize(w);
+        _record(w, true);
+    }
+
+    function _record(address w, bool strike) private {
+        Worker storage wk = workers[w];
+        wk.recent = uint8(((uint256(wk.recent) << 1) | (strike ? 1 : 0)) & ((1 << STRIKE_WINDOW) - 1));
+        if (strike && strikes(w) >= QUARANTINE_AFTER && !quarantined(w)) _quarantine(w);
+    }
+
+    /// Out at once: not active, its bond leaves totalActiveBond and starts
+    /// unbonding (withdrawable after unbondDelay, minus penalties).
     function _quarantine(address w) private {
         Worker storage wk = workers[w];
-        wk.streak = 0;
+        wk.recent = 0;
         wk.quarantinedAt = uint64(block.timestamp);
+        if (wk.active) {
+            wk.active = false;
+            activeWorkers -= 1;
+            totalActiveBond -= wk.bond;
+        }
+        if (wk.unbondAt == 0 && wk.bond > 0) {
+            wk.unbondAt = uint64(block.timestamp) + unbondDelay;
+            emit UnbondRequested(w, wk.unbondAt);
+        }
         emit Quarantined(w);
         for (uint256 i = 0; i < DEFENDERS; i++) {
             if (defender[i] == w) {

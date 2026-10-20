@@ -9,10 +9,11 @@ interface IGuardInbound {
     function inbound(bytes32 route, address to, uint256 amount) external;
 }
 
-/// ThreatRegistry's vaccine views (Reason is returned as its uint8 value).
+/// ThreatRegistry's enforcement views (Reason as its uint8 value): true only
+/// once a flag is the registry's enforceDelay old.
 interface IThreatFlags {
-    function isAddressFlagged(uint256 chainId, address who) external view returns (bool, uint8);
-    function isContractFlagged(address who) external view returns (bool, uint8);
+    function isAddressEnforced(uint256 chainId, address who) external view returns (bool, uint8);
+    function isContractEnforced(address who) external view returns (bool, uint8);
 }
 
 /// NeuroControl (Neuro's stop switch); only `paused()` is used here.
@@ -31,9 +32,11 @@ interface INeuroControl {
 ///      or to a marked address is never released.
 ///   4. Vaccine: with a ThreatRegistry set, a transfer whose source sender or
 ///      source contract (on its chain), or whose ZETAPHY recipient (address or
-///      code), is flagged by the Neuro runners is held: release reverts with
+///      code), is flagged by the Neuro runners is held once the flag is
+///      enforced (past the registry's enforceDelay): release reverts with
 ///      ThreatFlagged and the transfer stays, so it comes out if the flag is
-///      cleared by the same quorum.
+///      cleared (same quorum) or governance protects the key. To hold a
+///      transfer at once, the Neuro lane or a guardian vetoes it.
 ///   Released transfers still pass BridgeGuard's daily limits.
 contract BridgeAirlock {
     struct Transfer {
@@ -146,16 +149,16 @@ contract BridgeAirlock {
         emit Released(id, to, amount);
     }
 
-    /// 0 when no party of this transfer is flagged, else which one is (see ThreatFlagged).
-    /// NeuroLane watchers ask this before they attest.
+    /// 0 when no party of this transfer has an enforced flag, else which one
+    /// has (see ThreatFlagged). NeuroLane watchers ask this before they attest.
     function flaggedParty(uint256 srcChainId, address srcContract, address sender, address to) public view returns (uint8) {
         IThreatFlags r = threats;
         if (address(r) == address(0)) return 0;
-        (bool f, ) = r.isAddressFlagged(srcChainId, sender);
+        (bool f, ) = r.isAddressEnforced(srcChainId, sender);
         if (f) return 1;
-        (f, ) = r.isAddressFlagged(srcChainId, srcContract);
+        (f, ) = r.isAddressEnforced(srcChainId, srcContract);
         if (f) return 2;
-        (f, ) = r.isContractFlagged(to);
+        (f, ) = r.isContractEnforced(to);
         if (f) return 3;
         return 0;
     }

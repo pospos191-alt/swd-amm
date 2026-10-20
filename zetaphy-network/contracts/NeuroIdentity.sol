@@ -30,6 +30,10 @@ interface IERC721Receiver {
 ///           agentURI, metadata, agentWallet, transfer). `neuroURI()` and
 ///           `getTarget()` still show what the identity is about, whatever its
 ///           owner writes in the agentURI.
+///         - Nothing can be transferred to this registry. "Held by the
+///           registry" therefore always means "never claimed, agentURI is
+///           Neuro's own file": a claimed owner cannot set a custom URI and then
+///           hand the token back to pass it off as an unclaimed identity.
 contract NeuroIdentity {
     // ---------------------------------------------------------------- types
 
@@ -54,6 +58,8 @@ contract NeuroIdentity {
     uint8 public constant RULE_TEXT = 0;      // [A-Za-z0-9._:-] and %XX (uppercase hex)
     uint8 public constant RULE_LOWER = 1;     // [a-z0-9._:-] only (bech32, NEAR, Starknet hex)
     uint8 public constant RULE_EVM = 2;       // 0x + 40 lowercase hex
+    uint8 public constant RULE_MOVE = 3;      // 0x + 64 lowercase hex [::module::Name] (Sui, Aptos)
+    uint8 public constant RULE_BASE58 = 4;    // 32-44 base58 characters (Solana)
 
     string public constant name = "Neuro Agent Identity";
     string public constant symbol = "NEURO";
@@ -118,6 +124,7 @@ contract NeuroIdentity {
     error NotTargetOwner();
     error AlreadyHolder();
     error UnsafeRecipient();
+    error RegistryCustody();
 
     bytes32 private constant AGENT_WALLET_SET_TYPEHASH =
         keccak256("AgentWalletSet(uint256 agentId,address newWallet,address owner,uint256 deadline)");
@@ -186,6 +193,8 @@ contract NeuroIdentity {
         if (o != from) revert NotAuthorized();
         if (!_isAuthorized(o, msg.sender, tokenId)) revert NotAuthorized();
         if (to == address(0)) revert BadValue();
+        // Custody is only for never-claimed identities (see the contract notes).
+        if (to == address(this)) revert RegistryCustody();
         _transfer(from, to, tokenId);
     }
 
@@ -490,7 +499,7 @@ contract NeuroIdentity {
     function _addChain(string memory key, string memory caip2, uint8 rule) internal {
         bytes memory k = bytes(key);
         bytes memory c = bytes(caip2);
-        if (k.length == 0 || k.length > 32 || c.length < 5 || c.length > 41 || rule > RULE_EVM) revert BadValue();
+        if (k.length == 0 || k.length > 32 || c.length < 5 || c.length > 41 || rule > RULE_BASE58) revert BadValue();
         for (uint256 i; i < k.length; i++) {
             bytes1 b = k[i];
             if (!((b >= "a" && b <= "z") || (b >= "0" && b <= "9") || b == "-")) revert BadValue();
@@ -535,16 +544,55 @@ contract NeuroIdentity {
             for (uint256 i = 2; i < 42; i++) if (_hexVal(a[i], false) > 15) revert BadAccount();
             return;
         }
+        if (rule == RULE_MOVE) return _checkMove(a);
+        if (rule == RULE_BASE58) {
+            if (a.length < 32 || a.length > 44) revert BadAccount();
+            for (uint256 i; i < a.length; i++) {
+                bytes1 b = a[i];
+                if (!_alnum(b) || b == "0" || b == "O" || b == "I" || b == "l") revert BadAccount();
+            }
+            return;
+        }
         for (uint256 i; i < a.length; i++) {
             bytes1 b = a[i];
-            if ((b >= "a" && b <= "z") || (b >= "0" && b <= "9") || b == "." || b == "_" || b == ":" || b == "-") continue;
+            if (_safeLower(b)) continue;
             if (rule == RULE_TEXT) {
                 if (b >= "A" && b <= "Z") continue;
-                // %XX with uppercase hex, the one canonical spelling of an escaped byte
-                if (b == "%" && i + 2 < a.length && _hexVal(a[i + 1], true) < 16 && _hexVal(a[i + 2], true) < 16) { i += 2; continue; }
+                // %XX with uppercase hex, the one canonical spelling of an escaped byte;
+                // a byte that needs no escape (e.g. %41 for "A") is a second spelling, so refused
+                if (b == "%" && i + 2 < a.length && _hexVal(a[i + 1], true) < 16 && _hexVal(a[i + 2], true) < 16) {
+                    bytes1 d = bytes1(_hexVal(a[i + 1], true) * 16 + _hexVal(a[i + 2], true));
+                    if (_safeLower(d) || (d >= "A" && d <= "Z")) revert BadAccount();
+                    i += 2;
+                    continue;
+                }
             }
             revert BadAccount();
         }
+    }
+
+    /// Move: "0x" + 64 lowercase hex (the padded address), optionally followed
+    /// by "::module::Name" with identifiers [A-Za-z_][A-Za-z0-9_]*.
+    function _checkMove(bytes memory a) internal pure {
+        if (a.length < 66 || a[0] != "0" || a[1] != "x") revert BadAccount();
+        for (uint256 j = 2; j < 66; j++) if (_hexVal(a[j], false) > 15) revert BadAccount();
+        if (a.length == 66) return;
+        uint256 i = 66;
+        for (uint256 part; part < 2; part++) {
+            if (i + 2 >= a.length || a[i] != ":" || a[i + 1] != ":") revert BadAccount();
+            i += 2;
+            bytes1 f = a[i];
+            if (!((f >= "a" && f <= "z") || (f >= "A" && f <= "Z") || f == "_")) revert BadAccount();
+            while (i < a.length && a[i] != ":") {
+                if (!_alnum(a[i]) && a[i] != "_") revert BadAccount();
+                i++;
+            }
+        }
+        if (i != a.length) revert BadAccount();
+    }
+
+    function _safeLower(bytes1 b) internal pure returns (bool) {
+        return (b >= "a" && b <= "z") || (b >= "0" && b <= "9") || b == "." || b == "_" || b == ":" || b == "-";
     }
 
     /// Hex digit value, or 255. `upper` picks which letter case is accepted.

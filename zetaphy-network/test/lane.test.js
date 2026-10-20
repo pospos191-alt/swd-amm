@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Interface } from 'ethers';
-import { createLaneWatcher } from '../src/lane.js';
+import { createLaneWatcher, laneControl } from '../src/lane.js';
 
 const AIRLOCK = new Interface(JSON.parse(readFileSync(new URL('../artifacts/BridgeAirlock.json', import.meta.url), 'utf8')).abi);
 
@@ -95,4 +95,37 @@ test('a release that reverts in its gas estimate sends nothing (no nonce gap for
   assert.deepEqual(released, [1n], 'only the transfer that passes was sent');
   assert.ok(out.some((l) => /lock #0: not released \(Blocked\)/.test(l)), out.join('\n'));
   assert.equal(w.state.pending.length, 0, 'a Blocked transfer is dropped, not retried forever');
+});
+
+test('laneControl fails closed: an RPC error reading control() or paused() is retried, then means "do not attest", never "no switch"', async () => {
+  const CTRL = '0x' + 'c0'.repeat(20);
+  let controlDown = 6, pausedDown = 0, isPaused = false, controlCalls = 0;
+  const lane = { control: async () => { controlCalls++; if (controlDown-- > 0) throw new Error('rpc down'); return CTRL; } };
+  const connected = [];
+  const ctl = laneControl(lane, (a) => { connected.push(a); return { paused: async () => { if (pausedDown-- > 0) throw new Error('rpc down'); return isPaused; } }; },
+    { tries: 3, wait: async () => {} });
+  await assert.rejects(ctl.paused(), /could not read NeuroLane.control\(\): rpc down/); // 3 tries, all failed
+  assert.equal(controlCalls, 3);
+  assert.equal(ctl.address(), null, 'still unknown, asked again next time');
+  // In the watcher, that is a tick with nothing attested.
+  const { w, attested } = setup({ release: false, paused: () => ctl.paused() });
+  assert.ok((await w.tick()).includes('could not read NeuroControl: not attesting'));
+  assert.deepEqual(attested, []);
+  // RPC back (after retries within one read): the switch is found and read.
+  controlDown = 1;
+  assert.equal(await ctl.paused(), false);
+  assert.deepEqual(connected, [CTRL]);
+  isPaused = true;
+  assert.equal(await ctl.paused(), true);
+  pausedDown = 3; // paused() itself unreadable: throws, not "false"
+  await assert.rejects(ctl.paused(), /could not read NeuroControl.paused\(\)/);
+  pausedDown = 2; isPaused = false; // two failures, the third try answers
+  assert.equal(await ctl.paused(), false);
+});
+
+test('laneControl: a lane built with control = 0 has no switch to check (and says so)', async () => {
+  const logs = [];
+  const ctl = laneControl({ control: async () => '0x' + '00'.repeat(20) }, () => assert.fail('nothing to connect'), { log: (l) => logs.push(l) });
+  assert.equal(await ctl.paused(), false);
+  assert.match(logs.join('\n'), /no NeuroControl \(control = 0\)/);
 });

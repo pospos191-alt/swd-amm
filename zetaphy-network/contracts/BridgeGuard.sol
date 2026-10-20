@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// ThreatRegistry's view for code on ZETAPHY (Reason as its uint8 value).
+/// ThreatRegistry's enforcement view for code on ZETAPHY (Reason as its uint8
+/// value): true only once a flag is the registry's enforceDelay old.
 interface IContractThreats {
-    function isContractFlagged(address who) external view returns (bool, uint8);
+    function isContractEnforced(address who) external view returns (bool, uint8);
 }
 
 /// @title BridgedToken: a token that exists on ZETAPHY only through a bridge
@@ -52,10 +53,13 @@ contract BridgedToken {
 ///           - a pause that only guardians can pull and only governance can
 ///             release. Pausing stops the bridges, never the chain.
 ///           - vaccine (with a ThreatRegistry set): no coins to, or out of, a
-///             contract whose address or code the Neuro runners flagged, and
-///             none from an adapter that is itself flagged. The call reverts,
-///             so the adapter's message stays pending, not lost, and goes
-///             through if the flag is cleared.
+///             contract whose address or code the Neuro runners flagged (once
+///             the flag is enforced, i.e. past the registry's enforceDelay).
+///             The call reverts, so the adapter's message stays pending, not
+///             lost, and goes through if the flag is cleared. The adapter
+///             itself is NOT checked: governance chose it and can disable its
+///             route; a runner flag on its code hash or address must not be
+///             able to freeze a whole route.
 ///         Governance should be the chain's gov module or a multisig.
 contract BridgeGuard {
     struct Route {
@@ -152,13 +156,11 @@ contract BridgeGuard {
         outLeft = r.dailyLimit - (fresh ? 0 : r.outToday);
     }
 
-    /// Vaccine: refuses a flagged party (the coins' owner, or the adapter itself).
+    /// Vaccine: refuses a party (the coins' owner) whose flag is enforced.
     function _clean(address who) private view {
         IContractThreats t = threats;
         if (address(t) == address(0)) return;
-        (bool f, ) = t.isContractFlagged(msg.sender);
-        if (f) revert FlaggedContract(msg.sender);
-        (f, ) = t.isContractFlagged(who);
+        (bool f, ) = t.isContractEnforced(who);
         if (f) revert FlaggedContract(who);
     }
 

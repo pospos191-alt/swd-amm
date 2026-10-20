@@ -18,6 +18,10 @@ pragma solidity 0.8.26;
 ///           - communityFund: receives 5% of every job fee. The burned 5%
 ///             goes to BURN, an address nobody has a key for: it is locked
 ///             forever (still counted in the bank supply, never spendable).
+///           - chains: the chain keys ("bsc", "eth", ...) NeuroJobs takes
+///             requests for. A request for any other chain reverts, so fake
+///             requests for chains no runner reads cannot inflate the bodies.
+///             `zetaphy deploy` seeds it with the chains the runner supports.
 ///         Governance is the chain's gov module (its EVM address, called
 ///         through a MsgEVMCall proposal: zetaphy-chain/gov.sh neuro ...) or
 ///         a SimpleMultisig.
@@ -29,6 +33,7 @@ pragma solidity 0.8.26;
 ///           releasedAt(address) returns (uint64)
 ///           maxBodies() / maxRegrowPerHour() returns (uint256)
 ///           communityFund() returns (address)
+///           chainAllowed(bytes32) returns (bool)
 contract NeuroControl {
     /// Locked forever: no key exists for it.
     address public constant BURN = 0x000000000000000000000000000000000000dEaD;
@@ -36,6 +41,7 @@ contract NeuroControl {
     uint256 public constant MIN_BODIES = 4;
     uint256 public constant MAX_BODIES = 1000;
     uint256 public constant MAX_ROSTER = 32;
+    uint256 public constant MAX_CHAINS_PER_CALL = 64;
 
     address public governance;
     mapping(address => bool) public guardian;
@@ -55,6 +61,9 @@ contract NeuroControl {
     uint256 public maxRegrowPerHour;
     address public communityFund;
 
+    /// Chain keys (bytes32 of e.g. "bsc") NeuroJobs accepts requests for.
+    mapping(bytes32 => bool) public chainAllowed;
+
     event GovernanceChanged(address governance);
     event GuardianSet(address indexed who, bool allowed);
     event Paused(address indexed by);
@@ -68,6 +77,8 @@ contract NeuroControl {
     event MaxBodies(uint256 value);
     event MaxRegrowPerHour(uint256 value);
     event CommunityFund(address fund);
+    event ChainApproved(bytes32 indexed chain);
+    event ChainRemoved(bytes32 indexed chain);
 
     error NotGovernance();
     error NotGuardian();
@@ -186,5 +197,26 @@ contract NeuroControl {
         if (fund == address(0)) revert BadValue();
         communityFund = fund;
         emit CommunityFund(fund);
+    }
+
+    // ---- chains NeuroJobs takes requests for ----
+
+    function approveChain(bytes32 chain) public onlyGovernance {
+        if (chain == bytes32(0)) revert BadValue();
+        chainAllowed[chain] = true;
+        emit ChainApproved(chain);
+    }
+
+    /// Several at once (used at deploy to seed the runner's chain list).
+    function approveChains(bytes32[] calldata chains) external onlyGovernance {
+        if (chains.length == 0 || chains.length > MAX_CHAINS_PER_CALL) revert BadValue();
+        for (uint256 i = 0; i < chains.length; i++) approveChain(chains[i]);
+    }
+
+    /// Jobs already requested for it keep running; new requests are refused.
+    function removeChain(bytes32 chain) external onlyGovernance {
+        if (!chainAllowed[chain]) revert NotApproved();
+        chainAllowed[chain] = false;
+        emit ChainRemoved(chain);
     }
 }

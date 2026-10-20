@@ -1,8 +1,10 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { encodeBytes32String } from 'ethers';
 import { createChain } from './helpers/evm.js';
 
 const SKILL = '0x' + 'ab'.repeat(32), SKILL2 = '0x' + 'cd'.repeat(32);
+const BSC = encodeBytes32String('bsc'), ETH = encodeBytes32String('eth');
 let c, ctl;
 const a = (n) => c.acct[n].toString();
 beforeEach(async () => {
@@ -23,7 +25,8 @@ test('constructor refuses missing addresses and silly sizes', async () => {
 test('only governance changes the knobs', async () => {
   const calls = [['unpause', []], ['setGuardian', [a('thief'), true]], ['setGovernance', [a('thief')]], ['approveSkill', [SKILL]],
     ['revokeSkill', [SKILL]], ['setActiveSkill', [SKILL]], ['approveDefender', [a('r1')]], ['removeDefender', [a('r1')]],
-    ['release', [a('r1')]], ['setMaxBodies', [100]], ['setMaxRegrowPerHour', [4]], ['setCommunityFund', [a('thief')]]];
+    ['release', [a('r1')]], ['setMaxBodies', [100]], ['setMaxRegrowPerHour', [4]], ['setCommunityFund', [a('thief')]],
+    ['approveChain', [BSC]], ['approveChains', [[BSC]]], ['removeChain', [BSC]]];
   for (const [fn, args] of calls) await assert.rejects(ctl.send('thief', fn, args), /NotGovernance/, fn);
   await assert.rejects(ctl.send('thief', 'pause'), /NotGuardian/);
 });
@@ -77,6 +80,18 @@ test('defender roster, release, sizes and community fund', async () => {
   assert.equal((await ctl.call('communityFund')).toLowerCase(), a('r2').toLowerCase());
 });
 
+test('chain allowlist: governance approves (one or many) and removes chain keys', async () => {
+  assert.equal(await ctl.call('chainAllowed', [BSC]), false);
+  await ctl.send('gov', 'approveChains', [[BSC, ETH]]);
+  assert.equal(await ctl.call('chainAllowed', [BSC]), true);
+  assert.equal(await ctl.call('chainAllowed', [ETH]), true);
+  await assert.rejects(ctl.send('gov', 'approveChains', [[]]), /BadValue/);
+  await assert.rejects(ctl.send('gov', 'approveChain', ['0x' + '00'.repeat(32)]), /BadValue/);
+  await ctl.send('gov', 'removeChain', [ETH]);
+  assert.equal(await ctl.call('chainAllowed', [ETH]), false);
+  await assert.rejects(ctl.send('gov', 'removeChain', [ETH]), /NotApproved/);
+});
+
 test('governance can be a SimpleMultisig: 2 of 3 owners pause Neuro', async () => {
   const ms = await c.deploy('SimpleMultisig', [[a('o1'), a('o2'), a('o3')], 2], 'gov');
   await ctl.send('gov', 'setGovernance', [ms.address]);
@@ -110,7 +125,8 @@ esac
   const CTL = '0x' + '12'.repeat(20), RUNNER = '0x' + '34'.repeat(20), ID = '0x' + '56'.repeat(32);
   const gov = (...args) => execFileSync(new URL('../../zetaphy-chain/gov.sh', import.meta.url).pathname, args, { env: { ...process.env, ZETAPHYD: fake }, encoding: 'utf8' });
   for (const [action, value] of [['pause'], ['unpause'], ['approve-skill', ID], ['revoke-skill', ID], ['set-active-skill', ID], ['approve-defender', RUNNER],
-    ['remove-defender', RUNNER], ['release', RUNNER], ['set-max-bodies', '12'], ['set-max-regrow', '3'], ['set-community-fund', RUNNER]]) {
+    ['remove-defender', RUNNER], ['release', RUNNER], ['set-max-bodies', '12'], ['set-max-regrow', '3'], ['set-community-fund', RUNNER],
+    ['approve-chain', 'bsc'], ['remove-chain', 'arbitrum'], ['approve-chain', 'my-chain-2']]) {
     const out = gov('neuro', action, ...(value ? [value] : []), CTL);
     assert.match(out, /proposal 1 submitted/);
     const p = JSON.parse(readFileSync(join(dir, 'p.json'), 'utf8'));
@@ -123,4 +139,6 @@ esac
   }
   assert.throws(() => gov('neuro', 'set-max-bodies', 'many', CTL));
   assert.throws(() => gov('neuro', 'explode', CTL));
+  assert.throws(() => gov('neuro', 'approve-chain', 'BSC!', CTL));
+  assert.throws(() => neuroCall('approve-chain', 'x'.repeat(32)));
 });

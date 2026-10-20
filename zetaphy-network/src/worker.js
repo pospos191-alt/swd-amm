@@ -9,6 +9,11 @@
 // Governance (NeuroControl): a runner only takes jobs whose recorded skill is
 // its own skill id (src/skill.js: the Neuro code it runs), and takes no new
 // jobs while Neuro is paused; seats it already holds are still revealed.
+// Jobs requested before NeuroJobs had a NeuroControl carry skill 0, so they
+// are skipped too (they expire and refund).
+// After a quorum, a seat not yet revealed may still reveal until the job's
+// settleAt (jobInfo); once that has passed, a runner that sat on the job calls
+// settle(id), which penalizes the seats that never revealed.
 
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { AbiCoder, keccak256, hexlify, randomBytes, decodeBytes32String } from 'ethers';
@@ -17,6 +22,9 @@ import { readContract } from '../../zetaphy-neuro/src/reader.js';
 import { verdictOf } from '../../zetaphy-neuro/src/verdict.js';
 
 export const OPEN = 1n;
+export const DONE = 2n;
+/** Chain keys this runner can read: what `zetaphy deploy` votes into NeuroControl's allowlist. */
+export const SUPPORTED_CHAINS = ['zetaphy', ...Object.keys(CHAINS)];
 
 export const commitmentOf = (verdict, worker, salt) =>
   keccak256(AbiCoder.defaultAbiCoder().encode(['bytes32', 'address', 'bytes32'], [verdict, worker, salt]));
@@ -76,6 +84,25 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     return `committed (level ${report.analysis?.level}, ${now - job.created}s after request)`;
   }
 
+  /** jobInfo().settleAt: end of the reveal grace after a quorum, 0n when nothing is pending. */
+  async function settleAtOf(id) {
+    if (!jobs.jobInfo) return 0n;
+    return BigInt((await jobs.jobInfo(id)).settleAt ?? 0n);
+  }
+
+  async function sendReveal(id, seat, late) {
+    try {
+      await (await jobs.reveal(id, seat.verdict, seat.salt)).wait();
+      seat.revealed = true;
+      saveState(stateFile, state);
+      return `job ${id}: revealed${late ? ' (after the quorum, inside the grace)' : ''}`;
+    } catch (e) {
+      // Usually the job closed between our read and the reveal (a quorum
+      // formed): the next tick reveals inside the grace, or forgets the seat.
+      return `job ${id}: reveal not sent (${e.shortMessage ?? e.message})`;
+    }
+  }
+
   async function tick() {
     commitWindow ??= BigInt(await jobs.commitWindow());
     const now = await chainTime();
@@ -91,7 +118,20 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
       const job = await jobs.getJob(id);
       const seat = state.seats[id];
       const windowOver = now >= job.created + commitWindow;
-      if (job.status !== OPEN) { if (seat) done.push(`job ${id}: closed`); delete state.seats[id]; continue; }
+      if (job.status !== OPEN) {
+        const settleAt = seat && job.status === DONE ? await settleAtOf(id) : 0n;
+        if (settleAt !== 0n && now < settleAt && !seat.revealed) { done.push(await sendReveal(id, seat, true)); continue; }
+        if (settleAt !== 0n && now < settleAt) continue; // grace still running: settle afterwards
+        if (settleAt !== 0n && seat.revealed) {
+          try {
+            await (await jobs.settle(id)).wait();
+            done.push(`job ${id}: settled (seats that never revealed are penalized)`);
+          } catch (e) { done.push(`job ${id}: settle not sent (${e.shortMessage ?? e.message})`); }
+        }
+        if (seat) done.push(`job ${id}: closed`);
+        delete state.seats[id];
+        continue;
+      }
 
       if (!seat) {
         if (job.commits >= 3n || windowOver || stopped || foreign.has(id)) continue;
@@ -114,16 +154,7 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
           continue;
         }
       } else if (!seat.revealed && (job.commits >= 3n || windowOver)) {
-        try {
-          await (await jobs.reveal(id, seat.verdict, seat.salt)).wait();
-          seat.revealed = true;
-          saveState(stateFile, state);
-          done.push(`job ${id}: revealed`);
-        } catch (e) {
-          // Usually the job closed between our read and the reveal (a quorum
-          // formed). The next tick sees it closed and forgets the seat.
-          done.push(`job ${id}: reveal not sent (${e.shortMessage ?? e.message})`);
-        }
+        done.push(await sendReveal(id, seat, false));
       }
     }
     // Everything below `count` has been looked at; jobs still worth retrying

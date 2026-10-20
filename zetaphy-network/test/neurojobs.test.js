@@ -12,6 +12,8 @@ const V1 = '0x' + '11'.repeat(32), V2 = '0x' + '22'.repeat(32);
 
 // Runners get 90% of the fee (5% burned, 5% community fund).
 const RUN = (fee) => fee - 2n * ((fee * 500n) / 10_000n);
+// A failed or expired job refunds the fee minus 5% (burned).
+const REFUND = (fee) => fee - (fee * 500n) / 10_000n;
 const commitment = (verdict, worker, salt) => keccak256(AbiCoder.defaultAbiCoder().encode(['bytes32', 'address', 'bytes32'], [verdict, worker, salt]));
 
 let c, jobs, salts;
@@ -85,7 +87,7 @@ test('copying a revealed verdict does not work: commitments bind the runner', as
   await assert.rejects(jobs.send('w2', 'reveal', [id, V1, salts.w1]), /BadReveal/);
 });
 
-test('no quorum: job fails and the fee goes back to the requester', async () => {
+test('no quorum: job fails and the fee minus the 5% slice goes back to the requester', async () => {
   const id = await newJob(ZETA);
   await commitAs('w1', id, V1);
   await commitAs('w2', id, V2);
@@ -93,7 +95,8 @@ test('no quorum: job fails and the fee goes back to the requester', async () => 
   await revealAs('w1', id, V1);
   const ev = await revealAs('w2', id, V2);
   assert.ok(ev.some((e) => e.name === 'JobFailed'));
-  assert.equal(await jobs.call('credit', [addr('user')]), ZETA);
+  assert.equal(await jobs.call('credit', [addr('user')]), REFUND(ZETA));
+  assert.equal(await jobs.call('totalBurned'), ZETA - REFUND(ZETA));
 });
 
 test('timeout: anyone can expire; a runner that never revealed is penalized', async () => {
@@ -106,7 +109,9 @@ test('timeout: anyone can expire; a runner that never revealed is penalized', as
   c.advance(TIMEOUT);
   const ev = await jobs.send('w4', 'expire', [id]);
   assert.ok(ev.some((e) => e.name === 'Penalized' && e.args.worker.toLowerCase() === addr('w2').toLowerCase()));
-  assert.equal(await jobs.call('credit', [addr('user')]), ZETA);
+  assert.ok(ev.some((e) => e.name === 'Missed' && e.args.worker.toLowerCase() === addr('w2').toLowerCase()));
+  assert.equal(await jobs.call('strikes', [addr('w2')]), 1n);
+  assert.equal(await jobs.call('credit', [addr('user')]), REFUND(ZETA));
   await assert.rejects(revealAs('w2', id, V1), /Closed/);
 });
 
@@ -144,7 +149,11 @@ test('withdraw pays out credit exactly once', async () => {
   await jobs.send('w1', 'withdraw');
   assert.equal(await c.balance('w1') - before, RUN(ZETA) / 2n + ZETA / 4n);
   await assert.rejects(jobs.send('w1', 'withdraw'), /Nothing/);
-  // The late third reveal on a finished job is refused.
+  // The third seat may still reveal during the grace (no fee share, no penalty)...
+  await revealAs('w3', id, V1);
+  assert.equal(await jobs.call('credit', [addr('w3')]), 0n);
+  assert.equal((await jobs.call('workers', [addr('w3')])).bond, BOND);
+  // ...but only once.
   await assert.rejects(revealAs('w3', id, V1), /Closed/);
 });
 
@@ -169,7 +178,7 @@ test('requestFor sends a refund to the named user, not the payer', async () => {
   const id = (await jobs.call('jobCount')) - 1n;
   c.advance(TIMEOUT);
   await jobs.send('w4', 'expire', [id]);
-  assert.equal(await jobs.call('credit', [addr('user')]), ZETA);
+  assert.equal(await jobs.call('credit', [addr('user')]), REFUND(ZETA));
   assert.equal(await jobs.call('credit', [addr('owner')]), 0n);
   await assert.rejects(jobs.send('owner', 'requestFor', ['0x' + '00'.repeat(20), CHAIN, TARGET], ZETA), /BadValue/);
 });
@@ -255,6 +264,7 @@ async function governed(names, { maxBodies = 8, regrow = 4, bond = {} } = {}) {
   await nj.send('gov', 'setControl', [ctl.address]);
   await ctl.send('gov', 'approveSkill', [SKILL]);
   await ctl.send('gov', 'setActiveSkill', [SKILL]);
+  await ctl.send('gov', 'approveChains', [[CHAIN]]);
   await nj.send('gov', 'fund', [], 1000n * ZETA);
   for (const n of names) await nj.send(n, 'register', [], bond[n] ?? BOND);
   k.advance(1);
@@ -274,14 +284,23 @@ async function governed(names, { maxBodies = 8, regrow = 4, bond = {} } = {}) {
   return { k, ctl, nj, ad, req, cm, rv, run };
 }
 
-test('setControl: only the deployer, once, before the first job', async () => {
+test('setControl: only the deployer, once; a request slipped in first cannot block it', async () => {
   const ctl = await c.deploy('NeuroControl', [addr('owner'), addr('owner'), 8, 2], 'owner');
   await assert.rejects(jobs.send('user', 'setControl', [ctl.address]), /NotDeployer/);
   const fresh = await c.deploy('NeuroJobs', [BOND, REWARD, MIN_FEE, WINDOW, TIMEOUT, UNBOND, CAP], 'owner');
   await fresh.send('owner', 'setControl', [ctl.address]);
   await assert.rejects(fresh.send('owner', 'setControl', [ctl.address]), /BadValue/);
-  await newJob(); // `jobs` already has a job: too late
+  // Front-run: someone requests a job before the deployer wires in NeuroControl.
+  const early = await newJob(ZETA);
+  await jobs.send('owner', 'setControl', [ctl.address]);
+  assert.equal((await jobs.call('control')).toLowerCase(), ctl.address.toString().toLowerCase());
   await assert.rejects(jobs.send('owner', 'setControl', [ctl.address]), /BadValue/);
+  // That job carries skill 0: runners that follow governance skip it, so it
+  // expires and refunds the requester (minus the 5% slice).
+  assert.equal((await jobs.call('jobInfo', [early])).skill, '0x' + '00'.repeat(32));
+  c.advance(TIMEOUT);
+  await jobs.send('w1', 'expire', [early]);
+  assert.equal(await jobs.call('credit', [addr('user')]), REFUND(ZETA));
 });
 
 test('fee split: 90% runners, 5% burned, 5% community fund, to the wei', async () => {
@@ -295,7 +314,8 @@ test('fee split: 90% runners, 5% burned, 5% community fund, to the wei', async (
   const burn = (fee * 500n) / 10_000n, fundCut = (fee * 500n) / 10_000n, runners = fee - burn - fundCut;
   const share = runners / 2n, dust = runners - share * 2n;
   assert.ok(ev.some((e) => e?.name === 'Finalized')); // the quorum formed at w2's reveal
-  await assert.rejects(g.rv('w3', id, V1), /Closed/);
+  await g.rv('w3', id, V1); // late, in the grace: judged, but the fee is already shared
+  assert.equal(await g.nj.call('credit', [g.ad('w3')]), 0n);
   const reward = fee / 4n < REWARD ? fee / 4n : REWARD; // pool reward on top, capped at fee/4
   assert.equal(await g.nj.call('credit', [g.ad('w1')]), share + reward);
   assert.equal(await g.nj.call('credit', [g.ad('w2')]), share + reward);
@@ -330,13 +350,15 @@ test('fee split with three winners: the dust goes to the community fund', async 
   assert.equal(after[0] - before[0] + after[1] - before[1], fs.args.runners + 2n * reward);
 });
 
-test('a failed job refunds 100% of the fee: nothing burned, nothing to the fund', async () => {
+test('a failed job refunds 95% of the fee: 5% burned, nothing to the fund', async () => {
   const g = await governed(['w1', 'w2', 'w3']);
+  const deadBefore = await g.k.balance(DEAD);
   const id = await g.run([['w1', V1], ['w2', V2]], ZETA);
   assert.equal((await g.nj.call('getJob', [id])).status, 3n);
-  assert.equal(await g.nj.call('credit', [g.ad('user')]), ZETA);
+  assert.equal(await g.nj.call('credit', [g.ad('user')]), REFUND(ZETA));
   assert.equal(await g.nj.call('credit', [g.ad('fund')]), 0n);
-  assert.equal(await g.nj.call('totalBurned'), 0n);
+  assert.equal(await g.nj.call('totalBurned'), ZETA - REFUND(ZETA));
+  assert.equal(await g.k.balance(DEAD) - deadBefore, ZETA - REFUND(ZETA));
 });
 
 test('elastic bodies: 4 + ceil(requests per minute / 6), capped, fading back to 4 over 30 minutes', async () => {
@@ -382,6 +404,25 @@ test('a new minute does not drop the body count: the busy minute keeps counting 
   assert.equal(await g.nj.call('credit', [g.ad('user')]), 0n);
 });
 
+test('allowlist: requests for chains governance has not approved revert and do not grow the bodies', async () => {
+  const g = await governed(['w1', 'w2', 'w3'], { maxBodies: 50 });
+  g.k.advance(60 - Number(g.k.now() % 60n));
+  const FAKE = encodeBytes32String('nonexistent');
+  for (let i = 0; i < 30; i++) await assert.rejects(g.nj.send('user', 'request', [FAKE, TARGET], MIN_FEE), /UnknownChain/);
+  await assert.rejects(g.nj.send('user', 'requestFor', [g.ad('user'), FAKE, TARGET], MIN_FEE), /UnknownChain/);
+  assert.equal(await g.nj.call('load'), 0n);
+  assert.equal(await g.nj.call('bodies'), 4n);
+  assert.equal(await g.nj.call('jobCount'), 0n);
+  // Governance adds and removes chain keys.
+  await assert.rejects(g.ctl.send('user', 'approveChain', [FAKE]), /NotGovernance/);
+  await g.ctl.send('gov', 'approveChain', [FAKE]);
+  await g.req(); // CHAIN still fine
+  await g.nj.send('user', 'request', [FAKE, TARGET], MIN_FEE);
+  await g.ctl.send('gov', 'removeChain', [CHAIN]);
+  await assert.rejects(g.req(), /UnknownChain/);
+  await assert.rejects(g.ctl.send('gov', 'removeChain', [CHAIN]), /NotApproved/);
+});
+
 test('defenders: regrow fills the 4 seats from the voted roster, at most maxRegrowPerHour an hour', async () => {
   const names = ['d1', 'd2', 'd3', 'd4', 'd5', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8'];
   const g = await governed(names, { regrow: 2 });
@@ -419,19 +460,22 @@ test('defenders: regrow fills the 4 seats from the voted roster, at most maxRegr
   assert.ok(ev.some((e) => e?.name === 'DefenderSeated' && e.args.worker.toLowerCase() === g.ad('d5').toLowerCase() && e.args.seat === 1n));
 });
 
-test('quarantine: K=2 rejected verdicts in a row; the defender seat is vacated; only governance releases', async () => {
+test('quarantine: 2 strikes within the last 5 judged seats; the runner is out at once; only governance releases', async () => {
   const names = ['d1', 'd2', 'd3', 'd4'];
   const g = await governed(names, { regrow: 4, bond: { d1: 3n * BOND } }); // d1 can afford two penalties
   for (const d of names) await g.ctl.send('gov', 'approveDefender', [g.ad(d)]);
   await g.nj.send('user', 'regrow');
   g.k.advance(1);
   assert.equal(await g.nj.call('QUARANTINE_AFTER'), 2n);
-  // rejected, agreed, rejected: the streak was reset, no quarantine
+  assert.equal(await g.nj.call('STRIKE_WINDOW'), 5n);
+  // rejected, then agreed: one strike, no quarantine
   await g.run([['d1', V2], ['d2', V1], ['d3', V1]]);
   await g.run([['d1', V1], ['d2', V1], ['d3', V1]]);
-  await g.run([['d1', V2], ['d2', V1], ['d3', V1]]);
+  assert.equal(await g.nj.call('strikes', [g.ad('d1')]), 1n);
   assert.equal(await g.nj.call('quarantined', [g.ad('d1')]), false);
-  // a second rejection in a row: quarantined
+  // A second rejection within the window (not in a row): quarantined.
+  const activeBefore = await g.nj.call('activeWorkers');
+  const bondBefore = await g.nj.call('totalActiveBond');
   const id = await g.req();
   for (const [w, v] of [['d1', V2], ['d2', V1], ['d3', V1]]) await g.cm(w, id, v);
   await g.rv('d1', id, V2);
@@ -441,21 +485,118 @@ test('quarantine: K=2 rejected verdicts in a row; the defender seat is vacated; 
   assert.ok(ev.some((e) => e?.name === 'DefenderVacated' && e.args.seat === 0n));
   assert.equal(await g.nj.call('quarantined', [g.ad('d1')]), true);
   assert.equal((await g.nj.call('defenders'))[0], '0x' + '00'.repeat(20));
-  assert.equal((await g.nj.call('workers', [g.ad('d1')])).active, true); // still bonded, just not trusted
+  // Out at once: not active (ThreatRegistry, NeuroLane, NeuroValidation read this), not in the totals, unbonding.
+  const w = await g.nj.call('workers', [g.ad('d1')]);
+  const left = 3n * BOND - (3n * BOND) / 10n - (3n * BOND - (3n * BOND) / 10n) / 10n; // two 10% penalties
+  assert.equal(w.active, false);
+  assert.equal(w.bond, left);
+  assert.equal(w.unbondAt, g.k.now() + BigInt(UNBOND));
+  assert.equal(await g.nj.call('activeWorkers'), activeBefore - 1n);
+  assert.equal(await g.nj.call('totalActiveBond'), bondBefore - (3n * BOND) / 10n * 9n / 10n - left);
   g.k.advance(1);
   const next = await g.req();
   assert.equal(await g.nj.call('eligible', [next, g.ad('d1')]), false);
-  await assert.rejects(g.nj.send('d1', 'commit', [next, V1]), /NotChosen/);
+  await assert.rejects(g.nj.send('d1', 'commit', [next, V1]), /NotWorker/);
+  await assert.rejects(g.nj.send('d1', 'requestUnbond'), /NotWorker/);
   // regrow does not seat a quarantined runner
   g.k.advance(3600);
   let r = await g.nj.send('user', 'regrow');
   assert.equal(r.filter((e) => e?.name === 'DefenderSeated').length, 0);
-  // governance releases it; regrow seats it again
+  // The bond (minus penalties) comes out after the unbond delay; the address cannot register again.
+  const earned = await g.nj.call('credit', [g.ad('d1')]);
+  await g.nj.send('d1', 'withdrawBond');
+  assert.equal(await g.nj.call('credit', [g.ad('d1')]) - earned, left);
+  await assert.rejects(g.nj.send('d1', 'register', [], BOND), /InQuarantine/);
+  // governance releases it; it registers again and regrow seats it
   await assert.rejects(g.ctl.send('d1', 'release', [g.ad('d1')]), /NotGovernance/);
   await g.ctl.send('gov', 'release', [g.ad('d1')]);
   assert.equal(await g.nj.call('quarantined', [g.ad('d1')]), false);
+  await g.nj.send('d1', 'register', [], BOND);
+  assert.equal(await g.nj.call('strikes', [g.ad('d1')]), 0n); // a clean slate
   r = await g.nj.send('user', 'regrow');
   assert.ok(r.some((e) => e?.name === 'DefenderSeated' && e.args.worker.toLowerCase() === g.ad('d1').toLowerCase()));
+});
+
+test('strikes are a sliding window: one lie, four honest seats and another lie is not quarantine; the next lie is', async () => {
+  const g = await governed(['liar', 'w2', 'w3'], { bond: { liar: 3n * BOND } });
+  await g.run([['liar', V2], ['w2', V1], ['w3', V1]]);
+  for (let i = 0; i < 4; i++) await g.run([['liar', V1], ['w2', V1], ['w3', V1]]);
+  await g.run([['liar', V2], ['w2', V1], ['w3', V1]]); // the first lie has left the window
+  assert.equal(await g.nj.call('strikes', [g.ad('liar')]), 1n);
+  assert.equal(await g.nj.call('quarantined', [g.ad('liar')]), false);
+  await g.run([['liar', V2], ['w2', V1], ['w3', V1]]);
+  assert.equal(await g.nj.call('quarantined', [g.ad('liar')]), true);
+});
+
+test('a seat that does not reveal after the quorum: grace for the late, then settle() penalizes and strikes it', async () => {
+  const g = await governed(['liar', 'w2', 'w3'], { bond: { liar: 3n * BOND } });
+  // An honest runner a few seconds late: it reveals inside the grace, no penalty.
+  let id = await g.req();
+  for (const [w, v] of [['liar', V1], ['w2', V1], ['w3', V1]]) await g.cm(w, id, v);
+  await g.rv('w2', id, V1);
+  await g.rv('w3', id, V1);
+  const info = await g.nj.call('jobInfo', [id]);
+  assert.equal(info.settleAt, g.k.now() + BigInt(WINDOW));
+  g.k.advance(WINDOW - 5);
+  await g.rv('liar', id, V1);
+  assert.equal((await g.nj.call('workers', [g.ad('liar')])).bond, 3n * BOND);
+  assert.equal((await g.nj.call('workers', [g.ad('liar')])).agreed, 1n);
+  assert.equal((await g.nj.call('jobInfo', [id])).settleAt, 0n); // everyone revealed: nothing pending
+  await assert.rejects(g.nj.send('user', 'settle', [id]), /Nothing/);
+
+  // A liar that sees the honest pair agree and keeps quiet.
+  for (let round = 0; round < 2; round++) {
+    id = await g.req();
+    for (const [w, v] of [['liar', V2], ['w2', V1], ['w3', V1]]) await g.cm(w, id, v);
+    await g.rv('w2', id, V1);
+    await g.rv('w3', id, V1);
+    await assert.rejects(g.nj.send('user', 'settle', [id]), /TooEarly/);
+    g.k.advance(WINDOW);
+    await assert.rejects(g.rv('liar', id, V2), /Closed/); // the grace is over
+    const bond = (await g.nj.call('workers', [g.ad('liar')])).bond;
+    const ev = await g.nj.send('user', 'settle', [id]);
+    assert.ok(ev.some((e) => e?.name === 'Missed' && e.args.worker.toLowerCase() === g.ad('liar').toLowerCase()));
+    assert.ok(ev.some((e) => e?.name === 'Penalized' && e.args.amount === bond / 10n));
+    await assert.rejects(g.nj.send('user', 'settle', [id]), /Nothing/);
+  }
+  assert.equal(await g.nj.call('quarantined', [g.ad('liar')]), true); // two strikes
+  assert.equal((await g.nj.call('workers', [g.ad('liar')])).active, false);
+  // A lie revealed late is judged as a lie.
+  const g2 = await governed(['liar', 'w2', 'w3'], { bond: { liar: 3n * BOND } });
+  const id2 = await g2.req();
+  for (const [w, v] of [['liar', V2], ['w2', V1], ['w3', V1]]) await g2.cm(w, id2, v);
+  await g2.rv('w2', id2, V1);
+  await g2.rv('w3', id2, V1);
+  const ev2 = await g2.rv('liar', id2, V2);
+  assert.ok(ev2.some((e) => e?.name === 'Penalized'));
+  assert.equal((await g2.nj.call('workers', [g2.ad('liar')])).rejected, 1n);
+  assert.equal(await g2.nj.call('strikes', [g2.ad('liar')]), 1n);
+});
+
+test('quarantine: seats already taken still reveal; quarantine while unbonding does not double-count', async () => {
+  const g = await governed(['liar', 'w2', 'w3'], { bond: { liar: 3n * BOND } });
+  await g.run([['liar', V2], ['w2', V1], ['w3', V1]]); // strike 1
+  const a = await g.req(), b = await g.req();
+  const saltB = {};
+  for (const w of ['liar', 'w2', 'w3']) { // seats on job b, taken before the quarantine
+    saltB[w] = hexlify(randomBytes(32));
+    await g.nj.send(w, 'commit', [b, commitment(V1, g.ad(w), saltB[w])]);
+  }
+  for (const w of ['liar', 'w2', 'w3']) await g.cm(w, a, w === 'liar' ? V2 : V1);
+  await g.nj.send('liar', 'requestUnbond'); // already leaving when the quarantine hits
+  const total = await g.nj.call('totalActiveBond'), count = await g.nj.call('activeWorkers');
+  const unbondAt = (await g.nj.call('workers', [g.ad('liar')])).unbondAt;
+  for (const w of ['liar', 'w2', 'w3']) await g.rv(w, a, w === 'liar' ? V2 : V1);
+  assert.equal(await g.nj.call('quarantined', [g.ad('liar')]), true);
+  assert.equal(await g.nj.call('totalActiveBond'), total);
+  assert.equal(await g.nj.call('activeWorkers'), count);
+  assert.equal((await g.nj.call('workers', [g.ad('liar')])).unbondAt, unbondAt); // unchanged
+  // Its seat on job b still reveals, and is judged as usual.
+  const ev = await g.nj.send('liar', 'reveal', [b, V1, saltB.liar]);
+  assert.ok(ev.some((e) => e?.name === 'Revealed'));
+  await g.nj.send('w2', 'reveal', [b, V1, saltB.w2]);
+  assert.equal((await g.nj.call('getJob', [b])).status, 2n);
+  assert.ok(await g.nj.call('credit', [g.ad('liar')]) > 0n);
 });
 
 test('stop button: pause blocks requests and commits, not reveals, expiry or withdrawals', async () => {

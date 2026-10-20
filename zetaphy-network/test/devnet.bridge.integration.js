@@ -5,7 +5,10 @@
 // lane (standing in for Hyperlane) attests too; after the quarantine the
 // money enters ZETAPHY. An attacker who touched the decoy gets nothing.
 // Vaccine: a sender flagged in the ThreatRegistry (`zetaphy threat flag`) is
-// not attested and its transfer is held until the runners clear the flag.
+// not attested (once the flag is enforced, after enforceDelay) and its transfer
+// is held until the runners clear the flag. deploy-bridge protects the bridge's
+// own keys (lockbox included), so the runners cannot flag them; NeuroLane's
+// pause switch is the NeuroJobs' NeuroControl by default.
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -59,18 +62,31 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   }
   assert.equal((await jobs.getJob(0)).status, 2n, 'runners need one accepted verdict first');
 
-  const th = await cli('gov', ['deploy-threats', '--jobs', jobsAddr, '--quorum', '2', '--min-agreed', '1']);
+  const th = await cli('gov', ['deploy-threats', '--jobs', jobsAddr, '--quorum', '2', '--min-agreed', '1', '--enforce-delay', '6']);
   assert.equal(th.code, 0, th.out);
+  assert.match(th.out, /flags enforced after 6s/);
   const threats = /ThreatRegistry (0x[0-9a-fA-F]{40})/.exec(th.out)[1];
-  const b = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1', '--threats', threats]);
-  assert.equal(b.code, 0, b.out);
-  assert.match(b.out, /vaccine on/);
-  cfg = Object.fromEntries([...b.out.matchAll(/^(\w+) (0x[0-9a-fA-F]{40})$/gm)].map((m) => [m[1], m[2]]));
-
-  // Source side: a LockBox; Alice locks 5, the attacker pokes the decoy on ZETAPHY then locks 7.
+  // Source side first: a LockBox, so deploy-bridge can protect its address.
   const lb = await new ContractFactory(art('LockBox').abi, art('LockBox').bytecode, W.gov.connect(sp)).deploy();
   await lb.waitForDeployment();
   const lockbox = new Contract(await lb.getAddress(), art('LockBox').abi, sp);
+  const b = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1', '--threats', threats,
+    '--lockbox', `4097:${lockbox.target}`]);
+  assert.equal(b.code, 0, b.out);
+  assert.match(b.out, /vaccine on/);
+  assert.match(b.out, /ThreatRegistry: protect the bridge's own contracts and the lockbox \(done\)/);
+  cfg = Object.fromEntries([...b.out.matchAll(/^(\w+) (0x[0-9a-fA-F]{40})$/gm)].map((m) => [m[1], m[2]]));
+  // NeuroLane's pause switch defaults to the NeuroJobs' NeuroControl.
+  const jobsControl = await jobs.control();
+  assert.notEqual(jobsControl, '0x0000000000000000000000000000000000000000');
+  assert.equal(await new Contract(cfg.NeuroLane, art('NeuroLane').abi, zp).control(), jobsControl);
+  // The route's own keys are protected: a runner quorum cannot flag the lockbox (or the airlock).
+  for (const r of ['r1', 'r2', 'r3']) await cli(r, ['threat', 'flag', `4097:${lockbox.target}`, cfg.BridgeAirlock, '--reason', 'drainer', '--threats', threats]);
+  const prot = (await cli('r3', ['threat', 'check', `4097:${lockbox.target}`, cfg.BridgeAirlock, '--threats', threats])).out;
+  assert.doesNotMatch(prot, /FLAGGED/, prot);
+  assert.equal(prot.match(/protected by governance/g)?.length, 3, prot); // lockbox; airlock address and code
+
+  // Alice locks 5, the attacker pokes the decoy on ZETAPHY then locks 7.
   await (await lockbox.connect(W.alice.connect(sp)).lock(W.alice.address, { value: parseEther('5') })).wait();
   const decoy = new Contract(cfg.DecoyBridge, art('DecoyBridge').abi, W.attacker.connect(zp));
   await (await decoy.mint(W.attacker.address, parseEther('1000000'), { gasLimit: 300000n })).wait();
@@ -80,7 +96,15 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   // quorum changes nothing, so single votes may fail; the registry is what counts.
   const vote = async (cmd) => { for (const r of ['r1', 'r2', 'r3']) await cli(r, ['threat', cmd, `4097:${W.mallory.address}`, ...(cmd === 'flag' ? ['--reason', 'drainer'] : []), '--threats', threats]); };
   await vote('flag');
-  assert.match((await cli('r3', ['threat', 'check', `4097:${W.mallory.address}`, '--threats', threats])).out, /FLAGGED \(drainer\)/);
+  // A warning at once; enforced (what holds transfers) after the 6 s enforceDelay.
+  let chk = '';
+  for (let i = 0; i < 20; i++) {
+    chk = (await cli('r3', ['threat', 'check', `4097:${W.mallory.address}`, '--threats', threats])).out;
+    if (i === 0) assert.match(chk, /FLAGGED \(drainer, (warning only until .* \(then enforced\)|enforced)\)/, chk);
+    if (/FLAGGED \(drainer, enforced\)/.test(chk)) break;
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  assert.match(chk, /FLAGGED \(drainer, enforced\)/, chk);
   await (await lockbox.connect(W.mallory.connect(sp)).lock(W.mallory.address, { value: parseEther('3') })).wait();
 
   // The "Hyperlane" lane attests both locks independently.
