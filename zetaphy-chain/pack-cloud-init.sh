@@ -36,7 +36,7 @@ if [ "${1:-}" = "--check" ]; then
   echo "cloud-init.sh matches setup-node.sh ($sha)"
 else
   printf '%s\n' "$out" > cloud-init.sh
-  mkdir -p public/v && cp setup-node.sh "public/v/$sha.sh" && cp setup-node.sh public/setup-node.sh
+  rm -rf public && mkdir -p public/v && cp setup-node.sh "public/v/$sha.sh" && cp setup-node.sh public/setup-node.sh
   cat > public/README.md <<MD
 # ZETAPHY chain node setup
 
