@@ -5,9 +5,11 @@
 import {
   ml_dsa44, pqAddress, pqClient, normalizeAddress, validatorAddress, parseZeta, formatZeta, bytesToHex, hexToBytes,
   DEFAULT_GAS_LIMIT, DEFAULT_STAKING_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT,
+  DEFAULT_PRECOMPILE_GAS_LIMIT, quantumLockTx,
 } from './vendor/pqwallet.js';
 
-const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 'zetaphy-wallet:lang', token: 'zetaphy-wallet:token' };
+const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 'zetaphy-wallet:lang', token: 'zetaphy-wallet:token',
+  owners: 'zetaphy-wallet:owners:v1:' }; // + this wallet's zetaphy1… address
 const KDF_ITERATIONS = 600000;
 const EVM_CHAIN_ID = 77390n;
 
@@ -125,6 +127,46 @@ const T = {
     staked: 'ส่งคำสั่ง stake แล้ว โหนดรับธุรกรรมแล้ว',
     unstaked: 'ส่งคำสั่งถอน stake แล้ว เงินกลับเข้าบัญชีหลังพ้นช่วง unbonding',
     claimed: 'ส่งคำสั่งรับรางวัลแล้ว รางวัลเข้าบัญชีเมื่อธุรกรรมเข้าบล็อก',
+    // quantum lock: accounts this wallet controls
+    ownedTitle: 'บัญชีที่กระเป๋านี้ควบคุม',
+    ownedHint: 'บัญชี ECDSA (เช่น MetaMask) ที่ล็อกควอนตัมให้กระเป๋านี้แล้ว กุญแจเดิมของบัญชีนั้นใช้ไม่ได้อีก กระเป๋านี้โอน โอนโทเคน และ stake แทนได้ (เซ็นด้วย ML-DSA-44 และจ่ายค่าธรรมเนียมจากกระเป๋านี้)',
+    ownerLabel: 'ที่อยู่บัญชีที่ล็อกไว้ (0x… หรือ zetaphy1…)',
+    ownerUse: 'ทำรายการในนามบัญชีนี้',
+    actingAs: 'กำลังทำรายการในนามของ',
+    ownerBalance: 'ยอดเงินของบัญชีนั้น',
+    actingHint: 'โอน ZETAPHY โอนโทเคน และ stake ด้านล่างจะทำในนามบัญชีนี้ (as_owner) ค่าธรรมเนียมหักจากกระเป๋านี้',
+    ownerStop: 'กลับไปใช้บัญชีของฉัน',
+    ownedMine: 'ล็อกให้กระเป๋านี้',
+    ownedNotMine: 'ไม่ได้ล็อกให้กระเป๋านี้ (หรือยังไม่เข้าบล็อก)',
+    ownedOther: 'ล็อกให้บัญชีอื่น: {to}',
+    asTag: 'ในนามของ {owner}',
+    asNote: 'ทำในนามของ {owner} ซึ่งล็อกควอนตัมให้กระเป๋านี้ เงินและโทเคนออกจากบัญชีนั้น ค่าธรรมเนียมหักจากกระเป๋านี้',
+    nowActing: 'จากนี้ทำรายการในนามของ {owner}',
+    stopActing: 'กลับมาใช้บัญชีของคุณแล้ว',
+    ownerNotLocked: 'บัญชีนี้ไม่ได้ล็อกควอนตัมให้กระเป๋านี้ จึงทำรายการแทนไม่ได้',
+    ownerOther: 'บัญชีนี้ล็อกให้บัญชีอื่น ({to}) ไม่ใช่กระเป๋านี้',
+    ownerSelf: 'นี่คือบัญชีของกระเป๋านี้เอง',
+    ownerNotEnough: 'เงินในบัญชีนั้นไม่พอ: ต้องมี {need} ZETAPHY แต่มี {have}',
+    // quantum lock from MetaMask
+    mmTitle: 'ล็อกบัญชี MetaMask ให้กระเป๋านี้',
+    mmIntro: 'ย้ายการควบคุมบัญชี ECDSA ใน MetaMask มาไว้ที่กระเป๋าต้านควอนตัมนี้ ที่อยู่ ยอดเงิน โทเคน และ stake ของบัญชีนั้นอยู่ที่เดิม แต่จากนี้ไปสั่งได้ผ่านกระเป๋านี้เท่านั้น',
+    mmWarnPermanent: 'ถาวร ยกเลิกไม่ได้: หลังล็อก เชนจะปฏิเสธทุกธุรกรรมที่กุญแจ MetaMask ของบัญชีนั้นเซ็น และลายเซ็นของกุญแจนั้นใช้กับสัญญา (เช่น permit) ไม่ได้อีก',
+    mmWarnSeed: 'ถ้า seed ของกระเป๋านี้หาย บัญชีที่ล็อกไว้ก็หายไปด้วย ดาวน์โหลดไฟล์สำรอง seed ก่อน',
+    mmWarnTx: 'กระเป๋านี้ต้องเคยส่งธุรกรรมบนเชนแล้วอย่างน้อยหนึ่งครั้ง (ให้เชนรู้กุญแจสาธารณะ ML-DSA-44)',
+    mmOk: 'เข้าใจแล้วว่าการล็อกเป็นแบบถาวร',
+    mmLock: 'เชื่อม MetaMask แล้วล็อก',
+    mmSentLabel: 'MetaMask ส่งคำสั่งล็อกแล้ว tx hash:',
+    mmConfirm: 'ล็อกบัญชี MetaMask {owner} ให้กระเป๋านี้ ({me}) แบบถาวร?\n\nหลังจากนี้กุญแจ MetaMask ของบัญชีนั้นจะใช้กับ ZETAPHY ไม่ได้อีกเลย และถ้า seed ของกระเป๋านี้หาย บัญชีนั้นหายด้วย',
+    mmMissing: 'ไม่พบ MetaMask (window.ethereum) ในเบราว์เซอร์นี้',
+    mmDenied: 'MetaMask ไม่อนุญาตให้เชื่อมบัญชี',
+    mmRejected: 'ยกเลิกใน MetaMask แล้ว ไม่ได้ส่งอะไร',
+    mmWrongChain: 'MetaMask ไม่ได้อยู่บน ZETAPHY testnet (chain id {id}) สลับเครือข่ายใน MetaMask ก่อน',
+    mmNeedTx: 'กระเป๋านี้ยังไม่เคยส่งธุรกรรม: ส่งธุรกรรมสักครั้งก่อน (เช่น โอนเข้าบัญชีตัวเอง) เชนจึงจะยอมให้เป็นผู้ควบคุม',
+    mmSelfLocked: 'กระเป๋านี้ถูกล็อกให้บัญชีอื่นอยู่ จึงเป็นผู้ควบคุมไม่ได้',
+    mmAlreadyLocked: 'บัญชี MetaMask นี้ล็อกให้ {to} ไปแล้ว',
+    mmAlreadyMine: 'บัญชี MetaMask นี้ล็อกให้กระเป๋านี้อยู่แล้ว',
+    mmCancelled: 'ยกเลิกแล้ว ไม่ได้ส่งอะไร',
+    mmSent: 'MetaMask ส่งคำสั่งล็อกแล้ว เมื่อเข้าบล็อก บัญชีนั้นจะขึ้นในรายการด้านบน',
   },
   en: {
     subtitle: 'Quantum-safe wallet (ML-DSA-44) · no ECDSA key',
@@ -236,6 +278,44 @@ const T = {
     staked: 'Stake sent. The node accepted it.',
     unstaked: 'Unstake sent. The ZETAPHY comes back after the unbonding period.',
     claimed: 'Claim sent. The rewards arrive when the tx lands in a block.',
+    ownedTitle: 'Accounts this wallet controls',
+    ownedHint: 'ECDSA accounts (e.g. MetaMask) quantum-locked to this wallet. Their own keys no longer work; this wallet sends, sends tokens and stakes for them (signed with ML-DSA-44, fees paid by this wallet).',
+    ownerLabel: 'Locked account address (0x… or zetaphy1…)',
+    ownerUse: 'Act as this account',
+    actingAs: 'Acting as',
+    ownerBalance: 'Its balance',
+    actingHint: 'Send, token transfers and staking below act for this account (as_owner). Fees come from this wallet.',
+    ownerStop: 'Back to my account',
+    ownedMine: 'locked to this wallet',
+    ownedNotMine: 'not locked to this wallet (or not in a block yet)',
+    ownedOther: 'locked to another account: {to}',
+    asTag: 'For {owner}',
+    asNote: 'For {owner}, which is quantum-locked to this wallet: funds and tokens leave that account; the fee is paid by this wallet.',
+    nowActing: 'Now acting as {owner}.',
+    stopActing: 'Back to your own account.',
+    ownerNotLocked: 'That account is not quantum-locked to this wallet, so this wallet cannot act for it.',
+    ownerOther: 'That account is locked to another account ({to}), not to this wallet.',
+    ownerSelf: 'That is this wallet\'s own account.',
+    ownerNotEnough: 'That account does not have enough: needs {need} ZETAPHY, has {have}.',
+    mmTitle: 'Lock a MetaMask account to this wallet',
+    mmIntro: 'Hand control of an ECDSA account in MetaMask to this quantum-safe wallet. Its address, balance, tokens and stake stay where they are, but from now on only this wallet can move them.',
+    mmWarnPermanent: 'Permanent, no undo: after the lock the chain refuses every transaction that account\'s MetaMask key signs, and contracts no longer accept its signatures (e.g. permits).',
+    mmWarnSeed: 'If you lose this wallet\'s seed, the locked account is lost too. Download the seed backup first.',
+    mmWarnTx: 'This wallet must have sent at least one transaction on chain (so the chain knows its ML-DSA-44 public key).',
+    mmOk: 'I understand the lock is permanent',
+    mmLock: 'Connect MetaMask and lock',
+    mmSentLabel: 'MetaMask sent the lock. tx hash:',
+    mmConfirm: 'Lock the MetaMask account {owner} to this wallet ({me}) for good?\n\nIts MetaMask key will never work on ZETAPHY again, and if this wallet\'s seed is lost, so is that account.',
+    mmMissing: 'MetaMask (window.ethereum) was not found in this browser.',
+    mmDenied: 'MetaMask did not allow connecting an account.',
+    mmRejected: 'Rejected in MetaMask. Nothing was sent.',
+    mmWrongChain: 'MetaMask is not on ZETAPHY testnet (chain id {id}). Switch networks in MetaMask first.',
+    mmNeedTx: 'This wallet has not sent a transaction yet: send one first (e.g. to itself), then the chain accepts it as a controller.',
+    mmSelfLocked: 'This wallet is itself locked to another account, so it cannot be a controller.',
+    mmAlreadyLocked: 'That MetaMask account is already locked to {to}.',
+    mmAlreadyMine: 'That MetaMask account is already locked to this wallet.',
+    mmCancelled: 'Cancelled. Nothing was sent.',
+    mmSent: 'MetaMask sent the lock. Once it is in a block, the account shows up in the list above.',
   },
 };
 
@@ -260,7 +340,7 @@ function applyLang() {
   $('lang').textContent = lang === 'th' ? 'English' : 'ไทย';
   $('lang').lang = lang === 'th' ? 'en' : 'th';
   if (lastStatus) status(...lastStatus);
-  if (wallet) { showAccount(); showToken(); }
+  if (wallet) { showAccount(); showToken(); showOwned(); }
 }
 
 /** status(key, vars, isError, extra): extra is raw text (e.g. a node's log). */
@@ -314,7 +394,8 @@ function lock() {
   pending = null; tokenPending = null; stakePending = null;
   account = null;
   token = null;
-  for (const id of ['confirm', 'token-confirm', 'stake-confirm', 'tx-result', 'token-result', 'stake-result']) $(id).hidden = true;
+  acting = null; owned = [];
+  for (const id of ['confirm', 'token-confirm', 'stake-confirm', 'tx-result', 'token-result', 'stake-result', 'mm-result']) $(id).hidden = true;
   render();
 }
 
@@ -360,6 +441,13 @@ function showError(e) {
   if (/does not exist on chain yet/.test(m)) return fail('notFunded');
   const callFails = /the call would fail, so nothing was sent: (.*)$/.exec(m);
   if (callFails) return fail('callFails', {}, T.en[callFails[1]] ? t(callFails[1]) : callFails[1]);
+  const other = /quantum-locked to (\S+), not to/.exec(m);
+  if (other) return fail('ownerOther', { to: other[1] });
+  if (/is not quantum-locked to/.test(m)) return fail('ownerNotLocked');
+  const ownerShort = /does not have enough ZETAPHY: it needs (\S+), it has (\S+)$/.exec(m);
+  if (ownerShort) return fail('ownerNotEnough', { need: ownerShort[1], have: ownerShort[2] });
+  if (/no ML-DSA-44 public key on chain/.test(m)) return fail('mmNeedTx');
+  if (/is itself quantum-locked/.test(m)) return fail('mmSelfLocked');
   const short = /not enough ZETAPHY: need (\S+) .*have (\S+)$/.exec(m);
   if (short) return fail('notEnough', { need: short[1], have: short[2] });
   if (/expected zetaphyvaloper1/.test(m)) return fail('badValidator');
@@ -377,7 +465,7 @@ function render() {
   $('locked').hidden = !!wallet || !sealed;
   $('wallet').hidden = !wallet;
   if (!wallet && sealed) $('locked-addr').textContent = sealed.address ?? '';
-  if (wallet) { showAccount(); showToken(); }
+  if (wallet) { if (!owned.length) loadOwned(); showAccount(); showToken(); showOwned(); }
 }
 
 let account = null;
@@ -386,7 +474,8 @@ function showAccount() {
   $('addr-hex').textContent = wallet.addr.hex;
   if (!account) { $('acct-status').textContent = ''; return; }
   $('balance').textContent = `${formatZeta(account.balance)} ZETAPHY`;
-  $('acct-status').textContent = account.exists ? t('onChain', { n: account.accountNumber, s: account.sequence }) : t('notFunded');
+  $('acct-status').textContent = (account.exists ? t('onChain', { n: account.accountNumber, s: account.sequence }) : t('notFunded'))
+    + (account.quantumLockedTo ? ' · ' + t('ownedOther', { to: account.quantumLockedTo }) : '');
 }
 
 async function refresh() {
@@ -395,6 +484,7 @@ async function refresh() {
     const [a, balance] = await Promise.all([client.account(wallet.addr.bech32), client.balance(wallet.addr.hex)]);
     account = { ...a, balance };
     showAccount();
+    await refreshOwned();
   } catch (e) { return showError(e); }
   // The token panel follows: the one looked up, or the one remembered from last time.
   try {
@@ -471,13 +561,21 @@ async function review() {
   const g = $('gas').value.trim() || String(DEFAULT_GAS_LIMIT);
   if (!/^\d+$/.test(g) || BigInt(g) <= 0n) return fail('badGas');
   gasLimit = BigInt(g);
+  // As an owner: a MsgEVMCall carrying the value (the gas field is for plain sends).
+  const as = acting;
+  if (as) gasLimit = DEFAULT_EVM_GAS_LIMIT + EVM_CALL_GAS_OVERHEAD;
   status('working');
   const q = await client.quote({ publicKey: wallet.publicKey, gasLimit });
   account = { ...q.account, balance: q.balance };
   showAccount();
   if (!q.exists) return fail('notFunded');
-  if (amount + q.fee > q.balance) return fail('notEnough', { need: formatZeta(amount + q.fee), have: formatZeta(q.balance) });
-  pending = { to, amount, gasLimit, gasPrice: q.gasPrice, fee: q.fee };
+  if (as) {
+    await refreshActing();
+    if (amount > as.balance) return fail('ownerNotEnough', { need: formatZeta(amount), have: formatZeta(as.balance) });
+    if (q.fee > q.balance) return fail('notEnough', { need: formatZeta(q.fee), have: formatZeta(q.balance) });
+  } else if (amount + q.fee > q.balance) return fail('notEnough', { need: formatZeta(amount + q.fee), have: formatZeta(q.balance) });
+  pending = { to, amount, gasLimit, gasPrice: q.gasPrice, fee: q.fee, asOwner: as?.address };
+  showAsNote($('confirm'), as);
   $('c-to').textContent = `${to.bech32}\n${to.hex}`;
   $('c-amount').textContent = `${formatZeta(amount)} ZETAPHY`;
   $('c-fee').textContent = `${formatZeta(q.fee)} ZETAPHY`;
@@ -495,6 +593,7 @@ async function confirmSend() {
   const r = await client.send({
     publicKey: wallet.publicKey, sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey),
     to: p.to.bech32, amount: p.amount, gasLimit: p.gasLimit, gasPrice: p.gasPrice,
+    ...(p.asOwner ? { asOwner: p.asOwner.bech32, evmGasLimit: DEFAULT_EVM_GAS_LIMIT } : {}),
   });
   $('tx-hash').textContent = r.txHash;
   $('tx-result').hidden = false;
@@ -559,8 +658,11 @@ function decodeSymbol(hex) {
   return text || '?';
 }
 
+/** The account the token panel is for: this wallet, or the locked account it acts as. */
+const holder = () => (acting ? acting.address : wallet.addr);
+
 async function tokenBalanceOf(address) {
-  const b = resultBytes(await ethCall(address, SEL.balanceOf + addrWord(wallet.addr.bytes)));
+  const b = resultBytes(await ethCall(address, SEL.balanceOf + addrWord(holder().bytes)));
   if (!b || b.length < 32) throw new Error('notToken');
   return readWord(b, 0);
 }
@@ -631,6 +733,7 @@ async function tokenReview() {
   const txGas = evmGas + EVM_CALL_GAS_OVERHEAD;
   status('working');
   const t0 = token;
+  const as = acting;
   const [q, balance] = await Promise.all([client.quote({ publicKey: wallet.publicKey, gasLimit: txGas }), tokenBalanceOf(t0.address)]);
   account = { ...q.account, balance: q.balance };
   t0.balance = balance;
@@ -642,13 +745,14 @@ async function tokenReview() {
   // The same simulation callEVM runs before signing, so a doomed transfer never reaches the confirm step.
   let ret;
   try {
-    ret = await checkedCall('eth_call', [{ from: wallet.addr.hex, to: t0.address, data, gas: qty(evmGas) }, 'latest']);
+    ret = await checkedCall('eth_call', [{ from: (as ? as.address : wallet.addr).hex, to: t0.address, data, gas: qty(evmGas) }, 'latest']);
   } catch (e) {
     if (T.en[e.message]) throw e;
     return fail('callFails', {}, e.message);
   }
   checkTransfer(ret);
-  tokenPending = { token: t0.address, symbol: t0.symbol, decimals: t0.decimals, to, units, data, evmGas, txGas, gasPrice: q.gasPrice };
+  tokenPending = { token: t0.address, symbol: t0.symbol, decimals: t0.decimals, to, units, data, evmGas, txGas, gasPrice: q.gasPrice, asOwner: as?.address };
+  showAsNote($('token-confirm'), as);
   $('t-token').textContent = `${t0.symbol}\n${t0.address}`;
   $('t-to').textContent = `${to.bech32}\n${to.hex}`;
   $('t-amount').textContent = `${formatUnits(units, t0.decimals)} ${t0.symbol}`;
@@ -666,6 +770,7 @@ async function tokenConfirm() {
   const r = await client.callEVM({
     publicKey: wallet.publicKey, sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey),
     to: p.token, data: p.data, evmGasLimit: p.evmGas, gasLimit: p.txGas, gasPrice: p.gasPrice, checkResult: checkTransfer,
+    ...(p.asOwner ? { asOwner: p.asOwner.bech32 } : {}),
   });
   $('token-hash').textContent = r.txHash;
   $('token-result').hidden = false;
@@ -697,15 +802,22 @@ async function stakeReview(action) {
   }
   const g = $('stake-gas').value.trim() || String(DEFAULT_STAKING_GAS_LIMIT);
   if (!/^\d{1,12}$/.test(g) || BigInt(g) <= 0n) return fail('badGas');
-  const gasLimit = BigInt(g);
+  // As an owner: the staking or distribution precompile, called with as_owner.
+  const as = acting;
+  const gasLimit = as ? DEFAULT_PRECOMPILE_GAS_LIMIT + EVM_CALL_GAS_OVERHEAD : BigInt(g);
   status('working');
   const q = await client.quote({ publicKey: wallet.publicKey, gasLimit });
   account = { ...q.account, balance: q.balance };
   showAccount();
   if (!q.exists) return fail('notFunded');
   const spend = action === 'stake' ? amount : 0n;
-  if (spend + q.fee > q.balance) return fail('notEnough', { need: formatZeta(spend + q.fee), have: formatZeta(q.balance) });
-  stakePending = { action, validator, amount, gasLimit, gasPrice: q.gasPrice };
+  if (as) {
+    await refreshActing();
+    if (spend > as.balance) return fail('ownerNotEnough', { need: formatZeta(spend), have: formatZeta(as.balance) });
+    if (q.fee > q.balance) return fail('notEnough', { need: formatZeta(q.fee), have: formatZeta(q.balance) });
+  } else if (spend + q.fee > q.balance) return fail('notEnough', { need: formatZeta(spend + q.fee), have: formatZeta(q.balance) });
+  stakePending = { action, validator, amount, gasLimit, gasPrice: q.gasPrice, asOwner: as?.address };
+  showAsNote($('stake-confirm'), as);
   setI18n($('stake-confirm-title'), STAKE[action].title);
   $('s-validator').textContent = validator;
   $('s-amount-dt').hidden = $('s-amount').hidden = action === 'claim';
@@ -726,12 +838,152 @@ async function stakeConfirm() {
   const r = await STAKE[p.action].run({
     publicKey: wallet.publicKey, sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey),
     validator: p.validator, amount: p.action === 'claim' ? undefined : p.amount, gasLimit: p.gasLimit, gasPrice: p.gasPrice,
+    ...(p.asOwner ? { asOwner: p.asOwner.bech32, evmGasLimit: DEFAULT_PRECOMPILE_GAS_LIMIT } : {}),
   });
   $('stake-hash').textContent = r.txHash;
   $('stake-result').hidden = false;
   if (p.action !== 'claim') $('stake-amount').value = '';
   status(STAKE[p.action].done);
   setTimeout(refresh, 6000);
+}
+
+// ---- quantum lock: accounts this wallet controls (MsgEVMCall.as_owner) ----
+// The chain keeps who controls whom (zetaphy_pqAccount.quantumLockedTo); this page
+// only remembers which owner addresses to ask about, per wallet, in localStorage.
+let acting = null; // { address (normalized), balance } while acting for a locked account
+let owned = []; // [{ address, lockedTo }]
+
+const ownersKey = () => KEYS.owners + wallet.addr.bech32;
+function loadOwned() {
+  let list = [];
+  try { list = JSON.parse(store.get(ownersKey()) ?? '[]'); } catch { /* ignore */ }
+  owned = (Array.isArray(list) ? list : []).slice(0, 20).flatMap((a) => { try { return [{ address: normalizeAddress(a), lockedTo: undefined }]; } catch { return []; } });
+}
+function rememberOwner(address) {
+  if (!owned.some((o) => o.address.bech32 === address.bech32)) owned.push({ address, lockedTo: wallet.addr.bech32 });
+  store.set(ownersKey(), JSON.stringify(owned.map((o) => o.address.hex)));
+}
+
+async function refreshOwned() {
+  if (!wallet) return;
+  if (!owned.length) loadOwned();
+  await Promise.all(owned.map(async (o) => { o.lockedTo = (await client.account(o.address.bech32)).quantumLockedTo ?? null; }));
+  if (acting) await refreshActing();
+  showOwned();
+}
+
+async function refreshActing() {
+  const a = acting;
+  if (!a) return;
+  a.balance = await client.balance(a.address.hex);
+  showOwned();
+}
+
+function showOwned() {
+  const list = $('owned-list');
+  list.replaceChildren(...owned.map((o) => {
+    const li = document.createElement('li');
+    const code = document.createElement('code');
+    code.textContent = o.address.hex;
+    const note = document.createElement('span');
+    note.className = 'hint';
+    note.textContent = o.lockedTo === undefined ? '' : o.lockedTo === wallet.addr.bech32 ? t('ownedMine') : o.lockedTo ? t('ownedOther', { to: o.lockedTo }) : t('ownedNotMine');
+    li.append(code, note);
+    if (o.lockedTo === wallet.addr.bech32 && acting?.address.bech32 !== o.address.bech32) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ghost';
+      b.textContent = t('ownerUse');
+      b.addEventListener('click', () => busy(b, () => useOwner(o.address.hex)));
+      li.append(b);
+    }
+    return li;
+  }));
+  $('acting').hidden = !acting;
+  if (acting) {
+    $('acting-addr').textContent = `${acting.address.hex}\n${acting.address.bech32}`;
+    $('acting-balance').textContent = acting.balance == null ? '–' : `${formatZeta(acting.balance)} ZETAPHY`;
+  }
+  for (const el of document.querySelectorAll('.as-tag')) {
+    el.hidden = !acting;
+    el.textContent = acting ? t('asTag', { owner: acting.address.hex }) : '';
+  }
+}
+
+/** The "for {owner}" line in a confirm box. */
+function showAsNote(box, as) {
+  const el = box.querySelector('.as-note');
+  el.hidden = !as;
+  el.textContent = as ? t('asNote', { owner: as.address.hex }) : '';
+}
+
+function clearPending() {
+  pending = null; tokenPending = null; stakePending = null;
+  for (const id of ['confirm', 'token-confirm', 'stake-confirm']) $(id).hidden = true;
+}
+
+/** Act for a locked account: only if the chain says it is locked to this wallet. */
+async function useOwner(text) {
+  let address;
+  try { address = normalizeAddress(text); } catch { return fail('badAddress'); }
+  if (address.bech32 === wallet.addr.bech32) return fail('ownerSelf');
+  status('working');
+  const a = await client.account(address.bech32);
+  if (a.quantumLockedTo !== wallet.addr.bech32) return a.quantumLockedTo ? fail('ownerOther', { to: a.quantumLockedTo }) : fail('ownerNotLocked');
+  clearPending();
+  acting = { address, balance: await client.balance(address.hex) };
+  rememberOwner(address);
+  owned.find((o) => o.address.bech32 === address.bech32).lockedTo = a.quantumLockedTo;
+  $('owner').value = '';
+  showOwned();
+  status('nowActing', { owner: address.hex });
+  if (token) { token.balance = await tokenBalanceOf(token.address); showToken(); }
+}
+
+async function stopActing() {
+  clearPending();
+  acting = null;
+  showOwned();
+  status('stopActing');
+  if (token) { token.balance = await tokenBalanceOf(token.address); showToken(); }
+}
+
+// ---- quantum lock from MetaMask: an EVM tx to 0x…5051 with this wallet's address as data ----
+async function metamaskLock() {
+  if (!wallet || !$('mm-ok').checked) return;
+  const eth = window.ethereum;
+  if (!eth || typeof eth.request !== 'function') throw new Error('mmMissing');
+  status('working');
+  // The chain only accepts an ML-DSA-44 controller whose public key it knows.
+  await client.checkController(wallet.addr.bech32);
+  let accounts;
+  try { accounts = await eth.request({ method: 'eth_requestAccounts' }); } catch (e) { throw new Error(e?.code === 4001 ? 'mmRejected' : 'mmDenied'); }
+  if (!Array.isArray(accounts) || !accounts.length) throw new Error('mmDenied');
+  let owner;
+  try { owner = normalizeAddress(String(accounts[0]).toLowerCase()); } catch { throw new Error('mmDenied'); }
+  const chain = BigInt(await eth.request({ method: 'eth_chainId' }));
+  if (chain !== EVM_CHAIN_ID) throw Object.assign(new Error('mmWrongChain'), { vars: { id: chain } });
+  const a = await client.account(owner.bech32);
+  if (a.quantumLockedTo === wallet.addr.bech32) { rememberOwner(owner); showOwned(); return status('mmAlreadyMine'); }
+  if (a.quantumLockedTo) throw Object.assign(new Error('mmAlreadyLocked'), { vars: { to: a.quantumLockedTo } });
+  if (!window.confirm(t('mmConfirm', { owner: owner.hex, me: wallet.addr.bech32 }))) return status('mmCancelled');
+  const tx = quantumLockTx(wallet.addr.hex);
+  let hash;
+  try {
+    hash = await eth.request({ method: 'eth_sendTransaction', params: [{ from: owner.hex, to: tx.to, value: '0x0', data: tx.data }] });
+  } catch (e) {
+    if (e?.code === 4001) throw new Error('mmRejected');
+    throw new Error(e?.message ?? String(e));
+  }
+  $('mm-hash').textContent = String(hash);
+  $('mm-result').hidden = false;
+  $('mm-ok').checked = false;
+  $('mm-lock').disabled = true;
+  owned.push({ address: owner, lockedTo: undefined });
+  store.set(ownersKey(), JSON.stringify(owned.map((o) => o.address.hex)));
+  showOwned();
+  status('mmSent');
+  setTimeout(() => { refreshOwned().catch(showError); }, 6000);
 }
 
 function downloadBackup() {
@@ -787,6 +1039,10 @@ function init() {
   $('stake-form').addEventListener('submit', (e) => e.preventDefault());
   $('confirm-stake').addEventListener('click', () => busy($('confirm-stake'), stakeConfirm));
   $('cancel-stake').addEventListener('click', () => { stakePending = null; $('stake-confirm').hidden = true; status(''); });
+  $('owner-use').addEventListener('click', () => busy($('owner-use'), () => useOwner($('owner').value)));
+  $('owner-stop').addEventListener('click', () => busy($('owner-stop'), stopActing));
+  $('mm-ok').addEventListener('change', () => { $('mm-lock').disabled = !$('mm-ok').checked; });
+  $('mm-lock').addEventListener('click', () => busy($('mm-lock'), metamaskLock).then(() => { $('mm-lock').disabled = !$('mm-ok').checked; }));
   $('backup-ok').addEventListener('change', () => { $('backup').disabled = !$('backup-ok').checked; });
   $('backup').addEventListener('click', downloadBackup);
   $('lock').addEventListener('click', () => { lock(); status('lockedMsg'); });

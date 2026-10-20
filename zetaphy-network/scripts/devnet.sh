@@ -24,9 +24,11 @@ jqg '.consensus.params.block.max_gas="30000000" | .app_state.gov.params.voting_p
 jqg '.app_state.gov.params.min_deposit[0].amount="1000000000000000000000" | .app_state.gov.params.expedited_min_deposit[0].amount="5000000000000000000000"'
 # Fixed supply, as on the testnet (setup-node.sh): no inflation.
 jqg '.app_state.mint.minter.inflation="0.000000000000000000" | .app_state.mint.params.inflation_rate_change="0.000000000000000000" | .app_state.mint.params.inflation_max="0.000000000000000000" | .app_state.mint.params.inflation_min="0.000000000000000000"'
-# PQ=1: a zetaphyd built with the ML-DSA patch; switch its precompile on (0x…0900).
+# PQ=1: a zetaphyd built with the ML-DSA patch; switch its precompile on (0x…0900),
+# with staking (0x…0800) and distribution (0x…0801) as on the testnet: a
+# quantum-locked account stakes through them (MsgEVMCall.as_owner).
 if [ -n "${PQ:-}" ]; then
-  jqg '.app_state.evm.params.active_static_precompiles=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000900"]'
+  jqg '.app_state.evm.params.active_static_precompiles=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000800","0x0000000000000000000000000000000000000801","0x0000000000000000000000000000000000000900"]'
 fi
 
 $BIN genesis add-genesis-account "$($BIN keys show validator -a $K)" "100000000000000000000000000$DENOM" --home "$HOME_DIR"

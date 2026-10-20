@@ -25,6 +25,16 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 - Stake (เหมือน `zetaphy pq native stake` / `unstake` / `rewards`)
   - ใส่ validator `zetaphyvaloper1…` (ตรวจ checksum) แล้วกด Stake, ถอน stake หรือรับรางวัล ทุกปุ่มมีหน้ายืนยันก่อนเซ็น
   - ยังไม่แสดงยอดที่ stake อยู่
+- ล็อกบัญชี MetaMask ให้กระเป๋านี้ (ล็อกควอนตัม แบบถาวร)
+  - ต้องติ๊กยอมรับคำเตือนก่อน แล้วกดยืนยันอีกครั้งที่หน้าต่างที่แสดงทั้งสองบัญชี
+  - ใช้ `window.ethereum`: `eth_requestAccounts` แล้ว `eth_sendTransaction` `{to: 0x…5051, value: 0x0, data: ที่อยู่ 0x ของกระเป๋านี้}`
+  - ตรวจก่อนว่ากระเป๋านี้เคยส่งธุรกรรมแล้ว (เชนรู้กุญแจสาธารณะ), MetaMask อยู่บน chain 77390 และบัญชีนั้นยังไม่ถูกล็อก
+  - หลังล็อก กุญแจ MetaMask ของบัญชีนั้นใช้กับ ZETAPHY ไม่ได้อีก ถ้า seed ของกระเป๋านี้หาย บัญชีนั้นหายด้วย
+- บัญชีที่กระเป๋านี้ควบคุม
+  - ใส่ที่อยู่บัญชีที่ล็อกไว้ หน้าเว็บถาม `zetaphy_pqAccount` ว่า `quantumLockedTo` เป็นกระเป๋านี้จริงก่อนใช้
+  - ระหว่าง "ทำรายการในนามบัญชีนี้" การโอน ZETAPHY, โอนโทเคน และ stake/ถอน/รับรางวัล ส่งเป็น `MsgEVMCall` ที่มี `as_owner`
+    - เงินและโทเคนออกจากบัญชีที่ล็อก ค่าธรรมเนียมหักจากกระเป๋านี้ stake ผ่าน precompile `0x…0800` / `0x…0801`
+  - เบราว์เซอร์จำรายการที่อยู่ไว้ (แยกตามกระเป๋า) สถานะจริงอ่านจากเชนทุกครั้ง
 - ดาวน์โหลดไฟล์สำรอง seed
   - เป็น hex แบบไม่เข้ารหัส ใช้เป็น `~/.zetaphy/pq.seed` ของ `zetaphy pq native` ได้เลย
 - ภาษาไทย (ค่าเริ่มต้น) และอังกฤษ
@@ -65,7 +75,8 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 npm install
 npm run build     # สร้าง vendor/pqwallet.js ใหม่ แล้ว commit
 npm run serve     # http://localhost:8090/ (สำหรับนักพัฒนา)
-npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอน, โอนโทเคน (และที่ถูกปฏิเสธ), stake กับ RPC จำลอง
+npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอน, โอนโทเคน (และที่ถูกปฏิเสธ), stake,
+                  # ล็อกบัญชี MetaMask (window.ethereum จำลอง) และทำรายการแทนบัญชีที่ล็อก กับ RPC จำลอง
 ```
 
 ถ้าแก้ `zetaphy-network/src/pqtx.js` ต้อง `npm run build` แล้ว commit `vendor/pqwallet.js` ด้วย CI ตรวจว่าไฟล์ที่ commit ตรงกับที่ build ใหม่

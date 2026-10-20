@@ -25,7 +25,14 @@
 //   zetaphy pq native token-balance <token 0x…>   its balance of an ERC-20
 //   zetaphy pq native stake | unstake <zetaphyvaloper1…> <amount> [--gas 500000]   delegate to a validator, or undelegate
 //   zetaphy pq native rewards <zetaphyvaloper1…>   withdraw staking rewards
-//                                      (EVM logs of these calls are not in eth_getLogs; contract creation still needs an EVM tx)
+//   zetaphy pq native deploy <init code 0x…> [--value <ZETAPHY>] [--gas <EVM gas, default 3000000>]   create a contract; prints its address
+//                                      (EVM logs of these calls are not in eth_getLogs)
+//   zetaphy pq native lock-ecdsa [<controller zetaphy1… or 0x…>] --yes   PERMANENT: hand this machine's ECDSA key's account
+//                                      (~/.zetaphy/worker.key) to an ML-DSA-44 account (default: this pq native account);
+//                                      an EVM tx to 0x…5051, after which the chain refuses the ECDSA key
+//   zetaphy pq native ... --as <owner 0x… or zetaphy1…>   act for a quantum-locked account this one controls
+//                                      (send, call, token-send, token-balance, stake, unstake, rewards, deploy; --gas is then EVM gas)
+//   zetaphy pq native handover <owner> <new controller>   hand control of a locked account to another ML-DSA-44 account
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>]
@@ -52,8 +59,8 @@ import { createWorker } from './src/worker.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
 import { loadOrCreatePq, sealPqSeed, VARIANT as PQ_VARIANT } from './src/pq.js';
-import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, formatZeta, DEFAULT_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT,
-  DEFAULT_STAKING_GAS_LIMIT, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT } from './src/pqtx.js';
+import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, formatZeta, quantumLockTx, DEFAULT_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT,
+  DEFAULT_STAKING_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, DEFAULT_PRECOMPILE_GAS_LIMIT, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT } from './src/pqtx.js';
 import { createLaneWatcher } from './src/lane.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -269,17 +276,21 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     // Native PQ account: the chain checks the ML-DSA-44 signature itself, so
     // no ECDSA key, contract or gas payer is involved. Same seed as "pq new".
     const [sub, a1, a2, a3] = rest;
+    // [usage, fewest args, most args]
     const USAGE = {
-      send: ['<0x… or zetaphy1…> <amount> [--gas N]', 2],
-      call: ['<to 0x…> <calldata 0x…> [--value <ZETAPHY>] [--gas <EVM gas, default 200000>]', 2],
-      'token-send': ['<token 0x…> <to 0x… or zetaphy1…> <amount> [--gas <EVM gas, default 200000>]', 3],
-      'token-balance': ['<token 0x…>', 1],
-      stake: ['<zetaphyvaloper1…> <amount> [--gas N]', 2],
-      unstake: ['<zetaphyvaloper1…> <amount> [--gas N]', 2],
-      rewards: ['<zetaphyvaloper1…> [--gas N]', 1],
+      send: ['<0x… or zetaphy1…> <amount> [--gas N] [--as <owner>]', 2, 2],
+      call: ['<to 0x…> <calldata 0x…> [--value <ZETAPHY>] [--gas <EVM gas, default 200000>] [--as <owner>]', 2, 2],
+      'token-send': ['<token 0x…> <to 0x… or zetaphy1…> <amount> [--gas <EVM gas, default 200000>] [--as <owner>]', 3, 3],
+      'token-balance': ['<token 0x…> [--as <owner>]', 1, 1],
+      stake: ['<zetaphyvaloper1…> <amount> [--gas N] [--as <owner>]', 2, 2],
+      unstake: ['<zetaphyvaloper1…> <amount> [--gas N] [--as <owner>]', 2, 2],
+      rewards: ['<zetaphyvaloper1…> [--gas N] [--as <owner>]', 1, 1],
+      deploy: ['<init code 0x…> [--value <ZETAPHY>] [--gas <EVM gas, default 3000000>] [--as <owner>]', 1, 1],
+      handover: ['<owner 0x… or zetaphy1…> <new controller zetaphy1… or 0x…> [--gas N]', 2, 2],
+      'lock-ecdsa': ['[<controller zetaphy1… or 0x…>] --yes', 0, 1],
     };
     if (sub && !Object.hasOwn(USAGE, sub)) throw new Error(`usage: zetaphy pq native [${Object.keys(USAGE).join(' | ')}] …`);
-    if (sub && rest.length - 1 !== USAGE[sub][1]) throw new Error(`usage: zetaphy pq native ${sub} ${USAGE[sub][0]}`);
+    if (sub && (rest.length - 1 < USAGE[sub][1] || rest.length - 1 > USAGE[sub][2])) throw new Error(`usage: zetaphy pq native ${sub} ${USAGE[sub][0]}`);
     const contractArg = (a, what) => {
       if (!ADDR_RE.test(String(a))) throw new Error(`${what} must be a 0x address (40 hex digits)`);
       return normalizeAddress(a).hex; // checks the EIP-55 checksum of a mixed-case address
@@ -289,9 +300,18 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       if (v <= 0n) throw new Error('amount must be more than 0');
       return v;
     };
+    const hexArg = (a, what) => {
+      if (!/^0x(?:[0-9a-fA-F]{2})*$/.test(String(a))) throw new Error(`${what} must be 0x followed by whole bytes of hex`);
+      return String(a);
+    };
     if (opt.gas != null && !/^[1-9]\d*$/.test(String(opt.gas))) throw new Error('--gas must be a whole number');
-    if (opt.value != null && sub !== 'call') throw new Error('--value is only for "pq native call"');
+    if (opt.value != null && !['call', 'deploy'].includes(sub)) throw new Error('--value is only for "pq native call" and "pq native deploy"');
     if (opt.value === true) throw new Error('--value needs an amount in ZETAPHY');
+    const AS = [undefined, 'send', 'call', 'token-send', 'token-balance', 'stake', 'unstake', 'rewards', 'deploy'];
+    if (opt.as != null && !AS.includes(sub)) throw new Error(`--as is not for "pq native ${sub}"`);
+    if (opt.as === true) throw new Error('--as needs the address of a quantum-locked account (0x… or zetaphy1…)');
+    const asOwner = opt.as != null ? normalizeAddress(String(opt.as)) : null;
+    if (opt.yes != null && sub !== 'lock-ecdsa') throw new Error('--yes is only for "pq native lock-ecdsa"');
     const gas = opt.gas != null ? BigInt(opt.gas) : undefined;
     let args = {};
     if (sub === 'send') { normalizeAddress(a1); args = { value: zetaArg(a2) }; }
@@ -299,6 +319,10 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       const to = contractArg(a1, 'to');
       if (!/^0x(?:[0-9a-fA-F]{2})*$/.test(String(a2))) throw new Error('calldata must be 0x followed by whole bytes of hex (0x for none)');
       args = { to, data: a2, value: opt.value != null ? parseZeta(opt.value) : 0n };
+    }
+    if (sub === 'deploy') {
+      args = { initCode: hexArg(a1, 'init code'), value: opt.value != null ? parseZeta(opt.value) : 0n };
+      if (args.initCode === '0x') throw new Error('init code must not be empty');
     }
     if (sub === 'token-send') {
       args = { token: contractArg(a1, 'token'), to: normalizeAddress(a2).hex };
@@ -309,20 +333,39 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       args = { validator: validatorAddress(a1) };
       if (sub !== 'rewards') args.value = zetaArg(a2);
     }
-    if (['call', 'token-send'].includes(sub) && gas != null && (gas < MIN_EVM_GAS_LIMIT || gas > MAX_EVM_GAS_LIMIT)) {
+    if (sub === 'handover') args = { owner: normalizeAddress(a1), controller: normalizeAddress(a2) };
+    if (sub === 'lock-ecdsa' && a1 != null) args = { controller: normalizeAddress(a1) };
+    // --gas is EVM gas for calls, token sends and deploys, and for everything done --as an owner (a MsgEVMCall).
+    const evmGas = ['call', 'token-send', 'deploy'].includes(sub) || (asOwner && sub);
+    if (evmGas && gas != null && (gas < MIN_EVM_GAS_LIMIT || gas > MAX_EVM_GAS_LIMIT)) {
       throw new Error(`--gas (EVM gas) must be between ${MIN_EVM_GAS_LIMIT} and ${MAX_EVM_GAS_LIMIT}`);
     }
 
     const provider = await connectRpc(s);
-    const pq = loadOrCreatePq();
+    // lock-ecdsa to a given controller needs no ML-DSA seed on this machine.
+    const pq = sub === 'lock-ecdsa' && args.controller ? null : loadOrCreatePq();
     // ZETAPHY_CHAIN_ID: the Cosmos chain id to expect (a local devnet is not zetaphy-testnet-1).
     const client = pqClient((method, params) => provider.send(method, params), process.env.ZETAPHY_CHAIN_ID ? { chainId: process.env.ZETAPHY_CHAIN_ID } : {});
-    const me = pqAddress(pq.publicKeyBytes);
-    const signer = { publicKey: pq.publicKeyBytes, sign: pq.signBytes };
+    const me = pq ? pqAddress(pq.publicKeyBytes) : null;
+    const signer = pq ? { publicKey: pq.publicKeyBytes, sign: pq.signBytes } : null;
     const signed = `signed with ML-DSA-${PQ_VARIANT}`;
     const landed = (r) => write(`tx hash: ${r.txHash} (accepted by the node; it lands in a block within seconds)`);
     const noLogs = () => write('note: this is a Cosmos tx, so its EVM logs are not in eth_getLogs; balances are correct');
+    // Who the action is for: this account, or the locked owner it acts for.
+    const from = asOwner ?? me;
+    const fromText = !me ? '' : asOwner ? `${asOwner.bech32} (${asOwner.hex}, quantum-locked to ${me.bech32}, which signed)` : `${me.bech32} (${me.hex})`;
+    const as = asOwner ? { asOwner: asOwner.bech32 } : {};
     if (!sub) {
+      if (asOwner) {
+        const a = await client.account(asOwner.bech32);
+        write(`account ${asOwner.bech32}`);
+        write(`  ${asOwner.hex} (same account, EVM form)`);
+        write(`balance: ${zeta(await client.balance(asOwner.hex))}`);
+        write(a.quantumLockedTo
+          ? `quantum-locked to: ${a.quantumLockedTo}${a.quantumLockedTo === me.bech32 ? ' (this account: it can act for it with --as)' : ' (not this account)'}`
+          : 'not quantum-locked: its own key still signs for it');
+        return 0;
+      }
       write(`native PQ account (ML-DSA-${PQ_VARIANT} only, no ECDSA key):`);
       write(`  ${me.bech32}`);
       write(`  ${me.hex} (same account, EVM form)`);
@@ -331,19 +374,57 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       write(`balance: ${zeta(await client.balance(me.hex))}`);
       write(acct.exists ? `on chain: account ${acct.accountNumber}, ${acct.sequence} txs sent`
         : 'not on chain yet: send ZETAPHY to this address first (either form works); then it can send');
+      if (acct.quantumLockedTo) write(`quantum-locked to: ${acct.quantumLockedTo} (only that account can act for this one)`);
+      return 0;
+    }
+    if (sub === 'lock-ecdsa') {
+      const ctrl = args.controller ?? me;
+      const { wallet } = loadOrCreateKey(); // the key itself is never printed
+      const owner = normalizeAddress(wallet.address);
+      write(`quantum lock: ${owner.hex} (${owner.bech32}, this machine's ECDSA key) -> controller ${ctrl.bech32}`);
+      write('this is PERMANENT: afterwards the chain refuses every tx this ECDSA key signs (EVM and Cosmos), and ecrecover');
+      write('no longer accepts its signatures. Only the controller can move its funds, tokens and stake (pq native --as).');
+      write('Lose the controller\'s ML-DSA seed and this account is lost too.');
+      if (!opt.yes) throw new Error('nothing sent: run again with --yes to lock for good');
+      await client.checkController(ctrl.bech32, owner.bech32);
+      const before = await client.account(owner.bech32);
+      if (before.quantumLockedTo) throw new Error(`${owner.bech32} is already quantum-locked to ${before.quantumLockedTo}`);
+      if ((await provider.getBalance(owner.hex)) === 0n) throw new Error(`${owner.hex} has no ZETAPHY for the gas of the lock tx`);
+      const lock = quantumLockTx(ctrl.hex);
+      const sent = await wallet.connect(provider).sendTransaction({ to: lock.to, value: lock.value, data: lock.data });
+      write(`lock tx sent: ${sent.hash}`);
+      let rc;
+      try { rc = await sent.wait(); } catch (e) { rc = e.receipt; if (!rc) throw e; }
+      if (rc.status !== 1) throw new Error(`the lock tx ${sent.hash} failed in block ${rc.blockNumber}: the account is not locked`);
+      const after = await client.account(owner.bech32);
+      if (after.quantumLockedTo !== ctrl.bech32) throw new Error(`the lock tx landed but the node reports quantumLockedTo = ${after.quantumLockedTo}`);
+      write(`locked: ${owner.hex} is controlled by ${ctrl.bech32} from now on; act for it with --as ${owner.hex}`);
+      return 0;
+    }
+    if (sub === 'handover') {
+      const r = await client.quantumLockHandover({ ...signer, owner: args.owner.bech32, controller: args.controller.bech32, gasLimit: gas ?? DEFAULT_GAS_LIMIT });
+      write(`handed control of ${r.owner.bech32} (${r.owner.hex}) from ${me.bech32} to ${r.controller.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      landed(r);
       return 0;
     }
     if (sub === 'send') {
-      const r = await client.send({ ...signer, to: a1, amount: args.value, gasLimit: gas ?? DEFAULT_GAS_LIMIT });
-      write(`sent ${formatZeta(r.amount)} ZETAPHY to ${r.to.bech32} (${r.to.hex}) from ${r.from.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      const r = await client.send({ ...signer, ...as, to: a1, amount: args.value, ...(asOwner ? { evmGasLimit: gas ?? DEFAULT_EVM_GAS_LIMIT } : { gasLimit: gas ?? DEFAULT_GAS_LIMIT }) });
+      write(`sent ${formatZeta(r.amount)} ZETAPHY to ${r.to.bech32} (${r.to.hex}) from ${asOwner ? fromText : r.from.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
       landed(r);
       return 0;
     }
     if (sub === 'call') {
-      const r = await client.callEVM({ ...signer, to: args.to, data: args.data, value: args.value, evmGasLimit: gas ?? DEFAULT_EVM_GAS_LIMIT });
-      write(`called ${r.to} from ${me.bech32} (${me.hex}) with ${(args.data.length - 2) / 2} bytes of calldata${args.value ? `, value ${formatZeta(args.value)} ZETAPHY` : ''}`);
+      const r = await client.callEVM({ ...signer, ...as, to: args.to, data: args.data, value: args.value, evmGasLimit: gas ?? DEFAULT_EVM_GAS_LIMIT });
+      write(`called ${r.to} from ${fromText} with ${(args.data.length - 2) / 2} bytes of calldata${args.value ? `, value ${formatZeta(args.value)} ZETAPHY` : ''}`);
       write(`EVM gas ${r.evmGasLimit}, tx gas ${r.gasLimit}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
       if (r.result && r.result !== '0x') write(`the call returns (checked with eth_call): ${r.result}`);
+      landed(r); noLogs();
+      return 0;
+    }
+    if (sub === 'deploy') {
+      const r = await client.deploy({ ...signer, ...as, initCode: args.initCode, value: args.value, evmGasLimit: gas ?? DEFAULT_DEPLOY_GAS_LIMIT });
+      write(`created contract ${r.created} from ${fromText}${args.value ? `, value ${formatZeta(args.value)} ZETAPHY` : ''}`);
+      write(`EVM gas ${r.evmGasLimit}, tx gas ${r.gasLimit}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
       landed(r); noLogs();
       return 0;
     }
@@ -351,36 +432,39 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       const t = await tokenInfo(provider, args.token);
       write(`token ${t.symbol} at ${args.token} (${t.decimals} decimals)`);
       if (sub === 'token-balance') {
-        write(`${me.bech32} (${me.hex}) holds ${tokenAmount(await t.balanceOf(me.hex), t.decimals)} ${t.symbol}`);
+        write(`${from.bech32} (${from.hex}) holds ${tokenAmount(await t.balanceOf(from.hex), t.decimals)} ${t.symbol}`);
         return 0;
       }
       let units;
       try { units = parseUnits(String(a3), t.decimals); } catch { throw new Error(`${a3} has more decimal places than ${t.symbol} (${t.decimals})`); }
       if (units <= 0n) throw new Error('amount must be more than 0');
-      const r = await client.callEVM({ ...signer, to: args.token, data: ERC20.encodeFunctionData('transfer', [args.to, units]), evmGasLimit: gas ?? DEFAULT_EVM_GAS_LIMIT,
+      const r = await client.callEVM({ ...signer, ...as, to: args.token, data: ERC20.encodeFunctionData('transfer', [args.to, units]), evmGasLimit: gas ?? DEFAULT_EVM_GAS_LIMIT,
         checkResult: (ret) => {
           if (ret && ret !== '0x' && !ERC20.decodeFunctionResult('transfer', ret)[0]) throw new Error('the token refused the transfer (transfer returned false), so nothing was sent');
         } });
-      write(`sent ${tokenAmount(units, t.decimals)} ${t.symbol} to ${args.to} from ${me.bech32} (${me.hex}), fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      write(`sent ${tokenAmount(units, t.decimals)} ${t.symbol} to ${args.to} from ${fromText}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
       landed(r); noLogs();
       return 0;
     }
-    const opts = { ...signer, validator: args.validator, amount: args.value, gasLimit: gas ?? DEFAULT_STAKING_GAS_LIMIT };
+    // Staking: a Cosmos message, or with --as the staking/distribution precompile called as the owner.
+    const opts = { ...signer, ...as, validator: args.validator, amount: args.value,
+      ...(asOwner ? { evmGasLimit: gas ?? DEFAULT_PRECOMPILE_GAS_LIMIT } : { gasLimit: gas ?? DEFAULT_STAKING_GAS_LIMIT }) };
+    const via = asOwner ? ' (through the staking precompile)' : '';
     if (sub === 'stake') {
       const r = await client.delegate(opts);
-      write(`staked ${formatZeta(args.value)} ZETAPHY with ${r.validator} from ${me.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      write(`staked ${formatZeta(args.value)} ZETAPHY with ${r.validator} from ${asOwner ? fromText : me.bech32}${via}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
       landed(r);
       return 0;
     }
     if (sub === 'unstake') {
       const r = await client.undelegate(opts);
-      write(`unstaking ${formatZeta(args.value)} ZETAPHY from ${r.validator} (it comes back after the unbonding period), fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      write(`unstaking ${formatZeta(args.value)} ZETAPHY from ${r.validator}${asOwner ? ` for ${fromText}` : ''}${via} (it comes back after the unbonding period), fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
       landed(r);
       return 0;
     }
     if (sub === 'rewards') {
       const r = await client.withdrawRewards(opts);
-      write(`withdrew staking rewards from ${r.validator} to ${me.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      write(`withdrew staking rewards from ${r.validator} to ${asOwner ? fromText : me.bech32}${asOwner ? ' (through the distribution precompile)' : ''}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
       landed(r);
       return 0;
     }
