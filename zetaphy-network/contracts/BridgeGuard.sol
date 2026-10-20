@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+/// ThreatRegistry's view for code on ZETAPHY (Reason as its uint8 value).
+interface IContractThreats {
+    function isContractFlagged(address who) external view returns (bool, uint8);
+}
+
 /// @title BridgedToken: a token that exists on ZETAPHY only through a bridge
 /// @notice Only its BridgeGuard can mint (assets arriving) or burn (leaving).
 contract BridgedToken {
@@ -46,6 +51,11 @@ contract BridgedToken {
 ///             lose at most one day's limit, not everything;
 ///           - a pause that only guardians can pull and only governance can
 ///             release. Pausing stops the bridges, never the chain.
+///           - vaccine (with a ThreatRegistry set): no coins to, or out of, a
+///             contract whose address or code the Neuro runners flagged, and
+///             none from an adapter that is itself flagged. The call reverts,
+///             so the adapter's message stays pending, not lost, and goes
+///             through if the flag is cleared.
 ///         Governance should be the chain's gov module or a multisig.
 contract BridgeGuard {
     struct Route {
@@ -62,6 +72,7 @@ contract BridgeGuard {
     mapping(address => bool) public guardian;
     bool public paused;
     mapping(bytes32 => Route) public routes;
+    IContractThreats public threats; // zero: no vaccine check
 
     event RouteSet(bytes32 indexed id, address adapter, uint128 dailyLimit, bool enabled);
     event GuardianSet(address indexed who, bool allowed);
@@ -69,12 +80,14 @@ contract BridgeGuard {
     event Unpaused();
     event Inbound(bytes32 indexed route, address indexed to, uint256 amount);
     event Outbound(bytes32 indexed route, address indexed from, uint256 amount);
+    event ThreatsSet(address registry);
 
     error NotGovernance();
     error NotGuardian();
     error NotAdapter();
     error BridgePaused();
     error OverLimit(uint256 remaining);
+    error FlaggedContract(address who);
 
     constructor(address governance_) {
         governance = governance_;
@@ -92,6 +105,8 @@ contract BridgeGuard {
 
     function setGovernance(address g) external onlyGov { governance = g; }
     function setGuardian(address who, bool allowed) external onlyGov { guardian[who] = allowed; emit GuardianSet(who, allowed); }
+    /// The ThreatRegistry whose flags refuse coins (zero turns the check off).
+    function setThreats(IContractThreats r) external onlyGov { threats = r; emit ThreatsSet(address(r)); }
 
     function setRoute(bytes32 id, address adapter, uint128 dailyLimit, bool enabled) external onlyGov {
         Route storage r = routes[id];
@@ -116,6 +131,7 @@ contract BridgeGuard {
 
     function inbound(bytes32 id, address to, uint256 amount) external {
         Route storage r = _use(id, amount, true);
+        _clean(to);
         r.inToday += uint128(amount);
         token.mint(to, amount);
         emit Inbound(id, to, amount);
@@ -123,6 +139,7 @@ contract BridgeGuard {
 
     function outbound(bytes32 id, address from, uint256 amount) external {
         Route storage r = _use(id, amount, false);
+        _clean(from);
         r.outToday += uint128(amount);
         token.burn(from, amount);
         emit Outbound(id, from, amount);
@@ -133,6 +150,16 @@ contract BridgeGuard {
         bool fresh = r.day != uint64(block.timestamp / 1 days);
         inLeft = r.dailyLimit - (fresh ? 0 : r.inToday);
         outLeft = r.dailyLimit - (fresh ? 0 : r.outToday);
+    }
+
+    /// Vaccine: refuses a flagged party (the coins' owner, or the adapter itself).
+    function _clean(address who) private view {
+        IContractThreats t = threats;
+        if (address(t) == address(0)) return;
+        (bool f, ) = t.isContractFlagged(msg.sender);
+        if (f) revert FlaggedContract(msg.sender);
+        (f, ) = t.isContractFlagged(who);
+        if (f) revert FlaggedContract(who);
     }
 
     function _use(bytes32 id, uint256 amount, bool isIn) private returns (Route storage r) {

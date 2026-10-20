@@ -8,6 +8,7 @@ const ROUTE = encodeBytes32String('airlock/zetaphy');
 const Q = 600; // quarantine seconds
 const SRC = 97n; // a source chain id
 const LOCKBOX = '0x' + 'b0'.repeat(20);
+const ZERO = '0x' + '00'.repeat(20);
 const art = (n) => new Interface(JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8')).abi);
 const tokenIface = art('BridgedToken');
 
@@ -37,7 +38,7 @@ beforeEach(async () => {
   token = await guard.call('token');
   airlock = await c.deploy('BridgeAirlock', [guard.address, ROUTE, a('gov'), 2, Q], 'gov');
   await guard.send('gov', 'setRoute', [ROUTE, airlock.address, 1_000_000n * 10n ** 6n, true]);
-  lane = await c.deploy('NeuroLane', [jobs.address, airlock.address, 2, 1], 'gov');
+  lane = await c.deploy('NeuroLane', [jobs.address, airlock.address, 2, 1, ZERO], 'gov');
   decoy = await c.deploy('DecoyBridge', [airlock.address, 'ZETAPHY Bridge v1'], 'gov');
   await airlock.send('gov', 'setLane', [lane.address, true]);
   await airlock.send('gov', 'setLane', [a('hyperlane'), true]);
@@ -124,4 +125,79 @@ test('a decoy marks only its direct caller, so nobody can get an innocent user m
   await c.sendTo('alice', lure.address, art('Lure'), 'claimAirdrop', []);
   assert.equal(await airlock.call('tripped', [a('alice')]), false);
   assert.equal(await airlock.call('tripped', [lure.address]), true);
+});
+
+// ---- vaccine: the ThreatRegistry's flags hold transfers; clearing the flag lets them out ----
+const R = { Drainer: 1 };
+async function registry() {
+  const reg = await c.deploy('ThreatRegistry', [jobs.address, 2, 1], 'gov');
+  await airlock.send('gov', 'setThreats', [reg.address]);
+  const flag = async (key, on = true) => { for (const r of ['r1', 'r3']) await reg.send(r, 'vote', [key, on, on ? R.Drainer : 0]); };
+  return { reg, flag };
+}
+const ready = async (t) => { await airlock.send('hyperlane', 'attest', t); await neuro(t); c.advance(Q); };
+
+test('vaccine: a flagged source sender or source contract holds the transfer until the flag is cleared', async () => {
+  const { reg, flag } = await registry();
+  const bySender = tx(10, 'alice', 3n, 'attacker');
+  const byContract = tx(11);
+  const clean = tx(12);
+  await flag(await reg.call('addressKey', [SRC, a('attacker')]));
+  await flag(await reg.call('addressKey', [SRC, LOCKBOX]));
+  for (const t of [bySender, byContract, clean]) await ready(t);
+  assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 1n);
+  await assert.rejects(airlock.send('user', 'release', bySender), /ThreatFlagged/);
+  await assert.rejects(airlock.send('user', 'release', byContract), /ThreatFlagged/);
+  // The same address on another chain is someone else: not held.
+  assert.equal(await airlock.call('flaggedParty', [SRC + 1n, '0x' + 'b1'.repeat(20), a('attacker'), a('alice')]), 0n);
+  // Held, not lost: clear the flags (same quorum) and the transfers come out.
+  await flag(await reg.call('addressKey', [SRC, LOCKBOX]), false);
+  await assert.rejects(airlock.send('user', 'release', bySender), /ThreatFlagged/); // the sender is still flagged
+  await airlock.send('user', 'release', byContract);
+  await airlock.send('user', 'release', clean);
+  assert.equal(await bal('alice'), 2n * 500n * 10n ** 6n);
+  await flag(await reg.call('addressKey', [SRC, a('attacker')]), false);
+  await airlock.send('user', 'release', bySender);
+  assert.equal(await bal('alice'), 2n * 500n * 10n ** 6n + 3n);
+});
+
+test('vaccine: a recipient contract on ZETAPHY whose code is flagged gets nothing while flagged', async () => {
+  const { reg, flag } = await registry();
+  // A contract with no immutables stands in for a drainer: its code hash is keccak256 of the artifact's runtime code.
+  const lure = await c.deploy('LockBox', [], 'attacker');
+  const h = keccak256(JSON.parse(readFileSync(new URL('../artifacts/LockBox.json', import.meta.url), 'utf8')).deployedBytecode);
+  const t = [SRC, LOCKBOX, 13n, a('alice'), lure.address, 9n];
+  await ready(t);
+  await flag(await reg.call('codeKey', [h]));
+  assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('alice'), lure.address]), 3n);
+  await assert.rejects(airlock.send('user', 'release', t), /ThreatFlagged/);
+  await flag(await reg.call('codeKey', [h]), false);
+  await airlock.send('user', 'release', t);
+  assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [lure.address]), 9n);
+});
+
+test('vaccine: only governance sets the registry; zero turns the check off', async () => {
+  const { reg, flag } = await registry();
+  await assert.rejects(airlock.send('attacker', 'setThreats', [ZERO]), /NotGovernance/);
+  await flag(await reg.call('addressKey', [SRC, a('alice')]));
+  const t = tx(14);
+  await ready(t);
+  await assert.rejects(airlock.send('user', 'release', t), /ThreatFlagged/);
+  await airlock.send('gov', 'setThreats', [ZERO]);
+  await airlock.send('user', 'release', t);
+});
+
+test('NeuroLane attests nothing while Neuro is paused (NeuroControl), and again once unpaused', async () => {
+  const CONTROL = '0x' + 'c0'.repeat(20);
+  await c.putCode(CONTROL, '0x600160005260206000f3'); // paused() -> true
+  const paused = await c.deploy('NeuroLane', [jobs.address, airlock.address, 2, 1, CONTROL], 'gov');
+  await airlock.send('gov', 'setLane', [paused.address, true]);
+  assert.equal((await paused.call('control')).toLowerCase(), CONTROL);
+  await assert.rejects(paused.send('r1', 'attest', tx(15)), /NeuroPaused/);
+  const id = await airlock.call('transferId', tx(15));
+  await paused.send('r1', 'voteVeto', [id, 'still allowed: holding money back is safe']);
+  await c.putCode(CONTROL, '0x60206000f3'); // paused() -> false
+  await paused.send('r1', 'attest', tx(15));
+  await paused.send('r2', 'attest', tx(15));
+  assert.equal((await airlock.call('status', [id]))[0], 1n); // the lane's attestation reached the airlock
 });

@@ -20,6 +20,9 @@
 #   gov.sh pq-evidence on|off                            propose to stop (on) / resume (off) slashing on
 #                                                        ed25519-only double-sign evidence for
 #                                                        validators with an ML-DSA vote key
+#   gov.sh neuro <action> [value] <NeuroControl 0x…>     a vote that steers Neuro (not the coin):
+#     pause | unpause | approve-skill ID | revoke-skill ID | set-active-skill ID | approve-defender 0x…
+#     remove-defender 0x… | release 0x… | set-max-bodies N | set-max-regrow N | set-community-fund 0x…
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -121,6 +124,36 @@ case "${1:-}" in
   pq-evidence)
     v=${2:?on or off}; [[ "$v" =~ ^(on|off)$ ]] || { echo "on or off"; exit 1; }
     submit tx pq-evidence-proposal "$v" --deposit "$DEPOSIT" ;;
+  neuro)
+    # The gov module calls NeuroControl as its owner: a MsgEVMCall whose
+    # sender is the gov module (EVM address 0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2,
+    # the first 20 bytes of sha256("gov")). The calldata is built here, so
+    # the node needs no Node.js; ID is a skill id from `zetaphy neuro skill-id`.
+    act=${2:?action}
+    declare -A SEL=([pause]=8456cb59 [unpause]=3f4ba83a [approve-skill]=53c91c08 [revoke-skill]=615ef428
+      [set-active-skill]=dcad4460 [approve-defender]=ccaa1df0 [remove-defender]=874d8a07 [release]=19165587
+      [set-max-bodies]=3f1f3008 [set-max-regrow]=ecd0e17e [set-community-fund]=37339a16)
+    sel=${SEL[$act]:-}; [ -n "$sel" ] || { echo "neuro: unknown action $act"; exit 1; }
+    case "$act" in
+      pause|unpause) arg=""; ctl=${3:?NeuroControl 0x…}; word="" ;;
+      *) val=${3:?value}; ctl=${4:?NeuroControl 0x…}
+         case "$act" in
+           *-skill) [[ "$val" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "skill id: 0x + 64 hex (zetaphy neuro skill-id)"; exit 1; }; word=${val#0x} ;;
+           set-max-*) [[ "$val" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "a whole number above 0"; exit 1; }; word=$(printf '%064x' "$val") ;;
+           *) [[ "$val" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "address: 0x + 40 hex"; exit 1; }; word=000000000000000000000000${val#0x} ;;
+         esac
+         arg=" $val" ;;
+    esac
+    [[ "$ctl" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "NeuroControl: 0x + 40 hex"; exit 1; }
+    hex="$sel$word"
+    data=$(printf "$(echo -n "$hex" | sed 's/../\\x&/g')" | base64 -w0)
+    gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
+    f=$(mktemp)
+    # MsgEVMCall's JSON uses its Go field names (Sender, To, Value, Data as base64, GasLimit).
+    jq -n --arg gov "$gov" --arg to "$ctl" --arg data "$data" --arg d "$DEPOSIT" --arg t "Neuro: $act$arg" \
+      '{messages:[{"@type":"/zetaphy.pq.v1.MsgEVMCall",Sender:$gov,To:$to,Value:"0",Data:$data,GasLimit:"300000"}],
+        metadata:"",deposit:$d,title:$t,summary:("NeuroControl " + $to + ": " + $t + ". Steers Neuro only, never coin transfers."),expedited:false}' > "$f"
+    submit tx gov submit-proposal "$f"; rm -f "$f" ;;
   quantum-lock)
     # Afterwards the FROM key is refused; the controller acts for the account
     # (zetaphy pq native ... --as <this account>).
@@ -134,5 +167,5 @@ case "${1:-}" in
     send tx pq-vote-key
     echo "vote key registered" ;;
   *)
-    sed -n '8,22p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,25p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

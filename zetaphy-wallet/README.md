@@ -65,6 +65,18 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
   - WalletConnect: ปุ่มปิดอยู่จนกว่าจะมี projectId (ดูหัวข้อด้านล่าง)
 - ภาษาไทย (ค่าเริ่มต้น) และอังกฤษ
 
+## ฉีดวัคซีน: ไม่เซ็นธุรกรรมไปหาโค้ดที่ติดธง
+
+ก่อนเซ็นการโอน ZETAPHY, การโอนโทเคน (ตรวจทั้งสัญญาโทเคนและผู้รับ) และธุรกรรม EVM ที่หน้านี้สร้างให้กระเป๋าอื่น (ล็อกควอนตัม) หน้าเว็บตรวจปลายทางกับ `ThreatRegistry` (ดู zetaphy-network/README.md ขั้น 4)
+- อ่านโค้ดด้วย `eth_getCode` คำนวณลายนิ้วมือ Neuro (`fp1`, โค้ดเดียวกับ `zetaphy-neuro/src/fingerprint.js` อยู่ใน bundle) และ keccak-256 ของโค้ด
+- ถาม `isFlagged(fp1)`, `isCodeFlagged(codehash)` และ `isAddressFlagged(77390, ปลายทาง)`
+- ตรวจตอนกด "ตรวจก่อนโอน" และตรวจซ้ำตอนกดยืนยันก่อนเซ็น ทั้งกุญแจในหน้านี้และโหมด MetaMask Snap (snap จึงไม่ถูกขอให้เซ็นเลย)
+- **ติดธง: ไม่เซ็น** แจ้งที่อยู่ ติดธงเพราะอะไร (ลายนิ้วมือ / โค้ดตรงทุกไบต์ / ที่อยู่) และเหตุผล ไม่มีปุ่มข้าม
+- ที่อยู่ registry มาจาก `<meta name="zetaphy-threat-registry">` ใน `index.html` หรือ "ตั้งค่าเพิ่มเติม" ใต้ช่อง RPC (จำไว้ในเบราว์เซอร์นี้)
+- **ตั้ง registry แล้วแต่ตรวจไม่ได้** (โหนดไม่ตอบ, ที่อยู่นั้นไม่ใช่ registry): ไม่เซ็น (ปิดไว้ก่อน)
+- **ยังไม่ได้ตั้ง registry**: ส่งได้ แต่หน้ายืนยันขึ้นกรอบเตือน "ยังไม่ได้ตรวจโค้ดปลายทาง" ให้เห็นชัด เพื่อให้กระเป๋าใช้ได้ก่อนมี registry บน testnet
+- ไม่ตรวจ: deploy (ยังไม่มีปลายทาง) และ stake (ไปที่ precompile ไม่มีโค้ด)
+
 ## WalletConnect: ขั้นต่อไป
 
 ยังไม่มี WalletConnect SDK ใน bundle ปุ่ม WalletConnect ในหน้าเว็บจึงยังเชื่อมไม่ได้
@@ -101,7 +113,7 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 |---|---|
 | `index.html`, `app.js`, `style.css` | หน้าเว็บ |
 | `wallets.js` | ค่าเครือข่ายสำหรับกระเป๋าอื่น (EIP-3085, Keplr chain info) และการหากระเป๋า EVM (EIP-6963) ตรงกับ `zetaphy-chain/wallets/*.template.json` |
-| `vendor/pqwallet.js` | bundle ของ `zetaphy-network/src/pqtx.js` + ML-DSA-44 จาก `@noble/post-quantum` + `@noble/hashes` (commit ไว้ Vercel จึงไม่ต้อง build) |
+| `vendor/pqwallet.js` | bundle ของ `zetaphy-network/src/pqtx.js` + `zetaphy-neuro/src/fingerprint.js` + ML-DSA-44 จาก `@noble/post-quantum` + `@noble/hashes` (commit ไว้ Vercel จึงไม่ต้อง build) |
 | `src/entry.js`, `scripts/build.js` | สร้าง bundle ด้วย esbuild |
 | `scripts/serve.js` | เซิร์ฟเวอร์สำหรับรันบนเครื่อง ใช้ header ชุดเดียวกับ `vercel.json` |
 | `test/wallet.e2e.js` | ทดสอบในเบราว์เซอร์จริง (Playwright) |
@@ -117,9 +129,10 @@ npm test          # Chromium headless: สร้างกุญแจ, เข้
                   # และโหมด MetaMask Snap (snap ปลอมหลัง window.ethereum: wallet_requestSnaps / wallet_invokeSnap) กับ RPC จำลอง
                   # กระเป๋าอื่น: กระเป๋าปลอมที่ประกาศตัวด้วย EIP-6963, Binance Wallet (4200), Phantom, Keplr/Leap/Cosmostation,
                   # WalletConnect ที่ปิดอยู่ และตรวจว่าค่าในหน้าเว็บตรงกับ zetaphy-chain/wallets/
+                  # วัคซีน: ThreatRegistry จำลอง ปลายทางที่ติดธงถูกปฏิเสธก่อนเซ็น (รวมโหมด Snap) ที่ไม่ติดธงส่งได้
 ```
 
-ถ้าแก้ `zetaphy-network/src/pqtx.js` ต้อง `npm run build` แล้ว commit `vendor/pqwallet.js` ด้วย CI ตรวจว่าไฟล์ที่ commit ตรงกับที่ build ใหม่
+ถ้าแก้ `zetaphy-network/src/pqtx.js` หรือ `zetaphy-neuro/src/fingerprint.js` ต้อง `npm run build` แล้ว commit `vendor/pqwallet.js` ด้วย CI ตรวจว่าไฟล์ที่ commit ตรงกับที่ build ใหม่
 
 ## ติดตั้งบน Vercel (ฟรี)
 

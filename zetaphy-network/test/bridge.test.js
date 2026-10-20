@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeBytes32String, Interface } from 'ethers';
+import { encodeBytes32String, Interface, keccak256 } from 'ethers';
 import { readFileSync } from 'node:fs';
 import { createChain } from './helpers/evm.js';
 
@@ -64,4 +64,41 @@ test('a disabled route and settings changes by outsiders are refused', async () 
   await assert.rejects(guard.send('attacker', 'setRoute', [HYP, a('attacker'), 10n ** 30n, true]), /NotGovernance/);
   await assert.rejects(guard.send('guardian', 'setGuardian', [a('attacker'), true]), /NotGovernance/);
   await assert.rejects(guard.send('gov', 'createToken', ['x', 'x', 6]));
+});
+
+// ---- vaccine: no coins to, or out of, a flagged contract; none from a flagged adapter ----
+// Runner records stand-in: workers(any) -> (0, 0, active, agreed 1, rejected 0), so any account may vote here.
+const RUNNERS = '0x' + 'a7'.repeat(20);
+async function vaccinated() {
+  await c.putCode(RUNNERS, '0x6001604052600160605260a06000f3');
+  const reg = await c.deploy('ThreatRegistry', [RUNNERS, 2, 1], 'gov');
+  await guard.send('gov', 'setThreats', [reg.address]);
+  const flag = async (key, on = true) => { for (const v of ['alice', 'guardian']) await reg.send(v, 'vote', [key, on, on ? 1 : 0]); };
+  // A contract with no immutables stands in for a drainer (code hash = keccak256 of its artifact's runtime code).
+  const drainer = await c.deploy('LockBox', [], 'attacker');
+  const h = keccak256(JSON.parse(readFileSync(new URL('../artifacts/LockBox.json', import.meta.url), 'utf8')).deployedBytecode);
+  return { reg, flag, drainer: drainer.address, codeKey: await reg.call('codeKey', [h]) };
+}
+
+test('vaccine: coins are refused to and from a contract whose code is flagged, until the flag is cleared', async () => {
+  const { flag, drainer, codeKey } = await vaccinated();
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 50n * USDC]); // before the flag
+  await flag(codeKey);
+  await assert.rejects(guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]), /FlaggedContract/);
+  await assert.rejects(guard.send('hypAdapter', 'outbound', [HYP, drainer, 1n]), /FlaggedContract/); // stolen coins cannot leave
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, a('alice'), 1n]); // everyone else is unaffected
+  // The refused message is not lost: the adapter retries it after the flag is cleared.
+  await flag(codeKey, false);
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]);
+  assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [drainer]), 50n * USDC + 1n);
+});
+
+test('vaccine: a flagged adapter is refused; only governance sets the registry', async () => {
+  const { reg, flag } = await vaccinated();
+  await assert.rejects(guard.send('attacker', 'setThreats', [reg.address]), /NotGovernance/);
+  await flag(await reg.call('addressKey', [1n, a('hypAdapter')])); // the test chain's id is 1
+  await assert.rejects(guard.send('hypAdapter', 'inbound', [HYP, a('alice'), 1n]), /FlaggedContract/);
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, a('alice'), 1n]);
+  await guard.send('gov', 'setThreats', ['0x' + '00'.repeat(20)]); // zero: no check
+  await guard.send('hypAdapter', 'inbound', [HYP, a('alice'), 1n]);
 });

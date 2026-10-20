@@ -14,6 +14,18 @@ interface IRunners {
 ///         that reads this registry warns about it, on every chain.
 ///         A flag is cleared the same way (QUORUM votes to clear), so a wrong
 ///         flag can be appealed to the network, not to one operator.
+///
+///         Vaccine: a fingerprint can only be computed off chain, so the same
+///         votes can also flag exact identities that contracts can check:
+///           - codeKey(h):         EVM code with extcodehash h on ZETAPHY
+///           - addressKey(id, a):  address a on the chain with EVM id `id`
+///                                 (bridge senders, source tokens/contracts)
+///         Every key lives in the same table, with the same quorum and the
+///         same way back (clear). voteBatch lets a runner vote for a flagged
+///         fingerprint together with the code hashes and addresses it found
+///         for it, in one tx; each key still needs its own quorum.
+///         BridgeAirlock / BridgeGuard refuse flagged sources and recipients,
+///         and the ZETAPHY wallet refuses to sign calls to flagged code.
 contract ThreatRegistry {
     IRunners public immutable runners;
     uint8 public immutable quorum;
@@ -48,12 +60,50 @@ contract ThreatRegistry {
         minAgreed = minAgreed_;
     }
 
-    /// Vote to flag (flag = true, with a reason) or to clear (flag = false).
-    function vote(bytes32 fingerprint, bool flag, Reason reason) external {
+    /// keccak256 of empty code: every account without code has it, so it is never a threat.
+    bytes32 public constant EMPTY_CODEHASH = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+
+    /// The key under which EVM code with this extcodehash is flagged.
+    function codeKey(bytes32 codeHash) public pure returns (bytes32) {
+        return keccak256(abi.encode("zetaphy.threat.code", codeHash));
+    }
+
+    /// The key under which an address on a given chain (EVM chain id) is flagged.
+    function addressKey(uint256 chainId, address who) public pure returns (bytes32) {
+        return keccak256(abi.encode("zetaphy.threat.address", chainId, who));
+    }
+
+    function _checkRunner() private view {
         (, , bool active, uint32 agreed, uint32 rejected) = runners.workers(msg.sender);
         if (!active || agreed < minAgreed || rejected > agreed) revert NotRunner();
+    }
+
+    /// Vote to flag (flag = true, with a reason) or to clear (flag = false).
+    /// `fingerprint` is any key: a fp1 fingerprint, codeKey(..) or addressKey(..).
+    function vote(bytes32 fingerprint, bool flag, Reason reason) external {
+        _checkRunner();
+        if (!_vote(fingerprint, flag, reason)) revert NoChange();
+    }
+
+    /// One runner's votes on several keys at once, e.g. a fingerprint plus the
+    /// code hashes and addresses of its copies. Keys already in that state, or
+    /// already voted on by this runner this round, are skipped (not an error),
+    /// so the same list can be sent again as copies are found.
+    function voteBatch(bytes32[] calldata keys, bool flag, Reason reason) external returns (uint256 counted) {
+        _checkRunner();
+        if (flag && reason == Reason.None) revert NoChange();
+        for (uint256 i = 0; i < keys.length; i++) {
+            Entry storage e = entries[keys[i]];
+            if (e.flagged == flag || voted[keys[i]][e.round][msg.sender]) continue;
+            _vote(keys[i], flag, reason);
+            counted++;
+        }
+        if (counted == 0) revert NoChange();
+    }
+
+    function _vote(bytes32 fingerprint, bool flag, Reason reason) private returns (bool) {
         Entry storage e = entries[fingerprint];
-        if (e.flagged == flag || (flag && reason == Reason.None)) revert NoChange();
+        if (e.flagged == flag || (flag && reason == Reason.None)) return false;
         if (voted[fingerprint][e.round][msg.sender]) revert AlreadyVoted();
         voted[fingerprint][e.round][msg.sender] = true;
         e.votes += 1;
@@ -67,11 +117,31 @@ contract ThreatRegistry {
             if (flag) { flaggedList.push(fingerprint); emit Flagged(fingerprint, e.reason); }
             else { e.reason = Reason.None; emit Cleared(fingerprint); }
         }
+        return true;
     }
 
     function isFlagged(bytes32 fingerprint) external view returns (bool, Reason) {
         Entry storage e = entries[fingerprint];
         return (e.flagged, e.reason);
+    }
+
+    /// EVM code with this code hash (extcodehash) is flagged. Empty code never is.
+    function isCodeFlagged(bytes32 codeHash) public view returns (bool, Reason) {
+        if (codeHash == bytes32(0) || codeHash == EMPTY_CODEHASH) return (false, Reason.None);
+        Entry storage e = entries[codeKey(codeHash)];
+        return (e.flagged, e.reason);
+    }
+
+    function isAddressFlagged(uint256 chainId, address who) public view returns (bool, Reason) {
+        Entry storage e = entries[addressKey(chainId, who)];
+        return (e.flagged, e.reason);
+    }
+
+    /// For contracts on this chain: `who` itself is flagged, or the code at it is.
+    function isContractFlagged(address who) external view returns (bool, Reason) {
+        (bool f, Reason r) = isAddressFlagged(block.chainid, who);
+        if (f) return (f, r);
+        return isCodeFlagged(who.codehash);
     }
 
     function flaggedCount() external view returns (uint256) {

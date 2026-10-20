@@ -119,3 +119,41 @@ test('a runner the lottery did not pick for a job leaves it alone', async () => 
   await w.tick();
   assert.deepEqual(reads, [['bsc', T]]);
 });
+
+test('skill: only jobs recorded with this runner\'s skill id are taken', async () => {
+  const MINE = '0x' + 'ab'.repeat(32), OTHER = '0x' + 'cd'.repeat(32);
+  const jobs = fakeJobs();
+  jobs.jobInfo = async (id) => ({ skill: jobs.jobs[Number(id)].skill });
+  const reads = [];
+  const w = createWorker({ jobs, me: ME, stateFile: join(mkdtempSync(join(tmpdir(), 'zw-')), 'state.json'), chainTime: async () => 10n,
+    read: async (chain, target) => { reads.push(target); return report; }, skill: MINE.toUpperCase().replace('0X', '0x') });
+  jobs.add('bsc', 'other'); jobs.jobs[0].skill = OTHER;
+  jobs.add('bsc', 'mine'); jobs.jobs[1].skill = MINE;
+  const out = await w.tick();
+  assert.deepEqual(reads, ['mine']);
+  assert.match(out.join('\n'), /job 0: skip: skill 0xcdcd.* is not this runner's/);
+  assert.equal(w.state.cursor, 2); // a job of another skill never holds the cursor back
+  assert.deepEqual(await w.tick(), []); // and is not reported again
+});
+
+test('pause: no new jobs while Neuro is paused, but seats already taken are revealed', async () => {
+  const jobs = fakeJobs();
+  let stop = false;
+  const reads = [];
+  const w = createWorker({ jobs, me: ME, stateFile: join(mkdtempSync(join(tmpdir(), 'zw-')), 'state.json'), chainTime: async () => 10n,
+    read: async (chain, target) => { reads.push(target); return report; }, paused: async () => stop });
+  jobs.add('bsc', 'a');
+  await w.tick(); // committed to job 0
+  stop = true;
+  jobs.add('bsc', 'b');
+  jobs.jobs[0].commits = 3n;
+  const out = await w.tick();
+  assert.match(out.join('\n'), /paused by governance/);
+  assert.ok(jobs.jobs[0].reveals[ME], 'the seat taken before the pause is revealed');
+  assert.deepEqual(reads, ['a']);
+  assert.equal(w.state.cursor, 1); // job 1 waits for the unpause
+  stop = false;
+  const again = await w.tick();
+  assert.match(again.join('\n'), /running again/);
+  assert.deepEqual(reads, ['a', 'b']);
+});

@@ -1,0 +1,3 @@
+# Neuro skill id hashes these files byte for byte (zetaphy-network/src/skill.js):
+# keep LF on every checkout so all runners get the same id.
+zetaphy-neuro/src/** text eol=lf

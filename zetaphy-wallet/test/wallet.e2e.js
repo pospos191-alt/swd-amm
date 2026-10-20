@@ -7,7 +7,8 @@
 // mocked window.ethereum: wallet_requestSnaps / wallet_invokeSnap).
 // Other wallets: fake EIP-6963 wallets, Binance Wallet (window.binancew3w), Phantom,
 // Keplr / Leap / Cosmostation, WalletConnect off without a projectId, and the
-// network settings checked against zetaphy-chain/wallets/*.json.
+// network settings checked against zetaphy-chain/wallets/*.json. Vaccine: calls and transfers to
+// code flagged in a mock ThreatRegistry are refused before anything is signed.
 //   npm test            (uses Playwright's Chromium)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +24,7 @@ import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1b
 import { BinaryReader } from 'cosmjs-types/binary';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 // The fake snap builds and signs with the same code the real one bundles.
-import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress } from '../vendor/pqwallet.js';
+import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress, codeFingerprint } from '../vendor/pqwallet.js';
 
 const PORT = 18090;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -37,6 +38,10 @@ const PASS = 'correct horse 1';
 const TOKEN = '0x3333333333333333333333333333333333333333';
 const VALOPER = 'zetaphyvaloper1yg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zfnr6v8'; // 0x2222…22
 const word = (v) => BigInt(v).toString(16).padStart(64, '0');
+const TOKEN_CODE = '0x6080604052';
+const REGISTRY = '0x7777777777777777777777777777777777777777';
+const sel4 = (sig) => Buffer.from(keccak_256(Buffer.from(sig))).toString('hex').slice(0, 8);
+const REG_SEL = { fingerprint: sel4('isFlagged(bytes32)'), code: sel4('isCodeFlagged(bytes32)'), address: sel4('isAddressFlagged(uint256,address)') };
 /** ABI encoding of a single string return value. */
 const abiString = (str) => { const h = Buffer.from(str).toString('hex'); return '0x' + word(32) + word(h.length / 2) + h.padEnd(64 * Math.ceil(h.length / 64), '0'); };
 let server; let browser;
@@ -173,12 +178,21 @@ async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
     const { id, method, params } = JSON.parse(route.request().postData());
     let result; let error;
     if (method === 'eth_chainId') result = '0x12e4e';
-    else if (method === 'eth_getCode') result = params[0].toLowerCase() === TOKEN ? '0x6080604052' : '0x';
+    else if (method === 'eth_getCode') result = node.codes?.[params[0].toLowerCase()] ?? (params[0].toLowerCase() === TOKEN ? TOKEN_CODE : '0x');
     else if (method === 'eth_call') {
       // A mock ERC-20 at TOKEN: TUSD, 6 decimals.
       calls.push(params[0]);
       const sel = params[0].data.slice(2, 10);
-      if (!params[0].to) { if (node.deployRevert) error = { code: 3, message: 'execution reverted: constructor' }; else result = '0x6080'; } // a contract creation
+      // A mock ThreatRegistry at node.registry: node.flags = { fingerprint, code, address } lists (lower-case hex).
+      if (node.registry && params[0].to?.toLowerCase() === node.registry.toLowerCase()) {
+        const arg = params[0].data.slice(10).toLowerCase();
+        const hit = sel === REG_SEL.fingerprint ? node.flags?.fingerprint?.includes('0x' + arg)
+          : sel === REG_SEL.code ? node.flags?.code?.includes('0x' + arg)
+            : sel === REG_SEL.address && BigInt('0x' + arg.slice(0, 64)) === 77390n ? node.flags?.address?.includes('0x' + arg.slice(64 + 24)) : undefined;
+        if (node.registryDown) error = { code: -32000, message: 'execution reverted' };
+        else if (hit === undefined) error = { code: -32000, message: 'execution reverted' };
+        else result = '0x' + word(hit ? 1 : 0) + word(hit ? node.flags.reason ?? 1 : 0);
+      } else if (!params[0].to) { if (node.deployRevert) error = { code: 3, message: 'execution reverted: constructor' }; else result = '0x6080'; } // a contract creation
       else if (params[0].to === '0x0000000000000000000000000000000000000800' || params[0].to === '0x0000000000000000000000000000000000000801') result = '0x' + word(1);
       else if (!params[0].data || params[0].data === '0x') result = '0x'; // a plain value transfer
       else if (sel === '313ce567') result = '0x' + word(6);
@@ -1243,3 +1257,128 @@ test('WalletConnect stays off without a Reown projectId', async () => {
   assert.deepEqual(errors, []);
   await context.close();
 });
+
+// ---- vaccine: the page refuses to sign calls or transfers to code flagged in the ThreatRegistry ----
+async function setRegistry(page, address) {
+  await page.locator('details:has(#threat-registry) > summary').click();
+  await page.fill('#threat-registry', address);
+  await page.click('#threat-save');
+  await statusMatches(page, /ThreatRegistry address saved/);
+}
+async function tokenTransferReview(page) {
+  await page.fill('#token', TOKEN);
+  await page.fill('#token-to', TO);
+  await page.fill('#token-amount', '1');
+  await page.click('#token-review');
+}
+
+test('vaccine: flagged code (fingerprint, code hash or address) is refused before signing; clean code goes through', async () => {
+  const fp = '0x' + (await codeFingerprint(TOKEN_CODE)).slice(4);
+  const codeHash = '0x' + Buffer.from(keccak_256(Buffer.from(TOKEN_CODE.slice(2), 'hex'))).toString('hex');
+  const node = { exists: true, registry: REGISTRY, flags: { fingerprint: [fp], code: [], address: [], reason: 1 } };
+  const { page, context, errors, outside, sent, calls } = await importedPage(node);
+  await setRegistry(page, REGISTRY);
+  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-wallet:threat-registry')), REGISTRY);
+
+  // Same template as flagged code anywhere (Neuro's fp1 fingerprint): refused, with the reason.
+  await tokenTransferReview(page);
+  await statusMatches(page, /Not signed: 0x3333.* is flagged by the ZETAPHY immune system \(its code fingerprint \(fp1\) matches flagged code · reason: drainer\)/);
+  assert.ok(await page.isHidden('#token-confirm'));
+  // The exact code (keccak-256 code hash), or the address itself: refused too.
+  node.flags = { fingerprint: [], code: [codeHash], address: [], reason: 2 };
+  await page.click('#token-review');
+  await statusMatches(page, /is flagged .*its code is byte-for-byte flagged code · reason: honeypot/);
+  node.flags = { fingerprint: [], code: [], address: [TOKEN], reason: 5 };
+  await page.fill('#to', TOKEN);
+  await page.fill('#amount', '1');
+  await page.click('#review'); // a plain ZETAPHY send to the flagged contract
+  await statusMatches(page, /is flagged .*this address is flagged · reason: phishing/);
+  assert.ok(await page.isHidden('#confirm'));
+
+  // What the page asked the registry: fp1 hash, keccak-256 of the code, (77390, address).
+  const asked = calls.filter((c) => c.to.toLowerCase() === REGISTRY).map((c) => c.data);
+  assert.ok(asked.includes('0x' + REG_SEL.fingerprint + fp.slice(2)));
+  assert.ok(asked.includes('0x' + REG_SEL.code + codeHash.slice(2)));
+  assert.ok(asked.includes('0x' + REG_SEL.address + word(77390) + word(TOKEN)));
+
+  // Not flagged: it goes through, and the confirm box says it was checked.
+  node.flags = { fingerprint: [], code: [], address: [] };
+  await page.click('#token-review');
+  await visible(page, '#token-confirm');
+  assert.match(await page.textContent('#token-confirm .vaccine-note'), /Checked against the ThreatRegistry: the destination is not flagged/);
+  // A flag that lands between review and confirm still stops it: checked again before signing.
+  node.flags = { fingerprint: [fp], code: [], address: [], reason: 1 };
+  await page.click('#confirm-token');
+  await statusMatches(page, /Not signed: .* is flagged/);
+  assert.equal(sent.length, 0, 'nothing broadcast while flagged');
+  node.flags = { fingerprint: [], code: [], address: [] };
+  await page.click('#token-review');
+  await visible(page, '#token-confirm');
+  await page.click('#confirm-token');
+  await visible(page, '#token-result');
+  assert.equal(sent.length, 1);
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('vaccine: registry set but unreachable refuses (fail closed); no registry set sends with a visible "not checked" notice', async () => {
+  const node = { exists: true, registry: REGISTRY, registryDown: true };
+  const { page, context, errors, sent } = await importedPage(node);
+  // No registry configured: the transfer is allowed, and the confirm box says the code was NOT checked.
+  await tokenTransferReview(page);
+  await visible(page, '#token-confirm');
+  assert.match(await page.textContent('#token-confirm .vaccine-note'), /Destination code NOT checked: no ThreatRegistry address is set/);
+  assert.ok(await page.$eval('#token-confirm .vaccine-note', (el) => el.classList.contains('unchecked')));
+  // A plain send to an account with no code needs no notice.
+  await page.fill('#to', TO);
+  await page.fill('#amount', '1');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  assert.ok(await page.isHidden('#confirm .vaccine-note'));
+  // Registry set but it does not answer: nothing is signed.
+  await setRegistry(page, REGISTRY);
+  await tokenTransferReview(page);
+  await statusMatches(page, /Not signed: 0x3333.* could not be checked against the ThreatRegistry 0x7777/);
+  assert.ok(await page.isHidden('#token-confirm'));
+  await page.fill('#threat-registry', '0x1234');
+  await page.click('#threat-save');
+  await statusMatches(page, /must be 0x and 40 hex digits/);
+  assert.equal(sent.length, 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('vaccine (Thai, snap): a flagged destination is refused before the snap is asked to sign', async () => {
+  const snap = {};
+  const node = { exists: true, registry: REGISTRY, flags: { fingerprint: [], code: [], address: [TOKEN], reason: 1 } };
+  const { page, context, errors, sent } = await openPage(node, { snap, ethereum: { snaps: true } });
+  await visible(page, '#snap-card');
+  await page.click('#snap-connect');
+  await visible(page, '#wallet');
+  await page.fill('#rpc', RPC);
+  await page.click('#rpc-save');
+  await page.waitForFunction(() => document.getElementById('balance').textContent.includes('ZETAPHY'));
+  await setRegistryThai(page);
+  await page.fill('#to', TOKEN);
+  await page.fill('#amount', '1');
+  await page.click('#review');
+  await statusMatches(page, /ไม่เซ็น: 0x3333.* ติดธงในระบบภูมิคุ้มกันของ ZETAPHY \(ที่อยู่นี้ติดธง · เหตุผล: ดูดเงิน \(drainer\)\)/);
+  assert.ok(!snap.requests.some((r) => r.method === 'zetaphy_signTx'), 'the snap was never asked to sign');
+  node.flags = { fingerprint: [], code: [], address: [] };
+  await page.click('#review');
+  await visible(page, '#confirm');
+  await page.click('#confirm-send');
+  await visible(page, '#tx-result');
+  assert.ok(snap.requests.some((r) => r.method === 'zetaphy_signTx'));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+async function setRegistryThai(page) {
+  await page.locator('details:has(#threat-registry) > summary').click();
+  await page.fill('#threat-registry', REGISTRY);
+  await page.click('#threat-save');
+  await statusMatches(page, /บันทึกที่อยู่ ThreatRegistry แล้ว/);
+}

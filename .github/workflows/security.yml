@@ -137,9 +137,9 @@ jobs:
           out neuro '^zetaphy-neuro/'
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
           out network '^(zetaphy-network/|zetaphy-neuro/src/)'
-          out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$|zetaphy-chain/wallets/)'
+          out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$|zetaphy-neuro/src/(fingerprint|bytecode)\.js$|zetaphy-chain/wallets/)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
-          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|cli\.js|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet)\.integration\.js)$)'
+          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl)\.sol|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov)\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -410,6 +410,7 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pq
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pqcert
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:cosmoswallet
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:neurogov
 
   program:
     name: program (cargo test + anchor test)

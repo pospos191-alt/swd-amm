@@ -6,6 +6,9 @@
 // The salt and verdict are saved to disk BEFORE the commit is sent, so a
 // crash or restart can always reveal (a commit that is never revealed costs
 // part of the bond).
+// Governance (NeuroControl): a runner only takes jobs whose recorded skill is
+// its own skill id (src/skill.js: the Neuro code it runs), and takes no new
+// jobs while Neuro is paused; seats it already holds are still revealed.
 
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { AbiCoder, keccak256, hexlify, randomBytes, decodeBytes32String } from 'ethers';
@@ -37,10 +40,14 @@ function saveState(file, state) {
  * @param {(chainKey: string, target: string, opts: object) => Promise<object>} [p.read]  Neuro reader (tests inject)
  * @param {() => Promise<bigint>} p.chainTime    latest block timestamp
  * @param {(line: string) => void} [p.log]
+ * @param {string|null} [p.skill]                this runner's skill id (bytes32 hex); null = take any job
+ * @param {() => Promise<boolean>} [p.paused]    NeuroControl.paused(); omitted = never paused
  */
-export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readContract, chainTime, log = () => {} }) {
+export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readContract, chainTime, log = () => {}, skill = null, paused = null }) {
   const state = loadState(stateFile);
   let commitWindow = null;
+  const foreign = new Set(); // jobs of another skill: never ours
+  let wasPaused = false;
 
   function readerFor(chainKey) {
     // sourcify:false: a verdict must depend only on the chain, not on whether
@@ -76,6 +83,9 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     const ids = new Set(Object.keys(state.seats).map(Number));
     for (let id = state.cursor; id < count; id++) ids.add(id);
     const done = [];
+    const stopped = paused ? await paused() : false;
+    if (stopped !== wasPaused) done.push(stopped ? 'Neuro is paused by governance: no new jobs (seats already taken are still revealed)' : 'Neuro is running again');
+    wasPaused = stopped;
 
     for (const id of [...ids].sort((a, b) => a - b)) {
       const job = await jobs.getJob(id);
@@ -84,7 +94,15 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
       if (job.status !== OPEN) { if (seat) done.push(`job ${id}: closed`); delete state.seats[id]; continue; }
 
       if (!seat) {
-        if (job.commits >= 3n || windowOver) continue;
+        if (job.commits >= 3n || windowOver || stopped || foreign.has(id)) continue;
+        if (skill) {
+          const info = await jobs.jobInfo(id);
+          if (String(info.skill).toLowerCase() !== skill.toLowerCase()) {
+            foreign.add(id);
+            done.push(`job ${id}: skip: skill ${info.skill} is not this runner's (${skill})`);
+            continue;
+          }
+        }
         // Seats go by a bond-weighted lottery; the pool of eligible runners
         // widens during the window, so check again on later ticks.
         if (!(await jobs.eligible(id, me))) continue;
@@ -114,7 +132,7 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     let cursor = state.cursor;
     while (cursor < count) {
       const j = await jobs.getJob(cursor);
-      const full = j.status !== OPEN || j.commits >= 3n || now >= j.created + commitWindow || state.seats[cursor];
+      const full = j.status !== OPEN || j.commits >= 3n || now >= j.created + commitWindow || state.seats[cursor] || foreign.has(cursor);
       if (!full) break;
       cursor++;
     }
