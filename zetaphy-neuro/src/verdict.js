@@ -2,6 +2,9 @@
 // on in the NeuroJobs market (2 of 3). It keeps what the rules decided and
 // drops what moves between two reads of the same contract: token supply,
 // balances, the explanation's numbers. Same rules + same code = same verdict.
+// The trade simulation (sim-* findings, src/honeypot.js) is left out too: it
+// depends on the block and on whether a runner's RPC allows state overrides,
+// so two honest runners could see different results.
 
 export const VERDICT_VERSION = 1;
 
@@ -18,9 +21,9 @@ export function verdictBody(report) {
     chain: report.chain,
     // TON friendly addresses are case-sensitive base64: use the raw form.
     address: String(report.raw ?? report.address ?? '').toLowerCase(),
-    level: a.level ?? null,
+    level: a.rulesLevel ?? a.level ?? null,
     control: a.control ?? null,
-    findings: (a.findings ?? []).map((f) => `${f.id}:${f.severity}`).sort(),
+    findings: (a.findings ?? []).filter((f) => !f.id.startsWith('sim-')).map((f) => `${f.id}:${f.severity}`).sort(),
     functions: [...(report.functions ?? [])].sort(),
     unknownSelectors: [...(report.unknownSelectors ?? [])].sort(),
     fingerprint: report.fingerprint ?? null,

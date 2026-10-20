@@ -34,6 +34,12 @@ for a in "$@"; do
   bech=$($BIN debug addr "$a" --home "$HOME_DIR" | awk '/Bech32 Acc/ {print $3}')
   $BIN genesis add-genesis-account "$bech" "1000000000000000000000000$DENOM" --home "$HOME_DIR"   # 1,000,000 ZETAPHY
 done
+# FAUCET=1: a funded faucet key for zetaphy_faucet (as setup-node.sh does).
+if [ -n "${FAUCET:-}" ]; then
+  $BIN keys add faucet $K --algo eth_secp256k1 >/dev/null 2>&1
+  $BIN genesis add-genesis-account "$($BIN keys show faucet -a $K)" "1000000000000000000000000$DENOM" --home "$HOME_DIR"
+  (umask 077 && $BIN keys unsafe-export-eth-key faucet $K 2>/dev/null > "$HOME_DIR/config/faucet.key")
+fi
 $BIN genesis gentx validator "10000000000000000000000000$DENOM" $K --chain-id $CHAIN_ID --gas-prices "1000000000$DENOM" >/dev/null 2>&1
 $BIN genesis collect-gentxs --home "$HOME_DIR" >/dev/null 2>&1
 $BIN genesis validate-genesis --home "$HOME_DIR" >/dev/null

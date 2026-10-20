@@ -180,3 +180,57 @@ export function analyzeDelegated(target) {
   ];
   return { level: 'medium', control: 'eip7702', findings };
 }
+
+// Trade simulation (src/honeypot.js). Taxes at or above these percentages
+// are reported; under SIM_TAX_MEDIUM on both sides the round trip is "ok".
+export const SIM_TAX_MEDIUM = 10;
+export const SIM_TAX_HIGH = 50;
+// A sell that keeps this much or more of the value counts as "cannot sell".
+const SIM_NO_SELL = 99;
+
+/** Findings for a simulated buy and sell (report.sim), or [] when none was run. */
+export function simFindings(sim) {
+  if (!sim) return [];
+  const base = { dex: sim.dex, native: sim.native };
+  const skipped = (why) => [{ id: 'sim-skipped', severity: 'info', params: { ...base, why } }];
+  switch (sim.stage) {
+    case 'no-pool':
+    case 'no-liquidity':
+      return skipped('no-pool');
+    case 'no-override':
+      return skipped('no-override');
+    case 'buy-failed':
+      return skipped('buy-failed');
+    case 'sell-failed':
+      // A buy that delivered nothing is a 100% buy tax: nothing to sell.
+      if (sim.bought === '0') return [{ id: 'sim-high-tax', severity: 'high', params: { ...base, buy: 100, sell: null } }];
+      return [{ id: 'sim-cannot-sell', severity: 'high', params: { ...base, buy: sim.buyTax, sell: null } }];
+    case 'done': {
+      const { buyTax: buy, sellTax: sell } = sim;
+      if (buy == null || sell == null) return skipped('error');
+      if (sim.sold === '0' || sell >= SIM_NO_SELL) return [{ id: 'sim-cannot-sell', severity: 'high', params: { ...base, buy, sell } }];
+      const worst = Math.max(buy, sell);
+      if (worst > SIM_TAX_HIGH) return [{ id: 'sim-high-tax', severity: 'high', params: { ...base, buy, sell } }];
+      if (worst >= SIM_TAX_MEDIUM) return [{ id: 'sim-high-tax', severity: 'medium', params: { ...base, buy, sell } }];
+      return [{ id: 'sim-ok', severity: 'good', params: { ...base, buy, sell } }];
+    }
+    default:
+      return skipped('error');
+  }
+}
+
+/**
+ * Adds the simulation's findings to an analysis (before the closing caveat)
+ * and raises the level if needed. `rulesLevel` keeps the level the fixed
+ * rules gave: the network's verdict uses that, since a simulation depends on
+ * the block and on whether the RPC allows state overrides (src/verdict.js).
+ */
+export function withSimulation(analysis, sim) {
+  const extra = simFindings(sim);
+  if (!extra.length) return analysis;
+  const findings = [...analysis.findings];
+  const caveat = findings.findIndex((f) => f.id === 'bytecode-only');
+  findings.splice(caveat < 0 ? findings.length : caveat, 0, ...extra);
+  const level = extra.reduce((m, f) => (RANK[f.severity] > RANK[m] ? f.severity : m), analysis.level);
+  return { ...analysis, level, rulesLevel: analysis.level, findings };
+}

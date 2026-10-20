@@ -18,6 +18,13 @@ export const CHAINS = {
     name: 'Ethereum',
     rpcs: ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org'],
     explorer: 'https://etherscan.io/address/',
+    // `dex`: the chain's main Uniswap-V2-style DEX, used by the trade
+    // simulation (src/honeypot.js). scripts/live-check.js verifies it on
+    // chain: code present, router.factory() and router.WETH() match.
+    dex: {
+      name: 'Uniswap V2', factory: '0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f', router: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D',
+      weth: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', native: 'WETH', amountIn: '10000000000000000', // 0.01 ETH
+    },
   },
   bsc: {
     kind: 'evm',
@@ -25,6 +32,10 @@ export const CHAINS = {
     name: 'BNB Chain',
     rpcs: ['https://bsc-dataseed.bnbchain.org', 'https://bsc-rpc.publicnode.com'],
     explorer: 'https://bscscan.com/address/',
+    dex: {
+      name: 'PancakeSwap V2', factory: '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73', router: '0x10ED43C718714eb63d5aA57B78B54704E256024E',
+      weth: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', native: 'WBNB', amountIn: '50000000000000000', // 0.05 BNB
+    },
   },
   base: {
     kind: 'evm',
@@ -32,6 +43,10 @@ export const CHAINS = {
     name: 'Base',
     rpcs: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com'],
     explorer: 'https://basescan.org/address/',
+    dex: {
+      name: 'Uniswap V2', factory: '0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6', router: '0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24',
+      weth: '0x4200000000000000000000000000000000000006', native: 'WETH', amountIn: '10000000000000000', // 0.01 ETH
+    },
   },
   arbitrum: {
     kind: 'evm',
@@ -39,6 +54,10 @@ export const CHAINS = {
     name: 'Arbitrum One',
     rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum-one-rpc.publicnode.com'],
     explorer: 'https://arbiscan.io/address/',
+    dex: {
+      name: 'Uniswap V2', factory: '0xf1D7CC64Fb4452F05c498126312eBE29f30Fbcf9', router: '0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24',
+      weth: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', native: 'WETH', amountIn: '10000000000000000', // 0.01 ETH
+    },
   },
   sol: {
     kind: 'solana',

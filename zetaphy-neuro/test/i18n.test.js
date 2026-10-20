@@ -15,6 +15,7 @@ const FULL = {
   target: '0xtarget', match: 'exact', language: 'Solidity', compiler: 'v0.8.26', url: 'https://repo.sourcify.dev/1/0xa',
   label: 'pool', codeId: '42', codeHash: 'abc123', compiler: 'func', minter: 'osmo1minter', cap: '100', creator: 'osmo1creator', contract: 'osmo1hook',
   id: '840000:3', end: 900000, unlimited: false, share: 42.5, deployer: 'bc1pdeployer', size: 20480,
+  dex: 'PancakeSwap V2', native: 'WBNB', buy: 4.5, sell: 12, why: 'no-pool',
 };
 // Branches: no issuer, no holder, other `where`, wallet / other interfaces.
 const VARIANTS = [
@@ -25,6 +26,10 @@ const VARIANTS = [
   { ...FULL, wallet: true },
   { ...FULL, interfaces: [], account: false, maxSupply: undefined, holders: undefined, decreaseOnly: true },
   { ...FULL, cap: null, label: undefined, match: 'partial', compiler: undefined },
+  // Trade simulation: a sell that reverted, nothing bought, each skip reason.
+  { ...FULL, sell: null, why: 'no-override' },
+  { ...FULL, buy: 100, sell: null, why: 'buy-failed' },
+  { ...FULL, why: 'error' },
 ];
 
 test('every language has every message, menu name and UI label', () => {
@@ -41,7 +46,7 @@ test('every language has every message, menu name and UI label', () => {
 });
 
 // Params a finding always carries (the analyzer sets them unconditionally).
-const REQUIRED = { 'known-issuer': ['issuer'], lookalike: ['issuer'] };
+const REQUIRED = { 'known-issuer': ['issuer'], lookalike: ['issuer'], 'sim-ok': ['buy', 'sell'], 'sim-cannot-sell': ['buy'] };
 const keeps = (id, p) => (REQUIRED[id] ?? []).every((k) => p[k] != null);
 
 test('no message prints undefined, null or [object …] for any branch', () => {

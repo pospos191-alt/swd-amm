@@ -36,3 +36,16 @@ test('refuses anything that could send a transaction', async () => {
   await assert.rejects(rpc.call('eth_sendRawTransaction', ['0x']), /not allowed/);
   await assert.rejects(rpc.call('eth_sendTransaction', [{}]), /not allowed/);
 });
+
+test('eth_call passes a state override (third parameter) through unchanged', async () => {
+  const bodies = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    bodies.push(body);
+    return { ok: true, json: async () => ({ result: body.method === 'eth_chainId' ? '0x38' : '0x01' }) };
+  };
+  const rpc = createRpc(['https://a'], 56, { fetchImpl });
+  const override = { '0x4e6575726f53696d000000000000000000000001': { code: '0x00', balance: '0x1' } };
+  assert.equal(await rpc.call('eth_call', [{ to: '0x4e6575726f53696d000000000000000000000001', data: '0x' }, 'latest', override]), '0x01');
+  assert.deepEqual(bodies.at(-1).params[2], override);
+});

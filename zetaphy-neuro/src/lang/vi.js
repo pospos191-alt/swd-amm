@@ -14,6 +14,7 @@ export const UI = {
     program: 'Chương trình token', mintAuth: 'Quyền tạo token (mint authority)', freezeAuth: 'Quyền đóng băng (freeze authority)', extensions: 'Tiện ích mở rộng', upgradeAuth: 'Quyền nâng cấp', none: 'không có',
     package: 'Gói', standard: 'Tiêu chuẩn', admin: 'Quản trị viên', holders: 'Số người nắm giữ', listed: 'Danh sách tonapi', raw: 'Địa chỉ gốc (raw)',
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ', nearKeys: 'Khóa toàn quyền (full-access key)', codeHash: 'Mã băm của mã', cairo: 'Phiên bản Cairo', maxSupply: 'Nguồn cung tối đa', tokenId: 'Mã token',
+    pool: 'Pool thanh khoản', simTax: 'Thuế khi mô phỏng (mua / bán)', simFailed: 'bán thất bại',
   },
 };
 
@@ -175,6 +176,17 @@ export const T = {
     'eip7702': (p) => `Địa chỉ này là một ví thông thường mà chủ ví đã cài để chạy mã của hợp đồng ${p.target} (EIP-7702). Đây không phải token. Mã đó có thể làm bất cứ điều gì nó được viết ra để làm với tiền trong ví; hãy kiểm tra cả ${p.target}.`,
     'source-verified': (p) => `Có mã nguồn công khai mà Sourcify xác nhận ${p.match === 'exact' ? 'khớp từng byte với mã trên chuỗi' : 'khớp với mã trên chuỗi'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Xem tại ${p.url}`,
     'source-unverified': () => 'Không có mã nguồn trên Sourcify. Mã nguồn có thể vẫn được công bố trên explorer của chuỗi; nếu không được công bố ở đâu cả, hãy đặc biệt cẩn thận.',
+    // Trade simulation (honeypot check, src/honeypot.js)
+    'sim-cannot-sell': (p) => `Cảnh báo honeypot: khi mô phỏng giao dịch qua ${p.dex}, mua được nhưng ${p.sell == null ? 'không bán được' : `bán ra gần như không nhận lại gì (mất ${p.sell}%)`}. Nếu mua, bạn có thể không bán được. (Một số ít token chỉ chặn bán ngay sau khi mua; phép kiểm tra này không phân biệt được hai trường hợp.)`,
+    'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
+      ? `Mô phỏng mua qua ${p.dex} không nhận được token nào: toàn bộ số tiền mua đã bị lấy mất.`
+      : `Mô phỏng giao dịch qua ${p.dex} bị mất ${p.buy ?? '?'}% khi mua và ${p.sell ?? '?'}% khi bán, do token thu làm thuế. Bạn nhận lại ít hơn giá hiển thị đúng bằng phần đó.`),
+    'sim-ok': (p) => `Mô phỏng mua rồi bán lại một lượng nhỏ qua ${p.dex} thành công (thuế: mua ${p.buy}%, bán ${p.sell}%). Đây chỉ là phép thử tại khối hiện tại: người kiểm soát hợp đồng vẫn có thể tăng thuế hoặc chặn bán sau này.`,
+    'sim-skipped': (p) => ({
+      'no-pool': `Không tìm thấy pool của token này với ${p.native} trên ${p.dex}, nên chưa mô phỏng mua bán. Riêng điều này không phải dấu hiệu nguy hiểm; token có thể được giao dịch ở nơi khác.`,
+      'no-override': 'RPC công khai không cho phép mô phỏng giao dịch (state override), nên chưa thử mua bán.',
+      'buy-failed': `Mô phỏng mua qua ${p.dex} thất bại, nên không thử bán được. Có thể giao dịch chưa được mở, hoặc token từ chối lệnh mua từ hợp đồng.`,
+    })[p.why] ?? 'Không chạy được mô phỏng giao dịch, nên chưa thử mua và bán.',
     // CosmWasm (Osmosis, Neutron)
     'cw-not-found': () => 'Không có hợp đồng hay token nào tại địa chỉ này trên chuỗi này. Có thể bạn đã nhập sai, hoặc đã chọn sai chuỗi.',
     'cw20-token': (p) => `Token CW20 (hợp đồng Rust trên CosmWasm) "${p.name ?? '?'}" (${p.symbol ?? '?'}), tổng cung ${fmtSupply(p.totalSupply, p.decimals)}.`,

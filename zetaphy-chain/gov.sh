@@ -13,6 +13,8 @@
 #   gov.sh propose-ratelimit <denom> <channel> <send%> <recv%> <hours>
 #                                                        cap IBC flow of a denom on a channel
 #   gov.sh ratelimits                                    the IBC limits in force
+#   gov.sh delegate <zetaphyvaloper1…> <ZETAPHY> [key]   stake from a fund (default community)
+#   gov.sh validators                                    who validates, and their share
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -98,6 +100,19 @@ case "${1:-}" in
     submit "$f"; rm -f "$f" ;;
   ratelimits)
     $ZETAPHYD q ratelimit list-rate-limits $QF ;;
+  delegate)
+    # Delegation program: the community fund stakes with new validators so
+    # voting power does not stay with the first node.
+    val=${2:?validator operator address}; amt=${3:?ZETAPHY}; key=${4:-community}
+    [[ "$val" =~ ^zetaphyvaloper1[0-9a-z]{38}$ ]] || { echo "validator: zetaphyvaloper1… (gov.sh validators)"; exit 1; }
+    [[ "$amt" =~ ^[1-9][0-9]*$ ]] || { echo "amount: whole ZETAPHY"; exit 1; }
+    TXF=${TXF/--from $FROM/--from $key}
+    send tx staking delegate "$val" "${amt}000000000000000000azetaphy"
+    echo "delegated $amt ZETAPHY from $key to $val" ;;
+  validators)
+    $ZETAPHYD q staking validators $QF | jq -r '[.validators[] | select(.status=="BOND_STATUS_BONDED")] as $v
+      | ($v | map(.tokens | tonumber) | add) as $t
+      | $v[] | "\(.operator_address)  \(.description.moniker)  \((.tokens | tonumber) / $t * 100 | floor)%"' ;;
   *)
-    sed -n '8,15p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,17p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

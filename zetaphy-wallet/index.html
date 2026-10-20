@@ -111,6 +111,85 @@
       <p id="tx-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="tx-hash"></code></p>
     </div>
 
+    <div class="card" id="token-card">
+      <h2 data-i18n="tokenTitle">โทเคน ERC-20</h2>
+      <label for="token" data-i18n="tokenLabel">ที่อยู่สัญญาโทเคน (0x…)</label>
+      <div class="row">
+        <input id="token" spellcheck="false" autocomplete="off" placeholder="0x…">
+        <button id="token-load" type="button" data-i18n="tokenLoad">ดูโทเคน</button>
+      </div>
+      <div id="token-info" hidden>
+        <div class="balance">
+          <span data-i18n="tokenBalance">ยอดโทเคน</span>
+          <strong id="token-balance"></strong>
+        </div>
+        <p id="token-meta" class="hint"></p>
+      </div>
+      <form id="token-form" autocomplete="off">
+        <label for="token-to" data-i18n="toLabel">ถึง (0x… หรือ zetaphy1…)</label>
+        <input id="token-to" spellcheck="false" autocomplete="off">
+        <label for="token-amount" data-i18n="tokenAmountLabel">จำนวนโทเคน</label>
+        <input id="token-amount" inputmode="decimal" autocomplete="off" placeholder="0.0">
+        <details>
+          <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
+          <label for="token-gas" data-i18n="evmGasLabel">EVM gas limit (ค่าธรรมเนียมคิดจาก gas นี้บวกส่วนของธุรกรรม)</label>
+          <input id="token-gas" inputmode="numeric" value="200000">
+        </details>
+        <button id="token-review" type="submit" data-i18n="review">ตรวจก่อนโอน</button>
+      </form>
+      <div id="token-confirm" class="confirm" hidden>
+        <h3 data-i18n="tokenConfirmTitle">ยืนยันการโอนโทเคน</h3>
+        <dl>
+          <dt data-i18n="cToken">โทเคน</dt><dd><code id="t-token"></code></dd>
+          <dt data-i18n="cTo">ถึง</dt><dd><code id="t-to"></code></dd>
+          <dt data-i18n="cAmount">จำนวน</dt><dd id="t-amount"></dd>
+          <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="t-fee"></dd>
+        </dl>
+        <p class="hint" data-i18n="tokenChecked">จำลองการโอนกับโหนดแล้ว ผ่าน (จะจำลองซ้ำอีกครั้งก่อนเซ็น)</p>
+        <div class="row">
+          <button id="confirm-token" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
+          <button id="cancel-token" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
+        </div>
+      </div>
+      <p id="token-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="token-hash"></code></p>
+      <p class="hint" data-i18n="tokenNote">ค่าธรรมเนียมจ่ายเป็น ZETAPHY ถ้าสัญญา revert ธุรกรรมทั้งหมดล้มเหลวแต่ยังเสียค่าธรรมเนียม หน้านี้จึงจำลองก่อนเซ็นทุกครั้ง</p>
+    </div>
+
+    <div class="card" id="stake-card">
+      <h2 data-i18n="stakeTitle">Stake ZETAPHY</h2>
+      <form id="stake-form" autocomplete="off">
+        <label for="validator" data-i18n="validatorLabel">validator (zetaphyvaloper1…)</label>
+        <input id="validator" spellcheck="false" autocomplete="off" placeholder="zetaphyvaloper1…">
+        <label for="stake-amount" data-i18n="stakeAmountLabel">จำนวน (ZETAPHY) ไม่ต้องใส่ถ้ารับรางวัล</label>
+        <input id="stake-amount" inputmode="decimal" autocomplete="off" placeholder="0.0">
+        <details>
+          <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
+          <label for="stake-gas" data-i18n="gasLabel">gas limit</label>
+          <input id="stake-gas" inputmode="numeric" value="500000">
+        </details>
+        <div class="row actions">
+          <button id="stake" type="button" data-i18n="stake">Stake</button>
+          <button id="unstake" type="button" data-i18n="unstake">ถอน stake</button>
+          <button id="claim" type="button" data-i18n="claim">รับรางวัล</button>
+        </div>
+      </form>
+      <div id="stake-confirm" class="confirm" hidden>
+        <h3 id="stake-confirm-title" data-i18n="confirmStake">ยืนยันการ stake</h3>
+        <dl>
+          <dt data-i18n="cValidator">validator</dt><dd><code id="s-validator"></code></dd>
+          <dt id="s-amount-dt" data-i18n="cAmount">จำนวน</dt><dd id="s-amount"></dd>
+          <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="s-fee"></dd>
+          <dt data-i18n="cTotal">รวม</dt><dd id="s-total"></dd>
+        </dl>
+        <p id="unbond-note" class="hint" data-i18n="unbondNote" hidden>เงินที่ถอน stake จะกลับเข้าบัญชีหลังพ้นช่วง unbonding ของเชน ระหว่างนั้นใช้ไม่ได้และไม่ได้รางวัล</p>
+        <div class="row">
+          <button id="confirm-stake" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
+          <button id="cancel-stake" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
+        </div>
+      </div>
+      <p id="stake-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="stake-hash"></code></p>
+    </div>
+
     <div class="card">
       <h2 data-i18n="backupTitle">สำรอง seed</h2>
       <p class="warn-text" data-i18n="backupWarn">ไฟล์สำรองเป็น seed แบบไม่เข้ารหัส ใครได้ไฟล์นี้ไปก็ย้ายเงินออกได้ เก็บไว้ในที่ปลอดภัยแบบออฟไลน์ ห้ามส่งให้ใคร</p>

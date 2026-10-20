@@ -3,10 +3,11 @@
 // localStorage. The only network traffic is JSON-RPC to the node the user
 // typed in: addresses, balances and signed transactions. Never the seed.
 import {
-  ml_dsa44, pqAddress, pqClient, normalizeAddress, parseZeta, formatZeta, bytesToHex, hexToBytes, DEFAULT_GAS_LIMIT,
+  ml_dsa44, pqAddress, pqClient, normalizeAddress, validatorAddress, parseZeta, formatZeta, bytesToHex, hexToBytes,
+  DEFAULT_GAS_LIMIT, DEFAULT_STAKING_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT,
 } from './vendor/pqwallet.js';
 
-const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 'zetaphy-wallet:lang' };
+const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 'zetaphy-wallet:lang', token: 'zetaphy-wallet:token' };
 const KDF_ITERATIONS = 600000;
 const EVM_CHAIN_ID = 77390n;
 
@@ -87,6 +88,43 @@ const T = {
     forgetConfirm: 'ลบกระเป๋าออกจากเบราว์เซอร์นี้? ถ้าไม่มีไฟล์สำรอง seed เงินจะหายถาวร',
     forgotten: 'ลบกระเป๋าออกจากเบราว์เซอร์นี้แล้ว',
     backupDone: 'ดาวน์โหลดไฟล์สำรองแล้ว เก็บไว้แบบออฟไลน์',
+    // ERC-20 tokens
+    tokenTitle: 'โทเคน ERC-20',
+    tokenLabel: 'ที่อยู่สัญญาโทเคน (0x…)',
+    tokenLoad: 'ดูโทเคน',
+    tokenBalance: 'ยอดโทเคน',
+    tokenMeta: '{sym} · ทศนิยม {d} หลัก · สัญญา {addr}',
+    tokenAmountLabel: 'จำนวนโทเคน',
+    evmGasLabel: 'EVM gas limit (ค่าธรรมเนียมคิดจาก gas นี้บวกส่วนของธุรกรรม)',
+    tokenConfirmTitle: 'ยืนยันการโอนโทเคน',
+    cToken: 'โทเคน',
+    tokenChecked: 'จำลองการโอนกับโหนดแล้ว ผ่าน (จะจำลองซ้ำอีกครั้งก่อนเซ็น)',
+    tokenNote: 'ค่าธรรมเนียมจ่ายเป็น ZETAPHY ถ้าสัญญา revert ธุรกรรมทั้งหมดล้มเหลวแต่ยังเสียค่าธรรมเนียม หน้านี้จึงจำลองก่อนเซ็นทุกครั้ง',
+    badToken: 'ที่อยู่สัญญาโทเคนต้องเป็น 0x ตามด้วย hex 40 ตัว (ตรวจ checksum)',
+    noContract: 'ไม่มีสัญญาที่ {addr}',
+    notToken: 'สัญญานี้ไม่ใช่โทเคน ERC-20 (ไม่มี decimals())',
+    tokenDecimals: 'จำนวนมีทศนิยมเกิน {d} หลักของ {sym}',
+    badEvmGas: 'EVM gas limit ต้องเป็นจำนวนเต็มระหว่าง {min} ถึง {max}',
+    tokenNotEnough: 'โทเคนไม่พอ: จะโอน {need} {sym} แต่มี {have}',
+    callFails: 'ไม่ได้ส่ง: จำลองกับโหนดแล้วการโอนจะล้มเหลว (revert)',
+    tokenRefused: 'ไม่ได้ส่ง: โทเคนปฏิเสธการโอน (transfer คืนค่า false)',
+    tokenSent: 'ส่งแล้ว โหนดรับธุรกรรมแล้ว (เป็นธุรกรรม Cosmos จึงไม่มี log ใน eth_getLogs แต่ยอดถูกต้อง)',
+    // staking
+    stakeTitle: 'Stake ZETAPHY',
+    validatorLabel: 'validator (zetaphyvaloper1…)',
+    stakeAmountLabel: 'จำนวน (ZETAPHY) ไม่ต้องใส่ถ้ารับรางวัล',
+    stake: 'Stake',
+    unstake: 'ถอน stake',
+    claim: 'รับรางวัล',
+    confirmStake: 'ยืนยันการ stake',
+    confirmUnstake: 'ยืนยันการถอน stake',
+    confirmClaim: 'ยืนยันการรับรางวัล',
+    cValidator: 'validator',
+    unbondNote: 'เงินที่ถอน stake จะกลับเข้าบัญชีหลังพ้นช่วง unbonding ของเชน ระหว่างนั้นใช้ไม่ได้และไม่ได้รางวัล',
+    badValidator: 'ที่อยู่ validator ต้องเป็น zetaphyvaloper1… (ตรวจตัวสะกดหรือ checksum)',
+    staked: 'ส่งคำสั่ง stake แล้ว โหนดรับธุรกรรมแล้ว',
+    unstaked: 'ส่งคำสั่งถอน stake แล้ว เงินกลับเข้าบัญชีหลังพ้นช่วง unbonding',
+    claimed: 'ส่งคำสั่งรับรางวัลแล้ว รางวัลเข้าบัญชีเมื่อธุรกรรมเข้าบล็อก',
   },
   en: {
     subtitle: 'Quantum-safe wallet (ML-DSA-44) · no ECDSA key',
@@ -163,6 +201,41 @@ const T = {
     forgetConfirm: 'Remove the wallet from this browser? Without a seed backup the funds are lost for good.',
     forgotten: 'Wallet removed from this browser.',
     backupDone: 'Backup downloaded. Keep it offline.',
+    tokenTitle: 'ERC-20 tokens',
+    tokenLabel: 'Token contract address (0x…)',
+    tokenLoad: 'Look up',
+    tokenBalance: 'Token balance',
+    tokenMeta: '{sym} · {d} decimals · contract {addr}',
+    tokenAmountLabel: 'Amount of the token',
+    evmGasLabel: 'EVM gas limit (the fee is for this gas plus the tx itself)',
+    tokenConfirmTitle: 'Confirm the token transfer',
+    cToken: 'Token',
+    tokenChecked: 'Simulated on the node: it succeeds (it is simulated again just before signing).',
+    tokenNote: 'The fee is paid in ZETAPHY. If the contract reverts, the whole tx fails and the fee is still paid, so this page simulates every transfer before signing.',
+    badToken: 'The token contract must be 0x and 40 hex digits (check the checksum).',
+    noContract: 'There is no contract at {addr}.',
+    notToken: 'That contract is not an ERC-20 token (no decimals()).',
+    tokenDecimals: 'The amount has more than {d} decimal places for {sym}.',
+    badEvmGas: 'The EVM gas limit must be a whole number from {min} to {max}.',
+    tokenNotEnough: 'Not enough of the token: sending {need} {sym}, have {have}.',
+    callFails: 'Not sent: simulated on the node, the transfer would fail (revert)',
+    tokenRefused: 'Not sent: the token refused the transfer (transfer returned false).',
+    tokenSent: 'Sent. The node accepted it. (It is a Cosmos tx, so its EVM logs are not in eth_getLogs; balances are correct.)',
+    stakeTitle: 'Stake ZETAPHY',
+    validatorLabel: 'Validator (zetaphyvaloper1…)',
+    stakeAmountLabel: 'Amount (ZETAPHY), not needed to claim rewards',
+    stake: 'Stake',
+    unstake: 'Unstake',
+    claim: 'Claim rewards',
+    confirmStake: 'Confirm the stake',
+    confirmUnstake: 'Confirm the unstake',
+    confirmClaim: 'Confirm claiming rewards',
+    cValidator: 'Validator',
+    unbondNote: 'Unstaked ZETAPHY comes back after the chain\'s unbonding period. Until then it cannot be used and earns no rewards.',
+    badValidator: 'The validator must be a zetaphyvaloper1… address (check spelling or checksum).',
+    staked: 'Stake sent. The node accepted it.',
+    unstaked: 'Unstake sent. The ZETAPHY comes back after the unbonding period.',
+    claimed: 'Claim sent. The rewards arrive when the tx lands in a block.',
   },
 };
 
@@ -187,7 +260,7 @@ function applyLang() {
   $('lang').textContent = lang === 'th' ? 'English' : 'ไทย';
   $('lang').lang = lang === 'th' ? 'en' : 'th';
   if (lastStatus) status(...lastStatus);
-  if (wallet) showAccount();
+  if (wallet) { showAccount(); showToken(); }
 }
 
 /** status(key, vars, isError, extra): extra is raw text (e.g. a node's log). */
@@ -238,8 +311,10 @@ function openSeed(seed) {
 function lock() {
   if (wallet) { wallet.seed.fill(0); wallet.secretKey.fill(0); }
   wallet = null;
-  pending = null;
+  pending = null; tokenPending = null; stakePending = null;
   account = null;
+  token = null;
+  for (const id of ['confirm', 'token-confirm', 'stake-confirm', 'tx-result', 'token-result', 'stake-result']) $(id).hidden = true;
   render();
 }
 
@@ -283,6 +358,11 @@ function showError(e) {
   const m = String(e?.message ?? e);
   if (T.en[m]) return fail(m, e.vars);
   if (/does not exist on chain yet/.test(m)) return fail('notFunded');
+  const callFails = /the call would fail, so nothing was sent: (.*)$/.exec(m);
+  if (callFails) return fail('callFails', {}, T.en[callFails[1]] ? t(callFails[1]) : callFails[1]);
+  const short = /not enough ZETAPHY: need (\S+) .*have (\S+)$/.exec(m);
+  if (short) return fail('notEnough', { need: short[1], have: short[2] });
+  if (/expected zetaphyvaloper1/.test(m)) return fail('badValidator');
   if (/invalid address/.test(m)) return fail('badAddress');
   if (/not an amount|decimal places|more than 0/.test(m)) return fail('badAmount');
   const rej = /rejected the transaction (.*)$/.exec(m);
@@ -297,7 +377,7 @@ function render() {
   $('locked').hidden = !!wallet || !sealed;
   $('wallet').hidden = !wallet;
   if (!wallet && sealed) $('locked-addr').textContent = sealed.address ?? '';
-  if (wallet) showAccount();
+  if (wallet) { showAccount(); showToken(); }
 }
 
 let account = null;
@@ -315,12 +395,18 @@ async function refresh() {
     const [a, balance] = await Promise.all([client.account(wallet.addr.bech32), client.balance(wallet.addr.hex)]);
     account = { ...a, balance };
     showAccount();
+  } catch (e) { return showError(e); }
+  // The token panel follows: the one looked up, or the one remembered from last time.
+  try {
+    if (token) { token.balance = await tokenBalanceOf(token.address); showToken(); } else if ($('token').value.trim()) await loadToken(true);
   } catch (e) { showError(e); }
 }
 
-async function busy(btn, fn) {
-  btn.disabled = true;
-  try { await fn(); } catch (e) { showError(e); } finally { btn.disabled = false; }
+/** Runs fn with the button(s) disabled; any error is shown in the status line. */
+async function busy(btns, fn) {
+  const list = [].concat(btns);
+  for (const b of list) b.disabled = true;
+  try { await fn(); } catch (e) { showError(e); } finally { for (const b of list) b.disabled = false; }
 }
 
 // ---- setup: new key or import ----
@@ -417,6 +503,237 @@ async function confirmSend() {
   setTimeout(refresh, 6000);
 }
 
+// ---- ERC-20 tokens: calldata is encoded here, results read with eth_call ----
+// Contract calls are a /zetaphy.pq.v1.MsgEVMCall signed with ML-DSA-44. A revert
+// fails the whole tx and the fee is still paid, so every transfer is simulated
+// with eth_call first (here at review, and again by callEVM just before signing).
+const SEL = { transfer: 'a9059cbb', balanceOf: '70a08231', decimals: '313ce567', symbol: '95d89b41' };
+const UINT256_LIMIT = 2n ** 256n;
+const word = (v) => BigInt(v).toString(16).padStart(64, '0');
+const readWord = (b, at) => BigInt('0x' + (bytesToHex(b.slice(at, at + 32)) || '0'));
+const addrWord = (bytes) => bytesToHex(bytes).padStart(64, '0');
+const qty = (v) => '0x' + BigInt(v).toString(16);
+
+let token = null; // { address, symbol, decimals, balance }
+let tokenPending = null;
+
+/** The token input as a checksummed 0x address (a mixed-case one must pass EIP-55). */
+function tokenInput() {
+  const s = $('token').value.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(s)) throw new Error('badToken');
+  try { return normalizeAddress(s).hex; } catch { throw new Error('badToken'); }
+}
+
+/** eth_call; a node error is null, so callers decide what it means. Network and chain errors still throw. */
+async function ethCall(to, data) {
+  try { return await checkedCall('eth_call', [{ to, data: '0x' + data }, 'latest']); } catch (e) {
+    if (T.en[e.message] || /^RPC HTTP/.test(e.message)) throw e;
+    return null;
+  }
+}
+
+function resultBytes(hex) {
+  if (typeof hex !== 'string') return null;
+  try { return hexToBytes(hex); } catch { return null; }
+}
+
+/** symbol() as an ABI string, or bytes32 for old tokens. Control and bidi characters are dropped. */
+function decodeSymbol(hex) {
+  const b = resultBytes(hex);
+  if (!b) return '?';
+  let raw = null;
+  if (b.length >= 64) {
+    const off = readWord(b, 0);
+    if (off + 32n <= BigInt(b.length)) {
+      const n = readWord(b, Number(off));
+      if (Number(off) + 32 + Number(n) <= b.length && n <= 256n) raw = b.slice(Number(off) + 32, Number(off) + 32 + Number(n));
+    }
+  } else if (b.length === 32) {
+    const end = b.indexOf(0);
+    raw = b.slice(0, end < 0 ? 32 : end);
+  }
+  if (!raw) return '?';
+  let text;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(raw); } catch { return '?'; }
+  text = text.replace(/\p{C}/gu, '').trim().slice(0, 24);
+  return text || '?';
+}
+
+async function tokenBalanceOf(address) {
+  const b = resultBytes(await ethCall(address, SEL.balanceOf + addrWord(wallet.addr.bytes)));
+  if (!b || b.length < 32) throw new Error('notToken');
+  return readWord(b, 0);
+}
+
+/** Reads symbol, decimals and this account's balance; remembers the address. quiet: no "working" status. */
+async function loadToken(quiet = false) {
+  const address = tokenInput();
+  if (!quiet) status('working');
+  const code = await checkedCall('eth_getCode', [address, 'latest']);
+  if (typeof code !== 'string' || /^0x0*$/.test(code)) throw Object.assign(new Error('noContract'), { vars: { addr: address } });
+  const d = resultBytes(await ethCall(address, SEL.decimals));
+  if (!d || d.length < 32 || readWord(d, 0) > 255n) throw new Error('notToken');
+  const decimals = Number(readWord(d, 0));
+  const symbol = decodeSymbol(await ethCall(address, SEL.symbol));
+  const balance = await tokenBalanceOf(address);
+  if (!wallet || $('token').value.trim().toLowerCase() !== address.toLowerCase()) return; // changed meanwhile
+  token = { address, symbol, decimals, balance };
+  store.set(KEYS.token, address);
+  showToken();
+  if (!quiet) status('');
+}
+
+function formatUnits(v, decimals) {
+  const unit = 10n ** BigInt(decimals);
+  const frac = decimals ? (v % unit).toString().padStart(decimals, '0').replace(/0+$/, '') : '';
+  return `${v / unit}${frac ? '.' + frac : ''}`;
+}
+
+/** '1.5' -> base units of a token with `decimals` decimals. Trailing zeros past them are fine. */
+function parseUnits(text, decimals, symbol) {
+  const s = String(text).trim();
+  const m = /^(\d+)(?:\.(\d*))?$/.exec(s) ?? /^()\.(\d+)$/.exec(s);
+  if (!m || s.length > 100) throw new Error('badAmount');
+  const frac = (m[2] ?? '').replace(/0+$/, '');
+  if (frac.length > decimals) throw Object.assign(new Error('tokenDecimals'), { vars: { d: decimals, sym: symbol } });
+  const v = BigInt(m[1] || '0') * 10n ** BigInt(decimals) + BigInt(frac.padEnd(decimals, '0') || '0');
+  if (v <= 0n || v >= UINT256_LIMIT) throw new Error('badAmount');
+  return v;
+}
+
+/** transfer()'s result: nothing (old tokens such as USDT) or a true bool. */
+function checkTransfer(ret) {
+  if (ret === '0x') return;
+  const b = resultBytes(ret);
+  if (!b || b.length < 32 || readWord(b, 0) === 0n) throw new Error('tokenRefused');
+}
+
+function showToken() {
+  $('token-info').hidden = !token;
+  if (!token) return;
+  $('token-balance').textContent = `${formatUnits(token.balance, token.decimals)} ${token.symbol}`;
+  $('token-meta').textContent = t('tokenMeta', { sym: token.symbol, d: token.decimals, addr: token.address });
+}
+
+async function tokenReview() {
+  tokenPending = null;
+  $('token-confirm').hidden = true;
+  $('token-result').hidden = true;
+  const address = tokenInput();
+  if (!token || token.address !== address) await loadToken();
+  if (!token) return status('');
+  let to;
+  try { to = normalizeAddress($('token-to').value); } catch { return fail('badAddress'); }
+  const units = parseUnits($('token-amount').value, token.decimals, token.symbol);
+  const g = $('token-gas').value.trim() || String(DEFAULT_EVM_GAS_LIMIT);
+  if (!/^\d{1,9}$/.test(g) || BigInt(g) < MIN_EVM_GAS_LIMIT || BigInt(g) > MAX_EVM_GAS_LIMIT) return fail('badEvmGas', { min: MIN_EVM_GAS_LIMIT, max: MAX_EVM_GAS_LIMIT });
+  const evmGas = BigInt(g);
+  const txGas = evmGas + EVM_CALL_GAS_OVERHEAD;
+  status('working');
+  const t0 = token;
+  const [q, balance] = await Promise.all([client.quote({ publicKey: wallet.publicKey, gasLimit: txGas }), tokenBalanceOf(t0.address)]);
+  account = { ...q.account, balance: q.balance };
+  t0.balance = balance;
+  showAccount(); showToken();
+  if (!q.exists) return fail('notFunded');
+  if (units > balance) return fail('tokenNotEnough', { need: formatUnits(units, t0.decimals), sym: t0.symbol, have: formatUnits(balance, t0.decimals) });
+  if (q.fee > q.balance) return fail('notEnough', { need: formatZeta(q.fee), have: formatZeta(q.balance) });
+  const data = '0x' + SEL.transfer + addrWord(to.bytes) + word(units);
+  // The same simulation callEVM runs before signing, so a doomed transfer never reaches the confirm step.
+  let ret;
+  try {
+    ret = await checkedCall('eth_call', [{ from: wallet.addr.hex, to: t0.address, data, gas: qty(evmGas) }, 'latest']);
+  } catch (e) {
+    if (T.en[e.message]) throw e;
+    return fail('callFails', {}, e.message);
+  }
+  checkTransfer(ret);
+  tokenPending = { token: t0.address, symbol: t0.symbol, decimals: t0.decimals, to, units, data, evmGas, txGas, gasPrice: q.gasPrice };
+  $('t-token').textContent = `${t0.symbol}\n${t0.address}`;
+  $('t-to').textContent = `${to.bech32}\n${to.hex}`;
+  $('t-amount').textContent = `${formatUnits(units, t0.decimals)} ${t0.symbol}`;
+  $('t-fee').textContent = `${formatZeta(q.fee)} ZETAPHY`;
+  $('token-confirm').hidden = false;
+  status('');
+}
+
+async function tokenConfirm() {
+  if (!tokenPending || !wallet) return;
+  const p = tokenPending;
+  tokenPending = null;
+  $('token-confirm').hidden = true;
+  status('signing');
+  const r = await client.callEVM({
+    publicKey: wallet.publicKey, sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey),
+    to: p.token, data: p.data, evmGasLimit: p.evmGas, gasLimit: p.txGas, gasPrice: p.gasPrice, checkResult: checkTransfer,
+  });
+  $('token-hash').textContent = r.txHash;
+  $('token-result').hidden = false;
+  $('token-amount').value = '';
+  status('tokenSent');
+  setTimeout(refresh, 6000);
+}
+
+// ---- staking: delegate, undelegate, withdraw rewards ----
+let stakePending = null;
+const STAKE = {
+  stake: { title: 'confirmStake', done: 'staked', run: (o) => client.delegate(o) },
+  unstake: { title: 'confirmUnstake', done: 'unstaked', run: (o) => client.undelegate(o) },
+  claim: { title: 'confirmClaim', done: 'claimed', run: (o) => client.withdrawRewards(o) },
+};
+
+const setI18n = (el, key) => { el.dataset.i18n = key; el.textContent = t(key); };
+
+async function stakeReview(action) {
+  stakePending = null;
+  $('stake-confirm').hidden = true;
+  $('stake-result').hidden = true;
+  let validator;
+  try { validator = validatorAddress($('validator').value); } catch { return fail('badValidator'); }
+  let amount = 0n;
+  if (action !== 'claim') {
+    try { amount = parseZeta($('stake-amount').value); } catch { return fail('badAmount'); }
+    if (amount <= 0n) return fail('badAmount');
+  }
+  const g = $('stake-gas').value.trim() || String(DEFAULT_STAKING_GAS_LIMIT);
+  if (!/^\d{1,12}$/.test(g) || BigInt(g) <= 0n) return fail('badGas');
+  const gasLimit = BigInt(g);
+  status('working');
+  const q = await client.quote({ publicKey: wallet.publicKey, gasLimit });
+  account = { ...q.account, balance: q.balance };
+  showAccount();
+  if (!q.exists) return fail('notFunded');
+  const spend = action === 'stake' ? amount : 0n;
+  if (spend + q.fee > q.balance) return fail('notEnough', { need: formatZeta(spend + q.fee), have: formatZeta(q.balance) });
+  stakePending = { action, validator, amount, gasLimit, gasPrice: q.gasPrice };
+  setI18n($('stake-confirm-title'), STAKE[action].title);
+  $('s-validator').textContent = validator;
+  $('s-amount-dt').hidden = $('s-amount').hidden = action === 'claim';
+  $('s-amount').textContent = `${formatZeta(amount)} ZETAPHY`;
+  $('s-fee').textContent = `${formatZeta(q.fee)} ZETAPHY`;
+  $('s-total').textContent = `${formatZeta(spend + q.fee)} ZETAPHY`;
+  $('unbond-note').hidden = action !== 'unstake';
+  $('stake-confirm').hidden = false;
+  status('');
+}
+
+async function stakeConfirm() {
+  if (!stakePending || !wallet) return;
+  const p = stakePending;
+  stakePending = null;
+  $('stake-confirm').hidden = true;
+  status('signing');
+  const r = await STAKE[p.action].run({
+    publicKey: wallet.publicKey, sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey),
+    validator: p.validator, amount: p.action === 'claim' ? undefined : p.amount, gasLimit: p.gasLimit, gasPrice: p.gasPrice,
+  });
+  $('stake-hash').textContent = r.txHash;
+  $('stake-result').hidden = false;
+  if (p.action !== 'claim') $('stake-amount').value = '';
+  status(STAKE[p.action].done);
+  setTimeout(refresh, 6000);
+}
+
 function downloadBackup() {
   if (!wallet || !$('backup-ok').checked) return;
   const url = URL.createObjectURL(new Blob([`0x${bytesToHex(wallet.seed)}\n`], { type: 'text/plain' }));
@@ -433,6 +750,7 @@ function downloadBackup() {
 // ---- wiring ----
 function init() {
   $('rpc').value = store.get(KEYS.rpc) ?? '';
+  $('token').value = store.get(KEYS.token) ?? '';
   $('lang').addEventListener('click', () => { lang = lang === 'th' ? 'en' : 'th'; store.set(KEYS.lang, lang); applyLang(); });
   $('rpc-save').addEventListener('click', () => {
     const u = $('rpc').value.trim();
@@ -456,6 +774,19 @@ function init() {
   $('send-form').addEventListener('submit', (e) => { e.preventDefault(); busy($('review'), review); });
   $('confirm-send').addEventListener('click', () => busy($('confirm-send'), confirmSend));
   $('cancel-send').addEventListener('click', () => { pending = null; $('confirm').hidden = true; status(''); });
+  $('token-load').addEventListener('click', () => busy($('token-load'), () => loadToken()));
+  $('token').addEventListener('input', () => {
+    if (token && $('token').value.trim().toLowerCase() !== token.address.toLowerCase()) { token = null; showToken(); }
+    tokenPending = null; $('token-confirm').hidden = true;
+  });
+  $('token-form').addEventListener('submit', (e) => { e.preventDefault(); busy($('token-review'), tokenReview); });
+  $('confirm-token').addEventListener('click', () => busy($('confirm-token'), tokenConfirm));
+  $('cancel-token').addEventListener('click', () => { tokenPending = null; $('token-confirm').hidden = true; status(''); });
+  const stakeButtons = ['stake', 'unstake', 'claim'].map((id) => $(id));
+  for (const b of stakeButtons) b.addEventListener('click', () => busy(stakeButtons, () => stakeReview(b.id)));
+  $('stake-form').addEventListener('submit', (e) => e.preventDefault());
+  $('confirm-stake').addEventListener('click', () => busy($('confirm-stake'), stakeConfirm));
+  $('cancel-stake').addEventListener('click', () => { stakePending = null; $('stake-confirm').hidden = true; status(''); });
   $('backup-ok').addEventListener('change', () => { $('backup').disabled = !$('backup-ok').checked; });
   $('backup').addEventListener('click', downloadBackup);
   $('lock').addEventListener('click', () => { lock(); status('lockedMsg'); });

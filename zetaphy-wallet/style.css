@@ -72,6 +72,7 @@ button.danger { border-color: var(--danger); color: var(--danger); }
 .row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
 .row input { flex: 1 1 220px; }
 .row button { margin-top: 0; }
+.row.actions { margin-top: 12px; }
 .tabs .tab { background: transparent; color: var(--accent); }
 .tabs .tab.on { background: var(--accent); color: var(--accent-text); }
 .addr-row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
@@ -84,7 +85,7 @@ details { margin-top: 10px; }
 .confirm { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 12px; }
 .confirm dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; }
 .confirm dd { margin: 0; word-break: break-all; }
-code { word-break: break-all; }
+code, #token-meta { word-break: break-all; }
 .ok { color: var(--ok); }
 #status { min-height: 1.5em; position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; margin: 0; }
 #status.error { color: var(--danger); }

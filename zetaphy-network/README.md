@@ -201,7 +201,8 @@ zetaphy bridge watch --source-rpc https://<เชนต้นทาง> --lockbo
 
 เชน ZETAPHY มี precompile ตรวจลายเซ็น **ML-DSA** (FIPS 204 มาตรฐาน NIST ที่ต้านคอมพิวเตอร์ควอนตัม) อยู่ที่ `0x…0900`
 - ใช้ Cloudflare CIRCL v1.6.3 และติดตั้งผ่าน patch ใน `zetaphy-chain/setup-node.sh`
-- ระหว่างติดตั้ง ชุดทดสอบของ precompile รันก่อน build เสมอ
+- ชุดทดสอบของ precompile รันใน CI ทุกครั้งที่แก้ส่วนเชน
+- **สำหรับผู้เขียนสัญญา:** ถ้าลายเซ็นไม่ถูกต้อง precompile คืนค่าว่าง (ไม่ revert) เหมือน P256 (RIP-7212) ต้องตรวจว่าค่าที่คืนเป็น 1 ไม่ใช่ดูแค่ว่าเรียกสำเร็จ (`QuantumWallet` ตรวจแบบนี้อยู่แล้ว)
 
 ```
 zetaphy deploy-pq                 # ผู้ดูแล: ติดตั้ง QuantumWalletFactory
@@ -225,22 +226,52 @@ zetaphy pq send 0x... 1.5
 zetaphy pq native                              # ที่อยู่ zetaphy1… และ 0x… (บัญชีเดียวกัน) + ยอดเงิน
 zetaphy pq native send zetaphy1... 1.5         # หรือ 0x... ก็ได้
 zetaphy pq native send 0x... 1.5 --gas 500000  # ค่าเริ่มต้น 400000
+
+# เรียกสัญญาบน EVM ด้วยบัญชีนี้ (msg.sender = ที่อยู่ 0x… ของบัญชีนี้)
+zetaphy pq native call 0x<สัญญา> 0x<calldata> [--value 0.5] [--gas 200000]   # --gas คือ gas ฝั่ง EVM
+zetaphy pq native token-balance 0x<token>                  # ยอด ERC-20 (อ่านอย่างเดียว)
+zetaphy pq native token-send 0x<token> 0x... 12.5          # โอน ERC-20 (ผู้รับเป็น zetaphy1… ก็ได้)
+
+# stake กับ validator
+zetaphy pq native stake zetaphyvaloper1... 100             # --gas ค่าเริ่มต้น 500000
+zetaphy pq native unstake zetaphyvaloper1... 40            # ได้คืนหลังพ้นช่วง unbonding
+zetaphy pq native rewards zetaphyvaloper1...               # ถอนรางวัล stake
 ```
 
+**ใช้สัญญา EVM และ stake ได้โดยไม่มีกุญแจ ECDSA เลย**
+- `call` และ `token-send` ส่งข้อความ `/zetaphy.pq.v1.MsgEVMCall` (ธุรกรรม Cosmos ที่เซ็นด้วย ML-DSA-44)
+  - เชนรันคำสั่งนั้นบน EVM โดยให้ `msg.sender` เป็นที่อยู่ 0x… ของบัญชีนี้ (20 ไบต์เดียวกัน)
+  - จึงใช้ token, DeFi และสัญญาอื่น ๆ ได้เหมือนบัญชี ECDSA
+- `stake`, `unstake`, `rewards` เป็นข้อความมาตรฐานของ Cosmos SDK (`MsgDelegate`, `MsgUndelegate`, `MsgWithdrawDelegatorReward`)
+  - ที่อยู่ validator ต้องขึ้นต้นด้วย `zetaphyvaloper1` และตรวจ checksum ทุกครั้ง
+- `token-send` อ่าน `decimals()` และ `symbol()` ของ token ด้วย `eth_call` แล้วแสดงก่อนส่ง
+- ก่อนเซ็น คำสั่งจะลองรันการเรียกด้วย `eth_call` จากบัญชีนี้ก่อน
+  - ถ้าจะ revert (เช่น token ไม่พอ) จะไม่ส่งอะไรเลย
+  - ถ้าส่งไปแล้ว revert บนเชน ธุรกรรมล้มทั้งก้อน เงินและ token ไม่ขยับ เสียแค่ค่าธรรมเนียม
+- ค่าแก๊ส: เชนคิดแก๊ส EVM รวมในมิเตอร์แก๊สของธุรกรรม Cosmos
+  - gas ของธุรกรรม = gas EVM (`--gas`, ค่าเริ่มต้น 200000) + 400000 (ตรวจลายเซ็นและขนาดธุรกรรม)
+  - gas EVM ต้องอยู่ระหว่าง 21000 ถึง 10,000,000
+  - อย่าตั้ง `--gas` สูงเกินจำเป็น: เชนคิดอย่างน้อยสัดส่วนหนึ่งของ gas ที่ตั้งไว้
+- ข้อจำกัด
+  - log ของ EVM จากคำสั่งเหล่านี้ **ไม่ขึ้นใน `eth_getLogs`** เพราะเป็นธุรกรรม Cosmos ไม่ใช่ธุรกรรม EVM
+    - ยอดเงินและยอด token ถูกต้องเสมอ แต่หน้าเว็บหรือ indexer ที่ดูจาก event `Transfer` จะไม่เห็นรายการนี้
+  - สร้างสัญญาใหม่ (deploy) ยังต้องใช้ธุรกรรม EVM (กุญแจ ECDSA) เพราะ `MsgEVMCall` ต้องมีที่อยู่ปลายทางเสมอ
+
 - ใช้ seed เดียวกับ `zetaphy pq` (`~/.zetaphy/pq.seed` หรือ `pq.seed.json`)
-- ที่อยู่ = `sha256(public key)[0:20]`
+- ที่อยู่ = `sha256("zetaphy/mldsa44\0" + public key)[0:20]` (มีคำนำหน้าเพื่อไม่ให้ซ้ำกับที่อยู่แบบอื่นของ Cosmos SDK)
   - เขียนได้ทั้ง `zetaphy1…` และ `0x…` เพราะเป็น 20 ไบต์เดียวกัน
 - บัญชีจะมีบนเชนหลังได้รับเงินครั้งแรกเท่านั้น
   - ถ้ายังไม่มี คำสั่งจะบอกให้โอน ZETAPHY เข้าที่อยู่นี้ก่อน
-- ธุรกรรมเป็น `MsgSend` ของ Cosmos SDK เซ็นแบบ SIGN_MODE_DIRECT ด้วย ML-DSA-44 (pubkey `/zetaphy.crypto.mldsa44.PubKey`)
+- `send` เป็น `MsgSend` ของ Cosmos SDK; ทุกคำสั่งเซ็นแบบ SIGN_MODE_DIRECT ด้วย ML-DSA-44 (pubkey `/zetaphy.crypto.mldsa44.PubKey`)
   - ส่งผ่าน JSON-RPC พอร์ต 8545 เดิม (`zetaphy_pqAccount`, `zetaphy_sendCosmosTx`)
 - ค่าธรรมเนียม = gas limit × (`eth_gasPrice` × 1.2) หน่วย `azetaphy`
 - โค้ดอยู่ที่ `src/pqtx.js` (ใช้ได้ทั้ง Node และเบราว์เซอร์)
   - ทดสอบโดยถอดรหัสด้วย protobuf ทางการของ Cosmos SDK (`cosmjs-types`) และตรวจลายเซ็นทุกครั้ง
 - กระเป๋าบนเว็บสำหรับบัญชีแบบนี้อยู่ที่ `zetaphy-wallet/` (แยกจาก zetaphy-neuro ซึ่งสัญญาว่าไม่แตะกุญแจ)
 - ทดสอบบนเชนจริงแล้ว (`npm run test:devnet:pq`, รันใน CI ด้วย): ส่งได้ และเชนปฏิเสธธุรกรรมที่ใช้กุญแจอื่นสวมบัญชี ลายเซ็นที่ถูกแก้ และธุรกรรมเก่าที่ส่งซ้ำ
+  - ชุดเดียวกันมีทดสอบ `token-send`, `call --value`, `stake`, `rewards`, `unstake` และการเรียกที่ revert ต้องไม่ขยับเงิน (ต้องใช้ `zetaphyd` ที่มี `MsgEVMCall`)
 - เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy-testnet-1`): ตั้ง `ZETAPHY_CHAIN_ID`
-- ยังไม่ได้ทำ: ธุรกรรม EVM และกุญแจของ validator ยังใช้ ECDSA / ed25519 เหมือนเดิม
+- ยังไม่ได้ทำ: การสร้างสัญญาใหม่ (ธุรกรรม EVM) และกุญแจของ validator ยังใช้ ECDSA / ed25519 เหมือนเดิม
 
 ## จุดอ่อนที่แก้แล้ว (ตรวจเอง 19 ต.ค. 2026)
 

@@ -1,6 +1,9 @@
 // Minimal JSON-RPC clients. Read-only methods only: this module has no way to
 // sign or send a transaction, by design (Neuro tier 1 never moves funds).
 
+// eth_call may carry a state override (third parameter, used by the trade
+// simulation in honeypot.js). It is still a call: the node runs it on a
+// scratch copy of the state and throws the copy away; nothing is signed or sent.
 const EVM_ALLOWED = new Set(['eth_chainId', 'eth_getCode', 'eth_getStorageAt', 'eth_call']);
 const SOLANA_ALLOWED = new Set(['getGenesisHash', 'getAccountInfo']);
 const NEAR_ALLOWED = new Set(['status', 'query']); // `query` only reads (view_* and view-function calls)

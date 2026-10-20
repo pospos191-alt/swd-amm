@@ -313,9 +313,24 @@ jobs:
           bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
           cp -r zetaphy-chain/fork-tests/. "$SRC/"
 
-      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys)
+      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys, MsgEVMCall) + fuzzing
         working-directory: ${{ env.SRC }}
-        run: go test ./precompiles/mldsa/ ./crypto/mldsa44/
+        run: |
+          go test ./precompiles/mldsa/ ./crypto/mldsa44/
+          go test ./crypto/mldsa44/ -run '^$' -fuzz FuzzUnmarshalVerify -fuzztime 30s
+          cd evmd
+          go test -run 'EVMCall' .
+          go test -run '^$' -fuzz FuzzEVMCallUnmarshal -fuzztime 20s .
+
+      # Static security checks on the code ZETAPHY added. G115 (int
+      # conversions) is excluded only for the upstream rate-limit module,
+      # where it flags generated and range-checked code.
+      - name: gosec (ZETAPHY code)
+        working-directory: ${{ env.SRC }}
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8
+          gosec -quiet -exclude-generated ./crypto/mldsa44/... ./precompiles/mldsa/... ./evmd
+          gosec -quiet -exclude-generated -exclude=G115 ./x/ratelimit/...
 
       - name: Build zetaphyd
         working-directory: ${{ env.SRC }}/evmd
@@ -347,6 +362,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
+      # The Solana toolchain, the Rust target dir and the test validator fill
+      # the runner's disk (the linker then dies with a bus error). Remove
+      # preinstalled SDKs this job never uses.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell /usr/share/swift
+          sudo docker image prune -af >/dev/null 2>&1 || true
+          df -h /
+
       - name: Checkout
         uses: actions/checkout@v5
 

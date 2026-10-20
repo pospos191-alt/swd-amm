@@ -14,6 +14,7 @@ export const UI = {
     program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none',
     package: 'Package', standard: 'Standard', admin: 'Admin', holders: 'Holders', listed: 'tonapi list', raw: 'Raw address',
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code', nearKeys: 'Full-access keys', codeHash: 'Code hash', cairo: 'Cairo version', maxSupply: 'Maximum supply', tokenId: 'Token ID',
+    pool: 'Liquidity pool', simTax: 'Simulated tax (buy / sell)', simFailed: 'sell failed',
   },
 };
 
@@ -175,6 +176,17 @@ export const T = {
     'eip7702': (p) => `This address is an ordinary wallet whose owner set it to run the code of contract ${p.target} (EIP-7702). It is not a token. That code can do whatever it was written to do with the wallet's funds; check ${p.target} too.`,
     'source-verified': (p) => `Public source code that Sourcify confirmed ${p.match === 'exact' ? 'matches the on-chain code byte for byte' : 'matches the on-chain code'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Read it at ${p.url}`,
     'source-unverified': () => 'No source code on Sourcify. It may still be published on the chain\'s explorer; if it is published nowhere, be extra careful.',
+    // Trade simulation (honeypot check, src/honeypot.js)
+    'sim-cannot-sell': (p) => `Honeypot warning: in a simulated trade through ${p.dex}, buying worked but selling ${p.sell == null ? 'failed' : `gave back almost nothing (${p.sell}% lost)`}. If you buy, you may not be able to sell. (A few tokens block selling only right after a buy; this check cannot tell the two apart.)`,
+    'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
+      ? `A simulated buy through ${p.dex} delivered no tokens at all: the whole purchase was taken.`
+      : `A simulated trade through ${p.dex} lost ${p.buy ?? '?'}% when buying and ${p.sell ?? '?'}% when selling, taken by the token as tax. You get back that much less than the price suggests.`),
+    'sim-ok': (p) => `A simulated buy and sell of a small amount through ${p.dex} worked (tax: ${p.buy}% buy, ${p.sell}% sell). This is a test at the current block only: whoever controls the contract may still raise the tax or block selling later.`,
+    'sim-skipped': (p) => ({
+      'no-pool': `No ${p.dex} pool pairing this token with ${p.native} was found, so no test buy and sell was run. This alone is not a warning sign; the token may trade elsewhere.`,
+      'no-override': 'The public RPC did not allow a simulated trade (state override), so no test buy and sell was run.',
+      'buy-failed': `A simulated buy through ${p.dex} failed, so selling could not be tested. Trading may not be open yet, or the token may refuse buys from contracts.`,
+    })[p.why] ?? 'The simulated trade could not be run, so buying and selling were not tested.',
     // CosmWasm (Osmosis, Neutron)
     'cw-not-found': () => 'No contract or token at this address on this chain. It may be mistyped, or the wrong chain is selected.',
     'cw20-token': (p) => `CW20 token (a Rust contract on CosmWasm) "${p.name ?? '?'}" (${p.symbol ?? '?'}), total supply ${fmtSupply(p.totalSupply, p.decimals)}.`,

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { createLocalChain } from './helpers/local-chain.js';
+import { CHAINS } from '../src/chains.js';
 
 const PORT = 18080;
 const shots = process.env.SCREENSHOT_DIR;
@@ -158,6 +159,30 @@ test('TON: a mintable jetton is read over tonapi.io and shown as high risk', asy
   assert.ok(items[0].includes('Ton Rocket'));
   assert.match(await page.getAttribute('#meta a', 'href'), /^https:\/\/tonviewer\.com\//);
   if (shots) await page.screenshot({ path: `${shots}/neuro-ton.png`, fullPage: true });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('honeypot: the simulated trade catches a sell block behind a harmless name', async () => {
+  // A mock Uniswap-V2 DEX at PancakeSwap's real addresses, and a token only its owner can sell.
+  const addPool = await chain.installDex(CHAINS.bsc.dex);
+  const addr = await chain.deploy('QuietHoneypot');
+  const pair = await addPool(addr, 10n ** 24n, 10n ** 20n);
+  await chain.send(addr, 'syncRewards(address)', [pair]);
+  const { page, errors } = await openPage('light');
+  await page.fill('#address', addr);
+  await page.click('#go');
+  await page.waitForSelector('#result:not([hidden])');
+  assert.equal(await page.textContent('#title'), 'เสี่ยงสูง');
+  const items = await page.$$eval('#findings li', (els) => els.map((e) => e.textContent));
+  assert.match(items[1], /honeypot.*ขายไม่ได้/, 'right under what the token is');
+  const meta = await page.textContent('#meta');
+  assert.ok(meta.includes(`PancakeSwap V2 · ${pair}`), 'pool shown');
+  assert.match(meta, /0% \/ ขายไม่ได้/, 'buy tax and failed sell shown');
+  if (shots) await page.screenshot({ path: `${shots}/neuro-honeypot-th.png`, fullPage: true });
+  await page.selectOption('#lang', 'en');
+  assert.match(await page.textContent('#findings'), /Honeypot warning/);
+  await page.selectOption('#lang', 'th');
   assert.deepEqual(errors, []);
   await page.close();
 });

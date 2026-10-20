@@ -604,9 +604,20 @@ var CHAIN_ID = "zetaphy-testnet-1";
 var DENOM = "azetaphy";
 var PREFIX = "zetaphy";
 var PUBKEY_TYPE_URL = "/zetaphy.crypto.mldsa44.PubKey";
+var VALOPER_PREFIX = "zetaphyvaloper";
 var MSG_SEND_TYPE_URL = "/cosmos.bank.v1beta1.MsgSend";
+var MSG_DELEGATE_TYPE_URL = "/cosmos.staking.v1beta1.MsgDelegate";
+var MSG_UNDELEGATE_TYPE_URL = "/cosmos.staking.v1beta1.MsgUndelegate";
+var MSG_WITHDRAW_REWARD_TYPE_URL = "/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward";
+var MSG_EVM_CALL_TYPE_URL = "/zetaphy.pq.v1.MsgEVMCall";
 var SIGN_MODE_DIRECT = 1;
 var DEFAULT_GAS_LIMIT = 400000n;
+var DEFAULT_STAKING_GAS_LIMIT = 500000n;
+var DEFAULT_EVM_GAS_LIMIT = 200000n;
+var EVM_CALL_GAS_OVERHEAD = 400000n;
+var MIN_EVM_GAS_LIMIT = 21000n;
+var MAX_EVM_GAS_LIMIT = 10000000n;
+var MAX_UINT64 = 2n ** 64n - 1n;
 var PUBLIC_KEY_BYTES = 1312;
 var SIGNATURE_BYTES = 2420;
 var DECIMALS = 18;
@@ -664,6 +675,17 @@ var encodeAny = (typeUrl, value) => msg(pb.string(1, typeUrl), pb.bytes(2, value
 var encodeCoin = ({ denom, amount }) => msg(pb.string(1, denom), pb.string(2, String(amount)));
 var encodePubKey = (publicKey) => msg(pb.bytes(1, publicKey));
 var encodeMsgSend = ({ fromAddress, toAddress, amount }) => msg(pb.string(1, fromAddress), pb.string(2, toAddress), pb.repeatedMessage(3, amount.map(encodeCoin)));
+var encodeStake = ({ delegatorAddress, validatorAddress: validatorAddress2, amount }) => msg(pb.string(1, delegatorAddress), pb.string(2, validatorAddress2), pb.message(3, encodeCoin(amount)));
+var encodeMsgDelegate = encodeStake;
+var encodeMsgUndelegate = encodeStake;
+var encodeMsgWithdrawDelegatorReward = ({ delegatorAddress, validatorAddress: validatorAddress2 }) => msg(pb.string(1, delegatorAddress), pb.string(2, validatorAddress2));
+var encodeMsgEVMCall = ({ sender, to, value = 0n, data = new Uint8Array(), gasLimit }) => msg(
+  pb.string(1, sender),
+  pb.string(2, to),
+  pb.string(3, BigInt(value) === 0n ? "" : BigInt(value).toString()),
+  pb.bytes(4, data),
+  pb.uint(5, gasLimit)
+);
 var encodeTxBody = ({ messages, memo = "", timeoutHeight = 0n }) => msg(pb.repeatedMessage(1, messages.map((m) => encodeAny(m.typeUrl, m.value))), pb.string(2, memo), pb.uint(3, timeoutHeight));
 var encodeModeInfoSingle = (mode) => msg(pb.message(1, msg(pb.uint(1, mode))));
 var encodeSignerInfo = ({ publicKey, mode = SIGN_MODE_DIRECT, sequence }) => msg(pb.message(1, encodeAny(PUBKEY_TYPE_URL, encodePubKey(publicKey))), pb.message(2, encodeModeInfoSingle(mode)), pb.uint(3, sequence));
@@ -742,10 +764,17 @@ var normalizeAddress = (addr, prefix = PREFIX) => {
   const bytes = addressBytes(addr, prefix);
   return { bytes, hex: toChecksumHex(bytes), bech32: toBech32(bytes, prefix) };
 };
+function validatorAddress(addr, valoperPrefix = VALOPER_PREFIX) {
+  return toBech32(fromBech32(String(addr ?? "").trim(), valoperPrefix), valoperPrefix);
+}
+var ADDRESS_PREFIX = new TextEncoder().encode("zetaphy/mldsa44\0");
 function pqAddress(publicKey, prefix = PREFIX) {
   const pk = asBytes(publicKey, "publicKey");
   if (pk.length !== PUBLIC_KEY_BYTES) throw new Error(`ML-DSA-44 public key must be ${PUBLIC_KEY_BYTES} bytes`);
-  const bytes = sha256(pk).slice(0, 20);
+  const pre = new Uint8Array(ADDRESS_PREFIX.length + pk.length);
+  pre.set(ADDRESS_PREFIX);
+  pre.set(pk, ADDRESS_PREFIX.length);
+  const bytes = sha256(pre).slice(0, 20);
   return { bytes, hex: toChecksumHex(bytes), bech32: toBech32(bytes, prefix) };
 }
 function parseZeta(text) {
@@ -766,6 +795,93 @@ function formatZeta(a) {
 }
 var bumpGasPrice = (p) => (BigInt(p) * 12n + 9n) / 10n;
 var txHashOf = (txBytes) => bytesToHex(sha256(txBytes)).toUpperCase();
+var positive = (v, what) => {
+  const x = BigInt(v);
+  if (x <= 0n) throw new Error(`${what} must be more than 0`);
+  return x;
+};
+var uint64 = (v, what) => {
+  const x = positive(v, what);
+  if (x > MAX_UINT64) throw new Error(`${what} is too large`);
+  return x;
+};
+var accountBech32 = (addr, prefix) => toBech32(addressBytes(addr, prefix), prefix);
+function msgSend({ from, to, amount, denom = DENOM, prefix = PREFIX }) {
+  const value = positive(amount, "amount");
+  return {
+    typeUrl: MSG_SEND_TYPE_URL,
+    spend: value,
+    value: encodeMsgSend({ fromAddress: accountBech32(from, prefix), toAddress: accountBech32(to, prefix), amount: [{ denom, amount: value.toString() }] })
+  };
+}
+function msgDelegate({ delegator, validator, amount, denom = DENOM, prefix = PREFIX }) {
+  const value = positive(amount, "amount");
+  return {
+    typeUrl: MSG_DELEGATE_TYPE_URL,
+    spend: value,
+    value: encodeMsgDelegate({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: validatorAddress(validator, prefix + "valoper"), amount: { denom, amount: value.toString() } })
+  };
+}
+function msgUndelegate({ delegator, validator, amount, denom = DENOM, prefix = PREFIX }) {
+  const value = positive(amount, "amount");
+  return {
+    typeUrl: MSG_UNDELEGATE_TYPE_URL,
+    spend: 0n,
+    value: encodeMsgUndelegate({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: validatorAddress(validator, prefix + "valoper"), amount: { denom, amount: value.toString() } })
+  };
+}
+function msgWithdrawRewards({ delegator, validator, prefix = PREFIX }) {
+  return {
+    typeUrl: MSG_WITHDRAW_REWARD_TYPE_URL,
+    spend: 0n,
+    value: encodeMsgWithdrawDelegatorReward({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: validatorAddress(validator, prefix + "valoper") })
+  };
+}
+function msgEVMCall({ sender, to, value = 0n, data = new Uint8Array(), gasLimit = DEFAULT_EVM_GAS_LIMIT, prefix = PREFIX }) {
+  if (to == null || String(to).trim() === "") throw new Error('an EVM call needs a "to" address (contract creation is not supported)');
+  const toBytes = addressBytes(to, prefix);
+  const v = BigInt(value);
+  if (v < 0n) throw new Error("value must not be negative");
+  const gas = BigInt(gasLimit);
+  if (gas < MIN_EVM_GAS_LIMIT || gas > MAX_EVM_GAS_LIMIT) throw new Error(`EVM gas limit must be between ${MIN_EVM_GAS_LIMIT} and ${MAX_EVM_GAS_LIMIT}`);
+  return {
+    typeUrl: MSG_EVM_CALL_TYPE_URL,
+    spend: v,
+    value: encodeMsgEVMCall({ sender: accountBech32(sender, prefix), to: toChecksumHex(toBytes), value: v, data: asBytes(data, "data"), gasLimit: gas })
+  };
+}
+function buildTx({
+  publicKey,
+  sign,
+  messages,
+  denom = DENOM,
+  chainId = CHAIN_ID,
+  accountNumber,
+  sequence,
+  gasLimit = DEFAULT_GAS_LIMIT,
+  gasPrice,
+  memo = ""
+}) {
+  const pk = asBytes(publicKey, "publicKey");
+  if (pk.length !== PUBLIC_KEY_BYTES) throw new Error(`ML-DSA-44 public key must be ${PUBLIC_KEY_BYTES} bytes`);
+  if (!Array.isArray(messages) || messages.length === 0) throw new Error("at least one message is required");
+  for (const m of messages) {
+    if (typeof m?.typeUrl !== "string" || !m.typeUrl.startsWith("/")) throw new Error("every message needs a typeUrl like /cosmos.bank.v1beta1.MsgSend");
+    if (!(m.value instanceof Uint8Array)) throw new Error(`message ${m.typeUrl}: value must be the encoded bytes`);
+  }
+  if (accountNumber == null || sequence == null) throw new Error("accountNumber and sequence are required");
+  if (gasPrice == null) throw new Error("gasPrice is required");
+  const gas = uint64(gasLimit, "gasLimit");
+  if (typeof sign !== "function") throw new Error("sign must be a function");
+  const bodyBytes = encodeTxBody({ messages: messages.map(({ typeUrl, value }) => ({ typeUrl, value })), memo });
+  const fee = { amount: [{ denom, amount: (gas * BigInt(gasPrice)).toString() }], gasLimit: gas };
+  const authInfoBytes = encodeAuthInfo({ signerInfos: [{ publicKey: pk, mode: SIGN_MODE_DIRECT, sequence: BigInt(sequence) }], fee });
+  const signDocBytes = encodeSignDoc({ bodyBytes, authInfoBytes, chainId, accountNumber: BigInt(accountNumber) });
+  const signature = asBytes(sign(signDocBytes), "signature");
+  if (signature.length !== SIGNATURE_BYTES) throw new Error(`ML-DSA-44 signature must be ${SIGNATURE_BYTES} bytes`);
+  const txBytes = encodeTxRaw({ bodyBytes, authInfoBytes, signatures: [signature] });
+  return { txBytes, txHex: "0x" + bytesToHex(txBytes), signDocBytes, bodyBytes, authInfoBytes, fee: BigInt(fee.amount[0].amount), txHash: txHashOf(txBytes) };
+}
 function buildSendTx({
   publicKey,
   sign,
@@ -781,29 +897,22 @@ function buildSendTx({
   memo = "",
   prefix = PREFIX
 }) {
-  const pk = asBytes(publicKey, "publicKey");
-  const me = pqAddress(pk, prefix);
-  if (from != null && toBech32(addressBytes(from, prefix), prefix) !== me.bech32) throw new Error("from does not match the public key");
-  const toAddr = toBech32(addressBytes(to, prefix), prefix);
-  const value = BigInt(amount);
-  if (value <= 0n) throw new Error("amount must be more than 0");
-  if (accountNumber == null || sequence == null) throw new Error("accountNumber and sequence are required");
-  if (gasPrice == null) throw new Error("gasPrice is required");
-  const gas = BigInt(gasLimit);
-  if (gas <= 0n) throw new Error("gasLimit must be more than 0");
-  if (typeof sign !== "function") throw new Error("sign must be a function");
-  const bodyBytes = encodeTxBody({
-    messages: [{ typeUrl: MSG_SEND_TYPE_URL, value: encodeMsgSend({ fromAddress: me.bech32, toAddress: toAddr, amount: [{ denom, amount: value.toString() }] }) }],
+  const me = pqAddress(publicKey, prefix);
+  if (from != null && accountBech32(from, prefix) !== me.bech32) throw new Error("from does not match the public key");
+  return buildTx({
+    publicKey,
+    sign,
+    messages: [msgSend({ from: me.bech32, to, amount, denom, prefix })],
+    denom,
+    chainId,
+    accountNumber,
+    sequence,
+    gasLimit,
+    gasPrice,
     memo
   });
-  const fee = { amount: [{ denom, amount: (gas * BigInt(gasPrice)).toString() }], gasLimit: gas };
-  const authInfoBytes = encodeAuthInfo({ signerInfos: [{ publicKey: pk, mode: SIGN_MODE_DIRECT, sequence: BigInt(sequence) }], fee });
-  const signDocBytes = encodeSignDoc({ bodyBytes, authInfoBytes, chainId, accountNumber: BigInt(accountNumber) });
-  const signature = asBytes(sign(signDocBytes), "signature");
-  if (signature.length !== SIGNATURE_BYTES) throw new Error(`ML-DSA-44 signature must be ${SIGNATURE_BYTES} bytes`);
-  const txBytes = encodeTxRaw({ bodyBytes, authInfoBytes, signatures: [signature] });
-  return { txBytes, txHex: "0x" + bytesToHex(txBytes), signDocBytes, bodyBytes, authInfoBytes, fee: BigInt(fee.amount[0].amount), txHash: txHashOf(txBytes) };
 }
+var qty = (v) => "0x" + BigInt(v).toString(16);
 function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX } = {}) {
   async function account(addr) {
     const a = await rpcCall("zetaphy_pqAccount", [addr]);
@@ -825,35 +934,94 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
     const gas = BigInt(gasLimit);
     return { address: me, account: acct, exists: acct.exists, balance: bal, gasLimit: gas, gasPrice: price, fee: gas * price };
   }
-  async function send({ publicKey, sign, to, amount, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = "" }) {
-    const toAddr = normalizeAddress(to, prefix);
-    if (BigInt(amount) <= 0n) throw new Error("amount must be more than 0");
+  async function sendMsgs({ publicKey, sign, messages, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = "", value, preflight }) {
+    if (!Array.isArray(messages) || messages.length === 0) throw new Error("at least one message is required");
+    const spend = value != null ? BigInt(value) : messages.reduce((n, m) => n + BigInt(m.spend ?? 0n), 0n);
+    if (spend < 0n) throw new Error("value must not be negative");
+    uint64(gasLimit, "gasLimit");
     const q = await quote({ publicKey, gasLimit });
     if (!q.exists) throw new Error(`account ${q.address.bech32} does not exist on chain yet: send ZETAPHY to this address first`);
     const usePrice = price == null ? q.gasPrice : BigInt(price);
     const fee = q.gasLimit * usePrice;
-    const value = BigInt(amount);
-    if (value + fee > q.balance) throw new Error(`not enough ZETAPHY: need ${formatZeta(value + fee)} (amount + fee), have ${formatZeta(q.balance)}`);
-    const tx = buildSendTx({
+    if (spend + fee > q.balance) throw new Error(`not enough ZETAPHY: need ${formatZeta(spend + fee)} (${spend ? "amount + fee" : "fee"}), have ${formatZeta(q.balance)}`);
+    const checked = preflight ? await preflight(q) : void 0;
+    const tx = buildTx({
       publicKey,
       sign,
-      to,
-      amount: value,
+      messages,
       denom,
       chainId,
       accountNumber: q.account.accountNumber,
       sequence: q.account.sequence,
       gasLimit: q.gasLimit,
       gasPrice: usePrice,
-      memo,
-      prefix
+      memo
     });
     const r = await rpcCall("zetaphy_sendCosmosTx", [tx.txHex]);
     if (!r || typeof r.code !== "number") throw new Error("the node did not answer zetaphy_sendCosmosTx");
     if (r.code !== 0) throw new Error(`the node rejected the transaction (code ${r.code}): ${r.log || "no log"}`);
-    return { txHash: r.txHash || tx.txHash, from: q.address, to: toAddr, amount: value, fee, gasLimit: q.gasLimit, gasPrice: usePrice, sequence: q.account.sequence };
+    return { txHash: r.txHash || tx.txHash, from: q.address, value: spend, fee, gasLimit: q.gasLimit, gasPrice: usePrice, sequence: q.account.sequence, checked };
   }
-  return { account, gasPrice, balance, quote, send };
+  async function send({ publicKey, sign, to, amount, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = "" }) {
+    const toAddr = normalizeAddress(to, prefix);
+    const value = positive(amount, "amount");
+    const me = pqAddress(publicKey, prefix);
+    const r = await sendMsgs({ publicKey, sign, messages: [msgSend({ from: me.bech32, to: toAddr.bech32, amount: value, denom, prefix })], gasLimit, gasPrice: price, memo });
+    return { txHash: r.txHash, from: r.from, to: toAddr, amount: value, fee: r.fee, gasLimit: r.gasLimit, gasPrice: r.gasPrice, sequence: r.sequence };
+  }
+  async function callEVM({
+    publicKey,
+    sign,
+    to,
+    data = "0x",
+    value = 0n,
+    evmGasLimit = DEFAULT_EVM_GAS_LIMIT,
+    gasLimit,
+    gasPrice: price,
+    memo = "",
+    check = true,
+    checkResult
+  }) {
+    const me = pqAddress(publicKey, prefix);
+    const m = msgEVMCall({ sender: me.bech32, to, value, data, gasLimit: evmGasLimit, prefix });
+    const evmGas = BigInt(evmGasLimit);
+    const txGas = gasLimit == null ? evmGas + EVM_CALL_GAS_OVERHEAD : BigInt(gasLimit);
+    if (txGas <= evmGas) throw new Error("the tx gas limit must be more than the EVM gas limit (the chain charges the EVM gas on the tx)");
+    const toHex = toChecksumHex(addressBytes(to, prefix));
+    const dataHex = "0x" + bytesToHex(asBytes(data, "data"));
+    const preflight = check ? async () => {
+      let ret;
+      try {
+        const call = { from: me.hex, to: toHex, data: dataHex, gas: qty(evmGas) };
+        if (BigInt(value) > 0n) call.value = qty(value);
+        ret = await rpcCall("eth_call", [call, "latest"]);
+      } catch (e) {
+        throw new Error(`the call would fail, so nothing was sent: ${e.shortMessage ?? e.message}`);
+      }
+      if (checkResult) checkResult(ret);
+      return ret;
+    } : void 0;
+    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight });
+    return { ...r, to: toHex, data: dataHex, evmGasLimit: evmGas, result: r.checked };
+  }
+  const staking = (build, defaultGas) => async ({ publicKey, sign, validator, amount, gasLimit = defaultGas, gasPrice: price, memo = "" }) => {
+    const me = pqAddress(publicKey, prefix);
+    const m = build({ delegator: me.bech32, validator, amount, denom, prefix });
+    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit, gasPrice: price, memo });
+    return { ...r, validator: validatorAddress(validator, prefix + "valoper"), amount: amount == null ? void 0 : BigInt(amount) };
+  };
+  return {
+    account,
+    gasPrice,
+    balance,
+    quote,
+    sendMsgs,
+    send,
+    callEVM,
+    delegate: staking(msgDelegate, DEFAULT_STAKING_GAS_LIMIT),
+    undelegate: staking(msgUndelegate, DEFAULT_STAKING_GAS_LIMIT),
+    withdrawRewards: staking(msgWithdrawRewards, DEFAULT_STAKING_GAS_LIMIT)
+  };
 }
 
 // node_modules/@noble/curves/utils.js
@@ -1718,17 +1886,29 @@ var ml_dsa44 = /* @__PURE__ */ (() => getDilithium({
   securityLevel: 128
 }))();
 export {
+  ADDRESS_PREFIX,
   CHAIN_ID,
+  DEFAULT_EVM_GAS_LIMIT,
   DEFAULT_GAS_LIMIT,
+  DEFAULT_STAKING_GAS_LIMIT,
   DENOM,
+  EVM_CALL_GAS_OVERHEAD,
+  MAX_EVM_GAS_LIMIT,
+  MIN_EVM_GAS_LIMIT,
+  MSG_DELEGATE_TYPE_URL,
+  MSG_EVM_CALL_TYPE_URL,
   MSG_SEND_TYPE_URL,
+  MSG_UNDELEGATE_TYPE_URL,
+  MSG_WITHDRAW_REWARD_TYPE_URL,
   PREFIX,
   PUBKEY_TYPE_URL,
   PUBLIC_KEY_BYTES,
   SIGNATURE_BYTES,
   SIGN_MODE_DIRECT,
+  VALOPER_PREFIX,
   addressBytes,
   buildSendTx,
+  buildTx,
   bumpGasPrice,
   bytesToHex,
   encodeAny,
@@ -1736,7 +1916,11 @@ export {
   encodeCoin,
   encodeFee,
   encodeModeInfoSingle,
+  encodeMsgDelegate,
+  encodeMsgEVMCall,
   encodeMsgSend,
+  encodeMsgUndelegate,
+  encodeMsgWithdrawDelegatorReward,
   encodePubKey,
   encodeSignDoc,
   encodeSignerInfo,
@@ -1746,6 +1930,11 @@ export {
   fromBech32,
   hexToBytes,
   ml_dsa44,
+  msgDelegate,
+  msgEVMCall,
+  msgSend,
+  msgUndelegate,
+  msgWithdrawRewards,
   normalizeAddress,
   parseZeta,
   pqAddress,
@@ -1753,5 +1942,6 @@ export {
   toBech32,
   toChecksumHex,
   txHashOf,
+  validatorAddress,
   varint
 };

@@ -14,6 +14,7 @@ export const UI = {
     program: 'Program token', mintAuth: 'Hak mencetak (mint authority)', freezeAuth: 'Hak membekukan (freeze authority)', extensions: 'Ekstensi', upgradeAuth: 'Hak upgrade (upgrade authority)', none: 'tidak ada',
     package: 'Paket', standard: 'Standar', admin: 'Admin', holders: 'Pemegang', listed: 'Daftar tonapi', raw: 'Alamat mentah (raw)',
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang', nearKeys: 'Kunci akses penuh (full-access key)', codeHash: 'Hash kode', cairo: 'Versi Cairo', maxSupply: 'Pasokan maksimum', tokenId: 'ID token',
+    pool: 'Pool likuiditas', simTax: 'Pajak simulasi (beli / jual)', simFailed: 'gagal menjual',
   },
 };
 
@@ -175,6 +176,17 @@ export const T = {
     'eip7702': (p) => `Alamat ini adalah dompet biasa yang pemiliknya mengaturnya untuk menjalankan kode kontrak ${p.target} (EIP-7702). Ini bukan token. Kode itu dapat melakukan apa saja yang tertulis di dalamnya terhadap dana di dompet ini; periksa juga ${p.target}.`,
     'source-verified': (p) => `Ada kode sumber publik yang sudah dikonfirmasi Sourcify ${p.match === 'exact' ? 'sama persis byte demi byte dengan kode on-chain' : 'sesuai dengan kode on-chain'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Baca di ${p.url}`,
     'source-unverified': () => 'Tidak ada kode sumber di Sourcify. Kode sumbernya mungkin tetap dipublikasikan di explorer jaringan ini; jika tidak dipublikasikan di mana pun, berhati-hatilah.',
+    // Trade simulation (honeypot check, src/honeypot.js)
+    'sim-cannot-sell': (p) => `Peringatan honeypot: dalam simulasi perdagangan lewat ${p.dex}, membeli berhasil tetapi ${p.sell == null ? 'menjual gagal' : `menjual hampir tidak mengembalikan apa-apa (hilang ${p.sell}%)`}. Jika Anda membeli, Anda mungkin tidak bisa menjual. (Sebagian kecil token hanya memblokir penjualan sesaat setelah pembelian; pemeriksaan ini tidak bisa membedakan keduanya.)`,
+    'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
+      ? `Simulasi pembelian lewat ${p.dex} tidak menghasilkan token sama sekali: seluruh pembelian diambil.`
+      : `Simulasi perdagangan lewat ${p.dex} kehilangan ${p.buy ?? '?'}% saat membeli dan ${p.sell ?? '?'}% saat menjual, diambil token sebagai pajak. Anda menerima kembali sebanyak itu lebih sedikit dari harga yang terlihat.`),
+    'sim-ok': (p) => `Simulasi membeli lalu menjual sejumlah kecil lewat ${p.dex} berhasil (pajak: beli ${p.buy}%, jual ${p.sell}%). Ini hanya uji pada blok saat ini: pihak yang mengendalikan kontrak tetap bisa menaikkan pajak atau memblokir penjualan nanti.`,
+    'sim-skipped': (p) => ({
+      'no-pool': `Tidak ditemukan pool token ini dengan ${p.native} di ${p.dex}, jadi uji beli dan jual tidak dijalankan. Ini sendiri bukan tanda bahaya; token mungkin diperdagangkan di tempat lain.`,
+      'no-override': 'RPC publik tidak mengizinkan simulasi perdagangan (state override), jadi uji beli dan jual tidak dijalankan.',
+      'buy-failed': `Simulasi pembelian lewat ${p.dex} gagal, jadi penjualan tidak bisa diuji. Perdagangan mungkin belum dibuka, atau token menolak pembelian dari kontrak.`,
+    })[p.why] ?? 'Simulasi perdagangan tidak bisa dijalankan, jadi pembelian dan penjualan tidak diuji.',
     // CosmWasm (Osmosis, Neutron)
     'cw-not-found': () => 'Tidak ada kontrak atau token di alamat ini di jaringan ini. Mungkin salah ketik, atau jaringan yang dipilih salah.',
     'cw20-token': (p) => `Token CW20 (kontrak Rust di CosmWasm) "${p.name ?? '?'}" (${p.symbol ?? '?'}), total pasokan ${fmtSupply(p.totalSupply, p.decimals)}.`,

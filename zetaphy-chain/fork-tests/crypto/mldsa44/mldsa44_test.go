@@ -2,6 +2,7 @@ package mldsa44
 
 import (
 	"crypto/rand"
+	"fmt"
 	"crypto/sha256"
 	"testing"
 
@@ -38,9 +39,9 @@ func TestSignVerifyAndAddress(t *testing.T) {
 	if pub.VerifySignature(msg, sig[:100]) || (&PubKey{Key: pub.Key[:10]}).VerifySignature(msg, sig) {
 		t.Fatal("wrong sizes accepted")
 	}
-	h := sha256.Sum256(pub.Key)
+	h := sha256.Sum256(append([]byte("zetaphy/mldsa44\x00"), pub.Key...))
 	if string(pub.Address()) != string(h[:20]) {
-		t.Fatal("address is not sha256(key)[:20]")
+		t.Fatal("address is not sha256(prefix || key)[:20]")
 	}
 	other, _ := newKey(t)
 	if pub.Equals(other) || !pub.Equals(&PubKey{Key: append([]byte{}, pub.Key...)}) {
@@ -63,5 +64,68 @@ func TestProtoRoundTripAndRegistry(t *testing.T) {
 	}
 	if gogoproto.FileDescriptor(protoFile) == nil {
 		t.Fatal("file descriptor not registered")
+	}
+}
+
+func TestUnmarshalHostileInput(t *testing.T) {
+	for _, bz := range [][]byte{
+		{0x0a},                         // tag, no length
+		{0x0a, 0xff, 0xff, 0xff, 0x0f}, // length far past the end
+		{0x0a, 0x05, 1, 2},             // short value
+		{0xff},                         // bad tag
+		{0x10, 0x01, 0x0a, 0x01, 0x07}, // unknown varint field, then key
+	} {
+		var k PubKey
+		err := k.Unmarshal(bz)
+		if len(bz) == 5 && bz[0] == 0x10 {
+			if err != nil || len(k.Key) != 1 || k.Key[0] != 7 {
+				t.Fatalf("unknown field not skipped: %v %v", err, k.Key)
+			}
+			continue
+		}
+		if err == nil {
+			t.Fatalf("accepted %x", bz)
+		}
+	}
+	// a valid key survives MarshalToSizedBuffer into a larger buffer
+	pub, _ := newKey(t)
+	buf := make([]byte, pub.Size()+10)
+	n, _ := pub.MarshalToSizedBuffer(buf)
+	var back PubKey
+	if err := back.Unmarshal(buf[len(buf)-n:]); err != nil || !back.Equals(pub) {
+		t.Fatal("MarshalToSizedBuffer")
+	}
+}
+
+func FuzzUnmarshalVerify(f *testing.F) {
+	f.Add([]byte{0x0a, 0x02, 1, 2}, []byte("msg"), []byte{1})
+	f.Fuzz(func(t *testing.T, bz, msg, sig []byte) {
+		var k PubKey
+		if k.Unmarshal(bz) != nil {
+			return
+		}
+		_ = k.Valid()
+		if k.VerifySignature(msg, sig) {
+			t.Fatal("random input verified")
+		}
+		out, _ := k.Marshal()
+		var again PubKey
+		if again.Unmarshal(out) != nil || string(again.Key) != string(k.Key) {
+			t.Fatal("round trip")
+		}
+	})
+}
+
+// The same seed gives the same key and address in Go (CIRCL) and in the
+// JavaScript wallet (@noble/post-quantum, zetaphy-network/src/pqtx.js).
+func TestAddressMatchesJavaScript(t *testing.T) {
+	var seed [32]byte
+	for i := range seed {
+		seed[i] = byte(i)
+	}
+	pk, _ := mldsa44.NewKeyFromSeed(&seed)
+	b, _ := pk.MarshalBinary()
+	if got := fmt.Sprintf("%x", []byte((&PubKey{Key: b}).Address())); got != "6da134ebfcb035273e87954f0641bd920ed073ba" {
+		t.Fatalf("address %s", got)
 	}
 }

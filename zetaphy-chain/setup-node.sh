@@ -11,6 +11,9 @@
 # OPTIONAL: put your MetaMask address between the quotes to receive
 # 1,000,000 test ZETAPHY at genesis (public address only, never a private key).
 OWNER_EVM_ADDRESS="${OWNER_EVM_ADDRESS:-}"
+# To JOIN a running ZETAPHY chain instead of starting one: its node's https
+# name, e.g. JOIN="1-2-3-4.sslip.io" (genesis and peer address come from it).
+JOIN="${JOIN:-}"
 
 set -euo pipefail
 
@@ -71,12 +74,31 @@ zetaphy_patch_source() {
     -e 's#github.com/cosmos/ibc-go/v10#github.com/cosmos/ibc-go/v11#g' \
     -e 's#"cosmossdk.io/store/#"github.com/cosmos/cosmos-sdk/store/v2/#g' \
     -e 's#"cosmossdk.io/log"#"cosmossdk.io/log/v2"#g' {} +
+  # ibc-go v11 middlewares are set up after creation, so pointer receivers.
+  sed -i -E 's/^func \((im|i) IBCMiddleware\)/func (\1 *IBCMiddleware)/' "$src/x/ratelimit/ibc_middleware.go"
   for part in RL PQ; do
     sed -n "/^: <<.ZETAPHY_${part}_PATCH.\$/,/^ZETAPHY_${part}_PATCH\$/p" "$self" | sed '1d;$d' | (cd "$src" && git apply -)
   done
   (cd "$src" && go vet ./precompiles/mldsa/ ./crypto/mldsa44/ ./x/ratelimit/...)
 }
 if [ "${1:-}" = "--patch-source" ]; then zetaphy_patch_source "$2"; exit 0; fi
+
+# bash setup-node.sh --become-validator <ZETAPHY>: on a synced node that
+# joined with JOIN=, stake that much from its "validator" key (the faucet
+# gives 10) and become a validator.
+if [ "${1:-}" = "--become-validator" ]; then
+  amt=${2:?amount of ZETAPHY to stake}
+  [[ "$amt" =~ ^[0-9]+$ ]] || { echo "amount: whole ZETAPHY"; exit 1; }
+  zv() { su -s /bin/bash "$NODE_USER" -c "$BIN $* --home $NODE_HOME"; }
+  [ "$(zv status | jq -r .sync_info.catching_up)" = false ] || { echo "still syncing; try again later"; exit 1; }
+  f=$(su -s /bin/bash "$NODE_USER" -c 'mktemp')
+  jq -n --argjson pk "$(zv comet show-validator)" --arg a "${amt}000000000000000000$DENOM" --arg m "$MONIKER-$(hostname -s)" \
+    '{pubkey:$pk,amount:$a,moniker:$m,"commission-rate":"0.1","commission-max-rate":"0.2","commission-max-change-rate":"0.01","min-self-delegation":"1"}' \
+    | su -s /bin/bash "$NODE_USER" -c "cat > $f"
+  zv tx staking create-validator "$f" --from validator --keyring-backend test --keyring-dir "$KEYS_DIR" \
+    --chain-id "$CHAIN_ID" --gas auto --gas-adjustment 1.5 --gas-prices "1000000000$DENOM" -y
+  exit 0
+fi
 
 touch "$LOG" && chmod 640 "$LOG"
 exec > >(tee -a "$LOG") 2>&1
@@ -91,6 +113,7 @@ LIQUIDITY_TOTAL=100000000$Z        # 10% liquidity & partners (pays the two test
 TEAM=50000000$Z                    # 5% team: locked 1 year, then linear to year 4
 VALIDATOR_GRANT=1000000$Z          # from liquidity: validator account
 OWNER_GRANT=1000000$Z              # from liquidity: your MetaMask (only if set)
+FAUCET_GRANT=1000000$Z             # from liquidity: testnet faucet (zetaphy_faucet, 10 per newcomer)
 SELF_STAKE=500000$Z
 
 # ---------------------------------------------------------------------------
@@ -129,10 +152,12 @@ elif [ ! -x "$BIN" ] || [ -n "${FORCE_BUILD:-}" ]; then
   got=$(as_node "git -C '$src' rev-parse HEAD")
   [ "$got" = "$COSMOS_EVM_COMMIT" ] || { echo "source commit $got != pinned $COSMOS_EVM_COMMIT"; exit 1; }
   goenv="PATH=$(dirname "$GO"):\$PATH GOTOOLCHAIN=go${GO_VERSION}"
+  # Under 3 GB of RAM (e.g. a 1 GB free VM): one compile at a time.
+  [ "$mem_kb" -lt 3000000 ] && goenv="$goenv GOFLAGS=-p=1 GOGC=50"
   # The ZETAPHY changes (zetaphy_patch_source, above), as the node user.
   install -m 644 "$0" /tmp/zetaphy-setup-node.sh
   as_node "cd '$src' && $goenv bash /tmp/zetaphy-setup-node.sh --patch-source '$src'"
-  as_node "cd '$src' && PATH=$(dirname "$GO"):\$PATH GOTOOLCHAIN=go${GO_VERSION} make install"
+  as_node "cd '$src' && $goenv make install"
   install -m 755 "/home/${NODE_USER}/go/bin/evmd" "$BIN"
 fi
 "$BIN" version
@@ -146,7 +171,19 @@ if [ ! -f "$NODE_HOME/config/genesis.json" ]; then
   as_node "mkdir -p '$KEYS_DIR' && chmod 700 '$KEYS_DIR'"
   backup="$KEYS_DIR/MNEMONICS-KEEP-SECRET.txt"
   as_node "umask 077 && : > '$backup'"
-  for name in validator rewards swd-airdrop community liquidity team; do
+fi
+if [ ! -f "$NODE_HOME/config/genesis.json" ] && [ -n "$JOIN" ]; then
+  # Join: a full node of that chain; --become-validator later if wanted.
+  out=$(z keys add validator $K --algo eth_secp256k1 --home "$NODE_HOME" --output json)
+  echo "validator $(echo "$out" | jq -r .mnemonic)" | as_node "cat >> '$backup'"
+  [ "$MONIKER" = zetaphy-validator-0 ] && MONIKER="zetaphy-$(hostname -s)"
+  z init "$MONIKER" --chain-id "$CHAIN_ID" --home "$NODE_HOME" >/dev/null
+  z config set client chain-id "$CHAIN_ID" --home "$NODE_HOME"
+  as_node "curl -fsS 'https://$JOIN/zetaphy/genesis.json' -o '$NODE_HOME/config/genesis.json' && curl -fsS 'https://$JOIN/zetaphy/peer' -o '$NODE_HOME/config/seed-peer'"
+  z genesis validate-genesis --home "$NODE_HOME"
+  [ "$(jq -r .chain_id "$NODE_HOME/config/genesis.json")" = "$CHAIN_ID" ] || { echo "$JOIN is not on $CHAIN_ID"; exit 1; }
+elif [ ! -f "$NODE_HOME/config/genesis.json" ]; then
+  for name in validator rewards swd-airdrop community liquidity team faucet; do
     out=$(z keys add "$name" $K --algo eth_secp256k1 --home "$NODE_HOME" --output json)
     echo "$name $(echo "$out" | jq -r .mnemonic)" | as_node "cat >> '$backup'"
   done
@@ -185,7 +222,11 @@ if [ ! -f "$NODE_HOME/config/genesis.json" ]; then
   z genesis add-genesis-account "$(addr rewards)" "${REWARDS}${DENOM}" --home "$NODE_HOME"
   z genesis add-genesis-account "$(addr swd-airdrop)" "${SWD_AIRDROP}${DENOM}" --home "$NODE_HOME"
   z genesis add-genesis-account "$(addr community)" "${COMMUNITY}${DENOM}" --home "$NODE_HOME"
+  z genesis add-genesis-account "$(addr faucet)" "${FAUCET_GRANT}${DENOM}" --home "$NODE_HOME"
+  liquidity=$(python3 -c "print($liquidity - $FAUCET_GRANT)")
   z genesis add-genesis-account "$(addr liquidity)" "${liquidity}${DENOM}" --home "$NODE_HOME"
+  # The faucet's key, for the node itself (zetaphy_faucet); testnet only.
+  z keys unsafe-export-eth-key faucet $K --home "$NODE_HOME" 2>/dev/null | as_node "umask 077 && cat > '$NODE_HOME/config/faucet.key'"
   now=$(date +%s)
   z genesis add-genesis-account "$(addr team)" "${TEAM}${DENOM}" --home "$NODE_HOME" \
     --vesting-amount "${TEAM}${DENOM}" --vesting-start-time $((now + 365*86400)) --vesting-end-time $((now + 4*365*86400))
@@ -212,6 +253,14 @@ as_node "sed -i -E 's/^timeout_commit = .*/timeout_commit = \"5s\"/' '$C'"      
 as_node "sed -i -E 's/^type = \"flood\"/type = \"app\"/' '$C'"
 as_node "sed -i -E 's/^minimum-gas-prices = .*/minimum-gas-prices = \"1000000000$DENOM\"/' '$A'"
 as_node "sed -i -E 's/^evm-chain-id = .*/evm-chain-id = $EVM_CHAIN_ID/' '$A'"
+# Keep ~6 days of state, not all of it: disk stays small on free VMs.
+as_node "sed -i -E 's/^pruning = .*/pruning = \"custom\"/; s/^pruning-keep-recent = .*/pruning-keep-recent = \"100000\"/; s/^pruning-interval = .*/pruning-interval = \"10\"/' '$A'"
+[ "$mem_kb" -lt 3000000 ] && as_node "sed -i -E 's/^iavl-cache-size = .*/iavl-cache-size = 50000/' '$A'"
+# A joined node dials the node it joined.
+if [ -f "$NODE_HOME/config/seed-peer" ]; then
+  peer=$(tr -cd 'a-f0-9@.:' < "$NODE_HOME/config/seed-peer")
+  as_node "sed -i -E 's/^persistent_peers = .*/persistent_peers = \"$peer\"/' '$C'"
+fi
 # Public: EVM JSON-RPC 8545 (read + send signed txs) and P2P 26656.
 # Local only: CometBFT RPC 26657, REST 1317, gRPC 9090 (defaults).
 as_node "python3 - '$A' <<'PY'
@@ -256,6 +305,7 @@ ExecStart=$START
 Restart=always
 RestartSec=5
 LimitNOFILE=65535
+Environment=GOMEMLIMIT=$((mem_kb * 6 / 10 / 1024))MiB
 NoNewPrivileges=true
 ProtectSystem=full
 PrivateTmp=true
@@ -283,9 +333,19 @@ ip=$(curl -fsS -m 5 https://checkip.amazonaws.com 2>/dev/null || hostname -I | a
 # from Ubuntu's archive gets a free Let's Encrypt certificate for
 # <ip>.sslip.io, a free DNS name that points at the IP. Not fatal if it fails.
 host="${ip//./-}.sslip.io"
+# It also publishes what another machine needs to JOIN this chain.
+pub=/var/lib/zetaphy-public
+mkdir -p $pub && install -m 644 "$NODE_HOME/config/genesis.json" $pub/ && install -m 644 "$0" $pub/setup-node.sh
+echo "$(z comet show-node-id --home "$NODE_HOME")@$ip:26656" > $pub/peer
 if [ -z "$NO_SYSTEMD" ] && [ -d /run/systemd/system ] && [[ "$ip" =~ ^[0-9.]+$ ]]; then
-  { apt-get install -y caddy >/dev/null && printf '%s {\n\treverse_proxy 127.0.0.1:8545\n}\n' "$host" > /etc/caddy/Caddyfile \
+  { apt-get install -y caddy >/dev/null && printf '%s {\n\thandle_path /zetaphy/* {\n\t\troot * %s\n\t\tfile_server\n\t}\n\thandle {\n\t\treverse_proxy 127.0.0.1:8545\n\t}\n}\n' "$host" $pub > /etc/caddy/Caddyfile \
     && systemctl restart caddy; } || echo "https setup failed; the RPC still works over http"
+fi
+# A joined node asks the faucet of the node it joined for 10 ZETAPHY.
+if [ -n "$JOIN" ]; then
+  me=$(z debug addr "$(z keys show validator -a $K --home "$NODE_HOME")" --home "$NODE_HOME" | awk '/Address hex/ {print $3}')
+  curl -fsS "https://$JOIN" -H 'content-type: application/json' \
+    --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"zetaphy_faucet\",\"params\":[\"$me\"]}" || true
 fi
 cat <<INFO | tee "/home/$NODE_USER/NODE-INFO.txt"
 
@@ -294,6 +354,7 @@ ZETAPHY testnet node is starting.
   Chain ID (EVM):      $EVM_CHAIN_ID
   MetaMask RPC URL:    http://$ip:8545
   HTTPS RPC (wallet):  https://$host  (needs ports 80 and 443 open)
+  Others join with:    JOIN=$host in setup-node.sh, then --become-validator 9
   Currency symbol:     ZETAPHY
   Genesis keys:        $KEYS_DIR (testnet only; MNEMONICS-KEEP-SECRET.txt)
   Logs:                journalctl -u zetaphyd -f
@@ -304,10 +365,10 @@ exit 0
 # ---- ZETAPHY patches (applied in step 4; never executed as shell) ----
 : <<'ZETAPHY_RL_PATCH'
 diff --git a/x/ratelimit/ibc_middleware.go b/x/ratelimit/ibc_middleware.go
-index 2bd59d8..5d6a8ab 100644
+index c7e4cb2..5d6a8ab 100644
 --- a/x/ratelimit/ibc_middleware.go
 +++ b/x/ratelimit/ibc_middleware.go
-@@ -18,18 +18,36 @@ var _ porttypes.Middleware = (*IBCMiddleware)(nil)
+@@ -18,16 +18,34 @@ var _ porttypes.Middleware = (*IBCMiddleware)(nil)
  
  type IBCMiddleware struct {
  	app    porttypes.IBCModule
@@ -343,74 +404,9 @@ index 2bd59d8..5d6a8ab 100644
 +}
 +
  // OnChanOpenInit implements the IBCMiddleware interface
--func (im IBCMiddleware) OnChanOpenInit(ctx sdk.Context,
-+func (im *IBCMiddleware) OnChanOpenInit(ctx sdk.Context,
+ func (im *IBCMiddleware) OnChanOpenInit(ctx sdk.Context,
  	order channeltypes.Order,
- 	connectionHops []string,
- 	portID string,
-@@ -49,7 +67,7 @@ func (im IBCMiddleware) OnChanOpenInit(ctx sdk.Context,
- }
- 
- // OnChanOpenTry implements the IBCMiddleware interface
--func (im IBCMiddleware) OnChanOpenTry(
-+func (im *IBCMiddleware) OnChanOpenTry(
- 	ctx sdk.Context,
- 	order channeltypes.Order,
- 	connectionHops []string,
-@@ -62,7 +80,7 @@ func (im IBCMiddleware) OnChanOpenTry(
- }
- 
- // OnChanOpenAck implements the IBCMiddleware interface
--func (im IBCMiddleware) OnChanOpenAck(
-+func (im *IBCMiddleware) OnChanOpenAck(
- 	ctx sdk.Context,
- 	portID,
- 	channelID string,
-@@ -73,7 +91,7 @@ func (im IBCMiddleware) OnChanOpenAck(
- }
- 
- // OnChanOpenConfirm implements the IBCMiddleware interface
--func (im IBCMiddleware) OnChanOpenConfirm(
-+func (im *IBCMiddleware) OnChanOpenConfirm(
- 	ctx sdk.Context,
- 	portID,
- 	channelID string,
-@@ -82,7 +100,7 @@ func (im IBCMiddleware) OnChanOpenConfirm(
- }
- 
- // OnChanCloseInit implements the IBCMiddleware interface
--func (im IBCMiddleware) OnChanCloseInit(
-+func (im *IBCMiddleware) OnChanCloseInit(
- 	ctx sdk.Context,
- 	portID,
- 	channelID string,
-@@ -91,7 +109,7 @@ func (im IBCMiddleware) OnChanCloseInit(
- }
- 
- // OnChanCloseConfirm implements the IBCMiddleware interface
--func (im IBCMiddleware) OnChanCloseConfirm(
-+func (im *IBCMiddleware) OnChanCloseConfirm(
- 	ctx sdk.Context,
- 	portID,
- 	channelID string,
-@@ -100,7 +118,7 @@ func (im IBCMiddleware) OnChanCloseConfirm(
- }
- 
- // OnRecvPacket implements the IBCMiddleware interface
--func (im IBCMiddleware) OnRecvPacket(
-+func (im *IBCMiddleware) OnRecvPacket(
- 	ctx sdk.Context,
- 	channelVersion string,
- 	packet channeltypes.Packet,
-@@ -129,37 +147,43 @@ func (im IBCMiddleware) OnRecvPacket(
- }
- 
- // OnAcknowledgementPacket implements the IBCMiddleware interface
--func (im IBCMiddleware) OnAcknowledgementPacket(
-+func (im *IBCMiddleware) OnAcknowledgementPacket(
- 	ctx sdk.Context,
- 	channelVersion string,
- 	packet channeltypes.Packet,
+@@ -136,9 +154,13 @@ func (im *IBCMiddleware) OnAcknowledgementPacket(
  	acknowledgement []byte,
  	relayer sdk.AccAddress,
  ) error {
@@ -427,12 +423,7 @@ index 2bd59d8..5d6a8ab 100644
  	}
  	return im.app.OnAcknowledgementPacket(ctx, channelVersion, packet, acknowledgement, relayer)
  }
- 
- // OnTimeoutPacket implements the IBCMiddleware interface
--func (im IBCMiddleware) OnTimeoutPacket(
-+func (im *IBCMiddleware) OnTimeoutPacket(
- 	ctx sdk.Context,
- 	channelVersion string,
+@@ -150,9 +172,11 @@ func (im *IBCMiddleware) OnTimeoutPacket(
  	packet channeltypes.Packet,
  	relayer sdk.AccAddress,
  ) error {
@@ -446,31 +437,6 @@ index 2bd59d8..5d6a8ab 100644
 +		}
  	}
  	return im.app.OnTimeoutPacket(ctx, channelVersion, packet, relayer)
- }
- 
- // SendPacket implements the ICS4 Wrapper interface
- // Rate-limited SendPacket found in RateLimit Keeper
--func (im IBCMiddleware) SendPacket(
-+func (im *IBCMiddleware) SendPacket(
- 	ctx sdk.Context,
- 	sourcePort string,
- 	sourceChannel string,
-@@ -178,7 +202,7 @@ func (im IBCMiddleware) SendPacket(
- }
- 
- // WriteAcknowledgement implements the ICS4 Wrapper interface.
--func (im IBCMiddleware) WriteAcknowledgement(
-+func (im *IBCMiddleware) WriteAcknowledgement(
- 	ctx sdk.Context,
- 	packet exported.PacketI,
- 	ack exported.Acknowledgement,
-@@ -187,6 +211,6 @@ func (im IBCMiddleware) WriteAcknowledgement(
- }
- 
- // GetAppVersion returns the application version of the underlying application
--func (i IBCMiddleware) GetAppVersion(ctx sdk.Context, portID, channelID string) (string, bool) {
-+func (i *IBCMiddleware) GetAppVersion(ctx sdk.Context, portID, channelID string) (string, bool) {
- 	return i.keeper.GetAppVersion(ctx, portID, channelID)
  }
 diff --git a/x/ratelimit/keeper/keeper.go b/x/ratelimit/keeper/keeper.go
 index b7db0a2..e1bf9eb 100644
@@ -689,27 +655,24 @@ index 0000000..4cddc32
 +}
 diff --git a/crypto/mldsa44/keys.pb.go b/crypto/mldsa44/keys.pb.go
 new file mode 100644
-index 0000000..c0bc0f9
+index 0000000..e86a927
 --- /dev/null
 +++ b/crypto/mldsa44/keys.pb.go
-@@ -0,0 +1,273 @@
-+// Hand-written gogoproto code for zetaphy/crypto/mldsa44/keys.proto:
+@@ -0,0 +1,84 @@
++// Protobuf code for zetaphy/crypto/mldsa44/keys.proto, written by hand:
 +//
 +//	syntax = "proto3";
 +//	package zetaphy.crypto.mldsa44;
 +//	message PubKey { bytes key = 1; }
 +//
-+// The file descriptor is built in code (see descriptor.go) instead of being
-+// generated, so no protoc toolchain is needed to build the chain.
++// The file descriptor is built in code (descriptor.go), so no protoc
++// toolchain is needed to build the chain.
 +
 +package mldsa44
 +
 +import (
-+	fmt "fmt"
-+	io "io"
-+	math_bits "math/bits"
-+
 +	proto "github.com/cosmos/gogoproto/proto"
++	"google.golang.org/protobuf/encoding/protowire"
 +)
 +
 +// PubKey is an ML-DSA-44 (FIPS 204) public key: the raw 1312-byte encoding.
@@ -722,261 +685,75 @@ index 0000000..c0bc0f9
 +func (*PubKey) Descriptor() ([]byte, []int) {
 +	return fileDescriptor, []int{0}
 +}
-+func (m *PubKey) XXX_Unmarshal(b []byte) error { return m.Unmarshal(b) }
-+func (m *PubKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-+	b = b[:cap(b)]
-+	n, err := m.MarshalToSizedBuffer(b)
-+	if err != nil {
-+		return nil, err
-+	}
-+	return b[:n], nil
-+}
-+func (m *PubKey) XXX_Merge(src proto.Message) { xxx_messageInfo_PubKey.Merge(m, src) }
-+func (m *PubKey) XXX_Size() int               { return m.Size() }
-+func (m *PubKey) XXX_DiscardUnknown()         { xxx_messageInfo_PubKey.DiscardUnknown(m) }
-+
-+var xxx_messageInfo_PubKey proto.InternalMessageInfo
-+
-+func (m *PubKey) GetKey() []byte {
-+	if m != nil {
-+		return m.Key
-+	}
-+	return nil
-+}
 +
 +func init() {
 +	proto.RegisterType((*PubKey)(nil), ProtoName)
 +	proto.RegisterFile(protoFile, fileDescriptor)
 +}
 +
-+func (m *PubKey) Marshal() (dAtA []byte, err error) {
-+	size := m.Size()
-+	dAtA = make([]byte, size)
-+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-+	if err != nil {
-+		return nil, err
++func (m *PubKey) Size() int {
++	if m == nil || len(m.Key) == 0 {
++		return 0
 +	}
-+	return dAtA[:n], nil
++	return protowire.SizeTag(1) + protowire.SizeBytes(len(m.Key))
++}
++
++func (m *PubKey) Marshal() ([]byte, error) {
++	if m.Size() == 0 {
++		return []byte{}, nil
++	}
++	b := protowire.AppendTag(make([]byte, 0, m.Size()), 1, protowire.BytesType)
++	return protowire.AppendBytes(b, m.Key), nil
 +}
 +
 +func (m *PubKey) MarshalTo(dAtA []byte) (int, error) {
-+	size := m.Size()
-+	return m.MarshalToSizedBuffer(dAtA[:size])
++	b, _ := m.Marshal()
++	return copy(dAtA, b), nil
 +}
 +
++// MarshalToSizedBuffer writes at the end of dAtA, as gogoproto does.
 +func (m *PubKey) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-+	i := len(dAtA)
-+	if len(m.Key) > 0 {
-+		i -= len(m.Key)
-+		copy(dAtA[i:], m.Key)
-+		i = encodeVarint(dAtA, i, uint64(len(m.Key)))
-+		i--
-+		dAtA[i] = 0xa
-+	}
-+	return len(dAtA) - i, nil
++	b, _ := m.Marshal()
++	return copy(dAtA[len(dAtA)-len(b):], b), nil
 +}
 +
-+func encodeVarint(dAtA []byte, offset int, v uint64) int {
-+	offset -= sov(v)
-+	base := offset
-+	for v >= 1<<7 {
-+		dAtA[offset] = uint8(v&0x7f | 0x80)
-+		v >>= 7
-+		offset++
-+	}
-+	dAtA[offset] = uint8(v)
-+	return base
-+}
-+
-+func (m *PubKey) Size() (n int) {
-+	if m == nil {
-+		return 0
-+	}
-+	if l := len(m.Key); l > 0 {
-+		n += 1 + l + sov(uint64(l))
-+	}
-+	return n
-+}
-+
-+func sov(x uint64) (n int) { return (math_bits.Len64(x|1) + 6) / 7 }
-+
++// Unmarshal reads field 1 and skips unknown fields; malformed input is an error.
 +func (m *PubKey) Unmarshal(dAtA []byte) error {
-+	l := len(dAtA)
-+	iNdEx := 0
-+	for iNdEx < l {
-+		var wire uint64
-+		for shift := uint(0); ; shift += 7 {
-+			if shift >= 64 {
-+				return errIntOverflow
-+			}
-+			if iNdEx >= l {
-+				return io.ErrUnexpectedEOF
-+			}
-+			b := dAtA[iNdEx]
-+			iNdEx++
-+			wire |= uint64(b&0x7F) << shift
-+			if b < 0x80 {
-+				break
-+			}
++	m.Key = nil
++	for len(dAtA) > 0 {
++		num, typ, n := protowire.ConsumeTag(dAtA)
++		if n < 0 {
++			return protowire.ParseError(n)
 +		}
-+		fieldNum := int32(wire >> 3)
-+		wireType := int(wire & 0x7)
-+		if wireType == 4 {
-+			return fmt.Errorf("proto: PubKey: wiretype end group for non-group")
++		dAtA = dAtA[n:]
++		if num == 1 && typ == protowire.BytesType {
++			v, n := protowire.ConsumeBytes(dAtA)
++			if n < 0 {
++				return protowire.ParseError(n)
++			}
++			m.Key = append([]byte{}, v...)
++			dAtA = dAtA[n:]
++			continue
 +		}
-+		if fieldNum <= 0 {
-+			return fmt.Errorf("proto: PubKey: illegal tag %d (wire type %d)", fieldNum, wire)
++		n = protowire.ConsumeFieldValue(num, typ, dAtA)
++		if n < 0 {
++			return protowire.ParseError(n)
 +		}
-+		switch fieldNum {
-+		case 1:
-+			if wireType != 2 {
-+				return fmt.Errorf("proto: wrong wireType = %d for field Key", wireType)
-+			}
-+			var byteLen int
-+			for shift := uint(0); ; shift += 7 {
-+				if shift >= 64 {
-+					return errIntOverflow
-+				}
-+				if iNdEx >= l {
-+					return io.ErrUnexpectedEOF
-+				}
-+				b := dAtA[iNdEx]
-+				iNdEx++
-+				byteLen |= int(b&0x7F) << shift
-+				if b < 0x80 {
-+					break
-+				}
-+			}
-+			if byteLen < 0 {
-+				return errInvalidLength
-+			}
-+			postIndex := iNdEx + byteLen
-+			if postIndex < 0 {
-+				return errInvalidLength
-+			}
-+			if postIndex > l {
-+				return io.ErrUnexpectedEOF
-+			}
-+			m.Key = append(m.Key[:0], dAtA[iNdEx:postIndex]...)
-+			if m.Key == nil {
-+				m.Key = []byte{}
-+			}
-+			iNdEx = postIndex
-+		default:
-+			iNdEx--
-+			skippy, err := skip(dAtA[iNdEx:])
-+			if err != nil {
-+				return err
-+			}
-+			if (skippy < 0) || (iNdEx+skippy) < 0 {
-+				return errInvalidLength
-+			}
-+			if (iNdEx + skippy) > l {
-+				return io.ErrUnexpectedEOF
-+			}
-+			iNdEx += skippy
-+		}
-+	}
-+	if iNdEx > l {
-+		return io.ErrUnexpectedEOF
++		dAtA = dAtA[n:]
 +	}
 +	return nil
 +}
-+
-+var (
-+	errInvalidLength = fmt.Errorf("proto: negative length found during unmarshaling")
-+	errIntOverflow   = fmt.Errorf("proto: integer overflow")
-+)
-+
-+// skip returns the length of the unknown field at the start of dAtA.
-+func skip(dAtA []byte) (n int, err error) {
-+	l := len(dAtA)
-+	iNdEx := 0
-+	depth := 0
-+	for iNdEx < l {
-+		var wire uint64
-+		for shift := uint(0); ; shift += 7 {
-+			if shift >= 64 {
-+				return 0, errIntOverflow
-+			}
-+			if iNdEx >= l {
-+				return 0, io.ErrUnexpectedEOF
-+			}
-+			b := dAtA[iNdEx]
-+			iNdEx++
-+			wire |= (uint64(b) & 0x7F) << shift
-+			if b < 0x80 {
-+				break
-+			}
-+		}
-+		switch int(wire & 0x7) {
-+		case 0:
-+			for shift := uint(0); ; shift += 7 {
-+				if shift >= 64 {
-+					return 0, errIntOverflow
-+				}
-+				if iNdEx >= l {
-+					return 0, io.ErrUnexpectedEOF
-+				}
-+				iNdEx++
-+				if dAtA[iNdEx-1] < 0x80 {
-+					break
-+				}
-+			}
-+		case 1:
-+			iNdEx += 8
-+		case 2:
-+			var length int
-+			for shift := uint(0); ; shift += 7 {
-+				if shift >= 64 {
-+					return 0, errIntOverflow
-+				}
-+				if iNdEx >= l {
-+					return 0, io.ErrUnexpectedEOF
-+				}
-+				b := dAtA[iNdEx]
-+				iNdEx++
-+				length |= (int(b) & 0x7F) << shift
-+				if b < 0x80 {
-+					break
-+				}
-+			}
-+			if length < 0 {
-+				return 0, errInvalidLength
-+			}
-+			iNdEx += length
-+		case 3:
-+			depth++
-+		case 4:
-+			if depth == 0 {
-+				return 0, fmt.Errorf("proto: unexpected end group")
-+			}
-+			depth--
-+		case 5:
-+			iNdEx += 4
-+		default:
-+			return 0, fmt.Errorf("proto: illegal wireType %d", int(wire&0x7))
-+		}
-+		if iNdEx < 0 {
-+			return 0, errInvalidLength
-+		}
-+		if depth == 0 {
-+			return iNdEx, nil
-+		}
-+	}
-+	return 0, io.ErrUnexpectedEOF
-+}
 diff --git a/crypto/mldsa44/mldsa44.go b/crypto/mldsa44/mldsa44.go
 new file mode 100644
-index 0000000..15ee4a6
+index 0000000..62d63ad
 --- /dev/null
 +++ b/crypto/mldsa44/mldsa44.go
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,72 @@
 +// Package mldsa44 lets an account on the chain be controlled by an
 +// ML-DSA-44 (FIPS 204) key alone: a post-quantum signature on ordinary
 +// Cosmos transactions, with no ECDSA key anywhere.
 +//
-+// The address is the first 20 bytes of sha256(public key). Signatures are
++// The address is the first 20 bytes of sha256("zetaphy/mldsa44\x00" || public key). Signatures are
 +// pure ML-DSA with an empty context over the SIGN_MODE_DIRECT sign bytes.
 +package mldsa44
 +
@@ -1003,9 +780,13 @@ index 0000000..15ee4a6
 +
 +var _ cryptotypes.PubKey = &PubKey{}
 +
-+// Address is sha256(key)[:20].
++// AddressPrefix separates ML-DSA-44 addresses from every other
++// sha256(...)[:20] address in the SDK (module accounts, ed25519, multisig).
++const AddressPrefix = "zetaphy/mldsa44\x00"
++
++// Address is sha256(AddressPrefix || key)[:20].
 +func (m *PubKey) Address() cryptotypes.Address {
-+	h := sha256.Sum256(m.Key)
++	h := sha256.Sum256(append([]byte(AddressPrefix), m.Key...))
 +	return cryptotypes.Address(h[:20])
 +}
 +
@@ -1041,7 +822,7 @@ index 0000000..15ee4a6
 +	return pk.UnmarshalBinary(bytes.Clone(m.Key)) == nil
 +}
 diff --git a/evmd/app.go b/evmd/app.go
-index 204345c..bda8b86 100644
+index 204345c..6b56ad4 100644
 --- a/evmd/app.go
 +++ b/evmd/app.go
 @@ -36,6 +36,10 @@ import (
@@ -1138,14 +919,32 @@ index 204345c..bda8b86 100644
  		genutiltypes.ModuleName, evidencetypes.ModuleName, authz.ModuleName,
  		feegrant.ModuleName, upgradetypes.ModuleName, vestingtypes.ModuleName,
  	}
-@@ -842,6 +869,7 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
+@@ -684,6 +711,7 @@ func NewExampleApp(
+ 	if err = app.ModuleManager.RegisterServices(app.configurator); err != nil {
+ 		panic(fmt.Sprintf("failed to register services in module manager: %s", err.Error()))
+ 	}
++	app.registerEVMCall() // ZETAPHY: MsgEVMCall (zetaphy_pqcall.go)
+ 
+ 	// RegisterUpgradeHandlers is used for registering any on-chain upgrades.
+ 	// Make sure it's called after `app.ModuleManager` and `app.configurator` are set.
+@@ -842,7 +870,16 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
  
  // BeginBlocker application updates every begin block
  func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
-+	app.burnFees(ctx) // ZETAPHY: before distribution pays validators
- 	return app.ModuleManager.BeginBlock(ctx)
+-	return app.ModuleManager.BeginBlock(ctx)
++	// ZETAPHY: burn before distribution pays validators. The module manager
++	// replaces the event manager, so keep the burn's events and add them.
++	em := sdk.NewEventManager()
++	app.burnFees(ctx.WithEventManager(em))
++	bb, err := app.ModuleManager.BeginBlock(ctx)
++	if err != nil {
++		return bb, err
++	}
++	bb.Events = append(em.ABCIEvents(), bb.Events...)
++	return bb, nil
  }
  
+ // EndBlocker application updates every end block
 diff --git a/evmd/go.mod b/evmd/go.mod
 index e503386..dc04366 100644
 --- a/evmd/go.mod
@@ -1220,12 +1019,282 @@ index 0000000..96d0ea8
 +	write()
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_fee_burn", sdk.NewAttribute("amount", coins.String())))
 +}
+diff --git a/evmd/zetaphy_pqcall.go b/evmd/zetaphy_pqcall.go
+new file mode 100644
+index 0000000..e7f00ed
+--- /dev/null
++++ b/evmd/zetaphy_pqcall.go
+@@ -0,0 +1,264 @@
++package evmd
++
++// ZETAPHY MsgEVMCall: any Cosmos account, including a post-quantum ML-DSA-44
++// one, calls an EVM contract as itself (msg.sender = the account's 0x form),
++// paying gas through the Cosmos fee. With it a PQ account uses tokens and
++// contracts without ever holding an ECDSA key. Contract creation is not
++// offered (the account sequence would move twice).
++//
++//	syntax = "proto3"; package zetaphy.pq.v1;
++//	message MsgEVMCall { option (cosmos.msg.v1.signer) = "sender";
++//	  string sender = 1; string to = 2; string value = 3; bytes data = 4; uint64 gas_limit = 5; }
++//	message MsgEVMCallResponse { bytes ret = 1; uint64 gas_used = 2; }
++//	service Msg { option (cosmos.msg.v1.service) = true; rpc EVMCall(MsgEVMCall) returns (MsgEVMCallResponse); }
++
++import (
++	"bytes"
++	"compress/gzip"
++	"context"
++	"fmt"
++	"math/big"
++
++	gogoproto "github.com/cosmos/gogoproto/proto"
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/core"
++	ethtypes "github.com/ethereum/go-ethereum/core/types"
++	"google.golang.org/grpc"
++	protov2 "google.golang.org/protobuf/proto"
++	"google.golang.org/protobuf/reflect/protodesc"
++	"google.golang.org/protobuf/reflect/protoreflect"
++	"google.golang.org/protobuf/reflect/protoregistry"
++	"google.golang.org/protobuf/types/descriptorpb"
++	"google.golang.org/protobuf/types/dynamicpb"
++
++	msgv1 "cosmossdk.io/api/cosmos/msg/v1"
++	errorsmod "cosmossdk.io/errors"
++
++	sdk "github.com/cosmos/cosmos-sdk/types"
++	errortypes "github.com/cosmos/cosmos-sdk/types/errors"
++	"github.com/cosmos/cosmos-sdk/types/msgservice"
++
++	"github.com/cosmos/evm/x/vm/statedb"
++)
++
++const (
++	pqCallFile    = "zetaphy/pq/v1/tx.proto"
++	pqCallService = "zetaphy.pq.v1.Msg"
++	// MaxEVMCallGas caps one call, like eth_call's gas cap on this chain.
++	MaxEVMCallGas = 10_000_000
++)
++
++type MsgEVMCall struct {
++	Sender   string
++	To       string
++	Value    string
++	Data     []byte
++	GasLimit uint64
++}
++
++type MsgEVMCallResponse struct {
++	Ret     []byte
++	GasUsed uint64
++}
++
++func (m *MsgEVMCall) Reset()                            { *m = MsgEVMCall{} }
++func (m *MsgEVMCall) String() string                    { return fmt.Sprintf("MsgEVMCall{%s->%s}", m.Sender, m.To) }
++func (*MsgEVMCall) ProtoMessage()                       {}
++func (m *MsgEVMCallResponse) Reset()                    { *m = MsgEVMCallResponse{} }
++func (m *MsgEVMCallResponse) String() string            { return "MsgEVMCallResponse" }
++func (*MsgEVMCallResponse) ProtoMessage()               {}
++func (*MsgEVMCall) Descriptor() ([]byte, []int)         { return pqCallDescriptor, []int{0} }
++func (*MsgEVMCallResponse) Descriptor() ([]byte, []int) { return pqCallDescriptor, []int{1} }
++
++// The wire format is done by Google's protobuf runtime on a dynamic message
++// built from the descriptor below, so no hand-written parser is involved.
++func pqEncode(i int, vals ...protoreflect.Value) ([]byte, error) {
++	d := dynamicpb.NewMessage(pqCallFD.Messages().Get(i))
++	for n, v := range vals {
++		d.Set(d.Descriptor().Fields().ByNumber(protoreflect.FieldNumber(n+1)), v)
++	}
++	return protov2.MarshalOptions{Deterministic: true}.Marshal(d)
++}
++
++func pqDecode(i int, b []byte) (func(n int) protoreflect.Value, error) {
++	d := dynamicpb.NewMessage(pqCallFD.Messages().Get(i))
++	err := protov2.Unmarshal(b, d)
++	return func(n int) protoreflect.Value {
++		return d.Get(d.Descriptor().Fields().ByNumber(protoreflect.FieldNumber(n)))
++	}, err
++}
++
++func (m *MsgEVMCall) Marshal() ([]byte, error) {
++	return pqEncode(0, protoreflect.ValueOfString(m.Sender), protoreflect.ValueOfString(m.To),
++		protoreflect.ValueOfString(m.Value), protoreflect.ValueOfBytes(m.Data), protoreflect.ValueOfUint64(m.GasLimit))
++}
++
++func (m *MsgEVMCallResponse) Marshal() ([]byte, error) {
++	return pqEncode(1, protoreflect.ValueOfBytes(m.Ret), protoreflect.ValueOfUint64(m.GasUsed))
++}
++
++func (m *MsgEVMCall) Unmarshal(b []byte) error {
++	f, err := pqDecode(0, b)
++	if err != nil {
++		return err
++	}
++	*m = MsgEVMCall{f(1).String(), f(2).String(), f(3).String(), f(4).Bytes(), f(5).Uint()}
++	return nil
++}
++
++func (m *MsgEVMCallResponse) Unmarshal(b []byte) error {
++	f, err := pqDecode(1, b)
++	if err != nil {
++		return err
++	}
++	*m = MsgEVMCallResponse{f(1).Bytes(), f(2).Uint()}
++	return nil
++}
++
++func (m *MsgEVMCall) Size() int                       { b, _ := m.Marshal(); return len(b) }
++func (m *MsgEVMCallResponse) Size() int               { b, _ := m.Marshal(); return len(b) }
++func (m *MsgEVMCall) MarshalTo(d []byte) (int, error) { return m.MarshalToSizedBuffer(d[:m.Size()]) }
++func (m *MsgEVMCallResponse) MarshalTo(d []byte) (int, error) {
++	return m.MarshalToSizedBuffer(d[:m.Size()])
++}
++
++func (m *MsgEVMCall) MarshalToSizedBuffer(d []byte) (int, error) {
++	b, err := m.Marshal()
++	return copy(d[len(d)-len(b):], b), err
++}
++
++func (m *MsgEVMCallResponse) MarshalToSizedBuffer(d []byte) (int, error) {
++	b, err := m.Marshal()
++	return copy(d[len(d)-len(b):], b), err
++}
++
++// tx.proto, built in code; it carries the signer and service options the SDK reads.
++var pqCallProto = func() *descriptorpb.FileDescriptorProto {
++	str := descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
++	field := func(name string, num int32, t *descriptorpb.FieldDescriptorProto_Type) *descriptorpb.FieldDescriptorProto {
++		return &descriptorpb.FieldDescriptorProto{Name: &name, JsonName: &name, Number: &num, Type: t,
++			Label: descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()}
++	}
++	byt, u64 := descriptorpb.FieldDescriptorProto_TYPE_BYTES.Enum(), descriptorpb.FieldDescriptorProto_TYPE_UINT64.Enum()
++	msgOpts := &descriptorpb.MessageOptions{}
++	protov2.SetExtension(msgOpts, msgv1.E_Signer, []string{"sender"})
++	svcOpts := &descriptorpb.ServiceOptions{}
++	protov2.SetExtension(svcOpts, msgv1.E_Service, true)
++	return &descriptorpb.FileDescriptorProto{
++		Name: protov2.String(pqCallFile), Package: protov2.String("zetaphy.pq.v1"), Syntax: protov2.String("proto3"),
++		Dependency: []string{"cosmos/msg/v1/msg.proto"},
++		MessageType: []*descriptorpb.DescriptorProto{
++			{Name: protov2.String("MsgEVMCall"), Options: msgOpts, Field: []*descriptorpb.FieldDescriptorProto{
++				field("sender", 1, str), field("to", 2, str), field("value", 3, str), field("data", 4, byt), field("gas_limit", 5, u64)}},
++			{Name: protov2.String("MsgEVMCallResponse"), Field: []*descriptorpb.FieldDescriptorProto{
++				field("ret", 1, byt), field("gas_used", 2, u64)}},
++		},
++		Service: []*descriptorpb.ServiceDescriptorProto{{Name: protov2.String("Msg"), Options: svcOpts,
++			Method: []*descriptorpb.MethodDescriptorProto{{Name: protov2.String("EVMCall"),
++				InputType: protov2.String(".zetaphy.pq.v1.MsgEVMCall"), OutputType: protov2.String(".zetaphy.pq.v1.MsgEVMCallResponse")}}}},
++	}
++}()
++
++var pqCallFD = func() protoreflect.FileDescriptor {
++	fd, err := protodesc.NewFile(pqCallProto, protoregistry.GlobalFiles)
++	if err != nil {
++		panic(err)
++	}
++	return fd
++}()
++
++// pqCallDescriptor is the gzipped form gogoproto expects.
++var pqCallDescriptor = func() []byte {
++	raw, err := protov2.MarshalOptions{Deterministic: true}.Marshal(pqCallProto)
++	if err != nil {
++		panic(err)
++	}
++	var buf bytes.Buffer
++	w := gzip.NewWriter(&buf)
++	_, _ = w.Write(raw)
++	_ = w.Close()
++	return buf.Bytes()
++}()
++
++func init() {
++	gogoproto.RegisterType((*MsgEVMCall)(nil), "zetaphy.pq.v1.MsgEVMCall")
++	gogoproto.RegisterType((*MsgEVMCallResponse)(nil), "zetaphy.pq.v1.MsgEVMCallResponse")
++	gogoproto.RegisterFile(pqCallFile, pqCallDescriptor)
++}
++
++type pqCallServer interface {
++	EVMCall(context.Context, *MsgEVMCall) (*MsgEVMCallResponse, error)
++}
++
++var pqCallServiceDesc = grpc.ServiceDesc{
++	ServiceName: pqCallService,
++	HandlerType: (*pqCallServer)(nil),
++	Methods: []grpc.MethodDesc{{MethodName: "EVMCall", Handler: func(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
++		in := new(MsgEVMCall)
++		if err := dec(in); err != nil {
++			return nil, err
++		}
++		if interceptor == nil {
++			return srv.(pqCallServer).EVMCall(ctx, in)
++		}
++		info := &grpc.UnaryServerInfo{Server: srv, FullMethod: "/" + pqCallService + "/EVMCall"}
++		return interceptor(ctx, in, info, func(ctx context.Context, req interface{}) (interface{}, error) {
++			return srv.(pqCallServer).EVMCall(ctx, req.(*MsgEVMCall))
++		})
++	}}},
++	Metadata: pqCallFile,
++}
++
++type evmCallServer struct{ app *EVMD }
++
++// EVMCall runs the call with the sender as msg.sender and charges the gas it
++// used to the Cosmos gas meter (so the tx fee pays for it). A revert fails
++// the whole tx, so value and state changes are undone.
++func (s evmCallServer) EVMCall(goCtx context.Context, m *MsgEVMCall) (*MsgEVMCallResponse, error) {
++	ctx := sdk.UnwrapSDKContext(goCtx)
++	sender, err := sdk.AccAddressFromBech32(m.Sender)
++	if err != nil {
++		return nil, errorsmod.Wrap(errortypes.ErrInvalidAddress, "sender")
++	}
++	if !common.IsHexAddress(m.To) {
++		return nil, errorsmod.Wrap(errortypes.ErrInvalidAddress, "to must be a 0x address (contract creation is not offered)")
++	}
++	to := common.HexToAddress(m.To)
++	value := new(big.Int)
++	if m.Value != "" {
++		if _, ok := value.SetString(m.Value, 10); !ok || value.Sign() < 0 || value.BitLen() > 255 {
++			return nil, errorsmod.Wrap(errortypes.ErrInvalidRequest, "value must be a whole number of azetaphy")
++		}
++	}
++	gas := min(m.GasLimit, MaxEVMCallGas, ctx.GasMeter().GasRemaining())
++	if gas < 21000 {
++		return nil, errorsmod.Wrap(errortypes.ErrOutOfGas, "gas_limit below 21000 or tx gas too low")
++	}
++	from := common.BytesToAddress(sender)
++	nonce, err := s.app.AccountKeeper.GetSequence(ctx, sender)
++	if err != nil {
++		return nil, err
++	}
++	stateDB := statedb.New(ctx, s.app.EVMKeeper, statedb.NewEmptyTxConfig())
++	res, err := s.app.EVMKeeper.ApplyMessage(ctx, stateDB, core.Message{
++		From: from, To: &to, Nonce: nonce, Value: value, GasLimit: gas, Data: m.Data,
++		GasPrice: new(big.Int), GasFeeCap: new(big.Int), GasTipCap: new(big.Int), AccessList: ethtypes.AccessList{},
++	}, nil, true, false, false) // not internal: normal refund cap and minimum gas, like an EVM tx
++	if err != nil {
++		return nil, err
++	}
++	ctx.GasMeter().ConsumeGas(res.GasUsed, "zetaphy evm call")
++	if res.Failed() {
++		return nil, errorsmod.Wrapf(errortypes.ErrInvalidRequest, "evm call reverted: %s", res.VmError)
++	}
++	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_evm_call",
++		sdk.NewAttribute("from", from.Hex()), sdk.NewAttribute("to", to.Hex()), sdk.NewAttribute("value", value.String())))
++	return &MsgEVMCallResponse{Ret: res.Ret, GasUsed: res.GasUsed}, nil
++}
++
++// registerEVMCall wires MsgEVMCall into the app (codec and message router).
++func (app *EVMD) registerEVMCall() {
++	app.interfaceRegistry.RegisterImplementations((*sdk.Msg)(nil), &MsgEVMCall{})
++	msgservice.RegisterMsgServiceDesc(app.interfaceRegistry, &pqCallServiceDesc)
++	app.MsgServiceRouter().RegisterService(&pqCallServiceDesc, evmCallServer{app})
++}
 diff --git a/evmd/zetaphy_rpc.go b/evmd/zetaphy_rpc.go
 new file mode 100644
-index 0000000..80496f6
+index 0000000..96ac8d0
 --- /dev/null
 +++ b/evmd/zetaphy_rpc.go
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,256 @@
 +package evmd
 +
 +// ZETAPHY JSON-RPC namespace "zetaphy" on the public EVM endpoint (8545),
@@ -1234,17 +1303,27 @@ index 0000000..80496f6
 +//
 +//	zetaphy_pqAccount(address)  account number and sequence to sign with
 +//	zetaphy_sendCosmosTx(0x…)   broadcast a signed Cosmos tx (CheckTx only)
++//	zetaphy_faucet(address)     testnet only: a little ZETAPHY for newcomers
 +//
-+// Neither method holds keys or signs: like eth_sendRawTransaction, the
-+// second only passes on bytes the user already signed.
++// The first two hold no keys: like eth_sendRawTransaction, sendCosmosTx only
++// passes on bytes the user already signed. The faucet signs with its own key
++// (<home>/config/faucet.key, a capped testnet balance) and is off without it.
 +
 +import (
 +	"context"
++	"crypto/ecdsa"
 +	"fmt"
++	"math/big"
++	"os"
++	"path/filepath"
 +	"strings"
++	"sync"
++	"time"
 +
 +	"github.com/ethereum/go-ethereum/common"
 +	"github.com/ethereum/go-ethereum/common/hexutil"
++	ethtypes "github.com/ethereum/go-ethereum/core/types"
++	"github.com/ethereum/go-ethereum/crypto"
 +	gethrpc "github.com/ethereum/go-ethereum/rpc"
 +	"google.golang.org/grpc/codes"
 +	"google.golang.org/grpc/status"
@@ -1252,9 +1331,11 @@ index 0000000..80496f6
 +	evmrpc "github.com/cosmos/evm/rpc"
 +	"github.com/cosmos/evm/rpc/backend"
 +	"github.com/cosmos/evm/rpc/stream"
++	rpctypes "github.com/cosmos/evm/rpc/types"
 +	evmtypes "github.com/cosmos/evm/x/vm/types"
 +
 +	"github.com/cosmos/cosmos-sdk/client"
++	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 +	"github.com/cosmos/cosmos-sdk/server"
 +	sdk "github.com/cosmos/cosmos-sdk/types"
 +	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -1266,8 +1347,8 @@ index 0000000..80496f6
 +)
 +
 +func init() {
-+	if err := evmrpc.RegisterAPINamespace(ZetaphyNamespace, func(_ *server.Context, clientCtx client.Context, _ *stream.RPCStream, _ backend.BackendI) []gethrpc.API {
-+		return []gethrpc.API{{Namespace: ZetaphyNamespace, Version: "1.0", Service: &ZetaphyAPI{clientCtx: clientCtx}, Public: true}}
++	if err := evmrpc.RegisterAPINamespace(ZetaphyNamespace, func(_ *server.Context, clientCtx client.Context, _ *stream.RPCStream, b backend.BackendI) []gethrpc.API {
++		return []gethrpc.API{{Namespace: ZetaphyNamespace, Version: "1.0", Service: &ZetaphyAPI{clientCtx: clientCtx, backend: b}, Public: true}}
 +	}); err != nil {
 +		panic(err)
 +	}
@@ -1276,6 +1357,7 @@ index 0000000..80496f6
 +// ZetaphyAPI is the "zetaphy" JSON-RPC service.
 +type ZetaphyAPI struct {
 +	clientCtx client.Context
++	backend   backend.BackendI
 +}
 +
 +// PQAccount is what a wallet needs to sign a transaction for an account.
@@ -1344,8 +1426,19 @@ index 0000000..80496f6
 +	if len(txBytes) == 0 || len(txBytes) > maxCosmosTxBytes {
 +		return nil, fmt.Errorf("tx must be 1 to %d bytes", maxCosmosTxBytes)
 +	}
-+	if _, err := a.clientCtx.TxConfig.TxDecoder()(txBytes); err != nil {
++	tx, err := a.clientCtx.TxConfig.TxDecoder()(txBytes)
++	if err != nil {
 +		return nil, fmt.Errorf("not a Cosmos transaction: %w", err)
++	}
++	// EVM txs go through eth_sendRawTransaction, which enforces EIP-155
++	// replay protection; they must not get around it here.
++	if ext, ok := tx.(interface{ GetExtensionOptions() []*codectypes.Any }); ok && len(ext.GetExtensionOptions()) > 0 {
++		return nil, fmt.Errorf("EVM transactions must use eth_sendRawTransaction")
++	}
++	for _, m := range tx.GetMsgs() {
++		if _, ok := m.(*evmtypes.MsgEthereumTx); ok {
++			return nil, fmt.Errorf("EVM transactions must use eth_sendRawTransaction")
++		}
 +	}
 +	res, err := a.clientCtx.BroadcastTxSync(txBytes)
 +	if err != nil {
@@ -1353,6 +1446,111 @@ index 0000000..80496f6
 +	}
 +	return &CosmosTxResult{TxHash: res.TxHash, Code: res.Code, Log: res.RawLog}, nil
 +}
++
++// ---- faucet (testnet) ----------------------------------------------------
++
++const (
++	FaucetPerDay   = 200 // grants per UTC day, all addresses together
++	faucetCooldown = 24 * time.Hour
++)
++
++// FaucetAmount is 10 ZETAPHY: gas for many txs and a node runner's bond.
++var FaucetAmount = new(big.Int).Mul(big.NewInt(10), big.NewInt(1e18))
++
++// One faucet per process (the HTTP and WebSocket servers share it).
++var faucet struct {
++	sync.Mutex
++	key   *ecdsa.PrivateKey
++	nonce uint64 // next nonce; the node's pending count can lag a just-sent tx
++	day   int64
++	count int
++	last  map[common.Address]time.Time
++}
++
++type FaucetResult struct {
++	TxHash string       `json:"txHash"`
++	Amount *hexutil.Big `json:"amount"`
++}
++
++func (a *ZetaphyAPI) faucetKey() (*ecdsa.PrivateKey, error) {
++	if faucet.key != nil {
++		return faucet.key, nil
++	}
++	raw, err := os.ReadFile(filepath.Join(a.clientCtx.HomeDir, "config", "faucet.key"))
++	if err != nil {
++		return nil, fmt.Errorf("the faucet is off on this node")
++	}
++	key, err := crypto.HexToECDSA(strings.TrimPrefix(strings.TrimSpace(string(raw)), "0x"))
++	if err != nil {
++		return nil, fmt.Errorf("the faucet key is unreadable")
++	}
++	faucet.key = key
++	return key, nil
++}
++
++// Faucet (zetaphy_faucet) sends FaucetAmount to a new address (zetaphy1… or
++// 0x…): once per address per day, FaucetPerDay times per day in all, and
++// never to an address that already holds that much.
++func (a *ZetaphyAPI) Faucet(ctx context.Context, address string) (*FaucetResult, error) {
++	addr, err := parseAccount(address)
++	if err != nil {
++		return nil, fmt.Errorf("invalid address: %w", err)
++	}
++	to := common.BytesToAddress(addr)
++	faucet.Lock()
++	defer faucet.Unlock()
++	key, err := a.faucetKey()
++	if err != nil {
++		return nil, err
++	}
++	now := time.Now().UTC()
++	if d := now.Unix() / 86400; d != faucet.day {
++		faucet.day, faucet.count = d, 0
++	}
++	if faucet.last == nil || len(faucet.last) > 100000 {
++		faucet.last = map[common.Address]time.Time{}
++	}
++	if faucet.count >= FaucetPerDay {
++		return nil, fmt.Errorf("the faucet has given out today's %d grants; try again tomorrow (UTC)", FaucetPerDay)
++	}
++	if t, ok := faucet.last[to]; ok && now.Sub(t) < faucetCooldown {
++		return nil, fmt.Errorf("this address got ZETAPHY less than a day ago")
++	}
++	if bal, err := a.backend.GetBalance(ctx, to, rpctypes.BlockNumberOrHash{BlockNumber: ptr(rpctypes.EthLatestBlockNumber)}); err == nil && bal.ToInt().Cmp(FaucetAmount) >= 0 {
++		return nil, fmt.Errorf("this address already has ZETAPHY")
++	}
++	from := crypto.PubkeyToAddress(key.PublicKey)
++	pending, err := a.backend.GetTransactionCount(ctx, from, rpctypes.EthPendingBlockNumber)
++	if err != nil {
++		return nil, err
++	}
++	nonce := max(uint64(*pending), faucet.nonce)
++	price, err := a.backend.GasPrice(ctx)
++	if err != nil {
++		return nil, err
++	}
++	gasPrice := new(big.Int).Mul(price.ToInt(), big.NewInt(2))
++	tx := ethtypes.NewTransaction(nonce, to, FaucetAmount, 21000, gasPrice, nil)
++	signed, err := ethtypes.SignTx(tx, ethtypes.LatestSignerForChainID(a.backend.ChainConfig().ChainID), key)
++	if err != nil {
++		return nil, err
++	}
++	raw, err := signed.MarshalBinary()
++	if err != nil {
++		return nil, err
++	}
++	hash, err := a.backend.SendRawTransaction(ctx, raw)
++	if err != nil {
++		faucet.nonce = 0 // ask the node again next time
++		return nil, fmt.Errorf("faucet: %w", err)
++	}
++	faucet.nonce = nonce + 1
++	faucet.count++
++	faucet.last[to] = now
++	return &FaucetResult{TxHash: hash.Hex(), Amount: (*hexutil.Big)(FaucetAmount)}, nil
++}
++
++func ptr[T any](v T) *T { return &v }
 diff --git a/go.mod b/go.mod
 index 777e52d..c4797ba 100644
 --- a/go.mod
@@ -1520,7 +1718,7 @@ index 7f19b35..ec74b76 100644
  	bech32Precompile, err := bech32.NewPrecompile(bech32PrecompileBaseGas)
  	if err != nil {
 diff --git a/x/vm/types/precompiles.go b/x/vm/types/precompiles.go
-index a7e058a..d3819ff 100644
+index a7e058a..e64b909 100644
 --- a/x/vm/types/precompiles.go
 +++ b/x/vm/types/precompiles.go
 @@ -3,6 +3,8 @@ package types
@@ -1532,12 +1730,10 @@ index a7e058a..d3819ff 100644
  )
  
  const (
-@@ -23,6 +25,7 @@ const (
- var AvailableStaticPrecompiles = []string{
- 	P256PrecompileAddress,
- 	Bech32PrecompileAddress,
-+	MLDSAPrecompileAddress,
- 	StakingPrecompileAddress,
- 	DistributionPrecompileAddress,
- 	ICS20PrecompileAddress,
+@@ -31,4 +33,5 @@ var AvailableStaticPrecompiles = []string{
+ 	GovPrecompileAddress,
+ 	SlashingPrecompileAddress,
+ 	ICS02PrecompileAddress,
++	MLDSAPrecompileAddress, // 0x…0900, last: the list must stay sorted
+ }
 ZETAPHY_PQ_PATCH

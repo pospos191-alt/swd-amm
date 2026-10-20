@@ -5,7 +5,8 @@
 บล็อกกระเป๋า, หยุดการโอน, เปลี่ยนภาษี, อัปเกรดโค้ด ฯลฯ) อธิบายได้ 7 ภาษา: ไทย อังกฤษ จีน ญี่ปุ่น เกาหลี
 เวียดนาม อินโดนีเซีย ต้นทุน $0
 
-- **อ่านอย่างเดียว**: ใช้แค่ `eth_getCode`, `eth_getStorageAt`, `eth_call` (EVM) และ
+- **อ่านอย่างเดียว**: ใช้แค่ `eth_getCode`, `eth_getStorageAt`, `eth_call` (EVM รวมถึง `eth_call` แบบ
+  state override หนึ่งครั้งสำหรับจำลองซื้อขาย ดูด้านล่าง) และ
   `getGenesisHash`, `getAccountInfo` (Solana), GraphQL แบบ query อย่างเดียว (Sui), GET กับฟังก์ชัน
   `#[view]` (Aptos) และ GET จาก tonapi.io (TON) ผ่าน endpoint สาธารณะฟรี ไม่ขอเชื่อมกระเป๋า
   ไม่มีโค้ดส่งธุรกรรม (`src/rpc.js` ปฏิเสธคำสั่งอื่นทั้งหมด และตรวจว่า endpoint เป็น mainnet จริง)
@@ -103,7 +104,7 @@ set_fee, burn_from ฯลฯ)
 
 | ภาษา | อ่านอย่างไร |
 |---|---|
-| Solidity, Yul, Vyper, Huff | EVM bytecode (ไม่สนภาษาต้นทาง) + ซอร์สที่ verify แล้วจาก Sourcify (`src/sourcify.js`) ใช้ตั้งชื่อฟังก์ชันที่ไม่รู้จัก |
+| Solidity, Yul, Vyper, Huff | EVM bytecode (ไม่สนภาษาต้นทาง) + ซอร์สที่ verify แล้วจาก Sourcify (`src/sourcify.js`) ใช้ตั้งชื่อฟังก์ชันที่ไม่รู้จัก + จำลองซื้อแล้วขายคืนจริงผ่าน DEX หลักของเชน (`src/honeypot.js`) จับเหรียญ "ซื้อได้ ขายไม่ได้" และภาษีแอบแฝงได้ไม่ว่าฟังก์ชันจะชื่ออะไร |
 | Rust/C++ บน Arbitrum (Stylus) | แกะโค้ด WASM (brotli) ออกมาอ่าน หา selector ของฟังก์ชันที่รู้จัก (mint, pause, blacklist ฯลฯ) และการเรียก delegate_call/create2 แล้วใช้กฎชุดเดียวกับ EVM (`src/stylus.js`) ถ้าแกะไม่ได้จะบอกว่ายังตรวจไม่ได้ |
 | Rust บน Solana (Anchor) | อ่านรายการคำสั่งจาก IDL บนเชน (`src/anchor.js`) หาคำสั่งที่ต้องให้ผู้ดูแลเซ็น และคำสั่งอันตราย |
 | Rust บน NEAR | อ่านชื่อฟังก์ชันจาก export ของโค้ด WASM โดยตรง (mint, pause, upgrade ฯลฯ), ดูว่าบัญชีสัญญายังมีกุญแจเต็มสิทธิ์ (ลงโค้ดใหม่ได้) หรือไม่ และข้อมูลเหรียญ NEP-141 (`src/near.js`) |
@@ -131,16 +132,40 @@ set_fee, burn_from ฯลฯ)
 | สัญญาทางการของ USDT, USDC, WETH ฯลฯ (`src/known-tokens.js`) | ดี และลดสิทธิ์ของผู้ออกเหรียญเหลือ "ต่ำ" พร้อมบอกชื่อผู้ออก |
 | ใช้สัญลักษณ์เหมือนเหรียญทางการ แต่คนละที่อยู่ (เหรียญปลอม) | สูง |
 | ตรงแม่แบบแต่มีสิทธิ์ที่แม่แบบบอกว่าไม่มี | สูง |
+| จำลองซื้อขาย: ซื้อได้แต่ขายไม่ได้ หรือขายแล้วแทบไม่ได้เงินคืน (honeypot) | สูง |
+| จำลองซื้อขาย: ภาษีซื้อหรือขายเกิน 50% | สูง (10% ขึ้นไป = ปานกลาง) |
+| จำลองซื้อแล้วขายคืนได้ ภาษีต่ำกว่า 10% ทั้งสองทาง | ดี (พร้อมเตือนว่าเป็นผล ณ บล็อกนี้ เจ้าของอาจเปลี่ยนภายหลัง) |
+| ไม่พบ pool บน DEX หลัก / RPC ไม่ยอมให้ override / ซื้อไม่สำเร็จ | ข้อมูล (บอกว่าข้ามการจำลอง ไม่เคยบอกว่า "ปลอดภัย") |
 
-ข้อจำกัด: ตรวจจากชื่อฟังก์ชันที่รู้จัก (`src/signatures.js`) ในโค้ดบนเชน
-กลโกงที่ตั้งชื่อฟังก์ชันแปลกๆ อาจหลุดได้ เพิ่มชื่อใหม่ใน `src/signatures.js`
-แล้วรัน `npm run selectors`
+**จำลองซื้อขาย (honeypot check, `src/honeypot.js`)** วิธีเดียวกับ honeypot.is แต่ใช้แค่ `eth_call`:
+1. หา pool แบบ Uniswap V2 ของเหรียญคู่กับเหรียญหลักของเชนที่ห่อแล้ว (`factory.getPair(token, WETH)`)
+   บน DEX หลัก: Uniswap V2 (Ethereum, Base, Arbitrum) และ PancakeSwap V2 (BNB Chain) ตั้งค่าไว้ที่ `dex` ใน `src/chains.js`
+2. ถ้ามี pool เรียก `eth_call` ครั้งเดียวพร้อม state override (พารามิเตอร์ตัวที่สาม) วางสัญญาช่วย
+   `contracts/TradeSim.sol` ไว้ที่ที่อยู่ทิ้งได้ พร้อมเหรียญหลักเล็กน้อย (0.01 ETH / 0.05 BNB) สัญญาช่วยจะ
+   ตรวจว่า router ชี้ไปที่ factory และ WETH ที่ถูกต้อง ซื้อผ่าน `swapExactETHForTokensSupportingFeeOnTransferTokens`
+   เทียบจำนวนที่ได้กับ `getAmountsOut` (= ภาษีซื้อ) แล้วขายคืน 99% ผ่าน
+   `swapExactTokensForETHSupportingFeeOnTransferTokens` เทียบเงินที่ได้กับราคาที่ router บอก (= ภาษีขาย)
+   การขายที่ revert ถูกจับด้วย try/catch แล้วรายงานเป็นผล ไม่ใช่ error
+3. state override มีอยู่แค่ในการเรียกครั้งนั้น ไม่มีการเซ็นหรือส่งธุรกรรม สถานะบนเชนไม่เปลี่ยน
+   ถ้า RPC ไม่รองรับ override หรือไม่มี pool จะบอกว่าข้ามการจำลอง
+
+ไบต์โค้ดของสัญญาช่วยเก็บไว้ใน `src/tradesim.generated.js` (คอมไพล์ด้วย solc 0.8.26 แบบ Paris ไม่มี PUSH0
+จึงรันได้ทุกเชน) แก้ `contracts/TradeSim.sol` แล้วรัน `npm run tradesim` (`test/honeypot.test.js` ตรวจว่าตรงกัน)
+เหรียญทางการใน `src/known-tokens.js` ไม่ถูกจำลอง ผลจำลองไม่นับในคำตัดสินของเครือข่าย Neuro
+(`src/verdict.js`) เพราะขึ้นกับบล็อกและ RPC ของผู้รันแต่ละคน
+ข้อจำกัด: จำลองจากสัญญา ไม่ใช่กระเป๋าธรรมดา เหรียญที่กันการซื้อจากสัญญาจะขึ้นว่า "ซื้อไม่สำเร็จ"
+และเหรียญที่ห้ามขายเฉพาะในบล็อกเดียวกับที่ซื้อจะดูเหมือน honeypot ยังไม่รองรับ pool แบบ V3 หรือ DEX อื่น (เช่น Aerodrome บน Base)
+
+ข้อจำกัดของกฎชื่อฟังก์ชัน: ตรวจจากชื่อฟังก์ชันที่รู้จัก (`src/signatures.js`) ในโค้ดบนเชน
+กลโกงที่ตั้งชื่อฟังก์ชันแปลกๆ อาจหลุดได้ (การจำลองซื้อขายช่วยปิดช่องนี้สำหรับเหรียญที่มี pool)
+เพิ่มชื่อใหม่ใน `src/signatures.js` แล้วรัน `npm run selectors`
 
 ## ทดสอบ
 
 ```bash
 npm test          # คอมไพล์สัญญาตัวอย่างจริง (test/helpers/contracts.sol) รันบน EVM ในเครื่อง
                   # ทั้งเปิดและปิด optimizer + ลายนิ้วมือ/แม่แบบ + ตัวนับผู้ใช้
+                  # + จำลองซื้อขายด้วย DEX จำลอง (Uniswap V2) ที่ที่อยู่ของ PancakeSwap จริง
 npm run test:web  # เปิดหน้าเว็บใน Chromium ตอบ RPC จากเชนทดสอบ ไม่ใช้เน็ต
 ```
 
@@ -160,6 +185,9 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 - [x] Starknet (Cairo) · Bitcoin Runes
 - [ ] BRC-20 (ต้องหา API ฟรีที่ไม่ต้องใช้คีย์)
 - [x] อ่านเนื้อใน WASM ของ Stylus
+- [x] จำลองซื้อขาย (honeypot check) บน EVM ผ่าน Uniswap V2 / PancakeSwap V2 ทดสอบบน EVM ในเครื่องแล้ว
+      รอผล live check บน mainnet (ที่อยู่ DEX และ RPC ที่รองรับ state override) จาก CI
+- [ ] จำลองซื้อขายผ่าน pool แบบ V3 และ DEX อื่น (Aerodrome บน Base, Camelot บน Arbitrum)
 - [ ] ชั้นอธิบายด้วย AI (ทางเลือก): ส่งเฉพาะผลตรวจ ไม่ให้สิทธิ์เรียกเครื่องมือ (จุดอ่อนข้อ 12)
 
 ---
@@ -175,4 +203,8 @@ Japanese, Korean, Vietnamese and Indonesian, a reproducible `reportHash`, a CLI 
 Also: a privacy-preserving monthly user counter (`api/usage.js`, Vercel +
 Upstash Redis) with a stats page, and code-fingerprint templates to recognise
 ZETAPHY launcher tokens (`node cli.js fingerprint <chain> <address>`).
+EVM tokens also get a honeypot check (`src/honeypot.js`): one `eth_call` with a
+state override runs `contracts/TradeSim.sol`, which buys through the chain's main
+Uniswap-V2-style DEX and sells straight back, so a token you can buy but not
+sell, or that takes a hidden tax, is caught whatever its functions are named.
 Run `npm test` and `npm run test:web`.

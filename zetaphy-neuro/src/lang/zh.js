@@ -14,6 +14,7 @@ export const UI = {
     program: '代币程序', mintAuth: '增发权限（mint authority）', freezeAuth: '冻结权限（freeze authority）', extensions: '扩展', upgradeAuth: '升级权限', none: '无',
     package: '代码包', standard: '标准', admin: '管理员', holders: '持有人数', listed: 'tonapi 名单', raw: '原始地址',
     idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码', walletCode: '持有人钱包代码', nearKeys: '完全访问密钥（full-access key）', codeHash: '代码哈希', cairo: 'Cairo 版本', maxSupply: '最大供应量', tokenId: '代币编号',
+    pool: '流动性池', simTax: '模拟交易税（买入 / 卖出）', simFailed: '卖出失败',
   },
 };
 
@@ -175,6 +176,17 @@ export const T = {
     'eip7702': (p) => `该地址是普通钱包，其所有者设置它运行合约 ${p.target} 的代码（EIP-7702）。它不是代币。那段代码可以按其编写方式任意处置钱包里的资金；请同时检查 ${p.target}。`,
     'source-verified': (p) => `有公开的源代码，Sourcify 已确认它${p.match === 'exact' ? '与链上代码逐字节一致' : '与链上代码一致'}（${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}）。可在 ${p.url} 阅读`,
     'source-unverified': () => 'Sourcify 上没有源代码。它可能仍在该链的 explorer 上公开；如果哪里都没有公开，请格外小心。',
+    // Trade simulation (honeypot check, src/honeypot.js)
+    'sim-cannot-sell': (p) => `貔貅盘（honeypot）警告：通过 ${p.dex} 模拟交易，可以买入，但${p.sell == null ? '无法卖出' : `卖出后几乎拿不回钱（损失 ${p.sell}%）`}。买入后你可能无法卖出。（少数代币只在刚买入后禁止卖出，此检查无法区分这两种情况。）`,
+    'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
+      ? `通过 ${p.dex} 模拟买入后没有收到任何代币：所付款项被全部扣走。`
+      : `通过 ${p.dex} 模拟交易：买入时损失 ${p.buy ?? '?'}%，卖出时损失 ${p.sell ?? '?'}%，被代币作为税收走。你拿回的会比价格显示的少这么多。`),
+    'sim-ok': (p) => `通过 ${p.dex} 模拟少量买入再卖出成功（买入税 ${p.buy}%，卖出税 ${p.sell}%）。这只是当前区块的测试：控制合约的人以后仍可能提高税率或禁止卖出。`,
+    'sim-skipped': (p) => ({
+      'no-pool': `在 ${p.dex} 上未找到此代币与 ${p.native} 的交易池，因此未进行模拟买卖。仅凭这一点并非危险信号，该代币可能在其他地方交易。`,
+      'no-override': '公共 RPC 不允许模拟交易（state override），因此未进行模拟买卖。',
+      'buy-failed': `通过 ${p.dex} 模拟买入失败，因此无法测试卖出。可能尚未开放交易，或代币拒绝来自合约的买入。`,
+    })[p.why] ?? '无法运行模拟交易，因此未测试买入和卖出。',
     // CosmWasm (Osmosis, Neutron)
     'cw-not-found': () => '这条链上该地址没有合约或代币。可能地址输错了，或者选错了链。',
     'cw20-token': (p) => `CW20 代币（CosmWasm 上的 Rust 合约）“${p.name ?? '?'}”（${p.symbol ?? '?'}），总供应量 ${fmtSupply(p.totalSupply, p.decimals)}。`,

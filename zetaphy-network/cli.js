@@ -19,6 +19,13 @@
 //   zetaphy pq send <to> <amount>      move ZETAPHY out of it, signed with ML-DSA
 //   zetaphy pq native                  native PQ account (zetaphy1… / 0x…): Cosmos txs signed with ML-DSA only, no ECDSA key or gas payer
 //   zetaphy pq native send <0x… or zetaphy1…> <amount> [--gas 400000]   send from it (fund the account first)
+//   zetaphy pq native call <to 0x…> <calldata 0x…> [--value <ZETAPHY>] [--gas <EVM gas, default 200000>]
+//                                      call an EVM contract as that account (msg.sender = its 0x form); no ECDSA key
+//   zetaphy pq native token-send <token 0x…> <to 0x… or zetaphy1…> <amount>   ERC-20 transfer from it
+//   zetaphy pq native token-balance <token 0x…>   its balance of an ERC-20
+//   zetaphy pq native stake | unstake <zetaphyvaloper1…> <amount> [--gas 500000]   delegate to a validator, or undelegate
+//   zetaphy pq native rewards <zetaphyvaloper1…>   withdraw staking rewards
+//                                      (EVM logs of these calls are not in eth_getLogs; contract creation still needs an EVM tx)
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>]
@@ -38,14 +45,15 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JsonRpcProvider, Contract, ContractFactory, formatEther, parseEther, parseUnits, formatUnits, encodeBytes32String, NonceManager, Signature } from 'ethers';
+import { JsonRpcProvider, Contract, ContractFactory, Interface, formatEther, parseEther, parseUnits, formatUnits, encodeBytes32String, decodeBytes32String, NonceManager, Signature } from 'ethers';
 import { HOME, loadOrCreateKey, sealWorkerKey } from './src/keys.js';
 import { detectHardware, pickProfile } from './src/hardware.js';
 import { createWorker } from './src/worker.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
 import { loadOrCreatePq, sealPqSeed, VARIANT as PQ_VARIANT } from './src/pq.js';
-import { pqClient, pqAddress, normalizeAddress, parseZeta, formatZeta, DEFAULT_GAS_LIMIT } from './src/pqtx.js';
+import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, formatZeta, DEFAULT_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT,
+  DEFAULT_STAKING_GAS_LIMIT, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT } from './src/pqtx.js';
 import { createLaneWatcher } from './src/lane.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -113,6 +121,25 @@ async function connect(s, { needJobs = true } = {}) {
 }
 
 const zeta = (wei) => `${formatEther(wei)} ZETAPHY`;
+
+const ERC20 = new Interface(['function transfer(address to, uint256 value) returns (bool)', 'function balanceOf(address) view returns (uint256)',
+  'function decimals() view returns (uint8)', 'function symbol() view returns (string)']);
+
+const tokenAmount = (v, decimals) => formatUnits(v, decimals).replace(/\.0$/, '');
+
+/** decimals() and symbol() of an ERC-20, read with eth_call. */
+async function tokenInfo(provider, token) {
+  if ((await provider.send('eth_getCode', [token, 'latest'])) === '0x') throw new Error(`no contract at ${token}`);
+  const raw = (fn, args = []) => provider.send('eth_call', [{ to: token, data: ERC20.encodeFunctionData(fn, args) }, 'latest']);
+  let decimals;
+  try { decimals = Number(ERC20.decodeFunctionResult('decimals', await raw('decimals'))[0]); } catch { throw new Error(`${token} does not look like an ERC-20 token (no decimals())`); }
+  let symbol = '?';
+  try {
+    const r = await raw('symbol');
+    try { symbol = ERC20.decodeFunctionResult('symbol', r)[0]; } catch { symbol = decodeBytes32String(r); } // some old tokens return bytes32
+  } catch { /* no symbol(): keep '?' */ }
+  return { decimals, symbol, balanceOf: async (who) => ERC20.decodeFunctionResult('balanceOf', await raw('balanceOf', [who]))[0] };
+}
 
 export async function main(argv = process.argv.slice(2), env = process.env, write = console.log) {
   const { pos, opt } = parse(argv);
@@ -241,16 +268,60 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (group === 'pq' && cmd === 'native') {
     // Native PQ account: the chain checks the ML-DSA-44 signature itself, so
     // no ECDSA key, contract or gas payer is involved. Same seed as "pq new".
-    const [sub, to, amount] = rest;
-    if (sub && (sub !== 'send' || !to || !amount)) throw new Error('usage: zetaphy pq native send <0x… or zetaphy1…> <amount> [--gas N]');
-    if (sub) normalizeAddress(to);
-    if (opt.gas != null && !/^\d+$/.test(String(opt.gas))) throw new Error('--gas must be a whole number');
-    const value = sub ? parseZeta(amount) : 0n;
+    const [sub, a1, a2, a3] = rest;
+    const USAGE = {
+      send: ['<0x… or zetaphy1…> <amount> [--gas N]', 2],
+      call: ['<to 0x…> <calldata 0x…> [--value <ZETAPHY>] [--gas <EVM gas, default 200000>]', 2],
+      'token-send': ['<token 0x…> <to 0x… or zetaphy1…> <amount> [--gas <EVM gas, default 200000>]', 3],
+      'token-balance': ['<token 0x…>', 1],
+      stake: ['<zetaphyvaloper1…> <amount> [--gas N]', 2],
+      unstake: ['<zetaphyvaloper1…> <amount> [--gas N]', 2],
+      rewards: ['<zetaphyvaloper1…> [--gas N]', 1],
+    };
+    if (sub && !Object.hasOwn(USAGE, sub)) throw new Error(`usage: zetaphy pq native [${Object.keys(USAGE).join(' | ')}] …`);
+    if (sub && rest.length - 1 !== USAGE[sub][1]) throw new Error(`usage: zetaphy pq native ${sub} ${USAGE[sub][0]}`);
+    const contractArg = (a, what) => {
+      if (!ADDR_RE.test(String(a))) throw new Error(`${what} must be a 0x address (40 hex digits)`);
+      return normalizeAddress(a).hex; // checks the EIP-55 checksum of a mixed-case address
+    };
+    const zetaArg = (a) => {
+      const v = parseZeta(a);
+      if (v <= 0n) throw new Error('amount must be more than 0');
+      return v;
+    };
+    if (opt.gas != null && !/^[1-9]\d*$/.test(String(opt.gas))) throw new Error('--gas must be a whole number');
+    if (opt.value != null && sub !== 'call') throw new Error('--value is only for "pq native call"');
+    if (opt.value === true) throw new Error('--value needs an amount in ZETAPHY');
+    const gas = opt.gas != null ? BigInt(opt.gas) : undefined;
+    let args = {};
+    if (sub === 'send') { normalizeAddress(a1); args = { value: zetaArg(a2) }; }
+    if (sub === 'call') {
+      const to = contractArg(a1, 'to');
+      if (!/^0x(?:[0-9a-fA-F]{2})*$/.test(String(a2))) throw new Error('calldata must be 0x followed by whole bytes of hex (0x for none)');
+      args = { to, data: a2, value: opt.value != null ? parseZeta(opt.value) : 0n };
+    }
+    if (sub === 'token-send') {
+      args = { token: contractArg(a1, 'token'), to: normalizeAddress(a2).hex };
+      if (!/^(\d+(\.\d*)?|\.\d+)$/.test(String(a3))) throw new Error(`not an amount: ${a3}`);
+    }
+    if (sub === 'token-balance') args = { token: contractArg(a1, 'token') };
+    if (['stake', 'unstake', 'rewards'].includes(sub)) {
+      args = { validator: validatorAddress(a1) };
+      if (sub !== 'rewards') args.value = zetaArg(a2);
+    }
+    if (['call', 'token-send'].includes(sub) && gas != null && (gas < MIN_EVM_GAS_LIMIT || gas > MAX_EVM_GAS_LIMIT)) {
+      throw new Error(`--gas (EVM gas) must be between ${MIN_EVM_GAS_LIMIT} and ${MAX_EVM_GAS_LIMIT}`);
+    }
+
     const provider = await connectRpc(s);
     const pq = loadOrCreatePq();
     // ZETAPHY_CHAIN_ID: the Cosmos chain id to expect (a local devnet is not zetaphy-testnet-1).
     const client = pqClient((method, params) => provider.send(method, params), process.env.ZETAPHY_CHAIN_ID ? { chainId: process.env.ZETAPHY_CHAIN_ID } : {});
     const me = pqAddress(pq.publicKeyBytes);
+    const signer = { publicKey: pq.publicKeyBytes, sign: pq.signBytes };
+    const signed = `signed with ML-DSA-${PQ_VARIANT}`;
+    const landed = (r) => write(`tx hash: ${r.txHash} (accepted by the node; it lands in a block within seconds)`);
+    const noLogs = () => write('note: this is a Cosmos tx, so its EVM logs are not in eth_getLogs; balances are correct');
     if (!sub) {
       write(`native PQ account (ML-DSA-${PQ_VARIANT} only, no ECDSA key):`);
       write(`  ${me.bech32}`);
@@ -262,10 +333,57 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
         : 'not on chain yet: send ZETAPHY to this address first (either form works); then it can send');
       return 0;
     }
-    const r = await client.send({ publicKey: pq.publicKeyBytes, sign: pq.signBytes, to, amount: value, gasLimit: opt.gas != null ? BigInt(opt.gas) : DEFAULT_GAS_LIMIT });
-    write(`sent ${formatZeta(r.amount)} ZETAPHY to ${r.to.bech32} (${r.to.hex}) from ${r.from.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, signed with ML-DSA-${PQ_VARIANT}`);
-    write(`tx hash: ${r.txHash} (accepted by the node; it lands in a block within seconds)`);
-    return 0;
+    if (sub === 'send') {
+      const r = await client.send({ ...signer, to: a1, amount: args.value, gasLimit: gas ?? DEFAULT_GAS_LIMIT });
+      write(`sent ${formatZeta(r.amount)} ZETAPHY to ${r.to.bech32} (${r.to.hex}) from ${r.from.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      landed(r);
+      return 0;
+    }
+    if (sub === 'call') {
+      const r = await client.callEVM({ ...signer, to: args.to, data: args.data, value: args.value, evmGasLimit: gas ?? DEFAULT_EVM_GAS_LIMIT });
+      write(`called ${r.to} from ${me.bech32} (${me.hex}) with ${(args.data.length - 2) / 2} bytes of calldata${args.value ? `, value ${formatZeta(args.value)} ZETAPHY` : ''}`);
+      write(`EVM gas ${r.evmGasLimit}, tx gas ${r.gasLimit}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      if (r.result && r.result !== '0x') write(`the call returns (checked with eth_call): ${r.result}`);
+      landed(r); noLogs();
+      return 0;
+    }
+    if (sub === 'token-balance' || sub === 'token-send') {
+      const t = await tokenInfo(provider, args.token);
+      write(`token ${t.symbol} at ${args.token} (${t.decimals} decimals)`);
+      if (sub === 'token-balance') {
+        write(`${me.bech32} (${me.hex}) holds ${tokenAmount(await t.balanceOf(me.hex), t.decimals)} ${t.symbol}`);
+        return 0;
+      }
+      let units;
+      try { units = parseUnits(String(a3), t.decimals); } catch { throw new Error(`${a3} has more decimal places than ${t.symbol} (${t.decimals})`); }
+      if (units <= 0n) throw new Error('amount must be more than 0');
+      const r = await client.callEVM({ ...signer, to: args.token, data: ERC20.encodeFunctionData('transfer', [args.to, units]), evmGasLimit: gas ?? DEFAULT_EVM_GAS_LIMIT,
+        checkResult: (ret) => {
+          if (ret && ret !== '0x' && !ERC20.decodeFunctionResult('transfer', ret)[0]) throw new Error('the token refused the transfer (transfer returned false), so nothing was sent');
+        } });
+      write(`sent ${tokenAmount(units, t.decimals)} ${t.symbol} to ${args.to} from ${me.bech32} (${me.hex}), fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      landed(r); noLogs();
+      return 0;
+    }
+    const opts = { ...signer, validator: args.validator, amount: args.value, gasLimit: gas ?? DEFAULT_STAKING_GAS_LIMIT };
+    if (sub === 'stake') {
+      const r = await client.delegate(opts);
+      write(`staked ${formatZeta(args.value)} ZETAPHY with ${r.validator} from ${me.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      landed(r);
+      return 0;
+    }
+    if (sub === 'unstake') {
+      const r = await client.undelegate(opts);
+      write(`unstaking ${formatZeta(args.value)} ZETAPHY from ${r.validator} (it comes back after the unbonding period), fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      landed(r);
+      return 0;
+    }
+    if (sub === 'rewards') {
+      const r = await client.withdrawRewards(opts);
+      write(`withdrew staking rewards from ${r.validator} to ${me.bech32}, fee ${formatZeta(r.fee)} ZETAPHY, ${signed}`);
+      landed(r);
+      return 0;
+    }
   }
 
   if (group === 'pq') {
