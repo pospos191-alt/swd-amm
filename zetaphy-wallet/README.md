@@ -35,8 +35,8 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 
 ใส่ที่อยู่ JSON-RPC ของโหนด ZETAPHY (พอร์ต 8545) ในช่อง RPC ไม่มีค่าเริ่มต้น เบราว์เซอร์จำไว้ให้
 - หน้าเว็บบน Vercel เป็น https จึงต้องใช้ RPC แบบ https ด้วย (เบราว์เซอร์บล็อก http)
-  - เช่น วาง reverse proxy ที่มี TLS หน้าพอร์ต 8545
-  - หรือรันกระเป๋าบนเครื่องตัวเองด้วย `npm run serve` แล้วใช้ RPC แบบ http
+  - โหนดที่ติดตั้งด้วย `zetaphy-chain/setup-node.sh` (หรือ `cloud-init.sh`) มี https ให้แล้ว:
+    `https://<IP ที่เปลี่ยนจุดเป็นขีด>.sslip.io` เช่น `https://1-2-3-4.sslip.io` (ต้องเปิดพอร์ต 80 และ 443)
 - โหนดต้องตอบ CORS (preflight `OPTIONS`) ให้โดเมนของกระเป๋า
 - หน้าเว็บตรวจ `eth_chainId` ว่าเป็น ZETAPHY testnet (77390) ก่อนใช้งานทุกครั้ง
 - บัญชีจะมีบนเชนหลังได้รับเงินครั้งแรก ก่อนหน้านั้นโอนออกไม่ได้ หน้าเว็บจะบอกให้โอนเข้าก่อน
@@ -56,7 +56,7 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 ```
 npm install
 npm run build     # สร้าง vendor/pqwallet.js ใหม่ แล้ว commit
-npm run serve     # http://localhost:8090/
+npm run serve     # http://localhost:8090/ (สำหรับนักพัฒนา)
 npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอนกับ RPC จำลอง
 ```
 

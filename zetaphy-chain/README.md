@@ -52,9 +52,14 @@
 
 ### 3. เปิดพอร์ตให้คนภายนอกเข้าได้
 1. ในหน้าเครื่อง → **Primary VNIC → Subnet** (ลิงก์) → **Security Lists** → *Default Security List*
-2. **Add Ingress Rules** สองรายการ:
-   - Source CIDR `0.0.0.0/0`, IP Protocol **TCP**, Destination Port **8545** (สำหรับ MetaMask)
-   - Source CIDR `0.0.0.0/0`, IP Protocol **TCP**, Destination Port **26656** (ให้เครื่องอื่นมาต่อเชน ในขั้น 1)
+2. **Add Ingress Rules** (Source CIDR `0.0.0.0/0`, IP Protocol **TCP**) ทีละพอร์ต:
+   - **8545** สำหรับ MetaMask
+   - **26656** ให้เครื่องอื่นมาต่อเชน (ในขั้น 1)
+   - **80** และ **443** สำหรับ https (กระเป๋าบนเว็บต้องใช้ https)
+     - สคริปต์ติดตั้ง Caddy (จากคลังโปรแกรมของ Ubuntu) ซึ่งขอใบรับรอง Let's Encrypt ฟรีให้อัตโนมัติ
+     - ที่อยู่คือ `https://<IP ที่เปลี่ยนจุดเป็นขีด>.sslip.io` เช่น IP `1.2.3.4` → `https://1-2-3-4.sslip.io`
+     - sslip.io เป็นบริการ DNS ฟรีที่ชื่อชี้กลับมาที่ IP นั้นเอง
+     - ถ้าเปิดพอร์ตหลังเครื่องติดตั้งเสร็จ Caddy จะลองขอใบรับรองซ้ำเอง
 3. ไฟร์วอลล์ในตัวเครื่อง สคริปต์เปิดให้เองแล้ว
 
 ### 4. ตรวจว่าเชนทำงาน (ไม่ต้องใช้คอมพิวเตอร์)
@@ -70,9 +75,26 @@
     --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}'
   ```
   ตัวเลข `result` ควรเพิ่มขึ้นทุก ~5 วินาที
+- กระเป๋าบนเว็บ (`zetaphy-wallet`) ใส่ RPC เป็น `https://<IP ที่เปลี่ยนจุดเป็นขีด>.sslip.io`
 
 ถ้าผ่านไปนานแล้วยังไม่ทำงาน: หน้าเครื่อง → **Resources → Console connection**
 แล้วดู log ที่ `/var/log/zetaphy-setup.log`
+
+### แผนสำรอง: Google Cloud (ถ้าสมัคร Oracle ไม่ผ่าน)
+
+Google Cloud ให้เครื่อง **e2-micro** ฟรีถาวรเครื่องเดียว (RAM 1 GB, ดิสก์ 30 GB, เฉพาะเขต US)
+เล็กกว่า Oracle มาก: build นาน 1–2 ชั่วโมงขึ้นไป (สคริปต์เพิ่ม swap 4 GB ให้เอง) และ RAM ตึง
+1. สมัครที่ **cloud.google.com/free** (ต้องยืนยันบัตร ใช้แค่ส่วนฟรีไม่ถูกเก็บเงิน)
+2. **Compute Engine → VM instances → Create instance**
+   - **Region:** `us-central1` (หรือ `us-west1`, `us-east1` เท่านั้นที่ฟรี) · **Machine type:** `e2-micro`
+   - **Boot disk:** Ubuntu 24.04 LTS (x86/64), **Standard persistent disk** 30 GB
+   - **Firewall:** ติ๊ก Allow HTTP และ HTTPS
+   - **Advanced → Management → Metadata → Add item:** Key = `user-data`
+     Value = เนื้อไฟล์ [`setup-node.sh`](./setup-node.sh) ทั้งไฟล์ (Google รับได้ใหญ่กว่า Oracle จึงไม่ต้องใช้ `cloud-init.sh`)
+     ถ้าจะรับเหรียญทดลอง แก้บรรทัด `OWNER_EVM_ADDRESS="${OWNER_EVM_ADDRESS:-}"` เป็น `OWNER_EVM_ADDRESS="0x…"`
+3. **VPC network → Firewall → Create firewall rule:** Targets = All instances, Source `0.0.0.0/0`,
+   TCP `8545,26656`
+4. ตรวจแบบเดียวกับข้อ 4 ข้างบน (ใช้ External IP ของเครื่อง) ดู log ได้ที่ปุ่ม **SSH** ในหน้าเครื่อง: `sudo tail -f /var/log/zetaphy-setup.log`
 
 ---
 
@@ -81,9 +103,10 @@
 - เหรียญบนเชนนี้ไม่มีมูลค่า ห้ามโฆษณาหรือขาย
 - กุญแจของบัญชีตอนเปิดเชนเก็บแยกไว้ที่ `/home/zetaphy/.zetaphy-genesis-keys` (อ่านได้เฉพาะผู้ใช้ `zetaphy`)
   ไม่อยู่ในโฟลเดอร์ที่ node ใช้ คนที่ต่อ RPC จึงสั่งโอนเงินจากบัญชีเหล่านี้ไม่ได้
-- เปิดสาธารณะแค่ 8545 (EVM JSON-RPC: eth, net, web3, txpool) และ 26656 (P2P)
+- เปิดสาธารณะแค่ 8545 (EVM JSON-RPC: eth, net, web3, txpool, zetaphy), 26656 (P2P) และ 80/443 (Caddy: https ที่ส่งต่อไป 8545 ตัวเดียวกัน)
   ส่วน 26657 / 1317 / 9090 ฟังเฉพาะในเครื่อง
-- ก่อนขั้น 3 (เงินจริง) ต้องเปลี่ยน: กุญแจไปเก็บใน multisig/HSM, RPC ผ่าน https (Cloudflare Tunnel),
+  - `zetaphy_sendCosmosTx` แค่ส่งต่อธุรกรรมที่เซ็นมาแล้ว (เหมือน `eth_sendRawTransaction`) ไม่ถือกุญแจใด ๆ
+- ก่อนขั้น 3 (เงินจริง) ต้องเปลี่ยน: กุญแจไปเก็บใน multisig/HSM, https บนชื่อโดเมนของโครงการเอง (แทน sslip.io),
   validator อิสระ ≥ 20 ราย, audit ตามแผน
 
 ## สิ่งที่ขั้น 0 ยังไม่มี (ทำในขั้นถัดไป)

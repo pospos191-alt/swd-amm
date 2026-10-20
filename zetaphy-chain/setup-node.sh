@@ -269,22 +269,31 @@ else
   as_node "nohup $START > /home/$NODE_USER/zetaphyd.log 2>&1 &"
 fi
 
-step "8/8 firewall"
-# Oracle's Ubuntu images reject everything except SSH in iptables; open the two public ports.
+step "8/8 firewall and https"
+# Oracle's Ubuntu images reject everything except SSH in iptables; open the public ports.
 if command -v iptables >/dev/null && iptables -S INPUT 2>/dev/null | grep -q -- '-j REJECT'; then
-  for port in 8545 26656; do
+  for port in 8545 26656 80 443; do
     iptables -C INPUT -p tcp --dport $port -j ACCEPT 2>/dev/null || iptables -I INPUT 5 -p tcp --dport $port -j ACCEPT
   done
   command -v netfilter-persistent >/dev/null && netfilter-persistent save || true
 fi
 
 ip=$(curl -fsS -m 5 https://checkip.amazonaws.com 2>/dev/null || hostname -I | awk '{print $1}')
+# HTTPS in front of 8545, for pages served over https (the web wallet): Caddy
+# from Ubuntu's archive gets a free Let's Encrypt certificate for
+# <ip>.sslip.io, a free DNS name that points at the IP. Not fatal if it fails.
+host="${ip//./-}.sslip.io"
+if [ -z "$NO_SYSTEMD" ] && [ -d /run/systemd/system ] && [[ "$ip" =~ ^[0-9.]+$ ]]; then
+  { apt-get install -y caddy >/dev/null && printf '%s {\n\treverse_proxy 127.0.0.1:8545\n}\n' "$host" > /etc/caddy/Caddyfile \
+    && systemctl restart caddy; } || echo "https setup failed; the RPC still works over http"
+fi
 cat <<INFO | tee "/home/$NODE_USER/NODE-INFO.txt"
 
 ZETAPHY testnet node is starting.
   Chain ID (Cosmos):   $CHAIN_ID
   Chain ID (EVM):      $EVM_CHAIN_ID
   MetaMask RPC URL:    http://$ip:8545
+  HTTPS RPC (wallet):  https://$host  (needs ports 80 and 443 open)
   Currency symbol:     ZETAPHY
   Genesis keys:        $KEYS_DIR (testnet only; MNEMONICS-KEEP-SECRET.txt)
   Logs:                journalctl -u zetaphyd -f
