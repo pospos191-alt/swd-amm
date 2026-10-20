@@ -13,6 +13,7 @@ export const UI = {
     chain: '체인', address: '주소', proxy: 'Proxy', implementation: '실제 코드 (implementation)', owner: '소유자', functions: '알려진 함수', report: '보고서 ID', explorer: 'explorer에서 열기', fingerprint: '코드 지문 (템플릿 등록용)', unknown: '이름을 알 수 없는 함수',
     program: '토큰 프로그램', mintAuth: '발행 권한', freezeAuth: '동결 권한', extensions: '확장 기능', upgradeAuth: '업그레이드 권한', none: '없음',
     package: '패키지', standard: '표준', admin: '관리자', holders: '보유자 수', listed: 'tonapi 목록', raw: '원본 주소 (raw)',
+    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드',
   },
 };
 
@@ -155,4 +156,32 @@ export const T = {
     'ton-admin-dropped': () => '관리자 권한이 포기되었습니다. 이제 아무도 토큰을 발행하거나 토큰 정보를 바꿀 수 없습니다.',
     'ton-mint-flag': () => '컨트랙트에는 아직 발행 가능으로 표시되어 있지만, 발행할 관리자가 없습니다.',
     'ton-caveat': () => 'tonapi.io가 해석한 컨트랙트 데이터를 정해진 규칙으로 검사했습니다. 보유자 지갑 코드는 검사하지 않았습니다 (이 때문에 살 수는 있어도 팔 수 없는 토큰도 있습니다). 투자 조언이 아닙니다.',
+    // Solana programs (Anchor IDL)
+    'sol-idl': (p) => `이 프로그램은 Rust(Anchor)로 작성되었으며 명령어 목록을 체인에 공개합니다: ${p.name ?? '?'}, 명령어 ${p.count ?? '?'}개입니다.`,
+    'sol-admin-instructions': (p) => `관리자 서명이 필요한 명령어가 있습니다 (${list(p.functions)}). 관리자는 이 명령어로 프로그램의 동작을 바꿀 수 있습니다.`,
+    'sol-no-idl': () => '이 프로그램은 명령어 목록(Anchor IDL)을 체인에 공개하지 않으므로, 무엇을 할 수 있는지 읽을 수 없습니다.',
+    // EVM code that is not EVM bytecode
+    'stylus-code': (p) => (p.issuer
+      ? `${p.issuer}은(는) Stylus 컨트랙트(Rust/C++를 Arbitrum의 WASM으로 컴파일한 것)를 사용하며, Neuro의 규칙으로는 아직 읽을 수 없습니다.`
+      : 'Stylus 컨트랙트입니다 (Rust 또는 C++를 Arbitrum의 WASM으로 컴파일한 것). Neuro의 규칙으로는 아직 이 코드를 읽을 수 없으므로, 발행·차단·일시 정지가 가능한지 알 수 없습니다. 검사되지 않은 것으로 간주하십시오.'),
+    'unknown-code-format': (p) => (p.issuer
+      ? `${p.issuer}은(는) 표준 EVM bytecode가 아닌 코드를 사용합니다.`
+      : '이 컨트랙트의 코드는 표준 EVM bytecode가 아니어서 Neuro의 규칙으로 읽을 수 없습니다. 검사되지 않은 것으로 간주하십시오.'),
+    'eip7702': (p) => `이 주소는 일반 지갑이며, 소유자가 컨트랙트 ${p.target}의 코드를 실행하도록 설정했습니다 (EIP-7702). 토큰이 아닙니다. 그 코드는 작성된 대로 지갑의 자금으로 무엇이든 할 수 있으므로, ${p.target}도 검사하십시오.`,
+    'source-verified': (p) => `Sourcify가 ${p.match === 'exact' ? '체인의 코드와 바이트 단위까지 일치한다고' : '체인의 코드와 일치한다고'} 확인한 공개 소스 코드가 있습니다 (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). ${p.url}에서 읽을 수 있습니다.`,
+    'source-unverified': () => 'Sourcify에 소스 코드가 없습니다. 체인의 explorer에는 공개되어 있을 수 있습니다. 어디에도 공개되어 있지 않다면 특히 주의하십시오.',
+    // CosmWasm (Osmosis, Neutron)
+    'cw-not-found': () => '이 체인의 이 주소에는 컨트랙트나 토큰이 없습니다. 주소를 잘못 입력했거나 체인을 잘못 선택했을 수 있습니다.',
+    'cw20-token': (p) => `CW20 토큰(CosmWasm의 Rust 컨트랙트) "${p.name ?? '?'}" (${p.symbol ?? '?'}), 총 발행량 ${fmtSupply(p.totalSupply, p.decimals)}개입니다.`,
+    'cw-contract': (p) => `CosmWasm 컨트랙트(Rust로 작성)${p.label ? `, 이름 "${p.label}"` : ''}, code ID ${p.codeId ?? '?'}입니다. CW20 토큰이 아닙니다.`,
+    'cw-admin': (p) => `관리자(${p.admin})가 언제든지 컨트랙트 코드를 새 코드로 교체할 수 있습니다 (migrate). 오늘 검사한 내용이 내일은 맞지 않을 수 있습니다.`,
+    'cw-no-admin': () => '관리자가 없습니다. 컨트랙트 코드는 절대 교체될 수 없습니다.',
+    'cw-migrated': (p) => `이 컨트랙트의 코드는 이미 ${p.count}번 교체되었습니다.`,
+    'cw20-minter': (p) => `${p.minter}이(가) 아직 새 토큰을 ${p.cap ? `총 ${fmtSupply(p.cap, p.decimals)}개까지` : '제한 없이'} 발행할 수 있습니다. 보유자의 몫이 줄어들거나 시장에 물량이 쏟아질 수 있습니다.`,
+    'cw20-no-minter': () => '아무도 이 토큰을 더 발행할 수 없습니다.',
+    'tf-token': (p) => `${p.creator}이(가) 만든 Token Factory 코인 "${p.name ?? '?'}"${p.symbol ? ` (${p.symbol})` : ''}, 총 발행량 ${fmtSupply(p.totalSupply, p.decimals)}개입니다.`,
+    'tf-admin': (p) => `관리자(${p.admin})가 제한 없이 발행할 수 있으며, 일부 체인에서는 다른 사람의 지갑에서 토큰을 옮기거나 소각할 수도 있습니다.`,
+    'tf-no-admin': () => '관리자 권한이 포기되었습니다. 이제 아무도 더 발행할 수 없습니다.',
+    'tf-hook': (p) => `모든 전송은 컨트랙트 ${p.contract}(before-send hook)를 거쳐야 하며, 이 컨트랙트는 판매 차단 같은 자체 규칙을 적용할 수 있습니다.`,
+    'cw-caveat': () => '체인의 컨트랙트 데이터를 정해진 규칙으로 검사했습니다. 내부의 Rust 코드와 유동성은 검사하지 않았습니다. 투자 조언이 아닙니다.',
 };

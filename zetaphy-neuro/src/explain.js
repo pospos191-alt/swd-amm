@@ -20,8 +20,9 @@ const IDENTITY = new Set([
   'sui-coin', 'sui-not-found', 'sui-not-coin', 'sui-package',
   'apt-token', 'apt-not-found', 'apt-not-token', 'apt-package',
   'ton-jetton', 'ton-not-found', 'ton-not-jetton',
+  'cw20-token', 'cw-contract', 'cw-not-found', 'tf-token', 'eip7702',
 ]);
-const CAVEAT = new Set(['bytecode-only', 'sol-caveat', 'move-caveat', 'ton-caveat']);
+const CAVEAT = new Set(['bytecode-only', 'sol-caveat', 'move-caveat', 'ton-caveat', 'cw-caveat']);
 const ORDER = { high: 0, medium: 1, low: 2, good: 3, info: 4 };
 // Who issued it (or that it copies someone) belongs right under what it is.
 const ISSUER = new Set(['known-issuer', 'lookalike']);

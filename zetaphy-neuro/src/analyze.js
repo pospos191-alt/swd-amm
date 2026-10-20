@@ -11,6 +11,7 @@ const POWERS = [
   { cat: 'mint', id: 'can-mint', base: 'high' },
   { cat: 'blacklist', id: 'can-blacklist', base: 'high' },
   { cat: 'pause', id: 'can-pause', base: 'high' },
+  { cat: 'seize', id: 'can-seize', base: 'high' },
   { cat: 'fee', id: 'can-change-fee', base: 'medium' },
   { cat: 'trading', id: 'trading-switch', base: 'medium' },
   { cat: 'limit', id: 'can-limit', base: 'medium' },
@@ -138,8 +139,44 @@ export function analyze(input) {
   if ((input.opcodes?.delegatecall || input.opcodes?.callcode) && !proxy.kind) add('delegatecall', 'medium');
 
   if (!findings.some((f) => RANK[f.severity] > 0 || f.severity === 'good')) add('nothing-found', 'info');
+  // Verified source (Sourcify): undefined = not checked, null = not found.
+  // Added after "nothing found": public source is not by itself a safety signal.
+  if (input.source) add('source-verified', 'good', { match: input.source.match, language: input.source.language, compiler: input.source.compiler, name: input.source.name, url: input.source.url });
+  else if (input.source === null) add('source-unverified', 'info');
   add('bytecode-only', 'info');
 
   const level = findings.reduce((m, f) => (RANK[f.severity] > RANK[m] ? f.severity : m), 'info');
   return { level, control, findings };
+}
+
+/**
+ * Code Neuro's EVM rules cannot read: Stylus (Rust/C compiled to WASM on
+ * Arbitrum) or another non-EVM format. Only what the ABI can still answer
+ * (name, symbol, owner) is used; the powers stay unknown and are said so.
+ * @param {{format:'stylus'|'eof', token:object, owner?:string|null, known?:object|null, lookalike?:object|null}} input
+ */
+export function analyzeOpaque(input) {
+  const findings = [];
+  const add = (id, severity, params = {}) => findings.push({ id, severity, params });
+  const known = input.known ?? null;
+  const t = input.token ?? {};
+  if (t.symbol != null) add('erc20', 'info', { name: t.name, symbol: t.symbol, decimals: t.decimals, totalSupply: t.totalSupply });
+  if ((t.name && LINK_RE.test(t.name)) || (t.symbol && LINK_RE.test(t.symbol))) add('name-has-link', 'high', { name: t.name, symbol: t.symbol });
+  if (known) add('known-issuer', 'good', { symbol: known.symbol, issuer: known.issuer, kind: known.kind });
+  if (input.lookalike) add('lookalike', 'high', { symbol: t.symbol, official: input.lookalike.address, issuer: input.lookalike.issuer });
+  add(input.format === 'stylus' ? 'stylus-code' : 'unknown-code-format', known ? 'low' : 'medium', known ? { issuer: known.issuer } : {});
+  if (typeof input.owner === 'string' && input.owner !== ZERO) add('owner-active', 'info', { owner: input.owner });
+  else if (input.owner === ZERO) add('owner-renounced', 'good');
+  add('bytecode-only', 'info');
+  const level = findings.reduce((m, f) => (RANK[f.severity] > RANK[m] ? f.severity : m), 'info');
+  return { level, control: input.format, findings };
+}
+
+/** An EIP-7702 account: a normal wallet whose key holder chose to run another contract's code. */
+export function analyzeDelegated(target) {
+  const findings = [
+    { id: 'eip7702', severity: 'medium', params: { target } },
+    { id: 'bytecode-only', severity: 'info', params: {} },
+  ];
+  return { level: 'medium', control: 'eip7702', findings };
 }

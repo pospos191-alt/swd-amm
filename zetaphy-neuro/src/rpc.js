@@ -167,3 +167,13 @@ export function createTonApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 1
   };
   return { get: (path) => run((url) => get1(url, path)) };
 }
+
+/** Cosmos REST (LCD) client, GET only; refuses endpoints serving another chain id. */
+export function createCosmosRest(urls, chainId, { fetchImpl = globalThis.fetch, timeoutMs = 15000 } = {}) {
+  const run = failover(urls, async (url) => {
+    const info = await fetchJson(fetchImpl, `${url}/cosmos/base/tendermint/v1beta1/node_info`, { method: 'GET' }, timeoutMs);
+    const network = info?.default_node_info?.network;
+    if (network !== chainId) throw new RpcError(`wrong chain ${network} at ${url}`);
+  });
+  return { get: (path) => run((url) => fetchJson(fetchImpl, url + path, { method: 'GET' }, timeoutMs)) };
+}

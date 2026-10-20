@@ -9,6 +9,7 @@
 // decodes all of these for us.
 
 import { cleanText } from './abi.js';
+import { addPowerFindings } from './move.js';
 
 export const TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
 export const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb';
@@ -133,6 +134,15 @@ export function analyzeSolana(m, ctx = {}) {
   } else if (m.kind === 'program') {
     if (m.upgradeAuthority) add('sol-program-upgradeable', 'high', { authority: m.upgradeAuthority });
     else add('sol-program-immutable', 'good');
+    // Anchor IDL: the program's own list of instructions (Rust source names).
+    const idl = m.idl;
+    if (idl) {
+      add('sol-idl', 'info', { name: idl.name, count: idl.instructions });
+      if (idl.admin.length) add('sol-admin-instructions', 'medium', { functions: idl.admin });
+      addPowerFindings(add, idl.powers, (x) => x, {});
+    } else {
+      add('sol-no-idl', 'info');
+    }
   } else {
     const t = m.token;
     add('sol-token', 'info', { name: t.name, symbol: t.symbol, decimals: t.decimals, totalSupply: t.supply, program: m.program2022 ? 'Token-2022' : 'SPL Token' });

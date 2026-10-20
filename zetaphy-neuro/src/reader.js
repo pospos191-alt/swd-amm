@@ -2,15 +2,18 @@
 // Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call.
 
 import { CHAINS, isChainAddress } from './chains.js';
-import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi } from './rpc.js';
+import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest } from './rpc.js';
+import { readCosmwasmAccount, analyzeCosmwasm } from './cosmwasm.js';
 import { readSolanaAccount, analyzeSolana } from './solana.js';
+import { readAnchorIdl } from './anchor.js';
 import { readSuiAccount, analyzeSui } from './sui.js';
 import { readAptosAccount, analyzeAptos } from './aptos.js';
 import { readTonAccount, analyzeTon, parseTonAddress } from './ton.js';
 import { normalizeType, longAddress } from './move.js';
+import { lookupSourcify, abiFunctions, categorize } from './sourcify.js';
 import { scanBytecode, minimalProxyTarget, hexToBytes } from './bytecode.js';
 import { decodeAddress, decodeUint, decodeString, cleanText } from './abi.js';
-import { analyze } from './analyze.js';
+import { analyze, analyzeOpaque, analyzeDelegated } from './analyze.js';
 import { codeFingerprint } from './fingerprint.js';
 import { TEMPLATES } from './templates.js';
 import { knownToken, lookalikeOf } from './known-tokens.js';
@@ -67,6 +70,7 @@ export async function readContract(chainKey, address, opts = {}) {
   if (chain.kind === 'sui') return readSui(chainKey, chain, address, opts);
   if (chain.kind === 'aptos') return readAptos(chainKey, chain, address, opts);
   if (chain.kind === 'ton') return readTon(chainKey, chain, address, opts);
+  if (chain.kind === 'cosmwasm') return readCosmwasm(chainKey, chain, address, opts);
   const addr = address.toLowerCase();
   const rpc = opts.rpc ?? createRpc(chain.rpcs, chain.id, { fetchImpl: opts.fetchImpl });
 
@@ -91,6 +95,43 @@ export async function readContract(chainKey, address, opts = {}) {
   if (!hasCode) {
     report.analysis = analyze({ hasCode: false });
     report.reportHash = await sha256Hex(canonical({ ...report }));
+    return report;
+  }
+
+  // Code that is not EVM bytecode starts with 0xEF (never a valid first opcode).
+  const lower = code.toLowerCase();
+  if (/^0xef0100[0-9a-f]{40}$/.test(lower)) {
+    // EIP-7702: an ordinary wallet pointing at another contract's code.
+    report.delegation = '0x' + lower.slice(8);
+    report.analysis = analyzeDelegated(report.delegation);
+    report.reportHash = await sha256Hex(canonical(report));
+    return report;
+  }
+  if (lower.startsWith('0xef')) {
+    // 0xEFF000…: Arbitrum Stylus (Rust/C/C++ compiled to WASM). Anything else
+    // starting 0xEF is a format these rules do not understand either.
+    const format = lower.startsWith('0xeff000') ? 'stylus' : 'eof';
+    const [nameR, symbolR, decR, supplyR, ownerR] = await Promise.all([
+      tryCall(addr, SEL.name), tryCall(addr, SEL.symbol), tryCall(addr, SEL.decimals), tryCall(addr, SEL.totalSupply), tryCall(addr, SEL.owner),
+    ]);
+    const dec = decodeUint(decR);
+    const token = {
+      name: cleanText(decodeString(nameR)) ?? undefined,
+      symbol: cleanText(decodeString(symbolR), 24) ?? undefined,
+      decimals: dec != null && dec <= 255n ? Number(dec) : undefined,
+      totalSupply: decodeUint(supplyR)?.toString(),
+    };
+    const owner = ownerR ? decodeAddress(ownerR) : undefined;
+    report.format = format;
+    report.token = token;
+    report.owner = owner;
+    report.codeHash = await sha256Hex(lower);
+    report.analysis = analyzeOpaque({
+      format, token, owner,
+      known: knownToken(chainKey, addr),
+      lookalike: token.symbol ? lookalikeOf(chainKey, addr, token.symbol) : null,
+    });
+    report.reportHash = await sha256Hex(canonical(report));
     return report;
   }
 
@@ -152,9 +193,38 @@ export async function readContract(chainKey, address, opts = {}) {
   if (opts.threatLookup) {
     try { threat = await opts.threatLookup(report.fingerprint); } catch { threat = null; }
   }
-  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike, unknownSelectors, threat });
+  // Verified source (Sourcify): on by default for real reads, off when the
+  // caller injects an RPC (tests) or passes sourcify:false (network runners,
+  // whose verdicts must not depend on a third party's answer).
+  let source;
+  const wantSource = opts.sourcify ?? !opts.rpc;
+  if (wantSource && chain.id) {
+    const lookup = typeof opts.sourcify === 'function'
+      ? opts.sourcify
+      : (cid, a) => lookupSourcify(cid, a, { fetchImpl: opts.fetchImpl });
+    try { source = await lookup(chain.id, proxy.implementation ?? addr); } catch { source = undefined; }
+  }
+  let unknown = unknownSelectors;
+  if (source) {
+    // The verified ABI names what the selector list could not.
+    const abiFns = abiFunctions(source.abi);
+    const cats = categorize(abiFns);
+    const have = new Set(functions.map((f) => f.selector));
+    for (const f of abiFns) {
+      if (have.has(f.selector)) continue;
+      if (cats[f.selector] || unknown.includes(f.selector)) {
+        functions.push({ selector: f.selector, sig: f.sig, cat: cats[f.selector] ?? 'named' });
+        have.add(f.selector);
+      }
+    }
+    unknown = unknown.filter((sel) => !have.has(sel));
+    report.source = { match: source.match, language: source.language, compiler: source.compiler, name: source.name, url: source.url };
+  } else if (source === null) {
+    report.source = null; // checked: not on Sourcify
+  }
+  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike, unknownSelectors: unknown, threat, source });
   report.functions = functions.map((f) => f.sig).sort();
-  if (unknownSelectors.length) report.unknownSelectors = unknownSelectors;
+  if (unknown.length) report.unknownSelectors = unknown;
   report.reportHash = await sha256Hex(canonical(report));
   return report;
 }
@@ -162,6 +232,7 @@ export async function readContract(chainKey, address, opts = {}) {
 async function readSolana(chainKey, chain, address, opts) {
   const rpc = opts.rpc ?? createSolanaRpc(chain.rpcs, chain.genesisHash, { fetchImpl: opts.fetchImpl });
   const m = await readSolanaAccount(rpc, address);
+  if (m.kind === 'program') m.idl = await readAnchorIdl(rpc, address);
   const report = { version: REPORT_VERSION, chain: chainKey, address };
   if (m.kind === 'mint') {
     report.token = m.token;
@@ -173,6 +244,7 @@ async function readSolana(chainKey, chain, address, opts) {
     };
   } else if (m.kind === 'program') {
     report.solana = { program: 'upgradeable-loader', upgradeAuthority: m.upgradeAuthority };
+    if (m.idl) report.solana.idl = { address: m.idl.address, name: m.idl.name, instructions: m.idl.instructions };
   }
   const known = m.kind === 'mint' ? knownToken(chainKey, address) : null;
   const lookalike = m.kind === 'mint' ? lookalikeOf(chainKey, address, m.token.symbol) : null;
@@ -245,5 +317,19 @@ async function readTon(chainKey, chain, address, opts) {
   const known = m.kind === 'jetton' ? knownToken(chainKey, raw) : null;
   const lookalike = m.kind === 'jetton' ? lookalikeOf(chainKey, raw, m.token.symbol) : null;
   report.analysis = analyzeTon(m, { known, lookalike });
+  return finish(report);
+}
+
+async function readCosmwasm(chainKey, chain, address, opts) {
+  const api = opts.api ?? createCosmosRest(chain.rpcs, chain.chainId, { fetchImpl: opts.fetchImpl });
+  const m = await readCosmwasmAccount(api, address);
+  const report = { version: REPORT_VERSION, chain: chainKey, address };
+  if (m.token) report.token = m.token;
+  if (m.kind === 'cw20' || m.kind === 'contract') {
+    report.cosmwasm = { codeId: m.codeId, label: m.label, creator: m.creator, admin: m.admin, migrations: m.migrations };
+  } else if (m.kind === 'factory') {
+    report.cosmwasm = { creator: m.creator, admin: m.admin, hook: m.hook };
+  }
+  report.analysis = analyzeCosmwasm(m);
   return finish(report);
 }

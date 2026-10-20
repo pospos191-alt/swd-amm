@@ -1,7 +1,7 @@
 # Neuro ZETAPHY — ชั้น 1 (อ่านและอธิบายสัญญา)
 
 งานแรกตาม "แผน ZETAPHY Chain": ตัวอ่านสัญญาที่บอกเป็นภาษาคนว่าสัญญาเหรียญบน
-**Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos และ TON** ให้สิทธิ์อะไรกับเจ้าของบ้าง (สร้างเหรียญเพิ่ม,
+**Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos, TON, Osmosis และ Neutron** ให้สิทธิ์อะไรกับเจ้าของบ้าง (สร้างเหรียญเพิ่ม,
 บล็อกกระเป๋า, หยุดการโอน, เปลี่ยนภาษี, อัปเกรดโค้ด ฯลฯ) อธิบายได้ 7 ภาษา: ไทย อังกฤษ จีน ญี่ปุ่น เกาหลี
 เวียดนาม อินโดนีเซีย ต้นทุน $0
 
@@ -23,6 +23,7 @@ node cli.js base 0x... --lang en  # English (หรือ zh ja ko vi id)
 node cli.js sui 0x...::coin::COIN # เหรียญบน Sui
 node cli.js aptos 0x...           # Fungible Asset บน Aptos (หรือ 0x...::module::Name)
 node cli.js ton EQ...             # jetton บน TON
+node cli.js osmosis osmo1...      # สัญญา CosmWasm (Rust) หรือ factory/osmo1.../ชื่อ
 node cli.js arbitrum 0x... --json # รายงานเต็ม
 npm run web                       # เปิดหน้าเว็บที่ http://localhost:8080/
 ```
@@ -94,6 +95,20 @@ set_fee, burn_from ฯลฯ)
 
 ข้อจำกัดของ Sui/Aptos: ตรวจจากชื่อฟังก์ชันและข้อมูลบนเชน ยังไม่ได้อ่านเนื้อในทุกฟังก์ชัน
 
+**ภาษาที่ใช้เขียนสัญญา** Neuro อ่านโค้ดที่รันจริงบนเชน ไม่ใช่ซอร์ส จึงขึ้นกับว่าภาษานั้นคอมไพล์เป็นอะไร:
+
+| ภาษา | อ่านอย่างไร |
+|---|---|
+| Solidity, Yul, Vyper, Huff | EVM bytecode (ไม่สนภาษาต้นทาง) + ซอร์สที่ verify แล้วจาก Sourcify (`src/sourcify.js`) ใช้ตั้งชื่อฟังก์ชันที่ไม่รู้จัก |
+| Rust/C++ บน Arbitrum (Stylus) | รู้ว่าเป็น WASM ไม่อ่านผิดเป็น EVM อ่านชื่อ/เจ้าของผ่าน ABI แล้วบอกว่าสิทธิ์ยังตรวจไม่ได้ |
+| Rust บน Solana (Anchor) | อ่านรายการคำสั่งจาก IDL บนเชน (`src/anchor.js`) หาคำสั่งที่ต้องให้ผู้ดูแลเซ็น และคำสั่งอันตราย |
+| Rust บน CosmWasm (Osmosis, Neutron) | ผู้ดูแลที่เปลี่ยนโค้ดได้ (migrate), ประวัติการเปลี่ยนโค้ด, ผู้สร้างเหรียญ CW20, ผู้ดูแลเหรียญ Token Factory และ before-send hook (`src/cosmwasm.js`) |
+| Move (Sui, Aptos) | ชื่อฟังก์ชันและสิทธิ์ในโค้ด |
+| FunC/Tact (TON) | ข้อมูล jetton ที่ tonapi ถอดให้ |
+
+กระเป๋าแบบ EIP-7702 (กระเป๋าธรรมดาที่ตั้งให้รันโค้ดของสัญญาอื่น) จะบอกว่ารันโค้ดของสัญญาไหน
+ผู้รันในเครือข่าย Neuro ปิด Sourcify (`sourcify: false`) เพื่อให้คำตัดสินขึ้นกับข้อมูลบนเชนอย่างเดียว
+
 **EVM** (Ethereum, BNB Chain, Base, Arbitrum):
 
 | ผลตรวจ | ระดับ |
@@ -133,7 +148,8 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 - [x] รองรับ Ethereum และ Solana
 - [x] รองรับ Sui, Aptos (ภาษา Move) และ TON (ทดสอบกับข้อมูลตามรูปแบบจริงของแต่ละเชน ยังไม่ได้ลองกับ mainnet จากเครื่องนี้)
 - [ ] ให้เจ้าของภาษาตรวจคำแปล จีน ญี่ปุ่น เกาหลี เวียดนาม อินโดนีเซีย
-- [ ] CosmWasm, NEAR, Bitcoin (Runes/BRC-20), Starknet
+- [x] Rust: Solana (Anchor IDL), Arbitrum Stylus, CosmWasm (Osmosis, Neutron) · ซอร์ส Solidity/Vyper จาก Sourcify
+- [ ] NEAR, Bitcoin (Runes/BRC-20), Starknet, อ่านเนื้อใน WASM ของ Stylus
 - [ ] ชั้นอธิบายด้วย AI (ทางเลือก): ส่งเฉพาะผลตรวจ ไม่ให้สิทธิ์เรียกเครื่องมือ (จุดอ่อนข้อ 12)
 
 ---
@@ -141,7 +157,9 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 # Neuro ZETAPHY tier 1 (English summary)
 
 Read-only contract reader and explainer for Ethereum, BNB Chain, Base,
-Arbitrum, Solana, Sui, Aptos and TON. Fixed rules over on-chain code and data
+Arbitrum, Solana (incl. Anchor IDLs), Sui, Aptos, TON, Osmosis and Neutron
+(CosmWasm), with Sourcify verified-source lookups and Stylus / EIP-7702
+detection. Fixed rules over on-chain code and data
 (no AI, no wallet, no transactions), output in Thai, English, Chinese,
 Japanese, Korean, Vietnamese and Indonesian, a reproducible `reportHash`, a CLI and a static web page.
 Also: a privacy-preserving monthly user counter (`api/usage.js`, Vercel +

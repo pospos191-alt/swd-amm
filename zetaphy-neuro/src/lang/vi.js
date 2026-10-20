@@ -13,6 +13,7 @@ export const UI = {
     chain: 'Chuỗi', address: 'Địa chỉ', proxy: 'Proxy', implementation: 'Mã thực thi', owner: 'Chủ sở hữu', functions: 'Hàm đã nhận diện', report: 'Mã báo cáo', explorer: 'Mở trên explorer', fingerprint: 'Dấu vân tay mã (để đăng ký mẫu)', unknown: 'Hàm chưa rõ tên',
     program: 'Chương trình token', mintAuth: 'Quyền tạo token (mint authority)', freezeAuth: 'Quyền đóng băng (freeze authority)', extensions: 'Tiện ích mở rộng', upgradeAuth: 'Quyền nâng cấp', none: 'không có',
     package: 'Gói', standard: 'Tiêu chuẩn', admin: 'Quản trị viên', holders: 'Số người nắm giữ', listed: 'Danh sách tonapi', raw: 'Địa chỉ gốc (raw)',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy',
   },
 };
 
@@ -155,4 +156,32 @@ export const T = {
     'ton-admin-dropped': () => 'Vai trò quản trị viên đã bị bỏ: không ai có thể tạo thêm token hay thay đổi dữ liệu của token nữa.',
     'ton-mint-flag': () => 'Hợp đồng vẫn ghi là có thể tạo thêm token, nhưng không có quản trị viên nào để làm việc đó.',
     'ton-caveat': () => 'Kiểm tra từ dữ liệu hợp đồng do tonapi.io giải mã theo các quy tắc cố định. Chưa kiểm tra mã ví của người nắm giữ (vì lý do này, một số token có thể mua được nhưng không bán được). Không phải lời khuyên đầu tư.',
+    // Solana programs (Anchor IDL)
+    'sol-idl': (p) => `Chương trình này được viết bằng Rust (Anchor) và công bố danh sách lệnh của nó trên chuỗi: ${p.name ?? '?'}, ${p.count ?? '?'} lệnh.`,
+    'sol-admin-instructions': (p) => `Các lệnh cần chữ ký của quản trị viên (${list(p.functions)}). Quản trị viên có thể dùng chúng để thay đổi cách chương trình hoạt động.`,
+    'sol-no-idl': () => 'Chương trình này không công bố danh sách lệnh (Anchor IDL) trên chuỗi, nên không đọc được nó có thể làm gì.',
+    // EVM code that is not EVM bytecode
+    'stylus-code': (p) => (p.issuer
+      ? `${p.issuer} dùng hợp đồng Stylus (Rust/C++ biên dịch sang WASM trên Arbitrum), loại mã mà các quy tắc của Neuro chưa đọc được.`
+      : 'Đây là hợp đồng Stylus (Rust hoặc C++ biên dịch sang WASM trên Arbitrum). Các quy tắc của Neuro chưa đọc được loại mã này, nên không biết nó có thể tạo thêm token, chặn ví hay tạm dừng giao dịch hay không. Hãy coi như chưa được kiểm tra.'),
+    'unknown-code-format': (p) => (p.issuer
+      ? `${p.issuer} dùng mã không phải EVM bytecode tiêu chuẩn.`
+      : 'Mã của hợp đồng này không phải EVM bytecode tiêu chuẩn và các quy tắc của Neuro không đọc được. Hãy coi như chưa được kiểm tra.'),
+    'eip7702': (p) => `Địa chỉ này là một ví thông thường mà chủ ví đã cài để chạy mã của hợp đồng ${p.target} (EIP-7702). Đây không phải token. Mã đó có thể làm bất cứ điều gì nó được viết ra để làm với tiền trong ví; hãy kiểm tra cả ${p.target}.`,
+    'source-verified': (p) => `Có mã nguồn công khai mà Sourcify xác nhận ${p.match === 'exact' ? 'khớp từng byte với mã trên chuỗi' : 'khớp với mã trên chuỗi'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Xem tại ${p.url}`,
+    'source-unverified': () => 'Không có mã nguồn trên Sourcify. Mã nguồn có thể vẫn được công bố trên explorer của chuỗi; nếu không được công bố ở đâu cả, hãy đặc biệt cẩn thận.',
+    // CosmWasm (Osmosis, Neutron)
+    'cw-not-found': () => 'Không có hợp đồng hay token nào tại địa chỉ này trên chuỗi này. Có thể bạn đã nhập sai, hoặc đã chọn sai chuỗi.',
+    'cw20-token': (p) => `Token CW20 (hợp đồng Rust trên CosmWasm) "${p.name ?? '?'}" (${p.symbol ?? '?'}), tổng cung ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'cw-contract': (p) => `Một hợp đồng CosmWasm (viết bằng Rust)${p.label ? ` tên "${p.label}"` : ''}, code ID ${p.codeId ?? '?'}. Không phải token CW20.`,
+    'cw-admin': (p) => `Quản trị viên (${p.admin}) có thể thay mã của hợp đồng bằng mã mới bất cứ lúc nào (migrate). Kết quả kiểm tra hôm nay có thể không còn đúng vào ngày mai.`,
+    'cw-no-admin': () => 'Không có quản trị viên: mã của hợp đồng sẽ không bao giờ bị thay được.',
+    'cw-migrated': (p) => `Mã của hợp đồng này đã từng bị thay ${p.count} lần.`,
+    'cw20-minter': (p) => `${p.minter} vẫn có thể tạo thêm token mới${p.cap ? `, tối đa tổng cộng ${fmtSupply(p.cap, p.decimals)}` : ' không giới hạn'}, làm loãng giá trị của người nắm giữ hoặc xả tràn ngập thị trường.`,
+    'cw20-no-minter': () => 'Không ai có thể tạo thêm token này.',
+    'tf-token': (p) => `Coin Token Factory "${p.name ?? '?'}"${p.symbol ? ` (${p.symbol})` : ''} do ${p.creator} tạo, tổng cung ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'tf-admin': (p) => `Quản trị viên (${p.admin}) có thể tạo thêm token không giới hạn, và trên một số chuỗi còn có thể chuyển hoặc đốt token từ ví của người khác.`,
+    'tf-no-admin': () => 'Vai trò quản trị viên đã bị bỏ: không ai có thể tạo thêm token nữa.',
+    'tf-hook': (p) => `Mọi giao dịch chuyển token đều phải qua hợp đồng ${p.contract} (before-send hook), hợp đồng này có thể áp đặt quy tắc riêng, chẳng hạn như chặn bán.`,
+    'cw-caveat': () => 'Kiểm tra từ dữ liệu hợp đồng trên chuỗi theo các quy tắc cố định. Chưa kiểm tra mã Rust bên trong và thanh khoản. Không phải lời khuyên đầu tư.',
 };

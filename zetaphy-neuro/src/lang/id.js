@@ -13,6 +13,7 @@ export const UI = {
     chain: 'Jaringan', address: 'Alamat', proxy: 'Proxy', implementation: 'Kode utama (implementation)', owner: 'Pemilik', functions: 'Fungsi yang dikenali', report: 'ID laporan', explorer: 'Buka di explorer', fingerprint: 'Sidik jari kode (untuk pendaftaran templat)', unknown: 'Fungsi tanpa nama',
     program: 'Program token', mintAuth: 'Hak mencetak (mint authority)', freezeAuth: 'Hak membekukan (freeze authority)', extensions: 'Ekstensi', upgradeAuth: 'Hak upgrade (upgrade authority)', none: 'tidak ada',
     package: 'Paket', standard: 'Standar', admin: 'Admin', holders: 'Pemegang', listed: 'Daftar tonapi', raw: 'Alamat mentah (raw)',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini',
   },
 };
 
@@ -155,4 +156,32 @@ export const T = {
     'ton-admin-dropped': () => 'Peran admin sudah dilepas: tidak ada lagi yang bisa mencetak token atau mengubah data token.',
     'ton-mint-flag': () => 'Kontrak masih menyatakan token bisa dicetak, tetapi tidak ada admin yang bisa mencetaknya.',
     'ton-caveat': () => 'Diperiksa dari data kontrak yang diurai oleh tonapi.io dengan aturan tetap. Kode dompet pemegang tidak diperiksa (karena itu, beberapa token bisa dibeli tetapi tidak bisa dijual). Bukan saran investasi.',
+    // Solana programs (Anchor IDL)
+    'sol-idl': (p) => `Program ini ditulis dengan Rust (Anchor) dan menerbitkan daftar instruksinya di on-chain: ${p.name ?? '?'}, ${p.count ?? '?'} instruksi.`,
+    'sol-admin-instructions': (p) => `Instruksi yang memerlukan tanda tangan admin (${list(p.functions)}). Admin dapat memakainya untuk mengubah cara kerja program.`,
+    'sol-no-idl': () => 'Program ini tidak menerbitkan daftar instruksinya (Anchor IDL) di on-chain, sehingga apa yang bisa dilakukannya tidak dapat dibaca.',
+    // EVM code that is not EVM bytecode
+    'stylus-code': (p) => (p.issuer
+      ? `${p.issuer} memakai kontrak Stylus (Rust/C++ yang dikompilasi menjadi WASM di Arbitrum), yang belum bisa dibaca oleh aturan Neuro.`
+      : 'Kontrak Stylus (Rust atau C++ yang dikompilasi menjadi WASM di Arbitrum). Aturan Neuro belum bisa membaca kode ini, jadi tidak diketahui apakah kontrak ini dapat mencetak token, memblokir dompet, atau menghentikan transfer. Anggap saja belum diperiksa.'),
+    'unknown-code-format': (p) => (p.issuer
+      ? `${p.issuer} memakai kode yang bukan EVM bytecode standar.`
+      : 'Kode kontrak ini bukan EVM bytecode standar dan tidak bisa dibaca oleh aturan Neuro. Anggap saja belum diperiksa.'),
+    'eip7702': (p) => `Alamat ini adalah dompet biasa yang pemiliknya mengaturnya untuk menjalankan kode kontrak ${p.target} (EIP-7702). Ini bukan token. Kode itu dapat melakukan apa saja yang tertulis di dalamnya terhadap dana di dompet ini; periksa juga ${p.target}.`,
+    'source-verified': (p) => `Ada kode sumber publik yang sudah dikonfirmasi Sourcify ${p.match === 'exact' ? 'sama persis byte demi byte dengan kode on-chain' : 'sesuai dengan kode on-chain'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Baca di ${p.url}`,
+    'source-unverified': () => 'Tidak ada kode sumber di Sourcify. Kode sumbernya mungkin tetap dipublikasikan di explorer jaringan ini; jika tidak dipublikasikan di mana pun, berhati-hatilah.',
+    // CosmWasm (Osmosis, Neutron)
+    'cw-not-found': () => 'Tidak ada kontrak atau token di alamat ini di jaringan ini. Mungkin salah ketik, atau jaringan yang dipilih salah.',
+    'cw20-token': (p) => `Token CW20 (kontrak Rust di CosmWasm) "${p.name ?? '?'}" (${p.symbol ?? '?'}), total pasokan ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'cw-contract': (p) => `Kontrak CosmWasm (ditulis dengan Rust)${p.label ? ` bernama "${p.label}"` : ''}, code ID ${p.codeId ?? '?'}. Bukan token CW20.`,
+    'cw-admin': (p) => `Admin (${p.admin}) dapat mengganti kode kontrak dengan kode baru kapan saja (migrate). Hasil pemeriksaan hari ini belum tentu berlaku besok.`,
+    'cw-no-admin': () => 'Tidak ada admin: kode kontrak tidak akan pernah bisa diganti.',
+    'cw-migrated': (p) => `Kode kontrak ini sudah pernah diganti ${p.count} kali.`,
+    'cw20-minter': (p) => `${p.minter} masih dapat mencetak token baru${p.cap ? `, hingga total ${fmtSupply(p.cap, p.decimals)}` : ' tanpa batas'}, sehingga nilai milik pemegang menyusut atau pasar dibanjiri token.`,
+    'cw20-no-minter': () => 'Tidak ada yang bisa mencetak token ini lagi.',
+    'tf-token': (p) => `Koin Token Factory "${p.name ?? '?'}"${p.symbol ? ` (${p.symbol})` : ''} yang dibuat oleh ${p.creator}, total pasokan ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'tf-admin': (p) => `Admin (${p.admin}) dapat mencetak tanpa batas, dan di beberapa jaringan juga dapat memindahkan atau membakar token dari dompet orang lain.`,
+    'tf-no-admin': () => 'Peran admin sudah dilepas: tidak ada lagi yang bisa mencetak.',
+    'tf-hook': (p) => `Setiap transfer harus melewati kontrak ${p.contract} (before-send hook), yang dapat menerapkan aturannya sendiri, misalnya memblokir penjualan.`,
+    'cw-caveat': () => 'Diperiksa dari data kontrak on-chain dengan aturan tetap. Kode Rust di dalamnya dan likuiditas tidak diperiksa. Bukan saran investasi.',
 };
