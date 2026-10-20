@@ -817,33 +817,41 @@ var uint64 = (v, what) => {
 var accountBech32 = (addr, prefix) => toBech32(addressBytes(addr, prefix), prefix);
 function msgSend({ from, to, amount, denom = DENOM, prefix = PREFIX }) {
   const value = positive(amount, "amount");
+  const toAddress = accountBech32(to, prefix);
   return {
     typeUrl: MSG_SEND_TYPE_URL,
     spend: value,
-    value: encodeMsgSend({ fromAddress: accountBech32(from, prefix), toAddress: accountBech32(to, prefix), amount: [{ denom, amount: value.toString() }] })
+    intent: { type: "send", to: toAddress, amount: value.toString(), denom },
+    value: encodeMsgSend({ fromAddress: accountBech32(from, prefix), toAddress, amount: [{ denom, amount: value.toString() }] })
   };
 }
 function msgDelegate({ delegator, validator, amount, denom = DENOM, prefix = PREFIX }) {
   const value = positive(amount, "amount");
+  const val = validatorAddress(validator, prefix + "valoper");
   return {
     typeUrl: MSG_DELEGATE_TYPE_URL,
     spend: value,
-    value: encodeMsgDelegate({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: validatorAddress(validator, prefix + "valoper"), amount: { denom, amount: value.toString() } })
+    intent: { type: "delegate", validator: val, amount: value.toString(), denom },
+    value: encodeMsgDelegate({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: val, amount: { denom, amount: value.toString() } })
   };
 }
 function msgUndelegate({ delegator, validator, amount, denom = DENOM, prefix = PREFIX }) {
   const value = positive(amount, "amount");
+  const val = validatorAddress(validator, prefix + "valoper");
   return {
     typeUrl: MSG_UNDELEGATE_TYPE_URL,
     spend: 0n,
-    value: encodeMsgUndelegate({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: validatorAddress(validator, prefix + "valoper"), amount: { denom, amount: value.toString() } })
+    intent: { type: "undelegate", validator: val, amount: value.toString(), denom },
+    value: encodeMsgUndelegate({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: val, amount: { denom, amount: value.toString() } })
   };
 }
 function msgWithdrawRewards({ delegator, validator, prefix = PREFIX }) {
+  const val = validatorAddress(validator, prefix + "valoper");
   return {
     typeUrl: MSG_WITHDRAW_REWARD_TYPE_URL,
     spend: 0n,
-    value: encodeMsgWithdrawDelegatorReward({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: validatorAddress(validator, prefix + "valoper") })
+    intent: { type: "withdrawRewards", validator: val },
+    value: encodeMsgWithdrawDelegatorReward({ delegatorAddress: accountBech32(delegator, prefix), validatorAddress: val })
   };
 }
 function evmMsg({ sender, to, value, data, gasLimit, asOwner, prefix }) {
@@ -854,12 +862,16 @@ function evmMsg({ sender, to, value, data, gasLimit, asOwner, prefix }) {
   const from = accountBech32(sender, prefix);
   const owner = asOwner == null || asOwner === "" ? "" : accountBech32(asOwner, prefix);
   if (owner && owner === from) throw new Error("as_owner is the sender itself: leave it out");
+  const bytes = asBytes(data, "data");
+  const intent = to ? { type: "evmCall", to, data: "0x" + bytesToHex(bytes) } : { type: "evmDeploy", initCode: "0x" + bytesToHex(bytes) };
+  Object.assign(intent, { value: v.toString(), gasLimit: gas.toString() }, owner ? { asOwner: owner } : {});
   return {
     typeUrl: MSG_EVM_CALL_TYPE_URL,
     spend: owner ? 0n : v,
     ownerSpend: owner ? v : 0n,
     asOwner: owner || void 0,
-    value: encodeMsgEVMCall({ sender: from, to, value: v, data: asBytes(data, "data"), gasLimit: gas, asOwner: owner })
+    intent,
+    value: encodeMsgEVMCall({ sender: from, to, value: v, data: bytes, gasLimit: gas, asOwner: owner })
   };
 }
 function msgEVMCall({ sender, to, value = 0n, data = new Uint8Array(), gasLimit = DEFAULT_EVM_GAS_LIMIT, asOwner, prefix = PREFIX }) {
@@ -877,7 +889,33 @@ function msgQuantumLock({ signer, owner, controller, prefix = PREFIX }) {
   const o = accountBech32(owner, prefix);
   const c = accountBech32(controller, prefix);
   if (c === o) throw new Error("the controller must be another account than the owner");
-  return { typeUrl: MSG_QUANTUM_LOCK_TYPE_URL, spend: 0n, value: encodeMsgQuantumLock({ signer: s, owner: o, controller: c }) };
+  return {
+    typeUrl: MSG_QUANTUM_LOCK_TYPE_URL,
+    spend: 0n,
+    intent: { type: "quantumLock", owner: o, controller: c },
+    value: encodeMsgQuantumLock({ signer: s, owner: o, controller: c })
+  };
+}
+function messageFromIntent(intent, sender, prefix = PREFIX) {
+  const i = intent ?? {};
+  switch (i.type) {
+    case "send":
+      return msgSend({ from: sender, to: i.to, amount: i.amount, denom: i.denom ?? DENOM, prefix });
+    case "delegate":
+      return msgDelegate({ delegator: sender, validator: i.validator, amount: i.amount, denom: i.denom ?? DENOM, prefix });
+    case "undelegate":
+      return msgUndelegate({ delegator: sender, validator: i.validator, amount: i.amount, denom: i.denom ?? DENOM, prefix });
+    case "withdrawRewards":
+      return msgWithdrawRewards({ delegator: sender, validator: i.validator, prefix });
+    case "evmCall":
+      return msgEVMCall({ sender, to: i.to, value: i.value ?? 0n, data: i.data ?? new Uint8Array(), gasLimit: i.gasLimit ?? DEFAULT_EVM_GAS_LIMIT, asOwner: i.asOwner, prefix });
+    case "evmDeploy":
+      return msgEVMDeploy({ sender, initCode: i.initCode, value: i.value ?? 0n, gasLimit: i.gasLimit ?? DEFAULT_DEPLOY_GAS_LIMIT, asOwner: i.asOwner, prefix });
+    case "quantumLock":
+      return msgQuantumLock({ signer: sender, owner: i.owner, controller: i.controller, prefix });
+    default:
+      throw new Error(`unknown message type ${JSON.stringify(i.type)}`);
+  }
 }
 function quantumLockTx(controller, prefix = PREFIX) {
   return { to: PQ_LOCK_ADDRESS, value: 0n, data: "0x" + bytesToHex(addressBytes(controller, prefix)) };
@@ -964,6 +1002,44 @@ function buildTx({
   const txBytes = encodeTxRaw({ bodyBytes, authInfoBytes, signatures: [signature] });
   return { txBytes, txHex: "0x" + bytesToHex(txBytes), signDocBytes, bodyBytes, authInfoBytes, fee: BigInt(fee.amount[0].amount), txHash: txHashOf(txBytes) };
 }
+async function buildTxWith({
+  publicKey,
+  signTx,
+  messages,
+  denom = DENOM,
+  chainId = CHAIN_ID,
+  accountNumber,
+  sequence,
+  gasLimit = DEFAULT_GAS_LIMIT,
+  gasPrice,
+  memo = ""
+}) {
+  if (typeof signTx !== "function") throw new Error("signTx must be a function");
+  if (!Array.isArray(messages) || messages.length === 0) throw new Error("at least one message is required");
+  if (denom !== DENOM) throw new Error(`an external signer pays fees in ${DENOM} only`);
+  const intents = messages.map((m) => {
+    if (!m?.intent) throw new Error(`message ${m?.typeUrl}: no intent, so an external signer cannot show it`);
+    return m.intent;
+  });
+  if (accountNumber == null || sequence == null) throw new Error("accountNumber and sequence are required");
+  if (gasPrice == null) throw new Error("gasPrice is required");
+  const request = {
+    chainId,
+    accountNumber: BigInt(accountNumber).toString(),
+    sequence: BigInt(sequence).toString(),
+    gasLimit: BigInt(gasLimit).toString(),
+    gasPrice: BigInt(gasPrice).toString(),
+    memo,
+    messages: intents
+  };
+  const signed = await signTx(request);
+  if (!signed || typeof signed !== "object" || signed.signature == null) throw new Error("the signer returned no signature");
+  const tx = buildTx({ publicKey, sign: () => signed.signature, messages, denom, chainId, accountNumber, sequence, gasLimit, gasPrice, memo });
+  if (signed.txHex != null && String(signed.txHex).toLowerCase() !== tx.txHex.toLowerCase()) {
+    throw new Error("the signer signed another transaction than the one asked for, so nothing was sent");
+  }
+  return tx;
+}
 function buildSendTx({
   publicKey,
   sign,
@@ -1016,7 +1092,7 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
     const gas = BigInt(gasLimit);
     return { address: me, account: acct, exists: acct.exists, balance: bal, gasLimit: gas, gasPrice: price, fee: gas * price };
   }
-  async function sendMsgs({ publicKey, sign, messages, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = "", value, preflight }) {
+  async function sendMsgs({ publicKey, sign, signTx, messages, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = "", value, preflight }) {
     if (!Array.isArray(messages) || messages.length === 0) throw new Error("at least one message is required");
     const spend = value != null ? BigInt(value) : messages.reduce((n, m) => n + BigInt(m.spend ?? 0n), 0n);
     if (spend < 0n) throw new Error("value must not be negative");
@@ -1027,9 +1103,8 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
     const fee = q.gasLimit * usePrice;
     if (spend + fee > q.balance) throw new Error(`not enough ZETAPHY: need ${formatZeta(spend + fee)} (${spend ? "amount + fee" : "fee"}), have ${formatZeta(q.balance)}`);
     const checked = preflight ? await preflight(q) : void 0;
-    const tx = buildTx({
+    const params = {
       publicKey,
-      sign,
       messages,
       denom,
       chainId,
@@ -1038,7 +1113,8 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
       gasLimit: q.gasLimit,
       gasPrice: usePrice,
       memo
-    });
+    };
+    const tx = signTx ? await buildTxWith({ ...params, signTx }) : buildTx({ ...params, sign });
     const r = await rpcCall("zetaphy_sendCosmosTx", [tx.txHex]);
     if (!r || typeof r.code !== "number") throw new Error("the node did not answer zetaphy_sendCosmosTx");
     if (r.code !== 0) throw new Error(`the node rejected the transaction (code ${r.code}): ${r.log || "no log"}`);
@@ -1062,15 +1138,15 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
     if (a.quantumLockedTo) throw new Error(`the controller ${c.bech32} is itself quantum-locked (to ${a.quantumLockedTo})`);
     return { ...a, address: c };
   }
-  async function send({ publicKey, sign, to, amount, gasLimit, gasPrice: price, memo = "", asOwner, evmGasLimit = DEFAULT_EVM_GAS_LIMIT, check = true }) {
+  async function send({ publicKey, sign, signTx, to, amount, gasLimit, gasPrice: price, memo = "", asOwner, evmGasLimit = DEFAULT_EVM_GAS_LIMIT, check = true }) {
     const toAddr = normalizeAddress(to, prefix);
     const value = positive(amount, "amount");
     const me = pqAddress(publicKey, prefix);
     if (asOwner) {
-      const r2 = await callEVM({ publicKey, sign, to: toAddr.hex, value, evmGasLimit, gasLimit, gasPrice: price, memo, asOwner, check });
+      const r2 = await callEVM({ publicKey, sign, signTx, to: toAddr.hex, value, evmGasLimit, gasLimit, gasPrice: price, memo, asOwner, check });
       return { txHash: r2.txHash, from: r2.from, asOwner: r2.asOwner, to: toAddr, amount: value, fee: r2.fee, gasLimit: r2.gasLimit, gasPrice: r2.gasPrice, sequence: r2.sequence };
     }
-    const r = await sendMsgs({ publicKey, sign, messages: [msgSend({ from: me.bech32, to: toAddr.bech32, amount: value, denom, prefix })], gasLimit: gasLimit ?? DEFAULT_GAS_LIMIT, gasPrice: price, memo });
+    const r = await sendMsgs({ publicKey, sign, signTx, messages: [msgSend({ from: me.bech32, to: toAddr.bech32, amount: value, denom, prefix })], gasLimit: gasLimit ?? DEFAULT_GAS_LIMIT, gasPrice: price, memo });
     return { txHash: r.txHash, from: r.from, to: toAddr, amount: value, fee: r.fee, gasLimit: r.gasLimit, gasPrice: r.gasPrice, sequence: r.sequence };
   }
   function evmPreflight({ me, m, call, check, checkResult }) {
@@ -1099,6 +1175,7 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
   async function callEVM({
     publicKey,
     sign,
+    signTx,
     to,
     data = "0x",
     value = 0n,
@@ -1118,12 +1195,13 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
     const dataHex = "0x" + bytesToHex(asBytes(data, "data"));
     const call = { to: toHex, data: dataHex, gas: qty(evmGas) };
     if (BigInt(value) > 0n) call.value = qty(value);
-    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight: evmPreflight({ me, m, call, check, checkResult }) });
+    const r = await sendMsgs({ publicKey, sign, signTx, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight: evmPreflight({ me, m, call, check, checkResult }) });
     return { ...r, to: toHex, data: dataHex, evmGasLimit: evmGas, result: r.checked?.ret, asOwner: m.asOwner ? normalizeAddress(m.asOwner, prefix) : void 0 };
   }
   async function deploy({
     publicKey,
     sign,
+    signTx,
     initCode,
     value = 0n,
     evmGasLimit = DEFAULT_DEPLOY_GAS_LIMIT,
@@ -1144,22 +1222,22 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
       const p = pre ? await pre(q) : {};
       return { ...p, ownerAcct: m.asOwner ? p.owner ?? await account(m.asOwner) : void 0 };
     };
-    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight });
+    const r = await sendMsgs({ publicKey, sign, signTx, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight });
     const owner = m.asOwner ? normalizeAddress(m.asOwner, prefix) : void 0;
     const created = owner ? createAddress(owner.hex, r.checked.ownerAcct.sequence ?? 0n, prefix) : createAddress(me.hex, r.sequence + 1n, prefix);
     return { ...r, created, evmGasLimit: evmGas, asOwner: owner };
   }
-  async function quantumLockHandover({ publicKey, sign, owner, controller, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = "", check = true }) {
+  async function quantumLockHandover({ publicKey, sign, signTx, owner, controller, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = "", check = true }) {
     const me = pqAddress(publicKey, prefix);
     const m = msgQuantumLock({ signer: me.bech32, owner, controller, prefix });
     const preflight = check ? async () => {
       await ownedBy(owner, me.bech32);
       await checkController(controller, owner);
     } : void 0;
-    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit, gasPrice: price, memo, preflight });
+    const r = await sendMsgs({ publicKey, sign, signTx, messages: [m], gasLimit, gasPrice: price, memo, preflight });
     return { ...r, owner: normalizeAddress(owner, prefix), controller: normalizeAddress(controller, prefix) };
   }
-  const staking = (build, action) => async ({ publicKey, sign, validator, amount, gasLimit, gasPrice: price, memo = "", asOwner, evmGasLimit = DEFAULT_PRECOMPILE_GAS_LIMIT, check = true }) => {
+  const staking = (build, action) => async ({ publicKey, sign, signTx, validator, amount, gasLimit, gasPrice: price, memo = "", asOwner, evmGasLimit = DEFAULT_PRECOMPILE_GAS_LIMIT, check = true }) => {
     const me = pqAddress(publicKey, prefix);
     const val = validatorAddress(validator, prefix + "valoper");
     const amt = amount == null ? void 0 : BigInt(amount);
@@ -1170,11 +1248,11 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
       if (action === "delegate") m2.ownerSpend = amt;
       const evmGas = BigInt(evmGasLimit);
       const preflight = evmPreflight({ me, m: m2, call: { to: c.to, data: "0x" + bytesToHex(c.data), gas: qty(evmGas) }, check });
-      const r2 = await sendMsgs({ publicKey, sign, messages: [m2], gasLimit: txGasFor(evmGas, gasLimit), gasPrice: price, memo, preflight });
+      const r2 = await sendMsgs({ publicKey, sign, signTx, messages: [m2], gasLimit: txGasFor(evmGas, gasLimit), gasPrice: price, memo, preflight });
       return { ...r2, validator: val, amount: amt, asOwner: owner, evmGasLimit: evmGas };
     }
     const m = build({ delegator: me.bech32, validator: val, amount, denom, prefix });
-    const r = await sendMsgs({ publicKey, sign, messages: [m], gasLimit: gasLimit ?? DEFAULT_STAKING_GAS_LIMIT, gasPrice: price, memo });
+    const r = await sendMsgs({ publicKey, sign, signTx, messages: [m], gasLimit: gasLimit ?? DEFAULT_STAKING_GAS_LIMIT, gasPrice: price, memo });
     return { ...r, validator: val, amount: amt };
   };
   return {
@@ -2087,6 +2165,7 @@ export {
   addressBytes,
   buildSendTx,
   buildTx,
+  buildTxWith,
   bumpGasPrice,
   bytesToHex,
   createAddress,
@@ -2109,6 +2188,8 @@ export {
   formatZeta,
   fromBech32,
   hexToBytes,
+  keccak_256,
+  messageFromIntent,
   ml_dsa44,
   msgDelegate,
   msgEVMCall,

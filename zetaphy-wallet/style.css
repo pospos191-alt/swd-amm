@@ -47,7 +47,7 @@ h3 { font-size: 1rem; margin: 0 0 8px; }
 .warn-text { color: var(--danger); }
 label { display: block; margin: 10px 0 4px; font-size: 0.95rem; }
 label.check { display: flex; align-items: center; gap: 8px; }
-input:not([type=checkbox]) {
+input:not([type=checkbox]), textarea {
   width: 100%;
   padding: 9px 10px;
   border: 1px solid var(--line);
@@ -97,3 +97,4 @@ footer { margin: 24px 0; }
 .acting { border: 1px solid var(--accent); border-radius: 8px; padding: 8px 12px; margin-top: 12px; }
 .acting p { margin: 4px 0; }
 .as-tag { color: var(--accent); font-size: 0.9rem; margin: 0 0 8px; word-break: break-all; }
+textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; resize: vertical; word-break: break-all; }

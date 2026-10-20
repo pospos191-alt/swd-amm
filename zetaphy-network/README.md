@@ -306,10 +306,49 @@ zetaphy pq native handover 0x<owner> zetaphy1<controller ใหม่>
 - โค้ดอยู่ที่ `src/pqtx.js` (ใช้ได้ทั้ง Node และเบราว์เซอร์)
   - ทดสอบโดยถอดรหัสด้วย protobuf ทางการของ Cosmos SDK (`cosmjs-types`) และตรวจลายเซ็นทุกครั้ง
 - กระเป๋าบนเว็บสำหรับบัญชีแบบนี้อยู่ที่ `zetaphy-wallet/` (แยกจาก zetaphy-neuro ซึ่งสัญญาว่าไม่แตะกุญแจ)
+- กุญแจใน MetaMask: `zetaphy-snap/` (MetaMask Snap) สร้างบัญชีจาก Secret Recovery Phrase และเซ็นธุรกรรมเอง
+  - ทุกข้อความที่ `msg*` สร้างมี `intent` (ข้อความเดียวกันเป็น JSON ไม่มีผู้ส่ง) และ `messageFromIntent(intent, sender)` สร้างกลับได้ไบต์เดิม
+  - ทุกคำสั่งของ `pqClient` รับ `signTx(request)` แทน `sign(bytes)` ได้ (`buildTxWith`): ผู้เซ็นภายนอกได้แค่ intent ไม่เคยได้ไบต์
+    แล้ว `pqClient` สร้าง tx เองรอบลายเซ็นที่ได้ ถ้า `txHex` ที่ผู้เซ็นส่งกลับไม่ตรงจะไม่ส่ง
 - ทดสอบบนเชนจริงแล้ว (`npm run test:devnet:pq`, รันใน CI ด้วย): ส่งได้ และเชนปฏิเสธธุรกรรมที่ใช้กุญแจอื่นสวมบัญชี ลายเซ็นที่ถูกแก้ และธุรกรรมเก่าที่ส่งซ้ำ
   - ชุดเดียวกันมีทดสอบ `token-send`, `call --value`, `stake`, `rewards`, `unstake` และการเรียกที่ revert ต้องไม่ขยับเงิน (ต้องใช้ `zetaphyd` ที่มี `MsgEVMCall`)
 - เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy-testnet-1`): ตั้ง `ZETAPHY_CHAIN_ID`
 - ยังไม่ได้ทำ: การสร้างสัญญาใหม่ (ธุรกรรม EVM) และกุญแจของ validator ยังใช้ ECDSA / ed25519 เหมือนเดิม
+
+### ตรวจบล็อกแบบต้านควอนตัม: `zetaphy pq verify-block`
+
+validator ที่ลงทะเบียนกุญแจโหวต ML-DSA-44 แล้ว เซ็นทุกบล็อกด้วย ML-DSA-44 คู่กับ ed25519 และผู้เสนอบล็อก H+1 รวมลายเซ็นของบล็อก H ไว้เป็นธุรกรรมแรก (`MsgPQCertificate`)
+คำสั่งนี้ตรวจใบรับรองนั้นเองด้วย `@noble/post-quantum` โดยใช้แค่ CometBFT RPC
+
+```
+zetaphy pq verify-block 12345                        # --rpc ค่าเริ่มต้น http://127.0.0.1:26657 (หรือ ZETAPHY_COMET_RPC) ไม่ใช่พอร์ต 8545
+zetaphy pq export-vote-keys > pinned.json            # ทำบนโหนดที่เชื่อถือ (--height h ได้)
+zetaphy pq verify-block 12345 --rpc http://<โหนดใดก็ได้>:26657 --keys pinned.json
+zetaphy pq verify-block 12345 --json                 # ผลแบบ JSON; --chain-id ใช้กำหนด chain id เอง
+```
+
+- **สิ่งที่พิสูจน์:** validator ที่ถือ voting power มากพอเซ็น ML-DSA-44 รับรอง (chain id, ความสูง H, hash ของบล็อก H) ตามกติกาเดียวกับที่ทุกโหนดบังคับ
+  - กติกา: 3 × power ที่เซ็นถูกต้อง > 2 × power ทั้งหมด − 3 × power ของ validator ที่ยังไม่มีกุญแจ (ถ้าฝั่งขวาติดลบ ไม่ต้องมีลายเซ็น)
+  - นับ validator ละครั้งเดียว ข้ามที่อยู่ที่ไม่ใช่ validator และลายเซ็นที่ไม่ถูก
+  - header และธุรกรรมของบล็อก H ที่โหนดส่งมาต้อง hash ได้ตรงกับ hash ที่เซ็น จึงเชื่อข้อมูลบล็อกได้ด้วย
+  - ใบรับรองอยู่ในบล็อก H+1: บล็อกล่าสุดยังตรวจไม่ได้ ต้องรอบล็อกถัดไป
+- **ผล:**
+  - `VERIFIED post-quantum`: ผู้เซ็น ML-DSA ถือเกิน 2/3 ของ power ทั้งหมด
+  - ผ่านกติกาแต่ต้านควอนตัมได้บางส่วน: มี validator ที่ยังไม่ลงทะเบียนกุญแจ
+  - `NOT post-quantum`: validator ที่มีกุญแจถือไม่ถึง 1/3 เชนจึงยังไม่บังคับลายเซ็น (exit 0 เพราะผ่านกติกา)
+  - `NOT VERIFIED`: ไม่ผ่าน พร้อมเหตุผล และ exit code 1
+- **ความเชื่อถือ (trust model):**
+  - ไม่ต้องเชื่อโหนดเรื่อง hash, header, ธุรกรรม และตัวใบรับรอง: ถ้าโหนดปลอม ลายเซ็นจะตรวจไม่ผ่าน
+  - ที่ต้องเชื่อคือรายชื่อ validator, voting power และกุญแจโหวตของบล็อก H
+    - ไม่ใส่ `--keys`: อ่านจากโหนดเดียวกัน (`/validators` และ `abci_query` ที่ `/store/zetaphypq/key`) โหนดที่โกหกสร้าง validator และกุญแจปลอมเองได้ จึงเหมาะกับโหนดของตัวเอง
+    - ใส่ `--keys pinned.json`: ใช้ power และกุญแจจากไฟล์ที่ export ไว้จากโหนดที่เชื่อถือ ไม่ต้องเชื่อโหนดที่ถามเลย
+  - pinned.json เป็นภาพ ณ ความสูงหนึ่ง ต้อง export ใหม่เมื่อ validator เข้า/ออก power เปลี่ยน หรือเปลี่ยนกุญแจ
+    - ไฟล์เก่าทำให้ได้ "ไม่ผ่าน" ไม่ใช่ "ผ่านผิด ๆ" และคำสั่งเตือนเมื่อชุด validator ของโหนดต่างจากไฟล์
+  - chain id ที่ตรวจ: `--chain-id` ถ้าไม่มีใช้ค่าในไฟล์ pin ถ้าไม่มีอีกใช้ค่าจาก header
+  - ไม่ได้พิสูจน์ว่าธุรกรรมในบล็อกถูกกติกา: ต้องเชื่อว่า validator ส่วนใหญ่สุจริต เหมือน light client ทั่วไป
+- บนเครื่องที่ติดตั้งด้วย `setup-node.sh` พอร์ต 26657 ฟังเฉพาะในเครื่อง: รันบนเครื่องนั้น หรือใช้ `ssh -L 26657:127.0.0.1:26657`
+- ใช้ในโค้ด: `verifyBlock(rpc, height, { chainId, pinnedKeys })` และ `exportVoteKeys(rpc, { height })` ใน `src/pqcert.js` (เข้ารหัสด้วย `@noble` อย่างเดียว)
+- ทดสอบ: `npm test` (RPC จำลอง และบล็อกจริงจาก devnet ที่บันทึกไว้) และ `npm run test:devnet:pqcert` (เชน 2 validator จริง)
 
 ## จุดอ่อนที่แก้แล้ว (ตรวจเอง 19 ต.ค. 2026)
 
@@ -357,6 +396,7 @@ zetaphy deploy-stable --reserve 1000   # tUSDC, tUSDT และ StableGateway (�
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)
 - `ZETAPHYD=<zetaphyd ที่มี patch ML-DSA> npm run test:devnet:pq`: ทดสอบขั้น 5 บนเชนจริง
+- `ZETAPHYD=<zetaphyd ที่มีกุญแจโหวต ML-DSA> npm run test:devnet:pqcert`: เชน 2 validator ลงทะเบียนกุญแจโหวต แล้วตรวจบล็อกด้วย `zetaphy pq verify-block`
 - `npm run test:devnet:bridge`: สะพาน Neuro ข้ามเชนจริง 2 เชน (ต้นทาง และ ZETAPHY)
 - `npm run test:devnet`: ทดสอบบนเชน ZETAPHY จริง ต้องมี `zetaphyd`
   - สคริปต์ตั้งเชน 1 โหนด (บล็อกละ 1 วินาที)

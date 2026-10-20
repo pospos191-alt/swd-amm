@@ -18,7 +18,7 @@ import { Interface, getCreateAddress } from 'ethers';
 import {
   msgEVMDeploy, msgQuantumLock, encodeMsgQuantumLock, createAddress, stakingCall, quantumLockTx, MSG_QUANTUM_LOCK_TYPE_URL, PQ_LOCK_ADDRESS,
   STAKING_PRECOMPILE, DISTRIBUTION_PRECOMPILE, DEFAULT_DEPLOY_GAS_LIMIT, DEFAULT_PRECOMPILE_GAS_LIMIT,
-  buildSendTx, buildTx, msgSend, msgDelegate, msgUndelegate, msgWithdrawRewards, msgEVMCall, encodeMsgEVMCall, validatorAddress,
+  buildSendTx, buildTx, buildTxWith, messageFromIntent, msgSend, msgDelegate, msgUndelegate, msgWithdrawRewards, msgEVMCall, encodeMsgEVMCall, validatorAddress,
   MSG_DELEGATE_TYPE_URL, MSG_UNDELEGATE_TYPE_URL, MSG_WITHDRAW_REWARD_TYPE_URL, MSG_EVM_CALL_TYPE_URL, VALOPER_PREFIX,
   DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, DEFAULT_STAKING_GAS_LIMIT, pqAddress, pqClient, toBech32, fromBech32, addressBytes, normalizeAddress, varint, bytesToHex, hexToBytes,
   parseZeta, formatZeta, bumpGasPrice, txHashOf, encodeSignDoc,
@@ -998,4 +998,105 @@ test('CLI: pq native deploy, --as, handover, lock-ecdsa refusals, and the lock s
   } finally {
     server.close();
   }
+});
+
+// ---- intents: the messages as plain JSON, for a signer that builds the tx itself (the MetaMask Snap) ----
+
+test('intents: every message carries one, it is plain JSON, and messageFromIntent rebuilds the same bytes', () => {
+  const msgs = [
+    msgSend({ from: ME.bech32, to: OTHER, amount: 1234n }),
+    msgSend({ from: ME.bech32, to: OTHER, amount: 7n, denom: 'ibc/ABC' }),
+    msgDelegate({ delegator: ME.bech32, validator: VALOPER.toUpperCase(), amount: 5n }),
+    msgUndelegate({ delegator: ME.bech32, validator: VALOPER, amount: 6n }),
+    msgWithdrawRewards({ delegator: ME.bech32, validator: VALOPER }),
+    msgEVMCall({ sender: ME.bech32, to: OTHER, data: '0xa9059cbb', value: 3n, gasLimit: 60000n }),
+    msgEVMCall({ sender: ME.bech32, to: OTHER, value: 9n, asOwner: OWNER_HEX }),
+    msgEVMDeploy({ sender: ME.bech32, initCode: '0x60806040' }),
+    msgQuantumLock({ signer: ME.bech32, owner: OWNER_HEX, controller: NEW_CTRL }),
+  ];
+  for (const m of msgs) {
+    const json = JSON.parse(JSON.stringify(m.intent));
+    assert.deepEqual(json, m.intent, `${m.intent.type}: only strings`);
+    const again = messageFromIntent(json, ME.bech32);
+    assert.equal(again.typeUrl, m.typeUrl);
+    assert.deepEqual(again.value, m.value, `${m.intent.type}: same bytes`);
+    assert.equal(again.spend, m.spend);
+    assert.deepEqual(again.intent, m.intent);
+  }
+  // Canonical forms, so a signer shows what is encoded.
+  assert.deepEqual(msgs[0].intent, { type: 'send', to: toBech32(hexToBytes(OTHER)), amount: '1234', denom: DENOM });
+  assert.equal(msgs[2].intent.validator, VALOPER);
+  assert.deepEqual(msgs[6].intent, { type: 'evmCall', to: normalizeAddress(OTHER).hex, data: '0x', value: '9', gasLimit: String(DEFAULT_EVM_GAS_LIMIT), asOwner: OWNER });
+  assert.deepEqual(msgs[7].intent, { type: 'evmDeploy', initCode: '0x60806040', value: '0', gasLimit: String(DEFAULT_DEPLOY_GAS_LIMIT) });
+  assert.deepEqual(msgs[8].intent, { type: 'quantumLock', owner: OWNER, controller: NEW_CTRL });
+  // The signer is always the sender: an intent has no sender of its own.
+  const otherSender = messageFromIntent(msgs[0].intent, NEW_CTRL);
+  assert.equal(MsgSend.decode(otherSender.value).fromAddress, NEW_CTRL);
+  // Defaults, and refusals.
+  assert.equal(messageFromIntent({ type: 'evmCall', to: OTHER }, ME.bech32).intent.gasLimit, String(DEFAULT_EVM_GAS_LIMIT));
+  assert.throws(() => messageFromIntent({ type: 'mint', to: OTHER }, ME.bech32), /unknown message type "mint"/);
+  assert.throws(() => messageFromIntent(null, ME.bech32), /unknown message type/);
+  assert.throws(() => messageFromIntent({ type: 'send', to: 'zetaphy1bad', amount: '1' }, ME.bech32), /invalid address/);
+  assert.throws(() => messageFromIntent({ type: 'send', to: OTHER, amount: '0' }, ME.bech32), /more than 0/);
+  assert.throws(() => messageFromIntent({ type: 'evmDeploy', initCode: '0x' }, ME.bech32), /needs init code/);
+});
+
+/** What the ZETAPHY MetaMask Snap does with a signTx request: build from the intents, then sign. */
+const snapLike = (requests, tamper) => async (req) => {
+  requests.push(req);
+  const intents = tamper ? req.messages.map(tamper) : req.messages;
+  let signature;
+  const tx = buildTx({ publicKey, sign: (b) => (signature = sign(b)), messages: intents.map((i) => messageFromIntent(i, ME.bech32)), chainId: req.chainId,
+    accountNumber: req.accountNumber, sequence: req.sequence, gasLimit: req.gasLimit, gasPrice: req.gasPrice, memo: req.memo });
+  return { signature: '0x' + bytesToHex(signature), txHex: tx.txHex };
+};
+const hasBytes = (v) => v instanceof Uint8Array || (v && typeof v === 'object' && Object.values(v).some(hasBytes));
+
+test('client with signTx: an external signer gets intents, never bytes, and the tx is the one asked for', async () => {
+  const node = fakeNode({ accounts: { ...lockedToMe, [NEW_CTRL]: { pubKeyType: 'mldsa44' } } });
+  const c = pqClient(node.rpcCall);
+  const requests = [];
+  const signTx = snapLike(requests);
+  const r = await c.send({ publicKey, signTx, to: OTHER, amount: 15n, memo: 'hi' });
+  assert.deepEqual(requests[0], { chainId: CHAIN_ID, accountNumber: '42', sequence: '5', gasLimit: String(DEFAULT_GAS_LIMIT), gasPrice: '1200000000', memo: 'hi',
+    messages: [{ type: 'send', to: toBech32(hexToBytes(OTHER)), amount: '15', denom: DENOM }] });
+  let { msg } = lastSent(node);
+  assert.equal(MsgSend.decode(msg.value).amount[0].amount, '15');
+  assert.equal(r.txHash, txHashOf(hexToBytes(node.calls.find((x) => x.method === 'zetaphy_sendCosmosTx').params[0])));
+  const raw = TxRaw.decode(hexToBytes(node.calls.find((x) => x.method === 'zetaphy_sendCosmosTx').params[0]));
+  assert.ok(ml_dsa44.verify(raw.signatures[0], encodeSignDoc({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: CHAIN_ID, accountNumber: 42n }), publicKey));
+
+  // Every kind of message the wallet sends goes the same way.
+  await c.callEVM({ publicKey, signTx, to: TOKEN, data: ERC20.encodeFunctionData('transfer', [OTHER, 5n]), evmGasLimit: 60000n });
+  await c.delegate({ publicKey, signTx, validator: VALOPER, amount: 2n });
+  await c.withdrawRewards({ publicKey, signTx, validator: VALOPER });
+  await c.deploy({ publicKey, signTx, initCode: '0x6080' });
+  await c.send({ publicKey, signTx, to: OTHER, amount: 1n, asOwner: OWNER });
+  await c.delegate({ publicKey, signTx, validator: VALOPER, amount: 2n, asOwner: OWNER });
+  await c.quantumLockHandover({ publicKey, signTx, owner: OWNER, controller: NEW_CTRL });
+  assert.deepEqual(requests.map((q) => q.messages[0].type), ['send', 'evmCall', 'delegate', 'withdrawRewards', 'evmDeploy', 'evmCall', 'evmCall', 'quantumLock']);
+  assert.equal(requests[5].messages[0].asOwner, OWNER);
+  assert.equal(requests[6].messages[0].to, STAKING_PRECOMPILE);
+  assert.ok(!requests.some(hasBytes), 'only JSON goes to the signer');
+  assert.equal(sentCount(node), 8);
+  ({ msg } = lastSent(node));
+  assert.deepEqual(decodeMsgQuantumLock(msg.value), { signer: ME.bech32, owner: OWNER, controller: NEW_CTRL });
+});
+
+test('client with signTx: a signer that signs anything else, refuses, or answers nonsense sends nothing', async () => {
+  const node = fakeNode();
+  const c = pqClient(node.rpcCall);
+  const twice = (i) => ({ ...i, amount: String(BigInt(i.amount) * 2n) });
+  await assert.rejects(c.send({ publicKey, signTx: snapLike([], twice), to: OTHER, amount: 15n }), /signed another transaction than the one asked for, so nothing was sent/);
+  await assert.rejects(c.send({ publicKey, signTx: async () => { throw Object.assign(new Error('User rejected the request.'), { code: 4001 }); }, to: OTHER, amount: 1n }), /User rejected/);
+  await assert.rejects(c.send({ publicKey, signTx: async () => ({}), to: OTHER, amount: 1n }), /returned no signature/);
+  await assert.rejects(c.send({ publicKey, signTx: async () => ({ signature: '0x1234' }), to: OTHER, amount: 1n }), /2420 bytes/);
+  assert.equal(sentCount(node), 0);
+  // A message without an intent (built by hand) cannot go to an external signer.
+  await assert.rejects(buildTxWith({ publicKey, signTx: snapLike([]), messages: [{ typeUrl: MSG_SEND_TYPE_URL, value: new Uint8Array(1) }], accountNumber: 1, sequence: 0, gasPrice: 1 }), /no intent/);
+  await assert.rejects(buildTxWith({ publicKey, signTx: snapLike([]), messages: [msgSend({ from: ME.bech32, to: OTHER, amount: 1n })], denom: 'uatom', accountNumber: 1, sequence: 0, gasPrice: 1 }), /fees in azetaphy only/);
+  // A signer that returns only the signature: the tx is built here around it.
+  const sigOnly = async (req) => ({ signature: (await snapLike([])(req)).signature });
+  await c.send({ publicKey, signTx: sigOnly, to: OTHER, amount: 3n });
+  assert.equal(sentCount(node), 1);
 });
