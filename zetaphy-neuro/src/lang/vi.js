@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Chuỗi', address: 'Địa chỉ', proxy: 'Proxy', implementation: 'Mã thực thi', owner: 'Chủ sở hữu', functions: 'Hàm đã nhận diện', report: 'Mã báo cáo', explorer: 'Mở trên explorer', fingerprint: 'Dấu vân tay mã (để đăng ký mẫu)', unknown: 'Hàm chưa rõ tên',
     program: 'Chương trình token', mintAuth: 'Quyền tạo token (mint authority)', freezeAuth: 'Quyền đóng băng (freeze authority)', extensions: 'Tiện ích mở rộng', upgradeAuth: 'Quyền nâng cấp', none: 'không có',
     package: 'Gói', standard: 'Tiêu chuẩn', admin: 'Quản trị viên', holders: 'Số người nắm giữ', listed: 'Danh sách tonapi', raw: 'Địa chỉ gốc (raw)',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ', nearKeys: 'Khóa toàn quyền (full-access key)', codeHash: 'Mã băm của mã',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ', nearKeys: 'Khóa toàn quyền (full-access key)', codeHash: 'Mã băm của mã', cairo: 'Phiên bản Cairo',
   },
 };
 
@@ -201,4 +201,12 @@ export const T = {
       ? `${p.issuer} có thể nâng cấp mã thông qua một hàm của hợp đồng (${list(p.functions)}).`
       : `Mã có các hàm có thể thay chính mã của nó (${list(p.functions)}). Dù không có full-access key, ai được phép gọi các hàm này vẫn có thể thay đổi mã.`),
     'near-caveat': () => 'Kiểm tra từ tên hàm trong mã WASM và dữ liệu tài khoản trên chuỗi theo các quy tắc cố định. Chưa đọc nội dung hàm. Không phải lời khuyên đầu tư.',
+    // Starknet (Cairo)
+    'sn-not-found': () => 'Không có hợp đồng nào tại địa chỉ này trên Starknet. Có thể bạn nhập sai, hoặc đã chọn sai chuỗi.',
+    'sn-token': (p) => `Token Starknet "${p.name ?? '?'}" (${p.symbol ?? '?'}), tổng cung ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'sn-contract': (p) => `Một hợp đồng Starknet (viết bằng Cairo ${p.cairo === 1 ? '1' : '0'}) có ${p.count ?? '?'} hàm trong ABI. Không phải token.`,
+    'sn-upgradeable': (p) => (p.issuer
+      ? `${p.issuer} có thể nâng cấp mã của hợp đồng, cách thông thường để nhà phát hành sửa lỗi hoặc bổ sung tính năng.`
+      : `Có thể nâng cấp${p.implementation ? ` (một proxy trỏ tới mã ${p.implementation})` : ''}${p.functions?.length ? ` thông qua ${list(p.functions)}` : ''}: ai được phép đều có thể thay toàn bộ mã. Kết quả kiểm tra hôm nay có thể không còn đúng vào ngày mai.`),
+    'sn-caveat': () => 'Kiểm tra từ ABI mà hợp đồng công bố trên chuỗi (tên hàm và việc hàm có thay đổi trạng thái hay không) theo các quy tắc cố định. Chưa đọc nội dung hàm. Không phải lời khuyên đầu tư.',
 };

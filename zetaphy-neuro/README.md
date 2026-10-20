@@ -1,7 +1,7 @@
 # Neuro ZETAPHY — ชั้น 1 (อ่านและอธิบายสัญญา)
 
 งานแรกตาม "แผน ZETAPHY Chain": ตัวอ่านสัญญาที่บอกเป็นภาษาคนว่าสัญญาเหรียญบน
-**Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos, TON, NEAR, Osmosis และ Neutron** ให้สิทธิ์อะไรกับเจ้าของบ้าง (สร้างเหรียญเพิ่ม,
+**Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos, TON, NEAR, Starknet, Osmosis และ Neutron** ให้สิทธิ์อะไรกับเจ้าของบ้าง (สร้างเหรียญเพิ่ม,
 บล็อกกระเป๋า, หยุดการโอน, เปลี่ยนภาษี, อัปเกรดโค้ด ฯลฯ) อธิบายได้ 7 ภาษา: ไทย อังกฤษ จีน ญี่ปุ่น เกาหลี
 เวียดนาม อินโดนีเซีย ต้นทุน $0
 
@@ -24,6 +24,7 @@ node cli.js sui 0x...::coin::COIN # เหรียญบน Sui
 node cli.js aptos 0x...           # Fungible Asset บน Aptos (หรือ 0x...::module::Name)
 node cli.js ton EQ...             # jetton บน TON
 node cli.js near token.near        # สัญญา/เหรียญบน NEAR
+node cli.js starknet 0x...        # สัญญา Cairo บน Starknet
 node cli.js osmosis osmo1...      # สัญญา CosmWasm (Rust) หรือ factory/osmo1.../ชื่อ
 node cli.js arbitrum 0x... --json # รายงานเต็ม
 npm run web                       # เปิดหน้าเว็บที่ http://localhost:8080/
@@ -105,6 +106,7 @@ set_fee, burn_from ฯลฯ)
 | Rust/C++ บน Arbitrum (Stylus) | รู้ว่าเป็น WASM ไม่อ่านผิดเป็น EVM อ่านชื่อ/เจ้าของผ่าน ABI แล้วบอกว่าสิทธิ์ยังตรวจไม่ได้ |
 | Rust บน Solana (Anchor) | อ่านรายการคำสั่งจาก IDL บนเชน (`src/anchor.js`) หาคำสั่งที่ต้องให้ผู้ดูแลเซ็น และคำสั่งอันตราย |
 | Rust บน NEAR | อ่านชื่อฟังก์ชันจาก export ของโค้ด WASM โดยตรง (mint, pause, upgrade ฯลฯ), ดูว่าบัญชีสัญญายังมีกุญแจเต็มสิทธิ์ (ลงโค้ดใหม่ได้) หรือไม่ และข้อมูลเหรียญ NEP-141 (`src/near.js`) |
+| Cairo (Starknet) | อ่าน ABI ที่สัญญาเผยแพร่ไว้บนเชน: ชื่อฟังก์ชันและว่าแก้สถานะได้หรือไม่ (mint, pause, upgrade ฯลฯ), เจ้าของ, proxy แบบ Cairo 0 และข้อมูลเหรียญ (`src/starknet.js`) |
 | Rust บน CosmWasm (Osmosis, Neutron) | ผู้ดูแลที่เปลี่ยนโค้ดได้ (migrate), ประวัติการเปลี่ยนโค้ด, ผู้สร้างเหรียญ CW20, ผู้ดูแลเหรียญ Token Factory และ before-send hook (`src/cosmwasm.js`) |
 | Move (Sui, Aptos) | ชื่อฟังก์ชันและสิทธิ์ในโค้ด |
 | FunC/Tact (TON) | ข้อมูล jetton ที่ tonapi ถอดให้ |
@@ -153,7 +155,8 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 - [ ] ให้เจ้าของภาษาตรวจคำแปล จีน ญี่ปุ่น เกาหลี เวียดนาม อินโดนีเซีย
 - [x] Rust: Solana (Anchor IDL), Arbitrum Stylus, CosmWasm (Osmosis, Neutron) · ซอร์ส Solidity/Vyper จาก Sourcify
 - [x] NEAR (Rust/WASM) · TON ตรวจโค้ดกระเป๋าเหรียญของผู้ถือ
-- [ ] Bitcoin (Runes/BRC-20), Starknet, อ่านเนื้อใน WASM ของ Stylus
+- [x] Starknet (Cairo)
+- [ ] Bitcoin (Runes/BRC-20), อ่านเนื้อใน WASM ของ Stylus
 - [ ] ชั้นอธิบายด้วย AI (ทางเลือก): ส่งเฉพาะผลตรวจ ไม่ให้สิทธิ์เรียกเครื่องมือ (จุดอ่อนข้อ 12)
 
 ---
@@ -161,7 +164,7 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 # Neuro ZETAPHY tier 1 (English summary)
 
 Read-only contract reader and explainer for Ethereum, BNB Chain, Base,
-Arbitrum, Solana (incl. Anchor IDLs), Sui, Aptos, TON, Osmosis and Neutron
+Arbitrum, Solana (incl. Anchor IDLs), Sui, Aptos, TON, NEAR, Starknet, Osmosis and Neutron
 (CosmWasm), with Sourcify verified-source lookups and Stylus / EIP-7702
 detection. Fixed rules over on-chain code and data
 (no AI, no wallet, no transactions), output in Thai, English, Chinese,

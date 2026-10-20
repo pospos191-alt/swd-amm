@@ -22,8 +22,9 @@ const IDENTITY = new Set([
   'ton-jetton', 'ton-not-found', 'ton-not-jetton',
   'cw20-token', 'cw-contract', 'cw-not-found', 'tf-token', 'eip7702',
   'near-token', 'near-contract', 'near-not-found', 'near-no-contract',
+  'sn-token', 'sn-contract', 'sn-not-found',
 ]);
-const CAVEAT = new Set(['bytecode-only', 'sol-caveat', 'move-caveat', 'ton-caveat', 'cw-caveat', 'near-caveat']);
+const CAVEAT = new Set(['bytecode-only', 'sol-caveat', 'move-caveat', 'ton-caveat', 'cw-caveat', 'near-caveat', 'sn-caveat']);
 const ORDER = { high: 0, medium: 1, low: 2, good: 3, info: 4 };
 // Who issued it (or that it copies someone) belongs right under what it is.
 const ISSUER = new Set(['known-issuer', 'lookalike']);

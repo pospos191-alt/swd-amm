@@ -4,6 +4,7 @@
 const EVM_ALLOWED = new Set(['eth_chainId', 'eth_getCode', 'eth_getStorageAt', 'eth_call']);
 const SOLANA_ALLOWED = new Set(['getGenesisHash', 'getAccountInfo']);
 const NEAR_ALLOWED = new Set(['status', 'query']); // `query` only reads (view_* and view-function calls)
+const STARKNET_ALLOWED = new Set(['starknet_chainId', 'starknet_getClassAt', 'starknet_getClass', 'starknet_call']);
 
 export class RpcError extends Error {}
 
@@ -74,6 +75,18 @@ export function createNearRpc(urls, chainId, opts = {}) {
     identify: async (post, url) => {
       const st = await post('status', []);
       if (st?.chain_id !== chainId) throw new RpcError(`wrong chain ${st?.chain_id} at ${url}`);
+    },
+  });
+}
+
+/** Starknet client; refuses endpoints whose chain id differs (SN_MAIN). */
+export function createStarknetRpc(urls, chainId, opts = {}) {
+  return makeClient(urls, {
+    ...opts,
+    allowed: STARKNET_ALLOWED,
+    identify: async (post, url) => {
+      const id = await post('starknet_chainId', []);
+      if (String(id).toLowerCase() !== chainId) throw new RpcError(`wrong chain ${id} at ${url}`);
     },
   });
 }

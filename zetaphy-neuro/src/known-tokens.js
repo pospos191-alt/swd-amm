@@ -66,6 +66,11 @@ export const KNOWN_TOKENS = {
     { address: '17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1', symbol: 'USDC', issuer: 'Circle', kind: 'stablecoin' },
     { address: 'wrap.near', symbol: 'wNEAR', issuer: 'NEAR (wrapped NEAR)', kind: 'wrapped' },
   ],
+  // Starknet: 64-digit hex.
+  starknet: [
+    { address: '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d', symbol: 'STRK', issuer: 'Starknet', kind: 'native' },
+    { address: '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7', symbol: 'ETH', issuer: 'StarkGate (bridged ETH)', kind: 'bridged' },
+  ],
   // TON: raw form (workchain:hash) for matching, `display` for people.
   ton: [
     { address: '0:b113a994b5024a16719f69139328eb759596c38a25f59028b146fecdc3621dfe', display: 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs', symbol: 'USDT', issuer: 'Tether', kind: 'stablecoin' },

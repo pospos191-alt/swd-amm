@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)', unknown: 'Unnamed functions',
     program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none',
     package: 'Package', standard: 'Standard', admin: 'Admin', holders: 'Holders', listed: 'tonapi list', raw: 'Raw address',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code', nearKeys: 'Full-access keys', codeHash: 'Code hash',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code', nearKeys: 'Full-access keys', codeHash: 'Code hash', cairo: 'Cairo version',
   },
 };
 
@@ -201,4 +201,12 @@ export const T = {
       ? `${p.issuer} can upgrade the code through a contract function (${list(p.functions)}).`
       : `The code has functions that can replace its own code (${list(p.functions)}). Even without a full-access key, whoever may call them can change it.`),
     'near-caveat': () => 'Checked from the function names in the WASM code and on-chain account data with fixed rules. Function bodies are not read. Not investment advice.',
+    // Starknet (Cairo)
+    'sn-not-found': () => 'No contract at this address on Starknet. It may be mistyped, or the wrong chain is selected.',
+    'sn-token': (p) => `Starknet token "${p.name ?? '?'}" (${p.symbol ?? '?'}), total supply ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'sn-contract': (p) => `A Starknet contract (written in Cairo ${p.cairo === 1 ? '1' : '0'}) with ${p.count ?? '?'} functions in its ABI. Not a token.`,
+    'sn-upgradeable': (p) => (p.issuer
+      ? `${p.issuer} can upgrade the contract's code, the usual way issuers fix or extend it.`
+      : `Upgradeable${p.implementation ? ` (a proxy pointing at code ${p.implementation})` : ''}${p.functions?.length ? ` through ${list(p.functions)}` : ''}: whoever is allowed can replace all of the code. What is checked today may not hold tomorrow.`),
+    'sn-caveat': () => 'Checked from the ABI the contract publishes on chain (function names and whether they change state) with fixed rules. Function bodies are not read. Not investment advice.',
 };

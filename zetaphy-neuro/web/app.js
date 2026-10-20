@@ -13,6 +13,7 @@ const FORMAT = {
   aptos: { placeholder: '0x… / 0x…::coin::COIN', hint: '0x… (Fungible Asset) / 0x…::module::Name' },
   ton: { placeholder: 'EQ… / UQ…', hint: 'EQ…/UQ… (48) / 0:…' },
   near: { placeholder: 'token.near', hint: 'name.near / 64 hex' },
+  starknet: { placeholder: '0x…', hint: '0x + up to 64 hex' },
   cosmwasm: { placeholder: 'osmo1… / factory/osmo1…/name', hint: 'bech32 (osmo1… / neutron1…) / factory/<creator>/<name>' },
 };
 const kindOf = (chain) => CHAINS[chain]?.kind ?? 'evm';
@@ -99,6 +100,11 @@ function render(report) {
     rows.push([m.nearKeys, String(report.near.fullAccessKeys)]);
     rows.push([m.functions, String(report.near.methods)]);
     rows.push([m.codeHash, report.near.codeHash]);
+  }
+  if (report.starknet) {
+    rows.push([m.cairo, String(report.starknet.cairo)]);
+    rows.push([m.functions, String(report.starknet.functions)]);
+    if (report.starknet.implementation) rows.push([m.implementation, report.starknet.implementation]);
   }
   if (report.token?.holders != null) rows.push([m.holders, report.token.holders.toLocaleString('en-US')]);
   if (report.fingerprint) rows.push([m.fingerprint, report.fingerprint]);
