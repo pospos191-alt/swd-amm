@@ -6,6 +6,9 @@
 #   scripts/devnet.sh <home-dir> <rpc-port> 0xADDR [0xADDR ...]
 # Starts the node in the background, writes its pid to <home>/node.pid and
 # waits until the EVM JSON-RPC answers. Stop it with: kill $(cat <home>/node.pid)
+# REST=1 also serves the Cosmos REST API on <rpc-port>+103, as setup-node.sh
+# does on the testnet (Keplr, Leap and Cosmostation read accounts and send txs
+# there). Off by default, so the other devnets open no extra port.
 set -euo pipefail
 HOME_DIR=$1; PORT=$2; shift 2
 BIN=${ZETAPHYD:-zetaphyd}
@@ -21,6 +24,7 @@ jqg ".app_state.staking.params.bond_denom=\"$DENOM\" | .app_state.gov.params.min
 jqg ".app_state.bank.denom_metadata=[{\"description\":\"ZETAPHY (devnet)\",\"denom_units\":[{\"denom\":\"$DENOM\",\"exponent\":0},{\"denom\":\"zetaphy\",\"exponent\":18}],\"base\":\"$DENOM\",\"display\":\"zetaphy\",\"name\":\"ZETAPHY\",\"symbol\":\"ZETAPHY\"}]"
 jqg ".app_state.erc20.native_precompiles=[\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\"] | .app_state.erc20.token_pairs=[{contract_owner:1,erc20_address:\"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\",denom:\"$DENOM\",enabled:true}]"
 jqg '.consensus.params.block.max_gas="30000000" | .app_state.gov.params.voting_period="20s" | .app_state.gov.params.expedited_voting_period="10s" | .app_state.gov.params.max_deposit_period="20s"'
+jqg '.app_state.auth.params.sig_verify_cost_secp256k1="21000"'   # same as setup-node.sh: simulate prices eth_secp256k1 like the real check
 jqg '.app_state.gov.params.min_deposit[0].amount="1000000000000000000000" | .app_state.gov.params.expedited_min_deposit[0].amount="5000000000000000000000"'
 # Fixed supply, as on the testnet (setup-node.sh): no inflation.
 jqg '.app_state.mint.minter.inflation="0.000000000000000000" | .app_state.mint.params.inflation_rate_change="0.000000000000000000" | .app_state.mint.params.inflation_max="0.000000000000000000" | .app_state.mint.params.inflation_min="0.000000000000000000"'
@@ -51,7 +55,7 @@ sed -i -E 's/^timeout_commit = .*/timeout_commit = "1s"/; s/^type = "flood"/type
 sed -i -E "s#^laddr = \"tcp://127.0.0.1:26657\"#laddr = \"tcp://127.0.0.1:$((PORT+100))\"#; s#^laddr = \"tcp://0.0.0.0:26656\"#laddr = \"tcp://127.0.0.1:$((PORT+101))\"#" "$C"
 sed -i -E "s/^minimum-gas-prices = .*/minimum-gas-prices = \"1000000000$DENOM\"/; s/^evm-chain-id = .*/evm-chain-id = $EVM_CHAIN_ID/" "$A"
 python3 - "$A" "$PORT" <<'PY'
-import re, sys
+import os, re, sys
 p, port = sys.argv[1], int(sys.argv[2]); s = open(p).read()
 sec = re.search(r'(?ms)^\[json-rpc\].*?(?=^\[|\Z)', s).group(0)
 new = re.sub(r'(?m)^enable = .*', 'enable = true', sec)
@@ -66,13 +70,17 @@ for k, v in {'allow-insecure-unlock': 'false', 'gas-cap': '10000000', 'evm-timeo
 s = s.replace(sec, new)
 s = re.sub(r'(?ms)(^\[grpc\].*?^address = )"[^"]*"', rf'\1"127.0.0.1:{port+102}"', s)
 s = re.sub(r'(?ms)(^\[api\].*?^address = )"[^"]*"', rf'\1"tcp://127.0.0.1:{port+103}"', s)
+if os.environ.get('REST'):
+    api = re.search(r'(?ms)^\[api\].*?(?=^\[|\Z)', s).group(0)
+    s = s.replace(api, re.sub(r'(?m)^enable = .*', 'enable = true', api))
 open(p, 'w').write(s)
 PY
 
 nohup $BIN start --home "$HOME_DIR" --chain-id $CHAIN_ID --json-rpc.api eth,net,web3,txpool,zetaphy > "$HOME_DIR/node.log" 2>&1 &
 echo $! > "$HOME_DIR/node.pid"
 for i in $(seq 1 90); do
-  if curl -s -m 2 -X POST -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "http://127.0.0.1:$PORT" | grep -q '"result":"0x[1-9a-f]'; then
+  if curl -s -m 2 -X POST -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "http://127.0.0.1:$PORT" | grep -q '"result":"0x[1-9a-f]' &&
+     { [ -z "${REST:-}" ] || curl -s -m 2 "http://127.0.0.1:$((PORT+103))/cosmos/base/tendermint/v1beta1/node_info" | grep -q '"network"'; }; then
     echo "devnet up: http://127.0.0.1:$PORT (pid $(cat "$HOME_DIR/node.pid"))"; exit 0
   fi
   sleep 1

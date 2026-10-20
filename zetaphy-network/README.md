@@ -312,7 +312,7 @@ zetaphy pq native handover 0x<owner> zetaphy1<controller ใหม่>
     แล้ว `pqClient` สร้าง tx เองรอบลายเซ็นที่ได้ ถ้า `txHex` ที่ผู้เซ็นส่งกลับไม่ตรงจะไม่ส่ง
 - ทดสอบบนเชนจริงแล้ว (`npm run test:devnet:pq`, รันใน CI ด้วย): ส่งได้ และเชนปฏิเสธธุรกรรมที่ใช้กุญแจอื่นสวมบัญชี ลายเซ็นที่ถูกแก้ และธุรกรรมเก่าที่ส่งซ้ำ
   - ชุดเดียวกันมีทดสอบ `token-send`, `call --value`, `stake`, `rewards`, `unstake` และการเรียกที่ revert ต้องไม่ขยับเงิน (ต้องใช้ `zetaphyd` ที่มี `MsgEVMCall`)
-- เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy-testnet-1`): ตั้ง `ZETAPHY_CHAIN_ID`
+- เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy_77390-1`): ตั้ง `ZETAPHY_CHAIN_ID`
 - validator เซ็นโหวตด้วย ML-DSA-44 เพิ่มจาก ed25519 และทุกบล็อกมีใบรับรอง ML-DSA ของบล็อกก่อนหน้า (ตรวจด้วย `zetaphy pq verify-block`)
 
 ### ตรวจบล็อกแบบต้านควอนตัม: `zetaphy pq verify-block`
@@ -349,6 +349,40 @@ zetaphy pq verify-block 12345 --json                 # ผลแบบ JSON; --c
 - บนเครื่องที่ติดตั้งด้วย `setup-node.sh` พอร์ต 26657 ฟังเฉพาะในเครื่อง: รันบนเครื่องนั้น หรือใช้ `ssh -L 26657:127.0.0.1:26657`
 - ใช้ในโค้ด: `verifyBlock(rpc, height, { chainId, pinnedKeys })` และ `exportVoteKeys(rpc, { height })` ใน `src/pqcert.js` (เข้ารหัสด้วย `@noble` อย่างเดียว)
 - ทดสอบ: `npm test` (RPC จำลอง และบล็อกจริงจาก devnet ที่บันทึกไว้) และ `npm run test:devnet:pqcert` (เชน 2 validator จริง)
+
+## กระเป๋า Cosmos: Keplr, Leap, Cosmostation
+
+บัญชีบน ZETAPHY เป็นแบบ eth_secp256k1 (เชนแบบ Evmos)
+- กุญแจ: BIP39 → `m/44'/60'/0'/0/0` (coin type 60)
+- ที่อยู่ `zetaphy1…` คือ 20 ไบต์เดียวกับ `0x…`
+- pubkey: `/cosmos.evm.crypto.v1.ethsecp256k1.PubKey`
+
+ทดสอบบนเชนจริงแล้ว (`npm run test:devnet:cosmoswallet`, รันใน CI ด้วย)
+- ชุดทดสอบทำทีละขั้นแบบที่ Keplr ทำ (อ่านจากซอร์ส `@keplr-wallet` 0.13.41) โดยไม่ใช้ไลบรารีกระเป๋า
+- ผลแต่ละวิธีเซ็น:
+
+| วิธีเซ็น | ผล |
+|---|---|
+| `SIGN_MODE_DIRECT` เซ็น secp256k1 บน keccak256 (วิธีปกติของกระเป๋า) | ใช้ได้ ทั้ง `MsgSend` และ `MsgDelegate` |
+| `SIGN_MODE_LEGACY_AMINO_JSON` เซ็นบน keccak256 ของ JSON (Keplr `signAmino`) | ใช้ได้ |
+| `LEGACY_AMINO_JSON` เซ็นเป็น EIP-712 (Keplr + Ledger) | ใช้ได้ (domain chainId 77390; domain chainId อื่นถูกปฏิเสธ) |
+| เซ็นบน sha256 (แบบเชน Cosmos ทั่วไป) | เชนปฏิเสธ: code 4 `signature verification failed` |
+
+- ส่งได้ทั้งผ่าน REST `POST /cosmos/tx/v1beta1/txs` และผ่าน CometBFT RPC `broadcast_tx_sync`
+- อ่านบัญชีและยอดเงินผ่าน REST ได้ และ `eth_getBalance` ตรงกับยอดใน bank, nonce ตรงกับ sequence
+- REST เปิดเฉพาะเมื่อสั่ง `REST=1 scripts/devnet.sh …` (บน testnet `setup-node.sh` เปิดไว้แล้ว)
+
+แก้แล้วจากการทดสอบนี้:
+- `keplr.json` ที่ `setup-node.sh` สร้างมี feature `"eth-secp256k1-cosmos"`
+  - ถ้าไม่มี Keplr จะใส่ pubkey `/ethermint.crypto.v1.ethsecp256k1.PubKey` ซึ่งเชนถอดรหัสไม่ได้
+- ธุรกรรมที่เชนถอดรหัสไม่ได้ได้คำตอบเป็น error ทันที (เดิมค้างไม่มีคำตอบ เพราะ cosmos/evm v0.7.3 คืน error ผิดแบบให้ CometBFT)
+  - แพตช์ใน `mempool/mempool_handlers.go`
+- Keplr + Ledger: chain id เปลี่ยนเป็น `zetaphy_77390-1` (แบบ Ethermint) และ `keplr.json` มี feature `force-enable-evm-ledger`
+- genesis ตั้ง `sig_verify_cost_secp256k1 = 21000` ให้ simulate คิดค่าตรวจลายเซ็นเท่ากับของจริง
+
+ยังเหลือ:
+- Cosmos SDK v0.54 ให้เลขบัญชี (account number) เป็นค่า hash 64 บิต ซึ่งเกิน 2^53
+  - Keplr รองรับ แต่ `@cosmjs/stargate` รุ่น 0.38 ลงไปจะ error ต้องใช้ 0.39 ขึ้นไป
 
 ## จุดอ่อนที่แก้แล้ว (ตรวจเอง 19 ต.ค. 2026)
 
@@ -397,6 +431,7 @@ zetaphy deploy-stable --reserve 1000   # tUSDC, tUSDT และ StableGateway (�
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)
 - `ZETAPHYD=<zetaphyd ที่มี patch ML-DSA> npm run test:devnet:pq`: ทดสอบขั้น 5 บนเชนจริง
 - `ZETAPHYD=<zetaphyd ที่มีกุญแจโหวต ML-DSA> npm run test:devnet:pqcert`: เชน 2 validator ลงทะเบียนกุญแจโหวต แล้วตรวจบล็อกด้วย `zetaphy pq verify-block`
+- `ZETAPHYD=<zetaphyd> npm run test:devnet:cosmoswallet`: กระเป๋า Cosmos (Keplr, Leap, Cosmostation) เซ็นและส่งธุรกรรมบนเชนจริง
 - `npm run test:devnet:bridge`: สะพาน Neuro ข้ามเชนจริง 2 เชน (ต้นทาง และ ZETAPHY)
 - `npm run test:devnet`: ทดสอบบนเชน ZETAPHY จริง ต้องมี `zetaphyd`
   - สคริปต์ตั้งเชน 1 โหนด (บล็อกละ 1 วินาที)

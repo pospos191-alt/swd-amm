@@ -10,7 +10,8 @@
 #                 The real-chain test (npm run test:devnet) needs zetaphyd and
 #                 is run by hand. ~1 min.
 #   zetaphy-wallet every push / PR — the PQ web wallet: committed bundle
-#                 matches its sources + a headless-browser test. ~2 min.
+#                 matches its sources + a headless-browser test (it also
+#                 checks zetaphy-chain/wallets/ agrees with the page). ~2 min.
 #   zetaphy-snap  every push / PR — the MetaMask Snap: builds, the committed
 #                 snap.manifest.json shasum matches the build, and the built
 #                 snap runs in snaps-jest's simulated MetaMask. ~2 min.
@@ -136,9 +137,9 @@ jobs:
           out neuro '^zetaphy-neuro/'
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
           out network '^(zetaphy-network/|zetaphy-neuro/src/)'
-          out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$)'
+          out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$|zetaphy-chain/wallets/)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
-          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|cli\.js|scripts/devnet\.sh|test/devnet\.pq\.integration\.js)$)'
+          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|cli\.js|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet)\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -408,6 +409,7 @@ jobs:
           npm ci --no-audit --no-fund
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pq
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pqcert
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:cosmoswallet
 
   program:
     name: program (cargo test + anchor test)

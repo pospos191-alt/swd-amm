@@ -112,8 +112,8 @@ function mockChain({ vals = [[A, 30], [B, 30], [C, 20], [D, 20]], entries, cert,
 
 test('vote message: prefix, chain id, uint64 BE height, hash', () => {
   const hash = new Uint8Array(32).fill(7);
-  const m = voteMessage('zetaphy-testnet-1', 258, hash);
-  assert.deepEqual([...m], [...cat(utf8('zetaphy/pq-vote\0zetaphy-testnet-1\0'), [0, 0, 0, 0, 0, 0, 1, 2], hash)]);
+  const m = voteMessage('zetaphy_77390-1', 258, hash);
+  assert.deepEqual([...m], [...cat(utf8('zetaphy/pq-vote\0zetaphy_77390-1\0'), [0, 0, 0, 0, 0, 0, 1, 2], hash)]);
 });
 
 test('a valid certificate passes', async () => {
@@ -393,7 +393,7 @@ test('a real devnet block: Go-built certificate, CometBFT header hash', async ()
   assert.equal(r.chainId, 'zetaphy-pqcert-1');
   assert.equal(r.signedPower, 10_000_000n);
   assert.equal(r.signers.length, 2);
-  assert.equal((await verifyBlock(rpc, 13, { chainId: 'zetaphy-testnet-1' })).ok, false);
+  assert.equal((await verifyBlock(rpc, 13, { chainId: 'zetaphy_77390-1' })).ok, false);
 });
 
 test('merkle root matches CometBFT for 0, 1 and uneven counts', () => {

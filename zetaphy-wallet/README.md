@@ -48,7 +48,31 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
   - เบราว์เซอร์จำรายการที่อยู่ไว้ (แยกตามกระเป๋า) สถานะจริงอ่านจากเชนทุกครั้ง
 - ดาวน์โหลดไฟล์สำรอง seed
   - เป็น hex แบบไม่เข้ารหัส ใช้เป็น `~/.zetaphy/pq.seed` ของ `zetaphy pq native` ได้เลย
+- **ใช้ ZETAPHY กับกระเป๋าอื่น** (`wallets.js`, รายละเอียดและตารางว่ากระเป๋าไหนใช้ได้อยู่ใน `zetaphy-chain/wallets/README.md`)
+  - แสดงกระเป๋า EVM ทุกตัวในเบราว์เซอร์ด้วย EIP-6963 (ชื่อและไอคอน: MetaMask, Rabby, Coinbase, OKX, Trust, Brave, Phantom ฯลฯ)
+    - กระเป๋ารุ่นเก่าและเบราว์เซอร์ในแอปมือถือ: `window.ethereum`, `window.binancew3w.ethereum` (Binance Wallet), `window.phantom.ethereum`
+    - ไอคอนแสดงเฉพาะ `data:image/…` (CSP `img-src 'self' data:`) ชื่อแสดงเป็นข้อความล้วน ตัดอักขระควบคุมและ bidi ออก
+  - ผู้ใช้เลือกกระเป๋าเอง (จำไว้) กระเป๋าที่เลือกใช้กับ "เพิ่ม ZETAPHY", "เชื่อมกระเป๋า", ล็อกควอนตัม และโหมด Snap
+    - Snap ถาม `wallet_getSnaps` ก่อน ถ้ากระเป๋าไม่ใช่ MetaMask จะบอกให้เลือก MetaMask
+  - "เพิ่ม ZETAPHY ในกระเป๋านี้": `wallet_addEthereumChain` (EIP-3085) แล้ว `wallet_switchEthereumChain`
+    - RPC มาจากช่อง RPC ด้านบน ต้องเป็น https หรือ localhost
+    - ถ้ากระเป๋าปฏิเสธ (เช่น 4200 ใน Binance Wallet หรือ Phantom) บอกเหตุผลและเปิดค่าสำหรับเพิ่มเอง
+    - สัญลักษณ์ฝั่ง EVM คือ `ZPHY` เพราะ MetaMask และ chainlist รับได้ไม่เกิน 6 ตัว
+  - แสดงค่าสำหรับเพิ่มเองในกระเป๋าใดก็ได้: ชื่อเครือข่าย, RPC, chain ID, สัญลักษณ์, ทศนิยม
+  - "เพิ่มใน Keplr / Leap / Cosmostation": `experimentalSuggestChain(chainInfo)` แล้ว `enable` และแสดงที่อยู่ `zetaphy1…` ที่กระเป๋าตอบ
+    - rpc = `<host>/rpc`, rest = `<host>/rest` จาก host เดียวกับช่อง RPC
+  - มือถือ: ในเบราว์เซอร์ของแอปกระเป๋า กระเป๋าจะอยู่ในรายการเอง ถ้าเปิดจากเบราว์เซอร์ธรรมดาจะมีลิงก์ "เปิดในแอป"
+  - WalletConnect: ปุ่มปิดอยู่จนกว่าจะมี projectId (ดูหัวข้อด้านล่าง)
 - ภาษาไทย (ค่าเริ่มต้น) และอังกฤษ
+
+## WalletConnect: ขั้นต่อไป
+
+ยังไม่มี WalletConnect SDK ใน bundle ปุ่ม WalletConnect ในหน้าเว็บจึงยังเชื่อมไม่ได้
+- เจ้าของต้องสมัคร **projectId ของ Reown ฟรี** ที่ cloud.reown.com และใส่โดเมนของกระเป๋าใน allowlist ของโปรเจกต์
+- ใส่ projectId ใน `<meta name="zetaphy-walletconnect-project-id" content="…">` ของ `index.html` (หรือช่อง "ตั้งค่าเพิ่มเติม" ในหน้าเว็บ)
+  - พอมี projectId ปุ่มจะกดได้ แต่ยังบอกว่าเป็นขั้นต่อไป
+- **ขั้นต่อไป:** ใส่ SDK ใน `src/entry.js` แล้ว `npm run build` (และ commit `vendor/pqwallet.js`) แล้วต่อเข้ากับปุ่ม
+- ต้องใช้กับกระเป๋าบนมือถือเมื่อเปิดหน้านี้จากเบราว์เซอร์อื่น เช่น Binance Web3 Wallet นอกแอป Binance
 
 ## เก็บกุญแจอย่างไร
 
@@ -76,6 +100,7 @@ zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แ�
 | ไฟล์ | คืออะไร |
 |---|---|
 | `index.html`, `app.js`, `style.css` | หน้าเว็บ |
+| `wallets.js` | ค่าเครือข่ายสำหรับกระเป๋าอื่น (EIP-3085, Keplr chain info) และการหากระเป๋า EVM (EIP-6963) ตรงกับ `zetaphy-chain/wallets/*.template.json` |
 | `vendor/pqwallet.js` | bundle ของ `zetaphy-network/src/pqtx.js` + ML-DSA-44 จาก `@noble/post-quantum` + `@noble/hashes` (commit ไว้ Vercel จึงไม่ต้อง build) |
 | `src/entry.js`, `scripts/build.js` | สร้าง bundle ด้วย esbuild |
 | `scripts/serve.js` | เซิร์ฟเวอร์สำหรับรันบนเครื่อง ใช้ header ชุดเดียวกับ `vercel.json` |
@@ -90,6 +115,8 @@ npm run serve     # http://localhost:8090/ (สำหรับนักพัฒ
 npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอน, โอนโทเคน (และที่ถูกปฏิเสธ), stake, deploy,
                   # ล็อกบัญชี MetaMask (window.ethereum จำลอง), ทำรายการแทนบัญชีที่ล็อก
                   # และโหมด MetaMask Snap (snap ปลอมหลัง window.ethereum: wallet_requestSnaps / wallet_invokeSnap) กับ RPC จำลอง
+                  # กระเป๋าอื่น: กระเป๋าปลอมที่ประกาศตัวด้วย EIP-6963, Binance Wallet (4200), Phantom, Keplr/Leap/Cosmostation,
+                  # WalletConnect ที่ปิดอยู่ และตรวจว่าค่าในหน้าเว็บตรงกับ zetaphy-chain/wallets/
 ```
 
 ถ้าแก้ `zetaphy-network/src/pqtx.js` ต้อง `npm run build` แล้ว commit `vendor/pqwallet.js` ด้วย CI ตรวจว่าไฟล์ที่ commit ตรงกับที่ build ใหม่

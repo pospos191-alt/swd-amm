@@ -5,6 +5,9 @@
 // quantum lock from MetaMask (window.ethereum mocked), acting for a locked
 // account (as_owner), and the MetaMask Snap mode (a fake ZETAPHY Snap behind a
 // mocked window.ethereum: wallet_requestSnaps / wallet_invokeSnap).
+// Other wallets: fake EIP-6963 wallets, Binance Wallet (window.binancew3w), Phantom,
+// Keplr / Leap / Cosmostation, WalletConnect off without a projectId, and the
+// network settings checked against zetaphy-chain/wallets/*.json.
 //   npm test            (uses Playwright's Chromium)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -74,10 +77,59 @@ function fakeSnap(snap) {
   };
 }
 
-/** A page whose node RPC is answered by `node` (mutable state). snap: a fake ZETAPHY Snap's state. */
-async function openPage(node = {}, { ethereum, snap } = {}) {
+/**
+ * Fake wallets, put in the page before it loads; every call is recorded in window.__w.
+ * cfg.eip6963: [{ id, uuid, name, rdns, icon }] announce themselves (EIP-6963).
+ * cfg.binancew3w: window.binancew3w.ethereum (Binance Web3 Wallet's in-app browser).
+ * cfg.keplrLike: ['keplr', 'leap', …] as window[id]; cfg.cosmostation: window.cosmostation.providers.keplr.
+ * window.__wCfg[id] (initially cfg.state): { account, chainId, address, fail: { [method]: { code, message } } }.
+ */
+async function addFakeWallets(page, cfg) {
+  await page.addInitScript((cfg) => {
+    window.__w = [];
+    window.__wCfg = cfg.state ?? {};
+    const conf = (id) => (window.__wCfg[id] ??= {});
+    const evm = (id, flags = {}) => ({
+      ...flags,
+      request: async ({ method, params }) => {
+        window.__w.push({ wallet: id, method, params });
+        const c = conf(id);
+        const f = c.fail?.[method];
+        if (f) throw Object.assign(new Error(f.message), { code: f.code });
+        if (method === 'eth_requestAccounts') return [c.account ?? '0x4444444444444444444444444444444444444444'];
+        if (method === 'eth_chainId') return c.chainId ?? '0x1';
+        if (method === 'wallet_addEthereumChain' || method === 'wallet_switchEthereumChain') return null;
+        throw Object.assign(new Error(`The method "${method}" does not exist / is not available.`), { code: -32601 });
+      },
+    });
+    for (const p of cfg.eip6963 ?? []) {
+      const detail = Object.freeze({ info: Object.freeze({ uuid: p.uuid, name: p.name, icon: p.icon, rdns: p.rdns }), provider: evm(p.id) });
+      const announce = () => window.dispatchEvent(new CustomEvent('eip6963:announceProvider', { detail }));
+      window.addEventListener('eip6963:requestProvider', announce);
+      announce();
+    }
+    if (cfg.binancew3w) window.binancew3w = { ethereum: evm('binancew3w', { isBinance: true }) };
+    const keplrLike = (id) => ({
+      experimentalSuggestChain: async (info) => {
+        window.__w.push({ wallet: id, method: 'experimentalSuggestChain', params: info });
+        if (conf(id).fail?.suggest) throw new Error(conf(id).fail.suggest);
+      },
+      enable: async (chainId) => { window.__w.push({ wallet: id, method: 'enable', params: chainId }); },
+      getKey: async (chainId) => {
+        window.__w.push({ wallet: id, method: 'getKey', params: chainId });
+        return { name: 'test', algo: 'ethsecp256k1', bech32Address: conf(id).address ?? 'zetaphy1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zy4seeq9', isNanoLedger: false };
+      },
+    });
+    for (const id of cfg.keplrLike ?? []) window[id] = keplrLike(id);
+    if (cfg.cosmostation) window.cosmostation = { providers: { keplr: keplrLike('cosmostation') } };
+  }, cfg);
+}
+
+/** A page whose node RPC is answered by `node` (mutable state). snap: a fake ZETAPHY Snap's state. wallets: fake wallets. */
+async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
+  if (wallets) await addFakeWallets(page, wallets);
   if (snap) {
     const handle = fakeSnap(snap);
     await page.exposeFunction('__snap', async (snapId, request) => {
@@ -98,6 +150,7 @@ async function openPage(node = {}, { ethereum, snap } = {}) {
           if (method === 'eth_requestAccounts') return [c.account];
           if (method === 'eth_chainId') return c.chainId;
           if (method === 'eth_sendTransaction') return '0x' + 'ab'.repeat(32);
+          if (method === 'wallet_getSnaps' && c.snaps) return {};
           if (method === 'wallet_requestSnaps' && c.snaps) {
             const id = Object.keys(params)[0];
             return { [id]: { id, version: '0.1.0', enabled: true, blocked: false } };
@@ -140,10 +193,10 @@ async function openPage(node = {}, { ethereum, snap } = {}) {
     else if (method === 'zetaphy_pqAccount') {
       // Other accounts (locked owners, by lower-case 0x or zetaphy1…) from node.accounts.
       const other = node.accounts?.[params[0].toLowerCase()];
-      result = other ? { chainId: 'zetaphy-testnet-1', denom: 'azetaphy', exists: true, accountNumber: '30', sequence: '2', pubKeyType: 'eth_secp256k1', quantumLockedTo: null, ...other }
+      result = other ? { chainId: 'zetaphy_77390-1', denom: 'azetaphy', exists: true, accountNumber: '30', sequence: '2', pubKeyType: 'eth_secp256k1', quantumLockedTo: null, ...other }
         : params[0] !== SEED_BECH32 && params[0].toLowerCase() !== SEED_HEX_ADDR.toLowerCase()
-          ? { chainId: 'zetaphy-testnet-1', denom: 'azetaphy', exists: false, accountNumber: null, sequence: null, pubKeyType: null, quantumLockedTo: null }
-          : { address: SEED_BECH32, hex: SEED_HEX_ADDR, chainId: 'zetaphy-testnet-1', denom: 'azetaphy', exists: !!node.exists,
+          ? { chainId: 'zetaphy_77390-1', denom: 'azetaphy', exists: false, accountNumber: null, sequence: null, pubKeyType: null, quantumLockedTo: null }
+          : { address: SEED_BECH32, hex: SEED_HEX_ADDR, chainId: 'zetaphy_77390-1', denom: 'azetaphy', exists: !!node.exists,
             accountNumber: node.exists ? '12' : null, sequence: node.exists ? '4' : null, pubKeyType: node.exists ? (node.pubKeyType === undefined ? 'mldsa44' : node.pubKeyType) : null, quantumLockedTo: null };
     } else if (method === 'zetaphy_sendCosmosTx') {
       sent.push(params[0]);
@@ -177,7 +230,7 @@ const statusMatches = (page, re) => page.waitForFunction((src) => new RegExp(src
 /** The single message of a broadcast tx, after checking its ML-DSA-44 signature. */
 function decodeSent(hex) {
   const raw = TxRaw.decode(Buffer.from(hex.slice(2), 'hex'));
-  const doc = SignDoc.encode(SignDoc.fromPartial({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: 'zetaphy-testnet-1', accountNumber: 12n })).finish();
+  const doc = SignDoc.encode(SignDoc.fromPartial({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: 'zetaphy_77390-1', accountNumber: 12n })).finish();
   assert.ok(ml_dsa44.verify(raw.signatures[0], doc, ml_dsa44.keygen(Buffer.from(SEED_HEX, 'hex')).publicKey), 'ML-DSA-44 signature over the SignDoc');
   const body = TxBody.decode(raw.bodyBytes);
   assert.equal(body.messages.length, 1);
@@ -331,7 +384,7 @@ test('import a seed, see "fund it first", then send a signed tx the node receive
   assert.equal(auth.signerInfos[0].publicKey.typeUrl, '/zetaphy.crypto.mldsa44.PubKey');
   assert.equal(auth.signerInfos[0].sequence, 4n);
   assert.deepEqual(auth.fee.amount, [{ denom: 'azetaphy', amount: '480000000000000' }]);
-  const doc = SignDoc.encode(SignDoc.fromPartial({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: 'zetaphy-testnet-1', accountNumber: 12n })).finish();
+  const doc = SignDoc.encode(SignDoc.fromPartial({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: 'zetaphy_77390-1', accountNumber: 12n })).finish();
   const pk = ml_dsa44.keygen(Buffer.from(SEED_HEX, 'hex')).publicKey;
   assert.ok(ml_dsa44.verify(raw.signatures[0], doc, pk), 'ML-DSA-44 signature over the SignDoc');
 
@@ -863,7 +916,7 @@ test('snap: send, token send, stake and deploy are signed by the snap from the m
   await page.click('#confirm-send');
   await visible(page, '#tx-result');
   assert.deepEqual(signRequests()[0], { snapId: SNAP_ID, method: 'zetaphy_signTx', params: {
-    chainId: 'zetaphy-testnet-1', accountNumber: '12', sequence: '4', gasLimit: '400000', gasPrice: '1200000000', memo: '', lang: 'en',
+    chainId: 'zetaphy_77390-1', accountNumber: '12', sequence: '4', gasLimit: '400000', gasPrice: '1200000000', memo: '', lang: 'en',
     messages: [{ type: 'send', to: TO, amount: '1250000000000000000', denom: 'azetaphy' }] } });
   let { msg, auth } = decodeSent(sent[0]);
   assert.deepEqual(MsgSend.decode(msg.value), { fromAddress: SEED_BECH32, toAddress: TO, amount: [{ denom: 'azetaphy', amount: '1250000000000000000' }] });
@@ -944,6 +997,249 @@ test('snap: rejected in MetaMask, or a snap that signs something else: nothing i
   await statusMatches(page, /signed a different transaction than the one asked for/);
   assert.equal(sent.length, 0, 'nothing broadcast');
   assert.equal(snap.requests.filter((r) => r.method === 'zetaphy_signTx').length, 2);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// ---- other wallets: EIP-6963 discovery, add the network (EIP-3085), Keplr / Leap / Cosmostation, WalletConnect ----
+
+const WALLETS_DIR = new URL('../../zetaphy-chain/wallets/', import.meta.url);
+const RPC_HOST = new URL(RPC).host; // rpc.zetaphy.test:8545
+/** A zetaphy-chain/wallets template with this test's node as HOST. */
+const template = (name) => JSON.parse(readFileSync(new URL(name, WALLETS_DIR), 'utf8').replaceAll('HOST', RPC_HOST));
+const svgIcon = (fill) => 'data:image/svg+xml;base64,' + Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="${fill}"/></svg>`).toString('base64');
+const RABBY = { id: 'rabby', uuid: '6b1f3a9e-0000-4000-8000-000000000001', name: 'Fake Rabby', rdns: 'io.rabby', icon: svgIcon('blue') };
+// A name with a bidi override, and an icon that is a URL: neither may reach the page as such.
+const TRUST = { id: 'trust', uuid: '6b1f3a9e-0000-4000-8000-000000000002', name: 'Fake Trust‮', rdns: 'com.trustwallet.app', icon: 'https://evil.example/trust.png' };
+const PHANTOM = { id: 'phantom', uuid: '6b1f3a9e-0000-4000-8000-000000000003', name: 'Phantom', rdns: 'app.phantom', icon: svgIcon('purple') };
+const walletCalls = (page, id) => page.evaluate((w) => window.__w.filter((c) => c.wallet === w).map(({ method, params }) => ({ method, params })), id);
+const walletNames = (page) => page.$$eval('#evm-wallets button > span:last-child', (s) => s.map((x) => x.textContent));
+const pickedName = (page) => page.textContent('#evm-wallets button.on > span:last-child');
+
+test('wallet config files and the page build the same network settings', async () => {
+  const w = await import('../wallets.js');
+  const ep = w.nodeEndpoints(RPC);
+  assert.deepEqual(ep, { evm: 'https://rpc.zetaphy.test:8545', host: 'https://rpc.zetaphy.test:8545', rpc: 'https://rpc.zetaphy.test:8545/rpc', rest: 'https://rpc.zetaphy.test:8545/rest' });
+  assert.deepEqual(w.evmChainParams(ep), template('evm-add-chain.template.json'));
+  assert.deepEqual(w.keplrChainInfo(ep), template('keplr-chain-info.template.json'));
+  assert.deepEqual(w.nodeEndpoints('http://localhost:8545/').rpc, 'http://localhost:8545/rpc', 'http is fine on localhost');
+  assert.throws(() => w.nodeEndpoints('http://203.0.113.5:8545'), /chainNeedHttps/, 'wallets refuse http RPC URLs');
+  assert.throws(() => w.nodeEndpoints('ftp://x'), /badRpc/);
+  // MetaMask (wallet_addEthereumChain) and ethereum-lists both refuse a symbol of 7+ characters.
+  const evmList = JSON.parse(readFileSync(new URL('ethereum-lists/eip155-77390.json', WALLETS_DIR), 'utf8'));
+  assert.ok(w.EVM_SYMBOL.length <= 6);
+  assert.deepEqual(evmList.nativeCurrency, w.evmChainParams(ep).nativeCurrency);
+  assert.equal(evmList.chainId, 77390);
+  assert.equal(evmList.networkId, 77390);
+  assert.deepEqual(evmList.rpc, ['https://HOST']);
+  assert.deepEqual(Object.keys(w.evmChainParams(ep)).sort(), ['chainId', 'chainName', 'nativeCurrency', 'rpcUrls'], 'MetaMask refuses any other key');
+  const chain = JSON.parse(readFileSync(new URL('chain-registry/zetaphytestnet/chain.json', WALLETS_DIR), 'utf8'));
+  const assets = JSON.parse(readFileSync(new URL('chain-registry/zetaphytestnet/assetlist.json', WALLETS_DIR), 'utf8'));
+  assert.equal(chain.chain_id, w.CHAIN_ID);
+  assert.equal(chain.slip44, 60);
+  assert.equal(chain.bech32_prefix, w.BECH32.bech32PrefixAccAddr);
+  const fee = chain.fees.fee_tokens[0];
+  assert.deepEqual([fee.denom, fee.low_gas_price, fee.average_gas_price, fee.high_gas_price], [w.DENOM, w.GAS_PRICE_STEP.low, w.GAS_PRICE_STEP.average, w.GAS_PRICE_STEP.high]);
+  assert.equal(assets.assets[0].base, w.DENOM);
+  assert.equal(assets.assets[0].denom_units.find((u) => u.denom === assets.assets[0].display).exponent, w.DECIMALS);
+  // Icons: data:image/… only.
+  assert.equal(w.safeIcon(RABBY.icon), RABBY.icon);
+  for (const bad of [TRUST.icon, 'javascript:alert(1)', 'data:text/html;base64,PHNjcmlwdD4=', 'data:image/png;base64,AA" onerror="x', 42]) assert.equal(w.safeIcon(bad), null);
+  assert.equal(w.cleanName(TRUST.name), 'Fake Trust');
+  assert.equal(w.kindOf({ rdns: 'com.binance.wallet' }), 'binance');
+  assert.equal(w.kindOf({ name: 'Binance Web3 Wallet', rdns: 'com.example' }), 'binance');
+  assert.equal(w.kindOf({ rdns: 'app.phantom' }), 'phantom');
+  assert.equal(w.kindOf({ rdns: 'com.trustwallet.app' }), 'trust');
+});
+
+test('EIP-6963: two wallets announce themselves; the one picked is offered ZETAPHY (EIP-3085) and connected', async () => {
+  const { page, context, errors, outside } = await openPage({}, { wallets: { eip6963: [RABBY, TRUST] } });
+  await page.click('#lang');
+  await page.waitForFunction(() => document.querySelectorAll('#evm-wallets button').length === 2);
+  assert.deepEqual(await walletNames(page), ['Fake Rabby', 'Fake Trust'], 'names as plain text, bidi override dropped');
+  assert.deepEqual(await page.$$eval('#evm-wallets img', (i) => i.map((x) => x.getAttribute('src'))), [RABBY.icon], 'only the data:image icon is shown');
+  assert.equal(await page.textContent('#evm-wallets button:not(:has(img)) .wallet-icon'), 'F', 'a letter instead of the URL icon');
+  assert.ok(await page.isHidden('#evm-none'));
+  assert.equal(await pickedName(page), 'Fake Rabby', 'no MetaMask here: the first one');
+
+  // The network's values come from the RPC setting, which must be https.
+  await page.click('#evm-add');
+  await statusMatches(page, /Enter your node RPC URL first/);
+  await page.fill('#rpc', 'http://203.0.113.5:8545');
+  await page.click('#evm-add');
+  await statusMatches(page, /Wallets take only an https RPC URL/);
+  assert.equal(await page.textContent('#m-rpc'), '(enter an https RPC URL above first)');
+  await page.fill('#rpc', RPC);
+  await page.click('#rpc-save');
+  await page.click('#manual summary');
+  assert.equal(await page.textContent('#m-name'), 'ZETAPHY Testnet');
+  assert.equal(await page.textContent('#m-rpc'), 'https://rpc.zetaphy.test:8545');
+  assert.equal(await page.textContent('#m-chain'), '77390 (0x12e4e)');
+  assert.equal(await page.textContent('#m-symbol'), 'ZPHY');
+  assert.equal(await page.textContent('#m-decimals'), '18');
+  assert.match(await page.textContent('#m-symbol-note'), /ZPHY is ZETAPHY.*at most 6 letters.*0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE/);
+
+  // Pick the second one: only it is asked.
+  await page.click('#evm-wallets button:has-text("Fake Trust")');
+  assert.equal(await pickedName(page), 'Fake Trust');
+  await statusMatches(page, /Fake Trust picked/);
+  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-wallet:evm-wallet')), '6963:com.trustwallet.app');
+  await page.click('#evm-add');
+  await statusMatches(page, /ZETAPHY Testnet added to Fake Trust and selected/);
+  const params = template('evm-add-chain.template.json');
+  assert.deepEqual(params, { chainId: '0x12e4e', chainName: 'ZETAPHY Testnet', nativeCurrency: { name: 'ZETAPHY', symbol: 'ZPHY', decimals: 18 }, rpcUrls: ['https://rpc.zetaphy.test:8545'] });
+  assert.deepEqual(await walletCalls(page, 'trust'), [
+    { method: 'wallet_addEthereumChain', params: [params] },
+    { method: 'wallet_switchEthereumChain', params: [{ chainId: '0x12e4e' }] },
+  ]);
+  assert.deepEqual(await walletCalls(page, 'rabby'), [], 'the other wallet is not asked');
+
+  // Rejected in the wallet: said so, not a "network refused" error.
+  await page.evaluate(() => { window.__wCfg.trust.fail = { wallet_addEthereumChain: { code: 4001, message: 'User rejected the request.' } }; });
+  await page.click('#evm-add');
+  await statusMatches(page, /Cancelled in the wallet/);
+  await page.evaluate(() => { window.__wCfg.trust.fail = {}; window.__wCfg.trust.chainId = '0x12e4e'; });
+
+  // Connect: the wallet's account in both forms, the chain it is on, its balance from the node.
+  await page.click('#evm-connect');
+  await visible(page, '#evm-account');
+  assert.equal(await page.textContent('#evm-wallet-name'), 'Fake Trust');
+  assert.equal(await page.textContent('#evm-addr-hex'), OWNER);
+  assert.equal(await page.textContent('#evm-addr-bech32'), OWNER_BECH32);
+  await page.waitForFunction(() => /Balance 10 ZETAPHY/.test(document.getElementById('evm-chain').textContent));
+  assert.match(await page.textContent('#evm-chain'), /^On ZETAPHY Testnet\./);
+
+  // The Snap needs MetaMask: wallet_getSnaps tells a wallet without snaps, before anything is installed.
+  assert.equal(await page.textContent('#snap-card .using-text'), 'Wallet used: Fake Trust');
+  await page.click('#snap-connect');
+  await statusMatches(page, /Fake Trust cannot run MetaMask Snaps/);
+  assert.deepEqual((await walletCalls(page, 'trust')).map((c) => c.method).filter((m) => m.startsWith('wallet_') && m !== 'wallet_addEthereumChain' && m !== 'wallet_switchEthereumChain'), ['wallet_getSnaps']);
+
+  // The pick is remembered; Thai follows the language switch.
+  await page.reload();
+  await page.waitForFunction(() => document.querySelectorAll('#evm-wallets button').length === 2);
+  assert.equal(await pickedName(page), 'Fake Trust');
+  await page.click('#lang');
+  assert.equal(await page.textContent('#evm-add'), 'เพิ่ม ZETAPHY ในกระเป๋านี้');
+  assert.equal(await page.textContent('#snap-card .using-text'), 'กระเป๋าที่ใช้: Fake Trust');
+  assert.deepEqual(outside, [], 'the URL icon was never loaded');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('Binance Wallet (window.binancew3w.ethereum): add-chain works, and a 4200 refusal is explained with the manual values', async () => {
+  const { page, context, errors, outside } = await openPage({}, { wallets: { binancew3w: true } });
+  await page.click('#lang');
+  await page.fill('#rpc', RPC);
+  await page.click('#rpc-save');
+  assert.deepEqual(await walletNames(page), ['Binance Wallet']);
+  assert.equal(await pickedName(page), 'Binance Wallet');
+  assert.match(await page.textContent('#evm-note'), /Binance Wallet may not accept new networks yet/);
+  await page.click('#evm-add');
+  await statusMatches(page, /ZETAPHY Testnet added to Binance Wallet and selected/);
+  assert.deepEqual((await walletCalls(page, 'binancew3w'))[0], { method: 'wallet_addEthereumChain', params: [template('evm-add-chain.template.json')] });
+
+  // The wallet does not support adding networks.
+  await page.evaluate(() => { window.__wCfg.binancew3w.fail = { wallet_addEthereumChain: { code: 4200, message: 'The requested method is not supported' } }; });
+  assert.equal(await page.$eval('#manual', (d) => d.open), false);
+  await page.click('#evm-add');
+  await statusMatches(page, /Binance Wallet did not add the network \(The requested method is not supported\)\. It may not accept new networks yet: type the values below/);
+  assert.ok(await page.isVisible('#status.error'));
+  assert.equal(await page.$eval('#manual', (d) => d.open), true, 'the manual values are opened');
+  assert.ok(await page.isVisible('#m-rpc'));
+  assert.equal((await walletCalls(page, 'binancew3w')).filter((c) => c.method === 'wallet_switchEthereumChain').length, 1, 'no switch after the refusal');
+  await page.click('#lang');
+  assert.match(await page.textContent('#status'), /Binance Wallet ไม่ได้เพิ่มเครือข่าย .*อาจยังไม่รับเครือข่ายใหม่/);
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('Phantom: listed, warned before anything is asked, and its refusal to add the network is explained', async () => {
+  const { page, context, errors } = await openPage({}, { wallets: { eip6963: [PHANTOM], state: { phantom: { fail: { wallet_addEthereumChain: { code: 4200, message: 'Unsupported network' } } } } } });
+  await page.click('#lang');
+  await page.fill('#rpc', RPC);
+  await page.waitForFunction(() => document.querySelectorAll('#evm-wallets button').length === 1);
+  assert.deepEqual(await walletNames(page), ['Phantom']);
+  assert.ok(await page.isVisible('#evm-note'));
+  assert.match(await page.textContent('#evm-note'), /Phantom does not let anyone add networks.*Use another wallet/);
+  assert.deepEqual(await walletCalls(page, 'phantom'), [], 'nothing asked yet');
+  await page.click('#evm-add');
+  await statusMatches(page, /Phantom did not add the network \(Unsupported network\)\. It may not accept new networks yet/);
+  assert.deepEqual((await walletCalls(page, 'phantom')).map((c) => c.method), ['wallet_addEthereumChain']);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('Keplr, Leap, Cosmostation: experimentalSuggestChain gets the chain info, then the zetaphy1 address is shown', async () => {
+  const { page, context, errors, outside } = await openPage({}, { wallets: { keplrLike: ['keplr'], cosmostation: true } });
+  await page.click('#lang');
+  await page.click('#keplr-add');
+  await statusMatches(page, /Enter your node RPC URL first/);
+  await page.fill('#rpc', RPC);
+  await page.click('#keplr-add');
+  await statusMatches(page, /ZETAPHY Testnet added to Keplr/);
+  const info = template('keplr-chain-info.template.json');
+  assert.deepEqual(await walletCalls(page, 'keplr'), [
+    { method: 'experimentalSuggestChain', params: info },
+    { method: 'enable', params: 'zetaphy_77390-1' },
+    { method: 'getKey', params: 'zetaphy_77390-1' },
+  ]);
+  assert.equal(info.rpc, 'https://rpc.zetaphy.test:8545/rpc');
+  assert.equal(info.rest, 'https://rpc.zetaphy.test:8545/rest');
+  assert.deepEqual(info.evm, { chainId: 77390, rpc: 'https://rpc.zetaphy.test:8545' });
+  assert.deepEqual(info.bip44, { coinType: 60 });
+  assert.deepEqual(info.feeCurrencies[0].gasPriceStep, { low: 1e9, average: 2e9, high: 4e9 });
+  assert.deepEqual(info.features, ['eth-address-gen', 'eth-key-sign', 'eth-secp256k1-cosmos', 'force-enable-evm-ledger']);
+  await visible(page, '#cosmos-account');
+  assert.equal(await page.textContent('#cosmos-wallet-name'), 'Keplr');
+  assert.equal(await page.textContent('#cosmos-addr'), OWNER_BECH32);
+  assert.equal(await page.textContent('#cosmos-hex'), OWNER);
+
+  await page.click('#leap-add');
+  await statusMatches(page, /Leap was not found in this browser/);
+  await page.click('#cosmostation-add');
+  await statusMatches(page, /ZETAPHY Testnet added to Cosmostation/);
+  assert.deepEqual((await walletCalls(page, 'cosmostation'))[0], { method: 'experimentalSuggestChain', params: info });
+
+  // Refused in Keplr, or an address that is not zetaphy1….
+  await page.evaluate(() => { window.__wCfg.keplr.fail = { suggest: 'Request rejected' }; });
+  await page.click('#keplr-add');
+  await statusMatches(page, /Keplr did not add the network \(Request rejected\)/);
+  await page.evaluate(() => { window.__wCfg.keplr = { address: 'cosmos1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyn8nxu5' }; });
+  await page.click('#keplr-add');
+  await statusMatches(page, /not zetaphy1/);
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('WalletConnect stays off without a Reown projectId', async () => {
+  const { page, context, errors, outside } = await openPage();
+  await page.click('#lang');
+  assert.equal(await page.getAttribute('meta[name="zetaphy-walletconnect-project-id"]', 'content'), '');
+  assert.ok(await page.isDisabled('#wc-connect'));
+  assert.match(await page.textContent('#wc-hint'), /is off: it needs a Reown projectId/);
+  assert.ok(await page.isVisible('#evm-none'), 'no EVM wallet in this browser');
+  await page.click('#wallets-card details:last-of-type summary');
+  await page.fill('#wc-id', 'not-a-project-id');
+  await page.click('#wc-save');
+  await statusMatches(page, /must be 32 hex digits/);
+  assert.ok(await page.isDisabled('#wc-connect'));
+
+  // With one it turns on; the SDK is not bundled yet, and the page says so.
+  await page.fill('#wc-id', '0123456789abcdef0123456789abcdef');
+  await page.click('#wc-save');
+  assert.ok(await page.isEnabled('#wc-connect'));
+  await page.click('#wc-connect');
+  await statusMatches(page, /does not include WalletConnect yet \(it is the next step\)/);
+  await page.reload();
+  assert.ok(await page.isEnabled('#wc-connect'), 'remembered');
+  await page.click('#wallets-card details:last-of-type summary');
+  await page.fill('#wc-id', '');
+  await page.click('#wc-save');
+  assert.ok(await page.isDisabled('#wc-connect'));
+  assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
   await context.close();
 });

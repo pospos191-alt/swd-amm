@@ -178,16 +178,16 @@ func TestPQVoteSignature(t *testing.T) {
 		t.Fatal(err)
 	}
 	hash := bytes.Repeat([]byte{0xaa}, 32)
-	sig, err := pqSign(sk, pqVoteMsg("zetaphy-testnet-1", 7, hash))
+	sig, err := pqSign(sk, pqVoteMsg("zetaphy_77390-1", 7, hash))
 	if err != nil {
 		t.Fatal(err)
 	}
 	pk := &mldsa44.PubKey{Key: pub}
-	if !pk.VerifySignature(pqVoteMsg("zetaphy-testnet-1", 7, hash), sig) {
+	if !pk.VerifySignature(pqVoteMsg("zetaphy_77390-1", 7, hash), sig) {
 		t.Fatal("own signature")
 	}
-	for _, bad := range [][]byte{pqVoteMsg("zetaphy-testnet-2", 7, hash), pqVoteMsg("zetaphy-testnet-1", 8, hash),
-		pqVoteMsg("zetaphy-testnet-1", 7, bytes.Repeat([]byte{0xab}, 32))} {
+	for _, bad := range [][]byte{pqVoteMsg("zetaphy-testnet-2", 7, hash), pqVoteMsg("zetaphy_77390-1", 8, hash),
+		pqVoteMsg("zetaphy_77390-1", 7, bytes.Repeat([]byte{0xab}, 32))} {
 		if pk.VerifySignature(bad, sig) {
 			t.Fatal("signature accepted for another vote")
 		}

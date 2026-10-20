@@ -50,7 +50,7 @@
 //   zetaphy vault status | release     what has vested; pay it out (anyone may; node start does it daily)
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
-// (ZETAPHY_CHAIN_ID: Cosmos chain id `pq native` expects, default zetaphy-testnet-1)
+// (ZETAPHY_CHAIN_ID: Cosmos chain id `pq native` expects, default zetaphy_77390-1)
 // (NeuroJobs address). They are saved to ~/.zetaphy/config.json on first use.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
@@ -388,7 +388,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const provider = await connectRpc(s);
     // lock-ecdsa to a given controller needs no ML-DSA seed on this machine.
     const pq = sub === 'lock-ecdsa' && args.controller ? null : loadOrCreatePq();
-    // ZETAPHY_CHAIN_ID: the Cosmos chain id to expect (a local devnet is not zetaphy-testnet-1).
+    // ZETAPHY_CHAIN_ID: the Cosmos chain id to expect (a local devnet is not zetaphy_77390-1).
     const client = pqClient((method, params) => provider.send(method, params), process.env.ZETAPHY_CHAIN_ID ? { chainId: process.env.ZETAPHY_CHAIN_ID } : {});
     const me = pq ? pqAddress(pq.publicKeyBytes) : null;
     const signer = pq ? { publicKey: pq.publicKeyBytes, sign: pq.signBytes } : null;

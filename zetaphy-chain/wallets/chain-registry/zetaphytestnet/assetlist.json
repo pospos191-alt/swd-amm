@@ -1,0 +1,38 @@
+{
+  "$schema": "../../assetlist.schema.json",
+  "chain_name": "zetaphytestnet",
+  "assets": [
+    {
+      "description": "The native fee and staking token of ZETAPHY Testnet. Test coins only, no value.",
+      "denom_units": [
+        {
+          "denom": "azetaphy",
+          "exponent": 0,
+          "aliases": [
+            "attozetaphy"
+          ]
+        },
+        {
+          "denom": "zetaphy",
+          "exponent": 18
+        }
+      ],
+      "type_asset": "sdk.coin",
+      "base": "azetaphy",
+      "name": "ZETAPHY",
+      "display": "zetaphy",
+      "symbol": "ZETAPHY",
+      "logo_URIs": {
+        "svg": "https://raw.githubusercontent.com/cosmos/chain-registry/master/testnets/zetaphytestnet/images/zetaphy.svg"
+      },
+      "images": [
+        {
+          "svg": "https://raw.githubusercontent.com/cosmos/chain-registry/master/testnets/zetaphytestnet/images/zetaphy.svg"
+        }
+      ],
+      "keywords": [
+        "testnet"
+      ]
+    }
+  ]
+}

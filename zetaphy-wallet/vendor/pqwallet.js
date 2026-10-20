@@ -600,7 +600,7 @@ var shake128 = /* @__PURE__ */ genShake(31, 168, 16, /* @__PURE__ */ oidNist(11)
 var shake256 = /* @__PURE__ */ genShake(31, 136, 32, /* @__PURE__ */ oidNist(12));
 
 // ../zetaphy-network/src/pqtx.js
-var CHAIN_ID = "zetaphy-testnet-1";
+var CHAIN_ID = "zetaphy_77390-1";
 var DENOM = "azetaphy";
 var PREFIX = "zetaphy";
 var PUBKEY_TYPE_URL = "/zetaphy.crypto.mldsa44.PubKey";

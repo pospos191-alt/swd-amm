@@ -123,7 +123,7 @@ function intent(m, i) {
 export function parseSignRequest(params) {
   fields(params, ['chainId', 'accountNumber', 'sequence', 'gasLimit', 'gasPrice', 'messages'], ['memo', 'lang'], 'params');
   const { chainId } = params;
-  if (typeof chainId !== 'string' || !/^zetaphy-[a-z0-9][a-z0-9-]{0,39}$/.test(chainId)) throw new Error('chainId must be a ZETAPHY chain id such as zetaphy-testnet-1');
+  if (typeof chainId !== 'string' || !/^zetaphy[-_][a-z0-9][a-z0-9-]{0,39}$/.test(chainId)) throw new Error('chainId must be a ZETAPHY chain id such as zetaphy_77390-1');
   const memo = params.memo ?? '';
   if (typeof memo !== 'string' || memo.length > MAX_MEMO_CHARS) throw new Error(`memo must be text of at most ${MAX_MEMO_CHARS} characters`);
   // Control and invisible formatting characters (e.g. bidi overrides) could make the memo read differently.

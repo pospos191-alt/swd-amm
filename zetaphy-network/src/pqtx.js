@@ -21,7 +21,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 
-export const CHAIN_ID = 'zetaphy-testnet-1';
+export const CHAIN_ID = 'zetaphy_77390-1';
 export const DENOM = 'azetaphy';
 export const PREFIX = 'zetaphy';
 export const PUBKEY_TYPE_URL = '/zetaphy.crypto.mldsa44.PubKey';

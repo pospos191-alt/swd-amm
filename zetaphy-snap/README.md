@@ -59,7 +59,7 @@ const acct = await invoke('zetaphy_getAccount');
 
 ```js
 const signed = await invoke('zetaphy_signTx', {
-  chainId: 'zetaphy-testnet-1',   // ต้องขึ้นต้น zetaphy- (เชนอื่นที่ไม่ใช่ testnet จะมีคำเตือนในหน้าต่าง)
+  chainId: 'zetaphy_77390-1',   // ต้องขึ้นต้น zetaphy- (เชนอื่นที่ไม่ใช่ testnet จะมีคำเตือนในหน้าต่าง)
   accountNumber: '12', sequence: '4',          // จาก zetaphy_pqAccount
   gasLimit: '400000', gasPrice: '1200000000',  // ค่าธรรมเนียม = gasLimit × gasPrice (azetaphy)
   memo: '',                                    // ไม่บังคับ ไม่เกิน 256 ตัว ห้ามอักขระควบคุม
