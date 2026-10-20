@@ -2,9 +2,11 @@
 // Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call.
 
 import { CHAINS, isChainAddress } from './chains.js';
-import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc, createStarknetRpc } from './rpc.js';
+import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc, createStarknetRpc, createHiroApi } from './rpc.js';
 import { readCosmwasmAccount, analyzeCosmwasm } from './cosmwasm.js';
 import { readNearAccount, analyzeNear } from './near.js';
+import { readBitcoinToken, analyzeBitcoin } from './bitcoin.js';
+import { stylusWasm, scanWasm } from './stylus.js';
 import { readStarknetAccount, analyzeStarknet, normalize as snNormalize } from './starknet.js';
 import { readSolanaAccount, analyzeSolana } from './solana.js';
 import { readAnchorIdl } from './anchor.js';
@@ -78,6 +80,7 @@ export async function readContract(chainKey, address, opts = {}) {
   if (chain.kind === 'cosmwasm') return readCosmwasm(chainKey, chain, address, opts);
   if (chain.kind === 'near') return readNear(chainKey, chain, address, opts);
   if (chain.kind === 'starknet') return readStarknet(chainKey, chain, address, opts);
+  if (chain.kind === 'bitcoin') return readBitcoin(chainKey, chain, address, opts);
   const addr = address.toLowerCase();
   const rpc = opts.rpc ?? createRpc(chain.rpcs, chain.id, { fetchImpl: opts.fetchImpl });
 
@@ -133,6 +136,26 @@ export async function readContract(chainKey, address, opts = {}) {
     report.token = token;
     report.owner = owner;
     report.codeHash = await sha256Hex(lower);
+    // Stylus: unpack the WASM and read it with the EVM rules.
+    let scan = null;
+    if (format === 'stylus') {
+      const wasm = await stylusWasm(hexToBytes(lower));
+      try { scan = wasm ? scanWasm(wasm) : null; } catch { scan = null; }
+    }
+    if (scan) {
+      const known = knownToken(chainKey, addr);
+      const lookalike = token.symbol ? lookalikeOf(chainKey, addr, token.symbol) : null;
+      report.stylus = { wasmSize: scan.size };
+      report.functions = scan.functions.map((f) => f.sig).sort();
+      const analysis = analyze({ hasCode: true, functions: scan.functions, opcodes: scan.opcodes, proxy: { kind: null }, token, owner, known, lookalike });
+      // The EVM rules call a token with no ERC-20 selectors "not a token";
+      // say what was read instead.
+      analysis.findings = analysis.findings.filter((f) => f.id !== 'not-erc20');
+      analysis.findings.unshift({ id: 'stylus-read', severity: 'info', params: { count: scan.functions.length, size: scan.size } });
+      report.analysis = analysis;
+      report.reportHash = await sha256Hex(canonical(report));
+      return report;
+    }
     report.analysis = analyzeOpaque({
       format, token, owner,
       known: knownToken(chainKey, addr),
@@ -380,5 +403,17 @@ async function readStarknet(chainKey, chain, address, opts) {
   const known = m.kind === 'token' ? knownToken(chainKey, addr) : null;
   const lookalike = m.kind === 'token' ? lookalikeOf(chainKey, addr, m.token.symbol) : null;
   report.analysis = analyzeStarknet(m, { known, lookalike });
+  return finish(report);
+}
+
+async function readBitcoin(chainKey, chain, address, opts) {
+  const api = opts.api ?? createHiroApi(chain.rpcs, { fetchImpl: opts.fetchImpl });
+  const m = await readBitcoinToken(api, address);
+  // The address becomes the token's own name so the explorer link fits it.
+  const id = m.kind === 'rune' ? m.token.name : m.kind === 'brc20' ? `brc20:${m.id.toLowerCase()}` : address;
+  const report = { version: REPORT_VERSION, chain: chainKey, address: id };
+  if (m.token) report.token = m.token;
+  if (m.kind !== 'missing') report.bitcoin = { standard: m.kind === 'rune' ? 'Runes' : 'BRC-20', id: m.id, maxSupply: m.token.maxSupply, deployer: m.deployer, topHolder: m.top ?? undefined };
+  report.analysis = analyzeBitcoin(m);
   return finish(report);
 }

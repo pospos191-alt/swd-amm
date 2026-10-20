@@ -8,6 +8,7 @@ import { isAptosInput, APTOS_MAINNET } from './aptos.js';
 import { isTonAddress } from './ton.js';
 import { isCosmwasmInput } from './cosmwasm.js';
 import { isNearAccount } from './near.js';
+import { isBitcoinInput, parseBitcoinInput } from './bitcoin.js';
 import { isStarknetAddress, SN_MAIN } from './starknet.js';
 
 export const CHAINS = {
@@ -94,6 +95,13 @@ export const CHAINS = {
     rpcs: ['https://rpc.starknet.lava.build', 'https://starknet.drpc.org', 'https://api.zan.top/public/starknet-mainnet'],
     explorer: 'https://voyager.online/contract/',
   },
+  bitcoin: {
+    kind: 'bitcoin',
+    name: 'Bitcoin (Runes, BRC-20)',
+    rpcs: ['https://api.hiro.so'],
+    explorer: 'https://ordinals.com/rune/',
+    explorerBrc20: 'https://ordiscan.com/brc20/',
+  },
   ton: {
     kind: 'ton',
     name: 'TON',
@@ -118,6 +126,7 @@ export function isChainAddress(chainKey, address) {
     case 'cosmwasm': return isCosmwasmInput(address, c.prefix);
     case 'near': return isNearAccount(address);
     case 'starknet': return isStarknetAddress(address);
+    case 'bitcoin': return isBitcoinInput(address);
     default: return EVM_ADDRESS.test(address);
   }
 }
@@ -128,6 +137,11 @@ export function explorerUrl(chainKey, address) {
   if (!c) return null;
   // A factory denom has no page of its own: open its creator.
   if (c.kind === 'cosmwasm' && address.startsWith('factory/')) return c.explorer + address.split('/')[1];
+  if (c.kind === 'bitcoin') {
+    const q = parseBitcoinInput(address);
+    if (!q) return null;
+    return q.rune ? c.explorer + encodeURIComponent(address) : c.explorerBrc20 + encodeURIComponent(q.ticker);
+  }
   if (c.kind === 'sui' || c.kind === 'aptos') {
     return (address.includes('::') ? c.explorer : c.explorerObject) + encodeURIComponent(address);
   }

@@ -14,6 +14,7 @@ const FULL = {
   paused: true, decreaseOnly: false, kind: 'stablecoin', type: '0x2::sui::SUI',
   target: '0xtarget', match: 'exact', language: 'Solidity', compiler: 'v0.8.26', url: 'https://repo.sourcify.dev/1/0xa',
   label: 'pool', codeId: '42', codeHash: 'abc123', compiler: 'func', minter: 'osmo1minter', cap: '100', creator: 'osmo1creator', contract: 'osmo1hook',
+  id: '840000:3', end: 900000, unlimited: false, share: 42.5, deployer: 'bc1pdeployer', size: 20480,
 };
 // Branches: no issuer, no holder, other `where`, wallet / other interfaces.
 const VARIANTS = [

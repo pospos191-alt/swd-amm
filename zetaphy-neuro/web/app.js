@@ -14,6 +14,7 @@ const FORMAT = {
   ton: { placeholder: 'EQ… / UQ…', hint: 'EQ…/UQ… (48) / 0:…' },
   near: { placeholder: 'token.near', hint: 'name.near / 64 hex' },
   starknet: { placeholder: '0x…', hint: '0x + up to 64 hex' },
+  bitcoin: { placeholder: 'DOG•GO•TO•THE•MOON / ordi', hint: 'Rune name or id (840000:3) / BRC-20 ticker (4–5)' },
   cosmwasm: { placeholder: 'osmo1… / factory/osmo1…/name', hint: 'bech32 (osmo1… / neutron1…) / factory/<creator>/<name>' },
 };
 const kindOf = (chain) => CHAINS[chain]?.kind ?? 'evm';
@@ -105,6 +106,14 @@ function render(report) {
     rows.push([m.cairo, String(report.starknet.cairo)]);
     rows.push([m.functions, String(report.starknet.functions)]);
     if (report.starknet.implementation) rows.push([m.implementation, report.starknet.implementation]);
+  }
+  if (report.bitcoin) {
+    const b = report.bitcoin;
+    rows.push([m.standard, b.standard]);
+    rows.push([m.tokenId, b.id]);
+    if (b.maxSupply) rows.push([m.maxSupply, b.maxSupply]);
+    if (b.deployer) rows.push([m.creator, b.deployer]);
+    if (b.topHolder) rows.push([m.topHolder, `${b.topHolder.address ?? '?'} (${b.topHolder.share}%)`]);
   }
   if (report.token?.holders != null) rows.push([m.holders, report.token.holders.toLocaleString('en-US')]);
   if (report.fingerprint) rows.push([m.fingerprint, report.fingerprint]);

@@ -207,6 +207,29 @@ export function createTonApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 1
   return { get: (path) => paced(() => run((url) => get1(url, path))) };
 }
 
+/**
+ * Hiro indexer client for Bitcoin Runes and BRC-20: GET only, and only the
+ * runes/v1 and ordinals/v1/brc-20 read paths. The free tier needs no key.
+ */
+export function createHiroApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 15000 } = {}) {
+  const run = failover(urls, async () => {});
+  const get1 = async (url, path) => {
+    try {
+      return await fetchJson(fetchImpl, url + path, { method: 'GET' }, timeoutMs);
+    } catch (e) {
+      if (!/HTTP 429/.test(e.message)) throw e;
+      await new Promise((r) => setTimeout(r, 1500));
+      return fetchJson(fetchImpl, url + path, { method: 'GET' }, timeoutMs);
+    }
+  };
+  return {
+    get(path) {
+      if (!/^\/(runes\/v1\/etchings|ordinals\/v1\/brc-20\/tokens)\//.test(path)) throw new RpcError(`path not allowed: ${path}`);
+      return run((url) => get1(url, path));
+    },
+  };
+}
+
 /** Cosmos REST (LCD) client, GET only; refuses endpoints serving another chain id. */
 export function createCosmosRest(urls, chainId, { fetchImpl = globalThis.fetch, timeoutMs = 15000 } = {}) {
   const run = failover(urls, async (url) => {
