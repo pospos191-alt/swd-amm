@@ -25,12 +25,13 @@ const ME = pqAddress(publicKey);
 const OTHER = '0x' + '11'.repeat(20);
 const sha256 = (b) => createHash('sha256').update(b).digest();
 
-test('address of a known key is sha256(pk)[:20] in both forms', () => {
+test('address of a known key is sha256("zetaphy/mldsa44\\0" || pk)[:20] in both forms', () => {
   assert.equal(publicKey.length, 1312);
-  assert.deepEqual([...ME.bytes], [...sha256(publicKey).subarray(0, 20)]);
-  // Fixed vector: seed 0x00..1f. The chain side must derive the same.
-  assert.equal(ME.hex, '0x9f107644c1084526af3bc8098680b05499a2325A');
-  assert.equal(ME.bech32, 'zetaphy1nug8v3xpppzjdtemeqycdq9s2jv6yvj6negqn2');
+  assert.deepEqual([...ME.bytes], [...sha256(Buffer.concat([Buffer.from('zetaphy/mldsa44\0'), publicKey])).subarray(0, 20)]);
+  // Fixed vector: seed 0x00..1f. The chain checks the same one
+  // (zetaphy-chain/fork-tests/crypto/mldsa44: TestAddressMatchesJavaScript).
+  assert.equal(ME.hex, '0x6DA134EbFcb035273E87954f0641bD920ED073Ba');
+  assert.equal(ME.bech32, 'zetaphy1dksnf6lukq6jw058j48svsdajg8dqua6n67l9r');
   assert.throws(() => pqAddress(publicKey.subarray(1)), /1312 bytes/);
 });
 

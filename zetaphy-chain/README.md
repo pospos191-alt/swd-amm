@@ -182,7 +182,7 @@ gov.sh ratelimits
 1. precompile ตรวจลายเซ็น ML-DSA (FIPS 204) ที่ `0x0000000000000000000000000000000000000900` (Cloudflare CIRCL v1.6.3) เปิดใช้ใน genesis
    - กระเป๋าที่ใช้คือ `QuantumWallet` ใน `zetaphy-network` (คำสั่ง `zetaphy pq`) ซึ่งยังต้องมีบัญชี ECDSA จ่ายค่าแก๊ส
 2. **บัญชี PQ แท้:** บัญชีที่มีแค่กุญแจ ML-DSA-44 (`crypto/mldsa44`) ใช้ส่งธุรกรรม Cosmos ธรรมดาได้เลย ไม่มีกุญแจ ECDSA และไม่ต้องมีคนจ่ายค่าแก๊สแทน
-   - ที่อยู่ = `sha256(public key)[0:20]` เห็นได้ทั้งแบบ `zetaphy1…` และ `0x…`
+   - ที่อยู่ = `sha256("zetaphy/mldsa44\0" + public key)[0:20]` เห็นได้ทั้งแบบ `zetaphy1…` และ `0x…`
    - ส่งผ่านพอร์ต 8545 เดิมด้วย JSON-RPC `zetaphy_pqAccount` และ `zetaphy_sendCosmosTx` (ไม่ต้องเปิดพอร์ตใหม่)
    - ใช้ได้จาก `zetaphy pq native` และกระเป๋าบนเว็บ `zetaphy-wallet/`
    - ทดสอบบนเชนจริงแล้ว: ส่งได้ และเชนปฏิเสธธุรกรรมที่ใช้กุญแจอื่นสวมบัญชี ลายเซ็นที่ถูกแก้ และธุรกรรมเก่าที่ส่งซ้ำ

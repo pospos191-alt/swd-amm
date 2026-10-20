@@ -745,15 +745,15 @@ index 0000000..e86a927
 +}
 diff --git a/crypto/mldsa44/mldsa44.go b/crypto/mldsa44/mldsa44.go
 new file mode 100644
-index 0000000..15ee4a6
+index 0000000..62d63ad
 --- /dev/null
 +++ b/crypto/mldsa44/mldsa44.go
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,72 @@
 +// Package mldsa44 lets an account on the chain be controlled by an
 +// ML-DSA-44 (FIPS 204) key alone: a post-quantum signature on ordinary
 +// Cosmos transactions, with no ECDSA key anywhere.
 +//
-+// The address is the first 20 bytes of sha256(public key). Signatures are
++// The address is the first 20 bytes of sha256("zetaphy/mldsa44\x00" || public key). Signatures are
 +// pure ML-DSA with an empty context over the SIGN_MODE_DIRECT sign bytes.
 +package mldsa44
 +
@@ -780,9 +780,13 @@ index 0000000..15ee4a6
 +
 +var _ cryptotypes.PubKey = &PubKey{}
 +
-+// Address is sha256(key)[:20].
++// AddressPrefix separates ML-DSA-44 addresses from every other
++// sha256(...)[:20] address in the SDK (module accounts, ed25519, multisig).
++const AddressPrefix = "zetaphy/mldsa44\x00"
++
++// Address is sha256(AddressPrefix || key)[:20].
 +func (m *PubKey) Address() cryptotypes.Address {
-+	h := sha256.Sum256(m.Key)
++	h := sha256.Sum256(append([]byte(AddressPrefix), m.Key...))
 +	return cryptotypes.Address(h[:20])
 +}
 +
@@ -818,7 +822,7 @@ index 0000000..15ee4a6
 +	return pk.UnmarshalBinary(bytes.Clone(m.Key)) == nil
 +}
 diff --git a/evmd/app.go b/evmd/app.go
-index 204345c..bda8b86 100644
+index 204345c..ad85ff6 100644
 --- a/evmd/app.go
 +++ b/evmd/app.go
 @@ -36,6 +36,10 @@ import (
@@ -915,14 +919,24 @@ index 204345c..bda8b86 100644
  		genutiltypes.ModuleName, evidencetypes.ModuleName, authz.ModuleName,
  		feegrant.ModuleName, upgradetypes.ModuleName, vestingtypes.ModuleName,
  	}
-@@ -842,6 +869,7 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
+@@ -842,7 +869,16 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
  
  // BeginBlocker application updates every begin block
  func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
-+	app.burnFees(ctx) // ZETAPHY: before distribution pays validators
- 	return app.ModuleManager.BeginBlock(ctx)
+-	return app.ModuleManager.BeginBlock(ctx)
++	// ZETAPHY: burn before distribution pays validators. The module manager
++	// replaces the event manager, so keep the burn's events and add them.
++	em := sdk.NewEventManager()
++	app.burnFees(ctx.WithEventManager(em))
++	bb, err := app.ModuleManager.BeginBlock(ctx)
++	if err != nil {
++		return bb, err
++	}
++	bb.Events = append(em.ABCIEvents(), bb.Events...)
++	return bb, nil
  }
  
+ // EndBlocker application updates every end block
 diff --git a/evmd/go.mod b/evmd/go.mod
 index e503386..dc04366 100644
 --- a/evmd/go.mod
@@ -999,10 +1013,10 @@ index 0000000..96d0ea8
 +}
 diff --git a/evmd/zetaphy_rpc.go b/evmd/zetaphy_rpc.go
 new file mode 100644
-index 0000000..4b65eca
+index 0000000..96ac8d0
 --- /dev/null
 +++ b/evmd/zetaphy_rpc.go
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,256 @@
 +package evmd
 +
 +// ZETAPHY JSON-RPC namespace "zetaphy" on the public EVM endpoint (8545),
@@ -1043,6 +1057,7 @@ index 0000000..4b65eca
 +	evmtypes "github.com/cosmos/evm/x/vm/types"
 +
 +	"github.com/cosmos/cosmos-sdk/client"
++	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 +	"github.com/cosmos/cosmos-sdk/server"
 +	sdk "github.com/cosmos/cosmos-sdk/types"
 +	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -1133,8 +1148,19 @@ index 0000000..4b65eca
 +	if len(txBytes) == 0 || len(txBytes) > maxCosmosTxBytes {
 +		return nil, fmt.Errorf("tx must be 1 to %d bytes", maxCosmosTxBytes)
 +	}
-+	if _, err := a.clientCtx.TxConfig.TxDecoder()(txBytes); err != nil {
++	tx, err := a.clientCtx.TxConfig.TxDecoder()(txBytes)
++	if err != nil {
 +		return nil, fmt.Errorf("not a Cosmos transaction: %w", err)
++	}
++	// EVM txs go through eth_sendRawTransaction, which enforces EIP-155
++	// replay protection; they must not get around it here.
++	if ext, ok := tx.(interface{ GetExtensionOptions() []*codectypes.Any }); ok && len(ext.GetExtensionOptions()) > 0 {
++		return nil, fmt.Errorf("EVM transactions must use eth_sendRawTransaction")
++	}
++	for _, m := range tx.GetMsgs() {
++		if _, ok := m.(*evmtypes.MsgEthereumTx); ok {
++			return nil, fmt.Errorf("EVM transactions must use eth_sendRawTransaction")
++		}
 +	}
 +	res, err := a.clientCtx.BroadcastTxSync(txBytes)
 +	if err != nil {
@@ -1414,7 +1440,7 @@ index 7f19b35..ec74b76 100644
  	bech32Precompile, err := bech32.NewPrecompile(bech32PrecompileBaseGas)
  	if err != nil {
 diff --git a/x/vm/types/precompiles.go b/x/vm/types/precompiles.go
-index a7e058a..d3819ff 100644
+index a7e058a..e64b909 100644
 --- a/x/vm/types/precompiles.go
 +++ b/x/vm/types/precompiles.go
 @@ -3,6 +3,8 @@ package types
@@ -1426,12 +1452,10 @@ index a7e058a..d3819ff 100644
  )
  
  const (
-@@ -23,6 +25,7 @@ const (
- var AvailableStaticPrecompiles = []string{
- 	P256PrecompileAddress,
- 	Bech32PrecompileAddress,
-+	MLDSAPrecompileAddress,
- 	StakingPrecompileAddress,
- 	DistributionPrecompileAddress,
- 	ICS20PrecompileAddress,
+@@ -31,4 +33,5 @@ var AvailableStaticPrecompiles = []string{
+ 	GovPrecompileAddress,
+ 	SlashingPrecompileAddress,
+ 	ICS02PrecompileAddress,
++	MLDSAPrecompileAddress, // 0x…0900, last: the list must stay sorted
+ }
 ZETAPHY_PQ_PATCH

@@ -201,7 +201,8 @@ zetaphy bridge watch --source-rpc https://<เชนต้นทาง> --lockbo
 
 เชน ZETAPHY มี precompile ตรวจลายเซ็น **ML-DSA** (FIPS 204 มาตรฐาน NIST ที่ต้านคอมพิวเตอร์ควอนตัม) อยู่ที่ `0x…0900`
 - ใช้ Cloudflare CIRCL v1.6.3 และติดตั้งผ่าน patch ใน `zetaphy-chain/setup-node.sh`
-- ระหว่างติดตั้ง ชุดทดสอบของ precompile รันก่อน build เสมอ
+- ชุดทดสอบของ precompile รันใน CI ทุกครั้งที่แก้ส่วนเชน
+- **สำหรับผู้เขียนสัญญา:** ถ้าลายเซ็นไม่ถูกต้อง precompile คืนค่าว่าง (ไม่ revert) เหมือน P256 (RIP-7212) ต้องตรวจว่าค่าที่คืนเป็น 1 ไม่ใช่ดูแค่ว่าเรียกสำเร็จ (`QuantumWallet` ตรวจแบบนี้อยู่แล้ว)
 
 ```
 zetaphy deploy-pq                 # ผู้ดูแล: ติดตั้ง QuantumWalletFactory
@@ -228,7 +229,7 @@ zetaphy pq native send 0x... 1.5 --gas 500000  # ค่าเริ่มต้�
 ```
 
 - ใช้ seed เดียวกับ `zetaphy pq` (`~/.zetaphy/pq.seed` หรือ `pq.seed.json`)
-- ที่อยู่ = `sha256(public key)[0:20]`
+- ที่อยู่ = `sha256("zetaphy/mldsa44\0" + public key)[0:20]` (มีคำนำหน้าเพื่อไม่ให้ซ้ำกับที่อยู่แบบอื่นของ Cosmos SDK)
   - เขียนได้ทั้ง `zetaphy1…` และ `0x…` เพราะเป็น 20 ไบต์เดียวกัน
 - บัญชีจะมีบนเชนหลังได้รับเงินครั้งแรกเท่านั้น
   - ถ้ายังไม่มี คำสั่งจะบอกให้โอน ZETAPHY เข้าที่อยู่นี้ก่อน

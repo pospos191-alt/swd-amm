@@ -17,8 +17,8 @@ const ORIGIN = `http://localhost:${PORT}`;
 const RPC = 'https://rpc.zetaphy.test:8545/';
 const SEED_HEX = '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
 // Same vector as zetaphy-network/test/pqtx.test.js.
-const SEED_BECH32 = 'zetaphy1nug8v3xpppzjdtemeqycdq9s2jv6yvj6negqn2';
-const SEED_HEX_ADDR = '0x9f107644c1084526af3bc8098680b05499a2325A';
+const SEED_BECH32 = 'zetaphy1dksnf6lukq6jw058j48svsdajg8dqua6n67l9r';
+const SEED_HEX_ADDR = '0x6DA134EbFcb035273E87954f0641bD920ED073Ba';
 const TO = 'zetaphy1zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3huramw'; // 0x1111…11
 const PASS = 'correct horse 1';
 let server; let browser;
@@ -106,7 +106,7 @@ test('create a key, back it up, then lock and unlock (wrong passphrase refused)'
   const seedHex = readFileSync(await dl.path(), 'utf8').trim();
   assert.match(seedHex, /^0x[0-9a-f]{64}$/);
   const pk = ml_dsa44.keygen(Buffer.from(seedHex.slice(2), 'hex')).publicKey;
-  assert.equal(createHash('sha256').update(pk).digest('hex').slice(0, 40), hex.slice(2).toLowerCase());
+  assert.equal(createHash('sha256').update(Buffer.concat([Buffer.from('zetaphy/mldsa44\0'), Buffer.from(pk)])).digest('hex').slice(0, 40), hex.slice(2).toLowerCase());
 
   // Only the encrypted form is stored.
   const stored = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage)));

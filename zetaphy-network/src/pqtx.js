@@ -4,7 +4,7 @@
 //
 // Chain side (zetaphy-chain):
 //   pubkey Any  /zetaphy.crypto.mldsa44.PubKey { bytes key = 1 }  (1312 bytes)
-//   address     sha256(publicKey)[0:20]  (same 20 bytes as the 0x address)
+//   address     sha256("zetaphy/mldsa44\0" || publicKey)[0:20]  (same 20 bytes as the 0x address)
 //   signature   ml_dsa44.sign(SignDoc bytes, secretKey), SIGN_MODE_DIRECT
 //   JSON-RPC    zetaphy_pqAccount(address), zetaphy_sendCosmosTx(0x + TxRaw hex)
 
@@ -185,11 +185,16 @@ export const normalizeAddress = (addr, prefix = PREFIX) => {
   return { bytes, hex: toChecksumHex(bytes), bech32: toBech32(bytes, prefix) };
 };
 
-/** The account of an ML-DSA-44 public key: sha256(pk)[0:20]. */
+// Kept apart from every other sha256(...)[:20] address in the Cosmos SDK.
+export const ADDRESS_PREFIX = new TextEncoder().encode('zetaphy/mldsa44\0');
+
+/** The account of an ML-DSA-44 public key: sha256(ADDRESS_PREFIX || pk)[0:20]. */
 export function pqAddress(publicKey, prefix = PREFIX) {
   const pk = asBytes(publicKey, 'publicKey');
   if (pk.length !== PUBLIC_KEY_BYTES) throw new Error(`ML-DSA-44 public key must be ${PUBLIC_KEY_BYTES} bytes`);
-  const bytes = sha256(pk).slice(0, 20);
+  const pre = new Uint8Array(ADDRESS_PREFIX.length + pk.length);
+  pre.set(ADDRESS_PREFIX); pre.set(pk, ADDRESS_PREFIX.length);
+  const bytes = sha256(pre).slice(0, 20);
   return { bytes, hex: toChecksumHex(bytes), bech32: toBech32(bytes, prefix) };
 }
 

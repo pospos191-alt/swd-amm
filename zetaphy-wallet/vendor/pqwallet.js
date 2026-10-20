@@ -742,10 +742,14 @@ var normalizeAddress = (addr, prefix = PREFIX) => {
   const bytes = addressBytes(addr, prefix);
   return { bytes, hex: toChecksumHex(bytes), bech32: toBech32(bytes, prefix) };
 };
+var ADDRESS_PREFIX = new TextEncoder().encode("zetaphy/mldsa44\0");
 function pqAddress(publicKey, prefix = PREFIX) {
   const pk = asBytes(publicKey, "publicKey");
   if (pk.length !== PUBLIC_KEY_BYTES) throw new Error(`ML-DSA-44 public key must be ${PUBLIC_KEY_BYTES} bytes`);
-  const bytes = sha256(pk).slice(0, 20);
+  const pre = new Uint8Array(ADDRESS_PREFIX.length + pk.length);
+  pre.set(ADDRESS_PREFIX);
+  pre.set(pk, ADDRESS_PREFIX.length);
+  const bytes = sha256(pre).slice(0, 20);
   return { bytes, hex: toChecksumHex(bytes), bech32: toBech32(bytes, prefix) };
 }
 function parseZeta(text) {
@@ -1718,6 +1722,7 @@ var ml_dsa44 = /* @__PURE__ */ (() => getDilithium({
   securityLevel: 128
 }))();
 export {
+  ADDRESS_PREFIX,
   CHAIN_ID,
   DEFAULT_GAS_LIMIT,
   DENOM,

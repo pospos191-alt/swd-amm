@@ -2,6 +2,7 @@ package mldsa44
 
 import (
 	"crypto/rand"
+	"fmt"
 	"crypto/sha256"
 	"testing"
 
@@ -38,9 +39,9 @@ func TestSignVerifyAndAddress(t *testing.T) {
 	if pub.VerifySignature(msg, sig[:100]) || (&PubKey{Key: pub.Key[:10]}).VerifySignature(msg, sig) {
 		t.Fatal("wrong sizes accepted")
 	}
-	h := sha256.Sum256(pub.Key)
+	h := sha256.Sum256(append([]byte("zetaphy/mldsa44\x00"), pub.Key...))
 	if string(pub.Address()) != string(h[:20]) {
-		t.Fatal("address is not sha256(key)[:20]")
+		t.Fatal("address is not sha256(prefix || key)[:20]")
 	}
 	other, _ := newKey(t)
 	if pub.Equals(other) || !pub.Equals(&PubKey{Key: append([]byte{}, pub.Key...)}) {
@@ -113,4 +114,18 @@ func FuzzUnmarshalVerify(f *testing.F) {
 			t.Fatal("round trip")
 		}
 	})
+}
+
+// The same seed gives the same key and address in Go (CIRCL) and in the
+// JavaScript wallet (@noble/post-quantum, zetaphy-network/src/pqtx.js).
+func TestAddressMatchesJavaScript(t *testing.T) {
+	var seed [32]byte
+	for i := range seed {
+		seed[i] = byte(i)
+	}
+	pk, _ := mldsa44.NewKeyFromSeed(&seed)
+	b, _ := pk.MarshalBinary()
+	if got := fmt.Sprintf("%x", []byte((&PubKey{Key: b}).Address())); got != "6da134ebfcb035273e87954f0641bd920ed073ba" {
+		t.Fatalf("address %s", got)
+	}
 }
