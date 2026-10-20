@@ -1,6 +1,6 @@
 #!/bin/bash
-# Builds cloud-init.sh: setup-node.sh without its comment-only lines (the
-# patches at the end are kept byte for byte), compressed (xz) and
+# Builds cloud-init.sh: setup-node.sh without its comment-only lines (in the
+# patches, only new Go files lose theirs), compressed (xz) and
 # text-encoded (base85) so it fits Oracle Cloud's limit. Oracle base64-encodes what is
 # pasted and allows 32,000 bytes of instance metadata in all (SSH key
 # included), so the pasted file must stay under ~23,000 bytes.
@@ -10,12 +10,24 @@ set -euo pipefail
 cd "$(dirname "$0")"
 LIMIT=23000
 out=$(python3 - <<'PY'
-import base64, hashlib, lzma, textwrap
+import base64, hashlib, lzma, re, textwrap
 full = open('setup-node.sh').read()
 cut = full.index('# ---- ZETAPHY patches')
 lines = full[:cut].split('\n')
 code = [lines[0]] + [l for l in lines[1:] if not l.lstrip().startswith('#')]
-src = ('\n'.join(code) + full[cut:]).encode()
+# New Go files in the patches also lose their comment-only and blank lines (each is
+# one hunk, so only its line count changes); changes to upstream files stay exact.
+def slim(patch):
+    out = []
+    for d in re.split(r'(?=^diff --git )', patch, flags=re.M):
+        m = re.search(r'^new file mode .*\n(?:.*\n){3}@@ -0,0 \+1,(\d+) @@\n', d, re.M)
+        if m and d.split('\n', 1)[0].endswith('.go'):
+            body = [l for l in d[m.end():].split('\n') if not re.match(r'\+\s*(//(?!go:)|$)', l)]
+            n = sum(1 for l in body if l.startswith('+'))
+            d = d[:m.start(1)] + str(n) + ' @@\n' + '\n'.join(body)
+        out.append(d)
+    return ''.join(out)
+src = ('\n'.join(code) + slim(full[cut:])).encode()
 packed = lzma.compress(src, format=lzma.FORMAT_XZ, check=lzma.CHECK_CRC64,
                        filters=[{'id': lzma.FILTER_LZMA2, 'preset': 9 | lzma.PRESET_EXTREME}])
 body = '\n'.join(textwrap.wrap(base64.b85encode(packed).decode(), 500))

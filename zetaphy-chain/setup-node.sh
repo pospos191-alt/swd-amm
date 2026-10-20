@@ -822,7 +822,7 @@ index 0000000..62d63ad
 +	return pk.UnmarshalBinary(bytes.Clone(m.Key)) == nil
 +}
 diff --git a/evmd/app.go b/evmd/app.go
-index 204345c..ad85ff6 100644
+index 204345c..6b56ad4 100644
 --- a/evmd/app.go
 +++ b/evmd/app.go
 @@ -36,6 +36,10 @@ import (
@@ -919,7 +919,15 @@ index 204345c..ad85ff6 100644
  		genutiltypes.ModuleName, evidencetypes.ModuleName, authz.ModuleName,
  		feegrant.ModuleName, upgradetypes.ModuleName, vestingtypes.ModuleName,
  	}
-@@ -842,7 +869,16 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
+@@ -684,6 +711,7 @@ func NewExampleApp(
+ 	if err = app.ModuleManager.RegisterServices(app.configurator); err != nil {
+ 		panic(fmt.Sprintf("failed to register services in module manager: %s", err.Error()))
+ 	}
++	app.registerEVMCall() // ZETAPHY: MsgEVMCall (zetaphy_pqcall.go)
+ 
+ 	// RegisterUpgradeHandlers is used for registering any on-chain upgrades.
+ 	// Make sure it's called after `app.ModuleManager` and `app.configurator` are set.
+@@ -842,7 +870,16 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
  
  // BeginBlocker application updates every begin block
  func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
@@ -1010,6 +1018,276 @@ index 0000000..96d0ea8
 +	}
 +	write()
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_fee_burn", sdk.NewAttribute("amount", coins.String())))
++}
+diff --git a/evmd/zetaphy_pqcall.go b/evmd/zetaphy_pqcall.go
+new file mode 100644
+index 0000000..e7f00ed
+--- /dev/null
++++ b/evmd/zetaphy_pqcall.go
+@@ -0,0 +1,264 @@
++package evmd
++
++// ZETAPHY MsgEVMCall: any Cosmos account, including a post-quantum ML-DSA-44
++// one, calls an EVM contract as itself (msg.sender = the account's 0x form),
++// paying gas through the Cosmos fee. With it a PQ account uses tokens and
++// contracts without ever holding an ECDSA key. Contract creation is not
++// offered (the account sequence would move twice).
++//
++//	syntax = "proto3"; package zetaphy.pq.v1;
++//	message MsgEVMCall { option (cosmos.msg.v1.signer) = "sender";
++//	  string sender = 1; string to = 2; string value = 3; bytes data = 4; uint64 gas_limit = 5; }
++//	message MsgEVMCallResponse { bytes ret = 1; uint64 gas_used = 2; }
++//	service Msg { option (cosmos.msg.v1.service) = true; rpc EVMCall(MsgEVMCall) returns (MsgEVMCallResponse); }
++
++import (
++	"bytes"
++	"compress/gzip"
++	"context"
++	"fmt"
++	"math/big"
++
++	gogoproto "github.com/cosmos/gogoproto/proto"
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/core"
++	ethtypes "github.com/ethereum/go-ethereum/core/types"
++	"google.golang.org/grpc"
++	protov2 "google.golang.org/protobuf/proto"
++	"google.golang.org/protobuf/reflect/protodesc"
++	"google.golang.org/protobuf/reflect/protoreflect"
++	"google.golang.org/protobuf/reflect/protoregistry"
++	"google.golang.org/protobuf/types/descriptorpb"
++	"google.golang.org/protobuf/types/dynamicpb"
++
++	msgv1 "cosmossdk.io/api/cosmos/msg/v1"
++	errorsmod "cosmossdk.io/errors"
++
++	sdk "github.com/cosmos/cosmos-sdk/types"
++	errortypes "github.com/cosmos/cosmos-sdk/types/errors"
++	"github.com/cosmos/cosmos-sdk/types/msgservice"
++
++	"github.com/cosmos/evm/x/vm/statedb"
++)
++
++const (
++	pqCallFile    = "zetaphy/pq/v1/tx.proto"
++	pqCallService = "zetaphy.pq.v1.Msg"
++	// MaxEVMCallGas caps one call, like eth_call's gas cap on this chain.
++	MaxEVMCallGas = 10_000_000
++)
++
++type MsgEVMCall struct {
++	Sender   string
++	To       string
++	Value    string
++	Data     []byte
++	GasLimit uint64
++}
++
++type MsgEVMCallResponse struct {
++	Ret     []byte
++	GasUsed uint64
++}
++
++func (m *MsgEVMCall) Reset()                            { *m = MsgEVMCall{} }
++func (m *MsgEVMCall) String() string                    { return fmt.Sprintf("MsgEVMCall{%s->%s}", m.Sender, m.To) }
++func (*MsgEVMCall) ProtoMessage()                       {}
++func (m *MsgEVMCallResponse) Reset()                    { *m = MsgEVMCallResponse{} }
++func (m *MsgEVMCallResponse) String() string            { return "MsgEVMCallResponse" }
++func (*MsgEVMCallResponse) ProtoMessage()               {}
++func (*MsgEVMCall) Descriptor() ([]byte, []int)         { return pqCallDescriptor, []int{0} }
++func (*MsgEVMCallResponse) Descriptor() ([]byte, []int) { return pqCallDescriptor, []int{1} }
++
++// The wire format is done by Google's protobuf runtime on a dynamic message
++// built from the descriptor below, so no hand-written parser is involved.
++func pqEncode(i int, vals ...protoreflect.Value) ([]byte, error) {
++	d := dynamicpb.NewMessage(pqCallFD.Messages().Get(i))
++	for n, v := range vals {
++		d.Set(d.Descriptor().Fields().ByNumber(protoreflect.FieldNumber(n+1)), v)
++	}
++	return protov2.MarshalOptions{Deterministic: true}.Marshal(d)
++}
++
++func pqDecode(i int, b []byte) (func(n int) protoreflect.Value, error) {
++	d := dynamicpb.NewMessage(pqCallFD.Messages().Get(i))
++	err := protov2.Unmarshal(b, d)
++	return func(n int) protoreflect.Value {
++		return d.Get(d.Descriptor().Fields().ByNumber(protoreflect.FieldNumber(n)))
++	}, err
++}
++
++func (m *MsgEVMCall) Marshal() ([]byte, error) {
++	return pqEncode(0, protoreflect.ValueOfString(m.Sender), protoreflect.ValueOfString(m.To),
++		protoreflect.ValueOfString(m.Value), protoreflect.ValueOfBytes(m.Data), protoreflect.ValueOfUint64(m.GasLimit))
++}
++
++func (m *MsgEVMCallResponse) Marshal() ([]byte, error) {
++	return pqEncode(1, protoreflect.ValueOfBytes(m.Ret), protoreflect.ValueOfUint64(m.GasUsed))
++}
++
++func (m *MsgEVMCall) Unmarshal(b []byte) error {
++	f, err := pqDecode(0, b)
++	if err != nil {
++		return err
++	}
++	*m = MsgEVMCall{f(1).String(), f(2).String(), f(3).String(), f(4).Bytes(), f(5).Uint()}
++	return nil
++}
++
++func (m *MsgEVMCallResponse) Unmarshal(b []byte) error {
++	f, err := pqDecode(1, b)
++	if err != nil {
++		return err
++	}
++	*m = MsgEVMCallResponse{f(1).Bytes(), f(2).Uint()}
++	return nil
++}
++
++func (m *MsgEVMCall) Size() int                       { b, _ := m.Marshal(); return len(b) }
++func (m *MsgEVMCallResponse) Size() int               { b, _ := m.Marshal(); return len(b) }
++func (m *MsgEVMCall) MarshalTo(d []byte) (int, error) { return m.MarshalToSizedBuffer(d[:m.Size()]) }
++func (m *MsgEVMCallResponse) MarshalTo(d []byte) (int, error) {
++	return m.MarshalToSizedBuffer(d[:m.Size()])
++}
++
++func (m *MsgEVMCall) MarshalToSizedBuffer(d []byte) (int, error) {
++	b, err := m.Marshal()
++	return copy(d[len(d)-len(b):], b), err
++}
++
++func (m *MsgEVMCallResponse) MarshalToSizedBuffer(d []byte) (int, error) {
++	b, err := m.Marshal()
++	return copy(d[len(d)-len(b):], b), err
++}
++
++// tx.proto, built in code; it carries the signer and service options the SDK reads.
++var pqCallProto = func() *descriptorpb.FileDescriptorProto {
++	str := descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
++	field := func(name string, num int32, t *descriptorpb.FieldDescriptorProto_Type) *descriptorpb.FieldDescriptorProto {
++		return &descriptorpb.FieldDescriptorProto{Name: &name, JsonName: &name, Number: &num, Type: t,
++			Label: descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum()}
++	}
++	byt, u64 := descriptorpb.FieldDescriptorProto_TYPE_BYTES.Enum(), descriptorpb.FieldDescriptorProto_TYPE_UINT64.Enum()
++	msgOpts := &descriptorpb.MessageOptions{}
++	protov2.SetExtension(msgOpts, msgv1.E_Signer, []string{"sender"})
++	svcOpts := &descriptorpb.ServiceOptions{}
++	protov2.SetExtension(svcOpts, msgv1.E_Service, true)
++	return &descriptorpb.FileDescriptorProto{
++		Name: protov2.String(pqCallFile), Package: protov2.String("zetaphy.pq.v1"), Syntax: protov2.String("proto3"),
++		Dependency: []string{"cosmos/msg/v1/msg.proto"},
++		MessageType: []*descriptorpb.DescriptorProto{
++			{Name: protov2.String("MsgEVMCall"), Options: msgOpts, Field: []*descriptorpb.FieldDescriptorProto{
++				field("sender", 1, str), field("to", 2, str), field("value", 3, str), field("data", 4, byt), field("gas_limit", 5, u64)}},
++			{Name: protov2.String("MsgEVMCallResponse"), Field: []*descriptorpb.FieldDescriptorProto{
++				field("ret", 1, byt), field("gas_used", 2, u64)}},
++		},
++		Service: []*descriptorpb.ServiceDescriptorProto{{Name: protov2.String("Msg"), Options: svcOpts,
++			Method: []*descriptorpb.MethodDescriptorProto{{Name: protov2.String("EVMCall"),
++				InputType: protov2.String(".zetaphy.pq.v1.MsgEVMCall"), OutputType: protov2.String(".zetaphy.pq.v1.MsgEVMCallResponse")}}}},
++	}
++}()
++
++var pqCallFD = func() protoreflect.FileDescriptor {
++	fd, err := protodesc.NewFile(pqCallProto, protoregistry.GlobalFiles)
++	if err != nil {
++		panic(err)
++	}
++	return fd
++}()
++
++// pqCallDescriptor is the gzipped form gogoproto expects.
++var pqCallDescriptor = func() []byte {
++	raw, err := protov2.MarshalOptions{Deterministic: true}.Marshal(pqCallProto)
++	if err != nil {
++		panic(err)
++	}
++	var buf bytes.Buffer
++	w := gzip.NewWriter(&buf)
++	_, _ = w.Write(raw)
++	_ = w.Close()
++	return buf.Bytes()
++}()
++
++func init() {
++	gogoproto.RegisterType((*MsgEVMCall)(nil), "zetaphy.pq.v1.MsgEVMCall")
++	gogoproto.RegisterType((*MsgEVMCallResponse)(nil), "zetaphy.pq.v1.MsgEVMCallResponse")
++	gogoproto.RegisterFile(pqCallFile, pqCallDescriptor)
++}
++
++type pqCallServer interface {
++	EVMCall(context.Context, *MsgEVMCall) (*MsgEVMCallResponse, error)
++}
++
++var pqCallServiceDesc = grpc.ServiceDesc{
++	ServiceName: pqCallService,
++	HandlerType: (*pqCallServer)(nil),
++	Methods: []grpc.MethodDesc{{MethodName: "EVMCall", Handler: func(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
++		in := new(MsgEVMCall)
++		if err := dec(in); err != nil {
++			return nil, err
++		}
++		if interceptor == nil {
++			return srv.(pqCallServer).EVMCall(ctx, in)
++		}
++		info := &grpc.UnaryServerInfo{Server: srv, FullMethod: "/" + pqCallService + "/EVMCall"}
++		return interceptor(ctx, in, info, func(ctx context.Context, req interface{}) (interface{}, error) {
++			return srv.(pqCallServer).EVMCall(ctx, req.(*MsgEVMCall))
++		})
++	}}},
++	Metadata: pqCallFile,
++}
++
++type evmCallServer struct{ app *EVMD }
++
++// EVMCall runs the call with the sender as msg.sender and charges the gas it
++// used to the Cosmos gas meter (so the tx fee pays for it). A revert fails
++// the whole tx, so value and state changes are undone.
++func (s evmCallServer) EVMCall(goCtx context.Context, m *MsgEVMCall) (*MsgEVMCallResponse, error) {
++	ctx := sdk.UnwrapSDKContext(goCtx)
++	sender, err := sdk.AccAddressFromBech32(m.Sender)
++	if err != nil {
++		return nil, errorsmod.Wrap(errortypes.ErrInvalidAddress, "sender")
++	}
++	if !common.IsHexAddress(m.To) {
++		return nil, errorsmod.Wrap(errortypes.ErrInvalidAddress, "to must be a 0x address (contract creation is not offered)")
++	}
++	to := common.HexToAddress(m.To)
++	value := new(big.Int)
++	if m.Value != "" {
++		if _, ok := value.SetString(m.Value, 10); !ok || value.Sign() < 0 || value.BitLen() > 255 {
++			return nil, errorsmod.Wrap(errortypes.ErrInvalidRequest, "value must be a whole number of azetaphy")
++		}
++	}
++	gas := min(m.GasLimit, MaxEVMCallGas, ctx.GasMeter().GasRemaining())
++	if gas < 21000 {
++		return nil, errorsmod.Wrap(errortypes.ErrOutOfGas, "gas_limit below 21000 or tx gas too low")
++	}
++	from := common.BytesToAddress(sender)
++	nonce, err := s.app.AccountKeeper.GetSequence(ctx, sender)
++	if err != nil {
++		return nil, err
++	}
++	stateDB := statedb.New(ctx, s.app.EVMKeeper, statedb.NewEmptyTxConfig())
++	res, err := s.app.EVMKeeper.ApplyMessage(ctx, stateDB, core.Message{
++		From: from, To: &to, Nonce: nonce, Value: value, GasLimit: gas, Data: m.Data,
++		GasPrice: new(big.Int), GasFeeCap: new(big.Int), GasTipCap: new(big.Int), AccessList: ethtypes.AccessList{},
++	}, nil, true, false, false) // not internal: normal refund cap and minimum gas, like an EVM tx
++	if err != nil {
++		return nil, err
++	}
++	ctx.GasMeter().ConsumeGas(res.GasUsed, "zetaphy evm call")
++	if res.Failed() {
++		return nil, errorsmod.Wrapf(errortypes.ErrInvalidRequest, "evm call reverted: %s", res.VmError)
++	}
++	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_evm_call",
++		sdk.NewAttribute("from", from.Hex()), sdk.NewAttribute("to", to.Hex()), sdk.NewAttribute("value", value.String())))
++	return &MsgEVMCallResponse{Ret: res.Ret, GasUsed: res.GasUsed}, nil
++}
++
++// registerEVMCall wires MsgEVMCall into the app (codec and message router).
++func (app *EVMD) registerEVMCall() {
++	app.interfaceRegistry.RegisterImplementations((*sdk.Msg)(nil), &MsgEVMCall{})
++	msgservice.RegisterMsgServiceDesc(app.interfaceRegistry, &pqCallServiceDesc)
++	app.MsgServiceRouter().RegisterService(&pqCallServiceDesc, evmCallServer{app})
 +}
 diff --git a/evmd/zetaphy_rpc.go b/evmd/zetaphy_rpc.go
 new file mode 100644

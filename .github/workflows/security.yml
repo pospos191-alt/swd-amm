@@ -313,11 +313,14 @@ jobs:
           bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
           cp -r zetaphy-chain/fork-tests/. "$SRC/"
 
-      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys) + 30 s fuzzing
+      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys, MsgEVMCall) + fuzzing
         working-directory: ${{ env.SRC }}
         run: |
           go test ./precompiles/mldsa/ ./crypto/mldsa44/
           go test ./crypto/mldsa44/ -run '^$' -fuzz FuzzUnmarshalVerify -fuzztime 30s
+          cd evmd
+          go test -run 'EVMCall' .
+          go test -run '^$' -fuzz FuzzEVMCallUnmarshal -fuzztime 20s .
 
       # Static security checks on the code ZETAPHY added. G115 (int
       # conversions) is excluded only for the upstream rate-limit module,

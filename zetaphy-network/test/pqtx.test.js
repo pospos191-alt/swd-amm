@@ -12,8 +12,13 @@ import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 import { TxRaw, TxBody, AuthInfo, SignDoc } from 'cosmjs-types/cosmos/tx/v1beta1/tx';
 import { MsgSend } from 'cosmjs-types/cosmos/bank/v1beta1/tx';
 import { PubKey } from 'cosmjs-types/cosmos/crypto/secp256k1/keys';
+import { MsgDelegate, MsgUndelegate } from 'cosmjs-types/cosmos/staking/v1beta1/tx';
+import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1beta1/tx';
+import { Interface } from 'ethers';
 import {
-  buildSendTx, pqAddress, pqClient, toBech32, fromBech32, addressBytes, normalizeAddress, varint, bytesToHex, hexToBytes,
+  buildSendTx, buildTx, msgSend, msgDelegate, msgUndelegate, msgWithdrawRewards, msgEVMCall, encodeMsgEVMCall, validatorAddress,
+  MSG_DELEGATE_TYPE_URL, MSG_UNDELEGATE_TYPE_URL, MSG_WITHDRAW_REWARD_TYPE_URL, MSG_EVM_CALL_TYPE_URL, VALOPER_PREFIX,
+  DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, DEFAULT_STAKING_GAS_LIMIT, pqAddress, pqClient, toBech32, fromBech32, addressBytes, normalizeAddress, varint, bytesToHex, hexToBytes,
   parseZeta, formatZeta, bumpGasPrice, txHashOf, encodeSignDoc,
   PUBKEY_TYPE_URL, MSG_SEND_TYPE_URL, SIGN_MODE_DIRECT, CHAIN_ID, DENOM, DEFAULT_GAS_LIMIT,
 } from '../src/pqtx.js';
@@ -155,12 +160,191 @@ test('buildSendTx refuses bad input', () => {
   assert.equal(TxRaw.decode(sendTx({ from: ME.bech32 }).txBytes).signatures.length, 1);
 });
 
+// ---- staking, rewards and EVM calls ----
+
+const VALOPER = toBech32(ME.bytes, VALOPER_PREFIX); // any 20 bytes make a valid zetaphyvaloper1…
+
+test('validator addresses: zetaphyvaloper1… only, checksum checked, upper case normalized', () => {
+  assert.match(VALOPER, /^zetaphyvaloper1/);
+  assert.equal(validatorAddress(VALOPER), VALOPER);
+  assert.equal(validatorAddress(VALOPER.toUpperCase()), VALOPER);
+  assert.throws(() => validatorAddress(ME.bech32), /expected zetaphyvaloper1/);
+  assert.throws(() => validatorAddress(toBech32(ME.bytes, 'cosmosvaloper')), /expected zetaphyvaloper1/);
+  assert.throws(() => validatorAddress(VALOPER.slice(0, -1) + (VALOPER.at(-1) === 'q' ? 'p' : 'q')), /checksum/);
+  assert.throws(() => validatorAddress(ME.hex), /invalid address/);
+});
+
+test('MsgDelegate, MsgUndelegate, MsgWithdrawDelegatorReward match the official Cosmos SDK types', () => {
+  for (const [build, T, typeUrl, spends] of [[msgDelegate, MsgDelegate, MSG_DELEGATE_TYPE_URL, true], [msgUndelegate, MsgUndelegate, MSG_UNDELEGATE_TYPE_URL, false]]) {
+    const m = build({ delegator: ME.hex, validator: VALOPER, amount: 5n * 10n ** 18n });
+    assert.equal(m.typeUrl, typeUrl);
+    assert.equal(T.typeUrl, typeUrl);
+    const d = T.decode(m.value);
+    assert.deepEqual(T.encode(d).finish(), m.value, `${typeUrl} is canonical`);
+    assert.deepEqual(d, { delegatorAddress: ME.bech32, validatorAddress: VALOPER, amount: { denom: DENOM, amount: '5000000000000000000' } });
+    assert.deepEqual(m.value, T.encode(T.fromPartial({ delegatorAddress: ME.bech32, validatorAddress: VALOPER, amount: { denom: DENOM, amount: '5000000000000000000' } })).finish());
+    assert.equal(m.spend, spends ? 5n * 10n ** 18n : 0n, 'only delegating takes ZETAPHY out of the balance');
+    assert.throws(() => build({ delegator: ME.hex, validator: VALOPER, amount: 0n }), /more than 0/);
+    assert.throws(() => build({ delegator: ME.hex, validator: ME.bech32, amount: 1n }), /zetaphyvaloper1/);
+  }
+  const w = msgWithdrawRewards({ delegator: ME.bech32, validator: VALOPER });
+  assert.equal(w.typeUrl, MSG_WITHDRAW_REWARD_TYPE_URL);
+  assert.equal(MsgWithdrawDelegatorReward.typeUrl, MSG_WITHDRAW_REWARD_TYPE_URL);
+  assert.deepEqual(MsgWithdrawDelegatorReward.decode(w.value), { delegatorAddress: ME.bech32, validatorAddress: VALOPER });
+  assert.deepEqual(MsgWithdrawDelegatorReward.encode(MsgWithdrawDelegatorReward.decode(w.value)).finish(), w.value);
+});
+
+// A hand-written proto3 decoder for MsgEVMCall (there is no cosmjs-types entry):
+// it returns every field with its wire type and fails on anything unexpected.
+function decodeFields(bytes) {
+  const out = [];
+  let i = 0;
+  const readVarint = () => {
+    let v = 0n; let shift = 0n;
+    for (;;) {
+      if (i >= bytes.length) throw new Error('truncated varint');
+      const b = bytes[i++];
+      v |= BigInt(b & 0x7f) << shift; shift += 7n;
+      if (!(b & 0x80)) return v;
+    }
+  };
+  while (i < bytes.length) {
+    const k = readVarint();
+    const field = Number(k >> 3n); const wire = Number(k & 7n);
+    if (wire === 0) out.push({ field, wire, value: readVarint() });
+    else if (wire === 2) {
+      const n = Number(readVarint());
+      if (i + n > bytes.length) throw new Error('truncated field');
+      out.push({ field, wire, value: bytes.slice(i, i + n) }); i += n;
+    } else throw new Error(`unexpected wire type ${wire}`);
+  }
+  return out;
+}
+function decodeMsgEVMCall(bytes) {
+  const m = { sender: '', to: '', value: '', data: new Uint8Array(), gasLimit: 0n };
+  const want = { 1: ['sender', 2], 2: ['to', 2], 3: ['value', 2], 4: ['data', 4], 5: ['gasLimit', 0] };
+  let last = 0;
+  for (const f of decodeFields(bytes)) {
+    assert.ok(want[f.field], `unknown field ${f.field}`);
+    assert.ok(f.field > last, 'fields in order, each once');
+    last = f.field;
+    const [name, kind] = want[f.field];
+    assert.equal(f.wire, kind === 0 ? 0 : 2, `wire type of ${name}`);
+    m[name] = kind === 2 ? new TextDecoder().decode(f.value) : f.value;
+  }
+  return m;
+}
+
+test('MsgEVMCall: golden vector built by hand, and a hand-written decoder round trip', () => {
+  // Fields in number order, each as <tag> <length> <bytes>; tag = field << 3 | wire type:
+  //   0a = field 1 (sender), length-delimited      2e = 46 bytes "zetaphy1dksnf6lukq6jw058j48svsdajg8dqua6n67l9r"
+  //   12 = field 2 (to), length-delimited          2a = 42 bytes "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+  //   1a = field 3 (value), length-delimited       04 = "1000"
+  //   22 = field 4 (data), length-delimited        04 = a9059cbb (the transfer selector)
+  //   28 = field 5 (gas_limit), varint             c0 9a 0c = 200000 (0x30d40 in 7-bit groups, low first: 0x40|0x80, 0x1a|0x80, 0x0c)
+  const golden =
+    '0a2e' + '7a65746170687931646b736e66366c756b71366a773035386a343873767364616a673864717561366e36376c3972'
+    + '122a' + '307835614165623630353346334539344339623941303966333336363934333545374566314265416564'
+    + '1a04' + '31303030'
+    + '2204' + 'a9059cbb'
+    + '28' + 'c09a0c';
+  // The recipient is given in lower case; the message carries it EIP-55 checksummed.
+  const m = msgEVMCall({ sender: ME.hex, to: '0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed', value: 1000n, data: '0xa9059cbb', gasLimit: 200000n });
+  assert.equal(m.typeUrl, MSG_EVM_CALL_TYPE_URL);
+  assert.equal(MSG_EVM_CALL_TYPE_URL, '/zetaphy.pq.v1.MsgEVMCall');
+  assert.equal(bytesToHex(m.value), golden);
+  assert.equal(m.spend, 1000n);
+  assert.deepEqual(decodeMsgEVMCall(m.value), { sender: ME.bech32, to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed', value: '1000', data: hexToBytes('a9059cbb'), gasLimit: 200000n });
+
+  // Cross-check vector shared with the chain (zetaphy-chain/fork-tests checks the same hex in Go).
+  assert.equal(bytesToHex(msgEVMCall({ sender: 'zetaphy1dksnf6lukq6jw058j48svsdajg8dqua6n67l9r', to: '0x0000000000000000000000000000000000000242',
+    value: 5n, data: '0xa9059cbb000000000000', gasLimit: 200000n }).value),
+  '0a2e7a65746170687931646b736e66366c756b71366a773035386a343873767364616a673864717561366e36376c3972'
+    + '122a307830303030303030303030303030303030303030303030303030303030303030303030303030323432'
+    + '1a0135' + '220aa9059cbb000000000000' + '28c09a0c');
+
+  // Value 0 and no calldata: fields 3 and 4 are left out (proto3 defaults), gas_limit defaults to 200000.
+  const plain = msgEVMCall({ sender: ME.bech32, to: OTHER });
+  const fields = decodeFields(plain.value).map((f) => f.field);
+  assert.deepEqual(fields, [1, 2, 5]);
+  assert.equal(decodeMsgEVMCall(plain.value).gasLimit, DEFAULT_EVM_GAS_LIMIT);
+  assert.equal(bytesToHex(encodeMsgEVMCall({ sender: 'a', to: 'b', value: 0n, data: new Uint8Array(), gasLimit: 1n })), '0a0161120162' + '2801');
+
+  // A big value and large calldata still round trip.
+  const data = Uint8Array.from({ length: 300 }, (_, i) => i & 255);
+  const big = decodeMsgEVMCall(msgEVMCall({ sender: ME.bech32, to: OTHER, value: 10n ** 30n, data, gasLimit: 10_000_000n }).value);
+  assert.equal(big.value, '1000000000000000000000000000000');
+  assert.deepEqual(big.data, data);
+  assert.equal(big.gasLimit, 10_000_000n);
+});
+
+test('MsgEVMCall refuses bad input', () => {
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: '' }), /contract creation is not supported/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32 }), /contract creation is not supported/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD' }), /checksum/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: OTHER, value: -1n }), /negative/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: OTHER, data: '0x123' }), /invalid hex/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: OTHER, gasLimit: 20999n }), /between 21000 and 10000000/);
+  assert.throws(() => msgEVMCall({ sender: ME.bech32, to: OTHER, gasLimit: 10_000_001n }), /between/);
+  assert.throws(() => msgEVMCall({ sender: 'zetaphy1bad', to: OTHER }), /invalid address/);
+});
+
+test('buildTx with two messages: both in the body in order, one signature, cosmjs-types agree', () => {
+  const messages = [
+    msgEVMCall({ sender: ME.bech32, to: OTHER, value: 5n, data: '0x01', gasLimit: 50000n }),
+    msgDelegate({ delegator: ME.bech32, validator: VALOPER, amount: 9n }),
+  ];
+  const tx = buildTx({ publicKey, sign, messages, accountNumber: 4n, sequence: 1n, gasLimit: 900000n, gasPrice: 3n, memo: 'two' });
+  const raw = TxRaw.decode(tx.txBytes);
+  assert.deepEqual(TxRaw.encode(raw).finish(), tx.txBytes);
+  const body = TxBody.decode(raw.bodyBytes);
+  assert.deepEqual(TxBody.encode(body).finish(), raw.bodyBytes);
+  assert.deepEqual(body.messages.map((m) => m.typeUrl), [MSG_EVM_CALL_TYPE_URL, MSG_DELEGATE_TYPE_URL]);
+  assert.deepEqual(body.messages[0].value, messages[0].value);
+  assert.equal(MsgDelegate.decode(body.messages[1].value).amount.amount, '9');
+  assert.equal(body.memo, 'two');
+  const auth = AuthInfo.decode(raw.authInfoBytes);
+  assert.equal(auth.fee.gasLimit, 900000n);
+  assert.equal(tx.fee, 2700000n);
+  assert.equal(raw.signatures.length, 1);
+  assert.ok(ml_dsa44.verify(raw.signatures[0], encodeSignDoc({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: CHAIN_ID, accountNumber: 4n }), publicKey));
+  // buildSendTx is buildTx with one MsgSend: same bytes.
+  const viaBuildTx = buildTx({ publicKey, sign, messages: [msgSend({ from: ME.bech32, to: OTHER, amount: 1234567890123456789n })], accountNumber: 7n, sequence: 3n, gasLimit: 400000n, gasPrice: 12n, memo: 'hello' });
+  assert.deepEqual(viaBuildTx.bodyBytes, sendTx().bodyBytes);
+  assert.deepEqual(viaBuildTx.authInfoBytes, sendTx().authInfoBytes);
+
+  const base = { publicKey, sign, accountNumber: 4n, sequence: 1n, gasPrice: 3n };
+  assert.throws(() => buildTx({ ...base, messages: [] }), /at least one message/);
+  assert.throws(() => buildTx({ ...base, messages: [{ typeUrl: 'MsgSend', value: new Uint8Array() }] }), /typeUrl/);
+  assert.throws(() => buildTx({ ...base, messages: [{ typeUrl: '/x.Msg', value: 'ab' }] }), /encoded bytes/);
+  assert.throws(() => buildTx({ ...base, messages, gasLimit: 0n }), /gasLimit must be more than 0/);
+  assert.throws(() => buildTx({ ...base, messages, publicKey: publicKey.subarray(1) }), /1312 bytes/);
+});
+
 // ---- client against a fake node ----
 
-function fakeNode({ exists = true, code = 0, log = '', balance = 10n ** 20n, chainId = CHAIN_ID } = {}) {
+// A tiny ERC-20 the fake node answers eth_call for: 6 decimals, symbol tUSD,
+// the PQ account holds 1234.5 tUSD; transfer() of more reverts.
+const TOKEN = '0x' + '22'.repeat(20);
+const ERC20 = new Interface(['function transfer(address to, uint256 value) returns (bool)', 'function balanceOf(address) view returns (uint256)',
+  'function decimals() view returns (uint8)', 'function symbol() view returns (string)']);
+const TOKEN_BALANCE = 1234500000n;
+function fakeEthCall({ to, data }) {
+  if (to.toLowerCase() !== TOKEN) return '0x';
+  const tx = ERC20.parseTransaction({ data });
+  if (tx.name === 'decimals') return ERC20.encodeFunctionResult('decimals', [6]);
+  if (tx.name === 'symbol') return ERC20.encodeFunctionResult('symbol', ['tUSD']);
+  if (tx.name === 'balanceOf') return ERC20.encodeFunctionResult('balanceOf', [TOKEN_BALANCE]);
+  if (tx.args[1] > TOKEN_BALANCE) throw new Error('execution reverted: balance');
+  return ERC20.encodeFunctionResult('transfer', [true]);
+}
+
+function fakeNode({ exists = true, code = 0, log = '', balance = 10n ** 20n, chainId = CHAIN_ID, ethCall = fakeEthCall } = {}) {
   const calls = [];
   const rpcCall = async (method, params) => {
     calls.push({ method, params });
+    if (method === 'eth_call') return ethCall(params[0]);
+    if (method === 'eth_getCode') return params[0].toLowerCase() === TOKEN ? '0x6000' : '0x';
     if (method === 'zetaphy_pqAccount') {
       const a = normalizeAddress(params[0]);
       return { address: a.bech32, hex: a.hex, chainId, denom: DENOM, exists, accountNumber: exists ? '42' : null, sequence: exists ? '5' : null };
@@ -218,12 +402,95 @@ test('client: other refusals before anything is sent', async () => {
   await assert.rejects(pqClient(fakeNode().rpcCall).send({ publicKey, sign, to: 'zetaphy1bad', amount: 1n }), /invalid address/);
 });
 
+test('client: sendMsgs signs any messages, counts what they spend, refuses value + fee > balance', async () => {
+  const fee = DEFAULT_STAKING_GAS_LIMIT * 1200000000n;
+  const stake = 2n * 10n ** 18n;
+  const exact = stake + fee;
+  // Exactly enough: sent.
+  let node = fakeNode({ balance: exact });
+  let c = pqClient(node.rpcCall);
+  const r = await c.sendMsgs({ publicKey, sign, messages: [msgDelegate({ delegator: ME.bech32, validator: VALOPER, amount: stake })], gasLimit: DEFAULT_STAKING_GAS_LIMIT });
+  assert.equal(r.value, stake);
+  assert.equal(r.fee, fee);
+  const raw = TxRaw.decode(hexToBytes(node.calls.find((x) => x.method === 'zetaphy_sendCosmosTx').params[0]));
+  assert.equal(r.txHash, txHashOf(TxRaw.encode(raw).finish()));
+  assert.ok(ml_dsa44.verify(raw.signatures[0], encodeSignDoc({ bodyBytes: raw.bodyBytes, authInfoBytes: raw.authInfoBytes, chainId: CHAIN_ID, accountNumber: 42n }), publicKey));
+  assert.equal(AuthInfo.decode(raw.authInfoBytes).signerInfos[0].sequence, 5n);
+  // One azetaphy short: refused, nothing sent.
+  node = fakeNode({ balance: exact - 1n });
+  c = pqClient(node.rpcCall);
+  await assert.rejects(c.sendMsgs({ publicKey, sign, messages: [msgDelegate({ delegator: ME.bech32, validator: VALOPER, amount: stake })], gasLimit: DEFAULT_STAKING_GAS_LIMIT }), /not enough ZETAPHY: need 2\.0006 \(amount \+ fee\)/);
+  // Two messages: their spends add up (an EVM value and a delegation).
+  await assert.rejects(c.sendMsgs({ publicKey, sign, gasLimit: DEFAULT_STAKING_GAS_LIMIT, messages: [
+    msgEVMCall({ sender: ME.bech32, to: OTHER, value: stake / 2n }), msgDelegate({ delegator: ME.bech32, validator: VALOPER, amount: stake / 2n })] }), /not enough ZETAPHY/);
+  // An explicit value overrides the messages' own count.
+  await assert.rejects(c.sendMsgs({ publicKey, sign, messages: [msgWithdrawRewards({ delegator: ME.bech32, validator: VALOPER })], value: exact }), /not enough/);
+  assert.ok(!node.calls.some((x) => x.method === 'zetaphy_sendCosmosTx'), 'nothing was sent');
+  // Fee only (undelegate and rewards take nothing): fine with little ZETAPHY.
+  const u = await c.undelegate({ publicKey, sign, validator: VALOPER, amount: 10n ** 24n });
+  assert.equal(u.value, 0n);
+  assert.equal(u.validator, VALOPER);
+  await assert.rejects(pqClient(fakeNode({ balance: 1n }).rpcCall).withdrawRewards({ publicKey, sign, validator: VALOPER }), /need 0\.0006 \(fee\)/);
+  // An account that does not exist yet, and an empty list.
+  await assert.rejects(pqClient(fakeNode({ exists: false }).rpcCall).sendMsgs({ publicKey, sign, messages: [msgWithdrawRewards({ delegator: ME.bech32, validator: VALOPER })] }), /send ZETAPHY to this address first/);
+  await assert.rejects(c.sendMsgs({ publicKey, sign, messages: [] }), /at least one message/);
+});
+
+test('client: delegate, undelegate, withdrawRewards and callEVM put the right message in the tx', async () => {
+  const node = fakeNode();
+  const c = pqClient(node.rpcCall);
+  const lastMsg = () => {
+    const raw = TxRaw.decode(hexToBytes(node.calls.filter((x) => x.method === 'zetaphy_sendCosmosTx').at(-1).params[0]));
+    return { body: TxBody.decode(raw.bodyBytes), auth: AuthInfo.decode(raw.authInfoBytes) };
+  };
+  await c.delegate({ publicKey, sign, validator: VALOPER.toUpperCase(), amount: 3n });
+  let { body, auth } = lastMsg();
+  assert.equal(body.messages[0].typeUrl, MSG_DELEGATE_TYPE_URL);
+  assert.deepEqual(MsgDelegate.decode(body.messages[0].value), { delegatorAddress: ME.bech32, validatorAddress: VALOPER, amount: { denom: DENOM, amount: '3' } });
+  assert.equal(auth.fee.gasLimit, DEFAULT_STAKING_GAS_LIMIT);
+  await c.withdrawRewards({ publicKey, sign, validator: VALOPER, gasLimit: 300000n });
+  ({ body, auth } = lastMsg());
+  assert.deepEqual(MsgWithdrawDelegatorReward.decode(body.messages[0].value), { delegatorAddress: ME.bech32, validatorAddress: VALOPER });
+  assert.equal(auth.fee.gasLimit, 300000n);
+  await assert.rejects(c.delegate({ publicKey, sign, validator: ME.bech32, amount: 3n }), /zetaphyvaloper1/);
+
+  // callEVM: eth_call first (from the account's 0x form), then the tx; tx gas = EVM gas + 400000.
+  const data = ERC20.encodeFunctionData('transfer', [OTHER, 5n]);
+  const r = await c.callEVM({ publicKey, sign, to: TOKEN, data, evmGasLimit: 60000n });
+  const call = node.calls.filter((x) => x.method === 'eth_call').at(-1).params;
+  assert.deepEqual(call, [{ from: ME.hex, to: normalizeAddress(TOKEN).hex, data, gas: '0xea60' }, 'latest']);
+  assert.equal(r.result, ERC20.encodeFunctionResult('transfer', [true]));
+  ({ body, auth } = lastMsg());
+  assert.equal(auth.fee.gasLimit, 60000n + EVM_CALL_GAS_OVERHEAD);
+  assert.equal(EVM_CALL_GAS_OVERHEAD, 400000n);
+  assert.deepEqual(decodeMsgEVMCall(body.messages[0].value), { sender: ME.bech32, to: normalizeAddress(TOKEN).hex, value: '', data: hexToBytes(data), gasLimit: 60000n });
+  // With value: eth_call carries it too, and the balance check counts it.
+  const sends = () => node.calls.filter((x) => x.method === 'zetaphy_sendCosmosTx').length;
+  const before = sends();
+  await c.callEVM({ publicKey, sign, to: OTHER, value: 10n ** 18n });
+  assert.equal(node.calls.filter((x) => x.method === 'eth_call').at(-1).params[0].value, '0xde0b6b3a7640000');
+  assert.equal(lastMsg().auth.fee.gasLimit, DEFAULT_EVM_GAS_LIMIT + EVM_CALL_GAS_OVERHEAD);
+  assert.equal(sends(), before + 1);
+  // A call that would revert is refused before anything is signed or sent.
+  await assert.rejects(c.callEVM({ publicKey, sign, to: TOKEN, data: ERC20.encodeFunctionData('transfer', [OTHER, TOKEN_BALANCE + 1n]) }), /would fail, so nothing was sent: execution reverted: balance/);
+  await assert.rejects(c.callEVM({ publicKey, sign, to: TOKEN, data, checkResult: () => { throw new Error('refused by checkResult'); } }), /refused by checkResult/);
+  await assert.rejects(pqClient(fakeNode({ balance: 10n ** 18n }).rpcCall).callEVM({ publicKey, sign, to: OTHER, value: 10n ** 18n }), /not enough ZETAPHY/);
+  await assert.rejects(c.callEVM({ publicKey, sign, to: OTHER, evmGasLimit: 100000n, gasLimit: 100000n }), /more than the EVM gas limit/);
+  assert.equal(sends(), before + 1);
+  // check: false skips eth_call (for tests of the chain's own revert handling).
+  const n2 = fakeNode({ ethCall: () => { throw new Error('should not be called'); } });
+  await pqClient(n2.rpcCall).callEVM({ publicKey, sign, to: OTHER, check: false });
+  assert.equal(n2.calls.filter((x) => x.method === 'zetaphy_sendCosmosTx').length, 1);
+});
+
 // ---- CLI against a local JSON-RPC server ----
 
+// cli.js reads ZETAPHY_HOME once, when first imported: one temp home for every CLI test.
+const CLI_HOME = mkdtempSync(join(tmpdir(), 'zetaphy-pqtx-'));
+writeFileSync(join(CLI_HOME, 'pq.seed'), '0x' + bytesToHex(SEED) + '\n', { mode: 0o600 });
+process.env.ZETAPHY_HOME = CLI_HOME;
+
 test('CLI: zetaphy pq native and pq native send', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'zetaphy-pqtx-'));
-  writeFileSync(join(home, 'pq.seed'), '0x' + bytesToHex(SEED) + '\n', { mode: 0o600 });
-  process.env.ZETAPHY_HOME = home;
   let exists = false;
   const node = fakeNode();
   const answer = async ({ id, method, params }) => {
@@ -232,7 +499,11 @@ test('CLI: zetaphy pq native and pq native send', async () => {
       const a = normalizeAddress(params[0]);
       return { jsonrpc: '2.0', id, result: { address: a.bech32, hex: a.hex, chainId: CHAIN_ID, denom: DENOM, exists, accountNumber: exists ? '9' : null, sequence: exists ? '0' : null } };
     }
-    return { jsonrpc: '2.0', id, result: await node.rpcCall(method, params) };
+    try {
+      return { jsonrpc: '2.0', id, result: await node.rpcCall(method, params) };
+    } catch (e) {
+      return { jsonrpc: '2.0', id, error: { code: -32000, message: e.message } };
+    }
   };
   const server = createServer(async (req, res) => {
     let body = '';
@@ -268,6 +539,121 @@ test('CLI: zetaphy pq native and pq native send', async () => {
     assert.match(lines.join('\n'), new RegExp(`tx hash: ${txHashOf(hexToBytes(sent.params[0]))}`));
     assert.match(lines.join('\n'), /sent 2\.5 ZETAPHY/);
     assert.equal(DEFAULT_GAS_LIMIT, 400000n);
+  } finally {
+    server.close();
+  }
+});
+
+test('CLI: pq native call, token-send, token-balance, stake, unstake, rewards', async () => {
+  const node = fakeNode();
+  const answer = async ({ id, method, params }) => {
+    if (method === 'eth_chainId') return { jsonrpc: '2.0', id, result: '0x12e4e' };
+    try {
+      return { jsonrpc: '2.0', id, result: await node.rpcCall(method, params) };
+    } catch (e) {
+      return { jsonrpc: '2.0', id, error: { code: -32000, message: e.message } };
+    }
+  };
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const c of req) body += c;
+    const msg = JSON.parse(body);
+    const out = Array.isArray(msg) ? await Promise.all(msg.map(answer)) : await answer(msg);
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(out));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const rpc = `http://127.0.0.1:${server.address().port}`;
+  const { main } = await import('../cli.js');
+  const lines = [];
+  const write = (l) => lines.push(l);
+  const run = (...args) => main(['pq', 'native', ...args, '--rpc', rpc], {}, write);
+  const lastTx = () => {
+    const raw = TxRaw.decode(hexToBytes(node.calls.filter((x) => x.method === 'zetaphy_sendCosmosTx').at(-1).params[0]));
+    return { body: TxBody.decode(raw.bodyBytes), auth: AuthInfo.decode(raw.authInfoBytes), raw };
+  };
+  const sends = () => node.calls.filter((x) => x.method === 'zetaphy_sendCosmosTx').length;
+  try {
+    // Argument checks, all before anything is sent.
+    const bad = [
+      [['call', OTHER], /usage: zetaphy pq native call/],
+      [['call', OTHER, '0x', 'extra'], /usage: zetaphy pq native call/],
+      [['call', ME.bech32, '0x'], /to must be a 0x address/],
+      [['call', OTHER, '0x123'], /calldata must be 0x/],
+      [['call', OTHER, 'abcd'], /calldata must be 0x/],
+      [['call', '0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAeD', '0x'], /checksum/],
+      [['call', OTHER, '0x', '--value', 'lots'], /not an amount/],
+      [['call', OTHER, '0x', '--value'], /--value needs an amount/],
+      [['call', OTHER, '0x', '--gas', '1.5'], /whole number/],
+      [['call', OTHER, '0x', '--gas', '20000'], /between 21000 and 10000000/],
+      [['send', OTHER, '1', '--value', '1'], /--value is only for/],
+      [['token-send', TOKEN, OTHER], /usage: zetaphy pq native token-send/],
+      [['token-send', 'zetaphy1x', OTHER, '1'], /token must be a 0x address/],
+      [['token-send', TOKEN, 'zetaphy1nope', '1'], /invalid address/],
+      [['token-send', TOKEN, OTHER, '-1'], /not an amount/],
+      [['token-balance'], /usage: zetaphy pq native token-balance/],
+      [['token-balance', 'nope'], /token must be a 0x address/],
+      [['stake', VALOPER], /usage: zetaphy pq native stake/],
+      [['stake', ME.bech32, '1'], /expected zetaphyvaloper1/],
+      [['stake', VALOPER, '0'], /more than 0/],
+      [['unstake', VALOPER.slice(0, -1) + (VALOPER.at(-1) === 'q' ? 'p' : 'q'), '1'], /checksum/],
+      [['rewards'], /usage: zetaphy pq native rewards/],
+      [['rewards', VALOPER, '5'], /usage: zetaphy pq native rewards/],
+      [['frobnicate'], /usage: zetaphy pq native \[send \| call/],
+    ];
+    for (const [args, re] of bad) await assert.rejects(run(...args), re, args.join(' '));
+    assert.equal(sends(), 0);
+
+    // call with --value to a plain address; --gas is the EVM gas.
+    assert.equal(await run('call', OTHER, '0x', '--value', '0.75', '--gas', '50000'), 0);
+    let t = lastTx();
+    assert.deepEqual(decodeMsgEVMCall(t.body.messages[0].value), { sender: ME.bech32, to: normalizeAddress(OTHER).hex, value: '750000000000000000', data: new Uint8Array(), gasLimit: 50000n });
+    assert.equal(t.auth.fee.gasLimit, 450000n);
+    assert.ok(ml_dsa44.verify(t.raw.signatures[0], encodeSignDoc({ bodyBytes: t.raw.bodyBytes, authInfoBytes: t.raw.authInfoBytes, chainId: CHAIN_ID, accountNumber: 42n }), publicKey));
+    let out = lines.join('\n');
+    assert.match(out, /value 0\.75 ZETAPHY/);
+    assert.match(out, /EVM gas 50000, tx gas 450000/);
+    assert.match(out, /tx hash: [0-9A-F]{64}/);
+    assert.match(out, /not in eth_getLogs/);
+
+    // token-balance and token-send read decimals() and symbol() first.
+    lines.length = 0;
+    assert.equal(await run('token-balance', TOKEN), 0);
+    assert.match(lines.join('\n'), /token tUSD at 0x2222222222222222222222222222222222222222 \(6 decimals\)/);
+    assert.match(lines.join('\n'), /holds 1234\.5 tUSD/);
+    lines.length = 0;
+    assert.equal(await run('token-send', TOKEN, toBech32(hexToBytes(OTHER)), '12.5'), 0);
+    t = lastTx();
+    const m = decodeMsgEVMCall(t.body.messages[0].value);
+    assert.equal(m.to, normalizeAddress(TOKEN).hex);
+    assert.equal(m.value, '');
+    assert.equal(m.gasLimit, DEFAULT_EVM_GAS_LIMIT);
+    const tr = ERC20.decodeFunctionData('transfer', m.data);
+    assert.equal(tr[0], normalizeAddress(OTHER).hex, 'a zetaphy1… recipient becomes its 0x form');
+    assert.equal(tr[1], 12500000n);
+    assert.match(lines.join('\n'), /sent 12\.5 tUSD to 0x1111111111111111111111111111111111111111/);
+    const n = sends();
+    await assert.rejects(run('token-send', TOKEN, OTHER, '1.0000001'), /more decimal places than tUSD \(6\)/);
+    await assert.rejects(run('token-send', TOKEN, OTHER, '0'), /more than 0/);
+    await assert.rejects(run('token-send', TOKEN, OTHER, '5000'), /would fail, so nothing was sent/);
+    await assert.rejects(run('token-send', OTHER, OTHER, '1'), /no contract at/);
+    assert.equal(sends(), n, 'nothing sent for refused token sends');
+
+    // Staking.
+    lines.length = 0;
+    assert.equal(await run('stake', VALOPER, '3'), 0);
+    t = lastTx();
+    assert.deepEqual(MsgDelegate.decode(t.body.messages[0].value), { delegatorAddress: ME.bech32, validatorAddress: VALOPER, amount: { denom: DENOM, amount: '3000000000000000000' } });
+    assert.equal(t.auth.fee.gasLimit, DEFAULT_STAKING_GAS_LIMIT);
+    assert.match(lines.join('\n'), new RegExp(`staked 3 ZETAPHY with ${VALOPER}`));
+    assert.equal(await run('unstake', VALOPER, '1.5', '--gas', '600000'), 0);
+    t = lastTx();
+    assert.equal(t.body.messages[0].typeUrl, MSG_UNDELEGATE_TYPE_URL);
+    assert.equal(MsgUndelegate.decode(t.body.messages[0].value).amount.amount, '1500000000000000000');
+    assert.equal(t.auth.fee.gasLimit, 600000n);
+    assert.equal(await run('rewards', VALOPER), 0);
+    t = lastTx();
+    assert.deepEqual(MsgWithdrawDelegatorReward.decode(t.body.messages[0].value), { delegatorAddress: ME.bech32, validatorAddress: VALOPER });
+    assert.match(lines.join('\n'), /withdrew staking rewards/);
   } finally {
     server.close();
   }

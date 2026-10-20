@@ -10,9 +10,9 @@ import { execFileSync, execFile } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Wallet, JsonRpcProvider, concat, getBytes, hexlify, parseEther, keccak256, toBeHex } from 'ethers';
+import { Wallet, JsonRpcProvider, ContractFactory, NonceManager, concat, getBytes, hexlify, parseEther, keccak256, toBeHex } from 'ethers';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
-import { pqAddress, encodeTxBody, encodeMsgSend, encodeAuthInfo, encodeSignDoc, encodeTxRaw, bytesToHex, MSG_SEND_TYPE_URL } from '../src/pqtx.js';
+import { pqAddress, pqClient, encodeTxBody, encodeMsgSend, encodeAuthInfo, encodeSignDoc, encodeTxRaw, bytesToHex, MSG_SEND_TYPE_URL } from '../src/pqtx.js';
 
 const PORT = 18845;
 const RPC = `http://127.0.0.1:${PORT}`;
@@ -140,6 +140,113 @@ test('native PQ account: send with ML-DSA only; forged, tampered and replayed tx
   // Garbage is not passed on.
   await assert.rejects(send('0x1234'), /not a Cosmos transaction/);
   assert.equal(await provider.getBalance(to), parseEther('1.25'));
+});
+
+// Native PQ accounts beyond sends: EVM contract calls (/zetaphy.pq.v1.MsgEVMCall),
+// ERC-20 transfers and staking, all signed with ML-DSA-44 only.
+const ZETAPHYD = process.env.ZETAPHYD || 'zetaphyd';
+const COMET = `http://127.0.0.1:${PORT + 100}`; // CometBFT RPC of the devnet (scripts/devnet.sh)
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+const txHashIn = (out) => {
+  const h = /tx hash: ([0-9A-F]{64})/.exec(out)?.[1];
+  assert.ok(h, `no tx hash in: ${out}`);
+  return h;
+};
+/** The block result of a Cosmos tx (CometBFT leaves code out when it is 0). */
+async function waitTx(hash, ms = 30_000) {
+  for (const end = Date.now() + ms; Date.now() < end; await sleep(500)) {
+    try {
+      const r = await (await fetch(`${COMET}/tx?hash=0x${hash}`)).json();
+      if (r.result?.tx_result) return { ...r.result.tx_result, code: r.result.tx_result.code ?? 0 };
+    } catch { /* not indexed yet */ }
+  }
+  throw new Error(`tx ${hash} is not in a block after ${ms} ms`);
+}
+const zetaphyd = (args) => JSON.parse(execFileSync(ZETAPHYD, [...args, '--node', `tcp://127.0.0.1:${PORT + 100}`, '-o', 'json'], { env }).toString());
+const delegated = (delegator, valoper) => {
+  try {
+    const j = zetaphyd(['q', 'staking', 'delegation', delegator, valoper]);
+    return BigInt((j.delegation_response ?? j).balance.amount);
+  } catch { return 0n; }
+};
+
+test('native PQ account: ERC-20 token-send, call with value, stake, rewards, unstake; a reverting call moves nothing', { timeout: 300_000 }, async () => {
+  mkdirSync(join(root, 'frank'), { recursive: true, mode: 0o700 });
+  writeFileSync(join(root, 'frank', 'pq.seed'), '0x' + Buffer.alloc(32, 10).toString('hex') + '\n', { mode: 0o600 });
+  const frank = ml_dsa44.keygen(Buffer.alloc(32, 10));
+  const me = pqAddress(frank.publicKey);
+  const native = async (...args) => {
+    const r = await cli('frank', ['pq', 'native', ...args]);
+    assert.equal(r.code, 0, r.out);
+    const res = await waitTx(txHashIn(r.out)); // the next tx needs this one's sequence
+    assert.equal(res.code, 0, `${args.join(' ')}: ${res.log}`);
+    return { ...r, res };
+  };
+
+  // A tiny ERC-20 from an ECDSA actor; fund the PQ account with tokens and ZETAPHY.
+  const STABLE = JSON.parse(readFileSync(new URL('../artifacts/TestStable.json', import.meta.url), 'utf8'));
+  // NonceManager: right after a block the node's pending nonce can lag behind.
+  const deployer = new NonceManager(actors.deployer.connect(provider));
+  const token = await new ContractFactory(STABLE.abi, STABLE.bytecode, deployer).deploy('Test USD', 'tUSD');
+  await token.waitForDeployment();
+  const tokenAddr = await token.getAddress();
+  await (await token.faucet()).wait(); // 1,000 tUSD to the deployer
+  await (await token.transfer(me.hex, 100_000000n)).wait();
+  await (await deployer.sendTransaction({ to: me.hex, value: parseEther('20') })).wait();
+
+  const bal = await cli('frank', ['pq', 'native', 'token-balance', tokenAddr]);
+  assert.equal(bal.code, 0, bal.out);
+  assert.match(bal.out, /token tUSD at .* \(6 decimals\)/);
+  assert.match(bal.out, /holds 100 tUSD/);
+
+  // ERC-20 transfer from the PQ account: msg.sender is its 0x form.
+  const to = Wallet.createRandom().address;
+  const ts = await native('token-send', tokenAddr, to, '12.5');
+  assert.match(ts.out, /sent 12\.5 tUSD/);
+  assert.equal(await token.balanceOf(to), 12_500000n);
+  assert.equal(await token.balanceOf(me.hex), 87_500000n);
+  console.log(ts.out.trim());
+  // More than it holds: refused by the eth_call check, nothing sent.
+  const over = await cli('frank', ['pq', 'native', 'token-send', tokenAddr, to, '1000']);
+  assert.notEqual(over.code, 0, over.out);
+  assert.match(over.out, /would fail, so nothing was sent/);
+
+  // A call with value to a plain address moves ZETAPHY.
+  const plain = Wallet.createRandom().address;
+  await native('call', plain, '0x', '--value', '0.75');
+  assert.equal(await provider.getBalance(plain), parseEther('0.75'));
+
+  // Stake with the devnet's validator, withdraw rewards, then unstake part.
+  const valoper = execFileSync(ZETAPHYD, ['keys', 'show', 'validator', '--bech', 'val', '-a', '--keyring-backend', 'test', '--home', join(root, 'chain')], { env }).toString().trim();
+  assert.match(valoper, /^zetaphyvaloper1/);
+  const before = await provider.getBalance(me.hex);
+  const st = await native('stake', valoper, '5');
+  assert.equal(delegated(me.bech32, valoper), parseEther('5'));
+  const after = await provider.getBalance(me.hex);
+  assert.ok(before - after > parseEther('5') && before - after < parseEther('5.01'), `stake took ${before - after}`);
+  console.log(st.out.trim());
+  await sleep(3000); // a few blocks of fees to share out
+  const rw = await native('rewards', valoper);
+  assert.ok(rw.res.events?.some((e) => e.type === 'withdraw_rewards'), 'no withdraw_rewards event');
+  await native('unstake', valoper, '2');
+  assert.equal(delegated(me.bech32, valoper), parseEther('3'));
+
+  // A call that reverts: sent past the eth_call check, the tx must fail in the
+  // block and move nothing (only the fee is paid). TestStable.transfer is not
+  // payable and the amount is more than the account holds.
+  const client = pqClient((m, p) => provider.send(m, p), { chainId: 'zetaphy-local-1' });
+  const sign = (b) => ml_dsa44.sign(b, frank.secretKey);
+  const tokens = async () => [await token.balanceOf(me.hex), await token.balanceOf(to)];
+  const tokensBefore = await tokens();
+  const zBefore = await provider.getBalance(me.hex);
+  const data = token.interface.encodeFunctionData('transfer', [to, 1_000_000_000n]);
+  const r = await client.callEVM({ publicKey: frank.publicKey, sign, to: tokenAddr, data, value: parseEther('1'), check: false });
+  const res = await waitTx(r.txHash);
+  assert.notEqual(res.code, 0, 'a reverting call was accepted');
+  console.log(`reverting call failed as it should: code ${res.code}, ${res.log}`);
+  assert.deepEqual(await tokens(), tokensBefore);
+  assert.equal(await provider.getBalance(tokenAddr), 0n);
+  assert.equal(await provider.getBalance(me.hex), zBefore - r.fee, 'only the fee is paid');
 });
 
 // Testnet faucet (zetaphy_faucet): newcomers get 10 ZETAPHY once a day,
