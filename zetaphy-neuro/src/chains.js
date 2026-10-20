@@ -8,6 +8,7 @@ import { isAptosInput, APTOS_MAINNET } from './aptos.js';
 import { isTonAddress } from './ton.js';
 import { isCosmwasmInput } from './cosmwasm.js';
 import { isNearAccount } from './near.js';
+import { isRuneInput } from './bitcoin.js';
 import { isStarknetAddress, SN_MAIN } from './starknet.js';
 
 export const CHAINS = {
@@ -94,6 +95,12 @@ export const CHAINS = {
     rpcs: ['https://rpc.starknet.lava.build', 'https://starknet.drpc.org', 'https://api.zan.top/public/starknet-mainnet'],
     explorer: 'https://voyager.online/contract/',
   },
+  bitcoin: {
+    kind: 'bitcoin',
+    name: 'Bitcoin (Runes)',
+    rpcs: ['https://ordinals.com'],
+    explorer: 'https://ordinals.com/rune/',
+  },
   ton: {
     kind: 'ton',
     name: 'TON',
@@ -118,6 +125,7 @@ export function isChainAddress(chainKey, address) {
     case 'cosmwasm': return isCosmwasmInput(address, c.prefix);
     case 'near': return isNearAccount(address);
     case 'starknet': return isStarknetAddress(address);
+    case 'bitcoin': return isRuneInput(address);
     default: return EVM_ADDRESS.test(address);
   }
 }

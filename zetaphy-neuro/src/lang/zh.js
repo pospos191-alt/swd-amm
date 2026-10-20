@@ -13,7 +13,7 @@ export const UI = {
     chain: '链', address: '地址', proxy: 'Proxy', implementation: '实际代码（Implementation）', owner: '所有者', functions: '已识别的函数', report: '报告编号', explorer: '在 explorer 中打开', fingerprint: '代码指纹（用于登记模板）', unknown: '无法识别名称的函数',
     program: '代币程序', mintAuth: '增发权限（mint authority）', freezeAuth: '冻结权限（freeze authority）', extensions: '扩展', upgradeAuth: '升级权限', none: '无',
     package: '代码包', standard: '标准', admin: '管理员', holders: '持有人数', listed: 'tonapi 名单', raw: '原始地址',
-    idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码', walletCode: '持有人钱包代码', nearKeys: '完全访问密钥（full-access key）', codeHash: '代码哈希', cairo: 'Cairo 版本',
+    idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码', walletCode: '持有人钱包代码', nearKeys: '完全访问密钥（full-access key）', codeHash: '代码哈希', cairo: 'Cairo 版本', maxSupply: '最大供应量', tokenId: '代币编号',
   },
 };
 
@@ -168,6 +168,7 @@ export const T = {
     'stylus-code': (p) => (p.issuer
       ? `${p.issuer} 使用 Stylus 合约（Rust/C++ 编译为 Arbitrum 上的 WASM），Neuro 的规则目前还无法读取。`
       : '这是 Stylus 合约（用 Rust 或 C++ 编写，编译为 Arbitrum 上的 WASM）。Neuro 的规则目前还无法读取这种代码，因此不知道它能否增发、封锁或暂停转账。请视为未经检查。'),
+    'stylus-read': (p) => `这是 Stylus 合约（用 Rust 或 C++ 编写，编译为 Arbitrum 上的 WASM）。Neuro 已解开其 WASM 代码（${fmtSupply(p.size, 0)} 字节），在其中找到 ${p.count ?? 0} 个已知函数，下面的结果即来自这些函数。名称特殊的函数可能会被漏掉。`,
     'unknown-code-format': (p) => (p.issuer
       ? `${p.issuer} 使用的代码不是标准的 EVM bytecode。`
       : '该合约的代码不是标准的 EVM bytecode，Neuro 的规则无法读取。请视为未经检查。'),
@@ -209,4 +210,14 @@ export const T = {
       ? `${p.issuer} 可以升级合约代码，这是发行方修复或扩展功能的常规做法。`
       : `可升级${p.implementation ? `（proxy 指向代码 ${p.implementation}）` : ''}${p.functions?.length ? `（通过 ${list(p.functions)}）` : ''}：有权限的人可以替换全部代码。今天的检查结果，明天未必仍然成立。`),
     'sn-caveat': () => '基于合约在链上公开的 ABI（函数名以及是否会修改状态），按固定规则检查。未读取函数内部逻辑。不构成投资建议。',
+    // Bitcoin (Runes)
+    'btc-not-found': () => '在 Bitcoin 上找不到这个名称或编号的 Rune。Rune 的名称形如 DOG•GO•TO•THE•MOON，编号形如 840000:3。目前还不能读取 BRC-20 代币。',
+    'btc-rune': (p) => `Bitcoin 上的 Rune 代币“${p.name ?? '?'}”${p.symbol ? `（${p.symbol}）` : ''}，编号 ${p.id ?? '?'}，目前已发行 ${fmtSupply(p.totalSupply, p.decimals)}。`,
+    'btc-no-admin': () => 'Bitcoin 上的代币没有合约代码，也没有所有者：没有人能冻结、封锁、暂停、收税或修改这个代币。它的规则在创建时就已固定。',
+    'btc-open-mint': (p) => (p.unlimited
+      ? '任何人仍可继续铸造（mint），没有上限，也没有截止时间，因此供应量可以无限增长。'
+      : `仍在开放铸造（mint）：任何人都可以继续铸造，直到${p.end ? `区块 ${p.end} 或` : ''}${p.maxSupply ? `达到上限 ${fmtSupply(p.maxSupply, p.decimals)}` : '铸造期结束'}${p.percent != null ? `（目前已铸造 ${p.percent}%）` : ''}。供应量仍在增加。`),
+    'btc-premine': (p) => `创建代币时，最大供应量的 ${p.percent}% 直接归创建者所有（premine）。创建者随时可以卖出。`,
+    'btc-turbo': () => '创建者选择接受 Runes 协议未来的变更（turbo），因此这个代币的运作方式可能会随协议新版本而改变。',
+    'btc-caveat': () => '基于 Runes 的参考索引器 ord（ordinals.com）的数据，按固定规则检查。Rune 是索引器在 Bitcoin 之上按规则认定的。未检查持有人和流动性。不构成投资建议。',
 };

@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)', unknown: 'Unnamed functions',
     program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none',
     package: 'Package', standard: 'Standard', admin: 'Admin', holders: 'Holders', listed: 'tonapi list', raw: 'Raw address',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code', nearKeys: 'Full-access keys', codeHash: 'Code hash', cairo: 'Cairo version',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code', nearKeys: 'Full-access keys', codeHash: 'Code hash', cairo: 'Cairo version', maxSupply: 'Maximum supply', tokenId: 'Token ID',
   },
 };
 
@@ -168,6 +168,7 @@ export const T = {
     'stylus-code': (p) => (p.issuer
       ? `${p.issuer} uses a Stylus contract (Rust/C++ compiled to WASM on Arbitrum), which Neuro's rules cannot read yet.`
       : 'A Stylus contract (Rust or C++ compiled to WASM on Arbitrum). Neuro\'s rules cannot read this code yet, so it is unknown whether it can mint, block or pause. Treat it as unchecked.'),
+    'stylus-read': (p) => `A Stylus contract (Rust or C++ compiled to WASM on Arbitrum). Neuro unpacked its WASM code (${fmtSupply(p.size, 0)} bytes) and found ${p.count ?? 0} known function(s) in it; the findings below come from them. Unusual function names can be missed.`,
     'unknown-code-format': (p) => (p.issuer
       ? `${p.issuer} uses code that is not standard EVM bytecode.`
       : 'This contract\'s code is not standard EVM bytecode and Neuro\'s rules cannot read it. Treat it as unchecked.'),
@@ -209,4 +210,14 @@ export const T = {
       ? `${p.issuer} can upgrade the contract's code, the usual way issuers fix or extend it.`
       : `Upgradeable${p.implementation ? ` (a proxy pointing at code ${p.implementation})` : ''}${p.functions?.length ? ` through ${list(p.functions)}` : ''}: whoever is allowed can replace all of the code. What is checked today may not hold tomorrow.`),
     'sn-caveat': () => 'Checked from the ABI the contract publishes on chain (function names and whether they change state) with fixed rules. Function bodies are not read. Not investment advice.',
+    // Bitcoin (Runes)
+    'btc-not-found': () => 'No Rune with this name or id on Bitcoin. A Rune is a name like DOG•GO•TO•THE•MOON or an id like 840000:3. BRC-20 tokens are not read yet.',
+    'btc-rune': (p) => `Bitcoin Rune "${p.name ?? '?'}"${p.symbol ? ` (${p.symbol})` : ''}, id ${p.id ?? '?'}, supply so far ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'btc-no-admin': () => 'Bitcoin tokens have no contract code and no owner: nobody can freeze, blacklist, pause, tax or change this token. Its rules were fixed when it was created.',
+    'btc-open-mint': (p) => (p.unlimited
+      ? 'Anyone can still mint more, with no cap and no end date, so the supply can keep growing without limit.'
+      : `Minting is still open: anyone can mint more until ${p.end ? `block ${p.end} or ` : ''}${p.maxSupply ? `the maximum of ${fmtSupply(p.maxSupply, p.decimals)} is reached` : 'the mint period ends'}${p.percent != null ? ` (${p.percent}% minted so far)` : ''}. The supply is still growing.`),
+    'btc-premine': (p) => `${p.percent}% of the maximum supply went to the creator when the token was created (premine). They can sell it at any time.`,
+    'btc-turbo': () => 'The creator opted in to future Runes protocol changes (turbo), so how this token works may change with new protocol versions.',
+    'btc-caveat': () => 'Read from ord (ordinals.com), the reference Runes indexer, with fixed rules. Runes exist as indexer rules on top of Bitcoin. Holders and liquidity are not checked. Not investment advice.',
 };

@@ -12,7 +12,7 @@ export class RpcError extends Error {}
  * Shared client: tries each URL in order, and before trusting a URL checks
  * once (via `identify`) that it really serves the expected chain.
  */
-function makeClient(urls, { allowed, identify, fetchImpl = globalThis.fetch, timeoutMs = 15000 }) {
+function makeClient(urls, { allowed, identify, fetchImpl = globalThis.fetch, timeoutMs = 15000, retryMs = 1500 }) {
   const verified = new Set();
   let id = 0;
 
@@ -38,16 +38,24 @@ function makeClient(urls, { allowed, identify, fetchImpl = globalThis.fetch, tim
   async function call(method, params) {
     if (!allowed.has(method)) throw new RpcError(`method not allowed: ${method}`);
     let lastErr;
-    for (const url of urls) {
-      try {
-        if (!verified.has(url)) {
-          await identify((m, p) => post(url, m, p), url);
-          verified.add(url);
+    // Free endpoints rate-limit (HTTP 429): if that is why they all failed,
+    // wait a moment and try the list once more.
+    for (let round = 0; round < 2; round++) {
+      let limited = false;
+      for (const url of urls) {
+        try {
+          if (!verified.has(url)) {
+            await identify((m, p) => post(url, m, p), url);
+            verified.add(url);
+          }
+          return await post(url, method, params);
+        } catch (e) {
+          lastErr = e;
+          if (/HTTP 429/.test(e.message)) limited = true;
         }
-        return await post(url, method, params);
-      } catch (e) {
-        lastErr = e;
       }
+      if (!limited) break;
+      if (round === 0) await new Promise((r) => setTimeout(r, retryMs));
     }
     throw new RpcError(`all RPC endpoints failed: ${lastErr?.message ?? 'unknown'}`);
   }
@@ -205,6 +213,32 @@ export function createTonApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 1
     }
   };
   return { get: (path) => paced(() => run((url) => get1(url, path))) };
+}
+
+/**
+ * Reads rune pages from an `ord` server (ordinals.com: free, no key; its JSON
+ * API is switched off). GET only, /rune/ paths only.
+ */
+export function createOrdApi(urls, { fetchImpl = globalThis.fetch, timeoutMs = 15000 } = {}) {
+  const run = failover(urls, async () => {});
+  const get1 = async (url, path) => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetchImpl(url + path, { method: 'GET', signal: ctrl.signal });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new RpcError(`HTTP ${res.status}`);
+      return (await res.text()).slice(0, 200_000);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  return {
+    getText(path) {
+      if (!/^\/rune\/[^/?#]+$/.test(path)) throw new RpcError(`path not allowed: ${path}`);
+      return run((url) => get1(url, path));
+    },
+  };
 }
 
 /** Cosmos REST (LCD) client, GET only; refuses endpoints serving another chain id. */

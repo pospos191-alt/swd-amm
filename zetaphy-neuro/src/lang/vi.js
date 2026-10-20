@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Chuỗi', address: 'Địa chỉ', proxy: 'Proxy', implementation: 'Mã thực thi', owner: 'Chủ sở hữu', functions: 'Hàm đã nhận diện', report: 'Mã báo cáo', explorer: 'Mở trên explorer', fingerprint: 'Dấu vân tay mã (để đăng ký mẫu)', unknown: 'Hàm chưa rõ tên',
     program: 'Chương trình token', mintAuth: 'Quyền tạo token (mint authority)', freezeAuth: 'Quyền đóng băng (freeze authority)', extensions: 'Tiện ích mở rộng', upgradeAuth: 'Quyền nâng cấp', none: 'không có',
     package: 'Gói', standard: 'Tiêu chuẩn', admin: 'Quản trị viên', holders: 'Số người nắm giữ', listed: 'Danh sách tonapi', raw: 'Địa chỉ gốc (raw)',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ', nearKeys: 'Khóa toàn quyền (full-access key)', codeHash: 'Mã băm của mã', cairo: 'Phiên bản Cairo',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ', nearKeys: 'Khóa toàn quyền (full-access key)', codeHash: 'Mã băm của mã', cairo: 'Phiên bản Cairo', maxSupply: 'Nguồn cung tối đa', tokenId: 'Mã token',
   },
 };
 
@@ -168,6 +168,7 @@ export const T = {
     'stylus-code': (p) => (p.issuer
       ? `${p.issuer} dùng hợp đồng Stylus (Rust/C++ biên dịch sang WASM trên Arbitrum), loại mã mà các quy tắc của Neuro chưa đọc được.`
       : 'Đây là hợp đồng Stylus (Rust hoặc C++ biên dịch sang WASM trên Arbitrum). Các quy tắc của Neuro chưa đọc được loại mã này, nên không biết nó có thể tạo thêm token, chặn ví hay tạm dừng giao dịch hay không. Hãy coi như chưa được kiểm tra.'),
+    'stylus-read': (p) => `Đây là hợp đồng Stylus (Rust hoặc C++ biên dịch thành WASM trên Arbitrum). Neuro đã giải nén mã WASM (${fmtSupply(p.size, 0)} byte) và tìm thấy ${p.count ?? 0} hàm đã biết; các kết quả bên dưới đến từ những hàm này. Hàm có tên lạ có thể bị bỏ sót.`,
     'unknown-code-format': (p) => (p.issuer
       ? `${p.issuer} dùng mã không phải EVM bytecode tiêu chuẩn.`
       : 'Mã của hợp đồng này không phải EVM bytecode tiêu chuẩn và các quy tắc của Neuro không đọc được. Hãy coi như chưa được kiểm tra.'),
@@ -209,4 +210,14 @@ export const T = {
       ? `${p.issuer} có thể nâng cấp mã của hợp đồng, cách thông thường để nhà phát hành sửa lỗi hoặc bổ sung tính năng.`
       : `Có thể nâng cấp${p.implementation ? ` (một proxy trỏ tới mã ${p.implementation})` : ''}${p.functions?.length ? ` thông qua ${list(p.functions)}` : ''}: ai được phép đều có thể thay toàn bộ mã. Kết quả kiểm tra hôm nay có thể không còn đúng vào ngày mai.`),
     'sn-caveat': () => 'Kiểm tra từ ABI mà hợp đồng công bố trên chuỗi (tên hàm và việc hàm có thay đổi trạng thái hay không) theo các quy tắc cố định. Chưa đọc nội dung hàm. Không phải lời khuyên đầu tư.',
+    // Bitcoin (Runes)
+    'btc-not-found': () => 'Không tìm thấy Rune có tên hoặc mã này trên Bitcoin. Tên Rune có dạng DOG•GO•TO•THE•MOON, mã có dạng 840000:3. Chưa đọc được token BRC-20.',
+    'btc-rune': (p) => `Rune trên Bitcoin "${p.name ?? '?'}"${p.symbol ? ` (${p.symbol})` : ''}, mã ${p.id ?? '?'}, lượng đã phát hành đến nay ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'btc-no-admin': () => 'Token trên Bitcoin không có mã hợp đồng và không có chủ sở hữu: không ai có thể đóng băng, chặn ví, tạm dừng, đánh thuế hay thay đổi token này. Các quy tắc của nó đã cố định từ lúc tạo.',
+    'btc-open-mint': (p) => (p.unlimited
+      ? 'Bất kỳ ai vẫn có thể mint thêm, không có giới hạn và không có ngày kết thúc, nên nguồn cung có thể tăng mãi không giới hạn.'
+      : `Vẫn đang mở mint: bất kỳ ai cũng có thể mint thêm cho đến khi ${p.end ? `tới khối ${p.end} hoặc ` : ''}${p.maxSupply ? `đạt mức tối đa ${fmtSupply(p.maxSupply, p.decimals)}` : 'hết thời gian mint'}${p.percent != null ? ` (đã mint ${p.percent}%)` : ''}. Nguồn cung vẫn đang tăng.`),
+    'btc-premine': (p) => `${p.percent}% nguồn cung tối đa đã thuộc về người tạo ngay khi token được tạo (premine). Người tạo có thể bán ra bất cứ lúc nào.`,
+    'btc-turbo': () => 'Người tạo đã chọn nhận các thay đổi sau này của giao thức Runes (turbo), nên cách token này hoạt động có thể thay đổi theo các phiên bản giao thức mới.',
+    'btc-caveat': () => 'Kiểm tra từ ord (ordinals.com), bộ lập chỉ mục chuẩn của Runes, theo các quy tắc cố định. Rune tồn tại dưới dạng quy tắc của bộ lập chỉ mục trên nền Bitcoin. Chưa kiểm tra người nắm giữ và thanh khoản. Không phải lời khuyên đầu tư.',
 };

@@ -13,7 +13,7 @@ export const UI = {
     chain: 'Jaringan', address: 'Alamat', proxy: 'Proxy', implementation: 'Kode utama (implementation)', owner: 'Pemilik', functions: 'Fungsi yang dikenali', report: 'ID laporan', explorer: 'Buka di explorer', fingerprint: 'Sidik jari kode (untuk pendaftaran templat)', unknown: 'Fungsi tanpa nama',
     program: 'Program token', mintAuth: 'Hak mencetak (mint authority)', freezeAuth: 'Hak membekukan (freeze authority)', extensions: 'Ekstensi', upgradeAuth: 'Hak upgrade (upgrade authority)', none: 'tidak ada',
     package: 'Paket', standard: 'Standar', admin: 'Admin', holders: 'Pemegang', listed: 'Daftar tonapi', raw: 'Alamat mentah (raw)',
-    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang', nearKeys: 'Kunci akses penuh (full-access key)', codeHash: 'Hash kode', cairo: 'Versi Cairo',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang', nearKeys: 'Kunci akses penuh (full-access key)', codeHash: 'Hash kode', cairo: 'Versi Cairo', maxSupply: 'Pasokan maksimum', tokenId: 'ID token',
   },
 };
 
@@ -168,6 +168,7 @@ export const T = {
     'stylus-code': (p) => (p.issuer
       ? `${p.issuer} memakai kontrak Stylus (Rust/C++ yang dikompilasi menjadi WASM di Arbitrum), yang belum bisa dibaca oleh aturan Neuro.`
       : 'Kontrak Stylus (Rust atau C++ yang dikompilasi menjadi WASM di Arbitrum). Aturan Neuro belum bisa membaca kode ini, jadi tidak diketahui apakah kontrak ini dapat mencetak token, memblokir dompet, atau menghentikan transfer. Anggap saja belum diperiksa.'),
+    'stylus-read': (p) => `Ini kontrak Stylus (Rust atau C++ yang dikompilasi menjadi WASM di Arbitrum). Neuro membongkar kode WASM-nya (${fmtSupply(p.size, 0)} byte) dan menemukan ${p.count ?? 0} fungsi yang dikenal; temuan di bawah berasal dari fungsi-fungsi itu. Fungsi dengan nama tidak biasa bisa terlewat.`,
     'unknown-code-format': (p) => (p.issuer
       ? `${p.issuer} memakai kode yang bukan EVM bytecode standar.`
       : 'Kode kontrak ini bukan EVM bytecode standar dan tidak bisa dibaca oleh aturan Neuro. Anggap saja belum diperiksa.'),
@@ -209,4 +210,14 @@ export const T = {
       ? `${p.issuer} dapat meng-upgrade kode kontrak. Ini cara biasa penerbit memperbaiki atau menambah fitur.`
       : `Bisa di-upgrade${p.implementation ? ` (proxy yang menunjuk ke kode ${p.implementation})` : ''}${p.functions?.length ? ` melalui ${list(p.functions)}` : ''}: siapa pun yang diizinkan dapat mengganti seluruh kode. Hasil pemeriksaan hari ini belum tentu berlaku besok.`),
     'sn-caveat': () => 'Diperiksa dari ABI yang dipublikasikan kontrak on-chain (nama fungsi dan apakah fungsi mengubah state) dengan aturan tetap. Isi fungsi tidak dibaca. Bukan saran investasi.',
+    // Bitcoin (Runes)
+    'btc-not-found': () => 'Tidak ada Rune dengan nama atau ID ini di Bitcoin. Nama Rune berbentuk seperti DOG•GO•TO•THE•MOON dan ID seperti 840000:3. Token BRC-20 belum bisa dibaca.',
+    'btc-rune': (p) => `Rune Bitcoin "${p.name ?? '?'}"${p.symbol ? ` (${p.symbol})` : ''}, ID ${p.id ?? '?'}, pasokan sejauh ini ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'btc-no-admin': () => 'Token Bitcoin tidak punya kode kontrak dan tidak punya pemilik: tidak ada yang bisa membekukan, memblokir, menghentikan sementara, memungut pajak, atau mengubah token ini. Aturannya sudah tetap sejak token dibuat.',
+    'btc-open-mint': (p) => (p.unlimited
+      ? 'Siapa pun masih bisa mint lebih banyak, tanpa batas dan tanpa tanggal akhir, jadi pasokannya bisa terus bertambah tanpa batas.'
+      : `Mint masih dibuka: siapa pun bisa mint lebih banyak sampai ${p.end ? `blok ${p.end} atau sampai ` : ''}${p.maxSupply ? `maksimum ${fmtSupply(p.maxSupply, p.decimals)} tercapai` : 'masa mint berakhir'}${p.percent != null ? ` (sudah ${p.percent}% di-mint)` : ''}. Pasokannya masih bertambah.`),
+    'btc-premine': (p) => `${p.percent}% dari pasokan maksimum diberikan ke pembuat saat token dibuat (premine). Pembuat bisa menjualnya kapan saja.`,
+    'btc-turbo': () => 'Pembuat memilih ikut perubahan protokol Runes di masa depan (turbo), jadi cara kerja token ini bisa berubah mengikuti versi protokol yang baru.',
+    'btc-caveat': () => 'Diperiksa dari ord (ordinals.com), indexer acuan Runes, dengan aturan tetap. Rune ada sebagai aturan indexer di atas Bitcoin. Pemegang dan likuiditas tidak diperiksa. Bukan saran investasi.',
 };

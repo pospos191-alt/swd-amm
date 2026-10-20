@@ -13,7 +13,7 @@ export const UI = {
     chain: 'チェーン', address: 'アドレス', proxy: 'Proxy', implementation: '実装コード', owner: 'オーナー', functions: '判明している関数', report: 'レポートID', explorer: 'explorer で開く', fingerprint: 'コードの指紋（テンプレート登録用）', unknown: '名前が不明な関数',
     program: 'トークンプログラム', mintAuth: '発行権限', freezeAuth: '凍結権限', extensions: '拡張機能', upgradeAuth: 'アップグレード権限', none: 'なし',
     package: 'パッケージ', standard: '規格', admin: '管理者', holders: '保有者数', listed: 'tonapi リスト', raw: 'raw アドレス',
-    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード', walletCode: '保有者ウォレットのコード', nearKeys: 'フルアクセスキー（full-access key）', codeHash: 'コードハッシュ', cairo: 'Cairo バージョン',
+    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード', walletCode: '保有者ウォレットのコード', nearKeys: 'フルアクセスキー（full-access key）', codeHash: 'コードハッシュ', cairo: 'Cairo バージョン', maxSupply: '最大供給量', tokenId: 'トークン ID',
   },
 };
 
@@ -168,6 +168,7 @@ export const T = {
     'stylus-code': (p) => (p.issuer
       ? `${p.issuer} は Stylus コントラクト（Arbitrum 上で Rust/C++ を WASM にコンパイルしたもの）を使っており、Neuro のルールではまだ読み取れません。`
       : 'Stylus コントラクト（Arbitrum 上で Rust または C++ を WASM にコンパイルしたもの）です。Neuro のルールではまだこのコードを読み取れないため、トークンの発行、送金の停止、一時停止ができるかどうかは不明です。未確認として扱ってください。'),
+    'stylus-read': (p) => `Stylus コントラクトです（Rust や C++ を Arbitrum 上の WASM にコンパイルしたもの）。Neuro は WASM コード（${fmtSupply(p.size, 0)} バイト）を展開して読み、既知の関数を ${p.count ?? 0} 個見つけました。以下の結果はそれらに基づきます。珍しい名前の関数は見落とす可能性があります。`,
     'unknown-code-format': (p) => (p.issuer
       ? `${p.issuer} は標準的な EVM bytecode ではないコードを使っています。`
       : 'このコントラクトのコードは標準的な EVM bytecode ではなく、Neuro のルールでは読み取れません。未確認として扱ってください。'),
@@ -209,4 +210,14 @@ export const T = {
       ? `${p.issuer} はコントラクトのコードをアップグレードできます。発行者が修正や機能追加をする通常の方法です。`
       : `アップグレード可能${p.implementation ? `（コード ${p.implementation} を指す proxy）` : ''}${p.functions?.length ? `（${list(p.functions)} 経由）` : ''}: 権限を持つ人はコード全体を置き換えられます。今日の確認結果が明日も正しいとは限りません。`),
     'sn-caveat': () => 'コントラクトがチェーン上で公開している ABI（関数名と、状態を変更するかどうか）を決まったルールで確認した結果です。関数の中身は読んでいません。投資助言ではありません。',
+    // Bitcoin (Runes)
+    'btc-not-found': () => 'この名前または ID の Rune は Bitcoin 上に見つかりません。Rune の名前は DOG•GO•TO•THE•MOON、ID は 840000:3 のような形です。BRC-20 トークンはまだ読み取れません。',
+    'btc-rune': (p) => `Bitcoin の Rune「${p.name ?? '?'}」${p.symbol ? `（${p.symbol}）` : ''}、ID ${p.id ?? '?'}、これまでの発行量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
+    'btc-no-admin': () => 'Bitcoin のトークンにはコントラクトのコードもオーナーもありません。このトークンを凍結、ブロック、一時停止、課税、変更できる人はいません。ルールは作成時に固定されています。',
+    'btc-open-mint': (p) => (p.unlimited
+      ? '今も誰でも追加で mint できます。上限も終了日もないため、供給量は際限なく増え続ける可能性があります。'
+      : `mint はまだ受付中です: ${p.end ? `ブロック ${p.end} に達するか、` : ''}${p.maxSupply ? `上限の ${fmtSupply(p.maxSupply, p.decimals)} に達する` : 'mint 期間が終わる'}まで誰でも追加で mint できます${p.percent != null ? `（現在 ${p.percent}% mint 済み）` : ''}。供給量はまだ増えています。`),
+    'btc-premine': (p) => `トークン作成時に、最大供給量の ${p.percent}% が作成者に渡されました（premine）。作成者はいつでも売却できます。`,
+    'btc-turbo': () => '作成者は Runes プロトコルの今後の変更を受け入れる設定（turbo）を選んでいます。そのため、このトークンの仕組みはプロトコルの新バージョンで変わる可能性があります。',
+    'btc-caveat': () => 'Runes の基準となるインデクサー ord（ordinals.com）のデータを決まったルールで確認した結果です。Rune は Bitcoin 上でインデクサーが読み取るルールとして存在します。保有者と流動性は確認していません。投資助言ではありません。',
 };

@@ -13,7 +13,7 @@ export const UI = {
     chain: '체인', address: '주소', proxy: 'Proxy', implementation: '실제 코드 (implementation)', owner: '소유자', functions: '알려진 함수', report: '보고서 ID', explorer: 'explorer에서 열기', fingerprint: '코드 지문 (템플릿 등록용)', unknown: '이름을 알 수 없는 함수',
     program: '토큰 프로그램', mintAuth: '발행 권한', freezeAuth: '동결 권한', extensions: '확장 기능', upgradeAuth: '업그레이드 권한', none: '없음',
     package: '패키지', standard: '표준', admin: '관리자', holders: '보유자 수', listed: 'tonapi 목록', raw: '원본 주소 (raw)',
-    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드', nearKeys: '전체 접근 키 (full-access key)', codeHash: '코드 해시', cairo: 'Cairo 버전',
+    idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드', nearKeys: '전체 접근 키 (full-access key)', codeHash: '코드 해시', cairo: 'Cairo 버전', maxSupply: '최대 공급량', tokenId: '토큰 ID',
   },
 };
 
@@ -168,6 +168,7 @@ export const T = {
     'stylus-code': (p) => (p.issuer
       ? `${p.issuer}은(는) Stylus 컨트랙트(Rust/C++를 Arbitrum의 WASM으로 컴파일한 것)를 사용하며, Neuro의 규칙으로는 아직 읽을 수 없습니다.`
       : 'Stylus 컨트랙트입니다 (Rust 또는 C++를 Arbitrum의 WASM으로 컴파일한 것). Neuro의 규칙으로는 아직 이 코드를 읽을 수 없으므로, 발행·차단·일시 정지가 가능한지 알 수 없습니다. 검사되지 않은 것으로 간주하십시오.'),
+    'stylus-read': (p) => `Stylus 컨트랙트입니다(Rust 또는 C++를 Arbitrum의 WASM으로 컴파일). Neuro가 WASM 코드(${fmtSupply(p.size, 0)}바이트)를 풀어서 읽었고, 알려진 함수 ${p.count ?? 0}개를 찾았습니다. 아래 결과는 이 함수들에서 나온 것입니다. 이름이 특이한 함수는 놓칠 수 있습니다.`,
     'unknown-code-format': (p) => (p.issuer
       ? `${p.issuer}은(는) 표준 EVM bytecode가 아닌 코드를 사용합니다.`
       : '이 컨트랙트의 코드는 표준 EVM bytecode가 아니어서 Neuro의 규칙으로 읽을 수 없습니다. 검사되지 않은 것으로 간주하십시오.'),
@@ -209,4 +210,14 @@ export const T = {
       ? `${p.issuer}이(가) 컨트랙트 코드를 업그레이드할 수 있습니다. 발행사가 수정하거나 기능을 추가할 때 쓰는 일반적인 방식입니다.`
       : `업그레이드 가능${p.implementation ? ` (코드 ${p.implementation}을(를) 가리키는 proxy)` : ''}${p.functions?.length ? ` (함수: ${list(p.functions)})` : ''}: 권한이 있는 사람이 코드 전체를 교체할 수 있습니다. 오늘 확인한 내용이 내일은 달라질 수 있습니다.`),
     'sn-caveat': () => '컨트랙트가 체인에 공개한 ABI(함수 이름과 상태 변경 여부)를 정해진 규칙으로 검사했습니다. 함수 내부는 읽지 않았습니다. 투자 조언이 아닙니다.',
+    // Bitcoin (Runes)
+    'btc-not-found': () => 'Bitcoin에서 이 이름이나 ID의 Rune을 찾을 수 없습니다. Rune 이름은 DOG•GO•TO•THE•MOON, ID는 840000:3 같은 형식입니다. BRC-20 토큰은 아직 읽을 수 없습니다.',
+    'btc-rune': (p) => `Bitcoin Rune "${p.name ?? '?'}"${p.symbol ? ` (${p.symbol})` : ''}, ID ${p.id ?? '?'}, 지금까지 발행량 ${fmtSupply(p.totalSupply, p.decimals)}개입니다.`,
+    'btc-no-admin': () => 'Bitcoin 토큰에는 컨트랙트 코드도 소유자도 없습니다. 누구도 이 토큰을 동결, 차단, 일시 중지하거나 세금을 매기거나 바꿀 수 없습니다. 규칙은 만들 때 고정되었습니다.',
+    'btc-open-mint': (p) => (p.unlimited
+      ? '지금도 누구나 더 mint할 수 있고 상한도 종료일도 없어, 공급량이 끝없이 늘어날 수 있습니다.'
+      : `아직 mint가 열려 있습니다: ${p.end ? `블록 ${p.end}에 이르거나 ` : ''}${p.maxSupply ? `최대 ${fmtSupply(p.maxSupply, p.decimals)}개에 도달할` : 'mint 기간이 끝날'} 때까지 누구나 더 mint할 수 있습니다${p.percent != null ? ` (지금까지 ${p.percent}% mint됨)` : ''}. 공급량이 아직 늘고 있습니다.`),
+    'btc-premine': (p) => `토큰을 만들 때 최대 공급량의 ${p.percent}%가 생성자에게 돌아갔습니다 (premine). 생성자는 언제든지 팔 수 있습니다.`,
+    'btc-turbo': () => '생성자가 앞으로의 Runes 프로토콜 변경을 받아들이도록 선택했습니다 (turbo). 그래서 이 토큰의 작동 방식이 새 프로토콜 버전에 따라 바뀔 수 있습니다.',
+    'btc-caveat': () => 'Runes의 기준 인덱서인 ord(ordinals.com)의 데이터를 정해진 규칙으로 검사했습니다. Rune은 Bitcoin 위에서 인덱서가 읽는 규칙으로 존재합니다. 보유자와 유동성은 검사하지 않았습니다. 투자 조언이 아닙니다.',
 };
