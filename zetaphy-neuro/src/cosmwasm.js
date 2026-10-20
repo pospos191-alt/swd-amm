@@ -94,6 +94,10 @@ async function readFactoryDenom(api, denom, creator) {
     optional(`/cosmos/bank/v1beta1/denoms_metadata_by_query_string?denom=${q}`),
   ]);
   const m = meta?.metadata ?? {};
+  // Many factory coins set name/symbol/display to the raw denom: show the
+  // subdenom instead of a 100-character string.
+  const sub = denom.split('/').slice(2).join('/');
+  const plain = (v) => (v && !String(v).startsWith('factory/') ? v : '');
   const exps = (m.denom_units ?? []).map((u) => Number(u.exponent)).filter(Number.isInteger);
   const decimals = exps.length ? Math.max(...exps) : 0;
   return {
@@ -101,8 +105,8 @@ async function readFactoryDenom(api, denom, creator) {
     address: denom,
     creator,
     token: {
-      name: cleanText(m.name || denom.split('/').slice(2).join('/')) ?? undefined,
-      symbol: cleanText(m.symbol || m.display || '', 24) || undefined,
+      name: cleanText(plain(m.name) || sub) ?? undefined,
+      symbol: cleanText(plain(m.symbol) || plain(m.display) || '', 24) || undefined,
       decimals: decimals >= 0 && decimals <= 36 ? decimals : 0,
       supply: supply?.amount?.amount ?? undefined,
     },

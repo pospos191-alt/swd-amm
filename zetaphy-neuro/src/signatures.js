@@ -169,4 +169,6 @@ export const SIGNATURES = [
   ['upgradeToAndCall(address,bytes)', 'upgrade'],
   ['implementation()', 'upgrade'],
   ['deprecate(address)', 'upgrade'],           // USDT: forwards every call to a new contract
+  ['admin()', 'upgrade'],                       // transparent / ZeppelinOS proxy admin
+  ['changeAdmin(address)', 'upgrade'],
 ];

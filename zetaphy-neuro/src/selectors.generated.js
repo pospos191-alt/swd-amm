@@ -135,4 +135,6 @@ export const SELECTORS = {
   '4f1ef286': { sig: 'upgradeToAndCall(address,bytes)', cat: 'upgrade' },
   '5c60da1b': { sig: 'implementation()', cat: 'upgrade' },
   '0753c30c': { sig: 'deprecate(address)', cat: 'upgrade' },
+  'f851a440': { sig: 'admin()', cat: 'upgrade' },
+  '8f283970': { sig: 'changeAdmin(address)', cat: 'upgrade' },
 };

@@ -56,7 +56,7 @@ export function analyze(input) {
   const proxy = input.proxy ?? { kind: null };
   // implementation() alone is only a getter; upgradeTo* (or USDT's deprecate,
   // which forwards all calls to a new contract) is what swaps the code.
-  const upgradeable = proxy.kind === 'eip1967' || proxy.kind === 'beacon'
+  const upgradeable = proxy.kind === 'eip1967' || proxy.kind === 'beacon' || proxy.kind === 'zos'
     || sigsIn('upgrade').some((s) => s.startsWith('upgradeTo') || s === 'deprecate(address)');
 
   // Who controls the contract?

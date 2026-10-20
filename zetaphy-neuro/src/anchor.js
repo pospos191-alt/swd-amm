@@ -62,7 +62,10 @@ export async function parseIdlAccount(data) {
 // camelCase (Anchor < 0.30) -> snake_case (0.30+), so one set of rules fits both.
 const snake = (s) => String(s).replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
 
-const ADMIN_ACCOUNT = /(^|_)(admin|authority|owner|governor|operator|manager|minter|freezer|pauser|config_authority|update_authority)(_|$)/;
+// Signer names that mean "an admin", not "the user". A bare `authority` or
+// `owner` is usually the user signing for their own tokens (Jupiter's swaps
+// use `user_transfer_authority`), so those alone do not count.
+const ADMIN_ACCOUNT = /(^|_)(admin|governor|governance|operator|manager|multisig|guardian|minter|pauser|freezer|config_authority|admin_authority|update_authority|upgrade_authority|freeze_authority|mint_authority|pause_authority|fee_authority|global_authority)(_|$)/;
 
 /** Flattens nested account groups (composite accounts). */
 function flatAccounts(accs) {

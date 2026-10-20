@@ -1,0 +1,51 @@
+# Neuro live check: reads real tokens on every supported chain (EVM, Solana,
+# Sui, Aptos, TON, Osmosis, Neutron) through the free public endpoints the
+# web page uses, and checks the findings that must be there.
+#
+# Separate from CI on purpose: a public endpoint being down for a minute
+# must not block a merge. It runs when Neuro's reader code changes, once a
+# week (public APIs change without warning), and by hand.
+# Cost: about 1-2 minutes per run of the free Actions allowance.
+
+name: Neuro live check
+
+on:
+  pull_request:
+    paths: ['zetaphy-neuro/src/**', 'zetaphy-neuro/scripts/live-check.js', '.github/workflows/neuro-live.yml']
+  push:
+    branches: [main]
+    paths: ['zetaphy-neuro/src/**', 'zetaphy-neuro/scripts/live-check.js', '.github/workflows/neuro-live.yml']
+  schedule:
+    - cron: '41 5 * * 3' # Wednesdays
+  workflow_dispatch:
+    inputs:
+      chains:
+        description: "Only these chains (space-separated, e.g. 'ton sui'); empty = all"
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neuro-live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live:
+    name: Neuro live check (real chains)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: zetaphy-neuro
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+      # No install: the reader has no runtime dependencies.
+      - name: Read real tokens on every chain
+        env:
+          CHAINS: ${{ github.event.inputs.chains }}
+        run: node scripts/live-check.js $CHAINS
