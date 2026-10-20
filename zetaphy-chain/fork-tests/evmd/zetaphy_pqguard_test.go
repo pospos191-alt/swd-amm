@@ -6,11 +6,13 @@ package evmd
 // must not crash a node, contract-creation nonces, and genesis export.
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
@@ -41,9 +43,13 @@ func pqSetup(t *testing.T) *EVMD {
 	return Setup(t, constants.ExampleChainID.ChainID, constants.ExampleChainID.EVMChainID)
 }
 
+// pqApp: a fresh app and a context at height 2 with vote extensions on.
 func pqApp(t *testing.T) (*EVMD, sdk.Context) {
 	app := pqSetup(t)
-	return app, app.NewContext(false).WithBlockHeight(2).WithChainID(constants.ExampleChainID.ChainID)
+	ctx := app.NewContext(false).WithBlockHeight(2).WithChainID(constants.ExampleChainID.ChainID)
+	cp := ctx.ConsensusParams()
+	cp.Abci = &cmtproto.ABCIParams{VoteExtensionsEnableHeight: 1}
+	return app, ctx.WithConsensusParams(cp)
 }
 
 func pqFund(t *testing.T, app *EVMD, ctx sdk.Context, addr sdk.AccAddress, amt sdkmath.Int) {
@@ -177,12 +183,15 @@ func TestPQGenesis(t *testing.T) {
 	app, ctx := pqApp(t)
 	st := ctx.KVStore(app.GetKey(pqStoreKey))
 	st.Set(pqLockKey(make([]byte, 20)), []byte{7})
-	st.Set(pqVoteKeyOf([]byte{1, 2}), []byte{8})
+	cur, old := bytes.Repeat([]byte{8}, 1312), bytes.Repeat([]byte{9}, 1312)
+	st.Set(pqVoteKeyOf([]byte{1, 2}), append(append([]byte{0, 0, 0, 0, 0, 0, 0, 1}, cur...), old...)) // replaced in block 1
+	st.Set(pqLastBlockKey, make([]byte, 40))
 	raw, err := app.pqExportGenesis(ctx)
 	require.NoError(t, err)
 	app2, ctx2 := pqApp(t)
 	require.NoError(t, app2.pqInitGenesis(ctx2, raw))
 	require.Equal(t, []byte{7}, app2.pqController(ctx2, make([]byte, 20)))
-	require.Equal(t, []byte{8}, ctx2.KVStore(app2.GetKey(pqStoreKey)).Get(pqVoteKeyOf([]byte{1, 2})))
+	require.Equal(t, append(make([]byte, 8), cur...), ctx2.KVStore(app2.GetKey(pqStoreKey)).Get(pqVoteKeyOf([]byte{1, 2})), "the current key only, from height 0")
+	require.Nil(t, ctx2.KVStore(app2.GetKey(pqStoreKey)).Get(pqLastBlockKey), "not carried over")
 	require.Error(t, app2.pqInitGenesis(ctx2, []byte(`[{"key":"09","value":"00"}]`)), "unknown prefix")
 }

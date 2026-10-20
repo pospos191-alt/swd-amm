@@ -18,6 +18,8 @@ import (
 	"cosmossdk.io/core/comet"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 )
 
 type pqVal struct {
@@ -134,8 +136,10 @@ func TestPQCertificateTxOnlyInBlocks(t *testing.T) {
 	require.ErrorContains(t, err, "first tx of a block")
 	_, err = app.AnteHandler()(ctx.WithExecMode(sdk.ExecModeSimulate), tx, true)
 	require.Error(t, err)
-	_, err = app.AnteHandler()(ctx.WithExecMode(sdk.ExecModeFinalize), tx, false)
+	_, err = app.AnteHandler()(ctx.WithExecMode(sdk.ExecModeFinalize).WithTxIndex(0), tx, false)
 	require.NoError(t, err)
+	_, err = app.AnteHandler()(ctx.WithExecMode(sdk.ExecModeFinalize).WithTxIndex(1), tx, false)
+	require.Error(t, err, "only as the first tx")
 	res, err := app.CheckTx(&abci.RequestCheckTx{Tx: bz, Type: abci.CheckTxType_New})
 	require.NoError(t, err)
 	require.NotZero(t, res.Code)
@@ -166,4 +170,55 @@ func TestPQEvidenceSwitch(t *testing.T) {
 	got := app.pqFilterEvidence(ctx).CometInfo().GetEvidence()
 	require.Equal(t, 1, got.Len())
 	require.Equal(t, vals[1].addr, got.Get(0).Validator().Address(), "a validator without a key is still slashable")
+}
+
+// Two replacements of a vote key in one block: the votes on that block were
+// signed with the key from before the block, and must still verify.
+func TestPQVoteKeyTwiceInOneBlock(t *testing.T) {
+	app, ctx := pqApp(t)
+	vals, err := app.StakingKeeper.GetAllValidators(ctx)
+	require.NoError(t, err)
+	val := vals[0]
+	cons, err := val.GetConsAddr()
+	require.NoError(t, err)
+	opBz, err := app.StakingKeeper.ValidatorAddressCodec().StringToBytes(val.GetOperator())
+	require.NoError(t, err)
+	op := sdk.AccAddress(opBz).String()
+	keys := pqVals(3)
+	register := func(ctx sdk.Context, k pqVal, old *pqVal) error {
+		msg := pqVoteKeyMsg(ctx.ChainID(), cons, k.pub)
+		m := &MsgPQVoteKey{Operator: op, PubKey: k.pub}
+		m.Proof, _ = pqSign(k.sk, msg)
+		if old != nil {
+			m.OldKeySig, _ = pqSign(old.sk, msg)
+		}
+		_, err := app.pqVoteKey(ctx, m)
+		return err
+	}
+	const s = 20
+	require.NoError(t, register(ctx.WithBlockHeight(s-5), keys[0], nil))
+	in := ctx.WithBlockHeight(s)
+	require.Error(t, register(in, keys[1], nil), "replacing needs the current key")
+	require.NoError(t, register(in, keys[1], &keys[0]))
+	require.ErrorContains(t, register(in, keys[2], &keys[1]), "already changed in this block")
+	require.Equal(t, keys[0].pub, app.pqVoteKeyAt(in, cons, s), "votes on block s")
+	require.Equal(t, keys[1].pub, app.pqVoteKeyAt(in, cons, s+1), "votes from s+1 on")
+	require.NoError(t, register(ctx.WithBlockHeight(s+1), keys[2], &keys[1]), "next block")
+}
+
+// Only governance can flip the evidence switch.
+func TestPQSetEvidence(t *testing.T) {
+	app, ctx := pqApp(t)
+	gov := authtypes.NewModuleAddress(govtypes.ModuleName).String()
+	_, err := app.pqSetEvidence(ctx, &MsgSetPQEvidence{Authority: sdk.AccAddress(make([]byte, 20)).String(), Enabled: 1})
+	require.ErrorContains(t, err, "only governance")
+	_, err = app.pqSetEvidence(ctx, &MsgSetPQEvidence{Authority: gov, Enabled: 2})
+	require.Error(t, err)
+	_, err = app.pqSetEvidence(ctx, &MsgSetPQEvidence{Authority: gov, Enabled: 1})
+	require.NoError(t, err)
+	require.Equal(t, []byte{1}, ctx.KVStore(app.GetKey(pqStoreKey)).Get(pqEvidenceKey))
+	// The SDK finds the signer (the gov module) from the descriptor, as gov requires.
+	signers, _, err := app.AppCodec().GetMsgV1Signers(&MsgSetPQEvidence{Authority: gov})
+	require.NoError(t, err)
+	require.Equal(t, authtypes.NewModuleAddress(govtypes.ModuleName).Bytes(), signers[0])
 }

@@ -17,10 +17,9 @@
 #   gov.sh validators                                    who validates, and their share
 #   gov.sh quantum-lock <ML-DSA controller>              hand the FROM account to a PQ account, for good
 #   gov.sh vote-key                                      register or replace this node's ML-DSA vote key
-#   gov.sh propose-upgrade zetaphy-pq-evidence <height> "<why>"
-#                                                        stop slashing on ed25519-only double-sign
-#                                                        evidence for validators with an ML-DSA key
-#                                                        (zetaphy-ed25519-evidence switches it back)
+#   gov.sh pq-evidence on|off                            propose to stop (on) / resume (off) slashing on
+#                                                        ed25519-only double-sign evidence for
+#                                                        validators with an ML-DSA vote key
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -45,10 +44,10 @@ send() {
   [ "$(echo "$out" | jq -r .code 2>/dev/null)" = 0 ] || { echo "rejected: $(echo "$out" | jq -r .raw_log 2>/dev/null || echo "$out")"; exit 1; }
 }
 
-submit() { # $1 = proposal file
+submit() { # the tx that submits the proposal, e.g.: tx gov submit-proposal <file>
   local before id=""
   before=$($ZETAPHYD q gov proposals $QF 2>/dev/null | jq -r '[.proposals[]?.id | tonumber] | max // 0')
-  send tx gov submit-proposal "$1"
+  send "$@"
   # Wait for the block that includes it (blocks are ~5 s).
   for _ in $(seq 1 12); do
     sleep 2
@@ -71,13 +70,13 @@ case "${1:-}" in
     jq -n --arg gov "$gov" --arg name "$name" --arg h "$height" --arg d "$DEPOSIT" --arg s "$summary" \
       '{messages:[{"@type":"/cosmos.upgrade.v1beta1.MsgSoftwareUpgrade",authority:$gov,plan:{name:$name,height:$h,info:""}}],
         metadata:"",deposit:$d,title:("Upgrade to " + $name),summary:$s,expedited:false}' > "$f"
-    submit "$f"; rm -f "$f" ;;
+    submit tx gov submit-proposal "$f"; rm -f "$f" ;;
   propose-text)
     title=${2:?title}; summary=${3:?summary}
     f=$(mktemp)
     # A proposal with no messages must carry metadata (SDK rule).
     jq -n --arg d "$DEPOSIT" --arg t "$title" --arg s "$summary" '{messages:[],metadata:$t,deposit:$d,title:$t,summary:$s,expedited:false}' > "$f"
-    submit "$f"; rm -f "$f" ;;
+    submit tx gov submit-proposal "$f"; rm -f "$f" ;;
   vote)
     id=${2:?id}; opt=${3:?option}
     [[ "$opt" =~ ^(yes|no|abstain|no_with_veto)$ ]] || { echo "vote: yes, no, abstain or no_with_veto"; exit 1; }
@@ -103,7 +102,7 @@ case "${1:-}" in
         max_percent_send:$s,max_percent_recv:$r,duration_hours:$h}],
         metadata:"",deposit:$d,title:("IBC rate limit: " + $dn + " on " + $ch),
         summary:("At most " + $s + "% out / " + $r + "% in of the supply of " + $dn + " through " + $ch + " every " + $h + " hours."),expedited:false}' > "$f"
-    submit "$f"; rm -f "$f" ;;
+    submit tx gov submit-proposal "$f"; rm -f "$f" ;;
   ratelimits)
     $ZETAPHYD q ratelimit list-rate-limits $QF ;;
   delegate)
@@ -119,6 +118,9 @@ case "${1:-}" in
     $ZETAPHYD q staking validators $QF | jq -r '[.validators[] | select(.status=="BOND_STATUS_BONDED")] as $v
       | ($v | map(.tokens | tonumber) | add) as $t
       | $v[] | "\(.operator_address)  \(.description.moniker)  \((.tokens | tonumber) / $t * 100 | floor)%"' ;;
+  pq-evidence)
+    v=${2:?on or off}; [[ "$v" =~ ^(on|off)$ ]] || { echo "on or off"; exit 1; }
+    submit tx pq-evidence-proposal "$v" --deposit "$DEPOSIT" ;;
   quantum-lock)
     # Afterwards the FROM key is refused; the controller acts for the account
     # (zetaphy pq native ... --as <this account>).
@@ -132,5 +134,5 @@ case "${1:-}" in
     send tx pq-vote-key
     echo "vote key registered" ;;
   *)
-    sed -n '8,23p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,22p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

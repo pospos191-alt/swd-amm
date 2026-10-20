@@ -402,11 +402,12 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: PQ wallets and native ML-DSA accounts on a real devnet
+      - name: PQ wallets, native ML-DSA accounts and block certificates on real devnets
         working-directory: zetaphy-network
         run: |
           npm ci --no-audit --no-fund
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pq
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:pqcert
 
   program:
     name: program (cargo test + anchor test)

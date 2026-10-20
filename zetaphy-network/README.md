@@ -313,7 +313,7 @@ zetaphy pq native handover 0x<owner> zetaphy1<controller ใหม่>
 - ทดสอบบนเชนจริงแล้ว (`npm run test:devnet:pq`, รันใน CI ด้วย): ส่งได้ และเชนปฏิเสธธุรกรรมที่ใช้กุญแจอื่นสวมบัญชี ลายเซ็นที่ถูกแก้ และธุรกรรมเก่าที่ส่งซ้ำ
   - ชุดเดียวกันมีทดสอบ `token-send`, `call --value`, `stake`, `rewards`, `unstake` และการเรียกที่ revert ต้องไม่ขยับเงิน (ต้องใช้ `zetaphyd` ที่มี `MsgEVMCall`)
 - เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy-testnet-1`): ตั้ง `ZETAPHY_CHAIN_ID`
-- ยังไม่ได้ทำ: การสร้างสัญญาใหม่ (ธุรกรรม EVM) และกุญแจของ validator ยังใช้ ECDSA / ed25519 เหมือนเดิม
+- validator เซ็นโหวตด้วย ML-DSA-44 เพิ่มจาก ed25519 และทุกบล็อกมีใบรับรอง ML-DSA ของบล็อกก่อนหน้า (ตรวจด้วย `zetaphy pq verify-block`)
 
 ### ตรวจบล็อกแบบต้านควอนตัม: `zetaphy pq verify-block`
 

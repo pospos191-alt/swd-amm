@@ -8,6 +8,7 @@
 #   5. replacing a key without the current key's signature is refused
 #   6. each block starts with the ML-DSA vote certificate of the block before
 #   7. a new full node catches up from genesis (blocksync checks certificates)
+#   8. a governance vote switches off slashing on ed25519-only evidence
 #   bash test-vote-keys.sh <zetaphyd> [workdir]
 set -euo pipefail
 BIN=$1; W=${2:-$(mktemp -d)}; CHAIN=zetaphy-ve-1; D=azetaphy
@@ -21,7 +22,8 @@ $BIN keys add valB --keyring-backend test --home $W/B --algo eth_secp256k1 >/dev
 G=$W/A/config/genesis.json
 jq ".app_state.staking.params.bond_denom=\"$D\" | .app_state.evm.params.evm_denom=\"$D\" | .app_state.mint.params.mint_denom=\"$D\" | .app_state.gov.params.min_deposit[0].denom=\"$D\" | .app_state.gov.params.expedited_min_deposit[0].denom=\"$D\"
   | .app_state.bank.denom_metadata=[{description:\"ZETAPHY\",denom_units:[{denom:\"$D\",exponent:0},{denom:\"zetaphy\",exponent:18}],base:\"$D\",display:\"zetaphy\",name:\"ZETAPHY\",symbol:\"ZETAPHY\"}]
-  | .consensus.params.abci.vote_extensions_enable_height=\"1\"" $G > $G.t && mv $G.t $G
+  | .consensus.params.abci.vote_extensions_enable_height=\"1\"
+  | .app_state.gov.params.voting_period=\"8s\" | .app_state.gov.params.expedited_voting_period=\"4s\" | .app_state.gov.params.max_deposit_period=\"8s\"" $G > $G.t && mv $G.t $G
 for n in A B; do $BIN genesis add-genesis-account "$($BIN keys show val$n -a --keyring-backend test --home $W/$n)" "100000000000000000000000000$D" --home $W/A; done
 cp $G $W/B/config/genesis.json
 $BIN genesis gentx valA "6000000000000000000000000$D" --keyring-backend test --home $W/A --chain-id $CHAIN --gas-prices "1000000000$D" >/dev/null 2>&1
@@ -79,3 +81,15 @@ for _ in $(seq 1 90); do
 done
 c=$(curl -s 127.0.0.1:28865/status | jq -r '.result.sync_info.latest_block_height // 0')
 [ "$c" -ge "$h" ] || fail "7: the new node stopped at $c (tip $h)"; echo "ok 7 a new node caught up to $c, checking every certificate"
+F="--keyring-backend test --chain-id $CHAIN --node tcp://127.0.0.1:28645 --gas 800000 --gas-prices 1000000000$D -y -o json"
+$BIN tx pq-evidence-proposal on --deposit "10000000$D" --from valA --home $W/A $F >/dev/null
+sleep 4
+id=$($BIN q gov proposals --node tcp://127.0.0.1:28645 -o json 2>/dev/null | jq -r '[.proposals[]?.id | tonumber] | max // empty')
+[ -n "$id" ] || fail "8: no proposal"
+for n in A B; do $BIN tx gov vote "$id" yes --from val$n --home $W/$n $F >/dev/null; done
+for _ in $(seq 1 20); do
+  v=$(curl -s "127.0.0.1:28645/abci_query?path=%22/store/zetaphypq/key%22&data=0x05" | jq -r '.result.response.value // empty')
+  [ "$v" = "AQ==" ] && break; sleep 2
+done
+[ "$v" = "AQ==" ] || fail "8: the switch is not on after the vote (proposal $id)"
+moving 3 || fail "8: blocks stopped after the switch"; echo "ok 8 governance turned the evidence switch on (proposal $id); blocks continue"
