@@ -25,6 +25,9 @@
 //                                      be one voice of the Neuro bridge
 //   zetaphy deploy [--bond 100 --reward 1 --min-fee 0.1 --window 120 --timeout 600 --unbond 3600 --daily-reward-cap 100]
 //   zetaphy deploy-stable [--price 0.01 --reserve 1000 --governance 0x<multisig>]  test USDC/USDT + StableGateway
+//   zetaphy deploy-vault [--validators 0x... --validators-share 30 --fund N --governance 0x<multisig>]
+//                                      RewardVault: releases the reward pool at 10% a year (no withdraw)
+//   zetaphy vault status | release     what has vested; pay it out (anyone may; node start does it daily)
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
 // (NeuroJobs address). They are saved to ~/.zetaphy/config.json on first use.
@@ -47,7 +50,7 @@ const STABLE = art('TestStable');
 const GATEWAY = art('StableGateway');
 const QWALLET = art('QuantumWallet');
 const QFACTORY = art('QuantumWalletFactory');
-const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'DecoyBridge', 'LockBox', 'BridgedToken', 'SimpleMultisig'].map((n) => [n, art(n)]));
+const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'DecoyBridge', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault'].map((n) => [n, art(n)]));
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 /** --governance: who takes over the admin role after setup (a multisig). */
 function governanceOf(opt, write) {
@@ -73,7 +76,8 @@ function settings(opt, env) {
   const file = join(HOME, 'config.json');
   const saved = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const s = { ...saved, rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
-  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'bridgeGuard']) if (opt[k]) s[k] = opt[k];
+  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'bridgeGuard', 'vault']) if (opt[k]) s[k] = opt[k];
+  if (!s.vault && env.ZETAPHY_VAULT) s.vault = env.ZETAPHY_VAULT;
   if (opt.hybrid) s.pqHybrid = true;
   if (JSON.stringify(s) !== JSON.stringify(saved)) {
     mkdirSync(HOME, { recursive: true, mode: 0o700 });
@@ -127,8 +131,21 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     });
     write('running: waiting for jobs (Ctrl+C to stop)');
     const every = Number(opt.every ?? 5) * 1000;
+    // Pay out the reward vault's vested share about once an hour: anyone may,
+    // so every runner helps keep rewards flowing (a few cents of gas a day).
+    const vault = s.vault ? new Contract(s.vault, B.RewardVault.abi, c.signer) : null;
+    let lastVault = 0;
     for (;;) {
       try { await worker.tick(); } catch (e) { write(`tick failed: ${e.shortMessage ?? e.message}`); }
+      if (vault && Date.now() - lastVault > 3_600_000) {
+        lastVault = Date.now();
+        try {
+          if ((await vault.releasable()) > 0n) {
+            await (await vault.release()).wait();
+            write(`${new Date().toISOString()} reward vault: released the vested rewards`);
+          }
+        } catch (e) { write(`vault release failed: ${e.shortMessage ?? e.message}`); }
+      }
       if (opt.once) return 0;
       await new Promise((r) => setTimeout(r, every));
     }
@@ -248,6 +265,45 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (group === 'keys' && cmd === 'encrypt') {
     const done = [sealWorkerKey() && 'worker.key', sealPqSeed() && 'pq.seed'].filter(Boolean);
     write(done.length ? `encrypted: ${done.join(', ')} (keep ZETAPHY_PASSPHRASE safe: without it the keys are lost)` : 'no plain key files to encrypt');
+    return 0;
+  }
+
+  if (group === 'deploy-vault') {
+    // Shares: NeuroJobs' reward pool (through fund()) and, optionally, an
+    // address that rewards validators.
+    const c = await connect(s);
+    const vShare = opt.validators ? Number(opt['validators-share'] ?? 30) : 0;
+    if (opt.validators && !ADDR_RE.test(String(opt.validators))) throw new Error('--validators must be a 0x address');
+    if (!(vShare >= 0 && vShare < 100)) throw new Error('--validators-share must be 0-99 (percent)');
+    const shares = [{ to: s.jobs, bps: (100 - vShare) * 100, callFund: true }];
+    if (vShare) shares.push({ to: String(opt.validators), bps: vShare * 100, callFund: false });
+    const gov = governanceOf(opt, write) ?? c.me;
+    const v = await new ContractFactory(B.RewardVault.abi, B.RewardVault.bytecode, c.signer).deploy(gov, shares);
+    await v.waitForDeployment();
+    const address = await v.getAddress();
+    if (opt.fund) await (await c.signer.sendTransaction({ to: address, value: parseEther(String(opt.fund)) })).wait();
+    settings({ ...opt, vault: address }, env);
+    write(`RewardVault ${address}: ${shares.map((x) => `${x.bps / 100}% to ${x.to}`).join(', ')}${opt.fund ? `, pool ${opt.fund} ZETAPHY` : ''}`);
+    write('it releases 10% of what remains per year; nobody can withdraw faster. Move the rewards account into it with --fund.');
+    return 0;
+  }
+
+  if (group === 'vault') {
+    if (!s.vault) throw new Error('set the vault: --vault 0x... (or ZETAPHY_VAULT)');
+    const c = await connect(s, { needJobs: false });
+    const v = new Contract(s.vault, B.RewardVault.abi, c.signer);
+    if (cmd === 'release') {
+      const due = await v.releasable();
+      if (due === 0n) { write('nothing vested yet (releases are daily)'); return 0; }
+      await (await v.release()).wait();
+      write(`released ${zeta(due)}`);
+      return 0;
+    }
+    const [bal, due, day, shares, pendingAt] = await Promise.all([
+      c.provider.getBalance(s.vault), v.releasable(), v.daysElapsed(), v.shares(), v.pendingAt()]);
+    write(`pool: ${zeta(bal)} (day ${day}); vested now: ${zeta(due)}; next year: ${zeta(bal / 10n)}`);
+    for (const sh of shares) write(`  ${Number(sh.bps) / 100}% to ${sh.to}${sh.callFund ? ' (via fund())' : ''}`);
+    if (pendingAt > 0n) write(`recipients change announced: applies after ${new Date(Number(pendingAt) * 1000).toISOString()}`);
     return 0;
   }
 
