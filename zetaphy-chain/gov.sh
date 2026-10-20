@@ -38,9 +38,16 @@ send() {
 }
 
 submit() { # $1 = proposal file
+  local before id=""
+  before=$($ZETAPHYD q gov proposals $QF 2>/dev/null | jq -r '[.proposals[]?.id | tonumber] | max // 0')
   send tx gov submit-proposal "$1"
-  sleep 3
-  id=$($ZETAPHYD q gov proposals $QF | jq -r '.proposals | max_by(.id | tonumber) | .id')
+  # Wait for the block that includes it (blocks are ~5 s).
+  for _ in $(seq 1 12); do
+    sleep 2
+    id=$($ZETAPHYD q gov proposals $QF 2>/dev/null | jq -r --argjson b "$before" '[.proposals[]?.id | tonumber | select(. > $b)] | max // empty')
+    [ -n "$id" ] && break
+  done
+  [ -n "$id" ] || { echo "submitted, but no new proposal showed up yet: check with gov.sh status"; return; }
   echo "proposal $id submitted; vote with: gov.sh vote $id yes"
 }
 
