@@ -7,7 +7,7 @@
 import {
   ml_dsa44, keccak_256, pqAddress, pqClient, normalizeAddress, validatorAddress, parseZeta, formatZeta, bytesToHex, hexToBytes,
   DEFAULT_GAS_LIMIT, DEFAULT_STAKING_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT,
-  DEFAULT_PRECOMPILE_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, PUBLIC_KEY_BYTES, quantumLockTx,
+  DEFAULT_PRECOMPILE_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, PUBLIC_KEY_BYTES, quantumLockTx, codeFingerprint,
 } from './vendor/pqwallet.js';
 import {
   CHAIN_ID, CHAIN_NAME, EVM_CHAIN_ID_HEX, EVM_SYMBOL, DECIMALS, nodeEndpoints, evmChainParams, keplrChainInfo,
@@ -18,7 +18,8 @@ const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 
   owners: 'zetaphy-wallet:owners:v1:', // + this wallet's zetaphy1… address
   snap: 'zetaphy-wallet:snap:v1', // the snap ID last connected (no key: MetaMask holds it)
   evmWallet: 'zetaphy-wallet:evm-wallet', // the EVM wallet picked (its EIP-6963 rdns, or which injected object)
-  wcId: 'zetaphy-wallet:walletconnect-project-id' };
+  wcId: 'zetaphy-wallet:walletconnect-project-id',
+  threats: 'zetaphy-wallet:threat-registry' }; // ThreatRegistry address (the vaccine), else the page's meta tag
 const KDF_ITERATIONS = 600000;
 const EVM_CHAIN_ID = 77390n;
 
@@ -202,7 +203,7 @@ const T = {
     cCodeSize: 'ขนาดโค้ด',
     cCodeHash: 'hash ของโค้ด (keccak-256)',
     bytesN: '{n} ไบต์',
-    deployChecked: 'จำลองการสร้างกับโหนดแล้ว ผ่าน (จะจำลองซ้ำอีกครั้งก่อนเซ็น) เทียบ hash ของโค้ดกับที่ผู้เขียนสัญญาประกาศไว้',
+    deployChecked: 'จำลองการสร้างกับโหนดแล้ว ผ่าน (จะจำลองซ้ำอีกครั้งก่อนเซ็น) เทียบ hash ของโค้ดกับที่ผู้เขียนสัญญาประกาศไว้ การสร้างสัญญาไม่มีปลายทาง จึงไม่ได้ตรวจกับ ThreatRegistry',
     deployedAt: 'ที่อยู่สัญญาใหม่:',
     badInitCode: 'bytecode ต้องเป็น hex (0x…) ที่ไม่ว่าง',
     deploySent: 'ส่งแล้ว โหนดรับธุรกรรมแล้ว สัญญาจะมีเมื่อธุรกรรมเข้าบล็อก',
@@ -268,6 +269,22 @@ const T = {
     cosmosBadAddress: 'กระเป๋าตอบที่อยู่ที่ไม่ใช่ zetaphy1… จึงไม่ใช้',
     walletPicked: 'เลือก {name} แล้ว',
     snapNotMetaMask: '{name} ใช้ MetaMask Snap ไม่ได้ เลือก MetaMask (หรือ MetaMask Flask) ในส่วน "ใช้ ZETAPHY กับกระเป๋าอื่น" ด้านล่าง',
+    // vaccine: ThreatRegistry
+    threatLabel: 'ThreatRegistry (ระบบภูมิคุ้มกัน: ไม่เซ็นธุรกรรมไปหาโค้ดที่ติดธง)',
+    threatHint: 'ที่อยู่ 0x… ของ ThreatRegistry บน ZETAPHY (จำไว้ในเบราว์เซอร์นี้) หรือใส่ใน meta zetaphy-threat-registry ของ index.html ให้ทุกคน เว้นว่าง = ใช้ค่าใน meta',
+    threatSaved: 'บันทึกที่อยู่ ThreatRegistry แล้ว',
+    threatBadAddress: 'ที่อยู่ ThreatRegistry ต้องเป็น 0x ตามด้วย hex 40 ตัว',
+    threatFlagged: 'ไม่เซ็น: {addr} ติดธงในระบบภูมิคุ้มกันของ ZETAPHY ({what} · เหตุผล: {reason}) กระเป๋านี้ไม่ส่งธุรกรรมไปหาโค้ดที่ติดธง',
+    threatUnchecked: 'ไม่เซ็น: ตรวจ {addr} กับ ThreatRegistry {reg} ไม่ได้ เมื่อตั้ง ThreatRegistry แล้ว ตรวจไม่ได้ = ไม่ส่ง',
+    threatUnset: 'ยังไม่ได้ตรวจโค้ดปลายทาง: ยังไม่ได้ตั้งที่อยู่ ThreatRegistry (ตั้งค่าเพิ่มเติม ใต้ช่อง RPC)',
+    threatClean: 'ตรวจกับ ThreatRegistry แล้ว: ปลายทางไม่ติดธง (ตรวจแบบดีที่สุดเท่าที่ทำได้: ที่อยู่ โค้ด และโค้ดจริงหลัง proxy แบบ EIP-1967 / beacon / EIP-1167 ตรวจซ้ำอีกครั้งก่อนเซ็น)',
+    threatWarned: 'คำเตือน: {addr} ถูกนักรัน Neuro ติดธงแล้ว ({what} · เหตุผล: {reason}) แต่ธงยังไม่บังคับใช้ (ช่วงที่ governance ตรวจทานได้) กระเป๋าจะปฏิเสธเมื่อธงบังคับใช้ ส่งตอนนี้หรือไม่เป็นการตัดสินใจของคุณ',
+    threatNewWarning: 'ไม่เซ็น: {addr} ถูกติดธงหลังจากที่คุณตรวจ ({what} · เหตุผล: {reason}) กดตรวจอีกครั้งเพื่อดูคำเตือน',
+    threatBehind: '{impl} (โค้ดจริงหลัง proxy {proxy})',
+    threatWhatFingerprint: 'ลายนิ้วมือโค้ด (fp1) ตรงกับโค้ดที่ติดธง',
+    threatWhatCode: 'โค้ดตรงกับโค้ดที่ติดธงทุกไบต์',
+    threatWhatAddress: 'ที่อยู่นี้ติดธง',
+    reason1: 'ดูดเงิน (drainer)', reason2: 'ขายไม่ได้ (honeypot)', reason3: 'ผลิตเหรียญเพิ่มแบบซ่อน', reason4: 'เหรียญปลอม', reason5: 'หลอกลวง (phishing)', reason6: 'อื่น ๆ',
   },
   en: {
     subtitle: 'Quantum-safe wallet (ML-DSA-44) · no ECDSA key',
@@ -441,7 +458,7 @@ const T = {
     cCodeSize: 'Code size',
     cCodeHash: 'Code hash (keccak-256)',
     bytesN: '{n} bytes',
-    deployChecked: 'Simulated on the node: it succeeds (it is simulated again just before signing). Compare the code hash with the one the contract\'s author published.',
+    deployChecked: 'Simulated on the node: it succeeds (it is simulated again just before signing). Compare the code hash with the one the contract\'s author published. A contract creation has no destination, so it is not checked against the ThreatRegistry.',
     deployedAt: 'New contract address:',
     badInitCode: 'The bytecode must be non-empty hex (0x…).',
     deploySent: 'Sent. The node accepted it; the contract exists once the tx is in a block.',
@@ -506,6 +523,22 @@ const T = {
     cosmosBadAddress: 'The wallet answered with an address that is not zetaphy1…, so it is not used.',
     walletPicked: '{name} picked.',
     snapNotMetaMask: '{name} cannot run MetaMask Snaps. Pick MetaMask (or MetaMask Flask) under "Use ZETAPHY in other wallets" below.',
+    // vaccine: ThreatRegistry
+    threatLabel: 'ThreatRegistry (immune system: never sign transactions to flagged code)',
+    threatHint: 'Its 0x… address on ZETAPHY (remembered in this browser), or for everyone in index.html\'s zetaphy-threat-registry meta tag. Empty = the meta tag.',
+    threatSaved: 'ThreatRegistry address saved.',
+    threatBadAddress: 'The ThreatRegistry address must be 0x and 40 hex digits.',
+    threatFlagged: 'Not signed: {addr} is flagged by the ZETAPHY immune system ({what} · reason: {reason}). This wallet does not send transactions to flagged code.',
+    threatUnchecked: 'Not signed: {addr} could not be checked against the ThreatRegistry {reg}. Once a ThreatRegistry is set, no check means no send.',
+    threatUnset: 'Destination code NOT checked: no ThreatRegistry address is set (advanced settings under the RPC box).',
+    threatClean: 'Checked against the ThreatRegistry: the destination is not flagged (best effort: the address, its code and the code behind an EIP-1967 / beacon / EIP-1167 proxy; checked again before signing).',
+    threatWarned: 'Warning: {addr} was flagged by Neuro runners ({what} · reason: {reason}), but the flag is not enforced yet (governance can still review it). This wallet refuses once it is enforced; sending now is your choice.',
+    threatNewWarning: 'Not signed: {addr} was flagged after you reviewed this ({what} · reason: {reason}). Review it again to see the warning.',
+    threatBehind: '{impl} (the code behind proxy {proxy})',
+    threatWhatFingerprint: 'its code fingerprint (fp1) matches flagged code',
+    threatWhatCode: 'its code is byte-for-byte flagged code',
+    threatWhatAddress: 'this address is flagged',
+    reason1: 'drainer', reason2: 'honeypot', reason3: 'hidden mint', reason4: 'fake token', reason5: 'phishing', reason6: 'other',
   },
 };
 
@@ -779,8 +812,10 @@ async function review() {
     if (amount > as.balance) return fail('ownerNotEnough', { need: formatZeta(amount), have: formatZeta(as.balance) });
     if (q.fee > q.balance) return fail('notEnough', { need: formatZeta(q.fee), have: formatZeta(q.balance) });
   } else if (amount + q.fee > q.balance) return fail('notEnough', { need: formatZeta(amount + q.fee), have: formatZeta(q.balance) });
-  pending = { to, amount, gasLimit, gasPrice: q.gasPrice, fee: q.fee, asOwner: as?.address };
+  const checked = await vaccinate([to.hex]); // refuses flagged code before the confirm step
+  pending = { to, amount, gasLimit, gasPrice: q.gasPrice, fee: q.fee, asOwner: as?.address, checked };
   showAsNote($('confirm'), as);
+  showVaccine($('confirm'), checked);
   $('c-to').textContent = `${to.bech32}\n${to.hex}`;
   $('c-amount').textContent = `${formatZeta(amount)} ZETAPHY`;
   $('c-fee').textContent = `${formatZeta(q.fee)} ZETAPHY`;
@@ -794,6 +829,8 @@ async function confirmSend() {
   const p = pending;
   pending = null;
   $('confirm').hidden = true;
+  status('working');
+  noNewWarnings(p.checked, await vaccinate([p.to.hex])); // again, just before signing: a flag may have landed meanwhile
   signingStatus();
   const r = await client.send({
     publicKey: wallet.publicKey, ...signer(),
@@ -956,8 +993,10 @@ async function tokenReview() {
     return fail('callFails', {}, e.message);
   }
   checkTransfer(ret);
-  tokenPending = { token: t0.address, symbol: t0.symbol, decimals: t0.decimals, to, units, data, evmGas, txGas, gasPrice: q.gasPrice, asOwner: as?.address };
+  const checked = await vaccinate([t0.address, to.hex]); // the token contract and the recipient
+  tokenPending = { token: t0.address, symbol: t0.symbol, decimals: t0.decimals, to, units, data, evmGas, txGas, gasPrice: q.gasPrice, asOwner: as?.address, checked };
   showAsNote($('token-confirm'), as);
+  showVaccine($('token-confirm'), checked);
   $('t-token').textContent = `${t0.symbol}\n${t0.address}`;
   $('t-to').textContent = `${to.bech32}\n${to.hex}`;
   $('t-amount').textContent = `${formatUnits(units, t0.decimals)} ${t0.symbol}`;
@@ -971,6 +1010,8 @@ async function tokenConfirm() {
   const p = tokenPending;
   tokenPending = null;
   $('token-confirm').hidden = true;
+  status('working');
+  noNewWarnings(p.checked, await vaccinate([p.token, p.to.hex]));
   signingStatus();
   const r = await client.callEVM({
     publicKey: wallet.publicKey, ...signer(),
@@ -1107,6 +1148,142 @@ async function deployConfirm() {
   setTimeout(refresh, 6000);
 }
 
+// ---- vaccine: never sign a call or transfer to code the Neuro runners flagged ----
+// Before any EVM call or transfer is signed (here, by the snap, or by an EVM wallet),
+// each destination's code is read with eth_getCode and checked against ThreatRegistry:
+// its Neuro fingerprint (fp1, the same code as zetaphy-neuro), its keccak-256 code
+// hash, and the address itself on ZETAPHY. Proxies (best effort): the code a
+// destination forwards to is checked the same way, i.e. the EIP-1967 implementation
+// slot, the EIP-1967 beacon (and its implementation()) and an EIP-1167 minimal
+// proxy's target, up to PROXY_DEPTH hops. Other forwarding (custom slots, a target
+// chosen per call) is not seen. Contract creations have no destination: not checked.
+// Two levels, as the registry has them:
+//   - enforced (the flag is the registry's enforceDelay old): refused, no override;
+//   - flagged but not enforced yet: a visible warning in the confirm box; sending is
+//     the user's choice (a small runner quorum alone cannot stop a wallet at once).
+// Registry set but the check fails: refused (fail closed). No registry set yet:
+// sent, with a visible "not checked" notice in the confirm box (fail open), so the
+// wallet works before the registry exists.
+const THREAT_META = document.querySelector('meta[name="zetaphy-threat-registry"]')?.content.trim() ?? '';
+const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
+const selector = (sig) => bytesToHex(keccak_256(enc.encode(sig))).slice(0, 8);
+const THREAT_SEL = {
+  fingerprint: [selector('isFlagged(bytes32)'), selector('isEnforced(bytes32)')],
+  code: [selector('isCodeFlagged(bytes32)'), selector('isCodeEnforced(bytes32)')],
+  address: [selector('isAddressFlagged(uint256,address)'), selector('isAddressEnforced(uint256,address)')],
+};
+const WHAT = { fingerprint: 'threatWhatFingerprint', code: 'threatWhatCode', address: 'threatWhatAddress' };
+// EIP-1967 slots: keccak256(name) - 1.
+const slotOf = (name) => '0x' + (BigInt('0x' + bytesToHex(keccak_256(enc.encode(name)))) - 1n).toString(16).padStart(64, '0');
+const SLOT_IMPL = slotOf('eip1967.proxy.implementation');
+const SLOT_BEACON = slotOf('eip1967.proxy.beacon');
+const SEL_IMPLEMENTATION = selector('implementation()');
+// EIP-1167 minimal proxy, and its PUSH0 form (ERC-7511).
+const MINIMAL_PROXY = [/^0x363d3d373d3d3d363d73([0-9a-f]{40})5af43d82803e903d91602b57fd5bf3$/i, /^0x365f5f375f5f365f73([0-9a-f]{40})5af43d5f5f3e5f3d91602a57fd5bf3$/i];
+const PROXY_DEPTH = 3;
+
+/** The ThreatRegistry set in this browser, else the page's meta tag; '' when neither is valid. */
+function threatRegistry() {
+  const a = store.get(KEYS.threats) || THREAT_META;
+  return ADDR_RE.test(a) ? a : '';
+}
+
+/** A 32-byte word holding an address (zero or not an address: null). Throws on a malformed answer. */
+function wordAddress(hex) {
+  const b = resultBytes(hex);
+  if (!b || b.length < 32) throw new Error('not a word');
+  const w = bytesToHex(b.slice(0, 32));
+  if (!/^0{24}/.test(w) || /^0{64}$/.test(w)) return null;
+  return '0x' + w.slice(24);
+}
+
+/** Where this contract's calls go (best effort): EIP-1167 target, EIP-1967 implementation, beacon and its implementation. */
+async function proxyTargets(addr, code) {
+  const out = [];
+  for (const re of MINIMAL_PROXY) { const m = re.exec(code); if (m) out.push('0x' + m[1].toLowerCase()); }
+  const impl = wordAddress(await checkedCall('eth_getStorageAt', [addr, SLOT_IMPL, 'latest']));
+  if (impl) out.push(impl);
+  const beacon = wordAddress(await checkedCall('eth_getStorageAt', [addr, SLOT_BEACON, 'latest']));
+  if (beacon) {
+    out.push(beacon);
+    const bi = wordAddress(await checkedCall('eth_call', [{ to: beacon, data: '0x' + SEL_IMPLEMENTATION }, 'latest']));
+    if (bi) out.push(bi);
+  }
+  return out;
+}
+
+/**
+ * Checks each destination (0x…) and the code behind it if it is a proxy. Throws
+ * threatFlagged (an enforced flag, or with strict any flag), threatUnchecked (registry
+ * set, check failed). Returns { state, warnings }: state 'clean' (checked), 'warned'
+ * (checked; flagged but not enforced yet: warnings), 'unset' (a contract, but no
+ * registry: not checked) or 'none' (no contract and no registry).
+ */
+async function vaccinate(targets, { strict = false } = {}) {
+  const reg = threatRegistry();
+  let contracts = 0;
+  const warnings = [];
+  const queue = targets.map((a) => ({ addr: a.toLowerCase(), label: a, depth: 0 }));
+  const seen = new Set();
+  while (queue.length) {
+    const { addr: target, label, depth } = queue.shift();
+    if (seen.has(target)) continue;
+    seen.add(target);
+    const unchecked = () => Object.assign(new Error('threatUnchecked'), { vars: { addr: label, reg } });
+    let code;
+    try { code = await checkedCall('eth_getCode', [target, 'latest']); } catch (e) { if (reg) throw unchecked(); throw e; }
+    const valid = typeof code === 'string' && /^0x(?:[0-9a-fA-F]{2})*$/.test(code);
+    if (!valid && reg) throw unchecked();
+    const hasCode = valid && code.length > 2;
+    if (hasCode && depth === 0) contracts++;
+    if (!reg) continue;
+    const checks = [['address', word(EVM_CHAIN_ID) + target.slice(2).padStart(64, '0')]];
+    if (hasCode) {
+      const fp = (await codeFingerprint(code)).slice('fp1:'.length);
+      checks.push(['fingerprint', fp], ['code', bytesToHex(keccak_256(hexToBytes(code)))]);
+    }
+    // Each key: the warning view and the enforcement view.
+    let answers;
+    try {
+      answers = await Promise.all(checks.flatMap(([what, arg]) => THREAT_SEL[what].map((sel) => checkedCall('eth_call', [{ to: reg, data: '0x' + sel + arg }, 'latest']))));
+    } catch { throw unchecked(); }
+    for (const [i, [what]] of checks.entries()) {
+      const [warn, enforced] = [answers[2 * i], answers[2 * i + 1]].map(resultBytes);
+      if (!warn || warn.length < 64 || !enforced || enforced.length < 64) throw unchecked(); // no registry there, or not one
+      const flagged = readWord(warn, 0) !== 0n;
+      if (!flagged && readWord(enforced, 0) === 0n) continue;
+      const reason = Number(readWord(readWord(enforced, 0) !== 0n ? enforced : warn, 32));
+      const vars = { addr: label, what: t(WHAT[what]), reason: T[lang][`reason${reason}`] ? t(`reason${reason}`) : String(reason) };
+      if (readWord(enforced, 0) !== 0n || strict) throw Object.assign(new Error('threatFlagged'), { vars });
+      warnings.push(vars);
+    }
+    // Best effort: the code a proxy forwards to is checked as if it were the destination.
+    if (hasCode && depth < PROXY_DEPTH) {
+      let next;
+      try { next = await proxyTargets(target, code); } catch { throw unchecked(); }
+      for (const impl of next) queue.push({ addr: impl, label: t('threatBehind', { impl, proxy: label }), depth: depth + 1 });
+    }
+  }
+  return { state: !reg ? (contracts ? 'unset' : 'none') : warnings.length ? 'warned' : 'clean', warnings };
+}
+
+/** Before signing: refuses if a warning appeared that the user did not see at review. */
+function noNewWarnings(reviewed, now) {
+  const key = (w) => `${w.addr}|${w.what}`;
+  const known = new Set((reviewed?.warnings ?? []).map(key));
+  const fresh = now.warnings.find((w) => !known.has(key(w)));
+  if (fresh) throw Object.assign(new Error('threatNewWarning'), { vars: fresh });
+}
+
+/** The vaccine line in a confirm box: checked, a warning, or a visible "not checked" notice. */
+function showVaccine(box, checked) {
+  const el = box.querySelector('.vaccine-note');
+  el.hidden = checked.state === 'none';
+  el.classList.toggle('unchecked', checked.state === 'unset' || checked.state === 'warned');
+  if (checked.state === 'warned') { delete el.dataset.i18n; el.textContent = t('threatWarned', checked.warnings[0]); }
+  else if (checked.state !== 'none') setI18n(el, checked.state === 'unset' ? 'threatUnset' : 'threatClean');
+}
+
 // ---- quantum lock: accounts this wallet controls (MsgEVMCall.as_owner) ----
 // The chain keeps who controls whom (zetaphy_pqAccount.quantumLockedTo); this page
 // only remembers which owner addresses to ask about, per wallet, in localStorage.
@@ -1227,6 +1404,7 @@ async function metamaskLock() {
   if (a.quantumLockedTo) throw Object.assign(new Error('mmAlreadyLocked'), { vars: { to: a.quantumLockedTo } });
   if (!window.confirm(t('mmConfirm', { owner: owner.hex, me: wallet.addr.bech32 }))) return status('mmCancelled');
   const tx = quantumLockTx(wallet.addr.hex);
+  await vaccinate([tx.to], { strict: true }); // the page checks every EVM tx it builds before a wallet is asked to sign it (no confirm box here: any flag refuses)
   let hash;
   try {
     hash = await eth.request({ method: 'eth_sendTransaction', params: [{ from: owner.hex, to: tx.to, value: '0x0', data: tx.data }] });
@@ -1610,6 +1788,15 @@ function init() {
     status('wcSaved');
   });
   $('wc-connect').addEventListener('click', () => status('wcNotYet'));
+  $('threat-registry').value = store.get(KEYS.threats) ?? '';
+  $('threat-registry').placeholder = THREAT_META || '0x…';
+  $('threat-save').addEventListener('click', () => {
+    const a = $('threat-registry').value.trim();
+    if (a && !ADDR_RE.test(a)) return fail('threatBadAddress');
+    if (a) store.set(KEYS.threats, a); else store.del(KEYS.threats);
+    clearPending(); // a confirm box checked against the old setting is not reused
+    status('threatSaved');
+  });
   // The typed URL is used right away; Save also remembers it.
   $('rpc').addEventListener('input', () => { checkedRpc = null; showManual(); });
   applyLang();

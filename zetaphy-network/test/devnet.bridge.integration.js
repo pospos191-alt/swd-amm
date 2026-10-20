@@ -4,6 +4,11 @@
 // Three node runners watch S with `zetaphy bridge watch` and attest; a second
 // lane (standing in for Hyperlane) attests too; after the quarantine the
 // money enters ZETAPHY. An attacker who touched the decoy gets nothing.
+// Vaccine: a sender flagged in the ThreatRegistry (`zetaphy threat flag`) is
+// not attested (once the flag is enforced, after enforceDelay) and its transfer
+// is held until the runners clear the flag. deploy-bridge protects the bridge's
+// own keys (lockbox included), so the runners cannot flag them; NeuroLane's
+// pause switch is the NeuroJobs' NeuroControl by default.
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +21,7 @@ import { Wallet, JsonRpcProvider, Contract, ContractFactory, parseEther, NonceMa
 const ZP = 19045, SP = 19445; // a devnet also uses its port +100..+103
 const Z = `http://127.0.0.1:${ZP}`, S = `http://127.0.0.1:${SP}`;
 const root = mkdtempSync(join(tmpdir(), 'zetaphy-bridge-'));
-const names = ['gov', 'user', 'r1', 'r2', 'r3', 'hyperlane', 'alice', 'attacker'];
+const names = ['gov', 'user', 'r1', 'r2', 'r3', 'hyperlane', 'alice', 'attacker', 'mallory'];
 const W = Object.fromEntries(names.map((n) => [n, Wallet.createRandom()]));
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
 const env = { ...process.env, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' };
@@ -47,6 +52,7 @@ after(() => { for (const d of ['z', 's']) { try { process.kill(Number(readFileSy
 test('assets cross only with two independent lanes, after quarantine, and never to a decoy-marked attacker', { timeout: 600_000 }, async () => {
   // ZETAPHY side: NeuroJobs, three runners with a track record.
   const d = await cli('gov', ['deploy', '--fund', '100', '--window', '8', '--timeout', '60', '--unbond', '120']);
+  assert.match(d.out, /deployed at 0x/, d.out);
   jobsAddr = /deployed at (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
   for (const r of ['r1', 'r2', 'r3']) assert.equal((await cli(r, ['node', 'register', '--jobs', jobsAddr])).code, 0);
   await cli('user', ['job', 'request', 'zetaphy', jobsAddr, '--fee', '1', '--jobs', jobsAddr]);
@@ -56,18 +62,50 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   }
   assert.equal((await jobs.getJob(0)).status, 2n, 'runners need one accepted verdict first');
 
-  const b = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1']);
-  assert.equal(b.code, 0, b.out);
-  cfg = Object.fromEntries([...b.out.matchAll(/^(\w+) (0x[0-9a-fA-F]{40})$/gm)].map((m) => [m[1], m[2]]));
-
-  // Source side: a LockBox; Alice locks 5, the attacker pokes the decoy on ZETAPHY then locks 7.
+  const th = await cli('gov', ['deploy-threats', '--jobs', jobsAddr, '--quorum', '2', '--min-agreed', '1', '--enforce-delay', '6']);
+  assert.equal(th.code, 0, th.out);
+  assert.match(th.out, /flags enforced after 6s/);
+  const threats = /ThreatRegistry (0x[0-9a-fA-F]{40})/.exec(th.out)[1];
+  // Source side first: a LockBox, so deploy-bridge can protect its address.
   const lb = await new ContractFactory(art('LockBox').abi, art('LockBox').bytecode, W.gov.connect(sp)).deploy();
   await lb.waitForDeployment();
   const lockbox = new Contract(await lb.getAddress(), art('LockBox').abi, sp);
+  const b = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1', '--threats', threats,
+    '--lockbox', `4097:${lockbox.target}`]);
+  assert.equal(b.code, 0, b.out);
+  assert.match(b.out, /vaccine on/);
+  assert.match(b.out, /ThreatRegistry: protect the bridge's own contracts and the lockbox \(done\)/);
+  cfg = Object.fromEntries([...b.out.matchAll(/^(\w+) (0x[0-9a-fA-F]{40})$/gm)].map((m) => [m[1], m[2]]));
+  // NeuroLane's pause switch defaults to the NeuroJobs' NeuroControl.
+  const jobsControl = await jobs.control();
+  assert.notEqual(jobsControl, '0x0000000000000000000000000000000000000000');
+  assert.equal(await new Contract(cfg.NeuroLane, art('NeuroLane').abi, zp).control(), jobsControl);
+  // The route's own keys are protected: a runner quorum cannot flag the lockbox (or the airlock).
+  for (const r of ['r1', 'r2', 'r3']) await cli(r, ['threat', 'flag', `4097:${lockbox.target}`, cfg.BridgeAirlock, '--reason', 'drainer', '--threats', threats]);
+  const prot = (await cli('r3', ['threat', 'check', `4097:${lockbox.target}`, cfg.BridgeAirlock, '--threats', threats])).out;
+  assert.doesNotMatch(prot, /FLAGGED/, prot);
+  assert.equal(prot.match(/protected by governance/g)?.length, 3, prot); // lockbox; airlock address and code
+
+  // Alice locks 5, the attacker pokes the decoy on ZETAPHY then locks 7.
   await (await lockbox.connect(W.alice.connect(sp)).lock(W.alice.address, { value: parseEther('5') })).wait();
   const decoy = new Contract(cfg.DecoyBridge, art('DecoyBridge').abi, W.attacker.connect(zp));
   await (await decoy.mint(W.attacker.address, parseEther('1000000'), { gasLimit: 300000n })).wait();
   await (await lockbox.connect(W.attacker.connect(sp)).lock(W.attacker.address, { value: parseEther('7') })).wait();
+  // Mallory's address on the source chain is flagged by the runners before she locks 3. Only runners
+  // with an accepted verdict may vote (a seat that did not reveal has none), and a vote after the
+  // quorum changes nothing, so single votes may fail; the registry is what counts.
+  const vote = async (cmd) => { for (const r of ['r1', 'r2', 'r3']) await cli(r, ['threat', cmd, `4097:${W.mallory.address}`, ...(cmd === 'flag' ? ['--reason', 'drainer'] : []), '--threats', threats]); };
+  await vote('flag');
+  // A warning at once; enforced (what holds transfers) after the 6 s enforceDelay.
+  let chk = '';
+  for (let i = 0; i < 20; i++) {
+    chk = (await cli('r3', ['threat', 'check', `4097:${W.mallory.address}`, '--threats', threats])).out;
+    if (i === 0) assert.match(chk, /FLAGGED \(drainer, (warning only until .* \(then enforced\)|enforced)\)/, chk);
+    if (/FLAGGED \(drainer, enforced\)/.test(chk)) break;
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  assert.match(chk, /FLAGGED \(drainer, enforced\)/, chk);
+  await (await lockbox.connect(W.mallory.connect(sp)).lock(W.mallory.address, { value: parseEther('3') })).wait();
 
   // The "Hyperlane" lane attests both locks independently.
   // NonceManager: Cosmos EVM can report the pending nonce a moment late.
@@ -75,6 +113,7 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   const srcId = 4097n;
   await (await airlock.attest(srcId, lockbox.target, 0n, W.alice.address, W.alice.address, parseEther('5'))).wait();
   await (await airlock.attest(srcId, lockbox.target, 1n, W.attacker.address, W.attacker.address, parseEther('7'))).wait();
+  await (await airlock.attest(srcId, lockbox.target, 2n, W.mallory.address, W.mallory.address, parseEther('3'))).wait();
 
   // Runners watch S and attest; then, after the quarantine, release.
   const watch = (r, extra = []) => cli(r, ['bridge', 'watch', '--once', '--source-rpc', S, '--lockbox', lockbox.target, '--confirmations', '1',
@@ -90,5 +129,18 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.equal(await token.balanceOf(W.attacker.address), 0n);
   assert.equal(await airlock.tripped(W.attacker.address), true);
   assert.match(logs.join('\n'), /attested lock #0/);
-  console.log(`alice received 5 bridged USDC via 2 lanes + quarantine; attacker (decoy-marked) received 0`);
+  assert.equal(await token.balanceOf(W.mallory.address), 0n);
+  assert.match(logs.join('\n'), /lock #2: not attested \(source sender is flagged in the ThreatRegistry/);
+  console.log(`alice received 5 bridged USDC via 2 lanes + quarantine; attacker (decoy-marked) received 0; flagged mallory held`);
+
+  // The flag is cleared by the same quorum: the held transfer is attested and released.
+  await vote('clear');
+  assert.match((await cli('r3', ['threat', 'check', `4097:${W.mallory.address}`, '--threats', threats])).out, /not flagged/);
+  for (let i = 0; i < 30 && (await token.balanceOf(W.mallory.address)) === 0n; i++) {
+    const outs = await Promise.all(['r1', 'r2', 'r3'].map((r) => watch(r, ['--release'])));
+    logs.push(...outs.map((o) => o.out));
+    await new Promise((res) => setTimeout(res, 2000));
+  }
+  assert.equal(await token.balanceOf(W.mallory.address), parseEther('3'), logs.join('\n'));
+  console.log('after the flag was cleared, mallory\'s held transfer came through');
 });

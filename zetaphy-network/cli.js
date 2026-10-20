@@ -8,6 +8,7 @@
 //   zetaphy node unbond | withdraw-bond
 //   zetaphy job request <chain> <address> [--fee N]   ask the network to check a contract
 //   zetaphy job get <id>
+//   zetaphy job settle <id>            after a quorum's reveal grace: penalize seats that never revealed (anyone may)
 //   zetaphy job request-stable <chain> <address> --relay URL [--token usdc --fee 0.1 --tip 0.01]
 //                                      pay in test USDC/USDT through a relay: no ZETAPHY needed
 //   zetaphy faucet <usdc|usdt> --relay URL   test stablecoins for this wallet (the relay pays gas)
@@ -39,15 +40,53 @@
 //   zetaphy pq export-vote-keys [--height h] [--rpc <CometBFT RPC>] > pinned.json   validator powers and vote keys, to pin
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
-//   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>]
-//                                      BridgeGuard + BridgeAirlock + NeuroLane + a DecoyBridge
+//   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>
+//                          --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --lockbox <chainId>:0x<LockBox>]
+//                                      BridgeGuard + BridgeAirlock + NeuroLane + a DecoyBridge; NeuroLane's pause
+//                                      switch defaults to the NeuroJobs' control(); the bridge's own contracts (and
+//                                      the lockbox) are protected in the ThreatRegistry
 //   zetaphy bridge watch --source-rpc URL --lockbox 0x... [--confirmations 12 --release]
-//                                      be one voice of the Neuro bridge
+//                                      be one voice of the Neuro bridge (skips flagged sources, stops while Neuro is
+//                                      paused or its switch cannot be read)
+//   zetaphy deploy-threats [--quorum 3 --min-agreed 5 --enforce-delay 3600 --governance 0x<multisig>|gov]
+//                                      ThreatRegistry (immune system + vaccine); flags block only after the delay
+//   zetaphy threat flag <target>... --reason drainer|honeypot|hidden-mint|fake-token|phishing|other
+//   zetaphy threat clear <target>... | zetaphy threat check <target>...
+//   zetaphy threat protect|unprotect <target>... | threat enforce-delay <seconds> | threat set-governance <0x…|gov>
+//                                      governance only: sent if this key is governance, else printed as calldata
+//                                      for a multisig proposal or a MsgEVMCall (gov module)
+//                                      target: fp1:<hex> (Neuro fingerprint), code:0x<codehash>,
+//                                      0x<contract on ZETAPHY> (its address and code hash), <chainId>:0x<address>
 //   zetaphy deploy [--bond 100 --reward 1 --min-fee 0.1 --window 120 --timeout 600 --unbond 3600 --daily-reward-cap 100]
+//                  [--control 0x<NeuroControl> | --governance 0x<multisig>|gov --community-fund 0x... --max-bodies 64 --max-regrow 4]
+//                                      NeuroJobs wired to a NeuroControl (a new one, with this machine's Neuro skill voted in,
+//                                      unless --control is given); --governance gov = the chain's gov module
+//   zetaphy deploy-control [--governance 0x...|gov --community-fund 0x... --max-bodies 64 --max-regrow 4 --guardian 0x...]
+//   zetaphy neuro skill-id             this machine's Neuro skill id (sha256 of zetaphy-neuro/src, see src/skill.js)
+//   zetaphy neuro status               stop button, voted skill, bodies, defenders, quarantine
+//   zetaphy neuro regrow               refill vacant defender seats from the voted roster (anyone may)
+//   zetaphy neuro calldata <action> [value]   calldata of a NeuroControl governance call (no RPC needed);
+//                                      action: pause unpause approve-skill revoke-skill set-active-skill approve-defender
+//                                      remove-defender release set-max-bodies set-max-regrow set-community-fund
+//                                      approve-chain remove-chain (value: a chain key such as bsc)
+//                                      set-guardian (value 0x...:on|off) set-governance; skill value "local" = skill-id
+//   zetaphy neuro send <action> [value]       send it from this key (a guardian's pause, or a key that is governance)
+//   zetaphy neuro propose <action> [value] --multisig 0x...   propose it to a SimpleMultisig that is governance
+//                                      (with the gov module as governance: zetaphy-chain/gov.sh neuro ...)
 //   zetaphy deploy-stable [--price 0.01 --reserve 1000 --governance 0x<multisig>]  test USDC/USDT + StableGateway
 //   zetaphy deploy-vault [--validators 0x... --validators-share 30 --fund N --governance 0x<multisig>]
 //                                      RewardVault: releases the reward pool at 10% a year (no withdraw)
 //   zetaphy vault status | release     what has vested; pay it out (anyone may; node start does it daily)
+//   zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --governance 0x<multisig>]
+//                                      NeuroIdentity (ERC-8004 identity: 1 contract = 1 agent) + NeuroValidation (runner verdicts)
+//   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
+//   zetaphy identity get <chain> <address> | <agentId>   who controls it, its Neuro report link, runner verdicts
+//   zetaphy identity claim <agentId>                      the contract (or its owner()) takes control of its identity
+//   zetaphy identity verdict <agentId> <verdict 0x…> <score 0-100> [--tag t --uri u]   a bonded runner posts (or replaces) its verdict
+//   zetaphy msg sign <hello|verdict|threat-report|ack> --from <agentId> (--payload '<json>' | --payload-file f) [--to <agentId> --ttl 3600 --out f]
+//                                      signer: the agent's owner/operator/agentWallet, or a runner for an unclaimed Neuro identity
+//   zetaphy msg verify <file> [--me <agentId>]   check a signed message from another Neuro (it is data, never a command)
+//                                      (--identity / ZETAPHY_IDENTITY, --validation / ZETAPHY_VALIDATION: the two addresses)
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
 // (ZETAPHY_CHAIN_ID: Cosmos chain id `pq native` expects, default zetaphy_77390-1)
@@ -56,25 +95,28 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JsonRpcProvider, Contract, ContractFactory, Interface, formatEther, parseEther, parseUnits, formatUnits, encodeBytes32String, decodeBytes32String, NonceManager, Signature } from 'ethers';
+import { JsonRpcProvider, Contract, ContractFactory, Interface, formatEther, parseEther, parseUnits, formatUnits, encodeBytes32String, decodeBytes32String, NonceManager, Signature, keccak256 } from 'ethers';
 import { HOME, loadOrCreateKey, sealWorkerKey } from './src/keys.js';
 import { detectHardware, pickProfile } from './src/hardware.js';
-import { createWorker } from './src/worker.js';
+import { createWorker, SUPPORTED_CHAINS } from './src/worker.js';
+import { skillId, skillFiles } from './src/skill.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
 import { loadOrCreatePq, sealPqSeed, VARIANT as PQ_VARIANT } from './src/pq.js';
 import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, formatZeta, quantumLockTx, DEFAULT_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT,
   DEFAULT_STAKING_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, DEFAULT_PRECOMPILE_GAS_LIMIT, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT } from './src/pqtx.js';
-import { createLaneWatcher } from './src/lane.js';
+import { createLaneWatcher, laneControl } from './src/lane.js';
 import { verifyBlock, exportVoteKeys } from './src/pqcert.js';
+import { identityCommand } from './src/identitycli.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
 const ART = art('NeuroJobs');
+const CONTROL = art('NeuroControl');
 const STABLE = art('TestStable');
 const GATEWAY = art('StableGateway');
 const QWALLET = art('QuantumWallet');
 const QFACTORY = art('QuantumWalletFactory');
-const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'DecoyBridge', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault'].map((n) => [n, art(n)]));
+const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'DecoyBridge', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault', 'ThreatRegistry'].map((n) => [n, art(n)]));
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 /** --governance: who takes over the admin role after setup (a multisig). */
 function governanceOf(opt, write) {
@@ -85,6 +127,46 @@ function governanceOf(opt, write) {
 }
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 const STATUS = ['none', 'open', 'done', 'failed'];
+
+// ---- Neuro governance (NeuroControl) ----
+/** The gov module's EVM address: the first 20 bytes of sha256("gov") (zetaphy10d07y265gmmuvt4z0w9aw880jnsr700jvr86lj). */
+export const GOV_MODULE = '0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2';
+const NEURO_ACTIONS = {
+  pause: ['pause'], unpause: ['unpause'],
+  'approve-skill': ['approveSkill', 'skill'], 'revoke-skill': ['revokeSkill', 'skill'], 'set-active-skill': ['setActiveSkill', 'skill'],
+  'approve-defender': ['approveDefender', 'address'], 'remove-defender': ['removeDefender', 'address'], release: ['release', 'address'],
+  'set-max-bodies': ['setMaxBodies', 'uint'], 'set-max-regrow': ['setMaxRegrowPerHour', 'uint'],
+  'set-community-fund': ['setCommunityFund', 'address'], 'set-governance': ['setGovernance', 'address'], 'set-guardian': ['setGuardian', 'guardian'],
+  'approve-chain': ['approveChain', 'chain'], 'remove-chain': ['removeChain', 'chain'],
+};
+/** --governance for Neuro: a 0x address, or "gov" for the chain's gov module. */
+const neuroGovernance = (g) => (g === 'gov' ? GOV_MODULE : g);
+/** {fn, args, data} of a NeuroControl governance call. */
+export function neuroCall(action, value) {
+  const [fn, kind] = NEURO_ACTIONS[action] ?? [];
+  if (!fn) throw new Error(`unknown action ${action}: ${Object.keys(NEURO_ACTIONS).join(', ')}`);
+  let args = [];
+  if (kind === 'skill') {
+    const id = value === 'local' ? skillId() : String(value ?? '');
+    if (!/^0x[0-9a-fA-F]{64}$/.test(id)) throw new Error(`${action}: a skill id (0x + 64 hex, or "local" for zetaphy neuro skill-id)`);
+    args = [id];
+  } else if (kind === 'address') {
+    const a = neuroGovernance(String(value ?? ''));
+    if (!ADDR_RE.test(a)) throw new Error(`${action}: a 0x address`);
+    args = [a];
+  } else if (kind === 'uint') {
+    if (!/^[1-9][0-9]{0,5}$/.test(String(value ?? ''))) throw new Error(`${action}: a whole number above 0`);
+    args = [BigInt(value)];
+  } else if (kind === 'chain') {
+    if (!/^[a-z0-9-]{1,31}$/.test(String(value ?? ''))) throw new Error(`${action}: a chain key such as bsc (1-31 of a-z 0-9 -)`);
+    args = [encodeBytes32String(String(value))];
+  } else if (kind === 'guardian') {
+    const m = /^(0x[0-9a-fA-F]{40}):(on|off)$/.exec(String(value ?? ''));
+    if (!m) throw new Error('set-guardian: 0x<address>:on or 0x<address>:off');
+    args = [m[1], m[2] === 'on'];
+  } else if (value != null) throw new Error(`${action} takes no value`);
+  return { fn, args, data: new Interface(CONTROL.abi).encodeFunctionData(fn, args) };
+}
 const EVM_CHAIN_ID = 77390n;
 
 function parse(argv) {
@@ -100,7 +182,7 @@ function settings(opt, env) {
   const file = join(HOME, 'config.json');
   const saved = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const s = { ...saved, rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
-  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'bridgeGuard', 'vault']) if (opt[k]) s[k] = opt[k];
+  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'bridgeGuard', 'vault', 'threats']) if (opt[k]) s[k] = opt[k];
   if (!s.vault && env.ZETAPHY_VAULT) s.vault = env.ZETAPHY_VAULT;
   if (opt.hybrid) s.pqHybrid = true;
   if (JSON.stringify(s) !== JSON.stringify(saved)) {
@@ -191,6 +273,36 @@ async function pqBlockCommand(cmd, rest, opt, env, write) {
   return r.ok ? 0 : 1;
 }
 
+/** Step 1 of a NeuroControl: checks the options and deploys it (this key is governance for now). */
+async function newControl(c, opt) {
+  const finalGov = opt.governance == null ? null : neuroGovernance(String(opt.governance));
+  if (finalGov != null && !ADDR_RE.test(finalGov)) throw new Error('--governance must be a 0x address or "gov" (the chain\'s gov module)');
+  const fund = String(opt['community-fund'] ?? c.me);
+  if (!ADDR_RE.test(fund)) throw new Error('--community-fund must be a 0x address');
+  if (opt.guardian != null && !ADDR_RE.test(String(opt.guardian))) throw new Error('--guardian must be a 0x address');
+  const k = await new ContractFactory(CONTROL.abi, CONTROL.bytecode, c.signer).deploy(c.me, fund, BigInt(opt['max-bodies'] ?? 64), BigInt(opt['max-regrow'] ?? 4));
+  await k.waitForDeployment();
+  return { k, address: await k.getAddress(), finalGov, fund };
+}
+
+/** Step 2: votes in this machine's Neuro skill and the chains the runner reads, then hands it to --governance. */
+async function configureControl(c, { k, address, finalGov, fund }, opt, write) {
+  const id = skillId();
+  await (await k.approveSkill(id)).wait();
+  await (await k.setActiveSkill(id)).wait();
+  await (await k.approveChains(SUPPORTED_CHAINS.map((ch) => encodeBytes32String(ch)))).wait();
+  if (opt.guardian) await (await k.setGuardian(String(opt.guardian), true)).wait();
+  if (finalGov && finalGov.toLowerCase() !== c.me.toLowerCase()) await (await k.setGovernance(finalGov)).wait();
+  write(`NeuroControl ${address}: skill ${id} voted in, chains ${SUPPORTED_CHAINS.join(' ')}, community fund ${fund}, governance ${finalGov ?? c.me}${finalGov === GOV_MODULE ? ' (gov module: change it with zetaphy-chain/gov.sh neuro ...)' : ''}`);
+  if (!finalGov) write('warning: no --governance given, so this key stays the only governance of Neuro (fine for a quick test, not beyond)');
+  return address;
+}
+
+/** Deploys a NeuroControl with this machine's Neuro skill and chains voted in, then hands it to --governance. */
+async function deployControl(c, opt, write) {
+  return configureControl(c, await newControl(c, opt), opt, write);
+}
+
 export async function main(argv = process.argv.slice(2), env = process.env, write = console.log) {
   const { pos, opt } = parse(argv);
   const [group, cmd, ...rest] = pos;
@@ -210,7 +322,16 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       write(`not registered yet: run "zetaphy node register" (bond ${zeta(await c.jobs.workerBond())})`);
       return 1;
     }
+    // Governance: work only on jobs of this machine's (voted) skill; stop while paused.
+    const controlAddr = await c.jobs.control();
+    const control = controlAddr === ZERO_ADDR ? null : new Contract(controlAddr, CONTROL.abi, c.provider);
+    const mySkill = control ? skillId() : null;
+    if (control) {
+      const active = await control.activeSkill();
+      write(`skill: ${mySkill}${active.toLowerCase() === mySkill.toLowerCase() ? ' (the voted one)' : ` — NOT the voted skill ${active}: this runner takes no jobs until it runs that Neuro code`}`);
+    }
     const worker = createWorker({
+      skill: mySkill, paused: control ? () => control.paused() : null,
       jobs: c.jobs, me: c.me, stateFile: join(HOME, `jobs-${s.jobs.toLowerCase()}.json`),
       zetaphyChain: { kind: 'evm', id: Number(EVM_CHAIN_ID), name: 'ZETAPHY testnet', rpcs: [s.rpc] },
       chainTime: async () => BigInt((await c.provider.getBlock('latest')).timestamp),
@@ -253,7 +374,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     write(`wallet:   ${zeta(await c.provider.getBalance(c.me))}`);
     write(`bond:     ${zeta(w.bond)} (${w.active ? 'active' : w.unbondAt ? 'leaving' : 'not registered'})`);
     write(`earned:   ${zeta(await c.jobs.credit(c.me))} (withdraw with "zetaphy node withdraw")`);
-    write(`verdicts: ${w.agreed} agreed, ${w.rejected} rejected`);
+    write(`verdicts: ${w.agreed} agreed, ${w.rejected} rejected, ${await c.jobs.strikes(c.me)} strikes in the last 5${(await c.jobs.quarantined(c.me)) ? ' — QUARANTINED: out, bond unbonding; only a governance vote (release) lets this address register again' : ''}${(await c.jobs.isDefender(c.me)) ? ' (defender)' : ''}`);
     write(`network:  ${await c.jobs.activeWorkers()} active runners, ${await c.jobs.jobCount()} jobs, reward pool ${zeta(await c.jobs.rewardPool())}`);
     return 0;
   }
@@ -277,6 +398,15 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     return 0;
   }
 
+  if (group === 'job' && cmd === 'settle') {
+    if (!/^\d+$/.test(rest[0] ?? '')) throw new Error('usage: zetaphy job settle <id>');
+    const c = await connect(s);
+    const rc = await (await c.jobs.settle(BigInt(rest[0]))).wait();
+    const missed = rc.logs.map((l) => { try { return c.jobs.interface.parseLog(l); } catch { return null; } }).filter((e) => e?.name === 'Missed');
+    write(`job ${rest[0]} settled: ${missed.length ? missed.map((e) => `${e.args.worker} never revealed (penalized, one strike)`).join('; ') : 'nothing to penalize'}`);
+    return 0;
+  }
+
   if (group === 'job' && cmd === 'get') {
     const c = await connect(s);
     const j = await c.jobs.getJob(BigInt(rest[0] ?? cmd));
@@ -287,14 +417,84 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (group === 'deploy') {
     const c = await connect(s, { needJobs: false });
     const p = (k, d) => opt[k] ?? d;
+    if (opt.control != null && !ADDR_RE.test(String(opt.control))) throw new Error('--control must be a 0x address (NeuroControl)');
+    // NeuroControl first (unconfigured: no skill yet, so it takes no requests),
+    // then NeuroJobs and setControl straight away, and only then the rest of
+    // the setup. A request slipped in before setControl only gets skill 0
+    // (runners skip it; it expires and refunds) and cannot block setControl.
+    const fresh = opt.control ? null : await newControl(c, opt);
     const factory = new ContractFactory(ART.abi, ART.bytecode, c.signer);
     const contract = await factory.deploy(parseEther(String(p('bond', 100))), parseEther(String(p('reward', 1))), parseEther(String(p('min-fee', 0.1))),
       BigInt(p('window', 120)), BigInt(p('timeout', 600)), BigInt(p('unbond', 3600)), parseEther(String(p('daily-reward-cap', 100))));
     await contract.waitForDeployment();
     const address = await contract.getAddress();
-    if (opt.fund) await (await new Contract(address, ART.abi, c.signer).fund({ value: parseEther(String(opt.fund)) })).wait();
+    const nj = new Contract(address, ART.abi, c.signer);
+    const control = opt.control ? String(opt.control) : fresh.address;
+    await (await nj.setControl(control)).wait();
+    if (fresh) await configureControl(c, fresh, opt, write);
+    if (opt.fund) await (await nj.fund({ value: parseEther(String(opt.fund)) })).wait();
     settings({ ...opt, jobs: address }, {});
-    write(`NeuroJobs deployed at ${address}${opt.fund ? `, reward pool ${opt.fund} ZETAPHY` : ''}`);
+    write(`NeuroJobs deployed at ${address}${opt.fund ? `, reward pool ${opt.fund} ZETAPHY` : ''}, governed by NeuroControl ${control}`);
+    return 0;
+  }
+
+  if (group === 'deploy-control') {
+    const c = await connect(s, { needJobs: false });
+    await deployControl(c, opt, write);
+    return 0;
+  }
+
+  if (group === 'neuro' && cmd === 'skill-id') {
+    write(skillId());
+    if (opt.files) for (const f of skillFiles()) write(`  ${f}`);
+    return 0;
+  }
+
+  if (group === 'neuro' && cmd === 'calldata') {
+    write(neuroCall(rest[0], rest[1]).data);
+    return 0;
+  }
+
+  if (group === 'neuro' && ['status', 'regrow', 'send', 'propose'].includes(cmd)) {
+    const c = await connect(s);
+    const addr = await c.jobs.control();
+    if (addr === ZERO_ADDR) throw new Error('this NeuroJobs has no NeuroControl (deployed before governance)');
+    const control = new Contract(addr, CONTROL.abi, c.signer);
+    if (cmd === 'status') {
+      const [paused, active, gov, maxBodies, regrowCap, fund, bodies, load, burned, defenders, roster] = await Promise.all([
+        control.paused(), control.activeSkill(), control.governance(), control.maxBodies(), control.maxRegrowPerHour(), control.communityFund(),
+        c.jobs.bodies(), c.jobs.load(), c.jobs.totalBurned(), c.jobs.defenders(), control.roster()]);
+      const mine = skillId();
+      write(`NeuroControl ${addr}, governance ${gov}${gov.toLowerCase() === GOV_MODULE.toLowerCase() ? ' (the chain\'s gov module)' : ''}`);
+      write(`Neuro:      ${paused ? 'PAUSED (no new requests or commits; coin transfers are not affected)' : 'running'}`);
+      write(`skill:      ${active}${active.toLowerCase() === mine.toLowerCase() ? ' (this machine runs it)' : ` (this machine runs ${mine})`}`);
+      write(`bodies:     ${bodies} now (4 defenders + ceil(${Number(load) / 30} requests/min ÷ 6)), at most ${maxBodies}`);
+      write(`defenders:  ${defenders.filter((d) => d !== ZERO_ADDR).length} of 4 seated; roster ${roster.length}; regrow at most ${regrowCap}/hour`);
+      for (const [i, d] of defenders.entries()) write(`  seat ${i}: ${d === ZERO_ADDR ? '(vacant: zetaphy neuro regrow)' : d}`);
+      write(`fees:       90% runners, 5% burned (${zeta(burned)} so far, locked at 0x…dEaD), 5% community fund ${fund}; a failed job refunds 95%`);
+      const allowed = await Promise.all(SUPPORTED_CHAINS.map((ch) => control.chainAllowed(encodeBytes32String(ch))));
+      write(`chains:     ${SUPPORTED_CHAINS.filter((_, i) => allowed[i]).join(' ') || '(none)'} accepted${allowed.every(Boolean) ? '' : `; not voted in: ${SUPPORTED_CHAINS.filter((_, i) => !allowed[i]).join(' ')}`}`);
+      return 0;
+    }
+    if (cmd === 'regrow') {
+      const rc = await (await c.jobs.regrow()).wait();
+      const evs = rc.logs.map((l) => { try { return c.jobs.interface.parseLog(l); } catch { return null; } }).filter(Boolean);
+      for (const e of evs) if (e.name === 'DefenderVacated') write(`seat ${e.args.seat}: vacated ${e.args.worker}`);
+      for (const e of evs) if (e.name === 'DefenderSeated') write(`seat ${e.args.seat}: seated ${e.args.worker}`);
+      if (!evs.some((e) => e.name === 'DefenderSeated')) write('regrow: nothing seated (seats full, no fit runner on the roster, or the hourly cap is reached)');
+      return 0;
+    }
+    const call = neuroCall(rest[0], rest[1]);
+    if (cmd === 'send') {
+      await (await c.signer.sendTransaction({ to: addr, data: call.data })).wait();
+      write(`${rest[0]}: done (sent by ${c.me})`);
+      return 0;
+    }
+    if (!ADDR_RE.test(String(opt.multisig ?? ''))) throw new Error('usage: zetaphy neuro propose <action> [value] --multisig 0x<SimpleMultisig>');
+    const ms = new Contract(String(opt.multisig), B.SimpleMultisig.abi, c.signer);
+    const rc = await (await ms.propose(addr, 0n, call.data)).wait();
+    const ev = rc.logs.map((l) => { try { return ms.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === 'Proposed');
+    write(`proposed ${rest[0]} to multisig ${opt.multisig}${ev ? ` as #${ev.args[0]}` : ''}; other owners: confirm, then execute`);
     return 0;
   }
 
@@ -602,6 +802,36 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     return 0;
   }
 
+  /** Targets → [label, ThreatRegistry key]: fp1:<hex>, code:0x<hash>, <chainId>:0x<addr>, or 0x<addr> (address + its code). */
+  async function threatKeys(reg, provider, targets, usage = 'bad target') {
+    const keys = [];
+    for (const t of targets) {
+      let m;
+      if ((m = /^fp1:([0-9a-f]{64})$/i.exec(t))) keys.push([t, '0x' + m[1].toLowerCase()]);
+      else if ((m = /^code:(0x[0-9a-fA-F]{64})$/.exec(t))) keys.push([t, await reg.codeKey(m[1])]);
+      else if ((m = /^(\d+):(0x[0-9a-fA-F]{40})$/.exec(t))) keys.push([t, await reg.addressKey(BigInt(m[1]), m[2])]);
+      else if (ADDR_RE.test(t)) {
+        keys.push([`${t} (address on ZETAPHY)`, await reg.addressKey(EVM_CHAIN_ID, t)]);
+        const code = await provider.getCode(t);
+        if (code !== '0x') keys.push([`${t} (its code ${keccak256(code)})`, await reg.codeKey(keccak256(code))]);
+      } else throw new Error(`${t}: not a target. ${usage}`);
+    }
+    return keys;
+  }
+  /** A ThreatRegistry governance call: sent when this key is governance, else printed for a multisig / gov proposal. */
+  async function governAction(reg, c, write, fn, args, what) {
+    const gov = String(await reg.governance());
+    if (gov.toLowerCase() === c.me.toLowerCase()) {
+      await (await reg[fn](...args)).wait();
+      write(`ThreatRegistry: ${what} (done)`);
+      return true;
+    }
+    const data = reg.interface.encodeFunctionData(fn, args);
+    write(`ThreatRegistry governance is ${gov}, not this key. To ${what}, have it call:\n  to ${reg.target}\n  data ${data}`);
+    if (gov.toLowerCase() === GOV_MODULE.toLowerCase()) write('  (the gov module: submit this as a MsgEVMCall proposal)');
+    return false;
+  }
+
   if (group === 'deploy-bridge') {
     const c = await connect(s);
     const deploy = async (a, args) => { const k = await new ContractFactory(a.abi, a.bytecode, c.signer).deploy(...args); await k.waitForDeployment(); return new Contract(await k.getAddress(), a.abi, c.signer); };
@@ -611,11 +841,28 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const airlock = await deploy(B.BridgeAirlock, [guard.target, route, c.me, Number(opt.threshold ?? 2), BigInt(opt.quarantine ?? 3600)]);
     await (await guard.setRoute(route, airlock.target, parseEther(String(opt['daily-limit'] ?? 100000)), true)).wait();
     // A runner needs this many accepted verdicts (won by lottery) before it speaks for the bridge.
-    const lane = await deploy(B.NeuroLane, [s.jobs, airlock.target, Number(opt.quorum ?? 2), Number(opt['min-agreed'] ?? 5)]);
+    // --control: NeuroControl; while it says paused the lane attests nothing. Default: the NeuroJobs' own control().
+    if (opt.control != null && !ADDR_RE.test(String(opt.control))) throw new Error('--control must be a 0x address (NeuroControl)');
+    if (opt.lockbox != null && !/^\d+:0x[0-9a-fA-F]{40}$/.test(String(opt.lockbox))) throw new Error('--lockbox must be <source chain id>:0x<LockBox>');
+    const control = opt.control ? String(opt.control) : String(await c.jobs.control());
+    if (control === ZERO_ADDR) write('warning: NeuroJobs has no NeuroControl, so NeuroLane has no pause switch (pass --control 0x...)');
+    const lane = await deploy(B.NeuroLane, [s.jobs, airlock.target, Number(opt.quorum ?? 2), Number(opt['min-agreed'] ?? 5), control]);
     const decoy = await deploy(B.DecoyBridge, [airlock.target, 'ZETAPHY Bridge']);
     for (const tx of [airlock.setLane(lane.target, true), airlock.setVetoer(lane.target, true), airlock.setDecoy(decoy.target, true)]) await (await tx).wait();
     for (const l of [].concat(opt.lane ?? [])) await (await airlock.setLane(l, true)).wait();
     for (const g of [].concat(opt.guardian ?? [])) { await (await airlock.setVetoer(g, true)).wait(); await (await guard.setGuardian(g, true)).wait(); }
+    // Vaccine: flagged senders, source contracts and recipient code are held / refused.
+    if (s.threats) {
+      if (!ADDR_RE.test(String(s.threats))) throw new Error('--threats must be a 0x address (ThreatRegistry)');
+      for (const tx of [airlock.setThreats(s.threats), guard.setThreats(s.threats)]) await (await tx).wait();
+      write(`vaccine on: BridgeAirlock and BridgeGuard check ThreatRegistry ${s.threats}`);
+      // The bridge's own parts must never be frozen by a runner flag: protect their addresses and code hashes.
+      const reg = new Contract(s.threats, B.ThreatRegistry.abi, c.signer);
+      const own = [guard.target, await guard.token(), airlock.target, lane.target];
+      const keys = await threatKeys(reg, c.provider, [...own, ...(opt.lockbox ? [String(opt.lockbox)] : [])]);
+      await governAction(reg, c, write, 'setProtected', [keys.map((k) => k[1]), true], `protect the bridge's own contracts${opt.lockbox ? ' and the lockbox' : ''}`);
+      if (!opt.lockbox) write('note: pass --lockbox <chainId>:0x<LockBox> (or later: zetaphy threat protect <chainId>:0x<LockBox>) to protect the source lockbox too');
+    } else write('warning: no ThreatRegistry (--threats or deploy-threats), so flagged code is not refused by the bridge');
     const gov = governanceOf(opt, write);
     if (gov) {
       await (await guard.setGovernance(gov)).wait();
@@ -633,14 +880,19 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const c = await connect(s, { needJobs: false });
     const src = new JsonRpcProvider(String(opt['source-rpc']));
     const srcChainId = (await src.getNetwork()).chainId;
+    const lane = new Contract(s.neuroLane, B.NeuroLane.abi, c.signer);
+    const log = (l) => write(`${new Date().toISOString()} ${l}`);
+    // Fail closed: while the lane's control() or the switch's paused() cannot be read (after retries), nothing is attested.
+    const control = laneControl(lane, (a) => new Contract(a, ['function paused() view returns (bool)'], c.provider), { log });
     const watcher = createLaneWatcher({
       lockbox: new Contract(String(opt.lockbox), B.LockBox.abi, src),
-      lane: new Contract(s.neuroLane, B.NeuroLane.abi, c.signer),
+      lane,
+      control,
       airlock: new Contract(s.airlock, B.BridgeAirlock.abi, c.signer),
       me: c.me, srcChainId, confirmations: Number(opt.confirmations ?? 12), release: !!opt.release,
       stateFile: join(HOME, `lane-${srcChainId}-${String(opt.lockbox).toLowerCase()}.json`),
       chainTime: async () => BigInt((await c.provider.getBlock('latest')).timestamp),
-      log: (l) => write(`${new Date().toISOString()} ${l}`),
+      log,
     });
     const every = Number(opt.every ?? 5) * 1000;
     for (;;) {
@@ -648,6 +900,73 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       if (opt.once) return 0;
       await new Promise((r) => setTimeout(r, every));
     }
+  }
+
+  if (group === 'deploy-threats') {
+    const c = await connect(s);
+    const delay = BigInt(opt['enforce-delay'] ?? 3600);
+    // This key is governance at first, so deploy-bridge can protect the bridge's keys; --governance hands it on.
+    const k = await new ContractFactory(B.ThreatRegistry.abi, B.ThreatRegistry.bytecode, c.signer)
+      .deploy(s.jobs, Number(opt.quorum ?? 3), Number(opt['min-agreed'] ?? 5), c.me, delay);
+    await k.waitForDeployment();
+    const addr = await k.getAddress();
+    settings({ ...opt, threats: addr }, {});
+    write(`ThreatRegistry ${addr} (quorum ${opt.quorum ?? 3}, runners need ${opt['min-agreed'] ?? 5} accepted verdicts, flags enforced after ${delay}s)`);
+    if (opt.governance != null) {
+      const g = neuroGovernance(String(opt.governance));
+      if (!ADDR_RE.test(g)) throw new Error('--governance must be a 0x address or "gov"');
+      await (await new Contract(addr, B.ThreatRegistry.abi, c.signer).setGovernance(g)).wait();
+      write(`ThreatRegistry governance handed to ${g} (protect keys through it: zetaphy threat protect ...)`);
+    } else write(`ThreatRegistry governance: this key (${c.me}); hand it on with zetaphy threat set-governance <multisig|gov>`);
+    return 0;
+  }
+
+  if (group === 'threat' && ['enforce-delay', 'set-governance'].includes(cmd)) {
+    if (!s.threats) throw new Error('set --threats 0x<ThreatRegistry> (or run deploy-threats)');
+    const c = await connect(s, { needJobs: false });
+    const reg = new Contract(s.threats, B.ThreatRegistry.abi, c.signer);
+    if (cmd === 'enforce-delay') {
+      if (!/^\d{1,8}$/.test(String(rest[0] ?? ''))) throw new Error('usage: zetaphy threat enforce-delay <seconds, at most 2592000>');
+      await governAction(reg, c, write, 'setEnforceDelay', [BigInt(rest[0])], `enforce flags after ${rest[0]}s`);
+    } else {
+      const g = neuroGovernance(String(rest[0] ?? ''));
+      if (!ADDR_RE.test(g)) throw new Error('usage: zetaphy threat set-governance <0x multisig | gov>');
+      await governAction(reg, c, write, 'setGovernance', [g], `hand ThreatRegistry governance to ${g}`);
+    }
+    return 0;
+  }
+
+  if (group === 'threat' && ['flag', 'clear', 'check', 'protect', 'unprotect'].includes(cmd)) {
+    const usage = 'usage: zetaphy threat flag|clear|check|protect|unprotect <fp1:hex | code:0x<codehash> | 0x<contract> | <chainId>:0x<address>>... [--reason drainer]';
+    if (!rest.length) throw new Error(usage);
+    if (!s.threats) throw new Error('set --threats 0x<ThreatRegistry> (or run deploy-threats)');
+    const c = await connect(s, { needJobs: false });
+    const reg = new Contract(s.threats, B.ThreatRegistry.abi, c.signer);
+    // Every target becomes one or more registry keys, with a label for the output.
+    const keys = await threatKeys(reg, c.provider, rest, usage);
+    if (cmd === 'protect' || cmd === 'unprotect') {
+      await governAction(reg, c, write, 'setProtected', [keys.map((k) => k[1]), cmd === 'protect'], `${cmd} ${keys.map((k) => k[0]).join(', ')}`);
+      return 0;
+    }
+    if (cmd === 'check') {
+      const REASONS = ['none', 'drainer', 'honeypot', 'hidden-mint', 'fake-token', 'phishing', 'other'];
+      for (const [label, key] of keys) {
+        const [flagged, reason] = await reg.isFlagged(key);
+        const from = flagged ? await reg.enforcedFrom(key) : 0n;
+        const now = BigInt((await c.provider.getBlock('latest')).timestamp);
+        const when = !flagged ? '' : from <= now ? ', enforced' : `, warning only until ${new Date(Number(from) * 1000).toISOString()} (then enforced)`;
+        const prot = (await reg.protectedKey(key)) ? ' (protected by governance)' : '';
+        write(`${label}: ${flagged ? `FLAGGED (${REASONS[Number(reason)] ?? reason}${when})` : 'not flagged'}${prot}`);
+      }
+      return 0;
+    }
+    const REASON = { drainer: 1, honeypot: 2, 'hidden-mint': 3, 'fake-token': 4, phishing: 5, other: 6 };
+    const reason = cmd === 'flag' ? REASON[String(opt.reason ?? '')] : 0;
+    if (cmd === 'flag' && !reason) throw new Error(`--reason ${Object.keys(REASON).join('|')}`);
+    await (await reg.voteBatch(keys.map((k) => k[1]), cmd === 'flag', reason)).wait();
+    write(`voted to ${cmd} ${keys.length} key(s): ${keys.map((k) => k[0]).join(', ')}`);
+    write(`(a key changes when ${await reg.quorum()} runners agree; check with: zetaphy threat check ...)`);
+    return 0;
   }
 
   if (group === 'deploy-stable') {
@@ -724,6 +1043,11 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     if (!r.ok) throw new Error(`relay refused: ${body.error}`);
     write(`job ${body.jobId} requested: ${chainKey} ${target}, paid ${formatUnits(cost + tip, 6)} ${tokenKey.toUpperCase()} (no ZETAPHY used)`);
     return 0;
+  }
+
+  // ERC-8004 identity and signed Neuro messages (src/identitycli.js)
+  if (group === 'identity' || group === 'deploy-identity' || group === 'msg') {
+    return identityCommand({ group, cmd, rest, opt, env, write, s, connect, connectRpc });
   }
 
   write(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').filter((l) => l.startsWith('//   ')).map((l) => l.slice(3)).join('\n'));

@@ -9,6 +9,9 @@
 <meta name="zetaphy-snap-id" content="npm:@zetaphy/snap">
 <!-- WalletConnect (Reown) projectId, 32 hex characters from cloud.reown.com. Empty: the WalletConnect option stays off. -->
 <meta name="zetaphy-walletconnect-project-id" content="">
+<!-- ThreatRegistry on ZETAPHY (the vaccine): the page refuses to sign calls/transfers to flagged code.
+     Empty: not checked, and the confirm box says so. -->
+<meta name="zetaphy-threat-registry" content="">
 <title>ZETAPHY PQ Wallet</title>
 <link rel="stylesheet" href="./style.css">
 <script type="module" src="./app.js"></script>
@@ -39,6 +42,15 @@
       <button id="rpc-save" type="button" data-i18n="rpcSave">บันทึก</button>
     </div>
     <p class="hint" data-i18n="rpcHint">หน้านี้เปิดผ่าน https จึงต้องใช้ RPC ที่เป็น https ด้วย</p>
+    <details>
+      <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
+      <label for="threat-registry" data-i18n="threatLabel">ThreatRegistry (ระบบภูมิคุ้มกัน: ไม่เซ็นธุรกรรมไปหาโค้ดที่ติดธง)</label>
+      <div class="row">
+        <input id="threat-registry" spellcheck="false" autocomplete="off">
+        <button id="threat-save" type="button" data-i18n="rpcSave">บันทึก</button>
+      </div>
+      <p class="hint" data-i18n="threatHint">ที่อยู่ 0x… ของ ThreatRegistry บน ZETAPHY</p>
+    </details>
   </section>
 
   <section class="card" id="setup" hidden>
@@ -142,6 +154,7 @@
           <dt data-i18n="cTotal">รวม</dt><dd id="c-total"></dd>
         </dl>
         <p class="as-note hint" hidden></p>
+        <p class="vaccine-note hint" hidden></p>
         <div class="row">
           <button id="confirm-send" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
           <button id="cancel-send" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
@@ -186,6 +199,7 @@
           <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="t-fee"></dd>
         </dl>
         <p class="as-note hint" hidden></p>
+        <p class="vaccine-note hint" hidden></p>
         <p class="hint" data-i18n="tokenChecked">จำลองการโอนกับโหนดแล้ว ผ่าน (จะจำลองซ้ำอีกครั้งก่อนเซ็น)</p>
         <div class="row">
           <button id="confirm-token" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>

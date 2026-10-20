@@ -9,6 +9,18 @@ interface IGuardInbound {
     function inbound(bytes32 route, address to, uint256 amount) external;
 }
 
+/// ThreatRegistry's enforcement views (Reason as its uint8 value): true only
+/// once a flag is the registry's enforceDelay old.
+interface IThreatFlags {
+    function isAddressEnforced(uint256 chainId, address who) external view returns (bool, uint8);
+    function isContractEnforced(address who) external view returns (bool, uint8);
+}
+
+/// NeuroControl (Neuro's stop switch); only `paused()` is used here.
+interface INeuroControl {
+    function paused() external view returns (bool);
+}
+
 /// @title BridgeAirlock: nothing enters ZETAPHY on one bridge's word (stage 3)
 /// @notice Defence in depth for incoming assets:
 ///   1. Several independent "lanes" (Hyperlane, IBC, the Neuro runner lane...)
@@ -18,6 +30,13 @@ interface IGuardInbound {
 ///      Neuro lane by quorum, or a guardian) can stop it.
 ///   3. Decoy bridges (DecoyBridge) mark whoever pokes them; a transfer from
 ///      or to a marked address is never released.
+///   4. Vaccine: with a ThreatRegistry set, a transfer whose source sender or
+///      source contract (on its chain), or whose ZETAPHY recipient (address or
+///      code), is flagged by the Neuro runners is held once the flag is
+///      enforced (past the registry's enforceDelay): release reverts with
+///      ThreatFlagged and the transfer stays, so it comes out if the flag is
+///      cleared (same quorum) or governance protects the key. To hold a
+///      transfer at once, the Neuro lane or a guardian vetoes it.
 ///   Released transfers still pass BridgeGuard's daily limits.
 contract BridgeAirlock {
     struct Transfer {
@@ -38,6 +57,7 @@ contract BridgeAirlock {
     mapping(address => bool) public tripped;   // marked by a decoy
     mapping(bytes32 => Transfer) public transfers;
     mapping(bytes32 => mapping(address => bool)) public attestedBy;
+    IThreatFlags public threats;        // zero: no vaccine check
 
     event LaneSet(address lane, bool on);
     event VetoerSet(address who, bool on);
@@ -46,6 +66,7 @@ contract BridgeAirlock {
     event Vetoed(bytes32 indexed id, address indexed by, string reason);
     event Released(bytes32 indexed id, address indexed to, uint256 amount);
     event Tripped(address indexed who, address indexed decoy);
+    event ThreatsSet(address registry);
 
     error NotGovernance();
     error NotLane();
@@ -54,6 +75,8 @@ contract BridgeAirlock {
     error Twice();
     error NotReady();
     error Blocked();
+    /// what: 1 source sender, 2 source contract, 3 ZETAPHY recipient
+    error ThreatFlagged(uint8 what);
 
     constructor(IGuardInbound guard_, bytes32 route_, address governance_, uint8 threshold_, uint64 quarantine_) {
         require(threshold_ >= 2, "need 2+ independent lanes");
@@ -73,6 +96,8 @@ contract BridgeAirlock {
     function setThreshold(uint8 t) external onlyGov { require(t >= 2, "need 2+"); threshold = t; }
     function setQuarantine(uint64 q) external onlyGov { quarantine = q; }
     function setGovernance(address g) external onlyGov { governance = g; }
+    /// The ThreatRegistry whose flags hold transfers (zero turns the check off).
+    function setThreats(IThreatFlags r) external onlyGov { threats = r; emit ThreatsSet(address(r)); }
     /// Governance can lift a mark set by mistake.
     function untrip(address who) external onlyGov { tripped[who] = false; }
 
@@ -117,9 +142,25 @@ contract BridgeAirlock {
         Transfer storage t = transfers[id];
         if (t.released || t.vetoed || tripped[sender] || tripped[to]) revert Blocked();
         if (t.attestations < threshold || t.readyFrom == 0 || block.timestamp < t.readyFrom + quarantine) revert NotReady();
+        uint8 what = flaggedParty(srcChainId, srcContract, sender, to);
+        if (what != 0) revert ThreatFlagged(what);
         t.released = true;
         guard.inbound(route, to, amount);
         emit Released(id, to, amount);
+    }
+
+    /// 0 when no party of this transfer has an enforced flag, else which one
+    /// has (see ThreatFlagged). NeuroLane watchers ask this before they attest.
+    function flaggedParty(uint256 srcChainId, address srcContract, address sender, address to) public view returns (uint8) {
+        IThreatFlags r = threats;
+        if (address(r) == address(0)) return 0;
+        (bool f, ) = r.isAddressEnforced(srcChainId, sender);
+        if (f) return 1;
+        (f, ) = r.isAddressEnforced(srcChainId, srcContract);
+        if (f) return 2;
+        (f, ) = r.isContractEnforced(to);
+        if (f) return 3;
+        return 0;
     }
 
     function status(bytes32 id) external view returns (uint8 attestations, bool released, bool vetoed, uint64 readyAt) {
@@ -169,11 +210,14 @@ contract DecoyBridge {
 ///         transfers they see. When `quorum` distinct proven runners attest
 ///         the same transfer, this lane attests it to the airlock. Runners
 ///         can also vote to veto a transfer still in quarantine.
+///         While Neuro is paused (NeuroControl, if set) nothing is attested;
+///         vetoes still work, since holding money back is always safe.
 contract NeuroLane {
     IRunnerRecords public immutable runners;
     BridgeAirlock public immutable airlock;
     uint8 public immutable quorum;
     uint32 public immutable minAgreed;
+    INeuroControl public immutable control; // zero: no pause check
 
     mapping(bytes32 => uint8) public votes;
     mapping(bytes32 => mapping(address => bool)) public votedBy;
@@ -184,13 +228,15 @@ contract NeuroLane {
 
     error NotRunner();
     error Twice();
+    error NeuroPaused();
 
-    constructor(IRunnerRecords runners_, BridgeAirlock airlock_, uint8 quorum_, uint32 minAgreed_) {
+    constructor(IRunnerRecords runners_, BridgeAirlock airlock_, uint8 quorum_, uint32 minAgreed_, INeuroControl control_) {
         require(quorum_ >= 2, "quorum");
         runners = runners_;
         airlock = airlock_;
         quorum = quorum_;
         minAgreed = minAgreed_;
+        control = control_;
     }
 
     function _runner() private view {
@@ -200,6 +246,7 @@ contract NeuroLane {
 
     function attest(uint256 srcChainId, address srcContract, uint256 srcNonce, address sender, address to, uint256 amount) external {
         _runner();
+        if (address(control) != address(0) && control.paused()) revert NeuroPaused();
         bytes32 id = airlock.transferId(srcChainId, srcContract, srcNonce, sender, to, amount);
         bytes32 key = keccak256(abi.encode("attest", id));
         if (votedBy[key][msg.sender] || done[key]) revert Twice();
