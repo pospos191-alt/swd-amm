@@ -3,6 +3,7 @@
 
 const EVM_ALLOWED = new Set(['eth_chainId', 'eth_getCode', 'eth_getStorageAt', 'eth_call']);
 const SOLANA_ALLOWED = new Set(['getGenesisHash', 'getAccountInfo']);
+const NEAR_ALLOWED = new Set(['status', 'query']); // `query` only reads (view_* and view-function calls)
 
 export class RpcError extends Error {}
 
@@ -61,6 +62,18 @@ export function createRpc(urls, expectedChainId, opts = {}) {
     identify: async (post, url) => {
       const cid = parseInt(await post('eth_chainId', []), 16);
       if (cid !== expectedChainId) throw new RpcError(`wrong chain ${cid} at ${url}`);
+    },
+  });
+}
+
+/** NEAR client; refuses endpoints whose chain_id is not `chainId`. */
+export function createNearRpc(urls, chainId, opts = {}) {
+  return makeClient(urls, {
+    ...opts,
+    allowed: NEAR_ALLOWED,
+    identify: async (post, url) => {
+      const st = await post('status', []);
+      if (st?.chain_id !== chainId) throw new RpcError(`wrong chain ${st?.chain_id} at ${url}`);
     },
   });
 }

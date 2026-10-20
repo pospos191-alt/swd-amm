@@ -6,7 +6,7 @@ import { KNOWN_TOKENS, knownToken, lookalikeOf } from '../src/known-tokens.js';
 import { analyze } from '../src/analyze.js';
 import { explain } from '../src/explain.js';
 import { readContract } from '../src/reader.js';
-import { CHAINS } from '../src/chains.js';
+import { CHAINS, isChainAddress } from '../src/chains.js';
 import { createLocalChain } from './helpers/local-chain.js';
 import { pubkeyBytes } from '../src/solana.js';
 import { normalizeType, longAddress } from '../src/move.js';
@@ -28,6 +28,8 @@ test('every registered address is well-formed for its chain (EIP-55 checksum / 3
       else if (kind === 'sui' || kind === 'aptos') {
         const canon = t.address.includes('::') ? normalizeType(t.address) : longAddress(t.address);
         assert.equal(t.address, canon, `${chain} ${t.symbol} must be stored in 64-digit form`);
+      } else if (kind === 'near') {
+        assert.ok(isChainAddress('near', t.address), `${chain} ${t.symbol}`);
       } else if (kind === 'ton') {
         // The friendly form carries a CRC16 checksum, so a typo is caught.
         assert.equal(parseTonAddress(t.display).raw, t.address, `${chain} ${t.symbol}`);
