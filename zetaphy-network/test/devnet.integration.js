@@ -171,3 +171,15 @@ test('gate 1 report reads the chain and counts revealing runners', { timeout: 60
   assert.match(r.out, /✓ no stalled blocks/);
   assert.match(r.out, /3 addresses|2 addresses/);
 });
+
+test('stage 2: the reward pool sits in a vault that pays 10% a year', { timeout: 60_000 }, async () => {
+  const d = await cli('deployer', ['deploy-vault', '--jobs', jobsAddr, '--validators', actors.w3.address, '--validators-share', '30', '--fund', '500']);
+  assert.equal(d.code, 0, d.out);
+  const vault = /RewardVault (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
+  assert.match(d.out, /70% to 0x[0-9a-fA-F]{40}, 30% to/);
+  const st = await cli('w1', ['vault', 'status', '--vault', vault]);
+  assert.equal(st.code, 0, st.out);
+  assert.match(st.out, /pool: 500\.0 ZETAPHY \(day 0\); vested now: 0\.0 ZETAPHY; next year: 50\.0 ZETAPHY/);
+  const rel = await cli('w1', ['vault', 'release', '--vault', vault]);
+  assert.match(rel.out, /nothing vested yet/, 'day 0: nothing to pay');
+});
