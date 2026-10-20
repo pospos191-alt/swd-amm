@@ -14,6 +14,7 @@ export const UI = {
     program: '토큰 프로그램', mintAuth: '발행 권한', freezeAuth: '동결 권한', extensions: '확장 기능', upgradeAuth: '업그레이드 권한', none: '없음',
     package: '패키지', standard: '표준', admin: '관리자', holders: '보유자 수', listed: 'tonapi 목록', raw: '원본 주소 (raw)',
     idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드', nearKeys: '전체 접근 키 (full-access key)', codeHash: '코드 해시', cairo: 'Cairo 버전', maxSupply: '최대 공급량', tokenId: '토큰 ID',
+    pool: '유동성 풀', simTax: '시뮬레이션 세금 (구매 / 판매)', simFailed: '판매 실패',
   },
 };
 
@@ -175,6 +176,17 @@ export const T = {
     'eip7702': (p) => `이 주소는 일반 지갑이며, 소유자가 컨트랙트 ${p.target}의 코드를 실행하도록 설정했습니다 (EIP-7702). 토큰이 아닙니다. 그 코드는 작성된 대로 지갑의 자금으로 무엇이든 할 수 있으므로, ${p.target}도 검사하십시오.`,
     'source-verified': (p) => `Sourcify가 ${p.match === 'exact' ? '체인의 코드와 바이트 단위까지 일치한다고' : '체인의 코드와 일치한다고'} 확인한 공개 소스 코드가 있습니다 (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). ${p.url}에서 읽을 수 있습니다.`,
     'source-unverified': () => 'Sourcify에 소스 코드가 없습니다. 체인의 explorer에는 공개되어 있을 수 있습니다. 어디에도 공개되어 있지 않다면 특히 주의하십시오.',
+    // Trade simulation (honeypot check, src/honeypot.js)
+    'sim-cannot-sell': (p) => `허니팟 경고: ${p.dex}에서 거래를 시뮬레이션해 보니 살 수는 있었지만 ${p.sell == null ? '팔 수 없었습니다' : `팔아도 거의 돌려받지 못했습니다 (${p.sell}% 손실)`}. 사면 팔지 못할 수 있습니다. (일부 토큰은 산 직후에만 판매를 막는데, 이 검사로는 두 경우를 구별할 수 없습니다.)`,
+    'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
+      ? `${p.dex}에서 구매를 시뮬레이션해 보니 토큰을 하나도 받지 못했습니다. 낸 돈 전부가 빠져나갑니다.`
+      : `${p.dex}에서 거래를 시뮬레이션해 보니 살 때 ${p.buy ?? '?'}%, 팔 때 ${p.sell ?? '?'}%가 토큰의 세금으로 빠져나갔습니다. 가격으로 예상한 것보다 그만큼 적게 돌려받습니다.`),
+    'sim-ok': (p) => `${p.dex}에서 소액을 사고 다시 파는 시뮬레이션이 성공했습니다 (세금: 구매 ${p.buy}%, 판매 ${p.sell}%). 현재 블록에서 한 테스트일 뿐입니다. 컨트랙트를 관리하는 사람이 나중에 세금을 올리거나 판매를 막을 수 있습니다.`,
+    'sim-skipped': (p) => ({
+      'no-pool': `${p.dex}에서 이 토큰과 ${p.native}의 풀을 찾지 못해 사고파는 시뮬레이션을 하지 않았습니다. 이것만으로는 위험 신호가 아닙니다. 다른 곳에서 거래될 수 있습니다.`,
+      'no-override': '공개 RPC가 거래 시뮬레이션(state override)을 허용하지 않아 사고파는 테스트를 하지 않았습니다.',
+      'buy-failed': `${p.dex}에서 구매 시뮬레이션이 실패해 판매를 테스트하지 못했습니다. 아직 거래가 열리지 않았거나, 토큰이 컨트랙트의 구매를 거부할 수 있습니다.`,
+    })[p.why] ?? '거래 시뮬레이션을 실행하지 못해 구매와 판매를 테스트하지 않았습니다.',
     // CosmWasm (Osmosis, Neutron)
     'cw-not-found': () => '이 체인의 이 주소에는 컨트랙트나 토큰이 없습니다. 주소를 잘못 입력했거나 체인을 잘못 선택했을 수 있습니다.',
     'cw20-token': (p) => `CW20 토큰(CosmWasm의 Rust 컨트랙트) "${p.name ?? '?'}" (${p.symbol ?? '?'}), 총 발행량 ${fmtSupply(p.totalSupply, p.decimals)}개입니다.`,

@@ -87,6 +87,10 @@ function render(report) {
   if (report.format) rows.push([m.format, report.format]);
   if (report.delegation) rows.push([m.delegation, report.delegation]);
   if (report.source) rows.push([m.source, `${report.source.match} · ${report.source.url}`]);
+  // Trade simulation (honeypot check): the pool it used and the taxes it saw.
+  const sim = report.sim;
+  if (sim?.pair) rows.push([m.pool, `${sim.dex} · ${sim.pair}`]);
+  if (sim?.buyTax != null) rows.push([m.simTax, `${sim.buyTax}% / ${sim.sellTax != null ? `${sim.sellTax}%` : m.simFailed}`]);
   if (report.solana?.idl) rows.push([m.idl, `${report.solana.idl.name} · ${report.solana.idl.address}`]);
   if (report.cosmwasm) {
     const c = report.cosmwasm;

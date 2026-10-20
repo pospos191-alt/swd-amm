@@ -37,7 +37,7 @@ before(() => {
     writeFileSync(join(root, n, 'worker.key'), w.privateKey + '\n', { mode: 0o600 });
   }
   execFileSync(new URL('../scripts/devnet.sh', import.meta.url).pathname,
-    [join(root, 'chain'), String(PORT), ...Object.values(actors).map((w) => w.address)], { stdio: 'inherit', env: { ...env, PQ: '1' } });
+    [join(root, 'chain'), String(PORT), ...Object.values(actors).map((w) => w.address)], { stdio: 'inherit', env: { ...env, PQ: '1', FAUCET: '1' } });
   provider = new JsonRpcProvider(RPC, undefined, { staticNetwork: true });
 });
 after(() => { try { process.kill(Number(readFileSync(join(root, 'chain', 'node.pid'), 'utf8'))); } catch {} });
@@ -140,4 +140,20 @@ test('native PQ account: send with ML-DSA only; forged, tampered and replayed tx
   // Garbage is not passed on.
   await assert.rejects(send('0x1234'), /not a Cosmos transaction/);
   assert.equal(await provider.getBalance(to), parseEther('1.25'));
+});
+
+// Testnet faucet (zetaphy_faucet): newcomers get 10 ZETAPHY once a day,
+// by 0x or zetaphy1 address; rich addresses and repeats are refused.
+test('faucet: 10 ZETAPHY once per address; repeats and rich addresses refused', { timeout: 60_000 }, async () => {
+  const fresh = Wallet.createRandom().address;
+  const r = await provider.send('zetaphy_faucet', [fresh]);
+  assert.match(r.txHash, /^0x[0-9a-f]{64}$/);
+  const pqNew = pqAddress(ml_dsa44.keygen(Buffer.alloc(32, 9)).publicKey);
+  await provider.send('zetaphy_faucet', [pqNew.bech32]);
+  await new Promise((res) => setTimeout(res, 3000));
+  assert.equal(await provider.getBalance(fresh), parseEther('10'));
+  assert.equal(await provider.getBalance(pqNew.hex), parseEther('10'));
+  await assert.rejects(provider.send('zetaphy_faucet', [fresh]), /less than a day ago|already has/);
+  await assert.rejects(provider.send('zetaphy_faucet', [actors.deployer.address]), /already has ZETAPHY/);
+  await assert.rejects(provider.send('zetaphy_faucet', ['not-an-address']), /invalid address/);
 });

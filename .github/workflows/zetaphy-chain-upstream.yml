@@ -1,0 +1,66 @@
+# Weekly checks of the ZETAPHY chain build that need no code change to fail:
+#   vulns     govulncheck on the patched, pinned Cosmos EVM source: known
+#             vulnerabilities in code the node actually calls.
+#   upstream  the ZETAPHY patches applied to the LATEST Cosmos EVM release:
+#             an early warning that an upgrade needs the patches redone.
+# Runs Mondays and by hand (Actions -> zetaphy-chain upstream -> Run).
+name: zetaphy-chain upstream
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vulns:
+    name: govulncheck (pinned source + patches)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SRC: ${{ github.workspace }}/../cosmos-evm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.9'
+          cache: false
+      - name: Pinned source + ZETAPHY patches
+        run: |
+          tag=$(sed -n 's/^COSMOS_EVM_TAG="\(.*\)"/\1/p' zetaphy-chain/setup-node.sh)
+          git clone -q --depth 1 --branch "$tag" https://github.com/cosmos/evm.git "$SRC"
+          bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
+      - name: govulncheck
+        working-directory: ${{ env.SRC }}/evmd
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          govulncheck ./...
+
+  upstream:
+    name: patches on the latest Cosmos EVM release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      SRC: ${{ github.workspace }}/../cosmos-evm
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Latest release
+        id: rel
+        run: |
+          latest=$(gh api repos/cosmos/evm/releases/latest --jq .tag_name)
+          pinned=$(sed -n 's/^COSMOS_EVM_TAG="\(.*\)"/\1/p' zetaphy-chain/setup-node.sh)
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "Pinned: $pinned · latest release: $latest" >> "$GITHUB_STEP_SUMMARY"
+          git clone -q --depth 1 --branch "$latest" https://github.com/cosmos/evm.git "$SRC"
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.SRC }}/go.mod
+          cache: false
+      - name: Apply the ZETAPHY patches and build
+        run: |
+          bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
+          cd "$SRC/evmd" && go build ./cmd/evmd
+          echo "Patches apply and build on ${{ steps.rel.outputs.latest }}." >> "$GITHUB_STEP_SUMMARY"

@@ -10,12 +10,20 @@
 //
 // `expect`: findings that must be there; `absent`: ones that must not (past
 // false alarms). A "soft" sample is one whose address is not from an
-// official list; if it fails, it is a warning, not a failure.
+// official list, or that needs something a public RPC may refuse (the trade
+// simulation's state override); if it fails, it is a warning, not a failure.
+//
+// Before the samples, each EVM chain's DEX for the trade simulation
+// (src/chains.js `dex`) is checked on chain: code at the factory, router and
+// wrapped coin, and router.factory() / router.WETH() matching. A wrong
+// address there is a hard failure.
 
 import { appendFileSync } from 'node:fs';
 import { readContract } from '../src/reader.js';
 import { explain } from '../src/explain.js';
 import { CHAINS } from '../src/chains.js';
+import { createRpc } from '../src/rpc.js';
+import { decodeAddress } from '../src/abi.js';
 
 const SAMPLES = [
   // Solidity / Vyper (EVM bytecode + Sourcify)
@@ -27,6 +35,15 @@ const SAMPLES = [
   { chain: 'base', address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', label: 'USDC Base (ZeppelinOS proxy)', expect: ['erc20', 'known-issuer', 'proxy-upgradeable', 'can-blacklist'] },
   { chain: 'eth', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', label: 'USDC Ethereum (ZeppelinOS proxy)', expect: ['erc20', 'known-issuer', 'proxy-upgradeable'] },
   { chain: 'arbitrum', address: '0x912CE59144191C1204E64559FE8253a0e49E6548', label: 'ARB', expect: ['erc20', 'known-issuer'] },
+  // Trade simulation (honeypot check): liquid, untaxed tokens with a pool
+  // against the wrapped coin on the chain's V2 DEX should buy and sell back.
+  // Soft: a public RPC may refuse state overrides. The raw numbers are printed.
+  { chain: 'eth', address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', label: 'UNI trade simulation (Uniswap V2)', expect: ['sim-ok'], absent: ['sim-cannot-sell', 'sim-high-tax'], soft: true },
+  { chain: 'eth', address: '0x6982508145454Ce325dDbE47a25d4ec3d2311933', label: 'PEPE trade simulation (Uniswap V2)', expect: ['sim-ok'], absent: ['sim-cannot-sell', 'sim-high-tax'], soft: true },
+  { chain: 'bsc', address: '0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82', label: 'CAKE trade simulation (PancakeSwap V2)', expect: ['sim-ok'], absent: ['sim-cannot-sell', 'sim-high-tax'], soft: true },
+  // Not sure these have a Uniswap V2 pool with WETH; a "no pool" skip shows as a warning.
+  { chain: 'base', address: '0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b', label: 'VIRTUAL trade simulation (Uniswap V2)', expect: ['sim-ok'], absent: ['sim-cannot-sell'], soft: true },
+  { chain: 'arbitrum', address: '0xfc5A1A6EB076a2C7aD06eD22C90d7E710E35ad0a', label: 'GMX trade simulation (Uniswap V2)', expect: ['sim-ok'], absent: ['sim-cannot-sell'], soft: true },
   // Rust: Solana (mints and Anchor programs)
   { chain: 'sol', address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', label: 'USDC Solana', expect: ['sol-token', 'known-issuer'] },
   { chain: 'sol', address: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', label: 'BONK', expect: ['sol-token'] },
@@ -58,6 +75,31 @@ const SAMPLES = [
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** The trade simulation's DEX addresses for one chain, checked on chain. */
+async function checkDex(chain) {
+  const c = CHAINS[chain];
+  const d = c.dex;
+  const s = { chain, label: `${d.name} addresses (trade simulation)`, expect: [] };
+  const t0 = Date.now();
+  try {
+    const rpc = createRpc(c.rpcs, c.id);
+    const missing = [];
+    for (const [name, a] of [['factory', d.factory], ['router', d.router], [d.native, d.weth]]) {
+      const code = await rpc.call('eth_getCode', [a, 'latest']);
+      if (!code || code === '0x') missing.push(`no code at ${name} ${a}`);
+    }
+    const read = async (data) => { try { return decodeAddress(await rpc.call('eth_call', [{ to: d.router, data }, 'latest'])); } catch (e) { return `error: ${e.message}`; } };
+    const factory = await read('0xc45a0155'); // factory()
+    const weth = await read('0xad5c4648'); // WETH()
+    if (factory !== d.factory.toLowerCase()) missing.push(`router.factory() is ${factory}, expected ${d.factory}`);
+    if (weth !== d.weth.toLowerCase()) missing.push(`router.WETH() is ${weth}, expected ${d.weth}`);
+    const lines = [`factory ${d.factory}`, `router ${d.router}: factory() ${factory}, WETH() ${weth}`];
+    return { ...s, ok: missing.length === 0, missing, level: missing.length ? 'wrong' : 'verified', ids: [], ms: Date.now() - t0, lines };
+  } catch (e) {
+    return { ...s, ok: false, error: e.message, ms: Date.now() - t0 };
+  }
+}
+
 async function checkOne(s) {
   const t0 = Date.now();
   try {
@@ -68,6 +110,8 @@ async function checkOne(s) {
       ...(s.absent ?? []).filter((id) => ids.includes(id)).map((id) => `unexpected ${id}`),
     ];
     const extra = r.ton?.wallet ? [`wallet: ${JSON.stringify(r.ton.wallet)}`] : [];
+    // Raw trade simulation numbers (stage, pool, amounts quoted vs received, gas).
+    if (r.sim) extra.push(`sim: ${JSON.stringify(r.sim)}`);
     return { ...s, ok: missing.length === 0, missing, level: r.analysis.level, ids, ms: Date.now() - t0, lines: [...explain(r, 'en').lines.map((l) => `${l.severity}: ${l.text}`), ...extra] };
   } catch (e) {
     return { ...s, ok: false, error: e.message, ms: Date.now() - t0 };
@@ -77,12 +121,14 @@ async function checkOne(s) {
 const only = process.argv.slice(2);
 const samples = SAMPLES.filter((s) => !only.length || only.includes(s.chain));
 const results = [];
-for (const s of samples) {
+const dexChains = Object.keys(CHAINS).filter((k) => CHAINS[k].dex && (!only.length || only.includes(k)));
+const jobs = [...dexChains.map((chain) => ({ chain, dex: true })), ...samples];
+for (const s of jobs) {
   if (!CHAINS[s.chain]) throw new Error(`unknown chain ${s.chain}`);
-  const r = await checkOne(s);
+  const r = s.dex ? await checkDex(s.chain) : await checkOne(s);
   results.push(r);
   const mark = r.ok ? 'PASS' : r.soft ? 'WARN' : 'FAIL';
-  console.log(`\n[${mark}] ${s.chain} ${s.label}  ${r.error ? `error: ${r.error}` : `${r.level}  (${r.ms} ms)`}`);
+  console.log(`\n[${mark}] ${r.chain} ${r.label}  ${r.error ? `error: ${r.error}` : `${r.level}  (${r.ms} ms)`}`);
   if (r.missing?.length) console.log(`  missing: ${r.missing.join(', ')}`);
   for (const l of r.lines ?? []) console.log(`  ${l}`);
   if (s.chain === 'ton') await pause(1200); // tonapi free tier: ~1 request/second

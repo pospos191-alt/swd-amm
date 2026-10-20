@@ -1,5 +1,6 @@
 // Neuro ZETAPHY tier 1: reads one contract and produces a report.
-// Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call.
+// Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call (one of
+// them with a state override, for the trade simulation in honeypot.js).
 
 import { CHAINS, isChainAddress } from './chains.js';
 import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc, createStarknetRpc, createOrdApi } from './rpc.js';
@@ -17,7 +18,8 @@ import { normalizeType, longAddress } from './move.js';
 import { lookupSourcify, abiFunctions, categorize } from './sourcify.js';
 import { scanBytecode, minimalProxyTarget, hexToBytes } from './bytecode.js';
 import { decodeAddress, decodeUint, decodeString, cleanText } from './abi.js';
-import { analyze, analyzeOpaque, analyzeDelegated } from './analyze.js';
+import { analyze, analyzeOpaque, analyzeDelegated, withSimulation } from './analyze.js';
+import { simulateTrade } from './honeypot.js';
 import { codeFingerprint } from './fingerprint.js';
 import { TEMPLATES } from './templates.js';
 import { knownToken, lookalikeOf } from './known-tokens.js';
@@ -63,6 +65,8 @@ function canonical(v) {
  *   rpc/fetchImpl: inject for tests; templates: defaults to src/templates.js;
  *   chainConfig: {kind:'evm', id, name, rpcs} for a chain not in CHAINS;
  *   threatLookup: async (fingerprint) => ({flagged, reason}) from the ZETAPHY ThreatRegistry
+ *   simulate: run the trade simulation (honeypot check); default on unless
+ *     the caller injects an RPC (tests opt in)
  */
 export async function readContract(chainKey, address, opts = {}) {
   // opts.chainConfig lets a caller read a chain the website does not list
@@ -153,14 +157,17 @@ export async function readContract(chainKey, address, opts = {}) {
       analysis.findings = analysis.findings.filter((f) => f.id !== 'not-erc20');
       analysis.findings.unshift({ id: 'stylus-read', severity: 'info', params: { count: scan.functions.length, size: scan.size } });
       report.analysis = analysis;
+      if (isTokenContract(scan.functions) || token.symbol != null) await simulate(report, { rpc, chain, chainKey, addr, known, opts });
       report.reportHash = await sha256Hex(canonical(report));
       return report;
     }
+    const known = knownToken(chainKey, addr);
     report.analysis = analyzeOpaque({
-      format, token, owner,
-      known: knownToken(chainKey, addr),
+      format, token, owner, known,
       lookalike: token.symbol ? lookalikeOf(chainKey, addr, token.symbol) : null,
     });
+    // Code the rules cannot read at all: a real trade is the best check left.
+    if (token.symbol != null) await simulate(report, { rpc, chain, chainKey, addr, known, opts });
     report.reportHash = await sha256Hex(canonical(report));
     return report;
   }
@@ -266,8 +273,22 @@ export async function readContract(chainKey, address, opts = {}) {
   report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike, unknownSelectors: unknown, threat, source });
   report.functions = functions.map((f) => f.sig).sort();
   if (unknown.length) report.unknownSelectors = unknown;
+  if (isTokenContract(functions)) await simulate(report, { rpc, chain, chainKey, addr, known, opts });
   report.reportHash = await sha256Hex(canonical(report));
   return report;
+}
+
+/**
+ * Honeypot check: buys and sells the token in one read-only eth_call
+ * (src/honeypot.js) and adds what happened to the report. Skipped for an
+ * official issuer's token (its risk is trust in the issuer, and it is not a
+ * honeypot) and on chains with no DEX configured.
+ */
+async function simulate(report, { rpc, chain, chainKey, addr, known, opts }) {
+  if (!(opts.simulate ?? !opts.rpc) || !chain.dex || known) return;
+  if (addr === chain.dex.weth.toLowerCase()) return;
+  report.sim = await simulateTrade(rpc, chain.dex, addr);
+  report.analysis = withSimulation(report.analysis, report.sim);
 }
 
 async function readSolana(chainKey, chain, address, opts) {

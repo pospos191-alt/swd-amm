@@ -36,3 +36,15 @@ test('verdict changes when the rules decide something different', async () => {
   }
   assert.deepEqual(verdictBody(base).findings, ['can-change-fee:medium', 'erc20:info']);
 });
+
+test('the trade simulation does not change the verdict', async () => {
+  const simulated = structuredClone(base);
+  simulated.analysis.rulesLevel = simulated.analysis.level;
+  simulated.analysis.level = 'high';
+  simulated.analysis.findings.push({ id: 'sim-cannot-sell', severity: 'high', params: { dex: 'PancakeSwap V2', buy: 0, sell: null } });
+  simulated.sim = { stage: 'sell-failed', bought: '5' };
+  assert.equal(await verdictOf(simulated), await verdictOf(base));
+  const skipped = structuredClone(base);
+  skipped.analysis.findings.push({ id: 'sim-skipped', severity: 'info', params: { why: 'no-override' } });
+  assert.equal(await verdictOf(skipped), await verdictOf(base));
+});

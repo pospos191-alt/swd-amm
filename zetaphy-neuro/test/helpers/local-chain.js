@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import solc from 'solc';
 import { EVM } from '@ethereumjs/evm';
 import { Common, Chain, Hardfork } from '@ethereumjs/common';
-import { Address, hexToBytes, bytesToHex, setLengthLeft } from '@ethereumjs/util';
+import { Address, Account, hexToBytes, bytesToHex, setLengthLeft } from '@ethereumjs/util';
+import { selectorOf } from '../../scripts/keccak.js';
 
 const SOURCE = readFileSync(new URL('./contracts.sol', import.meta.url), 'utf8');
 const DEPLOYER = Address.fromString('0x1111111111111111111111111111111111111111');
@@ -61,6 +62,43 @@ export async function createLocalChain({ optimize = true } = {}) {
     await sm.putContractCode(Address.fromString(addressHex), hexToBytes(codeHex));
   }
 
+  async function fund(addressHex, wei) {
+    const a = Address.fromString(addressHex);
+    const acct = (await sm.getAccount(a)) ?? new Account();
+    acct.balance = BigInt(wei);
+    await sm.putAccount(a, acct);
+  }
+
+  /** A state-changing call from the deployer (setting up pools); returns the output. */
+  async function send(to, sig, args = [], value = 0n) {
+    const data = '0x' + selectorOf(sig) + args.map(word).join('');
+    const r = await evm.runCall({ caller: DEPLOYER, to: Address.fromString(to), data: hexToBytes(data), value: BigInt(value), gasLimit: 30_000_000n });
+    if (r.execResult.exceptionError) throw new Error(`${sig}: ${r.execResult.exceptionError.error}`);
+    return bytesToHex(r.execResult.returnValue);
+  }
+
+  /**
+   * Puts the mock Uniswap-V2 DEX (contracts.sol) at a chain's real DEX
+   * addresses (src/chains.js `dex`), so readContract finds it as on mainnet.
+   * Returns addPool(token, tokens, wei): a pool holding that much of each.
+   */
+  async function installDex(dex) {
+    const code = async (name, args) => bytesToHex(await sm.getContractCode(Address.fromString(await deploy(name, args))));
+    await putCode(dex.weth, await code('MockWETH'));
+    await putCode(dex.factory, await code('MockFactory'));
+    await putCode(dex.router, await code('MockRouter', word(dex.factory) + word(dex.weth)));
+    await fund(DEPLOYER.toString(), 10n ** 30n);
+    return async function addPool(token, tokens, wei) {
+      await send(dex.factory, 'createPair(address,address)', [token, dex.weth]);
+      const pair = '0x' + (await send(dex.factory, 'getPair(address,address)', [token, dex.weth])).slice(-40);
+      await send(dex.weth, 'deposit()', [], wei);
+      await send(dex.weth, 'transfer(address,uint256)', [pair, BigInt(wei).toString(16)]);
+      await send(token, 'transfer(address,uint256)', [pair, BigInt(tokens).toString(16)]);
+      await send(pair, 'sync()');
+      return pair;
+    };
+  }
+
   // Read-only RPC with the same interface as src/rpc.js.
   const rpc = {
     calls: [],
@@ -74,17 +112,28 @@ export async function createLocalChain({ optimize = true } = {}) {
         return bytesToHex(setLengthLeft(v, 32));
       }
       if (method === 'eth_call') {
-        const { to, data } = params[0];
-        const r = await evm.runCall({
-          caller: Address.fromString('0x2222222222222222222222222222222222222222'),
-          to: Address.fromString(to), data: hexToBytes(data), gasLimit: 10_000_000n,
-        });
-        if (r.execResult.exceptionError) throw new Error('execution reverted');
-        return bytesToHex(r.execResult.returnValue);
+        // Like a node: runs on a scratch copy of the state (with the optional
+        // state override, third parameter) and throws the copy away.
+        const [{ to, data, from }, , override] = params;
+        await sm.checkpoint();
+        try {
+          for (const [addr, o] of Object.entries(override ?? {})) {
+            if (o.code) await putCode(addr, o.code);
+            if (o.balance) await fund(addr, o.balance);
+          }
+          const r = await evm.runCall({
+            caller: Address.fromString(from ?? '0x2222222222222222222222222222222222222222'),
+            to: Address.fromString(to), data: hexToBytes(data), gasLimit: 30_000_000n,
+          });
+          if (r.execResult.exceptionError) throw new Error('execution reverted');
+          return bytesToHex(r.execResult.returnValue);
+        } finally {
+          await sm.revert();
+        }
       }
       throw new Error(`unsupported ${method}`);
     },
   };
 
-  return { deploy, putCode, rpc, bins };
+  return { deploy, putCode, fund, send, installDex, rpc, bins };
 }
