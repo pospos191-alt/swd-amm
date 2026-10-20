@@ -22,7 +22,9 @@ export function isNearAccount(s) {
 }
 
 const NO_CODE = '11111111111111111111111111111111';
-const UPGRADE_RE = /(^|_)(upgrade|update_contract|deploy_code|deploy_contract|set_code|migrate|stage_code|deploy_staged)(_|$)/;
+// Methods that replace the contract's code. `upgrade_name_symbol` or
+// `upgrade_icon` (USDt on NEAR) only change metadata, so whole names only.
+const UPGRADE_RE = /^(upgrade|upgrade_contract|upgrade_code|upgrade_self|update_contract|deploy_code|deploy_contract|set_code|migrate|stage_code|deploy_staged|deploy_upgrade)$/;
 
 // ------------------------------------------------------------------ WASM
 function leb(bytes, o) {

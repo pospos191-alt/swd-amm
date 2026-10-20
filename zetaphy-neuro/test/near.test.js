@@ -56,7 +56,7 @@ test('account ids and the WASM export reader', () => {
 
 test('NEP-141 token whose account still has a full-access key and a mint method', async () => {
   const rpc = fakeNear({ 'meme.near': {
-    code: [...TOKEN_METHODS, 'mint', 'set_paused', 'is_paused', 'get_owner', 'upgrade'],
+    code: [...TOKEN_METHODS, 'mint', 'set_paused', 'is_paused', 'get_owner', 'upgrade', 'upgrade_name_symbol', 'upgrade_icon'],
     keys: [FULL, FN_KEY],
     views: { ft_metadata: { spec: 'ft-1.0.0', name: 'Meme', symbol: 'MEME', decimals: 24 }, ft_total_supply: '1000000000000000000000000000' },
   } });
@@ -66,6 +66,7 @@ test('NEP-141 token whose account still has a full-access key and a mint method'
   assert.deepEqual(find(r, 'can-mint').params.functions, ['contract::mint']);
   assert.deepEqual(find(r, 'can-pause').params.functions, ['contract::set_paused'], 'getters like is_paused are not powers');
   assert.equal(find(r, 'near-upgrade-method').severity, 'medium');
+  assert.deepEqual(find(r, 'near-upgrade-method').params.functions, ['upgrade'], 'metadata setters are not code upgrades');
   assert.equal(r.near.fullAccessKeys, 1);
   assert.match(explain(r, 'th').lines[0].text, /Meme.*MEME.*1,000/);
   assert.ok(rpc.calls.every(([m]) => m === 'query'));
