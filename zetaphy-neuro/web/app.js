@@ -1,36 +1,36 @@
 // Web page for Neuro ZETAPHY tier 1. Everything shown from the chain goes
 // through textContent, never innerHTML: token names are written by strangers.
 import { readContract } from '../src/reader.js';
-import { explain } from '../src/explain.js';
-import { CHAINS, isChainAddress } from '../src/chains.js';
+import { explain, LANGS, uiText, pickLang } from '../src/explain.js';
+import { CHAINS, isChainAddress, explorerUrl } from '../src/chains.js';
 
 const $ = (id) => document.getElementById(id);
-const UI = {
-  th: { subtitle: 'อ่านและอธิบายสัญญา · ชั้น 1 อ่านอย่างเดียว', chain: 'เชน', address: 'ที่อยู่สัญญา', check: 'ตรวจสัญญา',
-    details: 'รายละเอียด', reading: 'กำลังอ่านสัญญาจากเชน…', badAddress: 'ที่อยู่ไม่ถูกต้อง: เชน EVM ต้องขึ้นต้นด้วย 0x ยาว 42 ตัวอักษร ส่วน Solana เป็นตัวอักษร 32–44 ตัว',
-    failed: 'อ่านไม่สำเร็จ: ', footer: 'ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม อ่านข้อมูลจากเชนผ่าน RPC สาธารณะเท่านั้น ผลตรวจไม่ใช่คำแนะนำการลงทุน', stats: 'สถิติการใช้งาน',
-    m: { chain: 'เชน', address: 'ที่อยู่', proxy: 'Proxy', implementation: 'โค้ดหลัก', owner: 'เจ้าของ', functions: 'ฟังก์ชันที่รู้จัก', report: 'รหัสรายงาน', explorer: 'ดูบน explorer', fingerprint: 'ลายนิ้วมือโค้ด (ใช้ลงทะเบียนแม่แบบ)', unknown: 'ฟังก์ชันที่ไม่รู้จักชื่อ',
-      program: 'โปรแกรมเหรียญ', mintAuth: 'สิทธิ์สร้างเหรียญ', freezeAuth: 'สิทธิ์อายัด', extensions: 'ส่วนเสริม', upgradeAuth: 'สิทธิ์อัปเกรด', none: 'ไม่มี' } },
-  en: { subtitle: 'Reads and explains contracts · tier 1, read-only', chain: 'Chain', address: 'Contract address', check: 'Check contract',
-    details: 'Details', reading: 'Reading the contract from the chain…', badAddress: 'Invalid address: EVM chains need 0x + 40 hex characters; Solana needs a 32–44 character base58 address',
-    failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data only. Not investment advice.', stats: 'Usage stats',
-    m: { chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)', unknown: 'Unnamed functions',
-      program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none' } },
+// What an address looks like on each kind of chain (placeholder and error hint).
+const FORMAT = {
+  evm: { placeholder: '0x…', hint: '0x + 40 hex' },
+  solana: { placeholder: 'EPjFWdd5…', hint: 'base58, 32–44' },
+  sui: { placeholder: '0x…::coin::COIN', hint: '0x…::module::NAME / 0x… (package)' },
+  aptos: { placeholder: '0x… / 0x…::coin::COIN', hint: '0x… (Fungible Asset) / 0x…::module::Name' },
+  ton: { placeholder: 'EQ… / UQ…', hint: 'EQ…/UQ… (48) / 0:…' },
 };
+const kindOf = (chain) => CHAINS[chain]?.kind ?? 'evm';
 
 let lang = 'th';
 let last = null;
-try { lang = localStorage.getItem('neuro-lang') === 'en' ? 'en' : 'th'; } catch { /* storage blocked */ }
+try { lang = pickLang(localStorage.getItem('neuro-lang') ?? 'th'); } catch { /* storage blocked */ }
 
 for (const [key, c] of Object.entries(CHAINS)) $('chain').add(new Option(c.name, key));
 $('chain').value = 'bsc';
-const setPlaceholder = () => { $('address').placeholder = CHAINS[$('chain').value].kind === 'solana' ? 'EPjFWdd5…' : '0x…'; };
+for (const [code, L] of Object.entries(LANGS)) $('lang').add(new Option(L.NAME, code));
+const setPlaceholder = () => { $('address').placeholder = FORMAT[kindOf($('chain').value)].placeholder; };
 $('chain').addEventListener('change', setPlaceholder);
 
 function applyLang() {
   document.documentElement.lang = lang;
-  $('lang').textContent = lang === 'th' ? 'EN' : 'ไทย';
-  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = UI[lang][el.dataset.i18n];
+  $('lang').value = lang;
+  const ui = uiText(lang);
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = ui[el.dataset.i18n];
+  $('lang').setAttribute('aria-label', ui.language);
   if (last) render(last);
 }
 
@@ -41,7 +41,7 @@ function status(text, isError = false) {
 
 function render(report) {
   const out = explain(report, lang);
-  const m = UI[lang].m;
+  const { m } = uiText(lang);
   $('verdict').className = `verdict ${out.level}`;
   $('title').textContent = out.title;
   const list = $('findings');
@@ -65,6 +65,20 @@ function render(report) {
     if (sol.extensions?.length) rows.push([m.extensions, sol.extensions.join(', ')]);
     if ('upgradeAuthority' in sol) rows.push([m.upgradeAuth, sol.upgradeAuthority ?? m.none]);
   }
+  if (report.raw) rows.push([m.raw, report.raw]);
+  if (report.move) {
+    const mv = report.move;
+    if (mv.standard) rows.push([m.standard, mv.standard]);
+    if (mv.package) rows.push([m.package, mv.package]);
+    if (mv.owner) rows.push([m.owner, mv.owner]);
+    for (const p of mv.packages ?? []) rows.push([m.package, p.address]);
+    if (mv.upgrade && 'policy' in mv.upgrade) rows.push([m.upgradeAuth, mv.upgrade.owner?.address ?? mv.upgrade.owner?.kind ?? m.none]);
+  }
+  if (report.ton) {
+    rows.push([m.admin, report.ton.admin ?? m.none]);
+    rows.push([m.listed, report.ton.verification]);
+  }
+  if (report.token?.holders != null) rows.push([m.holders, report.token.holders.toLocaleString('en-US')]);
   if (report.fingerprint) rows.push([m.fingerprint, report.fingerprint]);
   rows.push([m.report, report.reportHash]);
   const dl = $('meta');
@@ -77,7 +91,7 @@ function render(report) {
   const dt = document.createElement('dt'); dt.textContent = m.explorer;
   const dd = document.createElement('dd');
   const a = document.createElement('a');
-  a.href = CHAINS[report.chain].explorer + report.address; // address already validated
+  a.href = explorerUrl(report.chain, report.address); // address already validated
   a.target = '_blank'; a.rel = 'noopener noreferrer';
   a.textContent = new URL(a.href).hostname;
   dd.append(a); dl.append(dt, dd);
@@ -96,10 +110,11 @@ function reportUsage() {
 }
 
 async function run(chain, address) {
-  if (!isChainAddress(chain, address)) { status(UI[lang].badAddress, true); return; }
+  const ui = uiText(lang);
+  if (!isChainAddress(chain, address)) { status(ui.badAddress + FORMAT[kindOf(chain)].hint, true); return; }
   $('go').disabled = true;
   $('result').hidden = true;
-  status(UI[lang].reading);
+  status(ui.reading);
   try {
     last = await readContract(chain, address);
     render(last);
@@ -109,7 +124,7 @@ async function run(chain, address) {
     u.searchParams.set('chain', chain); u.searchParams.set('address', address);
     history.replaceState(null, '', u);
   } catch (e) {
-    status(UI[lang].failed + e.message, true);
+    status(uiText(lang).failed + e.message, true);
   } finally {
     $('go').disabled = false;
   }
@@ -119,8 +134,8 @@ $('form').addEventListener('submit', (e) => {
   e.preventDefault();
   run($('chain').value, $('address').value.trim());
 });
-$('lang').addEventListener('click', () => {
-  lang = lang === 'th' ? 'en' : 'th';
+$('lang').addEventListener('change', () => {
+  lang = pickLang($('lang').value);
   try { localStorage.setItem('neuro-lang', lang); } catch { /* storage blocked */ }
   applyLang();
 });

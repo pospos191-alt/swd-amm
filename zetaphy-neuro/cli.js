@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Neuro ZETAPHY tier 1 from the command line.
-//   node cli.js <bsc|base|arbitrum> <address> [--lang th|en] [--json]
-//   node cli.js fingerprint <bsc|base|arbitrum> <address>
+//   node cli.js <chain> <address> [--lang th|en|zh|ja|ko|vi|id] [--json]
+//   node cli.js fingerprint <evm chain> <address>
 //       prints a template entry to paste into src/templates.js
 import { readContract } from './src/reader.js';
-import { explain } from './src/explain.js';
-import { CHAINS } from './src/chains.js';
+import { explain, LANGS } from './src/explain.js';
+import { CHAINS, explorerUrl } from './src/chains.js';
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
@@ -14,13 +14,13 @@ const positional = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== 
 const chains = Object.keys(CHAINS).join('|');
 
 function usage() {
-  console.error(`usage: node cli.js <${chains}> <address> [--lang th|en] [--json]
+  console.error(`usage: node cli.js <${chains}> <address> [--lang ${Object.keys(LANGS).join('|')}] [--json]
        node cli.js fingerprint <${chains}> <address>`);
   process.exit(2);
 }
 
 async function fingerprint(chain, address) {
-  if (CHAINS[chain]?.kind === 'solana') throw new Error('fingerprints are for EVM contracts; Solana tokens are recognised by their mint settings');
+  if (CHAINS[chain]?.kind !== 'evm') throw new Error('fingerprints are for EVM contracts; other chains are recognised by their on-chain settings');
   const r = await readContract(chain, address);
   if (!r.fingerprint) throw new Error('no contract code at this address');
   const has = (id) => r.analysis.findings.some((f) => f.id === id);
@@ -58,7 +58,7 @@ try {
       console.log(`${CHAINS[chain].name} ${report.address}`);
       console.log(`== ${out.title} ==`);
       for (const l of out.lines) console.log(`${mark[l.severity]} ${l.text}`);
-      console.log(`\nreport ${report.reportHash.slice(0, 16)} · ${CHAINS[chain].explorer}${report.address}`);
+      console.log(`\nreport ${report.reportHash.slice(0, 16)} · ${explorerUrl(chain, report.address)}`);
     }
   }
 } catch (e) {

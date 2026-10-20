@@ -16,7 +16,7 @@ export function validRequest(q) {
   const big = (v) => { try { return BigInt(v) >= 0n; } catch { return false; } };
   return q && typeof q === 'object'
     && [q.user, q.token].every((a) => { try { getAddress(a); return true; } catch { return false; } })
-    && isHexString(q.chain, 32) && typeof q.target === 'string' && q.target.length > 0 && q.target.length <= 64
+    && isHexString(q.chain, 32) && typeof q.target === 'string' && q.target.length > 0 && q.target.length <= 330
     && ['fee', 'tip', 'maxCost', 'nonce', 'deadline'].every((k) => big(q[k]));
 }
 

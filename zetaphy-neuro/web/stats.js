@@ -11,7 +11,8 @@ const UI = {
     error: 'Could not load stats', month: 'Month', locale: 'en-US' },
 };
 let lang = 'th';
-try { lang = localStorage.getItem('neuro-lang') === 'en' ? 'en' : 'th'; } catch { /* storage blocked */ }
+// The stats page is Thai/English only: any language other than Thai shows English.
+try { const saved = localStorage.getItem('neuro-lang'); lang = saved && saved !== 'th' ? 'en' : 'th'; } catch { /* storage blocked */ }
 let data = null;
 
 const prevMonth = (m) => {

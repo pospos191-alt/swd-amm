@@ -2,8 +2,12 @@
 // Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call.
 
 import { CHAINS, isChainAddress } from './chains.js';
-import { createRpc, createSolanaRpc } from './rpc.js';
+import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi } from './rpc.js';
 import { readSolanaAccount, analyzeSolana } from './solana.js';
+import { readSuiAccount, analyzeSui } from './sui.js';
+import { readAptosAccount, analyzeAptos } from './aptos.js';
+import { readTonAccount, analyzeTon, parseTonAddress } from './ton.js';
+import { normalizeType, longAddress } from './move.js';
 import { scanBytecode, minimalProxyTarget, hexToBytes } from './bytecode.js';
 import { decodeAddress, decodeUint, decodeString, cleanText } from './abi.js';
 import { analyze } from './analyze.js';
@@ -60,6 +64,9 @@ export async function readContract(chainKey, address, opts = {}) {
     : isChainAddress(chainKey, address);
   if (!validAddress) throw new Error('invalid address');
   if (chain.kind === 'solana') return readSolana(chainKey, chain, address, opts);
+  if (chain.kind === 'sui') return readSui(chainKey, chain, address, opts);
+  if (chain.kind === 'aptos') return readAptos(chainKey, chain, address, opts);
+  if (chain.kind === 'ton') return readTon(chainKey, chain, address, opts);
   const addr = address.toLowerCase();
   const rpc = opts.rpc ?? createRpc(chain.rpcs, chain.id, { fetchImpl: opts.fetchImpl });
 
@@ -172,4 +179,71 @@ async function readSolana(chainKey, chain, address, opts) {
   report.analysis = analyzeSolana(m, { known, lookalike });
   report.reportHash = await sha256Hex(canonical(report));
   return report;
+}
+
+// ------------------------------------------------------------- Move + TON
+const finish = async (report) => {
+  report.reportHash = await sha256Hex(canonical(report));
+  return report;
+};
+
+// Move addresses are compared in their 64-digit form.
+const moveId = (a) => (a.includes('::') ? normalizeType(a) : longAddress(a));
+
+async function readSui(chainKey, chain, address, opts) {
+  const api = opts.api ?? createSuiGraphql(chain.rpcs, chain.chainIdentifier, { fetchImpl: opts.fetchImpl });
+  const m = await readSuiAccount((q, v) => api.query(q, v), address);
+  const id = moveId(address);
+  const report = { version: REPORT_VERSION, chain: chainKey, address: id };
+  if (m.kind === 'coin') {
+    report.token = m.token;
+    report.move = {
+      package: m.package,
+      supplyState: m.supplyState ?? undefined,
+      regulated: m.regulated ?? undefined,
+      treasury: m.treasury ?? undefined,
+      upgrade: m.upgrade ?? undefined,
+    };
+  } else if (m.kind === 'package') {
+    report.move = { package: m.package, upgrade: m.upgrade ?? undefined };
+  }
+  const known = m.kind === 'coin' ? knownToken(chainKey, id) : null;
+  const lookalike = m.kind === 'coin' ? lookalikeOf(chainKey, id, m.token.symbol) : null;
+  report.analysis = analyzeSui(m, { known, lookalike });
+  return finish(report);
+}
+
+async function readAptos(chainKey, chain, address, opts) {
+  const api = opts.api ?? createAptosRest(chain.rpcs, chain.id, { fetchImpl: opts.fetchImpl });
+  const m = await readAptosAccount(api, address);
+  const id = moveId(address);
+  const report = { version: REPORT_VERSION, chain: chainKey, address: id };
+  const isToken = m.kind === 'coin' || m.kind === 'fa';
+  if (isToken) report.token = m.token;
+  if (m.kind !== 'missing' && m.kind !== 'other') {
+    report.move = {
+      standard: m.kind === 'coin' ? 'Coin' : m.kind === 'fa' ? 'Fungible Asset' : 'package',
+      owner: m.owner ?? undefined,
+      packages: m.packages,
+    };
+  }
+  const known = isToken ? knownToken(chainKey, id) : null;
+  const lookalike = isToken ? lookalikeOf(chainKey, id, m.token.symbol) : null;
+  report.analysis = analyzeAptos(m, { known, lookalike });
+  return finish(report);
+}
+
+async function readTon(chainKey, chain, address, opts) {
+  const api = opts.api ?? createTonApi(chain.rpcs, { fetchImpl: opts.fetchImpl });
+  const m = await readTonAccount(api, address);
+  const { raw } = parseTonAddress(address);
+  const report = { version: REPORT_VERSION, chain: chainKey, address, raw };
+  if (m.kind === 'jetton') {
+    report.token = m.token;
+    report.ton = { admin: m.admin, mintable: m.mintable, verification: m.verification };
+  }
+  const known = m.kind === 'jetton' ? knownToken(chainKey, raw) : null;
+  const lookalike = m.kind === 'jetton' ? lookalikeOf(chainKey, raw, m.token.symbol) : null;
+  report.analysis = analyzeTon(m, { known, lookalike });
+  return finish(report);
 }

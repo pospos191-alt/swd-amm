@@ -1,11 +1,14 @@
 # Neuro ZETAPHY — ชั้น 1 (อ่านและอธิบายสัญญา)
 
 งานแรกตาม "แผน ZETAPHY Chain": ตัวอ่านสัญญาที่บอกเป็นภาษาคนว่าสัญญาเหรียญบน
-**Ethereum, BNB Chain, Base, Arbitrum และ Solana** ให้สิทธิ์อะไรกับเจ้าของบ้าง (สร้างเหรียญเพิ่ม,
-บล็อกกระเป๋า, หยุดการโอน, เปลี่ยนภาษี, อัปเกรดโค้ด ฯลฯ) ต้นทุน $0
+**Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos และ TON** ให้สิทธิ์อะไรกับเจ้าของบ้าง (สร้างเหรียญเพิ่ม,
+บล็อกกระเป๋า, หยุดการโอน, เปลี่ยนภาษี, อัปเกรดโค้ด ฯลฯ) อธิบายได้ 7 ภาษา: ไทย อังกฤษ จีน ญี่ปุ่น เกาหลี
+เวียดนาม อินโดนีเซีย ต้นทุน $0
 
 - **อ่านอย่างเดียว**: ใช้แค่ `eth_getCode`, `eth_getStorageAt`, `eth_call` (EVM) และ
-  `getGenesisHash`, `getAccountInfo` (Solana) ผ่าน RPC สาธารณะฟรี ไม่ขอเชื่อมกระเป๋า ไม่มีโค้ดส่งธุรกรรม (`src/rpc.js` ปฏิเสธคำสั่งอื่นทั้งหมด)
+  `getGenesisHash`, `getAccountInfo` (Solana), GraphQL แบบ query อย่างเดียว (Sui), GET กับฟังก์ชัน
+  `#[view]` (Aptos) และ GET จาก tonapi.io (TON) ผ่าน endpoint สาธารณะฟรี ไม่ขอเชื่อมกระเป๋า
+  ไม่มีโค้ดส่งธุรกรรม (`src/rpc.js` ปฏิเสธคำสั่งอื่นทั้งหมด และตรวจว่า endpoint เป็น mainnet จริง)
 - **กฎตายตัว ไม่ใช้ AI**: ผลเหมือนเดิมทุกครั้ง มี `reportHash` ให้เครื่องอื่นตรวจซ้ำได้
   (ตามจุดอ่อนข้อ 1 ในแผน: งานต้องตรวจซ้ำได้)
 - **ไม่เชื่อข้อความจากสัญญา**: ชื่อ/สัญลักษณ์เหรียญถูกกรองอักขระควบคุมและแสดงเป็นข้อความเท่านั้น
@@ -16,7 +19,10 @@
 ```bash
 npm install
 node cli.js bsc 0x...            # อธิบายเป็นภาษาไทย
-node cli.js base 0x... --lang en  # English
+node cli.js base 0x... --lang en  # English (หรือ zh ja ko vi id)
+node cli.js sui 0x...::coin::COIN # เหรียญบน Sui
+node cli.js aptos 0x...           # Fungible Asset บน Aptos (หรือ 0x...::module::Name)
+node cli.js ton EQ...             # jetton บน TON
 node cli.js arbitrum 0x... --json # รายงานเต็ม
 npm run web                       # เปิดหน้าเว็บที่ http://localhost:8080/
 ```
@@ -71,6 +77,23 @@ node cli.js fingerprint bsc 0x<เหรียญหนึ่งตัวที�
 บัญชีใหม่ถูกอายัดตั้งแต่ต้น, หยุดการโอน, ปิด mint ได้), ชื่อเหรียญจาก Metaplex และแก้ชื่อได้หรือไม่,
 และสิทธิ์อัปเกรดของโปรแกรม
 
+**Sui** (`src/sui.js`) เหรียญคือชนิด Move `0xแพ็กเกจ::โมดูล::ชื่อ` อำนาจอยู่ในอ็อบเจ็กต์:
+ใครถือ `TreasuryCap` (สร้างเหรียญเพิ่มไม่จำกัด), เหรียญแบบควบคุมที่มี `DenyCap` (บล็อกกระเป๋า
+และหยุดทั้งระบบได้), ใครถือ `UpgradeCap` (เปลี่ยนโค้ด) และนโยบายอัปเกรด หาได้จากธุรกรรมที่
+เผยแพร่แพ็กเกจ แล้วอ่านชื่อฟังก์ชัน public/entry ในโมดูลของเหรียญ (mint, blacklist, pause,
+set_fee, burn_from ฯลฯ)
+
+**Aptos** (`src/aptos.js`) รองรับทั้ง Coin แบบเดิมและ Fungible Asset: อ่าน ABI ของโค้ดผู้สร้าง
+หาว่าโครงสร้างไหนเก็บ `MintRef`/`MintCapability` (สร้างเพิ่ม), `TransferRef`/`FreezeCapability`
+(อายัดและย้ายเหรียญของคนอื่น), `BurnRef`/`BurnCapability` (เผาเหรียญของคนอื่น), `managed_coin`,
+โค้ดเสริมตอนฝาก/ถอน (dispatch hook), นโยบายอัปเกรดแพ็กเกจ และชื่อฟังก์ชันเหมือน Sui
+
+**TON** (`src/ton.js`) อ่าน jetton master ผ่าน tonapi.io: สร้างเหรียญเพิ่มได้ไหม, ผู้ดูแลยังอยู่หรือสละแล้ว,
+ป้ายหลอกลวง/รายชื่อที่ตรวจแล้วของ tonapi และสัญญาที่ถูกแช่แข็ง ตรวจ checksum ของที่อยู่ก่อนเรียกเน็ต
+และไม่รับที่อยู่ testnet ข้อจำกัด: ยังไม่ได้ตรวจโค้ดกระเป๋าเหรียญ (jetton wallet)
+
+ข้อจำกัดของ Sui/Aptos: ตรวจจากชื่อฟังก์ชันและข้อมูลบนเชน ยังไม่ได้อ่านเนื้อในทุกฟังก์ชัน
+
 **EVM** (Ethereum, BNB Chain, Base, Arbitrum):
 
 | ผลตรวจ | ระดับ |
@@ -101,22 +124,26 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 
 ## สถานะ
 
-- [x] ตัวอ่านและอธิบายสัญญา (CLI + หน้าเว็บ) ไทย/อังกฤษ
+- [x] ตัวอ่านและอธิบายสัญญา (CLI + หน้าเว็บ) 7 ภาษา (`src/lang/`, `test/i18n.test.js` ตรวจว่าทุกภาษาครบทุกข้อความ)
 - [x] พร้อมวางบน Vercel ฟรี (`vercel.json`)
 - [x] ตัวนับผู้ใช้ต่อเดือนแบบไม่เก็บข้อมูลส่วนตัว + หน้าสถิติเทียบเป้า 1,000
 - [x] ระบบจำแม่แบบเหรียญ ZETAPHY (รอที่อยู่เหรียญตัวอย่างหนึ่งตัวต่อเชนเพื่อลงทะเบียน)
 - [x] ลองกับสัญญาจริงบน mainnet แล้ว (USDT บน BNB Chain, 19 ต.ค. 2026)
 - [x] รู้จักเหรียญทางการรายใหญ่ และจับเหรียญปลอมที่ใช้ชื่อเลียนแบบ
 - [x] รองรับ Ethereum และ Solana
+- [x] รองรับ Sui, Aptos (ภาษา Move) และ TON (ทดสอบกับข้อมูลตามรูปแบบจริงของแต่ละเชน ยังไม่ได้ลองกับ mainnet จากเครื่องนี้)
+- [ ] ให้เจ้าของภาษาตรวจคำแปล จีน ญี่ปุ่น เกาหลี เวียดนาม อินโดนีเซีย
+- [ ] CosmWasm, NEAR, Bitcoin (Runes/BRC-20), Starknet
 - [ ] ชั้นอธิบายด้วย AI (ทางเลือก): ส่งเฉพาะผลตรวจ ไม่ให้สิทธิ์เรียกเครื่องมือ (จุดอ่อนข้อ 12)
 
 ---
 
 # Neuro ZETAPHY tier 1 (English summary)
 
-Read-only contract reader and explainer for BNB Chain, Base and Arbitrum. Fixed
-rules over on-chain bytecode (no AI, no wallet, no transactions), Thai and
-English output, a reproducible `reportHash`, a CLI and a static web page.
+Read-only contract reader and explainer for Ethereum, BNB Chain, Base,
+Arbitrum, Solana, Sui, Aptos and TON. Fixed rules over on-chain code and data
+(no AI, no wallet, no transactions), output in Thai, English, Chinese,
+Japanese, Korean, Vietnamese and Indonesian, a reproducible `reportHash`, a CLI and a static web page.
 Also: a privacy-preserving monthly user counter (`api/usage.js`, Vercel +
 Upstash Redis) with a stats page, and code-fingerprint templates to recognise
 ZETAPHY launcher tokens (`node cli.js fingerprint <chain> <address>`).

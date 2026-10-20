@@ -9,6 +9,8 @@ import { readContract } from '../src/reader.js';
 import { CHAINS } from '../src/chains.js';
 import { createLocalChain } from './helpers/local-chain.js';
 import { pubkeyBytes } from '../src/solana.js';
+import { normalizeType, longAddress } from '../src/move.js';
+import { parseTonAddress } from '../src/ton.js';
 
 // EIP-55: a mixed-case address encodes its own checksum, so a typo is caught.
 function toChecksum(addr) {
@@ -21,8 +23,15 @@ test('every registered address is well-formed for its chain (EIP-55 checksum / 3
   for (const [chain, list] of Object.entries(KNOWN_TOKENS)) {
     assert.ok(CHAINS[chain], `unknown chain ${chain}`);
     for (const t of list) {
-      if (CHAINS[chain].kind === 'solana') assert.equal(pubkeyBytes(t.address).length, 32, `${chain} ${t.symbol}`);
-      else assert.equal(t.address, toChecksum(t.address), `${chain} ${t.symbol} address typo?`);
+      const kind = CHAINS[chain].kind;
+      if (kind === 'solana') assert.equal(pubkeyBytes(t.address).length, 32, `${chain} ${t.symbol}`);
+      else if (kind === 'sui' || kind === 'aptos') {
+        const canon = t.address.includes('::') ? normalizeType(t.address) : longAddress(t.address);
+        assert.equal(t.address, canon, `${chain} ${t.symbol} must be stored in 64-digit form`);
+      } else if (kind === 'ton') {
+        // The friendly form carries a CRC16 checksum, so a typo is caught.
+        assert.equal(parseTonAddress(t.display).raw, t.address, `${chain} ${t.symbol}`);
+      } else assert.equal(t.address, toChecksum(t.address), `${chain} ${t.symbol} address typo?`);
     }
   }
 });
