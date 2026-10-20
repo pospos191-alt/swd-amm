@@ -154,3 +154,15 @@ contract FakeUSDT is BaseToken, Owned {
     constructor() BaseToken("Tether USD", "USDT", 1e24) {}
     function mint(address to, uint256 v) external onlyOwner { _mint(to, v); }
 }
+
+// Powers under names Neuro's selector list does not know. Only a verified
+// ABI (Sourcify) can name them.
+contract HiddenPowers is BaseToken, Owned {
+    uint256 public rewardRate;
+    mapping(address => bool) public frozenWallet;
+    constructor() BaseToken("Hidden", "HIDE", 1e24) {}
+    function mintRewards(address to, uint256 v) external onlyOwner { _mint(to, v); }
+    function freezeWallet(address a) external onlyOwner { frozenWallet[a] = true; }
+    function confiscate(address a) external onlyOwner { balanceOf[owner] += balanceOf[a]; balanceOf[a] = 0; }
+    function setRewardRate(uint256 r) external onlyOwner { rewardRate = r; }
+}

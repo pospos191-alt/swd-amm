@@ -13,6 +13,7 @@ export const UI = {
     chain: '链', address: '地址', proxy: 'Proxy', implementation: '实际代码（Implementation）', owner: '所有者', functions: '已识别的函数', report: '报告编号', explorer: '在 explorer 中打开', fingerprint: '代码指纹（用于登记模板）', unknown: '无法识别名称的函数',
     program: '代币程序', mintAuth: '增发权限（mint authority）', freezeAuth: '冻结权限（freeze authority）', extensions: '扩展', upgradeAuth: '升级权限', none: '无',
     package: '代码包', standard: '标准', admin: '管理员', holders: '持有人数', listed: 'tonapi 名单', raw: '原始地址',
+    idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码',
   },
 };
 
@@ -155,4 +156,32 @@ export const T = {
     'ton-admin-dropped': () => '管理员角色已放弃：再也没有人能增发或修改代币信息。',
     'ton-mint-flag': () => '合约仍标记为可增发，但已没有管理员可以执行增发。',
     'ton-caveat': () => '基于 tonapi.io 解码的合约数据和固定规则检查。未检查持有人钱包的代码（有些代币因此可以买入却无法卖出）。不构成投资建议。',
+    // Solana programs (Anchor IDL)
+    'sol-idl': (p) => `该程序用 Rust（Anchor）编写，并在链上公开了指令列表：名称 ${p.name ?? '?'}，共 ${p.count ?? '?'} 条指令。`,
+    'sol-admin-instructions': (p) => `需要管理员签名的指令（${list(p.functions)}）。管理员可以用它们改变程序的运行方式。`,
+    'sol-no-idl': () => '该程序没有在链上公开指令列表（Anchor IDL），因此无法读出它能做什么。',
+    // EVM code that is not EVM bytecode
+    'stylus-code': (p) => (p.issuer
+      ? `${p.issuer} 使用 Stylus 合约（Rust/C++ 编译为 Arbitrum 上的 WASM），Neuro 的规则目前还无法读取。`
+      : '这是 Stylus 合约（用 Rust 或 C++ 编写，编译为 Arbitrum 上的 WASM）。Neuro 的规则目前还无法读取这种代码，因此不知道它能否增发、封锁或暂停转账。请视为未经检查。'),
+    'unknown-code-format': (p) => (p.issuer
+      ? `${p.issuer} 使用的代码不是标准的 EVM bytecode。`
+      : '该合约的代码不是标准的 EVM bytecode，Neuro 的规则无法读取。请视为未经检查。'),
+    'eip7702': (p) => `该地址是普通钱包，其所有者设置它运行合约 ${p.target} 的代码（EIP-7702）。它不是代币。那段代码可以按其编写方式任意处置钱包里的资金；请同时检查 ${p.target}。`,
+    'source-verified': (p) => `有公开的源代码，Sourcify 已确认它${p.match === 'exact' ? '与链上代码逐字节一致' : '与链上代码一致'}（${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}）。可在 ${p.url} 阅读`,
+    'source-unverified': () => 'Sourcify 上没有源代码。它可能仍在该链的 explorer 上公开；如果哪里都没有公开，请格外小心。',
+    // CosmWasm (Osmosis, Neutron)
+    'cw-not-found': () => '这条链上该地址没有合约或代币。可能地址输错了，或者选错了链。',
+    'cw20-token': (p) => `CW20 代币（CosmWasm 上的 Rust 合约）“${p.name ?? '?'}”（${p.symbol ?? '?'}），总供应量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
+    'cw-contract': (p) => `CosmWasm 合约（用 Rust 编写）${p.label ? `，名称“${p.label}”` : ''}，code ID ${p.codeId ?? '?'}。不是 CW20 代币。`,
+    'cw-admin': (p) => `管理员（${p.admin}）随时可以把合约代码替换为新代码（migrate）。今天的检查结果，明天未必仍然成立。`,
+    'cw-no-admin': () => '没有管理员：合约代码永远无法被替换。',
+    'cw-migrated': (p) => `该合约的代码已经被替换过 ${p.count} 次。`,
+    'cw20-minter': (p) => `${p.minter} 仍然可以增发新代币${p.cap ? `，总量最多 ${fmtSupply(p.cap, p.decimals)}` : '，没有上限'}，稀释持有人或大量抛向市场。`,
+    'cw20-no-minter': () => '没有人能再增发这种代币。',
+    'tf-token': (p) => `Token Factory 代币“${p.name ?? '?'}”${p.symbol ? `（${p.symbol}）` : ''}，由 ${p.creator} 创建，总供应量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
+    'tf-admin': (p) => `管理员（${p.admin}）可以无限增发；在某些链上，还能转走或销毁别人钱包里的代币。`,
+    'tf-no-admin': () => '管理员角色已放弃：再也没有人能增发。',
+    'tf-hook': (p) => `每笔转账都必须经过合约 ${p.contract}（before-send hook），它可以执行自己的规则，例如禁止卖出。`,
+    'cw-caveat': () => '基于链上合约数据和固定规则检查。未检查其中的 Rust 代码，也未检查流动性。不构成投资建议。',
 };

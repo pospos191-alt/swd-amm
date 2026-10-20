@@ -13,6 +13,7 @@ export const UI = {
     chain: 'チェーン', address: 'アドレス', proxy: 'Proxy', implementation: '実装コード', owner: 'オーナー', functions: '判明している関数', report: 'レポートID', explorer: 'explorer で開く', fingerprint: 'コードの指紋（テンプレート登録用）', unknown: '名前が不明な関数',
     program: 'トークンプログラム', mintAuth: '発行権限', freezeAuth: '凍結権限', extensions: '拡張機能', upgradeAuth: 'アップグレード権限', none: 'なし',
     package: 'パッケージ', standard: '規格', admin: '管理者', holders: '保有者数', listed: 'tonapi リスト', raw: 'raw アドレス',
+    idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード',
   },
 };
 
@@ -155,4 +156,32 @@ export const T = {
     'ton-admin-dropped': () => '管理者の役割は放棄されています。もう誰もトークンを発行したり、情報を変更したりできません。',
     'ton-mint-flag': () => 'コントラクト上はまだ発行可能となっていますが、発行できる管理者はいません。',
     'ton-caveat': () => 'tonapi.io が解読したコントラクトのデータを決まったルールで確認した結果です。保有者のウォレットのコードは確認していません（そのせいで買えても売れないトークンもあります）。投資助言ではありません。',
+    // Solana programs (Anchor IDL)
+    'sol-idl': (p) => `このプログラムは Rust（Anchor）で書かれており、命令の一覧をチェーン上で公開しています: ${p.name ?? '?'}、命令 ${p.count ?? '?'} 個。`,
+    'sol-admin-instructions': (p) => `管理者の署名が必要な命令があります（${list(p.functions)}）。管理者はこれらを使ってプログラムの動作を変更できます。`,
+    'sol-no-idl': () => 'このプログラムは命令の一覧（Anchor IDL）をチェーン上で公開していないため、何ができるのかを読み取れません。',
+    // EVM code that is not EVM bytecode
+    'stylus-code': (p) => (p.issuer
+      ? `${p.issuer} は Stylus コントラクト（Arbitrum 上で Rust/C++ を WASM にコンパイルしたもの）を使っており、Neuro のルールではまだ読み取れません。`
+      : 'Stylus コントラクト（Arbitrum 上で Rust または C++ を WASM にコンパイルしたもの）です。Neuro のルールではまだこのコードを読み取れないため、トークンの発行、送金の停止、一時停止ができるかどうかは不明です。未確認として扱ってください。'),
+    'unknown-code-format': (p) => (p.issuer
+      ? `${p.issuer} は標準的な EVM bytecode ではないコードを使っています。`
+      : 'このコントラクトのコードは標準的な EVM bytecode ではなく、Neuro のルールでは読み取れません。未確認として扱ってください。'),
+    'eip7702': (p) => `このアドレスは普通のウォレットで、持ち主がコントラクト ${p.target} のコードを実行するように設定しています（EIP-7702）。トークンではありません。そのコードは、書かれているとおりにウォレットの資金を何にでも使えます。${p.target} も確認してください。`,
+    'source-verified': (p) => `Sourcify が${p.match === 'exact' ? 'チェーン上のコードと1バイト単位で完全に一致する' : 'チェーン上のコードと一致する'}ことを確認した公開ソースコードがあります（${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}）。${p.url} で読めます。`,
+    'source-unverified': () => 'Sourcify にソースコードがありません。チェーンの explorer で公開されている可能性はありますが、どこにも公開されていない場合は特に注意してください。',
+    // CosmWasm (Osmosis, Neutron)
+    'cw-not-found': () => 'このチェーンのこのアドレスにはコントラクトもトークンもありません。入力ミスか、選んだチェーンが違う可能性があります。',
+    'cw20-token': (p) => `CW20 トークン（CosmWasm 上の Rust コントラクト）「${p.name ?? '?'}」（${p.symbol ?? '?'}）、総供給量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
+    'cw-contract': (p) => `CosmWasm コントラクト（Rust で書かれたもの）${p.label ? `「${p.label}」` : ''}、code ID ${p.codeId ?? '?'}。CW20 トークンではありません。`,
+    'cw-admin': (p) => `管理者（${p.admin}）はいつでもコントラクトのコードを新しいコードに置き換えられます（migrate）。今日確認した内容が明日も正しいとは限りません。`,
+    'cw-no-admin': () => '管理者はいません。コントラクトのコードが置き換えられることはありません。',
+    'cw-migrated': (p) => `このコントラクトのコードはすでに ${p.count} 回置き換えられています。`,
+    'cw20-minter': (p) => `${p.minter} はまだトークンを新しく発行できます${p.cap ? `（合計 ${fmtSupply(p.cap, p.decimals)} まで）` : '（上限なし）'}。保有者の取り分が薄まったり、市場に大量に売られたりするおそれがあります。`,
+    'cw20-no-minter': () => 'このトークンをこれ以上発行できる人はいません。',
+    'tf-token': (p) => `Token Factory のコイン「${p.name ?? '?'}」${p.symbol ? `（${p.symbol}）` : ''}、作成者 ${p.creator}、総供給量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
+    'tf-admin': (p) => `管理者（${p.admin}）は上限なくトークンを発行できます。チェーンによっては、他の人のウォレットからトークンを移動したり焼却したりすることもできます。`,
+    'tf-no-admin': () => '管理者の役割は放棄されています。もう誰もトークンを発行できません。',
+    'tf-hook': (p) => `すべての送金はコントラクト ${p.contract}（before-send hook）を通過する必要があり、このコントラクトは売却の禁止など独自のルールを適用できます。`,
+    'cw-caveat': () => 'チェーン上のコントラクトのデータを決まったルールで確認した結果です。中身の Rust コードと流動性は確認していません。投資助言ではありません。',
 };

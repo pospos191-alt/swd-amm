@@ -13,6 +13,7 @@ export const UI = {
     chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)', unknown: 'Unnamed functions',
     program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none',
     package: 'Package', standard: 'Standard', admin: 'Admin', holders: 'Holders', listed: 'tonapi list', raw: 'Raw address',
+    idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs',
   },
 };
 
@@ -155,4 +156,32 @@ export const T = {
     'ton-admin-dropped': () => 'The admin role was dropped: nobody can mint or change the token\'s data any more.',
     'ton-mint-flag': () => 'The contract still says it is mintable, but there is no admin to mint.',
     'ton-caveat': () => 'Checked from contract data decoded by tonapi.io with fixed rules. Holder wallet code is not checked (some tokens can be bought but not sold because of it). Not investment advice.',
+    // Solana programs (Anchor IDL)
+    'sol-idl': (p) => `This program is written in Rust (Anchor) and publishes its instruction list on chain: ${p.name ?? '?'}, ${p.count ?? '?'} instructions.`,
+    'sol-admin-instructions': (p) => `Instructions that need an admin's signature (${list(p.functions)}). The admin can use them to change how the program behaves.`,
+    'sol-no-idl': () => 'This program does not publish its instruction list (Anchor IDL) on chain, so what it can do cannot be read.',
+    // EVM code that is not EVM bytecode
+    'stylus-code': (p) => (p.issuer
+      ? `${p.issuer} uses a Stylus contract (Rust/C++ compiled to WASM on Arbitrum), which Neuro's rules cannot read yet.`
+      : 'A Stylus contract (Rust or C++ compiled to WASM on Arbitrum). Neuro\'s rules cannot read this code yet, so it is unknown whether it can mint, block or pause. Treat it as unchecked.'),
+    'unknown-code-format': (p) => (p.issuer
+      ? `${p.issuer} uses code that is not standard EVM bytecode.`
+      : 'This contract\'s code is not standard EVM bytecode and Neuro\'s rules cannot read it. Treat it as unchecked.'),
+    'eip7702': (p) => `This address is an ordinary wallet whose owner set it to run the code of contract ${p.target} (EIP-7702). It is not a token. That code can do whatever it was written to do with the wallet's funds; check ${p.target} too.`,
+    'source-verified': (p) => `Public source code that Sourcify confirmed ${p.match === 'exact' ? 'matches the on-chain code byte for byte' : 'matches the on-chain code'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Read it at ${p.url}`,
+    'source-unverified': () => 'No source code on Sourcify. It may still be published on the chain\'s explorer; if it is published nowhere, be extra careful.',
+    // CosmWasm (Osmosis, Neutron)
+    'cw-not-found': () => 'No contract or token at this address on this chain. It may be mistyped, or the wrong chain is selected.',
+    'cw20-token': (p) => `CW20 token (a Rust contract on CosmWasm) "${p.name ?? '?'}" (${p.symbol ?? '?'}), total supply ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'cw-contract': (p) => `A CosmWasm contract (written in Rust)${p.label ? ` named "${p.label}"` : ''}, code ID ${p.codeId ?? '?'}. Not a CW20 token.`,
+    'cw-admin': (p) => `The admin (${p.admin}) can replace the contract's code with new code at any time (migrate). What is checked today may not hold tomorrow.`,
+    'cw-no-admin': () => 'No admin: the contract\'s code can never be replaced.',
+    'cw-migrated': (p) => `This contract's code has already been replaced ${p.count} time(s).`,
+    'cw20-minter': (p) => `${p.minter} can still mint new tokens${p.cap ? `, up to ${fmtSupply(p.cap, p.decimals)} in total` : ' without limit'}, diluting holders or flooding the market.`,
+    'cw20-no-minter': () => 'Nobody can mint more of this token.',
+    'tf-token': (p) => `Token Factory coin "${p.name ?? '?'}"${p.symbol ? ` (${p.symbol})` : ''} created by ${p.creator}, total supply ${fmtSupply(p.totalSupply, p.decimals)}.`,
+    'tf-admin': (p) => `The admin (${p.admin}) can mint without limit, and on some chains can also move or burn tokens from other people's wallets.`,
+    'tf-no-admin': () => 'The admin role was dropped: nobody can mint more.',
+    'tf-hook': (p) => `Every transfer must pass contract ${p.contract} (before-send hook), which can enforce its own rules, such as blocking sells.`,
+    'cw-caveat': () => 'Checked from on-chain contract data with fixed rules. The Rust code inside and liquidity are not checked. Not investment advice.',
 };

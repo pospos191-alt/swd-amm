@@ -12,6 +12,7 @@ const FORMAT = {
   sui: { placeholder: '0x…::coin::COIN', hint: '0x…::module::NAME / 0x… (package)' },
   aptos: { placeholder: '0x… / 0x…::coin::COIN', hint: '0x… (Fungible Asset) / 0x…::module::Name' },
   ton: { placeholder: 'EQ… / UQ…', hint: 'EQ…/UQ… (48) / 0:…' },
+  cosmwasm: { placeholder: 'osmo1… / factory/osmo1…/name', hint: 'bech32 (osmo1… / neutron1…) / factory/<creator>/<name>' },
 };
 const kindOf = (chain) => CHAINS[chain]?.kind ?? 'evm';
 
@@ -77,6 +78,19 @@ function render(report) {
   if (report.ton) {
     rows.push([m.admin, report.ton.admin ?? m.none]);
     rows.push([m.listed, report.ton.verification]);
+  }
+  if (report.format) rows.push([m.format, report.format]);
+  if (report.delegation) rows.push([m.delegation, report.delegation]);
+  if (report.source) rows.push([m.source, `${report.source.match} · ${report.source.url}`]);
+  if (report.solana?.idl) rows.push([m.idl, `${report.solana.idl.name} · ${report.solana.idl.address}`]);
+  if (report.cosmwasm) {
+    const c = report.cosmwasm;
+    if (c.label) rows.push([m.label, c.label]);
+    if (c.codeId) rows.push([m.codeId, c.codeId]);
+    if (c.creator) rows.push([m.creator, c.creator]);
+    rows.push([m.admin, c.admin ?? m.none]);
+    if (c.migrations) rows.push([m.migrations, String(c.migrations)]);
+    if (c.hook) rows.push([m.hook, c.hook]);
   }
   if (report.token?.holders != null) rows.push([m.holders, report.token.holders.toLocaleString('en-US')]);
   if (report.fingerprint) rows.push([m.fingerprint, report.fingerprint]);

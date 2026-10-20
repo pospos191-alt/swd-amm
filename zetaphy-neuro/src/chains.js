@@ -6,6 +6,7 @@
 import { isSuiInput, SUI_MAINNET } from './sui.js';
 import { isAptosInput, APTOS_MAINNET } from './aptos.js';
 import { isTonAddress } from './ton.js';
+import { isCosmwasmInput } from './cosmwasm.js';
 
 export const CHAINS = {
   eth: {
@@ -61,6 +62,22 @@ export const CHAINS = {
     explorer: 'https://explorer.aptoslabs.com/coin/',
     explorerObject: 'https://explorer.aptoslabs.com/account/',
   },
+  osmosis: {
+    kind: 'cosmwasm',
+    chainId: 'osmosis-1',
+    prefix: 'osmo',
+    name: 'Osmosis',
+    rpcs: ['https://lcd.osmosis.zone', 'https://rest.cosmos.directory/osmosis'],
+    explorer: 'https://www.mintscan.io/osmosis/address/',
+  },
+  neutron: {
+    kind: 'cosmwasm',
+    chainId: 'neutron-1',
+    prefix: 'neutron',
+    name: 'Neutron',
+    rpcs: ['https://rest-kralum.neutron-1.neutron.org', 'https://rest.cosmos.directory/neutron'],
+    explorer: 'https://www.mintscan.io/neutron/address/',
+  },
   ton: {
     kind: 'ton',
     name: 'TON',
@@ -82,6 +99,7 @@ export function isChainAddress(chainKey, address) {
     case 'sui': return isSuiInput(address);
     case 'aptos': return isAptosInput(address);
     case 'ton': return isTonAddress(address);
+    case 'cosmwasm': return isCosmwasmInput(address, c.prefix);
     default: return EVM_ADDRESS.test(address);
   }
 }
@@ -90,6 +108,8 @@ export function isChainAddress(chainKey, address) {
 export function explorerUrl(chainKey, address) {
   const c = CHAINS[chainKey];
   if (!c) return null;
+  // A factory denom has no page of its own: open its creator.
+  if (c.kind === 'cosmwasm' && address.startsWith('factory/')) return c.explorer + address.split('/')[1];
   if (c.kind === 'sui' || c.kind === 'aptos') {
     return (address.includes('::') ? c.explorer : c.explorerObject) + encodeURIComponent(address);
   }

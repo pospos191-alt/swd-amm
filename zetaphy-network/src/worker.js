@@ -43,8 +43,10 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
   let commitWindow = null;
 
   function readerFor(chainKey) {
-    if (chainKey === 'zetaphy') return zetaphyChain ? { chainConfig: zetaphyChain } : null;
-    return CHAINS[chainKey] ? {} : null;
+    // sourcify:false: a verdict must depend only on the chain, not on whether
+    // a third party has the source yet, or two runners could disagree.
+    if (chainKey === 'zetaphy') return zetaphyChain ? { chainConfig: zetaphyChain, sourcify: false } : null;
+    return CHAINS[chainKey] ? { sourcify: false } : null;
   }
 
   async function tryCommit(id, job, now) {

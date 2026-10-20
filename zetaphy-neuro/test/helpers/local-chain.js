@@ -11,6 +11,7 @@ import { Address, hexToBytes, bytesToHex, setLengthLeft } from '@ethereumjs/util
 const SOURCE = readFileSync(new URL('./contracts.sol', import.meta.url), 'utf8');
 const DEPLOYER = Address.fromString('0x1111111111111111111111111111111111111111');
 const cache = new Map();
+const abiCache = new Map();
 
 /** Compiles once per optimizer setting. Returns {ContractName: creationBytecodeHex}. */
 export function compile({ optimize = true } = {}) {
@@ -18,7 +19,7 @@ export function compile({ optimize = true } = {}) {
   const input = {
     language: 'Solidity',
     sources: { 'contracts.sol': { content: SOURCE } },
-    settings: { optimizer: { enabled: optimize, runs: 200 }, outputSelection: { '*': { '*': ['evm.bytecode.object'] } } },
+    settings: { optimizer: { enabled: optimize, runs: 200 }, outputSelection: { '*': { '*': ['evm.bytecode.object', 'abi'] } } },
   };
   const out = JSON.parse(solc.compile(JSON.stringify(input)));
   const errors = (out.errors ?? []).filter((e) => e.severity === 'error');
@@ -26,7 +27,14 @@ export function compile({ optimize = true } = {}) {
   const bins = Object.fromEntries(
     Object.entries(out.contracts['contracts.sol']).map(([k, v]) => [k, v.evm.bytecode.object]));
   cache.set(optimize, bins);
+  abiCache.set(optimize, Object.fromEntries(Object.entries(out.contracts['contracts.sol']).map(([k, v]) => [k, v.abi])));
   return bins;
+}
+
+/** {ContractName: abi} from the same compile. */
+export function abis({ optimize = true } = {}) {
+  compile({ optimize });
+  return abiCache.get(optimize);
 }
 
 const word = (hex) => hex.replace(/^0x/, '').padStart(64, '0');
