@@ -16,7 +16,7 @@ const AIRLOCK = new Interface(JSON.parse(readFileSync(new URL('../artifacts/Brid
 const LOCKBOX = '0x' + 'b0'.repeat(20);
 const ALICE = '0x' + 'a1'.repeat(20), MALLORY = '0x' + 'ee'.repeat(20);
 
-function setup({ flagged = () => 0n, paused, release = true, releaseEstimate = async () => 100_000n } = {}) {
+function setup({ flagged = () => 0n, held = () => 0n, paused, release = true, releaseEstimate = async () => 100_000n } = {}) {
   const locks = [{ args: { nonce: 0n, sender: ALICE, to: ALICE, amount: 5n } }, { args: { nonce: 1n, sender: MALLORY, to: MALLORY, amount: 7n } }];
   const attested = [], released = [];
   const lockbox = { target: LOCKBOX, runner: { provider: { getBlockNumber: async () => 100 } }, filters: { Locked: () => 'Locked' },
@@ -30,6 +30,7 @@ function setup({ flagged = () => 0n, paused, release = true, releaseEstimate = a
     interface: AIRLOCK,
     transferId: async (...t) => '0x' + String(t[2]).padStart(64, '0'),
     flaggedParty: async (chain, src, sender, to) => flagged(sender, src, to),
+    heldParty: async (chain, src, sender, to) => held(sender, src, to),
     threshold: async () => 2n,
     status: async () => [2n, false, false, 1n],
     release: releaseTx,
@@ -63,6 +64,29 @@ test('a flagged source contract or recipient is refused too', async () => {
     assert.deepEqual(attested, []);
     assert.ok(out.some((l) => l.includes(`${label} is flagged`)), out.join('\n'));
   }
+});
+
+test('a flag not enforced yet (warning level) holds the release, not the attestation; released once cleared', async () => {
+  let warn = true;
+  const { w, attested, released } = setup({ held: (sender) => (warn && sender === MALLORY ? 1n : 0n) });
+  const out = await w.tick();
+  assert.deepEqual(attested, [0n, 1n], 'attesting is safe: the airlock holds it anyway');
+  assert.deepEqual(released, [0n]);
+  assert.ok(out.some((l) => /lock #1: not released \(source sender is flagged in the ThreatRegistry \(not enforced yet\), held until the flag is cleared\)/.test(l)), out.join('\n'));
+  assert.equal(w.state.pending.length, 1, 'held, not dropped');
+  warn = false;
+  await w.tick();
+  assert.deepEqual(released, [0n, 1n]);
+  assert.equal(w.state.pending.length, 0);
+});
+
+test('if the warning-level check fails, nothing is released (fail closed)', async () => {
+  const { w, attested, released } = setup({ held: () => { throw new Error('rpc down'); } });
+  const out = await w.tick();
+  assert.deepEqual(attested, [0n, 1n]);
+  assert.deepEqual(released, []);
+  assert.ok(out.some((l) => /not released \(could not check the ThreatRegistry\)/.test(l)), out.join('\n'));
+  assert.equal(w.state.pending.length, 2);
 });
 
 test('if the ThreatRegistry cannot be checked, nothing is attested (fail closed)', async () => {

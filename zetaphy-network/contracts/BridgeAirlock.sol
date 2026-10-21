@@ -9,11 +9,14 @@ interface IGuardInbound {
     function inbound(bytes32 route, address to, uint256 amount) external;
 }
 
-/// ThreatRegistry's enforcement views (Reason as its uint8 value): true only
-/// once a flag is the registry's enforceDelay old.
+/// ThreatRegistry's views (Reason as its uint8 value). is*Flagged: as soon as
+/// the runners' quorum flagged (warning level). is*Enforced: once the flag is
+/// the registry's enforceDelay old, or at once through its fast lane.
 interface IThreatFlags {
     function isAddressEnforced(uint256 chainId, address who) external view returns (bool, uint8);
     function isContractEnforced(address who) external view returns (bool, uint8);
+    function isAddressFlagged(uint256 chainId, address who) external view returns (bool, uint8);
+    function isContractFlagged(address who) external view returns (bool, uint8);
 }
 
 /// NeuroControl (Neuro's stop switch); only `paused()` is used here.
@@ -32,11 +35,16 @@ interface INeuroControl {
 ///      or to a marked address is never released.
 ///   4. Vaccine: with a ThreatRegistry set, a transfer whose source sender or
 ///      source contract (on its chain), or whose ZETAPHY recipient (address or
-///      code), is flagged by the Neuro runners is held once the flag is
-///      enforced (past the registry's enforceDelay): release reverts with
-///      ThreatFlagged and the transfer stays, so it comes out if the flag is
-///      cleared (same quorum) or governance protects the key. To hold a
-///      transfer at once, the Neuro lane or a guardian vetoes it.
+///      code), is flagged by the Neuro runners is not released:
+///        - flagged, not enforced yet (warning level): held at once. release
+///          reverts with ThreatHeld; a hold is reversible, so it needs no
+///          waiting period. It comes out once the flag is cleared (same
+///          quorum) or governance protects the key.
+///        - enforced (past the registry's enforceDelay, or at once through its
+///          fast lane): refused, release reverts with ThreatFlagged, as long as
+///          the flag stands. The transfer stays, so it still comes out if the
+///          flag is cleared or the key protected.
+///      For a hold that outlives any flag, the Neuro lane or a guardian vetoes.
 ///   Released transfers still pass BridgeGuard's daily limits.
 contract BridgeAirlock {
     struct Transfer {
@@ -75,8 +83,10 @@ contract BridgeAirlock {
     error Twice();
     error NotReady();
     error Blocked();
-    /// what: 1 source sender, 2 source contract, 3 ZETAPHY recipient
+    /// what: 1 source sender, 2 source contract, 3 ZETAPHY recipient (enforced flag)
     error ThreatFlagged(uint8 what);
+    /// the same, for a flag that is not enforced yet: held until it is cleared
+    error ThreatHeld(uint8 what);
 
     constructor(IGuardInbound guard_, bytes32 route_, address governance_, uint8 threshold_, uint64 quarantine_) {
         require(threshold_ >= 2, "need 2+ independent lanes");
@@ -144,6 +154,8 @@ contract BridgeAirlock {
         if (t.attestations < threshold || t.readyFrom == 0 || block.timestamp < t.readyFrom + quarantine) revert NotReady();
         uint8 what = flaggedParty(srcChainId, srcContract, sender, to);
         if (what != 0) revert ThreatFlagged(what);
+        what = heldParty(srcChainId, srcContract, sender, to);
+        if (what != 0) revert ThreatHeld(what);
         t.released = true;
         guard.inbound(route, to, amount);
         emit Released(id, to, amount);
@@ -152,13 +164,26 @@ contract BridgeAirlock {
     /// 0 when no party of this transfer has an enforced flag, else which one
     /// has (see ThreatFlagged). NeuroLane watchers ask this before they attest.
     function flaggedParty(uint256 srcChainId, address srcContract, address sender, address to) public view returns (uint8) {
+        return _party(srcChainId, srcContract, sender, to, true);
+    }
+
+    /// 0 when no party of this transfer is flagged at all, else which one is
+    /// (warning level included: the registry's is*Flagged views). A transfer
+    /// with a held party is not released; NeuroLane watchers ask this before
+    /// they release.
+    function heldParty(uint256 srcChainId, address srcContract, address sender, address to) public view returns (uint8) {
+        return _party(srcChainId, srcContract, sender, to, false);
+    }
+
+    function _party(uint256 srcChainId, address srcContract, address sender, address to, bool enforced) private view returns (uint8) {
         IThreatFlags r = threats;
         if (address(r) == address(0)) return 0;
-        (bool f, ) = r.isAddressEnforced(srcChainId, sender);
+        bool f;
+        (f, ) = enforced ? r.isAddressEnforced(srcChainId, sender) : r.isAddressFlagged(srcChainId, sender);
         if (f) return 1;
-        (f, ) = r.isAddressEnforced(srcChainId, srcContract);
+        (f, ) = enforced ? r.isAddressEnforced(srcChainId, srcContract) : r.isAddressFlagged(srcChainId, srcContract);
         if (f) return 2;
-        (f, ) = r.isContractEnforced(to);
+        (f, ) = enforced ? r.isContractEnforced(to) : r.isContractFlagged(to);
         if (f) return 3;
         return 0;
     }

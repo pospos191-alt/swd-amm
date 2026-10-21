@@ -4,7 +4,9 @@ MetaMask เซ็นได้แค่ ECDSA snap นี้เพิ่ม **�
 - กุญแจสร้างใน MetaMask จาก Secret Recovery Phrase (SRP) ของผู้ใช้ สำรอง MetaMask ไว้ก็กู้บัญชีนี้คืนได้
 - เว็บที่ขอให้เซ็นส่งได้แค่ "ข้อความแบบมีโครงสร้าง" (โอน, stake, เรียกสัญญา, deploy, ส่งต่อบัญชีที่ล็อก) snap สร้างธุรกรรมเอง
   แสดงเป็นคำอ่านง่ายในหน้าต่างของ MetaMask และเซ็นเฉพาะเมื่อผู้ใช้กดยืนยัน
-- snap ไม่เซ็นไบต์ที่ผู้ใช้อ่านไม่ได้ ไม่ส่ง seed หรือกุญแจลับออกไปไหน และไม่ใช้เน็ต (เว็บเป็นคนส่งธุรกรรมเข้าโหนด)
+- snap ไม่เซ็นไบต์ที่ผู้ใช้อ่านไม่ได้ ไม่ส่ง seed หรือกุญแจลับออกไปไหน และการเซ็นไม่ใช้เน็ต (เว็บเป็นคนส่งธุรกรรมเข้าโหนด)
+- **วัคซีนใน MetaMask ธรรมดา** (transaction insight): ทุกธุรกรรม EVM บนทุกเชนที่ผู้ใช้กำลังจะยืนยันใน MetaMask
+  snap ตรวจปลายทางกับ `ThreatRegistry` ของ ZETAPHY ให้ ไม่ต้องใช้เว็บกระเป๋าของ ZETAPHY (ดู [วัคซีน](#วัคซีน-ตรวจทุกธุรกรรมใน-metamask))
 
 > **ใช้กับ testnet เท่านั้น ไม่ใช่เงินจริง**
 > snap นี้ยังไม่ผ่านการ audit และยังไม่อยู่ใน allowlist ของ MetaMask (ดู [การเผยแพร่](#การเผยแพร่-ตามจริง))
@@ -36,9 +38,14 @@ address = sha256("zetaphy/mldsa44\0" || publicKey)[0:20]                 // pqAd
 |---|---|
 | `snap_getEntropy` | สร้างกุญแจ ML-DSA-44 จาก SRP |
 | `snap_dialog` | หน้าต่างยืนยันก่อนเซ็นทุกครั้ง |
-| `endowment:rpc` (`dapps: true`, `snaps: false`) | ให้เว็บเรียก `zetaphy_getAccount` และ `zetaphy_signTx` |
+| `endowment:rpc` (`dapps: true`, `snaps: false`) | ให้เว็บเรียก `zetaphy_getAccount`, `zetaphy_signTx` และ `zetaphy_get/setThreatSource` |
+| `endowment:transaction-insight` (`allowTransactionOrigin: false`) | วัคซีน: ตรวจปลายทางของทุกธุรกรรม EVM ก่อนผู้ใช้ยืนยัน ไม่ขอเว็บต้นทางของธุรกรรม เพราะไม่ได้ใช้ (ส่งข้อมูลออกน้อยที่สุด) |
+| `endowment:ethereum-provider` | อ่านโค้ดปลายทาง (`eth_getCode`) และช่อง proxy (`eth_getStorageAt`, `eth_call` ของ `implementation()`) บนเชนของธุรกรรมนั้น ผ่าน MetaMask เอง (สลับเชนของ snap ด้วย `wallet_switchEthereumChain` ถ้าต้อง) |
+| `endowment:network-access` | ถาม `ThreatRegistry` ผ่าน RPC สาธารณะของ ZETAPHY ด้วย `eth_call` แบบอ่านอย่างเดียว (POST แบบ batch ครั้งเดียวต่อธุรกรรม และอีกครั้งเพื่ออ่านหลักฐานกับคำชี้แจงเมื่อมีธง) ไม่ติดต่อที่อื่น |
+| `snap_manageState` | จำแหล่งตรวจภัย (RPC + ที่อยู่ registry) ที่เว็บกระเป๋า ZETAPHY ตั้งให้ (ไม่เข้ารหัส เพราะไม่มีอะไรลับ) |
 
-- ไม่มี `endowment:network-access` ไม่มี `snap_manageState` snap ไม่เก็บอะไรเลย
+- กุญแจไม่เกี่ยวกับเน็ตเลย: `snap_getEntropy` ใช้แค่ตอนเซ็น ส่วนที่ใช้เน็ตมีแค่ transaction insight
+- `snap_manageState` เก็บแค่แหล่งตรวจภัย ไม่เก็บ seed กุญแจ หรือประวัติธุรกรรม
 - `dapps: true` แปลว่าทุกเว็บ **ขอ** เชื่อมได้ แต่ MetaMask ให้ผู้ใช้อนุมัติการเชื่อมทีละเว็บ (`wallet_requestSnaps`)
   และหน้าต่างยืนยันทุกครั้งบอกว่าเว็บไหนขอ
 - ยังไม่จำกัดโดเมน เพราะโดเมนจริงของเว็บกระเป๋ายังไม่แน่นอน เมื่อแน่นอนแล้ว ให้เปลี่ยนเป็น
@@ -98,6 +105,60 @@ const signed = await invoke('zetaphy_signTx', {
 - หน้าเว็บคำนวณที่อยู่จาก public key เอง ไม่เชื่อที่อยู่ที่ snap บอก
 - โอน, โอนโทเคน, stake และ deploy เซ็นผ่าน `zetaphy_signTx` ส่วนโหมดกุญแจในเบราว์เซอร์ (seed เข้ารหัสด้วยรหัสผ่าน) ยังใช้ได้เหมือนเดิม
 
+## วัคซีน: ตรวจทุกธุรกรรมใน MetaMask
+
+ก่อนผู้ใช้ยืนยันธุรกรรม EVM ใด ๆ ใน MetaMask (ทุกเชน ทุกเว็บ) snap แสดงผลตรวจของ ZETAPHY Neuro ในแท็บของ snap
+1. **ปลายทาง:** `to` ของธุรกรรม และที่อยู่ที่ call data ระบุ: ผู้ได้สิทธิ์ใน `approve` / `increaseAllowance`, ผู้ได้สิทธิ์ทั้งหมดใน `setApprovalForAll`, ผู้รับใน `transfer` ของ ERC-20
+2. **บนเชนของธุรกรรม** (ผ่าน `ethereum.request` ของ snap): อ่านโค้ดของแต่ละปลายทาง แล้วตามไปที่โค้ดจริงหลัง proxy แบบ EIP-1167 (และรูปแบบ PUSH0), EIP-1967 implementation และ beacon สูงสุด 3 ชั้น
+   - ใช้โค้ดชุดเดียวกับเว็บกระเป๋า: `zetaphy-network/src/vaccine.js` (`proxyTargets`, `threatQueries`)
+3. **ถาม ZETAPHY** ด้วย JSON-RPC batch เดียว: `eth_chainId` (ต้องเป็น 77390) แล้ว `eth_call` ไปที่ `ThreatRegistry` ของแต่ละปลายทาง ทั้งระดับเตือนและบังคับใช้
+   - `isAddressFlagged` / `isAddressEnforced(chainId ของธุรกรรม, ที่อยู่)`
+   - `isCodeFlagged` / `isCodeEnforced(keccak256(โค้ด))`
+   - `isFlagged` / `isEnforced(fp1)`: ลายนิ้วมือ Neuro (`fp1`) คำนวณใน snap เอง (สำเนาสูตรของ `zetaphy-neuro/src/fingerprint.js` ใน `vaccine.js` ไม่ดึง bytecode reader ทั้งชุดเข้ามา การทดสอบเทียบกับของ Neuro ทุกไบต์)
+
+4. **เฉพาะเมื่อมีธง** ถามอีก batch: `evidenceOf(key)` ของแต่ละธง (reportHash และ URI) และ `responseOf(key)` ของทุกคีย์ของปลายทางนั้น (คำชี้แจงของเจ้าของ)
+   ถามไม่ได้ก็ยังเตือนเหมือนเดิม และบอกว่าอ่านหลักฐานไม่ได้
+
+ทุกธงแสดงหมวดเป็นข้อเท็จจริงของโค้ด (ไม่ใช่ป้ายกล่าวหา) หลักฐานและวิธีตรวจซ้ำ คำชี้แจงของเจ้าของ (ถ้ามี) และบรรทัด
+"ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา / Automated code analysis, not an accusation" เจ้าของสัญญาชี้แจงหรืออุทธรณ์ได้บนเชน
+(zetaphy-network/README.md ขั้น 4) ดู [`docs/LEGAL.md`](../docs/LEGAL.md)
+
+ผลที่ MetaMask แสดง (ไทยและอังกฤษพร้อมกัน เพราะ insight ไม่รู้ภาษาผู้ใช้):
+
+| ผล | แสดง |
+|---|---|
+| ธงบังคับใช้แล้ว (เลย `enforceDelay` หรือผ่านช่องทางด่วน) | ระดับ `critical`: MetaMask ให้ยืนยันอีกชั้น พร้อมคำเตือน ที่อยู่ เหตุผล และติดธงเพราะอะไร (ที่อยู่ / โค้ด / fp1 / โค้ดหลัง proxy) |
+| ติดธงแต่ยังไม่บังคับใช้ | กล่องคำเตือน ไม่ใช่ critical |
+| ไม่ติดธง | "ตรวจโดย ZETAPHY Neuro แล้ว: ไม่ติดธง" |
+| ตรวจไม่ได้ (RPC ล่ม, RPC ไม่ใช่ ZETAPHY, ยังไม่ตั้ง registry, อ่านโค้ดบนเชนนั้นไม่ได้) | "ZETAPHY Neuro ตรวจไม่ได้" และเหตุผล (ไม่บอกว่าปลอดภัย) |
+| สร้างสัญญา (ไม่มี `to`) | บอกว่าไม่มีปลายทางให้ตรวจ |
+
+- ถ้าอ่านโค้ดไม่ได้แต่ที่อยู่ติดธง ยังแสดงธงนั้น
+- snap ไม่ปฏิเสธธุรกรรมเอง (insight ทำไม่ได้) การตัดสินใจสุดท้ายเป็นของผู้ใช้ ต่างจากเว็บกระเป๋า ZETAPHY ที่ไม่เซ็นเลยเมื่อธงบังคับใช้
+
+### ความเป็นส่วนตัว (ข้อมูลที่ส่งออกไป)
+
+- snap ส่ง **ที่อยู่ปลายทาง, chain id ของธุรกรรม, code hash (keccak-256) และ fp1 ของโค้ดปลายทาง** ไปที่ RPC ของ ZETAPHY
+  เจ้าของ RPC นั้นจึงเห็นได้ว่ามีคนกำลังจะส่งธุรกรรมไปหาสัญญาไหน (และ IP ของผู้ใช้ เหมือน RPC ทั่วไป)
+- **ไม่ส่ง** ที่อยู่ของผู้ใช้ จำนวนเงิน call data ทั้งก้อน หรือเว็บต้นทาง (`allowTransactionOrigin: false`)
+- การอ่านโค้ดบนเชนของธุรกรรมไปผ่าน RPC ที่ MetaMask ใช้อยู่แล้ว
+- ไม่อยากส่ง: ปิดสิทธิ์ของ snap ใน MetaMask หรือไม่ติดตั้ง snap (การเซ็นของเว็บกระเป๋าไม่เกี่ยวกับส่วนนี้)
+
+### แหล่งตรวจภัย (RPC และ ThreatRegistry)
+
+- ค่าตอน build อยู่ใน `snap.config.js` (`environment`) **ตอนนี้เป็นค่าตั้งต้นที่ยังใช้ไม่ได้**: RPC `https://rpc.zetaphy.invalid`, registry `0x000…0`
+  ทุกธุรกรรมจึงขึ้น "ตรวจไม่ได้: no ThreatRegistry configured" จนกว่าเจ้าของจะใส่ค่าจริงแล้ว build ใหม่ (shasum เปลี่ยน ต้อง commit manifest)
+- เว็บกระเป๋า ZETAPHY เปลี่ยนแหล่งได้ด้วย `zetaphy_setThreatSource` เฉพาะจาก origin ใน `ZETAPHY_WALLET_ORIGINS` (ค่าตั้งต้น `https://wallet.zetaphy.invalid` ใส่โดเมนจริงตอนรู้แล้ว)
+  และผู้ใช้ต้องกดยืนยันในหน้าต่างของ MetaMask ทุกครั้ง เว็บอื่นได้ error 4100
+
+```js
+await invoke('zetaphy_setThreatSource', { rpc: 'https://<RPC ของ ZETAPHY>', registry: '0x<ThreatRegistry>' }); // หรือ { reset: true }
+await invoke('zetaphy_getThreatSource'); // { rpc, registry, overridden } เว็บไหนก็อ่านได้ (ไม่มีอะไรลับ)
+```
+
+- RPC ต้องเป็น `https://` (ยกเว้น `http://localhost` / `127.0.0.1` ตอนพัฒนา) ไม่เกิน 256 ตัว ไม่มี user:password ในลิงก์
+- เว็บกระเป๋ายังไม่ได้เรียก `zetaphy_setThreatSource` ให้อัตโนมัติ (ตอนนี้ต้องเรียกเองหรือใส่ค่าตอน build)
+
 ## คำสั่ง
 
 ```
@@ -108,7 +169,7 @@ npm run serve     # เสิร์ฟ snap ที่ http://localhost:8080 ส�
 ```
 
 - `dist/` ไม่ได้ commit ส่วน `snap.manifest.json` commit ไว้ CI build ใหม่แล้วตรวจว่า shasum ใน manifest ตรง
-  ถ้าแก้ `src/` หรือ `zetaphy-network/src/pqtx.js` ต้อง `npm run build` แล้ว commit manifest ด้วย
+  ถ้าแก้ `src/`, `snap.config.js`, `zetaphy-network/src/pqtx.js` หรือ `zetaphy-network/src/vaccine.js` ต้อง `npm run build` แล้ว commit manifest ด้วย
 - `@noble/*` ที่ `pqtx.js` import ถูก resolve จาก `node_modules` ของแพ็กเกจนี้ (`snap.config.js`, `test/resolver.js`)
   bundle จึงขึ้นกับ `package-lock.json` นี้เท่านั้น
 - `package.json` มี `overrides` ตรึง `@metamask/snaps-utils` 12.6.0, `snaps-controllers` 21.1.1, `snaps-execution-environments` 11.3.1
@@ -122,6 +183,17 @@ npm run serve     # เสิร์ฟ snap ที่ http://localhost:8080 ส�
 - กดยกเลิก: error 4001 ไม่มีลายเซ็น
 - ลายเซ็นตรวจผ่านด้วย `ml_dsa44.verify` บน SignDoc ที่สร้างใหม่ด้วย `cosmjs-types` และข้อความถอดรหัสได้ตรง
 - input ผิดรูป 31 แบบถูกปฏิเสธด้วย `-32602` ก่อนมีหน้าต่าง, method ที่ไม่มีได้ `-32601`
+
+`test/insight.test.js` (วัคซีน: เชนของธุรกรรมจำลองด้วย `snap.mockJsonRpc` ส่วน RPC ของ ZETAPHY เป็นเซิร์ฟเวอร์ JSON-RPC เล็ก ๆ บน 127.0.0.1)
+- `fp1` ใน snap เท่ากับ `codeFingerprint` ของ zetaphy-neuro ทุกไบต์
+- ค่าตั้งต้น (ยังไม่มี registry): "ตรวจไม่ได้"
+- `zetaphy_setThreatSource`: origin อื่นได้ 4100, input ผิดรูปได้ -32602, กดยกเลิกได้ 4001, ตั้งแล้ว `getThreatSource` เห็น, `reset` กลับค่าตั้งต้น
+- ไม่ติดธง: "ตรวจโดย ZETAPHY Neuro แล้ว" ส่ง batch เดียว และสิ่งที่ส่งมีแค่ที่อยู่ปลายทาง chain id code hash และ fp1 (ไม่มีที่อยู่ผู้ใช้)
+- ธงบังคับใช้ (ที่อยู่, code hash, fp1): `critical` พร้อมเหตุผลไทย/อังกฤษ; ธงที่ยังไม่บังคับใช้: คำเตือน ไม่ใช่ critical
+- ผู้ได้สิทธิ์ใน `approve` ที่ติดธง: critical; การอ่านปลายทางจาก call data (approve, setApprovalForAll, transfer, increaseAllowance)
+- proxy: EIP-1167, EIP-1967 implementation, beacon ที่ชี้ไปโค้ดติดธง = critical; proxy ตัวเดิมหน้าโค้ดสะอาด = ไม่ติดธง
+- ตรวจไม่ได้: RPC ตอบ 500, RPC ไม่ใช่ ZETAPHY, อ่านโค้ดบนเชนไม่ได้ (แต่ที่อยู่ติดธงยังขึ้น critical)
+- Jest รันไฟล์ทดสอบทีละไฟล์ (`maxWorkers: 1`) เพราะ snaps-jest ใช้พอร์ต 18096 ตายตัว
 
 ที่ทดสอบในเครื่องนี้ไม่ได้: หน้าต่างจริงใน MetaMask Flask (snaps-jest ตรวจโครงสร้าง UI ไม่ได้วาดจริง) และการส่งธุรกรรมที่ snap เซ็นเข้าเชนจริง
 (สูตรธุรกรรมเดียวกันทดสอบกับเชนจริงแล้วใน `zetaphy-network/test/devnet.pq.integration.js`)
@@ -157,7 +229,9 @@ npm run serve     # เสิร์ฟ snap ที่ http://localhost:8080 ส�
 6. **ทดสอบใน Flask**: เปิดเว็บกระเป๋าใน MetaMask Flask กด "ใช้ MetaMask (ZETAPHY Snap)" (snap ID `npm:@zetaphy/snap`)
    ลองโอน, stake, deploy บน testnet และตรวจข้อความในหน้าต่าง
 7. **ขอ allowlist** (ถ้าต้องการให้ใช้ MetaMask ปกติได้):
+   - ใส่ค่าจริงของวัคซีนใน `snap.config.js` (RPC ของ ZETAPHY, ThreatRegistry, โดเมนเว็บกระเป๋า) แล้ว build ใหม่
    - ลบ log และสิทธิ์ที่ไม่ใช้ (ตอนนี้ไม่มี) และสแกนด้วย [Snapper](https://github.com/sayfer-io/Snapper)
+   - `endowment:network-access`, `endowment:ethereum-provider` และ `endowment:transaction-insight` ต้องอธิบายในคำขอ allowlist (ดูตารางสิทธิ์และหัวข้อความเป็นส่วนตัว)
    - จ้าง auditor จากรายชื่อของ MetaMask ให้ audit `src/` ของ snap และ `zetaphy-network/src/pqtx.js` กับ `@noble/post-quantum` (โมดูลจัดการกุญแจ)
      แก้ทุกข้อที่ระดับ medium ขึ้นไป แล้วเก็บ commit ที่ audit และ commit ที่แก้
    - กรอกฟอร์ม https://go.metamask.io/snaps-directory-request (ชื่อต้องตรงกับ `proposedName` คือ "ZETAPHY Post-Quantum"
@@ -169,10 +243,12 @@ npm run serve     # เสิร์ฟ snap ที่ http://localhost:8080 ส�
 
 | ไฟล์ | คืออะไร |
 |---|---|
-| `src/index.jsx` | `onRpcRequest`: `zetaphy_getAccount`, `zetaphy_signTx` |
+| `src/index.jsx` | `onRpcRequest`: `zetaphy_getAccount`, `zetaphy_signTx`, `zetaphy_get/setThreatSource`; `onTransaction` (วัคซีน) |
+| `src/threats.js`, `src/insight.jsx` | วัคซีน: ปลายทาง, อ่านโค้ด/proxy บนเชนนั้น, ถาม ThreatRegistry และหน้าที่แสดงใน MetaMask |
+| `../zetaphy-network/src/vaccine.js` | ใช้ร่วมกับเว็บกระเป๋า: view ของ registry, การตาม proxy, fp1 |
 | `src/account.js` | seed → ML-DSA-44 → ที่อยู่ (สูตรเดียวกับ CLI และเว็บกระเป๋า) |
 | `src/request.js` | ตรวจพารามิเตอร์ของ `zetaphy_signTx` อย่างเข้ม |
 | `src/describe.js`, `src/dialog.jsx` | ข้อความในหน้าต่างยืนยัน (ไทย/อังกฤษ) และการวาด |
 | `src/pqtx.js` | re-export `zetaphy-network/src/pqtx.js` |
 | `snap.manifest.json`, `snap.config.js`, `images/icon.svg` | manifest (shasum), การ build, ไอคอน |
-| `test/snap.test.js`, `jest.config.js`, `test/resolver.js` | การทดสอบด้วย snaps-jest |
+| `test/snap.test.js`, `test/insight.test.js`, `jest.config.js`, `test/resolver.js` | การทดสอบด้วย snaps-jest |

@@ -190,6 +190,9 @@ test('seats go by a bond-weighted lottery, not first come; it widens as the wind
   for (const n of names) await j3.send(n, 'register', [], BOND);
   c3.advance(1);
   await j3.send('user', 'request', [CHAIN, TARGET], MIN_FEE);
+  assert.equal(await j3.call('eligible', [0, c3.acct.r0.toString()]), false); // nobody before the draw
+  await j3.send('user', 'draw', [0]);
+  await assert.rejects(j3.send('user', 'draw', [0]), /Nothing/); // once
   const eligibleNow = async () => (await Promise.all(names.map((n) => j3.call('eligible', [0, c3.acct[n].toString()])))).filter(Boolean).length;
   const first = await eligibleNow();
   assert.ok(first >= 1 && first <= 15, `about 6 of 30 should qualify at first, got ${first}`);
@@ -199,8 +202,10 @@ test('seats go by a bond-weighted lottery, not first come; it widens as the wind
       break;
     }
   }
-  c3.advance(80); // two thirds of the window: four times as many qualify
+  c3.advance(40); // a third of the window: twice as many qualify
   assert.ok(await eligibleNow() > first);
+  c3.advance(40); // the last third: every runner, so seats fill whatever the draw
+  assert.equal(await eligibleNow(), names.length);
 });
 
 test('a runner that registers after the job was requested cannot take a seat on it', async () => {
@@ -211,6 +216,7 @@ test('a runner that registers after the job was requested cannot take a seat on 
   await assert.rejects(jobs.send(c4acct, 'commit', [id, V1]), /NotChosen/);
   c.advance(1);
   const later = await newJob();
+  await jobs.send('user', 'draw', [later]);
   assert.equal(await jobs.call('eligible', [later, addr(c4acct)]), true); // fine for later jobs
 });
 
@@ -273,10 +279,14 @@ async function governed(names, { maxBodies = 8, regrow = 4, bond = {} } = {}) {
   const req = async (fee = MIN_FEE) => { await nj.send('user', 'request', [CHAIN, TARGET], fee); return (await nj.call('jobCount')) - 1n; };
   const cm = async (w, id, v) => { s[w] = hexlify(randomBytes(32)); await nj.send(w, 'commit', [id, commitment(v, ad(w), s[w])]); };
   const rv = (w, id, v) => nj.send(w, 'reveal', [id, v, s[w]]);
-  /** a job where `seats` commit and reveal the given verdicts (all reveals sent) */
-  const run = async (votes, fee = MIN_FEE) => {
+  /** a job where `seats` commit and reveal the given verdicts (all reveals sent);
+   *  allDefenders: only defenders sit, so the 2nd and 3rd wait out the first third of the window */
+  const run = async (votes, fee = MIN_FEE, { allDefenders = false } = {}) => {
     const id = await req(fee);
-    for (const [w, v] of votes) await cm(w, id, v);
+    for (const [i, [w, v]] of votes.entries()) {
+      if (allDefenders && i === 1) k.advance(WINDOW / 3);
+      await cm(w, id, v);
+    }
     k.advance(WINDOW);
     for (const [w, v] of votes) await rv(w, id, v).catch(() => {});
     return id;
@@ -444,6 +454,7 @@ test('defenders: regrow fills the 4 seats from the voted roster, at most maxRegr
   const info = await g.nj.call('jobInfo', [id]);
   assert.equal(info.bodies_, 5n); // this request itself: 4 + ceil(1/6)
   assert.equal(info.drawn, 1n);   // 4 of the 5 bodies are the defenders
+  await g.nj.send('user', 'draw', [id]);
   for (const d of ['d1', 'd2', 'd3', 'd4']) assert.equal(await g.nj.call('eligible', [id, g.ad(d)]), true);
   const others = ['d5', 'r1', 'r2', 'r3', 'r4', 'r5', 'r6', 'r7', 'r8'];
   const drawnNow = async () => (await Promise.all(others.map((r) => g.nj.call('eligible', [id, g.ad(r)])))).filter(Boolean).length;
@@ -469,15 +480,18 @@ test('quarantine: 2 strikes within the last 5 judged seats; the runner is out at
   assert.equal(await g.nj.call('QUARANTINE_AFTER'), 2n);
   assert.equal(await g.nj.call('STRIKE_WINDOW'), 5n);
   // rejected, then agreed: one strike, no quarantine
-  await g.run([['d1', V2], ['d2', V1], ['d3', V1]]);
-  await g.run([['d1', V1], ['d2', V1], ['d3', V1]]);
+  // Only defenders here: one sits at once, the others after the first third of the window.
+  await g.run([['d1', V2], ['d2', V1], ['d3', V1]], MIN_FEE, { allDefenders: true });
+  await g.run([['d1', V1], ['d2', V1], ['d3', V1]], MIN_FEE, { allDefenders: true });
   assert.equal(await g.nj.call('strikes', [g.ad('d1')]), 1n);
   assert.equal(await g.nj.call('quarantined', [g.ad('d1')]), false);
   // A second rejection within the window (not in a row): quarantined.
   const activeBefore = await g.nj.call('activeWorkers');
   const bondBefore = await g.nj.call('totalActiveBond');
   const id = await g.req();
-  for (const [w, v] of [['d1', V2], ['d2', V1], ['d3', V1]]) await g.cm(w, id, v);
+  await g.cm('d1', id, V2);
+  g.k.advance(WINDOW / 3);
+  for (const [w, v] of [['d2', V1], ['d3', V1]]) await g.cm(w, id, v);
   await g.rv('d1', id, V2);
   await g.rv('d2', id, V1);
   const ev = await g.rv('d3', id, V1);
@@ -641,4 +655,254 @@ test('every job records the voted skill it was requested under; no active skill,
   const nj = await k.deploy('NeuroJobs', [BOND, REWARD, MIN_FEE, WINDOW, TIMEOUT, UNBOND, CAP], 'gov');
   await nj.send('gov', 'setControl', [ctl.address]);
   await assert.rejects(nj.send('user', 'request', [CHAIN, TARGET], MIN_FEE), /NoSkill/);
+});
+
+// ---- unpredictable lottery (PREVRANDAO), defender seat cap, heartbeat, challenge round ----
+
+const R1 = '0x' + 'a1'.repeat(32), R2 = '0x' + 'b2'.repeat(32);
+const ev = (evs, name) => evs.filter((e) => e?.name === name);
+
+/** A contract that requests (or challenges) and draws in the same transaction, so in the same block. */
+async function sameBlockHelper(k) {
+  const solc = (await import('solc')).default;
+  const src = `pragma solidity 0.8.26;
+interface J { function request(bytes32, string calldata) external payable returns (uint256); function draw(uint256) external;
+  function challenge(uint256) external payable; function commit(uint256, bytes32) external; }
+contract Same {
+  error TooEarly();
+  function requestAndDraw(J j, bytes32 c, string calldata t) external payable { uint256 id = j.request{value: msg.value}(c, t); j.draw(id); }
+  function challengeAndDraw(J j, uint256 id) external payable { j.challenge{value: msg.value}(id); j.draw(id); }
+}`;
+  const out = JSON.parse(solc.compile(JSON.stringify({ language: 'Solidity', sources: { 'S.sol': { content: src } },
+    settings: { evmVersion: 'cancun', outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object'] } } } })));
+  const s = out.contracts['S.sol'].Same;
+  return k.deployRaw({ abi: s.abi, bytecode: '0x' + s.evm.bytecode.object }, [], 'user');
+}
+
+test('lottery: nothing random at request; the draw comes in a later block and uses PREVRANDAO', async () => {
+  const names = Array.from({ length: 30 }, (_, i) => `r${i}`);
+  // Two identical chains: same runners, same request, same seed. Only PREVRANDAO differs.
+  const pick = async (randao) => {
+    const k = await createChain(['owner', 'user', ...names]);
+    const nj = await k.deploy('NeuroJobs', [BOND, REWARD, MIN_FEE, WINDOW, TIMEOUT, UNBOND, CAP], 'owner');
+    for (const n of names) await nj.send(n, 'register', [], BOND);
+    k.advance(1);
+    await nj.send('user', 'request', [CHAIN, TARGET], MIN_FEE);
+    // Before the draw nobody is eligible and nobody can tell who will be.
+    for (const n of names.slice(0, 5)) assert.equal(await nj.call('eligible', [0, k.acct[n].toString()]), false);
+    assert.equal((await nj.call('jobInfo', [0])).rand, '0x' + '00'.repeat(32));
+    if (randao) k.setPrevRandao(randao);
+    const drawn = ev(await nj.send('user', 'draw', [0]), 'Drawn');
+    assert.equal(drawn.length, 1);
+    assert.equal((await nj.call('jobInfo', [0])).rand, drawn[0].args.rand);
+    const set = [];
+    for (const n of names) if (await nj.call('eligible', [0, k.acct[n].toString()])) set.push(n);
+    return { set: set.join(','), rand: drawn[0].args.rand };
+  };
+  const a = await pick(R1), b = await pick(R2), z1 = await pick(null), z2 = await pick(null);
+  assert.notEqual(a.rand, b.rand);
+  assert.notEqual(a.set, b.set, 'another PREVRANDAO picks another eligible set');
+  // Constant PREVRANDAO (old zetaphyd, this EVM): still works, same result every time (as before).
+  assert.equal(z1.rand, z2.rand);
+  assert.equal(z1.set, z2.set);
+});
+
+test('lottery: a request and its draw (or first commit) cannot share a block', async () => {
+  const same = await sameBlockHelper(c);
+  await assert.rejects(same.send('user', 'requestAndDraw', [jobs.address, CHAIN, TARGET], MIN_FEE), /TooEarly/);
+  assert.equal(await jobs.call('jobCount'), 0n);
+  const id = await newJob();
+  await commitAs('w1', id, V1); // a later block: the first commit draws
+  await assert.rejects(jobs.send('user', 'draw', [id]), /Nothing/);
+});
+
+test('defenders: at most one per job; a second only after the first third, while no drawn runner sits', async () => {
+  const g = await governed(['d1', 'd2', 'r1', 'r2', 'r3']);
+  for (const d of ['d1', 'd2']) await g.ctl.send('gov', 'approveDefender', [g.ad(d)]);
+  await g.nj.send('user', 'regrow');
+  g.k.advance(1);
+  // Job a: d1 sits; d2 may not (no lottery for a defender) until a third of the window has passed.
+  const a = await g.req();
+  await g.cm('d1', a, V1);
+  assert.equal(await g.nj.call('eligible', [a, g.ad('d2')]), false);
+  await assert.rejects(g.cm('d2', a, V1), /NotChosen/);
+  g.k.advance(WINDOW / 3);
+  assert.equal(await g.nj.call('eligible', [a, g.ad('d2')]), true); // nobody else came: jobs do not stall
+  await g.cm('d2', a, V1);
+  // Job b: d1 sits, then a drawn runner: d2 stays out for good.
+  const b = await g.req();
+  await g.cm('d1', b, V1);
+  g.k.advance(WINDOW / 3); // the lottery has widened to every runner here
+  await g.cm('r1', b, V1);
+  assert.equal(await g.nj.call('eligible', [b, g.ad('d2')]), false);
+  await assert.rejects(g.cm('d2', b, V1), /NotChosen/);
+  await g.cm('r2', b, V1);
+});
+
+test('heartbeat: a silent defender loses its seat at regrow and is reseated only after a heartbeat', async () => {
+  const g = await governed(['d1', 'd2', 'r1']);
+  assert.equal(await g.ctl.call('defenderTimeout'), 6n * 3600n);
+  for (const d of ['d1', 'd2']) await g.ctl.send('gov', 'approveDefender', [g.ad(d)]);
+  g.k.advance(3600 - Number(g.k.now() % 3600n));
+  await g.nj.send('user', 'regrow');
+  await assert.rejects(g.nj.send('user', 'heartbeat'), /NotWorker/);
+  // d1 heartbeats every 1.5 hours (timeout / 4); d2 says nothing for 6 hours.
+  for (let i = 0; i < 4; i++) { g.k.advance(5400); await g.nj.send('d1', 'heartbeat'); }
+  g.k.advance(1);
+  assert.equal(await g.nj.call('isDefender', [g.ad('d1')]), true);
+  assert.equal(await g.nj.call('isDefender', [g.ad('d2')]), false); // stale: not always-eligible any more
+  let r = await g.nj.send('user', 'regrow');
+  assert.deepEqual(ev(r, 'DefenderVacated').map((e) => e.args.worker.toLowerCase()), [g.ad('d2').toLowerCase()]);
+  assert.equal(ev(r, 'DefenderSeated').length, 0); // still silent: not reseated
+  assert.equal((await g.nj.call('workers', [g.ad('d2')])).active, true); // still a runner, just not a defender
+  // d2 comes back: heartbeat, and the next regrow seats it again.
+  await g.nj.send('d2', 'heartbeat');
+  r = await g.nj.send('user', 'regrow');
+  assert.ok(ev(r, 'DefenderSeated').some((e) => e.args.worker.toLowerCase() === g.ad('d2').toLowerCase()));
+  assert.equal(await g.nj.call('isDefender', [g.ad('d2')]), true);
+  // A commit counts as a heartbeat too; governance sets the timeout.
+  await g.ctl.send('gov', 'setDefenderTimeout', [600]);
+  g.k.advance(1);
+  g.k.advance(500);
+  const id = await g.req();
+  await g.cm('d1', id, V1);
+  g.k.advance(200);
+  assert.equal(await g.nj.call('isDefender', [g.ad('d1')]), true);
+  assert.equal(await g.nj.call('isDefender', [g.ad('d2')]), false);
+});
+
+/** Round 1 with the given votes (every runner is eligible after the first third), then a challenge by `who`. */
+async function challenged(names, votes, { fee = MIN_FEE, who = 'user', bond, window } = {}) {
+  const g = await governed(names, { bond: { l1: BOND * 2n, l2: BOND * 2n } });
+  if (window) await g.ctl.send('gov', 'setChallengeWindow', [window]);
+  const id = await g.req(fee);
+  g.k.advance(WINDOW / 3);
+  for (const [w, v] of votes) await g.cm(w, id, v);
+  g.k.advance(WINDOW);
+  for (const [w, v] of votes) await g.rv(w, id, v).catch(() => {});
+  assert.equal((await g.nj.call('getJob', [id])).status, 2n);
+  const need = await g.nj.call('challengeBondOf', [id]);
+  const s2 = {};
+  const cm2 = async (w, v) => { s2[w] = hexlify(randomBytes(32)); await g.nj.send(w, 'challengeCommit', [id, commitment(v, g.ad(w), s2[w])]); };
+  const rv2 = (w, v) => g.nj.send(w, 'challengeReveal', [id, v, s2[w]]);
+  const open = async () => g.nj.send(who, 'challenge', [id], bond ?? need);
+  return { ...g, id, need, cm2, rv2, open };
+}
+
+test('challenge: round 2 overturns a lying pair: 50% of their bonds, strikes, the challenger and round 2 are paid, to the wei', async () => {
+  const names = ['l1', 'l2', 'h1', 'r1', 'r2', 'r3', 'r4'];
+  const g = await challenged(names, [['l1', V2], ['l2', V2], ['h1', V1]], { fee: ZETA, window: 7200 });
+  assert.equal((await g.nj.call('getJob', [g.id])).result, V2); // the pair won round 1
+  let as = await g.nj.call('assurance', [g.id]);
+  assert.equal(as.agreedBy, 2n);
+  assert.equal(as.state, 0n);
+  assert.equal(as.settled, false); // still inside the challenge window
+  assert.equal(g.need, 2n * ZETA); // max(2 x fee, 1 ZETAPHY)
+  // The pair tries to leave before anyone checks: the bond is held past the challenge window.
+  await g.nj.send('l1', 'requestUnbond');
+  g.k.advance(UNBOND);
+  await assert.rejects(g.nj.send('l1', 'withdrawBond'), /TooEarly/);
+  await assert.rejects(g.nj.send('user', 'challenge', [g.id], g.need - 1n), /BadValue/);
+  const ch = await g.open();
+  assert.equal(ev(ch, 'Challenged').length, 1);
+  await assert.rejects(g.open(), /AlreadyIn/); // one challenge per job
+  // Round 2: fresh seats only, drawn in a later block.
+  g.k.setPrevRandao(R1);
+  await g.nj.send('r1', 'draw', [g.id]);
+  for (const w of ['l2', 'h1']) assert.equal(await g.nj.call('challengeEligible', [g.id, g.ad(w)]), false);
+  await assert.rejects(g.cm2('l2', V1), /NotChosen/); // a round-1 seat never sits in round 2
+  g.k.advance(WINDOW / 3);
+  await g.cm2('r1', V1);
+  await g.cm2('r2', V1);
+  await g.cm2('r3', V2); // one round-2 liar
+  await assert.rejects(g.cm2('r4', V1), /NoSeat/);
+  const credits = async () => Promise.all(['user', 'l1', 'l2', 'h1', 'r1', 'r2', 'r3', 'fund'].map((w) => g.nj.call('credit', [g.ad(w)])));
+  const before = await credits();
+  const bonds = await Promise.all(['l1', 'l2'].map(async (w) => (await g.nj.call('workers', [g.ad(w)])).bond));
+  await g.rv2('r1', V1);
+  const res = await g.rv2('r2', V1);
+  assert.deepEqual(ev(res, 'ChallengeResolved').map((e) => [e.args.state, e.args.verdict]), [[3n, V1]]);
+  assert.equal((await g.nj.call('getJob', [g.id])).result, V1); // the final verdict is round 2's
+  const after = await credits();
+  const d = after.map((x, i) => x - before[i]);
+  const slashed = bonds[0] / 2n + bonds[1] / 2n;
+  for (const [i, w] of ['l1', 'l2'].entries()) {
+    const wk = await g.nj.call('workers', [g.ad(w)]);
+    assert.equal(wk.bond, bonds[i] - bonds[i] / 2n);
+    assert.equal(await g.nj.call('strikes', [g.ad(w)]), 1n);
+    assert.equal(d[1 + i], 0n);
+  }
+  const toChallenger = slashed / 2n, share = (slashed - toChallenger) / 3n;
+  assert.equal(d[0], g.need + toChallenger); // bond back + half the slash
+  assert.equal(d[3], share); // h1, outvoted in round 1, was right
+  assert.equal(d[4], share);
+  assert.equal(d[5], share);
+  assert.equal(d[6], 0n);
+  assert.equal(d.reduce((a, b) => a + b, 0n), g.need + slashed); // nothing lost: dust to the fund
+  as = await g.nj.call('assurance', [g.id]);
+  assert.equal(as.agreedBy, 3n);
+  assert.equal(as.state, 3n);
+  assert.equal(as.settled, true);
+  // The round-2 liar gets the usual grace, then is judged against round 2's verdict.
+  const r3 = await g.rv2('r3', V2);
+  assert.ok(ev(r3, 'Penalized').length === 1);
+  assert.equal(await g.nj.call('strikes', [g.ad('r3')]), 1n);
+});
+
+test('challenge: round 2 confirms: the challenger loses its bond to round 2 and the round-1 winners', async () => {
+  const g = await challenged(['w1', 'w2', 'r1', 'r2', 'r3'], [['w1', V1], ['w2', V1]]);
+  assert.equal(g.need, ZETA); // 2 x 0.1 is below the 1 ZETAPHY floor
+  await g.open();
+  g.k.advance(WINDOW / 3);
+  const before = await Promise.all(['user', 'w1', 'w2', 'r1', 'r2', 'fund'].map((w) => g.nj.call('credit', [g.ad(w)])));
+  await g.cm2('r1', V1);
+  await g.cm2('r2', V1);
+  g.k.advance(WINDOW);
+  await g.rv2('r1', V1);
+  const res = await g.rv2('r2', V1);
+  assert.equal(ev(res, 'ChallengeResolved')[0].args.state, 2n);
+  const d = (await Promise.all(['user', 'w1', 'w2', 'r1', 'r2', 'fund'].map((w) => g.nj.call('credit', [g.ad(w)])))).map((x, i) => x - before[i]);
+  assert.deepEqual(d.slice(0, 5), [0n, ZETA / 4n, ZETA / 4n, ZETA / 4n, ZETA / 4n]);
+  assert.equal(d.reduce((a, b) => a + b, 0n), ZETA);
+  const as = await g.nj.call('assurance', [g.id]);
+  assert.equal(as.agreedBy, 4n); // confirmed by 4 runners
+  assert.equal(as.state, 2n);
+  assert.equal((await g.nj.call('getJob', [g.id])).result, V1);
+  assert.equal(await g.nj.call('challengeCount'), 1n);
+  assert.equal(await g.nj.call('challenged', [0]), g.id);
+});
+
+test('challenge: no quorum in round 2: the bond goes back, the verdict stands as disputed; silent seats are penalized', async () => {
+  const g = await challenged(['w1', 'w2', 'r1', 'r2', 'r3'], [['w1', V1], ['w2', V1]], { who: 'r3' });
+  await g.open();
+  await assert.rejects(g.cm2('r3', V1), /NotChosen/); // never the challenger
+  g.k.advance(WINDOW / 3);
+  await g.cm2('r1', V1);
+  await g.cm2('r2', V2);
+  g.k.advance(WINDOW);
+  await g.rv2('r1', V1);
+  await assert.rejects(g.nj.send('user', 'challengeExpire', [g.id]), /TooEarly/);
+  g.k.advance(TIMEOUT);
+  const before = await g.nj.call('credit', [g.ad('r3')]);
+  const out = await g.nj.send('user', 'challengeExpire', [g.id]);
+  assert.ok(ev(out, 'Missed').some((e) => e.args.worker.toLowerCase() === g.ad('r2').toLowerCase()));
+  assert.equal(await g.nj.call('credit', [g.ad('r3')]) - before, g.need);
+  const as = await g.nj.call('assurance', [g.id]);
+  assert.equal(as.state, 4n);
+  assert.equal(as.agreedBy, 2n);
+  assert.equal((await g.nj.call('getJob', [g.id])).result, V1);
+});
+
+test('challenge: only a done job, inside the window, not while paused, not in the challenge block', async () => {
+  const g = await challenged(['w1', 'w2', 'r1'], [['w1', V1], ['w2', V1]]);
+  const open = await g.req();
+  await assert.rejects(g.nj.send('user', 'challenge', [open], ZETA), /Closed/);
+  await g.ctl.send('gov', 'pause');
+  await assert.rejects(g.open(), /Paused/);
+  await g.ctl.send('gov', 'unpause');
+  const same = await sameBlockHelper(g.k);
+  await assert.rejects(same.send('user', 'challengeAndDraw', [g.nj.address, g.id], g.need), /TooEarly/);
+  g.k.advance(TIMEOUT); // the window defaults to jobTimeout
+  await assert.rejects(g.open(), /Closed/);
+  assert.equal((await g.nj.call('assurance', [g.id])).settled, true);
 });

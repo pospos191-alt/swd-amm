@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// ThreatRegistry's enforcement view for code on ZETAPHY (Reason as its uint8
-/// value): true only once a flag is the registry's enforceDelay old.
+/// ThreatRegistry's view for code on ZETAPHY (Reason as its uint8 value): true
+/// as soon as the runners' quorum flagged its address or code (warning level).
 interface IContractThreats {
-    function isContractEnforced(address who) external view returns (bool, uint8);
+    function isContractFlagged(address who) external view returns (bool, uint8);
 }
 
 /// @title BridgedToken: a token that exists on ZETAPHY only through a bridge
@@ -53,10 +53,13 @@ contract BridgedToken {
 ///           - a pause that only guardians can pull and only governance can
 ///             release. Pausing stops the bridges, never the chain.
 ///           - vaccine (with a ThreatRegistry set): no coins to, or out of, a
-///             contract whose address or code the Neuro runners flagged (once
-///             the flag is enforced, i.e. past the registry's enforceDelay).
-///             The call reverts, so the adapter's message stays pending, not
-///             lost, and goes through if the flag is cleared. The adapter
+///             contract whose address or code the Neuro runners flagged, from
+///             the moment it is flagged (warning level; no enforceDelay here).
+///             This is a hold, not a loss: the call reverts, so the adapter's
+///             message stays pending (an inbound mint is retried, an outbound
+///             burn simply did not happen) and goes through once the flag is
+///             cleared or governance protects the key. Reverting is how a
+///             direct path holds, so it needs no separate hold state. The adapter
 ///             itself is NOT checked: governance chose it and can disable its
 ///             route; a runner flag on its code hash or address must not be
 ///             able to freeze a whole route.
@@ -156,11 +159,11 @@ contract BridgeGuard {
         outLeft = r.dailyLimit - (fresh ? 0 : r.outToday);
     }
 
-    /// Vaccine: refuses a party (the coins' owner) whose flag is enforced.
+    /// Vaccine: holds back a party (the coins' owner) that is flagged.
     function _clean(address who) private view {
         IContractThreats t = threats;
         if (address(t) == address(0)) return;
-        (bool f, ) = t.isContractEnforced(who);
+        (bool f, ) = t.isContractFlagged(who);
         if (f) revert FlaggedContract(who);
     }
 

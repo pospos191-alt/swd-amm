@@ -22,5 +22,15 @@ export default {
   polyfills: false,
   // A dependency of @metamask/snaps-sdk feature-checks for Buffer; nothing in the bundle uses it.
   stats: { buffer: false },
+  // The vaccine's build-time constants (src/threats.js), placeholders until the
+  // owner knows them: the ZETAPHY JSON-RPC (https) the transaction insight asks,
+  // the ThreatRegistry there (zero: none, so every insight says "couldn't check"),
+  // and the web wallet origin(s) allowed to override both (zetaphy_setThreatSource).
+  // Change them here, then npm run build and commit snap.manifest.json (shasum).
+  environment: {
+    ZETAPHY_THREAT_RPC: 'https://rpc.zetaphy.invalid',
+    ZETAPHY_THREAT_REGISTRY: '0x0000000000000000000000000000000000000000',
+    ZETAPHY_WALLET_ORIGINS: 'https://wallet.zetaphy.invalid',
+  },
   customizeWebpackConfig: (config) => ({ ...config, plugins: [...config.plugins, ownNoble] }),
 };

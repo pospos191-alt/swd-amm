@@ -890,7 +890,7 @@ index 0000000..62d63ad
 +	return pk.UnmarshalBinary(bytes.Clone(m.Key)) == nil
 +}
 diff --git a/evmd/app.go b/evmd/app.go
-index 204345c..0dc301d 100644
+index 204345c..08d2446 100644
 --- a/evmd/app.go
 +++ b/evmd/app.go
 @@ -36,6 +36,10 @@ import (
@@ -925,7 +925,15 @@ index 204345c..0dc301d 100644
  	)
  	oKeys := storetypes.NewObjectStoreKeys(banktypes.ObjectStoreKey, evmtypes.ObjectKey)
  
-@@ -530,9 +537,29 @@ func NewExampleApp(
+@@ -487,6 +494,7 @@ func NewExampleApp(
+ 
+ 	// enable virtual fee collection
+ 	app.EVMKeeper.EnableVirtualFeeCollection()
++	app.EVMKeeper.SetRandomFn(app.prevRandao) // ZETAPHY: block.prevrandao from the PQ certificate (zetaphy_random.go)
+ 
+ 	app.Erc20Keeper = erc20keeper.NewKeeper(
+ 		keys[erc20types.StoreKey],
+@@ -530,9 +538,29 @@ func NewExampleApp(
  	callbacksMiddleware.SetUnderlyingApplication(transferStack)
  	transferStack = callbacksMiddleware
  
@@ -955,7 +963,7 @@ index 204345c..0dc301d 100644
  
  	// Create static IBC router, add transfer route, then set and seal it
  	ibcRouter := porttypes.NewRouter()
-@@ -579,6 +606,7 @@ func NewExampleApp(
+@@ -579,6 +607,7 @@ func NewExampleApp(
  		ibc.NewAppModule(app.IBCKeeper),
  		ibctm.NewAppModule(tmLightClientModule),
  		transferModule,
@@ -963,7 +971,7 @@ index 204345c..0dc301d 100644
  		// Cosmos EVM modules
  		vmModule,
  		feemarket.NewAppModule(app.FeeMarketKeeper),
-@@ -618,7 +646,7 @@ func NewExampleApp(
+@@ -618,7 +647,7 @@ func NewExampleApp(
  		minttypes.ModuleName,
  
  		// IBC modules
@@ -972,7 +980,7 @@ index 204345c..0dc301d 100644
  
  		// Cosmos EVM BeginBlockers
  		erc20types.ModuleName, feemarkettypes.ModuleName,
-@@ -645,7 +673,7 @@ func NewExampleApp(
+@@ -645,7 +674,7 @@ func NewExampleApp(
  		evmtypes.ModuleName, erc20types.ModuleName, feemarkettypes.ModuleName,
  
  		// no-ops
@@ -981,7 +989,7 @@ index 204345c..0dc301d 100644
  		distrtypes.ModuleName,
  		slashingtypes.ModuleName, minttypes.ModuleName,
  		genutiltypes.ModuleName, evidencetypes.ModuleName, authz.ModuleName,
-@@ -670,7 +698,7 @@ func NewExampleApp(
+@@ -670,7 +699,7 @@ func NewExampleApp(
  		feemarkettypes.ModuleName,
  		erc20types.ModuleName,
  
@@ -990,7 +998,7 @@ index 204345c..0dc301d 100644
  		genutiltypes.ModuleName, evidencetypes.ModuleName, authz.ModuleName,
  		feegrant.ModuleName, upgradetypes.ModuleName, vestingtypes.ModuleName,
  	}
-@@ -684,6 +712,9 @@ func NewExampleApp(
+@@ -684,6 +713,9 @@ func NewExampleApp(
  	if err = app.ModuleManager.RegisterServices(app.configurator); err != nil {
  		panic(fmt.Sprintf("failed to register services in module manager: %s", err.Error()))
  	}
@@ -1000,7 +1008,7 @@ index 204345c..0dc301d 100644
  
  	// RegisterUpgradeHandlers is used for registering any on-chain upgrades.
  	// Make sure it's called after `app.ModuleManager` and `app.configurator` are set.
-@@ -730,6 +761,10 @@ func NewExampleApp(
+@@ -730,6 +762,10 @@ func NewExampleApp(
  	if err := app.configureEVMMempool(appOpts, logger); err != nil {
  		panic(fmt.Sprintf("failed to configure EVM mempool: %s", err.Error()))
  	}
@@ -1011,7 +1019,7 @@ index 204345c..0dc301d 100644
  
  	// In v0.46, the SDK introduces _postHandlers_. PostHandlers are like
  	// antehandlers, but are run _after_ the `runMsgs` execution. They are also
-@@ -812,7 +847,7 @@ func (app *EVMD) setAnteHandler(txConfig client.TxConfig, maxGasWanted uint64) {
+@@ -812,7 +848,7 @@ func (app *EVMD) setAnteHandler(txConfig client.TxConfig, maxGasWanted uint64) {
  		panic(err)
  	}
  
@@ -1020,7 +1028,7 @@ index 204345c..0dc301d 100644
  }
  
  func (app *EVMD) onPendingTx(hash common.Hash) {
-@@ -842,7 +877,17 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
+@@ -842,7 +878,19 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
  
  // BeginBlocker application updates every begin block
  func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
@@ -1029,6 +1037,8 @@ index 204345c..0dc301d 100644
 +	// replaces the event manager, so keep the burn's events and add them.
 +	em := sdk.NewEventManager()
 +	app.burnFees(ctx.WithEventManager(em))
++	app.burnDead(ctx.WithEventManager(em)) // ZETAPHY: ZETAPHY sent to 0x…dEaD leaves the supply
++	app.ensureBlockHashHistory(ctx)        // ZETAPHY: BLOCKHASH needs the EIP-2935 contract (zetaphy_random.go)
 +	// ZETAPHY: evidence switch (zetaphy_pqcert.go); its events join the burn's
 +	bb, err := app.ModuleManager.BeginBlock(app.pqFilterEvidence(ctx.WithEventManager(em)))
 +	if err != nil {
@@ -1039,7 +1049,7 @@ index 204345c..0dc301d 100644
  }
  
  // EndBlocker application updates every end block
-@@ -869,10 +914,19 @@ func (app *EVMD) InitChainer(ctx sdk.Context, req *abci.RequestInitChain) (*abci
+@@ -869,10 +917,19 @@ func (app *EVMD) InitChainer(ctx sdk.Context, req *abci.RequestInitChain) (*abci
  		panic(err)
  	}
  
@@ -1128,13 +1138,15 @@ index d6af75f..26d2cbf 100644
  	app.SetCheckTxHandler(checkTxHandler)
 diff --git a/evmd/zetaphy_feeburn.go b/evmd/zetaphy_feeburn.go
 new file mode 100644
-index 0000000..96d0ea8
+index 0000000..ccabdbf
 --- /dev/null
 +++ b/evmd/zetaphy_feeburn.go
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,75 @@
 +package evmd
 +
 +import (
++	"github.com/ethereum/go-ethereum/common"
++
 +	sdk "github.com/cosmos/cosmos-sdk/types"
 +	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 +
@@ -1174,6 +1186,36 @@ index 0000000..96d0ea8
 +	}
 +	write()
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_fee_burn", sdk.NewAttribute("amount", coins.String())))
++}
++
++// DeadAddress is the conventional burn address. ZETAPHY sent to it (Neuro
++// sends 5% of its fees there) used to stay counted in the total supply; each
++// block it is now really burned, also at the start of the block. Other
++// denoms at that address are left as they are.
++var DeadAddress = common.HexToAddress("0x000000000000000000000000000000000000dEaD")
++
++func (app *EVMD) burnDead(ctx sdk.Context) {
++	denom := evmtypes.GetEVMCoinDenom()
++	if denom == "" {
++		return
++	}
++	dead := sdk.AccAddress(DeadAddress.Bytes())
++	bal := app.BankKeeper.GetBalance(ctx, dead, denom) // zero when there is no account
++	if !bal.Amount.IsPositive() {
++		return
++	}
++	coins := sdk.NewCoins(bal)
++	cctx, write := ctx.CacheContext()
++	if err := app.BankKeeper.SendCoinsFromAccountToModule(cctx, dead, evmtypes.ModuleName, coins); err != nil {
++		ctx.Logger().Error("dead burn: move to burner failed", "err", err)
++		return
++	}
++	if err := app.BankKeeper.BurnCoins(cctx, evmtypes.ModuleName, coins); err != nil {
++		ctx.Logger().Error("dead burn: burn failed", "err", err)
++		return
++	}
++	write()
++	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_dead_burn", sdk.NewAttribute("amount", coins.String())))
 +}
 diff --git a/evmd/zetaphy_pqcall.go b/evmd/zetaphy_pqcall.go
 new file mode 100644
@@ -1537,10 +1579,10 @@ index 0000000..d306deb
 +}
 diff --git a/evmd/zetaphy_pqcert.go b/evmd/zetaphy_pqcert.go
 new file mode 100644
-index 0000000..ccb1358
+index 0000000..f1274d3
 --- /dev/null
 +++ b/evmd/zetaphy_pqcert.go
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,323 @@
 +package evmd
 +
 +// ZETAPHY post-quantum vote certificates.
@@ -1629,13 +1671,20 @@ index 0000000..ccb1358
 +
 +// pqCheckCert applies the rule above to the certificate for block height-1.
 +func (app *EVMD) pqCheckCert(ctx sdk.Context, height int64, votes []abci.VoteInfo, txs [][]byte) error {
++	_, err := app.pqVerifiedCert(ctx, height, votes, txs)
++	return err
++}
++
++// pqVerifiedCert is pqCheckCert that also returns the certificate when every
++// entry of it was verified (nil when there is none or nothing was checked).
++func (app *EVMD) pqVerifiedCert(ctx sdk.Context, height int64, votes []abci.VoteInfo, txs [][]byte) (*MsgPQCertificate, error) {
 +	last := ctx.KVStore(app.GetKey(pqStoreKey)).Get(pqLastBlockKey)
 +	if len(last) != 8+32 || int64(binary.BigEndian.Uint64(last)) != height-1 { // #nosec G115 -- block heights
-+		return nil // nothing to certify yet (first block, or state restored without it)
++		return nil, nil // nothing to certify yet (first block, or state restored without it)
 +	}
 +	prev, hash := height-1, last[8:]
 +	if !pqExtensionsOn(ctx, prev) {
-+		return nil
++		return nil, nil
 +	}
 +	var total, unregistered int64
 +	keys := map[string][]byte{}
@@ -1653,9 +1702,10 @@ index 0000000..ccb1358
 +	// registered validator of the block with a valid signature. Anything else
 +	// is refused, so a proposer cannot pad it or make nodes verify garbage.
 +	var signed int64
-+	if c := app.pqCertOf(txs); c != nil {
++	c := app.pqCertOf(txs)
++	if c != nil {
 +		if c.Height != uint64(prev) || len(c.Attestations)%pqAttestationSize != 0 || len(c.Attestations) > len(keys)*pqAttestationSize { // #nosec G115 -- block heights
-+			return fmt.Errorf("block %d: malformed vote certificate", prev)
++			return nil, fmt.Errorf("block %d: malformed vote certificate", prev)
 +		}
 +		msg := pqVoteMsg(ctx.ChainID(), prev, hash)
 +		var before []byte
@@ -1663,7 +1713,7 @@ index 0000000..ccb1358
 +			a := c.Attestations[i : i+20]
 +			k, ok := keys[string(a)]
 +			if !ok || bytes.Compare(a, before) <= 0 || !(&mldsa44.PubKey{Key: k}).VerifySignature(msg, c.Attestations[i+20:i+pqAttestationSize]) {
-+				return fmt.Errorf("block %d: vote certificate entry %d is not valid", prev, i/pqAttestationSize)
++				return nil, fmt.Errorf("block %d: vote certificate entry %d is not valid", prev, i/pqAttestationSize)
 +			}
 +			signed += power[string(a)]
 +			before = a
@@ -1671,9 +1721,12 @@ index 0000000..ccb1358
 +	}
 +	need := 2*total - 3*unregistered // signed power must be > need/3
 +	if need >= 0 && 3*signed <= need {
-+		return fmt.Errorf("block %d: ML-DSA-44 vote signatures cover %d of %d voting power (%d without a key); not enough", prev, signed, total, unregistered)
++		return nil, fmt.Errorf("block %d: ML-DSA-44 vote signatures cover %d of %d voting power (%d without a key); not enough", prev, signed, total, unregistered)
 +	}
-+	return nil
++	if c != nil && len(c.Attestations) == 0 {
++		c = nil
++	}
++	return c, nil
 +}
 +
 +// pqBuildCert makes the certificate tx from the votes that committed block height-1.
@@ -1749,9 +1802,12 @@ index 0000000..ccb1358
 +// pqPreBlock checks the certificate when the block runs (also in blocksync)
 +// and records this block for the next one.
 +func (app *EVMD) pqPreBlock(ctx sdk.Context, req *abci.RequestFinalizeBlock) error {
-+	if err := app.pqCheckCert(ctx, req.Height, req.DecidedLastCommit.Votes, req.Txs); err != nil {
++	cert, err := app.pqVerifiedCert(ctx, req.Height, req.DecidedLastCommit.Votes, req.Txs)
++	if err != nil {
 +		return err
 +	}
++	// ZETAPHY: block.prevrandao (zetaphy_random.go), before pqLastBlockKey moves on
++	app.setPrevRandao(ctx, req.Height, cert)
 +	if len(req.Hash) == 32 { // CometBFT always sends it; some test harnesses do not
 +		v := binary.BigEndian.AppendUint64(nil, uint64(req.Height)) // #nosec G115 -- block heights
 +		ctx.KVStore(app.GetKey(pqStoreKey)).Set(pqLastBlockKey, append(v, req.Hash...))
@@ -1852,7 +1908,7 @@ index 0000000..ccb1358
 +}
 diff --git a/evmd/zetaphy_pqguard.go b/evmd/zetaphy_pqguard.go
 new file mode 100644
-index 0000000..28bea58
+index 0000000..44f0886
 --- /dev/null
 +++ b/evmd/zetaphy_pqguard.go
 @@ -0,0 +1,461 @@
@@ -2286,7 +2342,7 @@ index 0000000..28bea58
 +	defer it.Close()
 +	for ; it.Valid(); it.Next() {
 +		k, v := it.Key(), it.Value()
-+		if k[0] == pqLastBlockKey[0] { // belongs to this chain's history only
++		if k[0] == pqLastBlockKey[0] || k[0] == pqRandaoKey[0] { // belongs to this chain's history only
 +			continue
 +		}
 +		if k[0] == 2 { // vote keys: the current key only, valid from the new chain's start
@@ -2316,6 +2372,134 @@ index 0000000..28bea58
 +		st.Set(k, v)
 +	}
 +	return nil
++}
+diff --git a/evmd/zetaphy_random.go b/evmd/zetaphy_random.go
+new file mode 100644
+index 0000000..9f0d7ff
+--- /dev/null
++++ b/evmd/zetaphy_random.go
+@@ -0,0 +1,122 @@
++package evmd
++
++// ZETAPHY: block.prevrandao (PREVRANDAO) that a transaction sender cannot
++// predict. Upstream cosmos/evm returns a constant there.
++//
++// For block N, set in PreBlocker before any transaction of N runs:
++//
++//	certificate mode (the post-quantum vote certificate for N-1 is in N and
++//	was verified, zetaphy_pqcert.go):
++//	  sha256("zetaphy.prevrandao.v1" || 0 || chain-id || 0 || N (8 bytes) ||
++//	         0x01 || certified height N-1 (8 bytes) || attestations)
++//	fallback (no vote extensions, no registered keys, block 1, state restored):
++//	  sha256("zetaphy.prevrandao.v1" || 0 || chain-id || 0 || N (8 bytes) ||
++//	         0x00 || hash of block N-1, when known)
++//
++// The attestations are the certificate's canonical bytes: entries of
++// validator address (20) || ML-DSA-44 signature over (chain id, N-1, hash of
++// N-1), sorted by address, each verified. They are only known once the
++// validators have precommitted N-1, and need the validators' secret keys.
++//
++// What remains (see zetaphy-chain/README.md and docs/CHAIN_AUDIT_SCOPE.md):
++//   - Validators can bias it. ML-DSA is not a unique signature: a signer can
++//     make many valid signatures for the same block. The proposer of N can
++//     re-sign its own entry and choose which entries above the 2/3 threshold
++//     to include, so it can try many values within the block time and pick
++//     one. Each other signer can do the same with its own entry before it
++//     precommits. It is unpredictable for users, not unbiasable by validators.
++//   - Vote extensions travel with the precommits for N-1, so a node that
++//     watches the votes can usually compute N's value during timeout_commit,
++//     before N is proposed. Contracts must take the value of a block after
++//     the one that fixed the bet (commit first, draw in a later block).
++//   - Fallback mode is predictable by anyone once N-1 is committed; it only
++//     guarantees the value changes every block.
++//
++// Queries: the store holds the value of the last finalized block. eth_call,
++// eth_estimateGas and CheckTx run on the latest committed block N and see N's
++// value; the transaction then runs in a later block with that block's value.
++// A context for a height without a stored value (e.g. replaying a block in a
++// trace on the state before it) gets a fallback without the previous hash.
++
++import (
++	"crypto/sha256"
++	"encoding/binary"
++
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/crypto"
++	ethparams "github.com/ethereum/go-ethereum/params"
++
++	sdk "github.com/cosmos/cosmos-sdk/types"
++)
++
++var pqRandaoKey = []byte{7} // height (8 bytes) || prevrandao of that block
++
++const prevRandaoTag = "zetaphy.prevrandao.v1"
++
++// PrevRandao computes the value above. cert is nil in fallback mode; prevHash
++// may be nil there.
++func PrevRandao(chainID string, height int64, cert *MsgPQCertificate, prevHash []byte) common.Hash {
++	h := sha256.New()
++	h.Write([]byte(prevRandaoTag))
++	h.Write([]byte{0})
++	h.Write([]byte(chainID))
++	h.Write([]byte{0})
++	h.Write(binary.BigEndian.AppendUint64(nil, uint64(height))) // #nosec G115 -- block heights
++	if cert != nil {
++		h.Write([]byte{1})
++		h.Write(binary.BigEndian.AppendUint64(nil, cert.Height))
++		h.Write(cert.Attestations)
++	} else {
++		h.Write([]byte{0})
++		h.Write(prevHash)
++	}
++	return common.BytesToHash(h.Sum(nil))
++}
++
++// setPrevRandao stores block height's value; it runs in PreBlocker, after the
++// certificate was checked and before the hash of height-1 is replaced.
++func (app *EVMD) setPrevRandao(ctx sdk.Context, height int64, cert *MsgPQCertificate) {
++	st := ctx.KVStore(app.GetKey(pqStoreKey))
++	var prevHash []byte
++	if cert == nil {
++		if last := st.Get(pqLastBlockKey); len(last) == 8+32 && int64(binary.BigEndian.Uint64(last)) == height-1 { // #nosec G115 -- block heights
++			prevHash = last[8:]
++		}
++	}
++	r := PrevRandao(ctx.ChainID(), height, cert, prevHash)
++	st.Set(pqRandaoKey, append(binary.BigEndian.AppendUint64(nil, uint64(height)), r.Bytes()...)) // #nosec G115 -- block heights
++}
++
++// prevRandao is the EVM keeper's source of block.prevrandao. It reads the
++// store without gas, so EVM gas use does not change.
++func (app *EVMD) prevRandao(ctx sdk.Context) common.Hash {
++	v := ctx.MultiStore().GetKVStore(app.GetKey(pqStoreKey)).Get(pqRandaoKey)
++	if len(v) == 8+32 && int64(binary.BigEndian.Uint64(v)) == ctx.BlockHeight() { // #nosec G115 -- block heights
++		return common.BytesToHash(v[8:])
++	}
++	return PrevRandao(ctx.ChainID(), ctx.BlockHeight(), nil, nil)
++}
++
++// ensureBlockHashHistory: BLOCKHASH(n) for the last 256 blocks reads the
++// hashes cosmos/evm keeps in the storage of the EIP-2935 history contract,
++// but only while that contract exists, and `zetaphyd init` writes a genesis
++// without it, so BLOCKHASH returned 0. It is installed at the start of the
++// first block that lacks it (also on a running chain), before the EVM
++// module records the block's hash. An account already at that address (e.g.
++// someone sent coins there) keeps its balance and gets the code.
++func (app *EVMD) ensureBlockHashHistory(ctx sdk.Context) {
++	addr := ethparams.HistoryStorageAddress
++	if app.EVMKeeper.IsContract(ctx, addr) {
++		return
++	}
++	code := ethparams.HistoryStorageCode
++	hash := crypto.Keccak256(code)
++	cctx, write := ctx.CacheContext()
++	acc := sdk.AccAddress(addr.Bytes())
++	if app.AccountKeeper.GetAccount(cctx, acc) == nil {
++		app.AccountKeeper.SetAccount(cctx, app.AccountKeeper.NewAccountWithAddress(cctx, acc))
++	}
++	app.EVMKeeper.SetCodeHash(cctx, addr.Bytes(), hash)
++	app.EVMKeeper.SetCode(cctx, hash, code)
++	write()
 +}
 diff --git a/evmd/zetaphy_rpc.go b/evmd/zetaphy_rpc.go
 new file mode 100644
@@ -2862,6 +3046,21 @@ index 7f19b35..ec74b76 100644
  func (s StaticPrecompiles) WithBech32Precompile() StaticPrecompiles {
  	bech32Precompile, err := bech32.NewPrecompile(bech32PrecompileBaseGas)
  	if err != nil {
+diff --git a/x/vm/keeper/keeper.go b/x/vm/keeper/keeper.go
+index 6b7b956..8b78d2b 100644
+--- a/x/vm/keeper/keeper.go
++++ b/x/vm/keeper/keeper.go
+@@ -86,6 +86,10 @@ type Keeper struct {
+ 	// virtualFeeCollection enabling will use "Virtual" methods from the bank module to accumulate
+ 	// fees to the fee collector module in the endBlocker instead of using regular sends during tx execution.
+ 	virtualFeeCollection bool
++
++	// ZETAPHY: supplies block.prevrandao (zetaphy_random.go); nil keeps the
++	// upstream constant.
++	randomFn func(sdk.Context) common.Hash
+ }
+ 
+ // NewKeeper generates new evm module keeper
 diff --git a/x/vm/keeper/precompiles.go b/x/vm/keeper/precompiles.go
 index ee26a8e..bd19281 100644
 --- a/x/vm/keeper/precompiles.go
@@ -2878,9 +3077,18 @@ index ee26a8e..bd19281 100644
  	// Get the precompile from the static precompiles
  	if precompile, found, err := k.GetStaticPrecompileInstance(&params, address); err != nil {
 diff --git a/x/vm/keeper/state_transition.go b/x/vm/keeper/state_transition.go
-index 0c160b4..b9abfd8 100644
+index 0c160b4..b165687 100644
 --- a/x/vm/keeper/state_transition.go
 +++ b/x/vm/keeper/state_transition.go
+@@ -60,7 +60,7 @@ func (k *Keeper) NewEVMWithOverridePrecompiles(
+ 		Time:        uint64(ctx.BlockHeader().Time.Unix()), //#nosec G115 -- int overflow is not a concern here
+ 		Difficulty:  big.NewInt(0),                         // unused. Only required in PoW context
+ 		BaseFee:     cfg.BaseFee,
+-		Random:      &common.MaxHash, // need to be different than nil to signal it is after the merge and pick up the right opcodes
++		Random:      k.prevRandao(ctx), // ZETAPHY (zetaphy_random.go); never nil, so the post-merge opcodes apply
+ 	}
+ 
+ 	ethCfg := types.GetEthChainConfig()
 @@ -422,6 +422,7 @@ func (k *Keeper) ApplyMessageWithConfig(ctx sdk.Context, stateDB *statedb.StateD
  				precompiles[address] = precompile
  			}
@@ -2925,6 +3133,41 @@ index 0000000..f078923
 +		return nil, nil
 +	}
 +	return out, err
++}
+diff --git a/x/vm/keeper/zetaphy_random.go b/x/vm/keeper/zetaphy_random.go
+new file mode 100644
+index 0000000..034de21
+--- /dev/null
++++ b/x/vm/keeper/zetaphy_random.go
+@@ -0,0 +1,29 @@
++package keeper
++
++import (
++	"github.com/ethereum/go-ethereum/common"
++
++	sdk "github.com/cosmos/cosmos-sdk/types"
++)
++
++// ZETAPHY: block.prevrandao (the PREVRANDAO opcode, the block context's
++// Random) comes from the app, which derives it each block from the
++// post-quantum vote certificate (evmd/zetaphy_random.go). Upstream cosmos/evm
++// sets it to a constant (0xff…ff), which any contract can predict.
++
++// SetRandomFn sets the function that gives block.prevrandao for a context.
++// It must be deterministic: every node runs it in DeliverTx.
++func (k *Keeper) SetRandomFn(f func(sdk.Context) common.Hash) *Keeper {
++	k.randomFn = f
++	return k
++}
++
++// prevRandao is never nil: a nil Random would switch the EVM to pre-merge
++// opcodes (DIFFICULTY instead of PREVRANDAO).
++func (k *Keeper) prevRandao(ctx sdk.Context) *common.Hash {
++	if k.randomFn == nil {
++		return &common.MaxHash
++	}
++	h := k.randomFn(ctx)
++	return &h
 +}
 diff --git a/x/vm/types/precompiles.go b/x/vm/types/precompiles.go
 index a7e058a..e64b909 100644

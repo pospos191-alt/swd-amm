@@ -22,6 +22,7 @@
 import { TypedDataEncoder, verifyTypedData, keccak256, toUtf8Bytes, getAddress, isAddress } from 'ethers';
 import { randomBytes } from 'node:crypto';
 import { NEURO_CHAINS } from './identity.js';
+import { REASONS as REASON_CODES } from './vaccine.js';
 
 export const MSG_VERSION = 1;
 export const MAX_ENVELOPE_BYTES = 16 * 1024;
@@ -48,7 +49,8 @@ export function msgDomain(chainId, verifyingContract) {
 
 // ------------------------------------------------------------------ schemas
 
-const REASONS = ['drainer', 'honeypot', 'hidden-mint', 'fake-token', 'phishing', 'other'];
+// ThreatRegistry.Reason codes (src/vaccine.js REASONS without 'none'): code facts, never intent.
+const REASONS = REASON_CODES.slice(1);
 
 /** The only kinds there are. required/optional: field -> type. */
 export const KINDS = {

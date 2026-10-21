@@ -146,10 +146,10 @@ test('a fingerprint flagged by the network is a high finding; an unreachable reg
   const chain = await createLocalChain();
   const addr = await chain.deploy('CleanToken');
   const seen = [];
-  const flagged = await readContract('bsc', addr, { rpc: chain.rpc, threatLookup: async (fp) => { seen.push(fp); return { flagged: true, reason: 'drainer' }; } });
+  const flagged = await readContract('bsc', addr, { rpc: chain.rpc, threatLookup: async (fp) => { seen.push(fp); return { flagged: true, reason: 'sweeps-approved-tokens' }; } });
   assert.match(seen[0], /^fp1:[0-9a-f]{64}$/);
   assert.equal(flagged.analysis.level, 'high');
-  assert.ok(flagged.analysis.findings.some((f) => f.id === 'network-flagged' && f.params.reason === 'drainer'));
+  assert.ok(flagged.analysis.findings.some((f) => f.id === 'network-flagged' && f.params.reason === 'sweeps-approved-tokens'));
   const down = await readContract('bsc', addr, { rpc: chain.rpc, threatLookup: async () => { throw new Error('rpc down'); } });
   assert.equal(down.analysis.level, 'info');
 });

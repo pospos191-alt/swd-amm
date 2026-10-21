@@ -91,7 +91,7 @@ async function metadataPda(mint) {
   return pda.toBase58();
 }
 
-test('scam-style Token-2022 mint: every dangerous power is flagged', async () => {
+test('Token-2022 mint with every risky power: each one is flagged', async () => {
   const mint = key(); const auth = key();
   const rpc = fakeSolana({
     [mint]: mintAccount(TOKEN_2022_PROGRAM, {
@@ -115,7 +115,7 @@ test('scam-style Token-2022 mint: every dangerous power is flagged', async () =>
   assert.equal(find(r, 'sol-transfer-fee').severity, 'high');
   assert.equal(r.solana.program, 'Token-2022');
   assert.deepEqual(rpc.calls, ['getAccountInfo'], 'metadata came from the extension, no extra lookup');
-  assert.match(explain(r, 'th').lines.find((l) => l.id === 'sol-permanent-delegate').text, /อันตรายมาก/);
+  assert.match(explain(r, 'th').lines.find((l) => l.id === 'sol-permanent-delegate').text, /เสี่ยงสูงมากต่อผู้ถือ/);
 });
 
 test('classic SPL token with authorities renounced and frozen metadata: no risk', async () => {

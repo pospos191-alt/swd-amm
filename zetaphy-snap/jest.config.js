@@ -8,6 +8,8 @@ module.exports = {
   // A fixed port gives the snap a fixed ID (local:http://localhost:18096), so its
   // snap_getEntropy, and the account, can be checked against SIP-6 in the tests.
   testEnvironmentOptions: { server: { port: 18096 } },
+  // ...and each test file starts that server, so the files run one after another.
+  maxWorkers: 1,
   // Tests and @noble (ESM only) run through SWC; zetaphy-network/src/pqtx.js resolves
   // @noble from this package, as in the bundle (test/resolver.js).
   transform: { '^.+\\.(js|jsx)$': ['@swc/jest', { jsc: { parser: { syntax: 'ecmascript', jsx: true }, transform: { react: { runtime: 'automatic', importSource: '@metamask/snaps-sdk' } } } }] },

@@ -54,12 +54,12 @@ function clean(...arrays) {
 function createView(arr) {
   return new DataView(arr.buffer, arr.byteOffset, arr.byteLength);
 }
-function rotr(word, shift) {
-  return word << 32 - shift | word >>> shift;
+function rotr(word2, shift) {
+  return word2 << 32 - shift | word2 >>> shift;
 }
 var isLE = /* @__PURE__ */ (() => new Uint8Array(new Uint32Array([287454020]).buffer)[0] === 68)();
-function byteSwap(word) {
-  return word << 24 & 4278190080 | word << 8 & 16711680 | word >>> 8 & 65280 | word >>> 24 & 255;
+function byteSwap(word2) {
+  return word2 << 24 & 4278190080 | word2 << 8 & 16711680 | word2 >>> 8 & 65280 | word2 >>> 24 & 255;
 }
 function byteSwap32(arr) {
   for (let i = 0; i < arr.length; i++) {
@@ -1191,12 +1191,12 @@ function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = PREFIX 
     const m = msgEVMCall({ sender: me.bech32, to, value, data, gasLimit: evmGasLimit, asOwner, prefix });
     const evmGas = BigInt(evmGasLimit);
     const txGas = txGasFor(evmGas, gasLimit);
-    const toHex = toChecksumHex(addressBytes(to, prefix));
+    const toHex2 = toChecksumHex(addressBytes(to, prefix));
     const dataHex = "0x" + bytesToHex(asBytes(data, "data"));
-    const call = { to: toHex, data: dataHex, gas: qty(evmGas) };
+    const call = { to: toHex2, data: dataHex, gas: qty(evmGas) };
     if (BigInt(value) > 0n) call.value = qty(value);
     const r = await sendMsgs({ publicKey, sign, signTx, messages: [m], gasLimit: txGas, gasPrice: price, memo, preflight: evmPreflight({ me, m, call, check, checkResult }) });
-    return { ...r, to: toHex, data: dataHex, evmGasLimit: evmGas, result: r.checked?.ret, asOwner: m.asOwner ? normalizeAddress(m.asOwner, prefix) : void 0 };
+    return { ...r, to: toHex2, data: dataHex, evmGasLimit: evmGas, result: r.checked?.ret, asOwner: m.asOwner ? normalizeAddress(m.asOwner, prefix) : void 0 };
   }
   async function deploy({
     publicKey,
@@ -2172,6 +2172,106 @@ async function codeFingerprint(codeHex) {
   const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
   return `${FINGERPRINT_VERSION}:${hex}`;
 }
+
+// ../zetaphy-network/src/vaccine.js
+var enc = new TextEncoder();
+var toHex = (b) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+function fromHex(hex) {
+  const h = /^0x/i.test(hex) ? hex.slice(2) : hex;
+  if (h.length % 2 || /[^0-9a-fA-F]/.test(h)) throw new Error("invalid hex");
+  const out = new Uint8Array(h.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(2 * i, 2 * i + 2), 16);
+  return out;
+}
+var selector = (sig) => toHex(keccak_256(enc.encode(sig))).slice(0, 8);
+var THREAT_SEL = {
+  fingerprint: [selector("isFlagged(bytes32)"), selector("isEnforced(bytes32)")],
+  code: [selector("isCodeFlagged(bytes32)"), selector("isCodeEnforced(bytes32)")],
+  address: [selector("isAddressFlagged(uint256,address)"), selector("isAddressEnforced(uint256,address)")]
+};
+var REASON_TEXT = [
+  { th: "-", en: "-" },
+  { th: "\u0E43\u0E19\u0E01\u0E32\u0E23\u0E08\u0E33\u0E25\u0E2D\u0E07\u0E0B\u0E37\u0E49\u0E2D\u0E02\u0E32\u0E22 \u0E0B\u0E37\u0E49\u0E2D\u0E44\u0E14\u0E49 \u0E41\u0E15\u0E48\u0E02\u0E32\u0E22\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E2B\u0E23\u0E37\u0E2D\u0E44\u0E14\u0E49\u0E40\u0E07\u0E34\u0E19\u0E04\u0E37\u0E19\u0E19\u0E49\u0E2D\u0E22\u0E21\u0E32\u0E01", en: "in a simulated trade, buying worked but selling failed or returned almost nothing" },
+  { th: "\u0E21\u0E35\u0E17\u0E35\u0E48\u0E2D\u0E22\u0E39\u0E48\u0E17\u0E35\u0E48\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E2B\u0E23\u0E35\u0E22\u0E0D\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E44\u0E14\u0E49\u0E44\u0E21\u0E48\u0E08\u0E33\u0E01\u0E31\u0E14", en: "an address can mint new tokens without a cap" },
+  { th: "\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E23\u0E37\u0E2D\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E23\u0E30\u0E07\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E42\u0E2D\u0E19\u0E2B\u0E23\u0E37\u0E2D\u0E01\u0E32\u0E23\u0E02\u0E32\u0E22\u0E02\u0E2D\u0E07\u0E1C\u0E39\u0E49\u0E16\u0E37\u0E2D\u0E44\u0E14\u0E49", en: "an owner or admin can stop holders from transferring or selling" },
+  { th: "\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E2B\u0E23\u0E37\u0E2D\u0E1C\u0E39\u0E49\u0E14\u0E39\u0E41\u0E25\u0E22\u0E49\u0E32\u0E22\u0E2B\u0E23\u0E37\u0E2D\u0E40\u0E1C\u0E32\u0E40\u0E2B\u0E23\u0E35\u0E22\u0E0D\u0E2B\u0E23\u0E37\u0E2D\u0E40\u0E07\u0E34\u0E19\u0E43\u0E19\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E02\u0E2D\u0E07\u0E1C\u0E39\u0E49\u0E16\u0E37\u0E2D\u0E04\u0E19\u0E2D\u0E37\u0E48\u0E19\u0E44\u0E14\u0E49", en: "an owner or admin can move or burn tokens or funds held by others" },
+  { th: "\u0E43\u0E0A\u0E49\u0E0A\u0E37\u0E48\u0E2D\u0E2B\u0E23\u0E37\u0E2D\u0E2A\u0E31\u0E0D\u0E25\u0E31\u0E01\u0E29\u0E13\u0E4C\u0E40\u0E14\u0E35\u0E22\u0E27\u0E01\u0E31\u0E1A\u0E40\u0E2B\u0E23\u0E35\u0E22\u0E0D\u0E17\u0E35\u0E48\u0E23\u0E39\u0E49\u0E08\u0E31\u0E01 \u0E41\u0E15\u0E48\u0E2D\u0E22\u0E39\u0E48\u0E04\u0E19\u0E25\u0E30\u0E17\u0E35\u0E48\u0E2D\u0E22\u0E39\u0E48", en: "uses the same name or symbol as a known token at a different address" },
+  { th: "\u0E43\u0E19\u0E01\u0E32\u0E23\u0E17\u0E14\u0E2A\u0E2D\u0E1A\u0E17\u0E35\u0E48\u0E17\u0E33\u0E0B\u0E49\u0E33\u0E44\u0E14\u0E49 \u0E22\u0E49\u0E32\u0E22\u0E40\u0E2B\u0E23\u0E35\u0E22\u0E0D\u0E17\u0E35\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E2D\u0E19\u0E38\u0E0D\u0E32\u0E15 (approve) \u0E44\u0E1B\u0E22\u0E31\u0E07\u0E17\u0E35\u0E48\u0E2D\u0E22\u0E39\u0E48\u0E17\u0E35\u0E48\u0E1C\u0E39\u0E49\u0E16\u0E37\u0E2D\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E40\u0E25\u0E37\u0E2D\u0E01", en: "in a reproducible test, it moved tokens approved to it to an address the holder did not choose" },
+  { th: "\u0E02\u0E49\u0E2D\u0E40\u0E17\u0E47\u0E08\u0E08\u0E23\u0E34\u0E07\u0E2D\u0E37\u0E48\u0E19\u0E02\u0E2D\u0E07\u0E42\u0E04\u0E49\u0E14 (\u0E14\u0E39\u0E2B\u0E25\u0E31\u0E01\u0E10\u0E32\u0E19)", en: "another code fact (see the evidence)" }
+];
+var DISCLAIMER = { th: "\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E27\u0E34\u0E40\u0E04\u0E23\u0E32\u0E30\u0E2B\u0E4C\u0E42\u0E04\u0E49\u0E14\u0E2D\u0E31\u0E15\u0E42\u0E19\u0E21\u0E31\u0E15\u0E34 \u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E04\u0E33\u0E01\u0E25\u0E48\u0E32\u0E27\u0E2B\u0E32", en: "Automated code analysis, not an accusation" };
+var REPRODUCE = {
+  th: "\u0E15\u0E23\u0E27\u0E08\u0E0B\u0E49\u0E33: \u0E23\u0E31\u0E19 Neuro \u0E01\u0E31\u0E1A\u0E42\u0E04\u0E49\u0E14\u0E40\u0E14\u0E35\u0E22\u0E27\u0E01\u0E31\u0E19 (zetaphy-neuro: node cli.js <chain> <address> --json) \u0E41\u0E25\u0E49\u0E27\u0E40\u0E17\u0E35\u0E22\u0E1A reportHash",
+  en: "reproduce: run Neuro on the same code (zetaphy-neuro: node cli.js <chain> <address> --json) and compare the reportHash"
+};
+var DETAIL_SEL = { evidence: selector("evidenceOf(bytes32)"), response: selector("responseOf(bytes32)") };
+var slotOf = (name) => "0x" + (BigInt("0x" + toHex(keccak_256(enc.encode(name)))) - 1n).toString(16).padStart(64, "0");
+var SLOT_IMPL = slotOf("eip1967.proxy.implementation");
+var SLOT_BEACON = slotOf("eip1967.proxy.beacon");
+var SEL_IMPLEMENTATION = selector("implementation()");
+var MINIMAL_PROXY = [/^0x363d3d373d3d3d363d73([0-9a-f]{40})5af43d82803e903d91602b57fd5bf3$/i, /^0x365f5f375f5f365f73([0-9a-f]{40})5af43d5f5f3e5f3d91602a57fd5bf3$/i];
+var PROXY_DEPTH = 3;
+var word = (v) => BigInt(v).toString(16).padStart(64, "0");
+function wordAddress(hex) {
+  const b = typeof hex === "string" ? fromHex(hex) : null;
+  if (!b || b.length < 32) throw new Error("not a word");
+  const w = toHex(b.slice(0, 32));
+  if (!/^0{24}/.test(w) || /^0{64}$/.test(w)) return null;
+  return "0x" + w.slice(24);
+}
+async function proxyTargets(call, addr, code) {
+  const out = [];
+  for (const re of MINIMAL_PROXY) {
+    const m = re.exec(code);
+    if (m) out.push("0x" + m[1].toLowerCase());
+  }
+  const impl = wordAddress(await call("eth_getStorageAt", [addr, SLOT_IMPL, "latest"]));
+  if (impl) out.push(impl);
+  const beacon = wordAddress(await call("eth_getStorageAt", [addr, SLOT_BEACON, "latest"]));
+  if (beacon) {
+    out.push(beacon);
+    const bi = wordAddress(await call("eth_call", [{ to: beacon, data: "0x" + SEL_IMPLEMENTATION }, "latest"]));
+    if (bi) out.push(bi);
+  }
+  return out;
+}
+var strWords = (str) => {
+  const h = toHex(enc.encode(str));
+  return word(h.length / 2) + h.padEnd(64 * Math.ceil(h.length / 64), "0");
+};
+var keccakHex = (hex) => "0x" + toHex(keccak_256(fromHex(hex)));
+var codeKey = (codeHashHex) => keccakHex(word(64) + codeHashHex.replace(/^0x/, "").padStart(64, "0") + strWords("zetaphy.threat.code"));
+var addressKey = (chainId, address) => keccakHex(word(96) + word(chainId) + address.toLowerCase().slice(2).padStart(64, "0") + strWords("zetaphy.threat.address"));
+var detailQueries = (key2) => ({ evidence: "0x" + DETAIL_SEL.evidence + key2.slice(2), response: "0x" + DETAIL_SEL.response + key2.slice(2) });
+var INVISIBLE = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}]/gu;
+var plainText = (s, max = 500) => String(s).replace(/[\r\n\t]+/g, " ").replace(INVISIBLE, "").trim().slice(0, max);
+function abiString(b, at) {
+  const big = (o) => BigInt("0x" + toHex(b.slice(o, o + 32)));
+  const off = Number(big(at));
+  if (off + 32 > b.length) throw new Error("bad string");
+  const len = Number(big(off));
+  if (len > 4096 || off + 32 + len > b.length) throw new Error("bad string");
+  return new TextDecoder().decode(b.slice(off + 32, off + 32 + len));
+}
+var wordAddr = (b, at) => "0x" + toHex(b.slice(at + 12, at + 32));
+var ZERO_HASH = "0x" + "0".repeat(64);
+function readEvidence(hex) {
+  const b = fromHex(hex);
+  if (b.length < 128) throw new Error("not an evidenceOf answer");
+  const reportHash = "0x" + toHex(b.slice(0, 32));
+  return { reportHash: reportHash === ZERO_HASH ? null : reportHash, uri: plainText(abiString(b, 32), 200), by: wordAddr(b, 64), at: Number(BigInt("0x" + toHex(b.slice(96, 128)))) };
+}
+function readResponse(hex) {
+  const b = fromHex(hex);
+  if (b.length < 160) throw new Error("not a responseOf answer");
+  return {
+    text: plainText(abiString(b, 0)),
+    by: wordAddr(b, 32),
+    at: Number(BigInt("0x" + toHex(b.slice(64, 96)))),
+    chainId: BigInt("0x" + toHex(b.slice(96, 128))),
+    account: wordAddr(b, 128)
+  };
+}
 export {
   ADDRESS_PREFIX,
   CHAIN_ID,
@@ -2181,6 +2281,7 @@ export {
   DEFAULT_PRECOMPILE_GAS_LIMIT,
   DEFAULT_STAKING_GAS_LIMIT,
   DENOM,
+  DISCLAIMER,
   DISTRIBUTION_PRECOMPILE,
   EVM_CALL_GAS_OVERHEAD,
   MAX_EVM_GAS_LIMIT,
@@ -2194,20 +2295,27 @@ export {
   MSG_WITHDRAW_REWARD_TYPE_URL,
   PQ_LOCK_ADDRESS,
   PREFIX,
+  PROXY_DEPTH,
   PUBKEY_TYPE_URL,
   PUBLIC_KEY_BYTES,
+  REASON_TEXT,
+  REPRODUCE,
   SIGNATURE_BYTES,
   SIGN_MODE_DIRECT,
   STAKING_PRECOMPILE,
+  THREAT_SEL,
   VALOPER_PREFIX,
   addressBytes,
+  addressKey,
   buildSendTx,
   buildTx,
   buildTxWith,
   bumpGasPrice,
   bytesToHex,
   codeFingerprint,
+  codeKey,
   createAddress,
+  detailQueries,
   encodeAny,
   encodeAuthInfo,
   encodeCoin,
@@ -2241,7 +2349,10 @@ export {
   parseZeta,
   pqAddress,
   pqClient,
+  proxyTargets,
   quantumLockTx,
+  readEvidence,
+  readResponse,
   stakingCall,
   toBech32,
   toChecksumHex,

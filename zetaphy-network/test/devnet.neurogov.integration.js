@@ -7,6 +7,7 @@
 //   - NeuroJobs refuses requests, coin transfers still work
 //   - a second vote unpauses it and requests work again
 //   - only chains on NeuroControl's allowlist take requests; a vote removes one
+//   - votes set the challenge bond (decimal ZETAPHY) and the defender timeout
 // Needs a zetaphyd with MsgEVMCall: ZETAPHYD=/path/to/zetaphyd npm run test:devnet:neurogov
 
 import { test, before, after } from 'node:test';
@@ -142,6 +143,18 @@ test('a gov vote approves a defender and raises the body cap', { timeout: 300_00
   assert.equal(await control.defenderApproved(actors.user.address), true);
   await vote('set-max-bodies', '80', controlAddr);
   assert.equal(await control.maxBodies(), 80n);
+});
+
+test('gov votes set the challenge bond and the defender timeout', { timeout: 300_000 }, async () => {
+  const provider = new JsonRpcProvider(RPC, undefined, { staticNetwork: true });
+  const control = new Contract(controlAddr, art('NeuroControl').abi, provider);
+  assert.equal(await control.challengeBond(), 10n ** 18n);
+  await vote('set-challenge-bond', '2.5', controlAddr);
+  assert.equal(await control.challengeBond(), 25n * 10n ** 17n);
+  await vote('set-defender-timeout', '3600', controlAddr);
+  assert.equal(await control.defenderTimeout(), 3600n);
+  const st = await cli('user', ['neuro', 'status', '--jobs', jobsAddr]);
+  assert.match(st.out, /challenges: bond at least max\(2 x fee, 2\.5 ZETAPHY\).*heartbeat every 3600 s/, st.out);
 });
 
 test('a gov vote removes a chain key: requests for it are refused', { timeout: 300_000 }, async () => {

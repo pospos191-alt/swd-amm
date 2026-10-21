@@ -5,9 +5,9 @@
 // Neuro look broken. For an exact official address we say who the issuer is
 // and lower those powers to "low" (trust in the issuer, not the code).
 //
-// The flip side is a strong scam signal: a token on the same chain that uses
-// one of these symbols (USDT, USDC, ...) at a DIFFERENT address is flagged
-// as a possible fake.
+// The flip side: a token on the same chain that uses one of these symbols
+// (USDT, USDC, ...) at a DIFFERENT address gets a high-risk finding stating
+// that it is not the registered address (a fact, not a claim about intent).
 //
 // Addresses are stored with their EIP-55 checksum; test/known-tokens.test.js
 // fails on any typo. Only add a token after checking its address on the
@@ -77,7 +77,7 @@ export const KNOWN_TOKENS = {
   ],
 };
 
-// Symbols a scammer copies. Compared case-insensitively, ignoring spaces,
+// Symbols most often reused by other tokens. Compared case-insensitively, ignoring spaces,
 // dots and dashes, so "U S D T", "usdt" and "USD-T" all count.
 const norm = (s) => String(s ?? '').toUpperCase().replace(/[\s.\-_]/g, '');
 

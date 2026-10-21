@@ -25,11 +25,15 @@ const IDENTITY = new Set([
   'near-token', 'near-contract', 'near-not-found', 'near-no-contract',
   'sn-token', 'sn-contract', 'sn-not-found',
 ]);
+// Findings that show a name, symbol or label taken from the chain.
+const NAMED = new Set(['erc20', 'sol-token', 'sui-coin', 'apt-token', 'ton-jetton', 'cw20-token', 'cw-contract', 'tf-token', 'btc-rune', 'near-token', 'sn-token', 'sol-idl']);
 const CAVEAT = new Set(['bytecode-only', 'sol-caveat', 'move-caveat', 'ton-caveat', 'cw-caveat', 'near-caveat', 'sn-caveat', 'btc-caveat']);
 const ORDER = { high: 0, medium: 1, low: 2, good: 3, info: 4 };
 // Who issued it (or that it copies someone) belongs right under what it is.
 const ISSUER = new Set(['known-issuer', 'lookalike']);
-const rank = (f) => (IDENTITY.has(f.id) ? -2 : ISSUER.has(f.id) ? -1 : CAVEAT.has(f.id) ? 9 : ORDER[f.severity] ?? 5);
+// Resemblance is softer evidence than a direct finding: after those of the same severity.
+const SOFTER = new Set(['similar-flagged']);
+const rank = (f) => (IDENTITY.has(f.id) ? -2 : ISSUER.has(f.id) ? -1 : CAVEAT.has(f.id) ? 9 : (ORDER[f.severity] ?? 5) + (SOFTER.has(f.id) ? 0.5 : 0));
 
 /** Picks a supported language code ('th' if unknown). */
 export const pickLang = (lang) => (LANGS[lang] ? lang : 'th');
@@ -40,13 +44,20 @@ export function uiText(lang) {
   return { ...en.UI, ...L, m: { ...en.UI.m, ...L.m } };
 }
 
-/** Report -> { title, level, lines: [{id, severity, text}] } in the chosen language. */
+/** Report -> { title, level, lines: [{id, severity, text}] } in the chosen language.
+ * Wording only: the finding ids and severities (what verdict.js hashes) are untouched. */
 export function explain(report, lang = 'th') {
   const L = LANGS[pickLang(lang)];
   const sorted = [...report.analysis.findings].sort((a, b) => rank(a) - rank(b));
+  const ui = uiText(lang);
   const lines = sorted.map((f) => {
     const fn = L.T[f.id] ?? en.T[f.id] ?? (() => f.id);
-    return { id: f.id, severity: f.severity, text: fn(f.params ?? {}) };
+    const p = f.params ?? {};
+    let text = fn(p);
+    // Names and symbols are written by whoever deployed the contract: say so,
+    // so they never read as Neuro's own claim.
+    if (NAMED.has(f.id) && (p.name || p.symbol || p.label)) text += ` ${ui.asWritten}`;
+    return { id: f.id, severity: f.severity, text };
   });
   const level = report.analysis.level;
   return { title: L.LEVEL[level] ?? en.LEVEL[level], level, lines };

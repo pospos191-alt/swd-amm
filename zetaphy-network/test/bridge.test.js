@@ -73,7 +73,7 @@ async function vaccinated() {
   await c.putCode(RUNNERS, '0x6001604052600160605260a06000f3');
   const reg = await c.deploy('ThreatRegistry', [RUNNERS, 2, 1, a('gov'), 0], 'gov');
   await guard.send('gov', 'setThreats', [reg.address]);
-  const flag = async (key, on = true) => { for (const v of ['alice', 'guardian']) await reg.send(v, 'vote', [key, on, on ? 1 : 0]); };
+  const flag = async (key, on = true) => { for (const v of ['alice', 'guardian']) await reg.send(v, 'vote', [key, on, on ? 1 : 0, '0x' + 'e7'.repeat(32), 'neuro report']); };
   // A contract with no immutables stands in for a drainer (code hash = keccak256 of its artifact's runtime code).
   const drainer = await c.deploy('LockBox', [], 'attacker');
   const h = keccak256(JSON.parse(readFileSync(new URL('../artifacts/LockBox.json', import.meta.url), 'utf8')).deployedBytecode);
@@ -110,11 +110,17 @@ test('vaccine: an adapter cannot be blocked by a runner flag (code hash or addre
   await guard.send('hypAdapter', 'inbound', [HYP, drainer, 1n]);
 });
 
-test('vaccine: BridgeGuard refuses only once the flag is enforced (enforceDelay)', async () => {
+test('vaccine: BridgeGuard holds at once, inside the enforceDelay (the revert leaves the adapter\'s message pending); a clear lets it through', async () => {
   const { reg, flag, drainer, codeKey } = await vaccinated();
   await reg.send('gov', 'setEnforceDelay', [3600]);
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 5n]);
   await flag(codeKey);
-  await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]); // warned, not enforced yet
-  c.advance(3600);
+  assert.equal((await reg.call('isContractEnforced', [drainer]))[0], false); // warning level only
   await assert.rejects(guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]), /FlaggedContract/);
+  await assert.rejects(guard.send('hypAdapter', 'outbound', [HYP, drainer, 1n]), /FlaggedContract/);
+  c.advance(1800);
+  await flag(codeKey, false); // cleared before it was ever enforced
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]);
+  await guard.send('hypAdapter', 'outbound', [HYP, drainer, 1n]);
+  assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [drainer]), 5n);
 });

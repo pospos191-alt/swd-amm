@@ -61,7 +61,7 @@ async function openPage(scheme, solanaAccounts = {}, tonapi = {}) {
   return { page, errors };
 }
 
-test('scam token shows high risk in Thai, then English', async () => {
+test('token with many owner powers shows high risk in Thai, then English', async () => {
   const addr = await chain.deploy('ScamToken');
   const { page, errors } = await openPage('light');
   await page.fill('#address', addr);
@@ -72,9 +72,19 @@ test('scam token shows high risk in Thai, then English', async () => {
   assert.ok(items.some((t) => t.includes('สร้างเหรียญเพิ่มได้')));
   assert.ok(page.url().includes(`address=${addr}`), 'shareable link');
   assert.match(await page.textContent('#meta'), /fp1:[0-9a-f]{64}/, 'fingerprint shown for template registration');
+  // Disclaimer, correction link and evidence (report ID + CLI command) on every report.
+  assert.match(await page.textContent('#disclaimer'), /ไม่ใช่คำกล่าวหาบุคคลหรือโครงการ/);
+  assert.equal(await page.getAttribute('#correction', 'href'), './legal.html');
+  const evidence = await page.textContent('#evidence');
+  const reportId = evidence.match(/[0-9a-f]{64}/)?.[0];
+  assert.ok(reportId, 'full report ID shown');
+  await page.waitForFunction(() => /0x[0-9a-f]{64}/.test(document.getElementById('evidence').textContent));
+  assert.ok((await page.textContent('#evidence')).includes(`node cli.js bsc ${addr.toLowerCase()} --lang th`), 'CLI command shown');
+  assert.ok(items.every((t) => t.includes(reportId.slice(0, 12))), 'each finding points to its report ID');
   if (shots) await page.screenshot({ path: `${shots}/neuro-scam-th.png`, fullPage: true });
   await page.selectOption('#lang', 'en');
   assert.equal(await page.textContent('#title'), 'High risk');
+  assert.match(await page.textContent('#disclaimer'), /not an accusation against any person or project/);
   // Every language in the menu re-renders the same result.
   const want = { zh: /[\u4E00-\u9FFF]/, ja: /[\u3040-\u30FF]/, ko: /[\uAC00-\uD7AF]/, vi: /rủi ro|Rủi ro/, id: /Risiko|risiko/ };
   for (const [code, re] of Object.entries(want)) {
@@ -87,7 +97,7 @@ test('scam token shows high risk in Thai, then English', async () => {
   await page.close();
 });
 
-test('phishing token name is shown as text, never as HTML', async () => {
+test('a token name with a link is shown as text, never as HTML', async () => {
   const addr = await chain.deploy('PhishToken');
   const { page, errors } = await openPage('dark');
   await page.goto(`http://localhost:${PORT}/?chain=bsc&address=${addr}`);
@@ -163,7 +173,7 @@ test('TON: a mintable jetton is read over tonapi.io and shown as high risk', asy
   await page.close();
 });
 
-test('honeypot: the simulated trade catches a sell block behind a harmless name', async () => {
+test('buy/sell test: the simulated trade catches a sell block behind a harmless name', async () => {
   // A mock Uniswap-V2 DEX at PancakeSwap's real addresses, and a token only its owner can sell.
   const addPool = await chain.installDex(CHAINS.bsc.dex);
   const addr = await chain.deploy('QuietHoneypot');
@@ -175,13 +185,14 @@ test('honeypot: the simulated trade catches a sell block behind a harmless name'
   await page.waitForSelector('#result:not([hidden])');
   assert.equal(await page.textContent('#title'), 'เสี่ยงสูง');
   const items = await page.$$eval('#findings li', (els) => els.map((e) => e.textContent));
-  assert.match(items[1], /honeypot.*ขายไม่ได้/, 'right under what the token is');
+  assert.match(items[1], /^ทดสอบขายไม่ผ่าน: .*ซื้อได้แต่ขายไม่ได้/, 'right under what the token is');
   const meta = await page.textContent('#meta');
   assert.ok(meta.includes(`PancakeSwap V2 · ${pair}`), 'pool shown');
   assert.match(meta, /0% \/ ขายไม่ได้/, 'buy tax and failed sell shown');
   if (shots) await page.screenshot({ path: `${shots}/neuro-honeypot-th.png`, fullPage: true });
   await page.selectOption('#lang', 'en');
-  assert.match(await page.textContent('#findings'), /Honeypot warning/);
+  assert.match(await page.textContent('#findings'), /Sell test failed: in a simulated trade/);
+  assert.doesNotMatch(await page.textContent('#result'), /honeypot|scam/i);
   await page.selectOption('#lang', 'th');
   assert.deepEqual(errors, []);
   await page.close();

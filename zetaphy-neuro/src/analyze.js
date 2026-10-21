@@ -17,10 +17,15 @@ const POWERS = [
   { cat: 'limit', id: 'can-limit', base: 'medium' },
 ];
 
+// Unknown-pattern signal: at least this many unnamed functions making up at
+// least this share of the dispatcher, in code that can move value.
+export const UNKNOWN_MIN = 2;
+export const UNKNOWN_SHARE = 0.5;
+
 // Template guarantee -> the power category it rules out.
 const GUARANTEED_ABSENT = { 'no-mint': 'mint', 'no-blacklist': 'blacklist', 'no-pause': 'pause' };
 
-// A name like "Claim at reward-site.xyz" is a common phishing airdrop trick.
+// A name like "Claim at reward-site.xyz": a link inside a token name (unsolicited airdrops).
 const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|xyz|app|site|top|vip|pro|finance|claims?|gift|live|online|info)\b|t\.me\/)/i;
 
 /**
@@ -36,6 +41,9 @@ const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|xyz|app|sit
  * @param {{symbol:string,issuer:string,address:string}|null} [input.lookalike]  official token whose symbol this one copies
  * @param {string[]} [input.unknownSelectors]  dispatcher functions with no known name
  * @param {{flagged: boolean, reason?: string}|null} [input.threat]  ZETAPHY ThreatRegistry verdict for this code
+ * @param {{percent:number, severity:string, fingerprint:string, reason?:string}|null} [input.similar]
+ *   closest entry of Neuro's flagged-code dataset (src/similarity.js)
+ * @param {number} [input.dispatched]  how many functions the dispatcher offers (EVM), for the unknown-pattern signal
  * @returns {{level:'high'|'medium'|'low'|'info', control:string, findings:Array}}
  */
 export function analyze(input) {
@@ -78,8 +86,12 @@ export function analyze(input) {
     add('name-has-link', 'high', { name: t.name, symbol: t.symbol });
   }
   if (known) add('known-issuer', 'good', { symbol: known.symbol, issuer: known.issuer, kind: known.kind });
-  // Neuro runners voted this exact code dangerous (immune system, stage 4).
+  // Neuro runners voted to record this exact code in the ThreatRegistry (immune system, stage 4).
   if (input.threat?.flagged) add('network-flagged', 'high', { reason: input.threat.reason });
+  // Not flagged itself, but close to code that is (a renamed or lightly
+  // edited copy). Severity grows with the similarity (src/similarity.js).
+  const similar = input.similar && !input.threat?.flagged ? input.similar : null;
+  if (similar) add('similar-flagged', similar.severity, { percent: similar.percent, fingerprint: similar.fingerprint, reason: similar.reason });
   if (input.lookalike) {
     add('lookalike', 'high', { symbol: t.symbol, official: input.lookalike.address, issuer: input.lookalike.issuer });
   }
@@ -137,6 +149,22 @@ export function analyze(input) {
   // Dangerous instructions in the logic contract
   if (input.opcodes?.selfdestruct) add('selfdestruct', 'high');
   if ((input.opcodes?.delegatecall || input.opcodes?.callcode) && !proxy.kind) add('delegatecall', 'medium');
+
+  // A pattern the rules do not recognise: most of what it offers has no
+  // known name (or it offers nothing named at all) and it can move value
+  // (CALL, CREATE, SELFDESTRUCT...). Not proof of anything, but never let
+  // "these rules know nothing about it" read as "safe".
+  if (typeof input.dispatched === 'number' && !known && !tpl && !similar && !input.threat?.flagged && !proxy.kind) {
+    const o = input.opcodes ?? {};
+    const movesValue = !!(o.call || o.callcode || o.delegatecall || o.selfdestruct || o.create || o.create2);
+    const share = input.dispatched ? unknown.length / input.dispatched : 0;
+    const unrecognised = input.dispatched
+      ? unknown.length >= UNKNOWN_MIN && share >= UNKNOWN_SHARE
+      : input.functions.length === 0;
+    if (movesValue && unrecognised) {
+      add('unknown-pattern', 'low', { count: unknown.length, share: Math.round(share * 100) });
+    }
+  }
 
   if (!findings.some((f) => RANK[f.severity] > 0 || f.severity === 'good')) add('nothing-found', 'info');
   // Verified source (Sourcify): undefined = not checked, null = not found.

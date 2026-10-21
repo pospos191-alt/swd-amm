@@ -24,7 +24,7 @@ import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1b
 import { BinaryReader } from 'cosmjs-types/binary';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 // The fake snap builds and signs with the same code the real one bundles.
-import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress, codeFingerprint } from '../vendor/pqwallet.js';
+import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress, codeFingerprint, addressKey } from '../vendor/pqwallet.js';
 
 const PORT = 18090;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -46,6 +46,15 @@ const REG_SEL = { fingerprint: [sel4('isFlagged(bytes32)'), sel4('isEnforced(byt
   address: [sel4('isAddressFlagged(uint256,address)'), sel4('isAddressEnforced(uint256,address)')] };
 const SLOT_IMPL = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'; // EIP-1967
 const SLOT_BEACON = '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50';
+// The views that explain a flag: evidenceOf(key) -> (bytes32, string, address, uint64), responseOf(key) -> (string, address, uint64, uint256, address).
+const DETAIL_SEL = { evidence: sel4('evidenceOf(bytes32)'), response: sel4('responseOf(bytes32)') };
+const strTail = (str) => { const h = Buffer.from(str).toString('hex'); return word(h.length / 2) + h.padEnd(64 * Math.ceil(h.length / 64), '0'); };
+const abiEvidence = (hash, uri) => '0x' + hash.slice(2) + word(128) + word(0x99) + word(5) + strTail(uri);
+const abiResponse = (text, by) => '0x' + word(160) + word(by) + word(7) + word(77390) + word(TOKEN) + strTail(text);
+const REPORT = '0x' + 'e7'.repeat(32);
+// Neutral reason texts (zetaphy-network/src/vaccine.js REASON_TEXT) of the reasons these tests use.
+const RT = { 1: 'in a simulated trade, buying worked but selling failed or returned almost nothing', 2: 'an address can mint new tokens without a cap',
+  5: 'uses the same name or symbol as a known token at a different address' };
 /** ABI encoding of a single string return value. */
 const abiString = (str) => { const h = Buffer.from(str).toString('hex'); return '0x' + word(32) + word(h.length / 2) + h.padEnd(64 * Math.ceil(h.length / 64), '0'); };
 let server; let browser;
@@ -197,9 +206,16 @@ async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
           : kind === 'code' ? node.flags?.code?.includes('0x' + arg)
             : kind === 'address' && BigInt('0x' + arg.slice(0, 64)) === 77390n ? node.flags?.address?.includes('0x' + arg.slice(64 + 24)) : undefined;
         if (hit && enforcedView && node.flags?.warnOnly) hit = false;
-        if (node.registryDown) error = { code: -32000, message: 'execution reverted' };
+        // evidenceOf / responseOf: node.evidence { reportHash, uri } for every key; node.responses { key: { text, by } }.
+        if (sel === DETAIL_SEL.evidence) hit = null, result = node.evidence ? abiEvidence(node.evidence.reportHash, node.evidence.uri) : abiEvidence('0x' + '00'.repeat(32), '');
+        if (sel === DETAIL_SEL.response) {
+          const r = node.responses?.['0x' + arg];
+          hit = null; result = r ? abiResponse(r.text, r.by) : abiResponse('', 0);
+        }
+        if (hit === null) { /* answered above */ }
+        else if (node.registryDown) error = { code: -32000, message: 'execution reverted' };
         else if (hit === undefined) error = { code: -32000, message: 'execution reverted' };
-        else result = '0x' + word(hit ? 1 : 0) + word(hit ? node.flags.reason ?? 1 : 0);
+        else if (hit !== null) result = '0x' + word(hit ? 1 : 0) + word(hit ? node.flags.reason ?? 1 : 0);
       } else if (!params[0].to) { if (node.deployRevert) error = { code: 3, message: 'execution reverted: constructor' }; else result = '0x6080'; } // a contract creation
       else if (params[0].to === '0x0000000000000000000000000000000000000800' || params[0].to === '0x0000000000000000000000000000000000000801') result = '0x' + word(1);
       else if (!params[0].data || params[0].data === '0x') result = '0x'; // a plain value transfer
@@ -1292,17 +1308,17 @@ test('vaccine: flagged code (fingerprint, code hash or address) is refused befor
 
   // Same template as flagged code anywhere (Neuro's fp1 fingerprint): refused, with the reason.
   await tokenTransferReview(page);
-  await statusMatches(page, /Not signed: 0x3333.* is flagged by the ZETAPHY immune system \(its code fingerprint \(fp1\) matches flagged code · reason: drainer\)/);
+  await statusMatches(page, /Not signed: 0x3333.* is flagged by the ZETAPHY immune system \(its code fingerprint \(fp1\) matches flagged code · reason: in a simulated trade, buying worked but selling failed or returned almost nothing\)/);
   assert.ok(await page.isHidden('#token-confirm'));
   // The exact code (keccak-256 code hash), or the address itself: refused too.
   node.flags = { fingerprint: [], code: [codeHash], address: [], reason: 2 };
   await page.click('#token-review');
-  await statusMatches(page, /is flagged .*its code is byte-for-byte flagged code · reason: honeypot/);
+  await statusMatches(page, /is flagged .*its code is byte-for-byte flagged code · reason: an address can mint new tokens without a cap/);
   node.flags = { fingerprint: [], code: [], address: [TOKEN], reason: 5 };
   await page.fill('#to', TOKEN);
   await page.fill('#amount', '1');
   await page.click('#review'); // a plain ZETAPHY send to the flagged contract
-  await statusMatches(page, /is flagged .*this address is flagged · reason: phishing/);
+  await statusMatches(page, /is flagged .*this address is flagged · reason: uses the same name or symbol as a known token at a different address/);
   assert.ok(await page.isHidden('#confirm'));
 
   // What the page asked the registry: fp1 hash, keccak-256 of the code, (77390, address).
@@ -1375,7 +1391,7 @@ test('vaccine (Thai, snap): a flagged destination is refused before the snap is 
   await page.fill('#to', TOKEN);
   await page.fill('#amount', '1');
   await page.click('#review');
-  await statusMatches(page, /ไม่เซ็น: 0x3333.* ติดธงในระบบภูมิคุ้มกันของ ZETAPHY \(ที่อยู่นี้ติดธง · เหตุผล: ดูดเงิน \(drainer\)\)/);
+  await statusMatches(page, /ไม่เซ็น: 0x3333.* ติดธงในระบบภูมิคุ้มกันของ ZETAPHY \(ที่อยู่นี้ติดธง · เหตุผล: ในการจำลองซื้อขาย ซื้อได้ แต่ขายไม่ได้หรือได้เงินคืนน้อยมาก\) .*ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา/);
   assert.ok(!snap.requests.some((r) => r.method === 'zetaphy_signTx'), 'the snap was never asked to sign');
   node.flags = { fingerprint: [], code: [], address: [] };
   await page.click('#review');
@@ -1433,7 +1449,7 @@ test('vaccine: a flag not enforced yet is a warning (sending is the user\'s choi
   await setRegistry(page, REGISTRY);
   await tokenTransferReview(page);
   await visible(page, '#token-confirm');
-  assert.match(await page.textContent('#token-confirm .vaccine-note'), /Warning: 0x3333.* was flagged by Neuro runners \(this address is flagged · reason: phishing\), but the flag is not enforced yet/);
+  assert.match(await page.textContent('#token-confirm .vaccine-note'), /Warning: 0x3333.* was flagged by Neuro runners \(this address is flagged · reason: uses the same name or symbol as a known token at a different address\), but the flag is not enforced yet.*Automated code analysis, not an accusation/);
   assert.ok(await page.$eval('#token-confirm .vaccine-note', (el) => el.classList.contains('unchecked')));
   await page.click('#confirm-token'); // the user saw the warning and sends anyway
   await visible(page, '#token-result');
@@ -1456,9 +1472,66 @@ test('vaccine: a flag not enforced yet is a warning (sending is the user\'s choi
   await context.close();
 });
 
+test('vaccine: a fast-lane flag (enforced at once: fastQuorum or enforceNow, inside the enforceDelay) is refused, not just warned', async () => {
+  // The registry's enforcement views answer true the moment a flag goes through the fast lane;
+  // the page refuses on them exactly as on a flag past its enforceDelay.
+  const node = { exists: true, registry: REGISTRY, flags: { fingerprint: [], code: [], address: [TOKEN], reason: 1, warnOnly: true } };
+  const { page, context, errors, sent } = await importedPage(node);
+  await setRegistry(page, REGISTRY);
+  await tokenTransferReview(page);
+  await visible(page, '#token-confirm'); // a normal fresh flag: a warning
+  assert.match(await page.textContent('#token-confirm .vaccine-note'), /not enforced yet .*fast lane is enforced at once/);
+  node.flags.warnOnly = false; // runners reached fastQuorum, or governance called enforceNow
+  await page.click('#token-review');
+  await statusMatches(page, /Not signed: 0x3333.* is flagged by the ZETAPHY immune system \(this address is flagged · reason: in a simulated trade, buying worked but selling failed or returned almost nothing\)/);
+  assert.ok(await page.isHidden('#token-confirm'));
+  assert.equal(sent.length, 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 async function setRegistryThai(page) {
   await page.locator('details:has(#threat-registry) > summary').click();
   await page.fill('#threat-registry', REGISTRY);
   await page.click('#threat-save');
   await statusMatches(page, /บันทึกที่อยู่ ThreatRegistry แล้ว/);
 }
+
+test('vaccine: every refusal and warning shows the code fact, its evidence (reportHash, how to reproduce), the owner\'s response and the disclaimer', async () => {
+  const OWNER = '0x' + '0a'.repeat(20);
+  const key = addressKey(77390n, TOKEN);
+  const node = { exists: true, registry: REGISTRY, flags: { fingerprint: [], code: [], address: [TOKEN], reason: 5, warnOnly: true },
+    evidence: { reportHash: REPORT, uri: 'neuro:zetaphy:0x3333' } };
+  const { page, context, errors, sent, calls } = await importedPage(node);
+  await setRegistry(page, REGISTRY);
+  // Flagged, not enforced, no response yet: a warning with the evidence and "no response yet".
+  await tokenTransferReview(page);
+  await visible(page, '#token-confirm');
+  let note = await page.textContent('#token-confirm .vaccine-note');
+  assert.match(note, /reason: uses the same name or symbol as a known token at a different address/);
+  assert.match(note, new RegExp(`Evidence: reportHash ${REPORT} \\(neuro:zetaphy:0x3333\\) · reproduce: run Neuro on the same code \\(zetaphy-neuro: node cli.js <chain> <address> --json\\) and compare the reportHash`));
+  assert.match(note, /No response from the owner yet · Automated code analysis, not an accusation/);
+  assert.ok(calls.some((c) => c.to.toLowerCase() === REGISTRY && c.data === '0x' + DETAIL_SEL.evidence + key.slice(2)), 'evidenceOf(the flagged key)');
+  // The owner answered (bidi and newline characters are dropped): shown next to the warning.
+  node.responses = { [key]: { text: 'pause() is for emergencies only;\u202e audit: example.org/audit\nthanks', by: OWNER } };
+  await page.click('#token-review');
+  await page.waitForFunction(() => /Response from the owner/.test(document.querySelector('#token-confirm .vaccine-note').textContent));
+  note = await page.textContent('#token-confirm .vaccine-note');
+  assert.ok(note.includes(`Response from the owner (${OWNER}): "pause() is for emergencies only; audit: example.org/audit thanks"`), note);
+  // Enforced: refused, with the same evidence, response and disclaimer.
+  node.flags.warnOnly = false;
+  await page.click('#token-review');
+  await statusMatches(page, /Not signed: 0x3333.* is flagged .*reason: uses the same name.*Evidence: reportHash 0x(e7){32}.*Response from the owner \(0x(0a){20}\): "pause\(\) is for emergencies only; audit.*Automated code analysis, not an accusation/);
+  // In Thai, the same status re-rendered: neutral texts, the owner's words, the disclaimer.
+  await page.click('#lang');
+  await statusMatches(page, /ไม่เซ็น: 0x3333.*เหตุผล: ใช้ชื่อหรือสัญลักษณ์เดียวกับเหรียญที่รู้จัก แต่อยู่คนละที่อยู่.*หลักฐาน: reportHash 0x(e7){32}.*ตรวจซ้ำ: รัน Neuro.*คำชี้แจงของเจ้าของ \(0x(0a){20}\): "pause\(\) is for emergencies.*ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา/);
+  for (const w of ['scam', 'drainer', 'phishing', 'honeypot', 'หลอกลวง', 'ดูดเงิน']) assert.ok(!(await page.textContent('#status')).toLowerCase().includes(w), w);
+  // No evidence stored: still refused (never a send), and said so.
+  node.evidence = undefined;
+  await page.click('#lang');
+  await page.click('#token-review');
+  await statusMatches(page, /Not signed: .*Evidence: none stored/);
+  assert.equal(sent.length, 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});

@@ -30,7 +30,7 @@ async function provenRunners(names) {
 }
 
 beforeEach(async () => {
-  c = await createChain(['gov', 'user', 'r1', 'r2', 'r3', 'r4', 'hyperlane', 'guardian', 'alice', 'attacker']);
+  c = await createChain(['gov', 'user', 'r1', 'r2', 'r3', 'r4', 'hyperlane', 'guardian', 'alice', 'attacker', 'mallory']);
   jobs = await c.deploy('NeuroJobs', [100n * ZETA, ZETA, ZETA / 10n, 120, 600, 3600, 1000n * ZETA], 'gov');
   await provenRunners(['r1', 'r2', 'r3', 'r4']);
   guard = await c.deploy('BridgeGuard', [a('gov')], 'gov');
@@ -128,11 +128,12 @@ test('a decoy marks only its direct caller, so nobody can get an innocent user m
 });
 
 // ---- vaccine: the ThreatRegistry's flags hold transfers; clearing the flag lets them out ----
-const R = { Drainer: 1 };
+const R = { CannotSellInSimulation: 1 };
+const EV = ['0x' + 'e7'.repeat(32), 'neuro report']; // evidence: a reportHash and where to read it
 async function registry(delay = 0) {
   const reg = await c.deploy('ThreatRegistry', [jobs.address, 2, 1, a('gov'), delay], 'gov');
   await airlock.send('gov', 'setThreats', [reg.address]);
-  const flag = async (key, on = true) => { for (const r of ['r1', 'r3']) await reg.send(r, 'vote', [key, on, on ? R.Drainer : 0]); };
+  const flag = async (key, on = true) => { for (const r of ['r1', 'r3']) await reg.send(r, 'vote', [key, on, on ? R.CannotSellInSimulation : 0, ...EV]); };
   return { reg, flag };
 }
 const ready = async (t) => { await airlock.send('hyperlane', 'attest', t); await neuro(t); c.advance(Q); };
@@ -202,16 +203,71 @@ test('NeuroLane attests nothing while Neuro is paused (NeuroControl), and again 
   assert.equal((await airlock.call('status', [id]))[0], 1n); // the lane's attestation reached the airlock
 });
 
-test('vaccine: a flag holds transfers only once it is enforceDelay old; the lane veto is the instant hold', async () => {
+test('vaccine: a flag holds a transfer at once (ThreatHeld); refused once enforced (ThreatFlagged); released after a clear', async () => {
   const { reg, flag } = await registry(3600);
   const t = tx(20, 'alice', 4n, 'attacker');
   await ready(t);
-  await flag(await reg.call('addressKey', [SRC, a('attacker')]));
+  const key = await reg.call('addressKey', [SRC, a('attacker')]);
+  await flag(key);
   assert.equal((await reg.call('isAddressFlagged', [SRC, a('attacker')]))[0], true); // Neuro warns at once
   assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 0n); // not enforced yet
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 1n); // but held
+  await assert.rejects(airlock.send('user', 'release', t), /ThreatHeld/);
   c.advance(3600);
   assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 1n);
   await assert.rejects(airlock.send('user', 'release', t), /ThreatFlagged/);
+  // A clear (same quorum) lets it out; nothing was lost while it was held.
+  await flag(key, false);
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 0n);
+  await airlock.send('user', 'release', t);
+  assert.equal(await bal('alice'), 4n);
+});
+
+test('vaccine: a held transfer comes out when the flag is cleared before it is ever enforced; every party can hold', async () => {
+  const { reg, flag } = await registry(3600);
+  const lure = await c.deploy('LockBox', [], 'attacker');
+  const h = keccak256(JSON.parse(readFileSync(new URL('../artifacts/LockBox.json', import.meta.url), 'utf8')).deployedBytecode);
+  const bySender = tx(22, 'alice', 1n, 'attacker');
+  const byRecipient = [SRC, LOCKBOX, 23n, a('alice'), lure.address, 2n];
+  for (const t of [bySender, byRecipient]) await ready(t);
+  await flag(await reg.call('addressKey', [SRC, a('attacker')]));
+  await flag(await reg.call('codeKey', [h]));
+  await assert.rejects(airlock.send('user', 'release', bySender), /ThreatHeld/);
+  await assert.rejects(airlock.send('user', 'release', byRecipient), /ThreatHeld/);
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), lure.address]), 3n);
+  await flag(await reg.call('addressKey', [SRC, LOCKBOX]));
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), a('alice')]), 2n);
+  // Governance protects the lockbox: no longer held on its account.
+  await reg.send('gov', 'setProtected', [[await reg.call('addressKey', [SRC, LOCKBOX])], true]);
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), a('alice')]), 0n);
+  c.advance(1800); // still inside the enforceDelay: cleared before it was ever enforced
+  await flag(await reg.call('addressKey', [SRC, a('attacker')]), false);
+  await flag(await reg.call('codeKey', [h]), false);
+  await airlock.send('user', 'release', bySender);
+  await airlock.send('user', 'release', byRecipient);
+  assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [lure.address]), 2n);
+});
+
+test('vaccine: a fast-lane flag (fastQuorum or enforceNow) refuses at once, before the enforceDelay', async () => {
+  const { reg, flag } = await registry(3600);
+  const t = tx(24, 'alice', 5n, 'attacker');
+  await ready(t);
+  const key = await reg.call('addressKey', [SRC, a('attacker')]);
+  await flag(key);
+  await assert.rejects(airlock.send('user', 'release', t), /ThreatHeld/);
+  await reg.send('gov', 'enforceNow', [key]);
+  assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 1n);
+  await assert.rejects(airlock.send('user', 'release', t), /ThreatFlagged/);
+  // The registry's quorum here is 2, fastQuorum 4: two more runners behind a flag enforce it at once.
+  const t2 = tx(25, 'alice', 6n, 'mallory');
+  await ready(t2);
+  const k2 = await reg.call('addressKey', [SRC, a('mallory')]);
+  await flag(k2);
+  await reg.send('r2', 'vote', [k2, true, R.CannotSellInSimulation, ...EV]);
+  assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('mallory'), a('alice')]), 0n);
+  await reg.send('r4', 'vote', [k2, true, R.CannotSellInSimulation, ...EV]);
+  assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('mallory'), a('alice')]), 1n);
+  await assert.rejects(airlock.send('user', 'release', t2), /ThreatFlagged/);
 });
 
 test('vaccine: governance protects the route\'s own keys (lockbox, airlock), so runners cannot hold every transfer', async () => {
@@ -223,8 +279,8 @@ test('vaccine: governance protects the route\'s own keys (lockbox, airlock), so 
   await assert.rejects(reg.send('r1', 'setProtected', [[lockboxKey, airlockKey], true]), /NotGovernance/);
   await reg.send('gov', 'setProtected', [[lockboxKey, airlockKey], true]);
   c.advance(3600);
-  await assert.rejects(reg.send('r1', 'vote', [lockboxKey, true, R.Drainer]), /ProtectedKey/);
-  await assert.rejects(reg.send('r1', 'vote', [airlockKey, true, R.Drainer]), /ProtectedKey/);
+  await assert.rejects(reg.send('r1', 'vote', [lockboxKey, true, R.CannotSellInSimulation, ...EV]), /ProtectedKey/);
+  await assert.rejects(reg.send('r1', 'vote', [airlockKey, true, R.CannotSellInSimulation, ...EV]), /ProtectedKey/);
   const t = tx(21);
   await ready(t);
   await airlock.send('user', 'release', t);

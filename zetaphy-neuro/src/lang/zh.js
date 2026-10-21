@@ -9,20 +9,29 @@ export const UI = {
   subtitle: '读取并解释合约 · 第 1 级，只读', chain: '链', address: '合约或代币地址', check: '检查合约',
   details: '详情', reading: '正在从链上读取…', badAddress: '该地址不适用于这条链。支持的格式：',
   failed: '读取失败：', footer: '从不要求连接钱包，也从不发送交易。只读取公开的链上数据。不构成投资建议。', stats: '使用统计', language: '语言',
+  disclaimer: '这是可重复验证的自动代码分析，不是对任何个人或项目的指控，也不构成投资建议。合约所有者可以回应或要求更正。',
+  correction: '如何回应或要求更正',
+  reproduce: '自行复核',
+  reproduceHow: '任何人都可以用下面的命令（在 zetaphy-neuro 文件夹中）重新运行此检查。裁定 ID 只涵盖规则得出的结论，只要合约的代码和设置不变就会一致。报告 ID 还涵盖供应量等会变化的数字。',
+  asWritten: '名称和符号按合约中所写显示，Neuro 不作确认。',
   m: {
     chain: '链', address: '地址', proxy: 'Proxy', implementation: '实际代码（Implementation）', owner: '所有者', functions: '已识别的函数', report: '报告编号', explorer: '在 explorer 中打开', fingerprint: '代码指纹（用于登记模板）', unknown: '无法识别名称的函数',
     program: '代币程序', mintAuth: '增发权限（mint authority）', freezeAuth: '冻结权限（freeze authority）', extensions: '扩展', upgradeAuth: '升级权限', none: '无',
     package: '代码包', standard: '标准', admin: '管理员', holders: '持有人数', listed: 'tonapi 名单', raw: '原始地址',
     idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码', walletCode: '持有人钱包代码', nearKeys: '完全访问密钥（full-access key）', codeHash: '代码哈希', cairo: 'Cairo 版本', maxSupply: '最大供应量', tokenId: '代币编号',
     pool: '流动性池', simTax: '模拟交易税（买入 / 卖出）', simFailed: '卖出失败',
+    verdict: '裁定 ID（仅规则）', command: '命令', rule: '规则',
   },
 };
+
+// ThreatRegistry categories (src/threat-reasons.js), as neutral descriptions of what the code does.
+export const REASON = { 'cannot-sell-in-simulation': '模拟交易中卖出失败或几乎拿不回钱', 'unlimited-mint': '某个地址可以无上限增发', 'owner-can-block-transfers': '所有者或管理员可以阻止转账或卖出', 'owner-can-move-holder-funds': '所有者或管理员可以转走或销毁他人持有的资金', 'same-name-as-known-token': '与已知代币同名或同符号，但地址不同', 'sweeps-approved-tokens': '在可复现的测试中，把授权给它的代币转到持有人未选择的地址', 'other': '其他代码事实（见证据）' };
 
 export const T = {
     'no-code': () => '该地址上没有合约代码。它可能只是普通钱包，或者选错了链。',
     'erc20': (p) => `ERC-20 代币“${p.name ?? '?'}”（${p.symbol ?? '?'}），总供应量 ${fmtSupply(p.totalSupply, p.decimals)}。`,
     'not-erc20': () => '未找到标准的 ERC-20 函数。这个合约可能不是代币。',
-    'name-has-link': () => '代币名称或符号里含有链接或网站名，这是常见骗局（免费“空投”代币，引诱你访问假网站）。不要打开该网站，也不要连接钱包。',
+    'name-has-link': () => '代币名称或符号（按合约中所写）里含有链接或网站名。未经请求发来、名称带链接的代币常被用来把人引到外部网站。不要因为代币名称而访问该网站或连接钱包。',
     'proxy-minimal': (p) => `最小克隆合约（EIP-1167），始终运行 ${p.implementation} 上的代码。代码无法更改。`,
     'proxy-upgradeable': (p) => (p.issuer
       ? `${p.issuer} 可以升级合约代码，这是发行方修复或扩展功能的常规做法。`
@@ -44,19 +53,21 @@ export const T = {
       ? `可以调整税率（${list(p.functions)}），但 ${p.project} 模板只允许调低。`
       : `可以修改买入/卖出税（${list(p.functions)}）。卖出税很高时，卖出几乎拿不回钱。`),
     'known-issuer': (p) => `由 ${p.issuer} 发行的官方 ${p.symbol} 合约（与登记的地址一致）。下列权限属于发行方；主要风险在于你是否信任发行方，而不是隐藏的代码。`,
-    'lookalike': (p) => `使用了与 ${p.issuer} 代币相同的符号 ${p.symbol}，但不是官方地址（${p.official}）。可能是假币；在核实地址之前，不要购买或接收。`,
+    'lookalike': (p) => `使用了与 ${p.issuer} 代币相同的符号 ${p.symbol}，但不是其登记地址（${p.official}）。此合约不是已登记的 ${p.issuer} 代币；购买或接收前请核实地址。`,
     'template-match': (p) => `与已登记的 ${p.project} 代币模板（${p.name}）一致。该模板的规则尚未经过审计。`,
     'template-mismatch': (p) => `代码与 ${p.project} 模板一致，但拥有模板声称没有的权限（${list(p.functions)}）。模板记录可能有误；核实之前不要相信它。`,
     'trading-switch': (p) => `有交易开关（${list(p.functions)}）。开关打开之前，你可能能买入却无法卖出。`,
     'can-limit': (p) => `可以设置单笔交易或单个钱包的限额（${list(p.functions)}）。限额极低时可能导致无法卖出。`,
     'fee-exempt': (p) => `可以让指定钱包免税（${list(p.functions)}）。在收税代币中很常见，但会让部分钱包占便宜。`,
-    'network-flagged': (p) => `Neuro ZETAPHY 网络已投票认定这段代码危险${p.reason ? `（${p.reason}）` : ''}。所有使用相同代码的合约都会收到同样的警告。`,
+    'network-flagged': (p) => `Neuro ZETAPHY 网络的运行者已投票将这段代码记录在 ThreatRegistry 中${p.reason ? `（类别：${REASON[p.reason] ?? p.reason}）` : ''}。所有使用相同代码的合约都会收到同样的警告。`,
+    'similar-flagged': (p) => `此代码与 Neuro 运行者标记过的代码相似 ${p.percent}%（指纹 ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `，类别：${REASON[p.reason] ?? p.reason}` : ''}）。对已标记代码稍作修改的副本，行为通常相同。`,
     'tax-wallet': (p) => `可以更改接收税款的钱包（${list(p.functions)}）。在收税代币中很常见。`,
     'selfdestruct': () => '代码中包含 SELFDESTRUCT。一旦触发，可能清除合约或转走其中的资金。',
     'delegatecall': () => '代码可以把另一个合约的代码当作自己的来运行（DELEGATECALL），因此实际运行的代码可能不是这里显示的代码。',
     'nothing-found': () => '按这些规则未发现特殊权限或危险指令。',
     'unknown-functions': (p) => `还有 ${p.count} 个函数 Neuro 无法识别名称（${(p.selectors ?? []).map((x) => '0x' + x).join(', ')}），因此不知道它们做什么。只要仍有所有者控制合约，这些函数就可能是特权函数，例如设置税率或交易限额。`,
-    'bytecode-only': () => '基于链上代码和固定规则检查。用不寻常函数名隐藏的骗局可能被漏掉。不构成投资建议。',
+    'unknown-pattern': (p) => `Neuro 还不认识这种模式，请小心：${p.share}% 的函数没有已知名称，而且代码可以转移币或代币。这里没发现问题并不代表安全。`,
+    'bytecode-only': () => '基于链上代码和固定规则检查。隐藏在不寻常函数名后的权限可能被漏掉。不构成投资建议。',
     // Solana
     'sol-not-found': () => 'Solana 上该地址没有账户。可能输错了，或者选错了链。',
     'sol-not-token': (p) => `该地址不是 Solana 上的代币铸造账户（mint），而是程序 ${p.owner} 的一个账户。`,
@@ -67,11 +78,11 @@ export const T = {
     'sol-mint-renounced': () => '增发权限（mint authority）已放弃：供应量永远不会再增加。',
     'sol-freeze-authority': (p) => (p.issuer
       ? `${p.issuer} 可以冻结账户（freeze authority），通常用于被盗资金或执法要求。`
-      : `账户仍然可以被冻结（freeze authority：${p.authority}）。被冻结的账户无法卖出或转账，这是 Solana 上常见的骗局。`),
+      : `账户仍然可以被冻结（freeze authority：${p.authority}）。被冻结的账户无法卖出或转账。`),
     'sol-freeze-renounced': () => '冻结权限（freeze authority）已放弃：没有人能冻结你的代币。',
     'sol-permanent-delegate': (p) => (p.issuer
       ? `${p.issuer} 可以从任何账户转走或销毁代币（permanent delegate），用于依法没收。`
-      : `一个永久代理（permanent delegate：${p.delegate}）无需许可就能从【所有】钱包转走或销毁代币。非常危险。`),
+      : `一个永久代理（permanent delegate：${p.delegate}）无需许可就能从【所有】钱包转走或销毁代币。对持有人风险很高。`),
     'sol-transfer-fee': (p) => `每次转账收取 ${p.percent}% 的费用${p.authority ? `，且费用管理者（${p.authority}）可以把费率提高到 100%` : ''}。`,
     'sol-transfer-hook': (p) => `每次转账都会运行一个额外程序（transfer hook：${p.programId}），它可以执行自己的规则，例如禁止卖出。`,
     'sol-default-frozen': () => '该代币的新账户默认处于冻结状态：买入后，在解冻之前你可能无法转出或卖出。',
@@ -144,7 +155,7 @@ export const T = {
       if ((p.interfaces ?? []).includes('jetton_wallet')) return '这是某个持有人的 jetton wallet，不是代币本身。请输入代币的主地址（jetton master）。';
       return `这个 TON 合约不是代币${p.interfaces?.length ? `（${list(p.interfaces)}）` : ''}。`;
     },
-    'ton-scam': () => 'tonapi.io 标记该代币或其管理员与诈骗有关。不要购买或接收。',
+    'ton-scam': () => 'tonapi.io（第三方）给该代币或其管理员账户加了警告标签。这是 tonapi.io 的标签，不是本次代码检查的结果；购买或接收前请查看其原因。',
     'ton-jetton': (p) => `TON 代币（jetton）“${p.name ?? '?'}”（${p.symbol ?? '?'}），总供应量 ${fmtSupply(p.totalSupply, p.decimals)}${p.holders != null ? `，持有人 ${fmtSupply(p.holders, 0)} 个` : ''}。`,
     'ton-listed': () => '在 tonapi.io 的已核查代币名单（whitelist）上。这只是第三方名单，不是保证。',
     'ton-frozen': () => '该代币合约因未缴存储费而被冻结，目前无法使用。',
@@ -176,8 +187,8 @@ export const T = {
     'eip7702': (p) => `该地址是普通钱包，其所有者设置它运行合约 ${p.target} 的代码（EIP-7702）。它不是代币。那段代码可以按其编写方式任意处置钱包里的资金；请同时检查 ${p.target}。`,
     'source-verified': (p) => `有公开的源代码，Sourcify 已确认它${p.match === 'exact' ? '与链上代码逐字节一致' : '与链上代码一致'}（${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}）。可在 ${p.url} 阅读`,
     'source-unverified': () => 'Sourcify 上没有源代码。它可能仍在该链的 explorer 上公开；如果哪里都没有公开，请格外小心。',
-    // Trade simulation (honeypot check, src/honeypot.js)
-    'sim-cannot-sell': (p) => `貔貅盘（honeypot）警告：通过 ${p.dex} 模拟交易，可以买入，但${p.sell == null ? '无法卖出' : `卖出后几乎拿不回钱（损失 ${p.sell}%）`}。买入后你可能无法卖出。（少数代币只在刚买入后禁止卖出，此检查无法区分这两种情况。）`,
+    // Trade simulation (buy/sell test, src/honeypot.js)
+    'sim-cannot-sell': (p) => `卖出测试未通过：通过 ${p.dex} 模拟交易，可以买入，但${p.sell == null ? '无法卖出' : `卖出后几乎拿不回钱（损失 ${p.sell}%）`}。买入后你可能无法卖出。（少数代币只在刚买入后禁止卖出，此检查无法区分这两种情况。）`,
     'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
       ? `通过 ${p.dex} 模拟买入后没有收到任何代币：所付款项被全部扣走。`
       : `通过 ${p.dex} 模拟交易：买入时损失 ${p.buy ?? '?'}%，卖出时损失 ${p.sell ?? '?'}%，被代币作为税收走。你拿回的会比价格显示的少这么多。`),

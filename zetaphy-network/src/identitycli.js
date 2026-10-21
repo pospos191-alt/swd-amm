@@ -3,9 +3,12 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Contract, ContractFactory, isAddress } from 'ethers';
+import { Contract, ContractFactory, ZeroAddress, isAddress, getAddress, verifyTypedData } from 'ethers';
 import { HOME, loadOrCreateKey } from './keys.js';
-import { chainArgs, canonicalTarget, decodeAgentURI } from './identity.js';
+import {
+  chainArgs, canonicalTarget, decodeAgentURI, NEURO_CHAINS, RULE, base58Decode, claimDomain, claimValues, CLAIM_TYPES, consentText,
+  remoteOwners, checkClaimBundle, signAttestation, sortedAttestations,
+} from './identity.js';
 import { signMessage, verifyMessage, createSeenSet, KINDS, MAX_ENVELOPE_BYTES } from './neuromsg.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -14,10 +17,13 @@ const ZETAPHY_CAIP2 = `eip155:${EVM_CHAIN_ID}`;
 const JOBS_ABI = ['function workers(address) view returns (uint128 bond, uint64 unbondAt, bool active, uint32 agreed, uint32 rejected)'];
 
 export const IDENTITY_USAGE = `usage:
-  zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --governance 0x<multisig>]
+  zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --claim-quorum 3 --governance 0x<multisig>]
   zetaphy identity register <chain> <address>
   zetaphy identity get <chain> <address> | <agentId>
   zetaphy identity claim <agentId>
+  zetaphy identity claim-request <agentId> --new-owner 0x… --owner-key <owner on its chain> [--ttl 86400 --out claim.json]
+  zetaphy identity attest-claim <claim.json> [--owner-sig 0x…]     (runners: check the owner on its chain, then sign)
+  zetaphy identity claim-remote <claim.json>
   zetaphy identity verdict <agentId> <verdict 0x…32 bytes> <score 0-100> [--tag neuro-v1 --uri URL]
   zetaphy msg sign <${Object.keys(KINDS).join('|')}> --from <agentId> (--payload '<json>' | --payload-file f) [--to <agentId> --ttl 3600 --source-chain ${ZETAPHY_CAIP2} --no-inline --out msg.json]
   zetaphy msg verify <file> [--me <agentId>]`;
@@ -51,6 +57,15 @@ const agentArg = (v) => {
   return BigInt(v);
 };
 
+/** The owner key as 0x-hex bytes: an EVM address (20 bytes) or a base58 key (Solana, 32 bytes). */
+function ownerKeyHex(chain, key) {
+  if (/^0x[0-9a-fA-F]{40}$/.test(key)) return key.toLowerCase();
+  if (NEURO_CHAINS[chain]?.rule === RULE.EVM) throw new Error(`--owner-key must be a 0x address for ${chain}`);
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(key)) return '0x' + base58Decode(key).toString('hex');
+  if (/^0x([0-9a-fA-F]{2}){1,64}$/.test(key)) return key.toLowerCase();
+  throw new Error('--owner-key: give an EVM address, a base58 key or 0x-hex bytes');
+}
+
 async function printIdentity(write, idr, id, provider, ctx) {
   const [chain, caip10, account, registeredBy, registeredAt, claimed] = await idr.getTarget(id);
   const holder = await idr.ownerOf(id);
@@ -82,10 +97,15 @@ export async function identityCommand({ group, cmd, rest, opt, env, write, s, co
     if (!opt.web || opt.web === true) throw new Error('--web is required: the Neuro web page, e.g. https://<host>/web/');
     const c = await connect(s, { needJobs: false });
     const I = art('NeuroIdentity');
-    const k = await new ContractFactory(I.abi, I.bytecode, c.signer).deploy(String(opt.web), opt.image ? String(opt.image) : '', ...chainArgs());
+    // Remote claims (targets on other chains) need NeuroJobs runners; without --jobs they stay off.
+    const quorum = s.jobs ? Number(opt['claim-quorum'] ?? 3) : 0;
+    if (s.jobs && (!Number.isInteger(quorum) || quorum < 1)) throw new Error('--claim-quorum must be a whole number of runners, at least 1');
+    const k = await new ContractFactory(I.abi, I.bytecode, c.signer).deploy(String(opt.web), opt.image ? String(opt.image) : '', ...chainArgs(),
+      s.jobs ?? ZeroAddress, quorum);
     await k.waitForDeployment();
     const identity = await k.getAddress();
     write(`NeuroIdentity (ERC-8004 identity registry) ${identity}`);
+    write(s.jobs ? `remote claims: ${quorum} NeuroJobs runner attestation(s) at ${s.jobs} (fixed for this deployment)` : 'remote claims: off (no NeuroJobs address, --jobs)');
     const patch = { identity };
     if (s.jobs) {
       const V = art('NeuroValidation');
@@ -147,6 +167,76 @@ export async function identityCommand({ group, cmd, rest, opt, env, write, s, co
       const idr = await identityContract(ctx, c.signer);
       await (await idr.claim(id)).wait();
       write(`agent ${id} is now controlled by ${c.me}`);
+      return 0;
+    }
+    if (cmd === 'claim-request') {
+      const id = agentArg(rest[0]);
+      if (!opt['new-owner'] || !isAddress(String(opt['new-owner']))) throw new Error('--new-owner 0x… is required: the ZETAPHY address that will control the identity');
+      if (!opt['owner-key'] || opt['owner-key'] === true) throw new Error('--owner-key is required: the target\'s owner on its chain (EVM 0x address, Solana base58 key)');
+      const provider = await connectRpc(s);
+      const idr = await identityContract(ctx, provider);
+      const [chain, caip10] = await idr.getTarget(id);
+      const ownerKey = ownerKeyHex(chain, String(opt['owner-key']));
+      const ttl = Number(opt.ttl ?? 86400);
+      if (!Number.isInteger(ttl) || ttl < 60 || ttl > 86400) throw new Error('--ttl must be 60-86400 seconds');
+      const b = {
+        v: 1, chainId: String((await provider.getNetwork()).chainId), registry: getAddress(await idr.getAddress()), agentId: String(id), target: caip10, chain,
+        newOwner: getAddress(String(opt['new-owner'])), ownerKey, nonce: String(await idr.claimNonce(id)),
+        deadline: String(Math.floor(Date.now() / 1000) + ttl), ownerSig: null, attestations: [],
+      };
+      const out = String(opt.out ?? 'claim.json');
+      writeFileSync(out, JSON.stringify(b, null, 2) + '\n');
+      write(`claim request for agent ${id} (${caip10}) -> ${out}`);
+      if (NEURO_CHAINS[chain]?.rule === RULE.EVM) {
+        write('the owner signs this EIP-712 message (eth_signTypedData_v4), then a runner adds it with --owner-sig:');
+        write(JSON.stringify({ domain: { ...claimDomain(b.chainId, b.registry), chainId: Number(b.chainId) }, primaryType: 'RemoteClaimConsent', types: CLAIM_TYPES.consent,
+          message: { ...claimValues(b), agentId: b.agentId, nonce: b.nonce, deadline: b.deadline } }, null, 2));
+      } else {
+        write('the owner signs this exact text with its wallet (e.g. Solana signMessage), then a runner adds the signature with --owner-sig:');
+        write(consentText(b));
+      }
+      return 0;
+    }
+    if (cmd === 'attest-claim') {
+      const file = rest[0];
+      if (!file) throw new Error(IDENTITY_USAGE);
+      const b = JSON.parse(readFileSync(file, 'utf8'));
+      if (opt['owner-sig'] && opt['owner-sig'] !== true) b.ownerSig = String(opt['owner-sig']);
+      const provider = await connectRpc(s);
+      const idr = await identityContract(ctx, provider);
+      const id = agentArg(b.agentId);
+      // the registry decides what is being claimed, not the file
+      const [chain, caip10, account] = await idr.getTarget(id);
+      if (caip10 !== b.target || getAddress(await idr.getAddress()) !== getAddress(b.registry)) throw new Error('the file does not match this registry\'s identity');
+      if (String(await idr.claimNonce(id)) !== String(b.nonce)) throw new Error('the identity was claimed since this request was made: make a new one');
+      if (String((await provider.getNetwork()).chainId) !== String(b.chainId)) throw new Error('the file is for another chain');
+      // read the owner on the target's chain with Neuro's own readers
+      const { readContract } = await import('../../zetaphy-neuro/src/reader.js');
+      const report = await readContract(chain, account, { sourcify: false, simulate: false, threatSignatures: false });
+      const r = await checkClaimBundle(b, remoteOwners(report), { verifyTypedData });
+      if (!r.ok) { write(`NOT ATTESTED: ${r.reason}`); return 1; }
+      const { wallet } = loadOrCreateKey();
+      if (s.jobs) {
+        const w = await new Contract(s.jobs, JOBS_ABI, provider).workers(wallet.address);
+        if (!(w.active && w.agreed > 0n && w.rejected <= w.agreed)) write(`warning: ${wallet.address} is not a runner in good standing yet; the registry will not count this attestation`);
+      }
+      b.attestations = [...(b.attestations ?? []).filter((a) => a.runner.toLowerCase() !== wallet.address.toLowerCase()), await signAttestation(wallet, b)];
+      writeFileSync(file, JSON.stringify(b, null, 2) + '\n');
+      write(`attested: ${b.ownerKey} is the ${r.owner.role} of ${caip10} and consented to give agent ${id} to ${b.newOwner} (${b.attestations.length} attestation(s) in ${file})`);
+      return 0;
+    }
+    if (cmd === 'claim-remote') {
+      const file = rest[0];
+      if (!file) throw new Error(IDENTITY_USAGE);
+      const b = JSON.parse(readFileSync(file, 'utf8'));
+      const c = await connect(s, { needJobs: false });
+      const idr = await identityContract(ctx, c.signer);
+      if (getAddress(await idr.getAddress()) !== getAddress(b.registry)) throw new Error('the file is for another registry');
+      const sigs = sortedAttestations(b.attestations ?? []);
+      const need = await idr.claimQuorum();
+      if (BigInt(sigs.length) < need) throw new Error(`${sigs.length} attestation(s); the registry needs ${need}`);
+      await (await idr.claimRemote(agentArg(b.agentId), b.newOwner, b.ownerKey, BigInt(b.deadline), b.ownerSig ?? '0x', sigs)).wait();
+      write(`agent ${b.agentId} (${b.target}) is now controlled by ${b.newOwner}`);
       return 0;
     }
     if (cmd === 'verdict') {
