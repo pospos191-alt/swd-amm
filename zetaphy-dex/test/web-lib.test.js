@@ -1,4 +1,4 @@
-// The DEX page's own libraries (test-ui/zetaphy/lib/*.js, no third-party code)
+// The DEX page's own libraries (web/lib/*.js, no third-party code)
 // checked against ethers, the contracts' math, Neuro's vaccine and the wallet:
 // selectors, ABI encoding, amounts, slippage, price impact, text cleaning, the
 // fp1 fingerprint, and that the page loads nothing from other sites.
@@ -10,14 +10,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { id, Interface, AbiCoder, keccak256, toUtf8Bytes, parseUnits as eParse } from 'ethers';
-import { SEL, ERRORS, encodeCall, decode, decodeError, parseUnits, formatUnits, decodeBytes32String } from '../../test-ui/zetaphy/lib/abi.js';
-import { getAmountOut, getAmountIn, minWithSlippage, maxWithSlippage, priceImpactBps, impactLevel, candidatePaths, poolKind, addLiquidityMins } from '../../test-ui/zetaphy/lib/amm.js';
-import { parseSettings, serializeSettings, parseImported, cleanRpc, cleanWalletId, rpcIsCustom, SLIPPAGE_MAX_BPS, SLIPPAGE_CONFIRM_BPS } from '../../test-ui/zetaphy/lib/storage.js';
-import { cleanText, cleanSymbol, validEntry, lookalikes } from '../../test-ui/zetaphy/lib/tokens.js';
-import { fingerprint1, SLOT_IMPL, SLOT_BEACON, REASON_TEXT, DISCLAIMER } from '../../test-ui/zetaphy/lib/neuro.js';
+import { SEL, ERRORS, encodeCall, decode, decodeError, parseUnits, formatUnits, decodeBytes32String } from '../web/lib/abi.js';
+import { getAmountOut, getAmountIn, minWithSlippage, maxWithSlippage, priceImpactBps, impactLevel, candidatePaths, poolKind, addLiquidityMins } from '../web/lib/amm.js';
+import { parseSettings, serializeSettings, parseImported, cleanRpc, cleanWalletId, rpcIsCustom, SLIPPAGE_MAX_BPS, SLIPPAGE_CONFIRM_BPS } from '../web/lib/storage.js';
+import { cleanText, cleanSymbol, validEntry, lookalikes } from '../web/lib/tokens.js';
+import { fingerprint1, SLOT_IMPL, SLOT_BEACON, REASON_TEXT, DISCLAIMER } from '../web/lib/neuro.js';
 import { amountOut, amountIn } from './helpers/dex.js';
 
-const PAGE = fileURLToPath(new URL('../../test-ui/zetaphy/', import.meta.url));
+const PAGE = fileURLToPath(new URL('../web/', import.meta.url));
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
 
 test('every precomputed selector is keccak256(signature)[0..4]; every listed error exists in the router or pair', () => {
@@ -145,7 +145,7 @@ test('Neuro in the page: fp1 matches zetaphy-network/src/vaccine.js, EIP-1967 sl
 test('the page loads nothing from other sites: no inline or external scripts, no remote imports, no innerHTML', () => {
   const html = readFileSync(join(PAGE, 'index.html'), 'utf8');
   for (const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
-    assert.match(m[1], /src="\/zetaphy\/[a-z]+\.js"/, 'only same-origin script files');
+    assert.match(m[1], /src="\/[a-z]+\.js"/, 'only same-origin script files');
     assert.equal(m[2].trim(), '', 'no inline script');
   }
   assert.doesNotMatch(html, /<link[^>]+href="https?:/, 'no remote stylesheets or fonts');
@@ -157,6 +157,26 @@ test('the page loads nothing from other sites: no inline or external scripts, no
     assert.doesNotMatch(src, /import[^;]*from\s+['"]https?:/, f);
     assert.doesNotMatch(src, /\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML|document\.write|\beval\(|new Function\(/, f);
   }
+});
+
+test('own origin: web/vercel.json sends the strict CSP and security headers on every path; the page uses root paths', () => {
+  const cfg = JSON.parse(readFileSync(join(PAGE, 'vercel.json'), 'utf8'));
+  assert.equal(cfg.headers.length, 1);
+  assert.equal(cfg.headers[0].source, '/(.*)');
+  const h = Object.fromEntries(cfg.headers[0].headers.map((x) => [x.key, x.value]));
+  const csp = Object.fromEntries(h['Content-Security-Policy'].split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v.join(' ')]));
+  assert.equal(csp['default-src'], "'none'");
+  assert.equal(csp['script-src'], "'self'");
+  assert.equal(csp['style-src'], "'self'");
+  assert.match(csp['connect-src'], /^'self' https:/);
+  for (const d of ['object-src', 'base-uri', 'form-action', 'frame-ancestors']) assert.equal(csp[d], "'none'", d);
+  assert.doesNotMatch(h['Content-Security-Policy'], /unsafe-|esm\.sh|jsdelivr|googleapis/);
+  assert.equal(h['X-Frame-Options'], 'DENY');
+  assert.equal(h['X-Content-Type-Options'], 'nosniff');
+  assert.equal(h['Referrer-Policy'], 'no-referrer');
+  assert.match(h['Strict-Transport-Security'], /^max-age=\d{8,}/);
+  assert.match(h['Permissions-Policy'], /camera=\(\)/);
+  for (const f of ['index.html', 'app.js']) assert.doesNotMatch(readFileSync(join(PAGE, f), 'utf8'), /['"]\/zetaphy\//, `${f}: no /zetaphy/ paths left`);
 });
 
 test('chain values and wallet discovery are the same as zetaphy-wallet/wallets.js', () => {
@@ -187,7 +207,7 @@ test('M4: stored settings are validated strictly: slippage capped at 5%, clean R
   assert.equal(SLIPPAGE_CONFIRM_BPS, 100);
   const def = { slippageBps: 50, deadlineMin: 20, rpc: '', fot: false };
   for (const junk of [null, '', 'not json', '[]', '"x"', '123', 'x'.repeat(60_000)]) assert.deepEqual(parseSettings(junk), def, String(junk).slice(0, 20));
-  // What a script elsewhere on the origin might write.
+  // What something else on the origin (an extension, an old profile) might write.
   assert.deepEqual(parseSettings(JSON.stringify({ slippageBps: 5000, deadlineMin: 99999, rpc: 'https://evil.example/', fot: true })),
     { slippageBps: 50, deadlineMin: 20, rpc: '', fot: false }, 'out-of-range slippage dropped; RPC not in saved form; fot ignored');
   assert.equal(parseSettings(JSON.stringify({ slippageBps: 500 })).slippageBps, 500);

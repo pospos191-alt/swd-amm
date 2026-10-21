@@ -1,5 +1,0 @@
-{
-  "private": true,
-  "type": "module",
-  "description": "ES modules of the ZETAPHY DEX page (lets Node tests import lib/*.js; not deployed)"
-}

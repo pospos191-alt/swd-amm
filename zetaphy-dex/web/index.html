@@ -8,15 +8,16 @@
 <title>ZETAPHY Swap · SAWASDEE COIN</title>
 <!-- ZETAPHY DEX web app (static, no server, no third-party code).
      Contracts, deploy CLI and tests: zetaphy-dex/. Every text is set with
-     textContent; the CSP for /zetaphy/ (test-ui/vercel.json) allows scripts
-     and styles from this site only. -->
-<link rel="stylesheet" href="/zetaphy/style.css">
+     textContent; the CSP (zetaphy-dex/web/vercel.json) allows scripts
+     and styles from this site only. Served on its own origin,
+     https://swap.sawasdeecoin.com/ -->
+<link rel="stylesheet" href="/style.css">
 <link rel="icon" href="data:,">
-<script type="module" src="/zetaphy/app.js"></script>
+<script type="module" src="/app.js"></script>
 </head>
 <body>
 <header class="app-header">
-  <a class="brand" href="/" title="SWD AMM"><span class="brand-mark">SWD</span><span class="brand-text" data-i18n="title">ZETAPHY Swap</span></a>
+  <a class="brand" href="https://swd-amm.sawasdeecoin.com/" rel="noopener" title="SWD AMM"><span class="brand-mark">SWD</span><span class="brand-text" data-i18n="title">ZETAPHY Swap</span></a>
   <span class="badge" data-i18n="badge">Testnet · Unaudited</span>
   <nav class="tabs" role="tablist">
     <button type="button" class="tab" role="tab" data-tab="swap" data-i18n="tabSwap" aria-selected="true">Swap</button>

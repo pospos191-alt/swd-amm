@@ -241,9 +241,14 @@ try {
       await page.click("#tb-tf-1m", { timeout: 5000 });
     }],
     ["open Portfolio tab", () => page.click('.tab-nav-btn[data-tab="portfolio"]', { timeout: 5000 })],
-    ["header links to the ZETAPHY DEX page (/zetaphy/)", async () => {
-      const href = await page.getAttribute("#rd-nav-zetaphy", "href", { timeout: 5000 });
-      if (href !== "/zetaphy/") throw new Error(`#rd-nav-zetaphy href is ${href}`);
+    ["header links to the ZETAPHY DEX site (https://swap.sawasdeecoin.com/)", async () => {
+      const a = await page.evaluate(() => {
+        const el = document.getElementById("rd-nav-zetaphy");
+        return el && { href: el.getAttribute("href"), target: el.getAttribute("target"), rel: el.getAttribute("rel") };
+      });
+      if (!a) throw new Error("#rd-nav-zetaphy missing");
+      if (a.href !== "https://swap.sawasdeecoin.com/") throw new Error(`#rd-nav-zetaphy href is ${a.href}`);
+      if (a.target !== "_blank" || !/\bnoopener\b/.test(a.rel ?? "")) throw new Error(`#rd-nav-zetaphy target=${a.target} rel=${a.rel}`);
     }],
     ["switch language to Thai", async () => { await page.click("#settings-btn"); await page.selectOption("#lang-select", "th"); await page.keyboard.press("Escape"); }],
     ["switch network to Devnet", () => page.selectOption("#network-select", "devnet")],
