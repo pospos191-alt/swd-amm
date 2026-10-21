@@ -119,7 +119,7 @@ test('the state file holds no secrets', () => {
 
 test('the real step list: order puts configuration before the handover, which is opt-in', () => {
   const names = launchSteps().map((s) => s.name);
-  assert.deepEqual(names, ['neuro', 'skill', 'threats', 'reports', 'identity', 'vault', 'pq', 'stable', 'compute', 'bridge', 'dex', 'nft', 'oracle', 'wire', 'protect', 'configs', 'snap', 'timelock', 'handover']);
+  assert.deepEqual(names, ['neuro', 'skill', 'threats', 'reports', 'identity', 'vault', 'pq', 'stable', 'compute', 'bridge', 'dex', 'dlmm', 'nft', 'oracle', 'wire', 'protect', 'configs', 'snap', 'timelock', 'handover']);
   const byName = Object.fromEntries(launchSteps().map((s) => [s.name, s]));
   assert.notEqual(byName.handover.when({ handover: false }), true);
   assert.equal(byName.handover.when({ handover: true }), true);
@@ -133,6 +133,8 @@ test('the real step list: order puts configuration before the handover, which is
   const gates = BRIDGE_GATES.join('\n');
   for (const re of [/independentLanes\(\) >= 2/, /--audit-sha256/, /10 independent Neuro runners/, /different multisigs/, /starter cap 1,000/, /--i-understand-real-funds/]) assert.match(gates, re);
   assert.notEqual(byName.identity.when({}), true, 'identity needs --neuro-url');
+  assert.ok(names.indexOf('dlmm') === names.indexOf('dex') + 1 && names.indexOf('dlmm') < names.indexOf('wire'), 'the DLMM after the V2 DEX, before the wiring and the handover');
+  assert.match(byName.dlmm.describe, /UNAUDITED/);
   for (const n of ['skill', 'wire', 'protect', 'configs', 'snap', 'handover']) assert.equal(byName[n].always, true, `${n} re-checks every run`);
 });
 
@@ -151,7 +153,14 @@ test('config writers: DEX and NFT deployments.json', () => {
   const nft = JSON.parse(nftWeb(committed('zetaphy-nft/web/deployments.json'), OUT));
   assert.equal(nft.rpc, 'https://1-2-3-4.sslip.io');
   assert.equal(nft.marketplace, A(5));
+  assert.equal(dex.contracts.dlmmFactory, undefined, 'no DLMM step: no DLMM addresses');
   assert.throws(() => dexWeb('', { ...OUT, dex: undefined }), /not deployed/);
+  // the DLMM step's factory and router join the V2 contracts (the web app's DLMM tab reads contracts.dlmmFactory / dlmmRouter)
+  const withDlmm = { ...OUT, dlmm: { unaudited: true, contracts: { dlmmFactory: A(11), dlmmRouter: A(12), dlmmPairCodeHash: '0x' + 'ab'.repeat(32) }, presets: [1, 10, 25, 100] } };
+  const both = JSON.parse(dexWeb(committed('zetaphy-dex/web/deployments.json'), withDlmm));
+  assert.deepEqual(both.contracts, { ...OUT.dex.contracts, dlmmFactory: A(11), dlmmRouter: A(12), dlmmPairCodeHash: '0x' + 'ab'.repeat(32) });
+  assert.equal(OUT.dex.contracts.dlmmFactory, undefined, 'the V2 record is not changed');
+  assert.throws(() => dexWeb('', { ...withDlmm, dlmm: { contracts: { dlmmFactory: A(11), dlmmRouter: '' } } }), /DLMM router: no address/);
   assert.throws(() => nftWeb('', { ...OUT, nft: { factory: '', marketplace: A(5) } }), /no address/);
 });
 
@@ -234,13 +243,16 @@ test('the deployer key: from a 0600 file or the environment; never in an error m
   assert.equal(existsSync(kf.dir), false);
 });
 
-test('handover: every admin role to the timelock (the DEX factory two-step), guardians, the printed plan', () => {
+test('handover: every admin role to the timelock (the DEX and DLMM factories two-step), guardians, the printed plan', () => {
   const o = { neuroControl: A(1), threatRegistry: A(2), stableGateway: A(3), dex: { contracts: { factory: A(4) } }, nft: { marketplace: A(5) },
-    bridgeGuard: A(6), bridgeAirlock: A(7), oracle: A(8), pythRelay: A(9), rewardVault: A(10), neuroIdentity: A(11) };
+    bridgeGuard: A(6), bridgeAirlock: A(7), oracle: A(8), pythRelay: A(9), rewardVault: A(10), neuroIdentity: A(11), dlmm: { contracts: { dlmmFactory: A(12), dlmmRouter: A(13) } } };
   const roles = adminRoles(o);
-  assert.deepEqual(roles.map((r) => r.address), [A(1), A(2), A(10), A(3), A(11), A(6), A(7), A(8), A(9), A(5), A(4)]);
-  assert.equal(roles.find((r) => r.address === A(4)).twoStep, true);
-  assert.deepEqual(roles.map((r) => r.read), ['governance', 'governance', 'governance', 'owner', 'admin', 'governance', 'governance', 'governance', 'governance', 'governance', 'governance']);
+  assert.deepEqual(roles.map((r) => r.address), [A(1), A(2), A(10), A(3), A(11), A(6), A(7), A(8), A(9), A(5), A(4), A(12)]);
+  assert.deepEqual(roles.filter((r) => r.twoStep).map((r) => r.address), [A(4), A(12)], 'the DEX and DLMM factories: two-step, the timelock accepts');
+  assert.deepEqual(roles.map((r) => r.read), ['governance', 'governance', 'governance', 'owner', 'admin', 'governance', 'governance', 'governance', 'governance', 'governance', 'governance', 'governance']);
+  const dlmmRole = roles.find((r) => r.address === A(12));
+  assert.equal(dlmmRole.write, 'setGovernance');
+  for (const fn of ['governance', 'pendingGovernance', 'setGovernance', 'acceptGovernance']) assert.ok(dlmmRole.abi.some((x) => x.name === fn), `DLMM factory ABI has ${fn}`);
   assert.deepEqual(guardianRoles(o).map((r) => r.address), [A(6), A(1), A(2), A(8), A(3)], 'the emergency switches: bridge, Neuro, holds, price feeds, the gateway');
   const p = evmCallProposal({ to: A(4), data: '0x0e18b681', title: 't', summary: 's' });
   assert.equal(p.messages[0]['@type'], '/zetaphy.pq.v1.MsgEVMCall');
@@ -254,6 +266,7 @@ test('handover: every admin role to the timelock (the DEX factory two-step), gua
   assert.match(plan, /zetaphy timelock schedule/);
   assert.match(plan, /zetaphy timelock execute <id>/);
   assert.match(plan, new RegExp(`DEX factory .* ${A(4)}`));
+  assert.match(plan, new RegExp(`DLMM factory .* ${A(12)}`));
   assert.equal(TIMELOCK_ROLES.proposer, '0xb09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc1');
 });
 

@@ -120,9 +120,9 @@ zetaphyd tx bank send liquidity zetaphy1… 1000000000000000000000azetaphy --key
    - `wallet_origin` = `https://wallet.sawasdeecoin.com` (โดเมนกระเป๋าในข้อ 7) ถ้ายังไม่มีเว้นว่าง
 2. ใช้เวลาไม่กี่นาที workflow:
    - deploy: NeuroJobs + NeuroControl (โหวต skill ปัจจุบันเข้าแล้ว), ThreatRegistry, ThreatReports, NeuroIdentity + NeuroValidation,
-     RewardVault, QuantumWalletFactory, test USDC/USDT + StableGateway, ComputeMarket, DEX (factory, router, 2 เหรียญทดลองพร้อมพูล), NFT (factory, marketplace)
-   - ต่อสาย: DEX และ NFT ตรวจ ThreatRegistry, ป้องกันโค้ดร่วมของคอลเลกชัน NFT ใน ThreatRegistry (ธงเดียวจะได้ไม่โดนทุกคอลเลกชัน)
-   - เขียน config: `zetaphy-dex/web/deployments.json`, `zetaphy-nft/web/deployments.json`, `zetaphy-explorer/config.json`,
+     RewardVault, QuantumWalletFactory, test USDC/USDT + StableGateway, ComputeMarket, DEX (factory, router, 2 เหรียญทดลองพร้อมพูล), DLMM (factory, router, preset ค่าเริ่มต้น bin step 1/10/25/100 bps; ยังไม่ผ่าน audit), NFT (factory, marketplace)
+   - ต่อสาย: DEX, DLMM และ NFT ตรวจ ThreatRegistry, ป้องกันโค้ดร่วมของคอลเลกชัน NFT ใน ThreatRegistry (ธงเดียวจะได้ไม่โดนทุกคอลเลกชัน)
+   - เขียน config: `zetaphy-dex/web/deployments.json` (DEX + ที่อยู่ DLMM สำหรับแท็บ DLMM), `zetaphy-nft/web/deployments.json`, `zetaphy-explorer/config.json`,
      `zetaphy-wallet/index.html` (RPC และ ThreatRegistry), `zetaphy-snap/snap.config.js` แล้ว build snap ใหม่ (shasum ใน `snap.manifest.json`)
    - บันทึกที่อยู่ทั้งหมดใน `zetaphy-launch/state/77390.json` (ที่อยู่เท่านั้น ไม่มี key) และแนบเป็น artifact ของ run
 3. **Pull requests** → เปิด PR "Testnet launch: contract addresses and web configs" → ดู diff (มีแต่ที่อยู่และ RPC) → **Merge**
@@ -181,9 +181,9 @@ Framework Preset **Other**, ไม่ต้องตั้ง Build/Output (ม�
   - **proposer/canceller** = `governance` ที่เลือก: `gov` (gov module ตั้งเวลาด้วยโหวต) หรือ `0x<multisig>`
   - **executor = ใครก็ได้** เมื่อครบเวลาแล้ว (สิ่งที่จะเรียกถูกล็อกไว้และทุกคนเห็นมา 48 ชั่วโมง) · **admin = timelock เอง** ไม่มี key ผู้ดูแลเหลือ
 - ยกสิทธิ์ผู้ดูแลทุกตัวให้ timelock: NeuroControl, ThreatRegistry (คุม ThreatReports ด้วย), RewardVault, StableGateway, NeuroIdentity, ZetaphyOracle, ZetaphyPythRelay,
-  BridgeGuard/BridgeAirlock (ถ้ามี), NFT marketplace และ DEX factory (สองขั้น: timelock ตอบรับเองในรอบเดียวกัน ไม่ต้องโหวตแยกแล้ว)
+  BridgeGuard/BridgeAirlock (ถ้ามี), NFT marketplace, DEX factory และ DLMM factory (สองขั้น: timelock ตอบรับเองในรอบเดียวกัน ไม่ต้องโหวตแยกแล้ว)
 - ตั้ง **guardian** (multisig ฉุกเฉิน) บนทุกสัญญาที่มีปุ่มฉุกเฉิน: กดหยุด (Neuro, สะพาน, gateway, ราคา), ลดเพดาน, กักธง, เอา lane/marker ออก ได้ **ทันที** แต่ทำได้แค่ลดความเสี่ยง เปิดคืนต้องผ่าน timelock
-- ตรวจบนเชน: ทุกสิทธิ์เป็นของ timelock, deployer ไม่เหลือ role ใดใน timelock และไม่ใช่ guardian, ไม่มี EOA (key เดี่ยว) ถือ role ใดเลย ไม่ผ่าน = ขั้นนี้ล้ม (รันซ้ำได้)
+- ตรวจบนเชน: ทุกสิทธิ์เป็นของ timelock (DEX/DLMM factory: ไม่มีใครค้างรอตอบรับ `pendingGovernance`), deployer ไม่เหลือ role ใดใน timelock และไม่ใช่ guardian, ไม่มี EOA (key เดี่ยว) ถือ role ใดเลย ไม่ผ่าน = ขั้นนี้ล้ม (รันซ้ำได้)
 
 1. เตรียม multisig ฉุกเฉิน (guardian): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` หรือ Safe (ดู "multisig + hardware wallet" ใน `zetaphy-network/README.md`) แต่ละ owner ใช้ hardware wallet ของตัวเอง
 2. **Actions → launch-testnet → Run workflow**: `rpc` เดิม, `dry_run` = **no**, `governance` = **gov** (หรือ `0x<multisig>`), `guardian` = **0x<multisig ฉุกเฉิน>**, `handover` = **yes**
@@ -318,14 +318,14 @@ zetaphy bridge open  --audit-report https://<ผู้ตรวจ>/report.pdf -
 ### อ้างอิง: launch.js
 
 workflow เรียก `node zetaphy-launch/launch.js` (โค้ดอ่านได้ใน repo; `--help` บอกตัวเลือกทั้งหมด) สิ่งที่ควรรู้:
-- ใช้โค้ด deploy ของแต่ละแพ็กเกจเอง (`zetaphy-network/cli.js`, `zetaphy-dex` `deploy()`, `zetaphy-nft/cli.js deploy`) ไม่ได้เขียนซ้ำ
+- ใช้โค้ด deploy ของแต่ละแพ็กเกจเอง (`zetaphy-network/cli.js`, `zetaphy-dex` `deploy()`, `zetaphy-dex/dlmm-cli.js` `deploy()`, `zetaphy-nft/cli.js deploy`) ไม่ได้เขียนซ้ำ
 - ตรวจก่อนทุกครั้ง: chain id ต้องเป็น 77390 (testnet เท่านั้น), ยอดเงิน deployer พอกับค่าประมาณ, state ตรงกับเชนและ deployer เดิม
 - ทุกขั้นบันทึกใน `zetaphy-launch/state/77390.json` ทันทีที่เสร็จ (`--resume` ข้ามที่เสร็จแล้ว); ขั้นตรวจ (skill, wire, protect, configs, snap, handover) รันทุกครั้งและไม่ส่งธุรกรรมถ้าทุกอย่างถูกแล้ว
 - key: รับจากไฟล์ (`--key-file`, chmod 600) หรือ env เท่านั้น ไม่รับบนบรรทัดคำสั่ง ไม่พิมพ์ ไม่เขียนลง state; workflow เขียน secret ลงไฟล์ 0600 ใน `$RUNNER_TEMP` แล้วลบทิ้งท้าย run
 - ขั้น `oracle`: TwapRecorder + ZetaphyPythRelay + ZetaphyOracle (ZETAPHY/USD จากพูล WZETAPHY/tUSD ของ DEX, เติม Pyth ด้วย `--pyth-zeta-feed`) แล้วให้ StableGateway คิดราคาผ่าน oracle
   ราคามีหลังหน้าต่าง TWAP เต็ม (ต้องมีคน poke เช่น `zetaphy relay start --poke-oracle 60`) · `--stable-testnet-price 0.01` = ทางสำรอง testnet ราคาคงที่ (ติดป้าย ปิดได้ผ่าน timelock)
 - ขั้น `timelock` + `handover` (เฉพาะ `--handover`): ดูข้อ 8 · `--guardian` บังคับ · `--timelock-delay` ค่าเริ่ม 172800 (ต่ำกว่า 86400 ได้เฉพาะ `--devnet` กับ RPC 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
-- ทดสอบ: `cd zetaphy-launch && npm test` (ตัวรันขั้น, state, ตัวเขียน config, ตัวเลือก timelock) และ `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (เชนจริงบนเครื่อง CI: deploy ทั้งหมด, oracle, smoke DEX/NFT/Neuro, handover ให้ timelock + ตรวจบนเชน, guardian หยุดทันที, โหวตตั้งเวลาแล้วใครก็ execute หลังครบเวลา, ตัวเฝ้ารายงาน)
+- ทดสอบ: `cd zetaphy-launch && npm test` (ตัวรันขั้น, state, ตัวเขียน config, ตัวเลือก timelock) และ `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (เชนจริงบนเครื่อง CI: deploy ทั้งหมดรวม DLMM, oracle, smoke DEX/NFT/Neuro, handover ให้ timelock + ตรวจบนเชน, guardian หยุดทันที, โหวตตั้งเวลาแล้วใครก็ execute หลังครบเวลา, ตัวเฝ้ารายงาน)
 
 ## 17. ความปลอดภัยในแกนกลางของเชน (หลัง reset genesis)
 

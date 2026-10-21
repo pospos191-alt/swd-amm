@@ -22,6 +22,8 @@
 #                 native/contract PQ tests on a real devnet, and the
 #                 timelock + price-oracle devnet test (+~4 min; it runs when
 #                 its test, those contracts or the pinned OpenZeppelin files
+#                 change), and the DEX DLMM devnet test (the job also runs
+#                 when only the DLMM contracts, dlmm-cli.js or its test
 #                 change); also checks cloud-init.sh is setup-node.sh packed.
 #                 ~15-25 min.
 #
@@ -108,6 +110,7 @@ jobs:
       dex: ${{ steps.f.outputs.dex }}
       nft: ${{ steps.f.outputs.nft }}
       launch: ${{ steps.f.outputs.launch }}
+      dlmm: ${{ steps.f.outputs.dlmm }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -150,6 +153,8 @@ jobs:
           out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
           out launch '^(zetaphy-launch/|zetaphy-(dex|nft)/web/deployments\.json$|zetaphy-explorer/config\.json$|zetaphy-wallet/index\.html$|zetaphy-snap/snap\.config\.js$)'
+          # the DLMM devnet test (in the zetaphy-chain job, which builds zetaphyd): when the DLMM contracts, their CLI or test change
+          out dlmm '^(zetaphy-dex/(contracts/dlmm/|artifacts/(ZetaphyDlmm|DlmmMath)[A-Za-z]*\.json$|dlmm-cli\.js$|cli\.js$|test/devnet\.dlmm\.integration\.js$|package(-lock)?\.json$)|zetaphy-network/(scripts/devnet\.sh|artifacts/ThreatRegistry\.json)$)'
           # the timelock/oracle devnet test: when its test, those contracts or the pinned OpenZeppelin files change (rarely)
           out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|src/securitycli\.js|cli\.js|contracts/(NeuroJobs|NeuroControl|ZetaphyTimelock|ZetaphyOracle|TwapRecorder|ZetaphyPythRelay)\.sol|vendor/.*|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc|timelock|security)\.integration\.js)$)'
 
@@ -464,7 +469,7 @@ jobs:
   zetaphy-chain:
     name: zetaphy-chain (patched node + PQ devnet)
     needs: changes
-    if: needs.changes.outputs.chain == 'true'
+    if: needs.changes.outputs.chain == 'true' || needs.changes.outputs.dlmm == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -553,6 +558,12 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:ibc
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:timelock
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:security
+
+      - name: DEX DLMM on a real devnet (deploy CLI, native liquidity, swaps, Neuro check)
+        working-directory: zetaphy-dex
+        run: |
+          npm ci --no-audit --no-fund
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:dlmm
 
   program:
     name: program (cargo test + anchor test)

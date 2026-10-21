@@ -39,7 +39,7 @@
 //   --bridge-lockbox <chainId>:0x…  also deploy the Neuro bridge CLOSED (needs a LockBox on the source chain; open later with `zetaphy bridge open` once gates pass)
 //   --skip-snap-build       write snap.config.js but do not run npm run build in zetaphy-snap
 //
-// Steps: neuro skill threats reports identity vault pq stable compute bridge dex nft oracle wire protect configs snap timelock handover
+// Steps: neuro skill threats reports identity vault pq stable compute bridge dex dlmm nft oracle wire protect configs snap timelock handover
 // Testnet only: refuses any chain but ZETAPHY (EVM chain id 77390).
 
 import { readFileSync, renameSync, mkdtempSync, rmSync } from 'node:fs';
@@ -210,6 +210,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, log 
       log('\naddresses:');
       for (const [k, v] of Object.entries(o)) if (typeof v === 'string') log(`  ${k.padEnd(22)} ${v}`);
       if (o.dex) log(`  ${'DEX factory/router'.padEnd(22)} ${o.dex.contracts.factory} / ${o.dex.contracts.router}`);
+      if (o.dlmm) log(`  ${'DLMM factory/router'.padEnd(22)} ${o.dlmm.contracts.dlmmFactory} / ${o.dlmm.contracts.dlmmRouter} (UNAUDITED)`);
       if (o.nft) log(`  ${'NFT factory/market'.padEnd(22)} ${o.nft.factory} / ${o.nft.marketplace}`);
       if (!ctx.handover) log(`\n${handoverPlan(ctx, state)}`);
       log(`\nstate written to ${stateFile}`);

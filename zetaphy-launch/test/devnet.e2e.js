@@ -1,11 +1,12 @@
 // End to end on a real ZETAPHY devnet (zetaphy-network/scripts/devnet.sh, 1 s blocks):
 //   - launch.js --dry-run sends nothing and writes nothing
-//   - a full launch deploys every contract and writes every web app config with real addresses (code checked)
+//   - a full launch deploys every contract and writes every web app config with real addresses (code checked),
+//     the DLMM factory + router included (default presets, router checking the ThreatRegistry)
 //   - --resume deploys nothing new; without it a second run is refused
 //   - smoke: the DEX router quotes, the NFT factory makes a collection, NeuroJobs takes a request under the voted skill
 //   - the oracle step: ZetaphyOracle + TwapRecorder + ZetaphyPythRelay, the StableGateway priced by it
 //   - --governance gov --guardian <key> --handover --devnet --timelock-delay 30: every admin role goes to the
-//     ZetaphyTimelock (the DEX factory's two-step included), the gov module is its only proposer/canceller,
+//     ZetaphyTimelock (the DEX and DLMM factories' two-step included), the gov module is its only proposer/canceller,
 //     anyone executes, the deployer keeps nothing; the guardian pauses Neuro at once but cannot unpause; a real
 //     gov vote schedules NeuroControl.unpause() through the timelock (zetaphy timelock schedule --proposal-out),
 //     anyone executes it after the delay (zetaphy timelock execute, the call given in full: a MsgEVMCall's logs
@@ -107,6 +108,7 @@ test('--dry-run: checks chain and balance, sends nothing, writes nothing', { tim
   assert.match(r.out, /neuro: would run/);
   assert.match(r.out, /bridge: skipped/);
   assert.match(r.out, /oracle: would run/);
+  assert.match(r.out, /dlmm: would run/);
   assert.match(r.out, /timelock: skipped/);
   assert.match(r.out, /handover: skipped/);
   assert.equal(existsSync(stateFile), false);
@@ -145,6 +147,17 @@ test('launch: every contract deployed and every config written with real address
   assert.equal(dex.contracts.threatRegistry, o.threatRegistry);
   assert.equal(dex.tokens.length, 2);
   for (const t of dex.tokens) await hasCode(t.address, t.symbol);
+  // the DLMM: factory + router in the same web config, the default presets, the registry wired, the deployer governance for now
+  for (const k of ['dlmmFactory', 'dlmmRouter']) { await hasCode(dex.contracts[k], `dex ${k}`); assert.equal(dex.contracts[k], o.dlmm.contracts[k]); }
+  const dlmmF = new Contract(dex.contracts.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, provider);
+  assert.deepEqual((await dlmmF.presetSteps()).map(Number).sort((a, b) => a - b), [1, 10, 25, 100]);
+  assert.deepEqual(o.dlmm.presets, [1, 10, 25, 100]);
+  assert.equal(await dlmmF.threatRegistry(), o.threatRegistry);
+  assert.equal(await dlmmF.governance(), deployer.address);
+  assert.equal(await dlmmF.PAIR_CODE_HASH(), dex.contracts.dlmmPairCodeHash);
+  const dlmmR = new Contract(dex.contracts.dlmmRouter, art('zetaphy-dex', 'ZetaphyDlmmRouter').abi, provider);
+  assert.equal(await dlmmR.factory(), dex.contracts.dlmmFactory);
+  assert.equal(o.dlmm.wnative, dex.contracts.wnative, 'the same wrapped native as the V2 DEX');
   // NFT web config
   const nft = JSON.parse(read('zetaphy-nft/web/deployments.json'));
   assert.equal(nft.rpc, RPC);
@@ -200,7 +213,7 @@ test('a second run: refused without --resume; --resume deploys nothing new', { t
   assert.match(r.out, /✓ dex: done/);
   assert.equal(await provider.getTransactionCount(deployer.address), nonce, 'no transaction: everything was done and in place');
   const after = state();
-  for (const k of ['neuro', 'threats', 'dex', 'nft', 'compute', 'oracle']) assert.deepEqual(after.steps[k], before.steps[k], k);
+  for (const k of ['neuro', 'threats', 'dex', 'dlmm', 'nft', 'compute', 'oracle']) assert.deepEqual(after.steps[k], before.steps[k], k);
 });
 
 test('smoke: the DEX router quotes, the NFT factory makes a collection, NeuroJobs takes a request under the voted skill', { timeout: 120_000 }, async () => {
@@ -247,9 +260,17 @@ test('--handover: every admin role to the timelock; the guardian pauses at once;
   for (const [a, abi, fn] of [[o.neuroControl, N('NeuroControl'), 'governance'], [o.threatRegistry, N('ThreatRegistry'), 'governance'], [o.rewardVault, N('RewardVault'), 'governance'],
     [o.stableGateway, N('StableGateway'), 'owner'], [o.neuroIdentity, N('NeuroIdentity'), 'admin'], [o.bridgeGuard, N('BridgeGuard'), 'governance'],
     [o.bridgeAirlock, N('BridgeAirlock'), 'governance'], [o.oracle, N('ZetaphyOracle'), 'governance'], [o.pythRelay, N('ZetaphyPythRelay'), 'governance'],
-    [o.nft.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, 'governance'], [o.dex.contracts.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, 'governance']]) {
+    [o.nft.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, 'governance'], [o.dex.contracts.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, 'governance'],
+    [o.dlmm.contracts.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, 'governance']]) {
     assert.equal(await read1(a, abi, fn), T, `${a} ${fn}`);
   }
+  // the two-step factories: accepted by the timelock, nobody left pending; the deployer can no longer change the DLMM
+  for (const [a, n] of [[o.dex.contracts.factory, 'ZetaphyFactory'], [o.dlmm.contracts.dlmmFactory, 'ZetaphyDlmmFactory']]) {
+    assert.equal(await read1(a, art('zetaphy-dex', n).abi, 'pendingGovernance'), ZeroAddress.toLowerCase(), `${n} pendingGovernance`);
+  }
+  const dlmmAsDeployer = new Contract(o.dlmm.contracts.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, deployer.connect(provider));
+  await assert.rejects(dlmmAsDeployer.setFeeTo.staticCall(deployer.address), (e) => e.revert?.name === 'NotGovernance');
+  assert.match(r.out, /DLMM factory .*accepted by the timelock/);
   // the timelock: the gov module proposes and cancels, anyone executes, it is its own admin, 30 s; the deployer holds nothing
   const tl = new Contract(o.timelock, N('ZetaphyTimelock'), provider);
   const P = hashText('PROPOSER_ROLE'), C = hashText('CANCELLER_ROLE'), E = hashText('EXECUTOR_ROLE');

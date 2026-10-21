@@ -236,6 +236,28 @@ export function launchSteps() {
       },
     },
     {
+      name: 'dlmm',
+      describe: 'DLMM factory + router (zetaphy-dex dlmm-cli deploy, UNAUDITED): the default presets (bin steps 1, 10, 25, 100 bps), the router checking the ThreatRegistry; the deployer stays governance until the handover',
+      artifacts: [['zetaphy-dex', 'ZetaphyDlmmFactory'], ['zetaphy-dex', 'ZetaphyDlmmPairDeployer'], ['zetaphy-dex', 'ZetaphyDlmmRouter']], txs: 5,
+      async run(ctx, state) {
+        const o = outputs(state);
+        const { deploy, DEFAULT_PRESETS } = await import(pathToFileURL(join(ROOT, 'zetaphy-dex/dlmm-cli.js')).href);
+        // a deployments file of its own (no file yet: a new one), so the V2 DEX record in the state stays as it was
+        const file = join(ctx.tmp, 'dlmm.json');
+        const opt = { rpc: ctx.rpc, 'key-file': ctx.keyFile, deployments: file };
+        if (o.threatRegistry) opt.registry = o.threatRegistry;
+        if (o.dex?.contracts?.wnative) opt.wnative = o.dex.contracts.wnative; // the same wrapped native as the V2 DEX
+        const d = await deploy(opt, (l) => ctx.log(`    ${l}`));
+        const contracts = { dlmmFactory: getAddress(d.contracts.dlmmFactory), dlmmRouter: getAddress(d.contracts.dlmmRouter), dlmmPairCodeHash: d.contracts.dlmmPairCodeHash };
+        await haveCode(ctx, { dlmmFactory: contracts.dlmmFactory, dlmmRouter: contracts.dlmmRouter });
+        const f = new Contract(contracts.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, ctx.provider);
+        const steps = (await f.presetSteps()).map(Number).sort((a, b) => a - b);
+        const want = Object.keys(DEFAULT_PRESETS).map(Number).sort((a, b) => a - b);
+        if (steps.join() !== want.join()) throw new Error(`DLMM presets ${steps.join(', ')}, expected ${want.join(', ')}`);
+        return { dlmm: { unaudited: true, contracts, wnative: getAddress(d.contracts.wnative), presets: steps } };
+      },
+    },
+    {
       name: 'nft',
       describe: 'NFT factory + marketplace (zetaphy-nft deploy), the marketplace checking the ThreatRegistry; protects the collections\' shared code keys',
       artifacts: [['zetaphy-nft', 'NFTFactory'], ['zetaphy-nft', 'NFTMarketplace']], txs: 1,
@@ -291,12 +313,13 @@ export function launchSteps() {
     {
       name: 'wire',
       always: true,
-      describe: 'check the DEX factory and the NFT marketplace point at the ThreatRegistry (set-registry while the deployer is governance)',
+      describe: 'check the DEX factory, the DLMM factory and the NFT marketplace point at the ThreatRegistry (set-registry while the deployer is governance)',
       async run(ctx, state) {
         const o = outputs(state);
         const s = signer(ctx);
         const checks = [];
         if (o.dex) checks.push(['DEX factory', new Contract(o.dex.contracts.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, s)]);
+        if (o.dlmm) checks.push(['DLMM factory', new Contract(o.dlmm.contracts.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, s)]);
         if (o.nft) checks.push(['NFT marketplace', new Contract(o.nft.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, s)]);
         for (const [what, k] of checks) {
           const cur = await k.threatRegistry();
@@ -380,7 +403,7 @@ export function launchSteps() {
       name: 'handover',
       always: true,
       describe: 'hand every admin role to the ZetaphyTimelock, the emergency switches to --guardian, and check on-chain that no EOA keeps an admin role (last)',
-      txs: 30,
+      txs: 32,
       when: (ctx) => (ctx.handover ? true : 'no --handover: the deployer stays admin for the testnet bring-up (the plan is printed below)'),
       async run(ctx, state) {
         return handover(ctx, state);
@@ -407,6 +430,7 @@ export function adminRoles(o) {
   add('ZetaphyPythRelay (relayers, threshold)', o.pythRelay, NET('ZetaphyPythRelay').abi, 'governance', 'setGovernance');
   add('NFT marketplace (fees, registry)', o.nft?.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, 'governance', 'setGovernance');
   add('DEX factory (feeTo, registry; the router\'s sweep; two-step: the timelock accepts)', o.dex?.contracts?.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, 'governance', 'setGovernance', { twoStep: true });
+  add('DLMM factory (presets, protocol share, feeTo, registry; the router\'s sweep; two-step: the timelock accepts)', o.dlmm?.contracts?.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, 'governance', 'setGovernance', { twoStep: true });
   return R;
 }
 
@@ -509,8 +533,13 @@ async function handover(ctx, state) {
     forbidden: [ctx.address], devnet: !!ctx.devnet, govModule: GOV_MODULE });
   problems.push(...chk.problems);
   for (const r of adminRoles(o)) {
-    const cur = await new Contract(r.address, r.abi, ctx.provider)[r.read]();
+    const k = new Contract(r.address, r.abi, ctx.provider);
+    const cur = await k[r.read]();
     if (!same(cur, o.timelock)) problems.push(`${r.label} ${r.address}: admin is ${cur}, not the timelock`);
+    if (!r.twoStep) continue;
+    // a two-step role: nobody else may be waiting to accept it
+    const pending = await k.pendingGovernance();
+    if (!same(pending, ZeroAddress)) problems.push(`${r.label} ${r.address}: ${pending} is still pending as governance`);
   }
   if (o.threatReports) {
     const reg = await new Contract(o.threatReports, ['function registry() view returns (address)'], ctx.provider).registry();
@@ -576,7 +605,7 @@ export async function estimate(ctx, state, steps) {
     gas += 150000n * BigInt(st.txs ?? 0);
     if (st.value) value += st.value(ctx);
   }
-  if (ctx.handover) gas += 150000n * 30n; // guardians, roles, the timelock's set-up batch, renouncing
+  if (ctx.handover) gas += 150000n * 32n; // guardians, roles, the timelock's set-up batch, renouncing
   const fee = await ctx.provider.getFeeData();
   const price = fee.maxFeePerGas ?? fee.gasPrice ?? 10n ** 9n;
   const need = ((gas * price) * 3n) / 2n + value; // 1.5 x the gas, plus the coins the steps put in contracts
