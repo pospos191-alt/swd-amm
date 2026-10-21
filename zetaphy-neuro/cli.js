@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Neuro ZETAPHY tier 1 from the command line.
-//   node cli.js <chain> <address> [--lang th|en|zh|ja|ko|vi|id] [--json]
+//   node cli.js <chain> <address> [--lang th|en|zh|ja|ko|vi|id] [--json] [--sim-seed 0x<32 bytes>]
+//       --sim-seed: re-run a NeuroJobs job's trade simulation with the same
+//       addresses and amounts (jobSimSeed(job id, lottery) in src/honeypot.js)
 //   node cli.js fingerprint <evm chain> <address>
 //       prints a template entry to paste into src/templates.js
 //   node cli.js signature <evm chain> <address> [--reason <ThreatRegistry code fact, src/threat-reasons.js>]
@@ -25,12 +27,12 @@ import { CHAINS, explorerUrl } from './src/chains.js';
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
-const VALUED = ['--lang', '--reason', '--flag-key', '--report-hash'];
+const VALUED = ['--lang', '--reason', '--flag-key', '--report-hash', '--sim-seed'];
 const positional = args.filter((a, i) => !a.startsWith('--') && !VALUED.includes(args[i - 1]));
 const chains = Object.keys(CHAINS).join('|');
 
 function usage() {
-  console.error(`usage: node cli.js <${chains}> <address> [--lang ${Object.keys(LANGS).join('|')}] [--json]
+  console.error(`usage: node cli.js <${chains}> <address> [--lang ${Object.keys(LANGS).join('|')}] [--json] [--sim-seed 0x<32 bytes>]
        node cli.js fingerprint <${chains}> <address>
        node cli.js signature <${chains}> <address> [--reason cannot-sell-in-simulation|unlimited-mint|owner-can-block-transfers|owner-can-move-holder-funds|same-name-as-known-token|sweeps-approved-tokens|other]
                              [--flag-key 0x<ThreatRegistry key> --report-hash 0x<evidence reportHash>]`);
@@ -94,7 +96,9 @@ try {
   } else {
     const [chain, address] = positional;
     if (!chain || !address) usage();
-    const report = await readContract(chain, address);
+    const simSeed = opt('--sim-seed');
+    if (simSeed !== undefined && !/^0x[0-9a-fA-F]{64}$/.test(simSeed)) usage();
+    const report = await readContract(chain, address, simSeed ? { simSeed } : {});
     if (flag('--json')) {
       console.log(JSON.stringify(report, null, 2));
     } else {

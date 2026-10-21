@@ -72,13 +72,18 @@ function hexBytes(hex) {
   return Uint8Array.from(h.match(/../g) ?? [], (b) => parseInt(b, 16));
 }
 
-/** Percent lost against the router's quote, one decimal, floored; null without a quote. */
+/**
+ * Percent lost against the router's quote, one decimal, floored; null without
+ * a quote. One part per million is forgiven first: a 5% fee computed as
+ * floor(amount * 5%) loses a hair under 5%, and the amount changes per check.
+ */
 export function taxPercent(expected, got) {
   const e = BigInt(expected);
   const g = BigInt(got);
   if (e <= 0n) return null;
   if (g >= e) return 0; // reflection tokens can pay out a little more than quoted
-  return Number(((e - g) * 1000n) / e) / 10;
+  const ppm = ((e - g) * 1_000_000n) / e;
+  return Number((ppm + 1n) / 1000n) / 10;
 }
 
 /**

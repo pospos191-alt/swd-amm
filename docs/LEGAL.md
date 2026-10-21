@@ -109,7 +109,8 @@ Neuro อ่านสัญญาเหรียญแล้วบอกว่�
 5. ผลตรวจที่ Neuro แสดงหรือธงที่คนรันร่างเผยแพร่ เข้าข่าย ม.14 หรือไม่ และโครงการในฐานะผู้ให้บริการต้องรับผิดตาม ม.15 หรือไม่
    ต้องมีขั้นตอนแจ้งเตือนและนำออก (notice-and-takedown) แบบใด ทั้งที่ข้อมูลบนเชนลบไม่ได้
 6. ธงที่คนรันร่าง/DAO โหวตใน `ThreatRegistry` ถือเป็นการกระทำของเจ้าของโครงการหรือไม่ ใครรับผิดถ้าธงผิด
-7. `DecoyBridge` ทำเครื่องหมายที่อยู่ที่เรียกสะพานหลอก และ `ThreatReports` ให้ใครก็รายงานได้พร้อม `note` สาธารณะ
+7. ตัวเฝ้าสะพาน (key ที่เป็น marker) ทำเครื่องหมายบนเชนให้ที่อยู่ที่เรียกสัญญาที่ตัวเฝ้าเฝ้าไว้ (รายชื่อเก็บเป็นความลับ) ทำให้การโอนผ่านสะพานของที่อยู่นั้นค้างจนกว่า governance จะปลด
+   และ `ThreatReports` ให้ใครก็รายงานได้พร้อม `note` สาธารณะ
    มีความเสี่ยงอะไร (ทั้งหมิ่นประมาทและข้อมูลส่วนบุคคล)
 
 **ข้อตกลงการใช้งานและเขตอำนาจศาล**
@@ -183,7 +184,8 @@ in by the owner before publishing.
   whether DAO/runner flags are attributed to the project owner; terms of use, disclaimers and jurisdiction; PDPA
   (wallet addresses as personal data, permanent on-chain records); SEC Thailand / digital asset rules for the
   ZETAPHY token, runner rewards and report fees; running validators and nodes; liability for the bridge "hold"
-  feature; the decoy bridge marking callers.
+  feature; the bridge monitor's marker key marking (on-chain, public) the callers of contracts it watches from a private list,
+  which holds their bridge transfers until governance lifts the mark.
 - **Free and low-cost legal help in Thailand** (verify current contact details yourself; none are given here):
   the Lawyers Council of Thailand's legal aid office; legal clinics at university law faculties; the Ministry of
   Justice's Rights and Liberties Protection Department.

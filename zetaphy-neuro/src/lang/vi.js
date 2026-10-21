@@ -14,6 +14,8 @@ export const UI = {
   reproduce: 'Tự kiểm tra lại',
   reproduceHow: 'Ai cũng có thể chạy lại phép kiểm tra này bằng lệnh bên dưới (trong thư mục zetaphy-neuro). Mã phán định chỉ gồm những gì các quy tắc kết luận, nên sẽ trùng khớp khi mã và thiết lập của hợp đồng không đổi. Mã báo cáo còn gồm các con số thay đổi như tổng cung.',
   asWritten: 'Tên và ký hiệu được hiển thị như ghi trong hợp đồng; Neuro không xác nhận chúng.',
+  early: 'Cảnh báo sớm: mẫu chưa công bố',
+  earlyHow: 'Máy chủ của ZETAPHY còn so sánh mã của hợp đồng này với các mẫu đang được theo dõi nhưng chưa công bố, để chúng không bị né tránh trước khi được công bố. Mã khớp với các mẫu dưới đây. Đây chỉ là thông tin tham khảo: không thuộc kết quả ở trên hay phán định của mạng lưới, có thể sai, và các mẫu sẽ được công bố sau (thường trong khoảng 30 ngày).',
   m: {
     chain: 'Chuỗi', address: 'Địa chỉ', proxy: 'Proxy', implementation: 'Mã thực thi', owner: 'Chủ sở hữu', functions: 'Hàm đã nhận diện', report: 'Mã báo cáo', explorer: 'Mở trên explorer', fingerprint: 'Dấu vân tay mã (để đăng ký mẫu)', unknown: 'Hàm chưa rõ tên',
     program: 'Chương trình token', mintAuth: 'Quyền tạo token (mint authority)', freezeAuth: 'Quyền đóng băng (freeze authority)', extensions: 'Tiện ích mở rộng', upgradeAuth: 'Quyền nâng cấp', none: 'không có',
@@ -21,6 +23,7 @@ export const UI = {
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ', nearKeys: 'Khóa toàn quyền (full-access key)', codeHash: 'Mã băm của mã', cairo: 'Phiên bản Cairo', maxSupply: 'Nguồn cung tối đa', tokenId: 'Mã token',
     pool: 'Pool thanh khoản', simTax: 'Thuế khi mô phỏng (mua / bán)', simFailed: 'bán thất bại',
     verdict: 'Mã phán định (chỉ quy tắc)', command: 'Lệnh', rule: 'quy tắc',
+    earlyMatch: 'Khớp một mẫu đang theo dõi. Nhóm:', earlyRef: 'mã tham chiếu',
   },
 };
 

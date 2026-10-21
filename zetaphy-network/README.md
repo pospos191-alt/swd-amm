@@ -10,7 +10,7 @@
 | 2 · ปล่อยรางวัลปีละ 10% | `RewardVault`: กองรางวัล 500 ล้านอยู่ในสัญญา ปล่อยรายวันรวมปีละ 10% ของที่เหลือ ไม่มีฟังก์ชันถอน |
 | ประตู 1 | `zetaphy gate` รายงานความคืบหน้าจากข้อมูลบนเชน |
 | 3 · สะพาน: จำกัดยอดต่อวัน + ปุ่มหยุดเฉพาะสะพาน | `BridgeGuard` + `BridgedToken` |
-| 3 · หลายสะพาน + Neuro เป็นสะพาน + สะพานหลอก | `BridgeAirlock` + `NeuroLane` + `HyperlaneLane` + `DecoyBridge` + `zetaphy bridge watch` |
+| 3 · หลายสะพาน + Neuro เป็นสะพาน + ทำเครื่องหมายผู้โจมตี | `BridgeAirlock` (marker) + `NeuroLane` + `HyperlaneLane` + `zetaphy bridge watch` / `bridge monitor` |
 | 3 · ประตูเปิดสะพาน + เฝ้าดู (สะพาน **ปิด** เป็นค่าเริ่มต้น) | `zetaphy bridge open` / `bridge monitor` + `.github/workflows/bridge-monitor.yml` |
 | 2 · ค่า AI 90% คนรันร่าง · 5% เผา · 5% กองทุนชุมชน | `NeuroJobs` แบ่งค่างานทุกงาน (งานที่ล้มเหลวคืนผู้ใช้ 100%) |
 | 4 · ร่างงอก/หด + ร่างป้องกัน 4 ร่าง + กักตัว/งอกใหม่ | `NeuroJobs` + `NeuroControl` + `zetaphy neuro regrow` |
@@ -178,7 +178,7 @@ zetaphy gate
   - การหยุดสะพานไม่ทำให้เชนหยุด
 - ฝั่ง IBC (USDC ของแท้ผ่าน Noble) มีเพดานระดับเชนด้วย (`x/ratelimit`) ตั้งโดย governance ด้วย `zetaphy-chain/gov.sh propose-ratelimit` (ดู zetaphy-chain/README.md ขั้น 3)
 
-### ด่านก่อนเข้า ZETAPHY: หลายสะพาน, Neuro เป็นสะพาน, สะพานหลอก
+### ด่านก่อนเข้า ZETAPHY: หลายสะพาน, Neuro เป็นสะพาน, ทำเครื่องหมายผู้โจมตี
 
 ```
 เชนต้นทาง (HyperlaneLockBox: ล็อก + ส่งข้อความ Hyperlane)
@@ -186,8 +186,8 @@ zetaphy gate
    ├──► สะพาน 1: Hyperlane (HyperlaneLane) ─┐
    ├──► สะพาน 2: Neuro (คนรันร่าง 2/3) ─┤──► BridgeAirlock (ห้องกักกัน) ──► BridgeGuard (เพดานต่อวัน) ──► ZETAPHY
    └──► (สะพานอื่นในอนาคต) ─────────┘          ▲ Neuro / guardian กดยับยั้งได้ระหว่างกักกัน
-                                                 ▲ ที่อยู่ที่ไปแตะ DecoyBridge = ห้ามออก
-ผู้โจมตี ──► DecoyBridge (สะพานหลอก ไม่มีเงิน) ──► ทำเครื่องหมายผู้โจมตี
+                                                 ▲ ที่อยู่ที่ถูกทำเครื่องหมาย = ไม่ปล่อยจนกว่า governance ปลด
+ผู้โจมตี ──► สัญญาที่ตัวเฝ้าเฝ้าไว้ (รายชื่อลับ) ──► bridge monitor + marker key ──► BridgeAirlock.trip(ผู้เรียก)
 ```
 
 1. **ต้องมีหลายสะพานยืนยันตรงกัน:** การโอนหนึ่งรายการต้องได้รับการยืนยันจากสะพานอิสระอย่างน้อย `threshold` สาย (ค่าเริ่มต้น 2) และรายละเอียดต้องตรงกันทุกตัว
@@ -197,11 +197,13 @@ zetaphy gate
    - คนรันร่างที่มีผลงานครบ quorum (ค่าเริ่มต้น 2) ยืนยันตรงกัน `NeuroLane` จึงยืนยันต่อให้ห้องกักกัน
 3. **ห้องกักกัน:** เมื่อได้รับการยืนยันครบแล้ว ต้องรอ `quarantine` วินาทีก่อน
    - ระหว่างนั้นคนรันร่างโหวตยับยั้งได้ (quorum) และ guardian ก็ยับยั้งได้
-4. **สะพานหลอก:** `DecoyBridge` หน้าตาเหมือนสะพาน (`mint`, `release`, `withdraw`, `handle`, `upgradeTo`, …) แต่ไม่มีเงิน
-   - ใครเรียกฟังก์ชันที่เปลี่ยนสถานะ จะถูกทำเครื่องหมาย เฉพาะผู้เรียกโดยตรง (`msg.sender`) ไม่ใช่ `tx.origin` จึงหลอกให้คนบริสุทธิ์โดนทำเครื่องหมายไม่ได้
-   - การโอนจากหรือถึงที่อยู่ที่ถูกทำเครื่องหมายจะไม่ถูกปล่อยออก
-   - สะพานหลอก **ไม่สั่งหยุดสะพานจริง** เพราะถ้าสั่งได้ ใครก็ป่วนระบบได้ด้วยการกดสะพานหลอก
-   - governance ปลดเครื่องหมายที่ทำผิดพลาดได้
+4. **ทำเครื่องหมาย (marker):** governance ตั้ง key ที่ทำเครื่องหมายได้ (`setMarker`: `deploy-bridge --marker 0x…` หรือ `zetaphy bridge marker 0x…`) ปกติคือ key ของตัวเฝ้า (bridge monitor) เอง ซึ่งไม่มีสิทธิ์อื่นเลย
+   - marker ทำได้อย่างเดียวคือ `trip(ที่อยู่)`: การโอนจากหรือถึงที่อยู่นั้นจะไม่ถูกปล่อย (`Blocked`) จนกว่า governance จะปลด (`untrip`, `zetaphy bridge untrip 0x…`) เงินไม่หาย ค้างอยู่ใน airlock
+     (หลังปลดแล้ว `bridge watch` ไม่ลองปล่อยรายการที่เคยได้ `Blocked` ซ้ำ ใครก็เรียก `release` เองได้)
+   - marker ยืนยัน ยับยั้ง ปล่อย mint หรือหยุดสะพาน **ไม่ได้** และโยกเงินไม่ได้ ถ้า key หลุด ที่เสียคือการโอนของบางที่อยู่ช้าลง จนกว่า governance จะถอด marker (`zetaphy bridge marker 0x… --off`) และปลดเครื่องหมาย
+   - airlock **ไม่เก็บรายชื่อสัญญาล่อ** บนเชน: รายชื่อสัญญาที่ตัวเฝ้าเฝ้าไว้ (watch list) เป็น secret ของ repo (`BRIDGE_WATCHLIST`) ไม่อยู่ในไฟล์ใดที่ commit และไม่ปรากฏในผลของตัวเฝ้า ใครเรียกสัญญาเหล่านั้น ตัวเฝ้าแจ้งเตือนแล้วทำเครื่องหมายผู้เรียก (ดู "เฝ้าดู")
+   - ทำเครื่องหมายเฉพาะผู้เรียกโดยตรง (`msg.sender` ที่สัญญาที่เฝ้าไว้ส่งออกใน event) ไม่ใช่ `tx.origin` คนที่ถูกหลอกให้เรียกสัญญาตัวกลางที่ไปแตะสัญญาที่เฝ้าไว้จึงไม่โดน (สัญญาตัวกลางโดนแทน)
+   - การทำเครื่องหมาย **ไม่สั่งหยุดสะพานจริง** และ **ไม่ทันที**: ตัวเฝ้าทำในรอบถัดไป จึงต้องตั้ง `quarantine` ให้นานกว่าช่วงห่างของรอบตัวเฝ้า (ดู "เฝ้าดู")
 5. เงินที่ผ่านทุกด่านแล้วยังต้องผ่านเพดานต่อวันของ `BridgeGuard` อีกชั้น
 6. **วัคซีน** (เมื่อตั้ง `--threats`): ผู้ส่งหรือสัญญาต้นทางที่ติดธงใน `ThreatRegistry` หรือผู้รับบน ZETAPHY ที่ที่อยู่หรือโค้ดติดธง
    - **กักเมื่อธงอายุครบ `holdDelay`** (ค่าเริ่มต้น 10 นาที ต้องน้อยกว่า `enforceDelay`; governance ปรับด้วย `setHoldDelay` / `zetaphy threat hold-delay`):
@@ -239,7 +241,7 @@ zetaphy gate
 zetaphy deploy-threats --quorum 3 --min-agreed 5 --enforce-delay 3600
 zetaphy deploy-bridge --lockbox 97:0x<HyperlaneLockBox> --quarantine 3600 --threats 0x<ThreatRegistry> \
   --hyperlane-mailbox 0x<Mailbox บน ZETAPHY> --hyperlane-origin <domain ต้นทาง> [--hyperlane-ism 0x<ISM>] \
-  --guardian 0x<guardian multisig> --governance 0x<governance multisig>
+  --guardian 0x<guardian multisig> --governance 0x<governance multisig> --marker 0x<ที่อยู่ของ key ตัวเฝ้า>
 #   ติดตั้งแบบปิด (route ยังไม่เปิด) เพดานต่อวันเริ่ม 1,000 โทเคน
 #   --guardian / --governance ต้องเป็น multisig (ไม่งั้นไม่ deploy) ใช้ key เดี่ยวได้เฉพาะ --devnet (RPC 127.0.0.1) หรือ --allow-eoa-for-testing
 #   มี ThreatRegistry แล้วต้องมี --lockbox (ไม่งั้นไม่ deploy) เพื่อปกป้อง LockBox ต้นทางเสมอ หรือใส่ --no-lockbox-protect อย่างจงใจ แล้ว threat protect ทีหลัง
@@ -299,7 +301,7 @@ zetaphy bridge close        # governance: ปิด route
 
 ### เฝ้าดู (monitor) และแจ้งเตือน
 
-`zetaphy bridge monitor` อ่านเชนอย่างเดียว (ไม่ใช้ key) จาก event ของ BridgeGuard, BridgeAirlock, NeuroLane, HyperlaneLane, ThreatRegistry และ (ถ้าให้ `--source-rpc --lockbox`) LockBox ต้นทาง แล้วแจ้งเตือนเมื่อ:
+`zetaphy bridge monitor` อ่าน event ของ BridgeGuard, BridgeAirlock, NeuroLane, HyperlaneLane, ThreatRegistry, (ถ้าให้ `--source-rpc --lockbox`) LockBox ต้นทาง และสัญญาใน watch list (ถ้ามี) แล้วแจ้งเตือนเมื่อ (ใช้ key เฉพาะเมื่อตั้ง `BRIDGE_MARKER_KEY` เพื่อทำเครื่องหมาย):
 
 | กฎ | เมื่อไร |
 |---|---|
@@ -308,21 +310,44 @@ zetaphy bridge close        # governance: ปิด route
 | `lane-missing` | lane หนึ่งยืนยัน อีก lane ไม่ยืนยันภายใน 30 นาที (`--disagree-minutes`) |
 | `lane-silent` | มีการฝากบนเชนต้นทางแต่ไม่มี lane ยืนยันภายใน 30 นาที (`--silent-minutes`, ต้องมี `--source-rpc`) |
 | `release-stalled` | ครบ lane + กักกันแล้วแต่ไม่ถูกปล่อยภายใน 30 นาที (relayer เงียบ หรือถูกกัก) |
-| `veto` / `pause` / `decoy-hit` | มี veto, guardian กด pause, มีคนแตะสะพานหลอก (ร้ายแรง) |
+| `veto` / `pause` | มี veto, guardian กด pause (ร้ายแรง) |
+| `watch-hit` | สัญญาใน watch list ส่ง event (ร้ายแรง) บอกเฉพาะผู้เรียก ไม่บอกว่าสัญญาไหน |
+| `marked` | มีการทำเครื่องหมายที่อยู่ (`Tripped`) ที่ตัวเฝ้านี้ทำเอง = เตือน · marker อื่นทำ = ร้ายแรง (ตรวจว่าใครถือ key นั้น) |
+| `mark-failed` | ทำเครื่องหมายไม่สำเร็จ (key ไม่ได้เป็น marker, แก๊สไม่พอ) ลองใหม่ทุกรอบ (ร้ายแรง) |
 | `hold` | `InboundHeld` ของ BridgeGuard, `HeldNow` / `FastEnforced` ของ ThreatRegistry |
-| `governance-change` | เปลี่ยน route เพดาน `maxDailyLimit` lane vetoer decoy guardian governance audit registry config/ISM ของ HyperlaneLane, unpause, untrip |
+| `governance-change` | เปลี่ยน route เพดาน `maxDailyLimit` lane vetoer marker guardian governance audit registry config/ISM ของ HyperlaneLane, unpause, untrip |
 | `large-transfer` | รายการเดียว ≥ 25% ของเพดานต่อวัน (`--large-pct`) |
 
-ผลเป็น JSON (`--out`) และสรุปภาษาไทย + อังกฤษ (`--summary` และหน้าจอ) แจ้งเตือนเดิมไม่ซ้ำ (เก็บใน `--state` พร้อมบล็อกล่าสุดที่อ่านแล้ว)
+ผลเป็น JSON (`--out`) สรุปภาษาไทย + อังกฤษ (`--summary` และหน้าจอ) และเนื้อหา issue (`--issue`) แจ้งเตือนเดิมไม่ซ้ำ (เก็บใน `--state` พร้อมบล็อกล่าสุดที่อ่านแล้ว) · `--quiet` พิมพ์แค่จำนวน (สำหรับ log สาธารณะ)
 
-**GitHub Actions (`.github/workflows/bridge-monitor.yml`):** ตอนนี้ปิดตารางเวลาไว้ (repo เป็น private ได้นาทีฟรีแค่ 2,000/เดือน) กดรันเองได้ (ใส่ `from_block` เพื่ออ่านใหม่); เมื่อเปิดสะพานแล้วให้เปิดบรรทัด `schedule` ในไฟล์ (รายชั่วโมง ~720 นาที/เดือน; ถ้า repo เป็น public ฟรีไม่จำกัด ตั้งทุก 15 นาทีได้)
+**ค่าลับอ่านจาก environment (secret ของ repo) เท่านั้น ไม่อยู่ในไฟล์ที่ commit:**
+- `BRIDGE_MONITOR_THRESHOLDS`: JSON ทับค่าเกณฑ์ใน `bridge-monitor.json` เช่น `{"volumePct": 60, "largePct": 10}` (คีย์ `volumePct`, `largePct`, `silentMinutes`, `disagreeMinutes`)
+  **ค่าใน `bridge-monitor.json` เป็นแค่ค่าเริ่มต้นที่เปิดเผย** ค่าที่ใช้จริงตั้งเป็น secret ได้ (ลำดับ: ตัวเลือกบรรทัดคำสั่ง > secret > ไฟล์ > ค่าในโค้ด)
+- `BRIDGE_WATCHLIST`: JSON `[{"address": "0x…", "callerTopic": 1}]` สัญญาที่ทุก event = แจ้งเตือน ผู้เรียกอ่านจาก topic ที่ `callerTopic` (ค่าเริ่มต้น 1 = พารามิเตอร์ indexed ตัวแรก)
+  - สัญญาที่เฝ้าต้องส่ง `msg.sender` ของตัวเองลง topic นั้น ถ้าผู้เรียกเลือกค่าที่ลงไปได้ ก็สั่งให้ทำเครื่องหมายใครก็ได้
+  - ผู้เรียก = ผู้เรียกโดยตรง คนที่ถูกล่อผ่านสัญญาตัวกลางจึงไม่โดน (สัญญาตัวกลางโดนแทน)
+  - ไม่มีผลลัพธ์ใดของตัวเฝ้าเอ่ยที่อยู่สัญญาที่เฝ้าไว้ (แจ้งเตือน, JSON, สรุป, issue, state) ใช้คำว่า "a watched contract" แทน มีชุดทดสอบตรวจทุกตัวพิมพ์
+- `BRIDGE_MARKER_KEY`: private key ของ marker (governance ตั้งด้วย `zetaphy bridge marker 0x<ที่อยู่ของ key นี้>`) ตัวเฝ้าเรียก `trip(ผู้เรียก)` ให้ผู้เรียกรายใหม่ที่ยังไม่ถูกทำเครื่องหมาย (จำไว้ใน state ไม่ทำซ้ำ)
+  - key นี้ไม่ถูกพิมพ์หรือบันทึกที่ใด ใส่ ZETAPHY ไว้แค่พอค่าแก๊ส และอย่าให้สิทธิ์อื่น
+  - ที่อยู่ที่ governance เคยปลด (`untrip`) ตัวเฝ้าไม่ทำเครื่องหมายซ้ำเอง (แจ้งเตือนให้คนตัดสิน)
+- ตั้งค่าใดค่าหนึ่งข้างบนแล้ว ไฟล์ `--state` จะถูกเข้ารหัส (AES-256-GCM ด้วย key ที่ได้จากค่าลับเหล่านั้น) เหลือแค่เลขบล็อกล่าสุดที่อ่านแล้วที่ไม่เข้ารหัส
+  เปลี่ยนค่าลับเมื่อไร (เช่น หมุน watch list หรือ marker key) ความจำเดิมอ่านไม่ได้ ตัวเฝ้าอ่านต่อจากบล็อกเดิมด้วยความจำใหม่ (แจ้งเตือนเดิมอาจซ้ำหนึ่งครั้ง ไม่อ่านย้อนหลังใหม่)
+
+**GitHub Actions (`.github/workflows/bridge-monitor.yml`):** ตอนนี้ปิดตารางเวลาไว้ (repo เป็น private ได้นาทีฟรีแค่ 2,000/เดือน) กดรันเองได้ (ใส่ `from_block` เพื่ออ่านใหม่); เมื่อเปิดสะพานแล้วให้เปิดบรรทัด `schedule` ในไฟล์
 1. ใส่ที่อยู่สะพานใน `zetaphy-network/bridge-monitor.json` (`bridgeGuard`, `bridgeAirlock`, `startBlock`, `rpc`) หรือปล่อยว่างให้อ่านจาก `zetaphy-launch/state/77390.json`
    RPC ใส่ในไฟล์นั้นหรือเป็น repository variable `ZETAPHY_RPC` (Settings → Secrets and variables → Actions → **Variables**)
 2. ยังไม่มีสะพาน = workflow ไม่ทำอะไร (notice แล้วจบ exit 0)
-3. มีแจ้งเตือน = เปิด issue ติดป้าย `bridge-alert` (หรือ comment ใน issue ที่ยังเปิดอยู่) ด้วย `GITHUB_TOKEN` ของ workflow (`issues: write`)
-4. ช่องทางเสริม (ไม่บังคับ, ไม่พิมพ์ค่าลง log): secret `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` และ/หรือ `DISCORD_WEBHOOK_URL`
-5. บล็อกล่าสุดที่อ่านแล้วเก็บใน artifact `bridge-monitor-state` ของ run ที่สำเร็จล่าสุด run ต่อไปอ่านต่อจากนั้น ไม่อ่านซ้ำ
-6. ค่าใช้จ่าย: repo สาธารณะฟรี · repo ส่วนตัวใช้ราว 2,900 นาที/เดือน (เกินโควตาฟรี 2,000) ให้เปลี่ยนเป็นทุก 30 นาทีหรือทุกชั่วโมง
+3. **log ของ Actions, step summary, artifact และ issue ของ repo สาธารณะ ทุกคนเห็น** workflow จึงพิมพ์แค่จำนวนแจ้งเตือน (`--quiet`) ไม่พิมพ์รายละเอียด
+   และเก็บ artifact รายงาน (`bridge-monitor-report`) เฉพาะตอน repo เป็น private · artifact `bridge-monitor-state` เข้ารหัสด้วยค่าลับ (ข้างบน)
+4. รายละเอียดแจ้งเตือนส่งไปช่องทางส่วนตัวเท่านั้น (secret ทั้งหมด ไม่พิมพ์ค่าลง log):
+   - `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` และ/หรือ `DISCORD_WEBHOOK_URL`
+   - `PRIVATE_ALERTS_TOKEN`: fine-grained token ที่มีสิทธิ์ Issues: read and write เฉพาะ repo ส่วนตัว (variable `PRIVATE_ALERTS_REPO`, ค่าเริ่มต้น `pospos191-alt/zetaphy-private`) แจ้งเตือนเป็น issue `bridge-alert` ที่นั่น
+   - issue ใน repo นี้ **เฉพาะ** เมื่อตั้ง variable `BRIDGE_ALERT_ISSUES` = `on` (ถ้า repo เป็น public แจ้งเตือนจะเป็นสาธารณะ)
+5. มีแจ้งเตือนแต่ไม่มีช่องทางไหนรับ = run **ล้ม** พร้อมข้อความสั้น (มีแค่จำนวน) และไม่บันทึก state รอบหน้าอ่านบล็อกเดิมแล้วส่งใหม่
+6. บล็อกล่าสุดที่อ่านแล้วเก็บใน artifact `bridge-monitor-state` ของ run ที่สำเร็จล่าสุด run ต่อไปอ่านต่อจากนั้น ไม่อ่านซ้ำ
+7. **ทำเครื่องหมายอัตโนมัติไม่ทันที:** ตัวเฝ้าทำเครื่องหมายในรอบถัดไป `quarantine` ของ airlock (ค่าเริ่มต้น 3600 วินาที) ต้องนานกว่าช่วงห่างของรอบ บวกความล่าช้าของตัวตั้งเวลา (มัก 5–15 นาที)
+   ไม่งั้นการโอนของผู้เรียกอาจถูกปล่อยก่อน รายชั่วโมงต้องใช้ quarantine เกิน 1 ชม. พอสมควร · แนะนำเมื่อ repo เป็น public: ทุก 15 นาที (`*/15`) กับ quarantine อย่างน้อย 2 ชม. (`setQuarantine(7200)`)
+8. ค่าใช้จ่าย: repo สาธารณะฟรี · repo ส่วนตัว รายชั่วโมง ~720 นาที/เดือน ทุก 15 นาที ~2,900 นาที/เดือน (เกินโควตาฟรี 2,000)
 
 ## ภูมิคุ้มกันและร่างงอก/หด
 
@@ -825,7 +850,7 @@ zetaphy pq verify-block 12345 --json                 # ผลแบบ JSON; --c
 |---|---|---|
 | 1 | คนเดียวสวมหลายที่อยู่ ยึดที่นั่งแบบมาก่อนได้ก่อน แล้วดูดกองรางวัล | **จับฉลากที่นั่งตามน้ำหนักเงินค้ำ**<br>• ใช้ seed จากคำขอ ซึ่งคนอื่นเปลี่ยนไม่ได้<br>• ต้องลงทะเบียนก่อนที่งานจะถูกส่ง<br>• รางวัลไม่เกิน 1/4 ของค่างาน และมีเพดานต่อวัน<br>• ส่งงานเองตอบเองจะขาดทุน ยกเว้นถือเงินค้ำเกิน 2/3 ของทั้งระบบ |
 | 2 | สถานะ "คนรันร่างที่มีผลงาน" ปั๊มเองได้ | ผลงานต้องได้จากการถูกจับฉลาก (ข้อ 1) และสะพาน Neuro ต้องการผลงานอย่างน้อย 5 งาน (`--min-agreed`) |
-| 3 | สะพานหลอกทำเครื่องหมาย `tx.origin` ทำให้ล่อคนบริสุทธิ์ให้โดนได้ | ทำเครื่องหมายเฉพาะผู้เรียกโดยตรง (`msg.sender`) มีชุดทดสอบด้วยสัญญาล่อเหยื่อ |
+| 3 | ทำเครื่องหมาย `tx.origin` ทำให้ล่อคนบริสุทธิ์ให้โดนได้ | ทำเครื่องหมายเฉพาะผู้เรียกโดยตรง (`msg.sender` ที่สัญญาที่เฝ้าไว้ส่งออก) มีชุดทดสอบด้วยสัญญาล่อเหยื่อ (`test/helpers/Lure.sol`) |
 | 4 | กุญแจผู้ดูแลมีดอกเดียว | `SimpleMultisig` (k-of-n) + `--governance` ส่งสิทธิ์ผู้ดูแลต่อหลังติดตั้ง |
 | 5 | JSON-RPC สาธารณะถูกยิงจนล่มได้ | ตั้งเพดานใน `setup-node.sh`: gas/เวลา eth_call, ขนาด log, batch, ขนาดคำขอ, จำนวนการเชื่อมต่อ และปิด unlock |
 | 6 | patch ML-DSA ยังไม่มีใครตรวจ | fuzz test (ข้อมูลเสียทุกแบบต้องไม่ทำให้เชนล่ม) และ benchmark: ML-DSA-44 ใช้ 80 µs, ML-DSA-65 ใช้ 142 µs จึงตั้งค่า gas ไว้สูงกว่างานจริงราว 3–5 เท่า |
@@ -889,9 +914,10 @@ zetaphy deploy-stable --reserve 1000   # tUSDC, tUSDT และ StableGateway (�
 - `ZETAPHYD=<zetaphyd ที่มีกุญแจโหวต ML-DSA> npm run test:devnet:pqcert`: เชน 2 validator ลงทะเบียนกุญแจโหวต แล้วตรวจบล็อกด้วย `zetaphy pq verify-block`
 - `ZETAPHYD=<zetaphyd> npm run test:devnet:cosmoswallet`: กระเป๋า Cosmos (Keplr, Leap, Cosmostation) เซ็นและส่งธุรกรรมบนเชนจริง
 - `ZETAPHYD=<zetaphyd> npm run test:devnet:neurogov`: โหวตบนเชนจริงหยุด Neuro (gov module เรียก NeuroControl ผ่าน MsgEVMCall) แล้วเปิดใหม่ การโอนเหรียญยังทำงานระหว่างหยุด โหวตถอดเชนออกจากรายชื่อแล้วคำขอเชนนั้นถูกปฏิเสธ และโหวตตั้งเงินวางท้าทาย (2.5 ZETAPHY) กับ `defenderTimeout`
-- `npm run test:devnet:bridge`: สะพาน Neuro ข้ามเชนจริง 2 เชน (ต้นทาง และ ZETAPHY) รวมถึงผู้ส่งที่ติดธงแล้ว guardian บังคับใช้ทันที (`enforce-now`) ถูกปฏิเสธ ผู้ส่งที่ติดธงระดับเตือนไม่ถูกกักจนครบ `holdDelay` แต่ guardian กักทันทีด้วย `hold-now` ทั้งคู่ออกได้หลังปลดธง, `deploy-bridge` ไม่ยอม deploy ถ้าไม่มี `--lockbox` หรือ guardian เป็น key เดี่ยวนอก devnet และติดตั้งแบบปิด, `bridge open` ไม่เปิดจนผ่านทุกประตู, `bridge monitor` แจ้ง decoy, การเปลี่ยนค่า, ยอดถึงเพดาน และ pause, `threat export`, รายงานจากผู้ใช้ (`report`, `reports`, `settle`, `claim`)
+- `npm run test:devnet:bridge`: สะพาน Neuro ข้ามเชนจริง 2 เชน (ต้นทาง และ ZETAPHY) รวมถึงผู้ส่งที่ติดธงแล้ว guardian บังคับใช้ทันที (`enforce-now`) ถูกปฏิเสธ ผู้ส่งที่ติดธงระดับเตือนไม่ถูกกักจนครบ `holdDelay` แต่ guardian กักทันทีด้วย `hold-now` ทั้งคู่ออกได้หลังปลดธง, `deploy-bridge` ไม่ยอม deploy ถ้าไม่มี `--lockbox` หรือ guardian เป็น key เดี่ยวนอก devnet และติดตั้งแบบปิด, `bridge open` ไม่เปิดจนผ่านทุกประตู, `bridge monitor` (watch list + marker key) ทำเครื่องหมายผู้ที่เรียกสัญญาที่เฝ้าไว้ก่อนพ้นการกักกันจนการโอนของเขาถูกปฏิเสธ โดยไม่มีผลลัพธ์ใดเอ่ยที่อยู่สัญญานั้น และแจ้งการเปลี่ยนค่า ยอดถึงเพดาน (เกณฑ์จาก secret) และ pause, `threat export`, รายงานจากผู้ใช้ (`report`, `reports`, `settle`, `claim`)
   - รันบนเครื่องที่ใช้ devnet ร่วมกัน: `flock /tmp/ci-test/devnet.lock env ZETAPHYD=<zetaphyd> npm run test:devnet:bridge`
-- `npm test` รวม `test/hyperlane.test.js` (HyperlaneLane กับ Mailbox จำลอง, ประตูบนเชน, เพดานแข็ง), `test/bridgegate.test.js` (ประตูของ CLI) และ `test/monitor.test.js` (กฎแจ้งเตือน)
+- `npm test` รวม `test/hyperlane.test.js` (HyperlaneLane กับ Mailbox จำลอง, ประตูบนเชน, เพดานแข็ง), `test/bridgegate.test.js` (ประตูของ CLI) และ `test/monitor.test.js` (กฎแจ้งเตือน, watch list, การทำเครื่องหมาย, ไม่มีที่อยู่สัญญาที่เฝ้าไว้ในผลลัพธ์ใด, state เข้ารหัส)
+  สัญญาสำหรับทดสอบอย่างเดียว (`test/helpers/WatchedEmitter.sol`, `test/helpers/Lure.sol`) คอมไพล์ในชุดทดสอบ ไม่อยู่ใน `contracts/` และ `artifacts/`
 - `npm run test:devnet`: ทดสอบบนเชน ZETAPHY จริง ต้องมี `zetaphyd`
   - สคริปต์ตั้งเชน 1 โหนด (บล็อกละ 1 วินาที)
   - คนรันร่าง 3 คนรับงานจริงจนได้ผลตรวจ 2 ใน 3 และได้รับเงิน

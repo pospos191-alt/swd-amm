@@ -22,6 +22,9 @@ const kindOf = (chain) => CHAINS[chain]?.kind ?? 'evm';
 
 let lang = 'th';
 let last = null;
+// Early warning (/api/early-warning, server/earlywarning.js) for the report shown.
+let early = null;
+const EARLY_SEVERITY = new Set(['high', 'medium', 'low', 'info']);
 try { lang = pickLang(localStorage.getItem('neuro-lang') ?? 'th'); } catch { /* storage blocked */ }
 
 for (const [key, c] of Object.entries(CHAINS)) $('chain').add(new Option(c.name, key));
@@ -144,7 +147,43 @@ function render(report) {
   a.target = '_blank'; a.rel = 'noopener noreferrer';
   a.textContent = new URL(a.href).hostname;
   dd.append(a); dl.append(dt, dd);
+  renderEarly();
   $('result').hidden = false;
+}
+
+// Advisory notice from the project's server: a reason category, a severity
+// and an opaque reference per matched private rule, never the rule itself.
+function renderEarly() {
+  const ws = early && early.report === last ? early.warnings : [];
+  $('early').hidden = !ws.length;
+  if (!ws.length) return;
+  const { m } = uiText(lang);
+  $('early-list').replaceChildren(...ws.map((w) => {
+    const li = document.createElement('li');
+    li.className = w.severity;
+    li.textContent = `${m.earlyMatch} ${LANGS[lang].REASON?.[w.reason] ?? LANGS.en.REASON[w.reason]} (${m.earlyRef} ${w.ref})`;
+    return li;
+  }));
+}
+
+// Asks the project's server whether this EVM contract matches a rule that is
+// not public yet. Sends only the chain and the address; optional (the page
+// works the same without it) and not part of the verdict.
+async function checkEarly(chain, address, report) {
+  if (kindOf(chain) !== 'evm' || !/^https?:$/.test(location.protocol)) return;
+  try {
+    const res = await fetch('/api/early-warning', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chain, address }),
+    });
+    if (!res.ok) return;
+    const out = await res.json();
+    const warnings = (Array.isArray(out?.warnings) ? out.warnings : [])
+      .filter((w) => w && Object.hasOwn(LANGS.en.REASON, w.reason) && EARLY_SEVERITY.has(w.severity) && /^ew-[0-9a-f]{12}$/.test(w.ref))
+      .slice(0, 5);
+    if (last !== report) return; // another check started meanwhile
+    early = { report, warnings };
+    renderEarly();
+  } catch { /* optional */ }
 }
 
 // Report ID, verdict ID and the CLI command that recomputes both.
@@ -184,6 +223,7 @@ async function run(chain, address) {
     render(last);
     status('');
     reportUsage();
+    checkEarly(chain, address, last);
     const u = new URL(location.href);
     u.searchParams.set('chain', chain); u.searchParams.set('address', address);
     history.replaceState(null, '', u);

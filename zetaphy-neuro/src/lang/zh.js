@@ -14,6 +14,8 @@ export const UI = {
   reproduce: '自行复核',
   reproduceHow: '任何人都可以用下面的命令（在 zetaphy-neuro 文件夹中）重新运行此检查。裁定 ID 只涵盖规则得出的结论，只要合约的代码和设置不变就会一致。报告 ID 还涵盖供应量等会变化的数字。',
   asWritten: '名称和符号按合约中所写显示，Neuro 不作确认。',
+  early: '提前提醒：尚未公开的模式',
+  earlyHow: 'ZETAPHY 的服务器还会把该合约的代码与正在观察、尚未公开的模式进行比对，以免这些模式在公布前就被绕开。代码与下列模式相符。此信息仅供参考：不属于上方结果，也不属于网络的裁定，可能有误；这些模式会在之后公开（通常约 30 天内）。',
   m: {
     chain: '链', address: '地址', proxy: 'Proxy', implementation: '实际代码（Implementation）', owner: '所有者', functions: '已识别的函数', report: '报告编号', explorer: '在 explorer 中打开', fingerprint: '代码指纹（用于登记模板）', unknown: '无法识别名称的函数',
     program: '代币程序', mintAuth: '增发权限（mint authority）', freezeAuth: '冻结权限（freeze authority）', extensions: '扩展', upgradeAuth: '升级权限', none: '无',
@@ -21,6 +23,7 @@ export const UI = {
     idl: 'Anchor IDL', codeId: '代码编号（code ID）', label: '合约名称', creator: '创建者', migrations: '代码被替换次数', hook: '转账检查合约', source: '已验证的源代码', format: '代码格式', delegation: '该钱包运行的代码', walletCode: '持有人钱包代码', nearKeys: '完全访问密钥（full-access key）', codeHash: '代码哈希', cairo: 'Cairo 版本', maxSupply: '最大供应量', tokenId: '代币编号',
     pool: '流动性池', simTax: '模拟交易税（买入 / 卖出）', simFailed: '卖出失败',
     verdict: '裁定 ID（仅规则）', command: '命令', rule: '规则',
+    earlyMatch: '与观察中的模式相符。类别：', earlyRef: '参考编号',
   },
 };
 

@@ -3,14 +3,16 @@
 //   - fake RPCs (as in stylus.test.js) for each answer an endpoint can give;
 //   - the real TradeSim bytecode on the in-memory EVM, against a mock
 //     Uniswap-V2 DEX placed at PancakeSwap's addresses, with tokens that
-//     tax or block selling under harmless function names.
+//     tax or block selling under harmless function names, and tokens that
+//     sell only when they recognise the simulation (SimAware).
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { readContract } from '../src/reader.js';
 import { explain, LANGS } from '../src/explain.js';
 import { verdictOf } from '../src/verdict.js';
 import { CHAINS } from '../src/chains.js';
-import { SIM_ADDRESS, taxPercent, runCalldata } from '../src/honeypot.js';
+import { keccak_256 } from '@noble/hashes/sha3';
+import { taxPercent, runCalldata, simPlan, jobSimSeed, isReservedAddress } from '../src/honeypot.js';
 import { simFindings } from '../src/analyze.js';
 import { TRADESIM_CODE, TRADESIM_RUN } from '../src/tradesim.generated.js';
 import { compileTradeSim } from '../scripts/build-tradesim.js';
@@ -23,6 +25,15 @@ const DEX = CHAINS.bsc.dex;
 const word = (hex) => String(hex).replace(/^0x/, '').toLowerCase().padStart(64, '0');
 const uint = (n) => BigInt(n).toString(16).padStart(64, '0');
 const PAIR = '0x' + 'aa'.repeat(20);
+const RAND = '0x' + '5e'.repeat(32);
+/** The TradeSim call among recorded RPC calls: the eth_call with a state override. */
+const simCallOf = (seen) => seen.find((c) => c.method === 'eth_call' && c.params?.[2]);
+/** run(...) calldata -> its arguments (6 words after the selector). */
+function decodeRun(data) {
+  const h = data.slice(10);
+  const w = (i) => h.slice(i * 64, i * 64 + 64);
+  return { router: '0x' + w(0).slice(24), token: '0x' + w(3).slice(24), amountIn: BigInt('0x' + w(4)), sellBps: BigInt('0x' + w(5)) };
+}
 
 test('committed TradeSim bytecode matches contracts/TradeSim.sol (run `npm run tradesim` if this fails)', () => {
   const { runtime, runSelector } = compileTradeSim();
@@ -43,6 +54,9 @@ test('tax is measured against the router quote, floored to 0.1%', () => {
   assert.equal(taxPercent('1000', '1010'), 0, 'more than quoted (reflection) is no tax');
   assert.equal(taxPercent('1000', '951'), 4.9);
   assert.equal(taxPercent('1000', '0'), 100);
+  // The token's own integer rounding (a fee of floor(v * 5%)) is forgiven: still 5%.
+  assert.equal(taxPercent('1000000000000', '950000000001'), 5);
+  assert.equal(taxPercent('1000000000000', '950500000000'), 4.9);
   assert.equal(taxPercent('0', '0'), null);
 });
 
@@ -69,8 +83,11 @@ before(async () => {
 });
 const TOKEN = '0x' + '42'.repeat(20);
 
-/** Answers getPair with `pair`; the override call with `sim` (a function of the params, or a value). */
-function fakeRpc({ pair = PAIR, sim }) {
+/**
+ * Answers getPair with `pair`; the override call with `sim` (a function of
+ * the params, or a value); eth_gasPrice with `gasPrice` (null: refuses it).
+ */
+function fakeRpc({ pair = PAIR, sim, gasPrice = '0x12a05f200' }) {
   const seen = [];
   return {
     seen,
@@ -78,10 +95,11 @@ function fakeRpc({ pair = PAIR, sim }) {
       seen.push({ method, params });
       if (method === 'eth_getCode') return params[0] === TOKEN ? tokenCode : '0x';
       if (method === 'eth_getStorageAt') return '0x' + '0'.repeat(64);
+      if (method === 'eth_gasPrice') { if (gasPrice == null) throw new Error('method not found'); return gasPrice; }
       if (method !== 'eth_call') throw new Error(method);
       const { to, data } = params[0];
       if (to === DEX.factory && data.startsWith('0xe6a43905')) return '0x' + word(pair);
-      if (to === SIM_ADDRESS) return typeof sim === 'function' ? sim(params) : sim;
+      if (params[2]?.[to]) return typeof sim === 'function' ? sim(params) : sim;
       throw new Error('execution reverted');
     },
   };
@@ -102,14 +120,19 @@ test('pool found, sell reverts: buy-but-not-sell is high risk', async () => {
   assert.equal(r.sim.pair, PAIR);
   assert.equal(r.sim.stage, 'sell-failed');
   assert.equal(ids(r).at(-1), 'bytecode-only', 'the caveat stays last');
-  // The override call: TradeSim code and some native coin at the throwaway address, nothing else.
-  const call = rpc.seen.find((c) => c.params?.[0]?.to === SIM_ADDRESS);
+  // The override call: TradeSim code (plus a random tail) and some native
+  // coin at the throwaway address, and coin for the caller; nothing else.
+  const call = simCallOf(rpc.seen);
+  const { to, from } = call.params[0];
   assert.equal(call.params[1], 'latest');
-  assert.deepEqual(Object.keys(call.params[2]), [SIM_ADDRESS]);
-  assert.equal(call.params[2][SIM_ADDRESS].code, TRADESIM_CODE);
-  assert.ok(BigInt(call.params[2][SIM_ADDRESS].balance) >= BigInt(DEX.amountIn));
-  assert.equal(call.params[0].data, runCalldata(DEX, TOKEN));
-  assert.ok(call.params[0].data.includes(word(DEX.router)) && call.params[0].data.includes(word(TOKEN)));
+  assert.deepEqual(Object.keys(call.params[2]).sort(), [to, from].sort());
+  assert.ok(call.params[2][to].code.startsWith(TRADESIM_CODE + 'fe'));
+  assert.equal(call.params[2][from].code, undefined, 'the caller stays a plain account');
+  const args = decodeRun(call.params[0].data);
+  assert.ok(call.params[0].data.startsWith('0x' + TRADESIM_RUN));
+  assert.deepEqual([args.router, args.token], [DEX.router.toLowerCase(), TOKEN]);
+  assert.equal(String(args.amountIn), r.sim.amountIn);
+  assert.ok(BigInt(call.params[2][to].balance) >= args.amountIn);
   assert.match(explain(r, 'th').lines.find((l) => l.id === 'sim-cannot-sell').text, /^ทดสอบขายไม่ผ่าน: .*ซื้อได้แต่ขายไม่ได้/);
   for (const L of Object.values(LANGS)) {
     // Wording states what the simulation saw; it never labels the token.
@@ -197,6 +220,105 @@ test('off by default with an injected RPC, for official issuers and on chains wi
   assert.equal(noDex.sim, undefined);
 });
 
+// ------------------------------------- not recognisable as Neuro's test
+test('two standalone checks use different addresses, code, amounts and shares', async () => {
+  const a = fakeRpc({ sim: result(5, 1000, 1000, 100, 98) });
+  const b = fakeRpc({ sim: result(5, 1000, 1000, 100, 98) });
+  const ra = await read(a);
+  const rb = await read(b);
+  const [ca, cb] = [simCallOf(a.seen), simCallOf(b.seen)];
+  assert.notEqual(ca.params[0].to, cb.params[0].to, 'TradeSim address');
+  assert.notEqual(ca.params[0].from, cb.params[0].from, 'caller (tx.origin)');
+  assert.notEqual(ca.params[0].to, '0x4e6575726f53696d000000000000000000000001', 'not the old fixed address');
+  assert.notEqual(ca.params[2][ca.params[0].to].code, cb.params[2][cb.params[0].to].code, 'code hash');
+  assert.notEqual(ca.params[0].data, cb.params[0].data, 'amount and share sold');
+  assert.notEqual(ra.sim.amountIn, rb.sim.amountIn);
+  // Same findings either way: taxes are measured against the router's quotes.
+  assert.deepEqual(ids(ra), ids(rb));
+  for (const c of [ca, cb]) {
+    const { amountIn, sellBps } = decodeRun(c.params[0].data);
+    assert.ok(amountIn >= BigInt(DEX.amountIn) * 3n / 4n && amountIn < BigInt(DEX.amountIn) * 5n / 4n, String(amountIn));
+    assert.ok(sellBps >= 9000n && sellBps <= 9990n, String(sellBps));
+    assert.ok(!isReservedAddress(c.params[0].to) && !isReservedAddress(c.params[0].from));
+  }
+});
+
+test('a job-seeded check is the same on every runner of the job, and differs between jobs', async () => {
+  const seed = jobSimSeed(7, RAND);
+  const runner = async (s) => {
+    const rpc = fakeRpc({ sim: result(4, 1000, 1000, 50) });
+    const r = await readContract('bsc', TOKEN, { rpc, simulate: true, simSeed: s });
+    return { call: simCallOf(rpc.seen), r };
+  };
+  const one = await runner(seed);
+  const two = await runner(seed);
+  assert.deepEqual(two.call.params, one.call.params, 'same addresses, code, amounts, gas and gas price');
+  assert.equal(await verdictOf(one.r), await verdictOf(two.r));
+  assert.deepEqual(one.r.sim, two.r.sim);
+  const other = await runner(jobSimSeed(8, RAND));
+  assert.notEqual(other.call.params[0].to, one.call.params[0].to);
+  assert.notEqual((await runner(jobSimSeed(7, '0x' + '5f'.repeat(32)))).call.params[0].to, one.call.params[0].to, 'a new lottery, a new plan');
+  // simPlan alone: the same seed gives the same plan.
+  assert.deepEqual(simPlan(DEX, { seed }), simPlan(DEX, { seed }));
+  assert.notDeepEqual(simPlan(DEX), simPlan(DEX));
+});
+
+test('jobSimSeed is keccak256("neuro-sim-job" || uint256 job || bytes32 lottery)', () => {
+  const want = '0x' + Buffer.from(keccak_256(Buffer.concat([Buffer.from('neuro-sim-job'), Buffer.from(uint(7), 'hex'), Buffer.from(RAND.slice(2), 'hex')]))).toString('hex');
+  assert.equal(jobSimSeed(7, RAND), want);
+  assert.equal(jobSimSeed(7n, RAND.toUpperCase().replace('0X', '0x')), want);
+  assert.throws(() => jobSimSeed(7, '0x1234'), /32 bytes/);
+  assert.throws(() => simPlan(DEX, { seed: 'not hex' }), /hex/);
+});
+
+test('reserved addresses (precompiles, system contracts, OP predeploys) are never used', () => {
+  for (const a of ['0x0000000000000000000000000000000000000001', '0x0000000000000000000000000000000000001000',
+    '0x00000000000000000000000000000000000000ff', '0x4200000000000000000000000000000000000006', '0xffffffffffffffffffffffffffffffffffffffff']) {
+    assert.ok(isReservedAddress(a), a);
+  }
+  assert.ok(!isReservedAddress('0x4e6575726f53696d000000000000000000000001'));
+  for (let i = 0; i < 50; i++) {
+    const p = simPlan(DEX, { seed: '0x' + i.toString(16).padStart(2, '0') });
+    assert.ok(!isReservedAddress(p.at) && !isReservedAddress(p.from) && p.at !== p.from);
+  }
+});
+
+test('the call carries a real gas price and gas limit, and the caller can pay for them', async () => {
+  const rpc = fakeRpc({ sim: result(5, 1000, 1000, 100, 98), gasPrice: '0x3b9aca00' }); // 1 gwei
+  await read(rpc);
+  const { params } = simCallOf(rpc.seen);
+  const [tx, , override] = params;
+  const price = BigInt(tx.gasPrice);
+  const gas = BigInt(tx.gas);
+  assert.ok(price >= 1_100_000_000n && price < 1_600_000_000n, `gas price ${price}: eth_gasPrice + 10-60%`);
+  assert.ok(gas >= 4_000_000n && gas < 6_000_000n, `gas ${gas}: a wallet's limit, not a node's 50M default`);
+  const fromBalance = BigInt(override[tx.from].balance);
+  assert.ok(fromBalance > gas * price, 'tx.origin has coin left after paying for gas');
+  // No round numbers a token could test for.
+  const { amountIn } = decodeRun(tx.data);
+  assert.notEqual(BigInt(override[tx.to].balance) % 10n ** 15n, 0n);
+  assert.notEqual(BigInt(override[tx.to].balance), amountIn * 10n);
+  assert.notEqual(fromBalance % 10n ** 15n, 0n);
+});
+
+test('a node that refuses the priced call is asked again without a gas price; no eth_gasPrice = unpriced', async () => {
+  const sims = [];
+  const picky = fakeRpc({ sim: (p) => { sims.push(p[0]); if (p[0].gasPrice) throw new Error('max fee per gas less than block base fee'); return result(5, 1000, 1000, 100, 98); } });
+  const r = await read(picky);
+  assert.equal(r.sim.stage, 'done');
+  assert.equal(sims.length, 2);
+  assert.ok(sims[0].gasPrice && !sims[1].gasPrice);
+  assert.equal(sims[0].to, sims[1].to, 'same plan both times');
+  // Any other refusal is not retried (no state overrides: skipped).
+  const other = fakeRpc({ sim: () => { throw new Error('state override not supported'); } });
+  assert.equal((await read(other)).sim.stage, 'no-override');
+  assert.equal(other.seen.filter((c) => c.method === 'eth_call' && c.params[2]).length, 1);
+  // No eth_gasPrice on this endpoint: one unpriced call.
+  const noPrice = fakeRpc({ sim: result(5, 1000, 1000, 100, 98), gasPrice: null });
+  assert.equal((await read(noPrice)).sim.stage, 'done');
+  assert.equal(simCallOf(noPrice.seen).params[0].gasPrice, undefined);
+});
+
 test('the network verdict is the same with or without the simulation', async () => {
   const withSim = await read(fakeRpc({ sim: result(4, 1000, 1000, 50) }));
   const without = await readContract('bsc', TOKEN, { rpc: fakeRpc({ sim: '0x' }) });
@@ -281,10 +403,45 @@ describe('TradeSim on an in-memory EVM (mock Uniswap V2 at PancakeSwap addresses
 
   test('the simulation changes nothing: same result twice, read-only methods only', async () => {
     const t = await listed('TaxToken', uint(500) + uint(2000), 'setPool(address)');
-    const a = await sim(t);
-    const b = await sim(t);
+    const seen = [];
+    const rpc = { call: (m, p) => { seen.push({ method: m, params: p }); return chain.rpc.call(m, p); } };
+    const seed = jobSimSeed(1, RAND);
+    const a = await readContract('bsc', t, { rpc, simulate: true, simSeed: seed });
+    const b = await readContract('bsc', t, { rpc, simulate: true, simSeed: seed });
     assert.deepEqual(a.sim, b.sim);
-    assert.equal(await chain.rpc.call('eth_getCode', [SIM_ADDRESS, 'latest']), '0x', 'override gone after the call');
-    assert.ok(chain.rpc.calls.every((m) => ['eth_getCode', 'eth_getStorageAt', 'eth_call'].includes(m)));
+    const { to, from } = simCallOf(seen).params[0];
+    assert.equal(await chain.rpc.call('eth_getCode', [to, 'latest']), '0x', 'override gone after the call');
+    assert.equal(await chain.rpc.call('eth_getCode', [from, 'latest']), '0x');
+    assert.ok(chain.rpc.calls.every((m) => ['eth_getCode', 'eth_getStorageAt', 'eth_call', 'eth_gasPrice'].includes(m)));
+    // A random check of the same token: other amounts, the same taxes.
+    const c = await sim(t);
+    assert.notEqual(c.sim.amountIn, a.sim.amountIn);
+    assert.deepEqual([c.sim.buyTax, c.sim.stage], [a.sim.buyTax, a.sim.stage]);
+  });
+
+  // A token that sells only when it sees something fixed about the test.
+  const simHash = '0x' + Buffer.from(keccak_256(Buffer.from(TRADESIM_CODE.slice(2), 'hex'))).toString('hex');
+  const TELLS = { 1: 'the old fixed NeuroSim addresses', 2: 'gas price 0', 3: 'a caller with no coin',
+    4: 'the public TradeSim code hash', 5: 'a sale of exactly 99%', 6: 'an exact allowance' };
+  for (const [tell, what] of Object.entries(TELLS)) {
+    test(`a token that lets only the test sell is caught (it looks for ${what})`, async () => {
+      const t = await listed('SimAware', uint(tell) + word(simHash), 'setVenue(address)');
+      const r = await sim(t);
+      assert.equal(r.sim.stage, 'sell-failed', JSON.stringify(r.sim));
+      assert.equal(find(r, 'sim-cannot-sell').severity, 'high');
+      const job = await readContract('bsc', t, { rpc: chain.rpc, simulate: true, simSeed: jobSimSeed(3, RAND) });
+      assert.equal(job.sim.stage, 'sell-failed', 'a job-seeded check too');
+    });
+  }
+
+  test('the old fixed setup was fooled by such a token', async () => {
+    // What every check used to look like: fixed addresses, no gas price,
+    // a caller with no coin, 10x the amount, 99% sold.
+    const t = await listed('SimAware', uint(1) + word(simHash), 'setVenue(address)');
+    const OLD_SIM = '0x4e6575726f53696d000000000000000000000001';
+    const plan = { amountIn: BigInt(DEX.amountIn), sellBps: 9900n };
+    const out = await chain.rpc.call('eth_call', [{ from: '0x4e6575726f53696d000000000000000000000002', to: OLD_SIM, data: runCalldata(DEX, t, plan) }, 'latest',
+      { [OLD_SIM]: { code: TRADESIM_CODE, balance: '0x' + (BigInt(DEX.amountIn) * 10n).toString(16) } }]);
+    assert.equal(Number(BigInt(out.slice(0, 66))), 5, 'sold: the token recognised the test and behaved');
   });
 });

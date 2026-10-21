@@ -14,6 +14,8 @@ export const UI = {
   reproduce: 'Periksa sendiri',
   reproduceHow: 'Siapa pun dapat menjalankan ulang pemeriksaan ini dengan perintah di bawah (di folder zetaphy-neuro). ID putusan hanya mencakup apa yang diputuskan aturan, jadi hasilnya sama selama kode dan pengaturan kontrak tidak berubah. ID laporan juga mencakup angka yang berubah seperti total pasokan.',
   asWritten: 'Nama dan simbol ditampilkan seperti tertulis di kontrak; Neuro tidak mengonfirmasinya.',
+  early: 'Peringatan dini: pola yang belum dipublikasikan',
+  earlyHow: 'Server ZETAPHY juga membandingkan kode kontrak ini dengan pola yang sedang diamati tetapi belum dipublikasikan, agar pola itu tidak diakali sebelum diumumkan. Kode cocok dengan pola di bawah. Ini hanya informasi tambahan: bukan bagian dari hasil di atas atau putusan jaringan, bisa keliru, dan polanya dipublikasikan kemudian (biasanya dalam sekitar 30 hari).',
   m: {
     chain: 'Jaringan', address: 'Alamat', proxy: 'Proxy', implementation: 'Kode utama (implementation)', owner: 'Pemilik', functions: 'Fungsi yang dikenali', report: 'ID laporan', explorer: 'Buka di explorer', fingerprint: 'Sidik jari kode (untuk pendaftaran templat)', unknown: 'Fungsi tanpa nama',
     program: 'Program token', mintAuth: 'Hak mencetak (mint authority)', freezeAuth: 'Hak membekukan (freeze authority)', extensions: 'Ekstensi', upgradeAuth: 'Hak upgrade (upgrade authority)', none: 'tidak ada',
@@ -21,6 +23,7 @@ export const UI = {
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang', nearKeys: 'Kunci akses penuh (full-access key)', codeHash: 'Hash kode', cairo: 'Versi Cairo', maxSupply: 'Pasokan maksimum', tokenId: 'ID token',
     pool: 'Pool likuiditas', simTax: 'Pajak simulasi (beli / jual)', simFailed: 'gagal menjual',
     verdict: 'ID putusan (hanya aturan)', command: 'Perintah', rule: 'aturan',
+    earlyMatch: 'Cocok dengan pola yang diamati. Kategori:', earlyRef: 'referensi',
   },
 };
 

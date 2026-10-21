@@ -105,7 +105,7 @@ export function evaluate({ events = [], snapshot, state = newState(), now, cfg =
     // governance changes
     if ((GOVERNANCE_EVENTS[e.source] ?? []).includes(e.name)) {
       const detail = Object.entries(a).map(([k, v]) => `${k}=${str(v)}`).join(', ');
-      add('governance-change', e.name === 'MaxDailyLimitProposed' || e.name === 'LaneSet' || e.name === 'ConfigSet' || e.name === 'IsmSet' || e.name === 'ThresholdSet' || e.name === 'GovernanceSet' ? 'critical' : 'warning',
+      add('governance-change', ['MaxDailyLimitProposed', 'LaneSet', 'ConfigSet', 'IsmSet', 'ThresholdSet', 'GovernanceSet', 'MarkerSet'].includes(e.name) ? 'critical' : 'warning',
         `governance change: ${where} ${e.name}(${detail})`,
         `มีการเปลี่ยนค่าโดย governance: ${where} ${e.name}(${detail})`, { ...at, event: e.name, args: a });
       if (e.source === 'guard' && e.name === 'RouteSet' && !st.routes.some((r) => lower(r) === lower(a.id))) st.routes.push(a.id);
@@ -322,7 +322,8 @@ const STATE_ENC = 'zetaphy-bridge-monitor-state/aes-256-gcm';
  * BRIDGE_WATCHLIST, BRIDGE_MONITOR_THRESHOLDS): a state file in a public place (a workflow artifact)
  * then shows nothing of what the monitor saw, queued or alerted. None set: null (plain JSON; everything
  * in it is then derived from public chain data and the committed thresholds). Changing one of these
- * secrets makes the old state unreadable: the monitor starts over (see openState).
+ * secrets makes the old memory unreadable: the monitor continues from the last scanned block (kept in
+ * clear) with a fresh memory (see openState).
  */
 export function stateKeyOf(env = {}) {
   const parts = ['BRIDGE_MARKER_KEY', 'BRIDGE_WATCHLIST', 'BRIDGE_MONITOR_THRESHOLDS'].map((k) => String(env[k] ?? '').trim());
@@ -330,26 +331,37 @@ export function stateKeyOf(env = {}) {
   return createHash('sha256').update(`zetaphy-bridge-monitor/state-key/1\n${parts.join('\n')}`).digest();
 }
 
-/** The state as saved: AES-256-GCM with stateKeyOf's key, or as is without one. */
+/**
+ * The state as saved: AES-256-GCM with stateKeyOf's key, or as is without one. The scan position
+ * (lastBlock, sourceBlocks: block numbers, nothing private) stays in clear, so a change of secrets
+ * costs the monitor its memory, not a rescan.
+ */
 export function sealState(state, key) {
   const json = JSON.stringify(state, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));
   if (!key) return JSON.parse(json);
   const iv = randomBytes(12);
   const c = createCipheriv('aes-256-gcm', key, iv);
   const data = Buffer.concat([c.update(json, 'utf8'), c.final()]);
-  return { format: STATE_ENC, iv: iv.toString('hex'), tag: c.getAuthTag().toString('hex'), data: data.toString('base64') };
+  return { format: STATE_ENC, lastBlock: state.lastBlock ?? null, sourceBlocks: state.sourceBlocks ?? {},
+    iv: iv.toString('hex'), tag: c.getAuthTag().toString('hex'), data: data.toString('base64') };
 }
 
-/** { state, note }: the saved state opened, or state null (start over) with a note saying why. */
+/**
+ * { state, note? }: the saved state opened. When it cannot be (no key, or one from other secrets):
+ * a fresh state that continues from the saved scan position, and a note saying so.
+ */
 export function openState(saved, key) {
   if (saved == null) return { state: null };
   if (saved.format !== STATE_ENC) return { state: saved };
-  if (!key) return { state: null, note: 'the saved state is encrypted and no monitor secret is set: starting over' };
+  const resume = () => ({ ...newState(), lastBlock: Number.isInteger(saved.lastBlock) ? saved.lastBlock : null,
+    sourceBlocks: saved.sourceBlocks && typeof saved.sourceBlocks === 'object' ? saved.sourceBlocks : {} });
+  const fresh = 'continuing from its last scanned block with a fresh memory (alerts already sent may repeat once)';
+  if (!key) return { state: resume(), note: `the saved state is encrypted and no monitor secret is set: ${fresh}` };
   try {
     const d = createDecipheriv('aes-256-gcm', key, Buffer.from(saved.iv, 'hex'));
     d.setAuthTag(Buffer.from(saved.tag, 'hex'));
     return { state: JSON.parse(Buffer.concat([d.update(Buffer.from(saved.data, 'base64')), d.final()]).toString('utf8')) };
-  } catch { return { state: null, note: 'the saved state was written with other monitor secrets: starting over' }; }
+  } catch { return { state: resume(), note: `the saved state was written with other monitor secrets: ${fresh}` }; }
 }
 
 /**
@@ -430,10 +442,10 @@ export async function snapshotOf({ guard, airlock, token, routeIds = [] }) {
   };
 }
 
-/** The caller in a log topic (a 32-byte word holding an address), or null. */
+/** The caller in a log topic (a 32-byte word holding a nonzero address), or null. */
 export function callerOf(topics, i) {
   const t = String(topics?.[i] ?? '');
-  return /^0x0{24}[0-9a-fA-F]{40}$/.test(t) ? getAddress(`0x${t.slice(26)}`) : null;
+  return /^0x0{24}[0-9a-fA-F]{40}$/.test(t) && !/^0x0{64}$/.test(t) ? getAddress(`0x${t.slice(26)}`) : null;
 }
 
 /**

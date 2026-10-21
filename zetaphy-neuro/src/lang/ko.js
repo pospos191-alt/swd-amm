@@ -14,6 +14,8 @@ export const UI = {
   reproduce: '직접 다시 확인하기',
   reproduceHow: '누구나 아래 명령(zetaphy-neuro 폴더에서 실행)으로 이 검사를 다시 할 수 있습니다. 판정 ID는 규칙이 판단한 내용만 담으므로 컨트랙트의 코드와 설정이 같으면 일치합니다. 보고서 ID에는 공급량처럼 바뀌는 숫자도 포함됩니다.',
   asWritten: '이름과 심볼은 컨트랙트에 적힌 그대로 표시하며 Neuro가 확인한 것이 아닙니다.',
+  early: '조기 경고: 아직 공개되지 않은 패턴',
+  earlyHow: 'ZETAPHY 서버는 이 컨트랙트의 코드를 관찰 중이지만 아직 공개하지 않은 패턴과도 비교합니다(공개 전에 우회되지 않도록 하기 위해서입니다). 아래 패턴과 일치했습니다. 참고용 정보일 뿐이며 위의 결과나 네트워크 판정에 포함되지 않고, 틀릴 수 있으며, 패턴은 나중에 공개됩니다(보통 약 30일 이내).',
   m: {
     chain: '체인', address: '주소', proxy: 'Proxy', implementation: '실제 코드 (implementation)', owner: '소유자', functions: '알려진 함수', report: '보고서 ID', explorer: 'explorer에서 열기', fingerprint: '코드 지문 (템플릿 등록용)', unknown: '이름을 알 수 없는 함수',
     program: '토큰 프로그램', mintAuth: '발행 권한', freezeAuth: '동결 권한', extensions: '확장 기능', upgradeAuth: '업그레이드 권한', none: '없음',
@@ -21,6 +23,7 @@ export const UI = {
     idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드', nearKeys: '전체 접근 키 (full-access key)', codeHash: '코드 해시', cairo: 'Cairo 버전', maxSupply: '최대 공급량', tokenId: '토큰 ID',
     pool: '유동성 풀', simTax: '시뮬레이션 세금 (구매 / 판매)', simFailed: '판매 실패',
     verdict: '판정 ID (규칙만)', command: '명령', rule: '규칙',
+    earlyMatch: '관찰 중인 패턴과 일치. 분류:', earlyRef: '참조 번호',
   },
 };
 

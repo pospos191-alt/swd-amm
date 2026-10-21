@@ -33,6 +33,15 @@ input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 
 #findings { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 10px; }
 #findings li { position: relative; padding-left: 20px; overflow-wrap: anywhere; }
 #findings .evidence { display: block; color: var(--muted); font-size: .8rem; }
+.early { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--medium); border-radius: 10px; }
+.early h2 { font-size: 1rem; margin: 0 0 6px; }
+.early ul { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 6px; }
+.early li { position: relative; padding-left: 20px; overflow-wrap: anywhere; }
+.early li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 8px; height: 8px; border-radius: 50%; background: var(--info); }
+.early li.high::before { background: var(--high); }
+.early li.medium::before { background: var(--medium); }
+.early li.low::before { background: var(--low); }
+.early p { color: var(--muted); font-size: .85rem; margin: 0; }
 .disclaimer { color: var(--muted); font-size: .85rem; margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
 .reproduce { border-top: 1px solid var(--line); padding: 4px 0 10px; }
 .reproduce h2 { font-size: 1rem; margin: 10px 0 2px; }
