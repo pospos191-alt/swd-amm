@@ -127,23 +127,27 @@ contract TwapRecorder {
         t.from = start.time;
         t.newest = n == 0 ? 0 : observation(pair, 0).time;
         t.observations = k + 1;
-        t.minDepth = d;
-        // segments: start -> ... -> newest -> now
-        Observation memory prev = start;
+        (t.minDepth, t.maxSegmentGapBps) = _segments(pair, k, start, Observation(uint64(nowTs), d, c0, c1), t.avg0);
+    }
+
+    /// Walks start -> ... -> newest -> now: the smallest depth, and the largest gap of a
+    /// segment's average (avg0) from the window's average, in bps.
+    function _segments(address pair, uint16 k, Observation memory prev, Observation memory last, uint256 avg)
+        private view returns (uint128 minDepth, uint256 maxGapBps)
+    {
+        minDepth = prev.depth < last.depth ? prev.depth : last.depth;
         for (uint16 j = k + 1; j > 0; j--) {
-            Observation memory o = j == 1 ? Observation(uint64(nowTs), d, c0, c1) : observation(pair, j - 2);
-            if (o.depth < t.minDepth) t.minDepth = o.depth;
+            Observation memory o = j == 1 ? last : observation(pair, j - 2);
+            if (o.depth < minDepth) minDepth = o.depth;
             uint256 dt = uint256(o.time) - prev.time;
-            if (dt != 0 && t.avg0 != 0) {
+            if (dt != 0 && avg != 0) {
                 uint256 seg;
                 unchecked { seg = (o.cum0 - prev.cum0) / dt; }
-                uint256 gap = seg > t.avg0 ? seg - t.avg0 : t.avg0 - seg;
-                uint256 bps = _mulDiv(gap, 10_000, t.avg0);
-                if (bps > t.maxSegmentGapBps) t.maxSegmentGapBps = bps;
+                uint256 bps = _mulDiv(seg > avg ? seg - avg : avg - seg, 10_000, avg);
+                if (bps > maxGapBps) maxGapBps = bps;
             }
             prev = o;
         }
-        if (start.depth < t.minDepth) t.minDepth = start.depth;
     }
 
     function _sqrt(uint256 x) private pure returns (uint256 z) {
