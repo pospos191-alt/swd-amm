@@ -110,8 +110,13 @@ for (const [name, factory] of [['CREATE2 deployer', CREATE2], ['Safe singleton f
     const data = concat([salt, INIT]);
     // The proxy returns the new address (20 bytes).
     assert.equal(getAddress(await provider.call({ to: factory, data })), predicted);
-    const r = await (await wallet.sendTransaction({ to: factory, data, gasLimit: 200_000 })).wait();
+    // Explicit nonce from the latest block: right after a receipt the node can
+    // still report the old pending nonce, and answer eth_call / eth_getCode from
+    // the block before; wait for the next block before reading.
+    const nonce = await provider.getTransactionCount(wallet.address, 'latest');
+    const r = await (await wallet.sendTransaction({ to: factory, data, gasLimit: 200_000, nonce })).wait();
     assert.equal(r.status, 1);
+    while ((await provider.getBlockNumber()) <= r.blockNumber) await new Promise((res) => setTimeout(res, 200));
     assert.equal(await provider.getCode(predicted), RUNTIME);
     assert.equal(BigInt(await provider.call({ to: predicted })), 42n);
     // Same salt again: the address is taken, so the proxy reverts.
