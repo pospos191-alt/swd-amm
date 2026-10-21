@@ -1,8 +1,7 @@
 // ZetaphyOracle + TwapRecorder + ZetaphyPythRelay on an in-memory EVM, with the real
 // ZETAPHY DEX pair (zetaphy-dex artifacts): a price or a clear revert, never a wrong value.
-// Manipulation attempts: a swap in the same transaction as the read, a pool pushed for a
-// block, a shallow pool, too few observations, a stale / wide / future / negative Pyth
-// price, sources that disagree, decimals, jumps (the circuit breaker), and the roles.
+// Regression tests of every guard (sources, liquidity, observations, staleness, confidence,
+// deviation, decimals, circuit breaker) and of the roles.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -91,7 +90,6 @@ test('a swap in the same transaction as the read moves nothing (single-block man
   o.c.advance(1); // the attacker's transaction opens the next block
   const atk = await o.c.deployRaw(mockArtifacts().SameBlockAttacker, [], 'attacker');
   await o.usd.send('gov', 'transfer', [atk.address, 50_000n * 10n ** 6n]);
-  // 25x the pool's USD side in: the spot price of the asset goes up ~600x for this block
   const ev = await atk.send('attacker', 'attack', [o.pair.address, o.usd.address, 50_000n * 10n ** 6n, o.oracle.address, o.asset.address]);
   const r = ev.find((e) => e?.name === 'Result');
   assert.equal(r.args.priced, true, 'still priced');

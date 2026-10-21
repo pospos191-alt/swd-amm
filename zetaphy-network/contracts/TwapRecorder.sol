@@ -29,8 +29,7 @@ interface ITwapPair {
 ///             of its window, not only at the moment it reads.
 ///         consult() returns the window's average and what a reader needs to
 ///         judge it (oldest time, observation count, smallest depth, the
-///         largest gap of one segment's average from the window's average: a
-///         price pushed hard for one block shows up as an outlier segment).
+///         largest gap of one segment's average from the window's average).
 contract TwapRecorder {
     struct Observation {
         uint64 time;

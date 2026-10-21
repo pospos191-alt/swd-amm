@@ -40,8 +40,8 @@ contract MockPriceOracle {
     }
 }
 
-/// Swaps `amountIn` of the token it holds into the pair and, in the same transaction,
-/// pokes and reads the oracle: what a flash-loan attacker can do within one block.
+/// Regression helper: swaps `amountIn` of the token it holds into the pair and, in the same
+/// transaction, pokes and reads the oracle.
 contract SameBlockAttacker {
     event Result(bool poked, bool priced, uint256 value, bytes reason);
 
@@ -52,7 +52,7 @@ contract SameBlockAttacker {
         catch (bytes memory r) { emit Result(poked, false, 0, r); }
     }
 
-    /// Only the swap (the pool stays pushed at the end of this block).
+    /// Only the swap.
     function push(address pair, address tokenIn, uint256 amountIn) external { _swap(pair, tokenIn, amountIn); }
 
     function _swap(address pair, address tokenIn, uint256 amountIn) private {

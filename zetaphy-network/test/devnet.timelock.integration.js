@@ -8,9 +8,8 @@
 //     the old admin is refused; `timelock schedule` by a multisig owner prints the calldata, the multisig sends it;
 //     `timelock execute` refuses early and runs after the delay (anyone); `timelock cancel` through the multisig;
 //   - emergencies stay immediate: the guardian pauses the feed (FeedIsPaused), cannot unpause;
-//   - manipulation: a big swap left in the pool for a block gives no price (TwapSpike / SourcesDeviate), and a Pyth
-//     price 10% off the TWAP gives SourcesDeviate; `bridge monitor` reports the schedule, the run, the cancel,
-//     the pause and the oracle trips.
+//   - regression: an abnormal pool or a Pyth price off the TWAP gives no price (a named revert); `bridge monitor`
+//     reports the schedule, the run, the cancel, the pause and the oracle trips.
 //
 //   ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet:timelock
 
@@ -212,7 +211,7 @@ test('the timelock: the multisig schedules, anyone executes after the delay, can
   assert.equal((await cli('user', ['timelock', 'execute', idU, '--timelock', T, '--from-block', String(ctx.timelockBlock)])).code, 0);
 });
 
-test('manipulation on a real chain: a pushed pool or a lying Pyth price gives no price; the monitor reports it all', { timeout: 300_000 }, async () => {
+test('regression on a real chain: abnormal sources give no price; the monitor reports it all', { timeout: 300_000 }, async () => {
   await ctx.keep(70); // a fresh window after the pause
   const [v] = await ctx.oracleC.price(ctx.wz.target);
   assert.equal(v, 2n * 10n ** 18n);

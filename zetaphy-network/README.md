@@ -387,8 +387,9 @@ zetaphy bridge close        # governance: ปิด route
 | ไม่มีผู้ดูแล | ComputeMarket, NeuroValidation, NFT factory, QuantumWalletFactory, NeuroLane, LockBox, TwapRecorder | – |
 
 **แยก role ตรงไหนบ้าง (ให้น้อยที่สุด):** BridgeGuard มี guardian อยู่แล้ว เพิ่มแค่ 3 ฟังก์ชันที่ลดความเสี่ยง · BridgeAirlock ไม่สร้าง role ใหม่ ใช้ guardian ของ BridgeGuard ตัวเดียวกัน · StableGateway และ ZetaphyOracle มี guardian กดหยุดได้อย่างเดียว ที่เหลือใช้ guardian/vetoer/marker เดิม
-- เอา marker ออกจะปลดเครื่องหมายทั้งหมดที่ marker นั้นทำ (เหมือน `setMarker(false)`) นี่คือวิธีหยุด marker key ที่ถูกขโมยไปทำเครื่องหมายทุกคน การโอนที่ถูกปลดยังต้องผ่านกักกัน ธง และเพดานตามปกติ
+- เอา marker ออกจะปลดเครื่องหมายทั้งหมดที่ marker นั้นทำ (เหมือน `setMarker(false)`)
 - `dropHeld` (ทิ้ง mint ที่ถูกกัก) ทำแล้วย้อนไม่ได้ จึงไปที่ timelock ระหว่างรอ guardian กด `pause` ได้ทันที
+- รายละเอียดด้านความปลอดภัยของ timelock และ guardian เก็บแยกไว้สำหรับทีม
 
 ```
 zetaphy deploy-timelock --proposer 0x<multisig>[,0x…] | gov [--delay 172800 --executor open]
@@ -406,17 +407,17 @@ zetaphy timelock cancel <operation id>     # canceller (multisig) ระหว�
 
 `price(asset)` คืน `(value, updatedAt)`: ราคาเป็น USD ทศนิยม 18 ตำแหน่ง หรือ **revert พร้อมชื่อเหตุผล** เสมอ ไม่มีการคืนราคาที่เก่า เอียง หรือกระโดด
 - **(ก) TWAP ของคู่เทรดบน DEX ของเรา** (ZetaphyPair เก็บ `price0/1CumulativeLast`) กับ stablecoin ที่นับเป็น $1
-  - `TwapRecorder` เก็บ observation: ใครก็ `record(pair)` ได้ (keeper, relay, ผู้ใช้) ได้ครั้งเดียวต่อ `minSpacing` และไม่เกินครั้งเดียวต่อบล็อก ไม่มีผู้ดูแล
-  - ราคาสะสมนับด้วย reserve ก่อนการเทรดแรกของบล็อก (กฎของ pair เอง) การ swap ในธุรกรรมหรือบล็อกเดียวกับที่อ่าน จึงไม่เปลี่ยน TWAP เลย (มีชุดทดสอบ)
-  - ใช้ได้เมื่อ: หน้าต่างอย่างน้อย `window` วินาที (เริ่มจาก observation ที่เก่าไม่เกิน 2 × window), observation ในหน้าต่าง ≥ `minObservations`, ความลึกของ pool ฝั่ง USD ≥ `minLiquidity` **ทุก observation** (เติมสภาพคล่องชั่วคราวตอนอ่านไม่ช่วย) และไม่มีช่วงย่อยระหว่าง observation ที่ราคาเฉลี่ยห่างจากค่าเฉลี่ยทั้งหน้าต่างเกิน `maxSegmentGapBps` (ดัน pool ค้างไว้หนึ่งบล็อกก็เห็นเป็น spike → `TwapSpike`)
-- **(ข) ราคาจาก Pyth** ผ่าน interface `IPyth` ของ Pyth เอง (`getPriceUnsafe`, struct `Price` ชุดเดียวกัน): ไม่เก่ากว่า `maxAge`, ไม่ลงวันที่ในอนาคต, เป็นบวก, ช่วงความเชื่อมั่น (`conf`) ไม่เกิน `maxConfBps` ของราคา, ปรับเลขยกกำลัง (`expo`) เป็น 18 ทศนิยม
-  - ZETAPHY ยังไม่มี Pyth: `ZetaphyPythRelay` รับ update **รูปแบบเดียวกับ Pyth** (`abi.encode(PythStructs.PriceFeed, uint64 prevPublishTime)` แบบ `MockPyth.createPriceFeedUpdateData`) จาก relayer ที่ governance ตั้ง ต้องครบ `threshold` คนส่ง update เดียวกันทุกไบต์จึงรับ
+  - `TwapRecorder` เก็บ observation: ใครก็ `record(pair)` ได้ (keeper, relay, ผู้ใช้) ไม่เกินครั้งเดียวต่อ `minSpacing` และต่อบล็อก ไม่มีผู้ดูแล
+  - ใช้ได้เมื่อหน้าต่างยาวพอ มี observation พอ pool ลึกพอทุก observation และไม่มีช่วงย่อยที่ราคาผิดปกติ (ค่าตั้งด้วย `oracle feed`)
+- **(ข) ราคาจาก Pyth** ผ่าน interface `IPyth` ของ Pyth เอง (`getPriceUnsafe`, struct `Price` ชุดเดียวกัน): ตรวจอายุ, เวลาในอนาคต, ราคาบวก, ช่วงความเชื่อมั่น (`conf`) และปรับเลขยกกำลัง (`expo`) เป็น 18 ทศนิยม
+  - ZETAPHY ยังไม่มี Pyth: `ZetaphyPythRelay` รับ update **รูปแบบเดียวกับ Pyth** (`abi.encode(PythStructs.PriceFeed, uint64 prevPublishTime)` แบบ `MockPyth.createPriceFeedUpdateData`) จาก relayer ที่ governance ตั้ง ต้องครบ `threshold` คนส่ง update เดียวกันจึงรับ
   - relayer ส่งต่อราคาจาก Hermes (บริการสาธารณะฟรีของ Pyth): `zetaphy oracle relay-pyth --feed 0x<feed id> --every 30`
-  - **ต่อกับของจริงทีหลัง:** (1) Pyth มาที่ ZETAPHY: timelock เรียก `oracle.setPyth(<Pyth>)` ไม่ต้องแก้สัญญา (Pyth ตรวจลายเซ็น Wormhole เอง) หรือ (2) Hyperlane: เขียน receiver ที่ `handle()` รับ update ของ Pyth จากเชนที่ Pyth ตรวจแล้ว แล้วให้มันเป็น relayer คนเดียว (threshold 1) ของ ZetaphyPythRelay
+  - **ต่อกับของจริงทีหลัง:** (1) Pyth มาที่ ZETAPHY: timelock เรียก `oracle.setPyth(<Pyth>)` ไม่ต้องแก้สัญญา (Pyth ตรวจลายเซ็น Wormhole เอง) หรือ (2) Hyperlane: receiver ที่ `handle()` รับ update ของ Pyth จากเชนที่ Pyth ตรวจแล้ว เป็น relayer คนเดียว (threshold 1) ของ ZetaphyPythRelay
 - **สองแหล่งต้องตรงกัน** ภายใน `maxDeviationBps` (ไม่งั้น `SourcesDeviate`) ค่าที่คืนเป็นของ Pyth โดยมี TWAP เป็นหลักยึด เปิดแหล่งเดียวก็ได้ (testnet ตอนนี้ใช้ TWAP อย่างเดียวจนกว่าจะมี feed)
-- **ตัดวงจร (circuit breaker):** `poke(asset)` (ใครก็ได้) บันทึก observation และถ้าทุกด่านผ่าน ตั้งราคานั้นเป็นราคาอ้างอิง `price()` ปฏิเสธราคาที่ห่างจากราคาอ้างอิงเกิน `maxChangeBps` หรือห่างจากราคาต้นช่วง `changeWindow` เกิน `maxWindowChangeBps` (`PriceJump`) ถ้า poke เจอการกระโดดแบบนั้น วงจรตัด (`CircuitBreakerTripped`) ไม่มีราคาจนกว่า governance จะ `resetCircuitBreaker` ผ่าน timelock
-- ค่าเริ่มต้นของ launch: ZETAPHY/USD จาก pool WZETAPHY/tUSD, หน้าต่าง 30 นาที, ≥ 10 observation, ความลึก ≥ $10,000, segment ≤ 20%, สองแหล่งต่างได้ ≤ 2%, เปลี่ยนต่อรอบ ≤ 15%, ต่อชั่วโมง ≤ 30%
+- **ตัดวงจร (circuit breaker):** `poke(asset)` (ใครก็ได้) บันทึก observation และถ้าทุกด่านผ่าน ตั้งราคานั้นเป็นราคาอ้างอิง ราคาที่กระโดดเกินเพดานต่อรอบหรือต่อช่วงเวลาถูกปฏิเสธ (`PriceJump`) และ poke ที่เจอจะตัดวงจร (`CircuitBreakerTripped`) ไม่มีราคาจนกว่า governance จะ `resetCircuitBreaker` ผ่าน timelock
 - ค่าทุกตัวเป็นของ timelock ยกเว้น `pauseFeed` ที่ guardian กดได้ทันที
+- ส่ง `poke` ด้วย gas คงที่ (เครื่องมือในนี้ใช้ 800,000) ไม่ใช้ค่าประมาณ
+- รายละเอียดด้านความปลอดภัย (เหตุผลของค่ากันและข้อจำกัด) เก็บแยกไว้สำหรับทีม
 
 ```
 zetaphy deploy-oracle --relayers 0x<relayer> [--min-spacing 60 --guardian 0x<multisig>]
@@ -998,9 +999,9 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
   - รันบนเครื่องที่ใช้ devnet ร่วมกัน: `flock /tmp/ci-test/devnet.lock env ZETAPHYD=<zetaphyd> npm run test:devnet:bridge`
 - `npm test` รวม `test/hyperlane.test.js` (HyperlaneLane กับ Mailbox จำลอง, ประตูบนเชน, เพดานแข็ง), `test/bridgegate.test.js` (ประตูของ CLI) และ `test/monitor.test.js` (กฎแจ้งเตือน, watch list, การทำเครื่องหมาย, ไม่มีที่อยู่สัญญาที่เฝ้าไว้ในผลลัพธ์ใด, state เข้ารหัส, แจ้งเตือน timelock/oracle)
 - `test/timelock.test.js`: role ของ timelock (proposer = canceller, executor ใครก็ได้, admin = ตัวเอง), เรียกก่อนครบเวลา/ไม่ได้ตั้งเวลา/คนที่ไม่ใช่ proposer ถูกปฏิเสธ, ยกเลิก, เปลี่ยนระยะรอต้องรอด้วย, ทุกสัญญาที่ส่งให้ timelock แล้วผู้ดูแลเดิมถูกปฏิเสธ และปุ่มฉุกเฉินของ guardian ใช้ได้ทันทีแต่เปิดคืนไม่ได้
-- `test/oracle.test.js`: ราคาจริงจาก DEX pair (artifact ของ zetaphy-dex), swap ในธุรกรรมเดียวกับที่อ่าน (ราคาไม่ขยับ), pool ที่ถูกดันค้างหนึ่งบล็อก (`TwapSpike`), pool ตื้น, observation ไม่พอ, TWAP เก่า, Pyth เก่า/อนาคต/ติดลบ/conf กว้าง, สองแหล่งไม่ตรงกัน, ทศนิยม (8/18, 18/6, expo −5 และ 0), ตัดวงจร, role, ZetaphyPythRelay (threshold, update เก่า, รูปแบบของ Pyth/Hermes)
-- `npm run test:devnet:timelock` (ต้องมี `zetaphyd`, ใช้ lock เดียวกัน): oracle บนเชนจริง (TWAP + Pyth ผ่าน relay, $2.00), StableGateway คิด 2 tUSDC ต่อค่างาน 1 ZETAPHY ผ่าน relay ที่ poke oracle, timelock ที่ multisig 2-of-3 เป็น proposer (schedule ก่อนเวลาถูกปฏิเสธ, execute โดยคนที่ไม่มี role, cancel), guardian หยุดราคาทันที, swap ก้อนใหญ่และ Pyth ที่โกหกไม่ทำให้ได้ราคาผิด และ `bridge monitor` รายงานครบ
-  สัญญาสำหรับทดสอบ (`test/helpers/OracleMocks.sol`: MockPyth, MockPriceOracle, SameBlockAttacker) คอมไพล์ในชุดทดสอบ ไม่อยู่ใน `contracts/`
+- `test/oracle.test.js`: ราคาจาก DEX pair จริง (artifact ของ zetaphy-dex) กับ Pyth จำลอง, ทศนิยม, ทุกเหตุผลที่ไม่มีราคา (สภาพคล่อง, observation, อายุ, conf, สองแหล่งไม่ตรงกัน), ตัดวงจร, role, ZetaphyPythRelay (threshold, update เก่า, รูปแบบของ Pyth/Hermes) และชุดทดสอบถดถอย (regression) ของด่านกันราคา
+- `npm run test:devnet:timelock` (ต้องมี `zetaphyd`, ใช้ lock เดียวกัน): oracle บนเชนจริง (TWAP + Pyth ผ่าน relay), StableGateway คิดราคาผ่าน oracle และ relay ที่ poke oracle, timelock ที่ multisig 2-of-3 เป็น proposer (execute ก่อนเวลาถูกปฏิเสธ, execute โดยคนที่ไม่มี role, cancel), guardian หยุดราคาทันที, ราคาผิดปกติไม่ได้ราคา และ `bridge monitor` รายงานครบ
+  สัญญาสำหรับทดสอบ (`test/helpers/OracleMocks.sol`) คอมไพล์ในชุดทดสอบ ไม่อยู่ใน `contracts/`
   สัญญาสำหรับทดสอบอย่างเดียว (`test/helpers/WatchedEmitter.sol`, `test/helpers/Lure.sol`) คอมไพล์ในชุดทดสอบ ไม่อยู่ใน `contracts/` และ `artifacts/`
 - `npm run test:devnet`: ทดสอบบนเชน ZETAPHY จริง ต้องมี `zetaphyd`
   - สคริปต์ตั้งเชน 1 โหนด (บล็อกละ 1 วินาที)

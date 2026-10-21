@@ -49,7 +49,7 @@ interface IDecimals {
 ///              in it, a pool depth (quote side, 18 decimals) of at least
 ///              `minLiquidity` at every observation and now, and no segment
 ///              between observations averaging more than `maxSegmentGapBps` away
-///              from the window's average (a price pushed for a block stands out);
+///              from the window's average;
 ///           b) Pyth (IPyth.getPriceUnsafe; on ZETAPHY a ZetaphyPythRelay until Pyth
 ///              or a Hyperlane route is here): not older than `maxAge`, not dated
 ///              in the future, positive, confidence interval at most `maxConfBps`
