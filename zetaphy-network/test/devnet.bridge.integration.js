@@ -1,9 +1,13 @@
 // The Neuro bridge across two real chains (both zetaphyd devnets):
 //   source chain S (EVM id 4097) holds a LockBox;
-//   ZETAPHY Z (77390) holds BridgeGuard + BridgeAirlock + NeuroLane + a decoy.
+//   ZETAPHY Z (77390) holds BridgeGuard + BridgeAirlock + NeuroLane, with the
+//   monitor's key as a marker, and a contract the monitor watches (a test-only
+//   emitter, its address only in the monitor's BRIDGE_WATCHLIST).
 // Three node runners watch S with `zetaphy bridge watch` and attest; a second
 // lane (standing in for Hyperlane) attests too; after the quarantine the
-// money enters ZETAPHY. An attacker who touched the decoy gets nothing.
+// money enters ZETAPHY. An attacker who called the watched contract is marked
+// by `bridge monitor` (BRIDGE_MARKER_KEY) before the quarantine ends and gets
+// nothing; no output of the monitor names the watched contract.
 // Vaccine: a sender flagged in the ThreatRegistry (`zetaphy threat flag`) and
 // enforced at once by a guardian (`threat enforce-now`, the fast lane) is not
 // attested, and its transfer waits until the runners clear the flag. A sender
@@ -20,7 +24,8 @@
 // guardian outside a devnet; `bridge open` refuses until every gate holds (audit on
 // record, 2 independent lanes, runners, multisig roles or --devnet, the cap), then
 // enables the route with a 10-token daily limit. `bridge monitor` then reports the
-// decoy hit, the governance changes, the volume at the limit, and a guardian's pause.
+// mark, the governance changes, the volume at the limit (thresholds from the
+// BRIDGE_MONITOR_THRESHOLDS secret), and a guardian's pause.
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -29,20 +34,21 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Wallet, JsonRpcProvider, Contract, ContractFactory, parseEther, NonceManager } from 'ethers';
+import { watchedArtifacts } from './helpers/watched.js';
 
 const ZP = 19045, SP = 19445; // a devnet also uses its port +100..+103
 const Z = `http://127.0.0.1:${ZP}`, S = `http://127.0.0.1:${SP}`;
 const root = mkdtempSync(join(tmpdir(), 'zetaphy-bridge-'));
-const names = ['gov', 'user', 'r1', 'r2', 'r3', 'hyperlane', 'alice', 'attacker', 'mallory', 'eve'];
+const names = ['gov', 'user', 'r1', 'r2', 'r3', 'hyperlane', 'alice', 'attacker', 'mallory', 'eve', 'monitor'];
 const W = Object.fromEntries(names.map((n) => [n, Wallet.createRandom()]));
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
 const env = { ...process.env, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' };
 let zp, sp, jobsAddr, cfg;
 
-function cli(actor, args, rpc = Z) {
+function cli(actor, args, rpc = Z, extraEnv = {}) {
   return new Promise((resolve) => {
     execFile(process.execPath, [new URL('../cli.js', import.meta.url).pathname, ...args, '--rpc', rpc], {
-      env: { ...env, ZETAPHY_HOME: join(root, actor) }, timeout: 90_000,
+      env: { ...env, ZETAPHY_HOME: join(root, actor), ...extraEnv }, timeout: 90_000,
     }, (err, stdout, stderr) => resolve({ code: err?.code ?? 0, out: stdout + stderr }));
   });
 }
@@ -61,7 +67,7 @@ before(() => {
 });
 after(() => { for (const d of ['z', 's']) { try { process.kill(Number(readFileSync(join(root, d, 'node.pid'), 'utf8'))); } catch {} } });
 
-test('assets cross only with two independent lanes, after quarantine, and never to a decoy-marked attacker', { timeout: 600_000 }, async () => {
+test('assets cross only with two independent lanes, after quarantine, and never to an attacker the monitor marked', { timeout: 600_000 }, async () => {
   // ZETAPHY side: NeuroJobs, three runners with a track record.
   const d = await cli('gov', ['deploy', '--fund', '100', '--window', '8', '--timeout', '60', '--unbond', '120']);
   assert.match(d.out, /deployed at 0x/, d.out);
@@ -92,7 +98,7 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.match(noLb.out, /needs --lockbox <source chain id>:0x<LockBox>, so the source lockbox is protected \(or pass --no-lockbox-protect/);
   assert.doesNotMatch(noLb.out, /BridgeGuard 0x/);
   const bridgeArgs = ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1', '--threats', threats,
-    '--lockbox', `4097:${lockbox.target}`, '--guardian', W.user.address];
+    '--lockbox', `4097:${lockbox.target}`, '--guardian', W.user.address, '--marker', W.monitor.address];
   // A single-key guardian: refused outside a devnet, before anything is deployed.
   const eoaGuardian = await cli('gov', bridgeArgs);
   assert.notEqual(eoaGuardian.code, 0, eoaGuardian.out);
@@ -103,7 +109,9 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.match(b.out, /bridge CLOSED \(route disabled, daily limit 1000, hard cap 1000\)/);
   assert.match(b.out, /vaccine on/);
   assert.match(b.out, /ThreatRegistry: protect the bridge's own contracts and the lockbox \(done\)/);
+  assert.match(b.out, new RegExp(`marker ${W.monitor.address}: may mark addresses`));
   cfg = Object.fromEntries([...b.out.matchAll(/^(\w+) (0x[0-9a-fA-F]{40})$/gm)].map((m) => [m[1], m[2]]));
+  assert.deepEqual(Object.keys(cfg).sort(), ['BridgeAirlock', 'BridgeGuard', 'BridgedToken', 'NeuroLane']);
   const guard = new Contract(cfg.BridgeGuard, art('BridgeGuard').abi, zp);
   const route = await new Contract(cfg.BridgeAirlock, art('BridgeAirlock').abi, zp).route();
   assert.equal((await guard.routes(route)).enabled, false, 'deployed closed');
@@ -120,6 +128,7 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.equal(opened.code, 0, opened.out);
   assert.match(opened.out, /record the audit on-chain \(BridgeGuard.setAudit\) \(done\)/);
   assert.match(opened.out, /bridge OPEN/);
+  assert.match(opened.out, /Markers: 1 \(keys that may mark an address/);
   assert.equal((await guard.routes(route)).enabled, true);
   assert.equal(await guard.auditSha256(), '0x' + 'ab'.repeat(32));
   // NeuroLane's pause switch defaults to the NeuroJobs' NeuroControl.
@@ -132,10 +141,34 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.doesNotMatch(prot, /FLAGGED/, prot);
   assert.equal(prot.match(/protected by governance/g)?.length, 3, prot); // lockbox; airlock address and code
 
-  // Alice locks 5, the attacker pokes the decoy on ZETAPHY then locks 7.
+  // A contract only the monitor's secret watch list names (a test-only emitter: every call logs msg.sender).
+  const WA = watchedArtifacts().WatchedEmitter;
+  const wf = await new ContractFactory(WA.abi, WA.bytecode, W.gov.connect(zp)).deploy();
+  await wf.waitForDeployment();
+  const watchedAddr = await wf.getAddress();
+  const monState = join(root, 'monitor-state.json');
+  const MON_ENV = { BRIDGE_WATCHLIST: JSON.stringify([{ address: watchedAddr }]), BRIDGE_MARKER_KEY: W.monitor.privateKey,
+    BRIDGE_MONITOR_THRESHOLDS: JSON.stringify({ largePct: 10 }) };
+  const mon = (extra = [], out = join(root, 'monitor.json')) => cli('user', ['bridge', 'monitor', '--bridgeGuard', cfg.BridgeGuard, '--airlock', cfg.BridgeAirlock,
+    '--state', monState, '--out', out, ...extra], Z, MON_ENV);
+  // Nothing the monitor writes may name the watched contract, in any letter case.
+  const noWatched = (text, what) => assert.ok(!String(text).toLowerCase().includes(watchedAddr.slice(2).toLowerCase()), `${what} names the watched contract`);
+
+  // Alice locks 5; the attacker calls the watched contract on ZETAPHY, then locks 7.
   await (await lockbox.connect(W.alice.connect(sp)).lock(W.alice.address, { value: parseEther('5') })).wait();
-  const decoy = new Contract(cfg.DecoyBridge, art('DecoyBridge').abi, W.attacker.connect(zp));
-  await (await decoy.mint(W.attacker.address, parseEther('1000000'), { gasLimit: 300000n })).wait();
+  const watched = new Contract(watchedAddr, WA.abi, W.attacker.connect(zp));
+  await (await watched.mint(W.attacker.address, parseEther('1000000'), { gasLimit: 300000n })).wait();
+  // The monitor (its scheduled run; the quarantine must outlast its interval) marks the caller.
+  const m0 = await mon(['--quiet', '--summary', join(root, 'summary0.md'), '--issue', join(root, 'issue0.md')]);
+  assert.equal(m0.code, 0, m0.out);
+  assert.match(m0.out, /^bridge monitor: \d+ alert\(s\), \d+ critical \(blocks \d+–\d+\); marked 1, pending 0$/m, m0.out);
+  assert.doesNotMatch(m0.out, /0x[0-9a-fA-F]{40}/, 'the public log has counts only');
+  assert.equal(await new Contract(cfg.BridgeAirlock, art('BridgeAirlock').abi, zp).tripped(W.attacker.address), true, 'marked by the monitor');
+  const rep0 = JSON.parse(readFileSync(join(root, 'monitor.json'), 'utf8'));
+  assert.ok(rep0.alerts.some((x) => x.rule === 'watch-hit' && x.data.caller.toLowerCase() === W.attacker.address.toLowerCase() && /queued/.test(x.en)), m0.out);
+  for (const f of ['monitor.json', 'monitor-state.json', 'summary0.md', 'issue0.md']) noWatched(readFileSync(join(root, f), 'utf8'), f);
+  noWatched(m0.out, 'stdout');
+  assert.equal(JSON.parse(readFileSync(monState, 'utf8')).format, 'zetaphy-bridge-monitor-state/aes-256-gcm', 'the state is encrypted');
   await (await lockbox.connect(W.attacker.connect(sp)).lock(W.attacker.address, { value: parseEther('7') })).wait();
   // Mallory's address on the source chain is flagged by the runners before she locks 3. Only runners
   // with an accepted verdict may vote (a seat that did not reveal has none), and a vote after the
@@ -199,10 +232,11 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   await assert.rejects(airlock.release.staticCall(srcId, lockbox.target, 3n, W.eve.address, W.eve.address, parseEther('2'))); // ThreatHeld
   assert.equal(await token.balanceOf(W.attacker.address), 0n);
   assert.equal(await airlock.tripped(W.attacker.address), true);
+  await assert.rejects(airlock.release.staticCall(srcId, lockbox.target, 1n, W.attacker.address, W.attacker.address, parseEther('7')), (e) => /Blocked|0xa5baf151/.test(`${e.shortMessage} ${e.data} ${e.message}`)); // marked: refused
   assert.match(logs.join('\n'), /attested lock #0/);
   assert.equal(await token.balanceOf(W.mallory.address), 0n);
   assert.match(logs.join('\n'), /lock #2: not attested \(source sender is flagged in the ThreatRegistry/);
-  console.log(`alice received 5 bridged USDC via 2 lanes + quarantine; attacker (decoy-marked) received 0; flagged mallory held`);
+  console.log(`alice received 5 bridged USDC via 2 lanes + quarantine; attacker (marked by the monitor) received 0; flagged mallory held`);
 
   // The data feed for other wallets: every standing flag, enforced or not, as JSON.
   const feedFile = join(root, 'threats.json');
@@ -250,17 +284,30 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.match((await cli('r1', ['threat', 'reports', '--threats', threats, '--reports', reports])).out, /0 open report\(s\) of 1/);
   console.log('a user report was flagged by the runners, who shared its fee');
 
-  // Monitoring: one scan from the bridge's first block sees the decoy hit, the governance changes
+  // Monitoring: one scan from the bridge's first block sees the mark (the monitor's own: a warning),
+  // the watched contract's caller again (already marked: not marked twice), the governance changes
   // and the day's volume at its limit (5 + 3 + 2 of 10); a guardian's pause shows up in the next scan.
-  const mon = (extra = []) => cli('user', ['bridge', 'monitor', '--bridgeGuard', cfg.BridgeGuard, '--airlock', cfg.BridgeAirlock,
-    '--state', join(root, 'monitor-state.json'), '--out', join(root, 'monitor.json'), ...extra]);
-  const m1 = await mon(['--from-block', '1']);
+  const m1 = await mon(['--from-block', '1', '--issue', join(root, 'issue1.md')]);
   assert.equal(m1.code, 0, m1.out);
   let rep = JSON.parse(readFileSync(join(root, 'monitor.json'), 'utf8'));
   const rulesOf = (r) => r.alerts.map((x) => x.rule);
-  assert.ok(rulesOf(rep).includes('decoy-hit'), m1.out);
-  assert.ok(rep.alerts.some((x) => x.rule === 'decoy-hit' && x.data.who.toLowerCase() === W.attacker.address.toLowerCase()), m1.out);
+  const isAttacker = (a) => String(a).toLowerCase() === W.attacker.address.toLowerCase();
+  assert.ok(rep.alerts.some((x) => x.rule === 'marked' && x.severity === 'warning' && isAttacker(x.data.who) && x.data.by.toLowerCase() === W.monitor.address.toLowerCase()), m1.out);
+  assert.ok(rep.alerts.some((x) => x.rule === 'watch-hit' && isAttacker(x.data.caller) && x.data.status === 'marked'), m1.out);
+  assert.deepEqual(rep.marking, { marked: 0, pending: 0 }, 'not marked twice');
+  assert.ok(rep.alerts.some((x) => x.rule === 'governance-change' && /MarkerSet/.test(x.en)), m1.out);
   assert.ok(rep.alerts.some((x) => x.rule === 'governance-change' && /AuditSet/.test(x.en)), m1.out);
+  // The thresholds secret: large transfers from 10% of the limit (the committed default is 25%: 2 of these 3).
+  assert.equal(rep.alerts.filter((x) => x.rule === 'large-transfer').length, 3, m1.out);
+  for (const [what, text] of [['report', JSON.stringify(rep)], ['issue', readFileSync(join(root, 'issue1.md'), 'utf8')], ['state', readFileSync(monState, 'utf8')], ['stdout', m1.out]]) noWatched(text, what);
+  const plain = await cli('mallory', ['bridge', 'monitor', '--bridgeGuard', cfg.BridgeGuard, '--airlock', cfg.BridgeAirlock, '--from-block', '1',
+    '--state', join(root, 'plain-state.json'), '--out', join(root, 'plain.json')]);
+  assert.equal(plain.code, 0, plain.out);
+  const plainRep = JSON.parse(readFileSync(join(root, 'plain.json'), 'utf8'));
+  assert.equal(plainRep.alerts.filter((x) => x.rule === 'large-transfer').length, 2, plain.out);
+  assert.ok(plainRep.alerts.some((x) => x.rule === 'marked' && x.severity === 'critical' && isAttacker(x.data.who)), 'without the marker key, every mark is critical');
+  assert.ok(!plainRep.alerts.some((x) => x.rule === 'watch-hit'), 'without the watch list, nothing is watched');
+  assert.equal(JSON.parse(readFileSync(join(root, 'plain-state.json'), 'utf8')).format, undefined, 'no secret set: a plain state');
   assert.ok(rep.alerts.some((x) => x.rule === 'governance-change' && /RouteSet/.test(x.en)), m1.out);
   const r = await guard.routes(route);
   if (Number(r.day) === Math.floor(Number((await zp.getBlock('latest')).timestamp) / 86400)) {
@@ -274,9 +321,21 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   const m2 = await mon();
   rep = JSON.parse(readFileSync(join(root, 'monitor.json'), 'utf8'));
   assert.ok(rep.alerts.some((x) => x.rule === 'pause' && x.data.by.toLowerCase() === W.user.address.toLowerCase()), m2.out);
-  assert.ok(!rulesOf(rep).includes('decoy-hit'), 'the next scan starts after the last scanned block');
+  assert.ok(!rulesOf(rep).includes('marked') && !rulesOf(rep).includes('watch-hit'), 'the next scan starts after the last scanned block');
+  noWatched(JSON.stringify(rep), 'report');
   const none = await cli('eve', ['bridge', 'monitor', '--monitor-config', join(root, 'none.json'), '--out', join(root, 'none-report.json')]);
   assert.equal(none.code, 0, none.out);
   assert.match(none.out, /notice: no bridge deployed/);
+  // Governance lifts the mark and removes the marker key (gov is still the airlock's governance here: sent at once).
+  const BA = ['--bridgeGuard', cfg.BridgeGuard, '--airlock', cfg.BridgeAirlock];
+  const ut = await cli('gov', ['bridge', 'untrip', W.attacker.address, ...BA]);
+  assert.match(ut.out, /lift the mark of 0x[0-9a-fA-F]{40} \(BridgeAirlock\.untrip\) \(done\)/, ut.out);
+  const off = await cli('gov', ['bridge', 'marker', W.monitor.address, '--off', ...BA]);
+  assert.match(off.out, /remove marker 0x[0-9a-fA-F]{40} \(BridgeAirlock\.setMarker\) \(done\)/, off.out);
+  const al = new Contract(cfg.BridgeAirlock, art('BridgeAirlock').abi, zp);
+  assert.equal(await al.tripped(W.attacker.address), false);
+  assert.equal(await al.isMarker(W.monitor.address), false);
+  assert.equal(await al.markerCount(), 0n);
+  assert.match((await cli('alice', ['bridge', 'untrip', W.attacker.address, ...BA])).out, /governance is 0x[0-9a-fA-F]{40}, not this key\. Have it call:\n  to 0x/);
   console.log(`monitor: ${rulesOf(JSON.parse(readFileSync(join(root, 'monitor.json'), 'utf8'))).join(', ')} after the pause`);
 });

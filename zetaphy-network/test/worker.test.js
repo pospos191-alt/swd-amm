@@ -4,8 +4,9 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { encodeBytes32String } from 'ethers';
-import { createWorker, commitmentOf } from '../src/worker.js';
+import { createWorker, commitmentOf, simSeedOf } from '../src/worker.js';
 import { verdictOf } from '../../zetaphy-neuro/src/verdict.js';
+import { jobSimSeed } from '../../zetaphy-neuro/src/honeypot.js';
 import { detectHardware, pickProfile } from '../src/hardware.js';
 
 const ME = '0x00000000000000000000000000000000000000aa';
@@ -87,6 +88,29 @@ test('a failed commit leaves no seat to reveal; unsupported chains are skipped',
   assert.match(out.join('\n'), /polygon not supported/);
   assert.match(out.join('\n'), /not committed \(NoSeat\)/);
   assert.deepEqual(JSON.parse(readFileSync(stateFile, 'utf8')).seats, {});
+});
+
+test('the trade simulation is seeded from the job and its lottery: every runner of the round runs the same test', async () => {
+  const RAND = '0x' + '5e'.repeat(32);
+  const seen = [];
+  const runner = async () => {
+    const jobs = fakeJobs();
+    jobs.jobInfo = async () => ({ skill: '0x' + '00'.repeat(32), rand: RAND });
+    jobs.add('bsc', T);
+    jobs.add('bsc', T);
+    const w = createWorker({ jobs, me: ME, stateFile: join(mkdtempSync(join(tmpdir(), 'zw-')), 'state.json'), chainTime: async () => 10n,
+      read: async (chain, target, opts) => { seen.push(opts); return report; } });
+    await w.tick();
+  };
+  await runner();
+  await runner(); // another machine
+  assert.equal(seen.length, 4);
+  assert.deepEqual(seen.map((o) => o.simSeed), [jobSimSeed(0, RAND), jobSimSeed(1, RAND), jobSimSeed(0, RAND), jobSimSeed(1, RAND)]);
+  assert.notEqual(seen[0].simSeed, seen[1].simSeed, 'each job its own plan');
+  assert.ok(seen.every((o) => o.sourcify === false));
+  // No lottery yet (or a contract without jobInfo): no seed, the simulation picks at random.
+  assert.equal(simSeedOf(0, '0x' + '00'.repeat(32)), null);
+  assert.equal(simSeedOf(0, undefined), null);
 });
 
 test('closed and full jobs are left alone', async () => {

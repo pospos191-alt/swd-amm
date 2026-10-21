@@ -274,8 +274,14 @@ Claude ไม่ใช่ทนาย และ testnet ไม่ทำให้
 4. **guardian และ governance เป็น multisig คนละตัว** owner ≥ 3, ต้องเซ็น ≥ 2, แต่ละ owner ใช้ **hardware wallet (Ledger/Trezor ผ่าน MetaMask)** ของตัวเอง ไม่มีใครถือหลาย key
    ไม่มี owner คนเดียวกันในทั้งสองตัว และไม่ใช่ key ของ deployer (governance เป็น gov module ได้) ดูหัวข้อ "multisig + hardware wallet" ใน `zetaphy-network/README.md`
 5. **bug bounty ที่มีเงินจริงแล้ว** (`docs/BUG_BOUNTY.md`: ตอนนี้เป็นเครดิตอย่างเดียว ต้องโหวตโอนเงินเข้ากองก่อน)
-6. **ตัวเฝ้าดูทำงานแล้ว:** ใส่ `rpc` ใน `zetaphy-network/bridge-monitor.json` (หรือ variable `ZETAPHY_RPC`) เปิดบรรทัด `schedule` ใน `.github/workflows/bridge-monitor.yml` (รายชั่วโมง; ถ้า repo เป็น public ตั้ง `*/15` ได้ฟรี) workflow **bridge-monitor** จะเปิด issue `bridge-alert` เมื่อมีแจ้งเตือน
-   (Telegram/Discord: secret `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `DISCORD_WEBHOOK_URL` ไม่บังคับ)
+6. **ตัวเฝ้าดูทำงานแล้ว:** ใส่ `rpc` ใน `zetaphy-network/bridge-monitor.json` (หรือ variable `ZETAPHY_RPC`) เปิดบรรทัด `schedule` ใน `.github/workflows/bridge-monitor.yml`
+   - **ช่องทางแจ้งเตือนส่วนตัวอย่างน้อยหนึ่งช่อง** (secret): `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `DISCORD_WEBHOOK_URL` หรือ `PRIVATE_ALERTS_TOKEN` (issue ใน repo ส่วนตัว `pospos191-alt/zetaphy-private`)
+     log ของ repo สาธารณะมีแค่จำนวนแจ้งเตือน รายละเอียดไปช่องทางส่วนตัวเท่านั้น ไม่มีช่องทาง = run ล้ม (issue ใน repo นี้เฉพาะเมื่อตั้ง variable `BRIDGE_ALERT_ISSUES` = `on`)
+   - เกณฑ์แจ้งเตือนจริงตั้งเป็น secret `BRIDGE_MONITOR_THRESHOLDS` ได้ (ค่าในไฟล์ที่ commit เป็นแค่ค่าเริ่มต้น)
+   - ถ้าใช้สัญญาที่เฝ้าไว้: secret `BRIDGE_WATCHLIST` (รายชื่อเก็บเป็นความลับ ไม่ commit) และ `BRIDGE_MARKER_KEY` (key ใหม่ที่ไม่มีสิทธิ์อื่น มี ZETAPHY แค่ค่าแก๊ส)
+     แล้วให้ governance ตั้งเป็น marker: `zetaphy bridge marker 0x<ที่อยู่ของ key นั้น>` (marker ทำได้แค่ทำเครื่องหมายที่อยู่ ไม่แตะเงิน governance ปลดได้ด้วย `zetaphy bridge untrip`)
+   - ทำเครื่องหมายอัตโนมัติเกิดในรอบถัดไปของตัวเฝ้า **`quarantine` ต้องนานกว่าช่วงห่างของรอบ** (ค่าเริ่มต้น 3600 วินาที = รายชั่วโมงไม่พอ)
+     แนะนำเมื่อ repo เป็น public: ทุก 15 นาที (`*/15`, ฟรี) กับ quarantine อย่างน้อย 2 ชม. (`BridgeAirlock.setQuarantine(7200)` ผ่าน governance)
 7. **เพดานเริ่มต่ำมาก:** 1,000 โทเคนต่อวัน ขึ้นได้ครั้งละไม่เกิน 2 เท่า และแต่ละครั้งรอ 7 วัน (`zetaphy bridge cap propose`) ตามตารางใน README
 
 เมื่อครบแล้ว (บนเครื่องที่มี `zetaphy-network`; key นี้ไม่ต้องมีสิทธิ์อะไร คำสั่งพิมพ์ธุรกรรมให้ multisig เซ็น):

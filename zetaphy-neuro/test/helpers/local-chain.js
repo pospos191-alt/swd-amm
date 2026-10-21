@@ -109,8 +109,10 @@ export async function createLocalChain({ optimize = true } = {}) {
   // Read-only RPC with the same interface as src/rpc.js.
   const rpc = {
     calls: [],
+    gasPrice: 1_000_000_000n, // what eth_gasPrice answers (1 gwei)
     async call(method, params) {
       this.calls.push(method);
+      if (method === 'eth_gasPrice') return '0x' + this.gasPrice.toString(16);
       if (method === 'eth_getCode') {
         return bytesToHex(await sm.getContractCode(Address.fromString(params[0])));
       }
@@ -121,16 +123,25 @@ export async function createLocalChain({ optimize = true } = {}) {
       if (method === 'eth_call') {
         // Like a node: runs on a scratch copy of the state (with the optional
         // state override, third parameter) and throws the copy away.
-        const [{ to, data, from }, , override] = params;
+        // Like geth: gas defaults to a high cap, gas price to 0, and a priced
+        // call needs a caller that can pay gas * gasPrice.
+        const [{ to, data, from, gas, gasPrice }, , override] = params;
+        const caller = Address.fromString(from ?? '0x2222222222222222222222222222222222222222');
+        const gasLimit = gas != null ? BigInt(gas) : 30_000_000n;
+        const price = gasPrice != null ? BigInt(gasPrice) : 0n;
+        // Each call starts cold, as on a node (runCall keeps EIP-2929 warm
+        // addresses and slots from earlier calls otherwise).
+        evm.journal.cleanJournal();
         await sm.checkpoint();
         try {
           for (const [addr, o] of Object.entries(override ?? {})) {
             if (o.code) await putCode(addr, o.code);
             if (o.balance) await fund(addr, o.balance);
           }
+          const balance = (await sm.getAccount(caller))?.balance ?? 0n;
+          if (price > 0n && balance < gasLimit * price) throw new Error('insufficient funds for gas * price + value');
           const r = await evm.runCall({
-            caller: Address.fromString(from ?? '0x2222222222222222222222222222222222222222'),
-            to: Address.fromString(to), data: hexToBytes(data), gasLimit: 30_000_000n,
+            caller, to: Address.fromString(to), data: hexToBytes(data), gasLimit, gasPrice: price,
           });
           if (r.execResult.exceptionError) throw new Error('execution reverted');
           return bytesToHex(r.execResult.returnValue);

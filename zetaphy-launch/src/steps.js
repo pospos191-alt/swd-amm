@@ -202,14 +202,14 @@ export function launchSteps() {
     },
     {
       name: 'bridge',
-      describe: 'BridgeGuard + BridgeAirlock + NeuroLane + DecoyBridge (zetaphy deploy-bridge --lockbox …), deployed CLOSED (route disabled, 1,000-token cap); protects the bridge\'s own contracts and the lockbox',
-      artifacts: [['zetaphy-network', 'BridgeGuard'], ['zetaphy-network', 'BridgeAirlock'], ['zetaphy-network', 'NeuroLane'], ['zetaphy-network', 'DecoyBridge']], txs: 10,
+      describe: 'BridgeGuard + BridgeAirlock + NeuroLane (zetaphy deploy-bridge --lockbox …), deployed CLOSED (route disabled, 1,000-token cap); protects the bridge\'s own contracts and the lockbox',
+      artifacts: [['zetaphy-network', 'BridgeGuard'], ['zetaphy-network', 'BridgeAirlock'], ['zetaphy-network', 'NeuroLane']], txs: 9,
       when: (ctx) => (ctx.bridgeLockbox ? true : 'off by default: needs a LockBox on the source chain, --bridge-lockbox <chainId>:0x<LockBox>'),
       async run(ctx, state) {
         const o = outputs(state);
         const { out, cfg } = await net(ctx, state, ['deploy-bridge', '--lockbox', ctx.bridgeLockbox, '--control', o.neuroControl]);
         const res = await haveCode(ctx, { bridgeGuard: getAddress(cfg.bridgeGuard), bridgeAirlock: getAddress(cfg.airlock), neuroLane: getAddress(cfg.neuroLane),
-          bridgedToken: pick(/BridgedToken (0x[0-9a-fA-F]{40})/, out, 'BridgedToken'), decoyBridge: pick(/DecoyBridge (0x[0-9a-fA-F]{40})/, out, 'DecoyBridge'), bridgeLockbox: ctx.bridgeLockbox });
+          bridgedToken: pick(/BridgedToken (0x[0-9a-fA-F]{40})/, out, 'BridgedToken'), bridgeLockbox: ctx.bridgeLockbox });
         // The launch never opens the bridge: check it is closed, and say what opening needs.
         if (await bridgeOpen(ctx, res)) throw new Error('the bridge route is enabled right after deploy-bridge: refusing (the launch deploys it closed)');
         for (const l of BRIDGE_GATES) ctx.log(`  ${l}`);

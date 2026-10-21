@@ -37,18 +37,27 @@
 // that ended Disputed (no quorum) may be challenged again inside the new
 // window (up to the contract's cap): the watcher does so if it still
 // disagrees, so a self-challenge that goes nowhere cannot lock out real ones.
+// Trade simulation: Neuro's buy/sell test runs at addresses and amounts picked
+// from a seed (zetaphy-neuro/src/honeypot.js). A runner passes
+// jobSimSeed(job id, the round's lottery), so all runners of a round run the
+// same test, and nobody knew it when the token was deployed. The simulation
+// is not part of the verdict (zetaphy-neuro/src/verdict.js); the seed makes a
+// runner's report reproducible (cli.js --sim-seed).
 
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { AbiCoder, keccak256, hexlify, randomBytes, decodeBytes32String, formatEther } from 'ethers';
 import { CHAINS } from '../../zetaphy-neuro/src/chains.js';
 import { readContract } from '../../zetaphy-neuro/src/reader.js';
 import { verdictOf } from '../../zetaphy-neuro/src/verdict.js';
+import { jobSimSeed } from '../../zetaphy-neuro/src/honeypot.js';
 
 export const OPEN = 1n;
 export const DONE = 2n;
 /** NeuroJobs.ChallengeState */
 export const CH = { NONE: 0n, OPEN: 1n, CONFIRMED: 2n, OVERTURNED: 3n, DISPUTED: 4n };
 const ZERO32 = '0x' + '00'.repeat(32);
+/** Simulation seed of a job round from its lottery; null while the lottery is not drawn. */
+export const simSeedOf = (id, rand) => (/^0x[0-9a-fA-F]{64}$/.test(String(rand ?? '')) && rand !== ZERO32 ? jobSimSeed(id, rand) : null);
 /** Chain keys this runner can read: what `zetaphy deploy` votes into NeuroControl's allowlist. */
 export const SUPPORTED_CHAINS = ['zetaphy', ...Object.keys(CHAINS)];
 
@@ -135,11 +144,12 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
   }
 
   /** This machine's verdict on a job: {verdict, report} or {skip: reason}. */
-  async function ourVerdict(job) {
+  async function ourVerdict(job, simSeed = null) {
     let chainKey;
     try { chainKey = decodeBytes32String(job.chain); } catch { return { skip: 'skip: bad chain name' }; }
-    const opts = readerFor(chainKey);
-    if (!opts) return { skip: `skip: chain ${chainKey} not supported here` };
+    const base = readerFor(chainKey);
+    if (!base) return { skip: `skip: chain ${chainKey} not supported here` };
+    const opts = simSeed ? { ...base, simSeed } : base;
     const report = await read(chainKey, job.target, opts);
     return { verdict: await verdictOf(report), report };
   }
@@ -162,9 +172,14 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     try { await (await send(jobs.draw, id)).wait(); } catch { /* too early, or someone drew first: fine */ }
   }
 
+  /** The lottery of round 1 (jobInfo().rand), or null on contracts without jobInfo. */
+  async function lotteryOf(id) {
+    return jobs.jobInfo ? (await jobs.jobInfo(id)).rand ?? null : null;
+  }
+
   /** Round 1 (round 2: second=true): compute, save, then commit. */
-  async function tryCommit(id, job, now, second = false) {
-    const v = await ourVerdict(job);
+  async function tryCommit(id, job, now, second = false, simSeed = null) {
+    const v = await ourVerdict(job, simSeed);
     if (v.skip) return v.skip;
     const salt = hexlify(randomBytes(32));
     const book = second ? state.seats2 : state.seats;
@@ -229,12 +244,14 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
       if (!seat) {
         if (job.commits >= 3n || windowOver || stopped) continue;
         if (await isForeign(id, done)) continue;
-        if (jobs.jobInfo && jobs.draw) await drawIfNeeded(id, (await jobs.jobInfo(id)).rand);
+        let rand = await lotteryOf(id);
+        if (jobs.draw) await drawIfNeeded(id, rand);
         // Seats go by a bond-weighted lottery; the pool of eligible runners
         // widens during the window, so check again on later ticks.
         if (!(await jobs.eligible(id, me))) continue;
+        if (!simSeedOf(id, rand)) rand = await lotteryOf(id); // drawn since: read it again
         try {
-          done.push(`job ${id}: ${await tryCommit(id, job, now)}`);
+          done.push(`job ${id}: ${await tryCommit(id, job, now, false, simSeedOf(id, rand))}`);
         } catch (e) {
           // Another runner took the last seat first, or the target chain is down: retry next tick.
           done.push(`job ${id}: not committed (${msgOf(e)})`);
@@ -291,8 +308,9 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
         await drawIfNeeded(id, ch.rand);
         if (!(await jobs.challengeEligible(id, me))) continue;
         const job = await jobs.getJob(id);
+        const rand = simSeedOf(id, ch.rand) ? ch.rand : (await jobs.challengeInfo(id)).rand;
         try {
-          done.push(`job ${id}: ${await tryCommit(id, { chain: job.chain, target: job.target, chStart: ch.start, round: no }, now, true)}`);
+          done.push(`job ${id}: ${await tryCommit(id, { chain: job.chain, target: job.target, chStart: ch.start, round: no }, now, true, simSeedOf(id, rand))}`);
         } catch (e) { done.push(`job ${id}: not committed in round 2 (${msgOf(e)})`); }
       } else if (!seat.revealed && (ch.commits >= 3n || windowOver)) {
         done.push(await sendReveal(id, seat, false, true));
@@ -361,7 +379,7 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
   async function challengeIfWrong(id, job, done) {
     if (await isForeign(id, done)) return;
     let v;
-    try { v = await ourVerdict(job); } catch (e) { done.push(`job ${id}: watch: could not re-run (${msgOf(e)})`); return; }
+    try { v = await ourVerdict(job, simSeedOf(id, await lotteryOf(id))); } catch (e) { done.push(`job ${id}: watch: could not re-run (${msgOf(e)})`); return; }
     if (v.skip) return;
     if (lc(v.verdict) === lc(job.result)) return;
     const bond = BigInt(await jobs.challengeBondOf(id));

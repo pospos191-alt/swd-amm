@@ -1,36 +1,64 @@
-# Bridge monitor: on demand (hourly once a bridge exists), read the ZETAPHY lock/mint bridge on the public
-# RPC (read-only, no key) and raise alerts: daily volume over 80% of the limit,
-# lanes disagreeing or silent, any veto, pause or decoy hit, holds on flagged
-# parties, governance changes (limits, lanes, roles, audit), large transfers,
-# transfers ready but not released. See zetaphy-network/src/monitor.js and the
-# monitoring section of zetaphy-network/README.md.
+# Bridge monitor: on demand (on a schedule once a bridge exists), read the ZETAPHY lock/mint bridge on
+# the public RPC and raise alerts: daily volume over the limit's threshold, lanes disagreeing or silent,
+# any veto, pause or mark, callers of watched contracts, holds on flagged parties, governance changes
+# (limits, lanes, roles, markers, audit), large transfers, transfers ready but not released.
+# See zetaphy-network/src/monitor.js and the monitoring section of zetaphy-network/README.md.
 #
-# Addresses and the RPC come from committed, public files:
-#   zetaphy-network/bridge-monitor.json   rpc, bridgeGuard, bridgeAirlock, startBlock, thresholds
+# PUBLIC LOG, PRIVATE ALERTS. Once this repository is public, its Actions logs, step summaries,
+# artifacts and issues are public too. So this workflow:
+#   - prints counts only (zetaphy bridge monitor --quiet; the step summary too), never alert details;
+#   - sends the details to private channels only (Telegram, Discord, an issue in a private repository);
+#     issues in THIS repository only if the variable BRIDGE_ALERT_ISSUES is "on" (public once it is);
+#   - keeps the report artifact only while this repository is private;
+#   - keeps the state artifact (to continue from the last scanned block) encrypted, with a key derived
+#     from the monitor secrets below (with none of them set nothing in it is private).
+# With alerts and no channel that took them, the run FAILS with a short message (counts only) and the
+# state is not saved, so the next run scans the same blocks again and retries the delivery.
+#
+# Committed, public files (addresses, the RPC, and DEFAULT thresholds):
+#   zetaphy-network/bridge-monitor.json   rpc, bridgeGuard, bridgeAirlock, startBlock, default thresholds
 #   zetaphy-launch/state/77390.json       the launch state (bridgeGuard / bridgeAirlock), when the first is empty
-# or the repository variable ZETAPHY_RPC (Settings → Secrets and variables → Actions → Variables).
-# While no bridge is deployed this does nothing: a notice, exit 0.
+# Repository variables (Settings → Secrets and variables → Actions → Variables):
+#   ZETAPHY_RPC            the RPC, instead of "rpc" in the file above
+#   BRIDGE_ALERT_ISSUES    "on": also open issues labelled bridge-alert here (with the built-in GITHUB_TOKEN)
+#   PRIVATE_ALERTS_REPO    owner/name for PRIVATE_ALERTS_TOKEN (default pospos191-alt/zetaphy-private)
+# Repository secrets (… → Secrets), all optional, passed through the environment, never printed:
+#   BRIDGE_MONITOR_THRESHOLDS  JSON over the committed defaults, e.g. {"volumePct": 60, "largePct": 10}
+#                              (keys volumePct, largePct, silentMinutes, disagreeMinutes)
+#   BRIDGE_WATCHLIST           JSON [{"address": "0x…", "callerTopic": 1}]: contracts whose every log is an
+#                              alert; the caller is read from topic callerTopic (default 1, msg.sender
+#                              emitted by the watched contract). Never named in any output.
+#   BRIDGE_MARKER_KEY          private key of a marker of the airlock (governance: zetaphy bridge marker
+#                              0x<its address>); the monitor marks each new caller of a watched contract
+#                              (BridgeAirlock.trip). A marker only marks: it moves no funds. Give it a
+#                              little ZETAPHY for gas, and nothing else.
+#   PRIVATE_ALERTS_TOKEN       fine-grained token with Issues: read and write on PRIVATE_ALERTS_REPO only
+#   TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL   private chat channels
 #
-# On alerts it opens (or comments on) one GitHub issue labelled `bridge-alert`, with
-# the built-in GITHUB_TOKEN. Optional repository secrets, only used when set and
-# never printed: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL.
+# The last scanned block (and open transfers, alerts already sent, marks) is the artifact
+# `bridge-monitor-state` of the last successful run; each run continues from it. Lost (artifacts expire
+# after 30 days unused): the scan restarts from startBlock, or the last 20,000 blocks (alerts may repeat
+# once; nobody is marked twice: the chain says who is). Written with other monitor secrets (e.g. after
+# rotating the watch list or the marker key): it continues from the same block with a fresh memory.
 #
-# The last scanned block (and open transfers, alerts already sent) is the artifact
-# `bridge-monitor-state` of the last successful run; each run continues from it, so
-# blocks are never rescanned. Lost (artifacts expire after 30 days unused): the scan
-# restarts from startBlock, or the last 20,000 blocks.
+# Marking is automated but not instant: a caller is marked at the next run, so the airlock's quarantine
+# (deploy-bridge --quarantine, default 3600 s) MUST be longer than the time between runs, plus the
+# scheduler's delay (often 5–15 minutes, sometimes more), or the caller's transfer can be released first.
+# Hourly runs need a quarantine well above 1 h. Recommended once this repository is public (minutes are
+# free): */15 with a quarantine of at least 2 h (governance: BridgeAirlock.setQuarantine(7200)).
 #
-# Cost: a public repository's Actions minutes are free. This repository is private
-# (GitHub Free: 2,000 minutes a month, each run billed as at least 1 minute) and no
-# bridge is deployed yet, so the schedule is OFF: run it by hand (Actions → bridge-monitor
-# → Run workflow). When a bridge is opened, uncomment the schedule below: hourly costs
-# about 720 minutes a month in a private repository, */15 about 2,900 (free if public).
+# Cost: a public repository's Actions minutes are free. While this repository is private (GitHub Free:
+# 2,000 minutes a month, each run billed as at least 1 minute) and no bridge is deployed, the schedule is
+# OFF: run it by hand (Actions → bridge-monitor → Run workflow). When a bridge is opened, uncomment the
+# schedule below: hourly costs about 720 minutes a month in a private repository, */15 about 2,900 (free
+# if public).
 
 name: bridge-monitor
 
 on:
   # schedule:
-  #   - cron: '7 * * * *'   # hourly; turn on once a bridge is deployed (see Cost above)
+  #   - cron: '7 * * * *'   # hourly; turn on once a bridge is deployed (see Cost above); quarantine > interval
+  #   - cron: '*/15 * * * *' # recommended once the repository is public, with a quarantine of 2 h or more
   workflow_dispatch:
     inputs:
       from_block:
@@ -41,7 +69,7 @@ on:
 
 permissions:
   contents: read
-  issues: write
+  issues: write   # only used when the variable BRIDGE_ALERT_ISSUES is "on"
   actions: read   # download the previous run's state artifact
 
 concurrency:
@@ -66,7 +94,11 @@ jobs:
         id: check
         env:
           RPC_VAR: ${{ vars.ZETAPHY_RPC }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Private repository? (Only then is the report kept as an artifact.) Unknown counts as public.
+          vis=$(gh api "repos/$GITHUB_REPOSITORY" --jq '.private' 2>/dev/null || true)
+          echo "private=$([ "$vis" = true ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           node - <<'JS'
           const fs = require('node:fs');
           const read = (f) => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {});
@@ -93,6 +125,27 @@ jobs:
         if: steps.check.outputs.deployed == 'true'
         run: npm ci --omit=dev --prefix zetaphy-network
 
+      - name: Mask the watched addresses in this job's log (defence in depth)
+        if: steps.check.outputs.deployed == 'true'
+        working-directory: zetaphy-network
+        env:
+          BRIDGE_WATCHLIST: ${{ secrets.BRIDGE_WATCHLIST }}
+        run: |
+          # The monitor never prints them; this masks them anyway, in every letter case it may take.
+          node - <<'JS'
+          const { getAddress } = require('ethers');
+          let list = [];
+          try { list = JSON.parse(process.env.BRIDGE_WATCHLIST || '[]'); } catch { list = []; }
+          for (const e of Array.isArray(list) ? list : []) {
+            const a = String((e && e.address) || '');
+            if (!/^0x[0-9a-fA-F]{40}$/.test(a)) continue;
+            const h = a.slice(2);
+            let c = h;
+            try { c = getAddress(a.toLowerCase()).slice(2); } catch {}
+            for (const v of new Set([h, h.toLowerCase(), h.toUpperCase(), c])) console.log(`::add-mask::${v}`);
+          }
+          JS
+
       - name: Restore the last scanned block
         if: steps.check.outputs.deployed == 'true'
         env:
@@ -101,17 +154,21 @@ jobs:
           mkdir -p state
           id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow bridge-monitor.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
           if [ -n "$id" ] && gh run download "$id" --repo "$GITHUB_REPOSITORY" --name bridge-monitor-state --dir state 2>/dev/null; then
-            echo "continuing from run $id: last block $(node -e 'console.log(require("./state/monitor-state.json").lastBlock)')"
+            echo "continuing from run $id"
           else
             echo "no previous state: first scan from startBlock (or the last 20,000 blocks)"
           fi
 
-      - name: Scan
+      - name: Scan (counts only in this log)
         id: scan
         if: steps.check.outputs.deployed == 'true'
         env:
           RPC: ${{ steps.check.outputs.rpc }}
           FROM_BLOCK: ${{ inputs.from_block }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BRIDGE_MONITOR_THRESHOLDS: ${{ secrets.BRIDGE_MONITOR_THRESHOLDS }}
+          BRIDGE_WATCHLIST: ${{ secrets.BRIDGE_WATCHLIST }}
+          BRIDGE_MARKER_KEY: ${{ secrets.BRIDGE_MARKER_KEY }}
         run: |
           export ZETAPHY_HOME="$RUNNER_TEMP/zhome"
           extra=()
@@ -120,13 +177,78 @@ jobs:
             extra=(--from-block "$FROM_BLOCK")
           fi
           mkdir -p out
-          node zetaphy-network/cli.js bridge monitor --rpc "$RPC" --monitor-config "$CONFIG" --launch-state "$LAUNCH_STATE" \
-            --state state/monitor-state.json --out out/report.json --summary out/summary.md "${extra[@]}"
+          node zetaphy-network/cli.js bridge monitor --quiet --rpc "$RPC" --monitor-config "$CONFIG" --launch-state "$LAUNCH_STATE" \
+            --state state/monitor-state.json --out out/report.json --summary out/summary.md --issue out/issue.md --run-url "$RUN_URL" "${extra[@]}"
           n=$(node -e 'console.log(require("./out/report.json").alerts.length)')
+          crit=$(node -e 'console.log(require("./out/report.json").alerts.filter((a) => a.severity === "critical").length)')
           echo "alerts=$n" >> "$GITHUB_OUTPUT"
-          cat out/summary.md >> "$GITHUB_STEP_SUMMARY"
+          echo "critical=$crit" >> "$GITHUB_OUTPUT"
+          echo "### bridge-monitor: $n alert(s), $crit critical (details only in the private alert channels)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Keep the state for the next run
+      - name: Keep the report (private repository only)
+        if: steps.check.outputs.deployed == 'true' && steps.check.outputs.private == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-monitor-report
+          path: out/
+          retention-days: 14
+
+      - name: Send the alerts to private channels
+        if: steps.check.outputs.deployed == 'true' && steps.scan.outputs.alerts != '0'
+        env:
+          N: ${{ steps.scan.outputs.alerts }}
+          CRIT: ${{ steps.scan.outputs.critical }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PRIVATE_ALERTS_TOKEN: ${{ secrets.PRIVATE_ALERTS_TOKEN }}
+          PRIVATE_ALERTS_REPO: ${{ vars.PRIVATE_ALERTS_REPO || 'pospos191-alt/zetaphy-private' }}
+          BRIDGE_ALERT_ISSUES: ${{ vars.BRIDGE_ALERT_ISSUES }}
+          REPO_TOKEN: ${{ github.token }}
+        run: |
+          set +x
+          tried=0; sent=0
+          title="Bridge alert: $N alert(s), $CRIT critical"
+          # One open bridge-alert issue per repository: comment on it, or open it. Prints nothing of the body.
+          issue() {
+            gh label create bridge-alert --repo "$1" --color B60205 --description "ZETAPHY bridge monitor alerts" >/dev/null 2>&1 || true
+            num=$(gh issue list --repo "$1" --label bridge-alert --state open --limit 1 --json number --jq '.[0].number // empty') || return 1
+            if [ -n "$num" ]; then gh issue comment "$num" --repo "$1" --body-file out/issue.md >/dev/null
+            else gh issue create --repo "$1" --label bridge-alert --title "$title" --body-file out/issue.md >/dev/null; fi
+          }
+          text=$(node -e 'const s=require("fs").readFileSync("out/summary.md","utf8"); process.stdout.write((s.length>3500?s.slice(0,3500)+"\n…":s)+"\n"+process.env.RUN_URL)')
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            tried=$((tried + 1))
+            body=$(TEXT="$text" node -e 'console.log(JSON.stringify({chat_id: process.env.TELEGRAM_CHAT_ID, text: process.env.TEXT, disable_web_page_preview: true}))')
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -d "$body" "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" 2>/dev/null || true)
+            echo "telegram: HTTP ${code:-none}"; [[ "$code" == 2* ]] && sent=$((sent + 1))
+          fi
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            tried=$((tried + 1))
+            body=$(TEXT="$text" node -e 'console.log(JSON.stringify({content: process.env.TEXT.slice(0, 1900)}))')
+            code=$(curl -sS -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -d "$body" "$DISCORD_WEBHOOK_URL" 2>/dev/null || true)
+            echo "discord: HTTP ${code:-none}"; [[ "$code" == 2* ]] && sent=$((sent + 1))
+          fi
+          if [ -n "$PRIVATE_ALERTS_TOKEN" ]; then
+            tried=$((tried + 1))
+            if (export GH_TOKEN="$PRIVATE_ALERTS_TOKEN"; issue "$PRIVATE_ALERTS_REPO"); then echo "private repository issue: sent"; sent=$((sent + 1)); else echo "private repository issue: not sent"; fi
+          fi
+          if [ "$BRIDGE_ALERT_ISSUES" = on ]; then
+            tried=$((tried + 1))
+            if (export GH_TOKEN="$REPO_TOKEN"; issue "$GITHUB_REPOSITORY"); then echo "issue in this repository: sent (BRIDGE_ALERT_ISSUES=on)"; sent=$((sent + 1)); else echo "issue in this repository: not sent"; fi
+          fi
+          if [ "$sent" -eq 0 ]; then
+            if [ "$tried" -eq 0 ]; then
+              echo "::error title=bridge-monitor::$N alert(s), $CRIT critical, and no private alert channel is set: set the secrets TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL or PRIVATE_ALERTS_TOKEN (or the variable BRIDGE_ALERT_ISSUES=on). No details here: this log may be public."
+            else
+              echo "::error title=bridge-monitor::$N alert(s), $CRIT critical, and none of the $tried alert channel(s) took them. No details here: this log may be public."
+            fi
+            exit 1
+          fi
+
+      # Last, and only when the run succeeded: alerts that were not delivered are raised again next run.
+      - name: Keep the state for the next run (encrypted with the monitor secrets)
         if: steps.check.outputs.deployed == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -134,58 +256,3 @@ jobs:
           path: state/monitor-state.json
           retention-days: 30
           if-no-files-found: error
-
-      - name: Keep the report
-        if: steps.check.outputs.deployed == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: bridge-monitor-report
-          path: out/
-          retention-days: 14
-
-      - name: Open or update the bridge-alert issue
-        if: steps.check.outputs.deployed == 'true' && steps.scan.outputs.alerts != '0'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          gh label create bridge-alert --repo "$GITHUB_REPOSITORY" --color B60205 --description "ZETAPHY bridge monitor alerts" 2>/dev/null || true
-          last=$(node -e 'console.log(require("./state/monitor-state.json").lastBlock)')
-          {
-            cat out/summary.md
-            echo
-            echo "Last scanned block: $last · run: $RUN_URL"
-            echo
-            echo '<details><summary>report.json</summary>'
-            echo
-            echo '```json'
-            head -c 50000 out/report.json
-            echo
-            echo '```'
-            echo '</details>'
-          } > out/issue.md
-          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --label bridge-alert --state open --limit 1 --json number --jq '.[0].number // empty')
-          if [ -n "$num" ]; then
-            gh issue comment "$num" --repo "$GITHUB_REPOSITORY" --body-file out/issue.md
-          else
-            gh issue create --repo "$GITHUB_REPOSITORY" --label bridge-alert --title "Bridge alert: $(node -e 'const r=require("./out/report.json"); console.log(`${r.alerts.length} alert(s), ${r.alerts.filter((a)=>a.severity==="critical").length} critical`)')" --body-file out/issue.md
-          fi
-
-      - name: Telegram / Discord (only when their secrets are set)
-        if: steps.check.outputs.deployed == 'true' && steps.scan.outputs.alerts != '0'
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set +x
-          text=$(node -e 'const s=require("fs").readFileSync("out/summary.md","utf8"); process.stdout.write((s.length>3500?s.slice(0,3500)+"\n…":s)+"\n"+process.env.RUN_URL)')
-          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
-            body=$(TEXT="$text" node -e 'console.log(JSON.stringify({chat_id: process.env.TELEGRAM_CHAT_ID, text: process.env.TEXT, disable_web_page_preview: true}))')
-            curl -sS -o /dev/null -w 'telegram: HTTP %{http_code}\n' -H 'content-type: application/json' -d "$body" "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" || echo "telegram: not sent"
-          fi
-          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
-            body=$(TEXT="$text" node -e 'console.log(JSON.stringify({content: process.env.TEXT.slice(0, 1900)}))')
-            curl -sS -o /dev/null -w 'discord: HTTP %{http_code}\n' -H 'content-type: application/json' -d "$body" "$DISCORD_WEBHOOK_URL" || echo "discord: not sent"
-          fi

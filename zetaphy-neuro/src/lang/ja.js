@@ -8,12 +8,14 @@ export const LEVEL = { high: '高リスク', medium: '中リスク', low: '低�
 export const UI = {
   subtitle: 'コントラクトを読み取り、わかりやすく説明します · ティア1・読み取り専用', chain: 'チェーン', address: 'コントラクトまたはトークンのアドレス', check: 'コントラクトを確認',
   details: '詳細', reading: 'チェーンから読み取り中…', badAddress: 'このチェーンでは無効なアドレスです。使える形式: ',
-  failed: '読み取れませんでした: ', footer: 'ウォレットの接続を求めることも、取引を送ることもありません。公開されているチェーンのデータを読むだけです。投資助言ではありません。', stats: '利用状況', language: '言語',
+  failed: '読み取れませんでした: ', footer: 'ウォレットの接続を求めることも、取引を送ることもありません。公開されているチェーンのデータを読みます。早期警告のため、チェーン名とコントラクトアドレスだけをこのサイトのサーバーに送ります（保存はしません）。投資助言ではありません。', stats: '利用状況', language: '言語',
   disclaimer: 'これは再現できる自動のコード分析であり、個人やプロジェクトへの告発でも投資助言でもありません。コントラクトの所有者は回答や訂正の申し出ができます。',
   correction: '回答・訂正の申し出方法',
   reproduce: '自分で再確認する',
   reproduceHow: '下のコマンド（zetaphy-neuro フォルダで実行）で、誰でもこの確認をやり直せます。判定 ID はルールが判断した内容だけを対象とするため、コントラクトのコードと設定が変わらない限り一致します。レポート ID は供給量など変化する数値も含みます。',
   asWritten: '名前とシンボルはコントラクトに書かれたとおりに表示しており、Neuro が確認したものではありません。',
+  early: '早期警告：まだ公開していないパターン',
+  earlyHow: 'ZETAPHY のサーバーは、このコントラクトのコードを、観察中でまだ公開していないパターンとも照合しています（公開前に回避されないようにするためです）。下記のパターンに一致しました。これは参考情報です。上の結果やネットワークの判定には含まれず、誤りの可能性があり、パターンは後日（通常は約 30 日以内に）公開されます。',
   m: {
     chain: 'チェーン', address: 'アドレス', proxy: 'Proxy', implementation: '実装コード', owner: 'オーナー', functions: '判明している関数', report: 'レポートID', explorer: 'explorer で開く', fingerprint: 'コードの指紋（テンプレート登録用）', unknown: '名前が不明な関数',
     program: 'トークンプログラム', mintAuth: '発行権限', freezeAuth: '凍結権限', extensions: '拡張機能', upgradeAuth: 'アップグレード権限', none: 'なし',
@@ -21,6 +23,7 @@ export const UI = {
     idl: 'Anchor IDL', codeId: 'code ID', label: 'ラベル', creator: '作成者', migrations: 'コードの置き換え回数', hook: '送金チェック用コントラクト', source: '検証済みのソースコード', format: 'コードの形式', delegation: 'このウォレットが実行するコード', walletCode: '保有者ウォレットのコード', nearKeys: 'フルアクセスキー（full-access key）', codeHash: 'コードハッシュ', cairo: 'Cairo バージョン', maxSupply: '最大供給量', tokenId: 'トークン ID',
     pool: '流動性プール', simTax: 'シミュレーションでの税（購入 / 売却）', simFailed: '売却失敗',
     verdict: '判定 ID（ルールのみ）', command: 'コマンド', rule: 'ルール',
+    earlyMatch: '観察中のパターンに一致。カテゴリー：', earlyRef: '参照番号',
   },
 };
 

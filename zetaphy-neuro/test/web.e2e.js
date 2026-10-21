@@ -5,13 +5,21 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import { chromium } from 'playwright-core';
 import { createLocalChain } from './helpers/local-chain.js';
 import { CHAINS } from '../src/chains.js';
+import { LANGS } from '../src/explain.js';
 
 const PORT = 18080;
+const RPC_PORT = 18081;
 const shots = process.env.SCREENSHOT_DIR;
-let server; let browser; let chain;
+let server; let browser; let chain; let rpcServer;
+// The local server's early-warning pack (as NEURO_PRIVATE_RULES on Vercel).
+const PRIVATE_PACK = { version: 1, refKey: 'e2e-ref-key-0123456789', rules: [{
+  id: 'e2e-secret-rule', addedAt: '2026-10-01', publishAfter: '2026-11-01', kind: 'selectors',
+  selectors: ['mint(address,uint256)', 'setBlacklist(address,bool)'], reason: 'owner-can-block-transfers', severity: 'high',
+}] };
 
 async function launch() {
   const opts = { headless: true };
@@ -22,11 +30,24 @@ async function launch() {
 
 before(async () => {
   chain = await createLocalChain();
-  server = spawn(process.execPath, ['scripts/serve.js', String(PORT)], { stdio: 'pipe' });
+  // JSON-RPC over HTTP backed by the test chain: what the local server reads
+  // contract code from for /api/early-warning (NEURO_DEV_RPC).
+  rpcServer = createServer(async (req, res) => {
+    let body = '';
+    for await (const c of req) body += c;
+    const { id, method, params } = JSON.parse(body);
+    let out;
+    try { out = { jsonrpc: '2.0', id, result: method === 'eth_chainId' ? '0x38' : await chain.rpc.call(method, params) }; } catch (e) { out = { jsonrpc: '2.0', id, error: { code: 3, message: e.message } }; }
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(out));
+  }).listen(RPC_PORT);
+  server = spawn(process.execPath, ['scripts/serve.js', String(PORT)], {
+    stdio: 'pipe',
+    env: { ...process.env, NEURO_PRIVATE_RULES: JSON.stringify(PRIVATE_PACK), NEURO_DEV_RPC: `http://127.0.0.1:${RPC_PORT}` },
+  });
   await new Promise((r) => server.stdout.once('data', r));
   browser = await launch();
 });
-after(async () => { await browser?.close(); server?.kill(); });
+after(async () => { await browser?.close(); server?.kill(); rpcServer?.close(); });
 
 const SOL_GENESIS = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 
@@ -194,6 +215,40 @@ test('buy/sell test: the simulated trade catches a sell block behind a harmless 
   assert.match(await page.textContent('#findings'), /Sell test failed: in a simulated trade/);
   assert.doesNotMatch(await page.textContent('#result'), /honeypot|scam/i);
   await page.selectOption('#lang', 'th');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('early warning: a match in the private rule pack shows an advisory notice, never the rule', async () => {
+  const addr = await chain.deploy('ScamToken');
+  const { page, errors } = await openPage('light');
+  await page.fill('#address', addr);
+  const answer = page.waitForResponse((r) => r.url().endsWith('/api/early-warning'));
+  await page.click('#go');
+  const res = await answer;
+  assert.deepEqual(JSON.parse(res.request().postData()), { chain: 'bsc', address: addr }, 'only the chain and the address are sent');
+  const body = await res.text();
+  for (const secret of ['e2e-secret-rule', 'setBlacklist', 'mint', '44337ea1', 'e2e-ref-key', 'selectors']) assert.ok(!body.includes(secret), secret);
+  await page.waitForSelector('#early:not([hidden])');
+  const th = await page.textContent('#early');
+  assert.ok(th.includes(LANGS.th.REASON['owner-can-block-transfers']), th);
+  assert.match(th, /ew-[0-9a-f]{12}/);
+  assert.ok(th.includes(LANGS.th.UI.early));
+  assert.equal(await page.textContent('#title'), 'เสี่ยงสูง', 'the result itself comes from the public rules');
+  if (shots) await page.screenshot({ path: `${shots}/neuro-early-warning-th.png`, fullPage: true });
+  await page.selectOption('#lang', 'en');
+  const en = await page.textContent('#early');
+  assert.match(en, /Early warning/);
+  assert.ok(en.includes(LANGS.en.REASON['owner-can-block-transfers']));
+  assert.doesNotMatch(en, /scam|honeypot|fraud/i);
+  await page.selectOption('#lang', 'th');
+  // A contract that matches nothing: no notice.
+  await page.fill('#address', await chain.deploy('CleanToken'));
+  const again = page.waitForResponse((r) => r.url().endsWith('/api/early-warning'));
+  await page.click('#go');
+  assert.deepEqual(await (await again).json(), { warnings: [], configured: true });
+  await page.waitForSelector('#result:not([hidden])');
+  assert.equal(await page.isHidden('#early'), true);
   assert.deepEqual(errors, []);
   await page.close();
 });

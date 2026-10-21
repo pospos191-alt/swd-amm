@@ -1,5 +1,5 @@
 {
-  "_comment": "Bridge monitor (.github/workflows/bridge-monitor.yml, zetaphy bridge monitor --monitor-config). Public values only. Empty bridgeGuard/bridgeAirlock fall back to zetaphy-launch/state/77390.json; with neither, the monitor does nothing. rpc: the public https RPC (or the repository variable ZETAPHY_RPC). startBlock: the block deploy-bridge ran at (first scan). sourceRpc + lockbox: optional, to see deposits no lane attested.",
+  "_comment": "Bridge monitor (.github/workflows/bridge-monitor.yml, zetaphy bridge monitor --monitor-config). Public values only: this file is committed. Empty bridgeGuard/bridgeAirlock fall back to zetaphy-launch/state/77390.json; with neither, the monitor does nothing. rpc: the public https RPC (or the repository variable ZETAPHY_RPC). startBlock: the block deploy-bridge ran at (first scan). sourceRpc + lockbox: optional, to see deposits no lane attested. volumePct, largePct, silentMinutes, disagreeMinutes are DEFAULTS only: the repository secret BRIDGE_MONITOR_THRESHOLDS (JSON, e.g. {\"volumePct\": 60}) overrides them. Never put the watch list or the marker key here: they are the secrets BRIDGE_WATCHLIST and BRIDGE_MARKER_KEY.",
   "rpc": null,
   "bridgeGuard": null,
   "bridgeAirlock": null,

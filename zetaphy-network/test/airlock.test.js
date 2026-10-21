@@ -2,7 +2,10 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { AbiCoder, keccak256, encodeBytes32String, hexlify, randomBytes, Interface } from 'ethers';
+import { bytesToHex } from '@ethereumjs/util';
 import { createChain, ZETA } from './helpers/evm.js';
+import { watchedArtifacts } from './helpers/watched.js';
+import { callerOf } from '../src/monitor.js';
 
 const ROUTE = encodeBytes32String('airlock/zetaphy');
 const Q = 600; // quarantine seconds
@@ -12,8 +15,9 @@ const ZERO = '0x' + '00'.repeat(20);
 const art = (n) => new Interface(JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8')).abi);
 const tokenIface = art('BridgedToken');
 
-let c, jobs, guard, airlock, lane, decoy, token;
+let c, jobs, guard, airlock, lane, token;
 const a = (n) => c.acct[n].toString();
+const lc = (x) => String(x).toLowerCase();
 
 async function provenRunners(names) {
   for (const w of names) await jobs.send(w, 'register', [], 100n * ZETA);
@@ -30,7 +34,7 @@ async function provenRunners(names) {
 }
 
 beforeEach(async () => {
-  c = await createChain(['gov', 'user', 'r1', 'r2', 'r3', 'r4', 'hyperlane', 'guardian', 'alice', 'attacker', 'mallory']);
+  c = await createChain(['gov', 'user', 'r1', 'r2', 'r3', 'r4', 'hyperlane', 'guardian', 'alice', 'attacker', 'mallory', 'monitor']);
   jobs = await c.deploy('NeuroJobs', [100n * ZETA, ZETA, ZETA / 10n, 120, 600, 3600, 1000n * ZETA], 'gov');
   await provenRunners(['r1', 'r2', 'r3', 'r4']);
   guard = await c.deploy('BridgeGuard', [a('gov')], 'gov');
@@ -38,12 +42,11 @@ beforeEach(async () => {
   token = await guard.call('token');
   airlock = await c.deploy('BridgeAirlock', [guard.address, ROUTE, a('gov'), 2, Q], 'gov');
   lane = await c.deploy('NeuroLane', [jobs.address, airlock.address, 2, 1, ZERO], 'gov');
-  decoy = await c.deploy('DecoyBridge', [airlock.address, 'ZETAPHY Bridge v1'], 'gov');
   await airlock.send('gov', 'setLane', [lane.address, true]);
   await airlock.send('gov', 'setLane', [a('hyperlane'), true]);
   await airlock.send('gov', 'setVetoer', [lane.address, true]);
   await airlock.send('gov', 'setVetoer', [a('guardian'), true]);
-  await airlock.send('gov', 'setDecoy', [decoy.address, true]);
+  await airlock.send('gov', 'setMarker', [a('monitor'), true]); // the bridge monitor's own key
   // Opening gates: the audit on record, 2 independent lanes (above), a cap raised once (x2, 7 days later).
   await guard.send('gov', 'setAudit', ['https://audits.example/zetaphy-bridge.pdf', '0x' + 'a1'.repeat(32)]);
   await guard.send('gov', 'proposeMaxDailyLimit', [2000n * 10n ** 6n]);
@@ -92,20 +95,49 @@ test('Neuro runners or a guardian can veto during the quarantine', async () => {
   await assert.rejects(airlock.send('attacker', 'veto', [id1, 'x']), /NotVetoer/);
 });
 
-test('decoy bridges mark the attacker; marked transfers never come out; the real bridge keeps working', async () => {
-  const decoyIface = art('DecoyBridge');
-  await c.sendTo('attacker', decoy.address, decoyIface, 'mint', [a('attacker'), 10n ** 30n]);
+test('a marker marks an address; its transfers are held until governance untrips it; the real bridge keeps working', async () => {
+  assert.equal(await airlock.call('isMarker', [a('monitor')]), true);
+  assert.equal(await airlock.call('markerCount'), 1n);
+  const ev = await airlock.send('monitor', 'trip', [a('attacker')]);
+  const tripped = ev.find((e) => e?.name === 'Tripped');
+  assert.equal(lc(tripped.args.who), a('attacker'));
+  assert.equal(lc(tripped.args.by), a('monitor'));
   assert.equal(await airlock.call('tripped', [a('attacker')]), true);
-  assert.equal(await guard.call('paused'), false); // a decoy never stops the bridges
+  assert.equal(await guard.call('paused'), false); // a mark never stops the bridges
   const bad = tx(4, 'alice', 1n, 'attacker');       // sent by the marked address
+  const toBad = tx(8, 'attacker', 2n, 'alice');     // or to it
   const good = tx(5);
-  for (const t of [bad, good]) { await airlock.send('hyperlane', 'attest', t); await neuro(t); }
+  for (const t of [bad, toBad, good]) { await airlock.send('hyperlane', 'attest', t); await neuro(t); }
   c.advance(Q);
   await assert.rejects(airlock.send('user', 'release', bad), /Blocked/);
+  await assert.rejects(airlock.send('user', 'release', toBad), /Blocked/);
   await airlock.send('user', 'release', good);
-  await assert.rejects(airlock.send('attacker', 'trip', [a('alice')]), /NotDecoy/);
-  await airlock.send('gov', 'untrip', [a('attacker')]); // governance can lift a mistaken mark
+  // Only markers mark; a marker holds no other power.
+  for (const who of ['attacker', 'gov', 'guardian']) await assert.rejects(airlock.send(who, 'trip', [a('alice')]), /NotMarker/);
+  await assert.rejects(airlock.send('monitor', 'untrip', [a('attacker')]), /NotGovernance/);
+  await assert.rejects(airlock.send('monitor', 'veto', [await airlock.call('transferId', bad), 'x']), /NotVetoer/);
+  await assert.rejects(airlock.send('monitor', 'attest', tx(9)), /NotLane/);
+  await assert.rejects(airlock.send('monitor', 'setMarker', [a('mallory'), true]), /NotGovernance/);
+  // Governance lifts a mistaken mark: held, not lost, the transfer comes out.
+  await airlock.send('gov', 'untrip', [a('attacker')]);
   assert.equal(await airlock.call('tripped', [a('attacker')]), false);
+  await airlock.send('user', 'release', bad);
+  assert.equal(await bal('alice'), 500n * 10n ** 6n + 1n);
+  // Governance removes a marker key (lost or misused): it marks nothing any more,
+  // and every mark it made is lifted at once (no untrip per address).
+  await airlock.send('monitor', 'trip', [a('alice')]);
+  assert.equal(await airlock.call('tripped', [a('alice')]), true);
+  await airlock.send('gov', 'setMarker', [a('monitor'), false]);
+  assert.equal(await airlock.call('tripped', [a('alice')]), false, 'a removed marker\'s marks no longer count');
+  await airlock.send('gov', 'setMarker', [a('monitor'), true]);
+  assert.equal(await airlock.call('tripped', [a('alice')]), true, 'naming it again brings them back');
+  await airlock.send('gov', 'untrip', [a('alice')]);
+  await airlock.send('gov', 'setMarker', [a('monitor'), true]); // again: no double count
+  assert.equal(await airlock.call('markerCount'), 1n);
+  await airlock.send('gov', 'setMarker', [a('monitor'), false]);
+  await airlock.send('gov', 'setMarker', [a('monitor'), false]);
+  assert.equal(await airlock.call('markerCount'), 0n);
+  await assert.rejects(airlock.send('monitor', 'trip', [a('mallory')]), /NotMarker/);
 });
 
 test('only lanes attest; only proven runners speak for the Neuro lane; BridgeGuard limits still apply', async () => {
@@ -120,16 +152,32 @@ test('only lanes attest; only proven runners speak for the Neuro lane; BridgeGua
   await assert.rejects(airlock.send('user', 'release', t)); // OverLimit inside BridgeGuard
 });
 
-test('a decoy marks only its direct caller, so nobody can get an innocent user marked', async () => {
-  // A lure contract that pokes the decoy when someone calls it.
-  const decoyIface = art('DecoyBridge');
-  await c.sendTo('alice', decoy.address, decoyIface, 'withdraw', [1]);
-  assert.equal(await airlock.call('tripped', [a('alice')]), true); // calling it directly does mark you
-  await airlock.send('gov', 'untrip', [a('alice')]);
-  const lure = await c.deploy('Lure', [decoy.address], 'attacker');
-  await c.sendTo('alice', lure.address, art('Lure'), 'claimAirdrop', []);
-  assert.equal(await airlock.call('tripped', [a('alice')]), false);
+test('a watched contract logs its direct caller, so luring an innocent user through a contract marks the contract, not the user', async () => {
+  // The monitor marks the caller a watched contract logs (topic 1: msg.sender), not tx.origin.
+  const W = watchedArtifacts();
+  const watched = await c.deployRaw(W.WatchedEmitter, [], 'gov');
+  const callerIn = (res) => {
+    const logs = res.execResult.logs ?? [];
+    assert.equal(logs.length, 1);
+    assert.equal(bytesToHex(logs[0][0]).toLowerCase(), watched.address.toLowerCase());
+    return callerOf(logs[0][1].map(bytesToHex), 1);
+  };
+  const direct = await c.sendTo('alice', watched.address, new Interface(W.WatchedEmitter.abi), 'mint', [a('alice'), 1n]);
+  assert.equal(lc(callerIn(direct)), a('alice')); // calling it yourself names you
+  const lure = await c.deployRaw(W.Lure, [watched.address], 'attacker');
+  const lured = await c.sendTo('alice', lure.address, new Interface(W.Lure.abi), 'claimAirdrop', []);
+  const caller = callerIn(lured);
+  assert.equal(caller.toLowerCase(), lure.address.toLowerCase()); // the lure, not alice
+  await airlock.send('monitor', 'trip', [caller]);
   assert.equal(await airlock.call('tripped', [lure.address]), true);
+  assert.equal(await airlock.call('tripped', [a('alice')]), false);
+  // The caller sits in topic 2 for another watched contract: callerTopic 2.
+  const t2 = await c.deployRaw(W.WatchedEmitterTopic2, [], 'gov');
+  const r = await c.sendTo('mallory', t2.address, new Interface(['function poke()']), 'poke', []);
+  const topics = r.execResult.logs[0][1].map(bytesToHex);
+  assert.equal(lc(callerOf(topics, 2)), a('mallory'));
+  assert.equal(callerOf(topics, 1), null); // a hash, not an address
+  assert.equal(callerOf(topics, 3), null); // no such topic
 });
 
 // ---- vaccine: the ThreatRegistry's flags hold transfers; clearing the flag lets them out ----

@@ -354,6 +354,33 @@ contract QuietHoneypot is BaseToken, Owned {
     }
 }
 
+// Lets only what it takes for Neuro's trade simulation sell, and blocks every
+// other seller: what a token could do if the simulation always looked the
+// same. `tell` picks the giveaway it looks for (test/honeypot.test.js):
+// 1 the old fixed NeuroSim addresses, 2 gas price 0, 3 a caller with no coin,
+// 4 the public TradeSim code hash, 5 a sale of exactly 99% (the old share),
+// 6 an exact (not unlimited) allowance to the router.
+contract SimAware is BaseToken, Owned {
+    address private lp;
+    uint8 private immutable tell;
+    bytes32 private immutable simCodeHash;
+    constructor(uint8 t, bytes32 h) BaseToken("Aware", "AWARE", 1e27) { tell = t; simCodeHash = h; }
+    function setVenue(address p) external onlyOwner { lp = p; }
+    function _looksLikeTest(address seller, uint256 v) private view returns (bool) {
+        if (tell == 1) return tx.origin == 0x4e6575726f53696d000000000000000000000002 || seller == 0x4e6575726f53696d000000000000000000000001;
+        if (tell == 2) return tx.gasprice == 0;
+        if (tell == 3) return tx.origin.balance == 0;
+        if (tell == 4) return seller.codehash == simCodeHash;
+        if (tell == 5) return v == balanceOf[seller] - balanceOf[seller] / 100;
+        if (tell == 6) return allowance[seller][msg.sender] < type(uint256).max / 2; // after transferFrom took v
+        return false;
+    }
+    function _move(address f, address to, uint256 v) internal override {
+        require(to != lp || f == owner || _looksLikeTest(f, v), "");
+        super._move(f, to, v);
+    }
+}
+
 // Trading not open yet: nothing can leave the pool.
 contract NotLaunched is BaseToken, Owned {
     address private lp;

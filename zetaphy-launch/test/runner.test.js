@@ -125,6 +125,8 @@ test('the real step list: order puts configuration before the handover, which is
   assert.equal(byName.handover.when({ handover: true }), true);
   assert.notEqual(byName.bridge.when({}), true, 'the bridge is off by default');
   assert.match(byName.bridge.describe, /deployed CLOSED/, 'the launch deploys the bridge closed, never open');
+  // Every artifact a step prices (the cost estimate) is committed.
+  for (const st of launchSteps()) for (const [pkg, n] of st.artifacts ?? []) assert.ok(existsSync(join(ROOT, pkg, 'artifacts', `${n}.json`)), `${st.name}: ${pkg}/${n}`);
   const gates = BRIDGE_GATES.join('\n');
   for (const re of [/independentLanes\(\) >= 2/, /--audit-sha256/, /10 independent Neuro runners/, /different multisigs/, /starter cap 1,000/, /--i-understand-real-funds/]) assert.match(gates, re);
   assert.notEqual(byName.identity.when({}), true, 'identity needs --neuro-url');

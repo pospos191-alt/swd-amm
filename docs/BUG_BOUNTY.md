@@ -13,7 +13,7 @@ English summary at the end.
 | ส่วน | อยู่ที่ |
 |---|---|
 | patch ของเชน (Cosmos EVM: ML-DSA, `MsgEVMCall`, ล็อกควอนตัม, เผาค่าธรรมเนียม, เลขสุ่ม, `x/ratelimit`, preinstalls) | `zetaphy-chain/` |
-| สะพาน: `BridgeGuard`, `BridgedToken`, `BridgeAirlock`, `NeuroLane`, `HyperlaneLane`, `HyperlaneLockBox`, `LockBox`, `DecoyBridge`, `zetaphy bridge watch` / `open` / `monitor` | `zetaphy-network/contracts/`, `zetaphy-network/src/` |
+| สะพาน: `BridgeGuard`, `BridgedToken`, `BridgeAirlock` (รวม marker), `NeuroLane`, `HyperlaneLane`, `HyperlaneLockBox`, `LockBox`, `zetaphy bridge watch` / `open` / `monitor` | `zetaphy-network/contracts/`, `zetaphy-network/src/` |
 | สัญญา Neuro: `NeuroJobs`, `NeuroJobsChallenges`, `NeuroControl`, `ThreatRegistry`, `ThreatReports`, `NeuroIdentity`, `NeuroValidation`, `ComputeMarket`, `RewardVault`, `StableGateway`, `QuantumWallet`, `SimpleMultisig` | `zetaphy-network/contracts/` |
 | DEX (factory, router, pair) | `zetaphy-dex/` |
 | NFT (factory, marketplace) | `zetaphy-nft/` |
@@ -99,7 +99,7 @@ pool held by a multisig, by a governance vote, before mainnet** and announced he
 not promises. The lock/mint bridge stays closed until this program is funded.
 
 - **Scope:** the chain patch (`zetaphy-chain/`), the bridge (`BridgeGuard`, `BridgeAirlock`, `NeuroLane`, `HyperlaneLane`,
-  `HyperlaneLockBox`, `LockBox`, `DecoyBridge` and the CLI around them), the Neuro contracts (`zetaphy-network/contracts/`),
+  `HyperlaneLockBox`, `LockBox`, the airlock's markers and the CLI around them, including the bridge monitor), the Neuro contracts (`zetaphy-network/contracts/`),
   the DEX (`zetaphy-dex/`), NFT (`zetaphy-nft/`), the web wallet (`zetaphy-wallet/`) and the MetaMask Snap (`zetaphy-snap/`).
   Out of scope: third-party services, volumetric DoS, social engineering, issues needing the victim's key or device,
   unreproduced scanner output, risks already accepted in `SECURITY.md`, and disputes about a Neuro flag (use the appeal).

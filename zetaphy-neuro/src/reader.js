@@ -1,6 +1,7 @@
 // Neuro ZETAPHY tier 1: reads one contract and produces a report.
 // Read-only: it only calls eth_getCode, eth_getStorageAt and eth_call (one of
-// them with a state override, for the trade simulation in honeypot.js).
+// them with a state override, for the trade simulation in honeypot.js, which
+// also reads eth_gasPrice).
 
 import { CHAINS, isChainAddress } from './chains.js';
 import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc, createStarknetRpc, createOrdApi } from './rpc.js';
@@ -69,6 +70,9 @@ function canonical(v) {
  *   threatLookup: async (fingerprint) => ({flagged, reason}) from the ZETAPHY ThreatRegistry
  *   simulate: run the trade simulation (honeypot check); default on unless
  *     the caller injects an RPC (tests opt in)
+ *   simSeed: 0x-hex seed for the simulation's addresses and amounts
+ *     (honeypot.js simPlan): NeuroJobs runners pass jobSimSeed(job, lottery)
+ *     so all of a job's runners run the same test; omitted = fresh random
  *   threatSignatures: similarity dataset for "similar to flagged code /
  *     a reference sample" warnings (default src/threat-signatures.js, which
  *     ships empty; false = off)
@@ -301,7 +305,7 @@ export async function readContract(chainKey, address, opts = {}) {
 async function simulate(report, { rpc, chain, chainKey, addr, known, opts }) {
   if (!(opts.simulate ?? !opts.rpc) || !chain.dex || known) return;
   if (addr === chain.dex.weth.toLowerCase()) return;
-  report.sim = await simulateTrade(rpc, chain.dex, addr);
+  report.sim = await simulateTrade(rpc, chain.dex, addr, { seed: opts.simSeed });
   report.analysis = withSimulation(report.analysis, report.sim);
 }
 

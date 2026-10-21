@@ -1,17 +1,29 @@
 // Local server for the web page: node scripts/serve.js [port]
-// Serves web/ and src/ (the page imports ../src/*.js) and a local
-// /api/usage backed by memory, so the whole page works without Vercel.
+// Serves web/ and src/ (the page imports ../src/*.js), a local /api/usage
+// backed by memory and /api/early-warning (rule pack from the same env vars
+// as on Vercel: NEURO_PRIVATE_RULES or NEURO_RULES_TOKEN), so the whole page
+// works without Vercel. Dev only: NEURO_DEV_RPC=<url> reads every EVM chain
+// for the early warning from that one JSON-RPC endpoint (tests use it).
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleUsage, memoryStore } from '../server/usage.js';
+import { handleEarlyWarning, createPackLoader, memoryLimiter, answerCache, defaultRpcFor } from '../server/earlywarning.js';
+import { createRpc } from '../src/rpc.js';
+import { CHAINS } from '../src/chains.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.svg': 'image/svg+xml' };
 const port = Number(process.argv[2] ?? 8080);
 const store = memoryStore();
 const DEV_SECRET = 'local-dev-secret-not-for-production';
+const early = {
+  loader: createPackLoader({ env: process.env }),
+  limiter: memoryLimiter(),
+  cache: answerCache(),
+  rpcFor: process.env.NEURO_DEV_RPC ? (chain) => createRpc([process.env.NEURO_DEV_RPC], CHAINS[chain].id) : defaultRpcFor,
+};
 
 async function readBody(req) {
   let size = 0;
@@ -39,6 +51,22 @@ createServer(async (req, res) => {
         origin: req.headers.origin,
         host: req.headers.host,
       }, store, DEV_SECRET);
+      res.writeHead(out.status, { 'content-type': 'application/json', ...(out.headers ?? {}) }).end(JSON.stringify(out.json ?? {}));
+    } catch {
+      res.writeHead(400).end();
+    }
+    return;
+  }
+
+  if (path === '/api/early-warning') {
+    try {
+      const out = await handleEarlyWarning({
+        method: req.method,
+        body: req.method === 'POST' ? await readBody(req) : undefined,
+        ip: req.socket.remoteAddress,
+        origin: req.headers.origin,
+        host: req.headers.host,
+      }, early);
       res.writeHead(out.status, { 'content-type': 'application/json', ...(out.headers ?? {}) }).end(JSON.stringify(out.json ?? {}));
     } catch {
       res.writeHead(400).end();

@@ -110,7 +110,7 @@ test('nothing is attested while Neuro is paused, or when the switch cannot be re
   assert.deepEqual(attested, [0n, 1n]);
 });
 
-test('a release that reverts in its gas estimate sends nothing (no nonce gap for the next tx); Blocked stops retrying', async () => {
+test('a release that reverts in its gas estimate sends nothing (no nonce gap for the next tx); a Blocked (marked, not vetoed) transfer is kept for after the mark is lifted', async () => {
   // Cosmos EVM hands the revert data back quoted; 0xa5baf151 is Blocked().
   const blocked = Object.assign(new Error('execution reverted (unknown custom error)'), { data: '"0xa5baf151"' });
   const { w, attested, released } = setup({ releaseEstimate: async (...t) => { if (t[2] === 0n) throw blocked; return 100_000n; } });
@@ -118,7 +118,7 @@ test('a release that reverts in its gas estimate sends nothing (no nonce gap for
   assert.deepEqual(attested, [0n, 1n]);
   assert.deepEqual(released, [1n], 'only the transfer that passes was sent');
   assert.ok(out.some((l) => /lock #0: not released \(Blocked\)/.test(l)), out.join('\n'));
-  assert.equal(w.state.pending.length, 0, 'a Blocked transfer is dropped, not retried forever');
+  assert.equal(w.state.pending.length, 1, 'the marked transfer is kept and retried, so it comes out once governance untrips');
 });
 
 test('laneControl fails closed: an RPC error reading control() or paused() is retried, then means "do not attest", never "no switch"', async () => {

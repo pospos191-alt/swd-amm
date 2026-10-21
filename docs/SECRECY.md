@@ -35,6 +35,10 @@
 - **ทุกอย่างบนเชนเป็นสาธารณะ** สัญญาที่ deploy แล้วถูกอ่าน bytecode / storage ได้เสมอ การซ่อนทำได้แค่ "ไม่มีป้ายบอก" ไม่ใช่ล่องหน
 - **ปลายทาง early warning ของ Neuro ถูกลองถามซ้ำ ๆ ได้** (คนร้ายแก้โค้ดแล้วถามจนไม่ขึ้นเตือน) การจำกัดอัตราแค่ทำให้ช้าลง และผลเตือนเป็นคำแนะนำ ไม่ใช่คำตัดสินบนเชน
 - **IP ของ validator** ตอนนี้ประกาศที่ `/zetaphy/peer` (จำเป็นให้เครื่องอื่นเข้าร่วม) ก่อน mainnet ต้องใช้ sentry node ซ่อน validator ตัวจริง
+- **สัญญาที่เฝ้าดูลับได้แค่จนถูกใช้ครั้งแรก** การทำเครื่องหมาย (`Tripped`) อยู่บนเชน ใครย้อนดูธุรกรรมของคนที่ถูกมาร์กก็หาสัญญาเจอ ถือว่าเปิดเผยแล้วหลังโดนครั้งแรก
+- **RPC ที่ตัวเฝ้าใช้มองเห็นรายการเฝ้า** (อยู่ในคำขอ `eth_getLogs`) ให้ใช้โหนดของเราเอง ไม่ใช่ RPC ของคนอื่น และถ้า URL ของ RPC มี API key ให้เก็บเป็น Secret ไม่ใช่ Variable
+- **การมาร์กไม่ได้เกิดทันที** ต้องตั้ง quarantine ให้นานกว่ารอบของตัวเฝ้า + ความล่าช้าของ GitHub (แนะนำ ≥ 2 ชม. กับรอบ 15 นาที) เมื่อมีเงินจริงควรรันตัวเฝ้าบนเครื่องของเราด้วย
+- **กุญแจ marker ถูกทำให้เปลืองแก๊สได้** (คนเรียกสัญญาที่เฝ้าจากหลายที่อยู่) ให้เติมแก๊สและดูการแจ้ง `mark-failed`
 - **faucet** จำกัดต่อวันทั้งระบบ คนเดียวใช้หลายที่อยู่กวาดโควต้าวันนั้นได้ (ไม่เสียเงินจริง แค่คนใหม่ต้องรอวันถัดไป)
 
 ## 4. ก่อนเปลี่ยน repo เป็น Public (เช็กลิสต์)
@@ -46,10 +50,15 @@
 1. **Settings → Code security**: เปิด **Private vulnerability reporting**, **Secret scanning** + **Push protection**, **Dependabot alerts**
 2. **Settings → Actions → General**: Fork pull request workflows → **Require approval for all external contributors**; Workflow permissions → **Read repository contents** (ค่าเริ่มต้นแบบอ่านอย่างเดียว)
 3. **Settings → Branches → Add rule** สำหรับ `main`: Require a pull request + Require status checks (CI)
-4. เปิดตารางเวลา bridge-monitor ได้ฟรีเมื่อมีสะพานจริง (`*/15`)
+4. **ก่อนกดเปลี่ยน** ลบ artifact เก่าชื่อ `bridge-monitor-report` ใน Actions (ตอน private เก็บรายละเอียดการแจ้งเตือนไว้ 14 วัน) ถ้ายังไม่เคยรัน bridge-monitor ก็ข้ามได้
+5. เปิดตารางเวลา bridge-monitor ได้ฟรีเมื่อมีสะพานจริง (`*/15`)
 
 ## 5. รอบดูแล
 
 - หลังมีการเฝ้าสัญญาใดถูกเรียก: เปลี่ยนรายการใน `BRIDGE_WATCHLIST` (ตัวที่ถูกเรียกแล้วถือว่าเปิดเผยแล้ว)
 - กฎ Neuro ที่ครบกำหนดพัก: workflow ใน `zetaphy-private` เปิด issue ให้ย้ายมา repo สาธารณะ แล้วโหวต skill ใหม่
 - เปลี่ยน `BRIDGE_MARKER_KEY` และ token ต่าง ๆ ทุก 6 เดือน หรือทันทีที่สงสัยว่าหลุด
+  - เปลี่ยน marker: governance โหวต `setMarker(ใหม่, true)` แล้ว `setMarker(เก่า, false)`
+  - เปลี่ยน watch list / marker key / thresholds แล้ว ตัวเฝ้าจะเริ่มความจำใหม่ (state เข้ารหัสด้วยค่าเหล่านี้) แต่ไม่ต้องสแกนบล็อกเก่าซ้ำ
+- หลัง governance `untrip` รายการที่ค้างไว้ runner จะปล่อยให้เองในรอบถัดไป (ไม่ทิ้ง)
+- marker หลุด: governance `setMarker(ที่อยู่นั้น, false)` ครั้งเดียว เครื่องหมายทั้งหมดที่มันทำจะไม่มีผลทันที

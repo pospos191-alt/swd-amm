@@ -8,12 +8,14 @@ export const LEVEL = { high: 'High risk', medium: 'Medium risk', low: 'Low risk'
 export const UI = {
   subtitle: 'Reads and explains contracts · tier 1, read-only', chain: 'Chain', address: 'Contract or token address', check: 'Check contract',
   details: 'Details', reading: 'Reading from the chain…', badAddress: 'Invalid address for this chain. Accepted formats: ',
-  failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data only. Not investment advice.', stats: 'Usage stats', language: 'Language',
+  failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data; for an early-warning check it sends only the chain and contract address to the server of this site, which stores nothing. Not investment advice.', stats: 'Usage stats', language: 'Language',
   disclaimer: 'This is automated, reproducible code analysis, not an accusation against any person or project, and not investment advice. The contract owner can respond or request a correction.',
   correction: 'How to respond or request a correction',
   reproduce: 'Check it yourself',
   reproduceHow: 'Anyone can re-run this check with the command below (in the zetaphy-neuro folder). The verdict ID covers only what the rules decided, so it matches while the contract\'s code and settings stay the same. The report ID also covers numbers that change, such as supply.',
   asWritten: 'Name and symbol are shown as written in the contract; Neuro does not confirm them.',
+  early: 'Early warning: patterns not yet published',
+  earlyHow: "ZETAPHY's server also compares this contract's code with patterns that are being watched but are not public yet, so that they cannot be worked around before they are announced. It matched the patterns below. This is advisory only: it is not part of the result above or of the network's verdict, it can be wrong, and the patterns are published later (usually within about 30 days).",
   m: {
     chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)', unknown: 'Unnamed functions',
     program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none',
@@ -21,6 +23,7 @@ export const UI = {
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code', nearKeys: 'Full-access keys', codeHash: 'Code hash', cairo: 'Cairo version', maxSupply: 'Maximum supply', tokenId: 'Token ID',
     pool: 'Liquidity pool', simTax: 'Simulated tax (buy / sell)', simFailed: 'sell failed',
     verdict: 'Verdict ID (rules only)', command: 'Command', rule: 'rule',
+    earlyMatch: 'Matches a watched pattern. Category:', earlyRef: 'reference',
   },
 };
 
