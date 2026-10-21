@@ -131,7 +131,7 @@ test('the report carries the alerts and an English and a Thai summary; the confi
   writeFileSync(join(dir, 'm.json'), JSON.stringify({ rpc: 'https://rpc.example', bridgeGuard: null, volumePct: 70 }));
   writeFileSync(join(dir, 's.json'), JSON.stringify({ steps: { bridge: { out: { bridgeGuard: L1, bridgeAirlock: L2 } } } }));
   assert.deepEqual(loadMonitorConfig({ configFile: join(dir, 'm.json'), launchStateFile: join(dir, 's.json') }), { rpc: 'https://rpc.example', bridgeGuard: L1, bridgeAirlock: L2, volumePct: 70,
-    timelock: null, oracle: null, labels: { [L1.toLowerCase()]: 'bridgeGuard', [L2.toLowerCase()]: 'bridgeAirlock' } });
+    timelock: null, oracle: null, timelockBlock: null, labels: { [L1.toLowerCase()]: 'bridgeGuard', [L2.toLowerCase()]: 'bridgeAirlock' } });
   assert.deepEqual(loadMonitorConfig({ configFile: join(dir, 'none.json') }), {});
   assert.equal(newState().lastBlock, null);
 });
@@ -376,4 +376,50 @@ test('oracle: deviation, stale, circuit breaker, pause and a feed without a pric
   assert.match(r.alerts[4].en, /TwapSpike/);
   assert.match(r.alerts[6].en, /price\(\) reverts PythStale/);
   assert.deepEqual(rules(evaluate({ snapshot: snap({ routes: [], oracleFeeds: [{ asset: ASSET, ok: false, error: 'PythStale' }] }), now: NOW + 60, state: r.state }).alerts), [], 'once a day');
+});
+
+test('gov proposals that schedule through the timelock (REST JSON; MsgEVMCall logs are not in eth_getLogs)', async () => {
+  const { govTimelockEvents } = await import('../src/monitor.js');
+  const { TIMELOCK } = await import('../src/timelock.js');
+  const T = getAddress('0x' + '7e'.repeat(20)), C = getAddress('0x' + 'c0'.repeat(20));
+  const inner = IFACES.guard.encodeFunctionData('unpause', []);
+  const data = TIMELOCK.encodeFunctionData('schedule', [C, 0n, inner, '0x' + '00'.repeat(32), '0x' + '00'.repeat(32), 172800n]);
+  const b64 = Buffer.from(data.slice(2), 'hex').toString('base64');
+  const json = { proposals: [
+    { id: '7', status: 'PROPOSAL_STATUS_VOTING_PERIOD', voting_end_time: '2027-01-01T00:00:00Z', messages: [{ '@type': '/zetaphy.pq.v1.MsgEVMCall', To: T, Data: b64 }] },
+    { id: '6', status: 'PROPOSAL_STATUS_PASSED', messages: [{ '@type': '/zetaphy.pq.v1.MsgEVMCall', to: T.toLowerCase(), data: Buffer.from(TIMELOCK.encodeFunctionData('cancel', ['0x' + '11'.repeat(32)]).slice(2), 'hex').toString('base64') }] },
+    { id: '5', status: 'PROPOSAL_STATUS_PASSED', messages: [{ '@type': '/zetaphy.pq.v1.MsgEVMCall', To: C, Data: b64 }] }, // not the timelock
+    { id: '4', status: 'PROPOSAL_STATUS_PASSED', messages: [{ '@type': '/cosmos.gov.v1.MsgExecLegacyContent' }] },
+  ] };
+  const events = govTimelockEvents(json, T, NOW);
+  assert.equal(events.length, 2);
+  const r = evaluate({ snapshot: snap({ routes: [] }), now: NOW, events, cfg: { labels: { [C.toLowerCase()]: 'neuroControl' } } });
+  assert.deepEqual(rules(r.alerts), ['timelock-proposal', 'timelock-proposal']);
+  assert.match(r.alerts[0].en, new RegExp(`gov proposal 7 \\(VOTING_PERIOD, voting ends 2027-01-01T00:00:00Z\\) would call the timelock: schedule neuroControl ${C} unpause\\(\\) \\(delay 172800 s\\)`));
+  assert.equal(r.alerts[0].severity, 'critical', 'unpause is a rule change');
+  assert.match(r.alerts[1].en, /did call the timelock: cancel cancel\(bytes32\)/);
+  assert.deepEqual(evaluate({ snapshot: snap({ routes: [] }), now: NOW + 60, events, state: r.state }).alerts, [], 'once per proposal and stage');
+});
+
+test('MsgEVMCall fields from protobuf (abci_query), as the REST answer leaves them out', async () => {
+  const { proposalMessages, fillEvmCalls, govTimelockEvents } = await import('../src/monitor.js');
+  const { encodeAny, encodeMsgEVMCall, MSG_EVM_CALL_TYPE_URL } = await import('../src/pqtx.js');
+  const { TIMELOCK } = await import('../src/timelock.js');
+  const T = getAddress('0x' + '7e'.repeat(20));
+  const data = TIMELOCK.encodeFunctionData('updateDelay', [3600n]);
+  const vint = (n) => { const o = []; do { let b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; o.push(b); } while (n); return o; };
+  const len = (field, b) => Buffer.concat([Buffer.from([(field << 3) | 2, ...vint(b.length)]), Buffer.from(b)]);
+  const any = encodeAny(MSG_EVM_CALL_TYPE_URL, encodeMsgEVMCall({ sender: 'zetaphy10d07y265gmmuvt4z0w9aw880jnsr700jvr86lj', to: T, data: Buffer.from(data.slice(2), 'hex'), gasLimit: 500000n }));
+  const proposal = Buffer.concat([Buffer.from([0x08, 9]), len(2, any), Buffer.from([0x18, 2])]);
+  const resp = len(1, proposal);
+  assert.deepEqual(proposalMessages(resp), [{ typeUrl: MSG_EVM_CALL_TYPE_URL, to: T, data }]);
+  const json = { proposals: [{ id: '9', status: 'PROPOSAL_STATUS_VOTING_PERIOD', messages: [{ '@type': MSG_EVM_CALL_TYPE_URL }] }] };
+  const seen = [];
+  await fillEvmCalls(json, 'http://comet.example', { fetchFn: async (u) => { seen.push(u); return { ok: true, json: async () => ({ result: { response: { value: resp.toString('base64') } } }) }; } });
+  assert.match(seen[0], /abci_query\?path=%22%2Fcosmos\.gov\.v1\.Query%2FProposal%22&data=0x0809$/);
+  const [e] = govTimelockEvents(json, T, NOW);
+  assert.deepEqual(e.args.calls, [{ action: 'updateDelay', function: 'updateDelay(uint256)' }]);
+  // unreadable fields still raise an alert
+  const [u] = govTimelockEvents({ proposals: [{ id: '3', status: 'PROPOSAL_STATUS_VOTING_PERIOD', messages: [{ '@type': MSG_EVM_CALL_TYPE_URL }] }] }, T, NOW);
+  assert.equal(u.args.calls[0].action, 'evm-call');
 });

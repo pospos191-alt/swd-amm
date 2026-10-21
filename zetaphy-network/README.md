@@ -322,6 +322,7 @@ zetaphy bridge close        # governance: ปิด route
 | `governance-change` | เปลี่ยน route เพดาน `maxDailyLimit` lane vetoer marker guardian governance audit registry config/ISM ของ HyperlaneLane, unpause, untrip |
 | `large-transfer` | รายการเดียว ≥ 25% ของเพดานต่อวัน (`--large-pct`) |
 | `timelock-scheduled` | มีการตั้งเวลาเรียกใน ZetaphyTimelock: สัญญาปลายทาง ชื่อฟังก์ชัน (ถ้ารู้จัก) และเวลาที่ทำได้ (ETA) · เปลี่ยน governance/role/delay/lane/ราคา = ร้ายแรง · นี่คือช่วงที่ยังยกเลิกได้ |
+| `timelock-proposal` | ข้อเสนอโหวต gov ที่จะตั้งเวลา (หรือยกเลิก) ใน timelock อ่านจาก Cosmos REST ของโหนด (`--rest`, ค่าเริ่ม `<RPC https>/rest`) และรายละเอียดของ MsgEVMCall จาก CometBFT (`--comet-rpc`, ค่าเริ่ม `<RPC https>/rpc`) เห็นตั้งแต่ช่วงโหวต |
 | `timelock-executed` / `timelock-cancelled` | การเรียกที่รอครบแล้วถูกเรียกจริง / ถูกยกเลิก |
 | `timelock-delay` | เปลี่ยนระยะรอของ timelock (`MinDelayChange`, ร้ายแรง) · เพิ่ม/ถอด role ของ timelock = `governance-change` |
 | `oracle-deviation` | TWAP ของ DEX กับ Pyth ต่างกันเกิน `maxDeviationBps` (`DeviationTripped`, ไม่มีราคา, ร้ายแรง) |
@@ -398,6 +399,7 @@ zetaphy timelock schedule --to 0x<สัญญา> --sig "setFee(uint16,address)
 #   ถ้า gov module เป็น proposer: เขียนไฟล์ proposal (MsgEVMCall ถึง timelock) ให้ zetaphyd tx gov submit-proposal p.json แล้ว gov.sh vote <id> yes
 zetaphy timelock status [<operation id>]   # ระยะรอ, ใครถือ role, สถานะ (Waiting/Ready/Done) และ ETA, ฟังก์ชันที่จะถูกเรียก
 zetaphy timelock execute <operation id>    # ใครก็ได้ หลังครบระยะรอ (อ่านรายละเอียดจาก event CallScheduled เอง)
+zetaphy timelock execute <id> --to 0x… --sig "…" --args … [--salt …]   # การเรียกที่โหวต gov ตั้งเวลา: ใส่ครบตามที่ schedule พิมพ์ (MsgEVMCall ไม่ทิ้ง log ใน eth_getLogs)
 zetaphy timelock cancel <operation id>     # canceller (multisig) ระหว่างรอ
 ```
 - คำสั่ง governance เดิม (`bridge …`, `threat …`, `oracle feed`) รู้ว่า governance เป็น timelock แล้วพิมพ์คำสั่ง `zetaphy timelock schedule …` ที่ใช้แทนให้

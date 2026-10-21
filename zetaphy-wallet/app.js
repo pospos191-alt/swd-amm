@@ -8,6 +8,7 @@ import {
   ml_dsa44, keccak_256, pqAddress, pqClient, normalizeAddress, validatorAddress, parseZeta, formatZeta, bytesToHex, hexToBytes,
   DEFAULT_GAS_LIMIT, DEFAULT_STAKING_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT,
   DEFAULT_PRECOMPILE_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, PUBLIC_KEY_BYTES, quantumLockTx, codeFingerprint,
+  secp256k1, qdayRevealText, qdaySalt, qdayCommitment, consentCall, SECURITY_PRECOMPILE, MAX_CONSENT_SECONDS,
   THREAT_SEL, PROXY_DEPTH, proxyTargets, codeKey, addressKey, detailQueries, readEvidence, readResponse, REASON_TEXT, DISCLAIMER, REPRODUCE,
 } from './vendor/pqwallet.js';
 import {
@@ -179,6 +180,39 @@ const T = {
     mmCancelled: 'ยกเลิกแล้ว ไม่ได้ส่งอะไร',
     mmSent: 'MetaMask ส่งคำสั่งล็อกแล้ว เมื่อเข้าบล็อก บัญชีนั้นจะขึ้นในรายการด้านบน',
     mmWarnSeedSnap: 'ถ้า Secret Recovery Phrase ของ MetaMask หาย บัญชีที่ล็อกไว้ก็หายไปด้วย',
+    // security core: Q-day and the threat gate's consent (docs/SECURITY-CORE.md)
+    qdTitle: 'เตรียมพร้อมสำหรับ Q-day',
+    qdIntro: 'Q-day คือวันที่เครือข่ายเลิกเชื่อลายเซ็น ECDSA (กุญแจแบบ MetaMask) เพราะคอมพิวเตอร์ควอนตัมอาจปลอมได้ หลังวันนั้นบัญชี ECDSA ที่ยังไม่ย้ายจะถูกแช่แข็ง (เงินยังอยู่ แต่ส่งธุรกรรมไม่ได้) วิธีที่ปลอดภัยที่สุดคือล็อกบัญชี MetaMask ให้กระเป๋านี้ล่วงหน้า (การ์ดด้านบน)',
+    qdCheck: 'ตรวจบัญชี MetaMask ของฉัน',
+    qdNone: 'Q-day: ยังไม่ได้กำหนด (เครือข่ายจะประกาศผ่านการโหวตล่วงหน้า)',
+    qdScheduled: 'Q-day: บล็อก {h} (ตอนนี้บล็อก {now}) หลังจากนั้นธุรกรรมที่เซ็นด้วย ECDSA จะถูกปฏิเสธ',
+    qdPassed: 'Q-day ผ่านไปแล้ว (บล็อก {h}): ธุรกรรมที่เซ็นด้วย ECDSA ถูกปฏิเสธ',
+    qdOff: 'ระบบความปลอดภัยแกนกลางยังไม่เปิดบนโหนดนี้',
+    qdPQ: '{acct}: เป็นบัญชี ML-DSA-44 อยู่แล้ว ไม่ต้องทำอะไร',
+    qdMigrated: '{acct}: ย้ายแล้ว ผู้ควบคุมคือ {to}',
+    qdPending: '{acct}: กำลังย้ายไป {to} เสร็จที่บล็อก {h}',
+    qdExposed: '{acct}: ยังไม่ย้าย และกุญแจสาธารณะเคยถูกใช้บนเชนแล้ว ต้องล็อกก่อน Q-day (การ์ดด้านบน) ไม่อย่างนั้นบัญชีจะถูกแช่แข็ง',
+    qdUnexposed: '{acct}: ยังไม่ย้าย แต่กุญแจไม่เคยถูกใช้บนเชน ล็อกตอนนี้ได้ (แนะนำ) หรือหลัง Q-day ย้ายด้วย commit–reveal ด้านล่างก็ได้',
+    qdRecoverIntro: 'กู้บัญชีหลัง Q-day (เฉพาะกุญแจที่ไม่เคยใช้บนเชน): MetaMask เซ็นข้อความในเครื่องเท่านั้น ไม่ส่งธุรกรรม กระเป๋านี้ส่ง commitment (ขั้นที่ 1) รอ {d} บล็อก แล้ว reveal (ขั้นที่ 2) รออีก {d} บล็อกบัญชีจึงเป็นของกระเป๋านี้',
+    qdCommit: 'ขั้นที่ 1: บันทึก commitment',
+    qdReveal: 'ขั้นที่ 2: reveal',
+    qdCommitted: 'บันทึก commitment แล้ว reveal ได้ตั้งแต่บล็อก {h}',
+    qdAlready: 'commitment นี้บันทึกไว้แล้วที่บล็อก {h}: reveal ได้ตั้งแต่บล็อก {r}',
+    qdNoCommit: 'ยังไม่มี commitment: ทำขั้นที่ 1 ก่อน',
+    qdTooEarly: 'ยังเร็วไป: reveal ได้ตั้งแต่บล็อก {h} (ตอนนี้ {now})',
+    qdNotYet: 'การ reveal เปิดหลัง Q-day เท่านั้น ก่อน Q-day ให้ล็อกบัญชีจาก MetaMask (การ์ดด้านบน)',
+    qdRevealed: 'reveal แล้ว: บัญชีจะเป็นของกระเป๋านี้เมื่อถึงบล็อกที่กำหนด',
+    qdCannot: 'บัญชีนี้ใช้ commit–reveal ไม่ได้ (ย้ายแล้ว หรือกุญแจเคยถูกใช้บนเชน)',
+    csTitle: 'ยินยอมเรียกสัญญาที่ติดธง',
+    csIntro: 'ถ้าเปิด threat gate ไว้ เครือข่ายจะไม่ส่งธุรกรรมไปหาสัญญาที่ Neuro ติดธงแบบบังคับใช้ เว้นแต่เจ้าของบัญชียินยอมเอง (ธุรกรรมเดียว นานสุด 1 วัน) นี่คือการขอความยินยอม ไม่ใช่การเซ็นเซอร์: คุณยังไปต่อได้ แต่ควรอ่านเหตุผลของธงก่อน',
+    csTarget: 'สัญญา (0x…)',
+    csSeconds: 'นานเท่าไร',
+    csOk: 'ฉันอ่านเหตุผลของธงแล้วและยอมรับความเสี่ยงเอง',
+    csSend: 'ส่งความยินยอมจากกระเป๋านี้',
+    csSendMM: 'ส่งความยินยอมจาก MetaMask',
+    csSent: 'ส่งความยินยอมแล้ว tx hash:',
+    csBad: 'ใส่ที่อยู่สัญญา 0x ตามด้วย hex 40 ตัว',
+    threatConsented: 'คำเตือน: {addr} ติดธงแบบบังคับใช้ ({what} · เหตุผล: {reason}) แต่คุณให้ความยินยอมไว้แล้ว จึงส่งได้ · {details}',
     // MetaMask Snap mode
     snapTitle: 'ใช้ MetaMask (ZETAPHY Snap)',
     snapIntro: 'กุญแจ ML-DSA-44 สร้างใน MetaMask จาก Secret Recovery Phrase ของคุณ หน้านี้ไม่เห็นกุญแจเลย และ MetaMask แสดงทุกธุรกรรมเป็นคำอ่านง่ายให้ยืนยันก่อนเซ็น',
@@ -275,7 +309,7 @@ const T = {
     threatHint: 'ที่อยู่ 0x… ของ ThreatRegistry บน ZETAPHY (จำไว้ในเบราว์เซอร์นี้) หรือใส่ใน meta zetaphy-threat-registry ของ index.html ให้ทุกคน เว้นว่าง = ใช้ค่าใน meta',
     threatSaved: 'บันทึกที่อยู่ ThreatRegistry แล้ว',
     threatBadAddress: 'ที่อยู่ ThreatRegistry ต้องเป็น 0x ตามด้วย hex 40 ตัว',
-    threatFlagged: 'ไม่เซ็น: {addr} ติดธงในระบบภูมิคุ้มกันของ ZETAPHY ({what} · เหตุผล: {reason}) กระเป๋านี้ไม่ส่งธุรกรรมไปหาโค้ดที่ธงบังคับใช้แล้ว · {details}',
+    threatFlagged: 'ไม่เซ็น: {addr} ติดธงในระบบภูมิคุ้มกันของ ZETAPHY ({what} · เหตุผล: {reason}) กระเป๋านี้ไม่ส่งธุรกรรมไปหาโค้ดที่ธงบังคับใช้แล้ว เว้นแต่คุณยินยอมก่อน (การ์ด "ยินยอมเรียกสัญญาที่ติดธง") · {details}',
     threatUnchecked: 'ไม่เซ็น: ตรวจ {addr} กับ ThreatRegistry {reg} ไม่ได้ เมื่อตั้ง ThreatRegistry แล้ว ตรวจไม่ได้ = ไม่ส่ง',
     threatUnset: 'ยังไม่ได้ตรวจโค้ดปลายทาง: ยังไม่ได้ตั้งที่อยู่ ThreatRegistry (ตั้งค่าเพิ่มเติม ใต้ช่อง RPC)',
     threatClean: 'ตรวจกับ ThreatRegistry แล้ว: ปลายทางไม่ติดธง (ตรวจแบบดีที่สุดเท่าที่ทำได้: ที่อยู่ โค้ด และโค้ดจริงหลัง proxy แบบ EIP-1967 / beacon / EIP-1167 ตรวจซ้ำอีกครั้งก่อนเซ็น)',
@@ -444,6 +478,39 @@ const T = {
     mmCancelled: 'Cancelled. Nothing was sent.',
     mmSent: 'MetaMask sent the lock. Once it is in a block, the account shows up in the list above.',
     mmWarnSeedSnap: 'If you lose your MetaMask Secret Recovery Phrase, the locked account is lost too.',
+    // security core: Q-day and the threat gate's consent (docs/SECURITY-CORE.md)
+    qdTitle: 'Prepare for Q-day',
+    qdIntro: 'Q-day is when the network stops trusting ECDSA signatures (MetaMask-style keys), because a quantum computer may forge them. From then on an ECDSA account that has not moved is frozen (its funds stay, but it cannot send). The safest way is to lock your MetaMask account to this wallet beforehand (the card above).',
+    qdCheck: 'Check my MetaMask account',
+    qdNone: 'Q-day: not scheduled (the network announces it by a vote, well ahead).',
+    qdScheduled: 'Q-day: block {h} (now {now}). From then on ECDSA-signed transactions are refused.',
+    qdPassed: 'Q-day has passed (block {h}): ECDSA-signed transactions are refused.',
+    qdOff: 'The security core is not on at this node.',
+    qdPQ: '{acct}: an ML-DSA-44 account already; nothing to do.',
+    qdMigrated: '{acct}: migrated; its controller is {to}.',
+    qdPending: '{acct}: moving to {to}, final at block {h}.',
+    qdExposed: '{acct}: not migrated, and its public key has been used on chain. Lock it before Q-day (the card above), or it will be frozen.',
+    qdUnexposed: '{acct}: not migrated, but its key was never used on chain. Lock it now (recommended), or after Q-day move it with the commit–reveal below.',
+    qdRecoverIntro: 'Recover after Q-day (only keys never used on chain): MetaMask signs a text locally and sends nothing. This wallet records a commitment (step 1), waits {d} blocks, then reveals (step 2); {d} blocks later the account is this wallet\'s.',
+    qdCommit: 'Step 1: record the commitment',
+    qdReveal: 'Step 2: reveal',
+    qdCommitted: 'Commitment recorded. Reveal from block {h}.',
+    qdAlready: 'This commitment was recorded in block {h}: reveal from block {r}.',
+    qdNoCommit: 'No commitment yet: do step 1 first.',
+    qdTooEarly: 'Too early: reveal from block {h} (now {now}).',
+    qdNotYet: 'The reveal opens at Q-day. Before it, lock the account from MetaMask (the card above).',
+    qdRevealed: 'Revealed: the account becomes this wallet\'s at the final block.',
+    qdCannot: 'This account cannot use commit–reveal (migrated already, or its key was used on chain).',
+    csTitle: 'Consent to a flagged contract',
+    csIntro: 'With the threat gate on, the network does not deliver a transaction to a contract with an enforced Neuro flag unless the account itself consents (one transaction, at most a day). This is consent, not censorship: you can still go ahead, but read the flag\'s reason first.',
+    csTarget: 'Contract (0x…)',
+    csSeconds: 'For how long',
+    csOk: 'I have read the flag\'s reason and take the risk myself',
+    csSend: 'Send consent from this wallet',
+    csSendMM: 'Send consent from MetaMask',
+    csSent: 'Consent sent. tx hash:',
+    csBad: 'Enter the contract address: 0x and 40 hex digits.',
+    threatConsented: 'Warning: {addr} has an enforced flag ({what} · reason: {reason}), but you consented, so it can be sent. · {details}',
     snapTitle: 'Use MetaMask (ZETAPHY Snap)',
     snapIntro: 'The ML-DSA-44 key is made inside MetaMask from your Secret Recovery Phrase; this page never sees it. MetaMask shows every transaction in plain words before it signs.',
     snapFlask: 'Until the snap is published and MetaMask has reviewed it, it installs only in MetaMask Flask (the developer build).',
@@ -537,7 +604,7 @@ const T = {
     threatHint: 'Its 0x… address on ZETAPHY (remembered in this browser), or for everyone in index.html\'s zetaphy-threat-registry meta tag. Empty = the meta tag.',
     threatSaved: 'ThreatRegistry address saved.',
     threatBadAddress: 'The ThreatRegistry address must be 0x and 40 hex digits.',
-    threatFlagged: 'Not signed: {addr} is flagged by the ZETAPHY immune system ({what} · reason: {reason}). This wallet does not send transactions to code whose flag is enforced. · {details}',
+    threatFlagged: 'Not signed: {addr} is flagged by the ZETAPHY immune system ({what} · reason: {reason}). This wallet does not send transactions to code whose flag is enforced unless you consent first (card "Consent to a flagged contract"). · {details}',
     threatUnchecked: 'Not signed: {addr} could not be checked against the ThreatRegistry {reg}. Once a ThreatRegistry is set, no check means no send.',
     threatUnset: 'Destination code NOT checked: no ThreatRegistry address is set (advanced settings under the RPC box).',
     threatClean: 'Checked against the ThreatRegistry: the destination is not flagged (best effort: the address, its code and the code behind an EIP-1967 / beacon / EIP-1167 proxy; checked again before signing).',
@@ -1204,14 +1271,19 @@ function threatRegistry() {
  * (checked; flagged but not enforced yet: warnings), 'unset' (a contract, but no
  * registry: not checked) or 'none' (no contract and no registry).
  */
-async function vaccinate(targets, { strict = false } = {}) {
+async function vaccinate(targets, { strict = false, from = (acting?.address ?? wallet?.addr)?.hex } = {}) {
   const reg = threatRegistry();
   let contracts = 0;
   const warnings = [];
-  const queue = targets.map((a) => ({ addr: a.toLowerCase(), label: a, depth: 0 }));
+  const queue = targets.map((a) => ({ addr: a.toLowerCase(), label: a, depth: 0, root: a.toLowerCase() }));
+  // Consent given on chain (the security precompile) for a destination: its enforced flags warn instead of refusing.
+  const consented = async (root) => {
+    if (!from) return false;
+    try { return (await client.consentUntil(from, root)) > BigInt(Math.floor(Date.now() / 1000)); } catch { return false; }
+  };
   const seen = new Set();
   while (queue.length) {
-    const { addr: target, label, depth } = queue.shift();
+    const { addr: target, label, depth, root } = queue.shift();
     if (seen.has(target)) continue;
     seen.add(target);
     const unchecked = () => Object.assign(new Error('threatUnchecked'), { vars: { addr: label, reg } });
@@ -1243,14 +1315,20 @@ async function vaccinate(targets, { strict = false } = {}) {
       const keys = checks.map(([w, arg]) => KEY_OF[w](target, arg));
       const vars = { addr: label, what: t(WHAT[what]), reason: { toString: () => (reason > 0 && T[lang][`reason${reason}`] ? t(`reason${reason}`) : `#${reason}`) },
         details: await threatDetails(reg, keys[i], keys) };
-      if (readWord(enforced, 0) !== 0n || strict) throw Object.assign(new Error('threatFlagged'), { vars });
+      if (readWord(enforced, 0) !== 0n || strict) {
+        if (strict || !(await consented(root))) {
+          if ($('cs-target') && !$('cs-target').value) $('cs-target').value = label.startsWith('0x') ? label : root;
+          throw Object.assign(new Error('threatFlagged'), { vars });
+        }
+        vars.consented = true;
+      }
       warnings.push(vars);
     }
     // Best effort: the code a proxy forwards to is checked as if it were the destination.
     if (hasCode && depth < PROXY_DEPTH) {
       let next;
       try { next = await proxyTargets(checkedCall, target, code); } catch { throw unchecked(); }
-      for (const impl of next) queue.push({ addr: impl, label: t('threatBehind', { impl, proxy: label }), depth: depth + 1 });
+      for (const impl of next) queue.push({ addr: impl, label: t('threatBehind', { impl, proxy: label }), depth: depth + 1, root });
     }
   }
   return { state: !reg ? (contracts ? 'unset' : 'none') : warnings.length ? 'warned' : 'clean', warnings };
@@ -1300,7 +1378,7 @@ function showVaccine(box, checked) {
   const el = box.querySelector('.vaccine-note');
   el.hidden = checked.state === 'none';
   el.classList.toggle('unchecked', checked.state === 'unset' || checked.state === 'warned');
-  if (checked.state === 'warned') { delete el.dataset.i18n; el.textContent = t('threatWarned', checked.warnings[0]); }
+  if (checked.state === 'warned') { delete el.dataset.i18n; el.textContent = t(checked.warnings[0].consented ? 'threatConsented' : 'threatWarned', checked.warnings[0]); }
   else if (checked.state !== 'none') setI18n(el, checked.state === 'unset' ? 'threatUnset' : 'threatClean');
 }
 
@@ -1441,6 +1519,120 @@ async function metamaskLock() {
   showOwned();
   status('mmSent');
   setTimeout(() => { refreshOwned().catch(showError); }, 6000);
+}
+
+// ---- security core: prepare for Q-day, and consent to a flagged contract ----
+// Q-day (zetaphy_securityStatus / zetaphy_migration): the chain refuses ECDSA-signed txs from
+// a voted height. Before it, an account moves by the quantum lock (card above). After it, an
+// account whose key was never used on chain moves by commit–reveal: MetaMask signs the migration
+// text locally (personal_sign; nothing is sent), this wallet records sha256 of (its public key,
+// this wallet, a salt) and later reveals it. The salt is keccak-256 of that signature, which
+// MetaMask gives again on request, so nothing is stored between the steps.
+let qdayOwner = null; // normalized MetaMask account being checked
+
+async function qdayStatus() {
+  const el = $('qd-status');
+  let st;
+  try { st = await client.securityStatus(); } catch { el.textContent = t('qdOff'); return null; }
+  if (!Number(st.securityCoreFrom)) { el.textContent = t('qdOff'); return null; }
+  const h = Number(st.qdayHeight);
+  el.textContent = !h ? t('qdNone') : st.qdayActive ? t('qdPassed', { h }) : t('qdScheduled', { h, now: st.latestHeight });
+  return st;
+}
+
+async function metamaskAccount() {
+  const eth = ethereum();
+  let accounts;
+  try { accounts = await eth.request({ method: 'eth_requestAccounts' }); } catch (e) { throw new Error(e?.code === 4001 ? 'mmRejected' : 'mmDenied'); }
+  if (!Array.isArray(accounts) || !accounts.length) throw new Error('mmDenied');
+  try { return normalizeAddress(String(accounts[0]).toLowerCase()); } catch { throw new Error('mmDenied'); }
+}
+
+async function qdayCheck() {
+  const st = await qdayStatus();
+  qdayOwner = await metamaskAccount();
+  const m = await client.migration(qdayOwner.hex);
+  const acct = qdayOwner.hex;
+  const out = $('qd-result');
+  out.hidden = false;
+  out.textContent = m.postQuantum ? t('qdPQ', { acct }) : m.migrated ? t('qdMigrated', { acct, to: m.controller })
+    : m.pendingController ? t('qdPending', { acct, to: m.pendingController, h: m.pendingFinalHeight })
+      : m.exposed ? t('qdExposed', { acct }) : t('qdUnexposed', { acct });
+  $('qd-recover').hidden = !(st && m.canCommitReveal && !m.migrated);
+  if (st) $('qd-recover-intro').textContent = t('qdRecoverIntro', { d: st.revealDelay });
+}
+
+/** MetaMask signs the migration text (locally); returns everything both steps need. */
+async function qdayMigration() {
+  if (!wallet || !qdayOwner) throw new Error('qdCannot');
+  const text = qdayRevealText({ owner: qdayOwner.hex, controller: wallet.addr.hex });
+  const hex = '0x' + bytesToHex(new TextEncoder().encode(text));
+  let sig;
+  try { sig = await ethereum().request({ method: 'personal_sign', params: [hex, qdayOwner.hex] }); } catch (e) { throw new Error(e?.code === 4001 ? 'mmRejected' : 'mmDenied'); }
+  const s = hexToBytes(sig);
+  if (s.length !== 65) throw new Error('mmDenied');
+  const msg = new TextEncoder().encode(text);
+  const h = keccak_256(new Uint8Array([...new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msg.length}`), ...msg]));
+  const rec = new Uint8Array(65); rec[0] = s[64] >= 27 ? s[64] - 27 : s[64]; rec.set(s.slice(0, 64), 1);
+  const publicKey = secp256k1.recoverPublicKey(rec, h, { prehash: false });
+  const salt = qdaySalt(s);
+  return { signature: s, salt, commitment: qdayCommitment({ publicKey, controller: wallet.addr.hex, salt }) };
+}
+
+async function qdayCommitStep() {
+  const st = await qdayStatus();
+  const mig = await qdayMigration();
+  const c = await client.commitmentHeight(mig.commitment);
+  if (c.found) return status('qdAlready', { h: c.height, r: Number(c.height) + Number(st.revealDelay) });
+  signingStatus();
+  await client.qdayCommit({ publicKey: wallet.publicKey, ...signer(), commitment: mig.commitment });
+  status('qdCommitted', { h: Number(st.latestHeight) + 1 + Number(st.revealDelay) });
+}
+
+async function qdayRevealStep() {
+  const st = await qdayStatus();
+  if (!st?.qdayActive) throw new Error('qdNotYet');
+  const mig = await qdayMigration();
+  const c = await client.commitmentHeight(mig.commitment);
+  if (!c.found) throw new Error('qdNoCommit');
+  const ready = Number(c.height) + Number(st.revealDelay);
+  if (Number(st.latestHeight) + 1 < ready) throw Object.assign(new Error('qdTooEarly'), { vars: { h: ready, now: st.latestHeight } });
+  signingStatus();
+  await client.qdayReveal({ publicKey: wallet.publicKey, ...signer(), owner: qdayOwner.hex, controller: wallet.addr.hex, salt: mig.salt, signature: mig.signature });
+  rememberOwner(qdayOwner);
+  status('qdRevealed');
+}
+
+function consentArgs() {
+  const target = $('cs-target').value.trim();
+  if (!ADDR_RE.test(target)) throw new Error('csBad');
+  const seconds = BigInt($('cs-seconds').value);
+  if (seconds <= 0n || seconds > BigInt(MAX_CONSENT_SECONDS)) throw new Error('csBad');
+  return { target, seconds };
+}
+
+async function consentSend() {
+  if (!wallet || !$('cs-ok').checked) return;
+  const { target, seconds } = consentArgs();
+  signingStatus();
+  const r = await client.consent({ publicKey: wallet.publicKey, ...signer(), target, seconds, ...(acting ? { asOwner: acting.address.bech32 } : {}) });
+  $('cs-hash').textContent = r.txHash; $('cs-result').hidden = false; $('cs-ok').checked = false;
+  status('csSent');
+}
+
+async function consentMetaMask() {
+  if (!$('cs-ok').checked) return;
+  const { target, seconds } = consentArgs();
+  const owner = await metamaskAccount();
+  const chain = BigInt(await ethereum().request({ method: 'eth_chainId' }));
+  if (chain !== EVM_CHAIN_ID) throw Object.assign(new Error('mmWrongChain'), { vars: { id: chain } });
+  const c = consentCall(target, seconds);
+  let hash;
+  try {
+    hash = await ethereum().request({ method: 'eth_sendTransaction', params: [{ from: owner.hex, to: SECURITY_PRECOMPILE, value: '0x0', data: '0x' + bytesToHex(c.data) }] });
+  } catch (e) { if (e?.code === 4001) throw new Error('mmRejected'); throw new Error(e?.message ?? String(e)); }
+  $('cs-hash').textContent = String(hash); $('cs-result').hidden = false; $('cs-ok').checked = false;
+  status('csSent');
 }
 
 // ---- MetaMask Snap: the key in MetaMask (zetaphy-snap/), reached through window.ethereum ----
@@ -1786,6 +1978,12 @@ function init() {
   $('owner-stop').addEventListener('click', () => busy($('owner-stop'), stopActing));
   $('mm-ok').addEventListener('change', () => { $('mm-lock').disabled = !$('mm-ok').checked; });
   $('mm-lock').addEventListener('click', () => busy($('mm-lock'), metamaskLock).then(() => { $('mm-lock').disabled = !$('mm-ok').checked; }));
+  $('qd-check').addEventListener('click', () => busy($('qd-check'), qdayCheck));
+  $('qd-commit').addEventListener('click', () => busy([$('qd-commit'), $('qd-reveal')], qdayCommitStep));
+  $('qd-reveal').addEventListener('click', () => busy([$('qd-commit'), $('qd-reveal')], qdayRevealStep));
+  $('cs-ok').addEventListener('change', () => { $('cs-send').disabled = $('cs-send-mm').disabled = !$('cs-ok').checked; });
+  $('cs-send').addEventListener('click', () => busy([$('cs-send'), $('cs-send-mm')], consentSend).then(() => { $('cs-send').disabled = $('cs-send-mm').disabled = !$('cs-ok').checked; }));
+  $('cs-send-mm').addEventListener('click', () => busy([$('cs-send'), $('cs-send-mm')], consentMetaMask).then(() => { $('cs-send').disabled = $('cs-send-mm').disabled = !$('cs-ok').checked; }));
   $('backup-ok').addEventListener('change', () => { $('backup').disabled = !$('backup-ok').checked; });
   $('backup').addEventListener('click', downloadBackup);
   $('lock').addEventListener('click', () => { lock(); status('lockedMsg'); });

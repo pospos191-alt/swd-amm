@@ -22,6 +22,7 @@ const ROLE = {
   operator: ['ผู้ได้สิทธิ์ทั้งหมด (setApprovalForAll)', 'Operator (setApprovalForAll)'], recipient: ['ผู้รับเหรียญ', 'Token recipient'],
   inner: ['ปลายทางของคำสั่งย่อย (multicall)', 'Inner call target (multicall)'], verifying: ['สัญญาที่ลายเซ็นนี้ใช้กับ', 'Contract this signature is for'],
   zone: ['zone ของคำสั่งซื้อขาย', 'Order zone'],
+  consent: ['สัญญาที่คุณกำลังยินยอมให้เรียกได้ (consent)', 'Contract you are consenting to call (consent)'],
 };
 const KIND = {
   transaction: { th: 'ธุรกรรมนี้', en: 'this transaction' },
@@ -107,6 +108,7 @@ export function insight(result, { kind = 'transaction', source = null } = {}) {
             <Text>{`นักรัน Neuro ติดธงข้อเท็จจริงของโค้ดที่${k.th}เกี่ยวข้อง และธงบังคับใช้แล้ว ดูหลักฐานและคำชี้แจงด้านล่าง อย่ายืนยัน เว้นแต่คุณแน่ใจจริง ๆ`}</Text>
             <Text>{`Neuro runners flagged a code fact about an address ${k.en} involves, and the flag is enforced. See the evidence and any response below. Do not confirm unless you are certain.`}</Text>
           </Banner>
+          <Text size="sm">บน ZETAPHY ที่เปิด threat gate เครือข่ายจะไม่ส่งธุรกรรมไปหาปลายทางที่ติดธงบังคับใช้ เว้นแต่บัญชีนี้ยินยอมก่อน: ธุรกรรม consent(ปลายทาง, วินาที) ไปที่ 0x…0901 (นานสุด 1 วัน) / On ZETAPHY with the threat gate on, the network refuses a transaction to a destination with an enforced flag unless this account consented first: a consent(destination, seconds) transaction to 0x…0901 (at most a day). Consent is your choice; the flag's reason is above.</Text>
           {findings.filter((f) => f.enforced).map((f) => <Finding f={f} />)}
           <Text size="sm" color="alternative">{`${DISCLAIMER.th} / ${DISCLAIMER.en}`}</Text>
           <SourceNote source={source} />

@@ -194,6 +194,7 @@ Framework Preset **Other**, ไม่ต้องตั้ง Build/Output (ม�
      - governance เป็น **multisig**: owner เสนอ `to` = timelock และ data ที่พิมพ์ (SimpleMultisig: propose → confirm → execute, Safe: Transaction Builder) เซ็นบน hardware wallet
      - governance เป็น **gov**: ดาวน์โหลด artifact `timelock-proposal` แล้วเสนอโหวตบนเครื่อง (ข้อ 4)
    - ครบ 48 ชั่วโมงแล้ว: `action` = **execute**, `id` = เลข operation (ใครก็ทำได้ workflow ใช้ key ของ deployer แค่จ่ายค่าแก๊ส)
+     ถ้าตั้งเวลาด้วยโหวต gov ให้ใส่ `to`, `sig`, `args`, `salt` เหมือนตอน schedule ด้วย (การเรียกผ่านโหวตไม่ทิ้ง log ที่โหนดค้นให้ได้)
    - `action` = **status** ดูระยะรอ ใครถือ role และสถานะของ operation (Waiting / Ready / Done) · **cancel** พิมพ์สิ่งที่ canceller ต้องส่ง
    - ตัวเฝ้า (`bridge monitor`, workflow **bridge-monitor**) แจ้งเตือนทุกการตั้งเวลา (สัญญา ฟังก์ชัน และเวลาที่ทำได้) การเรียกจริง และการยกเลิก
      แม้ยังไม่มีสะพาน หลัง handover ให้เปิดบรรทัด `schedule` ใน `.github/workflows/bridge-monitor.yml` (เช่นทุก 6 ชั่วโมง `'7 */6 * * *'` ฟรีเมื่อ repo เป็น public) ระยะรอ 48 ชั่วโมงจึงมีเวลาเห็นและยกเลิก

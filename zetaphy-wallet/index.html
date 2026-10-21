@@ -294,6 +294,31 @@
       <p id="mm-result" class="ok" hidden><span data-i18n="mmSentLabel">MetaMask ส่งคำสั่งล็อกแล้ว tx hash:</span> <code id="mm-hash"></code></p>
     </div>
 
+    <div class="card" id="qday-card">
+      <h2 data-i18n="qdTitle">เตรียมพร้อมสำหรับ Q-day</h2>
+      <p data-i18n="qdIntro">Q-day คือวันที่เครือข่ายเลิกเชื่อลายเซ็น ECDSA</p>
+      <p id="qd-status" class="hint"></p>
+      <button id="qd-check" type="button" data-i18n="qdCheck">ตรวจบัญชี MetaMask ของฉัน</button>
+      <p id="qd-result" class="hint" hidden></p>
+      <div id="qd-recover" hidden>
+        <p id="qd-recover-intro" class="hint"></p>
+        <button id="qd-commit" type="button" data-i18n="qdCommit">ขั้นที่ 1: บันทึก commitment</button>
+        <button id="qd-reveal" type="button" data-i18n="qdReveal">ขั้นที่ 2: reveal</button>
+      </div>
+    </div>
+
+    <div class="card" id="consent-card">
+      <h2 data-i18n="csTitle">ยินยอมเรียกสัญญาที่ติดธง</h2>
+      <p data-i18n="csIntro">ถ้าเปิด threat gate ไว้ เครือข่ายจะไม่ส่งธุรกรรมไปหาสัญญาที่ติดธงแบบบังคับใช้ เว้นแต่เจ้าของบัญชียินยอมเอง</p>
+      <label><span data-i18n="csTarget">สัญญา (0x…)</span> <input id="cs-target" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
+      <label><span data-i18n="csSeconds">นานเท่าไร</span>
+        <select id="cs-seconds"><option value="600">10 min</option><option value="3600" selected>1 h</option><option value="86400">24 h</option></select></label>
+      <label class="check"><input id="cs-ok" type="checkbox"> <span data-i18n="csOk">ฉันอ่านเหตุผลของธงแล้วและยอมรับความเสี่ยงเอง</span></label>
+      <button id="cs-send" type="button" disabled data-i18n="csSend">ส่งความยินยอมจากกระเป๋านี้</button>
+      <button id="cs-send-mm" type="button" disabled data-i18n="csSendMM">ส่งความยินยอมจาก MetaMask</button>
+      <p id="cs-result" class="ok" hidden><span data-i18n="csSent">ส่งความยินยอมแล้ว tx hash:</span> <code id="cs-hash"></code></p>
+    </div>
+
     <div class="card" id="backup-card">
       <h2 data-i18n="backupTitle">สำรอง seed</h2>
       <p class="warn-text" data-i18n="backupWarn">ไฟล์สำรองเป็น seed แบบไม่เข้ารหัส ใครได้ไฟล์นี้ไปก็ย้ายเงินออกได้ เก็บไว้ในที่ปลอดภัยแบบออฟไลน์ ห้ามส่งให้ใคร</p>

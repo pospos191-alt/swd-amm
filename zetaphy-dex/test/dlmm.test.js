@@ -5,6 +5,7 @@
 // share transfers, slippage and deadlines, and gas for typical swaps.
 
 import { test } from 'node:test';
+import { Address } from '@ethereumjs/util';
 import assert from 'node:assert/strict';
 import { setupDlmm, seededPair, lp, spot, path, liveBins, binSwapJS, presetTuple, PRESETS, ONE, MAX, Q128, art } from './helpers/dlmm.js';
 
@@ -281,7 +282,7 @@ test('the active bin takes only amounts in its own X:Y ratio (the rest comes bac
   // Only Y into a bin holding both: zero shares, refused.
   await assert.rejects(router.send('carol', 'addLiquidity', [lp({ X, Y, binStep: 10, activeId: 0, deltas: [0], ax: [0n], ay: [ONE], to: addr('carol'), deadline: deadline() })]), /ZeroShares/);
   // Price moved two bins down: idSlippage 1 refuses, 2 accepts (the shape moves with the price).
-  await router.send('bob', 'swapExactTokensForTokens', [25n * ONE, 0, path([10], [X, Y]), addr('bob'), deadline()]);
+  await router.send('bob', 'swapExactTokensForTokens', [15n * ONE, 0, path([10], [X, Y]), addr('bob'), deadline()]);
   const act = Number(await pair.call('getActiveId'));
   assert.ok(act <= -2);
   const dist = { deltas: [1, 2], ax: [ONE, ONE], ay: [0n, 0n] };
@@ -340,7 +341,7 @@ test('multi-hop X -> Y -> Z (exact in and exact out) and native routes (WZETAPHY
   const na = await c.balance('alice');
   await router.send('alice', 'removeLiquidityNATIVE', [X.address, 10, ids, sh, 0, 0, addr('alice'), deadline()]);
   assert.ok((await c.balance('alice')) > na);
-  assert.equal(await c.balance(router.address), 0n, 'no native left in the router');
+  assert.equal(await c.balance(Address.fromString(router.address)), 0n, 'no native left in the router');
   assert.equal(await bal(weth, router.address), 0n);
   for (const t of [X, Y, Z]) assert.equal(await bal(t, router.address), 0n);
   // Native only comes into the router from WZETAPHY.

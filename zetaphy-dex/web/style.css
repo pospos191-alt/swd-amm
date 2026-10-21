@@ -157,3 +157,12 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
   .field input, .field output { font-size: 19px; }
   select { max-width: 52%; }
 }
+
+/* DLMM tab (dlmm.js): bins around the price */
+.dl-chart { display: flex; align-items: flex-end; gap: 2px; height: 120px; margin: 8px 0; border-bottom: 1px solid var(--panel-border); }
+.dl-bar { flex: 1; min-width: 3px; border-radius: 3px 3px 0 0; background: var(--text-dim); opacity: 0.8; }
+.dl-bar.x { background: #3b82f6; }
+.dl-bar.y { background: #a855f7; }
+.dl-bar.active { outline: 2px solid var(--accent); opacity: 1; }
+#dlmm-root .row label.hint { white-space: nowrap; }
+#dlmm-root .row input { min-width: 0; }

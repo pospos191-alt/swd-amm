@@ -5,7 +5,7 @@
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import {
   CHAIN_ID, DENOM, formatZeta, normalizeAddress, toChecksumHex, validatorAddress, bytesToHex, hexToBytes,
-  STAKING_PRECOMPILE, DISTRIBUTION_PRECOMPILE, PQ_LOCK_ADDRESS,
+  STAKING_PRECOMPILE, DISTRIBUTION_PRECOMPILE, PQ_LOCK_ADDRESS, SECURITY_PRECOMPILE,
 } from './pqtx.js';
 
 const T = {
@@ -66,6 +66,22 @@ const T = {
     noteHandoverTitle: 'You give up control',
     noteHandover: 'After this, your account can no longer act for {owner}; only {controller} can. You cannot undo it.',
     footer: 'Approve only if you started this yourself on {origin}. Nothing else is signed.',
+    consent: 'Consent to call a flagged contract',
+    qdayCommit: 'Q-day migration, step 1 (commitment)',
+    qdayReveal: 'Q-day migration, step 2 (reveal)',
+    ibcHoldCancel: 'Return a held IBC transfer',
+    target: 'Flagged contract',
+    duration: 'For',
+    seconds: '{n} seconds',
+    commitment: 'Commitment',
+    holdId: 'Held transfer',
+    noteConsentTitle: 'You go past a safety check',
+    noteConsent: 'The network refuses calls from this account to {target} because the Neuro threat registry has an enforced flag on it. With this consent, it delivers them for {n} seconds. Read the flag\'s reason first; approve only if you are sure.',
+    noteConsentWithdraw: 'This withdraws an earlier consent for {target}.',
+    noteCommit: 'This records only a hash. It shows nothing about the old key; the reveal comes later.',
+    noteRevealTitle: 'Control moves for good',
+    noteReveal: 'After the wait, {owner} is controlled by {controller}. Only {origin} should ask for this, after you signed the migration text in your old wallet.',
+    noteHoldCancel: 'Only the IBC hold guardian can do this: transfer {id} goes back to its sender on the other chain.',
   },
   th: {
     title: 'เซ็นธุรกรรม ZETAPHY',
@@ -124,6 +140,22 @@ const T = {
     noteHandoverTitle: 'คุณสละการควบคุม',
     noteHandover: 'หลังจากนี้ บัญชีคุณทำรายการแทน {owner} ไม่ได้อีก มีแต่ {controller} ที่ทำได้ และคุณยกเลิกเองไม่ได้',
     footer: 'อนุมัติเฉพาะเมื่อคุณเริ่มรายการนี้เองบน {origin} ไม่มีอะไรอื่นถูกเซ็น',
+    consent: 'ยินยอมเรียกสัญญาที่ติดธง',
+    qdayCommit: 'ย้ายบัญชีรับ Q-day ขั้นที่ 1 (commitment)',
+    qdayReveal: 'ย้ายบัญชีรับ Q-day ขั้นที่ 2 (reveal)',
+    ibcHoldCancel: 'คืนรายการ IBC ที่ถูกพักไว้',
+    target: 'สัญญาที่ติดธง',
+    duration: 'นาน',
+    seconds: '{n} วินาที',
+    commitment: 'commitment',
+    holdId: 'รายการที่พักไว้',
+    noteConsentTitle: 'คุณกำลังข้ามด่านตรวจความปลอดภัย',
+    noteConsent: 'เครือข่ายปฏิเสธการเรียก {target} จากบัญชีนี้ เพราะ Neuro threat registry ติดธงแบบบังคับใช้ไว้ เมื่อยินยอม เครือข่ายจะส่งให้ได้นาน {n} วินาที อ่านเหตุผลของธงก่อน อนุมัติเฉพาะเมื่อแน่ใจ',
+    noteConsentWithdraw: 'นี่คือการถอนความยินยอมที่เคยให้ไว้กับ {target}',
+    noteCommit: 'บันทึกแค่ค่า hash ไม่เปิดเผยอะไรเกี่ยวกับกุญแจเก่า ขั้น reveal ทำทีหลัง',
+    noteRevealTitle: 'ย้ายการควบคุมถาวร',
+    noteReveal: 'เมื่อครบเวลารอ {owner} จะถูกควบคุมโดย {controller} ควรเป็น {origin} เท่านั้นที่ขอ หลังจากคุณเซ็นข้อความย้ายบัญชีในกระเป๋าเก่าแล้ว',
+    noteHoldCancel: 'ทำได้เฉพาะ guardian ของ IBC hold: รายการ {id} จะกลับไปหาผู้ส่งบนเชนต้นทาง',
   },
 };
 
@@ -135,6 +167,7 @@ const SEL = {
   delegate: sel('delegate(address,string,uint256)'),
   undelegate: sel('undelegate(address,string,uint256)'),
   withdrawRewards: sel('withdrawDelegatorRewards(address,string)'),
+  consent: sel('consent(address,uint64)'),
 };
 const MAX_UINT256 = 2n ** 256n - 1n;
 /** Call data longer than this is shown cut, with its full length. */
@@ -188,6 +221,12 @@ function decodeCall(to, data, t) {
       return { method: `${name}(address,string,uint256) · ${t.stakingPrecompile}`,
         rows: [[t.delegator, addressWord(args, 0)], [t.validator, valoper(stringAt(args, 1))], [t.amount, `${formatZeta(word(args, 2))} ZETAPHY`]],
         notes: name === 'undelegate' ? [{ severity: 'info', text: t.noteUnbond }] : [] };
+    }
+    if (sig === SEL.consent && to === SECURITY_PRECOMPILE) {
+      fixed(2);
+      const target = addressWord(args, 0); const n = word(args, 1);
+      return { method: 'consent(address,uint64) · ZETAPHY security precompile', rows: [[t.target, target], [t.duration, fill(t.seconds, { n })]],
+        notes: [n > 0n ? { severity: 'danger', title: t.noteConsentTitle, text: fill(t.noteConsent, { target, n }) } : { severity: 'info', text: fill(t.noteConsentWithdraw, { target }) }] };
     }
     if (sig === SEL.withdrawRewards && to === DISTRIBUTION_PRECOMPILE) {
       return { method: `withdrawDelegatorRewards(address,string) · ${t.distributionPrecompile}`,
@@ -260,6 +299,26 @@ function describeMessage(m, i, ctx) {
       }
       break;
     }
+    case 'consent': {
+      const n = BigInt(it.seconds);
+      rows.push([t.target, it.target], [t.duration, fill(t.seconds, { n })]);
+      if (it.asOwner) rows.push([t.asOwner, both(it.asOwner)]);
+      notes.push(n > 0n ? { severity: 'danger', title: t.noteConsentTitle, text: fill(t.noteConsent, { target: it.target, n }) }
+        : { severity: 'info', text: fill(t.noteConsentWithdraw, { target: it.target }) });
+      break;
+    }
+    case 'qdayCommit':
+      rows.push([t.commitment, it.commitment]);
+      notes.push({ severity: 'info', text: t.noteCommit });
+      break;
+    case 'qdayReveal':
+      rows.push([t.owner, both(it.owner)], [t.controller, both(it.controller)]);
+      notes.push({ severity: 'danger', title: t.noteRevealTitle, text: fill(t.noteReveal, { owner: it.owner, controller: it.controller, origin }) });
+      break;
+    case 'ibcHoldCancel':
+      rows.push([t.holdId, `#${it.id}`]);
+      notes.push({ severity: 'warning', text: fill(t.noteHoldCancel, { id: it.id }) });
+      break;
     case 'quantumLock':
       rows.push([t.owner, both(it.owner)], [t.controller, both(it.controller)]);
       notes.push({ severity: 'danger', title: t.noteHandoverTitle, text: fill(t.noteHandover, { owner: it.owner, controller: it.controller }) });

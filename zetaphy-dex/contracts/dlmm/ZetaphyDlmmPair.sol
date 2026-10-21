@@ -484,8 +484,9 @@ contract ZetaphyDlmmPair {
         uint256 takeY;
         if (supply == 0) {
             // Empty bin: shares = its value in Y, scaled by 2^128 (exact).
-            minted = x * price + (y << 128); // reverts on overflow: the bin would be worth > ~2^128 Y
-            if (y >= 1 << 128) revert Overflow();
+            // The bin's value must fit: x * price + y * 2^128 < 2^256 (~2^128 of Y).
+            if (y >= 1 << 128 || (x != 0 && price > type(uint256).max / x)) revert Overflow();
+            minted = x * price + (y << 128); // checked add: reverts if the sum overflows
             (takeX, takeY) = (x, y);
             _tree.add(_index(id));
         } else {

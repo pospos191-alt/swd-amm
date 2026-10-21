@@ -160,6 +160,9 @@ export async function timelockCommand({ group, cmd, rest, opt, write, s, connect
     const data = scheduleData({ ...op, delay });
     const now = BigInt((await c.provider.getBlock('latest')).timestamp);
     write(`operation ${id}: ${call.target} ${callName(call.data)}, executable after ${when(now + delay)} (delay ${delay} s)`);
+    // A call the gov module schedules leaves no log eth_getLogs returns: keep the full command to run it later.
+    const execCmd = `zetaphy timelock execute ${id} --timelock ${tl.target} --to ${call.target} --data ${call.data}${call.value ? ` --value ${call.value}` : ''}${salt !== ZeroHash ? ` --salt ${salt}` : ''}${predecessor !== ZeroHash ? ` --predecessor ${predecessor}` : ''}`;
+    write(`after the delay, anyone runs:\n  ${execCmd}`);
     if (await hasRole(tl, ROLES.proposer, c.me)) {
       await (await tl.schedule(op.target, op.value, op.data, predecessor, salt, delay)).wait();
       write(`scheduled (by ${c.me}). After the delay anyone runs: zetaphy timelock execute ${id}`);
@@ -182,13 +185,15 @@ export async function timelockCommand({ group, cmd, rest, opt, write, s, connect
     const c = await connect(s, { needJobs: false });
     const tl = timelockAt(s, opt, c.signer);
     let calls;
-    if (rest[0]) {
+    const explicit = () => { const call = callArgs(opt); return [{ ...call, predecessor: opt.predecessor ? String(opt.predecessor) : ZeroHash, salt: saltOf(opt.salt) }]; };
+    if (opt.to) {
+      // the call given in full (needed for one the gov module scheduled: its logs are not in eth_getLogs)
+      calls = explicit();
+      if (rest[0] && !same(operationId(calls[0]), rest[0])) throw new Error(`--to/--data/--salt/--predecessor give operation ${operationId(calls[0])}, not ${rest[0]}`);
+    } else if (rest[0]) {
       calls = await operation(c.provider, tl, rest[0], fromBlock);
-      if (!calls) throw new Error(`operation ${rest[0]}: no CallScheduled log since block ${fromBlock} (pass --from-block, or --to/--data/--salt/--predecessor)`);
-    } else {
-      const call = callArgs(opt);
-      calls = [{ ...call, predecessor: opt.predecessor ? String(opt.predecessor) : ZeroHash, salt: saltOf(opt.salt) }];
-    }
+      if (!calls) throw new Error(`operation ${rest[0]}: no CallScheduled log since block ${fromBlock}; a call a gov vote scheduled has none: pass it in full (--to, --data or --sig/--args, --salt), as \`timelock schedule\` printed`);
+    } else throw new Error('usage: zetaphy timelock execute <id> [--to 0x… --data 0x… | --sig … --args … --salt …]');
     const id = rest[0] ?? operationId(calls[0]);
     const state = STATES[Number(await tl.getOperationState(id))];
     const ts = await tl.getTimestamp(id);

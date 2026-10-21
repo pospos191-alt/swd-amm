@@ -16,7 +16,11 @@
 #   3. ibc-usdc-ratelimit (1% / 1% / 24 h) passes a vote, then a transfer over
 #      the cap is refused in both directions (inbound: refunded on B;
 #      outbound: the tx fails) and one under the cap goes through; re-running
-#      it with 50% changes the limit by vote (MsgUpdateRateLimit).
+#      it with 50% changes the limit by vote (MsgUpdateRateLimit);
+#   4. the large-transfer hold (security core): gov.sh ibc-hold / ibc-hold-rule
+#      pass votes; an inbound transfer over the threshold waits (nothing
+#      delivered, zetaphy_ibcHolds lists it) and arrives after the delay; another
+#      is returned by the guardian (gov.sh ibc-hold-cancel) and refunded on B.
 #
 #   ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock bash zetaphy-chain/ibc/test-ibc.sh
 # Env: PORT_A / PORT_B (EVM JSON-RPC ports, default 27545 / 28545; CometBFT is
@@ -128,7 +132,7 @@ pass "clients, connection and transfer channel-0 <-> channel-0 open (re-run: no 
 R start >/dev/null
 
 # ---- gov.sh against chain A ------------------------------------------------
-G() { ZETAPHYD="$BIN" NODE_HOME="$W/a" KEYS_DIR="$W/a" FROM=validator NODE=$NA CHAIN_ID=$CA bash "$REPO/zetaphy-chain/gov.sh" "$@"; }
+G() { ZETAPHYD="$BIN" NODE_HOME="$W/a" KEYS_DIR="$W/a" FROM=validator NODE=$NA CHAIN_ID=$CA EVM_RPC=http://127.0.0.1:$PA bash "$REPO/zetaphy-chain/gov.sh" "$@"; }
 pstatus() { G status "$1" | jq -r .status; }
 vote_pass() { # $1: output of a gov.sh command that submitted a proposal -> vote yes -> wait for PASSED
   local id; id=$(echo "$1" | sed -n 's/^proposal \([0-9]*\) submitted.*/\1/p')
@@ -238,6 +242,33 @@ res=$(tx "$NA" $CA ibc-transfer transfer transfer channel-0 "$user" "2000000$den
 [ "$(echo "$res" | jq -r .code)" = 0 ] || { echo "$res"; fail "2 USDC out after raising the limit"; }
 waitfor 90 bal "$NB" "$user" uusdc "$((ub + 2000000))" || fail "2 USDC did not reach B"
 pass "re-run with 50%: limit changed by vote (MsgUpdateRateLimit); the 2 USDC refused before now goes out"
+
+# ---- large-transfer hold (security core, docs/SECURITY-CORE.md) ------------------
+# Inbound USDC from 10 USDC up waits 60 s; the guardian is A's validator key.
+valaddr=$("$BIN" keys show validator -a --keyring-backend test --keyring-dir "$W/a" --home "$W/a")
+out=$(G ibc-hold 60 "$valaddr") || { echo "$out"; fail "ibc-hold proposal"; }
+vote_pass "$out"
+out=$(G ibc-hold-rule "$denom" 10000000 0) || { echo "$out"; fail "ibc-hold-rule proposal"; }
+vote_pass "$out"
+G security | jq -e --arg dn "$denom" --arg g "$valaddr" '.ibcHoldDelaySeconds == 60 and .ibcHoldGuardian == $g and (.ibcHoldRules[] | select(.denom == $dn) | .minAmount == "10000000")' >/dev/null \
+  || { G security; fail "hold settings not in force"; }
+pass "ibc-hold (60 s, guardian = validator) and ibc-hold-rule ($denom from 10 USDC) voted in"
+nholds() { G ibc-holds | jq length; }
+a0=$(bal "$NA" "$user" "$denom")
+R send-usdc "$userhex" 20000000 >/dev/null || fail "send-usdc 20"
+waitfor 90 nholds 1 || fail "20 USDC was not held"
+[ "$(bal "$NA" "$user" "$denom")" = "$a0" ] || fail "a held transfer was delivered at once"
+waitfor 240 bal "$NA" "$user" "$denom" "$((a0 + 20000000))" || fail "held transfer not delivered after the delay"
+waitfor 30 nholds 0 || fail "released hold still listed"
+pass "inbound 20 USDC (over 10): held, listed by zetaphy_ibcHolds, delivered after the 60 s delay"
+before=$(bal "$NB" "$rb" uusdc)
+R send-usdc "$userhex" 30000000 >/dev/null || fail "send-usdc 30"
+waitfor 90 nholds 1 || fail "30 USDC was not held"
+id=$(G ibc-holds | jq -r '.[0].id')
+out=$(G ibc-hold-cancel "$id") || { echo "$out"; fail "ibc-hold-cancel"; }
+waitfor 240 bal "$NB" "$rb" uusdc "$before" || fail "returned transfer not refunded on B"
+[ "$(bal "$NA" "$user" "$denom")" = "$((a0 + 20000000))" ] || fail "a returned transfer reached A"
+pass "inbound 30 USDC held, returned by the guardian (ibc-hold-cancel $id): refunded on B, nothing on A"
 
 echo "--- setup-relayer.sh status"; R status | sed 's/^/    /'
 out=$(R balances) && echo "$out" | grep -q azetaphy && echo "$out" | grep -q uusdc || { echo "$out"; fail "balances"; }

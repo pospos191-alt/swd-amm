@@ -8,7 +8,7 @@ import { dirname } from 'node:path';
 import { timelockHint } from './timelockcli.js';
 import { devnetOf, auditArgs, roleChecks, laneChecks, capProblems, runnerProblems, STARTER_UNITS, MIN_RUNNERS, GOV_MODULE } from './bridgegate.js';
 import { evaluate, newState, report, snapshotOf, readEvents, readLocks, loadMonitorConfig, DEFAULTS, parseThresholds, parseWatchlist, markerKeyOf,
-  stateKeyOf, sealState, openState, applyMarks, countsLine, issueText, oracleFeedsOf } from './monitor.js';
+  stateKeyOf, sealState, openState, applyMarks, countsLine, issueText, oracleFeedsOf, govTimelockEvents, readGovProposals, fillEvmCalls } from './monitor.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -194,7 +194,7 @@ export async function monitorCommand({ opt, env, write, s, connectRpc }) {
   const hasTimelock = ADDR_RE.test(String(timelockAddr ?? ''));
   const hasOracle = ADDR_RE.test(String(oracleAddr ?? ''));
   if (!hasBridge && !hasTimelock && !hasOracle) {
-    write('notice: no bridge, timelock or oracle deployed (no address in the monitor config or the launch state): nothing to watch');
+    write('notice: no bridge deployed (and no timelock or oracle: no BridgeGuard / BridgeAirlock, timelock or oracle address in the monitor config or the launch state): nothing to watch');
     if (out) saveJson(out, { format: 'zetaphy-bridge-monitor/1', deployed: false, alerts: [], summary: { en: 'No bridge deployed.', th: 'ยังไม่มีสะพาน' } });
     return 0;
   }
@@ -263,6 +263,19 @@ export async function monitorCommand({ opt, env, write, s, connectRpc }) {
   }
   events.sort((a, b) => (a.source === 'lockbox') - (b.source === 'lockbox') || a.block - b.block);
   const now = Number((await provider.getBlock('latest')).timestamp);
+  // A call the gov module schedules (MsgEVMCall) leaves no log eth_getLogs returns: read the gov proposals
+  // that target the timelock from the node's REST API (--rest, the config's "rest", or <https rpc>/rest).
+  const rest = opt.rest ?? cfg.rest ?? (/^https:\/\/[^/]+\/?$/.test(String(rpc ?? '')) ? `${String(rpc).replace(/\/+$/, '')}/rest` : null);
+  const comet = opt['comet-rpc'] ?? cfg.cometRpc ?? (/^https:\/\/[^/]+\/?$/.test(String(rpc ?? '')) ? `${String(rpc).replace(/\/+$/, '')}/rpc` : null);
+  if (hasTimelock && rest) {
+    try {
+      const props = await readGovProposals(rest);
+      if (comet) await fillEvmCalls(props, comet); // the REST answer lacks MsgEVMCall's fields
+      events.push(...govTimelockEvents(props, timelockAddr, now));
+    } catch (e) {
+      write(`notice: gov proposals not read from ${rest} (${String(e?.message ?? e).slice(0, 80)}): calls a vote schedules in the timelock are not checked this run`);
+    }
+  }
   const { alerts, state: next } = evaluate({ events, snapshot, state, now, cfg: { ...rules, marker: markerAddr, labels: cfg.labels ?? {} } });
   next.lastBlock = Math.max(to, state.lastBlock ?? -1);
   // Marks: the callers evaluate() queued (and earlier failures), with the marker key.

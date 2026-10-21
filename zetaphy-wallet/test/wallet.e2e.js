@@ -168,6 +168,7 @@ async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
           if (method === 'eth_requestAccounts') return [c.account];
           if (method === 'eth_chainId') return c.chainId;
           if (method === 'eth_sendTransaction') return '0x' + 'ab'.repeat(32);
+          if (method === 'personal_sign' && c.personalSign) return c.personalSign;
           if (method === 'wallet_getSnaps' && c.snaps) return {};
           if (method === 'wallet_requestSnaps' && c.snaps) {
             const id = Object.keys(params)[0];
@@ -239,6 +240,17 @@ async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
           ? { chainId: 'zetaphy_77390-1', denom: 'azetaphy', exists: false, accountNumber: null, sequence: null, pubKeyType: null, quantumLockedTo: null }
           : { address: SEED_BECH32, hex: SEED_HEX_ADDR, chainId: 'zetaphy_77390-1', denom: 'azetaphy', exists: !!node.exists,
             accountNumber: node.exists ? '12' : null, sequence: node.exists ? '4' : null, pubKeyType: node.exists ? (node.pubKeyType === undefined ? 'mldsa44' : node.pubKeyType) : null, quantumLockedTo: null };
+    } else if (method === 'zetaphy_securityStatus') {
+      result = { securityCoreFrom: '1', securityPrecompile: '0x0000000000000000000000000000000000000901', qdayHeight: '0', revealDelay: '5',
+        latestHeight: '100', qdayActive: false, threatRegistry: '', threatGateEnabled: false, maxConsentSeconds: 86400,
+        ibcHoldDelaySeconds: 21600, ibcHoldGuardian: '', ibcHoldRules: [], ...node.security };
+    } else if (method === 'zetaphy_migration') {
+      result = { address: '', hex: params[0], migrated: false, controller: null, pendingController: null, postQuantum: false, exposed: false,
+        canCommitReveal: true, ...(node.migration?.[params[0].toLowerCase()] ?? {}) };
+    } else if (method === 'zetaphy_qdayCommitment') {
+      result = node.commitments?.[params[0].toLowerCase()] ?? { found: false, height: 0 };
+    } else if (method === 'zetaphy_consent') {
+      result = { until: node.consents?.[`${params[0]}|${params[1]}`.toLowerCase()] ?? 0 };
     } else if (method === 'zetaphy_sendCosmosTx') {
       sent.push(params[0]);
       result = { txHash: createHash('sha256').update(Buffer.from(params[0].slice(2), 'hex')).digest('hex').toUpperCase(), code: node.code ?? 0, log: node.log ?? '' };
@@ -1535,6 +1547,96 @@ test('vaccine: every refusal and warning shows the code fact, its evidence (repo
   await page.click('#token-review');
   await statusMatches(page, /Not signed: .*Evidence: none stored/);
   assert.equal(sent.length, 0);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// ---- security core: prepare for Q-day (commit–reveal from MetaMask) and the threat gate's consent ----
+test('Q-day card: status, the MetaMask account checked, commit then reveal with a signature made only in MetaMask; consent card', async () => {
+  const { secp256k1 } = await import('@noble/curves/secp256k1.js');
+  const { qdayRevealText, qdayCommitment, qdaySalt, consentCall, hexToBytes: h2b } = await import('../vendor/pqwallet.js');
+  const key = new Uint8Array(32).fill(7);
+  const pub = secp256k1.getPublicKey(key, false);
+  const owner = '0x' + bytesToHex(keccak_256(pub.slice(1)).slice(12));
+  const text = qdayRevealText({ owner, controller: SEED_HEX_ADDR });
+  const msg = new TextEncoder().encode(text);
+  const digest = keccak_256(new Uint8Array([...new TextEncoder().encode(`\x19Ethereum Signed Message:\n${msg.length}`), ...msg]));
+  const rs = secp256k1.sign(digest, key, { prehash: false, format: 'recovered' });
+  const sig = new Uint8Array(65); sig.set(rs.slice(1), 0); sig[64] = rs[0] + 27;
+  const salt = qdaySalt(sig);
+  const commitment = qdayCommitment({ publicKey: secp256k1.getPublicKey(key, true), controller: SEED_HEX_ADDR, salt });
+  const node = { exists: true, security: { qdayHeight: '500', latestHeight: '100' }, migration: {}, commitments: {}, consents: {} };
+  const { page, context, errors, outside, sent } = await importedPage(node, { ethereum: { account: owner, chainId: '0x12e4e', personalSign: '0x' + bytesToHex(sig) } });
+
+  await page.click('#qd-check');
+  await page.waitForFunction(() => !document.getElementById('qd-result').hidden);
+  assert.match(await page.textContent('#qd-status'), /Q-day: block 500 \(now 100\)/);
+  assert.match(await page.textContent('#qd-result'), /never used on chain/);
+  assert.ok(!(await page.isHidden('#qd-recover')), 'the commit–reveal steps are offered');
+
+  // Step 1: MetaMask signs the text (personal_sign, nothing sent from it); this wallet sends the commitment.
+  await page.click('#qd-commit');
+  await statusMatches(page, /Commitment recorded/);
+  const ps = await page.evaluate(() => window.__eth.filter((c) => c.method === 'personal_sign').at(-1).params);
+  assert.equal(new TextDecoder().decode(h2b(ps[0])), text);
+  assert.ok(!(await ethCalls(page)).includes('eth_sendTransaction'), 'the old key sends nothing');
+  const c1 = decodeSent(sent.at(-1)).msg;
+  assert.equal(c1.typeUrl, '/zetaphy.pq.v1.MsgQDayCommit');
+  assert.ok(Buffer.from(c1.value).toString('hex').endsWith(bytesToHex(commitment)), 'the commitment of this owner, this wallet and the salt');
+
+  // Step 2 before Q-day: refused before anything is signed.
+  const n = sent.length;
+  await page.click('#qd-reveal');
+  await statusMatches(page, /opens at Q-day/);
+  assert.equal(sent.length, n);
+  // After Q-day, once the commitment is old enough.
+  Object.assign(node.security, { qdayActive: true, latestHeight: '600' });
+  node.commitments['0x' + bytesToHex(commitment)] = { found: true, height: '120' };
+  await page.click('#qd-reveal');
+  await statusMatches(page, /Revealed/);
+  const r = decodeSent(sent.at(-1)).msg;
+  assert.equal(r.typeUrl, '/zetaphy.pq.v1.MsgQDayReveal');
+  const rv = Buffer.from(r.value).toString('hex');
+  assert.ok(rv.includes(bytesToHex(salt)) && rv.includes(bytesToHex(sig)), 'salt and signature');
+
+  // Consent: from this wallet (MsgEVMCall to 0x…0901) and from MetaMask (an EVM tx).
+  const target = '0x00000000000000000000000000000000005Ca400';
+  await page.fill('#cs-target', target);
+  assert.ok(await page.isDisabled('#cs-send'), 'needs the risk ticked');
+  await page.check('#cs-ok');
+  await page.click('#cs-send');
+  await visible(page, '#cs-result');
+  const m = decodeMsgEVMCall(decodeSent(sent.at(-1)).msg.value);
+  assert.equal(m.to, '0x0000000000000000000000000000000000000901');
+  assert.equal('0x' + bytesToHex(m.data), '0x' + bytesToHex(consentCall(target, 3600).data));
+  await page.check('#cs-ok');
+  await page.click('#cs-send-mm');
+  await statusMatches(page, /Consent sent/);
+  const tx = await page.evaluate(() => window.__eth.filter((c) => c.method === 'eth_sendTransaction').at(-1).params[0]);
+  assert.equal(tx.to, '0x0000000000000000000000000000000000000901');
+  assert.equal(tx.data, '0x' + bytesToHex(consentCall(target, 3600).data));
+
+  await page.click('#lang');
+  assert.equal(await page.textContent('#qday-card h2'), 'เตรียมพร้อมสำหรับ Q-day');
+  assert.deepEqual(outside, []);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('vaccine + consent: an enforced flag is refused (and the consent card is filled in); with consent on chain it is a warning and can be sent', async () => {
+  const node = { exists: true, registry: REGISTRY, flags: { fingerprint: [], code: [], address: [TOKEN], reason: 6 }, consents: {} };
+  const { page, context, errors, sent } = await importedPage(node);
+  await setRegistry(page, REGISTRY);
+  await tokenTransferReview(page);
+  await statusMatches(page, /Not signed: .* is flagged .*unless you consent first/);
+  assert.equal((await page.inputValue('#cs-target')).toLowerCase(), TOKEN, 'the consent card is filled in');
+  node.consents[`${SEED_HEX_ADDR}|${TOKEN}`.toLowerCase()] = Math.floor(Date.now() / 1000) + 3600;
+  await page.click('#token-review');
+  await visible(page, '#token-confirm');
+  assert.match(await page.textContent('#token-confirm .vaccine-note'), /has an enforced flag .* but you consented/);
+  await page.click('#confirm-token');
+  await visible(page, '#token-result');
+  assert.equal(sent.length, 1);
   assert.deepEqual(errors, []);
   await context.close();
 });

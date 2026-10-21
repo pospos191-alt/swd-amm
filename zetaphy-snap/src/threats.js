@@ -113,6 +113,8 @@ const NAMED = Object.fromEntries([
   ['safeTransferFrom(address,address,uint256,uint256,bytes)', 1, 'recipient'],
   ['safeBatchTransferFrom(address,address,uint256[],uint256[],bytes)', 1, 'recipient'],
   ['approve(address,address,uint160,uint48)', 1, 'spender'], // Permit2 AllowanceTransfer
+  // ZETAPHY security precompile 0x…0901: consent to call `target` past the chain's threat gate
+  ['consent(address,uint64)', 0, 'consent'],
 ].map(([sig, arg, role]) => [selector(sig), { arg, role }]));
 
 // Batches decoded here: each inner call is read like a top-level one.

@@ -8,7 +8,8 @@
 //     ZetaphyTimelock (the DEX factory's two-step included), the gov module is its only proposer/canceller,
 //     anyone executes, the deployer keeps nothing; the guardian pauses Neuro at once but cannot unpause; a real
 //     gov vote schedules NeuroControl.unpause() through the timelock (zetaphy timelock schedule --proposal-out),
-//     anyone executes it after the delay (zetaphy timelock execute), and the bridge monitor reports both
+//     anyone executes it after the delay (zetaphy timelock execute, the call given in full: a MsgEVMCall's logs
+//     are not in eth_getLogs), and the bridge monitor reports both (the vote from the REST API, the run from logs)
 // The config files it writes are restored afterwards (the committed ones stay placeholders).
 //
 //   ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet
@@ -72,7 +73,8 @@ async function hasCode(a, what) {
 before(() => {
   for (const rel of TOUCHED) saved.set(rel, existsSync(join(ROOT, rel)) ? readFileSync(join(ROOT, rel)) : null);
   writeFileSync(keyFile, deployer.privateKey + '\n', { mode: 0o600 });
-  execFileSync(join(ROOT, 'zetaphy-network/scripts/devnet.sh'), [chainHome, String(PORT), deployer.address, user.address, guardian.address], { stdio: 'inherit', env, cwd: root });
+  // REST=1: the Cosmos REST API (+103), where the monitor reads gov proposals that schedule in the timelock
+  execFileSync(join(ROOT, 'zetaphy-network/scripts/devnet.sh'), [chainHome, String(PORT), deployer.address, user.address, guardian.address], { stdio: 'inherit', env: { ...env, REST: '1' }, cwd: root });
   mkdirSync(join(root, 'user-home'), { recursive: true, mode: 0o700 });
   writeFileSync(join(root, 'user-home', 'worker.key'), user.privateKey + '\n', { mode: 0o600 });
   provider = new JsonRpcProvider(RPC, 77390n, { staticNetwork: true, pollingInterval: 500 });
@@ -131,7 +133,7 @@ test('launch: every contract deployed and every config written with real address
   assert.equal(await new Contract(o.pythRelay, art('zetaphy-network', 'ZetaphyPythRelay').abi, provider).isRelayer(user.address), true);
   await assert.rejects(oracle.price(o.zetaAsset), (e) => e.revert?.name === 'TwapUnavailable', 'no price before the TWAP window has filled');
   assert.match(r.out, /Governance: the deployer is the admin/);
-  assert.match(r.out, /gov\.sh neuro approve-skill/);
+  assert.match(r.out, /zetaphy timelock schedule/);
 
   // DEX web config
   const dex = JSON.parse(read('zetaphy-dex/web/deployments.json'));
@@ -293,23 +295,25 @@ test('--handover: every admin role to the timelock; the guardian pauses at once;
   }
   assert.equal(st.status, 'PROPOSAL_STATUS_PASSED', `${st.status} ${st.failed_reason ?? ''}`);
   assert.equal(await tl.getOperationState(id), 1n, 'Waiting');
-  const early = await zcli(['timelock', 'execute', id, '--timelock', o.timelock, '--from-block', String(o.timelockBlock)]);
+  // a call the gov module scheduled leaves no log eth_getLogs returns: it is executed with the call given in full
+  const call = ['--to', o.neuroControl, '--sig', 'unpause()'];
+  assert.match(s1.out, new RegExp(`zetaphy timelock execute ${id} --timelock ${o.timelock} --to ${o.neuroControl} --data 0x3f4ba83a`));
+  const early = await zcli(['timelock', 'execute', id, '--timelock', o.timelock, ...call]);
   assert.notEqual(early.code, 0);
   assert.match(early.out, /is Waiting until/);
   const status = await zcli(['timelock', 'status', id, '--timelock', o.timelock, '--from-block', String(o.timelockBlock)]);
   assert.match(status.out, /Waiting ETA/);
-  assert.match(status.out, /unpause\(\)/);
   for (let i = 0; i < 40 && (await tl.getOperationState(id)) !== 2n; i++) await sleep(1000);
-  const ex = await zcli(['timelock', 'execute', id, '--timelock', o.timelock, '--from-block', String(o.timelockBlock)]);
+  const ex = await zcli(['timelock', 'execute', id, '--timelock', o.timelock, ...call]);
   assert.equal(ex.code, 0, ex.out);
   assert.equal(await control.paused(), false, 'unpaused by the timelock, run by a plain key');
 
   // the bridge monitor saw the schedule (with the function's name and when it could run) and the run
   const rep = join(root, 'monitor.json');
-  const m = await zcli(['bridge', 'monitor', '--launch-state', stateFile, '--from-block', String(o.timelockBlock), '--out', rep]);
+  const m = await zcli(['bridge', 'monitor', '--launch-state', stateFile, '--from-block', String(o.timelockBlock), '--out', rep, '--rest', `http://127.0.0.1:${PORT + 103}`, '--comet-rpc', `http://127.0.0.1:${PORT + 100}`]);
   assert.equal(m.code, 0, m.out);
   const alerts = JSON.parse(readFileSync(rep, 'utf8')).alerts;
-  assert.ok(alerts.some((a) => a.rule === 'timelock-scheduled' && /neuroControl .*unpause\(\), executable after/.test(a.en)), JSON.stringify(alerts.map((a) => a.en)));
+  assert.ok(alerts.some((a) => a.rule === 'timelock-proposal' && new RegExp(`gov proposal ${pid} .*schedule neuroControl ${o.neuroControl} unpause\\(\\) \\(delay 30 s\\)`).test(a.en)), JSON.stringify(alerts.map((a) => a.en)));
   assert.ok(alerts.some((a) => a.rule === 'timelock-executed' && /unpause\(\)/.test(a.en)));
   assert.ok(alerts.some((a) => a.rule === 'timelock-delay'), 'the handover set the delay (MinDelayChange 0 -> 30)');
 

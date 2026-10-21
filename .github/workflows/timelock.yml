@@ -6,7 +6,8 @@
 #             the calldata for a multisig (in the run summary), and a MsgEVMCall proposal file for
 #             the gov module (artifact "timelock-proposal": submit it on the node, then vote)
 #   execute   run an operation whose delay has passed (anyone may; the deployer key only pays gas:
-#             after the handover it holds no role)
+#             after the handover it holds no role). For a call a gov vote scheduled, also give to, sig/args
+#             (or data) and salt as for schedule: such calls leave no log the node returns
 #   cancel    what a canceller must send (calldata in the summary)
 #
 # Nothing secret is printed: calls, ids and calldata are public on-chain anyway. The deployer key
@@ -59,7 +60,7 @@ on:
         type: string
         default: ''
       id:
-        description: "status / execute / cancel: the operation id 0x… (64 hex)"
+        description: "status / execute / cancel: the operation id 0x… (64 hex); execute of a gov-scheduled call: also to, sig, args, salt"
         required: false
         type: string
         default: ''
@@ -156,7 +157,15 @@ jobs:
           a=(timelock "$ACTION")
           case "$ACTION" in
             status) [ -n "$ID" ] && a+=("$ID") ;;
-            execute|cancel) a+=("$ID") ;;
+            cancel) a+=("$ID") ;;
+            execute)
+              a+=("$ID")
+              # a call a gov vote scheduled leaves no log the node returns: give it in full (as schedule printed)
+              if [ -n "$TO" ]; then
+                a+=(--to "$TO")
+                if [ -n "$DATA" ]; then a+=(--data "$DATA"); else a+=(--sig "$SIG"); [ -n "$ARGS" ] && a+=(--args "$ARGS"); fi
+                [ -n "$SALT" ] && a+=(--salt "$SALT")
+              fi ;;
             schedule)
               a+=(--to "$TO" --proposal-out "$RUNNER_TEMP/proposal/timelock-proposal.json")
               if [ -n "$DATA" ]; then a+=(--data "$DATA"); else a+=(--sig "$SIG"); [ -n "$ARGS" ] && a+=(--args "$ARGS"); fi

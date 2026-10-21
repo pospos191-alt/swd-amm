@@ -45,6 +45,10 @@
 //                                      Without --keys the node is trusted for validator powers and vote keys
 //   zetaphy pq export-vote-keys [--height h] [--rpc <CometBFT RPC>] > pinned.json   validator powers and vote keys, to pin
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
+//   zetaphy security status | migration [<address>] | qday-commit | qday-reveal | consent <target 0x…> <seconds> [--as <owner>]
+//                    | ibc-holds | ibc-hold-cancel <id>   the chain's security core (docs/SECURITY-CORE.md): Q-day migration
+//                                      (commit–reveal for this machine's ECDSA key -> the pq native account), threat-gate consent,
+//                                      held IBC transfers (src/securitycli.js)
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
 //                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
@@ -182,6 +186,7 @@ import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, for
   DEFAULT_STAKING_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, DEFAULT_PRECOMPILE_GAS_LIMIT, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT } from './src/pqtx.js';
 import { createLaneWatcher, laneControl } from './src/lane.js';
 import { verifyBlock, exportVoteKeys } from './src/pqcert.js';
+import { securityCommand } from './src/securitycli.js';
 import { identityCommand } from './src/identitycli.js';
 import { bridgeCommand } from './src/bridgecli.js';
 import { timelockCommand, timelockHint } from './src/timelockcli.js';
@@ -637,6 +642,10 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     settings({ ...opt, pqFactory: address }, {});
     write(`QuantumWalletFactory ${address}`);
     return 0;
+  }
+
+  if (group === 'security') {
+    return securityCommand({ cmd, rest, opt, env, write, s, connectRpc, loadOrCreatePq, loadOrCreateKey });
   }
 
   if (group === 'pq' && cmd === 'native') {

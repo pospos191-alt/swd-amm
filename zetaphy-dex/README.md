@@ -207,3 +207,126 @@ node cli.js deploy ... --governance <0xMultisig>     # หรือเรีย�
 ## สัญญาอนุญาต
 
 MIT (ดู `LICENSE`) เขียนใหม่ทั้งหมด ไม่มีโค้ดจาก Uniswap (GPL-3.0) ใช้เพียงสูตรคณิตศาสตร์ที่เผยแพร่ใน whitepaper
+
+## DLMM (สภาพคล่องแบบแบ่งช่องราคา / bins) — ⚠️ ยังไม่ผ่านการตรวจสอบความปลอดภัย (UNAUDITED)
+
+> ⚠️ **ส่วนนี้ใหม่ ยังไม่ผ่าน audit ใช้บน testnet เท่านั้น** เหรียญทดสอบไม่มีมูลค่า ไม่ใช่คำแนะนำการลงทุน
+
+DLMM คือพูลที่แบ่งสภาพคล่องเป็น **ช่องราคา (bin)** แต่ละช่องมีราคาคงที่ ผู้ให้สภาพคล่องเลือกช่วงราคาที่จะวางเหรียญเองได้
+(สภาพคล่องกระจุกตัว) เป็นการพอร์ตการออกแบบ DLMM ของเราเองบน Solana (`programs/swd_amm/src/dlmm.rs`
+และค่าธรรมเนียมตามความผันผวนจาก `swdmm_math.rs`) มาเป็น Solidity **เขียนใหม่ทั้งหมดภายใต้ MIT**
+(ตรวจแล้ว: Trader Joe Liquidity Book `traderjoe-xyz/joe-v2` ใช้สัญญาอนุญาต MIT แต่ **ไม่ได้คัดลอกโค้ดของใครมา**)
+แยกจาก AMM x·y = k เดิมโดยสมบูรณ์ (ไม่ได้แก้ Factory / Pair / Router เดิม)
+
+| ไฟล์ | หน้าที่ |
+|---|---|
+| `contracts/dlmm/DlmmMath.sol` | คณิตศาสตร์ fixed-point 128.128 (ราคาของแต่ละ bin, mulDiv 512 บิต) และ bitmap หา bin ถัดไปที่มีสภาพคล่อง |
+| `contracts/dlmm/ZetaphyDlmmPair.sol` | พูล DLMM (bins, swap ข้าม bin, ฝาก/ถอน, ค่าธรรมเนียม, บัญชีหุ้นต่อ bin) และ `ZetaphyDlmmPairDeployer` (เก็บโค้ดของพูล) |
+| `contracts/dlmm/ZetaphyDlmmFactory.sol` | สร้างพูล 1 พูลต่อ (คู่เหรียญ, bin step) และค่าที่ governance ตั้งได้ |
+| `contracts/dlmm/ZetaphyDlmmRouter.sol` | ฟังก์ชันที่ผู้ใช้เรียก: เพิ่ม/ถอนสภาพคล่องเป็นช่วง, swap (exact in / exact out, หลายทอด), เหรียญหลัก, ตรวจ Neuro |
+| `contracts/test/DlmmTestHelpers.sol` | สัญญาสำหรับเทสต์เท่านั้น |
+| `dlmm-cli.js` | deploy DLMM (factory + router + preset เริ่มต้น) และตั้งค่า governance |
+| `web/dlmm.js`, `web/lib/dlmm.js` | แท็บ DLMM ในหน้าเว็บ (เลือกคู่/bin step, ดู bin รอบราคา, เพิ่ม/ถอนสภาพคล่องเป็นช่วง, swap) |
+| `test/dlmm*.test.js`, `test/web.dlmm.e2e.js`, `test/devnet.dlmm.integration.js` | เทสต์ (ดูด้านล่าง) |
+
+**การทำงาน**
+
+- **ราคาของ bin:** bin หมายเลข `id` มีราคา `(1 + binStep/10000)^id` (หน่วย: tokenY ต่อ tokenX แบบหน่วยเล็กสุด ไม่สนทศนิยม)
+  `binStep` เป็น bps เช่น 10 = ห่างกัน 0.1% ต่อ bin คำนวณแบบ fixed-point 128.128 ราคาอยู่ในช่วง 2⁻⁹⁶ ถึง 2⁹⁶
+  (bin ที่อยู่นอกช่วงนี้ใช้ไม่ได้) tokenX คือเหรียญที่ที่อยู่ (address) น้อยกว่า
+- **active bin** คือราคาปัจจุบัน: bin ที่สูงกว่าราคาถือ X อย่างเดียว (ขาย X เมื่อราคาขึ้นถึง), bin ที่ต่ำกว่าถือ Y อย่างเดียว,
+  active bin ถือได้ทั้งสองอย่าง การฝากต้องเป็นไปตามกฎนี้
+- **swap** เริ่มที่ active bin แล้วข้ามไปทีละ bin ที่มีสภาพคล่อง (ข้าม bin ว่างได้ทันทีด้วย bitmap) ในแต่ละ bin ราคาไม่ขยับ
+  ข้ามได้สูงสุด 100 bin ต่อ swap (ถ้าต้องมากกว่านั้นให้แบ่งเป็นหลายครั้ง) ถ้าสภาพคล่องไม่พอ ธุรกรรมจะ revert ทั้งหมด (ไม่มีการเติมบางส่วน)
+- **การปัดเศษเข้าข้างพูลเสมอ:** จำนวนที่ผู้ใช้จ่ายและค่าธรรมเนียมปัดขึ้น จำนวนที่ได้รับและหุ้นที่ได้ปัดลง
+- **หุ้น (shares) แยกต่อ bin** (บัญชีภายในแบบ ERC-1155 ไม่มี callback): ฝากครั้งแรกใน bin ว่างได้หุ้น = `x·ราคา + y·2¹²⁸`
+  ฝากครั้งต่อไปได้หุ้นตามสัดส่วน และ bin จะรับเหรียญตามสัดส่วน X:Y ที่มีอยู่เท่านั้น ส่วนเกินคืนให้ผู้ฝาก
+  ถอนได้ส่วนแบ่งของ bin ตามสัดส่วนหุ้น ฝาก/ถอน/โอนได้สูงสุด 100 bin ต่อครั้ง
+- **ค่าธรรมเนียม** = ค่าพื้นฐาน (base fee ตาม preset ของ bin step) + **ค่าตามความผันผวน** (volatility fee: ยิ่งราคาเพิ่งวิ่งผ่านหลาย bin
+  ยิ่งสูง ค่อย ๆ ลดลงตามเวลา มีเพดาน) รวมไม่เกิน 10% ค่าธรรมเนียมอยู่ใน bin ที่เกิดการซื้อขาย (เป็นของ LP ของ bin นั้น)
+  ยกเว้น **protocol share** (ค่าเริ่มต้น 0, สูงสุด 50% ของค่าธรรมเนียม) ซึ่งใครก็สั่ง `collectProtocolFees()` ให้ส่งไปที่ `feeTo` ได้
+- **บัญชีภายใน:** พูลจำยอดของตัวเอง เหรียญที่โอนเข้ามาตรง ๆ (donation) ไม่เปลี่ยน bin หรือราคา `skim(to)` ดึงส่วนเกินออก
+- **ไม่มี flash swap และไม่มี callback** ทุกฟังก์ชันที่เปลี่ยนสถานะมี reentrancy lock
+
+**Router** (`ZetaphyDlmmRouter`) ทุกฟังก์ชันมี `deadline` และขอบเขต slippage ของผู้ใช้:
+
+- `addLiquidity(params)` / `addLiquidityNATIVE(params)`: ระบุ bin แบบ **สัมพัทธ์กับ active bin** (`deltaIds`) พร้อมจำนวน X และ Y ของแต่ละ bin
+  (รูปแบบการกระจาย เช่น spot / curve / bid-ask เป็นเรื่องของหน้าเว็บ), `activeIdDesired` + `idSlippage` (ราคาเลื่อนได้กี่ bin),
+  `amountXMin` / `amountYMin` (ยอดที่ถูกใช้จริงขั้นต่ำ) ส่วนที่ bin ไม่รับคืนให้ทันที (เหรียญหลักคืนเป็นเหรียญหลัก)
+  ถ้าพูลยังว่างทั้งพูล router จะตั้ง active bin เป็น `activeIdDesired` ก่อนฝากในธุรกรรมเดียวกัน (**ผู้ฝากรายแรกเป็นผู้กำหนดราคา**)
+- `removeLiquidity` / `removeLiquidityNATIVE`: ต้องเรียก `pair.setApprovalForAll(router, true)` ก่อน (อนุญาตให้ router เผาหุ้นของเรา;
+  ยกเลิกได้ด้วย `false`) พร้อม `amountXMin` / `amountYMin`
+- `swapExactTokensForTokens`, `swapTokensForExactTokens`, `swapExactNATIVEForTokens`, `swapNATIVEForExactTokens`,
+  `swapExactTokensForNATIVE`, `swapTokensForExactNATIVE`: เส้นทาง `path = (binSteps[], tokens[])` หลายทอดได้
+  ใบเสนอราคา: `getAmountsOut` / `getAmountsIn` (หรือ `pair.getSwapOut` / `pair.getSwapIn`)
+- เหรียญหลัก (NATIVE) ใช้ `WNATIVE` แบบเดียวกับ router เดิม: บน ZETAPHY คือ precompile `0xEeee…EEeE` (ทดสอบบน devnet จริงแล้ว)
+- **ไม่รองรับเหรียญหักค่าธรรมเนียมเมื่อโอน** (router ปฏิเสธด้วย `FeeOnTransferNotSupported`) และ **ไม่รองรับเหรียญ rebase**
+  (ถ้ายอดของพูลลดลงเอง พูลจะไม่ยอมจ่ายเกินที่ถืออยู่: `BalanceBelowReserves`)
+
+**Neuro:** กฎเดียวกับ router เดิม เมื่อ governance ตั้ง `dlmmFactory.setThreatRegistry(<ThreatRegistry>)` router ปฏิเสธการซื้อ (swap เข้า)
+และการเพิ่มสภาพคล่องของเหรียญที่ธง "มีผลบังคับ" แล้ว (`TokenEnforced(token, reason)`) และ fail closed (`RegistryUnavailable`)
+ถ้า registry ไม่ตอบ การขายเป็นเหรียญหลักและการถอนสภาพคล่องทำได้เสมอ ผลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา
+
+**governance (บอกตามจริง):** ฟังก์ชันผู้ดูแลทั้งหมดอยู่ใต้ **บทบาทเดียว `governance`** จึงส่งมอบทั้งหมดให้ TimelockController
+(หรือ multisig) ได้ในสองขั้น: `setGovernance(<timelock>)` แล้วให้ timelock execute `acceptGovernance()`
+
+- *ทำได้:* เปิด/แก้/ปิด preset (bin step + ค่าธรรมเนียม) สำหรับ **พูลใหม่**, ตั้ง `feeTo`, ตั้ง protocol share (≤ 50% ของค่าธรรมเนียม)
+  ของพูลใหม่และพูลที่มีอยู่, ตั้ง/ปิด `threatRegistry` (ซึ่งหยุดการซื้อผ่าน router ได้ถ้า registry หยุดตอบ เหมือน router เดิม),
+  `router.sweep(to)` (เหรียญหลักที่หลงเข้า router)
+- *ทำไม่ได้:* ย้ายเงินของใคร หยุดพูล เปลี่ยนค่าธรรมเนียมหรือ bin step ของพูลที่สร้างแล้ว หรืออัปเกรดสัญญา (ไม่มี proxy)
+
+**Deploy และหน้าเว็บ**
+
+```bash
+cd zetaphy-dex
+# deploy factory + router (WNATIVE = precompile บน ZETAPHY) + preset 1/10/25/100 bps
+# แล้วเพิ่ม contracts.dlmmFactory / dlmmRouter ลงไฟล์ deployments ของ cli.js และ (ถ้าใส่ --web) web/deployments.json
+node dlmm-cli.js deploy --rpc <url> --key-file <file> [--web] [--governance <timelock>] [--fee-to <addr>]
+node dlmm-cli.js status --rpc <url>
+node dlmm-cli.js set-registry <ThreatRegistry|0x0> --rpc <url> --key-file <file>
+```
+
+กฎของไฟล์กุญแจเหมือน `cli.js` (ไฟล์เท่านั้น chmod 600, ไม่รับกุญแจทาง command line) และ deploy ได้เฉพาะเชน 77390 ยกเว้นใส่ `--any-chain`
+preset เริ่มต้น: bin step 1 / 10 / 25 / 100 bps, ค่าธรรมเนียมพื้นฐานเท่ากับ bin step, ค่าตามความผันผวนสูงสุด +50 / +100 / +150 / +300 bps
+
+แท็บ **DLMM** ในหน้าเว็บอ่าน `contracts.dlmmFactory` / `contracts.dlmmRouter` จาก `web/deployments.json` (ไม่มี = แสดงว่ายังไม่ได้ deploy)
+ใช้กระเป๋า, RPC, การตรวจ Neuro (ปฏิเสธเหรียญที่ธงมีผลบังคับ เตือนและให้ติ๊กยืนยันเมื่อมีธง) และค่า slippage/deadline เดียวกับหน้าเดิม
+อนุญาตเหรียญเท่าที่จะใช้พอดี และขอ `setApprovalForAll` เฉพาะตอนถอน (มีปุ่มยกเลิกสิทธิ์)
+
+**ทดสอบ**
+
+```bash
+cd zetaphy-dex
+npm run build && npm test     # รวมเทสต์ DLMM: dlmm.math / dlmm / dlmm.security / dlmm.neuro / dlmm.fuzz / dlmm.web-lib / dlmm.cli
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:web                          # รวมแท็บ DLMM (web.dlmm.e2e.js)
+ZDLMM_FUZZ_SEED=1,2,3,4 ZDLMM_FUZZ_STEPS=200 node --test test/dlmm.fuzz.test.js     # fuzz เพิ่ม (seed หลายค่าได้)
+ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet:dlmm  # บน devnet จริง (พอร์ต ZDLMM_DEVNET_PORT, ค่าเริ่มต้น 24745)
+```
+
+ครอบคลุม: ราคาเทียบค่าที่คำนวณแบบแม่นยำ ขอบช่วงราคา mulDiv 512 บิต bitmap, swap ตรงกับโมเดล BigInt ทุก wei, exact-out ที่น้อยที่สุด,
+ค่าธรรมเนียมตามความผันผวน, protocol fee, หลายทอด, เหรียญหลัก, slippage/deadline, การฝากครั้งแรก, reentrancy, donation,
+เหรียญหักค่าธรรมเนียม/rebase, bin สุดขอบ, ขีดจำกัดการข้าม bin, Neuro และ fuzz ที่ตรวจ invariant ทุกขั้น
+(ยอดรวมของ bin = reserve, พูลถือเหรียญครบ, หุ้นรวม = totalSupply, มูลค่าต่อหุ้นของ bin ไม่ลดลง)
+
+**แก๊ส (โดยประมาณ)**
+
+| การทำงาน | EVM ในหน่วยความจำ (execution gas ไม่รวม 21,000 + calldata) | devnet จริง (gasUsed ของธุรกรรม, ผ่าน precompile เหรียญหลัก) |
+|---|---|---|
+| swap ภายใน 1 bin | ~60,700 | 143,594 (ZTPHY → tUSD), 139,044 (tUSD → ZTPHY) |
+| swap exact-out (1 bin, คืนเงินทอน) | — | 160,986 |
+| swap ข้าม 6 / 21 / 50 bin | ~106,800 / ~243,300 / ~508,900 | 179,551 (25 ZTPHY ข้ามหลาย bin) |
+| swap ข้ามสูงสุด (100 ครั้ง) | ~1,000,700 | — |
+| swap 2 ทอด | — | 198,427 |
+| เพิ่มสภาพคล่องใน bin ใหม่ | ~77,000–80,000 ต่อ bin | 5,458,820 (21 bin รวมสร้างพูลใหม่ ~3.6M) |
+| ถอนสภาพคล่อง 21 bin | — | 455,540 |
+
+(คอลัมน์ devnet ใช้ preset เริ่มต้นของ `dlmm-cli.js` ซึ่งมีค่าธรรมเนียมตามความผันผวน; คอลัมน์ในหน่วยความจำใช้ preset ไม่มีค่าตามความผันผวน)
+
+**ยังไม่ได้ทำ:** TWAP/oracle ของ DLMM (ห้ามใช้ราคา active bin เป็น oracle), เส้นทาง swap อัตโนมัติข้ามหลายพูลในหน้าเว็บ (แท็บ DLMM swap ภายในพูลที่เลือก; router รองรับหลายทอดแล้ว)
+และยังไม่ได้ deploy บน testnet
+
+**ความเสี่ยง (สำหรับผู้ใช้):** ยังไม่ผ่าน audit; ผู้ให้สภาพคล่องรายแรกของพูลเป็นผู้กำหนดราคาเริ่มต้น ตรวจ active bin ก่อนฝากเสมอ
+(ตั้ง `idSlippage` ให้แคบ); สภาพคล่องที่อยู่ในช่วงราคาแคบจะกลายเป็นเหรียญอีกฝั่งทั้งหมดเมื่อราคาวิ่งผ่าน (impermanent loss
+สูงกว่าพูล x·y = k ได้); swap ใหญ่ที่ต้องข้ามมากกว่า 100 bin ต้องแบ่งทำหลายครั้ง; ตั้ง slippage ให้แคบเพราะถูก front-run / sandwich ได้;
+`setApprovalForAll(router)` ให้สิทธิ์ router เผาหุ้นทุก bin ของพูลนั้นในนามเรา (router ใช้กับผู้เรียกเองเท่านั้น) ยกเลิกได้เมื่อเลิกใช้
+รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม

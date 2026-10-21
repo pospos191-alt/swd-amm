@@ -25,6 +25,14 @@
 #     remove-defender 0x… | release 0x… | set-max-bodies N | set-max-regrow N | set-community-fund 0x…
 #     approve-chain KEY | remove-chain KEY   (chain keys NeuroJobs takes requests for, e.g. bsc)
 #     set-challenge-bond ZETAPHY | set-challenge-window SECONDS | set-defender-timeout SECONDS
+#   ---- security core (docs/SECURITY-CORE.md) ----
+#   gov.sh security                                      Q-day, threat gate and IBC hold settings in force
+#   gov.sh qday <height> [reveal-delay-blocks]           propose Q-day (0 = unschedule): ECDSA-signed txs refused from it
+#   gov.sh threat-gate <ThreatRegistry 0x…> on|off       propose the threat gate (enforced flags need the sender's consent)
+#   gov.sh ibc-hold <delay-seconds> [guardian]           propose the IBC large-transfer hold delay and guardian
+#   gov.sh ibc-hold-rule <denom|*> <min-amount> <bps>    propose when an inbound transfer is held (0 0 removes the rule)
+#   gov.sh ibc-holds                                     inbound transfers waiting
+#   gov.sh ibc-hold-cancel <id>                          the guardian (FROM) returns a held transfer to its sender
 #   gov.sh ibc-usdc-denom <channel>                      USDC from Noble via that channel: ibc/<hash>, ERC-20 0x…
 #   gov.sh ibc-usdc-ratelimit <channel> [send%] [recv%] [hours]   cap USDC on it, or change the cap (default 1 1 24)
 #   gov.sh ibc-usdc-erc20 <channel>                      USDC as an ERC-20 (MetaMask, explorer, DEX token lists)
@@ -190,6 +198,42 @@ case "${1:-}" in
     send tx pq-vote-key
     echo "vote key registered" ;;
 
+  # ---- security core (docs/SECURITY-CORE.md) --------------------------------
+  security)
+    rpc=${EVM_RPC:-http://127.0.0.1:8545}
+    curl -fsS "$rpc" -H 'content-type: application/json' \
+      --data '{"jsonrpc":"2.0","id":1,"method":"zetaphy_securityStatus","params":[]}' | jq .result ;;
+  qday)
+    h=${2:?height (0 = unschedule)}; d=${3:-}
+    [[ "$h" =~ ^[0-9]+$ ]] || { echo "height: a block number"; exit 1; }
+    if [ "$h" != 0 ]; then
+      now=$($ZETAPHYD --home "$NODE_HOME" --node "$NODE" status | jq -r '.sync_info.latest_block_height')
+      [ "$h" -gt "$((now + ${QDAY_MIN_NOTICE:-100}))" ] || { echo "Q-day must be well after the current block ($now): the vote must finish and people need time to migrate"; exit 1; }
+    fi
+    [ -z "$d" ] || [[ "$d" =~ ^[0-9]+$ ]] || { echo "reveal delay: a number of blocks"; exit 1; }
+    submit tx security-proposal qday "$h" $d --deposit "$DEPOSIT" ;;
+  threat-gate)
+    reg=${2:?ThreatRegistry 0x…}; v=${3:?on or off}
+    [[ "$reg" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "registry: 0x + 40 hex"; exit 1; }
+    [[ "$v" =~ ^(on|off)$ ]] || { echo "on or off"; exit 1; }
+    submit tx security-proposal threat-gate "$reg" "$v" --deposit "$DEPOSIT" ;;
+  ibc-hold)
+    d=${2:?delay in seconds, e.g. 21600 (6 h)}; g=${3:-}
+    [[ "$d" =~ ^[0-9]+$ ]] || { echo "delay: seconds"; exit 1; }
+    submit tx security-proposal ibc-hold "$d" $g --deposit "$DEPOSIT" ;;
+  ibc-hold-rule)
+    dn=${2:?denom (ibc/… or *)}; min=${3:?minimum amount in the base unit (0: none)}; bps=${4:?share of supply in basis points (0: none)}
+    [[ "$min" =~ ^[0-9]+$ && "$bps" =~ ^[0-9]+$ ]] || { echo "min-amount and bps: whole numbers"; exit 1; }
+    submit tx security-proposal ibc-hold-rule "$dn" "$min" "$bps" --deposit "$DEPOSIT" ;;
+  ibc-holds)
+    rpc=${EVM_RPC:-http://127.0.0.1:8545}
+    curl -fsS "$rpc" -H 'content-type: application/json' \
+      --data '{"jsonrpc":"2.0","id":1,"method":"zetaphy_ibcHolds","params":[]}' | jq .result ;;
+  ibc-hold-cancel)
+    id=${2:?hold id (gov.sh ibc-holds)}; [[ "$id" =~ ^[0-9]+$ ]] || { echo "id: a number"; exit 1; }
+    send tx ibc-hold-cancel "$id"
+    echo "held transfer $id returned: the relayer carries the error acknowledgement back and the source chain refunds the sender" ;;
+
   # ---- IBC: USDC from Noble (zetaphy-chain/ibc/README.md) ------------------
   ibc-usdc-denom|ibc-usdc-ratelimit|ibc-usdc-erc20|ibc-usdc-metadata)
     ch=${2:?ZETAPHY side channel, e.g. channel-0 (ibc/setup-relayer.sh status)}
@@ -285,5 +329,5 @@ case "${1:-}" in
           '{chainId:$c,address:$a,name:"USD Coin (Noble)",symbol:"USDC",decimals:6,extensions:{cosmosDenom:$dn,origin:"noble uusdc"}}' ;;
     esac ;;
   *)
-    sed -n '8,31p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,39p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

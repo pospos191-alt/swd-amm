@@ -17,6 +17,12 @@
 //   quantum lock an ECDSA (MetaMask) account sends an EVM tx to PQ_LOCK_ADDRESS with no value
 //                and the controller's 20-byte address as data; from then on its own key is
 //                refused and only that ML-DSA-44 account acts for it (MsgEVMCall.as_owner)
+//   security core (zetaphy-chain: zetaphy_security.go; docs/SECURITY-CORE.md)
+//               /zetaphy.pq.v1.MsgQDayCommit, MsgQDayReveal: the commit–reveal Q-day migration
+//               /zetaphy.pq.v1.MsgIBCHoldCancel: the guardian returns a held IBC transfer
+//               consent(target, seconds) on SECURITY_PRECOMPILE: go ahead past the threat gate
+//               JSON-RPC zetaphy_securityStatus, zetaphy_migration, zetaphy_qdayCommitment,
+//               zetaphy_consent, zetaphy_ibcHolds
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { keccak_256 } from '@noble/hashes/sha3.js';
@@ -32,6 +38,13 @@ export const MSG_UNDELEGATE_TYPE_URL = '/cosmos.staking.v1beta1.MsgUndelegate';
 export const MSG_WITHDRAW_REWARD_TYPE_URL = '/cosmos.distribution.v1beta1.MsgWithdrawDelegatorReward';
 export const MSG_EVM_CALL_TYPE_URL = '/zetaphy.pq.v1.MsgEVMCall';
 export const MSG_QUANTUM_LOCK_TYPE_URL = '/zetaphy.pq.v1.MsgQuantumLock';
+export const MSG_QDAY_COMMIT_TYPE_URL = '/zetaphy.pq.v1.MsgQDayCommit';
+export const MSG_QDAY_REVEAL_TYPE_URL = '/zetaphy.pq.v1.MsgQDayReveal';
+export const MSG_IBC_HOLD_CANCEL_TYPE_URL = '/zetaphy.pq.v1.MsgIBCHoldCancel';
+/** The security precompile: consent(target, seconds), consentUntil, threatGate, qday, migration, cancelIBCHold. */
+export const SECURITY_PRECOMPILE = '0x0000000000000000000000000000000000000901';
+/** A consent to the threat gate lasts at most a day. */
+export const MAX_CONSENT_SECONDS = 86400;
 /** An EVM tx to here (value 0, data = the controller's 20 bytes) quantum-locks its sender. */
 export const PQ_LOCK_ADDRESS = '0x0000000000000000000000000000000000005051';
 /** Cosmos EVM's staking and distribution precompiles (how a locked account stakes, through as_owner). */
@@ -147,6 +160,16 @@ export const encodeMsgEVMCall = ({ sender, to = '', value = 0n, data = new Uint8
     pb.bytes(4, data), pb.uint(5, gasLimit), pb.string(6, asOwner));
 
 /** zetaphy.pq.v1.MsgQuantumLock { string signer = 1; string owner = 2; string controller = 3; } */
+/** zetaphy.pq.v1.MsgQDayCommit { string signer = 1; bytes commitment = 2; } */
+export const encodeMsgQDayCommit = ({ signer, commitment }) => msg(pb.string(1, signer), pb.bytes(2, commitment));
+
+/** zetaphy.pq.v1.MsgQDayReveal { string signer = 1; string owner = 2; string controller = 3; bytes salt = 4; bytes signature = 5; } */
+export const encodeMsgQDayReveal = ({ signer, owner, controller, salt, signature }) =>
+  msg(pb.string(1, signer), pb.string(2, owner), pb.string(3, controller), pb.bytes(4, salt), pb.bytes(5, signature));
+
+/** zetaphy.pq.v1.MsgIBCHoldCancel { string signer = 1; uint64 id = 2; } */
+export const encodeMsgIBCHoldCancel = ({ signer, id }) => msg(pb.string(1, signer), pb.uint(2, id));
+
 export const encodeMsgQuantumLock = ({ signer, owner, controller }) =>
   msg(pb.string(1, signer), pb.string(2, owner), pb.string(3, controller));
 
@@ -380,6 +403,91 @@ export function msgQuantumLock({ signer, owner, controller, prefix = PREFIX }) {
     value: encodeMsgQuantumLock({ signer: s, owner: o, controller: c }) };
 }
 
+// ---- security core: Q-day migration, consent, IBC hold ----
+
+const bytes32 = (b, what) => {
+  const x = asBytes(b, what);
+  if (x.length !== 32) throw new Error(`${what} must be 32 bytes`);
+  return x;
+};
+
+/**
+ * What the old ECDSA key signs (EIP-191 personal_sign, e.g. MetaMask) to move its account to an
+ * ML-DSA-44 controller after Q-day. Must match zetaphy-chain QDayRevealText byte for byte.
+ */
+export function qdayRevealText({ chainId = CHAIN_ID, owner, controller, prefix = PREFIX }) {
+  return `ZETAPHY Q-day migration\nChain: ${chainId}\nAccount: ${toChecksumHex(addressBytes(owner, prefix))}` +
+    `\nNew ML-DSA-44 controller: ${toChecksumHex(addressBytes(controller, prefix))}\nSign this only in the ZETAPHY wallet.`;
+}
+
+/** The salt of a migration: keccak-256 of the owner's signature (deterministic, so nothing has to be saved between steps). */
+export const qdaySalt = (signature) => keccak_256(asBytes(signature, 'signature'));
+
+/**
+ * The Q-day commitment: sha256("zetaphy/qday-commit\0" || chainId || "\0" || the owner's compressed
+ * secp256k1 public key (33 bytes) || controller (20 bytes) || salt (32 bytes)). It shows nothing
+ * about the key until the reveal.
+ */
+export function qdayCommitment({ chainId = CHAIN_ID, publicKey, controller, salt, prefix = PREFIX }) {
+  const pub = asBytes(publicKey, 'publicKey');
+  if (pub.length !== 33 || (pub[0] !== 2 && pub[0] !== 3)) throw new Error('publicKey must be the 33-byte compressed secp256k1 key');
+  return sha256(concat([utf8(`zetaphy/qday-commit\0${chainId}\0`), pub, addressBytes(controller, prefix), bytes32(salt, 'salt')]));
+}
+
+/** MsgQDayCommit from `signer` (the new ML-DSA-44 account): records the commitment, shows nothing. */
+export function msgQDayCommit({ signer, commitment, prefix = PREFIX }) {
+  const c = bytes32(commitment, 'commitment');
+  return { typeUrl: MSG_QDAY_COMMIT_TYPE_URL, spend: 0n, intent: { type: 'qdayCommit', commitment: '0x' + bytesToHex(c) },
+    value: encodeMsgQDayCommit({ signer: accountBech32(signer, prefix), commitment: c }) };
+}
+
+/** MsgQDayReveal: opens the commitment (at least the reveal delay old) and moves `owner` to `controller`. */
+export function msgQDayReveal({ signer, owner, controller, salt, signature, prefix = PREFIX }) {
+  const sig = asBytes(signature, 'signature');
+  if (sig.length !== 65) throw new Error('signature must be 65 bytes (r, s, v)');
+  const o = accountBech32(owner, prefix); const c = accountBech32(controller, prefix); const sl = bytes32(salt, 'salt');
+  return { typeUrl: MSG_QDAY_REVEAL_TYPE_URL, spend: 0n,
+    intent: { type: 'qdayReveal', owner: o, controller: c, salt: '0x' + bytesToHex(sl), signature: '0x' + bytesToHex(sig) },
+    value: encodeMsgQDayReveal({ signer: accountBech32(signer, prefix), owner: o, controller: c, salt: sl, signature: sig }) };
+}
+
+/** MsgIBCHoldCancel: the guardian returns held inbound IBC transfer `id` to its sender. */
+export function msgIBCHoldCancel({ signer, id, prefix = PREFIX }) {
+  const n = uint64(id, 'id');
+  return { typeUrl: MSG_IBC_HOLD_CANCEL_TYPE_URL, spend: 0n, intent: { type: 'ibcHoldCancel', id: n.toString() },
+    value: encodeMsgIBCHoldCancel({ signer: accountBech32(signer, prefix), id: n }) };
+}
+
+const uint64Word = (v) => abiWord(uint64(v, 'seconds'));
+
+/**
+ * { to, data } of consent(target, seconds) on the security precompile: the sender goes ahead
+ * past the threat gate for calls to `target` for `seconds` (at most a day; 0 withdraws). From
+ * MetaMask it is a plain EVM tx; from an ML-DSA-44 account a MsgEVMCall (msgConsent).
+ */
+export function consentCall(target, seconds, prefix = PREFIX) {
+  const s = BigInt(seconds);
+  if (s < 0n || s > BigInt(MAX_CONSENT_SECONDS)) throw new Error(`seconds must be 0 to ${MAX_CONSENT_SECONDS} (a day)`);
+  return { to: SECURITY_PRECOMPILE, data: concat([keccak_256(utf8('consent(address,uint64)')).slice(0, 4), concat([new Uint8Array(12), addressBytes(target, prefix)]), uint64Word(s)]) };
+}
+
+/** MsgEVMCall to the security precompile giving consent (as the sender, or with asOwner as a locked account). */
+export function msgConsent({ sender, target, seconds, asOwner, prefix = PREFIX }) {
+  const c = consentCall(target, seconds, prefix);
+  const m = msgEVMCall({ sender, to: c.to, data: c.data, gasLimit: DEFAULT_EVM_GAS_LIMIT, asOwner, prefix });
+  m.intent = { type: 'consent', target: toChecksumHex(addressBytes(target, prefix)), seconds: BigInt(seconds).toString(), ...(asOwner ? { asOwner: m.intent.asOwner } : {}) };
+  return m;
+}
+
+/**
+ * Reads a threat-gate refusal (the chain's error text) into { target, registry, reason };
+ * null when the text is not one.
+ */
+export function parseThreatRefusal(text) {
+  const m = /(0x[0-9a-fA-F]{40}) has an enforced flag in the Neuro threat registry (0x[0-9a-fA-F]{40}) \(reason: ([A-Za-z0-9]+)\)/.exec(String(text ?? ''));
+  return m ? { target: m[1], registry: m[2], reason: m[3] } : null;
+}
+
 /**
  * The message an intent describes, from `sender` (the account that signs it). An intent is
  * a message as plain JSON with no sender (every message's `intent`); a signer that cannot
@@ -389,6 +497,8 @@ export function msgQuantumLock({ signer, owner, controller, prefix = PREFIX }) {
  *   { type: 'delegate' | 'undelegate', validator, amount, denom? }   { type: 'withdrawRewards', validator }
  *   { type: 'evmCall', to, data?, value?, gasLimit?, asOwner? }      { type: 'evmDeploy', initCode, value?, gasLimit?, asOwner? }
  *   { type: 'quantumLock', owner, controller }  (hands the locked `owner` on to `controller`)
+ *   { type: 'qdayCommit', commitment }   { type: 'qdayReveal', owner, controller, salt, signature }
+ *   { type: 'consent', target, seconds, asOwner? }   { type: 'ibcHoldCancel', id }
  */
 export function messageFromIntent(intent, sender, prefix = PREFIX) {
   const i = intent ?? {};
@@ -400,6 +510,10 @@ export function messageFromIntent(intent, sender, prefix = PREFIX) {
     case 'evmCall': return msgEVMCall({ sender, to: i.to, value: i.value ?? 0n, data: i.data ?? new Uint8Array(), gasLimit: i.gasLimit ?? DEFAULT_EVM_GAS_LIMIT, asOwner: i.asOwner, prefix });
     case 'evmDeploy': return msgEVMDeploy({ sender, initCode: i.initCode, value: i.value ?? 0n, gasLimit: i.gasLimit ?? DEFAULT_DEPLOY_GAS_LIMIT, asOwner: i.asOwner, prefix });
     case 'quantumLock': return msgQuantumLock({ signer: sender, owner: i.owner, controller: i.controller, prefix });
+    case 'qdayCommit': return msgQDayCommit({ signer: sender, commitment: i.commitment, prefix });
+    case 'qdayReveal': return msgQDayReveal({ signer: sender, owner: i.owner, controller: i.controller, salt: i.salt, signature: i.signature, prefix });
+    case 'consent': return msgConsent({ sender, target: i.target, seconds: i.seconds, asOwner: i.asOwner, prefix });
+    case 'ibcHoldCancel': return msgIBCHoldCancel({ signer: sender, id: i.id, prefix });
     default: throw new Error(`unknown message type ${JSON.stringify(i.type)}`);
   }
 }
@@ -756,7 +870,43 @@ export function pqClient(rpcCall, { chainId = CHAIN_ID, denom = DENOM, prefix = 
     return { ...r, validator: val, amount: amt };
   };
 
+  // ---- security core ----
+  const securityStatus = () => rpcCall('zetaphy_securityStatus', []);
+  const migration = (addr) => rpcCall('zetaphy_migration', [normalizeAddress(addr, prefix).hex]);
+  const commitmentHeight = async (c) => rpcCall('zetaphy_qdayCommitment', ['0x' + bytesToHex(bytes32(c, 'commitment'))]);
+  const consentUntil = async (account, target) => BigInt((await rpcCall('zetaphy_consent', [normalizeAddress(account, prefix).hex, toChecksumHex(addressBytes(target, prefix))])).until);
+  const ibcHolds = () => rpcCall('zetaphy_ibcHolds', []);
+
+  /** Step 1 of the Q-day migration, signed by this (controller) account. */
+  async function qdayCommit({ publicKey, sign, signTx, commitment, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = '' }) {
+    const me = pqAddress(publicKey, prefix);
+    const m = msgQDayCommit({ signer: me.bech32, commitment, prefix });
+    const preflight = async () => { if ((await commitmentHeight(commitment)).found) throw new Error('this commitment is already recorded'); };
+    return sendMsgs({ publicKey, sign, signTx, messages: [m], gasLimit, gasPrice: price, memo, preflight });
+  }
+
+  /** Step 2: the reveal (owner's signature and salt), at least the reveal delay after the commit. */
+  async function qdayReveal({ publicKey, sign, signTx, owner, controller, salt, signature, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = '' }) {
+    const me = pqAddress(publicKey, prefix);
+    const m = msgQDayReveal({ signer: me.bech32, owner, controller: controller ?? me.bech32, salt, signature, prefix });
+    return sendMsgs({ publicKey, sign, signTx, messages: [m], gasLimit, gasPrice: price, memo });
+  }
+
+  /** consent(target, seconds) from this account (or asOwner), through the security precompile. */
+  async function consent({ publicKey, sign, signTx, target, seconds, asOwner, gasPrice: price, memo = '' }) {
+    const me = pqAddress(publicKey, prefix);
+    const m = msgConsent({ sender: me.bech32, target, seconds, asOwner, prefix });
+    return sendMsgs({ publicKey, sign, signTx, messages: [m], gasLimit: DEFAULT_EVM_GAS_LIMIT + EVM_CALL_GAS_OVERHEAD, gasPrice: price, memo });
+  }
+
+  /** The guardian returns held IBC transfer `id` to its sender. */
+  async function ibcHoldCancel({ publicKey, sign, signTx, id, gasLimit = DEFAULT_GAS_LIMIT, gasPrice: price, memo = '' }) {
+    const me = pqAddress(publicKey, prefix);
+    return sendMsgs({ publicKey, sign, signTx, messages: [msgIBCHoldCancel({ signer: me.bech32, id, prefix })], gasLimit, gasPrice: price, memo });
+  }
+
   return {
+    securityStatus, migration, commitmentHeight, consentUntil, ibcHolds, qdayCommit, qdayReveal, consent, ibcHoldCancel,
     account, gasPrice, balance, quote, sendMsgs, send, callEVM, deploy, quantumLockHandover, ownedBy, checkController,
     delegate: staking(msgDelegate, 'delegate'),
     undelegate: staking(msgUndelegate, 'undelegate'),
