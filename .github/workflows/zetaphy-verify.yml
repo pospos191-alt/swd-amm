@@ -23,7 +23,7 @@ name: ZETAPHY verify
 
 on:
   schedule:
-    - cron: '17 */6 * * *'
+    - cron: '17 3 * * *'   # daily (was every 6 h): keeps the private repo inside the free 2,000 minutes
   push:
     branches: [main]
     paths: ['zetaphy-verify/build-info/**', 'zetaphy-verify/src/config.js']
