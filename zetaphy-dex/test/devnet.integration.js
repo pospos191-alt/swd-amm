@@ -64,7 +64,7 @@ test('the native precompile behaves like WETH: ERC-20 views, deposit() gives the
   const me = actors.user.address;
   assert.equal(await w.balanceOf(me), await provider.getBalance(me), 'precompile balance == native balance');
   const before = await provider.getBalance(me);
-  const r = await (await w.deposit({ value: parseEther('1') })).wait();
+  const r = await mined(w.deposit({ value: parseEther('1') }));
   const fee = r.gasUsed * r.gasPrice;
   assert.equal(await provider.getBalance(me), before - fee, 'deposit returns the coins (only gas spent)');
   console.log(`native precompile: symbol ${sym}, deposit gas ${r.gasUsed}`);
@@ -94,6 +94,14 @@ test('cli.js deploy uses the precompile as WETH, deploys test tokens and seeds p
   console.log(r.out.trim());
 });
 
+// The node can answer eth_call from the block before a receipt's block right
+// after the receipt arrives; wait until the next block exists before reading.
+async function mined(tx) {
+  const r = await (await tx).wait();
+  while ((await provider.getBlockNumber()) <= r.blockNumber) await new Promise((res) => setTimeout(res, 200));
+  return r;
+}
+
 test('a user swaps native ZETAPHY -> tUSD and back, adds and removes native liquidity', { timeout: 300_000 }, async () => {
   const user = signer('user');
   const me = actors.user.address;
@@ -106,7 +114,7 @@ test('a user swaps native ZETAPHY -> tUSD and back, adds and removes native liqu
   const amounts = await router.getAmountsOut(parseEther('2'), path);
   const minOut = (amounts[1] * 995n) / 1000n; // 0.5% slippage
   const n0 = await provider.getBalance(me);
-  const r1 = await (await router.swapExactETHForTokens(minOut, path, me, deadline(), { value: parseEther('2') })).wait();
+  const r1 = await mined(router.swapExactETHForTokens(minOut, path, me, deadline(), { value: parseEther('2') }));
   const got = await tusd.balanceOf(me);
   assert.equal(got, amounts[1], 'nobody else traded in between');
   assert.equal(n0 - (await provider.getBalance(me)), parseEther('2') + r1.gasUsed * r1.gasPrice);
@@ -114,10 +122,10 @@ test('a user swaps native ZETAPHY -> tUSD and back, adds and removes native liqu
 
   // tUSD -> native, with an exact approval
   const back = got / 2n;
-  await (await tusd.approve(await router.getAddress(), back)).wait();
+  await mined(tusd.approve(await router.getAddress(), back));
   const outs = await router.getAmountsOut(back, [path[1], NATIVE]);
   const n1 = await provider.getBalance(me);
-  const r2 = await (await router.swapExactTokensForETH(back, outs[1], [path[1], NATIVE], me, deadline())).wait();
+  const r2 = await mined(router.swapExactTokensForETH(back, outs[1], [path[1], NATIVE], me, deadline()));
   assert.equal((await provider.getBalance(me)) - n1 + r2.gasUsed * r2.gasPrice, outs[1]);
   assert.equal(await tusd.allowance(me, await router.getAddress()), 0n, 'the exact approval is used up');
   assert.equal(await provider.getBalance(await router.getAddress()), 0n, 'the router keeps no native coins');
@@ -126,18 +134,18 @@ test('a user swaps native ZETAPHY -> tUSD and back, adds and removes native liqu
   // add native liquidity, then remove it (native comes back as native)
   const pair = new Contract(pairAddr, art('ZetaphyPair').abi, user);
   const add = await tusd.balanceOf(me);
-  await (await tusd.approve(await router.getAddress(), add)).wait();
+  await mined(tusd.approve(await router.getAddress(), add));
   const nAdd = await provider.getBalance(me);
-  const rAdd = await (await router.addLiquidityETH(path[1], add, 0, 0, me, deadline(), { value: parseEther('5') })).wait();
+  const rAdd = await mined(router.addLiquidityETH(path[1], add, 0, 0, me, deadline(), { value: parseEther('5') }));
   const addedNative = nAdd - (await provider.getBalance(me)) - rAdd.gasUsed * rAdd.gasPrice; // the rest of the 5 was refunded
   assert.ok(addedNative > 0n && addedNative < parseEther('5'), `added ${addedNative}`);
   const lp = await pair.balanceOf(me);
   assert.ok(lp > 0n);
   const [q0, q1] = await pair.getReserves();
   assert.equal(await provider.getBalance(pairAddr), (await pair.token0()) === NATIVE ? q0 : q1, 'reserve == native balance');
-  await (await pair.approve(await router.getAddress(), lp)).wait();
+  await mined(pair.approve(await router.getAddress(), lp));
   const n2 = await provider.getBalance(me);
-  const r3 = await (await router.removeLiquidityETH(path[1], lp, 0, 0, me, deadline())).wait();
+  const r3 = await mined(router.removeLiquidityETH(path[1], lp, 0, 0, me, deadline()));
   const removedNative = (await provider.getBalance(me)) + r3.gasUsed * r3.gasPrice - n2;
   assert.ok(removedNative <= addedNative && removedNative > (addedNative * 999n) / 1000n, `added ${addedNative}, got back ${removedNative}`);
   console.log(`added ${addedNative} ZTPHY wei of liquidity (rest refunded), removed it: ${removedNative} back`);
@@ -151,12 +159,12 @@ test('Neuro: a token flagged in a real ThreatRegistry is refused by the router o
   const dep = signer('deployer');
   const runners = await new ContractFactory(art('MockRunners').abi, art('MockRunners').bytecode, dep).deploy();
   await runners.waitForDeployment();
-  for (const r of ['r1', 'r2']) await (await runners.set(actors[r].address, true)).wait();
+  for (const r of ['r1', 'r2']) await mined(runners.set(actors[r].address, true));
   const reg = await new ContractFactory(REGISTRY_ART.abi, REGISTRY_ART.bytecode, dep).deploy(await runners.getAddress(), 2, 1, actors.deployer.address, 0);
   await reg.waitForDeployment();
   const tswd = deployed.tokens[1].address;
   const key = await reg.addressKey(77390n, tswd);
-  for (const r of ['r1', 'r2']) await (await reg.connect(signer(r)).vote(key, true, 2, '0x' + 'e7'.repeat(32), 'neuro:devnet')).wait();
+  for (const r of ['r1', 'r2']) await mined(reg.connect(signer(r)).vote(key, true, 2, '0x' + 'e7'.repeat(32), 'neuro:devnet'));
   assert.deepEqual([...(await reg.isContractEnforced(tswd))], [true, 2n]);
 
   const s = await cli(['set-registry', await reg.getAddress(), '--key-file', join(root, 'deployer.key'), '--deployments', join(root, 'deployments.json')]);
@@ -171,14 +179,14 @@ test('Neuro: a token flagged in a real ThreatRegistry is refused by the router o
   assert.equal(parsed?.name, 'TokenEnforced', String(err?.message));
   assert.equal(parsed.args[0], tswd);
   // tUSD is unaffected; a holder of tSWD can still sell it.
-  await (await router.swapExactETHForTokens(0, [NATIVE, deployed.tokens[0].address], me, deadline(), { value: parseEther('1') })).wait();
+  await mined(router.swapExactETHForTokens(0, [NATIVE, deployed.tokens[0].address], me, deadline(), { value: parseEther('1') }));
   const deployerRouter = router.connect(dep);
   const t = new Contract(tswd, ERC20, dep);
-  await (await t.approve(deployed.contracts.router, parseEther('10'))).wait();
-  await (await deployerRouter.swapExactTokensForETH(parseEther('10'), 0, [tswd, NATIVE], actors.deployer.address, deadline())).wait();
+  await mined(t.approve(deployed.contracts.router, parseEther('10')));
+  await mined(deployerRouter.swapExactTokensForETH(parseEther('10'), 0, [tswd, NATIVE], actors.deployer.address, deadline()));
   // Off again.
   const off = await cli(['set-registry', '0x0', '--key-file', join(root, 'deployer.key'), '--deployments', join(root, 'deployments.json')]);
   assert.equal(off.code, 0, off.out);
-  await (await router.swapExactETHForTokens(0, [NATIVE, tswd], me, deadline(), { value: parseEther('1') })).wait();
+  await mined(router.swapExactETHForTokens(0, [NATIVE, tswd], me, deadline(), { value: parseEther('1') }));
   console.log('Neuro: swap into the enforced-flagged token refused (TokenEnforced), selling it worked, registry off -> allowed again');
 });
