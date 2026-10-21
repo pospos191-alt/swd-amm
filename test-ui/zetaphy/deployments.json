@@ -1,0 +1,10 @@
+{
+  "name": "ZETAPHY DEX",
+  "chainId": 77390,
+  "cosmosChainId": "zetaphy_77390-1",
+  "rpc": "",
+  "contracts": null,
+  "neuroRegistry": null,
+  "tokens": [],
+  "note": "Not deployed yet. `node zetaphy-dex/cli.js deploy --rpc <url> --key-file <file> --web test-ui/zetaphy/deployments.json` fills this file (see zetaphy-dex/README.md)."
+}

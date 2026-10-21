@@ -241,6 +241,10 @@ try {
       await page.click("#tb-tf-1m", { timeout: 5000 });
     }],
     ["open Portfolio tab", () => page.click('.tab-nav-btn[data-tab="portfolio"]', { timeout: 5000 })],
+    ["header links to the ZETAPHY DEX page (/zetaphy/)", async () => {
+      const href = await page.getAttribute("#rd-nav-zetaphy", "href", { timeout: 5000 });
+      if (href !== "/zetaphy/") throw new Error(`#rd-nav-zetaphy href is ${href}`);
+    }],
     ["switch language to Thai", async () => { await page.click("#settings-btn"); await page.selectOption("#lang-select", "th"); await page.keyboard.press("Escape"); }],
     ["switch network to Devnet", () => page.selectOption("#network-select", "devnet")],
     ["switch network back to Localnet", () => page.selectOption("#network-select", "localnet")],

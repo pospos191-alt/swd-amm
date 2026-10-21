@@ -1,0 +1,31 @@
+{
+  "name": "zetaphy-dex",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "ZETAPHY DEX: a constant-product AMM (Factory, Pair, Router) with Neuro ThreatRegistry checks, its deploy CLI and tests. The web app is in test-ui/zetaphy/.",
+  "type": "module",
+  "bin": {
+    "zetaphy-dex": "./cli.js"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "test": "node --test test/*.test.js",
+    "test:web": "node --test test/web.e2e.js",
+    "test:devnet": "node --test test/devnet.integration.js",
+    "test:web:devnet": "node --test test/web.devnet.e2e.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ethers": "6.16.0"
+  },
+  "devDependencies": {
+    "@ethereumjs/common": "4.4.0",
+    "@ethereumjs/evm": "3.1.1",
+    "@ethereumjs/util": "9.1.0",
+    "playwright-core": "1.56.1",
+    "solc": "0.8.26"
+  }
+}

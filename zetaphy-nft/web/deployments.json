@@ -1,0 +1,10 @@
+{
+  "network": "zetaphy-testnet",
+  "chainId": 77390,
+  "rpc": "",
+  "factory": "",
+  "marketplace": "",
+  "threatRegistry": "",
+  "deployBlock": 0,
+  "note": "Written by `node cli.js deploy --out web/deployments.json`. Empty until the contracts are deployed on the testnet."
+}

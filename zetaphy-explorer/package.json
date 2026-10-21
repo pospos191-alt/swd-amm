@@ -1,0 +1,25 @@
+{
+  "name": "zetaphy-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZETAPHY block explorer (explorer.sawasdeecoin.com). Static site: the browser reads the node's public RPC/REST directly; no server, no database, no indexer.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "serve": "node scripts/serve.js",
+    "test": "node --test test/unit.test.js test/explorer.e2e.js",
+    "test:unit": "node --test test/unit.test.js",
+    "test:e2e": "node --test test/explorer.e2e.js",
+    "test:devnet": "node --test test/devnet.integration.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@noble/hashes": "2.2.0",
+    "@noble/post-quantum": "0.6.1",
+    "esbuild": "0.25.11",
+    "ethers": "6.16.0",
+    "playwright-core": "1.56.1"
+  }
+}

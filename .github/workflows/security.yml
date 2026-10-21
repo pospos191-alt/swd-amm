@@ -101,6 +101,9 @@ jobs:
       wallet: ${{ steps.f.outputs.wallet }}
       snap: ${{ steps.f.outputs.snap }}
       chain: ${{ steps.f.outputs.chain }}
+      explorer: ${{ steps.f.outputs.explorer }}
+      dex: ${{ steps.f.outputs.dex }}
+      nft: ${{ steps.f.outputs.nft }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -138,6 +141,9 @@ jobs:
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
           out network '^(zetaphy-network/|zetaphy-neuro/src/)'
           out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$|zetaphy-neuro/src/(fingerprint|bytecode)\.js$|zetaphy-chain/wallets/)'
+          out explorer '^(zetaphy-explorer/|zetaphy-network/src/(pqcert|pqtx|vaccine)\.js$)'
+          out dex '^(zetaphy-dex/|test-ui/zetaphy/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
+          out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
           out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl)\.sol|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand)\.integration\.js)$)'
 
@@ -288,6 +294,106 @@ jobs:
 
       - name: Browser test (create key, encrypt/unlock, send to a mocked RPC)
         run: npm test
+
+  zetaphy-explorer:
+    name: zetaphy-explorer (unit + browser test)
+    needs: changes
+    if: needs.changes.outputs.explorer == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zetaphy-explorer
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Committed bundle matches the sources
+        run: |
+          npm run build
+          git diff --exit-code -- vendor/
+
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Unit and browser tests
+        run: npm test
+
+  zetaphy-dex:
+    name: zetaphy-dex (AMM contracts + swap page)
+    needs: changes
+    if: needs.changes.outputs.dex == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zetaphy-dex
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Committed artifacts match the sources
+        run: |
+          npm run build
+          git diff --exit-code -- artifacts/
+
+      - name: Contract, fuzz and page-library tests
+        run: npm test
+
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Browser test (swap page)
+        run: npm run test:web
+
+  zetaphy-nft:
+    name: zetaphy-nft (NFT contracts + marketplace page)
+    needs: changes
+    if: needs.changes.outputs.nft == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zetaphy-nft
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Committed artifacts match the sources
+        run: npm run build -- --check
+
+      - name: Contract and library tests
+        run: npm test
+
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Browser test (marketplace)
+        run: npm run test:e2e
 
   zetaphy-snap:
     name: zetaphy-snap (MetaMask Snap build + simulated tests)

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="SAWASDEE COIN NFT: create, mint, buy and sell NFTs on the ZETAPHY testnet.">
+  <title>ZETAPHY NFT · SAWASDEE COIN</title>
+  <link rel="icon" href="./logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/">
+      <img src="./logo.svg" alt="" width="32" height="32">
+      <span class="brand-text"><strong>SAWASDEE COIN</strong><small data-i18n="brandSub">NFT · ZETAPHY testnet</small></span>
+    </a>
+    <div class="tools">
+      <button type="button" id="lang" class="btn ghost">EN</button>
+      <button type="button" id="theme" class="btn ghost" aria-label="theme"><span class="theme-icon" aria-hidden="true"></span></button>
+      <button type="button" id="connect" class="btn primary">Connect wallet</button>
+    </div>
+    <nav>
+      <a href="#/" data-i18n="explore">Explore</a>
+      <a href="#/create" data-i18n="create">Create</a>
+      <a href="#/me" data-i18n="myNfts">My NFTs</a>
+      <a href="#/settings" data-i18n="settings">Settings</a>
+    </nav>
+  </header>
+  <p class="testnet" data-i18n="testnet">Testnet only.</p>
+  <main id="main"></main>
+  <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+  <dialog id="walletDialog">
+    <div class="dialog-head"><strong data-i18n="chooseWallet">Choose a wallet</strong><button type="button" class="btn ghost close" data-i18n="close">Close</button></div>
+    <div class="dialog-body"></div>
+  </dialog>
+  <footer><p data-i18n="footer"></p></footer>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "ZETAPHY DEX default list",
+  "version": { "major": 0, "minor": 1, "patch": 0 },
+  "note": "Uniswap token-list format (subset). Add ZETAPHY testnet tokens here: { chainId: 77390, address, name, symbol, decimals }. The native coin (ZTPHY) and the test tokens of deployments.json are added by the page.",
+  "tokens": []
+}

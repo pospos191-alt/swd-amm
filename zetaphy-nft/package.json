@@ -1,0 +1,33 @@
+{
+  "name": "zetaphy-nft",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZETAPHY NFT creator and marketplace (testnet): ERC-721/1155 collection factory, escrow-less marketplace with Neuro ThreatRegistry checks, and a static web app for nft.sawasdeecoin.com",
+  "type": "module",
+  "bin": {
+    "zetaphy-nft": "./cli.js"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "build:web": "node scripts/build-web.js",
+    "serve": "node scripts/serve.js",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node --test test/web.e2e.js",
+    "test:devnet": "node --test test/devnet.integration.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ethers": "6.16.0"
+  },
+  "devDependencies": {
+    "@ethereumjs/common": "4.4.0",
+    "@ethereumjs/evm": "3.1.1",
+    "@ethereumjs/util": "9.1.0",
+    "@noble/hashes": "2.2.0",
+    "esbuild": "0.25.11",
+    "playwright-core": "1.56.1",
+    "solc": "0.8.26"
+  }
+}

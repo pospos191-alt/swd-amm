@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<title>ZETAPHY Swap · SAWASDEE COIN</title>
+<!-- ZETAPHY DEX web app (static, no server, no third-party code).
+     Contracts, deploy CLI and tests: zetaphy-dex/. Every text is set with
+     textContent; the CSP for /zetaphy/ (test-ui/vercel.json) allows scripts
+     and styles from this site only. -->
+<link rel="stylesheet" href="/zetaphy/style.css">
+<link rel="icon" href="data:,">
+<script type="module" src="/zetaphy/app.js"></script>
+</head>
+<body>
+<header class="app-header">
+  <a class="brand" href="/" title="SWD AMM"><span class="brand-mark">SWD</span><span class="brand-text" data-i18n="title">ZETAPHY Swap</span></a>
+  <span class="badge" data-i18n="badge">Testnet · Unaudited</span>
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab" role="tab" data-tab="swap" data-i18n="tabSwap" aria-selected="true">Swap</button>
+    <button type="button" class="tab" role="tab" data-tab="pool" data-i18n="tabPool" aria-selected="false">Pool</button>
+    <button type="button" class="tab" role="tab" data-tab="tokens" data-i18n="tabTokens" aria-selected="false">Tokens</button>
+  </nav>
+  <div class="hdr-actions">
+    <button type="button" class="ghost" id="lang-btn" data-i18n="langBtn">EN</button>
+    <button type="button" class="ghost icon" id="theme-btn" data-i18n-title="themeTitle" aria-label="theme">◐</button>
+    <button type="button" class="ghost icon" id="settings-btn" data-i18n-title="settings" aria-label="settings">⚙</button>
+    <button type="button" id="connect-btn" data-i18n="connect">Connect wallet</button>
+  </div>
+</header>
+
+<main>
+  <div id="banner" class="banner" role="status" hidden></div>
+
+  <section id="tab-swap" class="panel" role="tabpanel">
+    <div class="card">
+      <div class="field">
+        <div class="field-top"><label for="swap-from" data-i18n="from">You pay</label><span class="hint" id="swap-from-bal"></span></div>
+        <div class="row">
+          <input id="swap-amount-in" inputmode="decimal" autocomplete="off" placeholder="0.0" spellcheck="false">
+          <button type="button" class="ghost small" id="swap-max" data-i18n="max">Max</button>
+          <select id="swap-from"></select>
+        </div>
+      </div>
+      <div class="flip-row"><button type="button" class="ghost icon" id="swap-flip" data-i18n-title="flip" aria-label="flip">⇅</button></div>
+      <div class="field">
+        <div class="field-top"><label for="swap-to" data-i18n="to">You receive</label><span class="hint" id="swap-to-bal"></span></div>
+        <div class="row">
+          <output id="swap-amount-out" class="amount-out">0.0</output>
+          <select id="swap-to"></select>
+        </div>
+      </div>
+      <dl class="details" id="swap-details" hidden>
+        <dt data-i18n="rate">Rate</dt><dd id="swap-rate"></dd>
+        <dt data-i18n="impact">Price impact</dt><dd id="swap-impact"></dd>
+        <dt id="swap-min-label">Minimum received</dt><dd id="swap-min"></dd>
+        <dt data-i18n="route">Route</dt><dd id="swap-route"></dd>
+        <dt data-i18n="lpFee">LP fee</dt><dd data-i18n="lpFeeValue">0.3%</dd>
+      </dl>
+      <div class="neuro" id="swap-neuro" hidden></div>
+      <p class="warn-line" id="swap-imported" hidden></p>
+      <label class="ack" id="swap-ack-slip-row" hidden><input type="checkbox" id="swap-ack-slip" autocomplete="off"> <span id="swap-ack-slip-text"></span></label>
+      <label class="ack" id="swap-ack-impact-row" hidden><input type="checkbox" id="swap-ack-impact"> <span id="swap-ack-impact-text"></span></label>
+      <label class="ack" id="swap-ack-flag-row" hidden><input type="checkbox" id="swap-ack-flag"> <span data-i18n="neuroAck"></span></label>
+      <div class="actions">
+        <button type="button" id="swap-approve" hidden></button>
+        <button type="button" id="swap-btn" class="primary" disabled data-i18n="enterAmount">Enter an amount</button>
+      </div>
+      <p class="status" id="swap-status" role="status"></p>
+    </div>
+  </section>
+
+  <section id="tab-pool" class="panel" role="tabpanel" hidden>
+    <div class="card">
+      <h2 data-i18n="addTitle">Add liquidity</h2>
+      <div class="field">
+        <div class="field-top"><label for="add-a" data-i18n="tokenA">Token A</label><span class="hint" id="add-a-bal"></span></div>
+        <div class="row"><input id="add-amt-a" inputmode="decimal" autocomplete="off" placeholder="0.0" spellcheck="false"><select id="add-a"></select></div>
+      </div>
+      <div class="field">
+        <div class="field-top"><label for="add-b" data-i18n="tokenB">Token B</label><span class="hint" id="add-b-bal"></span></div>
+        <div class="row"><input id="add-amt-b" inputmode="decimal" autocomplete="off" placeholder="0.0" spellcheck="false"><select id="add-b"></select></div>
+      </div>
+      <p class="hint" id="add-info"></p>
+      <div class="neuro" id="add-neuro" hidden></div>
+      <p class="warn-line" id="add-imported" hidden></p>
+      <label class="ack" id="add-ack-slip-row" hidden><input type="checkbox" id="add-ack-slip" autocomplete="off"> <span id="add-ack-slip-text"></span></label>
+      <label class="ack" id="add-ack-flag-row" hidden><input type="checkbox" id="add-ack-flag"> <span data-i18n="neuroAck"></span></label>
+      <div class="actions">
+        <button type="button" id="add-approve-a" hidden></button>
+        <button type="button" id="add-approve-b" hidden></button>
+        <button type="button" id="add-btn" class="primary" disabled data-i18n="add">Add liquidity</button>
+      </div>
+      <p class="status" id="add-status" role="status"></p>
+    </div>
+    <div class="card">
+      <div class="card-top"><h2 data-i18n="positions">My liquidity</h2><button type="button" class="ghost small" id="pos-refresh" data-i18n="refresh">Refresh</button></div>
+      <div id="positions" class="list"></div>
+      <label class="ack" id="pos-ack-slip-row" hidden><input type="checkbox" id="pos-ack-slip" autocomplete="off"> <span id="pos-ack-slip-text"></span></label>
+      <p class="status" id="pos-status" role="status"></p>
+    </div>
+  </section>
+
+  <section id="tab-tokens" class="panel" role="tabpanel" hidden>
+    <div class="card">
+      <h2 data-i18n="tokensTitle">Tokens</h2>
+      <p class="hint" data-i18n="tokensNote"></p>
+      <div id="token-list" class="list"></div>
+    </div>
+    <div class="card">
+      <h2 data-i18n="importTitle">Import a token</h2>
+      <div class="row">
+        <input id="import-addr" autocomplete="off" spellcheck="false" data-i18n-placeholder="importPh" placeholder="0x…">
+        <button type="button" id="import-check" data-i18n="check">Check</button>
+      </div>
+      <div id="import-result" class="import-result" hidden>
+        <p id="import-info"></p>
+        <div id="import-warnings"></div>
+        <div class="neuro" id="import-neuro" hidden></div>
+        <label class="ack" id="import-ack-row" hidden><input type="checkbox" id="import-ack"> <span data-i18n="importAck"></span></label>
+        <div class="actions"><button type="button" class="primary" id="import-add" data-i18n="importAdd">Import</button></div>
+      </div>
+      <p class="status" id="import-status" role="status"></p>
+    </div>
+  </section>
+</main>
+
+<dialog id="wallet-dialog">
+  <h2 data-i18n="walletsTitle">Choose a wallet</h2>
+  <div id="wallet-list" class="list"></div>
+  <div id="wallet-none" hidden><p data-i18n="noWallet"></p><div id="wallet-links" class="list"></div></div>
+  <p class="status" id="wallet-status" role="status"></p>
+  <div class="actions"><button type="button" class="ghost" id="wallet-close" data-i18n="close">Close</button></div>
+</dialog>
+
+<dialog id="settings-dialog">
+  <h2 data-i18n="settings">Settings</h2>
+  <label class="stack"><span data-i18n="slippage">Slippage (%)</span><input id="set-slippage" inputmode="decimal" autocomplete="off"></label>
+  <p class="hint" data-i18n="slippageHint"></p>
+  <label class="stack"><span data-i18n="deadline">Deadline (minutes)</span><input id="set-deadline" inputmode="numeric" autocomplete="off"></label>
+  <label class="stack"><span data-i18n="rpcUrl">RPC</span><input id="set-rpc" autocomplete="off" spellcheck="false" placeholder="https://"></label>
+  <p class="hint" data-i18n="rpcHint"></p>
+  <label class="ack"><input type="checkbox" id="set-fot" autocomplete="off"> <span data-i18n="fot"></span></label>
+  <p class="status" id="settings-status" role="status"></p>
+  <div class="actions"><button type="button" class="ghost" id="settings-close" data-i18n="close">Close</button><button type="button" class="primary" id="settings-save" data-i18n="save">Save</button></div>
+</dialog>
+
+<footer class="footer">
+  <p data-i18n="footer"></p>
+  <p class="hint"><span id="footer-contracts"></span></p>
+</footer>
+</body>
+</html>
