@@ -2,6 +2,22 @@
 
 ## Status: UNAUDITED DRAFT. Do not deploy to mainnet as-is.
 
+## Reporting a vulnerability / แจ้งช่องโหว่
+
+**Do not open a public issue.** Report privately through GitHub: **Security → Report a vulnerability**
+(the owner enables it under **Settings → Code security → Private vulnerability reporting**). Scope, severity
+levels, rewards, rules, safe harbor and the disclosure timeline are in [`docs/BUG_BOUNTY.md`](docs/BUG_BOUNTY.md).
+There is no real-money reward yet: on the testnet, rewards are recognition only, and real amounts must be
+funded by a governance vote before mainnet.
+
+**อย่าเปิด issue สาธารณะ** แจ้งแบบส่วนตัวทาง GitHub: แท็บ **Security → Report a vulnerability** รายละเอียด (ขอบเขต ระดับ รางวัล
+กติกา safe harbor กำหนดเวลาเปิดเผย) อยู่ใน [`docs/BUG_BOUNTY.md`](docs/BUG_BOUNTY.md) ตอนนี้ยังไม่มีเงินรางวัลจริง
+
+**ZETAPHY lock/mint bridge:** deployed CLOSED. It opens only when every gate in `zetaphy-network/README.md`
+(stage 3, "เปิดสะพาน") holds: a second independent lane (Hyperlane), an audit recorded on-chain, 10+ independent
+Neuro runners, multisig guardian and governance on hardware wallets, a funded bug bounty, small caps that grow
+behind a 7-day timelock, and the bridge monitor running.
+
 **Update (2026-09-08, latest): the first-depositor/donation attack found by
 the test suite (see the finding below) has been FIXED, not just
 documented.** Two changes landed in `lib.rs`:

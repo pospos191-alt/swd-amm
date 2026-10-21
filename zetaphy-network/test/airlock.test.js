@@ -37,7 +37,6 @@ beforeEach(async () => {
   await guard.send('gov', 'createToken', ['USD Coin (bridged)', 'USDC', 6]);
   token = await guard.call('token');
   airlock = await c.deploy('BridgeAirlock', [guard.address, ROUTE, a('gov'), 2, Q], 'gov');
-  await guard.send('gov', 'setRoute', [ROUTE, airlock.address, 1_000_000n * 10n ** 6n, true]);
   lane = await c.deploy('NeuroLane', [jobs.address, airlock.address, 2, 1, ZERO], 'gov');
   decoy = await c.deploy('DecoyBridge', [airlock.address, 'ZETAPHY Bridge v1'], 'gov');
   await airlock.send('gov', 'setLane', [lane.address, true]);
@@ -45,6 +44,12 @@ beforeEach(async () => {
   await airlock.send('gov', 'setVetoer', [lane.address, true]);
   await airlock.send('gov', 'setVetoer', [a('guardian'), true]);
   await airlock.send('gov', 'setDecoy', [decoy.address, true]);
+  // Opening gates: the audit on record, 2 independent lanes (above), a cap raised once (x2, 7 days later).
+  await guard.send('gov', 'setAudit', ['https://audits.example/zetaphy-bridge.pdf', '0x' + 'a1'.repeat(32)]);
+  await guard.send('gov', 'proposeMaxDailyLimit', [2000n * 10n ** 6n]);
+  c.advance(7 * 86400);
+  await guard.send('user', 'applyMaxDailyLimit');
+  await guard.send('gov', 'setRoute', [ROUTE, airlock.address, 2000n * 10n ** 6n, true]);
 });
 
 const tx = (nonce, to = 'alice', amount = 500n * 10n ** 6n, sender = 'alice') => [SRC, LOCKBOX, BigInt(nonce), a(sender), a(to), amount];

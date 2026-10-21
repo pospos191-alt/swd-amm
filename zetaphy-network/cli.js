@@ -46,12 +46,28 @@
 //   zetaphy pq export-vote-keys [--height h] [--rpc <CometBFT RPC>] > pinned.json   validator powers and vote keys, to pin
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
-//   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>
-//                          --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --lockbox <chainId>:0x<LockBox>]
-//                                      with a ThreatRegistry, --lockbox is required (or --no-lockbox-protect, explicitly)
-//                                      BridgeGuard + BridgeAirlock + NeuroLane + a DecoyBridge; NeuroLane's pause
-//                                      switch defaults to the NeuroJobs' control(); the bridge's own contracts (and
+//   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
+//                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
+//                          --hyperlane-mailbox 0x… [--hyperlane-origin <domain> --hyperlane-sender 0x… --hyperlane-ism 0x…]
+//                          --devnet | --allow-eoa-for-testing]
+//                                      BridgeGuard + BridgeAirlock + NeuroLane (+ HyperlaneLane) + a DecoyBridge, CLOSED:
+//                                      the route is disabled until zetaphy bridge open. A --guardian / --governance must be
+//                                      a multisig (Safe or SimpleMultisig, 3+ owners, threshold 2+) or (governance) the gov
+//                                      module; a single key only with --devnet (local RPC) or --allow-eoa-for-testing.
+//                                      Daily limit: at most 1,000 tokens (the starter cap; on-chain maxDailyLimit). NeuroLane's
+//                                      pause switch defaults to the NeuroJobs' control(); the bridge's own contracts (and
 //                                      the lockbox) are protected in the ThreatRegistry
+//   zetaphy bridge gates|open --audit-report <https url> --audit-sha256 <hex> [--daily-limit 1000 --min-runners 10
+//                          --raise-cap --i-understand-real-funds --devnet --allow-eoa-for-testing]
+//                                      open the bridge only when every gate holds: 2+ lanes with distinct controllers
+//                                      (none the deployer), the audit recorded on-chain, NeuroJobs activeWorkers >= 10,
+//                                      multisig guardian and governance (no shared owner), the cap; gates only checks
+//   zetaphy bridge close | pause        governance closes the route; a guardian pauses everything (only governance unpauses)
+//   zetaphy bridge cap [show | propose <tokens> | apply | cancel]   the hard cap: a raise (x2 at most) waits 7 days
+//   zetaphy bridge monitor [--monitor-config f --launch-state f --state f --out report.json --summary f --volume-pct 80
+//                          --large-pct 25 --silent-minutes 30 --source-rpc URL --lockbox 0x… --fail-on-alert]
+//                                      read-only scan: alerts (volume, lanes disagreeing or silent, veto, pause, decoy hit,
+//                                      holds, governance changes, large transfers) as JSON + a Thai / English summary
 //   zetaphy bridge watch --source-rpc URL --lockbox 0x... [--confirmations 12 --release]
 //                                      be one voice of the Neuro bridge (skips flagged sources, stops while Neuro is
 //                                      paused or its switch cannot be read)
@@ -146,6 +162,8 @@ import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, for
 import { createLaneWatcher, laneControl } from './src/lane.js';
 import { verifyBlock, exportVoteKeys } from './src/pqcert.js';
 import { identityCommand } from './src/identitycli.js';
+import { bridgeCommand } from './src/bridgecli.js';
+import { devnetOf, roleChecks, capProblems, STARTER_UNITS } from './src/bridgegate.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
 const ART = art('NeuroJobs');
@@ -154,7 +172,7 @@ const STABLE = art('TestStable');
 const GATEWAY = art('StableGateway');
 const QWALLET = art('QuantumWallet');
 const QFACTORY = art('QuantumWalletFactory');
-const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'DecoyBridge', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault', 'ThreatRegistry', 'ThreatReports'].map((n) => [n, art(n)]));
+const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'HyperlaneLane', 'DecoyBridge', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault', 'ThreatRegistry', 'ThreatReports'].map((n) => [n, art(n)]));
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 /** --governance: who takes over the admin role after setup (a multisig). */
 function governanceOf(opt, write) {
@@ -226,7 +244,7 @@ function settings(opt, env) {
   const file = join(HOME, 'config.json');
   const saved = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const s = { ...saved, rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
-  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'bridgeGuard', 'vault', 'threats', 'reports']) if (opt[k]) s[k] = opt[k];
+  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'hyperlaneLane', 'bridgeGuard', 'vault', 'threats', 'reports']) if (opt[k]) s[k] = opt[k];
   if (!s.vault && env.ZETAPHY_VAULT) s.vault = env.ZETAPHY_VAULT;
   if (opt.hybrid) s.pqHybrid = true;
   if (JSON.stringify(s) !== JSON.stringify(saved)) {
@@ -880,6 +898,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const k = await new ContractFactory(B.SimpleMultisig.abi, B.SimpleMultisig.bytecode, c.signer).deploy(owners, Number(opt.threshold ?? 2));
     await k.waitForDeployment();
     write(`SimpleMultisig ${await k.getAddress()} (${opt.threshold ?? 2} of ${owners.length})`);
+    // The bridge's gates (zetaphy bridge open) want 3+ distinct owners, threshold 2+, none of them this deployer key.
+    if (owners.length < 3 || Number(opt.threshold ?? 2) < 2) write('warning: zetaphy bridge open refuses a multisig with fewer than 3 owners or a threshold below 2');
+    if (owners.some((o) => o.toLowerCase() === c.me.toLowerCase())) write(`warning: this deployer key ${c.me} is an owner: zetaphy bridge open refuses that; each owner should be a hardware wallet of its own`);
     return 0;
   }
 
@@ -954,24 +975,55 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     if (s.threats && opt.lockbox == null && !opt['no-lockbox-protect']) {
       throw new Error('deploy-bridge with a ThreatRegistry needs --lockbox <source chain id>:0x<LockBox>, so the source lockbox is protected (or pass --no-lockbox-protect to deploy without that, and protect it later: zetaphy threat protect <chainId>:0x<LockBox>)');
     }
+    if (opt.lockbox != null && !/^\d+:0x[0-9a-fA-F]{40}$/.test(String(opt.lockbox))) throw new Error('--lockbox must be <source chain id>:0x<LockBox>');
+    if (opt.control != null && !ADDR_RE.test(String(opt.control))) throw new Error('--control must be a 0x address (NeuroControl)');
+    if (opt.enable || opt.open) throw new Error('deploy-bridge deploys the bridge CLOSED; open it with zetaphy bridge open once every gate is met');
+    const hyp = opt['hyperlane-mailbox'];
+    if (hyp != null && (!ADDR_RE.test(String(hyp)) || !opt.lockbox)) throw new Error('--hyperlane-mailbox 0x<Mailbox on ZETAPHY> needs --lockbox <chainId>:0x<HyperlaneLockBox>');
+    const devnet = devnetOf(s.rpc, opt);
+    const decimals = Number(opt.decimals ?? 18);
+    const limitUnits = parseUnits(String(opt['daily-limit'] ?? STARTER_UNITS), decimals);
+    const capP = capProblems({ limitUnits, decimals, raiseCap: !!opt['raise-cap'], maxDailyLimit: STARTER_UNITS * 10n ** BigInt(decimals) });
+    if (capP.length) throw new Error(`--daily-limit: ${capP.join('; ')}`);
     const c = await connect(s);
+    // Roles named here must be multisigs (or the gov module), checked before anything is deployed.
+    const gov = governanceOf(opt, write);
+    const guardians = [].concat(opt.guardian ?? []).map(String);
+    if (guardians.some((g) => !ADDR_RE.test(g))) throw new Error('--guardian must be a 0x address (a multisig)');
+    if (gov || guardians.length) {
+      const r = await roleChecks(c.provider, { governance: gov ? [gov] : [], guardians }, { deployer: c.me, devnet, allowEoa: !!opt['allow-eoa-for-testing'] });
+      const problems = r.problems.filter((p) => guardians.length || !/^no guardian/.test(p));
+      for (const w of r.warnings) write(`warning: ${w}`);
+      if (problems.length) throw new Error(`deploy-bridge refused (nothing deployed):\n  - ${problems.join('\n  - ')}`);
+    }
     const deploy = async (a, args) => { const k = await new ContractFactory(a.abi, a.bytecode, c.signer).deploy(...args); await k.waitForDeployment(); return new Contract(await k.getAddress(), a.abi, c.signer); };
     const route = encodeBytes32String('airlock');
     const guard = await deploy(B.BridgeGuard, [c.me]);
-    await (await guard.createToken(String(opt['token-name'] ?? 'USD Coin (bridged, testnet)'), String(opt['token-symbol'] ?? 'USDC'), Number(opt.decimals ?? 18))).wait();
+    await (await guard.createToken(String(opt['token-name'] ?? 'USD Coin (bridged, testnet)'), String(opt['token-symbol'] ?? 'USDC'), decimals)).wait();
     const airlock = await deploy(B.BridgeAirlock, [guard.target, route, c.me, Number(opt.threshold ?? 2), BigInt(opt.quarantine ?? 3600)]);
-    await (await guard.setRoute(route, airlock.target, parseEther(String(opt['daily-limit'] ?? 100000)), true)).wait();
+    // CLOSED: the route is set up but disabled; BridgeGuard itself refuses to enable it without the audit and 2+ independent lanes.
+    await (await guard.setRoute(route, airlock.target, limitUnits, false)).wait();
     // A runner needs this many accepted verdicts (won by lottery) before it speaks for the bridge.
     // --control: NeuroControl; while it says paused the lane attests nothing. Default: the NeuroJobs' own control().
-    if (opt.control != null && !ADDR_RE.test(String(opt.control))) throw new Error('--control must be a 0x address (NeuroControl)');
-    if (opt.lockbox != null && !/^\d+:0x[0-9a-fA-F]{40}$/.test(String(opt.lockbox))) throw new Error('--lockbox must be <source chain id>:0x<LockBox>');
     const control = opt.control ? String(opt.control) : String(await c.jobs.control());
     if (control === ZERO_ADDR) write('warning: NeuroJobs has no NeuroControl, so NeuroLane has no pause switch (pass --control 0x...)');
     const lane = await deploy(B.NeuroLane, [s.jobs, airlock.target, Number(opt.quorum ?? 2), Number(opt['min-agreed'] ?? 5), control]);
     const decoy = await deploy(B.DecoyBridge, [airlock.target, 'ZETAPHY Bridge']);
     for (const tx of [airlock.setLane(lane.target, true), airlock.setVetoer(lane.target, true), airlock.setDecoy(decoy.target, true)]) await (await tx).wait();
+    // The second lane: Hyperlane (its Mailbox on ZETAPHY; messages from the source chain's HyperlaneLockBox).
+    let hypLane = null;
+    if (hyp) {
+      const [srcId, srcAddr] = String(opt.lockbox).split(':');
+      const sender = String(opt['hyperlane-sender'] ?? srcAddr);
+      if (!ADDR_RE.test(sender)) throw new Error('--hyperlane-sender must be a 0x address (the source HyperlaneLockBox or router)');
+      const ism = opt['hyperlane-ism'] ? String(opt['hyperlane-ism']) : ZERO_ADDR;
+      if (!ADDR_RE.test(ism)) throw new Error('--hyperlane-ism must be a 0x address');
+      hypLane = await deploy(B.HyperlaneLane, [airlock.target, c.me, String(hyp), Number(opt['hyperlane-origin'] ?? srcId), '0x' + sender.slice(2).toLowerCase().padStart(64, '0'), BigInt(srcId), srcAddr, ism]);
+      await (await airlock.setLane(hypLane.target, true)).wait();
+      write(`HyperlaneLane: Mailbox ${hyp}, origin domain ${opt['hyperlane-origin'] ?? srcId}, sender ${sender}, ISM ${ism === ZERO_ADDR ? "the Mailbox's default" : ism}`);
+    }
     for (const l of [].concat(opt.lane ?? [])) await (await airlock.setLane(l, true)).wait();
-    for (const g of [].concat(opt.guardian ?? [])) { await (await airlock.setVetoer(g, true)).wait(); await (await guard.setGuardian(g, true)).wait(); }
+    for (const g of guardians) { await (await airlock.setVetoer(g, true)).wait(); await (await guard.setGuardian(g, true)).wait(); }
     // Vaccine: flagged senders, source contracts and recipient code are held / refused.
     if (s.threats) {
       if (!ADDR_RE.test(String(s.threats))) throw new Error('--threats must be a 0x address (ThreatRegistry)');
@@ -979,20 +1031,24 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       write(`vaccine on: BridgeAirlock and BridgeGuard check ThreatRegistry ${s.threats}`);
       // The bridge's own parts must never be frozen by a runner flag: protect their addresses and code hashes.
       const reg = new Contract(s.threats, B.ThreatRegistry.abi, c.signer);
-      const own = [guard.target, await guard.token(), airlock.target, lane.target];
+      const own = [guard.target, await guard.token(), airlock.target, lane.target, ...(hypLane ? [hypLane.target] : [])];
       const keys = await threatKeys(reg, c.provider, [...own, ...(opt.lockbox ? [String(opt.lockbox)] : [])]);
       await governAction(reg, c, write, 'setProtected', [keys.map((k) => k[1]), true], `protect the bridge's own contracts${opt.lockbox ? ' and the lockbox' : ''}`);
       if (!opt.lockbox) write('WARNING: --no-lockbox-protect: the source lockbox is NOT protected; protect it now: zetaphy threat protect <chainId>:0x<LockBox>');
     } else write('warning: no ThreatRegistry (--threats or deploy-threats), so flagged code is not refused by the bridge');
-    const gov = governanceOf(opt, write);
     if (gov) {
-      await (await guard.setGovernance(gov)).wait();
-      await (await airlock.setGovernance(gov)).wait();
-      write(`admin of BridgeGuard and BridgeAirlock handed to ${gov}`);
+      for (const k of [guard, airlock, ...(hypLane ? [hypLane] : [])]) await (await k.setGovernance(gov)).wait();
+      write(`admin of BridgeGuard, BridgeAirlock${hypLane ? ' and HyperlaneLane' : ''} handed to ${gov}`);
     }
-    settings({ ...opt, airlock: airlock.target, neuroLane: lane.target, bridgeGuard: guard.target }, {});
-    write(`BridgeGuard ${guard.target}\nBridgedToken ${await guard.token()}\nBridgeAirlock ${airlock.target}\nNeuroLane ${lane.target}\nDecoyBridge ${decoy.target}`);
+    settings({ ...opt, airlock: airlock.target, neuroLane: lane.target, bridgeGuard: guard.target, ...(hypLane ? { hyperlaneLane: hypLane.target } : {}) }, {});
+    write(`BridgeGuard ${guard.target}\nBridgedToken ${await guard.token()}\nBridgeAirlock ${airlock.target}\nNeuroLane ${lane.target}${hypLane ? `\nHyperlaneLane ${hypLane.target}` : ''}\nDecoyBridge ${decoy.target}`);
+    write(`bridge CLOSED (route disabled, daily limit ${tokenAmount(limitUnits, decimals)}, hard cap ${tokenAmount(await guard.maxDailyLimit(), decimals)}).`);
+    write('To open: a second independent lane, an audit, 10+ Neuro runners, multisig guardian + governance, then zetaphy bridge open --audit-report <url> --audit-sha256 <hex>');
     return 0;
+  }
+
+  if (group === 'bridge' && ['open', 'gates', 'close', 'pause', 'cap', 'monitor'].includes(cmd)) {
+    return bridgeCommand({ group, cmd, rest, opt, env, write, s, connect, connectRpc });
   }
 
   if (group === 'bridge' && cmd === 'watch') {

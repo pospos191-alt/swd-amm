@@ -16,6 +16,11 @@
 // NeuroJobs' NeuroControl by default.
 // Also: `threat export` (the data feed for other wallets) and user reports
 // (`deploy-reports`, `threat report`, `threat reports`, `settle`, `claim`).
+// Opening gates: deploy-bridge deploys the bridge CLOSED and refuses a single-key
+// guardian outside a devnet; `bridge open` refuses until every gate holds (audit on
+// record, 2 independent lanes, runners, multisig roles or --devnet, the cap), then
+// enables the route with a 10-token daily limit. `bridge monitor` then reports the
+// decoy hit, the governance changes, the volume at the limit, and a guardian's pause.
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -86,12 +91,37 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.notEqual(noLb.code, 0, noLb.out);
   assert.match(noLb.out, /needs --lockbox <source chain id>:0x<LockBox>, so the source lockbox is protected \(or pass --no-lockbox-protect/);
   assert.doesNotMatch(noLb.out, /BridgeGuard 0x/);
-  const b = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1', '--threats', threats,
-    '--lockbox', `4097:${lockbox.target}`]);
+  const bridgeArgs = ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1', '--threats', threats,
+    '--lockbox', `4097:${lockbox.target}`, '--guardian', W.user.address];
+  // A single-key guardian: refused outside a devnet, before anything is deployed.
+  const eoaGuardian = await cli('gov', bridgeArgs);
+  assert.notEqual(eoaGuardian.code, 0, eoaGuardian.out);
+  assert.match(eoaGuardian.out, /deploy-bridge refused \(nothing deployed\):\n  - guardian 0x[0-9a-fA-F]{40} is a single key \(EOA, no code\): use a multisig/);
+  assert.match((await cli('gov', [...bridgeArgs, '--daily-limit', '5000'])).out, /above the starter cap \(1000 tokens\): pass --raise-cap/);
+  const b = await cli('gov', [...bridgeArgs, '--devnet']);
   assert.equal(b.code, 0, b.out);
+  assert.match(b.out, /bridge CLOSED \(route disabled, daily limit 1000, hard cap 1000\)/);
   assert.match(b.out, /vaccine on/);
   assert.match(b.out, /ThreatRegistry: protect the bridge's own contracts and the lockbox \(done\)/);
   cfg = Object.fromEntries([...b.out.matchAll(/^(\w+) (0x[0-9a-fA-F]{40})$/gm)].map((m) => [m[1], m[2]]));
+  const guard = new Contract(cfg.BridgeGuard, art('BridgeGuard').abi, zp);
+  const route = await new Contract(cfg.BridgeAirlock, art('BridgeAirlock').abi, zp).route();
+  assert.equal((await guard.routes(route)).enabled, false, 'deployed closed');
+  // Opening gates: refused without the audit, outside a devnet (single-key lane, governance and guardian), with 3 runners.
+  const AUDIT = ['--audit-report', 'https://audits.example/zetaphy-bridge-devnet.pdf', '--audit-sha256', 'ab'.repeat(32)];
+  const shut = await cli('gov', ['bridge', 'open', '--jobs', jobsAddr]);
+  assert.equal(shut.code, 1, shut.out);
+  for (const re of [/The bridge stays CLOSED/, /--audit-report must be an https:\/\/ url/, /3 active Neuro runner\(s\) in NeuroJobs, needs at least 10/,
+    /lane 0x[0-9a-fA-F]{40} is a single key \(EOA\)/, /governance 0x[0-9a-fA-F]{40} is a single key \(EOA, no code\)/, /guardian 0x[0-9a-fA-F]{40} is a single key/,
+    /pass --i-understand-real-funds/]) assert.match(shut.out, re);
+  assert.match(shut.out, /NeuroLane +0x[0-9a-fA-F]{40} +controller 0x[0-9a-fA-F]{40} +admin \(none: immutable\)/); // the lane table for a human
+  assert.equal((await guard.routes(route)).enabled, false);
+  const opened = await cli('gov', ['bridge', 'open', '--jobs', jobsAddr, '--devnet', ...AUDIT, '--min-runners', '3', '--daily-limit', '10']);
+  assert.equal(opened.code, 0, opened.out);
+  assert.match(opened.out, /record the audit on-chain \(BridgeGuard.setAudit\) \(done\)/);
+  assert.match(opened.out, /bridge OPEN/);
+  assert.equal((await guard.routes(route)).enabled, true);
+  assert.equal(await guard.auditSha256(), '0x' + 'ab'.repeat(32));
   // NeuroLane's pause switch defaults to the NeuroJobs' NeuroControl.
   const jobsControl = await jobs.control();
   assert.notEqual(jobsControl, '0x0000000000000000000000000000000000000000');
@@ -219,4 +249,34 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.equal(claims.filter((x) => /claimed 0\.05 ZETAPHY/.test(x.out)).length, 2, claims.map((x) => x.out).join('\n')); // quorum 2: half each
   assert.match((await cli('r1', ['threat', 'reports', '--threats', threats, '--reports', reports])).out, /0 open report\(s\) of 1/);
   console.log('a user report was flagged by the runners, who shared its fee');
+
+  // Monitoring: one scan from the bridge's first block sees the decoy hit, the governance changes
+  // and the day's volume at its limit (5 + 3 + 2 of 10); a guardian's pause shows up in the next scan.
+  const mon = (extra = []) => cli('user', ['bridge', 'monitor', '--bridgeGuard', cfg.BridgeGuard, '--airlock', cfg.BridgeAirlock,
+    '--state', join(root, 'monitor-state.json'), '--out', join(root, 'monitor.json'), ...extra]);
+  const m1 = await mon(['--from-block', '1']);
+  assert.equal(m1.code, 0, m1.out);
+  let rep = JSON.parse(readFileSync(join(root, 'monitor.json'), 'utf8'));
+  const rulesOf = (r) => r.alerts.map((x) => x.rule);
+  assert.ok(rulesOf(rep).includes('decoy-hit'), m1.out);
+  assert.ok(rep.alerts.some((x) => x.rule === 'decoy-hit' && x.data.who.toLowerCase() === W.attacker.address.toLowerCase()), m1.out);
+  assert.ok(rep.alerts.some((x) => x.rule === 'governance-change' && /AuditSet/.test(x.en)), m1.out);
+  assert.ok(rep.alerts.some((x) => x.rule === 'governance-change' && /RouteSet/.test(x.en)), m1.out);
+  const r = await guard.routes(route);
+  if (Number(r.day) === Math.floor(Number((await zp.getBlock('latest')).timestamp) / 86400)) {
+    assert.ok(rep.alerts.some((x) => x.rule === 'volume' && x.severity === 'critical' && /= 100% of the daily limit 10/.test(x.en)), m1.out);
+  } else console.log('(a UTC day boundary passed during the test: the volume check is skipped)');
+  assert.match(m1.out, /ตัวเฝ้าสะพาน ZETAPHY: มีสัญญาณเตือน/);
+  assert.equal(rep.caughtUp, true);
+  const p = await cli('user', ['bridge', 'pause', '--bridgeGuard', cfg.BridgeGuard, '--airlock', cfg.BridgeAirlock]);
+  assert.match(p.out, /BridgeGuard paused/, p.out);
+  assert.equal(await guard.paused(), true);
+  const m2 = await mon();
+  rep = JSON.parse(readFileSync(join(root, 'monitor.json'), 'utf8'));
+  assert.ok(rep.alerts.some((x) => x.rule === 'pause' && x.data.by.toLowerCase() === W.user.address.toLowerCase()), m2.out);
+  assert.ok(!rulesOf(rep).includes('decoy-hit'), 'the next scan starts after the last scanned block');
+  const none = await cli('eve', ['bridge', 'monitor', '--monitor-config', join(root, 'none.json'), '--out', join(root, 'none-report.json')]);
+  assert.equal(none.code, 0, none.out);
+  assert.match(none.out, /notice: no bridge deployed/);
+  console.log(`monitor: ${rulesOf(JSON.parse(readFileSync(join(root, 'monitor.json'), 'utf8'))).join(', ')} after the pause`);
 });

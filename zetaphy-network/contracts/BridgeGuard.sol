@@ -8,6 +8,11 @@ interface IContractThreats {
     function isContractHeld(address who) external view returns (bool, uint8);
 }
 
+/// BridgeAirlock's count of lanes with distinct controllers.
+interface IIndependentLanes {
+    function independentLanes() external view returns (uint256);
+}
+
 /// @title BridgedToken: a token that exists on ZETAPHY only through a bridge
 /// @notice Only its BridgeGuard can mint (assets arriving) or burn (leaving).
 contract BridgedToken {
@@ -70,6 +75,15 @@ contract BridgedToken {
 ///             The adapter itself is NOT checked: governance chose it and can
 ///             disable its route; a runner flag on its code hash or address must
 ///             not be able to freeze a whole route.
+///         Opening gates (a route stays closed until they hold):
+///           - an audit on record: setAudit(https url, sha256 of the report)
+///             before any route can be enabled;
+///           - the route's adapter is a BridgeAirlock with at least 2 lanes
+///             whose controllers differ (independentLanes() >= 2);
+///           - a hard cap, maxDailyLimit, over every route's daily limit. It
+///             starts at 1,000 whole tokens (createToken), is lowered at once,
+///             and is raised only by governance, at most x2 per step, each step
+///             7 days after it was proposed: caps grow gradually and in public.
 ///         Governance should be the chain's gov module or a multisig.
 contract BridgeGuard {
     struct Route {
@@ -87,6 +101,17 @@ contract BridgeGuard {
     bool public paused;
     mapping(bytes32 => Route) public routes;
     IContractThreats public threats; // zero: no vaccine check
+    address[] private guardianList;  // everyone ever made a guardian (guardians() filters the current ones)
+
+    /// The audit the bridge opened on: where to read it and the sha256 of the report.
+    string public auditUrl;
+    bytes32 public auditSha256;
+    /// Hard cap over every route's daily limit (token units).
+    uint128 public maxDailyLimit;
+    uint128 public pendingMaxDailyLimit;
+    uint64 public pendingMaxAt;      // when the pending raise may be applied (0: none)
+    uint64 public constant CAP_DELAY = 7 days;
+    uint128 public constant STARTER_UNITS = 1000; // whole tokens: the cap at createToken
 
     /// Inbound mints held by the vaccine, waiting for releaseHeld.
     struct HeldMint {
@@ -98,6 +123,11 @@ contract BridgeGuard {
     HeldMint[] public held;
 
     event RouteSet(bytes32 indexed id, address adapter, uint128 dailyLimit, bool enabled);
+    event GovernanceSet(address governance);
+    event AuditSet(string url, bytes32 sha256);
+    event MaxDailyLimitProposed(uint128 value, uint64 at);
+    event MaxDailyLimitSet(uint128 value);
+    event MaxDailyLimitCancelled();
     event GuardianSet(address indexed who, bool allowed);
     event Paused(address indexed by);
     event Unpaused();
@@ -115,6 +145,12 @@ contract BridgeGuard {
     error OverLimit(uint256 remaining);
     error FlaggedContract(address who);
     error NoHeld();
+    error AuditMissing();
+    error NeedLanes(uint256 independent);
+    error OverCap(uint128 cap);
+    error CapStep(uint128 most);
+    error TooEarly(uint64 at);
+    error NoPending();
 
     constructor(address governance_) {
         governance = governance_;
@@ -124,18 +160,90 @@ contract BridgeGuard {
     function createToken(string calldata n, string calldata s, uint8 d) external returns (BridgedToken) {
         if (msg.sender != governance) revert NotGovernance();
         require(address(token) == address(0), "token exists");
+        require(d <= 30, "decimals");
         token = new BridgedToken(n, s, d, address(this));
+        maxDailyLimit = uint128(uint256(STARTER_UNITS) * (uint256(10) ** d));
+        emit MaxDailyLimitSet(maxDailyLimit);
         return token;
     }
 
     modifier onlyGov() { if (msg.sender != governance) revert NotGovernance(); _; }
 
-    function setGovernance(address g) external onlyGov { governance = g; }
-    function setGuardian(address who, bool allowed) external onlyGov { guardian[who] = allowed; emit GuardianSet(who, allowed); }
+    function setGovernance(address g) external onlyGov { governance = g; emit GovernanceSet(g); }
+    function setGuardian(address who, bool allowed) external onlyGov {
+        if (allowed && !guardian[who]) {
+            bool known = false;
+            for (uint256 i = 0; i < guardianList.length; i++) if (guardianList[i] == who) { known = true; break; }
+            if (!known) { require(guardianList.length < 32, "guardians"); guardianList.push(who); }
+        }
+        guardian[who] = allowed;
+        emit GuardianSet(who, allowed);
+    }
+
+    /// The current guardians.
+    function guardians() external view returns (address[] memory out) {
+        uint256 n = 0;
+        for (uint256 i = 0; i < guardianList.length; i++) if (guardian[guardianList[i]]) n++;
+        out = new address[](n);
+        n = 0;
+        for (uint256 i = 0; i < guardianList.length; i++) if (guardian[guardianList[i]]) out[n++] = guardianList[i];
+    }
+
+    /// The audit report the bridge opens on (an https url and the report's sha256).
+    function setAudit(string calldata url, bytes32 sha) external onlyGov {
+        bytes memory u = bytes(url);
+        require(sha != bytes32(0) && u.length > 8 && u.length <= 200 && u[0] == "h" && u[1] == "t" && u[2] == "t" && u[3] == "p"
+            && u[4] == "s" && u[5] == ":" && u[6] == "/" && u[7] == "/", "audit: https url and sha256");
+        auditUrl = url;
+        auditSha256 = sha;
+        emit AuditSet(url, sha);
+    }
+
+    /// Lowering the cap applies at once (and cancels a pending raise); a raise
+    /// (at most x2 of the cap) waits CAP_DELAY, then anyone applies it.
+    function proposeMaxDailyLimit(uint128 v) external onlyGov {
+        if (v <= maxDailyLimit) {
+            maxDailyLimit = v;
+            pendingMaxAt = 0;
+            pendingMaxDailyLimit = 0;
+            emit MaxDailyLimitSet(v);
+            return;
+        }
+        uint256 most = uint256(maxDailyLimit) * 2;
+        if (v > most) revert CapStep(uint128(most));
+        pendingMaxDailyLimit = v;
+        pendingMaxAt = uint64(block.timestamp) + CAP_DELAY;
+        emit MaxDailyLimitProposed(v, pendingMaxAt);
+    }
+
+    function applyMaxDailyLimit() external {
+        uint64 at = pendingMaxAt;
+        if (at == 0) revert NoPending();
+        if (block.timestamp < at) revert TooEarly(at);
+        maxDailyLimit = pendingMaxDailyLimit;
+        pendingMaxAt = 0;
+        pendingMaxDailyLimit = 0;
+        emit MaxDailyLimitSet(maxDailyLimit);
+    }
+
+    function cancelMaxDailyLimit() external onlyGov {
+        pendingMaxAt = 0;
+        pendingMaxDailyLimit = 0;
+        emit MaxDailyLimitCancelled();
+    }
     /// The ThreatRegistry whose flags refuse coins (zero turns the check off).
     function setThreats(IContractThreats r) external onlyGov { threats = r; emit ThreatsSet(address(r)); }
 
+    /// Enabling needs the audit on record, a daily limit within the hard cap and
+    /// an adapter that is a BridgeAirlock with 2+ independent lanes. Disabling (or
+    /// setting a closed route up) needs none of them: closing always works.
     function setRoute(bytes32 id, address adapter, uint128 dailyLimit, bool enabled) external onlyGov {
+        if (enabled) {
+            if (dailyLimit > maxDailyLimit) revert OverCap(maxDailyLimit);
+            if (auditSha256 == bytes32(0)) revert AuditMissing();
+            uint256 n = _independentLanes(adapter);
+            if (n < 2) revert NeedLanes(n);
+        }
         Route storage r = routes[id];
         r.adapter = adapter;
         r.dailyLimit = dailyLimit;
@@ -181,7 +289,8 @@ contract BridgeGuard {
         _clean(h.to);
         uint64 today = uint64(block.timestamp / 1 days);
         if (r.day != today) { r.day = today; r.inToday = 0; r.outToday = 0; }
-        if (r.inToday + h.amount > r.dailyLimit) revert OverLimit(r.dailyLimit - r.inToday);
+        uint128 lim = _limit(r);
+        if (r.inToday + h.amount > lim) revert OverLimit(lim > r.inToday ? lim - r.inToday : 0);
         h.done = true;
         r.inToday += uint128(h.amount);
         token.mint(h.to, h.amount);
@@ -211,8 +320,23 @@ contract BridgeGuard {
     function remaining(bytes32 id) external view returns (uint256 inLeft, uint256 outLeft) {
         Route storage r = routes[id];
         bool fresh = r.day != uint64(block.timestamp / 1 days);
-        inLeft = r.dailyLimit - (fresh ? 0 : r.inToday);
-        outLeft = r.dailyLimit - (fresh ? 0 : r.outToday);
+        uint128 lim = _limit(r);
+        uint128 i = fresh ? 0 : r.inToday;
+        uint128 o = fresh ? 0 : r.outToday;
+        inLeft = lim > i ? lim - i : 0;
+        outLeft = lim > o ? lim - o : 0;
+    }
+
+    /// A route's daily limit, never above the hard cap.
+    function _limit(Route storage r) private view returns (uint128) {
+        return r.dailyLimit < maxDailyLimit ? r.dailyLimit : maxDailyLimit;
+    }
+
+    function _independentLanes(address adapter) private view returns (uint256) {
+        if (adapter.code.length == 0) return 0;
+        (bool ok, bytes memory ret) = adapter.staticcall(abi.encodeCall(IIndependentLanes.independentLanes, ()));
+        if (!ok || ret.length < 32) return 0;
+        return abi.decode(ret, (uint256));
     }
 
     /// Vaccine: holds back a party (the coins' owner) that the registry holds.
@@ -233,6 +357,7 @@ contract BridgeGuard {
         uint64 today = uint64(block.timestamp / 1 days);
         if (r.day != today) { r.day = today; r.inToday = 0; r.outToday = 0; }
         uint256 used = isIn ? r.inToday : r.outToday;
-        if (used + amount > r.dailyLimit) revert OverLimit(r.dailyLimit - used);
+        uint256 lim = _limit(r);
+        if (used + amount > lim) revert OverLimit(lim > used ? lim - used : 0);
     }
 }

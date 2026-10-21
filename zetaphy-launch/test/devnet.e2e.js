@@ -147,6 +147,14 @@ test('launch: every contract deployed and every config written with real address
   for (const k of Object.values(nft.collectionCodeKeys)) assert.equal(await R.protectedKey(k), true, `code key ${k}`);
   assert.equal(await R.protectedKey(await R.addressKey(77390n, o.bridgeAirlock)), true, 'bridge airlock protected');
   assert.equal(await R.protectedKey(await R.addressKey(11155111n, LOCKBOX.split(':')[1])), true, 'lockbox protected');
+  // The bridge is deployed CLOSED: its route disabled, the 1,000-token hard cap, no audit on record.
+  const guard = new Contract(o.bridgeGuard, art('zetaphy-network', 'BridgeGuard').abi, provider);
+  const route = await new Contract(o.bridgeAirlock, art('zetaphy-network', 'BridgeAirlock').abi, provider).route();
+  assert.equal((await guard.routes(route)).enabled, false, 'the bridge route is closed');
+  assert.equal(await guard.maxDailyLimit(), 1000n * 10n ** 18n);
+  assert.equal(await guard.auditSha256(), '0x' + '00'.repeat(32));
+  assert.equal(o.bridgeOpen, false);
+  assert.match(r.out, /bridge: CLOSED \(route disabled\)\. It opens only through `zetaphy bridge open`/);
   const control = new Contract(o.neuroControl, art('zetaphy-network', 'NeuroControl').abi, provider);
   assert.equal(await control.activeSkill(), o.skillId);
   assert.equal(await control.governance(), deployer.address, 'the deployer keeps governance without --handover');
