@@ -30,7 +30,7 @@
 #   gov.sh qday <height> [reveal-delay-blocks]           propose Q-day (0 = unschedule): ECDSA-signed txs refused from it
 #   gov.sh threat-gate <ThreatRegistry 0x…> on|off       propose the threat gate (enforced flags need the sender's consent)
 #   gov.sh ibc-hold <delay-seconds> [guardian]           propose the IBC large-transfer hold delay and guardian
-#   gov.sh ibc-hold-rule <denom|*> <min-amount> <bps>    propose when an inbound transfer is held (0 0 removes the rule)
+#   gov.sh ibc-hold-rule <denom|*> <min-amount> <bps>    propose when an inbound transfer is held (0 0 removes the rule; "*": bps from min-amount up)
 #   gov.sh ibc-holds                                     inbound transfers waiting
 #   gov.sh ibc-hold-cancel <id>                          the guardian (FROM) returns a held transfer to its sender
 #   gov.sh ibc-usdc-denom <channel>                      USDC from Noble via that channel: ibc/<hash>, ERC-20 0x…

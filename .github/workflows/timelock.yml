@@ -11,7 +11,8 @@
 #   cancel    what a canceller must send (calldata in the summary)
 #
 # Nothing secret is printed: calls, ids and calldata are public on-chain anyway. The deployer key
-# (secret ZETAPHY_DEPLOYER_KEY) is used for execute only, from a 0600 file, removed at the end.
+# (secret ZETAPHY_DEPLOYER_KEY) is used for execute only, from a 0600 file, removed at the end, and only
+# after the RPC answered eth_chainId 0x12e4e (77390); the CLI signs with chain id 77390 only.
 # Cost: free (a GitHub-hosted runner for ~2 minutes).
 
 name: timelock
@@ -127,7 +128,17 @@ jobs:
           echo "address=$TL" >> "$GITHUB_OUTPUT"
           echo "block=${BLOCK:-0}" >> "$GITHUB_OUTPUT"
 
-      - name: Write the deployer key to a private file (execute only: it pays gas, it holds no role)
+      - name: Check the RPC is ZETAPHY (eth_chainId 0x12e4e = 77390) before the key signs
+        if: inputs.action == 'execute'
+        env:
+          RPC: ${{ inputs.rpc }}
+        run: |
+          got=$(curl -fsS --max-time 30 -H 'content-type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$RPC" | jq -r '.result // empty')
+          [ "$got" = "0x12e4e" ] || { echo "::error::the RPC answers eth_chainId '$got', not 0x12e4e (ZETAPHY, 77390): nothing is signed"; exit 1; }
+          echo "eth_chainId $got (ZETAPHY); the tool signs with chain id 77390 only"
+
+      - name: Write the deployer key to a private file (execute only; it pays gas and holds no role)
         if: inputs.action == 'execute'
         env:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}

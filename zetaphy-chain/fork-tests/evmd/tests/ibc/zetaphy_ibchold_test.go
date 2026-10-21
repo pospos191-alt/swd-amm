@@ -200,6 +200,91 @@ func (s *IBCHoldTestSuite) TestSupplyShareRule() {
 	s.Require().Equal(int64(499), s.balanceA().Int64())
 }
 
+// The "*" rule's minimum amount: below it the supply share does not apply,
+// so small transfers of a denom with no supply here yet are not held.
+func (s *IBCHoldTestSuite) TestSupplyShareRuleFloor() {
+	gov := authtypes.NewModuleAddress(govtypes.ModuleName).String()
+	s.gov(&evmd.MsgSetIBCHoldRule{Authority: gov, Denom: s.voucher})
+	h := s.app().MsgServiceRouter().Handler(&evmd.MsgSetIBCHoldRule{})
+	_, err := h(s.evmChainA.GetContext(), &evmd.MsgSetIBCHoldRule{Authority: gov, Denom: "*", MinAmount: "500"})
+	s.Require().ErrorContains(err, "supply share", "\"*\" with a minimum but no share")
+	s.gov(&evmd.MsgSetIBCHoldRule{Authority: gov, Denom: "*", MinAmount: "500", SupplyBps: 2500})
+	s.coordinator.CommitBlock(s.evmChainA)
+	s.Require().NoError(s.path.RelayPacket(s.sendFromB(499)), "supply 0 but under the minimum: delivered at once")
+	s.Require().Equal(int64(499), s.balanceA().Int64())
+	p := s.sendFromB(500)
+	s.Require().NoError(s.path.EndpointA.UpdateClient())
+	s.Require().NoError(s.path.EndpointA.RecvPacket(p))
+	s.Require().Equal(int64(499), s.balanceA().Int64(), "from the minimum and over 25% of the supply: held")
+}
+
+// recvRefused: p is refused at once on A (error acknowledgement, nothing
+// delivered) and the source chain refunds the sender.
+func (s *IBCHoldTestSuite) recvRefused(p channeltypes.Packet, amount int64) {
+	bApp := s.chainB.GetSimApp()
+	sender := s.chainB.SenderAccount.GetAddress()
+	before := bApp.BankKeeper.GetBalance(s.chainB.GetContext(), sender, s.bDenom).Amount
+	balA := s.balanceA()
+	s.Require().NoError(s.path.EndpointA.UpdateClient())
+	s.Require().NoError(s.path.EndpointA.RecvPacket(p))
+	commitment, acked := s.ackOnA(p)
+	s.Require().True(acked, "refused: acknowledged at once")
+	ack := channeltypes.NewErrorAcknowledgement(errHeldReturned)
+	s.Require().Equal(channeltypes.CommitAcknowledgement(ack.Acknowledgement()), commitment, "an error acknowledgement")
+	s.Require().Equal(balA, s.balanceA(), "nothing delivered")
+	s.Require().NoError(s.path.EndpointB.UpdateClient())
+	s.Require().NoError(s.path.EndpointB.AcknowledgePacket(p, ack.Acknowledgement()))
+	s.Require().Equal(before.AddRaw(amount), bApp.BankKeeper.GetBalance(s.chainB.GetContext(), sender, s.bDenom).Amount, "refunded")
+}
+
+func (s *IBCHoldTestSuite) hold(amount int64) channeltypes.Packet {
+	p := s.sendFromB(amount)
+	s.Require().NoError(s.path.EndpointA.UpdateClient())
+	s.Require().NoError(s.path.EndpointA.RecvPacket(p))
+	_, acked := s.ackOnA(p)
+	s.Require().False(acked, "held")
+	return p
+}
+
+// At most IBCHoldMaxPerDenom transfers of one denom wait: the next one over
+// the threshold is refused (refunded), not added. Once the waiting ones are
+// released, holding works again, in order of release time.
+func (s *IBCHoldTestSuite) TestHoldCapPerDenom() {
+	prev := evmd.IBCHoldMaxPerDenom
+	evmd.IBCHoldMaxPerDenom = 2
+	defer func() { evmd.IBCHoldMaxPerDenom = prev }()
+	s.hold(5000)
+	s.coordinator.IncrementTimeBy(30 * time.Minute)
+	s.hold(6000)
+	s.recvRefused(s.sendFromB(7000), 7000)
+	s.Require().NoError(s.path.RelayPacket(s.sendFromB(10)), "under the threshold: not affected")
+	s.Require().Equal(int64(10), s.balanceA().Int64())
+
+	// the first one's delay is over, not yet the second's
+	s.coordinator.IncrementTimeBy(31 * time.Minute)
+	s.coordinator.CommitBlock(s.evmChainA)
+	s.coordinator.CommitBlock(s.evmChainA)
+	s.Require().Equal(int64(5010), s.balanceA().Int64(), "released first-in first-out")
+	s.hold(8000) // a place is free again
+	s.recvRefused(s.sendFromB(9000), 9000)
+	s.coordinator.IncrementTimeBy(2 * time.Hour)
+	s.coordinator.CommitBlock(s.evmChainA)
+	s.coordinator.CommitBlock(s.evmChainA)
+	s.Require().Equal(int64(19010), s.balanceA().Int64())
+}
+
+// At most IBCHoldMaxOpen transfers wait in all; a cancellation frees a place.
+func (s *IBCHoldTestSuite) TestHoldCapGlobal() {
+	prev := evmd.IBCHoldMaxOpen
+	evmd.IBCHoldMaxOpen = 1
+	defer func() { evmd.IBCHoldMaxOpen = prev }()
+	s.hold(5000)
+	s.recvRefused(s.sendFromB(6000), 6000)
+	_, err := s.evmChainA.SendMsgsWithSender(s.evmChainA.SenderAccounts[2], &evmd.MsgIBCHoldCancel{Signer: s.guardian().String(), Id: 1})
+	s.Require().NoError(err)
+	s.hold(7000)
+}
+
 // Any unregistered error gives the same acknowledgement bytes (only the
 // ABCI code is in them), so the test can rebuild the one the chain wrote.
 var errHeldReturned = errors.New("returned")

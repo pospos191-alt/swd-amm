@@ -1573,6 +1573,11 @@ test('Q-day card: status, the MetaMask account checked, commit then reveal with 
   assert.match(await page.textContent('#qd-status'), /Q-day: block 500 \(now 100\)/);
   assert.match(await page.textContent('#qd-result'), /never used on chain/);
   assert.ok(!(await page.isHidden('#qd-recover')), 'the commit–reveal steps are offered');
+  // the signing warning names the account, the controller it is handed to, and the official wallet
+  const warn = await page.textContent('#qd-recover-warn');
+  assert.match(warn, /gives full control of/);
+  assert.match(warn, new RegExp(`${SEED_HEX_ADDR}[\\s\\S]*${SEED_HEX_ADDR}`, 'i'), 'the controller, twice');
+  assert.match(warn, /only in the official ZETAPHY wallet/);
 
   // Step 1: MetaMask signs the text (personal_sign, nothing sent from it); this wallet sends the commitment.
   await page.click('#qd-commit');

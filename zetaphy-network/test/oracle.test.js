@@ -224,7 +224,7 @@ test('TwapRecorder: anyone records, at most once per minSpacing, never twice in 
 });
 
 test('ZetaphyPythRelay: Pyth\'s update format, only relayers, a threshold of identical updates, older ones ignored', async () => {
-  const c = await createChain(['gov', 'r1', 'r2', 'eve']);
+  const c = await createChain(['gov', 'r1', 'r2', 'eve', 'r3']);
   const A = (n) => c.acct[n].toString();
   const relay = await c.deploy('ZetaphyPythRelay', [A('gov'), [A('r1'), A('r2')], 2], 'gov');
   // abi.encode(PythStructs.PriceFeed, uint64 prevPublishTime), as Pyth's MockPyth.createPriceFeedUpdateData builds it
@@ -251,13 +251,25 @@ test('ZetaphyPythRelay: Pyth\'s update format, only relayers, a threshold of ide
   await assert.rejects(relay.call('getPriceNoOlderThan', [FEED, 5]), /StalePrice/);
   assert.equal(await relay.call('getUpdateFee', [[u1]]), 0n);
   for (const [fn, args] of [['setRelayer', [A('eve'), true]], ['setThreshold', [1]], ['setGovernance', [A('eve')]]]) await assert.rejects(relay.send('r1', fn, args), /NotGovernance/);
+  // a relayer governance removes no longer counts toward a pending update
+  const u2 = upd(300_000_000n, c.now());
+  await relay.send('r1', 'updatePriceFeeds', [[u2]]);
+  assert.equal(await relay.call('submissions', [keccak256(u2)]), 1n);
+  await relay.send('gov', 'setRelayer', [A('r1'), false]);
+  assert.equal(await relay.call('submissions', [keccak256(u2)]), 0n);
+  await relay.send('gov', 'setRelayer', [A('r3'), true]);
+  await relay.send('r2', 'updatePriceFeeds', [[u2]]);
+  assert.equal((await relay.call('getPriceUnsafe', [FEED])).price, 200_000_000n, 'the removed relayer\'s submission does not count');
+  await relay.send('r3', 'updatePriceFeeds', [[u2]]);
+  assert.equal((await relay.call('getPriceUnsafe', [FEED])).price, 300_000_000n, 'two current relayers');
+  await relay.send('gov', 'setRelayer', [A('r1'), true]);
   // the oracle reads the relay as it would read Pyth
   const recorder = await c.deploy('TwapRecorder', [60], 'gov');
   const oracle = await c.deploy('ZetaphyOracle', [A('gov'), recorder.address, relay.address], 'gov');
   await oracle.send('gov', 'setPythFeed', [A('eve'), FEED, 120, 100]);
   await oracle.send('gov', 'setGuards', [A('eve'), 200, 1500, 3000, 3600]);
   await oracle.send('eve', 'poke', [A('eve')]);
-  assert.equal((await oracle.call('price', [A('eve')]))[0], 2n * E18);
+  assert.equal((await oracle.call('price', [A('eve')]))[0], 3n * E18);
   assert.equal(keccak256(u1).length, 66);
 });
 

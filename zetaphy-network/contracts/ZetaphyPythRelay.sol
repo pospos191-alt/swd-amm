@@ -56,7 +56,9 @@ contract ZetaphyPythRelay is IPythLike {
     mapping(bytes32 => PriceFeed) private _feeds;
     /// keccak256(update) => relayer => submitted (an update is accepted once threshold relayers sent it)
     mapping(bytes32 => mapping(address => bool)) public submitted;
-    mapping(bytes32 => uint8) public submissions;
+    /// Who submitted each update, so only those still relayers count
+    /// (submissions()): a relayer governance removes no longer counts.
+    mapping(bytes32 => address[]) private _submitters;
 
     event PriceFeedUpdate(bytes32 indexed id, uint64 publishTime, int64 price, uint64 conf);
     event RelayerSet(address indexed relayer, bool on);
@@ -106,15 +108,23 @@ contract ZetaphyPythRelay is IPythLike {
             if (f.id == bytes32(0) || f.price.publishTime > block.timestamp + MAX_FUTURE) revert InvalidUpdateData();
             if (f.price.publishTime <= _feeds[f.id].price.publishTime) continue; // older or same: ignored, as Pyth does
             bytes32 u = keccak256(updateData[i]);
+            uint8 n = submissions(u);
             if (!submitted[u][msg.sender]) {
                 submitted[u][msg.sender] = true;
-                submissions[u] += 1;
-                emit Submitted(f.id, u, msg.sender, submissions[u]);
+                _submitters[u].push(msg.sender);
+                n += 1;
+                emit Submitted(f.id, u, msg.sender, n);
             }
-            if (submissions[u] < threshold) continue;
+            if (n < threshold) continue;
             _feeds[f.id] = f;
             emit PriceFeedUpdate(f.id, uint64(f.price.publishTime), f.price.price, f.price.conf);
         }
+    }
+
+    /// How many current relayers submitted this update (keccak256 of it).
+    function submissions(bytes32 u) public view returns (uint8 n) {
+        address[] storage s = _submitters[u];
+        for (uint256 i = 0; i < s.length; i++) if (isRelayer[s[i]]) n += 1;
     }
 
     function priceFeedExists(bytes32 id) public view returns (bool) { return _feeds[id].price.publishTime != 0; }

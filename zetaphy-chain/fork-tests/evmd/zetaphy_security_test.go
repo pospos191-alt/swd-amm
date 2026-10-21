@@ -625,3 +625,61 @@ func TestQDayP256(t *testing.T) {
 	require.Equal(t, common.LeftPadBytes([]byte{1}, 32), verify(ctx), "Q-day scheduled, not reached")
 	require.Empty(t, verify(ctx.WithBlockHeight(20)), "Q-day: no signature is valid")
 }
+
+// A tx the gate refuses only once in a block (its consent was withdrawn or
+// expired after CheckTx) is included and pays its fee: the ante handler
+// keeps the fee and the nonce, the execution is reverted.
+func TestThreatGateRefusedInBlockPaysFee(t *testing.T) {
+	app, ctx := secApp(t)
+	user := secPQAccount(t, app, ctx)
+	reg := secDeploy(t, app, ctx, user, secRegistryRuntime)
+	scam := common.HexToAddress("0x00000000000000000000000000000000005ca400")
+	secFlag(app, ctx, reg, scam, 6)
+	_, err := app.setThreatGate(ctx, &MsgSetThreatGate{Authority: secGovAddr(), Registry: reg.Hex(), Enabled: 1})
+	require.NoError(t, err)
+	key, _ := crypto.GenerateKey()
+	from := crypto.PubkeyToAddress(key.PublicKey)
+	pqFund(t, app, ctx, from.Bytes(), secOne())
+	chainID := evmtypes.GetEthChainConfig().ChainID
+	signer := ethtypes.LatestSignerForChainID(chainID)
+	signed, err := ethtypes.SignTx(ethtypes.NewTx(&ethtypes.DynamicFeeTx{ChainID: chainID, Nonce: 0, To: &scam, Value: big.NewInt(1),
+		Gas: 50000, GasFeeCap: big.NewInt(10_000_000_000), GasTipCap: big.NewInt(1)}), signer, key)
+	require.NoError(t, err)
+	msg := &evmtypes.MsgEthereumTx{}
+	require.NoError(t, msg.FromSignedEthereumTx(signed, signer))
+	tx, err := msg.BuildTx(app.GetTxConfig().NewTxBuilder(), evmtypes.GetEVMCoinDenom())
+	require.NoError(t, err)
+	cp := ctx.ConsensusParams()
+	cp.Block = &cmtproto.BlockParams{MaxGas: 30_000_000, MaxBytes: 2_000_000}
+	ctx = ctx.WithConsensusParams(cp).WithBlockGasMeter(storetypes.NewGasMeter(30_000_000))
+	denom := evmtypes.GetEVMCoinDenom()
+	before := app.BankKeeper.GetBalance(ctx, from.Bytes(), denom).Amount
+
+	// CheckTx: refused before inclusion, as before.
+	c, _ := ctx.WithExecMode(sdk.ExecModeCheck).CacheContext()
+	_, err = app.AnteHandler()(c, tx, false)
+	require.ErrorIs(t, err, ErrThreatFlagged)
+
+	// In a block (as baseapp runTx): the ante handler's branch is kept...
+	fctx := ctx.WithExecMode(sdk.ExecModeFinalize)
+	anteCtx, write := fctx.CacheContext()
+	newCtx, err := app.AnteHandler()(anteCtx, tx, false)
+	require.NoError(t, err, "included")
+	write()
+	require.Equal(t, uint64(1), app.EVMKeeper.GetNonce(fctx, from), "nonce used")
+	charged := before.Sub(app.BankKeeper.GetBalance(fctx, from.Bytes(), denom).Amount)
+	require.True(t, charged.IsPositive(), "fee deducted")
+	// ...and the message runs reverted: nothing reaches the flagged contract.
+	runCtx, _ := newCtx.WithMultiStore(fctx.MultiStore()).CacheContext()
+	res, err := app.MsgServiceRouter().Handler(msg)(runCtx, msg)
+	require.NoError(t, err)
+	var out evmtypes.MsgEthereumTxResponse
+	require.NoError(t, out.Unmarshal(res.Data))
+	require.Contains(t, out.VmError, "threat gate")
+	require.True(t, app.BankKeeper.GetBalance(runCtx, scam.Bytes(), denom).Amount.IsZero(), "value not sent")
+	require.True(t, app.BankKeeper.GetBalance(runCtx, from.Bytes(), denom).Amount.LT(before), "the fee stays paid")
+
+	// A MsgEVMCall in such a tx fails where it runs.
+	_, err = app.evmCall(newCtx, &MsgEVMCall{Sender: user.String(), To: "0x0000000000000000000000000000000000600d00", GasLimit: 50000})
+	require.ErrorIs(t, err, ErrThreatFlagged)
+}

@@ -100,13 +100,13 @@ Part of the same `ZETAPHY_PQ_PATCH` in `zetaphy-chain/setup-node.sh` (~1,400 lin
 
 | File | What to look at |
 |---|---|
-| `evmd/zetaphy_security.go` | store layout (zetaphypq keys 0x0F–0x1B), activation height 0x0F, EVM-storage mirrors at `0x…5051`, BeginBlock work |
+| `evmd/zetaphy_security.go` | store layout (zetaphypq keys 0x0F–0x1D), activation height 0x0F, EVM-storage mirrors at `0x…5051`, BeginBlock work |
 | `evmd/zetaphy_qday.go` | `MsgSetQDay` (gov only), the Q-day ante rule (every signer ML-DSA-44; no `MsgEthereumTx`; authz inner messages), commit–reveal migration (`QDayCommitment`, EIP-191 reveal text, low-s check, commitment age, "oldest commitment wins" while pending, finalize queue bounded per block), exposure test |
 | `x/vm/keeper/zetaphy_ecrecover.go` | ecrecover (and P256VERIFY at 0x…0100) return nothing from Q-day; exposure marks written from inside the precompile (also under STATICCALL) |
 | `mempool/zetaphy_lock.go` | submission-time refusal (Q-day, quantum lock) and the app hook (threat gate on a query context) |
-| `evmd/zetaphy_threatgate.go` | registry static call (gas cap, fail-open, throw-away cache context), consent records, exemptions (system addresses, the registry, governance), ante coverage of `MsgEthereumTx` and `MsgEVMCall` (also in authz) |
+| `evmd/zetaphy_threatgate.go` | registry static call (gas cap, fail-open, throw-away cache context), consent records, exemptions (system addresses, the registry, governance), ante coverage of `MsgEthereumTx` and `MsgEVMCall` (also in authz); in a block a refused tx keeps its fee and nonce and is reverted where it runs (EVM hook, `evmCall`) |
 | `evmd/zetaphy_secprecompile.go` | precompile `0x…0901`: consent only from `msg.sender == tx.origin`, no value, write protection under STATICCALL/DELEGATECALL, guardian-only `cancelIBCHold`, activation by height |
-| `evmd/zetaphy_ibchold.go` | v1 middleware on top of the transfer stack (async acknowledgement; release in BeginBlock through the rest of the stack in a cache context with panic recovery and a gas cap per delivery (out of gas or a panic = error acknowledgement) and per block; error-ack cancel; local-denom computation for both directions), v2 refusal, parameter bounds |
+| `evmd/zetaphy_ibchold.go` | v1 middleware on top of the transfer stack (async acknowledgement; release in BeginBlock through the rest of the stack in a cache context with panic recovery and a gas cap per delivery (out of gas or a panic = error acknowledgement) and per block; error-ack cancel; local-denom computation for both directions; the `"*"` rule's supply share counted from its minimum amount; open holds capped in total and per denom, over the cap an error acknowledgement), v2 refusal, parameter bounds |
 | `evmd/zetaphy_rpc.go` | read-only JSON-RPC (`zetaphy_securityStatus`, `zetaphy_migration`, `zetaphy_qdayCommitment`, `zetaphy_consent`, `zetaphy_ibcHolds`) |
 | `evmd/zetaphy_upgrade.go` | genesis allow-list, export, the `zetaphy-v3` upgrade handler |
 

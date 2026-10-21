@@ -285,9 +285,11 @@ function settings(opt, env) {
 
 async function connectRpc(s) {
   if (!s.rpc) throw new Error('set the ZETAPHY testnet RPC: --rpc http://<node>:8545 (or ZETAPHY_RPC)');
-  const provider = new JsonRpcProvider(s.rpc, undefined, { staticNetwork: false, polling: true, pollingInterval: 1000 });
-  const net = await provider.getNetwork();
-  if (net.chainId !== EVM_CHAIN_ID) throw new Error(`that RPC is chain ${net.chainId}, not ZETAPHY testnet (${EVM_CHAIN_ID})`);
+  // The network is fixed to 77390, so every tx this key signs carries chain id 77390 whatever the RPC says later;
+  // an RPC that answers another chain id is refused before anything is signed.
+  const provider = new JsonRpcProvider(s.rpc, EVM_CHAIN_ID, { staticNetwork: true, polling: true, pollingInterval: 1000 });
+  const id = BigInt(await provider.send('eth_chainId', []));
+  if (id !== EVM_CHAIN_ID) { provider.destroy(); throw new Error(`that RPC is chain ${id}, not ZETAPHY testnet (${EVM_CHAIN_ID})`); }
   return provider;
 }
 

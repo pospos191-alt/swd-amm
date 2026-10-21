@@ -125,6 +125,15 @@ jobs:
           elif [ -f "$STATE" ]; then echo "resuming from the state on ${{ github.ref_name }}"
           else echo "no earlier state: a fresh launch"; fi
 
+      - name: Check the RPC is ZETAPHY (eth_chainId 0x12e4e = 77390) before any key is used
+        env:
+          RPC: ${{ inputs.rpc }}
+        run: |
+          got=$(curl -fsS --max-time 30 -H 'content-type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$RPC" | jq -r '.result // empty')
+          [ "$got" = "0x12e4e" ] || { echo "::error::the RPC answers eth_chainId '$got', not 0x12e4e (ZETAPHY, 77390): nothing is signed"; exit 1; }
+          echo "eth_chainId $got (ZETAPHY); the tool signs with chain id 77390 only"
+
       - name: Write the deployer key to a private file
         env:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}

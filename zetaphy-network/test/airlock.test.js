@@ -138,6 +138,17 @@ test('a marker marks an address; its transfers are held until governance untrips
   await airlock.send('gov', 'setMarker', [a('monitor'), false]);
   assert.equal(await airlock.call('markerCount'), 0n);
   await assert.rejects(airlock.send('monitor', 'trip', [a('mallory')]), /NotMarker/);
+  // A second marker cannot take over a mark that counts (so removing that
+  // marker later does not lift the first marker's mark).
+  await airlock.send('gov', 'setMarker', [a('monitor'), true]);
+  await airlock.send('gov', 'setMarker', [a('mallory'), true]);
+  await airlock.send('monitor', 'trip', [a('user')]);
+  await airlock.send('mallory', 'trip', [a('user')]);
+  assert.equal(lc(await airlock.call('trippedBy', [a('user')])), a('monitor'));
+  await airlock.send('gov', 'setMarker', [a('mallory'), false]);
+  assert.equal(await airlock.call('tripped', [a('user')]), true);
+  await airlock.send('gov', 'untrip', [a('user')]);
+  await airlock.send('gov', 'setMarker', [a('monitor'), false]);
 });
 
 test('only lanes attest; only proven runners speak for the Neuro lane; BridgeGuard limits still apply', async () => {

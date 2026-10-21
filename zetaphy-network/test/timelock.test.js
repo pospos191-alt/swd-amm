@@ -164,6 +164,12 @@ test('BridgeAirlock: guardians of the guard remove a lane or a marker and raise 
   assert.equal(await airlock.call('tripped', [A('eve')]), true);
   await airlock.send('guardian', 'emergencyRemoveMarker', [A('marker')]);
   assert.equal(await airlock.call('markerCount'), 0n);
+  // a guardian stops the marker from marking, but cannot lift its marks
+  assert.equal(await airlock.call('tripped', [A('eve')]), true, 'marks stay until governance decides');
+  assert.equal(await airlock.call('markerRevoked', [A('marker')]), true);
+  await assert.rejects(airlock.send('marker', 'trip', [A('lane2')]), /NotMarker/);
+  await assert.rejects(airlock.send('guardian', 'emergencyRemoveMarker', [A('marker')]), /NotMarker/);
+  await assert.rejects(airlock.send('guardian', 'untrip', [A('eve')]), /NotGovernance/);
   await assert.rejects(airlock.send('guardian', 'emergencyRaiseThreshold', [2]), /raise only|revert|Error/, 'raise only');
   await airlock.send('guardian', 'emergencyRaiseThreshold', [3]);
   await assert.rejects(airlock.send('guardian', 'emergencyRaiseQuarantine', [600]), /raise only|revert|Error/, 'raise only');
@@ -176,6 +182,10 @@ test('BridgeAirlock: guardians of the guard remove a lane or a marker and raise 
   }
   await govern(airlock, 'setThreshold', [2]);
   assert.equal(await airlock.call('threshold'), 2n);
+  // governance removing the marker (through the timelock) lifts its marks
+  await govern(airlock, 'setMarker', [A('marker'), false]);
+  assert.equal(await airlock.call('markerRevoked', [A('marker')]), false);
+  assert.equal(await airlock.call('tripped', [A('eve')]), false);
 });
 
 test('every other admin role behind the timelock: the old admin is refused, a scheduled call goes through', async () => {
@@ -241,4 +251,41 @@ test('CLI helpers: calldata from --sig/--args, a gov proposal for the timelock, 
   assert.equal(saltOf(undefined), ZeroHash);
   assert.equal(saltOf('0x' + '01'.repeat(32)), '0x' + '01'.repeat(32));
   assert.notEqual(saltOf('raise-cap-1'), saltOf('raise-cap-2'));
+});
+
+// timelock execute (the workflow signs it with the deployer key) refuses an RPC that answers another chain id
+// before anything is signed (and the CLI's network is fixed to 77390, so what it signs is for 77390 only).
+test('CLI timelock execute: an RPC that is not chain 77390 gets nothing signed', async () => {
+  const { createServer } = await import('node:http');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { Wallet } = await import('ethers');
+  const home = mkdtempSync(join(tmpdir(), 'zetaphy-tl-chain-'));
+  writeFileSync(join(home, 'worker.key'), Wallet.createRandom().privateKey + '\n', { mode: 0o600 });
+  process.env.ZETAPHY_HOME = home;
+  const chainId = '0x1';
+  const seen = [];
+  const answer = ({ id, method }) => {
+    seen.push(method);
+    if (method === 'eth_chainId') return { jsonrpc: '2.0', id, result: chainId };
+    return { jsonrpc: '2.0', id, error: { code: -32601, message: `${method}: not in this fake` } };
+  };
+  const server = createServer(async (req, res) => {
+    let body = '';
+    for await (const c of req) body += c;
+    const msg = JSON.parse(body);
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(Array.isArray(msg) ? msg.map(answer) : answer(msg)));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const rpc = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const { main } = await import('../cli.js');
+    const id = '0x' + '11'.repeat(32);
+    await assert.rejects(main(['timelock', 'execute', id, '--timelock', '0x' + '22'.repeat(20), '--rpc', rpc], {}, () => {}), /that RPC is chain 1, not ZETAPHY testnet \(77390\)/);
+    assert.ok(!seen.includes('eth_sendRawTransaction'), 'nothing signed or sent');
+    assert.deepEqual([...new Set(seen)], ['eth_chainId']);
+  } finally {
+    server.close();
+  }
 });

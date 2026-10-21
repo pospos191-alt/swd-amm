@@ -11,6 +11,9 @@
 //     gov vote schedules NeuroControl.unpause() through the timelock (zetaphy timelock schedule --proposal-out),
 //     anyone executes it after the delay (zetaphy timelock execute, the call given in full: a MsgEVMCall's logs
 //     are not in eth_getLogs), and the bridge monitor reports both (the vote from the REST API, the run from logs)
+//   - the handover's bootstrap audit: an operation the deployer key schedules with a Cosmos tx (MsgEVMCall, no log)
+//     while the timelock is at zero delay makes the handover refuse that timelock (nothing handed over); one it
+//     schedules with an EVM tx is cancelled before the deployer renounces
 // The config files it writes are restored afterwards (the committed ones stay placeholders).
 //
 //   ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet
@@ -22,7 +25,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Wallet, JsonRpcProvider, Contract, NonceManager, encodeBytes32String, parseEther, ZeroAddress, ZeroHash, id as hashText } from 'ethers';
+import { Wallet, JsonRpcProvider, Contract, NonceManager, encodeBytes32String, parseEther, ZeroAddress, ZeroHash, id as hashText, keccak256 } from 'ethers';
 import { CONFIG_FILES } from '../src/configs.js';
 import { GOV_MODULE } from '../src/steps.js';
 
@@ -69,6 +72,43 @@ const read = (rel) => readFileSync(join(ROOT, rel), 'utf8');
 async function hasCode(a, what) {
   assert.match(String(a), /^0x[0-9a-fA-F]{40}$/, `${what}: ${a}`);
   assert.notEqual(await provider.getCode(a), '0x', `${what} ${a} has no code`);
+}
+
+// A Cosmos tx signed by an eth_secp256k1 key (SIGN_MODE_DIRECT), protobuf written by hand: the launch never sends one,
+// so the handover's audit must notice it. Broadcast through CometBFT (+100).
+const pbVarint = (n) => { let v = BigInt(n); const out = []; while (v >= 0x80n) { out.push(Number(v & 0x7fn) | 0x80); v >>= 7n; } out.push(Number(v)); return Buffer.from(out); };
+const pbBytes = (no, b) => Buffer.concat([pbVarint((no << 3) | 2), pbVarint(Buffer.from(b).length), Buffer.from(b)]);
+const pbStr = (no, str) => pbBytes(no, Buffer.from(String(str), 'utf8'));
+const pbU64 = (no, n) => (BigInt(n) === 0n ? Buffer.alloc(0) : Buffer.concat([pbVarint(no << 3), pbVarint(n)]));
+const pbAny = (typeUrl, value) => Buffer.concat([pbStr(1, typeUrl), pbBytes(2, value)]);
+function toBech32(hex) {
+  const CH = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+  const data = []; let acc = 0, bits = 0;
+  for (const b of Buffer.from(hex.slice(2), 'hex')) { acc = ((acc << 8) | b) & 0xffff; bits += 8; while (bits >= 5) { bits -= 5; data.push((acc >> bits) & 31); } }
+  if (bits) data.push((acc << (5 - bits)) & 31);
+  const polymod = (v) => { let c = 1; for (const x of v) { const t = c >> 25; c = ((c & 0x1ffffff) << 5) ^ x; for (let i = 0; i < 5; i++) if ((t >> i) & 1) c ^= [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3][i]; } return c; };
+  const hrp = 'zetaphy';
+  const pm = polymod([...[...hrp].map((c) => c.charCodeAt(0) >> 5), 0, ...[...hrp].map((c) => c.charCodeAt(0) & 31), ...data, 0, 0, 0, 0, 0, 0]) ^ 1;
+  return `${hrp}1${[...data, ...Array.from({ length: 6 }, (_, i) => (pm >> (5 * (5 - i))) & 31)].map((d) => CH[d]).join('')}`;
+}
+const encodeEVMCall = ({ sender, to, data, gasLimit }) => pbAny('/zetaphy.pq.v1.MsgEVMCall',
+  Buffer.concat([pbStr(1, sender), pbStr(2, to), pbStr(3, '0'), pbBytes(4, Buffer.from(data.slice(2), 'hex')), pbU64(5, gasLimit)]));
+async function cosmosTx(wallet, msgAny) {
+  const acct = zd(['q', 'auth', 'account', toBech32(wallet.address), '--node', `tcp://127.0.0.1:${PORT + 100}`, '-o', 'json']);
+  const accountNumber = /"account_number":\s*"?(\d+)/.exec(acct)?.[1] ?? '0';
+  const sequence = await provider.getTransactionCount(wallet.address);
+  const body = pbBytes(1, msgAny);
+  const pub = pbAny('/cosmos.evm.crypto.v1.ethsecp256k1.PubKey', pbBytes(1, Buffer.from(wallet.signingKey.compressedPublicKey.slice(2), 'hex')));
+  const signerInfo = Buffer.concat([pbBytes(1, pub), pbBytes(2, pbBytes(1, pbU64(1, 1))), pbU64(3, sequence)]);
+  const fee = Buffer.concat([pbBytes(1, Buffer.concat([pbStr(1, 'azetaphy'), pbStr(2, '1000000000000000')])), pbU64(2, 600000)]);
+  const authInfo = Buffer.concat([pbBytes(1, signerInfo), pbBytes(2, fee)]);
+  const signDoc = Buffer.concat([pbBytes(1, body), pbBytes(2, authInfo), pbStr(3, 'zetaphy-local-1'), pbU64(4, accountNumber)]);
+  const sig = wallet.signingKey.sign(keccak256(signDoc));
+  const raw = Buffer.concat([pbBytes(1, body), pbBytes(2, authInfo), pbBytes(3, Buffer.from(sig.r.slice(2) + sig.s.slice(2), 'hex'))]);
+  const res = await fetch(`http://127.0.0.1:${PORT + 100}`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'broadcast_tx_sync', params: { tx: raw.toString('base64') } }) });
+  const j = await res.json();
+  return { code: j.result?.code ?? -1, log: j.result?.log ?? JSON.stringify(j.error ?? j) };
 }
 
 before(() => {
@@ -249,10 +289,48 @@ test('--handover: every admin role to the timelock; the guardian pauses at once;
   assert.match(noGuard.out, /--handover needs --guardian/);
   const short = await launch(['--resume', '--governance', 'gov', '--guardian', guardian.address, '--handover', '--timelock-delay', '30']);
   assert.match(short.out, /less than 86400 s \(24 h\) only with --devnet/);
+  const N0 = (n) => art('zetaphy-network', n).abi;
+  const P0 = hashText('PROPOSER_ROLE');
+  const grantData = (tlAddr) => new Contract(tlAddr, N0('ZetaphyTimelock')).interface.encodeFunctionData('grantRole', [P0, user.address]);
+
+  // The timelock alone (zero delay, the deployer its proposer). With the deployer key, someone schedules an operation
+  // through a Cosmos tx (MsgEVMCall): no log eth_getLogs returns. The handover refuses this timelock.
+  const t1 = await launch([...handoverArgs, '--only', 'timelock']);
+  assert.equal(t1.code, 0, t1.out);
+  const tlA = outs().timelock;
+  const tlAc = new Contract(tlA, N0('ZetaphyTimelock'), provider);
+  const salt = hashText('planted');
+  const plantedA = await tlAc.hashOperation(tlA, 0, grantData(tlA), ZeroHash, salt);
+  const sched = tlAc.interface.encodeFunctionData('schedule', [tlA, 0, grantData(tlA), ZeroHash, salt, 0]);
+  const br = await cosmosTx(deployer, encodeEVMCall({ sender: toBech32(deployer.address), to: tlA, data: sched, gasLimit: 400000 }));
+  assert.equal(br.code, 0, JSON.stringify(br));
+  for (let i = 0; i < 20 && (await tlAc.getOperationState(plantedA)) !== 2n; i++) await sleep(500);
+  assert.equal(await tlAc.getOperationState(plantedA), 2n, 'planted through MsgEVMCall: Ready at once');
+  const refused = await launch([...handoverArgs, '--only', 'handover']);
+  assert.notEqual(refused.code, 0, refused.out);
+  assert.match(refused.out, /signed 1 transaction\(s\) that are not EVM transactions .*MsgEVMCall/);
+  assert.equal((await new Contract(outs().neuroControl, N0('NeuroControl'), provider).governance()), deployer.address, 'nothing handed over');
+
+  // A new timelock; this time the planted operation is an EVM tx (a CallScheduled log): cancelled by the handover.
+  const t2 = await launch([...handoverArgs, '--only', 'timelock', '--redo']);
+  assert.equal(t2.code, 0, t2.out);
+  const tlB = outs().timelock;
+  assert.notEqual(tlB, tlA);
+  const tlBw = new Contract(tlB, N0('ZetaphyTimelock'), new NonceManager(deployer.connect(provider)));
+  await (await tlBw.schedule(tlB, 0, grantData(tlB), ZeroHash, salt, 0)).wait();
+  const plantedB = await tlBw.hashOperation(tlB, 0, grantData(tlB), ZeroHash, salt);
+  assert.equal(await tlBw.getOperationState(plantedB), 2n);
   const r = await launch(handoverArgs);
   assert.equal(r.code, 0, r.out);
   assert.match(r.out, /checked on-chain: \d+ admin role\(s\) belong to the timelock/);
+  assert.match(r.out, new RegExp(`WARNING: operation ${plantedB} was scheduled on the timelock by someone with the deployer key, not by the launch: cancelled`));
+  assert.match(r.out, /no operation from the bootstrap is left but the handover's/);
+  assert.equal(await tlBw.getOperationState(plantedB), 0n, 'cancelled');
   const o = outs();
+  assert.equal(o.timelock, tlB);
+  assert.deepEqual(o.cancelledOperations, [plantedB]);
+  assert.match(o.handoverOperation, /^0x[0-9a-f]{64}$/);
+  assert.equal(await tlBw.getOperationState(o.handoverOperation), 3n, 'the handover batch: Done');
   await hasCode(o.timelock, 'timelock');
   const T = o.timelock.toLowerCase();
   const N = (n) => art('zetaphy-network', n).abi;

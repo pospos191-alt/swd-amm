@@ -140,9 +140,10 @@ export async function main(argv = process.argv.slice(2), env = process.env, log 
 
   const { privateKey, source } = readDeployerKey(opt, env);
   const wallet = new Wallet(privateKey);
-  const provider = new JsonRpcProvider(rpc, undefined, { polling: true, pollingInterval: 1000 });
+  // Fixed to 77390: every tx the deployer signs carries chain id 77390, whatever the RPC answers later.
+  const provider = new JsonRpcProvider(rpc, EVM_CHAIN_ID, { staticNetwork: true, polling: true, pollingInterval: 1000 });
   try {
-    const chainId = (await provider.getNetwork()).chainId;
+    const chainId = BigInt(await provider.send('eth_chainId', []));
     if (chainId !== EVM_CHAIN_ID) throw new Error(`the RPC is EVM chain ${chainId}, not the ZETAPHY testnet (${EVM_CHAIN_ID}): refused`);
     const genesisHash = (await provider.getBlock(1))?.hash ?? null;
     log(`ZETAPHY testnet (EVM chain ${chainId}) at ${rpc}; deployer ${wallet.address} (key from ${source})`);

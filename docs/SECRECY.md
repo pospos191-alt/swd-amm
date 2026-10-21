@@ -58,6 +58,6 @@
   - เปลี่ยน marker: governance โหวต `setMarker(ใหม่, true)` แล้ว `setMarker(เก่า, false)`
   - เปลี่ยน watch list / marker key / thresholds แล้ว ตัวเฝ้าจะเริ่มความจำใหม่ (state เข้ารหัสด้วยค่าเหล่านี้) แต่ไม่ต้องสแกนบล็อกเก่าซ้ำ
 - หลัง governance `untrip` รายการที่ค้างไว้ runner จะปล่อยให้เองในรอบถัดไป (ไม่ทิ้ง)
-- marker หลุด: guardian เรียก `emergencyRemoveMarker(ที่อยู่นั้น)` ทันที (หรือ governance `setMarker(ที่อยู่นั้น, false)` ผ่าน timelock) เครื่องหมายทั้งหมดที่มันทำจะไม่มีผล
+- marker หลุด: guardian เรียก `emergencyRemoveMarker(ที่อยู่นั้น)` ทันที มันจะทำเครื่องหมายเพิ่มไม่ได้ แต่เครื่องหมายที่ทำไว้แล้วยังมีผล จนกว่า governance ตัดสินผ่าน timelock: `setMarker(ที่อยู่นั้น, false)` ยกเลิกเครื่องหมายทั้งหมดของมัน หรือ `untrip` ทีละที่อยู่
 - หลัง handover การเปลี่ยน marker, guardian, relayer ราคา หรือ owner ของ multisig ที่เป็น proposer ทั้งหมดผ่าน timelock (รอ 48 ชั่วโมง) วางแผนล่วงหน้า
 - relayer ราคาหลุด: guardian `pauseFeed` ทันที แล้วตั้งเวลา `setRelayer(ที่อยู่นั้น, false)` ผ่าน timelock

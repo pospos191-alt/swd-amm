@@ -12,7 +12,9 @@ import { runSteps, newState, saveState, loadState, outputs, assertNoSecrets } fr
 import { dexWeb, nftWeb, explorerConfig, walletHtml, snapConfig, publicBase, neuroReportUrl, CONFIG_FILES } from '../src/configs.js';
 import { readDeployerKey, keyFolder } from '../src/key.js';
 import { parseArgs, governanceTarget, timelockDelay, addressList, isLoopback } from '../launch.js';
-import { launchSteps, adminRoles, guardianRoles, evmCallProposal, handoverPlan, GOV_MODULE, GOV_MODULE_BECH32, BRIDGE_GATES, DEFAULT_DELAY, MIN_DELAY, TIMELOCK_ROLES } from '../src/steps.js';
+import { launchSteps, adminRoles, guardianRoles, evmCallProposal, handoverPlan, GOV_MODULE, GOV_MODULE_BECH32, BRIDGE_GATES, DEFAULT_DELAY, MIN_DELAY, TIMELOCK_ROLES,
+  missingNonces, sortOperations, isHandoverShape, handoverSalt } from '../src/steps.js';
+import { Interface } from 'ethers';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'zetaphy-launch-unit-'));
@@ -286,3 +288,33 @@ test('timelock options: 48 h by default, never below 24 h outside a local devnet
   assert.deepEqual(addressList(undefined, 'x'), []);
   assert.deepEqual(parseArgs(['--devnet', '--handover', '--guardian', A(1)]), { devnet: true, handover: true, guardian: A(1) });
 });
+
+test('handover audit: only the launch\'s batch may be left from the zero-delay bootstrap; non-EVM nonces are found', () => {
+  // operations from CallScheduled logs: own batch (done), a planted one still pending, one planted and run,
+  // one cancelled, and one governance scheduled later with the real delay (ignored)
+  const call = (id, delay) => ({ id, delay: BigInt(delay), target: A(1), value: 0n, data: '0x' });
+  const ids = ['0x' + '01'.repeat(32), '0x' + '02'.repeat(32), '0x' + '03'.repeat(32), '0x' + '04'.repeat(32), '0x' + '05'.repeat(32)];
+  const calls = [call(ids[0], 0), call(ids[0], 0), call(ids[1], 0), call(ids[2], 0), call(ids[3], 0), call(ids[4], 172800)];
+  const states = new Map([[ids[0], 3], [ids[1], 2], [ids[2], 3], [ids[3], 0], [ids[4], 1]]);
+  assert.deepEqual(sortOperations(calls, states, { own: new Set([ids[0]]), realDelay: 172800 }), { pending: [ids[1]], ran: [ids[2]], ownPending: [] });
+  assert.deepEqual(sortOperations(calls, new Map([...states, [ids[0], 1]]), { own: new Set([ids[0]]), realDelay: 172800 }).ownPending, [ids[0]]);
+  assert.deepEqual(sortOperations(calls, states, { own: new Set(), realDelay: 172800 }).ran, [ids[0], ids[2]], 'an unknown done batch counts as foreign');
+  // the deployer's nonces: 5 (the timelock deployment) to 9; 7 is not an EVM tx (a Cosmos tx, e.g. MsgEVMCall)
+  assert.deepEqual(missingNonces(new Set([5, 6, 8, 9]), 5, 10), [7]);
+  assert.deepEqual(missingNonces(new Set([5, 6, 7]), 5, 8), []);
+  // the handover batch's shape: the timelock granting its roles and setting its delay, two-step acceptances
+  const T = A(77), F = A(4);
+  const tli = new Interface(['function grantRole(bytes32,address)', 'function updateDelay(uint256)', 'function revokeRole(bytes32,address)']);
+  const ok = [{ target: T, data: tli.encodeFunctionData('grantRole', [TIMELOCK_ROLES.proposer, GOV_MODULE]) }, { target: F, data: '0x238efcbc' },
+    { target: T, data: tli.encodeFunctionData('updateDelay', [172800]) }];
+  assert.equal(new Interface(['function acceptGovernance()']).getFunction('acceptGovernance').selector, '0x238efcbc');
+  assert.equal(isHandoverShape(ok, T, [F]), true);
+  assert.equal(isHandoverShape([...ok, { target: A(6), data: '0x238efcbc' }], T, [F]), false, 'acceptGovernance elsewhere');
+  assert.equal(isHandoverShape([{ target: T, data: tli.encodeFunctionData('grantRole', [ZERO_ROLE, A(66)]) }], T, [F]), false, 'the admin role');
+  assert.equal(isHandoverShape([{ target: T, data: tli.encodeFunctionData('revokeRole', [TIMELOCK_ROLES.proposer, GOV_MODULE]) }], T, [F]), false);
+  assert.equal(isHandoverShape([{ target: A(6), data: '0x12345678' }], T, [F]), false, 'any other call');
+  assert.equal(isHandoverShape([], T, [F]), false);
+  assert.equal(handoverSalt(77390, T), handoverSalt(77390, T));
+  assert.notEqual(handoverSalt(77390, T), handoverSalt(77390, A(78)));
+});
+const ZERO_ROLE = '0x' + '00'.repeat(32);

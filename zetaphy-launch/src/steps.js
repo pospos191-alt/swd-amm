@@ -10,7 +10,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Contract, ContractFactory, NonceManager, formatEther, parseEther, parseUnits, getAddress, id as hashText, ZeroAddress, ZeroHash } from 'ethers';
+import { Contract, ContractFactory, Interface, NonceManager, formatEther, parseEther, parseUnits, getAddress, id as hashText, toQuantity, zeroPadValue, ZeroAddress, ZeroHash } from 'ethers';
 import { outputs } from './runner.js';
 import { CONFIG_FILES } from './configs.js';
 
@@ -396,7 +396,8 @@ export function launchSteps() {
         const a = NET('ZetaphyTimelock');
         const k = await new ContractFactory(a.abi, a.bytecode, signer(ctx)).deploy(0, [ctx.address], [ctx.address], ZeroAddress);
         const rc = await k.deploymentTransaction().wait();
-        return haveCode(ctx, { timelock: await k.getAddress(), timelockBlock: rc.blockNumber });
+        // timelockNonce: the deployer's nonce of this deployment, where the handover's audit of its later txs starts
+        return { ...(await haveCode(ctx, { timelock: await k.getAddress(), timelockBlock: rc.blockNumber })), timelockNonce: k.deploymentTransaction().nonce };
       },
     },
     {
@@ -454,6 +455,134 @@ export function evmCallProposal({ to, data, title, summary, gasLimit = 300000 })
   };
 }
 
+// ---------- the bootstrap audit ----------
+// Between the timelock step and the deployer renouncing, the deployer is the timelock's only proposer at a zero
+// delay. The launch schedules exactly one operation then (the handover batch). Anything else scheduled in that
+// window would stay executable after the handover, so the handover finds and cancels it, and refuses when it
+// cannot be sure: an EVM tx that schedules leaves a CallScheduled log; a Cosmos tx (e.g. MsgEVMCall) leaves no log
+// the node returns, but it uses one of the deployer's nonces, and the launch itself sends EVM txs only.
+
+/** At most this many blocks between the timelock's deployment and the end of the handover are audited. */
+export const MAX_AUDIT_BLOCKS = 20_000;
+const TIMELOCKCLI = () => import(pathToFileURL(join(ROOT, 'zetaphy-network/src/timelockcli.js')).href);
+const ROLE_REVOKED = hashText('RoleRevoked(bytes32,address,address)');
+
+/** The handover batch's salt (fixed per chain and timelock). */
+export const handoverSalt = (chainId, timelock) => hashText(`zetaphy-launch handover ${chainId} ${timelock}`);
+
+/** Nonces in [first, end) that no EVM tx of the deployer carries (seen: the nonces of its EVM txs). */
+export function missingNonces(seen, first, end) {
+  const out = [];
+  for (let n = Number(first); n < Number(end); n++) if (!seen.has(n)) out.push(n);
+  return out;
+}
+
+/** Does this operation (its calls) look like the launch's handover batch: only the timelock granting
+ *  proposer/canceller/executor and setting its delay, and two-step admin roles accepting? */
+export function isHandoverShape(calls, timelock, twoStep) {
+  const tli = new Interface(['function grantRole(bytes32,address)', 'function updateDelay(uint256)']);
+  const acc = new Interface(['function acceptGovernance()']).getFunction('acceptGovernance').selector;
+  const roles = new Set([TIMELOCK_ROLES.proposer, TIMELOCK_ROLES.canceller, TIMELOCK_ROLES.executor]);
+  return calls.length > 0 && calls.every((c) => {
+    if (BigInt(c.value ?? 0) !== 0n) return false;
+    if (same(c.target, timelock)) {
+      let p;
+      try { p = tli.parseTransaction({ data: c.data }); } catch { return false; }
+      return p?.name === 'updateDelay' || (p?.name === 'grantRole' && roles.has(p.args[0]));
+    }
+    return String(c.data).toLowerCase() === acc && twoStep.some((a) => same(a, c.target));
+  });
+}
+
+/**
+ * Sorts the operations found in the timelock's CallScheduled logs. calls: scheduledCalls() entries (one per call of
+ * an operation); states: id -> 0 Unset (never or cancelled), 1 Waiting, 2 Ready, 3 Done; own: the launch's own ids.
+ * Only operations scheduled below realDelay count (after the handover every new one waits at least that).
+ * Returns { pending: foreign ids still executable, ran: foreign ids already executed, ownPending: own ids not Done }.
+ */
+export function sortOperations(calls, states, { own, realDelay }) {
+  const byId = new Map();
+  for (const c of calls) if (!byId.has(c.id)) byId.set(c.id, BigInt(c.delay));
+  const pending = [], ran = [], ownPending = [];
+  for (const [id, delay] of byId) {
+    if (delay >= BigInt(realDelay)) continue;
+    const st = states.get(id) ?? 0;
+    if (own.has(id)) { if (st !== 3) ownPending.push(id); continue; }
+    if (st === 3) ran.push(id); else if (st === 1 || st === 2) pending.push(id);
+  }
+  return { pending, ran, ownPending };
+}
+
+/** The deployer's nonces since the timelock's deployment that are not EVM txs (up to block toBlock). */
+async function nonEvmNonces(ctx, o, toBlock) {
+  const from = Number(o.timelockBlock);
+  if (toBlock - from > MAX_AUDIT_BLOCKS) return { tooLong: toBlock - from };
+  const seen = new Set();
+  let first = o.timelockNonce;
+  for (let b = from; b <= toBlock; b += 16) {
+    const blocks = await Promise.all(Array.from({ length: Math.min(16, toBlock - b + 1) }, (_, i) => ctx.provider.send('eth_getBlockByNumber', [toQuantity(b + i), true])));
+    for (const blk of blocks) {
+      for (const t of blk?.transactions ?? []) {
+        if (!same(t.from, ctx.address)) continue;
+        seen.add(Number(t.nonce));
+        if (first == null && t.to == null && Number(blk.number) === from) {
+          const rc = await ctx.provider.getTransactionReceipt(t.hash);
+          if (rc && same(rc.contractAddress, o.timelock)) first = Number(t.nonce);
+        }
+      }
+    }
+  }
+  if (first == null) throw new Error(`could not find the timelock's deployment by ${ctx.address} in block ${from}`);
+  return { missing: missingNonces(seen, first, await ctx.provider.getTransactionCount(ctx.address, toBlock)) };
+}
+
+/** The block where the deployer's last timelock role was revoked (renounced), or null. */
+async function renouncedAt(ctx, o) {
+  const head = await ctx.provider.getBlockNumber();
+  let last = null;
+  for (let a = Number(o.timelockBlock); a <= head; a += 2000) {
+    const logs = await ctx.provider.getLogs({ address: o.timelock, fromBlock: a, toBlock: Math.min(head, a + 1999), topics: [ROLE_REVOKED, null, zeroPadValue(ctx.address, 32)] });
+    for (const l of logs) last = Math.max(last ?? 0, l.blockNumber);
+  }
+  return last;
+}
+
+/** The audit: the operations scheduled during the bootstrap, and the deployer's non-EVM txs, up to toBlock. */
+async function bootstrapAudit(ctx, state, o, tl, { own, realDelay, toBlock, withNonces = true }) {
+  const { scheduledCalls } = await TIMELOCKCLI();
+  const calls = await scheduledCalls(ctx.provider, tl, { fromBlock: Number(o.timelockBlock), toBlock });
+  const states = new Map();
+  for (const id of new Set(calls.map((c) => c.id))) states.set(id, Number(await tl.getOperationState(id)));
+  // the handover batch of an earlier run (also from a state written before its id was kept)
+  const salt = handoverSalt(state.chainId, o.timelock);
+  const twoStep = adminRoles(o).filter((r) => r.twoStep).map((r) => r.address);
+  for (const id of states.keys()) {
+    const mine = calls.filter((c) => c.id === id);
+    if (mine.every((c) => c.salt === salt) && isHandoverShape(mine, o.timelock, twoStep)) own.add(id);
+  }
+  return { ...sortOperations(calls, states, { own, realDelay }), nonces: withNonces ? await nonEvmNonces(ctx, o, toBlock) : null };
+}
+
+/** Refuses a bootstrap that is not clean, and cancels what was planted (the deployer is still a canceller). */
+async function cleanBootstrap(ctx, state, o, tl, own, realDelay, when) {
+  const a = await bootstrapAudit(ctx, state, o, tl, { own, realDelay, toBlock: await ctx.provider.getBlockNumber() });
+  const redo = 'do not hand over to this timelock: deploy a new one with a new deployer key (--fresh, or --only timelock,handover --redo)';
+  if (a.nonces.tooLong) throw new Error(`${when}: ${a.nonces.tooLong} blocks since the timelock was deployed: too many to check that the deployer sent nothing else (at most ${MAX_AUDIT_BLOCKS}); ${redo}`);
+  if (a.nonces.missing.length) {
+    throw new Error(`${when}: the deployer ${ctx.address} signed ${a.nonces.missing.length} transaction(s) that are not EVM transactions since the timelock was deployed `
+      + `(nonce ${a.nonces.missing.join(', ')}): a Cosmos tx such as MsgEVMCall can schedule a timelock operation that no log shows; ${redo}`);
+  }
+  if (a.ran.length) throw new Error(`${when}: operation(s) the launch did not schedule already ran on the timelock: ${a.ran.join(', ')}; ${redo}`);
+  const cancelled = [];
+  for (const id of a.pending) {
+    if (!(await tl.hasRole(TIMELOCK_ROLES.canceller, ctx.address))) throw new Error(`${when}: operation ${id} (not the launch's) is pending and the deployer can no longer cancel it; ${redo}`);
+    await wait(tl.cancel(id));
+    cancelled.push(id);
+    ctx.log(`  WARNING: operation ${id} was scheduled on the timelock by someone with the deployer key, not by the launch: cancelled. Treat the deployer key as compromised.`);
+  }
+  return cancelled;
+}
+
 async function handover(ctx, state) {
   const target = ctx.governance;
   if (!target || same(target, ctx.address)) throw new Error('--handover needs --governance gov or --governance 0x<multisig>');
@@ -470,6 +599,12 @@ async function handover(ctx, state) {
     if (same(a, ctx.address)) throw new Error(`--${what === 'proposer' ? 'governance' : 'guardian'} ${a}: not the deployer key`);
     if (!same(a, GOV_MODULE) && (await ctx.provider.getCode(a)) === '0x' && !ctx.devnet) throw new Error(`${what} ${a} is a single key (EOA): a multisig (or, for governance, the gov module); an EOA only with --devnet`);
   }
+  // 0. the bootstrap so far: nothing but the launch's own operation on the timelock (refused before any role moves)
+  let handoverId = state.steps.handover?.out?.handoverOperation ?? null;
+  const own = new Set([handoverId].filter(Boolean));
+  const bootstrap = (await Promise.all(['proposer', 'canceller', 'executor', 'admin'].map((r) => tl.hasRole(TIMELOCK_ROLES[r], ctx.address)))).some(Boolean);
+  const cancelled = [];
+  if (bootstrap) cancelled.push(...await cleanBootstrap(ctx, state, o, tl, own, delay, 'before the handover'));
   const done = [], stuck = [];
   const guardianSet = [];
   // 1. the emergency switches (while the deployer is still governance of each)
@@ -513,8 +648,10 @@ async function handover(ctx, state) {
     for (const r of accept) calls.push([r.address, new Contract(r.address, r.abi).interface.encodeFunctionData('acceptGovernance', [])]);
     self('updateDelay', [delay]);
     const targets = calls.map((c) => c[0]), values = calls.map(() => 0n), datas = calls.map((c) => c[1]);
-    const salt = hashText(`zetaphy-launch handover ${state.chainId} ${o.timelock}`);
+    const salt = handoverSalt(state.chainId, o.timelock);
     const id = await tl.hashOperationBatch(targets, values, datas, ZeroHash, salt);
+    own.add(id);
+    handoverId = id;
     if (Number(await tl.getOperationState(id)) === 0) await wait(tl.scheduleBatch(targets, values, datas, ZeroHash, salt, 0));
     if (Number(await tl.getOperationState(id)) !== 3) await wait(tl.executeBatch(targets, values, datas, ZeroHash, salt));
     for (const r of accept) { ctx.log(`  ${r.label}: accepted by the timelock`); done.push(r.address); }
@@ -522,6 +659,8 @@ async function handover(ctx, state) {
   } else if (accept.length) {
     for (const r of accept) { ctx.log(`  ${r.label}: pending; a proposer schedules ${r.address} acceptGovernance() through the timelock`); stuck.push(r.address); }
   }
+  // the last chance to cancel (the deployer is still a canceller): the launch's batch is the only operation left
+  if (bootstrap) cancelled.push(...await cleanBootstrap(ctx, state, o, tl, own, delay, 'before the deployer renounces'));
   for (const role of ['proposer', 'canceller', 'executor', 'admin']) {
     if (await tl.hasRole(TIMELOCK_ROLES[role], ctx.address)) await wait(tl.renounceRole(TIMELOCK_ROLES[role], ctx.address));
   }
@@ -532,6 +671,19 @@ async function handover(ctx, state) {
   const chk = await checkTimelock(ctx.provider, tlRead, { minDelay: delay, proposers, executors: ctx.executorMode === 'governance' ? proposers : null,
     forbidden: [ctx.address], devnet: !!ctx.devnet, govModule: GOV_MODULE });
   problems.push(...chk.problems);
+  // no operation from the bootstrap (scheduled below the real delay) is left that could still run, none but the
+  // launch's ran, and the deployer signed nothing but EVM txs until it renounced
+  const end = await renouncedAt(ctx, o);
+  if (end == null) problems.push('the deployer never renounced its timelock roles');
+  else {
+    const a = await bootstrapAudit(ctx, state, o, tlRead, { own, realDelay: delay, toBlock: end });
+    const late = await bootstrapAudit(ctx, state, o, tlRead, { own, realDelay: delay, toBlock: await ctx.provider.getBlockNumber(), withNonces: false });
+    for (const id of new Set([...a.pending, ...late.pending])) problems.push(`operation ${id} from the bootstrap (below the ${delay} s delay) is still pending: it could run after the handover`);
+    for (const id of new Set([...a.ran, ...late.ran])) problems.push(`operation ${id} from the bootstrap ran, and the launch did not schedule it`);
+    for (const id of a.ownPending) problems.push(`the handover operation ${id} is not done`);
+    if (a.nonces.tooLong) problems.push(`the bootstrap lasted ${a.nonces.tooLong} blocks: too many to check the deployer's transactions (at most ${MAX_AUDIT_BLOCKS})`);
+    else if (a.nonces.missing.length) problems.push(`the deployer signed non-EVM transaction(s) during the bootstrap (nonce ${a.nonces.missing.join(', ')}): an operation could be scheduled that no log shows`);
+  }
   for (const r of adminRoles(o)) {
     const k = new Contract(r.address, r.abi, ctx.provider);
     const cur = await k[r.read]();
@@ -555,9 +707,13 @@ async function handover(ctx, state) {
     if (await k[r.read](ctx.address)) problems.push(`${r.label}: the deployer is still a guardian`);
   }
   if (problems.length) throw new Error(`the handover check failed:\n  - ${problems.join('\n  - ')}`);
-  ctx.log(`  checked on-chain: ${adminRoles(o).length} admin role(s) belong to the timelock; no EOA and not the deployer holds a timelock role; guardian ${ctx.guardian} on ${guardianRoles(o).length} contract(s)`);
+  ctx.log(`  checked on-chain: ${adminRoles(o).length} admin role(s) belong to the timelock; no EOA and not the deployer holds a timelock role; guardian ${ctx.guardian} on ${guardianRoles(o).length} contract(s); `
+    + `no operation from the bootstrap is left but the handover's, and the deployer sent only EVM transactions until it renounced (block ${end})`);
+  const prevCancelled = state.steps.handover?.out?.cancelledOperations ?? [];
   return { governance: o.timelock, timelock: o.timelock, proposers, executor: ctx.executorMode === 'governance' ? 'governance' : 'anyone', minDelay: Number(delay),
-    guardian: ctx.guardian, handedOver: done, ...(stuck.length ? { notHandedOver: stuck } : {}), verifiedAt: new Date().toISOString() };
+    guardian: ctx.guardian, handedOver: done, ...(stuck.length ? { notHandedOver: stuck } : {}), handoverOperation: handoverId,
+    ...(prevCancelled.length || cancelled.length ? { cancelledOperations: [...new Set([...prevCancelled, ...cancelled])] } : {}),
+    bootstrapAuditedTo: end, verifiedAt: new Date().toISOString() };
 }
 
 /** What the handover will do and the commands that follow it (printed when --handover is not given). */

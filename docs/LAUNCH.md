@@ -184,6 +184,14 @@ Framework Preset **Other**, ไม่ต้องตั้ง Build/Output (ม�
   BridgeGuard/BridgeAirlock (ถ้ามี), NFT marketplace, DEX factory และ DLMM factory (สองขั้น: timelock ตอบรับเองในรอบเดียวกัน ไม่ต้องโหวตแยกแล้ว)
 - ตั้ง **guardian** (multisig ฉุกเฉิน) บนทุกสัญญาที่มีปุ่มฉุกเฉิน: กดหยุด (Neuro, สะพาน, gateway, ราคา), ลดเพดาน, กักธง, เอา lane/marker ออก ได้ **ทันที** แต่ทำได้แค่ลดความเสี่ยง เปิดคืนต้องผ่าน timelock
 - ตรวจบนเชน: ทุกสิทธิ์เป็นของ timelock (DEX/DLMM factory: ไม่มีใครค้างรอตอบรับ `pendingGovernance`), deployer ไม่เหลือ role ใดใน timelock และไม่ใช่ guardian, ไม่มี EOA (key เดี่ยว) ถือ role ใดเลย ไม่ผ่าน = ขั้นนี้ล้ม (รันซ้ำได้)
+- ช่วงตั้งค่า timelock (ระยะรอ 0, deployer เป็น proposer) launch ตั้งเวลา operation เดียวคือชุด handover (เลขเก็บใน state: `handoverOperation`)
+  ก่อนยกสิทธิ์และก่อน deployer สละ role ตัวตรวจอ่าน log `CallScheduled` ตั้งแต่บล็อกที่สร้าง timelock: operation อื่นที่ยังรออยู่ถูก **ยกเลิก** (บันทึกใน `cancelledOperations`
+  พร้อมคำเตือนว่า key ของ deployer อาจหลุด) operation อื่นที่รันไปแล้ว = ไม่ส่งต่อให้ timelock นี้
+  ธุรกรรม Cosmos (เช่น `MsgEVMCall`) ไม่ทิ้ง log ที่โหนดค้นให้ได้ แต่ใช้ nonce ของ deployer: launch ส่งแต่ธุรกรรม EVM จึงนับ nonce ทุกตัวตั้งแต่สร้าง timelock
+  ถ้ามี nonce ที่ไม่ใช่ธุรกรรม EVM = ไม่ส่งต่อ ให้สร้าง timelock ใหม่ด้วย key ใหม่ (`--only timelock,handover --redo` หรือ `--fresh`)
+  ตรวจได้ไม่เกิน 20,000 บล็อกนับจากสร้าง timelock จึงควรรันขั้น timelock และ handover ในรอบเดียวกัน (ปกติ workflow ทำแบบนั้น)
+  - สิ่งที่ตัวตรวจมองไม่เห็น: สิทธิ์ authz ที่ deployer เคยให้บัญชีอื่น **ก่อน** สร้าง timelock (ผู้รับสิทธิ์ส่ง `MsgEVMCall` แทน deployer ได้โดยไม่ใช้ nonce ของ deployer)
+    ก่อน handover ตรวจว่าไม่มี: `zetaphyd q authz grants-by-granter <ที่อยู่ zetaphy1… ของ deployer>` ต้องว่าง; ใช้ key ของ deployer เฉพาะกับ launch เท่านั้น และหลัง handover ถือว่า key นี้เลิกใช้แล้ว
 
 1. เตรียม multisig ฉุกเฉิน (guardian): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` หรือ Safe (ดู "multisig + hardware wallet" ใน `zetaphy-network/README.md`) แต่ละ owner ใช้ hardware wallet ของตัวเอง
 2. **Actions → launch-testnet → Run workflow**: `rpc` เดิม, `dry_run` = **no**, `governance` = **gov** (หรือ `0x<multisig>`), `guardian` = **0x<multisig ฉุกเฉิน>**, `handover` = **yes**

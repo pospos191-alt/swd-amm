@@ -193,6 +193,7 @@ const T = {
     qdPending: '{acct}: กำลังย้ายไป {to} เสร็จที่บล็อก {h}',
     qdExposed: '{acct}: ยังไม่ย้าย และกุญแจสาธารณะเคยถูกใช้บนเชนแล้ว ต้องล็อกก่อน Q-day (การ์ดด้านบน) ไม่อย่างนั้นบัญชีจะถูกแช่แข็ง',
     qdUnexposed: '{acct}: ยังไม่ย้าย แต่กุญแจไม่เคยถูกใช้บนเชน ล็อกตอนนี้ได้ (แนะนำ) หรือหลัง Q-day ย้ายด้วย commit–reveal ด้านล่างก็ได้',
+    qdRecoverWarn: 'คำเตือน: ข้อความที่ MetaMask ให้เซ็นในสองขั้นนี้ มอบสิทธิ์ควบคุมบัญชี {acct} ให้ {ctrl} (บัญชี ML-DSA-44 ของกระเป๋านี้) ทั้งหมด ตรวจว่าที่อยู่ "New ML-DSA-44 controller" ในข้อความตรงกับ {ctrl} และเซ็นข้อความนี้เฉพาะในกระเป๋า ZETAPHY ทางการเท่านั้น เว็บอื่นที่ขอให้เซ็นข้อความ "ZETAPHY Q-day migration" อาจยึดบัญชีของคุณ',
     qdRecoverIntro: 'กู้บัญชีหลัง Q-day (เฉพาะกุญแจที่ไม่เคยใช้บนเชน): MetaMask เซ็นข้อความในเครื่องเท่านั้น ไม่ส่งธุรกรรม กระเป๋านี้ส่ง commitment (ขั้นที่ 1) รอ {d} บล็อก แล้ว reveal (ขั้นที่ 2) รออีก {d} บล็อกบัญชีจึงเป็นของกระเป๋านี้',
     qdCommit: 'ขั้นที่ 1: บันทึก commitment',
     qdReveal: 'ขั้นที่ 2: reveal',
@@ -491,6 +492,7 @@ const T = {
     qdPending: '{acct}: moving to {to}, final at block {h}.',
     qdExposed: '{acct}: not migrated, and its public key has been used on chain. Lock it before Q-day (the card above), or it will be frozen.',
     qdUnexposed: '{acct}: not migrated, but its key was never used on chain. Lock it now (recommended), or after Q-day move it with the commit–reveal below.',
+    qdRecoverWarn: 'Warning: the text MetaMask asks you to sign in these two steps gives full control of {acct} to {ctrl} (this wallet\'s ML-DSA-44 account). Check that its "New ML-DSA-44 controller" line is {ctrl}, and sign this text only in the official ZETAPHY wallet. Any other site that asks you to sign a "ZETAPHY Q-day migration" text can take the account.',
     qdRecoverIntro: 'Recover after Q-day (only keys never used on chain): MetaMask signs a text locally and sends nothing. This wallet records a commitment (step 1), waits {d} blocks, then reveals (step 2); {d} blocks later the account is this wallet\'s.',
     qdCommit: 'Step 1: record the commitment',
     qdReveal: 'Step 2: reveal',
@@ -1560,6 +1562,7 @@ async function qdayCheck() {
       : m.exposed ? t('qdExposed', { acct }) : t('qdUnexposed', { acct });
   $('qd-recover').hidden = !(st && m.canCommitReveal && !m.migrated);
   if (st) $('qd-recover-intro').textContent = t('qdRecoverIntro', { d: st.revealDelay });
+  $('qd-recover-warn').textContent = t('qdRecoverWarn', { acct, ctrl: wallet ? wallet.addr.hex : '?' });
 }
 
 /** MetaMask signs the migration text (locally); returns everything both steps need. */
