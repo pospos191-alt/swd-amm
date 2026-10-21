@@ -6,7 +6,7 @@
 เวียดนาม อินโดนีเซีย ต้นทุน $0
 
 - **อ่านอย่างเดียว**: ใช้แค่ `eth_getCode`, `eth_getStorageAt`, `eth_call` (EVM รวมถึง `eth_call` แบบ
-  state override หนึ่งครั้งสำหรับจำลองซื้อขาย ดูด้านล่าง) และ
+  state override หนึ่งครั้งสำหรับจำลองซื้อขาย ดูด้านล่าง), `eth_gasPrice` และ
   `getGenesisHash`, `getAccountInfo` (Solana), GraphQL แบบ query อย่างเดียว (Sui), GET กับฟังก์ชัน
   `#[view]` (Aptos) และ GET จาก tonapi.io (TON) ผ่าน endpoint สาธารณะฟรี ไม่ขอเชื่อมกระเป๋า
   ไม่มีโค้ดส่งธุรกรรม (`src/rpc.js` ปฏิเสธคำสั่งอื่นทั้งหมด และตรวจว่า endpoint เป็น mainnet จริง)
@@ -184,13 +184,29 @@ set_fee, burn_from ฯลฯ)
 1. หา pool แบบ Uniswap V2 ของเหรียญคู่กับเหรียญหลักของเชนที่ห่อแล้ว (`factory.getPair(token, WETH)`)
    บน DEX หลัก: Uniswap V2 (Ethereum, Base, Arbitrum) และ PancakeSwap V2 (BNB Chain) ตั้งค่าไว้ที่ `dex` ใน `src/chains.js`
 2. ถ้ามี pool เรียก `eth_call` ครั้งเดียวพร้อม state override (พารามิเตอร์ตัวที่สาม) วางสัญญาช่วย
-   `contracts/TradeSim.sol` ไว้ที่ที่อยู่ทิ้งได้ พร้อมเหรียญหลักเล็กน้อย (0.01 ETH / 0.05 BNB) สัญญาช่วยจะ
+   `contracts/TradeSim.sol` ไว้ที่ที่อยู่ทิ้งได้ พร้อมเหรียญหลักเล็กน้อย (ราว 0.01 ETH / 0.05 BNB ±25%) สัญญาช่วยจะ
    ตรวจว่า router ชี้ไปที่ factory และ WETH ที่ถูกต้อง ซื้อผ่าน `swapExactETHForTokensSupportingFeeOnTransferTokens`
-   เทียบจำนวนที่ได้กับ `getAmountsOut` (= ภาษีซื้อ) แล้วขายคืน 99% ผ่าน
+   เทียบจำนวนที่ได้กับ `getAmountsOut` (= ภาษีซื้อ) แล้วขายคืน 90–99.9% (สุ่ม) ผ่าน
    `swapExactTokensForETHSupportingFeeOnTransferTokens` เทียบเงินที่ได้กับราคาที่ router บอก (= ภาษีขาย)
    การขายที่ revert ถูกจับด้วย try/catch แล้วรายงานเป็นผล ไม่ใช่ error
 3. state override มีอยู่แค่ในการเรียกครั้งนั้น ไม่มีการเซ็นหรือส่งธุรกรรม สถานะบนเชนไม่เปลี่ยน
    ถ้า RPC ไม่รองรับ override หรือไม่มี pool จะบอกว่าข้ามการจำลอง
+
+**ไม่ให้เหรียญจำการทดสอบได้** โค้ดนี้เปิดเผย เหรียญจึงเขียนให้ "ทำตัวดีเฉพาะตอนเห็นการทดสอบของ Neuro" ได้
+ถ้าการทดสอบหน้าตาเหมือนเดิมทุกครั้ง (เดิมใช้ที่อยู่ตายตัว `0x4e6575726f53696d…01` / `…02`) ตอนนี้ทุกค่าที่เหรียญมองเห็นได้ถูกเลือกใหม่ทุกครั้ง (`simPlan` ใน `src/honeypot.js`):
+- ที่อยู่ของสัญญาช่วยและผู้เรียก (`tx.origin`): ตรวจเดี่ยว (เว็บ, CLI) สุ่มใหม่ทุกครั้ง (`crypto.getRandomValues`, เลี่ยง precompile
+  และสัญญาระบบ) งานของเครือข่าย (NeuroJobs) ได้จาก `jobSimSeed(job id, ลอตเตอรีของรอบ)` ซึ่งไม่มีใครรู้ตอน deploy เหรียญ
+  ผู้รันทุกคนของรอบเดียวกันจึงทดสอบแบบเดียวกัน และใครก็รันซ้ำได้: `node cli.js bsc 0x… --sim-seed 0x<seed>`
+- hash/ขนาดโค้ดของสัญญาช่วย (ต่อท้ายไบต์สุ่มหลัง INVALID), จำนวนที่ซื้อ, สัดส่วนที่ขาย, ยอดเงิน (ไม่เป็นเลขกลม), gas limit
+- ราคา gas: `eth_call` ที่ไม่ใส่ราคา gas รันด้วย `tx.gasprice = 0` และ (geth) `block.basefee = 0` ซึ่งธุรกรรมจริงไม่มีทางเป็น
+  จึงใส่ราคาจาก `eth_gasPrice` +10–60% และให้ผู้เรียกมีเงินจ่ายค่า gas (ถ้า RPC ไม่ยอม จะลองใหม่แบบไม่ใส่ราคาหนึ่งครั้ง)
+- อนุมัติ router แบบไม่จำกัด (เหมือนกระเป๋าส่วนใหญ่) ไม่ใช่จำนวนพอดี
+- `test/honeypot.test.js` มีเหรียญ `SimAware` ที่ยอมให้ขายเฉพาะเมื่อเห็นจุดสังเกตแต่ละแบบข้างต้น: แบบเดิมถูกหลอก แบบใหม่จับได้ทุกแบบ
+
+ที่ยังซ่อนไม่ได้ (บอกตรง ๆ): ใน `eth_call` ครั้งเดียว ผู้ซื้อ/ผู้ขายต้องเป็นสัญญา (มีโค้ด) และไม่ใช่ `tx.origin`
+เหรียญที่ "ให้เฉพาะสัญญาขายได้" จึงยังหลบได้ (แก้ได้ในอนาคตด้วย `eth_simulateV1` หลายธุรกรรมจากกระเป๋าธรรมดา ถ้า RPC สาธารณะรองรับพอ)
+และที่อยู่ของงานเครือข่ายเปิดเผยทันทีที่บล็อกลอตเตอรีออก เจ้าของเหรียญที่เฝ้า NeuroJobs อาจรีบใส่ที่อยู่นั้นใน whitelist ได้ทัน
+(ผลจำลองไม่อยู่ในคำตัดสินของเครือข่ายอยู่แล้ว จึงกระทบแค่รายงานของผู้รันคนนั้น)
 
 ไบต์โค้ดของสัญญาช่วยเก็บไว้ใน `src/tradesim.generated.js` (คอมไพล์ด้วย solc 0.8.26 แบบ Paris ไม่มี PUSH0
 จึงรันได้ทุกเชน) แก้ `contracts/TradeSim.sol` แล้วรัน `npm run tradesim` (`test/honeypot.test.js` ตรวจว่าตรงกัน)
@@ -198,6 +214,43 @@ set_fee, burn_from ฯลฯ)
 (`src/verdict.js`) เพราะขึ้นกับบล็อกและ RPC ของผู้รันแต่ละคน
 ข้อจำกัด: จำลองจากสัญญา ไม่ใช่กระเป๋าธรรมดา เหรียญที่กันการซื้อจากสัญญาจะขึ้นว่า "ซื้อไม่สำเร็จ"
 และเหรียญที่ห้ามขายเฉพาะในบล็อกเดียวกับที่ซื้อจะขึ้นว่า "ขายไม่ได้" เหมือนกัน (ข้อความบอกข้อจำกัดนี้ไว้) ยังไม่รองรับ pool แบบ V3 หรือ DEX อื่น (เช่น Aerodrome บน Base)
+
+## สองชั้นของกฎ: สาธารณะ (consensus) และเตือนล่วงหน้า (ส่วนตัว)
+
+| | กฎสาธารณะ (`src/`) | เตือนล่วงหน้า (`server/earlywarning.js`) |
+|---|---|---|
+| ใครรัน | ผู้รันเครือข่ายทุกคน + หน้าเว็บ + CLI | เซิร์ฟเวอร์ของโครงการเท่านั้น (`api/early-warning.js`) |
+| กฎอยู่ที่ | repo นี้ (skill id = hash ของ `src/`) | repo ส่วนตัว `pospos191-alt/zetaphy-private` → `rules/pack.json` |
+| อยู่ในคำตัดสินบนเชน | ใช่ | **ไม่** เป็นคำแนะนำเท่านั้น |
+| ผู้ใช้เห็น | ข้อเท็จจริงของโค้ดเต็ม ๆ | หมวด (reason) ระดับ และรหัสอ้างอิงทึบ `ew-…` ไม่เห็นตัวกฎ |
+
+ทำไม: กฎใหม่ที่เปิดเผยทันทีบอกคนทำเหรียญว่าต้องแก้อะไร แต่กฎ consensus ต้องเป็นโค้ดสาธารณะชุดเดียวกัน
+จึงพักกฎใหม่ไว้ในชุดส่วนตัวราว 30 วัน (หรือจนระลอกนั้นซา) แล้วเปิดเผย: กฎแบบ signature ย้ายเข้า `ADDED`
+ใน `src/threat-signatures.js` ซึ่งเป็นทักษะใหม่ ต้องโหวต `NeuroControl.approveSkill` นโยบายและรูปแบบกฎอยู่ใน
+`zetaphy-private/rules/README.md` (workflow ที่นั่นเปิด issue ทุกสัปดาห์เมื่อมีกฎครบกำหนด)
+
+- ชนิดกฎ: `signature` (ลายนิ้วมือ + MinHash แบบเดียวกับ `threat-signatures.js`, ใช้ `closestFlagged`), `selectors`
+  (ชุด selector / ชื่อฟังก์ชันที่มาด้วยกัน), `bytecode` (ไบต์ที่ต้องเจอ หรือลำดับ opcode เช่น `ORIGIN * EQ`) ดูโค้ดหลัง proxy ด้วย
+- หน้าเว็บส่งแค่ `{chain, address}` ไป `POST /api/early-warning` หลังตรวจเสร็จ (เฉพาะ EVM) ถ้ามีผลจะขึ้นกล่อง
+  "เตือนล่วงหน้า" แยกจากผลตรวจ 7 ภาษา ระดับความเสี่ยงด้านบนไม่เปลี่ยน
+- เซิร์ฟเวอร์ไม่เก็บอะไร: จำคำตอบต่อ (เชน, ที่อยู่) ในหน่วยความจำ 5 นาที นับอัตราด้วย HMAC ของ IP ไม่ log ชุดกฎหรือ token
+
+**ตั้งค่าบน Vercel** (Settings → Environment Variables แล้ว Redeploy) เลือกอย่างใดอย่างหนึ่ง:
+- `NEURO_RULES_TOKEN` = fine-grained token ของ GitHub ที่เข้าได้เฉพาะ `zetaphy-private` สิทธิ์ **Contents: Read-only**
+  (ไม่บังคับ: `NEURO_RULES_REPO` ค่าเริ่มต้น `pospos191-alt/zetaphy-private`, `NEURO_RULES_PATH` ค่าเริ่มต้น `rules/pack.json`)
+  เซิร์ฟเวอร์อ่านใหม่ทุก ~10 นาที แก้กฎแล้วไม่ต้อง deploy ใหม่ ถ้าดึงไม่ได้จะใช้ชุดล่าสุดที่ดึงได้ต่อ
+- หรือ `NEURO_PRIVATE_RULES` = ตัวชุดกฎเป็น JSON (หรือ base64 ของ JSON) ต้อง Redeploy ทุกครั้งที่แก้
+- ไม่ตั้งเลย: ตอบ `{ "warnings": [], "configured": false }` หน้าเว็บทำงานเหมือนเดิม
+- การจำกัดอัตรา (12 ครั้ง/นาที, 300 ครั้ง/วัน ต่อ IP) ใช้ Redis ของตัวนับผู้ใช้ถ้าตั้ง `KV_REST_API_*` และ `USAGE_SALT` แล้ว
+  (ใช้ร่วมทุก instance) ไม่งั้นนับในหน่วยความจำของแต่ละ instance
+- ทดลองบนเครื่อง: `NEURO_PRIVATE_RULES="$(cat ../../zetaphy-private/rules/pack.json)" npm run web`
+
+**ข้อจำกัด (บอกตรง ๆ)**
+- ปลายทางนี้ถูกใช้เป็น "เครื่องทาย" ได้: คนทำเหรียญ deploy โค้ดหลายแบบแล้วถามจนไม่ขึ้นเตือน การจำกัดอัตราและ IP
+  แค่ทำให้ช้าลง (เปลี่ยน IP ได้) ความลับของกฎจึงมีอายุ ต้องเปิดเผยตามกำหนด
+- เตือนล่วงหน้าเป็นคำแนะนำ อาจผิดได้ ไม่อยู่ในคำตัดสินบนเชน และไม่มีใครตรวจซ้ำได้จนกว่ากฎจะเปิดเผย
+  (ต่างจากกฎสาธารณะ) ถ้อยคำจึงบอกแค่ว่า "ตรงกับรูปแบบที่เฝ้าดู" และหมวดที่เป็นกลาง ไม่ตัดสินเหรียญ
+- ผู้ใช้ต้องเชื่อเซิร์ฟเวอร์ของโครงการสำหรับชั้นนี้ และเซิร์ฟเวอร์เห็นที่อยู่สัญญาที่ถูกตรวจ (ไม่เก็บ)
 
 ข้อจำกัดของกฎชื่อฟังก์ชัน: ตรวจจากชื่อฟังก์ชันที่รู้จัก (`src/signatures.js`) ในโค้ดบนเชน
 สิทธิ์พิเศษที่ซ่อนหลังชื่อฟังก์ชันแปลกๆ อาจหลุดได้ (การจำลองซื้อขายช่วยปิดช่องนี้สำหรับเหรียญที่มี pool)
@@ -210,6 +263,7 @@ npm test          # คอมไพล์สัญญาตัวอย่าง
                   # ทั้งเปิดและปิด optimizer + ลายนิ้วมือ/แม่แบบ + ตัวนับผู้ใช้
                   # + จำลองซื้อขายด้วย DEX จำลอง (Uniswap V2) ที่ที่อยู่ของ PancakeSwap จริง
                   # + โค้ดคล้ายโค้ดที่ติดธง (สำเนาที่แก้นิดหน่อยต้องโดนเตือน เหรียญทั่วไปต้องไม่โดน)
+                  # + เหรียญที่ยอมให้ขายเฉพาะตอนเห็นการทดสอบ (SimAware) + ชั้นเตือนล่วงหน้า (test/earlywarning.test.js)
 npm run test:web  # เปิดหน้าเว็บใน Chromium ตอบ RPC จากเชนทดสอบ ไม่ใช้เน็ต
 ```
 
@@ -232,6 +286,9 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 - [x] จำลองซื้อขาย (ทดสอบซื้อแล้วขายคืน) บน EVM ผ่าน Uniswap V2 / PancakeSwap V2 ทดสอบบน EVM ในเครื่องแล้ว
       รอผล live check บน mainnet (ที่อยู่ DEX และ RPC ที่รองรับ state override) จาก CI
 - [ ] จำลองซื้อขายผ่าน pool แบบ V3 และ DEX อื่น (Aerodrome บน Base, Camelot บน Arbitrum)
+- [x] การจำลองไม่มีค่าตายตัวให้เหรียญจำได้ (ที่อยู่สุ่ม / จากงานเครือข่าย, ราคา gas จริง, จำนวนไม่กลม)
+- [ ] จำลองจากกระเป๋าธรรมดาหลายธุรกรรม (`eth_simulateV1`) ปิดช่อง "ให้เฉพาะสัญญาขายได้"
+- [x] ชั้นเตือนล่วงหน้า (กฎส่วนตัวช่วงพัก) + workflow เปิดเผยกฎที่ครบกำหนด
 - [x] เตือนโค้ดคล้ายโค้ดที่ติดธง (EVM) + สัญญาณ "ยังไม่รู้จักรูปแบบนี้"
 - [x] baseline จากรูปแบบ OpenZeppelin ที่พบบ่อย (solc 0.8.26 เปิด/ปิด optimizer) และชุดข้อมูลจริงเริ่มว่าง
 - [ ] ใส่สัญญาที่ติดธงจริงบน mainnet ในชุดข้อมูล (พร้อมคีย์และ reportHash ของธง) และขยาย baseline ด้วยเหรียญ OpenZeppelin จริงที่คอมไพล์หลายเวอร์ชัน solc
@@ -257,6 +314,21 @@ EVM tokens also get a buy/sell test (`src/honeypot.js`): one `eth_call` with a
 state override runs `contracts/TradeSim.sol`, which buys through the chain's main
 Uniswap-V2-style DEX and sells straight back, so a token you can buy but not
 sell, or that takes a hidden tax, is caught whatever its functions are named.
+Nothing in that test is fixed for a token to recognise: the helper's and the
+caller's addresses are random per check (or derived from a NeuroJobs job and
+its lottery, `jobSimSeed`, so all runners of a round run the same test;
+`--sim-seed` re-runs it), as are its code hash, the amounts, the share sold
+and the gas limit, and the call carries a real gas price (a call without one
+runs at `tx.gasprice` 0 and, on geth, `block.basefee` 0). One limit remains:
+in a single `eth_call` the buyer is a contract, not `tx.origin`.
+Two rule tiers: the public consensus rules in `src/` (the skill id), and an
+advisory **early-warning** tier (`server/earlywarning.js`,
+`POST /api/early-warning`) that runs a private, embargoed rule pack
+(`zetaphy-private/rules/pack.json`, loaded from `NEURO_PRIVATE_RULES` or with a
+read-only `NEURO_RULES_TOKEN`) and returns only `{reason, severity, ref}` per
+match. Rules go public after about 30 days. The endpoint can be probed as an
+oracle (rate limits only slow that down), and its warnings are not part of
+on-chain verdicts.
 EVM code is also compared with an in-repo similarity dataset
 (`src/similarity.js`, `src/threat-signatures.js`, shipped empty; test reference
 samples live in `test/fixtures/`): opcode 4-gram MinHash plus selector Jaccard
