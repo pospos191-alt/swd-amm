@@ -180,6 +180,24 @@ gov.sh vote <id> yes
 gov.sh ratelimits
 ```
 
+## ขั้น 3 ต่อ: USDC จริงจาก Noble (IBC + relayer)
+
+ชุดเครื่องมือใน [`ibc/`](ibc/README.md) ต่อ ZETAPHY กับ Noble (เชนที่ Circle ออก USDC เอง) ทำบนเครื่องโหนดผ่าน Cloud Shell ทั้งหมด ฟรี:
+```
+sudo bash setup-relayer.sh                  # Hermes (ตรึงเวอร์ชัน + SHA-256), ผู้ใช้ relayer, กุญแจ; พิมพ์แค่ที่อยู่ให้เติมแก๊ส
+sudo bash setup-relayer.sh create-channel   # light client + connection + ช่อง transfer
+sudo bash setup-relayer.sh start            # service hermes-relayer (status / balances / stop)
+sudo bash setup-relayer.sh send-usdc <0x…> 1000000   # USDC ก้อนแรก 1 USDC
+gov.sh ibc-usdc-erc20 channel-0             # ที่อยู่ ERC-20 ของ USDC สำหรับ MetaMask, explorer, DEX
+gov.sh ibc-usdc-ratelimit channel-0         # เพดานต่ำ 1% / 1% ต่อ 24 ชม. (โหวต)
+```
+- USDC บน ZETAPHY คือเหรียญ `ibc/<sha256("transfer/<ช่อง>/uusdc")>` (`gov.sh ibc-usdc-denom <ช่อง>`)
+  โมดูล erc20 ของ Cosmos EVM v0.7.3 ทำให้เป็น ERC-20 เองตอนเหรียญแรกมาถึง (ไม่มี proposal ลงทะเบียน)
+- testnet ปัจจุบัน: ERC-20 นี้ตอบ `decimals()` = 0 (metadata ค่าเริ่มต้นของ ibc-go) แก้ได้ด้วยการอัปเกรดเชนหรือใส่ `gov.sh ibc-usdc-metadata` ใน genesis ของเชนใหม่
+- relayer ล่มทำให้โอนช้าแต่เงินไม่หาย (light client ตรวจกันเอง) แต่ห้ามหยุดเกิน 14 วัน; light client ของ IBC ตรวจ ed25519 ซึ่งไม่ต้านควอนตัม
+- testnet ก่อน (Noble `grand-1`); mainnet (`noble-1`) หลังผ่าน audit เท่านั้น
+- ทดสอบบนเชนทดลอง 2 เชนโดยไม่ต้องใช้ Noble: `ibc/test-ibc.sh` (`npm run test:devnet:ibc` ใน zetaphy-network)
+
 ## ขั้น 5: ลายเซ็นต้านควอนตัม (ML-DSA)
 
 `setup-node.sh` ใส่ patch ไว้ท้ายไฟล์ ตอน build จะเพิ่มสิ่งต่อไปนี้ (รวมข้อ 8–10 เรื่องเลขสุ่ม การเผาเหรียญ และความสูงเปิดใช้):

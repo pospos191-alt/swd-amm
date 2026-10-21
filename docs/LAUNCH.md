@@ -24,7 +24,8 @@
 | 12 | ปรึกษาทนาย | คุณ |
 | 13 | PR ขึ้นรายชื่อ chainlist / Keplr | 🤖 เตรียมไฟล์, คุณเปิด PR จากบัญชีคุณ |
 | 14 | audit ก่อนมีเงินจริง | คุณ |
-| 15 | สะพาน: ปิดไว้ก่อน เปิดเมื่อผ่านทุกประตู + ตัวเฝ้าดู | คุณ (🤖 ตรวจประตูให้ได้) |
+| 15 | IBC + USDC จาก Noble testnet (relayer บนเครื่องโหนด) | คุณ (🤖 ตรวจผลให้ได้) |
+| 16 | สะพาน: ปิดไว้ก่อน เปิดเมื่อผ่านทุกประตู + ตัวเฝ้าดู | คุณ (🤖 ตรวจประตูให้ได้) |
 
 ---
 
@@ -130,7 +131,7 @@ PR ที่ขึ้นว่า **Partial** อย่าเพิ่ง merge
 **เชนถูกล้าง/เริ่มใหม่:** workflow จะปฏิเสธ (บล็อก 1 ไม่ตรงกับ state) ลบไฟล์ `zetaphy-launch/state/77390.json` ใน branch `launch/testnet` (หรือลบ branch นั้น) แล้วรันใหม่
 **ไม่ทำโดยค่าเริ่มต้น:** สะพาน Neuro (`zetaphy deploy-bridge`) ต้องมี LockBox บนเชนต้นทางก่อน; เมื่อมีแล้ว 🤖 รันให้ได้ด้วย `--bridge-lockbox <chainId>:0x…`
 **สะพาน lock/mint ติดตั้งแบบปิด (CLOSED) เสมอ:** ขั้น bridge ของ workflow ติดตั้งสัญญาแต่ไม่เปิด route (เพดานแข็ง 1,000 โทเคน) และจะล้มถ้าพบว่า route เปิดอยู่
-workflow นี้ **เปิดสะพานไม่ได้** ดูข้อ 15
+workflow นี้ **เปิดสะพานไม่ได้** ดูข้อ 16
 ส่วนการย้ายกองรางวัล 500 ล้านเข้า RewardVault ใช้ key `rewards` บนเครื่อง (`zetaphy deploy-vault --fund` ใน `zetaphy-network/README.md`)
 
 🤖 ถ้าให้ Claude ใช้ GitHub Actions ของ repo นี้ได้ Claude กด Run workflow, อ่านผล และรีวิว PR ให้ได้ (secret ยังเป็นของคุณ Claude ไม่เห็นค่า)
@@ -246,7 +247,22 @@ Claude ไม่ใช่ทนาย และ testnet ไม่ทำให้
 ทุกอย่างในเช็กลิสต์นี้เป็น testnet สัญญาและเชนยังไม่ผ่าน audit (ขอบเขตอยู่ใน `docs/AUDIT_SCOPE.md` และ `docs/CHAIN_AUDIT_SCOPE.md`)
 **ห้ามใช้กับเงินจริง** จนกว่าจะ audit โดยผู้ตรวจอิสระ แก้ทุกข้อระดับ medium ขึ้นไป และเปิดเผยรายงาน; mainnet ใช้ขั้นตอนใน `docs/MAINNET_RUNBOOK.md` ไม่ใช่ workflow นี้
 
-## 15. สะพาน: ปิดไว้จนกว่าจะผ่านทุกประตู
+## 15. IBC + USDC จาก Noble testnet
+
+ต่อ ZETAPHY กับ Noble (เชนที่ Circle ออก USDC) ผ่าน IBC ฟรี ทำในเบราว์เซอร์ทั้งหมด รายละเอียดใน [`zetaphy-chain/ibc/README.md`](../zetaphy-chain/ibc/README.md)
+ทำหลังข้อ 2 (เชนทำงาน) และใช้ Noble **testnet** (`grand-1`) เท่านั้น; mainnet (`noble-1`) รอข้อ 14
+1. เข้าเครื่องทาง Cloud Shell แบบข้อ 8.2 (เป็น `ubuntu` ยังไม่ต้อง `sudo -iu zetaphy`) แล้วเอา `zetaphy-chain/ibc/setup-relayer.sh` ขึ้นเครื่อง (GitHub → **Raw** → `cat > setup-relayer.sh` วาง Ctrl-D)
+2. `sudo bash setup-relayer.sh` → ได้ที่อยู่ relayer 2 ที่ (ไม่มี key ให้ถือ)
+3. เติมแก๊ส: MetaMask ส่ง 10 ZTPHY ไปที่ `0x…` ของ relayer; **faucet.circle.com** → Noble Testnet → ที่อยู่ `noble1…`
+4. `sudo bash setup-relayer.sh create-channel` → จด `ZETAPHY_CHANNEL` (เช่น `channel-0`) แล้ว `sudo bash setup-relayer.sh start`
+5. `sudo bash setup-relayer.sh send-usdc <ที่อยู่ MetaMask> 1000000` (1 USDC เข้าเชน)
+6. `sudo -iu zetaphy` แล้ว `gov.sh ibc-usdc-erc20 channel-0` (ที่อยู่ ERC-20 ไปใส่ MetaMask / token list) และ
+   `gov.sh ibc-usdc-ratelimit channel-0` → `gov.sh vote <เลข> yes` (เพดาน 1% ต่อ 24 ชม.)
+7. ดูแล: `sudo bash setup-relayer.sh status` สัปดาห์ละครั้ง เติม USDC จาก faucet เมื่อยอดฝั่ง Noble ต่ำ ห้ามหยุด relayer เกิน 14 วัน
+
+🤖 บอกผลของ `status` (ไม่มีความลับในนั้น) แล้ว Claude ช่วยอ่านและแก้ปัญหาให้ได้
+
+## 16. สะพาน: ปิดไว้จนกว่าจะผ่านทุกประตู
 
 สะพาน lock/mint (`BridgeAirlock` → `BridgeGuard`) **ปิดอยู่** หลัง launch และต้องปิดต่อไปจนกว่าจะมี **ครบทุกข้อ** (การตัดสินใจของเจ้าของโครงการ):
 1. **lane ที่สองที่อิสระจริง:** Hyperlane (`HyperlaneLane` + `HyperlaneLockBox`) ที่ผู้ควบคุม (Mailbox/ISM/validator ของ Hyperlane) ไม่ใช่กลุ่มเดียวกับคนรันร่าง Neuro
