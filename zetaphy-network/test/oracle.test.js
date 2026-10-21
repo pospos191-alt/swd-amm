@@ -158,6 +158,11 @@ test('sources that disagree beyond maxDeviation: no price (SourcesDeviate), Devi
   const ev = await o.oracle.send('keeper', 'poke', [o.asset.address]);
   const d = ev.find((e) => e?.name === 'DeviationTripped');
   assert.ok(d && d.args.bps >= 290n, 'logged with both prices');
+  o.c.advance(61); // a poke that also records an observation
+  await o.setPyth((o.P.price * 110n) / 100n);
+  const ev2 = await o.oracle.send('keeper', 'poke', [o.asset.address]);
+  assert.ok(ev2.some((e) => e?.name === 'DeviationTripped'));
+  await o.keep(1);
   await o.setPyth((o.P.price * 101n) / 100n); // 1%: within
   assert.equal((await priceOf(o))[0], (2n * E18 * 101n) / 100n);
 });

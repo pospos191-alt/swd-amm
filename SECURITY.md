@@ -18,6 +18,18 @@ funded by a governance vote before mainnet.
 Neuro runners, multisig guardian and governance on hardware wallets, a funded bug bounty, small caps that grow
 behind a 7-day timelock, and the bridge monitor running.
 
+**ZETAPHY governance:** after the launch handover every admin role of the ZETAPHY contracts (bridge, ThreatRegistry,
+NeuroControl, RewardVault, StableGateway, NeuroIdentity, ZetaphyOracle and its Pyth relay, DEX factory, NFT marketplace)
+belongs to `ZetaphyTimelock` (OpenZeppelin `TimelockController` 5.4.0, unmodified, pinned by sha256 in
+`zetaphy-network/vendor/openzeppelin-contracts.json`; 48 h delay; proposers = the gov module or a multisig; anyone executes;
+no admin key). Guardians (multisigs) keep only switches that reduce risk (pause, lower caps, holds, remove a lane or marker,
+pause a price feed). The launch tool checks on-chain that no EOA keeps an admin or timelock role. Prices for the StableGateway
+come from `ZetaphyOracle` (DEX TWAP + Pyth with staleness, deviation, confidence and circuit-breaker guards), never a
+silently wrong value. Scope: [`docs/BUG_BOUNTY.md`](docs/BUG_BOUNTY.md); details in `zetaphy-network/README.md`.
+
+**การปกครองของ ZETAPHY:** หลัง handover สิทธิ์ผู้ดูแลทุกตัวเป็นของ `ZetaphyTimelock` (รอ 48 ชั่วโมง) guardian กดได้ทันทีเฉพาะสิ่งที่ลดความเสี่ยง
+ราคาของ StableGateway มาจาก `ZetaphyOracle` ที่ไม่มีราคาก็ revert ไม่เดา รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+
 **Update (2026-09-08, latest): the first-depositor/donation attack found by
 the test suite (see the finding below) has been FIXED, not just
 documented.** Two changes landed in `lib.rs`:

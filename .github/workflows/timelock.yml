@@ -1,0 +1,178 @@
+# ZETAPHY timelock from the browser (docs/LAUNCH.md, step 8): after the handover every admin
+# role belongs to the ZetaphyTimelock. Run by hand only (Actions → timelock → Run workflow).
+#
+#   status    the timelock's delay, who holds its roles, and one operation (id) or the recent ones
+#   schedule  what the governance must send to schedule a call (to, sig, args or data, salt):
+#             the calldata for a multisig (in the run summary), and a MsgEVMCall proposal file for
+#             the gov module (artifact "timelock-proposal": submit it on the node, then vote)
+#   execute   run an operation whose delay has passed (anyone may; the deployer key only pays gas:
+#             after the handover it holds no role)
+#   cancel    what a canceller must send (calldata in the summary)
+#
+# Nothing secret is printed: calls, ids and calldata are public on-chain anyway. The deployer key
+# (secret ZETAPHY_DEPLOYER_KEY) is used for execute only, from a 0600 file, removed at the end.
+# Cost: free (a GitHub-hosted runner for ~2 minutes).
+
+name: timelock
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "status, schedule, execute or cancel"
+        required: true
+        type: choice
+        options: ['status', 'schedule', 'execute', 'cancel']
+        default: 'status'
+      rpc:
+        description: "The node's https RPC, e.g. https://1-2-3-4.sslip.io"
+        required: true
+        type: string
+      timelock:
+        description: "0x… of the ZetaphyTimelock (empty: read from zetaphy-launch/state/77390.json on branch launch/testnet)"
+        required: false
+        type: string
+        default: ''
+      to:
+        description: "schedule: the contract to call, 0x…"
+        required: false
+        type: string
+        default: ''
+      sig:
+        description: "schedule: the function, e.g. setMaxBodies(uint256) (or leave empty and give data)"
+        required: false
+        type: string
+        default: ''
+      args:
+        description: "schedule: its arguments, comma-separated, e.g. 32"
+        required: false
+        type: string
+        default: ''
+      data:
+        description: "schedule: raw calldata 0x… instead of sig/args"
+        required: false
+        type: string
+        default: ''
+      salt:
+        description: "schedule: a word that makes a repeated call a new operation (e.g. raise-cap-2)"
+        required: false
+        type: string
+        default: ''
+      id:
+        description: "status / execute / cancel: the operation id 0x… (64 hex)"
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: timelock
+  cancel-in-progress: false
+
+jobs:
+  timelock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Check the inputs
+        env:
+          ACTION: ${{ inputs.action }}
+          RPC: ${{ inputs.rpc }}
+          TL: ${{ inputs.timelock }}
+          TO: ${{ inputs.to }}
+          SIG: ${{ inputs.sig }}
+          ARGS: ${{ inputs.args }}
+          DATA: ${{ inputs.data }}
+          SALT: ${{ inputs.salt }}
+          ID: ${{ inputs.id }}
+        run: |
+          [[ "$RPC" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]] || { echo "::error::rpc must be https://<host>"; exit 1; }
+          [ -z "$TL" ] || [[ "$TL" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "::error::timelock must be 0x<40 hex>"; exit 1; }
+          [ -z "$TO" ] || [[ "$TO" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "::error::to must be 0x<40 hex>"; exit 1; }
+          [ -z "$SIG" ] || [[ "$SIG" =~ ^[A-Za-z_][A-Za-z0-9_]*\([a-z0-9,\[\]]*\)$ ]] || { echo "::error::sig must look like setFee(uint16,address)"; exit 1; }
+          [ -z "$ARGS" ] || [[ "$ARGS" =~ ^[A-Za-z0-9,x.:_-]{1,600}$ ]] || { echo "::error::args: comma-separated numbers, addresses, true/false"; exit 1; }
+          [ -z "$DATA" ] || [[ "$DATA" =~ ^0x[0-9a-fA-F]{8,}$ ]] || { echo "::error::data must be 0x calldata"; exit 1; }
+          [ -z "$SALT" ] || [[ "$SALT" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || { echo "::error::salt: letters, digits . _ - (up to 64)"; exit 1; }
+          [ -z "$ID" ] || [[ "$ID" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "::error::id must be 0x<64 hex>"; exit 1; }
+          if [ "$ACTION" = schedule ] && { [ -z "$TO" ] || { [ -z "$SIG" ] && [ -z "$DATA" ]; }; }; then echo "::error::schedule needs to, and sig (+ args) or data"; exit 1; fi
+          if [ "$ACTION" = execute ] || [ "$ACTION" = cancel ]; then [ -n "$ID" ] || { echo "::error::$ACTION needs id"; exit 1; }; fi
+
+      - name: Install
+        run: npm ci --prefix zetaphy-network --omit=dev --no-audit --no-fund
+
+      - name: Find the timelock
+        id: tl
+        env:
+          TL: ${{ inputs.timelock }}
+        run: |
+          if [ -z "$TL" ] && git fetch -q origin launch/testnet 2>/dev/null; then
+            git show FETCH_HEAD:zetaphy-launch/state/77390.json > "$RUNNER_TEMP/state.json" 2>/dev/null || true
+            TL=$(jq -r '[.steps[].out.timelock // empty][0] // empty' "$RUNNER_TEMP/state.json" 2>/dev/null)
+            BLOCK=$(jq -r '[.steps[].out.timelockBlock // empty][0] // empty' "$RUNNER_TEMP/state.json" 2>/dev/null)
+          fi
+          [ -n "$TL" ] || { echo "::error::no timelock: give its address (or hand over first: docs/LAUNCH.md step 8)"; exit 1; }
+          echo "address=$TL" >> "$GITHUB_OUTPUT"
+          echo "block=${BLOCK:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Write the deployer key to a private file (execute only: it pays gas, it holds no role)
+        if: inputs.action == 'execute'
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set (any funded key may execute)"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}
+          echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          mkdir -p "$RUNNER_TEMP/home" && chmod 700 "$RUNNER_TEMP/home"
+          umask 077; printf '0x%s\n' "$k" > "$RUNNER_TEMP/home/worker.key"
+          unset KEY k
+
+      - name: Run
+        env:
+          ACTION: ${{ inputs.action }}
+          RPC: ${{ inputs.rpc }}
+          TL: ${{ steps.tl.outputs.address }}
+          FROM_BLOCK: ${{ steps.tl.outputs.block }}
+          TO: ${{ inputs.to }}
+          SIG: ${{ inputs.sig }}
+          ARGS: ${{ inputs.args }}
+          DATA: ${{ inputs.data }}
+          SALT: ${{ inputs.salt }}
+          ID: ${{ inputs.id }}
+          ZETAPHY_HOME: ${{ runner.temp }}/home
+        run: |
+          mkdir -p "$ZETAPHY_HOME" && chmod 700 "$ZETAPHY_HOME"
+          a=(timelock "$ACTION")
+          case "$ACTION" in
+            status) [ -n "$ID" ] && a+=("$ID") ;;
+            execute|cancel) a+=("$ID") ;;
+            schedule)
+              a+=(--to "$TO" --proposal-out "$RUNNER_TEMP/proposal/timelock-proposal.json")
+              if [ -n "$DATA" ]; then a+=(--data "$DATA"); else a+=(--sig "$SIG"); [ -n "$ARGS" ] && a+=(--args "$ARGS"); fi
+              [ -n "$SALT" ] && a+=(--salt "$SALT") ;;
+          esac
+          node zetaphy-network/cli.js "${a[@]}" --timelock "$TL" --from-block "$FROM_BLOCK" --rpc "$RPC" 2>&1 | tee "$RUNNER_TEMP/out.txt"
+          { echo '```'; cat "$RUNNER_TEMP/out.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/home"
+
+      - name: Upload the gov proposal (schedule, when the gov module is a proposer)
+        if: inputs.action == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: timelock-proposal
+          path: ${{ runner.temp }}/proposal/
+          if-no-files-found: ignore

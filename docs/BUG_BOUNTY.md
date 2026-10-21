@@ -15,6 +15,7 @@ English summary at the end.
 | patch ของเชน (Cosmos EVM: ML-DSA, `MsgEVMCall`, ล็อกควอนตัม, เผาค่าธรรมเนียม, เลขสุ่ม, `x/ratelimit`, preinstalls) | `zetaphy-chain/` |
 | สะพาน: `BridgeGuard`, `BridgedToken`, `BridgeAirlock` (รวม marker), `NeuroLane`, `HyperlaneLane`, `HyperlaneLockBox`, `LockBox`, `zetaphy bridge watch` / `open` / `monitor` | `zetaphy-network/contracts/`, `zetaphy-network/src/` |
 | สัญญา Neuro: `NeuroJobs`, `NeuroJobsChallenges`, `NeuroControl`, `ThreatRegistry`, `ThreatReports`, `NeuroIdentity`, `NeuroValidation`, `ComputeMarket`, `RewardVault`, `StableGateway`, `QuantumWallet`, `SimpleMultisig` | `zetaphy-network/contracts/` |
+| การปกครองและราคา: `ZetaphyTimelock` (OpenZeppelin `TimelockController` 5.4.0 ที่ pin ไว้ใน `vendor/`, รวมการส่งต่อสิทธิ์ของ launch tool), `ZetaphyOracle`, `TwapRecorder`, `ZetaphyPythRelay`, ปุ่มฉุกเฉินของ guardian, `zetaphy timelock` / `oracle` | `zetaphy-network/contracts/`, `zetaphy-network/vendor/`, `zetaphy-network/src/`, `zetaphy-launch/` |
 | DEX (factory, router, pair) | `zetaphy-dex/` |
 | NFT (factory, marketplace) | `zetaphy-nft/` |
 | กระเป๋าเว็บ (รวมบัญชี PQ) | `zetaphy-wallet/` |
@@ -100,6 +101,8 @@ not promises. The lock/mint bridge stays closed until this program is funded.
 
 - **Scope:** the chain patch (`zetaphy-chain/`), the bridge (`BridgeGuard`, `BridgeAirlock`, `NeuroLane`, `HyperlaneLane`,
   `HyperlaneLockBox`, `LockBox`, the airlock's markers and the CLI around them, including the bridge monitor), the Neuro contracts (`zetaphy-network/contracts/`),
+  the governance timelock and its handover (`ZetaphyTimelock`, the pinned OpenZeppelin files in `zetaphy-network/vendor/`, `zetaphy-launch/`), the guardians'
+  emergency switches, the price oracle (`ZetaphyOracle`, `TwapRecorder`, `ZetaphyPythRelay`, `StableGateway`'s pricing),
   the DEX (`zetaphy-dex/`), NFT (`zetaphy-nft/`), the web wallet (`zetaphy-wallet/`) and the MetaMask Snap (`zetaphy-snap/`).
   Out of scope: third-party services, volumetric DoS, social engineering, issues needing the victim's key or device,
   unreproduced scanner output, risks already accepted in `SECURITY.md`, and disputes about a Neuro flag (use the appeal).

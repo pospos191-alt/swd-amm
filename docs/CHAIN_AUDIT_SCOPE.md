@@ -42,7 +42,11 @@ mode (genesis and peer fetched over https from another node) and
 
 Upstream Cosmos SDK / CometBFT / Cosmos EVM / ibc-go code that ZETAPHY does
 not modify, and the EVM contracts in `zetaphy-network/contracts` (separate
-scope, see that folder's README).
+scope, see that folder's README and `docs/BUG_BOUNTY.md`: they include the
+governance `ZetaphyTimelock`, built from OpenZeppelin Contracts 5.4.0 files
+pinned by sha256 in `zetaphy-network/vendor/openzeppelin-contracts.json`, and
+the `ZetaphyOracle` price feed). The chain-side touch point is `MsgEVMCall`
+from the gov module, which is how a vote schedules a call in that timelock.
 
 ## Already done (free)
 

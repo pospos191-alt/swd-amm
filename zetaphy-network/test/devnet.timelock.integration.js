@@ -220,7 +220,10 @@ test('regression on a real chain: abnormal sources give no price; the monitor re
   const relay = new Contract(ctx.relay, art('ZetaphyPythRelay').abi, signerOf('relayer'));
   await ok(relay.updatePriceFeeds([encodePriceFeed({ id: FEED, price: 220000000n, conf: 100000n, expo: -8, publishTime: t + 1 })]));
   await assert.rejects(ctx.oracleC.price(ctx.wz.target), (e) => e.revert?.name === 'SourcesDeviate');
-  await ok(new Contract(ctx.oracle, art('ZetaphyOracle').abi, signerOf('keeper')).poke(ctx.wz.target, { gasLimit: 800_000n })); // logs DeviationTripped
+  { const k = new Contract(ctx.oracle, art('ZetaphyOracle').abi, signerOf('keeper'));
+    try { await k.poke.staticCall(ctx.wz.target, { gasLimit: 800_000n }); } catch (e) { console.log('DEBUG poke static', e.revert, e.data, e.shortMessage); }
+    console.log('DEBUG live', await ctx.oracleC.livePrice(ctx.wz.target));
+    await ok(k.poke(ctx.wz.target, { gasLimit: 800_000n })); } // logs DeviationTripped
   // a big swap left in the pool: the next blocks have no price either
   const d = signerOf('deployer');
   await ok(ctx.tusd.connect(d).transfer(ctx.pairAddr, 20_000n * 10n ** 6n));

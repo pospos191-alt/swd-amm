@@ -171,37 +171,52 @@ Framework Preset **Other**, ไม่ต้องตั้ง Build/Output (ม�
 
 🤖 ถ้า DNS ของโดเมนอยู่ที่ Vercel และให้สิทธิ์แล้ว Claude เพิ่มระเบียนให้ได้
 
-## 8. ส่งต่อสิทธิ์ผู้ดูแลให้การโหวต (gov)
+## 8. ส่งต่อสิทธิ์ผู้ดูแลให้ timelock (โหวต gov หรือ multisig ตั้งเวลา แล้วรอ 48 ชั่วโมง)
 
-ระหว่างเปิด testnet deployer เป็นผู้ดูแลทุกสัญญาไว้ก่อน ตั้งค่าเพิ่มได้ทันทีโดยไม่ต้องรอโหวต
-**ส่งต่อเมื่อทุกอย่างใช้งานได้แล้วเท่านั้น** เพราะหลังจากนั้นการเปลี่ยนแปลงทุกอย่างต้องผ่านโหวต (proposal ฝาก 1,000 ZETAPHY, โหวต 10 นาที)
+ระหว่างเปิด testnet deployer เป็นผู้ดูแลทุกสัญญาไว้ก่อน ตั้งค่าเพิ่มได้ทันทีโดยไม่ต้องรอ
+**ส่งต่อเมื่อทุกอย่างใช้งานได้แล้วเท่านั้น** เพราะหลังจากนั้นการเปลี่ยนแปลงทุกอย่างต้อง **ตั้งเวลาใน ZetaphyTimelock แล้วรอ 48 ชั่วโมง**
 
-1. **Actions → launch-testnet → Run workflow**: `rpc` เดิม, `dry_run` = **no**, `governance` = **gov**, `handover` = **yes**
-   - deployer ส่งธุรกรรมโอนสิทธิ์เอง (ไม่ต้องโหวต) ให้ gov module (`0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2`):
-     NeuroControl, ThreatRegistry (คุม ThreatReports ด้วย), RewardVault, StableGateway, NeuroIdentity, NFT marketplace
-   - DEX factory เป็นแบบสองขั้น: gov ต้อง "ตอบรับ" ด้วยการโหวต workflow เขียนไฟล์ proposal ไว้ที่
-     `zetaphy-launch/state/proposals/77390-dex-accept-governance.json` (อยู่ใน PR และ artifact) แล้ว merge PR
-   - ถ้าจะให้ multisig ถือแทน ใส่ `governance` = `0x<multisig>`; multisig ต้องเรียก `acceptGovernance()` ของ DEX factory เอง
-2. **เข้าเครื่อง (ทำในเบราว์เซอร์):** หน้า Oracle → ไอคอน **Cloud Shell** `>_` มุมขวาบน →
+สิ่งที่ handover ทำ (ทั้งหมดในรอบเดียว แล้วตรวจบนเชน):
+- สร้าง **ZetaphyTimelock** (OpenZeppelin TimelockController 5.4.0) ระยะรอ 48 ชั่วโมง
+  - **proposer/canceller** = `governance` ที่เลือก: `gov` (gov module ตั้งเวลาด้วยโหวต) หรือ `0x<multisig>`
+  - **executor = ใครก็ได้** เมื่อครบเวลาแล้ว (สิ่งที่จะเรียกถูกล็อกไว้และทุกคนเห็นมา 48 ชั่วโมง) · **admin = timelock เอง** ไม่มี key ผู้ดูแลเหลือ
+- ยกสิทธิ์ผู้ดูแลทุกตัวให้ timelock: NeuroControl, ThreatRegistry (คุม ThreatReports ด้วย), RewardVault, StableGateway, NeuroIdentity, ZetaphyOracle, ZetaphyPythRelay,
+  BridgeGuard/BridgeAirlock (ถ้ามี), NFT marketplace และ DEX factory (สองขั้น: timelock ตอบรับเองในรอบเดียวกัน ไม่ต้องโหวตแยกแล้ว)
+- ตั้ง **guardian** (multisig ฉุกเฉิน) บนทุกสัญญาที่มีปุ่มฉุกเฉิน: กดหยุด (Neuro, สะพาน, gateway, ราคา), ลดเพดาน, กักธง, เอา lane/marker ออก ได้ **ทันที** แต่ทำได้แค่ลดความเสี่ยง เปิดคืนต้องผ่าน timelock
+- ตรวจบนเชน: ทุกสิทธิ์เป็นของ timelock, deployer ไม่เหลือ role ใดใน timelock และไม่ใช่ guardian, ไม่มี EOA (key เดี่ยว) ถือ role ใดเลย ไม่ผ่าน = ขั้นนี้ล้ม (รันซ้ำได้)
+
+1. เตรียม multisig ฉุกเฉิน (guardian): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` หรือ Safe (ดู "multisig + hardware wallet" ใน `zetaphy-network/README.md`) แต่ละ owner ใช้ hardware wallet ของตัวเอง
+2. **Actions → launch-testnet → Run workflow**: `rpc` เดิม, `dry_run` = **no**, `governance` = **gov** (หรือ `0x<multisig>`), `guardian` = **0x<multisig ฉุกเฉิน>**, `handover` = **yes**
+   - deployer ส่งธุรกรรมเองทั้งหมด (ไม่ต้องโหวต) แล้ว merge PR (state มีที่อยู่ `timelock`)
+3. **เปลี่ยนค่าหลังจากนี้ (ทุกอย่างทำในเบราว์เซอร์):** **Actions → timelock → Run workflow**
+   - `action` = **schedule**, `rpc`, `to` = สัญญา (ที่อยู่อยู่ใน `zetaphy-launch/state/77390.json`), `sig` = ฟังก์ชัน เช่น `setMaxBodies(uint256)`, `args` = `32`
+   - ผลใน run summary: เลข operation (`0x…`), เวลาที่ทำได้ และ calldata
+     - governance เป็น **multisig**: owner เสนอ `to` = timelock และ data ที่พิมพ์ (SimpleMultisig: propose → confirm → execute, Safe: Transaction Builder) เซ็นบน hardware wallet
+     - governance เป็น **gov**: ดาวน์โหลด artifact `timelock-proposal` แล้วเสนอโหวตบนเครื่อง (ข้อ 4)
+   - ครบ 48 ชั่วโมงแล้ว: `action` = **execute**, `id` = เลข operation (ใครก็ทำได้ workflow ใช้ key ของ deployer แค่จ่ายค่าแก๊ส)
+   - `action` = **status** ดูระยะรอ ใครถือ role และสถานะของ operation (Waiting / Ready / Done) · **cancel** พิมพ์สิ่งที่ canceller ต้องส่ง
+   - ตัวเฝ้า (`bridge monitor`) แจ้งเตือนทุกการตั้งเวลา (สัญญา ฟังก์ชัน และเวลาที่ทำได้) การเรียกจริง และการยกเลิก
+4. **เสนอโหวต (governance = gov) บนเครื่อง:** หน้า Oracle → ไอคอน **Cloud Shell** `>_` มุมขวาบน →
    เมนูเฟือง ⚙ ของ Cloud Shell → **Upload** → เลือกไฟล์ private key ที่ Save ไว้ในข้อ 1 แล้วพิมพ์:
    ```bash
    chmod 600 ssh-key-*.key && ssh -i ssh-key-*.key ubuntu@<Public IP>
    sudo -iu zetaphy
    ```
-3. **โหวตตอบรับ DEX:** เปิดไฟล์ proposal บน GitHub → **Raw** → คัดลอกทั้งหมด แล้วในหน้าต่างเครื่อง:
+   เปิดไฟล์ `timelock-proposal.json` ที่ดาวน์โหลด → คัดลอกทั้งหมด แล้วในหน้าต่างเครื่อง:
    ```bash
-   cat > dex.json        # วาง แล้วกด Ctrl-D
+   cat > p.json        # วาง แล้วกด Ctrl-D
    F="--from validator --keyring-backend test --keyring-dir ~/.zetaphy-genesis-keys --chain-id zetaphy_77390-1 --gas auto --gas-adjustment 1.5 --gas-prices 1000000000azetaphy -y"
-   zetaphyd tx gov submit-proposal dex.json $F
+   zetaphyd tx gov submit-proposal p.json $F
    zetaphyd q gov proposals -o json | jq -r '.proposals[-1].id'     # เลข proposal
    zetaphyd tx gov vote <เลข> yes $F
    ```
-   รอ 10 นาที `zetaphyd q gov proposal <เลข>` ต้องเป็น `PROPOSAL_STATUS_PASSED`
-4. **ต่อจากนี้ Neuro ใช้โหวต:** สคริปต์ [`zetaphy-chain/gov.sh`](../zetaphy-chain/gov.sh) (คัดลอกไปไว้บนเครื่องแบบเดียวกับข้อ 3) เช่น
-   `gov.sh neuro pause <NeuroControl>`, `gov.sh neuro approve-skill <skill id> <NeuroControl>` แล้ว `gov.sh vote <เลข> yes`
-   ที่อยู่ NeuroControl อยู่ใน `zetaphy-launch/state/77390.json` (`neuroControl`) และ workflow พิมพ์คำสั่งเต็มให้ทุกครั้งที่รันโดยไม่ได้ handover
+   รอ 10 นาที `zetaphyd q gov proposal <เลข>` ต้องเป็น `PROPOSAL_STATUS_PASSED` แล้วรออีก 48 ชั่วโมงจึง execute (ข้อ 3)
+   - `gov.sh neuro …` เรียก NeuroControl ตรง ๆ ใช้ได้เฉพาะตอนที่ gov module เป็น governance ของ NeuroControl เอง หลัง handover ให้ใช้ timelock แทน
+   - gov module เป็น canceller ทางเดียว = ยกเลิกต้องโหวตเช่นกัน แนะนำให้เพิ่ม multisig เป็น proposer/canceller อีกตัว (`--timelock-proposers 0x<multisig>` ของ launch.js)
+5. **ฉุกเฉิน:** owner ของ guardian เรียกจาก multisig ได้ทันที เช่น `pause()` ของ NeuroControl / BridgeGuard / StableGateway, `pauseFeed(<asset>)` ของ ZetaphyOracle
+   เปิดคืนต้องตั้งเวลาผ่าน timelock (ข้อ 3)
 
-🤖 Claude รัน workflow ขั้น 1 ให้ได้ (ถ้าให้สิทธิ์ GitHub Actions) แต่การโหวตต้องใช้กุญแจ validator บนเครื่องของคุณ: คุณทำเอง
+🤖 Claude รัน workflow launch-testnet และ timelock ให้ได้ (ถ้าให้สิทธิ์ GitHub Actions) แต่การโหวตและการเซ็นของ multisig ต้องเป็นคุณและ owner คนอื่นบน hardware wallet ของตัวเอง
 
 ## 9. MetaMask Snap (npm และ allowlist)
 
@@ -291,7 +306,8 @@ zetaphy bridge open  --audit-report https://<ผู้ตรวจ>/report.pdf -
 ```
 - ข้อใดไม่ผ่าน คำสั่งพิมพ์ทุกข้อที่ขาดและไม่ส่งอะไร · `BridgeGuard` เองก็ไม่ยอมเปิดถ้าไม่มี audit บนเชนหรือ lane อิสระไม่ถึง 2
 - คำสั่งพิมพ์ตาราง lane / controller / admin / owner ของ multisig ให้คุณ **ตรวจด้วยตา** ก่อนให้ owner เซ็น
-- ฉุกเฉิน: guardian `zetaphy bridge pause` (หยุดทันที) · เปิดคืนต้องเป็น governance (`unpause`)
+- ฉุกเฉิน: guardian `zetaphy bridge pause` (หยุดทันที) · เปิดคืนต้องเป็น governance (`unpause`) ซึ่งหลัง handover คือ timelock (ข้อ 8)
+- หลัง handover ทุกคำสั่งข้างบนที่ governance ต้องส่ง (`setAudit`, `setRoute`, `setMarker` …) ต้องตั้งเวลาผ่าน timelock คำสั่งพิมพ์ `zetaphy timelock schedule …` ให้
 
 🤖 Claude รัน `bridge gates` และอ่านผลตัวเฝ้าดูให้ได้ แต่การเซ็นของ multisig ต้องเป็นคุณและ owner คนอื่นบน hardware wallet ของตัวเอง
 
@@ -304,4 +320,7 @@ workflow เรียก `node zetaphy-launch/launch.js` (โค้ดอ่า�
 - ตรวจก่อนทุกครั้ง: chain id ต้องเป็น 77390 (testnet เท่านั้น), ยอดเงิน deployer พอกับค่าประมาณ, state ตรงกับเชนและ deployer เดิม
 - ทุกขั้นบันทึกใน `zetaphy-launch/state/77390.json` ทันทีที่เสร็จ (`--resume` ข้ามที่เสร็จแล้ว); ขั้นตรวจ (skill, wire, protect, configs, snap, handover) รันทุกครั้งและไม่ส่งธุรกรรมถ้าทุกอย่างถูกแล้ว
 - key: รับจากไฟล์ (`--key-file`, chmod 600) หรือ env เท่านั้น ไม่รับบนบรรทัดคำสั่ง ไม่พิมพ์ ไม่เขียนลง state; workflow เขียน secret ลงไฟล์ 0600 ใน `$RUNNER_TEMP` แล้วลบทิ้งท้าย run
-- ทดสอบ: `cd zetaphy-launch && npm test` (ตัวรันขั้น, state, ตัวเขียน config) และ `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (เชนจริงบนเครื่อง CI: deploy ทั้งหมด, smoke DEX/NFT/Neuro, handover + โหวตจริง)
+- ขั้น `oracle`: TwapRecorder + ZetaphyPythRelay + ZetaphyOracle (ZETAPHY/USD จากพูล WZETAPHY/tUSD ของ DEX, เติม Pyth ด้วย `--pyth-zeta-feed`) แล้วให้ StableGateway คิดราคาผ่าน oracle
+  ราคามีหลังหน้าต่าง TWAP เต็ม (ต้องมีคน poke เช่น `zetaphy relay start --poke-oracle 60`) · `--stable-testnet-price 0.01` = ทางสำรอง testnet ราคาคงที่ (ติดป้าย ปิดได้ผ่าน timelock)
+- ขั้น `timelock` + `handover` (เฉพาะ `--handover`): ดูข้อ 8 · `--guardian` บังคับ · `--timelock-delay` ค่าเริ่ม 172800 (ต่ำกว่า 86400 ได้เฉพาะ `--devnet` กับ RPC 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
+- ทดสอบ: `cd zetaphy-launch && npm test` (ตัวรันขั้น, state, ตัวเขียน config, ตัวเลือก timelock) และ `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (เชนจริงบนเครื่อง CI: deploy ทั้งหมด, oracle, smoke DEX/NFT/Neuro, handover ให้ timelock + ตรวจบนเชน, guardian หยุดทันที, โหวตตั้งเวลาแล้วใครก็ execute หลังครบเวลา, ตัวเฝ้ารายงาน)

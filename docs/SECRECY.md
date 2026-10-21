@@ -12,6 +12,8 @@
 | กติกา Neuro ที่ runner โหวต (skill ใน `zetaphy-neuro/src`) | runner ทุกคนต้องรันโค้ดชุดเดียวกันจึงตรวจซ้ำได้ (skill id = hash ของไฟล์) |
 | ลอตเตอรีเลือกผู้ตัดสิน | ใช้ blockhash หลังคำขอ รู้กติกาแต่เดาล่วงหน้าไม่ได้ |
 | เพดานสะพาน, timelock, quarantine, เกณฑ์ช่องทางอิสระ | อยู่บนเชนอยู่แล้ว และออกแบบให้ "รู้แล้วก็ยังเจาะไม่ได้" |
+| การตั้งเวลาใน ZetaphyTimelock (สัญญา ฟังก์ชัน ข้อมูล เวลาที่ทำได้) | ตั้งใจให้ทุกคนเห็น 48 ชั่วโมงก่อนมีผล (ตัวเฝ้าแจ้งเตือน) นี่คือจุดประสงค์ของ timelock |
+| ค่ากันของ ZetaphyOracle (หน้าต่าง TWAP, ความต่างของแหล่งราคา, เพดานการเปลี่ยน) | อ่านจาก storage บนเชนได้อยู่แล้ว เอกสารสาธารณะจึงไม่ลงตัวเลขหรือเหตุผลเชิงโจมตี |
 | ที่อยู่สัญญา (launch state) | อยู่บนเชนอยู่แล้ว |
 
 ## 2. ต้องซ่อน และเก็บไว้ที่ไหน
@@ -26,6 +28,8 @@
 | รายชื่อสัญญาที่เฝ้า (watch list) | GitHub Secret `BRIDGE_WATCHLIST` | ไม่มีใคร (รายงาน/issue/log ไม่แสดงที่อยู่เหล่านี้) |
 | เกณฑ์แจ้งเตือนจริงของสะพาน | GitHub Secret `BRIDGE_MONITOR_THRESHOLDS` (ไฟล์ใน repo เป็นค่าเริ่มต้น) | ไม่มีใคร |
 | การแจ้งเตือนสด | Telegram / Discord ส่วนตัว หรือ issue ใน repo private | ทีม |
+| กุญแจ relayer ราคา Pyth (`ZetaphyPythRelay`) | บนเครื่องที่รัน `zetaphy oracle relay-pyth` (สิทธิ์: ส่งราคาเท่านั้น oracle ตรวจซ้ำกับ TWAP) | เจ้าของเครื่อง |
+| รายละเอียดด้านความปลอดภัย (เหตุผลของค่ากัน จุดอ่อนที่ยังเหลือ การวิเคราะห์การโจมตี ผลรีวิว) | repo private `zetaphy-private/security/` (เช่น `timelock-oracle.md`) | ทีม |
 | กฎ Neuro ใหม่ช่วงพัก (embargo) | repo private `zetaphy-private/rules/pack.json` → เซิร์ฟเวอร์ Neuro อ่านด้วย token อ่านอย่างเดียว | ทีม (ผู้ใช้เห็นแค่ผลเตือน ไม่เห็นกฎ) |
 | ช่องโหว่ที่ยังไม่ได้แก้ | GitHub Private vulnerability reporting / Security advisory (draft) | ทีม จนกว่าจะแก้และประกาศ |
 | token บริการ (Vercel, Upstash, `NEURO_RULES_TOKEN`) | ตัวแปรลับของ Vercel / GitHub | ไม่มีใคร |
@@ -61,4 +65,6 @@
   - เปลี่ยน marker: governance โหวต `setMarker(ใหม่, true)` แล้ว `setMarker(เก่า, false)`
   - เปลี่ยน watch list / marker key / thresholds แล้ว ตัวเฝ้าจะเริ่มความจำใหม่ (state เข้ารหัสด้วยค่าเหล่านี้) แต่ไม่ต้องสแกนบล็อกเก่าซ้ำ
 - หลัง governance `untrip` รายการที่ค้างไว้ runner จะปล่อยให้เองในรอบถัดไป (ไม่ทิ้ง)
-- marker หลุด: governance `setMarker(ที่อยู่นั้น, false)` ครั้งเดียว เครื่องหมายทั้งหมดที่มันทำจะไม่มีผลทันที
+- marker หลุด: guardian เรียก `emergencyRemoveMarker(ที่อยู่นั้น)` ทันที (หรือ governance `setMarker(ที่อยู่นั้น, false)` ผ่าน timelock) เครื่องหมายทั้งหมดที่มันทำจะไม่มีผล
+- หลัง handover การเปลี่ยน marker, guardian, relayer ราคา หรือ owner ของ multisig ที่เป็น proposer ทั้งหมดผ่าน timelock (รอ 48 ชั่วโมง) วางแผนล่วงหน้า
+- relayer ราคาหลุด: guardian `pauseFeed` ทันที แล้วตั้งเวลา `setRelayer(ที่อยู่นั้น, false)` ผ่าน timelock
