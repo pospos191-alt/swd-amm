@@ -97,7 +97,7 @@ test('the oracle on a real chain: TWAP of the DEX pool + Pyth through the relay,
     while (Date.now() < end) {
       const t = (await provider.getBlock('latest')).timestamp;
       await ok(relay.updatePriceFeeds([encodePriceFeed({ id: FEED, price, conf: 100000n, expo: -8, publishTime: t })]));
-      await ok(keeper.poke(wz.target));
+      await ok(keeper.poke(wz.target, { gasLimit: 800_000n })); // a fixed limit: the estimate may come from a block where no observation is due
       await sleep(5000);
     }
   };
@@ -221,7 +221,7 @@ test('manipulation on a real chain: a pushed pool or a lying Pyth price gives no
   const relay = new Contract(ctx.relay, art('ZetaphyPythRelay').abi, signerOf('relayer'));
   await ok(relay.updatePriceFeeds([encodePriceFeed({ id: FEED, price: 220000000n, conf: 100000n, expo: -8, publishTime: t + 1 })]));
   await assert.rejects(ctx.oracleC.price(ctx.wz.target), (e) => e.revert?.name === 'SourcesDeviate');
-  await ok(new Contract(ctx.oracle, art('ZetaphyOracle').abi, signerOf('keeper')).poke(ctx.wz.target)); // logs DeviationTripped
+  await ok(new Contract(ctx.oracle, art('ZetaphyOracle').abi, signerOf('keeper')).poke(ctx.wz.target, { gasLimit: 800_000n })); // logs DeviationTripped
   // a big swap left in the pool: the next blocks have no price either
   const d = signerOf('deployer');
   await ok(ctx.tusd.connect(d).transfer(ctx.pairAddr, 20_000n * 10n ** 6n));

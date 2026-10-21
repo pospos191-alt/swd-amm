@@ -16,6 +16,8 @@ const num = (v, d, what, max = 2 ** 32 - 1) => {
   if (!Number.isInteger(n) || n < 0 || n > max) throw new Error(`${what}: a whole number up to ${max}`);
   return n;
 };
+/** poke's gas: fixed, since an estimate made when no observation is due is too low once one is. */
+export const POKE_GAS = 800_000n;
 const list = (v) => String(v ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 
 function oracleAt(s, opt, runner) {
@@ -101,7 +103,7 @@ export async function oracleCommand({ group, cmd, rest, opt, env, write, s, conn
     const c = await connect(s, { needJobs: false });
     const k = oracleAt(s, opt, c.signer);
     for (const a of rest) {
-      const rc = await (await k.poke(a)).wait();
+      const rc = await (await k.poke(a, { gasLimit: POKE_GAS })).wait();
       const evs = rc.logs.map((l) => { try { return k.interface.parseLog(l); } catch { return null; } }).filter(Boolean);
       const e = evs.find((x) => x.name !== 'Poked') ?? evs.find((x) => x.name === 'Poked');
       write(`${a}: ${!e ? 'nothing new (paused, tripped or no change)' : e.name === 'Poked' ? `reference ${usd(e.args.price)}` : e.name === 'SourceProblem' ? `SourceProblem ${PROBLEMS[Number(e.args.problem)]}` : e.name}`);

@@ -1512,7 +1512,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       const asset = await gateway.zetaAsset();
       if (/^0x0{40}$/i.test(oracleAddr)) throw new Error('--poke-oracle: this gateway has no oracle');
       const oracle = new Contract(oracleAddr, art('ZetaphyOracle').abi, c.signer);
-      const poke = async () => { try { await (await oracle.poke(asset)).wait(); } catch (e) { write(`${new Date().toISOString()} oracle poke failed: ${e.shortMessage ?? e.message}`); } };
+      const poke = async () => { try { await (await oracle.poke(asset, { gasLimit: 800_000n })).wait(); } catch (e) { write(`${new Date().toISOString()} oracle poke failed: ${e.shortMessage ?? e.message}`); } };
       await poke();
       keeper = setInterval(poke, every * 1000);
     }

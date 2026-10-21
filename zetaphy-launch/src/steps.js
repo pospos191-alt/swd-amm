@@ -269,7 +269,7 @@ export function launchSteps() {
           await wait(k.setTwap(zetaAsset, zetaPair, 1800, 10, 2000, BigInt(ctx.oracleMinLiquidity ?? 10000) * 10n ** 18n));
           if (ctx.pythZetaFeed) await wait(k.setPythFeed(zetaAsset, ctx.pythZetaFeed, 120, 100));
           await wait(k.setGuards(zetaAsset, 200, 1500, 3000, 3600));
-          await wait(k.poke(zetaAsset)); // the first TWAP observation
+          await wait(k.poke(zetaAsset, { gasLimit: 800_000n })); // the first TWAP observation (a fixed limit: an estimate may skip the recording)
           Object.assign(out, { zetaAsset, zetaPair });
           ctx.log(`  ZetaphyOracle ${oracle}: ZETAPHY/USD from the DEX pool ${zetaPair} (30 min TWAP, 10+ observations)${ctx.pythZetaFeed ? ` and Pyth ${ctx.pythZetaFeed}` : ''}; priced once the window has filled (keeper: zetaphy relay start --poke-oracle 60, or zetaphy oracle poke)`);
           if (o.stableGateway) {
