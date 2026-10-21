@@ -3,8 +3,12 @@
 //   - a full launch deploys every contract and writes every web app config with real addresses (code checked)
 //   - --resume deploys nothing new; without it a second run is refused
 //   - smoke: the DEX router quotes, the NFT factory makes a collection, NeuroJobs takes a request under the voted skill
-//   - --governance gov --handover: every admin role goes to the gov module, and the DEX's
-//     acceptGovernance proposal file passes a real vote
+//   - the oracle step: ZetaphyOracle + TwapRecorder + ZetaphyPythRelay, the StableGateway priced by it
+//   - --governance gov --guardian <key> --handover --devnet --timelock-delay 30: every admin role goes to the
+//     ZetaphyTimelock (the DEX factory's two-step included), the gov module is its only proposer/canceller,
+//     anyone executes, the deployer keeps nothing; the guardian pauses Neuro at once but cannot unpause; a real
+//     gov vote schedules NeuroControl.unpause() through the timelock (zetaphy timelock schedule --proposal-out),
+//     anyone executes it after the delay (zetaphy timelock execute), and the bridge monitor reports both
 // The config files it writes are restored afterwards (the committed ones stay placeholders).
 //
 //   ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet
@@ -12,11 +16,11 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Wallet, JsonRpcProvider, Contract, NonceManager, encodeBytes32String, parseEther, ZeroAddress } from 'ethers';
+import { Wallet, JsonRpcProvider, Contract, NonceManager, encodeBytes32String, parseEther, ZeroAddress, ZeroHash, id as hashText } from 'ethers';
 import { CONFIG_FILES } from '../src/configs.js';
 import { GOV_MODULE } from '../src/steps.js';
 
@@ -30,6 +34,7 @@ const stateFile = join(root, 'state.json');
 const keyFile = join(root, 'deployer.key');
 const deployer = Wallet.createRandom();
 const user = Wallet.createRandom();
+const guardian = Wallet.createRandom();
 const env = { ...process.env, ZETAPHYD, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' };
 // zetaphyd leaves a data/ folder in its working directory: run it (and devnet.sh) in the temp folder.
 const zd = (args) => execFileSync(ZETAPHYD, args, { env, encoding: 'utf8', cwd: root });
@@ -50,6 +55,13 @@ function launch(args, extraEnv = {}) {
   });
 }
 const state = () => JSON.parse(readFileSync(stateFile, 'utf8'));
+/** zetaphy-network/cli.js as `user` (a plain key: no role anywhere). */
+function zcli(args) {
+  return new Promise((resolve) => {
+    execFile(process.execPath, [join(ROOT, 'zetaphy-network/cli.js'), ...args, '--rpc', RPC], { env: { ...env, ZETAPHY_HOME: join(root, 'user-home') }, timeout: 120_000 },
+      (err, stdout, stderr) => resolve({ code: err?.code ?? 0, out: stdout + stderr }));
+  });
+}
 const outs = () => Object.assign({}, ...Object.values(state().steps).map((s) => s.out ?? {}));
 const read = (rel) => readFileSync(join(ROOT, rel), 'utf8');
 async function hasCode(a, what) {
@@ -60,7 +72,9 @@ async function hasCode(a, what) {
 before(() => {
   for (const rel of TOUCHED) saved.set(rel, existsSync(join(ROOT, rel)) ? readFileSync(join(ROOT, rel)) : null);
   writeFileSync(keyFile, deployer.privateKey + '\n', { mode: 0o600 });
-  execFileSync(join(ROOT, 'zetaphy-network/scripts/devnet.sh'), [chainHome, String(PORT), deployer.address, user.address], { stdio: 'inherit', env, cwd: root });
+  execFileSync(join(ROOT, 'zetaphy-network/scripts/devnet.sh'), [chainHome, String(PORT), deployer.address, user.address, guardian.address], { stdio: 'inherit', env, cwd: root });
+  mkdirSync(join(root, 'user-home'), { recursive: true, mode: 0o700 });
+  writeFileSync(join(root, 'user-home', 'worker.key'), user.privateKey + '\n', { mode: 0o600 });
   provider = new JsonRpcProvider(RPC, 77390n, { staticNetwork: true, pollingInterval: 500 });
 });
 
@@ -90,6 +104,8 @@ test('--dry-run: checks chain and balance, sends nothing, writes nothing', { tim
   t.diagnostic(/balance .*/.exec(r.out)[0]);
   assert.match(r.out, /neuro: would run/);
   assert.match(r.out, /bridge: skipped/);
+  assert.match(r.out, /oracle: would run/);
+  assert.match(r.out, /timelock: skipped/);
   assert.match(r.out, /handover: skipped/);
   assert.equal(existsSync(stateFile), false);
   assert.equal(await provider.getTransactionCount(deployer.address), nonce);
@@ -97,13 +113,23 @@ test('--dry-run: checks chain and balance, sends nothing, writes nothing', { tim
 });
 
 test('launch: every contract deployed and every config written with real addresses', { timeout: 900_000 }, async () => {
-  const r = await launch(['--neuro-url', NEURO_URL, '--wallet-origin', WALLET_ORIGIN, '--bridge-lockbox', LOCKBOX]);
+  const r = await launch(['--neuro-url', NEURO_URL, '--wallet-origin', WALLET_ORIGIN, '--bridge-lockbox', LOCKBOX, '--oracle-relayer', user.address]);
   assert.equal(r.code, 0, r.out);
   assert.ok(!r.out.includes(deployer.privateKey.slice(2)), 'the key is never printed');
   assert.ok(!readFileSync(stateFile, 'utf8').includes(deployer.privateKey.slice(2)), 'the state holds no key');
   const o = outs();
   for (const k of ['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'neuroIdentity', 'neuroValidation', 'rewardVault', 'quantumWalletFactory',
-    'tUSDC', 'tUSDT', 'stableGateway', 'computeMarket', 'bridgeGuard', 'bridgeAirlock', 'neuroLane']) await hasCode(o[k], k);
+    'tUSDC', 'tUSDT', 'stableGateway', 'computeMarket', 'bridgeGuard', 'bridgeAirlock', 'neuroLane', 'oracle', 'twapRecorder', 'pythRelay', 'zetaPair']) await hasCode(o[k], k);
+  // the oracle: ZETAPHY/USD from the DEX pool, the gateway priced by it, the relayer named
+  const oracle = new Contract(o.oracle, art('zetaphy-network', 'ZetaphyOracle').abi, provider);
+  assert.equal((await oracle.twapOf(o.zetaAsset)).pair, o.zetaPair);
+  assert.equal((await oracle.guardsOf(o.zetaAsset)).maxDeviationBps, 200n);
+  const gw = new Contract(o.stableGateway, art('zetaphy-network', 'StableGateway').abi, provider);
+  assert.equal(await gw.oracle(), o.oracle);
+  assert.equal(await gw.zetaAsset(), o.zetaAsset);
+  assert.equal(await gw.priceSource(), 'ZetaphyOracle');
+  assert.equal(await new Contract(o.pythRelay, art('zetaphy-network', 'ZetaphyPythRelay').abi, provider).isRelayer(user.address), true);
+  await assert.rejects(oracle.price(o.zetaAsset), (e) => e.revert?.name === 'TwapUnavailable', 'no price before the TWAP window has filled');
   assert.match(r.out, /Governance: the deployer is the admin/);
   assert.match(r.out, /gov\.sh neuro approve-skill/);
 
@@ -172,7 +198,7 @@ test('a second run: refused without --resume; --resume deploys nothing new', { t
   assert.match(r.out, /✓ dex: done/);
   assert.equal(await provider.getTransactionCount(deployer.address), nonce, 'no transaction: everything was done and in place');
   const after = state();
-  for (const k of ['neuro', 'threats', 'dex', 'nft', 'compute']) assert.deepEqual(after.steps[k], before.steps[k], k);
+  for (const k of ['neuro', 'threats', 'dex', 'nft', 'compute', 'oracle']) assert.deepEqual(after.steps[k], before.steps[k], k);
 });
 
 test('smoke: the DEX router quotes, the NFT factory makes a collection, NeuroJobs takes a request under the voted skill', { timeout: 120_000 }, async () => {
@@ -200,52 +226,95 @@ test('smoke: the DEX router quotes, the NFT factory makes a collection, NeuroJob
   assert.equal(skill, o.skillId, 'the job carries the approved skill');
 });
 
-test('--governance gov --handover: every admin role goes to the gov module; the DEX acceptance passes a vote', { timeout: 300_000 }, async () => {
-  const r = await launch(['--resume', '--governance', 'gov', '--handover', '--neuro-url', NEURO_URL, '--wallet-origin', WALLET_ORIGIN, '--bridge-lockbox', LOCKBOX, '--skip-snap-build']);
+test('--handover: every admin role to the timelock; the guardian pauses at once; a gov vote schedules, anyone executes after the delay', { timeout: 600_000 }, async () => {
+  const handoverArgs = ['--resume', '--governance', 'gov', '--guardian', guardian.address, '--handover', '--devnet', '--timelock-delay', '30',
+    '--neuro-url', NEURO_URL, '--wallet-origin', WALLET_ORIGIN, '--bridge-lockbox', LOCKBOX, '--skip-snap-build'];
+  // refused without a guardian, and with a short delay outside --devnet
+  const noGuard = await launch(['--resume', '--governance', 'gov', '--handover', '--devnet', '--timelock-delay', '30']);
+  assert.match(noGuard.out, /--handover needs --guardian/);
+  const short = await launch(['--resume', '--governance', 'gov', '--guardian', guardian.address, '--handover', '--timelock-delay', '30']);
+  assert.match(short.out, /less than 86400 s \(24 h\) only with --devnet/);
+  const r = await launch(handoverArgs);
   assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /checked on-chain: \d+ admin role\(s\) belong to the timelock/);
   const o = outs();
+  await hasCode(o.timelock, 'timelock');
+  const T = o.timelock.toLowerCase();
   const N = (n) => art('zetaphy-network', n).abi;
   const read1 = async (a, abi, fn) => (await new Contract(a, abi, provider)[fn]()).toLowerCase();
-  const gov = GOV_MODULE.toLowerCase();
-  assert.equal(await read1(o.neuroControl, N('NeuroControl'), 'governance'), gov);
-  assert.equal(await read1(o.threatRegistry, N('ThreatRegistry'), 'governance'), gov);
-  assert.equal(await read1(o.rewardVault, N('RewardVault'), 'governance'), gov);
-  assert.equal(await read1(o.stableGateway, N('StableGateway'), 'owner'), gov);
-  assert.equal(await read1(o.neuroIdentity, N('NeuroIdentity'), 'admin'), gov);
-  assert.equal(await read1(o.bridgeGuard, N('BridgeGuard'), 'governance'), gov);
-  assert.equal(await read1(o.bridgeAirlock, N('BridgeAirlock'), 'governance'), gov);
-  assert.equal(await read1(o.nft.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, 'governance'), gov);
-  const f = new Contract(o.dex.contracts.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, provider);
-  assert.equal((await f.pendingGovernance()).toLowerCase(), gov);
-  assert.equal((await f.governance()).toLowerCase(), deployer.address.toLowerCase());
+  for (const [a, abi, fn] of [[o.neuroControl, N('NeuroControl'), 'governance'], [o.threatRegistry, N('ThreatRegistry'), 'governance'], [o.rewardVault, N('RewardVault'), 'governance'],
+    [o.stableGateway, N('StableGateway'), 'owner'], [o.neuroIdentity, N('NeuroIdentity'), 'admin'], [o.bridgeGuard, N('BridgeGuard'), 'governance'],
+    [o.bridgeAirlock, N('BridgeAirlock'), 'governance'], [o.oracle, N('ZetaphyOracle'), 'governance'], [o.pythRelay, N('ZetaphyPythRelay'), 'governance'],
+    [o.nft.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, 'governance'], [o.dex.contracts.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, 'governance']]) {
+    assert.equal(await read1(a, abi, fn), T, `${a} ${fn}`);
+  }
+  // the timelock: the gov module proposes and cancels, anyone executes, it is its own admin, 30 s; the deployer holds nothing
+  const tl = new Contract(o.timelock, N('ZetaphyTimelock'), provider);
+  const P = hashText('PROPOSER_ROLE'), C = hashText('CANCELLER_ROLE'), E = hashText('EXECUTOR_ROLE');
+  assert.equal(await tl.getMinDelay(), 30n);
+  assert.deepEqual([await tl.getRoleMemberCount(P), await tl.getRoleMember(P, 0)], [1n, GOV_MODULE]);
+  assert.deepEqual([await tl.getRoleMemberCount(C), await tl.getRoleMember(C, 0)], [1n, GOV_MODULE]);
+  assert.deepEqual([await tl.getRoleMemberCount(E), await tl.getRoleMember(E, 0)], [1n, ZeroAddress]);
+  assert.equal((await tl.getRoleMember(ZeroHash, 0)).toLowerCase(), T);
+  for (const role of [P, C, E, ZeroHash]) assert.equal(await tl.hasRole(role, deployer.address), false);
+  const control = new Contract(o.neuroControl, N('NeuroControl'), new NonceManager(guardian.connect(provider)));
+  assert.equal(await control.guardian(guardian.address), true);
+  assert.equal(await control.guardian(deployer.address), false);
 
-  // The proposal file the handover wrote, through a real vote (as the owner does on the node).
-  const file = join(root, 'proposals', '77390-dex-accept-governance.json');
-  assert.ok(existsSync(file), r.out);
+  // the guardian pauses Neuro at once; it cannot unpause (only the timelock can)
+  await (await control.pause()).wait();
+  assert.equal(await control.paused(), true);
+  await assert.rejects(control.unpause.staticCall(), (e) => e.revert?.name === 'NotGovernance');
+
+  // a gov vote schedules NeuroControl.unpause() through the timelock; anyone executes it after 30 s
+  const file = join(root, 'unpause.json');
+  const s1 = await zcli(['timelock', 'schedule', '--timelock', o.timelock, '--to', o.neuroControl, '--sig', 'unpause()', '--proposal-out', file]);
+  assert.equal(s1.code, 0, s1.out);
+  assert.match(s1.out, /this key cannot/);
+  const id = /operation (0x[0-9a-f]{64})/.exec(s1.out)[1];
   const node = ['--node', `tcp://127.0.0.1:${PORT + 100}`];
   const tx = ['--home', chainHome, '--keyring-backend', 'test', '--from', 'validator', '--chain-id', 'zetaphy-local-1', ...node,
     '--gas', 'auto', '--gas-adjustment', '1.5', '--gas-prices', '1000000000azetaphy', '-y', '-o', 'json'];
   zd(['tx', 'gov', 'submit-proposal', file, ...tx]);
-  let id;
-  for (let i = 0; i < 20 && !id; i++) {
+  let pid;
+  for (let i = 0; i < 20 && !pid; i++) {
     await sleep(1000);
     const ps = JSON.parse(zd(['q', 'gov', 'proposals', ...node, '-o', 'json'])).proposals ?? [];
-    id = ps.find((p) => p.title === 'DEX: accept governance')?.id;
+    pid = ps.find((p) => /^Timelock: unpause/.test(p.title))?.id;
   }
-  assert.ok(id, 'proposal submitted');
+  assert.ok(pid, 'proposal submitted');
   await sleep(2000);
-  zd(['tx', 'gov', 'vote', String(id), 'yes', ...tx]);
+  zd(['tx', 'gov', 'vote', String(pid), 'yes', ...tx]);
   let st;
   for (let i = 0; i < 60; i++) {
-    st = JSON.parse(zd(['q', 'gov', 'proposal', String(id), ...node, '-o', 'json'])).proposal;
+    st = JSON.parse(zd(['q', 'gov', 'proposal', String(pid), ...node, '-o', 'json'])).proposal;
     if (!/VOTING_PERIOD|DEPOSIT_PERIOD/.test(st.status)) break;
     await sleep(1000);
   }
   assert.equal(st.status, 'PROPOSAL_STATUS_PASSED', `${st.status} ${st.failed_reason ?? ''}`);
-  assert.equal((await f.governance()).toLowerCase(), gov, 'the gov module governs the DEX factory');
+  assert.equal(await tl.getOperationState(id), 1n, 'Waiting');
+  const early = await zcli(['timelock', 'execute', id, '--timelock', o.timelock, '--from-block', String(o.timelockBlock)]);
+  assert.notEqual(early.code, 0);
+  assert.match(early.out, /is Waiting until/);
+  const status = await zcli(['timelock', 'status', id, '--timelock', o.timelock, '--from-block', String(o.timelockBlock)]);
+  assert.match(status.out, /Waiting ETA/);
+  assert.match(status.out, /unpause\(\)/);
+  for (let i = 0; i < 40 && (await tl.getOperationState(id)) !== 2n; i++) await sleep(1000);
+  const ex = await zcli(['timelock', 'execute', id, '--timelock', o.timelock, '--from-block', String(o.timelockBlock)]);
+  assert.equal(ex.code, 0, ex.out);
+  assert.equal(await control.paused(), false, 'unpaused by the timelock, run by a plain key');
+
+  // the bridge monitor saw the schedule (with the function's name and when it could run) and the run
+  const rep = join(root, 'monitor.json');
+  const m = await zcli(['bridge', 'monitor', '--launch-state', stateFile, '--from-block', String(o.timelockBlock), '--out', rep]);
+  assert.equal(m.code, 0, m.out);
+  const alerts = JSON.parse(readFileSync(rep, 'utf8')).alerts;
+  assert.ok(alerts.some((a) => a.rule === 'timelock-scheduled' && /neuroControl .*unpause\(\), executable after/.test(a.en)), JSON.stringify(alerts.map((a) => a.en)));
+  assert.ok(alerts.some((a) => a.rule === 'timelock-executed' && /unpause\(\)/.test(a.en)));
+  assert.ok(alerts.some((a) => a.rule === 'timelock-delay'), 'the handover set the delay (MinDelayChange 0 -> 30)');
 
   // A re-run is a no-op: everything is already handed over.
-  const again = await launch(['--resume', '--governance', 'gov', '--handover', '--only', 'handover']);
+  const again = await launch([...handoverArgs, '--only', 'handover']);
   assert.equal(again.code, 0, again.out);
-  assert.match(again.out, /already 0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2/i);
+  assert.match(again.out, new RegExp(`already ${o.timelock}`, 'i'));
 });

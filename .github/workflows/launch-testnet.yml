@@ -38,12 +38,17 @@ on:
         options: ['yes', 'no']
         default: 'yes'
       governance:
-        description: "Who takes the admin roles at handover: gov (the chain's gov module, by votes) or 0x<multisig>; deployer = keep for now"
+        description: "Who controls the timelock after the handover (proposes/cancels): gov (the chain's gov module, by votes) or 0x<multisig>; deployer = keep for now"
         required: true
         type: string
         default: 'deployer'
+      guardian:
+        description: "The emergency multisig 0x… (pause, lower caps, holds; acts at once, only reduces risk). Needed for handover = yes"
+        required: false
+        type: string
+        default: ''
       handover:
-        description: "Hand the admin roles over now (after everything is configured)? Needs governance = gov or 0x…"
+        description: "Hand every admin role to a new ZetaphyTimelock now (48 h delay; after everything is configured)? Needs governance and guardian"
         required: true
         type: choice
         options: ['no', 'yes']
@@ -90,13 +95,16 @@ jobs:
         env:
           RPC: ${{ inputs.rpc }}
           GOV: ${{ inputs.governance }}
+          GUARDIAN: ${{ inputs.guardian }}
           HANDOVER: ${{ inputs.handover }}
           NEURO_URL: ${{ inputs.neuro_url }}
           WALLET_ORIGIN: ${{ inputs.wallet_origin }}
         run: |
           [[ "$RPC" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]] || { echo "::error::rpc must be https://<host> (e.g. https://1-2-3-4.sslip.io)"; exit 1; }
           [[ "$GOV" =~ ^(deployer|gov|0x[0-9a-fA-F]{40})$ ]] || { echo "::error::governance must be deployer, gov or 0x<40 hex>"; exit 1; }
+          [ -z "$GUARDIAN" ] || [[ "$GUARDIAN" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "::error::guardian must be 0x<40 hex> (a multisig)"; exit 1; }
           if [ "$HANDOVER" = yes ] && [ "$GOV" = deployer ]; then echo "::error::handover = yes needs governance = gov or 0x<multisig>"; exit 1; fi
+          if [ "$HANDOVER" = yes ] && [ -z "$GUARDIAN" ]; then echo "::error::handover = yes needs guardian = 0x<emergency multisig>"; exit 1; fi
           [ -z "$NEURO_URL" ] || [[ "$NEURO_URL" =~ ^https://[A-Za-z0-9./_-]+$ ]] || { echo "::error::neuro_url must be https://…"; exit 1; }
           [ -z "$WALLET_ORIGIN" ] || [[ "$WALLET_ORIGIN" =~ ^https://[A-Za-z0-9.-]+$ ]] || { echo "::error::wallet_origin must be https://<host>"; exit 1; }
 
@@ -138,6 +146,7 @@ jobs:
         env:
           RPC: ${{ inputs.rpc }}
           GOV: ${{ inputs.governance }}
+          GUARDIAN: ${{ inputs.guardian }}
           HANDOVER: ${{ inputs.handover }}
           DRY: ${{ inputs.dry_run }}
           NEURO_URL: ${{ inputs.neuro_url }}
@@ -145,6 +154,7 @@ jobs:
         run: |
           args=(--rpc "$RPC" --key-file "$RUNNER_TEMP/deployer.key" --resume --governance "$GOV")
           [ "$HANDOVER" = yes ] && args+=(--handover)
+          [ -n "$GUARDIAN" ] && args+=(--guardian "$GUARDIAN")
           [ "$DRY" = yes ] && args+=(--dry-run)
           [ -n "$NEURO_URL" ] && args+=(--neuro-url "$NEURO_URL")
           [ -n "$WALLET_ORIGIN" ] && args+=(--wallet-origin "$WALLET_ORIGIN")

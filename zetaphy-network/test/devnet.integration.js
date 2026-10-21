@@ -145,8 +145,10 @@ async function runUntilDone(id, jobs) {
 }
 
 test('stage 2: a user with no ZETAPHY pays in test USDC through a relay', { timeout: 300_000 }, async () => {
-  const d = await cli('deployer', ['deploy-stable', '--jobs', jobsAddr, '--reserve', '100']);
+  // No DEX pool on this chain for ZetaphyOracle's TWAP: the labeled testnet fallback (devnet.timelock.integration.js prices through the oracle)
+  const d = await cli('deployer', ['deploy-stable', '--jobs', jobsAddr, '--reserve', '100', '--testnet-fixed-price', '0.01']);
   assert.equal(d.code, 0, d.out);
+  assert.match(d.out, /TESTNET FIXED PRICE 0\.01 per ZETAPHY/);
   const gateway = /StableGateway (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
   const usdc = /tUSDC (0x[0-9a-fA-F]{40})/.exec(d.out)[1];
   const usdt = /tUSDT (0x[0-9a-fA-F]{40})/.exec(d.out)[1];

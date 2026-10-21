@@ -19,8 +19,11 @@
 #                 setup-node.sh's patches to the pinned Cosmos EVM source
 #                 the same way the server does, runs their Go tests (ML-DSA,
 #                 IBC transfers + rate limits), builds zetaphyd and runs the
-#                 native/contract PQ tests on a real devnet; also checks
-#                 cloud-init.sh is setup-node.sh packed. ~15-25 min.
+#                 native/contract PQ tests on a real devnet, and the
+#                 timelock + price-oracle devnet test (+~4 min; it runs when
+#                 its test, those contracts or the pinned OpenZeppelin files
+#                 change); also checks cloud-init.sh is setup-node.sh packed.
+#                 ~15-25 min.
 #
 # Free-tier budget: GitHub Free gives private repos 2,000 Actions minutes a
 # month. The `changes` job runs each test job ONLY when its own files changed
@@ -147,7 +150,8 @@ jobs:
           out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
           out launch '^(zetaphy-launch/|zetaphy-(dex|nft)/web/deployments\.json$|zetaphy-explorer/config\.json$|zetaphy-wallet/index\.html$|zetaphy-snap/snap\.config\.js$)'
-          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl)\.sol|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc)\.integration\.js)$)'
+          # the timelock/oracle devnet test: when its test, those contracts or the pinned OpenZeppelin files change (rarely)
+          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl|ZetaphyTimelock|ZetaphyOracle|TwapRecorder|ZetaphyPythRelay)\.sol|vendor/.*|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc|timelock)\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -546,6 +550,7 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:chainrand
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:preinstalls
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:ibc
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:timelock
 
   program:
     name: program (cargo test + anchor test)
