@@ -36,8 +36,7 @@
 #                 test of test-ui/index.html (catches a page that freezes on
 #                 load, like build 2026-09-25o). ~2 min.
 #   program       every push / PR — cargo test (unit/property tests), the
-#                 attack suite (security/attack-tests, natively and against
-#                 the built SBF program) and the full `anchor test` localnet
+#                 full `anchor test` localnet
 #                 suite (the same `yarn test` you run in WSL). First run ~20-30 min (compiling), later runs
 #                 are faster thanks to the caches.
 #   audit         every push / PR — cargo audit against the RustSec database.
@@ -594,7 +593,6 @@ jobs:
         with:
           workspaces: |
             . -> target
-            security/attack-tests -> target
 
       - name: Cache Solana CLI
         id: solana-cache
@@ -677,17 +675,10 @@ jobs:
       - name: mainnet build flags compile (24h-48h timelock)
         run: cargo check -p swd_amm --features mainnet
 
-      - name: Attack suite, native build (security/attack-tests)
-        run: cargo test --locked --manifest-path security/attack-tests/Cargo.toml
-
       - name: anchor build (SBF program + IDL)
         run: anchor build
 
-      # Same attacks against the real SBF program anchor just built — this
-      # also runs the DLMM attacks, which can't run natively (see
-      # security/attack-tests/tests/dlmm_attacks.rs).
-      - name: Attack suite, real SBF program (incl. DLMM)
-        run: BPF_OUT_DIR="$PWD/target/deploy" cargo test --locked --manifest-path security/attack-tests/Cargo.toml -- --include-ignored
+      # The attack suite for this program lives in the private repo (zetaphy-private, weekly).
 
       - name: anchor test (full localnet suite, same as `yarn test`)
         run: |
