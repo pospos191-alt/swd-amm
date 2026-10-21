@@ -10,7 +10,7 @@
     "test": "node --test test/unit.test.js test/explorer.e2e.js",
     "test:unit": "node --test test/unit.test.js",
     "test:e2e": "node --test test/explorer.e2e.js",
-    "test:devnet": "flock /tmp/ci-test/devnet.lock node --test test/devnet.integration.js"
+    "test:devnet": "node --test test/devnet.integration.js"
   },
   "engines": {
     "node": ">=20"
