@@ -8,14 +8,15 @@
 //   3. NeuroJobs.activeWorkers() >= minRunners (default 10);
 //   4. guardian(s) and governance that are multisigs (Safe or SimpleMultisig:
 //      threshold >= 2, owners >= 3, none the deployer), not the same multisig,
-//      no owner in both; or the chain's gov module for governance. EOAs only on a
-//      devnet or with --allow-eoa-for-testing;
+//      no owner in both; or the chain's gov module for governance; or a
+//      ZetaphyTimelock (24 h+ delay, its own only admin) whose proposers pass
+//      the same checks. EOAs only on a devnet or with --allow-eoa-for-testing;
 //   5. a daily limit at most the starter cap (1,000 tokens) unless --raise-cap,
 //      and never above BridgeGuard.maxDailyLimit (raised only after a 7-day timelock);
 //   6. --i-understand-real-funds on anything but a devnet.
 // These functions read the chain and return problems (strings); they send nothing.
 
-import { Interface, getAddress } from 'ethers';
+import { Interface, getAddress, id, ZeroHash } from 'ethers';
 
 export const STARTER_UNITS = 1000n;
 export const MIN_RUNNERS = 10;
@@ -78,7 +79,26 @@ export async function multisigInfo(provider, address) {
     for (let i = 0n; i < n; i++) owners.push(getAddress(await tryCall(provider, a, 'owners', [i])));
     return { address: a, kind: 'simple', owners, threshold: Number(t) };
   }
+  // a ZetaphyTimelock (OpenZeppelin TimelockController + role enumeration): its delay, admins and proposers
+  const tl = await timelockInfo(provider, a);
+  if (tl) return tl;
   return { address: a, kind: 'contract' };
+}
+
+const TL = new Interface(['function getMinDelay() view returns (uint256)', 'function getRoleMemberCount(bytes32) view returns (uint256)',
+  'function getRoleMember(bytes32, uint256) view returns (address)']);
+const PROPOSER_ROLE = id('PROPOSER_ROLE');
+async function timelockInfo(provider, a) {
+  const call = async (fn, args = []) => { try { const r = await provider.call({ to: a, data: TL.encodeFunctionData(fn, args) }); return r && r !== '0x' ? TL.decodeFunctionResult(fn, r)[0] : undefined; } catch { return undefined; } };
+  const delay = await call('getMinDelay');
+  const n = await call('getRoleMemberCount', [PROPOSER_ROLE]);
+  if (delay == null || n == null || n > 20n) return null;
+  const members = async (role, count) => { const out = []; for (let i = 0n; i < count; i++) out.push(getAddress(await call('getRoleMember', [role, i]))); return out; };
+  const proposers = await members(PROPOSER_ROLE, n);
+  const admins = await members(ZeroHash, (await call('getRoleMemberCount', [ZeroHash])) ?? 0n);
+  const infos = [];
+  for (const p of proposers) infos.push(await multisigInfo(provider, p));
+  return { address: a, kind: 'timelock', delay: Number(delay), proposers: infos, admins };
 }
 
 /** Problems of one multisig: threshold >= 2, owners >= 3, distinct, none the deployer. */
@@ -106,7 +126,15 @@ export async function roleChecks(provider, { governance = [], guardians = [] }, 
   const guardInfos = [];
   for (const g of new Set(guardians.map((x) => getAddress(x)))) guardInfos.push(await look(g, 'guardian'));
   if (!guardInfos.length) problems.push('no guardian: set a guardian multisig (it can pause the bridge, never unpause)');
-  for (const i of [...govInfos, ...guardInfos]) {
+  // governance behind a ZetaphyTimelock: the delay holds (24 h+), the timelock is its own only admin,
+  // and its proposers are checked like governance (multisigs or the gov module)
+  for (const t of govInfos.filter((x) => x.kind === 'timelock')) {
+    if (t.delay < 86400 && !devnet) problems.push(`governance ${t.address} is a timelock with a ${t.delay} s delay: at least 86400 (24 h)`);
+    if (t.admins.length !== 1 || !same(t.admins[0], t.address)) problems.push(`governance ${t.address} is a timelock whose admin role is ${t.admins.join(', ') || 'nobody'}: it must be its own only admin`);
+    if (!t.proposers.length) problems.push(`governance ${t.address} is a timelock without proposers`);
+    for (const p of t.proposers) govInfos.push({ ...p, role: `governance (proposer of timelock ${t.address})` });
+  }
+  for (const i of [...govInfos.filter((x) => x.kind !== 'timelock'), ...guardInfos]) {
     const label = i.role;
     if (i.kind === 'gov-module') {
       if (i.role === 'guardian') warnings.push(`guardian ${i.address} is the gov module: a pause would need a vote (slow); prefer a guardian multisig`);
@@ -120,7 +148,7 @@ export async function roleChecks(provider, { governance = [], guardians = [] }, 
     if (i.kind === 'contract') { problems.push(`${label} ${i.address}: a contract that is neither a Safe nor a SimpleMultisig (cannot read its owners and threshold)`); continue; }
     problems.push(...multisigProblems(i, { deployer, label }));
   }
-  for (const g of govInfos) {
+  for (const g of govInfos.filter((x) => x.kind !== 'timelock')) {
     for (const d of guardInfos) {
       if (same(g.address, d.address)) { problems.push(`guardian and governance are the same address ${g.address}: use two different multisigs`); continue; }
       const shared = (g.owners ?? []).filter((o) => (d.owners ?? []).some((x) => same(x, o)));
