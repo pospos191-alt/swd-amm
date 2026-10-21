@@ -510,6 +510,7 @@ export function loadMonitorConfig({ configFile, launchStateFile } = {}) {
     cfg.labels ??= {};
     for (const [k, v] of Object.entries(out)) if (typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v)) cfg.labels[v.toLowerCase()] ??= k;
     if (out.dex?.contracts?.factory) cfg.labels[out.dex.contracts.factory.toLowerCase()] ??= 'dexFactory';
+    if (out.dlmm?.contracts?.dlmmFactory) cfg.labels[out.dlmm.contracts.dlmmFactory.toLowerCase()] ??= 'dlmmFactory';
     if (out.nft?.marketplace) cfg.labels[out.nft.marketplace.toLowerCase()] ??= 'nftMarketplace';
   }
   return cfg;
