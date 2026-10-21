@@ -8,10 +8,23 @@ import {IERC165, IERC721, IERC721Metadata, IERC721Receiver, IERC2981} from "./in
 /// @notice Token ids start at 1 and count up. A token's URI is the one given at
 ///         mint (fixed for good), else baseURI + id. Not enumerable: wallets and
 ///         the web app find tokens from Transfer events.
+///
+///         `transferCount(tokenId)` counts every move of a token: its mint, each
+///         transfer (also to the same holder) and its burn. NFTMarketplace snapshots
+///         it when a token is listed, so a listing dies for good once the token has
+///         moved outside the market, even if it later comes back to the seller.
+///         The counter shares the owner's storage slot (address + uint96), so it
+///         costs no extra storage write.
 contract ZetaphyERC721 is CollectionBase, IERC721 {
     uint256 public constant MAX_MINT_PER_TX = 50;
 
-    mapping(uint256 => address) private _owners;
+    /// The holder and the token's move count, packed in one slot.
+    struct TokenState {
+        address owner;
+        uint96 transfers;
+    }
+
+    mapping(uint256 => TokenState) private _tokens;
     mapping(address => uint256) private _balances;
     mapping(uint256 => address) private _tokenApprovals;
     mapping(address => mapping(address => bool)) private _operatorApprovals;
@@ -44,7 +57,7 @@ contract ZetaphyERC721 is CollectionBase, IERC721 {
     }
 
     function ownerOf(uint256 tokenId) public view returns (address) {
-        address o = _owners[tokenId];
+        address o = _tokens[tokenId].owner;
         if (o == address(0)) revert NonexistentToken(tokenId);
         return o;
     }
@@ -55,6 +68,11 @@ contract ZetaphyERC721 is CollectionBase, IERC721 {
         if (bytes(own).length != 0) return own;
         if (bytes(_baseURI).length == 0) return "";
         return string.concat(_baseURI, _toString(tokenId));
+    }
+
+    /// How many times `tokenId` was minted, transferred or burned (0: never minted).
+    function transferCount(uint256 tokenId) external view returns (uint256) {
+        return _tokens[tokenId].transfers;
     }
 
     function getApproved(uint256 tokenId) external view returns (address) {
@@ -83,15 +101,17 @@ contract ZetaphyERC721 is CollectionBase, IERC721 {
 
     function transferFrom(address from, address to, uint256 tokenId) public {
         if (to == address(0)) revert InvalidReceiver(address(0));
-        address o = ownerOf(tokenId);
+        TokenState memory t = _tokens[tokenId];
+        address o = t.owner;
+        if (o == address(0)) revert NonexistentToken(tokenId);
         if (o != from) revert IncorrectOwner();
         if (msg.sender != o && _tokenApprovals[tokenId] != msg.sender && !isApprovedForAll(o, msg.sender)) revert NotAuthorized();
         delete _tokenApprovals[tokenId];
         unchecked {
             _balances[from] -= 1;
             _balances[to] += 1;
+            _tokens[tokenId] = TokenState(to, t.transfers + 1); // uint96: never wraps in practice
         }
-        _owners[tokenId] = to;
         emit Transfer(from, to, tokenId);
     }
 
@@ -127,11 +147,13 @@ contract ZetaphyERC721 is CollectionBase, IERC721 {
 
     /// The holder (or an approved address) destroys a token. Burned tokens still count toward maxSupply.
     function burn(uint256 tokenId) external {
-        address o = ownerOf(tokenId);
+        TokenState memory t = _tokens[tokenId];
+        address o = t.owner;
+        if (o == address(0)) revert NonexistentToken(tokenId);
         if (msg.sender != o && _tokenApprovals[tokenId] != msg.sender && !isApprovedForAll(o, msg.sender)) revert NotAuthorized();
         delete _tokenApprovals[tokenId];
-        delete _owners[tokenId];
         unchecked {
+            _tokens[tokenId] = TokenState(address(0), t.transfers + 1); // the count survives the burn
             _balances[o] -= 1;
             totalBurned += 1;
         }
@@ -155,7 +177,7 @@ contract ZetaphyERC721 is CollectionBase, IERC721 {
 
     function _mintOne(address to, uint256 tokenId) private {
         if (to == address(0)) revert InvalidReceiver(address(0));
-        _owners[tokenId] = to;
+        _tokens[tokenId] = TokenState(to, 1); // ids are never reused: a fresh slot
         unchecked { _balances[to] += 1; }
         emit Transfer(address(0), to, tokenId);
         _checkReceiver(address(0), to, tokenId, "");

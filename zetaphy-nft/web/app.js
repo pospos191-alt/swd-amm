@@ -427,6 +427,9 @@ async function pageItem(el, addr, idStr) {
   const offers = (await Promise.all(oids.map(async (oid) => ({ id: oid, o: offerFrom(await read(S.rpc, market(), F.getOffer, oid)) })))).filter((x) => x.o.amount > 0n);
 
   const sec = h('section', { class: 'card', id: 'listings' }, h('h2', { text: T('listings') }));
+  // External collections cannot tell the marketplace about transfers outside it: an old
+  // listing comes back to life if its seller gets the item back (factory ones: never).
+  if (!info.trusted) sec.append(h('p', { class: 'warnbox small', id: 'externalRevive', text: T('externalRevive') }));
   if (!listings.length) sec.append(h('p', { class: 'muted', text: T('noListingsHere') }));
   // The connected seller's listings of this token that can no longer be bought (sold,
   // replaced, token moved away…): offer to cancel them, so they can never come back.
@@ -477,7 +480,7 @@ async function pageItem(el, addr, idStr) {
       if (!q) { osec.append(row); continue; }
       const [fee, roy, , rest] = q;
       row.append(actionButton(T('accept'), async () => {
-        await ensureApproval(info);
+        await ensureApproval(info, id);
         await sendTx(market(), F.acceptOffer.encode(oid, rest), 0n, T('accept'));
         await route();
         afterSale(info, id);
@@ -496,6 +499,7 @@ async function pageItem(el, addr, idStr) {
     const days = input({ type: 'number', min: '1', max: '365', value: '7', name: 'days' });
     forms.append(h('section', { class: 'card', id: 'listForm' }, h('h2', { text: T('sell') }),
       field(isMulti ? T('pricePerUnit') : T('price'), price, EVM_SYMBOL), isMulti ? field(T('quantity'), qtyIn) : null, field(T('days'), days),
+      info.trusted ? null : h('p', { class: 'warnbox small', text: `${T('externalRevive')} ${T(isMulti ? 'externalApprove1155' : 'externalApprove')}` }),
       actionButton(T('listForSale'), async () => {
         const p = parseZtphy(price.value);
         if (!p) throw new Error(T('badPrice'));
@@ -503,7 +507,7 @@ async function pageItem(el, addr, idStr) {
         if (!(n >= 1n && n <= myBal)) throw new Error(T('badQuantity'));
         const d = Math.floor(Number(days.value));
         if (!(d >= 1 && d <= 365)) throw new Error(T('badDays'));
-        await ensureApproval(info);
+        await ensureApproval(info, id);
         await sendTx(market(), F.list.encode(info.addr, id, n, p, BigInt(Math.floor(Date.now() / 1000) + d * 86400)), 0n, T('listForSale'));
         route();
       })));
@@ -581,12 +585,20 @@ function confirmUnknownMarket(addr) {
   });
 }
 
-/** The marketplace may move this collection's tokens for the connected wallet. */
-async function ensureApproval(info) {
+/** The marketplace may move token `id` of this collection for the connected wallet.
+ *  Factory collections and every ERC-1155: setApprovalForAll (the factory's collections
+ *  tell the marketplace about outside transfers, so a token that comes back never
+ *  revives an old listing; ERC-1155 has no per-token approval). An external ERC-721:
+ *  approve(marketplace, id) for this token only, which its next transfer clears, so a
+ *  token that comes back is not approved again by itself (an old listing stays unbuyable). */
+async function ensureApproval(info, id) {
   const me = S.wallet.account;
   if (await read(S.rpc, info.addr, F.isApprovedForAll, me, market())) return;
+  const perToken = !info.trusted && info.kind === KIND.ERC721;
+  if (perToken && String(await read(S.rpc, info.addr, F.getApproved, id).catch(() => '')).toLowerCase() === market().toLowerCase()) return;
   if (overridden(market(), S.dep.marketplace) && !(await confirmUnknownMarket(market()))) throw new Error(T('approvalCancelled'));
-  await sendTx(info.addr, F.setApprovalForAll.encode(market(), true), 0n, T('approve'));
+  if (perToken) await sendTx(info.addr, F.approve.encode(market(), id), 0n, T('approve'));
+  else await sendTx(info.addr, F.setApprovalForAll.encode(market(), true), 0n, T('approve'));
 }
 
 function pageCreate(el) {

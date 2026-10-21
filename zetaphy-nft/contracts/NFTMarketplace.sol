@@ -16,6 +16,17 @@ interface INFTFactoryView {
     function isCollection(address a) external view returns (bool);
 }
 
+/// The move counters of the factory's collections (ZetaphyERC721 / ZetaphyERC1155).
+interface IMoveCount721 {
+    /// Mints, transfers and burns of `tokenId` so far.
+    function transferCount(uint256 tokenId) external view returns (uint256);
+}
+
+interface IMoveCount1155 {
+    /// Times units of `id` left `holder` (transfers out, burns) so far.
+    function transferCount(address holder, uint256 id) external view returns (uint256);
+}
+
 /// @title NFTMarketplace: fixed-price listings and offers in native ZETAPHY
 /// @notice Escrow-less listings: the NFT stays in the seller's wallet, which approves
 ///         this contract (setApprovalForAll, or approve for one ERC-721 token); the sale
@@ -44,9 +55,19 @@ interface INFTFactoryView {
 ///         again, a buy that sells a listing out, accepting an offer for the token, and
 ///         any delivery of the token through this market (to its seller or its
 ///         recipient) bump it, so an older listing can never be bought again, even
-///         after its seller holds the token again. A transfer outside this market is
-///         invisible here: such a listing shows SellerLacksToken while the token is
-///         away; its seller should cancel it (the web app offers to).
+///         after its seller holds the token again.
+///
+///         Moves outside this market: for a collection made by `factory`, a listing
+///         also records the collection's move counter (`transferCount(tokenId)` for
+///         ERC-721; `transferCount(seller, id)`, units leaving the seller, for
+///         ERC-1155) and can only be bought while it is unchanged, so a token that
+///         left the seller outside this market and came back later never revives an
+///         old listing (status Moved, for good). This market's own partial ERC-1155
+///         sales move units out of the seller too; `buy` adds that one move to the
+///         listing's record in the same transaction. Any other collection cannot be
+///         asked: a transfer outside this market is invisible there, such a listing
+///         shows SellerLacksToken while the token is away and becomes buyable again
+///         if it comes back; its seller should cancel it (the web app offers to).
 ///
 ///         Neuro: when governance has set `threatRegistry` (zero = off), listing, buying,
 ///         offering and accepting refuse a collection that has an ENFORCED flag. For a
@@ -62,7 +83,8 @@ contract NFTMarketplace {
     /// Why a listing cannot be bought now (listingStatus).
     /// Replaced: the seller listed the token again, sold it or accepted an offer for it here.
     /// TermsChanged: the fee or royalty rose since listing (the seller would get less).
-    enum Status { Ok, Inactive, Expired, SellerCancelledAll, SellerLacksToken, NotApproved, Refused, Replaced, TermsChanged }
+    /// Moved: (factory collections) the token or units left the seller outside this market since listing.
+    enum Status { Ok, Inactive, Expired, SellerCancelledAll, SellerLacksToken, NotApproved, Refused, Replaced, TermsChanged, Moved }
 
     struct Listing {
         address seller;
@@ -74,6 +96,8 @@ contract NFTMarketplace {
         uint256 unitPrice; // wei per unit (ERC-721: the price)
         uint256 quantity;  // units still for sale (0: sold out or cancelled)
         uint64 tokenNonce;       // tokenNonceOf[seller][collection][tokenId] when listed
+        uint96 moves;            // tracked: the collection's move counter it must still show
+        bool tracked;            // a factory collection: `moves` is checked
         uint256 minUnitProceeds; // the seller's part of one unit's sale when listed
     }
 
@@ -143,6 +167,7 @@ contract NFTMarketplace {
     error Reentrancy();
     error GasTooLow();
     error ProceedsTooLow(uint256 proceeds, uint256 minProceeds);
+    error TokenMoved();
 
     modifier onlyGov() {
         if (msg.sender != governance) revert NotGovernance();
@@ -207,10 +232,12 @@ contract NFTMarketplace {
         _checkThreat(collection);
         if (!_holds(kind, collection, tokenId, msg.sender, quantity)) revert SellerLacksToken();
         if (!_approved(kind, collection, tokenId, msg.sender)) revert NotApproved();
-        uint64 tn = _bumpToken(msg.sender, collection, tokenId);
-        (, , , uint256 unitProceeds) = quote(collection, tokenId, unitPrice);
+        Listing memory l = Listing(msg.sender, expiry, kind, collection, nonceOf[msg.sender], tokenId, unitPrice, quantity,
+            _bumpToken(msg.sender, collection, tokenId), 0, false, 0);
+        (, , , l.minUnitProceeds) = quote(collection, tokenId, unitPrice);
+        if (_fromFactory(collection)) (l.tracked, l.moves) = (true, _moves(kind, collection, tokenId, msg.sender));
         id = _listings.length;
-        _listings.push(Listing(msg.sender, expiry, kind, collection, nonceOf[msg.sender], tokenId, unitPrice, quantity, tn, unitProceeds));
+        _listings.push(l);
         emit Listed(id, msg.sender, collection, tokenId, quantity, unitPrice, expiry);
     }
 
@@ -234,6 +261,8 @@ contract NFTMarketplace {
         Listing storage l = _listing(id);
         (address seller, address collection, uint256 tokenId, Kind kind) = (l.seller, l.collection, l.tokenId, l.kind);
         if (l.quantity == 0 || l.nonce != nonceOf[seller] || l.tokenNonce != tokenNonceOf[seller][collection][tokenId]) revert NotActive();
+        bool tracked = l.tracked;
+        if (tracked && _moves(kind, collection, tokenId, seller) != l.moves) revert TokenMoved();
         if (quantity == 0 || quantity > l.quantity) revert BadQuantity();
         if (block.timestamp >= l.expiry) revert Expired();
         uint256 price = l.unitPrice * quantity;
@@ -245,6 +274,9 @@ contract NFTMarketplace {
         l.quantity -= quantity;
         // Sold out: retire the token nonce too (the seller's next listing starts fresh).
         if (l.quantity == 0) _bumpToken(seller, collection, tokenId);
+        // A partial ERC-1155 sale: the delivery below moves units out of the seller once
+        // (none when the seller buys from itself); the listing expects exactly that.
+        else if (tracked && msg.sender != seller) l.moves += 1;
         (uint256 fee, uint256 royalty, ) = _settle(collection, tokenId, seller, price);
         _deliver(kind, collection, tokenId, seller, msg.sender, quantity);
         emit Sold(id, msg.sender, collection, tokenId, quantity, price, fee, royalty);
@@ -353,6 +385,7 @@ contract NFTMarketplace {
         if (l.quantity == 0) return Status.Inactive;
         if (l.nonce != nonceOf[l.seller]) return Status.SellerCancelledAll;
         if (l.tokenNonce != tokenNonceOf[l.seller][l.collection][l.tokenId]) return Status.Replaced;
+        if (l.tracked && _moves(l.kind, l.collection, l.tokenId, l.seller) != l.moves) return Status.Moved;
         if (block.timestamp >= l.expiry) return Status.Expired;
         if (_enforced(l.collection)) return Status.Refused;
         if (_unitProceeds(l) < l.minUnitProceeds) return Status.TermsChanged;
@@ -399,9 +432,20 @@ contract NFTMarketplace {
     function _threat(address collection) private view returns (bool on, uint8 reason) {
         address r = threatRegistry;
         if (r == address(0)) return (false, 0);
-        address f = factory;
-        if (f != address(0) && INFTFactoryView(f).isCollection(collection)) return IThreatRegistryView(r).isAddressEnforced(block.chainid, collection);
+        if (_fromFactory(collection)) return IThreatRegistryView(r).isAddressEnforced(block.chainid, collection);
         return IThreatRegistryView(r).isContractEnforced(collection);
+    }
+
+    /// Made by `factory` (zero factory: nothing is).
+    function _fromFactory(address collection) private view returns (bool) {
+        address f = factory;
+        return f != address(0) && INFTFactoryView(f).isCollection(collection);
+    }
+
+    /// A factory collection's move counter for this listing's token (and seller, for ERC-1155).
+    /// It fits: ZetaphyERC721 counts in 96 bits, ZetaphyERC1155 in 64.
+    function _moves(Kind kind, address c, uint256 tokenId, address seller) private view returns (uint96) {
+        return uint96(kind == Kind.ERC721 ? IMoveCount721(c).transferCount(tokenId) : IMoveCount1155(c).transferCount(seller, tokenId));
     }
 
     function _enforced(address collection) private view returns (bool on) {

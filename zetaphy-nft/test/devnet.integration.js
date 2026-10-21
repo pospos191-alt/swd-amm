@@ -2,7 +2,8 @@
 // zetaphy-network/scripts/devnet.sh): the CLI deploys the factory and the
 // marketplace and writes the deployments JSON; a creator makes ERC-721 and
 // ERC-1155 collections, mints and lists; a buyer buys (fee and royalty to the
-// wei); the seller withdraws; a stale listing and the ThreatRegistry refusal;
+// wei); the seller withdraws; a stale listing (moved away and back: stays dead)
+// and the ThreatRegistry refusal;
 // then the web app, served with its CSP, finds the listing from the node's
 // eth_getLogs and buys through a wallet that signs real transactions.
 // Not part of `npm test` (needs the zetaphyd binary):
@@ -107,11 +108,17 @@ test('CLI deploys; create, mint, list and buy (ERC-721 and ERC-1155) on a real Z
   assert.equal(wd.args.amount, price - fee);
   assert.equal(await marketC.owed(actors.creator.address), 0n);
 
-  // A stale listing: the creator lists #2, then gives it away.
+  // A stale listing: the creator lists #2, then gives it away outside the market.
   await (await marketC.list(col, 2, 1, ZETA, BigInt(Math.floor(Date.now() / 1000) + 3600))).wait();
+  assert.equal((await marketB.getListing(1)).moves, await nft.transferCount(2));
   await (await nft.transferFrom(actors.creator.address, actors.deployer.address, 2)).wait();
-  assert.equal(await marketB.listingStatus(1, 0), 4n);
-  await assert.rejects(marketB.buy.estimateGas(1, 1, { value: ZETA }), (e) => errorName(e, marketB.interface) === 'SellerLacksToken');
+  assert.equal(await marketB.listingStatus(1, 0), 9n, 'Moved');
+  await assert.rejects(marketB.buy.estimateGas(1, 1, { value: ZETA }), (e) => errorName(e, marketB.interface) === 'TokenMoved');
+  // It comes back outside the market (the creator's approval for all is still on): the old listing stays dead.
+  await (await C(col, 'ZetaphyERC721', 'deployer').transferFrom(actors.deployer.address, actors.creator.address, 2)).wait();
+  assert.equal(await nft.ownerOf(2), actors.creator.address);
+  assert.equal(await marketB.listingStatus(1, 0), 9n, 'still Moved');
+  await assert.rejects(marketB.buy.estimateGas(1, 1, { value: ZETA }), (e) => errorName(e, marketB.interface) === 'TokenMoved');
 
   // ERC-1155: 10 editions, list all at a unit price, buy 4.
   const col2 = await created(await factory.createERC1155(cfg({ name: 'Devnet Editions', symbol: 'DED' })), factory);
@@ -122,6 +129,9 @@ test('CLI deploys; create, mint, list and buy (ERC-721 and ERC-1155) on a real Z
   await (await marketB.buy(2, 4, { value: ZETA })).wait();
   assert.equal(await ed.balanceOf(actors.buyer.address, 1), 4n);
   assert.equal((await marketB.getListing(2)).quantity, 6n);
+  // The partial sale moved units out of the seller once; the listing expects exactly that.
+  assert.equal((await marketB.getListing(2)).moves, await ed.transferCount(actors.creator.address, 1));
+  assert.equal(await marketB.listingStatus(2, 0), 0n);
 
   // ThreatRegistry: governance points the marketplace at a registry; an enforced flag refuses.
   const R = mockArtifacts().MockThreatRegistry;

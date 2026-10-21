@@ -229,7 +229,14 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   await clickAndWait(s, 'List for sale', statusIs(/List for sale: done/));
   await nft.send(seller, 'transferFrom', [seller, other, 3]);
   await go(b, `#/i/${col}/3`);
-  assert.match(await b.textContent('#listings'), /no longer holds this token/);
+  assert.match(await b.textContent('#listings'), /left the seller outside the marketplace/);
+  assert.equal(await b.locator('#listings').getByRole('button', { name: 'Buy' }).count(), 0);
+  assert.equal(await b.locator('#externalRevive').count(), 0, 'no revive warning for a factory collection');
+  // It comes back to the seller (approval for all still on): the old listing stays dead (factory move counter).
+  await nft.send(other, 'transferFrom', [other, seller, 3]);
+  assert.equal(await market.call('listingStatus', [2, 0]), 9n, 'Moved');
+  await go(b, `#/i/${col}/3`);
+  assert.match(await b.textContent('#listings'), /invalid for good/);
   assert.equal(await b.locator('#listings').getByRole('button', { name: 'Buy' }).count(), 0);
   await go(b, '#/');
   await b.waitForSelector('.page[data-ready]');
@@ -257,6 +264,26 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   await go(b, `#/c/${ext.address}`);
   assert.match(await b.textContent('.collection-head'), /External contract/);
   assert.match(await b.textContent('.collection-head'), /Not created by the ZETAPHY factory/);
+  // Its item page warns that old listings may revive; listing an ERC-721 approves this one token only.
+  await ext.send(other, 'mint', [buyer, '']);
+  await go(b, `#/i/${ext.address}/1`);
+  await b.waitForSelector('#listForm');
+  assert.match(await b.textContent('#externalRevive'), /old listing may revive if you get the item back\. Cancel listings you no longer want/);
+  assert.match(await b.textContent('#listForm'), /approves the marketplace for this one token only/);
+  await b.fill('input[name=price]', '1');
+  const sentBeforeExt = wallet.sent.length;
+  await clickAndWait(b, 'List for sale', statusIs(/List for sale: done/));
+  const listSel = new (await import('ethers')).Interface(artifacts.NFTMarketplace.abi).getFunction('list').selector;
+  assert.deepEqual(wallet.sent.slice(sentBeforeExt).map((t) => [t.to.toLowerCase(), t.data.slice(0, 10)]),
+    [[ext.address.toLowerCase(), '0x095ea7b3'], [market.address.toLowerCase(), listSel]], 'approve(market, 1), then list: no setApprovalForAll');
+  assert.equal(await ext.call('isApprovedForAll', [buyer, market.address]), false);
+  assert.equal((await ext.call('getApproved', [1])).toLowerCase(), market.address.toLowerCase());
+  const extListing = (await market.call('listingCount')) - 1n;
+  assert.equal(await market.call('listingStatus', [extListing, 0]), 0n);
+  // Away and back outside the market: the per-token approval did not come back with it.
+  await ext.send(buyer, 'transferFrom', [buyer, other, 1]);
+  await ext.send(other, 'transferFrom', [other, buyer, 1]);
+  assert.equal(await market.call('listingStatus', [extListing, 0]), 5n, 'NotApproved: not revived');
 
   // ---- Settings: no contract overrides without ?dev=1; with it, a loud warning ----
   await go(b, '#/settings');
@@ -274,7 +301,7 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
 
   // ---- My NFTs (from Transfer events) ----
   await go(b, '#/me');
-  await b.waitForFunction(() => document.querySelectorAll('.grid .nft-card').length === 2);
+  await b.waitForFunction(() => document.querySelectorAll('.grid .nft-card').length === 3); // #1, #2 and the external token
 
   // ---- Thai, dark mode, phone width ----
   await b.click('#lang');
