@@ -7,7 +7,7 @@ import { createChain, ZETA } from './helpers/chain.js';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
 const DAY = 86_400n;
-const S = { Ok: 0n, Inactive: 1n, Expired: 2n, SellerCancelledAll: 3n, SellerLacksToken: 4n, NotApproved: 5n, Refused: 6n };
+const S = { Ok: 0n, Inactive: 1n, Expired: 2n, SellerCancelledAll: 3n, SellerLacksToken: 4n, NotApproved: 5n, Refused: 6n, Replaced: 7n, TermsChanged: 8n };
 
 let c, factory, market, nft, multi;
 const A = (n) => c.addr(n);
@@ -26,7 +26,7 @@ const evOf = (events, name) => events.find((e) => e.name === name);
 beforeEach(async () => {
   c = await createChain(['gov', 'feeTo', 'seller', 'buyer', 'other', 'artist']);
   factory = await c.deploy('NFTFactory', [], 'gov');
-  market = await c.deploy('NFTMarketplace', [A('gov'), A('feeTo'), 100, ZERO], 'gov'); // 1% fee, no registry
+  market = await c.deploy('NFTMarketplace', [A('gov'), A('feeTo'), 100, ZERO, factory.address], 'gov'); // 1% fee, no registry
   nft = await create(721, { royaltyReceiver: A('artist'), royaltyBps: 500 }); // 5% royalty
   await nft.send('seller', 'mintMany', [A('seller'), 5]);
   await nft.send('seller', 'setApprovalForAll', [market.address, true]);
@@ -145,12 +145,14 @@ test('stale listing: the seller moved the token away or revoked approval', async
   await nft.send('seller', 'setApprovalForAll', [market.address, false]);
   assert.equal(await market.call('listingStatus', [1, 1]), S.NotApproved);
   await assert.rejects(market.send('buyer', 'buy', [1, 1], ZETA), /NotApproved/);
-  // Two listings of one token: after one sells, the other is stale.
+  // Two listings of one token: the newer one replaces the older one at once.
   await nft.send('seller', 'setApprovalForAll', [market.address, true]);
   await market.send('seller', 'list', [nft.address, 3, 1, ZETA, exp()]);
   await market.send('seller', 'list', [nft.address, 3, 1, 2n * ZETA, exp()]);
-  await market.send('buyer', 'buy', [2, 1], ZETA);
-  await assert.rejects(market.send('other', 'buy', [3, 1], 2n * ZETA), /SellerLacksToken/);
+  assert.equal(await market.call('listingStatus', [2, 1]), S.Replaced);
+  await assert.rejects(market.send('buyer', 'buy', [2, 1], ZETA), /NotActive/);
+  await market.send('buyer', 'buy', [3, 1], 2n * ZETA);
+  await assert.rejects(market.send('other', 'buy', [3, 1], 2n * ZETA), /NotActive/);
 });
 
 test('ERC-1155 amounts: partial buys, per-unit price, remaining quantity, holder checks', async () => {
@@ -190,19 +192,19 @@ test('offers: escrowed value, accept by the holder, cancel, expiry, ERC-1155 qua
   await assert.rejects(market.send('buyer', 'makeOffer', [nft.address, 2, 1, exp(DAY)], 0n), /BadPrice/);
   await assert.rejects(market.send('buyer', 'makeOffer', [nft.address, 2, 2, exp(DAY)], 1n), /BadQuantity/);
   await assert.rejects(market.send('buyer', 'makeOffer', [A('other'), 2, 1, exp(DAY)], 1n), /NotNFT/);
-  await assert.rejects(market.send('other', 'acceptOffer', [0]), /SellerLacksToken/);
+  await assert.rejects(market.send('other', 'acceptOffer', [0, 0]), /SellerLacksToken/);
   await nft.send('seller', 'setApprovalForAll', [market.address, false]);
-  await assert.rejects(market.send('seller', 'acceptOffer', [0]), /NotApproved/);
+  await assert.rejects(market.send('seller', 'acceptOffer', [0, 0]), /NotApproved/);
   await nft.send('seller', 'setApprovalForAll', [market.address, true]);
   await assert.rejects(market.send('other', 'cancelOffer', [0]), /NotBuyer/);
-  const acc = evOf(await market.send('seller', 'acceptOffer', [0]), 'OfferAccepted');
+  const acc = evOf(await market.send('seller', 'acceptOffer', [0, 0]), 'OfferAccepted');
   const fee = value / 100n;
   const royalty = value * 500n / 10_000n;
   assert.equal(acc.args.fee, fee);
   assert.equal(acc.args.royalty, royalty);
   assert.equal(await nft.call('ownerOf', [2]), A('buyer'));
   assert.deepEqual(await owed('seller', 'feeTo', 'artist', 'buyer'), [value - fee - royalty, fee, royalty, 0n]);
-  await assert.rejects(market.send('seller', 'acceptOffer', [0]), /NotActive/);
+  await assert.rejects(market.send('seller', 'acceptOffer', [0, 0]), /NotActive/);
   await assert.rejects(market.send('buyer', 'cancelOffer', [0]), /NotActive/);
 
   // Cancel: the value is credited back to the buyer, who withdraws it.
@@ -215,15 +217,15 @@ test('offers: escrowed value, accept by the holder, cancel, expiry, ERC-1155 qua
   // Expired: cannot be accepted, but the buyer takes it back.
   await market.send('buyer', 'makeOffer', [nft.address, 3, 1, exp(DAY)], ZETA);
   c.advance(DAY);
-  await assert.rejects(market.send('seller', 'acceptOffer', [2]), /Expired/);
+  await assert.rejects(market.send('seller', 'acceptOffer', [2, 0]), /Expired/);
   await market.send('buyer', 'cancelOffer', [2]);
   assert.deepEqual(await owed('buyer'), [ZETA]);
   // ERC-1155: all units at once.
   await market.send('buyer', 'makeOffer', [multi.address, 1, 4, exp(DAY)], 4n * ZETA);
   await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 7, '0x']); // 3 left
-  await assert.rejects(market.send('seller', 'acceptOffer', [3]), /SellerLacksToken/);
+  await assert.rejects(market.send('seller', 'acceptOffer', [3, 0]), /SellerLacksToken/);
   await multi.send('other', 'setApprovalForAll', [market.address, true]);
-  await market.send('other', 'acceptOffer', [3]); // another holder may accept
+  await market.send('other', 'acceptOffer', [3, 0]); // another holder may accept
   assert.equal(await multi.call('balanceOf', [A('buyer'), 1]), 4n);
   assert.equal(await multi.call('balanceOf', [A('other'), 1]), 3n);
 });
@@ -232,8 +234,8 @@ test('protocol fee: governance only, capped at 5%; 0% works; governance hand-ove
   await assert.rejects(market.send('other', 'setFee', [50, A('other')]), /NotGovernance/);
   await assert.rejects(market.send('gov', 'setFee', [501, A('feeTo')]), /FeeTooHigh/);
   await assert.rejects(market.send('gov', 'setFee', [100, ZERO]), /ZeroAddress/);
-  await assert.rejects(c.deploy('NFTMarketplace', [A('gov'), A('feeTo'), 501, ZERO], 'gov'), /FeeTooHigh/);
-  await assert.rejects(c.deploy('NFTMarketplace', [ZERO, A('feeTo'), 100, ZERO], 'gov'), /ZeroAddress/);
+  await assert.rejects(c.deploy('NFTMarketplace', [A('gov'), A('feeTo'), 501, ZERO, factory.address], 'gov'), /FeeTooHigh/);
+  await assert.rejects(c.deploy('NFTMarketplace', [ZERO, A('feeTo'), 100, ZERO, factory.address], 'gov'), /ZeroAddress/);
   // Max fee + max royalty, odd price.
   const big = await create(721, { royaltyReceiver: A('artist'), royaltyBps: 1000 });
   await big.send('seller', 'mint', [A('seller'), '']);
@@ -287,7 +289,7 @@ test('at any gas limit the seller picks, an offer pays the full royalty or does 
     const offer = await market.call('offerCount');
     await market.send('buyer', 'makeOffer', [w.address, 1, 1, exp()], 10_000n);
     try {
-      const ev = await market.send('seller', 'acceptOffer', [offer], 0n, gas);
+      const ev = await market.send('seller', 'acceptOffer', [offer, 0], 0n, gas);
       assert.equal(evOf(ev, 'OfferAccepted').args.royalty, 1_000n, `gas ${gas}: full royalty or no sale`);
       sales++;
       await w.send('buyer', 'transferFrom', [A('buyer'), A('seller'), 1]);
@@ -395,7 +397,7 @@ test('Neuro: an enforced flag refuses list, buy, offer and accept; cancel and wi
   await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /CollectionRefused/);
   assert.equal(await market.call('listingStatus', [0, 1]), S.Refused);
   await assert.rejects(market.send('buyer', 'makeOffer', [nft.address, 4, 1, exp()], ZETA), /CollectionRefused/);
-  await assert.rejects(market.send('seller', 'acceptOffer', [0]), /CollectionRefused/);
+  await assert.rejects(market.send('seller', 'acceptOffer', [0, 0]), /CollectionRefused/);
   // Other collections are unaffected.
   await market.send('seller', 'list', [multi.address, 1, 1, ZETA, exp()]);
   // Nobody's money or listing is stuck.
@@ -408,4 +410,117 @@ test('Neuro: an enforced flag refuses list, buy, offer and accept; cancel and wi
   await market.send('gov', 'setThreatRegistry', [ZERO]);
   await market.send('seller', 'list', [nft.address, 4, 1, ZETA, exp()]);
   await market.send('buyer', 'buy', [3, 1], ZETA);
+});
+
+test('stale listings never come back: re-acquired after acceptOffer, after a market purchase, or relisted', async () => {
+  // (1) Listed, then sold by accepting an offer; the token comes back with a plain transfer.
+  await market.send('seller', 'list', [nft.address, 1, 1, ZETA, exp()]); // listing 0
+  await market.send('buyer', 'makeOffer', [nft.address, 1, 1, exp()], 2n * ZETA); // offer 0
+  await market.send('seller', 'acceptOffer', [0, 0]);
+  assert.equal(await nft.call('ownerOf', [1]), A('buyer'));
+  await nft.send('buyer', 'transferFrom', [A('buyer'), A('seller'), 1]);
+  assert.equal(await nft.call('ownerOf', [1]), A('seller'));
+  assert.equal(await market.call('listingStatus', [0, 1]), S.Replaced);
+  await assert.rejects(market.send('other', 'buy', [0, 1], ZETA), /NotActive/);
+
+  // (2) Listed, given away, bought back through the market: the old listing stays dead.
+  await market.send('seller', 'list', [nft.address, 2, 1, ZETA, exp()]); // listing 1
+  await nft.send('seller', 'transferFrom', [A('seller'), A('other'), 2]);
+  await nft.send('other', 'setApprovalForAll', [market.address, true]);
+  await market.send('other', 'list', [nft.address, 2, 1, 3n * ZETA, exp()]); // listing 2
+  await market.send('seller', 'buy', [2, 1], 3n * ZETA);
+  assert.equal(await nft.call('ownerOf', [2]), A('seller'));
+  assert.equal(await market.call('listingStatus', [1, 1]), S.Replaced);
+  await assert.rejects(market.send('buyer', 'buy', [1, 1], ZETA), /NotActive/);
+  // (3) A sold-out listing, the token bought back by its seller: still sold out; a new listing works.
+  await market.send('seller', 'list', [nft.address, 2, 1, 4n * ZETA, exp()]); // listing 3
+  assert.equal(await market.call('listingStatus', [3, 1]), S.Ok);
+  await market.send('buyer', 'buy', [3, 1], 4n * ZETA);
+  await nft.send('buyer', 'transferFrom', [A('buyer'), A('seller'), 2]);
+  await assert.rejects(market.send('other', 'buy', [3, 1], 4n * ZETA), /NotActive/);
+  await market.send('seller', 'list', [nft.address, 2, 1, 5n * ZETA, exp()]); // listing 4
+  await market.send('buyer', 'buy', [4, 1], 5n * ZETA);
+  assert.equal(await nft.call('ownerOf', [2]), A('buyer'));
+
+  // (4) ERC-1155: a partial buy keeps the listing; accepting an offer for the id retires it.
+  await market.send('seller', 'list', [multi.address, 1, 5, ZETA, exp()]); // listing 5
+  await market.send('buyer', 'buy', [5, 2], 2n * ZETA);
+  assert.equal(await market.call('listingStatus', [5, 0]), S.Ok);
+  await market.send('other', 'makeOffer', [multi.address, 1, 1, exp()], ZETA); // offer 1
+  await market.send('seller', 'acceptOffer', [1, 0]);
+  assert.equal(await market.call('listingStatus', [5, 0]), S.Replaced);
+  await assert.rejects(market.send('buyer', 'buy', [5, 1], ZETA), /NotActive/);
+  // tokenNonceOf is public: clients can tell which listing is live.
+  assert.equal((await market.call('getListing', [5])).tokenNonce, 1n);
+  assert.equal(await market.call('tokenNonceOf', [A('seller'), multi.address, 1]), 2n);
+});
+
+test('seller guards: acceptOffer minProceeds; a listing refuses a sale after the fee or royalty rose', async () => {
+  const value = 10n * ZETA;
+  await market.send('buyer', 'makeOffer', [nft.address, 1, 1, exp()], value);
+  const [, , , rest] = await market.call('quote', [nft.address, 1, value]);
+  assert.equal(rest, value - value / 100n - value * 5n / 100n);
+  // Governance raises the fee before the accept is included: the seller's minimum holds.
+  await market.send('gov', 'setFee', [500, A('feeTo')]);
+  await assert.rejects(market.send('seller', 'acceptOffer', [0, rest]), /ProceedsTooLow/);
+  await market.send('gov', 'setFee', [100, A('feeTo')]);
+  await assert.rejects(market.send('seller', 'acceptOffer', [0, rest + 1n]), /ProceedsTooLow/);
+  await market.send('seller', 'acceptOffer', [0, rest]);
+  assert.deepEqual(await owed('seller'), [rest]);
+
+  // A listing records the seller's part of one unit; a higher royalty or fee later stops the sale.
+  await market.send('seller', 'list', [nft.address, 2, 1, ZETA, exp()]); // listing 0
+  assert.equal((await market.call('getListing', [0])).minUnitProceeds, ZETA - ZETA / 100n - ZETA * 5n / 100n);
+  await nft.send('seller', 'setRoyalty', [A('artist'), 1000]);
+  assert.equal(await market.call('listingStatus', [0, 1]), S.TermsChanged);
+  await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /ProceedsTooLow/);
+  await nft.send('seller', 'setRoyalty', [A('artist'), 500]);
+  await market.send('gov', 'setFee', [200, A('feeTo')]);
+  await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /ProceedsTooLow/);
+  // Lower terms are fine.
+  await market.send('gov', 'setFee', [0, ZERO]);
+  assert.equal(await market.call('listingStatus', [0, 1]), S.Ok);
+  await market.send('buyer', 'buy', [0, 1], ZETA);
+  // ERC-1155 multi-unit buys check per unit (no rounding surprise).
+  await market.send('gov', 'setFee', [100, A('feeTo')]);
+  await market.send('seller', 'list', [multi.address, 1, 7, 333_333_333_333_333_333n, exp()]);
+  await market.send('buyer', 'buy', [1, 7], 7n * 333_333_333_333_333_333n);
+});
+
+test('withdrawFor: anyone pays a passive royalty receiver what it is owed, only to itself', async () => {
+  const passive = await c.deploy('PassiveReceiver', [], 'other');
+  const p721 = await create(721, { royaltyReceiver: passive.address, royaltyBps: 1000 });
+  await p721.send('seller', 'mint', [A('seller'), '']);
+  await p721.send('seller', 'setApprovalForAll', [market.address, true]);
+  await market.send('seller', 'list', [p721.address, 1, 1, ZETA, exp()]);
+  await market.send('buyer', 'buy', [0, 1], ZETA);
+  assert.deepEqual(await owed(passive.address), [ZETA / 10n]);
+  const otherBefore = await c.balance('other');
+  const w = evOf(await market.send('other', 'withdrawFor', [passive.address]), 'Withdrawn');
+  assert.equal(w.args.from, passive.address);
+  assert.equal(w.args.to, passive.address);
+  assert.equal(await c.balance(passive.address), ZETA / 10n);
+  assert.equal(await c.balance('other'), otherBefore, 'the caller gets nothing');
+  await assert.rejects(market.send('other', 'withdrawFor', [passive.address]), /NothingOwed/);
+  await assert.rejects(market.send('other', 'withdrawFor', [ZERO]), /ZeroAddress/);
+});
+
+test('Neuro: a code-key flag does not stop factory collections (address key only); external ones and a market without a factory still check code', async () => {
+  const reg = await c.deploy('MockThreatRegistry', [], 'gov');
+  await market.send('gov', 'setThreatRegistry', [reg.address]);
+  const codeHash = (await import('ethers')).keccak256(await c.code(nft.address));
+  await reg.send('gov', 'setKey', [await reg.call('codeKey', [codeHash]), 2, 2]);
+  assert.deepEqual([...await reg.call('isContractEnforced', [nft.address])], [true, 2n]);
+  await market.send('seller', 'list', [nft.address, 1, 1, ZETA, exp()]);
+  assert.equal(await market.call('listingStatus', [0, 1]), S.Ok);
+  await market.send('buyer', 'buy', [0, 1], ZETA);
+  // The same code outside the factory: refused.
+  const ext = await c.deploy('ZetaphyERC721', [cfg(), A('seller')], 'seller');
+  await ext.send('seller', 'mintMany', [A('seller'), 1]);
+  await ext.send('seller', 'setApprovalForAll', [market.address, true]);
+  await assert.rejects(market.send('seller', 'list', [ext.address, 1, 1, ZETA, exp()]), /CollectionRefused/);
+  // A marketplace deployed without a factory checks address and code for everything.
+  const plain = await c.deploy('NFTMarketplace', [A('gov'), A('feeTo'), 100, reg.address, ZERO], 'gov');
+  await nft.send('seller', 'setApprovalForAll', [plain.address, true]);
+  await assert.rejects(plain.send('seller', 'list', [nft.address, 2, 1, ZETA, exp()]), /CollectionRefused/);
 });

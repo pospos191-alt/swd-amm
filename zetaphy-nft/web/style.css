@@ -140,3 +140,8 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
   #connect { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
 .card > h2:first-child, .card > h1:first-child { margin-top: 0; }
+
+/* the typed confirmation before approving a marketplace not in deployments.json */
+dialog.danger { border: 2px solid var(--bad); }
+.bad { color: var(--bad); }
+.btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }

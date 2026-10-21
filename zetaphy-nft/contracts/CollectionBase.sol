@@ -67,7 +67,6 @@ abstract contract CollectionBase is IERC2981 {
     error Reentrancy();
     error PayFailed();
     error BadQuantity();
-    error WithdrawFirst();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -105,11 +104,20 @@ abstract contract CollectionBase is IERC2981 {
     }
 
     /// Nobody owns the collection afterwards: no more owner mints or setting changes.
-    /// Public-mint proceeds must be withdrawn first (nobody could take them after).
-    function renounceOwnership() external onlyOwner {
-        if (address(this).balance != 0) revert WithdrawFirst();
-        emit OwnershipTransferred(owner, address(0));
+    /// Whatever the contract holds (public-mint proceeds, or ZETAPHY anyone forced in,
+    /// e.g. with selfdestruct) is sent to the renouncing owner in the same call, so a
+    /// 1-wei donation cannot block renouncing and nothing is left that nobody could take.
+    /// Checks-effects-interactions: the owner is cleared before the payment.
+    function renounceOwnership() external onlyOwner nonReentrant {
+        address previous = owner;
         owner = address(0);
+        emit OwnershipTransferred(previous, address(0));
+        uint256 amount = address(this).balance;
+        if (amount != 0) {
+            (bool ok, ) = payable(previous).call{value: amount}("");
+            if (!ok) revert PayFailed();
+            emit Withdrawn(previous, amount);
+        }
     }
 
     function setRoyalty(address receiver, uint96 bps) external onlyOwner {

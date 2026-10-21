@@ -2,7 +2,7 @@
 import { fn, event } from './abi.js';
 
 const CONFIG = '(string,string,string,string,address,uint96,uint256,bool,uint256)';
-const LISTING = '(address,uint64,uint8,address,uint64,uint256,uint256,uint256)';
+const LISTING = '(address,uint64,uint8,address,uint64,uint256,uint256,uint256,uint64,uint256)';
 const OFFER = '(address,uint64,uint8,address,uint256,uint256,uint256)';
 
 export const F = {
@@ -51,8 +51,10 @@ export const F = {
   buy: fn('buy(uint256,uint256)'),
   makeOffer: fn('makeOffer(address,uint256,uint256,uint64)', ['uint256']),
   cancelOffer: fn('cancelOffer(uint256)'),
-  acceptOffer: fn('acceptOffer(uint256)'),
+  acceptOffer: fn('acceptOffer(uint256,uint256)'),
   withdraw: fn('withdraw()'),
+  withdrawFor: fn('withdrawFor(address)'),
+  tokenNonceOf: fn('tokenNonceOf(address,address,uint256)', ['uint64']),
   owed: fn('owed(address)', ['uint256']),
   getListing: fn('getListing(uint256)', [LISTING]),
   getOffer: fn('getOffer(uint256)', [OFFER]),
@@ -76,8 +78,8 @@ export const E = {
 };
 
 export const KIND = { NONE: 0, ERC721: 1, ERC1155: 2 };
-export const STATUS = ['ok', 'inactive', 'expired', 'cancelledAll', 'sellerLacksToken', 'notApproved', 'refused'];
-export const listingFrom = (t) => ({ seller: t[0], expiry: Number(t[1]), kind: Number(t[2]), collection: t[3], nonce: t[4], tokenId: t[5], unitPrice: t[6], quantity: t[7] });
+export const STATUS = ['ok', 'inactive', 'expired', 'cancelledAll', 'sellerLacksToken', 'notApproved', 'refused', 'replaced', 'termsChanged'];
+export const listingFrom = (t) => ({ seller: t[0], expiry: Number(t[1]), kind: Number(t[2]), collection: t[3], nonce: t[4], tokenId: t[5], unitPrice: t[6], quantity: t[7], tokenNonce: t[8], minUnitProceeds: t[9] });
 export const offerFrom = (t) => ({ buyer: t[0], expiry: Number(t[1]), kind: Number(t[2]), collection: t[3], tokenId: t[4], quantity: t[5], amount: t[6] });
 
 // ---- ZTPHY amounts (18 decimals) ----

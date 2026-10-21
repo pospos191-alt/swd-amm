@@ -11,7 +11,7 @@ interface IMarket {
     function buy(uint256 id, uint256 quantity) external payable;
     function withdraw() external;
     function cancelOffer(uint256 id) external;
-    function acceptOffer(uint256 id) external;
+    function acceptOffer(uint256 id, uint256 minProceeds) external;
     function makeOffer(address c, uint256 tokenId, uint256 q, uint64 expiry) external payable returns (uint256);
 }
 
@@ -198,7 +198,7 @@ contract EvilCollection is ZetaphyERC721 {
         bool ok;
         bytes memory e;
         if (a == 1) (ok, e) = address(market).call(abi.encodeWithSelector(IMarket.buy.selector, arg, 1));
-        else if (a == 2) (ok, e) = address(market).call(abi.encodeWithSelector(IMarket.acceptOffer.selector, arg));
+        else if (a == 2) (ok, e) = address(market).call(abi.encodeWithSelector(IMarket.acceptOffer.selector, arg, 0));
         else if (a == 3) (ok, e) = address(market).call(abi.encodeWithSelector(IMarket.cancelOffer.selector, arg));
         else (ok, e) = address(market).call(abi.encodeWithSelector(IMarket.withdraw.selector));
         reentryError = ok ? bytes("ok") : e;
@@ -253,4 +253,17 @@ contract FakeNFT {
 /// Answers supportsInterface(0xffffffff) with true (not ERC-165 compliant).
 contract BadERC165 {
     function supportsInterface(bytes4) external pure returns (bool) { return true; }
+}
+
+/// Forces ZETAPHY into any address (selfdestruct in the creating transaction still
+/// sends its balance under EIP-6780), as a griefer would to block renounceOwnership.
+contract ForceSend {
+    constructor(address payable to) payable {
+        selfdestruct(to);
+    }
+}
+
+/// A royalty receiver that can take ZETAPHY but has no way to call withdraw.
+contract PassiveReceiver {
+    receive() external payable {}
 }

@@ -42,7 +42,7 @@ beforeEach(async () => {
   }
   reg = await c.deployArtifact(art('ThreatRegistry'), [jobs.address, 3, 1, A('owner'), DELAY], 'owner');
   factory = await c.deploy('NFTFactory', [], 'owner');
-  market = await c.deploy('NFTMarketplace', [A('owner'), A('owner'), 100, reg.address], 'owner');
+  market = await c.deploy('NFTMarketplace', [A('owner'), A('owner'), 100, reg.address, factory.address], 'owner');
   const ev = await factory.send('seller', 'createERC721', [{ name: 'N', symbol: 'N', baseURI: '', contractURI: '', royaltyReceiver: ZERO,
     royaltyBps: 0, maxSupply: 0, publicMint: false, mintPrice: 0 }]);
   nft = c.at(ev.find((e) => e.name === 'CollectionCreated').args.collection, 'ZetaphyERC721');
@@ -75,18 +75,32 @@ test('address flag: listed while only flagged (newer flag), refused once enforce
   await market.send('seller', 'list', [nft.address, 3, 1, ZETA, exp()]);
 });
 
-test('code flag: every factory collection of that kind shares the code hash, so governance should protect it', async () => {
+test('code flag: shared by every factory collection, so it does not stop them; it still stops an external copy', async () => {
   const ev = await factory.send('buyer', 'createERC721', [{ name: 'Other', symbol: 'O', baseURI: '', contractURI: '', royaltyReceiver: ZERO,
     royaltyBps: 0, maxSupply: 0, publicMint: false, mintPrice: 0 }]);
   const other = ev.find((e) => e.name === 'CollectionCreated').args.collection;
   const codeHash = keccak256(await c.code(nft.address));
   assert.equal(codeHash, keccak256(await c.code(other)));
+  // The same code deployed outside the factory: an external collection.
+  const ext = await c.deploy('ZetaphyERC721', [{ name: 'Copy', symbol: 'C', baseURI: '', contractURI: '', royaltyReceiver: ZERO,
+    royaltyBps: 0, maxSupply: 0, publicMint: false, mintPrice: 0 }, A('seller')], 'seller');
+  assert.equal(keccak256(await c.code(ext.address)), codeHash);
+  await ext.send('seller', 'mintMany', [A('seller'), 1]);
+  await ext.send('seller', 'setApprovalForAll', [market.address, true]);
   const key = await reg.call('codeKey', [codeHash]);
   await flag(key, R.UnlimitedMint);
   c.advance(DELAY);
   assert.deepEqual([...await reg.call('isContractEnforced', [other])], [true, 2n]);
-  await assert.rejects(market.send('seller', 'list', [nft.address, 1, 1, ZETA, exp()]), /CollectionRefused/);
-  // Protecting the shared code key (README: do this for the trusted factory's code) lifts it for all.
-  await reg.send('owner', 'setProtected', [[key], true]);
+  // Factory collections: only their own address key counts here, so trading goes on.
   await market.send('seller', 'list', [nft.address, 1, 1, ZETA, exp()]);
+  await market.send('buyer', 'buy', [0, 1], ZETA);
+  // The external copy is judged by its address and its code: refused.
+  await assert.rejects(market.send('seller', 'list', [ext.address, 1, 1, ZETA, exp()]), /CollectionRefused/);
+  // A factory collection's own address flag still refuses it.
+  await flag(await reg.call('addressKey', [1, nft.address]), R.OwnerCanBlockTransfers);
+  c.advance(DELAY);
+  await assert.rejects(market.send('seller', 'list', [nft.address, 2, 1, ZETA, exp()]), /CollectionRefused/);
+  // Protecting the shared code key (cli.js deploy prints this step) lifts it for the external copy too.
+  await reg.send('owner', 'setProtected', [[key], true]);
+  await market.send('seller', 'list', [ext.address, 1, 1, ZETA, exp()]);
 });

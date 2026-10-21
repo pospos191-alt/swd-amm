@@ -7,6 +7,13 @@ import {IERC721, IERC1155} from "./interfaces/Interfaces.sol";
 interface IThreatRegistryView {
     /// The contract's address on this chain, or its code (extcodehash), has a flag that is enforced.
     function isContractEnforced(address who) external view returns (bool, uint8);
+    /// The address key alone (`chainId`, `who`) has a flag that is enforced.
+    function isAddressEnforced(uint256 chainId, address who) external view returns (bool, uint8);
+}
+
+/// NFTFactory's view: whether it made `a`.
+interface INFTFactoryView {
+    function isCollection(address a) external view returns (bool);
 }
 
 /// @title NFTMarketplace: fixed-price listings and offers in native ZETAPHY
@@ -26,15 +33,36 @@ interface IThreatRegistryView {
 ///         (`owed`) and taken with withdraw / withdrawTo: a receiver that refuses ZETAPHY
 ///         cannot block a sale.
 ///
+///         Seller guards: a listing records the seller's part of one unit's sale when
+///         it is listed (`minUnitProceeds`); if the fee or the royalty rises after that,
+///         the listing cannot be bought (`ProceedsTooLow`, status TermsChanged) until
+///         the seller lists again. acceptOffer takes the least the seller accepts to
+///         receive (`minProceeds`), computed by the seller's client from what it showed.
+///
+///         One live listing per token and seller: every listing records the
+///         (seller, collection, tokenId) nonce `tokenNonceOf`. Listing the same token
+///         again, a buy that sells a listing out, accepting an offer for the token, and
+///         any delivery of the token through this market (to its seller or its
+///         recipient) bump it, so an older listing can never be bought again, even
+///         after its seller holds the token again. A transfer outside this market is
+///         invisible here: such a listing shows SellerLacksToken while the token is
+///         away; its seller should cancel it (the web app offers to).
+///
 ///         Neuro: when governance has set `threatRegistry` (zero = off), listing, buying,
-///         offering and accepting refuse a collection whose address or code has an
-///         ENFORCED flag (ThreatRegistry.isContractEnforced). Cancelling and withdrawing
-///         always work. A flag states a reproducible fact about code, not an accusation.
+///         offering and accepting refuse a collection that has an ENFORCED flag. For a
+///         collection made by `factory` (NFTFactory.isCollection), only its own address
+///         key counts (ThreatRegistry.isAddressEnforced): every factory collection of a
+///         kind shares one runtime code, so a single code flag would otherwise stop
+///         them all. Any other collection: its address or its code
+///         (ThreatRegistry.isContractEnforced). Cancelling and withdrawing always work.
+///         A flag states a reproducible fact about code, not an accusation.
 contract NFTMarketplace {
     enum Kind { None, ERC721, ERC1155 }
 
     /// Why a listing cannot be bought now (listingStatus).
-    enum Status { Ok, Inactive, Expired, SellerCancelledAll, SellerLacksToken, NotApproved, Refused }
+    /// Replaced: the seller listed the token again, sold it or accepted an offer for it here.
+    /// TermsChanged: the fee or royalty rose since listing (the seller would get less).
+    enum Status { Ok, Inactive, Expired, SellerCancelledAll, SellerLacksToken, NotApproved, Refused, Replaced, TermsChanged }
 
     struct Listing {
         address seller;
@@ -45,6 +73,8 @@ contract NFTMarketplace {
         uint256 tokenId;
         uint256 unitPrice; // wei per unit (ERC-721: the price)
         uint256 quantity;  // units still for sale (0: sold out or cancelled)
+        uint64 tokenNonce;       // tokenNonceOf[seller][collection][tokenId] when listed
+        uint256 minUnitProceeds; // the seller's part of one unit's sale when listed
     }
 
     struct Offer {
@@ -67,10 +97,14 @@ contract NFTMarketplace {
     address public feeRecipient;
     uint16 public feeBps;
     address public threatRegistry;
+    /// The NFTFactory whose collections are judged by their address key only (zero: none).
+    address public immutable factory;
 
     Listing[] private _listings;
     Offer[] private _offers;
     mapping(address => uint64) public nonceOf;
+    /// seller => collection => tokenId => nonce; a listing is live only while it matches.
+    mapping(address => mapping(address => mapping(uint256 => uint64))) public tokenNonceOf;
     mapping(address => uint256) public owed;
     uint256 private _lock = 1;
 
@@ -81,6 +115,7 @@ contract NFTMarketplace {
     event OfferMade(uint256 indexed id, address indexed buyer, address indexed collection, uint256 tokenId, uint256 quantity, uint256 amount, uint64 expiry);
     event OfferCancelled(uint256 indexed id);
     event OfferAccepted(uint256 indexed id, address indexed seller, address indexed collection, uint256 tokenId, uint256 quantity, uint256 price, uint256 fee, uint256 royalty);
+    event ListingsReplaced(address indexed seller, address indexed collection, uint256 tokenId, uint64 nonce);
     event Credited(address indexed to, uint256 amount);
     event Withdrawn(address indexed from, address indexed to, uint256 amount);
     event GovernanceSet(address governance);
@@ -107,6 +142,7 @@ contract NFTMarketplace {
     error PayFailed();
     error Reentrancy();
     error GasTooLow();
+    error ProceedsTooLow(uint256 proceeds, uint256 minProceeds);
 
     modifier onlyGov() {
         if (msg.sender != governance) revert NotGovernance();
@@ -120,11 +156,12 @@ contract NFTMarketplace {
         _lock = 1;
     }
 
-    constructor(address governance_, address feeRecipient_, uint16 feeBps_, address threatRegistry_) {
+    constructor(address governance_, address feeRecipient_, uint16 feeBps_, address threatRegistry_, address factory_) {
         if (governance_ == address(0)) revert ZeroAddress();
         governance = governance_;
         _setFee(feeBps_, feeRecipient_);
         threatRegistry = threatRegistry_;
+        factory = factory_;
         emit GovernanceSet(governance_);
         emit ThreatRegistrySet(threatRegistry_);
     }
@@ -158,7 +195,8 @@ contract NFTMarketplace {
     // ---- listings ----
 
     /// Lists `quantity` units (ERC-721: 1) of a token you hold at `unitPrice` wei each,
-    /// until `expiry` (unix seconds). Approve this contract first.
+    /// until `expiry` (unix seconds). Approve this contract first. Replaces (makes
+    /// unbuyable) every earlier listing of this token by you.
     function list(address collection, uint256 tokenId, uint256 quantity, uint256 unitPrice, uint64 expiry) external returns (uint256 id) {
         Kind kind = kindOf(collection);
         if (kind == Kind.None) revert NotNFT();
@@ -169,8 +207,10 @@ contract NFTMarketplace {
         _checkThreat(collection);
         if (!_holds(kind, collection, tokenId, msg.sender, quantity)) revert SellerLacksToken();
         if (!_approved(kind, collection, tokenId, msg.sender)) revert NotApproved();
+        uint64 tn = _bumpToken(msg.sender, collection, tokenId);
+        (, , , uint256 unitProceeds) = quote(collection, tokenId, unitPrice);
         id = _listings.length;
-        _listings.push(Listing(msg.sender, expiry, kind, collection, nonceOf[msg.sender], tokenId, unitPrice, quantity));
+        _listings.push(Listing(msg.sender, expiry, kind, collection, nonceOf[msg.sender], tokenId, unitPrice, quantity, tn, unitProceeds));
         emit Listed(id, msg.sender, collection, tokenId, quantity, unitPrice, expiry);
     }
 
@@ -188,20 +228,24 @@ contract NFTMarketplace {
         emit CancelledAll(msg.sender, n);
     }
 
-    /// Buys `quantity` units of a listing, paying exactly unitPrice x quantity.
+    /// Buys `quantity` units of a listing, paying exactly unitPrice x quantity (the
+    /// buyer's total cost is msg.value: nothing is added to it).
     function buy(uint256 id, uint256 quantity) external payable nonReentrant {
         Listing storage l = _listing(id);
-        if (l.quantity == 0 || l.nonce != nonceOf[l.seller]) revert NotActive();
+        (address seller, address collection, uint256 tokenId, Kind kind) = (l.seller, l.collection, l.tokenId, l.kind);
+        if (l.quantity == 0 || l.nonce != nonceOf[seller] || l.tokenNonce != tokenNonceOf[seller][collection][tokenId]) revert NotActive();
         if (quantity == 0 || quantity > l.quantity) revert BadQuantity();
         if (block.timestamp >= l.expiry) revert Expired();
         uint256 price = l.unitPrice * quantity;
         if (msg.value != price) revert WrongValue();
-        (address seller, address collection, uint256 tokenId, Kind kind) = (l.seller, l.collection, l.tokenId, l.kind);
         _checkThreat(collection);
+        _checkTerms(l);
         if (!_holds(kind, collection, tokenId, seller, quantity)) revert SellerLacksToken();
         if (!_approved(kind, collection, tokenId, seller)) revert NotApproved();
         l.quantity -= quantity;
-        (uint256 fee, uint256 royalty) = _settle(collection, tokenId, seller, price);
+        // Sold out: retire the token nonce too (the seller's next listing starts fresh).
+        if (l.quantity == 0) _bumpToken(seller, collection, tokenId);
+        (uint256 fee, uint256 royalty, ) = _settle(collection, tokenId, seller, price);
         _deliver(kind, collection, tokenId, seller, msg.sender, quantity);
         emit Sold(id, msg.sender, collection, tokenId, quantity, price, fee, royalty);
     }
@@ -233,8 +277,12 @@ contract NFTMarketplace {
     }
 
     /// A holder of the token accepts an offer: the token goes to the buyer, the
-    /// held amount is split like a sale. Approve this contract first.
-    function acceptOffer(uint256 id) external nonReentrant {
+    /// held amount is split like a sale. Approve this contract first. Reverts
+    /// (ProceedsTooLow) unless the holder's part is at least `minProceeds`: the
+    /// client computes it from the offer, fee and royalty it showed, so a fee or
+    /// royalty raised before inclusion, or an RPC that showed a fake amount, cannot
+    /// make the holder sell for less. Also replaces the holder's listings of the token.
+    function acceptOffer(uint256 id, uint256 minProceeds) external nonReentrant {
         Offer storage o = _offer(id);
         uint256 price = o.amount;
         if (price == 0) revert NotActive();
@@ -244,7 +292,9 @@ contract NFTMarketplace {
         if (!_holds(kind, collection, tokenId, msg.sender, quantity)) revert SellerLacksToken();
         if (!_approved(kind, collection, tokenId, msg.sender)) revert NotApproved();
         o.amount = 0;
-        (uint256 fee, uint256 royalty) = _settle(collection, tokenId, msg.sender, price);
+        _bumpToken(msg.sender, collection, tokenId);
+        (uint256 fee, uint256 royalty, uint256 rest) = _settle(collection, tokenId, msg.sender, price);
+        if (rest < minProceeds) revert ProceedsTooLow(rest, minProceeds);
         _deliver(kind, collection, tokenId, msg.sender, buyer, quantity);
         emit OfferAccepted(id, msg.sender, collection, tokenId, quantity, price, fee, royalty);
     }
@@ -258,12 +308,24 @@ contract NFTMarketplace {
     /// Sends what you are owed to `to` (e.g. when your own address cannot receive ZETAPHY).
     function withdrawTo(address payable to) public nonReentrant {
         if (to == address(0)) revert ZeroAddress();
-        uint256 amount = owed[msg.sender];
+        _pay(msg.sender, to);
+    }
+
+    /// Anyone may pay `receiver` what it is owed, to `receiver` itself: for a royalty
+    /// receiver (or any payee) that is a contract able to receive ZETAPHY but unable
+    /// to call withdraw. The money can only go to its owner.
+    function withdrawFor(address payable receiver) external nonReentrant {
+        if (receiver == address(0)) revert ZeroAddress();
+        _pay(receiver, receiver);
+    }
+
+    function _pay(address from, address payable to) private {
+        uint256 amount = owed[from];
         if (amount == 0) revert NothingOwed();
-        owed[msg.sender] = 0;
+        owed[from] = 0;
         (bool ok, ) = to.call{value: amount}("");
         if (!ok) revert PayFailed();
-        emit Withdrawn(msg.sender, to, amount);
+        emit Withdrawn(from, to, amount);
     }
 
     // ---- views ----
@@ -290,8 +352,10 @@ contract NFTMarketplace {
         Listing storage l = _listing(id);
         if (l.quantity == 0) return Status.Inactive;
         if (l.nonce != nonceOf[l.seller]) return Status.SellerCancelledAll;
+        if (l.tokenNonce != tokenNonceOf[l.seller][l.collection][l.tokenId]) return Status.Replaced;
         if (block.timestamp >= l.expiry) return Status.Expired;
         if (_enforced(l.collection)) return Status.Refused;
+        if (_unitProceeds(l) < l.minUnitProceeds) return Status.TermsChanged;
         if (quantity == 0 || quantity > l.quantity) quantity = l.quantity;
         if (!_holds(l.kind, l.collection, l.tokenId, l.seller, quantity)) return Status.SellerLacksToken;
         if (!_approved(l.kind, l.collection, l.tokenId, l.seller)) return Status.NotApproved;
@@ -330,26 +394,47 @@ contract NFTMarketplace {
         if (expiry <= block.timestamp || expiry > block.timestamp + MAX_DURATION) revert BadExpiry();
     }
 
-    function _enforced(address collection) private view returns (bool) {
+    /// Whether the collection has an enforced flag that counts here, and its reason:
+    /// a factory collection's own address key only; any other collection's address or code.
+    function _threat(address collection) private view returns (bool on, uint8 reason) {
         address r = threatRegistry;
-        if (r == address(0)) return false;
-        (bool on, ) = IThreatRegistryView(r).isContractEnforced(collection);
-        return on;
+        if (r == address(0)) return (false, 0);
+        address f = factory;
+        if (f != address(0) && INFTFactoryView(f).isCollection(collection)) return IThreatRegistryView(r).isAddressEnforced(block.chainid, collection);
+        return IThreatRegistryView(r).isContractEnforced(collection);
+    }
+
+    function _enforced(address collection) private view returns (bool on) {
+        (on, ) = _threat(collection);
     }
 
     /// Refuses a collection with an enforced flag. A registry that fails to answer
     /// refuses too (fail closed); governance can set it to zero.
     function _checkThreat(address collection) private view {
-        address r = threatRegistry;
-        if (r == address(0)) return;
-        (bool on, uint8 reason) = IThreatRegistryView(r).isContractEnforced(collection);
+        (bool on, uint8 reason) = _threat(collection);
         if (on) revert CollectionRefused(reason);
     }
 
-    /// Credits the fee, the royalty and the seller's part; returns (fee, royalty).
-    function _settle(address collection, uint256 tokenId, address seller, uint256 price) private returns (uint256 fee, uint256 royalty) {
+    /// The seller's part of one unit's sale at the current fee and royalty.
+    function _unitProceeds(Listing storage l) private view returns (uint256 rest) {
+        (, , , rest) = quote(l.collection, l.tokenId, l.unitPrice);
+    }
+
+    /// The fee or royalty must not have risen since the listing (seller's guard).
+    function _checkTerms(Listing storage l) private view {
+        uint256 rest = _unitProceeds(l);
+        if (rest < l.minUnitProceeds) revert ProceedsTooLow(rest, l.minUnitProceeds);
+    }
+
+    /// Retires every listing of `tokenId` by `seller`; returns the new nonce.
+    function _bumpToken(address seller, address collection, uint256 tokenId) private returns (uint64 n) {
+        n = ++tokenNonceOf[seller][collection][tokenId];
+        emit ListingsReplaced(seller, collection, tokenId, n);
+    }
+
+    /// Credits the fee, the royalty and the seller's part; returns (fee, royalty, seller's part).
+    function _settle(address collection, uint256 tokenId, address seller, uint256 price) private returns (uint256 fee, uint256 royalty, uint256 rest) {
         address receiver;
-        uint256 rest;
         (fee, royalty, receiver, rest) = quote(collection, tokenId, price);
         if (fee != 0) _credit(feeRecipient, fee);
         if (royalty != 0) _credit(receiver, royalty);
@@ -415,7 +500,10 @@ contract NFTMarketplace {
 
     /// Moves the token with the safe transfer (a contract buyer must accept it), then
     /// checks the buyer really received it (a token that only pretends fails the sale).
+    /// The recipient's own earlier listings of this token are retired first: holding
+    /// it again must not revive them.
     function _deliver(Kind kind, address c, uint256 tokenId, address from, address to, uint256 quantity) private {
+        if (to != from) _bumpToken(to, c, tokenId);
         if (kind == Kind.ERC721) {
             IERC721(c).safeTransferFrom(from, to, tokenId);
             if (IERC721(c).ownerOf(tokenId) != to) revert TransferFailed();

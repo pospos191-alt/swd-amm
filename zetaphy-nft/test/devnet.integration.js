@@ -13,7 +13,7 @@ import { execFileSync, execFile, spawn } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Wallet, JsonRpcProvider, Contract, ContractFactory, NonceManager, ZeroAddress } from 'ethers';
+import { Wallet, JsonRpcProvider, Contract, ContractFactory, NonceManager, ZeroAddress, keccak256 } from 'ethers';
 import { chromium } from 'playwright-core';
 import { mockArtifacts } from './helpers/chain.js';
 
@@ -72,6 +72,10 @@ test('CLI deploys; create, mint, list and buy (ERC-721 and ERC-1155) on a real Z
   assert.equal(dep.chainId, 77390);
   assert.equal(dep.rpc, PUBLIC_RPC);
   assert.ok(dep.deployBlock > 0);
+  // No registry yet: the CLI prints the governance step for the shared code keys.
+  assert.match(d.out, /WHEN A REGISTRY IS SET .*protect the factory collections' shared code keys/s);
+  assert.match(d.out, new RegExp(dep.collectionCodeKeys.erc721));
+  assert.equal(dep.codeKeysProtected, false);
   const info = await cli(['info', '--deployments', out, '--rpc', RPC]);
   assert.equal(info.code, 0, info.out);
   assert.match(info.out, /"feeBps": 100/);
@@ -82,6 +86,7 @@ test('CLI deploys; create, mint, list and buy (ERC-721 and ERC-1155) on a real Z
   // ERC-721 with a 5% royalty to the creator.
   const col = await created(await factory.createERC721(cfg({ royaltyReceiver: actors.creator.address, royaltyBps: 500n, maxSupply: 100n })), factory);
   assert.equal(await factory.isCollection(col), true);
+  assert.equal(await marketC.factory(), dep.factory);
   const nft = C(col, 'ZetaphyERC721', 'creator');
   await (await nft.mint(actors.creator.address, 'ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi/1.json')).wait();
   await (await nft.mintMany(actors.creator.address, 3)).wait(); // ids 2..4
@@ -124,11 +129,18 @@ test('CLI deploys; create, mint, list and buy (ERC-721 and ERC-1155) on a real Z
   await reg.waitForDeployment();
   const g = await cli(['gov', 'set-registry', await reg.getAddress(), '--deployments', out, '--rpc', RPC, '--key-file', keyFile]);
   assert.equal(g.code, 0, g.out);
+  assert.match(g.out, /NEXT STEP \(ThreatRegistry governance\)/); // the mock has no governance(): the step is printed
   signer('deployer').reset(); // the CLI used the deployer's next nonce
   assert.equal(await marketB.threatRegistry(), await reg.getAddress());
   await (await reg.set(col, 3, 3)).wait(); // the address key on this chain (77390)
   await assert.rejects(marketC.list.estimateGas(col, 3, 1, ZETA, BigInt(Math.floor(Date.now() / 1000) + 3600)), (e) => errorName(e, marketC.interface) === 'CollectionRefused');
   await (await reg.set(col, 0, 0)).wait();
+  // A flag on the code key every factory collection shares does not stop this one (address key only).
+  assert.equal(keccak256(await provider.getCode(col)), dep.collectionCodeHashes.erc721);
+  await (await reg.setKey(await reg.codeKey(dep.collectionCodeHashes.erc721), 3, 3)).wait();
+  assert.equal(await reg.codeKey(dep.collectionCodeHashes.erc721), dep.collectionCodeKeys.erc721);
+  await marketC.list.estimateGas(col, 3, 1, ZETA, BigInt(Math.floor(Date.now() / 1000) + 3600));
+  await (await reg.setKey(dep.collectionCodeKeys.erc721, 0, 0)).wait();
   // List #3 for the browser test below.
   await (await marketC.list(col, 3, 1, ZETA / 2n, BigInt(Math.floor(Date.now() / 1000) + 3600))).wait();
   dep.registry = await reg.getAddress();
@@ -146,7 +158,11 @@ test('the web app finds the listing with eth_getLogs on the node and buys it thr
     if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [actors.buyer.address];
     if (method === 'eth_chainId') return '0x12e4e';
     if (method.startsWith('wallet_')) return null;
-    if (method === 'eth_sendTransaction') { const t = params[0]; return (await buyer.sendTransaction({ to: t.to, data: t.data, value: BigInt(t.value ?? 0) })).hash; }
+    if (method === 'eth_sendTransaction') {
+      const t = params[0];
+      if (t.chainId !== '0x12e4e') throw new Error(`wallet: tx without chainId 77390 (${t.chainId})`);
+      return (await buyer.sendTransaction({ to: t.to, data: t.data, value: BigInt(t.value ?? 0), chainId: BigInt(t.chainId) })).hash;
+    }
     throw new Error(`wallet: ${method}`);
   });
   await ctx.addInitScript(() => {

@@ -32,6 +32,8 @@ const HOSTILE = { name: 'Cat‮gnp.exe <img src=x onerror=alert(1)>', descriptio
 
 let server, browser, shim, factory, market, registry, deployBlock;
 const problems = [];
+// The chain id the mock wallets report (a test switches it to check the refusal), and the txs they sent.
+const wallet = { chainId: '0x12e4e', sent: [] };
 // SCREENSHOTS=<dir>: also saves a few screenshots there (for a look at the layout).
 const shot = async (page, name) => { if (process.env.SCREENSHOTS) await page.screenshot({ path: `${process.env.SCREENSHOTS}/${name}.png`, fullPage: true }); };
 
@@ -46,7 +48,7 @@ before(async () => {
   deployBlock = Number(shim.blockNumber());
   factory = await shim.deploy(artifacts.NFTFactory, [], deployer);
   registry = await shim.deploy(mockArtifacts().MockThreatRegistry, [], deployer);
-  market = await shim.deploy(artifacts.NFTMarketplace, [deployer, deployer, 100, registry.address], deployer);
+  market = await shim.deploy(artifacts.NFTMarketplace, [deployer, deployer, 100, registry.address, factory.address], deployer);
   server = spawn(process.execPath, ['scripts/serve.js', String(PORT)], { stdio: 'pipe', cwd: new URL('..', import.meta.url) });
   await new Promise((r) => server.stdout.once('data', r));
   browser = await launch();
@@ -58,11 +60,13 @@ async function contextFor(account, label) {
   const ctx = await browser.newContext({ locale: 'en-US' });
   await ctx.exposeBinding('__walletRequest', async (_src, method, params) => {
     if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [account];
-    if (method === 'eth_chainId') return '0x12e4e';
+    if (method === 'eth_chainId') return wallet.chainId;
     if (method === 'wallet_switchEthereumChain' || method === 'wallet_addEthereumChain') return null;
     if (method === 'eth_sendTransaction') {
       const tx = params[0];
       assert.equal(tx.from.toLowerCase(), account.toLowerCase());
+      assert.equal(tx.chainId, '0x12e4e', 'every transaction names chain 77390');
+      wallet.sent.push(tx);
       return shim.send({ from: tx.from, to: tx.to, data: tx.data, value: BigInt(tx.value ?? 0) });
     }
     throw new Error(`wallet: ${method} not supported`);
@@ -188,16 +192,35 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   await clickAndWait(s, 'Withdraw', statusIs(/Withdraw: done/));
   assert.equal(await shim.balance(seller) - before, 1_485_000_000_000_000_000n);
 
-  // ---- offer on #2: the buyer offers 0.5, the seller accepts ----
+  // ---- offer on #2 (also listed for 9): the buyer offers 0.5, the seller accepts ----
+  await reroute(s, `#/i/${col}/2`);
+  await s.fill('input[name=price]', '9');
+  await clickAndWait(s, 'List for sale', statusIs(/List for sale: done/)); // listing 1
   await reroute(b, `#/i/${col}/2`);
   assert.equal(await b.textContent('.item-info h1'), 'Gateway Cat 2');
   assert.equal(await b.getAttribute('.item-media img', 'src'), `${GW}bafytest/2.png`);
   await b.fill('input[name=offer]', '0.5');
   await clickAndWait(b, 'Make an offer', statusIs(/Make an offer: done/));
-  await reroute(s, `#/i/${col}/2`);
-  await s.waitForSelector('#offers [data-offer="0"]');
+  await go(s, `#/i/${col}/2`); // a fresh load (same hash); the wallet reconnects silently
+  await s.waitForSelector('#offers [data-offer="0"]', { timeout: 10_000 }).catch(async (e) => { throw new Error(`${e.message}: ${await s.textContent('main')} ${problems.join(' | ')}`); });
+  // The holder sees what it gets; that amount is acceptOffer's minProceeds.
+  assert.match(await s.textContent('#offers .quote'), /fee 0\.005 · Royalty 0\.025 · you get 0\.47 ZTPHY/);
+  // The wallet switched to another network meanwhile: nothing is sent.
+  wallet.chainId = '0x1';
+  const sentBefore = wallet.sent.length;
+  await clickAndWait(s, 'Accept offer', statusIs(/not on ZETAPHY Testnet/));
+  assert.equal(wallet.sent.length, sentBefore, 'no transaction on the wrong chain');
+  wallet.chainId = '0x12e4e';
   await clickAndWait(s, 'Accept offer', statusIs(/Accept offer: done/));
+  const accept = wallet.sent.at(-1);
+  assert.equal(BigInt('0x' + accept.data.slice(74, 138)), 470_000_000_000_000_000n, 'minProceeds = what was shown');
   assert.equal((await nft.call('ownerOf', [2])).toLowerCase(), buyer.toLowerCase());
+  // The seller's listing of #2 is retired by the sale; the page offers to cancel it.
+  assert.equal(await market.call('listingStatus', [1, 0]), 7n);
+  await s.waitForSelector('#staleListings');
+  assert.match(await s.textContent('#staleListings'), /1 old listing/);
+  await clickAndWait(s, 'Cancel my 1 old listing(s)', statusIs(/Cancel listing: done/));
+  assert.equal((await market.call('getListing', [1])).quantity, 0n);
 
   // ---- stale listing: #3 listed, then moved away ----
   await nft.send(seller, 'mint', [seller, '']);
@@ -210,7 +233,7 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   assert.equal(await b.locator('#listings').getByRole('button', { name: 'Buy' }).count(), 0);
   await go(b, '#/');
   await b.waitForSelector('.page[data-ready]');
-  assert.equal(await b.locator('.nft-card[data-listing="1"]').count(), 0, 'stale listing hidden on Explore');
+  assert.equal(await b.locator('.nft-card[data-listing="2"]').count(), 0, 'stale listing hidden on Explore');
   assert.match(await b.textContent('.page'), /no longer valid listings hidden/);
 
   // ---- Neuro: a newer flag warns; an enforced flag refuses ----
@@ -234,6 +257,20 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   await go(b, `#/c/${ext.address}`);
   assert.match(await b.textContent('.collection-head'), /External contract/);
   assert.match(await b.textContent('.collection-head'), /Not created by the ZETAPHY factory/);
+
+  // ---- Settings: no contract overrides without ?dev=1; with it, a loud warning ----
+  await go(b, '#/settings');
+  assert.equal(await b.locator('input[name=marketplace], input[name=factory]').count(), 0);
+  assert.match(await b.textContent('.page'), /Those servers see your IP address/);
+  await b.goto('about:blank');
+  await b.goto(`${ORIGIN}/?dev=1#/settings`);
+  await b.waitForSelector('.page[data-ready]');
+  assert.equal(await b.locator('input[name=marketplace]').count(), 1);
+  assert.match(await b.textContent('#devOverride'), /Developer mode/);
+  // A huge ?older= is capped (no runaway scan).
+  const logsBefore = shim.stats.calls.eth_getLogs;
+  await go(b, '#/?older=999999999');
+  assert.ok(shim.stats.calls.eth_getLogs - logsBefore <= 2 * 20 * 25 + 10, 'bounded scan');
 
   // ---- My NFTs (from Transfer events) ----
   await go(b, '#/me');

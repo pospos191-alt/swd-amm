@@ -8,7 +8,7 @@ import { isAddress, checksum, topicOf, ZERO_ADDRESS } from './lib/abi.js';
 import { F, E, KIND, STATUS, listingFrom, offerFrom, parseZtphy, formatZtphy, shortAddr } from './lib/contracts.js';
 import { makeRpc, read, waitReceipt, scanLogs, RpcError } from './lib/rpc.js';
 import { loadMetadata, normalizeTokenUri, normalizeGateway, substituteId, cleanText, cleanMultiline, imageSrc, safeLink, DEFAULT_GATEWAY, GATEWAYS, fetchMetadataJson, readMetadata } from './lib/meta.js';
-import { discoverWallets, ensureChain, EVM_CHAIN_ID, EVM_SYMBOL, openInAppLinks } from './lib/wallet.js';
+import { discoverWallets, ensureChain, assertChain, EVM_CHAIN_ID, EVM_CHAIN_ID_HEX, EVM_SYMBOL, openInAppLinks } from './lib/wallet.js';
 import { t, LANGS, errorText } from './lib/i18n.js';
 import { threatQueries, readThreat, reasonText, DISCLAIMER, REPRODUCE } from './vendor/zetaphy-lib.js';
 
@@ -32,8 +32,19 @@ const S = {
 const T = (k, v) => t(S.lang, k, v);
 const gateway = () => normalizeGateway(S.settings.gateway) ?? DEFAULT_GATEWAY;
 const scanWindow = () => Math.min(Math.max(Number(S.settings.scanBlocks) || 50_000, 2_000), 2_000_000);
-const market = () => S.settings.marketplace || S.dep.marketplace;
-const factory = () => S.settings.factory || S.dep.factory;
+// "Scan older blocks" (?older=N): at most MAX_OLDER windows and MAX_SCAN blocks per scan.
+const MAX_OLDER = 20;
+const MAX_SCAN = 4_000_000;
+const olderOf = (q) => Math.min(Math.max(Math.floor(Number(q.get('older')) || 1), 1), MAX_OLDER);
+const scanSpan = (older) => Math.min(scanWindow() * older, MAX_SCAN);
+// The factory and marketplace come from deployments.json (served with the site).
+// Overriding them in Settings is a developer feature only: it needs ?dev=1 in the
+// page URL, and every approval to a marketplace that is not the deployed one asks
+// the user to type a confirmation first (setApprovalForAll lets it move all your tokens).
+const DEV = (() => { try { return new URLSearchParams(location.search).get('dev') === '1'; } catch { return false; } })();
+const market = () => (DEV && S.settings.marketplace) || S.dep.marketplace;
+const factory = () => (DEV && S.settings.factory) || S.dep.factory;
+const overridden = (a, deployed) => !!a && (!isAddress(deployed ?? '') || a.toLowerCase() !== deployed.toLowerCase());
 const rpcUrl = () => S.settings.rpc || S.dep.rpc || '';
 const ok = (a) => isAddress(a) && a !== ZERO_ADDRESS;
 
@@ -115,17 +126,21 @@ async function collectionInfo(addr) {
 }
 
 const threatCache = new Map();
-/** Neuro: { off } | { flagged, enforced, reason } for the collection's address, code and fp1 fingerprint. */
-async function threatOf(addr, code) {
+/** Neuro: { off } | { flagged, enforced, reason } for the collection's address, code and fp1 fingerprint.
+ *  For a factory collection (`trusted`) only its address key can be enforced here, as
+ *  in the marketplace: a flag on the code every factory collection shares is shown as
+ *  a warning (`shared`), never as a refusal. */
+async function threatOf(addr, code, trusted = false) {
   if (!ok(S.registry)) return { off: true };
-  const key = addr.toLowerCase();
+  const key = `${addr.toLowerCase()}:${trusted ? 1 : 0}`;
   if (threatCache.has(key)) return threatCache.get(key);
   const p = (async () => {
     const qs = threatQueries(S.chainId, addr.toLowerCase(), code ?? await S.rpc.getCode(addr));
     let out = { flagged: false, enforced: false, reason: 0 };
     for (const q of qs) {
       const [w, e] = await Promise.all([S.rpc.ethCall(S.registry, q.warn), S.rpc.ethCall(S.registry, q.enforced)]);
-      const r = readThreat(w, e);
+      let r = readThreat(w, e);
+      if (trusted && q.what !== 'address' && r.flagged) r = { ...r, enforced: false, shared: true };
       if (r.enforced && !out.enforced) out = { ...r, what: q.what };
       else if (r.flagged && !out.flagged) out = { ...r, what: q.what };
     }
@@ -165,6 +180,7 @@ function threatBox(th, compact = false) {
   if (compact) return h('span', { class: `badge ${th.enforced ? 'bad' : 'warn'}`, text: th.enforced ? T('neuroEnforcedShort') : T('neuroFlaggedShort'), title: reason });
   return h('div', { class: `neuro ${th.enforced ? 'badbox' : 'warnbox'}`, role: 'note' },
     h('strong', { text: th.enforced ? T('neuroEnforced') : T('neuroFlagged') }),
+    th.shared ? h('p', { class: 'small', text: T('neuroShared') }) : null,
     h('p', { text: `${T('neuroReason')}: ${reason}` }),
     h('p', { class: 'small', text: `${DISCLAIMER.th} (${DISCLAIMER.en})` }),
     h('p', { class: 'small muted', text: REPRODUCE[S.lang === 'th' ? 'th' : 'en'] }));
@@ -210,19 +226,22 @@ async function needWallet() {
   throw new Error(T('connectFirst'));
 }
 
-/** Simulates, then sends through the wallet, then waits for the receipt. */
+/** Simulates, then sends through the wallet, then waits for the receipt. The
+ *  wallet's chain id is read again right before signing (the user may have
+ *  switched networks meanwhile) and the transaction names chain 77390 itself. */
 async function sendTx(to, data, value = 0n, what = '') {
   const w = await needWallet();
   if (!S.rpc) throw new Error(T('noRpc'));
-  await ensureChain(w.provider, rpcUrl());
+  await ensureChain(w.provider, rpcUrl()).catch((e) => { throw e?.code === 'WRONG_CHAIN' ? new Error(T('wrongChain')) : e; });
   const v = '0x' + BigInt(value).toString(16);
   try {
     await S.rpc.call('eth_call', [{ from: w.account, to, data, value: v }, 'latest']);
   } catch (e) {
     throw new Error(`${T('wouldFail')}: ${errorText(S.lang, e)}`);
   }
+  await assertChain(w.provider).catch(() => { throw new Error(T('wrongChain')); });
   status(`${what}${T('confirmInWallet')}`, 'pending');
-  const hash = await w.provider.request({ method: 'eth_sendTransaction', params: [{ from: w.account, to, data, value: v }] });
+  const hash = await w.provider.request({ method: 'eth_sendTransaction', params: [{ from: w.account, to, data, value: v, chainId: EVM_CHAIN_ID_HEX }] });
   status(`${what}${T('pending')} ${String(hash).slice(0, 12)}…`, 'pending');
   const r = await waitReceipt(S.rpc, hash);
   status(`${what}${T('done')}`, 'ok');
@@ -257,7 +276,7 @@ async function listingCard(l, id) {
   const info = await collectionInfo(l.collection);
   const card = h('a', { class: 'nft-card', href: `#/i/${info.addr}/${l.tokenId}`, 'data-listing': String(id) });
   const media = h('div', { class: 'media' }, spinner());
-  const th = await threatOf(info.addr, info.code);
+  const th = await threatOf(info.addr, info.code, info.trusted);
   card.append(media, h('div', { class: 'body' },
     h('div', { class: 'title', text: `${info.name || shortAddr(info.addr)} #${l.tokenId}` }),
     h('div', { class: 'price', text: `${formatZtphy(l.unitPrice)} ${EVM_SYMBOL}${l.kind === KIND.ERC1155 ? ` × ${l.quantity}` : ''}` }),
@@ -276,7 +295,8 @@ async function pageExplore(el, q) {
   const grid = h('div', { class: 'grid' }, spinner());
   const more = h('div', { class: 'row' });
   el.append(h('h2', { text: T('recentListings') }), grid, more);
-  const windowBlocks = scanWindow() * (Number(q.get('older')) || 1);
+  const older = olderOf(q);
+  const windowBlocks = scanSpan(older);
   const { logs, complete } = await scanLogs(S.rpc, { address: market(), topics: [E.Listed.topic] },
     { floor: S.dep.deployBlock ?? 0, maxBlocks: windowBlocks, want: 60, cacheKey: `${S.rpc.url}|${market()}|listed` });
   const ids = [...new Set(logs.map((lg) => E.Listed.decode(lg).id))].slice(0, 60);
@@ -288,7 +308,7 @@ async function pageExplore(el, q) {
   grid.replaceChildren(...(await Promise.all(active.map((r) => listingCard(r.l, r.id)))));
   if (!active.length) grid.replaceChildren(h('p', { class: 'muted', text: T('noListings') }));
   if (rows.length > active.length) more.append(h('span', { class: 'muted small', text: T('hiddenListings', { n: rows.length - active.length }) }));
-  if (!complete) more.append(h('a', { class: 'btn', href: `#/?older=${(Number(q.get('older')) || 1) + 1}`, text: T('loadOlder') }));
+  if (!complete && older < MAX_OLDER && windowBlocks < MAX_SCAN) more.append(h('a', { class: 'btn', href: `#/?older=${older + 1}`, text: T('loadOlder') }));
 
   // Collections made by the factory, newest first.
   const cgrid = h('div', { class: 'grid small-cards' });
@@ -310,7 +330,7 @@ async function pageCollection(el, addr, q) {
   if (!isAddress(addr)) { el.append(h('p', { text: T('badAddress') })); return; }
   const info = await collectionInfo(addr);
   if (info.noCode || info.kind === KIND.NONE) { el.append(h('h1', { text: shortAddr(addr) }), h('p', { class: 'badbox', text: T('notNft') })); return; }
-  const th = await threatOf(info.addr, info.code);
+  const th = await threatOf(info.addr, info.code, info.trusted);
   const me = S.wallet?.account;
   const isOwner = me && info.owner && me.toLowerCase() === info.owner.toLowerCase();
   const head = h('div', { class: 'card collection-head' });
@@ -369,7 +389,7 @@ async function pageItem(el, addr, idStr) {
   const info = await collectionInfo(addr);
   if (info.noCode || info.kind === KIND.NONE) { el.append(h('p', { class: 'badbox', text: T('notNft') })); return; }
   const isMulti = info.kind === KIND.ERC1155;
-  const [m, th] = await Promise.all([tokenMeta(info, id), threatOf(info.addr, info.code)]);
+  const [m, th] = await Promise.all([tokenMeta(info, id), threatOf(info.addr, info.code, info.trusted)]);
   const me = S.wallet?.account;
   const owner721 = isMulti ? null : await read(S.rpc, info.addr, F.ownerOf, id).catch(() => null);
   const myBal = me ? (isMulti ? await read(S.rpc, info.addr, F.balanceOf1155, me, id).catch(() => 0n) : (owner721 && owner721.toLowerCase() === me.toLowerCase() ? 1n : 0n)) : 0n;
@@ -408,6 +428,10 @@ async function pageItem(el, addr, idStr) {
 
   const sec = h('section', { class: 'card', id: 'listings' }, h('h2', { text: T('listings') }));
   if (!listings.length) sec.append(h('p', { class: 'muted', text: T('noListingsHere') }));
+  // The connected seller's listings of this token that can no longer be bought (sold,
+  // replaced, token moved away…): offer to cancel them, so they can never come back.
+  const myStale = me ? listings.filter((x) => x.st !== 0 && x.l.seller.toLowerCase() === me.toLowerCase()) : [];
+  if (myStale.length) sec.append(staleNotice(myStale.map((x) => x.id)));
   for (const { id: lid, l, st } of listings) {
     const mine = me && l.seller.toLowerCase() === me.toLowerCase();
     const qty = input({ type: 'number', min: '1', max: String(l.quantity), value: '1', class: 'qty', 'aria-label': T('quantity') });
@@ -447,11 +471,17 @@ async function pageItem(el, addr, idStr) {
       h('div', { class: 'small muted', text: `${T('from')} ${shortAddr(o.buyer)} · ${o.expiry < now ? T('expired') : `${T('until')} ${new Date(o.expiry * 1000).toLocaleString(S.lang === 'th' ? 'th-TH' : 'en-GB')}`}` })));
     if (mineOffer) row.append(actionButton(T('cancelOffer'), async () => { await sendTx(market(), F.cancelOffer.encode(oid), 0n, T('cancelOffer')); route(); }, ''));
     else if (me && myBal >= o.quantity && o.expiry > now && !blocked) {
+      // What the holder would get, as shown; it becomes acceptOffer's minProceeds, so a
+      // higher fee or royalty at inclusion (or an RPC that showed a fake amount) reverts.
+      const q = await read(S.rpc, market(), F.quote, info.addr, id, o.amount).catch(() => null);
+      if (!q) { osec.append(row); continue; }
+      const [fee, roy, , rest] = q;
       row.append(actionButton(T('accept'), async () => {
         await ensureApproval(info);
-        await sendTx(market(), F.acceptOffer.encode(oid), 0n, T('accept'));
-        route();
-      }));
+        await sendTx(market(), F.acceptOffer.encode(oid, rest), 0n, T('accept'));
+        await route();
+        afterSale(info, id);
+      }), h('div', { class: 'small muted quote', text: `${T('fee')} ${formatZtphy(fee)} · ${T('royalty')} ${formatZtphy(roy)} · ${T('youGet')} ${formatZtphy(rest)} ${EVM_SYMBOL}` }));
     }
     osec.append(row);
   }
@@ -498,10 +528,64 @@ async function pageItem(el, addr, idStr) {
   el.append(forms);
 }
 
+/** Cancels listings one by one (each is its own transaction), then reloads the page. */
+async function cancelListings(ids) {
+  for (const lid of ids) await sendTx(market(), F.cancel.encode(lid), 0n, T('cancel'));
+  route();
+}
+
+/** "Your old listings of this token can no longer be bought: cancel them." */
+function staleNotice(ids) {
+  return h('div', { class: 'warnbox small', id: 'staleListings' },
+    h('p', { text: T('staleMine', { n: ids.length }) }),
+    actionButton(T('cancelStale', { n: ids.length }), () => cancelListings(ids), ''));
+}
+
+/** After the connected wallet sold this token (accepted an offer), offers to cancel
+ *  its other listings of it that are still open (the contract already makes them
+ *  unbuyable; cancelling also takes them off every list). */
+async function afterSale(info, id) {
+  const me = S.wallet?.account;
+  if (!me || !ok(market())) return;
+  const lres = await scanLogs(S.rpc, { address: market(), topics: [E.Listed.topic, null, topicOf(me), topicOf(info.addr)] },
+    { floor: S.dep.deployBlock ?? 0, maxBlocks: scanWindow() }).catch(() => ({ logs: [] }));
+  const lids = [...new Set(lres.logs.map((lg) => E.Listed.decode(lg)).filter((x) => x.tokenId === id).map((x) => x.id))];
+  const open = [];
+  for (const lid of lids) { const l = listingFrom(await read(S.rpc, market(), F.getListing, lid)); if (l.quantity > 0n) open.push(lid); }
+  if (open.length && !document.querySelector('#staleListings')) document.querySelector('#listings')?.append(staleNotice(open));
+}
+
+/** Typed confirmation (in the page, no script dialog) before approving a marketplace
+ *  that is not the one in deployments.json (only possible with ?dev=1). */
+function confirmUnknownMarket(addr) {
+  return new Promise((resolve) => {
+    const want = addr.slice(-6).toLowerCase();
+    const typed = input({ name: 'confirmMarket', 'aria-label': T('typeToConfirm', { code: want }) });
+    typed.addEventListener('input', () => typed.setCustomValidity(''));
+    const dlg = h('dialog', { class: 'dialog danger', id: 'marketConfirm' });
+    const done = (yes) => { dlg.close(); dlg.remove(); resolve(yes); };
+    dlg.append(h('div', { class: 'dialog-body' },
+      h('h2', { class: 'bad', text: T('unknownMarketTitle') }),
+      h('p', { class: 'badbox', text: T('unknownMarket', { addr }) }),
+      field(T('typeToConfirm', { code: want }), typed),
+      h('div', { class: 'row' },
+        button(T('approveAnyway'), () => {
+          if (typed.value.trim().toLowerCase() === want) return done(true);
+          typed.setCustomValidity(T('typeToConfirm', { code: want }));
+          typed.reportValidity();
+        }, 'danger'),
+        button(T('cancelAction'), () => done(false)))));
+    dlg.addEventListener('cancel', (e) => { e.preventDefault(); done(false); });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
 /** The marketplace may move this collection's tokens for the connected wallet. */
 async function ensureApproval(info) {
   const me = S.wallet.account;
   if (await read(S.rpc, info.addr, F.isApprovedForAll, me, market())) return;
+  if (overridden(market(), S.dep.marketplace) && !(await confirmUnknownMarket(market()))) throw new Error(T('approvalCancelled'));
   await sendTx(info.addr, F.setApprovalForAll.encode(market(), true), 0n, T('approve'));
 }
 
@@ -555,7 +639,8 @@ function ipfsHelp() {
   return h('details', { class: 'card help' }, h('summary', { text: T('ipfsTitle') }),
     h('p', { text: T('ipfsLead') }),
     h('ul', {}, ...['ipfsOpt1', 'ipfsOpt2', 'ipfsOpt3', 'ipfsOpt4'].map((k) => h('li', { text: T(k) }))),
-    h('p', { class: 'small muted', text: T('ipfsNote') }));
+    h('p', { class: 'small muted', text: T('ipfsNote') }),
+    h('p', { class: 'small muted', text: T('privacyNote') }));
 }
 
 async function pageMint(el, addr) {
@@ -645,9 +730,9 @@ async function pageMe(el, q) {
   }
   const grid = h('div', { class: 'grid' }, spinner());
   el.append(h('h2', { text: T('holdings') }), grid);
-  const older = Number(q.get('older')) || 1;
+  const older = olderOf(q);
   const me = topicOf(who);
-  const opts = (tag) => ({ floor: 0, maxBlocks: scanWindow() * older, cacheKey: `${S.rpc.url}|${who}|${tag}` });
+  const opts = (tag) => ({ floor: 0, maxBlocks: scanSpan(older), cacheKey: `${S.rpc.url}|${who}|${tag}` });
   const [a, b, c] = await Promise.all([
     scanLogs(S.rpc, { topics: [E.Transfer721.topic, null, me] }, opts('t721')),
     scanLogs(S.rpc, { topics: [E.TransferSingle.topic, null, null, me] }, opts('t1155')),
@@ -673,7 +758,7 @@ async function pageMe(el, q) {
     return card;
   }));
   if (!held.length) grid.replaceChildren(h('p', { class: 'muted', text: T('noHoldings') }));
-  if (!(a.complete && b.complete && c.complete)) el.append(h('a', { class: 'btn', href: `#/me?${who !== S.wallet?.account ? `a=${who}&` : ''}older=${older + 1}`, text: T('loadOlder') }));
+  if (!(a.complete && b.complete && c.complete) && older < MAX_OLDER && scanSpan(older) < MAX_SCAN) el.append(h('a', { class: 'btn', href: `#/me?${who !== S.wallet?.account ? `a=${who}&` : ''}older=${older + 1}`, text: T('loadOlder') }));
 }
 
 function pageSettings(el) {
@@ -681,12 +766,15 @@ function pageSettings(el) {
   const rpc = input({ name: 'rpc', value: S.settings.rpc ?? '', placeholder: S.dep.rpc || 'https://rpc…' });
   const gwSel = h('select', { name: 'gatewayPreset' }, ...GATEWAYS.map((g) => h('option', { value: g, text: g, selected: g === gateway() })), h('option', { value: '', text: T('custom'), selected: !GATEWAYS.includes(gateway()) }));
   const gw = input({ name: 'gateway', value: GATEWAYS.includes(gateway()) ? '' : gateway(), placeholder: 'https://…/ipfs/' });
-  const fac = input({ name: 'factory', value: S.settings.factory ?? '', placeholder: S.dep.factory || '0x…' });
-  const mk = input({ name: 'marketplace', value: S.settings.marketplace ?? '', placeholder: S.dep.marketplace || '0x…' });
+  // Contract overrides: developer mode (?dev=1) only, with a loud warning.
+  const fac = DEV ? input({ name: 'factory', value: S.settings.factory ?? '', placeholder: S.dep.factory || '0x…' }) : null;
+  const mk = DEV ? input({ name: 'marketplace', value: S.settings.marketplace ?? '', placeholder: S.dep.marketplace || '0x…' }) : null;
   const sb = input({ name: 'scanBlocks', type: 'number', min: '2000', step: '2000', value: String(scanWindow()) });
   el.append(h('form', { class: 'card form', on: { submit: (e) => e.preventDefault() } },
     field(T('rpcUrl'), rpc, T('rpcHint')), field(T('gateway'), gwSel), field(T('customGateway'), gw, T('gatewayHint')),
-    field(T('factoryAddr'), fac, T('fromDeployments')), field(T('marketAddr'), mk, T('fromDeployments')), field(T('scanBlocks'), sb, T('scanHint')),
+    DEV ? h('p', { class: 'badbox', id: 'devOverride', text: T('devOverrideWarn') }) : null,
+    DEV ? field(T('factoryAddr'), fac, T('fromDeployments')) : null, DEV ? field(T('marketAddr'), mk, T('fromDeployments')) : null,
+    field(T('scanBlocks'), sb, T('scanHint')),
     h('div', { class: 'row' },
       actionButton(T('save'), async () => {
         const next = {};
@@ -695,7 +783,7 @@ function pageSettings(el) {
         const g = gw.value.trim() ? normalizeGateway(gw.value) : gwSel.value;
         if (!g) throw new Error(T('badGateway'));
         next.gateway = g;
-        for (const [k, v] of [['factory', fac.value.trim()], ['marketplace', mk.value.trim()]]) { if (v) { if (!isAddress(v)) throw new Error(T('badAddress')); next[k] = checksum(v); } }
+        if (DEV) for (const [k, v] of [['factory', fac.value.trim()], ['marketplace', mk.value.trim()]]) { if (v) { if (!isAddress(v)) throw new Error(T('badAddress')); next[k] = checksum(v); } }
         next.scanBlocks = Number(sb.value) || 50_000;
         S.settings = next;
         save('zn.settings', next);
@@ -708,6 +796,7 @@ function pageSettings(el) {
         status(T('cacheCleared'), 'ok');
       }))),
   h('section', { class: 'card' }, h('h2', { text: T('deployment') }), h('pre', { class: 'mono small break', text: JSON.stringify({ ...S.dep, registryNow: S.registry, chainId: S.chainId }, null, 2) })),
+  h('p', { class: 'small muted', text: T('privacyNote') }),
   ipfsHelp());
 }
 

@@ -68,6 +68,15 @@ const TEXT = {
     wouldFail: 'This transaction would fail', confirmInWallet: ': confirm in your wallet…', pending: ': waiting for the block', done: ': done.', rejected: 'Rejected in the wallet.',
     status_ok: 'available', status_inactive: 'sold or cancelled', status_expired: 'expired', status_cancelledAll: 'the seller cancelled all listings',
     status_sellerLacksToken: 'the seller no longer holds this token: the listing is invalid', status_notApproved: 'the seller withdrew the marketplace approval', status_refused: 'refused (enforced Neuro flag)',
+    status_replaced: 'replaced: the seller listed this token again, sold it or accepted an offer for it', status_termsChanged: 'the fee or royalty rose since listing: the seller must list again',
+    wrongChain: 'Your wallet is not on ZETAPHY Testnet (chain 77390): nothing was sent. Switch the network in the wallet and try again.',
+    neuroShared: 'This flag is on the code that every collection of the ZETAPHY factory shares, not on this collection itself, so the marketplace does not refuse it. Governance reviews such flags.',
+    youGet: 'you get', staleMine: 'You have {n} old listing(s) of this token that can no longer be bought (sold, replaced or the token moved). Cancel them so they are gone for good.',
+    cancelStale: 'Cancel my {n} old listing(s)',
+    unknownMarketTitle: 'Warning: unknown marketplace contract', unknownMarket: 'You are about to let {addr} move ALL your tokens of this collection. It is NOT the marketplace in this site\'s deployments.json (it was set in Settings in developer mode). Only continue if you deployed or checked this contract yourself.',
+    typeToConfirm: 'Type {code} (the last 6 characters of the address) to confirm', approveAnyway: 'Approve this contract', cancelAction: 'Cancel', approvalCancelled: 'Approval cancelled.',
+    devOverrideWarn: 'Developer mode: contract addresses typed here replace the deployed ones. A wrong marketplace address can take every token you approve to it. Leave empty unless you are testing your own deployment.',
+    privacyNote: 'Privacy: images and metadata are loaded straight from the links their creators chose (any https site or IPFS gateway). Those servers see your IP address and when you looked. The site itself keeps nothing.',
   },
   th: {
     brandSub: 'NFT · เครือข่ายทดสอบ ZETAPHY',
@@ -131,6 +140,15 @@ const TEXT = {
     wouldFail: 'ธุรกรรมนี้จะไม่สำเร็จ', confirmInWallet: ': ยืนยันในกระเป๋า…', pending: ': รอบล็อก', done: ': สำเร็จ', rejected: 'ปฏิเสธในกระเป๋าแล้ว',
     status_ok: 'ซื้อได้', status_inactive: 'ขายแล้วหรือยกเลิกแล้ว', status_expired: 'หมดอายุ', status_cancelledAll: 'ผู้ขายยกเลิกรายการทั้งหมดแล้ว',
     status_sellerLacksToken: 'ผู้ขายไม่ได้ถือโทเคนนี้แล้ว รายการนี้ใช้ไม่ได้', status_notApproved: 'ผู้ขายถอนการอนุญาตให้ตลาดแล้ว', status_refused: 'ไม่รับ (ธง Neuro ที่บังคับใช้แล้ว)',
+    status_replaced: 'ถูกแทนที่แล้ว: ผู้ขายลงขายโทเคนนี้ใหม่ ขายไปแล้ว หรือรับข้อเสนอของโทเคนนี้แล้ว', status_termsChanged: 'ค่าธรรมเนียมหรือค่าลิขสิทธิ์สูงขึ้นหลังลงขาย ผู้ขายต้องลงขายใหม่',
+    wrongChain: 'กระเป๋าของคุณไม่ได้อยู่บน ZETAPHY Testnet (chain 77390) จึงยังไม่ได้ส่งอะไรออกไป เปลี่ยนเครือข่ายในกระเป๋าแล้วลองอีกครั้ง',
+    neuroShared: 'ธงนี้อยู่ที่โค้ดที่ทุกคอลเลกชันจากโรงงาน ZETAPHY ใช้ร่วมกัน ไม่ได้อยู่ที่คอลเลกชันนี้เอง ตลาดจึงไม่ปฏิเสธ ธงแบบนี้ผู้ดูแลระบบ (governance) จะตรวจสอบ',
+    youGet: 'คุณได้รับ', staleMine: 'คุณมีรายการขายเก่าของโทเคนนี้ {n} รายการที่ซื้อไม่ได้แล้ว (ขายแล้ว ถูกแทนที่ หรือโทเคนย้ายไปแล้ว) ยกเลิกเพื่อให้หายไปถาวร',
+    cancelStale: 'ยกเลิกรายการเก่าของฉัน {n} รายการ',
+    unknownMarketTitle: 'คำเตือน: สัญญาตลาดที่ไม่รู้จัก', unknownMarket: 'คุณกำลังจะอนุญาตให้ {addr} โอนโทเคน "ทั้งหมด" ของคุณในคอลเลกชันนี้ สัญญานี้ไม่ใช่ตลาดใน deployments.json ของเว็บนี้ (ตั้งไว้ในหน้าตั้งค่าโหมดนักพัฒนา) ทำต่อเฉพาะเมื่อคุณ deploy หรือตรวจสอบสัญญานี้เองแล้ว',
+    typeToConfirm: 'พิมพ์ {code} (6 ตัวท้ายของที่อยู่) เพื่อยืนยัน', approveAnyway: 'อนุญาตสัญญานี้', cancelAction: 'ยกเลิก', approvalCancelled: 'ยกเลิกการอนุญาตแล้ว',
+    devOverrideWarn: 'โหมดนักพัฒนา: ที่อยู่สัญญาที่พิมพ์ตรงนี้จะใช้แทนที่อยู่ที่ deploy ไว้ ถ้าใส่ที่อยู่ตลาดผิด โทเคนทุกชิ้นที่คุณอนุญาตให้สัญญานั้นอาจถูกโอนไปได้ เว้นว่างไว้ เว้นแต่กำลังทดสอบสัญญาที่คุณ deploy เอง',
+    privacyNote: 'ความเป็นส่วนตัว: รูปและ metadata โหลดตรงจากลิงก์ที่ผู้สร้างเลือกไว้ (เว็บ https ใดก็ได้ หรือเกตเวย์ IPFS) เซิร์ฟเวอร์เหล่านั้นจะเห็นที่อยู่ IP ของคุณและเวลาที่เปิดดู ตัวเว็บนี้ไม่เก็บข้อมูลใด ๆ',
   },
 };
 
@@ -166,9 +184,10 @@ const ERRORS = {
   NotBuyer: { en: 'only the buyer can do this', th: 'เฉพาะผู้ยื่นข้อเสนอเท่านั้น' },
   UriTooLong: { en: 'URI too long', th: 'URI ยาวเกินไป' },
   Reentrancy: { en: 'reentrant call', th: 'เรียกซ้อน' },
+  ProceedsTooLow: { en: 'the fee or royalty changed: the seller would receive less than shown', th: 'ค่าธรรมเนียมหรือค่าลิขสิทธิ์เปลี่ยน ผู้ขายจะได้รับน้อยกว่าที่แสดง' },
 };
 const BY_SELECTOR = Object.fromEntries(Object.keys(ERRORS).map((n) => {
-  const sig = n === 'CollectionRefused' ? 'CollectionRefused(uint8)' : n === 'InvalidReceiver' ? 'InvalidReceiver(address)' : n === 'NonexistentToken' ? 'NonexistentToken(uint256)' : `${n}()`;
+  const sig = n === 'CollectionRefused' ? 'CollectionRefused(uint8)' : n === 'InvalidReceiver' ? 'InvalidReceiver(address)' : n === 'NonexistentToken' ? 'NonexistentToken(uint256)' : n === 'ProceedsTooLow' ? 'ProceedsTooLow(uint256,uint256)' : `${n}()`;
   return [keccak(sig).slice(0, 10), n];
 }));
 

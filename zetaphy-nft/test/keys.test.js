@@ -2,7 +2,7 @@
 // never overwritten, written 0600, and the CLI never prints it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, statSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, statSync, writeFileSync, readFileSync, symlinkSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -37,4 +37,31 @@ test('keystore with ZETAPHY_PASSPHRASE, env key, bad files', () => {
   assert.match(cli(['key', 'address', '--key-file', join(dir, 'bad.key')]).out, /not a key file/);
   assert.match(cli(['key', 'address'], { ZETAPHY_HOME: join(dir, 'none') }).out, /no key at .*key new/);
   assert.match(cli(['deploy']).out, /--rpc URL is required/);
+});
+
+test('key new refuses a symlink at the key path (dangling or not) and never writes through it', () => {
+  const home = join(dir, 'linkhome');
+  mkdirSync(home);
+  const victim = join(dir, 'victim.txt');
+  writeFileSync(victim, 'keep me\n');
+  symlinkSync(victim, join(home, 'deployer.key'));
+  let r = cli(['key', 'new'], { ZETAPHY_HOME: home });
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /symbolic link/);
+  assert.equal(readFileSync(victim, 'utf8'), 'keep me\n');
+  const home2 = join(dir, 'linkhome2');
+  mkdirSync(home2);
+  const target = join(dir, 'not-yet-there.key');
+  symlinkSync(target, join(home2, 'deployer.key'));
+  r = cli(['key', 'new'], { ZETAPHY_HOME: home2 });
+  assert.notEqual(r.code, 0);
+  assert.match(r.out, /symbolic link/);
+  assert.equal(existsSync(target), false, 'nothing created at the link target');
+  // The .json (keystore) name is checked too.
+  const home3 = join(dir, 'linkhome3');
+  mkdirSync(home3);
+  symlinkSync(join(dir, 'other-target.json'), join(home3, 'deployer.key.json'));
+  r = cli(['key', 'new'], { ZETAPHY_HOME: home3, ZETAPHY_PASSPHRASE: 'pw' });
+  assert.match(r.out, /symbolic link/);
+  assert.equal(existsSync(join(dir, 'other-target.json')), false);
 });

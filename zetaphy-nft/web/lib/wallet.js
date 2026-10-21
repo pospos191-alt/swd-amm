@@ -99,16 +99,35 @@ export function discoverWallets(win, onChange) {
   return { list };
 }
 
-/** Puts the wallet on ZETAPHY: switch, or add then switch (4902: unknown chain). */
+/** The wallet's current chain id as a number, or null if it gives no sensible answer. */
+export async function walletChainId(provider) {
+  try {
+    const v = await provider.request({ method: 'eth_chainId' });
+    if (typeof v !== 'string' && typeof v !== 'number' && typeof v !== 'bigint') return null;
+    const n = BigInt(v);
+    return n >= 0n && n <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(n) : null;
+  } catch { return null; }
+}
+
+/** Throws unless the wallet is on ZETAPHY (77390) right now. */
+export async function assertChain(provider) {
+  const id = await walletChainId(provider);
+  if (id !== EVM_CHAIN_ID) {
+    throw Object.assign(new Error(`wrong network: the wallet is on chain ${id ?? 'unknown'}, not ${EVM_CHAIN_ID} (ZETAPHY)`), { code: 'WRONG_CHAIN', chainId: id });
+  }
+}
+
+/** Puts the wallet on ZETAPHY: switch, or add then switch (4902: unknown chain); then
+ *  reads the chain id again and throws if the wallet still is not on 77390. */
 export async function ensureChain(provider, rpcUrl) {
-  const current = await provider.request({ method: 'eth_chainId' }).catch(() => null);
-  if (current && BigInt(current) === BigInt(EVM_CHAIN_ID)) return;
+  if (await walletChainId(provider) === EVM_CHAIN_ID) return;
   try {
     await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: EVM_CHAIN_ID_HEX }] });
   } catch (e) {
     if (e?.code !== 4902 && !/unrecognized|unknown|not added/i.test(e?.message ?? '')) throw e;
     await provider.request({ method: 'wallet_addEthereumChain', params: [evmChainParams(rpcUrl)] });
   }
+  await assertChain(provider);
 }
 
 /** Links that open this page inside a wallet app's browser (phones without an injected wallet). */

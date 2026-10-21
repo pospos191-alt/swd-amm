@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { AbiCoder, Interface, id as ethersId, getAddress } from 'ethers';
 import { encode, decode, fn, event, checksum, topicOf } from '../web/lib/abi.js';
 import { resolveUri, normalizeTokenUri, imageSrc, readMetadata, fetchMetadataJson, cleanText, cleanMultiline, substituteId, normalizeGateway, MAX_METADATA } from '../web/lib/meta.js';
-import { parseZtphy, formatZtphy, F, E } from '../web/lib/contracts.js';
+import { parseZtphy, formatZtphy, F, E, STATUS, listingFrom } from '../web/lib/contracts.js';
 import { scanLogs } from '../web/lib/rpc.js';
 import { t, keysOf, errorText } from '../web/lib/i18n.js';
 import { artifacts } from './helpers/chain.js';
@@ -46,10 +46,15 @@ test('function selectors and calls match the compiled ABIs', () => {
   const cfg = ['N', 'S', '', 'ipfs://c', A1, 250n, 5n, false, 0n];
   assert.equal(F.createERC721.encode(cfg), fac.encodeFunctionData('createERC721', [cfg]));
   // Decoding a struct answer.
-  const ret = m.encodeFunctionResult('getListing', [[A1, 99n, 1, A1, 0n, 5n, 7n, 1n]]);
+  const ret = m.encodeFunctionResult('getListing', [[A1, 99n, 1, A1, 0n, 5n, 7n, 1n, 3n, 6n]]);
   const l = F.getListing.decode(ret);
   assert.equal(l[1], 99n);
   assert.equal(l[6], 7n);
+  assert.deepEqual(listingFrom(l), { seller: getAddress(A1), expiry: 99, kind: 1, collection: getAddress(A1), nonce: 0n, tokenId: 5n, unitPrice: 7n, quantity: 1n, tokenNonce: 3n, minUnitProceeds: 6n });
+  assert.equal(F.acceptOffer.encode(4n, 10n ** 18n), m.encodeFunctionData('acceptOffer', [4n, 10n ** 18n]));
+  // Every listingStatus value has a name (and a text, see the i18n test).
+  assert.equal(STATUS.length, 9, 'NFTMarketplace.Status has 9 values');
+  for (const st of STATUS) for (const lang of ['en', 'th']) assert.ok(keysOf(lang).includes(`status_${st}`), `${lang}.status_${st}`);
   // Events: topics equal ethers', decoding of indexed and data fields.
   for (const [k, ev] of Object.entries(E)) {
     const src = [...ifaces].find((i) => { try { return i.getEvent(ev.name); } catch { return false; } });
@@ -198,4 +203,31 @@ test('both languages have every text; Neuro wording stays neutral and carries th
   const sel = new Interface(artifacts.NFTMarketplace.abi).getError('CollectionRefused').selector;
   assert.match(errorText('th', { data: sel + '0'.repeat(63) + '3' }), /ธง Neuro/);
   assert.equal(errorText('en', { message: 'execution reverted: registry down' }), 'registry down');
+});
+
+test('wallet: ensureChain re-reads the chain after switch/add; assertChain refuses anything but 77390', async () => {
+  const { ensureChain, assertChain } = await import('../web/lib/wallet.js');
+  const fake = (chains, { switchFails = false } = {}) => {
+    const seen = [];
+    let i = 0;
+    return { seen, request: async ({ method }) => {
+      seen.push(method);
+      if (method === 'eth_chainId') return chains[Math.min(i++, chains.length - 1)];
+      if (method === 'wallet_switchEthereumChain' && switchFails) throw Object.assign(new Error('Unrecognized chain'), { code: 4902 });
+      return null;
+    } };
+  };
+  await ensureChain(fake(['0x12e4e']), 'https://rpc');
+  const ok = fake(['0x1', '0x12e4e']);
+  await ensureChain(ok, 'https://rpc');
+  assert.deepEqual(ok.seen, ['eth_chainId', 'wallet_switchEthereumChain', 'eth_chainId']);
+  // The wallet says "switched" but stays on chain 1: refused.
+  await assert.rejects(ensureChain(fake(['0x1', '0x1']), 'https://rpc'), (e) => e.code === 'WRONG_CHAIN');
+  const added = fake(['0x38', '0x12e4e'], { switchFails: true });
+  await ensureChain(added, 'https://rpc');
+  assert.deepEqual(added.seen, ['eth_chainId', 'wallet_switchEthereumChain', 'wallet_addEthereumChain', 'eth_chainId']);
+  await assertChain(fake([77390]));
+  for (const bad of ['0x1', null, 'nonsense', {}, '0x12e4f']) await assert.rejects(assertChain(fake([bad])), (e) => e.code === 'WRONG_CHAIN', String(bad));
+  const sel = new Interface(artifacts.NFTMarketplace.abi).getError('ProceedsTooLow').selector;
+  assert.match(errorText('en', { data: sel + '0'.repeat(128) }), /receive less than shown/);
 });

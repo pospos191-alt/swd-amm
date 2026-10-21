@@ -175,7 +175,6 @@ test('public mint: closed by default, exact price, proceeds withdrawn by the own
   assert.equal(await a.call('balanceOf', [A('alice')]), 2n);
   assert.equal(await c.balance(a.address), 4n * ZETA);
   await assert.rejects(a.send('alice', 'withdraw'), /NotOwner/);
-  await assert.rejects(a.send('creator', 'renounceOwnership'), /WithdrawFirst/);
   const before = await c.balance('creator');
   await a.send('creator', 'withdraw');
   assert.equal(await c.balance('creator') - before, 4n * ZETA);
@@ -213,9 +212,17 @@ test('metadata: base/contract URI changeable until frozen; ownership transfer an
   await assert.rejects(a.send('creator', 'transferOwnership', [ZERO]), /ZeroAddress/);
   await a.send('creator', 'transferOwnership', [A('alice')]);
   assert.equal(await a.call('owner'), A('alice'));
-  await a.send('alice', 'renounceOwnership');
+  // Anyone can force ZETAPHY in (selfdestruct): renouncing still works and sweeps it to the owner.
+  await c.deploy('ForceSend', [a.address], 'bob', 1n);
+  assert.equal(await c.balance(a.address), 1n);
+  const before = await c.balance('alice');
+  const ev = await a.send('alice', 'renounceOwnership');
+  assert.deepEqual(ev.map((e) => e.name), ['OwnershipTransferred', 'Withdrawn']);
+  assert.equal(await c.balance('alice') - before, 1n);
+  assert.equal(await c.balance(a.address), 0n);
   assert.equal(await a.call('owner'), ZERO);
   await assert.rejects(a.send('alice', 'mint', [A('alice'), '']), /NotOwner/);
+  await assert.rejects(a.send('alice', 'renounceOwnership'), /NotOwner/);
 });
 
 test('ERC-1155: create ids, mint amounts, per-id max supply, URIs, balances', async () => {
