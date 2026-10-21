@@ -5,6 +5,7 @@
 import { Contract, Wallet, NonceManager, getAddress, parseUnits, formatUnits } from 'ethers';
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { timelockHint } from './timelockcli.js';
 import { devnetOf, auditArgs, roleChecks, laneChecks, capProblems, runnerProblems, STARTER_UNITS, MIN_RUNNERS, GOV_MODULE } from './bridgegate.js';
 import { evaluate, newState, report, snapshotOf, readEvents, readLocks, loadMonitorConfig, DEFAULTS, parseThresholds, parseWatchlist, markerKeyOf,
   stateKeyOf, sealState, openState, applyMarks, countsLine, issueText } from './monitor.js';
@@ -24,6 +25,8 @@ export async function govCall(k, c, write, fn, args, what) {
     return true;
   }
   const data = k.interface.encodeFunctionData(fn, args);
+  const hint = await timelockHint(k.runner?.provider ?? c.provider, gov, k.target, data);
+  if (hint) { write(`${what}: ${hint.join('\n')}`); return false; }
   write(`${what}: governance is ${gov}, not this key. Have it call:\n  to ${k.target}\n  data ${data}`);
   if (same(gov, GOV_MODULE)) write('  (the gov module: submit this as a MsgEVMCall proposal, zetaphy-chain/gov.sh)');
   else write('  (SimpleMultisig: an owner calls propose(to, 0, data), others confirm, then execute; Safe: Transaction Builder, each owner signs on a hardware wallet)');
