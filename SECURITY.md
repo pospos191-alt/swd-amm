@@ -1205,3 +1205,13 @@ proposal instead. Written blind, not yet run against a real deployment.
   buybacks the way Raydium funds RAY buybacks), that's an additional,
   deliberate design change to `swap`, not something to add as an
   afterthought.
+
+## ZETAPHY chain security core (Q-day, threat gate, IBC hold) — added 2026-10-21
+
+Protocol-level rules in the ZETAPHY chain patch (`zetaphy-chain/setup-node.sh`), each off until a governance
+vote: Q-day (ECDSA-signed transactions refused from a voted height; migration by quantum lock, or commit–reveal
+for keys never used on chain), the threat gate (a call to a contract with an enforced Neuro flag needs the
+sender's own consent, precompile `0x…0901`), and the IBC large-transfer hold (big inbound transfers wait; the
+guardian can only return them to the sender). User guide (Thai): [`docs/SECURITY-CORE.md`](docs/SECURITY-CORE.md);
+audit scope: [`docs/CHAIN_AUDIT_SCOPE.md`](docs/CHAIN_AUDIT_SCOPE.md). **Unaudited; testnet only.**
+Known limits and internal review notes are kept separately for the team.

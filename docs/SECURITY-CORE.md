@@ -58,6 +58,8 @@ CLI: `zetaphy security qday-commit` แล้ว `zetaphy security qday-reveal`
 - คะแนนโหวตบล็อกมีลายเซ็น ML-DSA อยู่แล้ว (ขั้น 5) แต่ **บัญชี operator** ที่เป็น ECDSA จะส่งธุรกรรมไม่ได้หลัง Q-day
   — ล็อกควอนตัมบัญชี operator ก่อน แล้วจัดการ validator ผ่าน `MsgEVMCall as_owner` (precompile staking,
   distribution, slashing, gov) และ `MsgPQVoteKey` ช่อง `validator_owner`
+- relayer IBC (Hermes) และ faucet ของ testnet เซ็นด้วย ECDSA จึงส่งธุรกรรมไม่ได้หลัง Q-day เช่นกัน
+  — IBC จะหยุดจนกว่าจะมี relayer ที่เซ็นด้วย ML-DSA-44 (ยังไม่มี) จึงยังไม่ควรตั้ง Q-day บนเชนที่ใช้ IBC จริง
 - governance ควรกำหนด Q-day เมื่อ validator ส่วนใหญ่ล็อกบัญชีแล้วเท่านั้น ไม่อย่างนั้นการโหวตหลัง Q-day จะทำไม่ได้
   (`gov.sh qday` ไม่ยอมตั้งความสูงที่ใกล้เกินไป)
 

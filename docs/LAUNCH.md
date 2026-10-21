@@ -326,3 +326,15 @@ workflow เรียก `node zetaphy-launch/launch.js` (โค้ดอ่า�
   ราคามีหลังหน้าต่าง TWAP เต็ม (ต้องมีคน poke เช่น `zetaphy relay start --poke-oracle 60`) · `--stable-testnet-price 0.01` = ทางสำรอง testnet ราคาคงที่ (ติดป้าย ปิดได้ผ่าน timelock)
 - ขั้น `timelock` + `handover` (เฉพาะ `--handover`): ดูข้อ 8 · `--guardian` บังคับ · `--timelock-delay` ค่าเริ่ม 172800 (ต่ำกว่า 86400 ได้เฉพาะ `--devnet` กับ RPC 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
 - ทดสอบ: `cd zetaphy-launch && npm test` (ตัวรันขั้น, state, ตัวเขียน config, ตัวเลือก timelock) และ `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (เชนจริงบนเครื่อง CI: deploy ทั้งหมด, oracle, smoke DEX/NFT/Neuro, handover ให้ timelock + ตรวจบนเชน, guardian หยุดทันที, โหวตตั้งเวลาแล้วใครก็ execute หลังครบเวลา, ตัวเฝ้ารายงาน)
+
+## 17. ความปลอดภัยในแกนกลางของเชน (หลัง reset genesis)
+
+เชนใหม่จาก `setup-node.sh` ปัจจุบันมี security core ตั้งแต่บล็อก 1 แต่ทุกกติกาปิด (คู่มือ: `docs/SECURITY-CORE.md`)
+เปิดทีละอย่างด้วยการโหวตบนเครื่อง node (ไม่ต้องรันอะไรในเครื่องตัวเอง):
+1. **Threat gate:** เมื่อ ThreatRegistry ของ Neuro deploy แล้ว `gov.sh threat-gate <ThreatRegistry 0x…> on` แล้วโหวต
+   (ก่อนนั้นตั้ง protected key ของสัญญาโปรโตคอลทั้งหมดใน registry)
+2. **IBC hold:** หลังเปิด channel กับ Noble `gov.sh ibc-hold 21600 <guardian>` (guardian = multisig) และ
+   `gov.sh ibc-hold-rule <ibc/… ของ USDC> <ขั้นต่ำ> <bps>` คู่กับ rate limit (ข้อ 15)
+3. **Q-day:** ยังไม่ต้องตั้ง ทดสอบได้บน testnet เท่านั้น และตั้งเมื่อ validator ทุกรายล็อกควอนตัมบัญชี operator แล้ว
+   (`gov.sh qday <ความสูง>` ห่างจากปัจจุบันมากพอให้ทุกคนย้ายทัน)
+ดูค่าที่ใช้อยู่: `gov.sh security`

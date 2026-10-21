@@ -856,6 +856,25 @@ zetaphy pq native handover 0x<owner> zetaphy1<controller ใหม่>
 - เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy_77390-1`): ตั้ง `ZETAPHY_CHAIN_ID`
 - validator เซ็นโหวตด้วย ML-DSA-44 เพิ่มจาก ed25519 และทุกบล็อกมีใบรับรอง ML-DSA ของบล็อกก่อนหน้า (ตรวจด้วย `zetaphy pq verify-block`)
 
+### ความปลอดภัยในแกนกลางของเชน: `zetaphy security` (Q-day, ความยินยอม, IBC hold)
+
+คู่มือเต็ม: [`docs/SECURITY-CORE.md`](../docs/SECURITY-CORE.md) ทุกกติกาปิดจนกว่าจะโหวต (`zetaphy-chain/gov.sh`)
+
+```bash
+zetaphy security status                    # Q-day, threat gate, IBC hold ที่ใช้อยู่
+zetaphy security migration [0x…]           # บัญชีนี้ (ค่าเริ่ม: กุญแจ ECDSA ของเครื่องนี้) ย้ายแล้วหรือยัง
+# หลัง Q-day: ย้ายกุญแจ ECDSA ที่ไม่เคยใช้บนเชน ไปให้บัญชี pq native ของเครื่องนี้
+# (กุญแจเดิมเซ็นข้อความในเครื่องเท่านั้น ไม่ส่งธุรกรรม)
+zetaphy security qday-commit               # ขั้นที่ 1 ทำได้ตั้งแต่ก่อน Q-day
+zetaphy security qday-reveal               # ขั้นที่ 2 หลัง Q-day และหลังรอ reveal_delay บล็อก
+zetaphy security consent 0x<สัญญา> 3600     # ยินยอมเรียกสัญญาที่ติดธงบังคับใช้ นาน 1 ชม. (0 = ถอน) [--as <owner>]
+zetaphy security ibc-holds                 # การโอนเข้า IBC ที่ถูกพัก
+zetaphy security ibc-hold-cancel <id>      # guardian คืนเงินให้ผู้ส่ง
+```
+ก่อน Q-day ทางที่ดีที่สุดคือ `zetaphy pq native lock-ecdsa --yes` (ล็อกควอนตัม) ไลบรารีสำหรับกระเป๋าอื่นอยู่ใน
+`src/pqtx.js` (`qdayRevealText`, `qdayCommitment`, `consentCall`, `msgQDayCommit`, `msgQDayReveal`, `pqClient().securityStatus/migration/...`)
+ทดสอบบนเชนจริง: `ZETAPHYD=… npm run test:devnet:security`
+
 ### ตรวจบล็อกแบบต้านควอนตัม: `zetaphy pq verify-block`
 
 validator ที่ลงทะเบียนกุญแจโหวต ML-DSA-44 แล้ว เซ็นทุกบล็อกด้วย ML-DSA-44 คู่กับ ed25519 และผู้เสนอบล็อก H+1 รวมลายเซ็นของบล็อก H ไว้เป็นธุรกรรมแรก (`MsgPQCertificate`)
