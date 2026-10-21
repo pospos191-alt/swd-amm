@@ -8,7 +8,7 @@ export const LEVEL = { high: 'Risiko tinggi', medium: 'Risiko sedang', low: 'Ris
 export const UI = {
   subtitle: 'Membaca dan menjelaskan kontrak · tingkat 1, hanya baca', chain: 'Jaringan', address: 'Alamat kontrak atau token', check: 'Periksa kontrak',
   details: 'Detail', reading: 'Membaca data dari jaringan…', badAddress: 'Alamat tidak valid untuk jaringan ini. Format yang diterima: ',
-  failed: 'Gagal membaca: ', footer: 'Tidak pernah meminta Anda menghubungkan dompet dan tidak pernah mengirim transaksi. Hanya membaca data publik dari jaringan. Bukan saran investasi.', stats: 'Statistik penggunaan', language: 'Bahasa',
+  failed: 'Gagal membaca: ', footer: 'Tidak pernah meminta Anda menghubungkan dompet dan tidak pernah mengirim transaksi. Membaca data publik dari jaringan; untuk peringatan dini hanya jaringan dan alamat kontrak yang dikirim ke server situs ini, yang tidak menyimpan apa pun. Bukan saran investasi.', stats: 'Statistik penggunaan', language: 'Bahasa',
   disclaimer: 'Ini adalah analisis kode otomatis yang dapat diulang, bukan tuduhan terhadap orang atau proyek mana pun, dan bukan saran investasi. Pemilik kontrak dapat menanggapi atau meminta koreksi.',
   correction: 'Cara menanggapi atau meminta koreksi',
   reproduce: 'Periksa sendiri',
