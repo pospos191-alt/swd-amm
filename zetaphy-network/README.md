@@ -315,7 +315,7 @@ zetaphy bridge close        # governance: ปิด route
 
 ผลเป็น JSON (`--out`) และสรุปภาษาไทย + อังกฤษ (`--summary` และหน้าจอ) แจ้งเตือนเดิมไม่ซ้ำ (เก็บใน `--state` พร้อมบล็อกล่าสุดที่อ่านแล้ว)
 
-**GitHub Actions (`.github/workflows/bridge-monitor.yml`):** รันทุก 15 นาที และกดรันเองได้ (ใส่ `from_block` เพื่ออ่านใหม่)
+**GitHub Actions (`.github/workflows/bridge-monitor.yml`):** ตอนนี้ปิดตารางเวลาไว้ (repo เป็น private ได้นาทีฟรีแค่ 2,000/เดือน) กดรันเองได้ (ใส่ `from_block` เพื่ออ่านใหม่); เมื่อเปิดสะพานแล้วให้เปิดบรรทัด `schedule` ในไฟล์ (รายชั่วโมง ~720 นาที/เดือน; ถ้า repo เป็น public ฟรีไม่จำกัด ตั้งทุก 15 นาทีได้)
 1. ใส่ที่อยู่สะพานใน `zetaphy-network/bridge-monitor.json` (`bridgeGuard`, `bridgeAirlock`, `startBlock`, `rpc`) หรือปล่อยว่างให้อ่านจาก `zetaphy-launch/state/77390.json`
    RPC ใส่ในไฟล์นั้นหรือเป็น repository variable `ZETAPHY_RPC` (Settings → Secrets and variables → Actions → **Variables**)
 2. ยังไม่มีสะพาน = workflow ไม่ทำอะไร (notice แล้วจบ exit 0)

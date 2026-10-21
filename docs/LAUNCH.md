@@ -274,7 +274,7 @@ Claude ไม่ใช่ทนาย และ testnet ไม่ทำให้
 4. **guardian และ governance เป็น multisig คนละตัว** owner ≥ 3, ต้องเซ็น ≥ 2, แต่ละ owner ใช้ **hardware wallet (Ledger/Trezor ผ่าน MetaMask)** ของตัวเอง ไม่มีใครถือหลาย key
    ไม่มี owner คนเดียวกันในทั้งสองตัว และไม่ใช่ key ของ deployer (governance เป็น gov module ได้) ดูหัวข้อ "multisig + hardware wallet" ใน `zetaphy-network/README.md`
 5. **bug bounty ที่มีเงินจริงแล้ว** (`docs/BUG_BOUNTY.md`: ตอนนี้เป็นเครดิตอย่างเดียว ต้องโหวตโอนเงินเข้ากองก่อน)
-6. **ตัวเฝ้าดูทำงานแล้ว:** ใส่ `rpc` ใน `zetaphy-network/bridge-monitor.json` (หรือ variable `ZETAPHY_RPC`) workflow **bridge-monitor** รันทุก 15 นาที เปิด issue `bridge-alert` เมื่อมีแจ้งเตือน
+6. **ตัวเฝ้าดูทำงานแล้ว:** ใส่ `rpc` ใน `zetaphy-network/bridge-monitor.json` (หรือ variable `ZETAPHY_RPC`) เปิดบรรทัด `schedule` ใน `.github/workflows/bridge-monitor.yml` (รายชั่วโมง; ถ้า repo เป็น public ตั้ง `*/15` ได้ฟรี) workflow **bridge-monitor** จะเปิด issue `bridge-alert` เมื่อมีแจ้งเตือน
    (Telegram/Discord: secret `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `DISCORD_WEBHOOK_URL` ไม่บังคับ)
 7. **เพดานเริ่มต่ำมาก:** 1,000 โทเคนต่อวัน ขึ้นได้ครั้งละไม่เกิน 2 เท่า และแต่ละครั้งรอ 7 วัน (`zetaphy bridge cap propose`) ตามตารางใน README
 

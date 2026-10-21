@@ -1,4 +1,4 @@
-# Bridge monitor: every 15 minutes, read the ZETAPHY lock/mint bridge on the public
+# Bridge monitor: on demand (hourly once a bridge exists), read the ZETAPHY lock/mint bridge on the public
 # RPC (read-only, no key) and raise alerts: daily volume over 80% of the limit,
 # lanes disagreeing or silent, any veto, pause or decoy hit, holds on flagged
 # parties, governance changes (limits, lanes, roles, audit), large transfers,
@@ -20,15 +20,17 @@
 # blocks are never rescanned. Lost (artifacts expire after 30 days unused): the scan
 # restarts from startBlock, or the last 20,000 blocks.
 #
-# Cost: a public repository's Actions minutes are free. In a private repository this
-# schedule uses about 2,900 minutes a month (each run is billed as at least 1 minute),
-# above GitHub Free's 2,000: there, make it */30 or hourly.
+# Cost: a public repository's Actions minutes are free. This repository is private
+# (GitHub Free: 2,000 minutes a month, each run billed as at least 1 minute) and no
+# bridge is deployed yet, so the schedule is OFF: run it by hand (Actions → bridge-monitor
+# → Run workflow). When a bridge is opened, uncomment the schedule below: hourly costs
+# about 720 minutes a month in a private repository, */15 about 2,900 (free if public).
 
 name: bridge-monitor
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'
+  # schedule:
+  #   - cron: '7 * * * *'   # hourly; turn on once a bridge is deployed (see Cost above)
   workflow_dispatch:
     inputs:
       from_block:
