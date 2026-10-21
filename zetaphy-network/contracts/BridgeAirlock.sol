@@ -87,6 +87,9 @@ contract BridgeAirlock {
     mapping(address => bool) public tripped;   // marked by a decoy
     mapping(bytes32 => Transfer) public transfers;
     mapping(bytes32 => mapping(address => bool)) public attestedBy;
+    /// By controller (laneControllerOf at attest time): two lanes with one
+    /// controller count once, so the threshold means independent lanes.
+    mapping(bytes32 => mapping(address => bool)) public attestedByController;
     IThreatFlags public threats;        // zero: no vaccine check
 
     event LaneSet(address lane, bool on);
@@ -191,7 +194,11 @@ contract BridgeAirlock {
         if (attestedBy[id][msg.sender]) revert Twice();
         attestedBy[id][msg.sender] = true;
         Transfer storage t = transfers[id];
-        t.attestations += 1;
+        address c = laneControllerOf(msg.sender);
+        if (!attestedByController[id][c]) {
+            attestedByController[id][c] = true;
+            t.attestations += 1;
+        }
         if (t.readyFrom == 0 && t.attestations >= threshold) t.readyFrom = uint64(block.timestamp);
         emit Attested(id, msg.sender, t.attestations, srcChainId, srcContract, srcNonce, sender, to, amount);
     }

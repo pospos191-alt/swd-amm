@@ -108,8 +108,10 @@ install_hermes() {
   [ -n "$sum" ] || { echo "no pinned Hermes build for $arch (x86_64 or aarch64)"; exit 1; }
   command -v curl >/dev/null && command -v jq >/dev/null || { apt-get update -y && apt-get install -y curl jq; }
   tmp=$(mktemp -d)
-  tgz=${HERMES_TARBALL:-$tmp/hermes.tar.gz}
-  if [ -z "$HERMES_TARBALL" ]; then
+  tgz=$tmp/hermes.tar.gz
+  if [ -n "$HERMES_TARBALL" ]; then
+    cp "$HERMES_TARBALL" "$tgz"   # check and extract the same private copy
+  else
     curl -fsSL --retry 3 -o "$tgz" \
       "https://github.com/informalsystems/hermes/releases/download/$HERMES_VERSION/hermes-$HERMES_VERSION-$arch-unknown-linux-gnu.tar.gz"
   fi
@@ -306,7 +308,9 @@ UNIT
 stop() {
   if use_systemd; then systemctl stop "$UNIT" 2>/dev/null || true
   elif [ -f "$HERMES_HOME/hermes.pid" ]; then
-    kill "$(cat "$HERMES_HOME/hermes.pid")" 2>/dev/null || true; rm -f "$HERMES_HOME/hermes.pid"
+    pid=$(cat "$HERMES_HOME/hermes.pid"); rm -f "$HERMES_HOME/hermes.pid"
+    # the pid file is writable by the relayer user: only stop a Hermes process
+    if [[ "$pid" =~ ^[0-9]+$ ]] && [ "$(readlink "/proc/$pid/exe" 2>/dev/null)" = "$(readlink -f "$HERMES_BIN")" ]; then kill "$pid" 2>/dev/null || true; fi
   fi
   echo "relayer stopped"
 }

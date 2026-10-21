@@ -157,3 +157,13 @@ test('vaccine: BridgeGuard holds only after the registry\'s holdDelay (or a guar
   await assert.rejects(guard.send('alice', 'releaseHeld', [1]), /NoHeld/);
   await assert.rejects(guard.send('gov', 'dropHeld', [1]), /NoHeld/);
 });
+
+test('the hard cap binds all routes together: more routes do not multiply it', async () => {
+  const third = encodeBytes32String('third');
+  await c.putCode(a('attacker'), TWO_LANES);
+  await guard.send('gov', 'setRoute', [third, a('attacker'), 1000n * USDC, true]);
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, a('alice'), 1000n * USDC]);
+  await assert.rejects(guard.send('attacker', 'inbound', [third, a('attacker'), 1n]), /OverLimit/);
+  c.advance(86400);
+  await guard.send('attacker', 'inbound', [third, a('attacker'), 1n]);
+});

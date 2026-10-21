@@ -231,3 +231,17 @@ test('BridgeGuard lists its current guardians; governance changes are events', a
   const ev2 = await airlock.send('gov', 'setThreshold', [3]);
   assert.equal(ev2.find((e) => e?.name === 'ThresholdSet').args.threshold, 3n);
 });
+
+test('two lanes with one controller count once: a second NeuroLane over the same runners cannot stand in for Hyperlane', async () => {
+  await open(); // NeuroLane + HyperlaneLane: 2 independent, route enabled
+  const lane2 = await c.deploy('NeuroLane', [jobs.address, airlock.address, 2, 1, ZERO], 'gov');
+  await airlock.send('gov', 'setLane', [lane2.address, true]); // 3 lanes, still 2 independent
+  const { t } = await lock(300n * USDC);
+  await neuro(t);
+  for (const r of ['r3', 'r4']) await lane2.send(r, 'attest', t);
+  const id = await airlock.call('transferId', t);
+  assert.equal((await airlock.call('status', [id]))[0], 1n); // runners' word, once
+  c.advance(Q);
+  await assert.rejects(airlock.send('user', 'release', t), /NotReady/);
+  assert.equal(await bal('alice'), 0n);
+});

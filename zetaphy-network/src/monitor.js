@@ -78,13 +78,17 @@ export function evaluate({ events = [], snapshot, state = newState(), now, cfg =
     // governance changes
     if ((GOVERNANCE_EVENTS[e.source] ?? []).includes(e.name)) {
       const detail = Object.entries(a).map(([k, v]) => `${k}=${str(v)}`).join(', ');
-      add('governance-change', e.name === 'MaxDailyLimitProposed' || e.name === 'LaneSet' || e.name === 'ConfigSet' || e.name === 'GovernanceSet' ? 'critical' : 'warning',
+      add('governance-change', e.name === 'MaxDailyLimitProposed' || e.name === 'LaneSet' || e.name === 'ConfigSet' || e.name === 'IsmSet' || e.name === 'ThresholdSet' || e.name === 'GovernanceSet' ? 'critical' : 'warning',
         `governance change: ${where} ${e.name}(${detail})`,
         `มีการเปลี่ยนค่าโดย governance: ${where} ${e.name}(${detail})`, { ...at, event: e.name, args: a });
       if (e.source === 'guard' && e.name === 'RouteSet' && !st.routes.some((r) => lower(r) === lower(a.id))) st.routes.push(a.id);
     }
     if (e.name === 'Paused') add('pause', 'critical', `bridge PAUSED by ${a.by} (only governance can unpause)`, `สะพานถูกหยุด (pause) โดย ${a.by} (ต้องให้ governance เปิดคืน)`, { ...at, by: a.by });
-    if (e.name === 'Vetoed') add('veto', 'critical', `transfer ${a.id} vetoed by ${a.by}: ${a.reason}`, `รายการโอน ${a.id} ถูก veto โดย ${a.by}: ${a.reason}`, { ...at, id: a.id, by: a.by, reason: a.reason });
+    if (e.name === 'Vetoed') {
+      // the vetoer writes this text; keep it plain so it can't add links or @mentions to the alert issue
+      const reason = String(a.reason ?? '').replace(/[^\w .,:;()\-\u0E00-\u0E7F]/g, '').slice(0, 200);
+      add('veto', 'critical', `transfer ${a.id} vetoed by ${a.by}: ${reason}`, `รายการโอน ${a.id} ถูก veto โดย ${a.by}: ${reason}`, { ...at, id: a.id, by: a.by, reason });
+    }
     if (e.name === 'Tripped') add('decoy-hit', 'critical', `decoy bridge ${a.decoy} poked by ${a.who}: that address is marked, its transfers never come out`,
       `มีคนแตะสะพานล่อ (decoy) ${a.decoy}: ${a.who} ถูกทำเครื่องหมาย รายการของที่อยู่นี้จะไม่ถูกปล่อย`, { ...at, who: a.who, decoy: a.decoy });
     if (e.name === 'InboundHeld') add('hold', 'warning', `mint of ${amt(a.amount)} to ${a.to} held (ThreatRegistry flag), id ${a.id}`,

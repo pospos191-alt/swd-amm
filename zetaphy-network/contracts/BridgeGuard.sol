@@ -80,7 +80,7 @@ contract BridgedToken {
 ///             before any route can be enabled;
 ///           - the route's adapter is a BridgeAirlock with at least 2 lanes
 ///             whose controllers differ (independentLanes() >= 2);
-///           - a hard cap, maxDailyLimit, over every route's daily limit. It
+///           - a hard cap, maxDailyLimit, over every route's daily limit and over all routes together per day. It
 ///             starts at 1,000 whole tokens (createToken), is lowered at once,
 ///             and is raised only by governance, at most x2 per step, each step
 ///             7 days after it was proposed: caps grow gradually and in public.
@@ -112,6 +112,11 @@ contract BridgeGuard {
     uint64 public pendingMaxAt;      // when the pending raise may be applied (0: none)
     uint64 public constant CAP_DELAY = 7 days;
     uint128 public constant STARTER_UNITS = 1000; // whole tokens: the cap at createToken
+    /// Every route together, per direction and day: the hard cap binds the
+    /// guard, so more routes cannot multiply it.
+    uint128 public totalInToday;
+    uint128 public totalOutToday;
+    uint64 public totalDay;
 
     /// Inbound mints held by the vaccine, waiting for releaseHeld.
     struct HeldMint {
@@ -273,6 +278,7 @@ contract BridgeGuard {
             emit InboundHeld(held.length - 1, id, to, amount);
             return;
         }
+        _total(amount, true);
         r.inToday += uint128(amount);
         token.mint(to, amount);
         emit Inbound(id, to, amount);
@@ -291,6 +297,7 @@ contract BridgeGuard {
         if (r.day != today) { r.day = today; r.inToday = 0; r.outToday = 0; }
         uint128 lim = _limit(r);
         if (r.inToday + h.amount > lim) revert OverLimit(lim > r.inToday ? lim - r.inToday : 0);
+        _total(h.amount, true);
         h.done = true;
         r.inToday += uint128(h.amount);
         token.mint(h.to, h.amount);
@@ -312,6 +319,7 @@ contract BridgeGuard {
     function outbound(bytes32 id, address from, uint256 amount) external {
         Route storage r = _use(id, amount, false);
         _clean(from);
+        _total(amount, false);
         r.outToday += uint128(amount);
         token.burn(from, amount);
         emit Outbound(id, from, amount);
@@ -330,6 +338,16 @@ contract BridgeGuard {
     /// A route's daily limit, never above the hard cap.
     function _limit(Route storage r) private view returns (uint128) {
         return r.dailyLimit < maxDailyLimit ? r.dailyLimit : maxDailyLimit;
+    }
+
+    /// The hard cap over all routes together (per direction, per day).
+    function _total(uint256 amount, bool isIn) private {
+        uint64 today = uint64(block.timestamp / 1 days);
+        if (totalDay != today) { totalDay = today; totalInToday = 0; totalOutToday = 0; }
+        uint256 used = isIn ? totalInToday : totalOutToday;
+        uint256 cap = maxDailyLimit;
+        if (used + amount > cap) revert OverLimit(cap > used ? cap - used : 0);
+        if (isIn) totalInToday = uint128(used + amount); else totalOutToday = uint128(used + amount);
     }
 
     function _independentLanes(address adapter) private view returns (uint256) {
