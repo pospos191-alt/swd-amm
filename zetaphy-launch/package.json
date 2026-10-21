@@ -1,0 +1,20 @@
+{
+  "name": "zetaphy-launch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZETAPHY testnet launch day: deploys and wires every contract once the chain is live, then writes the addresses into every web app's config.",
+  "type": "module",
+  "bin": {
+    "zetaphy-launch": "./launch.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:devnet": "node --test test/devnet.e2e.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ethers": "6.16.0"
+  }
+}

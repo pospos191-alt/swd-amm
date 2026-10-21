@@ -1183,6 +1183,8 @@ async function deployConfirm() {
 // sent, with a visible "not checked" notice in the confirm box (fail open), so the
 // wallet works before the registry exists.
 const THREAT_META = document.querySelector('meta[name="zetaphy-threat-registry"]')?.content.trim() ?? '';
+// The site's default RPC (<meta name="zetaphy-rpc">, written by zetaphy-launch); a saved RPC wins.
+const RPC_META = document.querySelector('meta[name="zetaphy-rpc"]')?.content.trim() ?? '';
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 // THREAT_SEL (the registry's views), PROXY_DEPTH and proxyTargets come from
 // zetaphy-network/src/vaccine.js, the same code the ZETAPHY Snap's transaction
@@ -1735,7 +1737,7 @@ function showWalletConnect() {
 
 // ---- wiring ----
 function init() {
-  $('rpc').value = store.get(KEYS.rpc) ?? '';
+  $('rpc').value = store.get(KEYS.rpc) ?? RPC_META;
   $('token').value = store.get(KEYS.token) ?? '';
   $('snap-id').value = store.get(KEYS.snap) ?? DEFAULT_SNAP_ID;
   $('lang').addEventListener('click', () => { lang = lang === 'th' ? 'en' : 'th'; store.set(KEYS.lang, lang); applyLang(); });

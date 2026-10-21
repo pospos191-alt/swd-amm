@@ -28,6 +28,10 @@ jqg '.app_state.auth.params.sig_verify_cost_secp256k1="21000"'   # same as setup
 jqg '.app_state.gov.params.min_deposit[0].amount="1000000000000000000000" | .app_state.gov.params.expedited_min_deposit[0].amount="5000000000000000000000"'
 # Fixed supply, as on the testnet (setup-node.sh): no inflation.
 jqg '.app_state.mint.minter.inflation="0.000000000000000000" | .app_state.mint.params.inflation_rate_change="0.000000000000000000" | .app_state.mint.params.inflation_max="0.000000000000000000" | .app_state.mint.params.inflation_min="0.000000000000000000"'
+# Standard contracts preinstalled as on the testnet (CREATE2 deployer, Multicall3,
+# Permit2, Safe singleton factory); the list lives in setup-node.sh.
+bash "$(dirname "$0")/../../zetaphy-chain/setup-node.sh" --preinstalls > "$HOME_DIR/preinstalls.json"
+jq --slurpfile p "$HOME_DIR/preinstalls.json" '.app_state.evm.preinstalls = $p[0]' "$G" > "$G.tmp" && mv "$G.tmp" "$G"
 # PQ=1: a zetaphyd built with the ML-DSA patch; switch its precompile on (0x…0900),
 # with staking (0x…0800) and distribution (0x…0801) as on the testnet: a
 # quantum-locked account stakes through them (MsgEVMCall.as_owner).
