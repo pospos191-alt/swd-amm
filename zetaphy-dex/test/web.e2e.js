@@ -1,5 +1,5 @@
-// Browser end-to-end test of the DEX page (test-ui/zetaphy/) in headless
-// Chromium, under the CSP test-ui/vercel.json gives /zetaphy/, with a mock
+// Browser end-to-end test of the DEX page (zetaphy-dex/web/) in headless
+// Chromium, served at the root under the CSP of web/vercel.json, with a mock
 // EIP-6963 wallet and a mock JSON-RPC that is a real EVM (@ethereumjs/evm,
 // chain id 77390) holding the real contracts: the DEX, test tokens, and Neuro's
 // ThreatRegistry with one flagged and one enforced token.

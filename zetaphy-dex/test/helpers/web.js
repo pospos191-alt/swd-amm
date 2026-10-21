@@ -1,6 +1,7 @@
-// Browser-test plumbing for the DEX page (test-ui/zetaphy/): a static server
-// for test-ui/ that sends the headers test-ui/vercel.json gives each path (so
-// the page runs under its real CSP), and a mock EIP-6963 wallet whose requests
+// Browser-test plumbing for the DEX page (zetaphy-dex/web/, its own Vercel
+// project at https://swap.sawasdeecoin.com/): a static server for web/ that
+// sends the headers web/vercel.json gives each path (so the page runs under
+// its real CSP), and a mock EIP-6963 wallet whose requests
 // are answered in Node (it signs nothing itself: the backend executes or
 // sends the transaction).
 
@@ -9,12 +10,12 @@ import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, normalize, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const TEST_UI = fileURLToPath(new URL('../../../test-ui/', import.meta.url));
+export const WEB = fileURLToPath(new URL('../../web/', import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json' };
 
 /** Vercel's headers for a path: every rule whose source matches, in order. */
 export function vercelHeaders(path) {
-  const cfg = JSON.parse(readFileSync(join(TEST_UI, 'vercel.json'), 'utf8'));
+  const cfg = JSON.parse(readFileSync(join(WEB, 'vercel.json'), 'utf8'));
   const out = {};
   for (const rule of cfg.headers ?? []) {
     // The sources used there are plain regexes in path-to-regexp's (…) groups.
@@ -23,8 +24,8 @@ export function vercelHeaders(path) {
   return out;
 }
 
-/** Serves test-ui/ on 127.0.0.1; `overrides` maps a path to a body (e.g. the test's deployments.json). */
-export async function serveTestUi(overrides = {}) {
+/** Serves web/ at the root of 127.0.0.1 (as on its own domain); `overrides` maps a path to a body (e.g. the test's deployments.json). */
+export async function servePage(overrides = {}) {
   const server = http.createServer((req, res) => {
     const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
     for (const [k, v] of Object.entries(vercelHeaders(path))) res.setHeader(k, v);
@@ -33,8 +34,8 @@ export async function serveTestUi(overrides = {}) {
       res.end(overrides[path]);
       return;
     }
-    let file = normalize(join(TEST_UI, path));
-    if (!file.startsWith(TEST_UI)) { res.statusCode = 403; res.end(); return; }
+    let file = normalize(join(WEB, path));
+    if (!file.startsWith(WEB)) { res.statusCode = 403; res.end(); return; }
     if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
     if (!existsSync(file)) { res.statusCode = 404; res.end(); return; }
     res.setHeader('content-type', TYPES[extname(file)] ?? 'application/octet-stream');

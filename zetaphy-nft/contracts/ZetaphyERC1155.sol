@@ -9,8 +9,23 @@ import {IERC165, IERC1155, IERC1155MetadataURI, IERC1155Receiver, IERC2981} from
 ///         URI (fixed for good) or the collection's baseURI. More units of an existing
 ///         id: `mint` (owner) or `publicMintTo` (anyone, mintPrice per unit, while
 ///         publicMint is on). maxSupply caps the units ever minted of each id.
+///
+///         `transferCount(holder, id)` counts every time units of `id` LEFT `holder`
+///         (a transfer or batch transfer to someone else, or a burn; a market sale
+///         too). NFTMarketplace snapshots it when units are listed, so a listing dies
+///         for good once the seller's units moved outside the market, even if they
+///         come back. Units arriving (transfers in, mints) do not count: they cannot
+///         revive anything, and counting them would let anyone kill any seller's
+///         listing by sending (or public-minting) one unit to the seller.
+///         The count shares the balance's storage word (high 64 bits; the low 192
+///         bits are the balance, so at most 2^192 - 1 units of an id are ever minted):
+///         no extra storage write, only a few arithmetic operations.
 contract ZetaphyERC1155 is CollectionBase, IERC1155MetadataURI {
-    mapping(uint256 => mapping(address => uint256)) private _balances;
+    /// id => holder => (transferCount << 192) | balance
+    mapping(uint256 => mapping(address => uint256)) private _accounts;
+    uint256 private constant BALANCE_BITS = 192;
+    uint256 private constant BALANCE_MASK = (1 << 192) - 1;
+    uint256 private constant ONE_MOVE = 1 << 192;
     mapping(address => mapping(address => bool)) private _operatorApprovals;
     mapping(uint256 => string) private _tokenURIs;
     /// Units now in existence, per id.
@@ -46,13 +61,18 @@ contract ZetaphyERC1155 is CollectionBase, IERC1155MetadataURI {
     }
 
     function balanceOf(address account, uint256 id) public view returns (uint256) {
-        return _balances[id][account];
+        return _accounts[id][account] & BALANCE_MASK;
+    }
+
+    /// How many times units of `id` left `holder` (transfers out and burns).
+    function transferCount(address holder, uint256 id) external view returns (uint256) {
+        return _accounts[id][holder] >> BALANCE_BITS;
     }
 
     function balanceOfBatch(address[] calldata accounts, uint256[] calldata ids) external view returns (uint256[] memory out) {
         if (accounts.length != ids.length) revert LengthMismatch();
         out = new uint256[](accounts.length);
-        for (uint256 i; i < accounts.length; ++i) out[i] = _balances[ids[i]][accounts[i]];
+        for (uint256 i; i < accounts.length; ++i) out[i] = _accounts[ids[i]][accounts[i]] & BALANCE_MASK;
     }
 
     function isApprovedForAll(address account, address operator) public view returns (bool) {
@@ -113,12 +133,8 @@ contract ZetaphyERC1155 is CollectionBase, IERC1155MetadataURI {
     /// The holder (or an approved operator) destroys units. They still count toward maxSupply.
     function burn(address from, uint256 id, uint256 amount) external {
         _checkSender(from);
-        uint256 b = _balances[id][from];
-        if (b < amount) revert InsufficientBalance();
-        unchecked {
-            _balances[id][from] = b - amount;
-            totalSupply[id] -= amount;
-        }
+        _take(from, id, amount);
+        unchecked { totalSupply[id] -= amount; }
         emit TransferSingle(msg.sender, from, address(0), id, amount);
     }
 
@@ -126,11 +142,12 @@ contract ZetaphyERC1155 is CollectionBase, IERC1155MetadataURI {
         if (!exists(id)) revert NonexistentToken(id);
         if (to == address(0)) revert InvalidReceiver(address(0));
         uint256 minted = totalMinted[id] + amount;
-        if (maxSupply != 0 && minted > maxSupply) revert MaxSupplyReached();
+        // Also the hard cap of the packed balance: no balance can ever reach the count bits.
+        if ((maxSupply != 0 && minted > maxSupply) || minted > BALANCE_MASK) revert MaxSupplyReached();
         totalMinted[id] = minted;
         if (minted > _largestMinted) _largestMinted = minted;
         totalSupply[id] += amount;
-        _balances[id][to] += amount;
+        unchecked { _accounts[id][to] += amount; } // below 2^192: the count bits stay untouched
         emit TransferSingle(msg.sender, address(0), to, id, amount);
         _checkReceiver(address(0), to, id, amount, "");
     }
@@ -143,11 +160,22 @@ contract ZetaphyERC1155 is CollectionBase, IERC1155MetadataURI {
         if (from != msg.sender && !isApprovedForAll(from, msg.sender)) revert NotAuthorized();
     }
 
+    /// A move to oneself changes no balance (and no count): only the balance is checked.
     function _move(address from, address to, uint256 id, uint256 value) private {
-        uint256 b = _balances[id][from];
-        if (b < value) revert InsufficientBalance();
-        unchecked { _balances[id][from] = b - value; }
-        _balances[id][to] += value;
+        if (from == to) {
+            if ((_accounts[id][from] & BALANCE_MASK) < value) revert InsufficientBalance();
+            return;
+        }
+        _take(from, id, value);
+        unchecked { _accounts[id][to] += value; } // every balance stays below 2^192 (the mint cap)
+    }
+
+    /// Takes `value` units from `from`; a non-zero amount also counts one move out.
+    function _take(address from, uint256 id, uint256 value) private {
+        uint256 a = _accounts[id][from];
+        if ((a & BALANCE_MASK) < value) revert InsufficientBalance();
+        if (value == 0) return;
+        unchecked { _accounts[id][from] = a - value + ONE_MOVE; } // the 64-bit count wraps only after 2^64 moves
     }
 
     /// ERC-1155: a contract recipient must answer with the acceptance magic value.

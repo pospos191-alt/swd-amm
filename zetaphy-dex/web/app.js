@@ -17,7 +17,7 @@ import { EVM_CHAIN_ID, EVM_CHAIN_ID_HEX, EVM_SYMBOL, nodeEndpoints, evmChainPara
 import { parseSettings, serializeSettings, parseImported, cleanWalletId, rpcIsCustom, SLIPPAGE_MAX_BPS, SLIPPAGE_CONFIRM_BPS } from './lib/storage.js';
 
 const $ = (id) => document.getElementById(id);
-const BASE = '/zetaphy/';
+const BASE = '/';
 const KEYS = { lang: 'zetaphy-dex:lang', theme: 'zetaphy-dex:theme', settings: 'zetaphy-dex:settings', imported: `zetaphy-dex:imported:${EVM_CHAIN_ID}`, wallet: 'zetaphy-dex:wallet' };
 const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },

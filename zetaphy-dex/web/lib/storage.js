@@ -1,9 +1,11 @@
 // What the DEX page reads back from localStorage, validated strictly.
 //
-// /zetaphy/ shares its origin with the rest of the test-ui site, whose CSP is
-// looser (security finding M4): a script running anywhere on the origin can
-// write this page's localStorage. So nothing stored is trusted beyond plain,
-// bounded values:
+// Security finding M4: the page used to share its origin with the test-ui
+// site, whose CSP is looser, so a script there could write this page's
+// localStorage. The page now has its own origin (swap.sawasdeecoin.com), but
+// stored values are still treated as untrusted input (an extension, an old
+// browser profile or a future bug can write them too), so nothing stored is
+// trusted beyond plain, bounded values:
 //   - slippage: at most SLIPPAGE_MAX_BPS (5%); above SLIPPAGE_CONFIRM_BPS (1%)
 //     the page asks for a fresh confirmation before each trade (never stored);
 //   - the RPC: kept only in the exact form nodeEndpoints() gives; the page shows
@@ -13,7 +15,6 @@
 //   - imported tokens: at most MAX_IMPORTED entries of this chain, each a clean
 //     token-list entry; the page labels them "imported, not in the list" and
 //     asks Neuro again right before a trade.
-// A separate subdomain for the DEX would be a stronger boundary (README).
 
 import { validEntry } from './tokens.js';
 import { nodeEndpoints } from './wallets.js';

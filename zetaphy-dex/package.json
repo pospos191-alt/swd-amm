@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
-  "description": "ZETAPHY DEX: a constant-product AMM (Factory, Pair, Router) with Neuro ThreatRegistry checks, its deploy CLI and tests. The web app is in test-ui/zetaphy/.",
+  "description": "ZETAPHY DEX: a constant-product AMM (Factory, Pair, Router) with Neuro ThreatRegistry checks, its deploy CLI and tests. The web app is in web/ (served at https://swap.sawasdeecoin.com/).",
   "type": "module",
   "bin": {
     "zetaphy-dex": "./cli.js"

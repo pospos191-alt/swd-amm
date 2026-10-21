@@ -1,13 +1,14 @@
 // NFTMarketplace: list / buy / cancel / expire, offers, fee and royalty math to
-// the wei, pull payments, reentrancy attempts, stale listings, ERC-1155
-// amounts, ERC-165 detection, and the Neuro ThreatRegistry refusal.
+// the wei, pull payments, reentrancy attempts, stale listings (move counters of
+// factory collections, the old behaviour for external ones), ERC-1155 amounts,
+// ERC-165 detection, and the Neuro ThreatRegistry refusal.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createChain, ZETA } from './helpers/chain.js';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
 const DAY = 86_400n;
-const S = { Ok: 0n, Inactive: 1n, Expired: 2n, SellerCancelledAll: 3n, SellerLacksToken: 4n, NotApproved: 5n, Refused: 6n, Replaced: 7n, TermsChanged: 8n };
+const S = { Ok: 0n, Inactive: 1n, Expired: 2n, SellerCancelledAll: 3n, SellerLacksToken: 4n, NotApproved: 5n, Refused: 6n, Replaced: 7n, TermsChanged: 8n, Moved: 9n };
 
 let c, factory, market, nft, multi;
 const A = (n) => c.addr(n);
@@ -15,6 +16,10 @@ const exp = (secs = 7n * DAY) => c.now() + secs;
 const cfg = (over = {}) => ({ name: 'Siam', symbol: 'SIAM', baseURI: 'ipfs://base/', contractURI: '', royaltyReceiver: ZERO,
   royaltyBps: 0, maxSupply: 0, publicMint: false, mintPrice: 0, ...over });
 
+/** The same collection code deployed directly: not made by the factory, so "external" to the market. */
+async function external(kind, over = {}, from = 'seller') {
+  return c.deploy(kind === 721 ? 'ZetaphyERC721' : 'ZetaphyERC1155', [cfg(over), A(from)], from);
+}
 async function create(kind, over = {}, from = 'seller') {
   const ev = await factory.send(from, kind === 721 ? 'createERC721' : 'createERC1155', [cfg(over)]);
   return c.at(ev.find((e) => e.name === 'CollectionCreated').args.collection, kind === 721 ? 'ZetaphyERC721' : 'ZetaphyERC1155');
@@ -132,13 +137,13 @@ test('buy: exact value only; cancel by the seller; cancelAll; expiry', async () 
 test('stale listing: the seller moved the token away or revoked approval', async () => {
   await market.send('seller', 'list', [nft.address, 1, 1, ZETA, exp()]);
   await nft.send('seller', 'transferFrom', [A('seller'), A('other'), 1]);
-  assert.equal(await market.call('listingStatus', [0, 1]), S.SellerLacksToken);
+  assert.equal(await market.call('listingStatus', [0, 1]), S.Moved, 'a factory collection: the move is seen');
   const before = await c.balance('buyer');
-  await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /SellerLacksToken/);
+  await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /TokenMoved/);
   assert.equal(await c.balance('buyer'), before, 'nothing taken');
   // The new holder's approval of the market does not revive the old listing for them.
   await nft.send('other', 'setApprovalForAll', [market.address, true]);
-  await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /SellerLacksToken/);
+  await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /TokenMoved/);
   assert.equal(await nft.call('ownerOf', [1]), A('other'));
   // Revoked approval.
   await market.send('seller', 'list', [nft.address, 2, 1, ZETA, exp()]);
@@ -168,20 +173,29 @@ test('ERC-1155 amounts: partial buys, per-unit price, remaining quantity, holder
   assert.equal(await multi.call('balanceOf', [A('seller'), 1]), 7n);
   assert.equal((await market.call('getListing', [0])).quantity, 5n);
   await assert.rejects(market.send('buyer', 'buy', [0, 6], unit * 6n), /BadQuantity/);
-  // The seller gives 4 of their 7 away: 3 left, the listing has 5.
-  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 4, '0x']);
-  assert.equal(await market.call('listingStatus', [0, 4]), S.SellerLacksToken);
-  assert.equal(await market.call('listingStatus', [0, 3]), S.Ok);
-  assert.equal(await market.call('listingStatus', [0, 0]), S.SellerLacksToken, '0: all that is left (5)');
-  await assert.rejects(market.send('buyer', 'buy', [0, 4], unit * 4n), /SellerLacksToken/);
   await market.send('other', 'buy', [0, 3], unit * 3n);
-  assert.equal(await multi.call('balanceOf', [A('other'), 1]), 7n);
+  assert.equal(await multi.call('balanceOf', [A('other'), 1]), 3n);
   assert.equal((await market.call('getListing', [0])).quantity, 2n);
+  assert.equal(await market.call('listingStatus', [0, 0]), S.Ok);
   const [s, f, r] = await owed('seller', 'feeTo', 'artist');
   const t6 = unit * 3n;
   assert.equal(f, 2n * (t6 / 100n));
   assert.equal(r, 2n * (t6 * 250n / 10_000n));
   assert.equal(s + f + r, unit * 6n, 'every wei accounted for');
+  // Holder checks against the seller's balance (an external collection: a move out does not end the listing there).
+  const ext = await external(1155);
+  await ext.send('seller', 'create', [A('seller'), 7, '']);
+  await ext.send('seller', 'setApprovalForAll', [market.address, true]);
+  await market.send('seller', 'list', [ext.address, 1, 5, unit, exp()]); // listing 1
+  // The seller gives 4 of their 7 away: 3 left, the listing has 5.
+  await ext.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 4, '0x']);
+  assert.equal(await market.call('listingStatus', [1, 4]), S.SellerLacksToken);
+  assert.equal(await market.call('listingStatus', [1, 3]), S.Ok);
+  assert.equal(await market.call('listingStatus', [1, 0]), S.SellerLacksToken, '0: all that is left (5)');
+  await assert.rejects(market.send('buyer', 'buy', [1, 4], unit * 4n), /SellerLacksToken/);
+  await market.send('other', 'buy', [1, 3], unit * 3n);
+  assert.equal(await ext.call('balanceOf', [A('other'), 1]), 7n);
+  assert.equal((await market.call('getListing', [1])).quantity, 2n);
 });
 
 test('offers: escrowed value, accept by the holder, cancel, expiry, ERC-1155 quantity', async () => {
@@ -523,4 +537,166 @@ test('Neuro: a code-key flag does not stop factory collections (address key only
   const plain = await c.deploy('NFTMarketplace', [A('gov'), A('feeTo'), 100, reg.address, ZERO], 'gov');
   await nft.send('seller', 'setApprovalForAll', [plain.address, true]);
   await assert.rejects(plain.send('seller', 'list', [nft.address, 2, 1, ZETA, exp()]), /CollectionRefused/);
+});
+
+test('factory ERC-721: listed, moved away outside the market and back: the old listing is dead for good (Moved)', async () => {
+  await market.send('seller', 'list', [nft.address, 1, 1, ZETA, exp()]); // listing 0
+  let l = await market.call('getListing', [0]);
+  assert.equal(l.tracked, true);
+  assert.equal(l.moves, await nft.call('transferCount', [1]));
+  assert.equal(l.moves, 1n, 'minted once');
+  // Away and back by plain transfers; the seller's setApprovalForAll is still on.
+  await nft.send('seller', 'transferFrom', [A('seller'), A('other'), 1]);
+  await nft.send('other', 'transferFrom', [A('other'), A('seller'), 1]);
+  assert.equal(await nft.call('ownerOf', [1]), A('seller'));
+  assert.equal(await nft.call('isApprovedForAll', [A('seller'), market.address]), true);
+  assert.equal(await market.call('listingStatus', [0, 1]), S.Moved);
+  const before = await c.balance('buyer');
+  await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /TokenMoved/);
+  assert.equal(await c.balance('buyer'), before);
+  assert.equal(await nft.call('ownerOf', [1]), A('seller'));
+  // Even a move to oneself counts.
+  await market.send('seller', 'list', [nft.address, 2, 1, ZETA, exp()]); // listing 1
+  await nft.send('seller', 'safeTransferFrom(address,address,uint256)', [A('seller'), A('seller'), 2]);
+  assert.equal(await market.call('listingStatus', [1, 1]), S.Moved);
+  // A per-token approve() listing: the move clears the approval, but Moved is the reason shown, and it stays.
+  await nft.send('seller', 'setApprovalForAll', [market.address, false]);
+  await nft.send('seller', 'approve', [market.address, 3]);
+  await market.send('seller', 'list', [nft.address, 3, 1, ZETA, exp()]); // listing 2
+  await nft.send('seller', 'transferFrom', [A('seller'), A('other'), 3]);
+  await nft.send('other', 'transferFrom', [A('other'), A('seller'), 3]);
+  await nft.send('seller', 'approve', [market.address, 3]);
+  assert.equal(await market.call('listingStatus', [2, 1]), S.Moved);
+  await assert.rejects(market.send('buyer', 'buy', [2, 1], ZETA), /TokenMoved/);
+  // A new listing of the returned token works (and the dead one stays dead after it).
+  await nft.send('seller', 'setApprovalForAll', [market.address, true]);
+  await market.send('seller', 'list', [nft.address, 1, 1, 2n * ZETA, exp()]); // listing 3
+  assert.equal(await market.call('listingStatus', [3, 1]), S.Ok);
+  await market.send('buyer', 'buy', [3, 1], 2n * ZETA);
+  assert.equal(await nft.call('ownerOf', [1]), A('buyer'));
+  l = await market.call('getListing', [0]);
+  assert.equal(l.quantity, 1n, 'never sold: only the counter keeps it shut');
+});
+
+test('factory ERC-1155: any move of the seller\'s units outside the market kills the listing; arrivals do not', async () => {
+  const st = (id) => market.call('listingStatus', [id, 0]);
+  // All units away and back.
+  await market.send('seller', 'list', [multi.address, 1, 5, ZETA, exp()]); // listing 0
+  assert.equal((await market.call('getListing', [0])).tracked, true);
+  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 10, '0x']);
+  await multi.send('other', 'safeTransferFrom', [A('other'), A('seller'), 1, 10, '0x']);
+  assert.equal(await multi.call('balanceOf', [A('seller'), 1]), 10n);
+  assert.equal(await st(0), S.Moved);
+  await assert.rejects(market.send('buyer', 'buy', [0, 1], ZETA), /TokenMoved/);
+  // One unit away (9 left, still more than listed): Moved too.
+  await market.send('seller', 'list', [multi.address, 1, 5, ZETA, exp()]); // listing 1
+  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 1, '0x']);
+  assert.equal(await st(1), S.Moved);
+  // A batch transfer out.
+  await market.send('seller', 'list', [multi.address, 1, 5, ZETA, exp()]); // listing 2
+  await multi.send('seller', 'create', [A('seller'), 3, '']);
+  await multi.send('seller', 'safeBatchTransferFrom', [A('seller'), A('other'), [2, 1], [1, 1], '0x']);
+  assert.equal(await st(2), S.Moved);
+  // A burn.
+  await market.send('seller', 'list', [multi.address, 1, 5, ZETA, exp()]); // listing 3
+  await multi.send('seller', 'burn', [A('seller'), 1, 1]);
+  assert.equal(await st(3), S.Moved);
+  // Other ids are separate: moving id 2 leaves a listing of id 1 alone.
+  await market.send('seller', 'list', [multi.address, 1, 5, ZETA, exp()]); // listing 4
+  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 2, 1, '0x']);
+  assert.equal(await st(4), S.Ok);
+  // Arrivals do not count: nobody can kill a listing by sending or minting units to the seller.
+  await multi.send('other', 'safeTransferFrom', [A('other'), A('seller'), 1, 1, '0x']);
+  await multi.send('seller', 'mint', [A('seller'), 1, 2]);
+  await multi.send('seller', 'setMint', [true, 0]);
+  await multi.send('other', 'publicMintTo', [A('seller'), 1, 1]);
+  assert.equal(await st(4), S.Ok);
+  // Nor do a 0-unit "transfer" or the seller moving units to itself.
+  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 0, '0x']);
+  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('seller'), 1, 3, '0x']);
+  assert.equal(await st(4), S.Ok);
+  await market.send('buyer', 'buy', [4, 5], 5n * ZETA);
+  assert.equal(await multi.call('balanceOf', [A('buyer'), 1]), 5n);
+});
+
+test('factory ERC-1155 partial fills: each market sale updates the listing\'s expected count; an outside move still kills it', async () => {
+  await market.send('seller', 'list', [multi.address, 1, 6, ZETA, exp()]); // listing 0
+  const moves0 = (await market.call('getListing', [0])).moves;
+  await market.send('buyer', 'buy', [0, 1], ZETA);
+  await market.send('other', 'buy', [0, 2], 2n * ZETA);
+  let l = await market.call('getListing', [0]);
+  assert.equal(l.quantity, 3n);
+  assert.equal(l.moves, moves0 + 2n);
+  assert.equal(l.moves, await multi.call('transferCount', [A('seller'), 1]));
+  assert.equal(await market.call('listingStatus', [0, 0]), S.Ok);
+  // The seller buying from its own listing moves nothing: the expectation does not change.
+  await market.send('seller', 'buy', [0, 1], ZETA);
+  l = await market.call('getListing', [0]);
+  assert.deepEqual([l.quantity, l.moves], [2n, moves0 + 2n]);
+  assert.equal(await market.call('listingStatus', [0, 0]), S.Ok);
+  // Bought out in two more sales.
+  await market.send('buyer', 'buy', [0, 1], ZETA);
+  await market.send('buyer', 'buy', [0, 1], ZETA);
+  assert.equal(await multi.call('balanceOf', [A('buyer'), 1]), 3n);
+  assert.equal(await multi.call('balanceOf', [A('other'), 1]), 2n);
+  assert.equal(await market.call('listingStatus', [0, 0]), S.Inactive);
+  // Partial fill, then an outside move: dead.
+  await market.send('seller', 'list', [multi.address, 1, 4, ZETA, exp()]); // listing 1
+  await market.send('buyer', 'buy', [1, 1], ZETA);
+  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 1, '0x']);
+  await multi.send('other', 'safeTransferFrom', [A('other'), A('seller'), 1, 1, '0x']);
+  assert.equal(await market.call('listingStatus', [1, 0]), S.Moved);
+  await assert.rejects(market.send('buyer', 'buy', [1, 1], ZETA), /TokenMoved/);
+});
+
+test('external collections keep the old behaviour: no counter, a token that comes back revives an unexpired listing', async () => {
+  const e721 = await external(721);
+  await e721.send('seller', 'mintMany', [A('seller'), 1]);
+  await e721.send('seller', 'setApprovalForAll', [market.address, true]);
+  await market.send('seller', 'list', [e721.address, 1, 1, ZETA, exp()]); // listing 0
+  const l = await market.call('getListing', [0]);
+  assert.deepEqual([l.tracked, l.moves], [false, 0n]);
+  await e721.send('seller', 'transferFrom', [A('seller'), A('other'), 1]);
+  assert.equal(await market.call('listingStatus', [0, 1]), S.SellerLacksToken);
+  await e721.send('other', 'transferFrom', [A('other'), A('seller'), 1]);
+  assert.equal(await market.call('listingStatus', [0, 1]), S.Ok, 'the known gap for collections the market cannot ask');
+  await market.send('buyer', 'buy', [0, 1], ZETA);
+  assert.equal(await e721.call('ownerOf', [1]), A('buyer'));
+
+  const e1155 = await external(1155);
+  await e1155.send('seller', 'create', [A('seller'), 4, '']);
+  await e1155.send('seller', 'setApprovalForAll', [market.address, true]);
+  await market.send('seller', 'list', [e1155.address, 1, 4, ZETA, exp()]); // listing 1
+  await e1155.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 4, '0x']);
+  await e1155.send('other', 'safeTransferFrom', [A('other'), A('seller'), 1, 4, '0x']);
+  assert.equal(await market.call('listingStatus', [1, 0]), S.Ok);
+  // What the web app offers: cancel the old listing.
+  await market.send('seller', 'cancel', [1]);
+  await assert.rejects(market.send('buyer', 'buy', [1, 1], ZETA), /NotActive/);
+
+  // A market with no factory tracks nothing, even for a factory-made collection.
+  const bare = await c.deploy('NFTMarketplace', [A('gov'), A('feeTo'), 100, ZERO, ZERO], 'gov');
+  await nft.send('seller', 'setApprovalForAll', [bare.address, true]);
+  await bare.send('seller', 'list', [nft.address, 2, 1, ZETA, exp()]);
+  assert.equal((await bare.call('getListing', [0])).tracked, false);
+});
+
+test('gas: the counters cost no extra storage write in the collections; list and buy stay within bounds', async () => {
+  const gas = {};
+  await nft.send('seller', 'transferFrom', [A('seller'), A('other'), 5]); gas.transfer721 = c.lastGas();
+  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 1, '0x']);
+  await multi.send('seller', 'safeTransferFrom', [A('seller'), A('other'), 1, 1, '0x']); gas.transfer1155 = c.lastGas();
+  await market.send('seller', 'list', [nft.address, 1, 1, ZETA, exp()]); gas.list721 = c.lastGas();
+  await market.send('buyer', 'buy', [0, 1], ZETA); gas.buy721 = c.lastGas();
+  await market.send('seller', 'list', [multi.address, 1, 6, ZETA, exp()]); gas.list1155 = c.lastGas();
+  await market.send('buyer', 'buy', [1, 2], 2n * ZETA); gas.buyPartialFirst = c.lastGas();
+  await market.send('buyer', 'buy', [1, 2], 2n * ZETA); gas.buyPartial = c.lastGas();
+  // Execution gas (no 21,000 base), measured in this same setup before the counters existed,
+  // and what the counters may add: nothing stored in the collections (a few arithmetic
+  // operations); in the market, reading the counter (and isCollection when listing), plus
+  // one warm slot update per partial ERC-1155 sale.
+  const before = { transfer721: 33_509n, transfer1155: 10_308n, list721: 218_107n, buy721: 161_264n, list1155: 198_057n, buyPartialFirst: 92_251n, buyPartial: 54_051n };
+  const extra = { transfer721: 300n, transfer1155: 300n, list721: 3_000n, buy721: 3_000n, list1155: 3_000n, buyPartialFirst: 6_000n, buyPartial: 6_000n };
+  const max = Object.fromEntries(Object.keys(before).map((k) => [k, before[k] + extra[k]]));
+  for (const [k, v] of Object.entries(max)) assert.ok(gas[k] <= v, `${k}: ${gas[k]} > ${v}`);
 });

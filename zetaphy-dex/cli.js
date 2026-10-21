@@ -23,7 +23,8 @@
 //   --test-tokens            also deploy two test tokens (no value) and seed a pool with each
 //   --public-rpc <https url> the RPC URL the web app should use (written to the deployments file)
 //   --out <file>             default deployments/<chainId>.json
-//   --web <file>             also write the web app's deployments.json (e.g. ../test-ui/zetaphy/deployments.json)
+//   --web [file]             also write the web app's deployments.json; with no file: web/deployments.json
+//                            (next to this CLI, whatever the current directory)
 //   --any-chain              deploy on a chain other than ZETAPHY (EVM chain id 77390); refused without it
 
 import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
@@ -35,15 +36,18 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const NATIVE_PRECOMPILE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 export const ZETAPHY_EVM_CHAIN_ID = 77390n;
 const ZERO = '0x0000000000000000000000000000000000000000';
+export const WEB_DEPLOYMENTS = resolve(HERE, 'web', 'deployments.json');
 const art = (n) => JSON.parse(readFileSync(resolve(HERE, 'artifacts', `${n}.json`), 'utf8'));
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const pos = [], opt = {};
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const k = a.slice(2);
       if (['test-tokens', 'help', 'any-chain'].includes(k)) opt[k] = true;
+      // --web takes an optional file: bare --web means the page's own deployments.json.
+      else if (k === 'web' && (i + 1 >= argv.length || argv[i + 1].startsWith('--'))) opt.web = WEB_DEPLOYMENTS;
       else { if (i + 1 >= argv.length) throw new Error(`${a} needs a value`); opt[k] = argv[++i]; }
     } else pos.push(a);
   }

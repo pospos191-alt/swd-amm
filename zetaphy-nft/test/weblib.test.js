@@ -46,14 +46,16 @@ test('function selectors and calls match the compiled ABIs', () => {
   const cfg = ['N', 'S', '', 'ipfs://c', A1, 250n, 5n, false, 0n];
   assert.equal(F.createERC721.encode(cfg), fac.encodeFunctionData('createERC721', [cfg]));
   // Decoding a struct answer.
-  const ret = m.encodeFunctionResult('getListing', [[A1, 99n, 1, A1, 0n, 5n, 7n, 1n, 3n, 6n]]);
+  const ret = m.encodeFunctionResult('getListing', [[A1, 99n, 1, A1, 0n, 5n, 7n, 1n, 3n, 4n, true, 6n]]);
   const l = F.getListing.decode(ret);
   assert.equal(l[1], 99n);
   assert.equal(l[6], 7n);
-  assert.deepEqual(listingFrom(l), { seller: getAddress(A1), expiry: 99, kind: 1, collection: getAddress(A1), nonce: 0n, tokenId: 5n, unitPrice: 7n, quantity: 1n, tokenNonce: 3n, minUnitProceeds: 6n });
+  assert.deepEqual(listingFrom(l), { seller: getAddress(A1), expiry: 99, kind: 1, collection: getAddress(A1), nonce: 0n, tokenId: 5n, unitPrice: 7n, quantity: 1n, tokenNonce: 3n, moves: 4n, tracked: true, minUnitProceeds: 6n });
   assert.equal(F.acceptOffer.encode(4n, 10n ** 18n), m.encodeFunctionData('acceptOffer', [4n, 10n ** 18n]));
   // Every listingStatus value has a name (and a text, see the i18n test).
-  assert.equal(STATUS.length, 9, 'NFTMarketplace.Status has 9 values');
+  assert.equal(STATUS.length, 10, 'NFTMarketplace.Status has 10 values');
+  assert.match(errorText('en', { data: m.getError('TokenMoved').selector }), /left the seller outside the marketplace/);
+  assert.equal(F.approve.encode(A1, 7n), new Interface(artifacts.ZetaphyERC721.abi).encodeFunctionData('approve', [A1, 7n]));
   for (const st of STATUS) for (const lang of ['en', 'th']) assert.ok(keysOf(lang).includes(`status_${st}`), `${lang}.status_${st}`);
   // Events: topics equal ethers', decoding of indexed and data fields.
   for (const [k, ev] of Object.entries(E)) {

@@ -4,12 +4,13 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, chmodSync, existsSync } from 'node:fs';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Wallet } from 'ethers';
-import { main, loadKey, checkDeployChain } from '../cli.js';
+import { main, loadKey, checkDeployChain, parseArgs, WEB_DEPLOYMENTS } from '../cli.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'zdex-cli-'));
 
@@ -89,4 +90,13 @@ test('deploy refuses a chain other than ZETAPHY (77390) unless --any-chain', asy
     await assert.rejects(main(['deploy', '--rpc', `http://127.0.0.1:${server.address().port}`, '--key-file', f], () => {}), /not ZETAPHY \(77390\); pass --any-chain/);
     assert.ok(!seen.includes('eth_sendRawTransaction') && !seen.includes('eth_getBalance'), seen.join(','));
   } finally { server.close(); }
+});
+
+test('--web with no file writes the page\'s own web/deployments.json; a file given is kept as is', () => {
+  assert.equal(WEB_DEPLOYMENTS, fileURLToPath(new URL('../web/deployments.json', import.meta.url)));
+  assert.ok(existsSync(WEB_DEPLOYMENTS));
+  assert.equal(parseArgs(['deploy', '--web']).opt.web, WEB_DEPLOYMENTS);
+  assert.equal(parseArgs(['deploy', '--web', '--test-tokens']).opt.web, WEB_DEPLOYMENTS);
+  assert.equal(parseArgs(['deploy', '--web', '/tmp/x.json']).opt.web, '/tmp/x.json');
+  assert.equal(parseArgs(['deploy']).opt.web, undefined, 'not written unless asked');
 });

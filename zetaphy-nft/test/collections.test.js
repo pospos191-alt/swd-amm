@@ -293,3 +293,74 @@ test('ERC-1155: transfers, batch transfers, operators, burns, receiver checks', 
   assert.equal(await b.call('totalSupply', [1]), 7n);
   await assert.rejects(b.send('bob', 'burn', [A('bob'), 1, 6]), /InsufficientBalance/);
 });
+
+test('ERC-721 transferCount: every mint, transfer (also to oneself) and burn of a token counts; others untouched', async () => {
+  const a = await create(721);
+  assert.equal(await a.call('transferCount', [1]), 0n, 'never minted');
+  await a.send('creator', 'mintMany', [A('alice'), 2]);
+  assert.equal(await a.call('transferCount', [1]), 1n, 'the mint');
+  await a.send('alice', 'transferFrom', [A('alice'), A('bob'), 1]);
+  await a.send('bob', 'safeTransferFrom(address,address,uint256)', [A('bob'), A('alice'), 1]);
+  assert.equal(await a.call('transferCount', [1]), 3n, 'away and back: +2');
+  await a.send('alice', 'transferFrom', [A('alice'), A('alice'), 1]);
+  assert.equal(await a.call('transferCount', [1]), 4n, 'to oneself counts');
+  assert.equal(await a.call('ownerOf', [1]), A('alice'));
+  assert.equal(await a.call('balanceOf', [A('alice')]), 2n);
+  await assert.rejects(a.send('bob', 'transferFrom', [A('alice'), A('bob'), 1]), /NotAuthorized/);
+  assert.equal(await a.call('transferCount', [1]), 4n, 'a refused transfer counts nothing');
+  assert.equal(await a.call('transferCount', [2]), 1n, 'token 2 untouched');
+  await a.send('alice', 'burn', [1]);
+  assert.equal(await a.call('transferCount', [1]), 5n, 'the burn counts and the count survives it');
+  await assert.rejects(a.call('ownerOf', [1]), /NonexistentToken/);
+  await assert.rejects(a.send('alice', 'transferFrom', [A('alice'), A('bob'), 1]), /NonexistentToken/);
+  await assert.rejects(a.send('alice', 'burn', [1]), /NonexistentToken/);
+  assert.equal(await a.call('totalSupply'), 1n);
+});
+
+test('ERC-1155 transferCount(holder, id): units leaving the holder count (single, batch, burn); arrivals and empty moves do not', async () => {
+  const b = await create(1155);
+  await b.send('creator', 'create', [A('alice'), 10, '']);
+  await b.send('creator', 'create', [A('alice'), 5, '']);
+  const tc = (who, id) => b.call('transferCount', [A(who), id]);
+  assert.equal(await tc('alice', 1), 0n, 'a mint is an arrival');
+  await b.send('alice', 'safeTransferFrom', [A('alice'), A('bob'), 1, 3, '0x']);
+  assert.deepEqual([await tc('alice', 1), await tc('bob', 1), await tc('alice', 2)], [1n, 0n, 0n]);
+  await b.send('bob', 'safeTransferFrom', [A('bob'), A('alice'), 1, 3, '0x']);
+  assert.deepEqual([await tc('alice', 1), await tc('bob', 1)], [1n, 1n], 'getting units back does not undo the count');
+  assert.equal(await b.call('balanceOf', [A('alice'), 1]), 10n);
+  await b.send('alice', 'safeBatchTransferFrom', [A('alice'), A('bob'), [1, 2, 1], [1, 1, 1], '0x']);
+  assert.deepEqual([await tc('alice', 1), await tc('alice', 2)], [3n, 1n], 'a batch counts each entry');
+  assert.deepEqual([...await b.call('balanceOfBatch', [[A('alice'), A('alice'), A('bob'), A('bob')], [1, 2, 1, 2]])], [8n, 4n, 2n, 1n]);
+  // Nothing moves: a zero amount, or to oneself (anyone may send 0 units "from" themselves to anyone).
+  await b.send('alice', 'safeTransferFrom', [A('alice'), A('bob'), 1, 0, '0x']);
+  await b.send('alice', 'safeTransferFrom', [A('alice'), A('alice'), 1, 8, '0x']);
+  await b.send('alice', 'safeBatchTransferFrom', [A('alice'), A('alice'), [1, 2], [8, 4], '0x']);
+  await assert.rejects(b.send('alice', 'safeTransferFrom', [A('alice'), A('alice'), 1, 9, '0x']), /InsufficientBalance/);
+  await assert.rejects(b.send('alice', 'safeTransferFrom', [A('alice'), A('bob'), 1, 9, '0x']), /InsufficientBalance/);
+  assert.deepEqual([await tc('alice', 1), await tc('alice', 2), await b.call('balanceOf', [A('alice'), 1])], [3n, 1n, 8n]);
+  // Arrivals from others (transfer in, owner mint, public mint) never touch the holder's count.
+  await b.send('bob', 'safeTransferFrom', [A('bob'), A('alice'), 1, 1, '0x']);
+  await b.send('creator', 'mint', [A('alice'), 1, 2]);
+  await b.send('creator', 'setMint', [true, 0]);
+  await b.send('carol', 'publicMintTo', [A('alice'), 1, 1]);
+  assert.deepEqual([await tc('alice', 1), await b.call('balanceOf', [A('alice'), 1])], [3n, 12n]);
+  // Burns count; an approved operator's moves count for the holder.
+  await b.send('alice', 'burn', [A('alice'), 1, 2]);
+  await b.send('alice', 'setApprovalForAll', [A('carol'), true]);
+  await b.send('carol', 'safeTransferFrom', [A('alice'), A('carol'), 1, 1, '0x']);
+  assert.deepEqual([await tc('alice', 1), await b.call('balanceOf', [A('alice'), 1]), await b.call('totalSupply', [1])], [5n, 9n, 11n]);
+});
+
+test('ERC-1155: the packed balance caps the units ever minted of an id at 2^192 - 1', async () => {
+  const b = await create(1155);
+  const cap = (1n << 192n) - 1n;
+  await b.send('creator', 'create', [A('alice'), cap - 1n, '']);
+  await b.send('creator', 'mint', [A('bob'), 1, 1]);
+  await assert.rejects(b.send('creator', 'mint', [A('bob'), 1, 1]), /MaxSupplyReached/);
+  await b.send('alice', 'safeTransferFrom', [A('alice'), A('bob'), 1, cap - 1n, '0x']);
+  assert.equal(await b.call('balanceOf', [A('bob'), 1]), cap);
+  assert.equal(await b.call('transferCount', [A('bob'), 1]), 0n, 'a full balance does not reach the count bits');
+  assert.equal(await b.call('transferCount', [A('alice'), 1]), 1n);
+  await b.send('bob', 'burn', [A('bob'), 1, cap]);
+  assert.deepEqual([await b.call('balanceOf', [A('bob'), 1]), await b.call('transferCount', [A('bob'), 1])], [0n, 1n]);
+});

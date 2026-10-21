@@ -6,7 +6,8 @@ EVM chain id `77390`, chain id `zetaphy_77390-1`, เหรียญหลัก
 > ⚠️ **Testnet เท่านั้น เหรียญไม่มีมูลค่า สัญญายังไม่ผ่านการตรวจสอบความปลอดภัย (unaudited)** อ่านหัวข้อ "ความเสี่ยง" ก่อนใช้
 
 - สัญญา, สคริปต์ build, CLI สำหรับ deploy และชุดทดสอบ: โฟลเดอร์นี้ (`zetaphy-dex/`)
-- หน้าเว็บ: `test-ui/zetaphy/` เผยแพร่ที่ **https://swd-amm.sawasdeecoin.com/zetaphy/** (ไปพร้อมโปรเจกต์ Vercel เดิมของ test-ui)
+- หน้าเว็บ: `web/` เผยแพร่ที่ **https://swap.sawasdeecoin.com/** (โปรเจกต์ Vercel ของตัวเอง บน origin ของตัวเอง)
+  ที่อยู่เดิม `https://swd-amm.sawasdeecoin.com/zetaphy/` redirect (308) มาที่นี่
 
 ## โครงสร้าง
 
@@ -21,7 +22,7 @@ EVM chain id `77390`, chain id `zetaphy_77390-1`, เหรียญหลัก
 | `artifacts/*.json` | ผล compile (commit ไว้ CLI ไม่ต้องใช้ compiler) `npm run build -- --check` ตรวจว่าตรงกับซอร์ส |
 | `cli.js` | deploy และตั้งค่า governance |
 | `test/` | unit test (EVM ในหน่วยความจำ), fuzz, e2e บนเบราว์เซอร์, integration บน devnet จริง |
-| `../test-ui/zetaphy/` | หน้าเว็บ (HTML/CSS/JS ล้วน ไม่มีโค้ดของบุคคลที่สาม) |
+| `web/` | หน้าเว็บ (HTML/CSS/JS ล้วน ไม่มีโค้ดของบุคคลที่สาม) และ `web/vercel.json` (CSP และ header ความปลอดภัย) |
 
 ## การออกแบบ
 
@@ -120,7 +121,7 @@ node cli.js deploy --rpc https://<rpc ของ ZETAPHY> --key-file ~/.zetaphy/d
   --public-rpc https://<rpc ที่หน้าเว็บใช้> \
   --registry <ที่อยู่ ThreatRegistry ถ้าต้องการเปิดการตรวจบนเชน> \
   --test-tokens \
-  --web ../test-ui/zetaphy/deployments.json
+  --web            # ไม่ใส่ชื่อไฟล์ = web/deployments.json
 # 2) ดูสถานะ
 node cli.js status --rpc https://<rpc>
 # 3) ตั้ง/ปิด Neuro registry ภายหลัง (ต้องเป็น governance), เปิด/ปิด protocol fee
@@ -131,18 +132,30 @@ node cli.js deploy ... --governance <0xMultisig>     # หรือเรีย�
 ```
 
 ตัวเลือกอื่น: `--wnative deploy` (deploy WZETAPHY แทน precompile, สำหรับเชนอื่น ใช้คู่กับ `--any-chain`), `--fee-to`, `--out <ไฟล์>`
-ผลลัพธ์เขียนที่ `deployments/<chainId>.json` และ (ถ้าใส่ `--web`) ที่ `test-ui/zetaphy/deployments.json` ซึ่งหน้าเว็บอ่าน
+ผลลัพธ์เขียนที่ `deployments/<chainId>.json` และ (ถ้าใส่ `--web`) ที่ `web/deployments.json` ซึ่งหน้าเว็บอ่าน (`--web <ไฟล์>` เขียนที่อื่นแทนได้)
 `--test-tokens` สร้าง tUSD และ tSWD (ไม่มีมูลค่า) พร้อมพูลกับ ZTPHY และ `mint-test <token> <to> <amount>` แจกเพิ่มได้
 
-หลัง deploy ให้ commit `test-ui/zetaphy/deployments.json` (ไม่มีความลับ มีแค่ที่อยู่สัญญาและ RPC สาธารณะ)
+หลัง deploy ให้ commit `web/deployments.json` (ไม่มีความลับ มีแค่ที่อยู่สัญญาและ RPC สาธารณะ) Vercel จะ deploy หน้าเว็บใหม่เอง
 
 ## หน้าเว็บบน Vercel
 
-หน้าเว็บอยู่ใน `test-ui/zetaphy/` จึง **deploy ไปพร้อมโปรเจกต์ Vercel เดิมของ test-ui โดยอัตโนมัติ** ที่
-**https://swd-amm.sawasdeecoin.com/zetaphy/** ไม่ต้องสร้างโปรเจกต์หรือโดเมนใหม่ ไม่มีค่าใช้จ่ายเพิ่ม (static ล้วน ไม่มี server)
-หัวเว็บหลัก (`test-ui/index.html`) มีลิงก์ "ZETAPHY Swap" ไปที่ `/zetaphy/`
+หน้าเว็บอยู่ใน `web/` และ deploy เป็น **โปรเจกต์ Vercel แยกของตัวเอง** ที่ **https://swap.sawasdeecoin.com/**
+(static ล้วน ไม่มี server ไม่มีขั้น build) จึงไม่ใช้ origin ร่วมกับเว็บ test-ui ที่ CSP หลวมกว่า (`'unsafe-inline'`, สคริปต์จาก CDN)
+หัวเว็บหลัก (`test-ui/index.html`) มีลิงก์ "ZETAPHY Swap" ไปที่ `https://swap.sawasdeecoin.com/` (เปิดแท็บใหม่, `rel="noopener"`)
+และ `test-ui/vercel.json` redirect `/zetaphy` กับ `/zetaphy/*` แบบถาวร (308) ไปที่ path เดียวกันบน `swap.sawasdeecoin.com` ลิงก์เก่าจึงยังใช้ได้
 
-- ตั้งค่า: `test-ui/zetaphy/deployments.json` (จาก `cli.js deploy --web`) และ `test-ui/zetaphy/tokenlist.json`
+ตั้งค่าครั้งแรก (เจ้าของทำครั้งเดียว):
+
+1. Vercel → **Add New… → Project** → import repo `swd-amm` เดิม (โปรเจกต์ใหม่ แยกจากโปรเจกต์ของ test-ui)
+2. **Root Directory: `zetaphy-dex/web`**, Framework Preset: **Other**, ไม่ต้องมี Build Command / Output Directory (ปล่อยว่าง) แล้ว Deploy
+   (`web/vercel.json` ใส่ CSP และ header ความปลอดภัยให้ทุก path)
+3. DNS ของ `sawasdeecoin.com`: เพิ่มระเบียน **CNAME `swap` → `cname.vercel-dns.com`**
+   (ถ้า DNS ของโดเมนอยู่ที่ Vercel เอง ข้ามขั้นนี้ได้ Vercel สร้างให้)
+4. ในโปรเจกต์ใหม่ → **Settings → Domains** → เพิ่ม **`swap.sawasdeecoin.com`** รอสถานะ Valid Configuration (Vercel ออกใบรับรอง HTTPS ให้เอง)
+5. ตรวจ: `curl -sI https://swap.sawasdeecoin.com/ | grep -i content-security-policy` ต้องขึ้นต้นด้วย `default-src 'none'; script-src 'self'`
+   และ `curl -sI https://swd-amm.sawasdeecoin.com/zetaphy/` ต้องได้ 308 ไปที่ `https://swap.sawasdeecoin.com/`
+
+- ตั้งค่า: `web/deployments.json` (จาก `cli.js deploy --web`) และ `web/tokenlist.json`
   (รูปแบบ token list ของ Uniswap: `{ chainId: 77390, address, name, symbol, decimals }`)
 - RPC ที่หน้าเว็บใช้ต้องเป็น https และเปิด CORS ให้เบราว์เซอร์เรียกได้ (เหมือนที่ zetaphy-wallet ใช้) ผู้ใช้เปลี่ยน RPC ได้ใน "ตั้งค่า"
   แต่ถ้าไม่ใช่ RPC ของ `deployments.json` หน้าเว็บแสดงแถบเตือนตลอด (พร้อมปุ่มกลับไปใช้ค่าเริ่มต้น) และ **ไม่ส่ง RPC นั้นให้กระเป๋า**
@@ -152,17 +165,19 @@ node cli.js deploy ... --governance <0xMultisig>     # หรือเรีย�
   (router จึง revert ถ้าสัดส่วนเปลี่ยน) ฝั่งสัญญา router ก็ใช้จำนวนที่ใส่ตรง ๆ เมื่อ `totalSupply == 0` (ดู "การออกแบบ")
 - ก่อน `eth_sendTransaction` ทุกครั้ง หน้าเว็บถาม `eth_chainId` จากกระเป๋าอีกครั้ง ถ้าไม่ใช่ 77390 จะไม่ส่ง และใส่ `chainId: 0x12e4e` ในธุรกรรม
 - ก่อนซื้อและก่อนเพิ่มสภาพคล่อง ถาม Neuro ใหม่ (ไม่ใช้แคช) อีกครั้งตอนกดยืนยัน
-- ความปลอดภัย: `test-ui/vercel.json` มีกฎ header แยกสำหรับ `/zetaphy(.*)`: CSP เข้มงวด (`default-src 'none'; script-src 'self'; style-src 'self'`
-  ไม่มี inline, ไม่มีสคริปต์จากที่อื่น, `connect-src` เฉพาะ https และ localhost) ส่วนกฎเดิมของเว็บหลักยังใช้กับทุก path อื่นเหมือนเดิม
+- ความปลอดภัย: `web/vercel.json` ใส่ CSP เข้มงวดให้ทุก path (`default-src 'none'; script-src 'self'; style-src 'self'`
+  ไม่มี inline, ไม่มีสคริปต์จากที่อื่น, `connect-src` เฉพาะ https และ localhost, `frame-ancestors 'none'`)
+  พร้อม HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy` และ COOP `same-origin`
   หน้าเว็บใช้ `textContent` เท่านั้น กรองชื่อ/สัญลักษณ์เหรียญ (ตัดอักขระควบคุม/bidi/zero-width, จำกัดความยาว, เตือนชื่อซ้ำกับรายการ)
   และ **อนุญาต (approve) เท่าที่ต้องใช้พอดี** ไม่ใช่ไม่จำกัด ไม่มีไลบรารีของบุคคลที่สาม (ABI encoder เขียนเอง, selector คำนวณไว้แล้วและมีเทสต์ตรวจ)
 - กระเป๋า: EIP-6963 (MetaMask, Rabby, OKX, Trust, Binance Wallet, Coinbase, Brave, Phantom ฯลฯ) และ provider แบบเก่า
   (`window.ethereum`, `window.binancew3w`) เพิ่มเครือข่ายด้วย `wallet_addEthereumChain` (ticker ZTPHY) บนมือถือที่ไม่มีกระเป๋ามีลิงก์เปิดในแอปกระเป๋า
 - ภาษาไทย/อังกฤษ, โหมดสว่าง/มืด, ใช้บนมือถือได้ (ทดสอบที่ความกว้าง 360 px)
 
-**localStorage ใช้ origin ร่วมกับเว็บหลัก (M4):** `/zetaphy/` อยู่บนโดเมนเดียวกับ test-ui เดิม ซึ่ง CSP หลวมกว่า (`'unsafe-inline'`,
-แพ็กเกจจาก esm.sh/jsdelivr) ถ้าเว็บหลักมีช่องโหว่ XSS สคริปต์นั้นเขียน localStorage ของหน้า DEX ได้ หน้าเว็บจึงตรวจทุกค่าที่อ่านกลับ
-อย่างเข้มงวด (`test-ui/zetaphy/lib/storage.js`) และไม่เชื่อค่าเหล่านั้นในเรื่องที่เกี่ยวกับเงิน:
+**ค่าที่เก็บใน localStorage ไม่ถูกเชื่อ (M4):** เดิมหน้า DEX อยู่ที่ `/zetaphy/` บน origin เดียวกับ test-ui ซึ่ง CSP หลวมกว่า
+ถ้าเว็บนั้นมีช่องโหว่ XSS สคริปต์จะเขียน localStorage ของหน้า DEX ได้ ตอนนี้หน้า DEX ย้ายไปอยู่บน `swap.sawasdeecoin.com` ของตัวเองแล้ว
+(เบราว์เซอร์แยก storage, DOM และ service worker ตาม origin) แต่ยังคงตรวจทุกค่าที่อ่านกลับอย่างเข้มงวด (`web/lib/storage.js`)
+เพราะค่าใน localStorage ยังถูกเขียนได้จากทางอื่น (ส่วนขยายของเบราว์เซอร์, โปรไฟล์เก่า, บั๊กในอนาคต) และไม่เชื่อค่าเหล่านั้นในเรื่องที่เกี่ยวกับเงิน:
 
 - slippage ที่เก็บไว้ต้องเป็นจำนวนเต็ม 1–500 bps (**สูงสุด 5%**) มิฉะนั้นใช้ 0.5% และถ้า **เกิน 1%** ต้องติ๊กยืนยันใหม่ทุกครั้งก่อน
   swap / เพิ่ม / ถอนสภาพคล่อง (ไม่เก็บการยืนยันไว้)
@@ -172,11 +187,8 @@ node cli.js deploy ... --governance <0xMultisig>     # หรือเรีย�
   **"นำเข้าเอง ไม่อยู่ในรายการ"** ในตัวเลือกเหรียญและในรายการ และเตือนพร้อมที่อยู่สัญญาเมื่อเลือกใช้ และถาม Neuro ใหม่ตอนกดยืนยัน
 - id กระเป๋า ภาษา และธีม ต้องตรงรูปแบบที่กำหนด
 
-ความเสี่ยงที่ยังเหลือ: สคริปต์ที่รันบน origin เดียวกันยังทำได้มากกว่าเขียน localStorage เช่น เปิด `/zetaphy/` ในหน้าต่าง/iframe
-แล้วแก้ DOM ของหน้า DEX ตรง ๆ หรือลงทะเบียน service worker ถ้ามี URL บน origin ที่คืนสคริปต์ตามที่ผู้โจมตีกำหนดได้ มาตรการข้างต้น
-ลดผลของการเขียนทับค่าที่เก็บไว้เท่านั้น **การแยก DEX ไปไว้บน subdomain ของตัวเอง (เช่น `swap.sawasdeecoin.com`) จะเป็นขอบเขตที่แข็งแรงกว่า**
-เพราะเบราว์เซอร์แยก storage, DOM และ service worker ตาม origin ตอนนี้เจ้าของเลือกให้อยู่บนโดเมนนี้
-- ดูในเครื่อง: `cd test-ui && python3 serve.py` (หรือ server static ใดก็ได้ที่ root คือ `test-ui/`) แล้วเปิด `/zetaphy/`
+- ดูในเครื่อง: `cd zetaphy-dex && python3 -m http.server -d web 8000` (หรือ server static ใดก็ได้ที่ root คือ `web/`) แล้วเปิด
+  `http://localhost:8000/` (server นี้ไม่ส่ง header ของ `vercel.json`; `npm run test:web` ทดสอบภายใต้ CSP จริง)
 
 ## ความเสี่ยง
 
@@ -189,7 +201,6 @@ node cli.js deploy ... --governance <0xMultisig>     # หรือเรีย�
 - ผลตรวจ Neuro ดีเท่ากับข้อมูลใน ThreatRegistry: "ไม่พบธง" ไม่ได้แปลว่าปลอดภัย และธงคือผลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา
 - เมื่อเปิดการตรวจบนเชน ถ้า registry หยุดตอบ (หรือใช้แก๊สเกิน 100,000) การซื้อ/เพิ่มสภาพคล่องผ่าน router จะถูกปฏิเสธทั้งหมดจนกว่า
   governance จะแก้หรือตั้งเป็น `0` (ขายเป็นเหรียญหลักและถอนได้เสมอ) นี่คือการออกแบบให้ fail closed ไม่ใช่ข้อบกพร่อง
-- หน้าเว็บอยู่บน origin เดียวกับเว็บหลักของ test-ui ดู "localStorage ใช้ origin ร่วมกับเว็บหลัก" ข้างบน
 - ใครก็ส่งเหรียญหลักเข้าพูลโดยตรงผ่าน bank send ได้ (ยอดเกิน reserve): `skim` ดึงออก `sync` ปรับ reserve ตาม
 - ไม่มี `permit` (EIP-2612) สำหรับ LP: การถอนต้อง approve ก่อน (หน้าเว็บ approve เท่าที่ถอนพอดี)
 

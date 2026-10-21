@@ -9,8 +9,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Interface, parseEther, formatUnits } from 'ethers';
 import { chromium } from 'playwright-core';
-import { serveTestUi, injectWallet, chromiumOptions, vercelHeaders } from './web.js';
-import { formatUnits as pageFormat } from '../../../test-ui/zetaphy/lib/abi.js';
+import { servePage, injectWallet, chromiumOptions, vercelHeaders } from './web.js';
+import { formatUnits as pageFormat } from '../../web/lib/abi.js';
 
 const A = (n) => JSON.parse(readFileSync(new URL(`../../artifacts/${n}.json`, import.meta.url), 'utf8'));
 export const ARTS = {
@@ -81,7 +81,7 @@ export async function setupDex(b) {
 export async function runScenario(b, d, log = () => {}) {
   const { cfg, tokens, router, wnative, call1, enc, unseeded } = d;
   const user = b.user;
-  const server = await serveTestUi({ '/zetaphy/deployments.json': JSON.stringify(cfg) });
+  const server = await servePage({ '/deployments.json': JSON.stringify(cfg) });
   const browser = await chromium.launch(chromiumOptions());
   const problems = [];
   const walletLog = [];
@@ -129,11 +129,10 @@ export async function runScenario(b, d, log = () => {}) {
       }
     });
 
-    const res = await page.goto(`${server.origin}/zetaphy/`);
-    assert.match(res.headers()['content-security-policy'], /script-src 'self';/, 'the /zetaphy CSP from vercel.json');
-    assert.match(vercelHeaders('/')['Content-Security-Policy'], /esm\.sh/, 'the main page keeps its own CSP');
-    assert.match(vercelHeaders('/api/devnet-faucet')['Content-Security-Policy'], /esm\.sh/);
-    assert.match(vercelHeaders('/zetaphy/app.js')['Content-Security-Policy'], /^default-src 'none'; script-src 'self';/);
+    const res = await page.goto(`${server.origin}/`);
+    assert.match(res.headers()['content-security-policy'], /^default-src 'none'; script-src 'self'; style-src 'self';/, 'the CSP from web/vercel.json');
+    assert.match(vercelHeaders('/app.js')['Content-Security-Policy'], /^default-src 'none'; script-src 'self';/);
+    assert.match(vercelHeaders('/lib/storage.js')['Content-Security-Policy'], /^default-src 'none'; script-src 'self';/);
     await page.waitForFunction(() => document.documentElement.dataset.appReady === '1', null, { timeout: 30_000 });
     assert.equal(await page.locator('#banner').isHidden(), true, await page.locator('#banner').textContent());
     log('page ready under the strict CSP');
@@ -328,7 +327,7 @@ export async function runScenario(b, d, log = () => {}) {
     assert.ok(overflow <= 0, `no horizontal scroll at 360 px (${overflow})`);
     log('language toggle (EN), theme toggle, 360 px phone width OK');
 
-    // ---- M4: localStorage written by another page of this origin
+    // ---- M4: localStorage written by something else on this origin (stored values stay untrusted)
     await page.setViewportSize({ width: 1280, height: 900 });
     const altRpc = `${RPC_URL.replace(/\/$/, '')}?alt=1`; // the form the page saves
     await page.evaluate(([alt, fake, junkAddr]) => {
