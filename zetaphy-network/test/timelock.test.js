@@ -214,3 +214,21 @@ test('every other admin role behind the timelock: the old admin is refused, a sc
   assert.equal(await registry.call('guardian', [A('guardian')]), true, 'ThreatRegistry guardians hold / enforce flags at once (holdNow, enforceNow)');
   assert.equal(mockArtifacts().Caller != null, true);
 });
+
+test('CLI helpers: calldata from --sig/--args, a gov proposal for the timelock, salts', async () => {
+  const { callArgs, evmCallProposal, GOV_MODULE_BECH32 } = await import('../src/timelockcli.js');
+  const to = '0x' + '12'.repeat(20);
+  const a = callArgs({ to, sig: 'setGuardian(address,bool)', args: `${to},true` });
+  assert.equal(a.data, new Interface(['function setGuardian(address,bool)']).encodeFunctionData('setGuardian', [to, true]));
+  assert.equal(callName(a.data), 'setGuardian(address,bool)');
+  assert.throws(() => callArgs({ to, sig: 'setGuardian(address,bool)', args: to }), /takes 2/);
+  assert.throws(() => callArgs({ to }), /--data/);
+  assert.throws(() => callArgs({ to: '0x12', data: '0x12345678' }), /--to/);
+  const p = evmCallProposal({ to, data: '0xabcdef01', title: 't', summary: 's' });
+  assert.equal(p.messages[0]['@type'], '/zetaphy.pq.v1.MsgEVMCall');
+  assert.equal(p.messages[0].Sender, GOV_MODULE_BECH32);
+  assert.equal(p.messages[0].Data, Buffer.from('abcdef01', 'hex').toString('base64'));
+  assert.equal(saltOf(undefined), ZeroHash);
+  assert.equal(saltOf('0x' + '01'.repeat(32)), '0x' + '01'.repeat(32));
+  assert.notEqual(saltOf('raise-cap-1'), saltOf('raise-cap-2'));
+});

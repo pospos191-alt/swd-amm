@@ -130,7 +130,8 @@ test('the report carries the alerts and an English and a Thai summary; the confi
   const dir = mkdtempSync(join(tmpdir(), 'monitor-'));
   writeFileSync(join(dir, 'm.json'), JSON.stringify({ rpc: 'https://rpc.example', bridgeGuard: null, volumePct: 70 }));
   writeFileSync(join(dir, 's.json'), JSON.stringify({ steps: { bridge: { out: { bridgeGuard: L1, bridgeAirlock: L2 } } } }));
-  assert.deepEqual(loadMonitorConfig({ configFile: join(dir, 'm.json'), launchStateFile: join(dir, 's.json') }), { rpc: 'https://rpc.example', bridgeGuard: L1, bridgeAirlock: L2, volumePct: 70 });
+  assert.deepEqual(loadMonitorConfig({ configFile: join(dir, 'm.json'), launchStateFile: join(dir, 's.json') }), { rpc: 'https://rpc.example', bridgeGuard: L1, bridgeAirlock: L2, volumePct: 70,
+    timelock: null, oracle: null, labels: { [L1.toLowerCase()]: 'bridgeGuard', [L2.toLowerCase()]: 'bridgeAirlock' } });
   assert.deepEqual(loadMonitorConfig({ configFile: join(dir, 'none.json') }), {});
   assert.equal(newState().lastBlock, null);
 });
@@ -334,4 +335,45 @@ test('state: encrypted with a key derived from the monitor secrets; another key 
   assert.deepEqual(sealState(st, null), st);
   assert.deepEqual(openState(st, k1).state, st); // a plain state (before the secrets were set) is still read
   assert.deepEqual(openState(null, k1), { state: null });
+});
+
+test('timelock: a scheduled call names the function and when it can run; executed, cancelled, a new delay, roles', () => {
+  const T = '0x' + '7e'.repeat(20);
+  const data = IFACES.guard.encodeFunctionData('setGovernance', ['0x' + '99'.repeat(20)]);
+  const events = [
+    ev('timelock', 'CallScheduled', { id: '0x' + 'ab'.repeat(32), index: 0n, target: T, value: 0n, data, predecessor: '0x' + '00'.repeat(32), delay: 172800n }),
+    ev('timelock', 'CallScheduled', { id: '0x' + 'cd'.repeat(32), index: 0n, target: T, value: 0n, data: '0x12345678', predecessor: '0x' + '00'.repeat(32), delay: 172800n }),
+    ev('timelock', 'CallExecuted', { id: '0x' + 'ab'.repeat(32), index: 0n, target: T, value: 0n, data }),
+    ev('timelock', 'Cancelled', { id: '0x' + 'cd'.repeat(32) }),
+    ev('timelock', 'MinDelayChange', { oldDuration: 172800n, newDuration: 3600n }),
+    ev('timelock', 'RoleGranted', { role: '0x' + '11'.repeat(32), account: T, sender: T }),
+  ];
+  const { alerts } = evaluate({ snapshot: snap({ routes: [] }), now: NOW, events, cfg: { labels: { [T.toLowerCase()]: 'bridgeGuard' } } });
+  assert.deepEqual(rules(alerts), ['timelock-scheduled', 'timelock-scheduled', 'timelock-executed', 'timelock-cancelled', 'timelock-delay', 'governance-change']);
+  assert.equal(alerts[0].severity, 'critical', 'a governance change is critical');
+  assert.match(alerts[0].en, new RegExp(`bridgeGuard ${T} setGovernance\\(address\\), executable after ${new Date((NOW + 172800) * 1000).toISOString()}`));
+  assert.match(alerts[0].th, /ทำได้หลัง/);
+  assert.equal(alerts[1].severity, 'warning');
+  assert.match(alerts[1].en, /0x12345678/, 'an unknown selector is shown as is');
+  assert.equal(alerts[4].severity, 'critical');
+});
+
+test('oracle: deviation, stale, circuit breaker, pause and a feed without a price now; repeats are folded', () => {
+  const ASSET = '0x' + 'a5'.repeat(20);
+  const events = [
+    ev('oracle', 'DeviationTripped', { asset: ASSET, twapPrice: 2n * 10n ** 18n, pythPrice: 21n * 10n ** 17n, bps: 500n }),
+    ev('oracle', 'DeviationTripped', { asset: ASSET, twapPrice: 2n * 10n ** 18n, pythPrice: 21n * 10n ** 17n, bps: 500n }, NOW + 60),
+    ev('oracle', 'StaleFeed', { asset: ASSET, source: 2n, updatedAt: BigInt(NOW - 600) }),
+    ev('oracle', 'CircuitBreakerTripped', { asset: ASSET, price: 3n * 10n ** 18n, ref: 2n * 10n ** 18n, bps: 5000n }),
+    ev('oracle', 'FeedPaused', { asset: ASSET, by: L1 }),
+    ev('oracle', 'SourceProblem', { asset: ASSET, problem: 6n, a: 4000n, b: 2000n }),
+    ev('oracle', 'GuardsSet', { asset: ASSET, maxDeviationBps: 200n, maxChangeBps: 1500n, maxWindowChangeBps: 3000n, changeWindow: 3600n }),
+  ];
+  const r = evaluate({ snapshot: snap({ routes: [], oracleFeeds: [{ asset: ASSET, ok: false, error: 'PythStale' }, { asset: L2, ok: true, value: 1n }] }), now: NOW, events });
+  assert.deepEqual(rules(r.alerts), ['oracle-deviation', 'oracle-stale', 'oracle-breaker', 'oracle-paused', 'oracle-problem', 'governance-change', 'oracle-stale']);
+  assert.match(r.alerts[0].en, /TWAP \$2 and Pyth \$2\.1 differ by 500 bps/);
+  assert.match(r.alerts[2].th, /ตัดวงจรราคา/);
+  assert.match(r.alerts[4].en, /TwapSpike/);
+  assert.match(r.alerts[6].en, /price\(\) reverts PythStale/);
+  assert.deepEqual(rules(evaluate({ snapshot: snap({ routes: [], oracleFeeds: [{ asset: ASSET, ok: false, error: 'PythStale' }] }), now: NOW + 60, state: r.state }).alerts), [], 'once a day');
 });

@@ -257,3 +257,21 @@ test('ZetaphyPythRelay: Pyth\'s update format, only relayers, a threshold of ide
   assert.equal((await oracle.call('price', [A('eve')]))[0], 2n * E18);
   assert.equal(keccak256(u1).length, 66);
 });
+
+test('Pyth update encoding: Hermes JSON to the relay\'s format and back', async () => {
+  const { encodePriceFeed, decodePriceFeed, fromHermes, hermesUrl, usd } = await import('../src/oracle.js');
+  const id = '0x' + 'ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace'.slice(0, 64);
+  const [d] = fromHermes({ parsed: [{ id: id.slice(2), price: { price: '311234500000', conf: '150000000', expo: -8, publish_time: 1800000000 },
+    ema_price: { price: '311000000000', conf: '140000000', expo: -8, publish_time: 1800000000 }, metadata: { prev_publish_time: 1799999999 } }] });
+  const f = decodePriceFeed(d);
+  assert.equal(f.id, id);
+  assert.equal(f.price, 311234500000n);
+  assert.equal(f.expo, -8);
+  assert.equal(f.prevPublishTime, 1799999999n);
+  assert.equal(encodePriceFeed({ id, price: 311234500000n, conf: 150000000n, expo: -8, publishTime: 1800000000, emaPrice: 311000000000n, emaConf: 140000000n, prevPublishTime: 1799999999 }), d);
+  assert.throws(() => fromHermes({ parsed: [{ id: id.slice(2), price: { price: 'x' } }] }), /malformed/);
+  assert.throws(() => fromHermes({}), /no parsed/);
+  assert.match(hermesUrl([id]), /^https:\/\/hermes\.pyth\.network\/v2\/updates\/price\/latest\?ids%5B%5D=0xff61.*&parsed=true$/);
+  assert.throws(() => hermesUrl([id], 'http://evil.example'), /https/);
+  assert.equal(usd(2n * 10n ** 18n + 5n * 10n ** 16n), '$2.05');
+});

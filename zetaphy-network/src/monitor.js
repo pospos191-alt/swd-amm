@@ -13,6 +13,13 @@
 //   large-transfer    one transfer of largePct % of the route's limit or more
 //   lane-silent       a source deposit (with --source-rpc) no lane attested within silentMinutes
 //   release-stalled   a transfer ready (lanes + quarantine) but not released within silentMinutes
+//   timelock-scheduled  a call scheduled in the ZetaphyTimelock (target, function, when it can run):
+//                     the window in which a bad change can still be cancelled
+//   timelock-executed | timelock-cancelled | timelock-delay (MinDelayChange) | governance-change (its roles)
+//   oracle-deviation  ZetaphyOracle: the DEX TWAP and Pyth disagree (DeviationTripped, no price)
+//   oracle-stale      a feed's source is stale (StaleFeed, or price() reverts TwapStale / PythStale)
+//   oracle-breaker    the circuit breaker tripped (a jump): no price until governance resets it
+//   oracle-paused | oracle-problem | oracle-unavailable   a paused feed, another source problem, no price
 // evaluate() is pure (unit-tested); scan() does the reading. State (the last
 // scanned block, open transfers, alerts already sent, marks) is kept by the caller.
 //
@@ -33,6 +40,8 @@
 import { Interface, formatUnits, getAddress } from 'ethers';
 import { readFileSync, existsSync } from 'node:fs';
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { callName } from './timelock.js';
+import { PROBLEMS, usd } from './oracle.js';
 
 export const DEFAULTS = { volumePct: 80, largePct: 25, disagreeMinutes: 30, silentMinutes: 30, chunk: 1000, maxBlocks: 50_000, lookback: 20_000 };
 
@@ -45,6 +54,8 @@ export const IFACES = {
   threats: new Interface(['event HeldNow(bytes32 indexed key, address indexed by)', 'event FastEnforced(bytes32 indexed key, address indexed by)',
     'event GovernanceSet(address governance)', 'event Protected(bytes32 indexed key, bool on)']),
   lockbox: new Interface(['event Locked(uint256 indexed nonce, address indexed sender, address indexed to, uint256 amount)']),
+  timelock: new Interface(art('ZetaphyTimelock')),
+  oracle: new Interface(art('ZetaphyOracle')),
 };
 
 const GOVERNANCE_EVENTS = {
@@ -52,7 +63,14 @@ const GOVERNANCE_EVENTS = {
   airlock: ['LaneSet', 'VetoerSet', 'MarkerSet', 'ThreatsSet', 'GovernanceSet', 'ThresholdSet', 'QuarantineSet', 'Untripped'],
   hyperlaneLane: ['ConfigSet', 'IsmSet', 'GovernanceSet'],
   threats: ['GovernanceSet'],
+  timelock: ['RoleGranted', 'RoleRevoked'],
+  oracle: ['GovernanceSet', 'GuardianSet', 'PythSet', 'TwapConfigured', 'PythConfigured', 'GuardsSet', 'FeedUnpaused', 'CircuitBreakerReset'],
 };
+/** Timelocked calls that change who governs, the delay, roles or the riskiest rules: critical when scheduled. */
+const CRITICAL_CALLS = new Set(['setGovernance', 'setOwner', 'setAdmin', 'grantRole', 'revokeRole', 'renounceRole', 'updateDelay', 'acceptGovernance',
+  'setLane', 'setMarker', 'setThreshold', 'setQuarantine', 'untrip', 'setThreats', 'setRoute', 'proposeMaxDailyLimit', 'unpause', 'setGuardian',
+  'setConfig', 'setInterchainSecurityModule', 'setPyth', 'setRelayer', 'setTwap', 'setPythFeed', 'setGuards', 'resetCircuitBreaker', 'unpauseFeed',
+  'setOracle', 'setTestnetFixedPrices', 'withdrawReserve', 'sweep', 'setProtected', 'setThreatRegistry', 'setFee', 'setFeeTo', 'proposeShares']);
 
 export function newState() {
   return { version: 1, lastBlock: null, routes: [], transfers: {}, locks: {}, sourceBlocks: {}, alerted: {}, marks: {} };
@@ -134,6 +152,39 @@ export function evaluate({ events = [], snapshot, state = newState(), now, cfg =
       `การ mint ${amt(a.amount)} ให้ ${a.to} ถูกกัก (ติดธงใน ThreatRegistry) id ${a.id}`, { ...at, to: a.to, amount: a.amount, id: a.id });
     if (e.source === 'threats' && (e.name === 'HeldNow' || e.name === 'FastEnforced')) add('hold', 'warning', `ThreatRegistry ${e.name}: key ${a.key} by ${a.by} (bridge transfers of that party are held)`,
       `ThreatRegistry ${e.name}: key ${a.key} โดย ${a.by} (รายการโอนผ่านสะพานของฝ่ายนั้นถูกกัก)`, { ...at, key: a.key, by: a.by });
+    // the timelock: what is scheduled, when it can run, and what ran
+    if (e.source === 'timelock') {
+      const label = (x) => { const n = c.labels?.[lower(x)]; return n ? `${n} ${x}` : String(x); };
+      if (e.name === 'CallScheduled') {
+        const fn = callName(a.data);
+        const eta = Number(e.time) + Number(a.delay);
+        add('timelock-scheduled', CRITICAL_CALLS.has(fn.split('(')[0]) ? 'critical' : 'warning',
+          `timelock: call scheduled ${String(a.id).slice(0, 10)}… #${str(a.index)}: ${label(a.target)} ${fn}${BigInt(a.value ?? 0) ? ` value ${str(a.value)}` : ''}, executable after ${new Date(eta * 1000).toISOString()} (cancellable until then)`,
+          `timelock: มีการตั้งเวลาเรียก ${String(a.id).slice(0, 10)}… #${str(a.index)}: ${label(a.target)} ${fn}${BigInt(a.value ?? 0) ? ` value ${str(a.value)}` : ''} ทำได้หลัง ${new Date(eta * 1000).toISOString()} (ยกเลิกได้ก่อนเวลานั้น)`,
+          { ...at, id: a.id, index: a.index, target: a.target, function: fn, eta, data: a.data });
+      }
+      if (e.name === 'CallExecuted') add('timelock-executed', 'warning', `timelock: executed ${String(a.id).slice(0, 10)}… #${str(a.index)}: ${label(a.target)} ${callName(a.data)}`,
+        `timelock: เรียกแล้ว ${String(a.id).slice(0, 10)}… #${str(a.index)}: ${label(a.target)} ${callName(a.data)}`, { ...at, id: a.id, target: a.target, function: callName(a.data) });
+      if (e.name === 'Cancelled') add('timelock-cancelled', 'warning', `timelock: cancelled ${a.id}`, `timelock: ยกเลิก ${a.id}`, { ...at, id: a.id });
+      if (e.name === 'MinDelayChange') add('timelock-delay', 'critical', `timelock: delay changed from ${str(a.oldDuration)} s to ${str(a.newDuration)} s`,
+        `timelock: เปลี่ยนระยะรอจาก ${str(a.oldDuration)} วินาทีเป็น ${str(a.newDuration)} วินาที`, { ...at, old: a.oldDuration, new: a.newDuration });
+    }
+    // the price oracle
+    if (e.source === 'oracle') {
+      if (e.name === 'DeviationTripped') add('oracle-deviation', 'critical', `oracle: ${a.asset} has no price: DEX TWAP ${usd(a.twapPrice)} and Pyth ${usd(a.pythPrice)} differ by ${str(a.bps)} bps`,
+        `oracle: ${a.asset} ไม่มีราคา: TWAP ของ DEX ${usd(a.twapPrice)} กับ Pyth ${usd(a.pythPrice)} ต่างกัน ${str(a.bps)} bps`, { ...at, asset: a.asset, twap: a.twapPrice, pyth: a.pythPrice, bps: a.bps },
+        `oracle-dev:${lower(a.asset)}:${Math.floor(e.time / 3600)}`);
+      if (e.name === 'StaleFeed') add('oracle-stale', 'warning', `oracle: ${a.asset}: the ${Number(a.source) === 1 ? 'DEX TWAP' : 'Pyth'} source is stale (last ${new Date(Number(a.updatedAt) * 1000).toISOString()})`,
+        `oracle: ${a.asset}: แหล่งราคา ${Number(a.source) === 1 ? 'TWAP ของ DEX' : 'Pyth'} เก่าเกินไป (ล่าสุด ${new Date(Number(a.updatedAt) * 1000).toISOString()})`, { ...at, asset: a.asset, source: a.source },
+        `oracle-stale:${lower(a.asset)}:${str(a.source)}:${Math.floor(e.time / 86400)}`);
+      if (e.name === 'CircuitBreakerTripped') add('oracle-breaker', 'critical', `oracle: ${a.asset} circuit breaker TRIPPED: ${usd(a.price)} vs ${usd(a.ref)} (${str(a.bps)} bps); no price until governance resets it (timelock)`,
+        `oracle: ${a.asset} ตัดวงจรราคาแล้ว: ${usd(a.price)} เทียบกับ ${usd(a.ref)} (${str(a.bps)} bps) ไม่มีราคาจนกว่า governance จะรีเซ็ต (ผ่าน timelock)`, { ...at, asset: a.asset, price: a.price, ref: a.ref, bps: a.bps });
+      if (e.name === 'FeedPaused') add('oracle-paused', 'critical', `oracle: feed ${a.asset} PAUSED by ${a.by} (only governance unpauses, through the timelock)`,
+        `oracle: ราคา ${a.asset} ถูกหยุดโดย ${a.by} (ต้องให้ governance เปิดคืนผ่าน timelock)`, { ...at, asset: a.asset, by: a.by });
+      if (e.name === 'SourceProblem') add('oracle-problem', 'warning', `oracle: ${a.asset}: ${PROBLEMS[Number(a.problem)] ?? a.problem} (${str(a.a)}, ${str(a.b)})`,
+        `oracle: ${a.asset}: ${PROBLEMS[Number(a.problem)] ?? a.problem} (${str(a.a)}, ${str(a.b)})`, { ...at, asset: a.asset, problem: PROBLEMS[Number(a.problem)] ?? a.problem },
+        `oracle-problem:${lower(a.asset)}:${str(a.problem)}:${Math.floor(e.time / 3600)}`);
+    }
     // large single transfer
     if (e.source === 'guard' && (e.name === 'Inbound' || e.name === 'Outbound')) {
       const r = routeById[lower(a.route)];
@@ -180,6 +231,15 @@ export function evaluate({ events = [], snapshot, state = newState(), now, cfg =
       : m?.done != null ? ['marked', 'already marked', 'ถูกทำเครื่องหมายไว้แล้ว']
       : ['queued', 'queued: the monitor marks it now (BridgeAirlock.trip)', 'เข้าคิว: ตัวเฝ้าทำเครื่องหมายตอนนี้ (BridgeAirlock.trip)'];
     add('watch-hit', 'critical', `a watched contract was called by ${who}${logs}: ${en}`, `มีการเรียกสัญญาที่เฝ้าไว้โดย ${who}${logs}: ${th}`, { caller: who, logs: n, status });
+  }
+
+  // oracle feeds that give no price right now (price() reverted), once a day per feed and reason
+  for (const f of snapshot.oracleFeeds ?? []) {
+    if (f.ok) continue;
+    const why = String(f.error ?? 'error');
+    const rule = /Stale/.test(why) ? 'oracle-stale' : /BreakerTripped/.test(why) ? 'oracle-breaker' : /FeedIsPaused/.test(why) ? 'oracle-paused' : 'oracle-unavailable';
+    add(rule, rule === 'oracle-unavailable' || rule === 'oracle-stale' ? 'warning' : 'critical', `oracle: ${f.asset} has no price now (price() reverts ${why})`,
+      `oracle: ${f.asset} ไม่มีราคาตอนนี้ (price() ปฏิเสธ: ${why})`, { asset: f.asset, error: why }, `oracle-now:${lower(f.asset)}:${why}:${Math.floor(now / 86400)}`);
   }
 
   // volume over X% of the daily limit (on-chain counters of today)
@@ -243,7 +303,8 @@ export function report({ alerts, chainId, fromBlock, toBlock, addresses, snapsho
   const th = alerts.length === 0 ? `ตัวเฝ้าสะพาน ZETAPHY: ไม่มีสัญญาณเตือน (บล็อก ${fromBlock}–${toBlock})${mTh}`
     : [`ตัวเฝ้าสะพาน ZETAPHY: มีสัญญาณเตือน ${alerts.length} รายการ ร้ายแรง ${crit} รายการ (บล็อก ${fromBlock}–${toBlock})${mTh}`, ...alerts.map((x) => `- [${x.severity}] ${x.rule}: ${x.th}`)].join('\n');
   return plain({ format: 'zetaphy-bridge-monitor/1', generatedAt: new Date(now * 1000).toISOString(), chainId, fromBlock, toBlock, addresses,
-    snapshot: snapshot && { paused: snapshot.paused, maxDailyLimit: snapshot.maxDailyLimit, threshold: snapshot.threshold, lanes: snapshot.lanes, routes: snapshot.routes },
+    snapshot: snapshot && { paused: snapshot.paused, maxDailyLimit: snapshot.maxDailyLimit, threshold: snapshot.threshold, lanes: snapshot.lanes, routes: snapshot.routes,
+      ...(snapshot.oracleFeeds ? { oracleFeeds: snapshot.oracleFeeds } : {}) },
     ...(marking ? { marking } : {}), alerts, summary: { en, th } });
 }
 
@@ -429,8 +490,26 @@ export function loadMonitorConfig({ configFile, launchStateFile } = {}) {
     const out = Object.assign({}, ...Object.values(st.steps ?? {}).map((s) => s.out ?? {}));
     cfg.bridgeGuard ??= out.bridgeGuard ?? null;
     cfg.bridgeAirlock ??= out.bridgeAirlock ?? null;
+    cfg.timelock ??= out.timelock ?? null;
+    cfg.oracle ??= out.oracle ?? null;
+    // names for addresses in alerts (timelock targets)
+    cfg.labels ??= {};
+    for (const [k, v] of Object.entries(out)) if (typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v)) cfg.labels[v.toLowerCase()] ??= k;
+    if (out.dex?.contracts?.factory) cfg.labels[out.dex.contracts.factory.toLowerCase()] ??= 'dexFactory';
+    if (out.nft?.marketplace) cfg.labels[out.nft.marketplace.toLowerCase()] ??= 'nftMarketplace';
   }
   return cfg;
+}
+
+/** Each oracle asset: does price() answer now? [{ asset, ok, value?, error? }] */
+export async function oracleFeedsOf(oracle) {
+  const out = [];
+  for (const asset of await oracle.assets()) {
+    try { const [value] = await oracle.price(asset); out.push({ asset: getAddress(asset), ok: true, value }); } catch (e) {
+      out.push({ asset: getAddress(asset), ok: false, error: e?.revert?.name ?? String(e?.code ?? 'error').replace(/[^\w-]/g, '') });
+    }
+  }
+  return out;
 }
 
 /** Reads a snapshot of the bridge's state. */
