@@ -1,0 +1,210 @@
+# ZETAPHY testnet launch day (docs/LAUNCH.md): deploy and wire every contract on the
+# live testnet, write the addresses into every web app's config, and open a pull
+# request with them. Run by hand only (Actions → launch-testnet → Run workflow);
+# never on push or pull request.
+#
+# The deployer key is the repository secret ZETAPHY_DEPLOYER_KEY (added by the owner,
+# Settings → Secrets and variables → Actions). It goes into a 0600 file under
+# $RUNNER_TEMP, is passed to launch.js as --key-file, never as an argument or an
+# environment variable of launch.js, and the file is removed at the end. GitHub masks
+# the secret in logs; the step also masks its 0x / no-0x spellings.
+#
+# Why a pull request (not a direct commit to main): the configs decide which
+# contracts the live sites talk to, so the owner sees the diff (and Vercel's preview)
+# before merging. The workflow keeps its own branch, launch/testnet: each run rebuilds
+# it on the default branch with the newest state, and a failed run still pushes its
+# state there, so the next run continues where it stopped (--resume).
+# If "Allow GitHub Actions to create and approve pull requests" is off
+# (Settings → Actions → General → Workflow permissions), the branch is still pushed
+# and the run prints the link to open the pull request by hand.
+# A pull request opened with GITHUB_TOKEN does not start other workflows (GitHub's
+# rule against loops), so CI checks on it start when the owner pushes or re-opens it.
+#
+# Cost: free (GitHub-hosted runner minutes; public repositories have no limit).
+
+name: launch-testnet
+
+on:
+  workflow_dispatch:
+    inputs:
+      rpc:
+        description: "The node's https RPC, e.g. https://1-2-3-4.sslip.io (NODE-INFO.txt on the server)"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run: only check the chain, the deployer's address and balance (no transactions, no PR)"
+        required: true
+        type: choice
+        options: ['yes', 'no']
+        default: 'yes'
+      governance:
+        description: "Who takes the admin roles at handover: gov (the chain's gov module, by votes) or 0x<multisig>; deployer = keep for now"
+        required: true
+        type: string
+        default: 'deployer'
+      handover:
+        description: "Hand the admin roles over now (after everything is configured)? Needs governance = gov or 0x…"
+        required: true
+        type: choice
+        options: ['no', 'yes']
+        default: 'no'
+      neuro_url:
+        description: "The Neuro web page (NeuroIdentity links, explorer report links)"
+        required: false
+        type: string
+        default: 'https://swd-amm-zetaphy-neuro.vercel.app/web/'
+      wallet_origin:
+        description: "The web wallet's https origin for the MetaMask Snap, e.g. https://wallet.sawasdeecoin.com (empty: keep)"
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: launch-testnet
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    name: Launch the ZETAPHY testnet contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash   # bash -eo pipefail: a failed launch is not hidden by | tee
+    env:
+      BRANCH: launch/testnet
+      STATE: zetaphy-launch/state/77390.json
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Check the inputs
+        env:
+          RPC: ${{ inputs.rpc }}
+          GOV: ${{ inputs.governance }}
+          HANDOVER: ${{ inputs.handover }}
+          NEURO_URL: ${{ inputs.neuro_url }}
+          WALLET_ORIGIN: ${{ inputs.wallet_origin }}
+        run: |
+          [[ "$RPC" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]] || { echo "::error::rpc must be https://<host> (e.g. https://1-2-3-4.sslip.io)"; exit 1; }
+          [[ "$GOV" =~ ^(deployer|gov|0x[0-9a-fA-F]{40})$ ]] || { echo "::error::governance must be deployer, gov or 0x<40 hex>"; exit 1; }
+          if [ "$HANDOVER" = yes ] && [ "$GOV" = deployer ]; then echo "::error::handover = yes needs governance = gov or 0x<multisig>"; exit 1; fi
+          [ -z "$NEURO_URL" ] || [[ "$NEURO_URL" =~ ^https://[A-Za-z0-9./_-]+$ ]] || { echo "::error::neuro_url must be https://…"; exit 1; }
+          [ -z "$WALLET_ORIGIN" ] || [[ "$WALLET_ORIGIN" =~ ^https://[A-Za-z0-9.-]+$ ]] || { echo "::error::wallet_origin must be https://<host>"; exit 1; }
+
+      - name: Install (launcher, network, DEX, NFT, snap)
+        run: |
+          npm ci --prefix zetaphy-launch --no-audit --no-fund
+          for p in zetaphy-network zetaphy-dex zetaphy-nft; do npm ci --prefix "$p" --omit=dev --no-audit --no-fund; done
+          npm ci --prefix zetaphy-snap --no-audit --no-fund
+
+      - name: Pick up the state of an earlier run (launch/testnet), if any
+        run: |
+          if git fetch -q origin "$BRANCH" 2>/dev/null && git cat-file -e "FETCH_HEAD:$STATE" 2>/dev/null; then
+            mkdir -p "$(dirname "$STATE")"
+            git show "FETCH_HEAD:$STATE" > "$STATE"
+            mkdir -p zetaphy-launch/state/proposals
+            git archive FETCH_HEAD zetaphy-launch/state/proposals 2>/dev/null | tar -x 2>/dev/null || true
+            echo "resuming from the state on $BRANCH"
+          elif [ -f "$STATE" ]; then echo "resuming from the state on ${{ github.ref_name }}"
+          else echo "no earlier state: a fresh launch"; fi
+
+      - name: Write the deployer key to a private file
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set (Settings → Secrets and variables → Actions; docs/LAUNCH.md step 4)"
+            exit 1
+          fi
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}
+          echo "::add-mask::$k"
+          echo "::add-mask::0x$k"
+          umask 077
+          printf '0x%s\n' "$k" > "$RUNNER_TEMP/deployer.key"
+          chmod 600 "$RUNNER_TEMP/deployer.key"
+          unset KEY k
+
+      - name: Launch
+        id: launch
+        env:
+          RPC: ${{ inputs.rpc }}
+          GOV: ${{ inputs.governance }}
+          HANDOVER: ${{ inputs.handover }}
+          DRY: ${{ inputs.dry_run }}
+          NEURO_URL: ${{ inputs.neuro_url }}
+          WALLET_ORIGIN: ${{ inputs.wallet_origin }}
+        run: |
+          args=(--rpc "$RPC" --key-file "$RUNNER_TEMP/deployer.key" --resume --governance "$GOV")
+          [ "$HANDOVER" = yes ] && args+=(--handover)
+          [ "$DRY" = yes ] && args+=(--dry-run)
+          [ -n "$NEURO_URL" ] && args+=(--neuro-url "$NEURO_URL")
+          [ -n "$WALLET_ORIGIN" ] && args+=(--wallet-origin "$WALLET_ORIGIN")
+          node zetaphy-launch/launch.js "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/launch.log"
+
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deployer.key"
+
+      - name: Upload the state (addresses only)
+        if: always() && inputs.dry_run == 'no'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zetaphy-launch-state-77390
+          path: |
+            zetaphy-launch/state/77390.json
+            zetaphy-launch/state/proposals/
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Push launch/testnet and open the pull request
+        if: always() && inputs.dry_run == 'no' && steps.launch.outcome != 'skipped'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTCOME: ${{ steps.launch.outcome }}
+          BASE: ${{ github.event.repository.default_branch }}
+          RPC: ${{ inputs.rpc }}
+        run: |
+          [ -f "$STATE" ] || { echo "no state written (nothing was deployed): nothing to push"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B "$BRANCH"
+          git add -- zetaphy-launch/state \
+            zetaphy-dex/web/deployments.json zetaphy-nft/web/deployments.json zetaphy-explorer/config.json \
+            zetaphy-wallet/index.html zetaphy-snap/snap.config.js zetaphy-snap/snap.manifest.json
+          # Never the key: it lived in $RUNNER_TEMP, outside the checkout. Belt and braces:
+          if git diff --cached --name-only | grep -Eiq '(\.key|keystore|secret)'; then echo "::error::refusing to commit a key-like file"; exit 1; fi
+          if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
+          what=$([ "$OUTCOME" = success ] && echo "contracts and configs" || echo "PARTIAL launch state (a step failed: run the workflow again to continue)")
+          git commit -q -m "zetaphy-launch: testnet $what" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} (RPC $RPC)."
+          git push -q --force origin "$BRANCH"
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            echo "the open pull request from $BRANCH is updated"
+            exit 0
+          fi
+          body=$(mktemp)
+          {
+            echo "Written by the **launch-testnet** workflow ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})) against \`$RPC\`."
+            echo
+            [ "$OUTCOME" = success ] || echo "> **Partial:** a step failed. Run the workflow again: it continues from \`$STATE\`. Do not merge until it succeeds."
+            echo
+            echo "- \`$STATE\`: every deployed address (no keys)"
+            echo "- web configs: DEX, NFT, explorer, wallet, snap (with the rebuilt \`snap.manifest.json\` shasum)"
+            echo
+            echo "Merge to put the live addresses on the sites (Vercel deploys main). See docs/LAUNCH.md."
+            echo
+            echo '```'
+            sed -n '/^addresses:/,$p' "$RUNNER_TEMP/launch.log" | head -80
+            echo '```'
+          } > "$body"
+          if ! gh pr create --base "$BASE" --head "$BRANCH" --title "Testnet launch: contract addresses and web configs" --body-file "$body"; then
+            echo "::warning::could not open the pull request (Settings → Actions → General → Workflow permissions → allow GitHub Actions to create pull requests). Open it by hand: ${{ github.server_url }}/${{ github.repository }}/compare/$BASE...$BRANCH"
+          fi
