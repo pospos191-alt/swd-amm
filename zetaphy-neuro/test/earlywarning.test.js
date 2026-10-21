@@ -348,3 +348,22 @@ test('nothing is logged: the pack and the token stay out of the logs', async () 
   }
   assert.deepEqual(lines, []);
 });
+
+test('opcode patterns with many "*" stay linear on hostile code (no exponential backtracking)', async () => {
+  const { parseOpcodes, opcodesMatch } = await import('../server/earlywarning.js');
+  const ops = new Array(24_000).fill(0x01); // ADD everywhere: every "*" branch matches
+  const t0 = Date.now();
+  assert.equal(opcodesMatch(ops, parseOpcodes('ADD * ADD * ADD * ADD * ADD * ADD * STOP')), false);
+  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+  assert.equal(opcodesMatch([0x32, 0x01, 0x01, 0x14], parseOpcodes('ORIGIN * EQ')), true);
+});
+
+test('rate limits count an IPv6 client by its /64', async () => {
+  const { clientKeyOf, memoryLimiter } = await import('../server/earlywarning.js');
+  assert.equal(clientKeyOf('2001:db8:1:2::9'), clientKeyOf('2001:0db8:0001:0002:ffff:1:2:3'));
+  assert.notEqual(clientKeyOf('2001:db8:1:2::9'), clientKeyOf('2001:db8:1:3::9'));
+  assert.equal(clientKeyOf('::ffff:203.0.113.9'), '203.0.113.9');
+  const m = memoryLimiter({ perMinute: 2, now: () => 0 });
+  assert.ok((await m.check('2001:db8:1:2::1')).ok && (await m.check('2001:db8:1:2::2')).ok);
+  assert.equal((await m.check('2001:db8:1:2::3')).ok, false, 'a new address in the same /64 is the same client');
+});

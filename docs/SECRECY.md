@@ -50,7 +50,8 @@
 1. **Settings → Code security**: เปิด **Private vulnerability reporting**, **Secret scanning** + **Push protection**, **Dependabot alerts**
 2. **Settings → Actions → General**: Fork pull request workflows → **Require approval for all external contributors**; Workflow permissions → **Read repository contents** (ค่าเริ่มต้นแบบอ่านอย่างเดียว)
 3. **Settings → Branches → Add rule** สำหรับ `main`: Require a pull request + Require status checks (CI)
-4. เปิดตารางเวลา bridge-monitor ได้ฟรีเมื่อมีสะพานจริง (`*/15`)
+4. **ก่อนกดเปลี่ยน** ลบ artifact เก่าชื่อ `bridge-monitor-report` ใน Actions (ตอน private เก็บรายละเอียดการแจ้งเตือนไว้ 14 วัน) ถ้ายังไม่เคยรัน bridge-monitor ก็ข้ามได้
+5. เปิดตารางเวลา bridge-monitor ได้ฟรีเมื่อมีสะพานจริง (`*/15`)
 
 ## 5. รอบดูแล
 
@@ -59,4 +60,5 @@
 - เปลี่ยน `BRIDGE_MARKER_KEY` และ token ต่าง ๆ ทุก 6 เดือน หรือทันทีที่สงสัยว่าหลุด
   - เปลี่ยน marker: governance โหวต `setMarker(ใหม่, true)` แล้ว `setMarker(เก่า, false)`
   - เปลี่ยน watch list / marker key / thresholds แล้ว ตัวเฝ้าจะเริ่มความจำใหม่ (state เข้ารหัสด้วยค่าเหล่านี้) แต่ไม่ต้องสแกนบล็อกเก่าซ้ำ
-- หลัง governance `untrip` ใครสักคนต้องเรียก `release` เองสำหรับรายการที่ค้างไว้
+- หลัง governance `untrip` รายการที่ค้างไว้ runner จะปล่อยให้เองในรอบถัดไป (ไม่ทิ้ง)
+- marker หลุด: governance `setMarker(ที่อยู่นั้น, false)` ครั้งเดียว เครื่องหมายทั้งหมดที่มันทำจะไม่มีผลทันที

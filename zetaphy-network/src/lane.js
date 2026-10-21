@@ -161,8 +161,9 @@ export function createLaneWatcher({ lockbox, lane, airlock, me, srcChainId, conf
           } catch (err) {
             const name = why(err, airlock);
             out.push(`lock #${t[2]}: not released (${name})`);
-            if (/Blocked/.test(name)) continue; // marked (until governance untrips) or vetoed: stop retrying
-            // ThreatHeld / ThreatFlagged (a flag landed meanwhile): kept, retried next tick.
+            // Not vetoed or released (checked above), so Blocked means a party is
+            // marked: kept and retried, so it comes out once governance lifts the mark.
+            // ThreatHeld / ThreatFlagged (a flag landed meanwhile): kept, retried next tick too.
           }
         }
       }

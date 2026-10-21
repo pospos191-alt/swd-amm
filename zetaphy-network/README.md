@@ -314,6 +314,7 @@ zetaphy bridge close        # governance: ปิด route
 | `watch-hit` | สัญญาใน watch list ส่ง event (ร้ายแรง) บอกเฉพาะผู้เรียก ไม่บอกว่าสัญญาไหน |
 | `marked` | มีการทำเครื่องหมายที่อยู่ (`Tripped`) ที่ตัวเฝ้านี้ทำเอง = เตือน · marker อื่นทำ = ร้ายแรง (ตรวจว่าใครถือ key นั้น) |
 | `mark-failed` | ทำเครื่องหมายไม่สำเร็จ (key ไม่ได้เป็น marker, แก๊สไม่พอ) ลองใหม่ทุกรอบ (ร้ายแรง) |
+| `mark-skipped` | ผู้เรียกเป็นสัญญา (เช่น Multicall, router ที่หลายคนใช้ร่วมกัน) จึงไม่ทำเครื่องหมายอัตโนมัติ ให้คนตัดสินใจ (เตือน) |
 | `hold` | `InboundHeld` ของ BridgeGuard, `HeldNow` / `FastEnforced` ของ ThreatRegistry |
 | `governance-change` | เปลี่ยน route เพดาน `maxDailyLimit` lane vetoer marker guardian governance audit registry config/ISM ของ HyperlaneLane, unpause, untrip |
 | `large-transfer` | รายการเดียว ≥ 25% ของเพดานต่อวัน (`--large-pct`) |

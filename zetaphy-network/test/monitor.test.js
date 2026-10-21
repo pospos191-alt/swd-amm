@@ -257,6 +257,17 @@ test('marking: queued callers are tripped once; already tripped ones only record
   assert.match(m4.alerts[0].en, /is not a marker of the airlock \(governance: setMarker\)/);
   assert.equal((await applyMarks({ airlock: k4, marker: MARKER, state: st4, now: NOW + 60 })).alerts.length, 0);
   assert.deepEqual(k4.sent, []);
+  // A caller that is a contract (Multicall, a forwarder, a router: shared by many) is not marked automatically.
+  const ROUTER = getAddress('0x' + '7a'.repeat(20));
+  const st5 = evaluate({ snapshot: snap(), now: NOW, cfg: { marker: MARKER }, events: [
+    { source: 'watch', name: 'Hit', args: { caller: ROUTER }, block: 5, time: NOW },
+    { source: 'watch', name: 'Hit', args: { caller: L2 }, block: 6, time: NOW },
+  ] }).state;
+  const k5 = fakeAirlock();
+  const m5 = await applyMarks({ airlock: k5, marker: MARKER, state: st5, now: NOW, codeAt: async (w) => (w === ROUTER ? '0x6080' : '0x') });
+  assert.deepEqual(k5.sent, [L2]);
+  assert.deepEqual(rules(m5.alerts), ['mark-skipped']);
+  assert.equal((await applyMarks({ airlock: k5, marker: MARKER, state: st5, now: NOW + 60, codeAt: async () => '0x6080' })).alerts.length, 0, 'decided once');
   // Marks are forgotten 90 days after they are done.
   const old = evaluate({ snapshot: snap(), now: NOW + 91 * 86400, state: r3.state });
   assert.deepEqual(old.state.marks, {});

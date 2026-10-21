@@ -370,7 +370,7 @@ export function openState(saved, key) {
  * tripped on-chain is only recorded. A failure stays queued for the next run; its reason is the
  * error's code or revert name only. Returns { alerts, marked, pending } and updates state.marks.
  */
-export async function applyMarks({ airlock, marker, state, now }) {
+export async function applyMarks({ airlock, marker, state, now, codeAt }) {
   const alerts = [];
   state.marks ??= {};
   state.alerted ??= {};
@@ -395,6 +395,15 @@ export async function applyMarks({ airlock, marker, state, now }) {
   for (const [k, m] of queued) {
     const who = getAddress(k);
     try {
+      // A caller with code (Multicall, a forwarder, the ERC-4337 EntryPoint, a
+      // router) is shared by many people: marking it would freeze everyone's
+      // bridge transfers through it. Alert only; a person decides.
+      if (codeAt && (await codeAt(who)) !== '0x') {
+        m.lifted = now;
+        alerts.push({ rule: 'mark-skipped', severity: 'warning', en: `${who} touched a watched contract but is itself a contract (it may be shared by many people): not marked automatically; governance can mark it by hand`,
+          th: `${who} เรียกสัญญาที่เฝ้าอยู่ แต่ตัวมันเป็นสัญญา (อาจมีคนใช้ร่วมกันมาก) จึงไม่ทำเครื่องหมายอัตโนมัติ ให้คนตัดสินใจ`, data: { who } });
+        continue;
+      }
       if (!(await airlock.tripped(who))) { await (await airlock.trip(who)).wait(); marked += 1; }
       m.done = now;
     } catch (e) {
@@ -463,7 +472,19 @@ export async function readEvents(provider, sources, from, to, { chunk = DEFAULTS
   if ((!byAddr.size && !watched.size) || to < from) return [];
   const out = [];
   const times = new Map();
-  const timeOf = async (n) => { if (!times.has(n)) times.set(n, Number((await provider.getBlock(n)).timestamp)); return times.get(n); };
+  // With a watch list, a getBlock error is reduced to its code too: it quotes the block number,
+  // which can be the block of a watched contract's log (and so point to it).
+  const timeOf = async (n) => {
+    if (!times.has(n)) {
+      let b;
+      try { b = await provider.getBlock(n); } catch (e) {
+        if (!watched.size) throw e;
+        throw new Error(`reading a block's time failed (${String(e?.code ?? 'error').replace(/[^\w-]/g, '')}; details withheld: the block may point to a watched contract)`);
+      }
+      times.set(n, Number(b.timestamp));
+    }
+    return times.get(n);
+  };
   for (let a = from; a <= to; a += chunk) {
     const b = Math.min(a + chunk - 1, to);
     let logs;

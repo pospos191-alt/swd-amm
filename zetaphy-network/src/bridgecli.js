@@ -248,7 +248,7 @@ export async function monitorCommand({ opt, env, write, s, connectRpc }) {
   // Marks: the callers evaluate() queued (and earlier failures), with the marker key.
   let marking = null;
   if (marker) {
-    const m = await applyMarks({ airlock: airlock.connect(marker), marker: markerAddr, state: next, now });
+    const m = await applyMarks({ airlock: airlock.connect(marker), marker: markerAddr, state: next, now, codeAt: (a) => provider.getCode(a) });
     alerts.push(...m.alerts);
     marking = { marked: m.marked, pending: m.pending };
   }

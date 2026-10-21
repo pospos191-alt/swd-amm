@@ -96,18 +96,27 @@ export function parseOpcodes(pattern) {
   return tokens;
 }
 
-/** Does the opcode list (PUSH data dropped) contain the pattern? */
+/**
+ * Does the opcode list (PUSH data dropped) contain the pattern? The code is
+ * the asker's (anyone can deploy it), so the search is memoized: each
+ * (position, token) pair is decided once, O(code x pattern x GAP) at most,
+ * never exponential in the number of "*" gaps.
+ */
 export function opcodesMatch(ops, tokens) {
+  const width = tokens.length + 1;
+  const failed = new Uint8Array((ops.length + 1) * width); // 1: (i, t) known not to match
   const at = (i, t) => {
     if (t === tokens.length) return true;
+    if (failed[i * width + t]) return false;
     const tok = tokens[t];
+    let ok = false;
     if (tok.gap) {
-      for (let skip = 0; skip <= GAP && i + skip <= ops.length; skip++) if (at(i + skip, t + 1)) return true;
-      return false;
+      for (let skip = 0; skip <= GAP && i + skip <= ops.length; skip++) if (at(i + skip, t + 1)) { ok = true; break; }
+    } else if (i < ops.length && (tok.any || (ops[i] >= tok.lo && ops[i] <= tok.hi))) {
+      ok = at(i + 1, t + 1);
     }
-    if (i >= ops.length) return false;
-    if (!tok.any && (ops[i] < tok.lo || ops[i] > tok.hi)) return false;
-    return at(i + 1, t + 1);
+    if (!ok) failed[i * width + t] = 1;
+    return ok;
   };
   for (let i = 0; i < ops.length; i++) if (at(i, 0)) return true;
   return false;
@@ -398,6 +407,24 @@ export function warningsFor(pack, ctx) {
 
 // --------------------------------------------------------- abuse limits
 /**
+ * The client a limit counts: an IPv4 address as is, an IPv6 address by its
+ * /64 (one subscriber usually holds a whole /64, so counting single IPv6
+ * addresses would give one client 2^64 separate budgets).
+ */
+export function clientKeyOf(ip) {
+  let s = String(ip ?? '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/%.*$/, '');
+  const v4 = /^(?:::ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  if (v4) return v4[1];
+  if (!s.includes(':') || !/^[0-9a-f:.]+$/.test(s)) return s;
+  const [head, tail = null] = s.split('::');
+  const part = (x) => (x ? x.split(':') : []);
+  const h = part(head);
+  const t = tail == null ? [] : part(tail);
+  const groups = tail == null ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+  return groups.slice(0, 4).map((g) => (g.includes('.') ? g : g.replace(/^0+(?=.)/, ''))).join(':') + '::/64';
+}
+
+/**
  * Fixed-window limits per client and for this instance as a whole. Clients
  * are kept as an HMAC of their IP under a per-process random key, never the IP.
  */
@@ -419,7 +446,7 @@ export function memoryLimiter({ perMinute = 12, perDay = 300, globalPerMinute = 
         for (const [k, w] of windows) if (t >= w.start + w.size) windows.delete(k);
         lastSweep = t;
       }
-      const id = createHmac('sha256', key).update(String(ip ?? '')).digest('hex').slice(0, 32);
+      const id = createHmac('sha256', key).update(clientKeyOf(ip)).digest('hex').slice(0, 32);
       const waits = [
         hit(`g:m`, 60_000, globalPerMinute, t),
         hit(`m:${id}`, 60_000, perMinute, t),
@@ -440,7 +467,7 @@ export function redisLimiter(store, secret, { perMinute = 12, perDay = 300, now 
   return {
     async check(ip) {
       const t = now();
-      const id = createHmac('sha256', secret).update(`ew|${ip ?? ''}`).digest('hex').slice(0, 32);
+      const id = createHmac('sha256', secret).update(`ew|${clientKeyOf(ip)}`).digest('hex').slice(0, 32);
       const minute = Math.floor(t / 60_000);
       const day = new Date(t).toISOString().slice(0, 10);
       const m = `neuro:ew:m:${minute}:${id}`;

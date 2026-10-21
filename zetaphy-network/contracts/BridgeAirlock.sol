@@ -89,7 +89,10 @@ contract BridgeAirlock {
     /// Keys that may mark addresses (trip). See trip(): a marker can only mark.
     mapping(address => bool) public isMarker;
     uint256 public markerCount;         // markers now on
-    mapping(address => bool) public tripped;   // marked by a marker; cleared by governance (untrip)
+    /// Who marked an address (zero: not marked). A mark counts only while its
+    /// marker is still a marker, so removing a stolen marker key lifts all of
+    /// its marks at once (see tripped()).
+    mapping(address => address) public trippedBy;
     mapping(bytes32 => Transfer) public transfers;
     mapping(bytes32 => mapping(address => bool)) public attestedBy;
     /// By controller (laneControllerOf at attest time): two lanes with one
@@ -166,7 +169,14 @@ contract BridgeAirlock {
     /// The ThreatRegistry whose flags hold transfers (zero turns the check off).
     function setThreats(IThreatFlags r) external onlyGov { threats = r; emit ThreatsSet(address(r)); }
     /// Governance can lift a mark set by mistake.
-    function untrip(address who) external onlyGov { tripped[who] = false; emit Untripped(who); }
+    function untrip(address who) external onlyGov { delete trippedBy[who]; emit Untripped(who); }
+
+    /// Marked by a marker that is still on. setMarker(m, false) lifts every
+    /// mark m made (setting m on again would bring them back).
+    function tripped(address who) public view returns (bool) {
+        address m = trippedBy[who];
+        return m != address(0) && isMarker[m];
+    }
 
     /// The lanes now on.
     function lanes() external view returns (address[] memory) { return laneList; }
@@ -231,10 +241,10 @@ contract BridgeAirlock {
     /// release, mint, pause or move any funds, and a mark loses nothing (the
     /// transfer stays and comes out once the mark is lifted). So a stolen or
     /// misused marker key can at worst delay some addresses' transfers until
-    /// governance removes the marker (setMarker) and lifts its marks.
+    /// governance removes the marker (setMarker), which lifts all its marks.
     function trip(address who) external {
         if (!isMarker[msg.sender]) revert NotMarker();
-        tripped[who] = true;
+        trippedBy[who] = msg.sender;
         emit Tripped(who, msg.sender);
     }
 
@@ -242,7 +252,7 @@ contract BridgeAirlock {
     function release(uint256 srcChainId, address srcContract, uint256 srcNonce, address sender, address to, uint256 amount) external {
         bytes32 id = transferId(srcChainId, srcContract, srcNonce, sender, to, amount);
         Transfer storage t = transfers[id];
-        if (t.released || t.vetoed || tripped[sender] || tripped[to]) revert Blocked();
+        if (t.released || t.vetoed || tripped(sender) || tripped(to)) revert Blocked();
         if (t.attestations < threshold || t.readyFrom == 0 || block.timestamp < t.readyFrom + quarantine) revert NotReady();
         uint8 what = flaggedParty(srcChainId, srcContract, sender, to);
         if (what != 0) revert ThreatFlagged(what);

@@ -123,7 +123,15 @@ test('a marker marks an address; its transfers are held until governance untrips
   assert.equal(await airlock.call('tripped', [a('attacker')]), false);
   await airlock.send('user', 'release', bad);
   assert.equal(await bal('alice'), 500n * 10n ** 6n + 1n);
-  // Governance removes a marker key (lost or misused): it marks nothing any more.
+  // Governance removes a marker key (lost or misused): it marks nothing any more,
+  // and every mark it made is lifted at once (no untrip per address).
+  await airlock.send('monitor', 'trip', [a('alice')]);
+  assert.equal(await airlock.call('tripped', [a('alice')]), true);
+  await airlock.send('gov', 'setMarker', [a('monitor'), false]);
+  assert.equal(await airlock.call('tripped', [a('alice')]), false, 'a removed marker\'s marks no longer count');
+  await airlock.send('gov', 'setMarker', [a('monitor'), true]);
+  assert.equal(await airlock.call('tripped', [a('alice')]), true, 'naming it again brings them back');
+  await airlock.send('gov', 'untrip', [a('alice')]);
   await airlock.send('gov', 'setMarker', [a('monitor'), true]); // again: no double count
   assert.equal(await airlock.call('markerCount'), 1n);
   await airlock.send('gov', 'setMarker', [a('monitor'), false]);
