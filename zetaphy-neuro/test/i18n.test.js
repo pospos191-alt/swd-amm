@@ -109,9 +109,10 @@ test('no message, reason or UI text uses an accusatory label', () => {
     }
     for (const s of Object.values(L.REASON)) assert.doesNotMatch(s, ACCUSATORY, `${code} REASON: ${s}`);
     const ui = uiText(code);
-    for (const k of ['disclaimer', 'correction', 'reproduce', 'reproduceHow', 'asWritten', 'footer']) {
+    for (const k of ['disclaimer', 'correction', 'reproduce', 'reproduceHow', 'asWritten', 'footer', 'early', 'earlyHow']) {
       assert.doesNotMatch(ui[k], ACCUSATORY, `${code} UI.${k}`);
     }
+    for (const k of ['earlyMatch', 'earlyRef']) assert.doesNotMatch(ui.m[k], ACCUSATORY, `${code} UI.m.${k}`);
   }
 });
 
@@ -127,7 +128,10 @@ test('every language describes every ThreatRegistry category and has the disclai
     for (const k of ['disclaimer', 'correction', 'reproduce', 'reproduceHow', 'asWritten']) {
       assert.ok(L.UI[k]?.length > 3, `${code}: UI.${k}`);
     }
-    for (const k of ['verdict', 'command', 'rule']) assert.ok(L.UI.m[k]?.length > 0, `${code}: UI.m.${k}`);
+    for (const k of ['verdict', 'command', 'rule', 'earlyMatch', 'earlyRef']) assert.ok(L.UI.m[k]?.length > 0, `${code}: UI.m.${k}`);
+    // The early-warning notice says it is advisory and not part of the verdict.
+    for (const k of ['early', 'earlyHow']) assert.ok(L.UI[k]?.length > 3, `${code}: UI.${k}`);
+    assert.match(L.UI.earlyHow, /30/, `${code}: says when the patterns are published`);
   }
 });
 
