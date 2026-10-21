@@ -7,9 +7,10 @@
 //   node cli.js set-fee-to   <address|0x0> --rpc <url> --key-file <file> [--deployments <file>]
 //   node cli.js mint-test <token> <to> <amount> --rpc <url> --key-file <file>
 //
-// The key: a file holding a 0x… private key (chmod 600), or an Ethereum keystore
-// JSON (then ZETAPHY_PASSPHRASE decrypts it). --key-file can also come from
+// The key: a file holding a 0x… private key, or an Ethereum keystore JSON (then
+// ZETAPHY_PASSPHRASE decrypts it). --key-file can also come from
 // ZETAPHY_DEX_KEY_FILE. A key is never taken on the command line or asked for.
+// A key file that other users can read (group or world) is refused: chmod 600 it.
 // Use a testnet-only key: this DEX is unaudited.
 //
 // deploy options:
@@ -23,6 +24,7 @@
 //   --public-rpc <https url> the RPC URL the web app should use (written to the deployments file)
 //   --out <file>             default deployments/<chainId>.json
 //   --web <file>             also write the web app's deployments.json (e.g. ../test-ui/zetaphy/deployments.json)
+//   --any-chain              deploy on a chain other than ZETAPHY (EVM chain id 77390); refused without it
 
 import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -41,7 +43,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const k = a.slice(2);
-      if (['test-tokens', 'help'].includes(k)) opt[k] = true;
+      if (['test-tokens', 'help', 'any-chain'].includes(k)) opt[k] = true;
       else { if (i + 1 >= argv.length) throw new Error(`${a} needs a value`); opt[k] = argv[++i]; }
     } else pos.push(a);
   }
@@ -52,7 +54,9 @@ function parseArgs(argv) {
 export function loadKey(file) {
   if (!file) throw new Error('no key: pass --key-file <file> or set ZETAPHY_DEX_KEY_FILE (never a key on the command line)');
   const st = statSync(file);
-  if (process.platform !== 'win32' && (st.mode & 0o077)) console.error(`warning: ${file} is readable by other users; chmod 600 it`);
+  if (process.platform !== 'win32' && (st.mode & 0o077)) {
+    throw new Error(`${file} is readable or writable by other users (mode ${(st.mode & 0o777).toString(8)}): run chmod 600 ${file}`);
+  }
   const text = readFileSync(file, 'utf8').trim();
   if (text.startsWith('{')) {
     const pass = process.env.ZETAPHY_PASSPHRASE;
@@ -97,9 +101,23 @@ async function deployOne(signer, name, args, log) {
 
 const wait = async (txp) => { const r = await (await txp).wait(); if (r.status !== 1) throw new Error('transaction failed'); return r; };
 
+/** deploy runs on ZETAPHY (77390) only, unless --any-chain says otherwise. */
+export function checkDeployChain(chainId, anyChain) {
+  if (chainId !== ZETAPHY_EVM_CHAIN_ID && !anyChain) {
+    throw new Error(`the RPC is on chain id ${chainId}, not ZETAPHY (${ZETAPHY_EVM_CHAIN_ID}); pass --any-chain to deploy there anyway`);
+  }
+}
+
 export async function deploy(opt, log = console.log) {
   const { provider, signer } = connect(opt, true);
+  try {
+    return await deployWith(provider, signer, opt, log);
+  } finally { provider.destroy(); }
+}
+
+async function deployWith(provider, signer, opt, log) {
   const net = await provider.getNetwork();
+  checkDeployChain(net.chainId, opt['any-chain']);
   const me = await signer.getAddress();
   log(`chain ${net.chainId}, deployer ${me}, balance ${formatUnits(await provider.getBalance(me), 18)}`);
 
@@ -211,7 +229,11 @@ async function mintTest(pos, opt, log) {
   log(`minted ${amount} ${await t.symbol()} to ${to}`);
 }
 
-const HELP = readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1, 25).map((l) => l.replace(/^\/\/ ?/, '')).join('\n');
+// The header comment, up to the first line that is not a comment.
+const HELP = (() => {
+  const lines = readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').slice(1);
+  return lines.slice(0, lines.findIndex((l) => !l.startsWith('//'))).map((l) => l.replace(/^\/\/ ?/, '')).join('\n');
+})();
 
 export async function main(argv, log = console.log) {
   const [cmd, ...rest] = argv;

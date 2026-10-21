@@ -18,9 +18,17 @@ interface IThreatRegistryView {
 ///           - setThreatRegistry(r):  Neuro's ThreatRegistry. Zero (the default) = off;
 ///                                    otherwise the router refuses to swap into, or add
 ///                                    liquidity with, a token whose flag is ENFORCED there.
-///                                    Selling a token and removing liquidity always work;
+///                                    Selling a token for the native coin and removing
+///                                    liquidity never ask the registry, so they always work;
+///           - sweep the router's stray native coins (ZetaphyRouter.sweep; never user funds);
 ///           - transfer governance (two steps: setGovernance, then acceptGovernance).
-///         Governance cannot move anyone's funds, pause pools or change the 0.3% fee.
+///         Governance cannot move anyone's funds, change the 0.3% fee, or stop the
+///         pairs themselves (they never ask the registry). It CAN stop buying through
+///         the router: the router's registry check fails closed, so a registry that
+///         stops answering (or that answers "enforced" for every token) makes the
+///         router refuse every swap into a token and every add of liquidity until
+///         governance sets the registry to zero (which lifts it at once). The check
+///         here (setThreatRegistry) only proves the registry answered when it was set.
 contract ZetaphyFactory {
     address public governance;
     address public pendingGovernance;
@@ -91,11 +99,15 @@ contract ZetaphyFactory {
         emit FeeToSet(feeTo_);
     }
 
+    /// Gas for the query below; the same cap as ZetaphyRouter.REGISTRY_GAS.
+    uint256 public constant REGISTRY_GAS = 100_000;
+
     /// Zero switches the router's check off. A nonzero address must answer
-    /// isContractEnforced (checked here), so a typo cannot stop every swap.
+    /// isContractEnforced within REGISTRY_GAS (checked here), so a typo cannot
+    /// stop every swap. It cannot prove the registry keeps answering later.
     function setThreatRegistry(address registry) external onlyGov {
         if (registry != address(0)) {
-            (bool ok, bytes memory r) = registry.staticcall(abi.encodeCall(IThreatRegistryView.isContractEnforced, (address(this))));
+            (bool ok, bytes memory r) = registry.staticcall{gas: REGISTRY_GAS}(abi.encodeCall(IThreatRegistryView.isContractEnforced, (address(this))));
             if (!ok || r.length < 64) revert NotARegistry();
         }
         threatRegistry = registry;

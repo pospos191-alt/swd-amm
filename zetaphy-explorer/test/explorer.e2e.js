@@ -122,7 +122,7 @@ test('home: chain id, height, supply with burns, staking, PQ coverage, latest bl
 test('block page: header, proposer, decoded txs and the ML-DSA-44 certificate verified in the browser', async () => {
   const { page, ctx, problems } = await openPage();
   await go(page, '#/block/20');
-  await waitText(page, 'ใบรับรองถูกต้อง');
+  await waitText(page, 'ใบรับรองถูกต้องตามกุญแจ validator ของโหนดนี้');
   const t = await text(page);
   assert.match(t, new RegExp(chain.blocks.get(20).hash));
   assert.match(t, /Alpha Node|Beta Node/); // proposer moniker
@@ -295,7 +295,7 @@ test('search, language and theme toggles, settings (another node), phone width',
   await waitText(page, 'บันทึกแล้ว');
   const before = counts[OTHER_NODE];
   await go(page, '#/block/5');
-  await waitText(page, 'ใบรับรองถูกต้อง');
+  await waitText(page, 'ใบรับรองถูกต้องตามกุญแจ validator ของโหนดนี้');
   assert.ok(counts[OTHER_NODE] > before, 'requests go to the node set in settings');
   assert.equal(await page.evaluate(() => window.__explorer.config().node), OTHER_NODE + '/');
   await go(page, '#/settings');

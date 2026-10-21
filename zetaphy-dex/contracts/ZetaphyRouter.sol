@@ -23,16 +23,36 @@ pragma solidity 0.8.26;
 // on this chain, or its exact code). Selling such a token and removing
 // liquidity always work, so nobody is locked in. A flag is automated,
 // reproducible code analysis, not an accusation (docs/LEGAL.md).
+//
+// Governance's reach over the router (stated plainly, see README):
+//   - the registry check FAILS CLOSED: if the registry governance set stops
+//     answering (reverts, returns junk, or needs more than REGISTRY_GAS), or
+//     answers "enforced" for everything, every swap into a token other than
+//     the native coin, and every add of liquidity, is refused router-wide.
+//     Selling into the native coin and removing liquidity never ask the
+//     registry, so they keep working; the pairs themselves never ask it either.
+//     Governance lifts such a stop by setting the registry to zero.
+//   - sweep(to): native coins that reached the router outside a call (a
+//     precompile transfer, a self-destruct) can be sent on by governance. The
+//     router holds no user funds between calls, so nothing of a user's is reachable.
+//
+// First deposit: while a pair's totalSupply is 0 (nobody has minted LP yet),
+// addLiquidity takes the desired amounts as given, even if someone donated
+// tokens and called sync() so that the reserves are not zero. The donation
+// then belongs to the first LP, and the first LP's price is not set by
+// whoever made the donation (security finding M3).
 
 interface IFactory {
     function getPair(address, address) external view returns (address);
     function createPair(address, address) external returns (address);
     function threatRegistry() external view returns (address);
+    function governance() external view returns (address);
     function PAIR_CODE_HASH() external view returns (bytes32);
 }
 
 interface IPair {
     function getReserves() external view returns (uint112, uint112, uint32);
+    function totalSupply() external view returns (uint256);
     function mint(address to) external returns (uint256);
     function burn(address to) external returns (uint256, uint256);
     function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external;
@@ -57,6 +77,9 @@ contract ZetaphyRouter {
     address public immutable WETH;
     bytes32 private immutable pairCodeHash;
 
+    /// Gas given to each ThreatRegistry query: a registry that needs more fails closed (RegistryUnavailable).
+    uint256 public constant REGISTRY_GAS = 100_000;
+
     error Expired();
     error InvalidPath();
     error InsufficientAAmount();
@@ -71,10 +94,13 @@ contract ZetaphyRouter {
     error TransferFailed();
     error NativeTransferFailed();
     error OnlyWNative();
+    error NotGovernance();
     /// Neuro's ThreatRegistry has an enforced flag on this token (reason: ThreatRegistry.Reason).
     error TokenEnforced(address token, uint8 reason);
-    /// The ThreatRegistry governance set did not answer; fails closed.
+    /// The ThreatRegistry governance set did not answer (within REGISTRY_GAS); fails closed.
     error RegistryUnavailable();
+
+    event Swept(address indexed to, uint256 amount);
 
     modifier ensure(uint256 deadline) {
         if (deadline < block.timestamp) revert Expired();
@@ -93,12 +119,23 @@ contract ZetaphyRouter {
         if (msg.sender != WETH) revert OnlyWNative();
     }
 
+    /// Governance only: sends the router's whole native balance to `to`. Coins
+    /// can only be there by mistake (a precompile transfer or a self-destruct
+    /// skips receive()); the router holds no user funds between calls.
+    function sweep(address to) external {
+        if (msg.sender != IFactory(factory).governance()) revert NotGovernance();
+        if (to == address(0)) revert ZeroAddress();
+        uint256 amount = address(this).balance;
+        _sendNative(to, amount);
+        emit Swept(to, amount);
+    }
+
     // ---- Neuro ----
 
     /// Reverts with TokenEnforced if the registry (when set) has an enforced flag on `token`.
     function _refuseEnforced(address registry, address token) private view {
         if (token == WETH) return;
-        (bool ok, bytes memory r) = registry.staticcall(abi.encodeCall(IThreatView.isContractEnforced, (token)));
+        (bool ok, bytes memory r) = registry.staticcall{gas: REGISTRY_GAS}(abi.encodeCall(IThreatView.isContractEnforced, (token)));
         if (!ok || r.length < 64) revert RegistryUnavailable();
         (bool enforced, uint8 reason) = abi.decode(r, (bool, uint8));
         if (enforced) revert TokenEnforced(token, reason);
@@ -210,9 +247,12 @@ contract ZetaphyRouter {
         private returns (uint256 amountA, uint256 amountB)
     {
         _checkPair(tokenA, tokenB);
-        if (IFactory(factory).getPair(tokenA, tokenB) == address(0)) IFactory(factory).createPair(tokenA, tokenB);
+        address pair = IFactory(factory).getPair(tokenA, tokenB);
+        if (pair == address(0)) pair = IFactory(factory).createPair(tokenA, tokenB);
         (uint256 reserveA, uint256 reserveB) = getReserves(tokenA, tokenB);
-        if (reserveA == 0 && reserveB == 0) {
+        // No LP minted yet: a new pool, whatever the reserves (a donation + sync
+        // must not set the first LP's price). The first LP sets it and gets the donation.
+        if (IPair(pair).totalSupply() == 0 || (reserveA == 0 && reserveB == 0)) {
             (amountA, amountB) = (amountADesired, amountBDesired);
         } else {
             uint256 amountBOptimal = quote(amountADesired, reserveA, reserveB);

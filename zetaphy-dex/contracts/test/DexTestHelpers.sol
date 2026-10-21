@@ -99,3 +99,79 @@ contract MockRunners {
     function set(address a, bool v) external { on[a] = v; }
     function workers(address a) external view returns (uint128, uint64, bool, uint32, uint32) { return (100, 0, on[a], on[a] ? 5 : 0, 0); }
 }
+
+/// Checks that a reverted call leaves native balances exactly as they were
+/// (security note S1: the DEX trusts the native ERC-20 precompile's balances,
+/// so the chain must undo precompile transfers made inside a reverting call).
+/// probe() runs `calls` inside a sub-call (this.run). With undo = true the
+/// sub-call always reverts at the end (Undo, or Failed(i, data) if a call
+/// failed first); with undo = false it keeps the calls' effects (only a failed
+/// call reverts it). The balances of `watch` and of this contract, read both as
+/// address.balance and through `wnative`.balanceOf, are reported in Probed; the
+/// rest of this contract's native balance goes back to the caller at the end.
+contract RevertProbe {
+    struct Call { address target; uint256 value; bytes data; }
+    struct Balances { uint256 watchNative; uint256 watchWrapped; uint256 selfNative; uint256 selfWrapped; }
+
+    error Undo();
+    error Failed(uint256 index, bytes data);
+    error RefundFailed();
+
+    event Probed(Balances before, Balances afterwards, bool reverted, bytes revertData);
+
+    function _balances(address wnative, address watch) private view returns (Balances memory b) {
+        b.watchNative = watch.balance;
+        b.watchWrapped = IERC20T(wnative).balanceOf(watch);
+        b.selfNative = address(this).balance;
+        b.selfWrapped = IERC20T(wnative).balanceOf(address(this));
+    }
+
+    function probe(Call[] calldata calls, bool undo, address wnative, address watch)
+        external payable returns (Balances memory before, Balances memory afterwards, bool reverted, bytes memory revertData)
+    {
+        before = _balances(wnative, watch);
+        try this.run(calls, undo) {
+            reverted = false;
+        } catch (bytes memory r) {
+            reverted = true;
+            revertData = r;
+        }
+        afterwards = _balances(wnative, watch);
+        emit Probed(before, afterwards, reverted, revertData);
+        (bool ok,) = msg.sender.call{value: address(this).balance}("");
+        if (!ok) revert RefundFailed();
+    }
+
+    function run(Call[] calldata calls, bool undo) external {
+        require(msg.sender == address(this), "self only");
+        for (uint256 i; i < calls.length; i++) {
+            (bool ok, bytes memory r) = calls[i].target.call{value: calls[i].value}(calls[i].data);
+            if (!ok) revert Failed(i, r);
+        }
+        if (undo) revert Undo();
+    }
+
+    receive() external payable {}
+}
+
+/// A registry stand-in that answers "not enforced" after burning `burn` gas:
+/// with burn above the router's REGISTRY_GAS it stops answering in time, and
+/// the router fails closed (RegistryUnavailable).
+contract GasHogRegistry {
+    uint256 public burn;
+    function setBurn(uint256 b) external { burn = b; }
+    function isContractEnforced(address) external view returns (bool, uint8) {
+        uint256 start = gasleft();
+        uint256 x;
+        while (start - gasleft() < burn) x++;
+        return (false, 0);
+    }
+}
+
+/// Sends its value to `to` without calling it (SELFDESTRUCT in the
+/// constructor), the way stray native coins can reach the router.
+contract ForceSend {
+    constructor(address payable to) payable {
+        selfdestruct(to);
+    }
+}

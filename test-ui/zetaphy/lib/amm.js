@@ -63,3 +63,24 @@ export function sqrt(y) {
   while (x < z) { z = x; x = (y / x + x) / 2n; }
   return z;
 }
+
+/**
+ * How the page treats a pool when adding liquidity (security finding M3):
+ *   'new':      no pair, or a pair with no reserves and no LP: the user sets the price;
+ *   'unseeded': a pair with reserves but no LP minted (someone donated tokens and
+ *               called sync): still a new pool, and the page warns. The router takes
+ *               the desired amounts as given while totalSupply is 0, so the
+ *               donation cannot set the first LP's price;
+ *   'live':     LP exists: amounts follow the pool's price.
+ * `pool` is { reserveA, reserveB } or null; `totalSupply` the pair's LP supply.
+ */
+export function poolKind(pool, totalSupply) {
+  if (!pool) return 'new';
+  const any = pool.reserveA > 0n || pool.reserveB > 0n;
+  if (totalSupply === 0n) return any ? 'unseeded' : 'new';
+  return pool.reserveA > 0n && pool.reserveB > 0n ? 'live' : 'new';
+}
+
+/** addLiquidity's minimums: the desired amounts themselves unless the pool is 'live' (then less slippage). */
+export const addLiquidityMins = (amountA, amountB, kind, bps) =>
+  (kind === 'live' ? [minWithSlippage(amountA, bps), minWithSlippage(amountB, bps)] : [amountA, amountB]);

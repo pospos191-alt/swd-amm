@@ -261,6 +261,8 @@ function pqCard(H, latest, vals) {
       }
       fill(body,
         h('p', { class: 'verdict' }, verdict, ' ', routeLink(`block/${BigInt(H) + 1n}`, t('pqInBlock', { n: groupDigits(String(BigInt(H) + 1n)) }))),
+        // Next to the verdict, not below the table: the keys and powers come from this node.
+        note(t('pqTrust'), 'info'),
         kv([
           [t('pqSigned'), `${groupDigits(r.signedPower.toString())} / ${groupDigits(r.totalPower.toString())} (${percent(r.signedPower, r.totalPower || 1n)})`],
           [t('pqRequired'), r.required > 0n ? groupDigits(r.required.toString()) : t('pqNothingRequired')],
@@ -273,7 +275,6 @@ function pqCard(H, latest, vals) {
           v.hasKey ? badge(t('yes'), 'ok') : badge(t('no'), 'warn'), v.signed ? badge('✓ ML-DSA-44', 'ok') : badge('—', ''),
         ])),
         r.problems.length ? h('ul', { class: 'problems' }, r.problems.map((p) => h('li', null, safeText(p, 300)))) : null,
-        note(t('pqTrust'), 'info'),
       );
     }).catch((e) => fill(body, errorBox(e), h('button', { type: 'button', on: { click: run } }, t('retry'))));
   };

@@ -3,13 +3,18 @@
 // wallet), signs only through the user's wallet (EIP-6963), approves exact
 // amounts, checks tokens with Neuro's ThreatRegistry before buying, importing
 // or adding liquidity. Every text goes in with textContent.
+// localStorage is shared with the rest of the site's origin, so what it holds
+// is validated strictly and never trusted for anything that moves funds
+// (lib/storage.js). Right before every eth_sendTransaction the wallet's chain
+// is asked again (eth_chainId) and the transaction carries chainId 77390.
 
 import { TEXT } from './i18n.js';
 import { encodeCall, decode, decodeError, decodeBytes32String, parseUnits, formatUnits, isAddress, ZERO_ADDRESS } from './lib/abi.js';
-import { getAmountOut, minWithSlippage, priceImpactBps, impactLevel, quote, candidatePaths } from './lib/amm.js';
+import { getAmountOut, minWithSlippage, priceImpactBps, impactLevel, quote, candidatePaths, poolKind, addLiquidityMins } from './lib/amm.js';
 import { checkToken, reasonText, DISCLAIMER } from './lib/neuro.js';
 import { cleanName, cleanSymbol, validEntry, lookalikes } from './lib/tokens.js';
 import { EVM_CHAIN_ID, EVM_CHAIN_ID_HEX, EVM_SYMBOL, nodeEndpoints, evmChainParams, discoverWallets, openInAppLinks } from './lib/wallets.js';
+import { parseSettings, serializeSettings, parseImported, cleanWalletId, rpcIsCustom, SLIPPAGE_MAX_BPS, SLIPPAGE_CONFIRM_BPS } from './lib/storage.js';
 
 const $ = (id) => document.getElementById(id);
 const BASE = '/zetaphy/';
@@ -133,10 +138,7 @@ function tokenByAddress(a) {
 }
 
 function loadImported() {
-  try {
-    const arr = JSON.parse(store.get(KEYS.imported) ?? '[]');
-    return Array.isArray(arr) ? arr.map((x) => validEntry({ ...x, source: 'imported' }, EVM_CHAIN_ID)).filter(Boolean) : [];
-  } catch { return []; }
+  return parseImported(store.get(KEYS.imported), EVM_CHAIN_ID);
 }
 function saveImported() {
   store.set(KEYS.imported, JSON.stringify(state.tokens.filter((x) => x.source === 'imported').map(({ address, name, symbol, decimals }) => ({ address, name, symbol, decimals, chainId: EVM_CHAIN_ID }))));
@@ -176,7 +178,7 @@ async function allowance(tokenAddress, owner, spender) {
 
 function fillSelect(sel, keep) {
   const prev = keep ?? sel.value;
-  sel.replaceChildren(...state.tokens.map((x) => el('option', { value: keyOf(x), text: `${x.symbol} · ${x.name}${isNative(x) ? '' : ' · ' + short(x.address)}` })));
+  sel.replaceChildren(...state.tokens.map((x) => el('option', { value: keyOf(x), text: `${x.symbol} · ${x.name}${isNative(x) ? '' : ' · ' + short(x.address)}${x.source === 'imported' ? ` · ⚠ ${t('importedBadge')}` : ''}` })));
   if (prev && tokenByKey(prev)) sel.value = prev;
 }
 function fillAllSelects() {
@@ -243,6 +245,25 @@ async function neuroCheck(address) {
   const result = await checkToken(rpc, await registryAddress(), address);
   state.neuro.set(k, { at: Date.now(), result });
   return result;
+}
+
+/** Neuro's answer asked again now (no cache): right before a trade or an add. */
+async function neuroFresh(address) {
+  state.neuro.delete(address.toLowerCase());
+  return neuroCheck(address);
+}
+
+/**
+ * Before signing: asks Neuro again about `tokens` (not the native coin). Throws
+ * if one is enforced now, or needs an acknowledgement it did not have.
+ */
+async function recheckNeuro(tokens, acknowledged) {
+  for (const tok of tokens) {
+    if (isNative(tok)) continue;
+    const r = await neuroFresh(tok.address);
+    if (r.status === 'enforced') throw new Error(t('refusedEnforced', { sym: tok.symbol }));
+    if (needsAck(r) && !acknowledged) throw new Error(t('neuroChanged', { sym: tok.symbol }));
+  }
 }
 
 /** The worst of several answers, and the token it is about. */
@@ -337,8 +358,9 @@ async function ensureChain() {
     await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: EVM_CHAIN_ID_HEX }] });
   } catch (e) {
     if (e?.code === 4001) throw e;
+    // Only the deployment's RPC goes to the wallet, never one from Settings (storage can be written by other pages of this origin).
     let ep;
-    try { ep = nodeEndpoints(rpcUrl()); } catch { throw new Error(t('addNetFailed', { msg: t('noRpc') })); }
+    try { ep = nodeEndpoints(state.cfg?.rpc || ''); } catch { throw new Error(t('addNetFailed', { msg: t('noDefaultRpc') })); }
     try {
       await p.request({ method: 'wallet_addEthereumChain', params: [evmChainParams(ep)] });
     } catch (e2) { throw new Error(t('addNetFailed', { msg: errorText(e2) })); }
@@ -353,8 +375,17 @@ async function sendTx(tx, statusId) {
   const call = { from: state.account, to: tx.to, data: tx.data, ...(tx.value ? { value: '0x' + tx.value.toString(16) } : {}) };
   // A dry run first: a revert is explained before the wallet shows anything.
   await rpc('eth_call', [call, 'latest']);
+  // The wallet's chain, asked again right before signing (it may have switched without telling the page).
+  const provider = state.wallet.provider;
+  let cid = null;
+  try { cid = Number(BigInt(await provider.request({ method: 'eth_chainId' }))); } catch { cid = null; }
+  if (cid !== EVM_CHAIN_ID) {
+    state.chainId = cid;
+    renderBanner();
+    throw new Error(t('chainChangedSend', { id: String(cid) }));
+  }
   setStatus(statusId, t('confirmInWallet'));
-  const hash = await state.wallet.provider.request({ method: 'eth_sendTransaction', params: [call] });
+  const hash = await provider.request({ method: 'eth_sendTransaction', params: [{ ...call, chainId: EVM_CHAIN_ID_HEX }] });
   if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('wallet returned no transaction hash');
   setStatus(statusId, t('waiting', { hash: short(hash) }));
   for (let i = 0; i < 120; i++) {
@@ -379,12 +410,41 @@ function renderBanner() {
   const parts = [];
   if (!deployed()) parts.push(el('p', { text: t('notDeployed') }));
   else if (!rpcUrl() && !(state.wallet && state.chainId === EVM_CHAIN_ID)) parts.push(el('p', { text: t('noRpc') }));
+  if (rpcIsCustom(state.settings.rpc, state.cfg?.rpc ?? '')) {
+    parts.push(el('p', { id: 'banner-rpc', text: t('customRpc', { url: state.settings.rpc }) }));
+    parts.push(el('button', { type: 'button', id: 'banner-rpc-default', text: t('useDefaultRpc'), onclick: () => {
+      state.settings = { ...state.settings, rpc: '' };
+      store.set(KEYS.settings, serializeSettings(state.settings));
+      state.registry = undefined;
+      state.neuro.clear();
+      refreshAll();
+    } }));
+  }
   if (state.account && state.chainId !== EVM_CHAIN_ID) {
     parts.push(el('p', { text: t('wrongNet', { id: String(state.chainId) }) }));
     parts.push(el('button', { type: 'button', text: t('switchNet'), onclick: () => ensureChain().then(refreshAll).catch((e) => { b.append(el('p', { text: errorText(e) })); }) }));
   }
   b.replaceChildren(...parts);
   b.hidden = parts.length === 0;
+}
+
+// ---------------------------------------------------------------- imported tokens, high slippage
+
+/** A warning line when one of `tokens` was imported by hand (not in the list). */
+function showImported(box, tokens) {
+  const tok = tokens.find((x) => x?.source === 'imported');
+  box.hidden = !tok;
+  if (tok) box.textContent = t('importedWarn', { sym: tok.symbol, addr: tok.address });
+}
+
+/** Shows `<prefix>-ack-slip-row` if the slippage setting is above 1%; returns whether a confirmation is needed. */
+function showSlipAck(prefix) {
+  const bps = state.settings.slippageBps;
+  const need = bps > SLIPPAGE_CONFIRM_BPS;
+  $(`${prefix}-ack-slip-row`).hidden = !need;
+  if (need) $(`${prefix}-ack-slip-text`).textContent = t('slipAck', { s: (bps / 100).toString() });
+  else $(`${prefix}-ack-slip`).checked = false;
+  return need;
 }
 
 // ---------------------------------------------------------------- swap
@@ -409,7 +469,9 @@ async function updateSwap() {
   $('swap-details').hidden = true;
   $('swap-ack-impact-row').hidden = true;
   $('swap-ack-flag-row').hidden = true;
+  $('swap-ack-slip-row').hidden = true;
   const { tin, tout } = swapTokens();
+  showImported($('swap-imported'), [tout, tin]);
   $('swap-amount-out').textContent = '0.0';
   if (!deployed()) { swapButton(t('notDeployed'), false); $('swap-neuro').hidden = true; return; }
   // balances
@@ -459,7 +521,8 @@ async function updateSwap() {
     $('swap-ack-impact-text').textContent = t('impactHighAck', { v: (Number(impact) / 100).toFixed(2) });
     $('swap-ack-impact-row').hidden = false;
   }
-  swapPlan = { tin, tout, amountIn, route, minOut, flagAck: needsAck(worst?.result), impactAck: level === 'severe' };
+  const slipAck = showSlipAck('swap');
+  swapPlan = { tin, tout, amountIn, route, minOut, flagAck: needsAck(worst?.result), impactAck: level === 'severe', slipAck };
 
   if (!state.account) { swapButton(t('connect'), true); return; }
   if (state.chainId !== EVM_CHAIN_ID) { swapButton(t('switchNet'), true); return; }
@@ -484,7 +547,8 @@ async function updateSwap() {
 
 function checkSwapReady() {
   if (!swapPlan || !state.account || state.chainId !== EVM_CHAIN_ID) return;
-  const ok = !swapPlan.needsApproval && (!swapPlan.flagAck || $('swap-ack-flag').checked) && (!swapPlan.impactAck || $('swap-ack-impact').checked);
+  const ok = !swapPlan.needsApproval && (!swapPlan.flagAck || $('swap-ack-flag').checked) && (!swapPlan.impactAck || $('swap-ack-impact').checked)
+    && (!swapPlan.slipAck || $('swap-ack-slip').checked);
   swapButton(t('swap'), ok);
 }
 
@@ -493,6 +557,7 @@ async function onSwapClick() {
   if (state.chainId !== EVM_CHAIN_ID) { await ensureChain().catch((e) => setStatus('swap-status', errorText(e), 'err')); refreshAll(); return; }
   const p = swapPlan;
   if (!p) return;
+  if (p.slipAck && !$('swap-ack-slip').checked) return;
   const { tin, tout, amountIn, route, minOut } = p;
   const fot = state.settings.fot;
   const to = state.account;
@@ -510,11 +575,13 @@ async function onSwapClick() {
   }
   $('swap-btn').disabled = true;
   try {
+    await recheckNeuro([tout], p.flagAck && $('swap-ack-flag').checked);
     await sendTx({ to: state.cfg.contracts.router, data: encodeCall(sig, args), value }, 'swap-status');
     $('swap-amount-in').value = '';
   } catch (e) {
     setStatus('swap-status', t('failed', { msg: errorText(e) }), 'err');
   }
+  $('swap-ack-slip').checked = false; // a fresh confirmation for every transaction
   updateSwap();
 }
 
@@ -542,12 +609,14 @@ async function updateAdd(source) {
   $('add-approve-a').hidden = true;
   $('add-approve-b').hidden = true;
   $('add-ack-flag-row').hidden = true;
+  $('add-ack-slip-row').hidden = true;
   const btn = $('add-btn');
   const set = (text, en) => { btn.textContent = text; btn.disabled = !en; };
   $('add-info').textContent = '';
   if (!deployed()) { set(t('notDeployed'), false); $('add-neuro').hidden = true; return; }
   const ta = tokenByKey($('add-a').value) ?? NATIVE;
   const tb = tokenByKey($('add-b').value) ?? NATIVE;
+  showImported($('add-imported'), [ta, tb]);
   if (keyOf(ta) === keyOf(tb)) { set(t('sameToken'), false); return; }
   if (state.account) {
     Promise.all([balanceOf(ta, state.account), balanceOf(tb, state.account)]).then(([x, y]) => {
@@ -556,12 +625,13 @@ async function updateAdd(source) {
       $('add-b-bal').textContent = t('balance', { v: fmt(y, tb.decimals) });
     }).catch(() => {});
   }
-  let p, checks;
+  let p, checks, ts = 0n;
   try {
     [p, checks] = await Promise.all([
       pool(addrOf(ta), addrOf(tb)),
       Promise.all([ta, tb].filter((x) => !isNative(x)).map(async (tok) => ({ token: tok, result: await neuroCheck(tok.address) }))),
     ]);
+    if (p) [ts] = await callDecode(p.pair, 'totalSupply()', [], ['uint256']);
   } catch (e) { if (seq === addSeq) set(t('rpcError', { msg: errorText(e) }), false); return; }
   if (seq !== addSeq) return;
   const worst = worstOf(checks);
@@ -570,25 +640,31 @@ async function updateAdd(source) {
   const parse = (id, dec) => { try { return parseUnits($(id).value || '0', dec); } catch { return 0n; } };
   let amtA = parse('add-amt-a', ta.decimals);
   let amtB = parse('add-amt-b', tb.decimals);
-  const hasReserves = p && p.reserveA > 0n && p.reserveB > 0n;
-  if (hasReserves) {
+  // Only a pool with LP has a price to follow. Reserves without LP (a donation
+  // and sync()) are a new pool: the user enters both amounts (finding M3).
+  const kind = poolKind(p, ts);
+  const info = $('add-info');
+  info.className = 'hint';
+  if (kind === 'live') {
     if (addEdited === 'a' && amtA > 0n) { amtB = quote(amtA, p.reserveA, p.reserveB); $('add-amt-b').value = formatUnits(amtB, tb.decimals, tb.decimals).replace(/,/g, ''); }
     else if (addEdited === 'b' && amtB > 0n) { amtA = quote(amtB, p.reserveB, p.reserveA); $('add-amt-a').value = formatUnits(amtA, ta.decimals, ta.decimals).replace(/,/g, ''); }
     const price = (p.reserveB * 10n ** BigInt(ta.decimals)) / p.reserveA;
-    let info = t('poolPrice', { a: ta.symbol, p: fmt(price, tb.decimals, 8), b: tb.symbol });
+    let text = t('poolPrice', { a: ta.symbol, p: fmt(price, tb.decimals, 8), b: tb.symbol });
     if (amtA > 0n) {
-      const [ts] = await callDecode(p.pair, 'totalSupply()', [], ['uint256']);
       const liq = (amtA * ts) / p.reserveA;
-      info += ' · ' + t('poolShare', { v: ((Number(liq) / Number(ts + liq)) * 100).toFixed(4) });
+      text += ' · ' + t('poolShare', { v: ((Number(liq) / Number(ts + liq)) * 100).toFixed(4) });
     }
-    $('add-info').textContent = info;
+    info.textContent = text;
+  } else if (kind === 'unseeded') {
+    info.className = 'warn-line';
+    info.textContent = t('unseededPool');
   } else {
-    $('add-info').textContent = t('newPool');
+    info.textContent = t('newPool');
   }
   if (worst?.result.status === 'enforced') { set(t('refusedEnforced', { sym: worst.token.symbol }), false); return; }
   if (needsAck(worst?.result)) $('add-ack-flag-row').hidden = false;
   if (amtA === 0n || amtB === 0n) { set(t('enterAmount'), false); return; }
-  addPlan = { ta, tb, amtA, amtB, exact: !hasReserves, flagAck: needsAck(worst?.result) };
+  addPlan = { ta, tb, amtA, amtB, kind, flagAck: needsAck(worst?.result), slipAck: kind === 'live' && showSlipAck('add') };
   if (!state.account) { set(t('connect'), true); return; }
   if (state.chainId !== EVM_CHAIN_ID) { set(t('switchNet'), true); return; }
   try {
@@ -606,7 +682,7 @@ async function updateAdd(source) {
     }
   } catch (e) { set(t('rpcError', { msg: errorText(e) }), false); return; }
   if (seq !== addSeq) return;
-  set(t('add'), !addPlan.needsApproval && (!addPlan.flagAck || $('add-ack-flag').checked));
+  set(t('add'), !addPlan.needsApproval && (!addPlan.flagAck || $('add-ack-flag').checked) && (!addPlan.slipAck || $('add-ack-slip').checked));
 }
 
 async function approveFor(tok, amount, statusId) {
@@ -621,25 +697,28 @@ async function onAddClick() {
   if (state.chainId !== EVM_CHAIN_ID) { await ensureChain().catch((e) => setStatus('add-status', errorText(e), 'err')); refreshAll(); return; }
   const p = addPlan;
   if (!p) return;
-  const bps = state.settings.slippageBps;
-  const min = (x) => (p.exact ? x : minWithSlippage(x, bps));
+  if (p.slipAck && !$('add-ack-slip').checked) return;
+  // A new or unseeded pool: min = desired, so the router reverts if the ratio changed (finding M3).
+  const [minA, minB] = addLiquidityMins(p.amtA, p.amtB, p.kind, state.settings.slippageBps);
   let tx;
   if (isNative(p.ta) || isNative(p.tb)) {
-    const [tok, amtTok, amtNat] = isNative(p.ta) ? [p.tb, p.amtB, p.amtA] : [p.ta, p.amtA, p.amtB];
+    const [tok, amtTok, amtNat, minTok, minNat] = isNative(p.ta) ? [p.tb, p.amtB, p.amtA, minB, minA] : [p.ta, p.amtA, p.amtB, minA, minB];
     tx = { to: state.cfg.contracts.router, value: amtNat,
-      data: encodeCall('addLiquidityETH(address,uint256,uint256,uint256,address,uint256)', [tok.address, amtTok, min(amtTok), min(amtNat), state.account, deadline()]) };
+      data: encodeCall('addLiquidityETH(address,uint256,uint256,uint256,address,uint256)', [tok.address, amtTok, minTok, minNat, state.account, deadline()]) };
   } else {
     tx = { to: state.cfg.contracts.router,
-      data: encodeCall('addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)', [p.ta.address, p.tb.address, p.amtA, p.amtB, min(p.amtA), min(p.amtB), state.account, deadline()]) };
+      data: encodeCall('addLiquidity(address,address,uint256,uint256,uint256,uint256,address,uint256)', [p.ta.address, p.tb.address, p.amtA, p.amtB, minA, minB, state.account, deadline()]) };
   }
   $('add-btn').disabled = true;
   try {
     setStatus('add-status', t('adding'));
+    await recheckNeuro([p.ta, p.tb], p.flagAck && $('add-ack-flag').checked);
     await sendTx(tx, 'add-status');
     $('add-amt-a').value = '';
     $('add-amt-b').value = '';
     loadPositions();
   } catch (e) { setStatus('add-status', t('failed', { msg: errorText(e) }), 'err'); }
+  $('add-ack-slip').checked = false;
   updateAdd();
 }
 
@@ -677,6 +756,7 @@ async function loadPositions() {
       items.push(positionItem({ pair, lp, t0, t1, r0, r1, ts, m0, m1 }));
     }
     box.replaceChildren(...(items.length ? items : [el('p', { class: 'hint', text: t('noPositions') })]));
+    if (items.length) showSlipAck('pos'); else $('pos-ack-slip-row').hidden = true;
   } catch (e) { setStatus('pos-status', t('rpcError', { msg: errorText(e) }), 'err'); }
 }
 
@@ -695,6 +775,7 @@ function positionItem(pos) {
 
 async function removeLiquidity(pos, pct, button) {
   if (!state.account) { openWallets(); return; }
+  if (showSlipAck('pos') && !$('pos-ack-slip').checked) { setStatus('pos-status', t('slipAck', { s: (state.settings.slippageBps / 100).toString() }), 'err'); return; }
   button.disabled = true;
   const router = state.cfg.contracts.router;
   const liq = (pos.lp * BigInt(pct)) / 100n;
@@ -721,6 +802,7 @@ async function removeLiquidity(pos, pct, button) {
     setStatus('pos-status', t('removing'));
     await sendTx({ to: router, data }, 'pos-status');
   } catch (e) { setStatus('pos-status', t('failed', { msg: errorText(e) }), 'err'); }
+  $('pos-ack-slip').checked = false;
   loadPositions();
 }
 
@@ -799,18 +881,9 @@ function onImportAdd() {
 
 // ---------------------------------------------------------------- settings
 
+/** Strictly validated (lib/storage.js): slippage <= 5%, a clean RPC URL, the fee-on-transfer switch never read back. */
 function loadSettings() {
-  try {
-    const s = JSON.parse(store.get(KEYS.settings) ?? '{}');
-    const bps = Number(s.slippageBps);
-    const dl = Number(s.deadlineMin);
-    state.settings = {
-      slippageBps: Number.isInteger(bps) && bps >= 1 && bps <= 5000 ? bps : 50,
-      deadlineMin: Number.isInteger(dl) && dl >= 1 && dl <= 180 ? dl : 20,
-      rpc: typeof s.rpc === 'string' ? s.rpc : '',
-      fot: s.fot === true,
-    };
-  } catch { /* defaults */ }
+  state.settings = parseSettings(store.get(KEYS.settings));
 }
 
 function openSettings() {
@@ -826,14 +899,15 @@ function saveSettings() {
   const sl = Number($('set-slippage').value);
   const dl = Number($('set-deadline').value);
   const rpcText = $('set-rpc').value.trim();
-  if (!(sl >= 0.01 && sl <= 50)) { setStatus('settings-status', t('slippage') + ': 0.01 – 50', 'err'); return; }
+  if (!(sl >= 0.01 && sl <= SLIPPAGE_MAX_BPS / 100)) { setStatus('settings-status', `${t('slippage')}: 0.01 – ${SLIPPAGE_MAX_BPS / 100}`, 'err'); return; }
   if (!(Number.isInteger(dl) && dl >= 1 && dl <= 180)) { setStatus('settings-status', t('deadline') + ': 1 – 180', 'err'); return; }
   let rpcValue = '';
   if (rpcText) {
     try { rpcValue = nodeEndpoints(rpcText).evm; } catch { setStatus('settings-status', t('rpcUrl'), 'err'); return; }
   }
   state.settings = { slippageBps: Math.round(sl * 100), deadlineMin: dl, rpc: rpcValue, fot: $('set-fot').checked };
-  store.set(KEYS.settings, JSON.stringify(state.settings));
+  store.set(KEYS.settings, serializeSettings(state.settings)); // fot is for this visit only
+  for (const id of ['swap-ack-slip', 'add-ack-slip', 'pos-ack-slip']) $(id).checked = false;
   state.registry = undefined;
   state.neuro.clear();
   $('settings-dialog').close();
@@ -902,7 +976,7 @@ async function init() {
 
   // events
   for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => showTab(b.dataset.tab));
-  $('lang-btn').addEventListener('click', () => { state.lang = state.lang === 'th' ? 'en' : 'th'; store.set(KEYS.lang, state.lang); applyI18n(); refreshAll(); renderTokenList(); });
+  $('lang-btn').addEventListener('click', () => { state.lang = state.lang === 'th' ? 'en' : 'th'; store.set(KEYS.lang, state.lang); applyI18n(); fillAllSelects(); refreshAll(); renderTokenList(); });
   $('theme-btn').addEventListener('click', () => { const next = currentTheme() === 'dark' ? 'light' : 'dark'; applyTheme(next); store.set(KEYS.theme, next); });
   $('settings-btn').addEventListener('click', openSettings);
   $('settings-close').addEventListener('click', () => $('settings-dialog').close());
@@ -926,12 +1000,14 @@ async function init() {
   $('swap-approve').addEventListener('click', onSwapApprove);
   $('swap-ack-flag').addEventListener('change', checkSwapReady);
   $('swap-ack-impact').addEventListener('change', checkSwapReady);
+  $('swap-ack-slip').addEventListener('change', checkSwapReady);
   const addDebounced = debounce(updateAdd, 250);
   $('add-amt-a').addEventListener('input', () => { addEdited = 'a'; addDebounced(); });
   $('add-amt-b').addEventListener('input', () => { addEdited = 'b'; addDebounced(); });
   $('add-a').addEventListener('change', () => updateAdd());
   $('add-b').addEventListener('change', () => updateAdd());
   $('add-ack-flag').addEventListener('change', () => updateAdd());
+  $('add-ack-slip').addEventListener('change', () => updateAdd());
   $('add-btn').addEventListener('click', onAddClick);
   $('pos-refresh').addEventListener('click', loadPositions);
   $('import-check').addEventListener('click', onImportCheck);
@@ -942,7 +1018,7 @@ async function init() {
   discovery = discoverWallets(window, () => { if ($('wallet-dialog').open) renderWalletList(); });
   // Reconnect silently to the wallet used last time (eth_accounts: no prompt).
   setTimeout(() => {
-    const id = store.get(KEYS.wallet);
+    const id = cleanWalletId(store.get(KEYS.wallet));
     const w = id && walletsNow().find((x) => x.id === id);
     if (w && !state.account) connectWallet(w, true);
   }, 400);

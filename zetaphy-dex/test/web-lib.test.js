@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { id, Interface, AbiCoder, keccak256, toUtf8Bytes, parseUnits as eParse } from 'ethers';
 import { SEL, ERRORS, encodeCall, decode, decodeError, parseUnits, formatUnits, decodeBytes32String } from '../../test-ui/zetaphy/lib/abi.js';
-import { getAmountOut, getAmountIn, minWithSlippage, maxWithSlippage, priceImpactBps, impactLevel, candidatePaths } from '../../test-ui/zetaphy/lib/amm.js';
+import { getAmountOut, getAmountIn, minWithSlippage, maxWithSlippage, priceImpactBps, impactLevel, candidatePaths, poolKind, addLiquidityMins } from '../../test-ui/zetaphy/lib/amm.js';
+import { parseSettings, serializeSettings, parseImported, cleanRpc, cleanWalletId, rpcIsCustom, SLIPPAGE_MAX_BPS, SLIPPAGE_CONFIRM_BPS } from '../../test-ui/zetaphy/lib/storage.js';
 import { cleanText, cleanSymbol, validEntry, lookalikes } from '../../test-ui/zetaphy/lib/tokens.js';
 import { fingerprint1, SLOT_IMPL, SLOT_BEACON, REASON_TEXT, DISCLAIMER } from '../../test-ui/zetaphy/lib/neuro.js';
 import { amountOut, amountIn } from './helpers/dex.js';
@@ -167,4 +168,63 @@ test('chain values and wallet discovery are the same as zetaphy-wallet/wallets.j
   }
   const fn = (src, name) => { const i = src.indexOf(`export function ${name}`); return src.slice(i, src.indexOf('\n}\n', i)); };
   for (const f of ['nodeEndpoints', 'evmChainParams', 'discoverWallets', 'safeIcon', 'kindOf', 'openInAppLinks']) assert.equal(fn(page, f), fn(wallet, f), f);
+});
+
+test('M3: a pair with reserves but no LP is a new pool for the page; its minimums are the desired amounts', () => {
+  const r = (a, b) => ({ reserveA: a, reserveB: b });
+  assert.equal(poolKind(null, 0n), 'new');
+  assert.equal(poolKind(r(0n, 0n), 0n), 'new');
+  assert.equal(poolKind(r(7n, 3n), 0n), 'unseeded', 'donation + sync, nobody holds LP');
+  assert.equal(poolKind(r(7n, 0n), 0n), 'unseeded');
+  assert.equal(poolKind(r(10n ** 18n, 4n * 10n ** 18n), 2n * 10n ** 18n), 'live');
+  assert.deepEqual(addLiquidityMins(1000n, 3000n, 'new', 300), [1000n, 3000n]);
+  assert.deepEqual(addLiquidityMins(1000n, 3000n, 'unseeded', 300), [1000n, 3000n], 'min = desired: the router reverts on any ratio change');
+  assert.deepEqual(addLiquidityMins(10_000n, 30_000n, 'live', 50), [9_950n, 29_850n]);
+});
+
+test('M4: stored settings are validated strictly: slippage capped at 5%, clean RPC only, fee-on-transfer never read back', () => {
+  assert.equal(SLIPPAGE_MAX_BPS, 500);
+  assert.equal(SLIPPAGE_CONFIRM_BPS, 100);
+  const def = { slippageBps: 50, deadlineMin: 20, rpc: '', fot: false };
+  for (const junk of [null, '', 'not json', '[]', '"x"', '123', 'x'.repeat(60_000)]) assert.deepEqual(parseSettings(junk), def, String(junk).slice(0, 20));
+  // What a script elsewhere on the origin might write.
+  assert.deepEqual(parseSettings(JSON.stringify({ slippageBps: 5000, deadlineMin: 99999, rpc: 'https://evil.example/', fot: true })),
+    { slippageBps: 50, deadlineMin: 20, rpc: '', fot: false }, 'out-of-range slippage dropped; RPC not in saved form; fot ignored');
+  assert.equal(parseSettings(JSON.stringify({ slippageBps: 500 })).slippageBps, 500);
+  assert.equal(parseSettings(JSON.stringify({ slippageBps: 501 })).slippageBps, 50);
+  assert.equal(parseSettings(JSON.stringify({ slippageBps: '300' })).slippageBps, 50, 'a string is not a number here');
+  assert.equal(parseSettings(JSON.stringify({ slippageBps: 12.5 })).slippageBps, 50);
+  assert.equal(parseSettings(JSON.stringify({ rpc: 'https://rpc.example.org' })).rpc, 'https://rpc.example.org');
+  assert.equal(parseSettings(JSON.stringify({ rpc: 'http://evil.example' })).rpc, '', 'http elsewhere than localhost');
+  assert.equal(parseSettings(JSON.stringify({ rpc: 'javascript:alert(1)' })).rpc, '');
+  assert.equal(parseSettings(JSON.stringify({ rpc: 'https://user:pw@rpc.example.org' })).rpc, '', 'not the form the page saves');
+  assert.equal(cleanRpc('https://rpc.example.org/' + 'a'.repeat(400)), '');
+  assert.deepEqual(JSON.parse(serializeSettings({ slippageBps: 75, deadlineMin: 5, rpc: '', fot: true })), { slippageBps: 75, deadlineMin: 5, rpc: '' });
+  assert.equal(rpcIsCustom('', 'https://a'), false);
+  assert.equal(rpcIsCustom('https://a', 'https://a'), false);
+  assert.equal(rpcIsCustom('https://b', 'https://a'), true);
+  assert.equal(rpcIsCustom('https://b', ''), true);
+  assert.equal(cleanWalletId('6963:io.metamask'), '6963:io.metamask');
+  assert.equal(cleanWalletId('injected:ethereum'), 'injected:ethereum');
+  assert.equal(cleanWalletId('6963:<img src=x>'), null);
+  assert.equal(cleanWalletId({}), null);
+});
+
+test('M4: stored imported tokens: this chain only, clean entries, no duplicates, at most 50', () => {
+  const a = '0x' + '11'.repeat(20), b = '0x' + '22'.repeat(20);
+  const list = [
+    { address: a, name: 'A‮x', symbol: 'AAA', decimals: 18, chainId: 77390 },
+    { address: a.toUpperCase().replace('0X', '0x'), name: 'dup', symbol: 'D', decimals: 18, chainId: 77390 },
+    { address: b, name: 'B', symbol: 'B', decimals: 18 }, // no chainId
+    { address: b, name: 'B', symbol: 'B', decimals: 18, chainId: '77390' }, // a string
+    { address: b, name: 'B', symbol: 'B', decimals: 99, chainId: 77390 },
+    { address: '0x1234', name: 'C', symbol: 'C', decimals: 18, chainId: 77390 },
+    { address: b, name: 'B', symbol: 'B', decimals: 6, chainId: 1 },
+    null, 'x', [],
+  ];
+  assert.deepEqual(parseImported(JSON.stringify(list), 77390), [{ address: a, name: 'Ax', symbol: 'AAA', decimals: 18, source: 'imported' }]);
+  assert.deepEqual(parseImported('{"0":1}', 77390), []);
+  assert.deepEqual(parseImported('nope', 77390), []);
+  const many = Array.from({ length: 80 }, (_, i) => ({ address: '0x' + i.toString(16).padStart(40, '0'), name: 'T', symbol: 'T', decimals: 18, chainId: 77390 }));
+  assert.equal(parseImported(JSON.stringify(many), 77390).length, 50);
 });

@@ -169,7 +169,7 @@ test('devnet: home, blocks with real ML-DSA-44 certificates verified in the brow
   // a block after the key registration: a real certificate, verified with @noble/post-quantum
   const h = facts.tokenTxBlock;
   await page.goto(`http://localhost:${PORT}/#/block/${h}`);
-  await waitText(page, 'Certificate valid · more than 2/3 of all power signed with ML-DSA-44');
+  await waitText(page, 'Certificate valid according to this node\'s validator keys · more than 2/3 of all power signed with ML-DSA-44');
   const tb = await text(page);
   assert.match(tb, /PQ certificate/); assert.match(tb, new RegExp(`certifies block ${(h - 1).toLocaleString('en-US')}`));
   assert.ok(await page.locator(`main a[href="#/tx/${facts.tokenTx}"]`).count() === 1, 'the block lists the EVM hash of its MsgEthereumTx');

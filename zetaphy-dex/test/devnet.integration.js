@@ -5,7 +5,11 @@
 //   - a user swaps native ZETAPHY -> tUSD and back, adds and removes native
 //     liquidity; the pair's native balance IS its precompile balance (reserve);
 //   - Neuro: a real ThreatRegistry, a token flagged by two runners, the router
-//     refuses to swap into it once governance sets the registry (selling works).
+//     refuses to swap into it once governance sets the registry (selling works);
+//   - S1: the DEX trusts the precompile's balances, so a call that moves native
+//     coins through it and then reverts (the router's minimum, the pair's K
+//     check, or a deliberate revert) must leave every native balance exactly as
+//     it was; deposit{value} from a contract gives the coins back to it.
 // Needs the zetaphyd binary (ZETAPHYD=…, default `zetaphyd` on PATH), so it is
 // not part of `npm test`. Run: npm run test:devnet
 // On shared machines: flock /tmp/ci-test/devnet.lock npm run test:devnet
@@ -189,4 +193,86 @@ test('Neuro: a token flagged in a real ThreatRegistry is refused by the router o
   assert.equal(off.code, 0, off.out);
   await mined(router.swapExactETHForTokens(0, [NATIVE, tswd], me, deadline(), { value: parseEther('1') }));
   console.log('Neuro: swap into the enforced-flagged token refused (TokenEnforced), selling it worked, registry off -> allowed again');
+});
+
+test('S1: native coins moved through the precompile inside a reverting call are restored exactly; deposit{value} from a contract gives them back', { timeout: 300_000 }, async () => {
+  const user = signer('user');
+  const me = actors.user.address;
+  const ri = new Interface(art('ZetaphyRouter').abi);
+  const pi = new Interface(art('ZetaphyPair').abi);
+  const wi = new Interface([...ERC20, 'function deposit() payable']);
+  const probe = await new ContractFactory(art('RevertProbe').abi, art('RevertProbe').bytecode, user).deploy();
+  await probe.waitForDeployment();
+  const P = await probe.getAddress();
+  const tusd = deployed.tokens[0].address;
+  const router = new Contract(deployed.contracts.router, art('ZetaphyRouter').abi, provider);
+  const pairAddr = await router.pairFor(NATIVE, tusd);
+  const pair = new Contract(pairAddr, art('ZetaphyPair').abi, provider);
+  const nativeIs0 = (await pair.token0()) === NATIVE;
+  const reserveNative = async () => { const [r0, r1] = await pair.getReserves(); return nativeIs0 ? r0 : r1; };
+  const t = new Contract(tusd, ERC20, provider);
+
+  /** Runs one probe as `user`; checks the balances the chain reports inside and after the transaction. */
+  async function run(name, calls, undo, value) {
+    const n0 = await provider.getBalance(me);
+    const p0 = await provider.getBalance(pairAddr);
+    const t0 = await t.balanceOf(P);
+    const r = await mined(probe.probe(calls, undo, NATIVE, pairAddr, { value, gasLimit: 3_000_000n }));
+    const ev = r.logs.map((l) => { try { return probe.interface.parseLog(l); } catch { return null; } }).find((x) => x?.name === 'Probed');
+    assert.ok(ev, `${name}: Probed event`);
+    const [before, afterwards, reverted, revertData] = ev.args;
+    const gas = r.gasUsed * r.gasPrice;
+    assert.equal(await provider.getBalance(me), n0 - gas, `${name}: the caller paid gas only (the value came back)`);
+    assert.equal(await provider.getBalance(P), 0n, `${name}: the probe keeps nothing`);
+    return { before: [...before], afterwards: [...afterwards], reverted, revertData, p0, t0 };
+  }
+  const unchanged = (name, x) => {
+    assert.equal(x.reverted, true, name);
+    assert.deepEqual(x.afterwards, x.before, `${name}: native and precompile balances inside the tx are what they were before the reverted call`);
+  };
+  const innerError = (x) => { const f = probe.interface.parseError(x.revertData); return f.name === 'Failed' ? [Number(f.args[0]), f.args[1]] : [f.name]; };
+  const after = async (name, x) => {
+    assert.equal(await provider.getBalance(pairAddr), x.p0, `${name}: the pair's native balance is unchanged after the tx`);
+    assert.equal(await provider.getBalance(pairAddr), await reserveNative(), `${name}: and still equals its reserve`);
+    assert.equal(await t.balanceOf(P), x.t0, `${name}: no tUSD reached the probe`);
+  };
+  const dl = deadline();
+  const ONE = parseEther('1');
+
+  // A: the router wraps (precompile transfer of 1 ZTPHY into the pair), swaps, then fails its minimum.
+  const a = await run('A', [{ target: deployed.contracts.router, value: ONE,
+    data: ri.encodeFunctionData('swapExactETHForTokensSupportingFeeOnTransferTokens', [2n ** 255n, [NATIVE, tusd], P, dl]) }], false, ONE);
+  unchanged('A', a);
+  const [ia, da] = innerError(a);
+  assert.equal(ia, 0);
+  assert.equal(ri.parseError(da)?.name, 'InsufficientOutputAmount', 'A: reverted by the router after the coins moved');
+  await after('A', a);
+
+  // B: 1 ZTPHY sent to the pair through the precompile's transfer, then a swap asking 1 wei too much: K.
+  const [r0, r1] = await pair.getReserves();
+  const [rIn, rOut] = nativeIs0 ? [r0, r1] : [r1, r0];
+  const out = (ONE * 997n * rOut) / (rIn * 1000n + ONE * 997n) + 1n;
+  const b = await run('B', [
+    { target: NATIVE, value: 0n, data: wi.encodeFunctionData('transfer', [pairAddr, ONE]) },
+    { target: pairAddr, value: 0n, data: pi.encodeFunctionData('swap', nativeIs0 ? [0n, out, P, '0x'] : [out, 0n, P, '0x']) },
+  ], false, ONE);
+  unchanged('B', b);
+  const [ib, db] = innerError(b);
+  assert.equal(ib, 1);
+  assert.equal(pi.parseError(db)?.name, 'K', 'B: the pair\'s K check');
+  await after('B', b);
+
+  // C: a swap that succeeds, then a deliberate revert around it.
+  const c = await run('C', [{ target: deployed.contracts.router, value: ONE,
+    data: ri.encodeFunctionData('swapExactETHForTokens', [0n, [NATIVE, tusd], P, dl]) }], true, ONE);
+  unchanged('C', c);
+  assert.deepEqual(innerError(c), ['Undo']);
+  await after('C', c);
+
+  // D: deposit{value} called by a contract: the coins come straight back to it (nothing reverts).
+  const d = await run('D', [{ target: NATIVE, value: ONE, data: wi.encodeFunctionData('deposit') }], false, ONE);
+  assert.equal(d.reverted, false);
+  assert.equal(d.before[2], ONE, 'D: the probe held the value');
+  assert.deepEqual(d.afterwards, d.before, 'D: deposit gave the coins back to the calling contract (native == precompile balance, unchanged)');
+  console.log(`S1: precompile transfers undone on revert (router minimum, K, deliberate); deposit{value} from a contract returns the coins`);
 });

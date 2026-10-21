@@ -60,6 +60,8 @@
         <dt data-i18n="lpFee">LP fee</dt><dd data-i18n="lpFeeValue">0.3%</dd>
       </dl>
       <div class="neuro" id="swap-neuro" hidden></div>
+      <p class="warn-line" id="swap-imported" hidden></p>
+      <label class="ack" id="swap-ack-slip-row" hidden><input type="checkbox" id="swap-ack-slip" autocomplete="off"> <span id="swap-ack-slip-text"></span></label>
       <label class="ack" id="swap-ack-impact-row" hidden><input type="checkbox" id="swap-ack-impact"> <span id="swap-ack-impact-text"></span></label>
       <label class="ack" id="swap-ack-flag-row" hidden><input type="checkbox" id="swap-ack-flag"> <span data-i18n="neuroAck"></span></label>
       <div class="actions">
@@ -83,6 +85,8 @@
       </div>
       <p class="hint" id="add-info"></p>
       <div class="neuro" id="add-neuro" hidden></div>
+      <p class="warn-line" id="add-imported" hidden></p>
+      <label class="ack" id="add-ack-slip-row" hidden><input type="checkbox" id="add-ack-slip" autocomplete="off"> <span id="add-ack-slip-text"></span></label>
       <label class="ack" id="add-ack-flag-row" hidden><input type="checkbox" id="add-ack-flag"> <span data-i18n="neuroAck"></span></label>
       <div class="actions">
         <button type="button" id="add-approve-a" hidden></button>
@@ -94,6 +98,7 @@
     <div class="card">
       <div class="card-top"><h2 data-i18n="positions">My liquidity</h2><button type="button" class="ghost small" id="pos-refresh" data-i18n="refresh">Refresh</button></div>
       <div id="positions" class="list"></div>
+      <label class="ack" id="pos-ack-slip-row" hidden><input type="checkbox" id="pos-ack-slip" autocomplete="off"> <span id="pos-ack-slip-text"></span></label>
       <p class="status" id="pos-status" role="status"></p>
     </div>
   </section>
@@ -133,9 +138,11 @@
 <dialog id="settings-dialog">
   <h2 data-i18n="settings">Settings</h2>
   <label class="stack"><span data-i18n="slippage">Slippage (%)</span><input id="set-slippage" inputmode="decimal" autocomplete="off"></label>
+  <p class="hint" data-i18n="slippageHint"></p>
   <label class="stack"><span data-i18n="deadline">Deadline (minutes)</span><input id="set-deadline" inputmode="numeric" autocomplete="off"></label>
   <label class="stack"><span data-i18n="rpcUrl">RPC</span><input id="set-rpc" autocomplete="off" spellcheck="false" placeholder="https://"></label>
-  <label class="ack"><input type="checkbox" id="set-fot"> <span data-i18n="fot"></span></label>
+  <p class="hint" data-i18n="rpcHint"></p>
+  <label class="ack"><input type="checkbox" id="set-fot" autocomplete="off"> <span data-i18n="fot"></span></label>
   <p class="status" id="settings-status" role="status"></p>
   <div class="actions"><button type="button" class="ghost" id="settings-close" data-i18n="close">Close</button><button type="button" class="primary" id="settings-save" data-i18n="save">Save</button></div>
 </dialog>
