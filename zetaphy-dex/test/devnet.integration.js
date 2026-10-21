@@ -1,0 +1,184 @@
+// End-to-end on a real ZETAPHY chain (zetaphyd, 1 s blocks, a throwaway
+// single-node devnet from zetaphy-network/scripts/devnet.sh):
+//   - cli.js deploy finds the native ERC-20 precompile (0xEeee…EEeE) and uses
+//     it as the router's WETH; it deploys two test tokens and seeds their pools;
+//   - a user swaps native ZETAPHY -> tUSD and back, adds and removes native
+//     liquidity; the pair's native balance IS its precompile balance (reserve);
+//   - Neuro: a real ThreatRegistry, a token flagged by two runners, the router
+//     refuses to swap into it once governance sets the registry (selling works).
+// Needs the zetaphyd binary (ZETAPHYD=…, default `zetaphyd` on PATH), so it is
+// not part of `npm test`. Run: npm run test:devnet
+// On shared machines: flock /tmp/ci-test/devnet.lock npm run test:devnet
+// Ports: ZDEX_DEVNET_PORT (default 24545) and the next ~110.
+
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync, execFile } from 'node:child_process';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Wallet, JsonRpcProvider, Contract, ContractFactory, parseEther, Interface, NonceManager } from 'ethers';
+
+const PORT = Number(process.env.ZDEX_DEVNET_PORT ?? 24545);
+const RPC = `http://127.0.0.1:${PORT}`;
+const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+const root = mkdtempSync(join(tmpdir(), 'zetaphy-dex-devnet-'));
+const actors = Object.fromEntries(['deployer', 'user', 'r1', 'r2'].map((n) => [n, Wallet.createRandom()]));
+const env = { ...process.env, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' };
+const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
+const REGISTRY_ART = JSON.parse(readFileSync(new URL('../../zetaphy-network/artifacts/ThreatRegistry.json', import.meta.url), 'utf8'));
+const ERC20 = ['function balanceOf(address) view returns (uint256)', 'function approve(address,uint256) returns (bool)', 'function allowance(address,address) view returns (uint256)',
+  'function symbol() view returns (string)', 'function decimals() view returns (uint8)', 'function transfer(address,uint256) returns (bool)'];
+let provider, deployed;
+
+function cli(args) {
+  return new Promise((resolve) => {
+    execFile(process.execPath, [new URL('../cli.js', import.meta.url).pathname, ...args, '--rpc', RPC], { env, timeout: 180_000 },
+      (err, stdout, stderr) => resolve({ code: err?.code ?? 0, out: stdout + stderr }));
+  });
+}
+const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 600);
+// One NonceManager per actor (the node's pending nonce can lag right after a
+// receipt); reset() after cli.js sent transactions with the same key.
+const signers = {};
+const signer = (n) => (signers[n] ??= new NonceManager(actors[n].connect(provider)));
+
+before(() => {
+  writeFileSync(join(root, 'deployer.key'), actors.deployer.privateKey + '\n', { mode: 0o600 });
+  execFileSync(new URL('../../zetaphy-network/scripts/devnet.sh', import.meta.url).pathname,
+    [join(root, 'chain'), String(PORT), ...Object.values(actors).map((w) => w.address)],
+    { stdio: 'inherit', env: { ...env, COSMOS_CHAIN_ID: 'zetaphy_77390-1' } });
+  provider = new JsonRpcProvider(RPC, undefined, { staticNetwork: false, polling: true, pollingInterval: 500 });
+});
+
+after(() => {
+  try { process.kill(Number(readFileSync(join(root, 'chain', 'node.pid'), 'utf8'))); } catch {}
+});
+
+test('the native precompile behaves like WETH: ERC-20 views, deposit() gives the coins back, balances are native balances', { timeout: 120_000 }, async () => {
+  assert.equal((await provider.getNetwork()).chainId, 77390n);
+  const w = new Contract(NATIVE, [...ERC20, 'function deposit() payable', 'function withdraw(uint256)'], signer('user'));
+  assert.equal(await w.decimals(), 18n);
+  const sym = await w.symbol();
+  assert.ok(typeof sym === 'string' && sym.length > 0, sym);
+  const me = actors.user.address;
+  assert.equal(await w.balanceOf(me), await provider.getBalance(me), 'precompile balance == native balance');
+  const before = await provider.getBalance(me);
+  const r = await (await w.deposit({ value: parseEther('1') })).wait();
+  const fee = r.gasUsed * r.gasPrice;
+  assert.equal(await provider.getBalance(me), before - fee, 'deposit returns the coins (only gas spent)');
+  console.log(`native precompile: symbol ${sym}, deposit gas ${r.gasUsed}`);
+});
+
+test('cli.js deploy uses the precompile as WETH, deploys test tokens and seeds pools', { timeout: 300_000 }, async () => {
+  const out = join(root, 'deployments.json');
+  const r = await cli(['deploy', '--key-file', join(root, 'deployer.key'), '--test-tokens', '--out', out, '--public-rpc', 'https://rpc.example.invalid']);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /wrapped native: 0xEeee\S+ \(native-precompile\)/);
+  deployed = JSON.parse(readFileSync(out, 'utf8'));
+  assert.equal(deployed.chainId, 77390);
+  assert.equal(deployed.contracts.wnative, NATIVE);
+  assert.equal(deployed.tokens.length, 2);
+  assert.equal(deployed.rpc, 'https://rpc.example.invalid');
+  const router = new Contract(deployed.contracts.router, art('ZetaphyRouter').abi, provider);
+  assert.equal(await router.WETH(), NATIVE);
+  // The seeded pool: its native balance is exactly the WZTPHY reserve.
+  const tusd = deployed.tokens[0].address;
+  const pair = new Contract(await router.pairFor(tusd, NATIVE), art('ZetaphyPair').abi, provider);
+  const [r0, r1] = await pair.getReserves();
+  const nativeIs0 = (await pair.token0()) === NATIVE;
+  assert.equal(await provider.getBalance(await pair.getAddress()), nativeIs0 ? r0 : r1);
+  assert.equal(nativeIs0 ? r0 : r1, parseEther('100'));
+  const s = await cli(['status', '--deployments', out]);
+  assert.match(s.out, /"pairs": 2/, s.out);
+  console.log(r.out.trim());
+});
+
+test('a user swaps native ZETAPHY -> tUSD and back, adds and removes native liquidity', { timeout: 300_000 }, async () => {
+  const user = signer('user');
+  const me = actors.user.address;
+  const router = new Contract(deployed.contracts.router, art('ZetaphyRouter').abi, user);
+  const tusd = new Contract(deployed.tokens[0].address, ERC20, user);
+  const path = [NATIVE, await tusd.getAddress()];
+  const pairAddr = await router.pairFor(...path);
+
+  // native -> tUSD
+  const amounts = await router.getAmountsOut(parseEther('2'), path);
+  const minOut = (amounts[1] * 995n) / 1000n; // 0.5% slippage
+  const n0 = await provider.getBalance(me);
+  const r1 = await (await router.swapExactETHForTokens(minOut, path, me, deadline(), { value: parseEther('2') })).wait();
+  const got = await tusd.balanceOf(me);
+  assert.equal(got, amounts[1], 'nobody else traded in between');
+  assert.equal(n0 - (await provider.getBalance(me)), parseEther('2') + r1.gasUsed * r1.gasPrice);
+  console.log(`swapped 2 ZTPHY -> ${got} tUSD wei (gas ${r1.gasUsed})`);
+
+  // tUSD -> native, with an exact approval
+  const back = got / 2n;
+  await (await tusd.approve(await router.getAddress(), back)).wait();
+  const outs = await router.getAmountsOut(back, [path[1], NATIVE]);
+  const n1 = await provider.getBalance(me);
+  const r2 = await (await router.swapExactTokensForETH(back, outs[1], [path[1], NATIVE], me, deadline())).wait();
+  assert.equal((await provider.getBalance(me)) - n1 + r2.gasUsed * r2.gasPrice, outs[1]);
+  assert.equal(await tusd.allowance(me, await router.getAddress()), 0n, 'the exact approval is used up');
+  assert.equal(await provider.getBalance(await router.getAddress()), 0n, 'the router keeps no native coins');
+  console.log(`swapped ${back} tUSD wei -> ${outs[1]} ZTPHY wei (gas ${r2.gasUsed})`);
+
+  // add native liquidity, then remove it (native comes back as native)
+  const pair = new Contract(pairAddr, art('ZetaphyPair').abi, user);
+  const add = await tusd.balanceOf(me);
+  await (await tusd.approve(await router.getAddress(), add)).wait();
+  const nAdd = await provider.getBalance(me);
+  const rAdd = await (await router.addLiquidityETH(path[1], add, 0, 0, me, deadline(), { value: parseEther('5') })).wait();
+  const addedNative = nAdd - (await provider.getBalance(me)) - rAdd.gasUsed * rAdd.gasPrice; // the rest of the 5 was refunded
+  assert.ok(addedNative > 0n && addedNative < parseEther('5'), `added ${addedNative}`);
+  const lp = await pair.balanceOf(me);
+  assert.ok(lp > 0n);
+  const [q0, q1] = await pair.getReserves();
+  assert.equal(await provider.getBalance(pairAddr), (await pair.token0()) === NATIVE ? q0 : q1, 'reserve == native balance');
+  await (await pair.approve(await router.getAddress(), lp)).wait();
+  const n2 = await provider.getBalance(me);
+  const r3 = await (await router.removeLiquidityETH(path[1], lp, 0, 0, me, deadline())).wait();
+  const removedNative = (await provider.getBalance(me)) + r3.gasUsed * r3.gasPrice - n2;
+  assert.ok(removedNative <= addedNative && removedNative > (addedNative * 999n) / 1000n, `added ${addedNative}, got back ${removedNative}`);
+  console.log(`added ${addedNative} ZTPHY wei of liquidity (rest refunded), removed it: ${removedNative} back`);
+  assert.equal(await pair.balanceOf(me), 0n);
+  // Slippage and deadline are enforced on chain.
+  await assert.rejects(router.swapExactETHForTokens.staticCall(amounts[1] * 10n, path, me, deadline(), { value: parseEther('2') }), /InsufficientOutputAmount|revert/);
+  await assert.rejects(router.swapExactETHForTokens.staticCall(0, path, me, 1n, { value: parseEther('2') }), /Expired|revert/);
+});
+
+test('Neuro: a token flagged in a real ThreatRegistry is refused by the router once governance sets the registry; selling still works', { timeout: 300_000 }, async () => {
+  const dep = signer('deployer');
+  const runners = await new ContractFactory(art('MockRunners').abi, art('MockRunners').bytecode, dep).deploy();
+  await runners.waitForDeployment();
+  for (const r of ['r1', 'r2']) await (await runners.set(actors[r].address, true)).wait();
+  const reg = await new ContractFactory(REGISTRY_ART.abi, REGISTRY_ART.bytecode, dep).deploy(await runners.getAddress(), 2, 1, actors.deployer.address, 0);
+  await reg.waitForDeployment();
+  const tswd = deployed.tokens[1].address;
+  const key = await reg.addressKey(77390n, tswd);
+  for (const r of ['r1', 'r2']) await (await reg.connect(signer(r)).vote(key, true, 2, '0x' + 'e7'.repeat(32), 'neuro:devnet')).wait();
+  assert.deepEqual([...(await reg.isContractEnforced(tswd))], [true, 2n]);
+
+  const s = await cli(['set-registry', await reg.getAddress(), '--key-file', join(root, 'deployer.key'), '--deployments', join(root, 'deployments.json')]);
+  assert.equal(s.code, 0, s.out);
+  dep.reset();
+  const user = signer('user');
+  const me = actors.user.address;
+  const router = new Contract(deployed.contracts.router, art('ZetaphyRouter').abi, user);
+  const iface = new Interface(art('ZetaphyRouter').abi);
+  const err = await router.swapExactETHForTokens.staticCall(0, [NATIVE, tswd], me, deadline(), { value: parseEther('1') }).catch((e) => e);
+  const parsed = iface.parseError(err?.data ?? err?.info?.error?.data ?? '0x');
+  assert.equal(parsed?.name, 'TokenEnforced', String(err?.message));
+  assert.equal(parsed.args[0], tswd);
+  // tUSD is unaffected; a holder of tSWD can still sell it.
+  await (await router.swapExactETHForTokens(0, [NATIVE, deployed.tokens[0].address], me, deadline(), { value: parseEther('1') })).wait();
+  const deployerRouter = router.connect(dep);
+  const t = new Contract(tswd, ERC20, dep);
+  await (await t.approve(deployed.contracts.router, parseEther('10'))).wait();
+  await (await deployerRouter.swapExactTokensForETH(parseEther('10'), 0, [tswd, NATIVE], actors.deployer.address, deadline())).wait();
+  // Off again.
+  const off = await cli(['set-registry', '0x0', '--key-file', join(root, 'deployer.key'), '--deployments', join(root, 'deployments.json')]);
+  assert.equal(off.code, 0, off.out);
+  await (await router.swapExactETHForTokens(0, [NATIVE, tswd], me, deadline(), { value: parseEther('1') })).wait();
+  console.log('Neuro: swap into the enforced-flagged token refused (TokenEnforced), selling it worked, registry off -> allowed again');
+});

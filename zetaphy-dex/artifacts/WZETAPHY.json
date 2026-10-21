@@ -1,0 +1,347 @@
+{
+  "contractName": "WZETAPHY",
+  "sourceName": "contracts/WZETAPHY.sol",
+  "solcLongVersion": "0.8.26+commit.8a97fa7a",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "InsufficientAllowance",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InsufficientBalance",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "SendFailed",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "spender",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "Approval",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "Deposit",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "Transfer",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "Withdrawal",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "allowance",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "spender",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "approve",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "balanceOf",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "decimals",
+      "outputs": [
+        {
+          "internalType": "uint8",
+          "name": "",
+          "type": "uint8"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "deposit",
+      "outputs": [],
+      "stateMutability": "payable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "name",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "symbol",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "totalSupply",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "transfer",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "transferFrom",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "value",
+          "type": "uint256"
+        }
+      ],
+      "name": "withdraw",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "stateMutability": "payable",
+      "type": "receive"
+    }
+  ],
+  "bytecode": "0x6080604052348015600e575f80fd5b506106b38061001c5f395ff3fe60806040526004361061009d575f3560e01c8063313ce56711610062578063313ce5671461018957806370a08231146101af57806395d89b41146101da578063a9059cbb1461020b578063d0e30db01461022a578063dd62ed3e14610232575f80fd5b806306fdde03146100b0578063095ea7b31461010057806318160ddd1461012f57806323b872dd1461014b5780632e1a7d4d1461016a575f80fd5b366100ac576100aa610268565b005b5f80fd5b3480156100bb575f80fd5b506100ea6040518060400160405280600f81526020016e57726170706564205a45544150485960881b81525081565b6040516100f7919061054b565b60405180910390f35b34801561010b575f80fd5b5061011f61011a36600461059b565b6102c2565b60405190151581526020016100f7565b34801561013a575f80fd5b50475b6040519081526020016100f7565b348015610156575f80fd5b5061011f6101653660046105c3565b61032e565b348015610175575f80fd5b506100aa6101843660046105fd565b610458565b348015610194575f80fd5b5061019d601281565b60405160ff90911681526020016100f7565b3480156101ba575f80fd5b5061013d6101c9366004610614565b5f6020819052908152604090205481565b3480156101e5575f80fd5b506100ea60405180604001604052806006815260200165575a5450485960d01b81525081565b348015610216575f80fd5b5061011f61022536600461059b565b610538565b6100aa610268565b34801561023d575f80fd5b5061013d61024c36600461062d565b600160209081525f928352604080842090915290825290205481565b335f908152602081905260408120805434929061028690849061065e565b909155505060405134815233907fe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c9060200160405180910390a2565b335f8181526001602090815260408083206001600160a01b038716808552925280832085905551919290917f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b9259061031c9086815260200190565b60405180910390a35060015b92915050565b6001600160a01b0383165f9081526020819052604081205482111561036657604051631e9acf1760e31b815260040160405180910390fd5b6001600160a01b03841633146103ec576001600160a01b0384165f9081526001602090815260408083203384529091529020545f1981146103ea57828110156103c2576040516313be252b60e01b815260040160405180910390fd5b6001600160a01b0385165f908152600160209081526040808320338452909152902083820390555b505b6001600160a01b038481165f818152602081815260408083208054889003905593871680835291849020805487019055925185815290927fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef910160405180910390a35060019392505050565b335f9081526020819052604090205481111561048757604051631e9acf1760e31b815260040160405180910390fd5b335f81815260208181526040918290208054859003905590518381527f7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65910160405180910390a26040515f90339083908381818185875af1925050503d805f811461050d576040519150601f19603f3d011682016040523d82523d5f602084013e610512565b606091505b5050905080610534576040516381063e5160e01b815260040160405180910390fd5b5050565b5f61054433848461032e565b9392505050565b602081525f82518060208401528060208501604085015e5f604082850101526040601f19601f83011684010191505092915050565b80356001600160a01b0381168114610596575f80fd5b919050565b5f80604083850312156105ac575f80fd5b6105b583610580565b946020939093013593505050565b5f805f606084860312156105d5575f80fd5b6105de84610580565b92506105ec60208501610580565b929592945050506040919091013590565b5f6020828403121561060d575f80fd5b5035919050565b5f60208284031215610624575f80fd5b61054482610580565b5f806040838503121561063e575f80fd5b61064783610580565b915061065560208401610580565b90509250929050565b8082018082111561032857634e487b7160e01b5f52601160045260245ffdfea2646970667358221220ad34735ef39b6eda2a7f43bf594cbb38761756126174ab5f39ca9e3bfa2ed89a64736f6c634300081a0033",
+  "deployedBytecode": "0x60806040526004361061009d575f3560e01c8063313ce56711610062578063313ce5671461018957806370a08231146101af57806395d89b41146101da578063a9059cbb1461020b578063d0e30db01461022a578063dd62ed3e14610232575f80fd5b806306fdde03146100b0578063095ea7b31461010057806318160ddd1461012f57806323b872dd1461014b5780632e1a7d4d1461016a575f80fd5b366100ac576100aa610268565b005b5f80fd5b3480156100bb575f80fd5b506100ea6040518060400160405280600f81526020016e57726170706564205a45544150485960881b81525081565b6040516100f7919061054b565b60405180910390f35b34801561010b575f80fd5b5061011f61011a36600461059b565b6102c2565b60405190151581526020016100f7565b34801561013a575f80fd5b50475b6040519081526020016100f7565b348015610156575f80fd5b5061011f6101653660046105c3565b61032e565b348015610175575f80fd5b506100aa6101843660046105fd565b610458565b348015610194575f80fd5b5061019d601281565b60405160ff90911681526020016100f7565b3480156101ba575f80fd5b5061013d6101c9366004610614565b5f6020819052908152604090205481565b3480156101e5575f80fd5b506100ea60405180604001604052806006815260200165575a5450485960d01b81525081565b348015610216575f80fd5b5061011f61022536600461059b565b610538565b6100aa610268565b34801561023d575f80fd5b5061013d61024c36600461062d565b600160209081525f928352604080842090915290825290205481565b335f908152602081905260408120805434929061028690849061065e565b909155505060405134815233907fe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c9060200160405180910390a2565b335f8181526001602090815260408083206001600160a01b038716808552925280832085905551919290917f8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b9259061031c9086815260200190565b60405180910390a35060015b92915050565b6001600160a01b0383165f9081526020819052604081205482111561036657604051631e9acf1760e31b815260040160405180910390fd5b6001600160a01b03841633146103ec576001600160a01b0384165f9081526001602090815260408083203384529091529020545f1981146103ea57828110156103c2576040516313be252b60e01b815260040160405180910390fd5b6001600160a01b0385165f908152600160209081526040808320338452909152902083820390555b505b6001600160a01b038481165f818152602081815260408083208054889003905593871680835291849020805487019055925185815290927fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef910160405180910390a35060019392505050565b335f9081526020819052604090205481111561048757604051631e9acf1760e31b815260040160405180910390fd5b335f81815260208181526040918290208054859003905590518381527f7fcf532c15f0a6db0bd6d0e038bea71d30d808c7d98cb3bf7268a95bf5081b65910160405180910390a26040515f90339083908381818185875af1925050503d805f811461050d576040519150601f19603f3d011682016040523d82523d5f602084013e610512565b606091505b5050905080610534576040516381063e5160e01b815260040160405180910390fd5b5050565b5f61054433848461032e565b9392505050565b602081525f82518060208401528060208501604085015e5f604082850101526040601f19601f83011684010191505092915050565b80356001600160a01b0381168114610596575f80fd5b919050565b5f80604083850312156105ac575f80fd5b6105b583610580565b946020939093013593505050565b5f805f606084860312156105d5575f80fd5b6105de84610580565b92506105ec60208501610580565b929592945050506040919091013590565b5f6020828403121561060d575f80fd5b5035919050565b5f60208284031215610624575f80fd5b61054482610580565b5f806040838503121561063e575f80fd5b61064783610580565b915061065560208401610580565b90509250929050565b8082018082111561032857634e487b7160e01b5f52601160045260245ffdfea2646970667358221220ad34735ef39b6eda2a7f43bf594cbb38761756126174ab5f39ca9e3bfa2ed89a64736f6c634300081a0033",
+  "input": {
+    "language": "Solidity",
+    "sources": {
+      "contracts/TestToken.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @title TestToken: a plain ERC-20 for the ZETAPHY testnet DEX (no value, testnet only).\n/// @notice The deployer gets the initial supply and may mint more (a test faucet).\n///         Optional `feeBps`: a cut of every transfer is burned (fee-on-transfer\n///         token, to test the router's *SupportingFeeOnTransferTokens functions).\ncontract TestToken {\n    string public name;\n    string public symbol;\n    uint8 public immutable decimals;\n    uint16 public immutable feeBps;\n    address public immutable minter;\n    uint256 public totalSupply;\n    mapping(address => uint256) public balanceOf;\n    mapping(address => mapping(address => uint256)) public allowance;\n\n    event Transfer(address indexed from, address indexed to, uint256 value);\n    event Approval(address indexed owner, address indexed spender, uint256 value);\n\n    error InsufficientBalance();\n    error InsufficientAllowance();\n    error NotMinter();\n\n    constructor(string memory name_, string memory symbol_, uint8 decimals_, uint256 initialSupply, uint16 feeBps_) {\n        require(feeBps_ <= 5000, \"fee\");\n        name = name_;\n        symbol = symbol_;\n        decimals = decimals_;\n        feeBps = feeBps_;\n        minter = msg.sender;\n        _mint(msg.sender, initialSupply);\n    }\n\n    function mint(address to, uint256 value) external {\n        if (msg.sender != minter) revert NotMinter();\n        _mint(to, value);\n    }\n\n    function _mint(address to, uint256 value) private {\n        totalSupply += value;\n        unchecked { balanceOf[to] += value; }\n        emit Transfer(address(0), to, value);\n    }\n\n    function approve(address spender, uint256 value) external returns (bool) {\n        allowance[msg.sender][spender] = value;\n        emit Approval(msg.sender, spender, value);\n        return true;\n    }\n\n    function transfer(address to, uint256 value) external returns (bool) {\n        _transfer(msg.sender, to, value);\n        return true;\n    }\n\n    function transferFrom(address from, address to, uint256 value) external returns (bool) {\n        uint256 a = allowance[from][msg.sender];\n        if (a != type(uint256).max) {\n            if (a < value) revert InsufficientAllowance();\n            unchecked { allowance[from][msg.sender] = a - value; }\n        }\n        _transfer(from, to, value);\n        return true;\n    }\n\n    function _transfer(address from, address to, uint256 value) private {\n        uint256 b = balanceOf[from];\n        if (b < value) revert InsufficientBalance();\n        uint256 fee = (value * feeBps) / 10_000;\n        unchecked {\n            balanceOf[from] = b - value;\n            balanceOf[to] += value - fee;\n            totalSupply -= fee;\n        }\n        emit Transfer(from, to, value - fee);\n        if (fee != 0) emit Transfer(from, address(0), fee);\n    }\n}\n"
+      },
+      "contracts/WZETAPHY.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n/// @title WZETAPHY: wrapped native coin, one token per wei (a classic WETH, written from scratch).\n/// @notice On ZETAPHY itself the DEX uses the native ERC-20 precompile\n///         0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE instead (Cosmos EVM's WERC20,\n///         whose balances ARE the native balances). This contract is for the\n///         unit tests (an EVM without that precompile) and for other EVM chains:\n///         `cli.js deploy --wnative deploy` deploys it.\ncontract WZETAPHY {\n    string public constant name = \"Wrapped ZETAPHY\";\n    string public constant symbol = \"WZTPHY\";\n    uint8 public constant decimals = 18;\n\n    mapping(address => uint256) public balanceOf;\n    mapping(address => mapping(address => uint256)) public allowance;\n\n    event Approval(address indexed owner, address indexed spender, uint256 value);\n    event Transfer(address indexed from, address indexed to, uint256 value);\n    event Deposit(address indexed to, uint256 value);\n    event Withdrawal(address indexed from, uint256 value);\n\n    error InsufficientBalance();\n    error InsufficientAllowance();\n    error SendFailed();\n\n    receive() external payable {\n        deposit();\n    }\n\n    function deposit() public payable {\n        balanceOf[msg.sender] += msg.value;\n        emit Deposit(msg.sender, msg.value);\n    }\n\n    function withdraw(uint256 value) external {\n        if (balanceOf[msg.sender] < value) revert InsufficientBalance();\n        unchecked { balanceOf[msg.sender] -= value; }\n        emit Withdrawal(msg.sender, value);\n        (bool ok,) = msg.sender.call{value: value}(\"\");\n        if (!ok) revert SendFailed();\n    }\n\n    function totalSupply() external view returns (uint256) {\n        return address(this).balance;\n    }\n\n    function approve(address spender, uint256 value) external returns (bool) {\n        allowance[msg.sender][spender] = value;\n        emit Approval(msg.sender, spender, value);\n        return true;\n    }\n\n    function transfer(address to, uint256 value) external returns (bool) {\n        return transferFrom(msg.sender, to, value);\n    }\n\n    function transferFrom(address from, address to, uint256 value) public returns (bool) {\n        if (balanceOf[from] < value) revert InsufficientBalance();\n        if (from != msg.sender) {\n            uint256 a = allowance[from][msg.sender];\n            if (a != type(uint256).max) {\n                if (a < value) revert InsufficientAllowance();\n                unchecked { allowance[from][msg.sender] = a - value; }\n            }\n        }\n        unchecked {\n            balanceOf[from] -= value;\n            balanceOf[to] += value;\n        }\n        emit Transfer(from, to, value);\n        return true;\n    }\n}\n"
+      },
+      "contracts/ZetaphyFactory.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\nimport {ZetaphyPair} from \"./ZetaphyPair.sol\";\n\n/// The part of Neuro's ThreatRegistry (zetaphy-network/contracts/ThreatRegistry.sol)\n/// the DEX reads: true once a flag on the contract's address on this chain, or\n/// on its exact code (extcodehash), is enforced. Reason: ThreatRegistry.Reason.\ninterface IThreatRegistryView {\n    function isContractEnforced(address who) external view returns (bool enforced, uint8 reason);\n}\n\n/// @title ZetaphyFactory: creates one ZetaphyPair per token pair (CREATE2) and\n///        holds the DEX's governance settings.\n/// @notice Governance (a multisig on the testnet) may:\n///           - setFeeTo(a):           the protocol fee switch. Zero (the default) = off;\n///                                    otherwise 1/6 of the 0.3% LP fee goes to `a` as LP tokens;\n///           - setThreatRegistry(r):  Neuro's ThreatRegistry. Zero (the default) = off;\n///                                    otherwise the router refuses to swap into, or add\n///                                    liquidity with, a token whose flag is ENFORCED there.\n///                                    Selling a token and removing liquidity always work;\n///           - transfer governance (two steps: setGovernance, then acceptGovernance).\n///         Governance cannot move anyone's funds, pause pools or change the 0.3% fee.\ncontract ZetaphyFactory {\n    address public governance;\n    address public pendingGovernance;\n    address public feeTo;\n    address public threatRegistry;\n\n    mapping(address => mapping(address => address)) public getPair;\n    address[] public allPairs;\n\n    /// keccak256 of ZetaphyPair's creation code: pair = CREATE2(this, keccak256(token0, token1), PAIR_CODE_HASH).\n    bytes32 public immutable PAIR_CODE_HASH;\n\n    address private _p0;\n    address private _p1;\n\n    event PairCreated(address indexed token0, address indexed token1, address pair, uint256 allPairsLength);\n    event FeeToSet(address feeTo);\n    event ThreatRegistrySet(address registry);\n    event GovernanceProposed(address governance);\n    event GovernanceSet(address governance);\n\n    error IdenticalAddresses();\n    error ZeroAddress();\n    error PairExists();\n    error NotGovernance();\n    error NotPendingGovernance();\n    error NotARegistry();\n\n    modifier onlyGov() {\n        if (msg.sender != governance) revert NotGovernance();\n        _;\n    }\n\n    constructor(address governance_) {\n        if (governance_ == address(0)) revert ZeroAddress();\n        governance = governance_;\n        PAIR_CODE_HASH = keccak256(type(ZetaphyPair).creationCode);\n        emit GovernanceSet(governance_);\n    }\n\n    function allPairsLength() external view returns (uint256) {\n        return allPairs.length;\n    }\n\n    /// Read by a new pair's constructor (only set during createPair).\n    function pairParameters() external view returns (address token0, address token1) {\n        return (_p0, _p1);\n    }\n\n    function createPair(address tokenA, address tokenB) external returns (address pair) {\n        if (tokenA == tokenB) revert IdenticalAddresses();\n        (address token0, address token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);\n        if (token0 == address(0)) revert ZeroAddress();\n        if (getPair[token0][token1] != address(0)) revert PairExists();\n        _p0 = token0;\n        _p1 = token1;\n        pair = address(new ZetaphyPair{salt: keccak256(abi.encodePacked(token0, token1))}());\n        delete _p0;\n        delete _p1;\n        getPair[token0][token1] = pair;\n        getPair[token1][token0] = pair;\n        allPairs.push(pair);\n        emit PairCreated(token0, token1, pair, allPairs.length);\n    }\n\n    function setFeeTo(address feeTo_) external onlyGov {\n        feeTo = feeTo_;\n        emit FeeToSet(feeTo_);\n    }\n\n    /// Zero switches the router's check off. A nonzero address must answer\n    /// isContractEnforced (checked here), so a typo cannot stop every swap.\n    function setThreatRegistry(address registry) external onlyGov {\n        if (registry != address(0)) {\n            (bool ok, bytes memory r) = registry.staticcall(abi.encodeCall(IThreatRegistryView.isContractEnforced, (address(this))));\n            if (!ok || r.length < 64) revert NotARegistry();\n        }\n        threatRegistry = registry;\n        emit ThreatRegistrySet(registry);\n    }\n\n    function setGovernance(address next) external onlyGov {\n        pendingGovernance = next;\n        emit GovernanceProposed(next);\n    }\n\n    function acceptGovernance() external {\n        if (msg.sender != pendingGovernance) revert NotPendingGovernance();\n        governance = msg.sender;\n        pendingGovernance = address(0);\n        emit GovernanceSet(msg.sender);\n    }\n}\n"
+      },
+      "contracts/ZetaphyPair.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n// ZETAPHY DEX pair: a constant-product (x * y = k) pool of two tokens, written\n// from scratch for ZETAPHY (MIT). The math and the interface follow the\n// Uniswap V2 whitepaper (https://uniswap.org/whitepaper.pdf) so that tools\n// that know V2 pools read it too, but no Uniswap source code is copied.\n//\n//   - fee: 0.3% of every input stays in the pool (LP fee);\n//   - protocol fee: off by default. When governance sets factory.feeTo, 1/6\n//     of the fee growth (0.05% of volume) is minted to feeTo as LP tokens,\n//     on the next mint/burn (whitepaper section 2.4);\n//   - TWAP: price0CumulativeLast / price1CumulativeLast accumulate the\n//     UQ112.112 price times seconds, at the first touch of each block, before\n//     the trade (overflow is intended: consumers take differences);\n//   - MINIMUM_LIQUIDITY (1000 wei of LP) is locked at address(0) on the first\n//     mint, so the share price can never be pushed to a level where nobody\n//     can afford a share;\n//   - every state-changing function holds one reentrancy lock;\n//   - skim() sends out tokens above the reserves, sync() sets the reserves\n//     to the balances;\n//   - flash swaps: swap() sends the output first and, with data, calls\n//     zetaphyDexCall on `to`; the K check after it needs the input (or the\n//     output back plus the fee) to be in the pool by then.\n\ninterface IZetaphyFactoryForPair {\n    function feeTo() external view returns (address);\n    function pairParameters() external view returns (address token0, address token1);\n}\n\ninterface IERC20Balance {\n    function balanceOf(address) external view returns (uint256);\n}\n\ninterface IZetaphyDexCallee {\n    function zetaphyDexCall(address sender, uint256 amount0Out, uint256 amount1Out, bytes calldata data) external;\n}\n\ncontract ZetaphyPair {\n    // ---- LP token (ERC-20) ----\n    string public constant name = \"ZETAPHY DEX LP\";\n    string public constant symbol = \"ZLP\";\n    uint8 public constant decimals = 18;\n    uint256 public totalSupply;\n    mapping(address => uint256) public balanceOf;\n    mapping(address => mapping(address => uint256)) public allowance;\n\n    event Transfer(address indexed from, address indexed to, uint256 value);\n    event Approval(address indexed owner, address indexed spender, uint256 value);\n\n    // ---- pool ----\n    uint256 public constant MINIMUM_LIQUIDITY = 1000;\n    address public immutable factory;\n    address public immutable token0;\n    address public immutable token1;\n\n    uint112 private reserve0;\n    uint112 private reserve1;\n    uint32 private blockTimestampLast;\n\n    uint256 public price0CumulativeLast;\n    uint256 public price1CumulativeLast;\n    /// reserve0 * reserve1 after the last liquidity event (only kept while the protocol fee is on).\n    uint256 public kLast;\n\n    uint256 private unlocked = 1;\n\n    event Mint(address indexed sender, uint256 amount0, uint256 amount1);\n    event Burn(address indexed sender, uint256 amount0, uint256 amount1, address indexed to);\n    event Swap(address indexed sender, uint256 amount0In, uint256 amount1In, uint256 amount0Out, uint256 amount1Out, address indexed to);\n    event Sync(uint112 reserve0, uint112 reserve1);\n\n    error Locked();\n    error Overflow();\n    error TransferFailed();\n    error InsufficientLiquidityMinted();\n    error InsufficientLiquidityBurned();\n    error InsufficientOutputAmount();\n    error InsufficientInputAmount();\n    error InsufficientLiquidity();\n    error InvalidTo();\n    error K();\n    error InsufficientAllowance();\n    error InsufficientBalance();\n\n    modifier lock() {\n        if (unlocked != 1) revert Locked();\n        unlocked = 2;\n        _;\n        unlocked = 1;\n    }\n\n    /// Created by the factory with CREATE2; the tokens come from the factory,\n    /// so the init code (and so every pair's address) does not depend on them.\n    constructor() {\n        factory = msg.sender;\n        (token0, token1) = IZetaphyFactoryForPair(msg.sender).pairParameters();\n    }\n\n    function getReserves() public view returns (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast) {\n        _reserve0 = reserve0;\n        _reserve1 = reserve1;\n        _blockTimestampLast = blockTimestampLast;\n    }\n\n    // ---- ERC-20 ----\n\n    function approve(address spender, uint256 value) external returns (bool) {\n        allowance[msg.sender][spender] = value;\n        emit Approval(msg.sender, spender, value);\n        return true;\n    }\n\n    function transfer(address to, uint256 value) external returns (bool) {\n        _transfer(msg.sender, to, value);\n        return true;\n    }\n\n    function transferFrom(address from, address to, uint256 value) external returns (bool) {\n        uint256 a = allowance[from][msg.sender];\n        if (a != type(uint256).max) {\n            if (a < value) revert InsufficientAllowance();\n            unchecked { allowance[from][msg.sender] = a - value; }\n        }\n        _transfer(from, to, value);\n        return true;\n    }\n\n    function _transfer(address from, address to, uint256 value) private {\n        uint256 b = balanceOf[from];\n        if (b < value) revert InsufficientBalance();\n        unchecked {\n            balanceOf[from] = b - value;\n            balanceOf[to] += value; // cannot overflow: sum of balances == totalSupply\n        }\n        emit Transfer(from, to, value);\n    }\n\n    function _mint(address to, uint256 value) private {\n        totalSupply += value;\n        unchecked { balanceOf[to] += value; }\n        emit Transfer(address(0), to, value);\n    }\n\n    function _burn(address from, uint256 value) private {\n        balanceOf[from] -= value;\n        unchecked { totalSupply -= value; }\n        emit Transfer(from, address(0), value);\n    }\n\n    // ---- pool internals ----\n\n    /// transfer(), accepting tokens that return nothing (USDT-style) but not ones that return false.\n    function _safeTransfer(address token, address to, uint256 value) private {\n        (bool ok, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, to, value));\n        if (!ok || (data.length != 0 && (data.length < 32 || !abi.decode(data, (bool))))) revert TransferFailed();\n    }\n\n    function _balance(address token) private view returns (uint256) {\n        return IERC20Balance(token).balanceOf(address(this));\n    }\n\n    /// New reserves; on the block's first touch, the price accumulators grow by\n    /// the price before this update times the seconds since the last one.\n    function _update(uint256 balance0, uint256 balance1, uint112 _reserve0, uint112 _reserve1) private {\n        if (balance0 > type(uint112).max || balance1 > type(uint112).max) revert Overflow();\n        uint32 blockTimestamp = uint32(block.timestamp % 2 ** 32);\n        unchecked {\n            uint32 timeElapsed = blockTimestamp - blockTimestampLast; // wraps around, by design\n            if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {\n                // UQ112.112: (reserve1 << 112) / reserve0 fits in 224 bits; the products wrap, by design.\n                price0CumulativeLast += ((uint256(_reserve1) << 112) / _reserve0) * timeElapsed;\n                price1CumulativeLast += ((uint256(_reserve0) << 112) / _reserve1) * timeElapsed;\n            }\n        }\n        reserve0 = uint112(balance0);\n        reserve1 = uint112(balance1);\n        blockTimestampLast = blockTimestamp;\n        emit Sync(reserve0, reserve1);\n    }\n\n    /// Protocol fee: 1/6 of the growth of sqrt(k) since the last liquidity event, as LP tokens to feeTo.\n    function _mintFee(uint112 _reserve0, uint112 _reserve1) private returns (bool feeOn) {\n        address feeTo = IZetaphyFactoryForPair(factory).feeTo();\n        feeOn = feeTo != address(0);\n        uint256 _kLast = kLast;\n        if (feeOn) {\n            if (_kLast != 0) {\n                uint256 rootK = _sqrt(uint256(_reserve0) * _reserve1);\n                uint256 rootKLast = _sqrt(_kLast);\n                if (rootK > rootKLast) {\n                    uint256 liquidity = (totalSupply * (rootK - rootKLast)) / (rootK * 5 + rootKLast);\n                    if (liquidity > 0) _mint(feeTo, liquidity);\n                }\n            }\n        } else if (_kLast != 0) {\n            kLast = 0;\n        }\n    }\n\n    // ---- pool: called by the router (or anyone who transferred tokens in first) ----\n\n    /// LP tokens for the tokens sent to the pair since the last update.\n    function mint(address to) external lock returns (uint256 liquidity) {\n        (uint112 _reserve0, uint112 _reserve1,) = getReserves();\n        uint256 balance0 = _balance(token0);\n        uint256 balance1 = _balance(token1);\n        uint256 amount0 = balance0 - _reserve0;\n        uint256 amount1 = balance1 - _reserve1;\n\n        bool feeOn = _mintFee(_reserve0, _reserve1);\n        uint256 _totalSupply = totalSupply; // after _mintFee, which may change it\n        if (_totalSupply == 0) {\n            uint256 root = _sqrt(amount0 * amount1);\n            if (root <= MINIMUM_LIQUIDITY) revert InsufficientLiquidityMinted();\n            liquidity = root - MINIMUM_LIQUIDITY;\n            _mint(address(0), MINIMUM_LIQUIDITY); // locked forever\n        } else {\n            uint256 l0 = (amount0 * _totalSupply) / _reserve0;\n            uint256 l1 = (amount1 * _totalSupply) / _reserve1;\n            liquidity = l0 < l1 ? l0 : l1;\n        }\n        if (liquidity == 0) revert InsufficientLiquidityMinted();\n        _mint(to, liquidity);\n\n        _update(balance0, balance1, _reserve0, _reserve1);\n        if (feeOn) kLast = uint256(reserve0) * reserve1;\n        emit Mint(msg.sender, amount0, amount1);\n    }\n\n    /// Burns the LP tokens sent to the pair; their share of both tokens goes to `to`.\n    function burn(address to) external lock returns (uint256 amount0, uint256 amount1) {\n        (uint112 _reserve0, uint112 _reserve1,) = getReserves();\n        address _token0 = token0;\n        address _token1 = token1;\n        uint256 balance0 = _balance(_token0);\n        uint256 balance1 = _balance(_token1);\n        uint256 liquidity = balanceOf[address(this)];\n\n        bool feeOn = _mintFee(_reserve0, _reserve1);\n        uint256 _totalSupply = totalSupply;\n        amount0 = (liquidity * balance0) / _totalSupply; // pro rata of balances, not reserves\n        amount1 = (liquidity * balance1) / _totalSupply;\n        if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurned();\n        _burn(address(this), liquidity);\n        _safeTransfer(_token0, to, amount0);\n        _safeTransfer(_token1, to, amount1);\n        balance0 = _balance(_token0);\n        balance1 = _balance(_token1);\n\n        _update(balance0, balance1, _reserve0, _reserve1);\n        if (feeOn) kLast = uint256(reserve0) * reserve1;\n        emit Burn(msg.sender, amount0, amount1, to);\n    }\n\n    /// Sends the outputs to `to` (then calls it back if `data` is not empty);\n    /// the inputs must be in the pair by the end, such that the balances less\n    /// 0.3% of the inputs keep k at least where it was.\n    function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external lock {\n        if (amount0Out == 0 && amount1Out == 0) revert InsufficientOutputAmount();\n        (uint112 _reserve0, uint112 _reserve1,) = getReserves();\n        if (amount0Out >= _reserve0 || amount1Out >= _reserve1) revert InsufficientLiquidity();\n\n        uint256 balance0;\n        uint256 balance1;\n        {\n            address _token0 = token0;\n            address _token1 = token1;\n            if (to == _token0 || to == _token1) revert InvalidTo();\n            if (amount0Out > 0) _safeTransfer(_token0, to, amount0Out); // optimistic\n            if (amount1Out > 0) _safeTransfer(_token1, to, amount1Out);\n            if (data.length > 0) IZetaphyDexCallee(to).zetaphyDexCall(msg.sender, amount0Out, amount1Out, data);\n            balance0 = _balance(_token0);\n            balance1 = _balance(_token1);\n        }\n        uint256 amount0In = balance0 > _reserve0 - amount0Out ? balance0 - (_reserve0 - amount0Out) : 0;\n        uint256 amount1In = balance1 > _reserve1 - amount1Out ? balance1 - (_reserve1 - amount1Out) : 0;\n        if (amount0In == 0 && amount1In == 0) revert InsufficientInputAmount();\n        {\n            uint256 balance0Adjusted = balance0 * 1000 - amount0In * 3;\n            uint256 balance1Adjusted = balance1 * 1000 - amount1In * 3;\n            if (balance0Adjusted * balance1Adjusted < uint256(_reserve0) * _reserve1 * 1_000_000) revert K();\n        }\n\n        _update(balance0, balance1, _reserve0, _reserve1);\n        emit Swap(msg.sender, amount0In, amount1In, amount0Out, amount1Out, to);\n    }\n\n    /// Sends whatever is above the reserves (e.g. tokens sent by mistake) to `to`.\n    function skim(address to) external lock {\n        address _token0 = token0;\n        address _token1 = token1;\n        _safeTransfer(_token0, to, _balance(_token0) - reserve0);\n        _safeTransfer(_token1, to, _balance(_token1) - reserve1);\n    }\n\n    /// Sets the reserves to the balances (e.g. after a token's balance changed on its own).\n    function sync() external lock {\n        _update(_balance(token0), _balance(token1), reserve0, reserve1);\n    }\n\n    function _sqrt(uint256 y) private pure returns (uint256 z) {\n        if (y > 3) {\n            z = y;\n            uint256 x = y / 2 + 1;\n            while (x < z) {\n                z = x;\n                x = (y / x + x) / 2;\n            }\n        } else if (y != 0) {\n            z = 1;\n        }\n    }\n}\n"
+      },
+      "contracts/ZetaphyRouter.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n// ZETAPHY DEX router (MIT, written from scratch). The functions keep the\n// Uniswap V2 router's names and argument order, so wallets that decode V2\n// calls show them; \"ETH\" in a name means the chain's native coin (ZETAPHY,\n// ticker ZTPHY), which the router wraps through WETH():\n//   - on ZETAPHY: the native ERC-20 precompile 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE\n//     (Cosmos EVM's WERC20: its balanceOf is the native balance, transfer moves\n//     native coins, deposit() gives the coins straight back, withdraw() is a no-op);\n//   - elsewhere (and in the unit tests): the WZETAPHY contract, a classic WETH.\n// The router works with both, because it only relies on deposit, withdraw,\n// transfer and balanceOf.\n//\n// Every function checks a deadline; every swap and liquidity call takes a\n// minimum (or maximum) amount, so the caller sets the slippage it accepts.\n// The *SupportingFeeOnTransferTokens functions work with tokens that take a\n// cut on transfer: they measure what each pair actually received.\n//\n// Neuro: when governance set factory.threatRegistry() (zero = off), the\n// router refuses to swap INTO, or add liquidity with, a token whose flag is\n// enforced in Neuro's ThreatRegistry (isContractEnforced: the token's address\n// on this chain, or its exact code). Selling such a token and removing\n// liquidity always work, so nobody is locked in. A flag is automated,\n// reproducible code analysis, not an accusation (docs/LEGAL.md).\n\ninterface IFactory {\n    function getPair(address, address) external view returns (address);\n    function createPair(address, address) external returns (address);\n    function threatRegistry() external view returns (address);\n    function PAIR_CODE_HASH() external view returns (bytes32);\n}\n\ninterface IPair {\n    function getReserves() external view returns (uint112, uint112, uint32);\n    function mint(address to) external returns (uint256);\n    function burn(address to) external returns (uint256, uint256);\n    function swap(uint256 amount0Out, uint256 amount1Out, address to, bytes calldata data) external;\n    function transferFrom(address from, address to, uint256 value) external returns (bool);\n}\n\ninterface IWNative {\n    function deposit() external payable;\n    function withdraw(uint256) external;\n}\n\ninterface IERC20Min {\n    function balanceOf(address) external view returns (uint256);\n}\n\ninterface IThreatView {\n    function isContractEnforced(address who) external view returns (bool enforced, uint8 reason);\n}\n\ncontract ZetaphyRouter {\n    address public immutable factory;\n    address public immutable WETH;\n    bytes32 private immutable pairCodeHash;\n\n    error Expired();\n    error InvalidPath();\n    error InsufficientAAmount();\n    error InsufficientBAmount();\n    error InsufficientAmount();\n    error InsufficientLiquidity();\n    error InsufficientInputAmount();\n    error InsufficientOutputAmount();\n    error ExcessiveInputAmount();\n    error IdenticalAddresses();\n    error ZeroAddress();\n    error TransferFailed();\n    error NativeTransferFailed();\n    error OnlyWNative();\n    /// Neuro's ThreatRegistry has an enforced flag on this token (reason: ThreatRegistry.Reason).\n    error TokenEnforced(address token, uint8 reason);\n    /// The ThreatRegistry governance set did not answer; fails closed.\n    error RegistryUnavailable();\n\n    modifier ensure(uint256 deadline) {\n        if (deadline < block.timestamp) revert Expired();\n        _;\n    }\n\n    constructor(address factory_, address wnative) {\n        if (factory_ == address(0) || wnative == address(0)) revert ZeroAddress();\n        factory = factory_;\n        WETH = wnative;\n        pairCodeHash = IFactory(factory_).PAIR_CODE_HASH();\n    }\n\n    /// Native coins only come from WZETAPHY.withdraw (the precompile moves them without a call).\n    receive() external payable {\n        if (msg.sender != WETH) revert OnlyWNative();\n    }\n\n    // ---- Neuro ----\n\n    /// Reverts with TokenEnforced if the registry (when set) has an enforced flag on `token`.\n    function _refuseEnforced(address registry, address token) private view {\n        if (token == WETH) return;\n        (bool ok, bytes memory r) = registry.staticcall(abi.encodeCall(IThreatView.isContractEnforced, (token)));\n        if (!ok || r.length < 64) revert RegistryUnavailable();\n        (bool enforced, uint8 reason) = abi.decode(r, (bool, uint8));\n        if (enforced) revert TokenEnforced(token, reason);\n    }\n\n    /// Every token a swap along `path` receives into a pool or hands out (path[1..]); not the one sold.\n    function _checkPath(address[] calldata path) private view {\n        address registry = IFactory(factory).threatRegistry();\n        if (registry == address(0)) return;\n        for (uint256 i = 1; i < path.length; i++) _refuseEnforced(registry, path[i]);\n    }\n\n    function _checkPair(address a, address b) private view {\n        address registry = IFactory(factory).threatRegistry();\n        if (registry == address(0)) return;\n        _refuseEnforced(registry, a);\n        _refuseEnforced(registry, b);\n    }\n\n    // ---- library ----\n\n    function sortTokens(address tokenA, address tokenB) public pure returns (address token0, address token1) {\n        if (tokenA == tokenB) revert IdenticalAddresses();\n        (token0, token1) = tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);\n        if (token0 == address(0)) revert ZeroAddress();\n    }\n\n    /// The pair's CREATE2 address (it may not exist yet).\n    function pairFor(address tokenA, address tokenB) public view returns (address) {\n        (address token0, address token1) = sortTokens(tokenA, tokenB);\n        return address(uint160(uint256(keccak256(abi.encodePacked(\n            hex\"ff\", factory, keccak256(abi.encodePacked(token0, token1)), pairCodeHash)))));\n    }\n\n    function getReserves(address tokenA, address tokenB) public view returns (uint256 reserveA, uint256 reserveB) {\n        (address token0,) = sortTokens(tokenA, tokenB);\n        (uint256 r0, uint256 r1,) = IPair(pairFor(tokenA, tokenB)).getReserves();\n        (reserveA, reserveB) = tokenA == token0 ? (r0, r1) : (r1, r0);\n    }\n\n    /// The amount of B worth amountA at the current price (no fee, no price impact).\n    function quote(uint256 amountA, uint256 reserveA, uint256 reserveB) public pure returns (uint256) {\n        if (amountA == 0) revert InsufficientAmount();\n        if (reserveA == 0 || reserveB == 0) revert InsufficientLiquidity();\n        return (amountA * reserveB) / reserveA;\n    }\n\n    /// Output for an exact input, after the 0.3% fee.\n    function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) public pure returns (uint256) {\n        if (amountIn == 0) revert InsufficientInputAmount();\n        if (reserveIn == 0 || reserveOut == 0) revert InsufficientLiquidity();\n        uint256 amountInWithFee = amountIn * 997;\n        return (amountInWithFee * reserveOut) / (reserveIn * 1000 + amountInWithFee);\n    }\n\n    /// Input needed for an exact output, after the 0.3% fee (rounded up).\n    function getAmountIn(uint256 amountOut, uint256 reserveIn, uint256 reserveOut) public pure returns (uint256) {\n        if (amountOut == 0) revert InsufficientOutputAmount();\n        if (reserveIn == 0 || reserveOut == 0 || amountOut >= reserveOut) revert InsufficientLiquidity();\n        return (reserveIn * amountOut * 1000) / ((reserveOut - amountOut) * 997) + 1;\n    }\n\n    function getAmountsOut(uint256 amountIn, address[] calldata path) public view returns (uint256[] memory amounts) {\n        if (path.length < 2) revert InvalidPath();\n        amounts = new uint256[](path.length);\n        amounts[0] = amountIn;\n        for (uint256 i; i < path.length - 1; i++) {\n            (uint256 rIn, uint256 rOut) = getReserves(path[i], path[i + 1]);\n            amounts[i + 1] = getAmountOut(amounts[i], rIn, rOut);\n        }\n    }\n\n    function getAmountsIn(uint256 amountOut, address[] calldata path) public view returns (uint256[] memory amounts) {\n        if (path.length < 2) revert InvalidPath();\n        amounts = new uint256[](path.length);\n        amounts[amounts.length - 1] = amountOut;\n        for (uint256 i = path.length - 1; i > 0; i--) {\n            (uint256 rIn, uint256 rOut) = getReserves(path[i - 1], path[i]);\n            amounts[i - 1] = getAmountIn(amounts[i], rIn, rOut);\n        }\n    }\n\n    // ---- token transfers ----\n\n    function _safeTransfer(address token, address to, uint256 value) private {\n        (bool ok, bytes memory data) = token.call(abi.encodeWithSelector(0xa9059cbb, to, value));\n        if (!ok || (data.length != 0 && (data.length < 32 || !abi.decode(data, (bool))))) revert TransferFailed();\n    }\n\n    function _safeTransferFrom(address token, address from, address to, uint256 value) private {\n        (bool ok, bytes memory data) = token.call(abi.encodeWithSelector(0x23b872dd, from, to, value));\n        if (!ok || (data.length != 0 && (data.length < 32 || !abi.decode(data, (bool))))) revert TransferFailed();\n    }\n\n    function _sendNative(address to, uint256 value) private {\n        (bool ok,) = to.call{value: value}(\"\");\n        if (!ok) revert NativeTransferFailed();\n    }\n\n    /// Wraps `amount` of the native coin and sends it to `pair`.\n    function _wrapTo(address pair, uint256 amount) private {\n        IWNative(WETH).deposit{value: amount}();\n        _safeTransfer(WETH, pair, amount);\n    }\n\n    // ---- add liquidity ----\n\n    function _addLiquidity(address tokenA, address tokenB, uint256 amountADesired, uint256 amountBDesired, uint256 amountAMin, uint256 amountBMin)\n        private returns (uint256 amountA, uint256 amountB)\n    {\n        _checkPair(tokenA, tokenB);\n        if (IFactory(factory).getPair(tokenA, tokenB) == address(0)) IFactory(factory).createPair(tokenA, tokenB);\n        (uint256 reserveA, uint256 reserveB) = getReserves(tokenA, tokenB);\n        if (reserveA == 0 && reserveB == 0) {\n            (amountA, amountB) = (amountADesired, amountBDesired);\n        } else {\n            uint256 amountBOptimal = quote(amountADesired, reserveA, reserveB);\n            if (amountBOptimal <= amountBDesired) {\n                if (amountBOptimal < amountBMin) revert InsufficientBAmount();\n                (amountA, amountB) = (amountADesired, amountBOptimal);\n            } else {\n                uint256 amountAOptimal = quote(amountBDesired, reserveB, reserveA);\n                // amountAOptimal <= amountADesired here\n                if (amountAOptimal < amountAMin) revert InsufficientAAmount();\n                (amountA, amountB) = (amountAOptimal, amountBDesired);\n            }\n        }\n    }\n\n    function addLiquidity(\n        address tokenA, address tokenB, uint256 amountADesired, uint256 amountBDesired,\n        uint256 amountAMin, uint256 amountBMin, address to, uint256 deadline\n    ) external ensure(deadline) returns (uint256 amountA, uint256 amountB, uint256 liquidity) {\n        (amountA, amountB) = _addLiquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin);\n        address pair = pairFor(tokenA, tokenB);\n        _safeTransferFrom(tokenA, msg.sender, pair, amountA);\n        _safeTransferFrom(tokenB, msg.sender, pair, amountB);\n        liquidity = IPair(pair).mint(to);\n    }\n\n    /// msg.value is the most native coin to add; the rest is refunded.\n    function addLiquidityETH(\n        address token, uint256 amountTokenDesired, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline\n    ) external payable ensure(deadline) returns (uint256 amountToken, uint256 amountETH, uint256 liquidity) {\n        (amountToken, amountETH) = _addLiquidity(token, WETH, amountTokenDesired, msg.value, amountTokenMin, amountETHMin);\n        address pair = pairFor(token, WETH);\n        _safeTransferFrom(token, msg.sender, pair, amountToken);\n        _wrapTo(pair, amountETH);\n        liquidity = IPair(pair).mint(to);\n        if (msg.value > amountETH) _sendNative(msg.sender, msg.value - amountETH);\n    }\n\n    // ---- remove liquidity ----\n\n    function removeLiquidity(\n        address tokenA, address tokenB, uint256 liquidity, uint256 amountAMin, uint256 amountBMin, address to, uint256 deadline\n    ) public ensure(deadline) returns (uint256 amountA, uint256 amountB) {\n        address pair = pairFor(tokenA, tokenB);\n        if (!IPair(pair).transferFrom(msg.sender, pair, liquidity)) revert TransferFailed();\n        (uint256 amount0, uint256 amount1) = IPair(pair).burn(to);\n        (address token0,) = sortTokens(tokenA, tokenB);\n        (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);\n        if (amountA < amountAMin) revert InsufficientAAmount();\n        if (amountB < amountBMin) revert InsufficientBAmount();\n    }\n\n    function removeLiquidityETH(\n        address token, uint256 liquidity, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline\n    ) public ensure(deadline) returns (uint256 amountToken, uint256 amountETH) {\n        (amountToken, amountETH) = removeLiquidity(token, WETH, liquidity, amountTokenMin, amountETHMin, address(this), deadline);\n        _safeTransfer(token, to, amountToken);\n        IWNative(WETH).withdraw(amountETH);\n        _sendNative(to, amountETH);\n    }\n\n    /// For tokens that take a cut on transfer: passes on whatever token amount the router received.\n    function removeLiquidityETHSupportingFeeOnTransferTokens(\n        address token, uint256 liquidity, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline\n    ) public ensure(deadline) returns (uint256 amountETH) {\n        (, amountETH) = removeLiquidity(token, WETH, liquidity, amountTokenMin, amountETHMin, address(this), deadline);\n        _safeTransfer(token, to, IERC20Min(token).balanceOf(address(this)));\n        IWNative(WETH).withdraw(amountETH);\n        _sendNative(to, amountETH);\n    }\n\n    // ---- swaps (exact amounts known up front) ----\n\n    /// amounts[0] must already be in the first pair.\n    function _swap(uint256[] memory amounts, address[] calldata path, address _to) private {\n        for (uint256 i; i < path.length - 1; i++) {\n            (address input, address output) = (path[i], path[i + 1]);\n            (address token0,) = sortTokens(input, output);\n            uint256 amountOut = amounts[i + 1];\n            (uint256 amount0Out, uint256 amount1Out) = input == token0 ? (uint256(0), amountOut) : (amountOut, uint256(0));\n            address to = i < path.length - 2 ? pairFor(output, path[i + 2]) : _to;\n            IPair(pairFor(input, output)).swap(amount0Out, amount1Out, to, new bytes(0));\n        }\n    }\n\n    function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)\n        external ensure(deadline) returns (uint256[] memory amounts)\n    {\n        _checkPath(path);\n        amounts = getAmountsOut(amountIn, path);\n        if (amounts[amounts.length - 1] < amountOutMin) revert InsufficientOutputAmount();\n        _safeTransferFrom(path[0], msg.sender, pairFor(path[0], path[1]), amounts[0]);\n        _swap(amounts, path, to);\n    }\n\n    function swapTokensForExactTokens(uint256 amountOut, uint256 amountInMax, address[] calldata path, address to, uint256 deadline)\n        external ensure(deadline) returns (uint256[] memory amounts)\n    {\n        _checkPath(path);\n        amounts = getAmountsIn(amountOut, path);\n        if (amounts[0] > amountInMax) revert ExcessiveInputAmount();\n        _safeTransferFrom(path[0], msg.sender, pairFor(path[0], path[1]), amounts[0]);\n        _swap(amounts, path, to);\n    }\n\n    function swapExactETHForTokens(uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)\n        external payable ensure(deadline) returns (uint256[] memory amounts)\n    {\n        if (path[0] != WETH) revert InvalidPath();\n        _checkPath(path);\n        amounts = getAmountsOut(msg.value, path);\n        if (amounts[amounts.length - 1] < amountOutMin) revert InsufficientOutputAmount();\n        _wrapTo(pairFor(path[0], path[1]), amounts[0]);\n        _swap(amounts, path, to);\n    }\n\n    function swapTokensForExactETH(uint256 amountOut, uint256 amountInMax, address[] calldata path, address to, uint256 deadline)\n        external ensure(deadline) returns (uint256[] memory amounts)\n    {\n        if (path[path.length - 1] != WETH) revert InvalidPath();\n        _checkPath(path);\n        amounts = getAmountsIn(amountOut, path);\n        if (amounts[0] > amountInMax) revert ExcessiveInputAmount();\n        _safeTransferFrom(path[0], msg.sender, pairFor(path[0], path[1]), amounts[0]);\n        _swap(amounts, path, address(this));\n        IWNative(WETH).withdraw(amounts[amounts.length - 1]);\n        _sendNative(to, amounts[amounts.length - 1]);\n    }\n\n    function swapExactTokensForETH(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline)\n        external ensure(deadline) returns (uint256[] memory amounts)\n    {\n        if (path[path.length - 1] != WETH) revert InvalidPath();\n        _checkPath(path);\n        amounts = getAmountsOut(amountIn, path);\n        if (amounts[amounts.length - 1] < amountOutMin) revert InsufficientOutputAmount();\n        _safeTransferFrom(path[0], msg.sender, pairFor(path[0], path[1]), amounts[0]);\n        _swap(amounts, path, address(this));\n        IWNative(WETH).withdraw(amounts[amounts.length - 1]);\n        _sendNative(to, amounts[amounts.length - 1]);\n    }\n\n    /// msg.value is the most native coin to spend; the rest is refunded.\n    function swapETHForExactTokens(uint256 amountOut, address[] calldata path, address to, uint256 deadline)\n        external payable ensure(deadline) returns (uint256[] memory amounts)\n    {\n        if (path[0] != WETH) revert InvalidPath();\n        _checkPath(path);\n        amounts = getAmountsIn(amountOut, path);\n        if (amounts[0] > msg.value) revert ExcessiveInputAmount();\n        _wrapTo(pairFor(path[0], path[1]), amounts[0]);\n        _swap(amounts, path, to);\n        if (msg.value > amounts[0]) _sendNative(msg.sender, msg.value - amounts[0]);\n    }\n\n    // ---- swaps (fee-on-transfer tokens: amounts measured as they arrive) ----\n\n    function _swapSupportingFeeOnTransferTokens(address[] calldata path, address _to) private {\n        for (uint256 i; i < path.length - 1; i++) {\n            (address input, address output) = (path[i], path[i + 1]);\n            (address token0,) = sortTokens(input, output);\n            IPair pair = IPair(pairFor(input, output));\n            uint256 amountOutput;\n            {\n                (uint256 r0, uint256 r1,) = pair.getReserves();\n                (uint256 reserveIn, uint256 reserveOut) = input == token0 ? (r0, r1) : (r1, r0);\n                uint256 amountInput = IERC20Min(input).balanceOf(address(pair)) - reserveIn;\n                amountOutput = getAmountOut(amountInput, reserveIn, reserveOut);\n            }\n            (uint256 amount0Out, uint256 amount1Out) = input == token0 ? (uint256(0), amountOutput) : (amountOutput, uint256(0));\n            address to = i < path.length - 2 ? pairFor(output, path[i + 2]) : _to;\n            pair.swap(amount0Out, amount1Out, to, new bytes(0));\n        }\n    }\n\n    function swapExactTokensForTokensSupportingFeeOnTransferTokens(\n        uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline\n    ) external ensure(deadline) {\n        if (path.length < 2) revert InvalidPath();\n        _checkPath(path);\n        _safeTransferFrom(path[0], msg.sender, pairFor(path[0], path[1]), amountIn);\n        address last = path[path.length - 1];\n        uint256 before = IERC20Min(last).balanceOf(to);\n        _swapSupportingFeeOnTransferTokens(path, to);\n        if (IERC20Min(last).balanceOf(to) - before < amountOutMin) revert InsufficientOutputAmount();\n    }\n\n    function swapExactETHForTokensSupportingFeeOnTransferTokens(\n        uint256 amountOutMin, address[] calldata path, address to, uint256 deadline\n    ) external payable ensure(deadline) {\n        if (path.length < 2 || path[0] != WETH) revert InvalidPath();\n        _checkPath(path);\n        _wrapTo(pairFor(path[0], path[1]), msg.value);\n        address last = path[path.length - 1];\n        uint256 before = IERC20Min(last).balanceOf(to);\n        _swapSupportingFeeOnTransferTokens(path, to);\n        if (IERC20Min(last).balanceOf(to) - before < amountOutMin) revert InsufficientOutputAmount();\n    }\n\n    function swapExactTokensForETHSupportingFeeOnTransferTokens(\n        uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline\n    ) external ensure(deadline) {\n        if (path.length < 2 || path[path.length - 1] != WETH) revert InvalidPath();\n        _checkPath(path);\n        _safeTransferFrom(path[0], msg.sender, pairFor(path[0], path[1]), amountIn);\n        // With the precompile, WETH.balanceOf(router) is the router's native\n        // balance, which may hold coins of its own: measure the difference.\n        uint256 before = IERC20Min(WETH).balanceOf(address(this));\n        _swapSupportingFeeOnTransferTokens(path, address(this));\n        uint256 amountOut = IERC20Min(WETH).balanceOf(address(this)) - before;\n        if (amountOut < amountOutMin) revert InsufficientOutputAmount();\n        IWNative(WETH).withdraw(amountOut);\n        _sendNative(to, amountOut);\n    }\n}\n"
+      },
+      "contracts/test/DexTestHelpers.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity 0.8.26;\n\n// Contracts used only by the unit tests (never deployed by cli.js).\n\ninterface IPairT {\n    function token0() external view returns (address);\n    function token1() external view returns (address);\n    function swap(uint256, uint256, address, bytes calldata) external;\n    function sync() external;\n    function skim(address) external;\n    function mint(address) external returns (uint256);\n    function burn(address) external returns (uint256, uint256);\n    function getReserves() external view returns (uint112, uint112, uint32);\n}\n\ninterface IERC20T {\n    function transfer(address, uint256) external returns (bool);\n    function balanceOf(address) external view returns (uint256);\n}\n\n/// A flash borrower: takes the output, then pays back `repayBps` of what it\n/// must (10000 = exactly enough with the 0.3% fee) in the borrowed token.\ncontract FlashBorrower {\n    uint256 public repayBps = 10_000;\n    address public lastSender;\n    function setRepayBps(uint256 b) external { repayBps = b; }\n\n    function borrow(address pair, uint256 amount0Out, uint256 amount1Out) external {\n        IPairT(pair).swap(amount0Out, amount1Out, address(this), abi.encode(pair));\n    }\n\n    function zetaphyDexCall(address sender, uint256 amount0Out, uint256 amount1Out, bytes calldata data) external {\n        address pair = abi.decode(data, (address));\n        require(msg.sender == pair, \"not pair\");\n        lastSender = sender;\n        if (amount0Out > 0) _repay(IPairT(pair).token0(), pair, amount0Out);\n        if (amount1Out > 0) _repay(IPairT(pair).token1(), pair, amount1Out);\n    }\n\n    function _repay(address token, address pair, uint256 out) private {\n        // Same-token repayment: (balance*1000 - in*3) >= reserve*1000 needs in >= out*1000/997.\n        uint256 owed = (out * 1000) / 997 + 1;\n        IERC20T(token).transfer(pair, (owed * repayBps) / 10_000);\n    }\n}\n\n/// An ERC-20 whose transfer can call back into a pair (a hostile token): every\n/// entry point of the pair must refuse with Locked() while one is running.\ncontract ReentrantToken {\n    string public constant name = \"Reentrant\";\n    string public constant symbol = \"RE\";\n    uint8 public constant decimals = 18;\n    uint256 public totalSupply;\n    mapping(address => uint256) public balanceOf;\n    mapping(address => mapping(address => uint256)) public allowance;\n    address public pair;\n    uint8 public mode; // 0 off, 1 swap, 2 sync, 3 skim, 4 mint, 5 burn\n    bytes public lastRevert;\n    uint256 public attempts;\n\n    event Transfer(address indexed from, address indexed to, uint256 value);\n\n    constructor(uint256 supply) { totalSupply = supply; balanceOf[msg.sender] = supply; }\n    function arm(address p, uint8 m) external { pair = p; mode = m; }\n\n    function approve(address s, uint256 v) external returns (bool) { allowance[msg.sender][s] = v; return true; }\n    function transfer(address to, uint256 v) external returns (bool) { _move(msg.sender, to, v); return true; }\n    function transferFrom(address f, address to, uint256 v) external returns (bool) {\n        if (allowance[f][msg.sender] != type(uint256).max) allowance[f][msg.sender] -= v;\n        _move(f, to, v);\n        return true;\n    }\n\n    function _move(address f, address to, uint256 v) private {\n        balanceOf[f] -= v;\n        balanceOf[to] += v;\n        emit Transfer(f, to, v);\n        if (mode != 0 && msg.sender == pair) {\n            uint8 m = mode;\n            mode = 0; // once\n            attempts++;\n            bytes memory call;\n            if (m == 1) call = abi.encodeCall(IPairT.swap, (1, 0, address(this), \"\"));\n            else if (m == 2) call = abi.encodeCall(IPairT.sync, ());\n            else if (m == 3) call = abi.encodeCall(IPairT.skim, (address(this)));\n            else if (m == 4) call = abi.encodeCall(IPairT.mint, (address(this)));\n            else call = abi.encodeCall(IPairT.burn, (address(this)));\n            (bool ok, bytes memory r) = pair.call(call);\n            require(!ok, \"reentered\");\n            lastRevert = r;\n        }\n    }\n}\n\n/// Stands in for NeuroJobs' runner list (ThreatRegistry asks it who may vote).\ncontract MockRunners {\n    mapping(address => bool) public on;\n    function set(address a, bool v) external { on[a] = v; }\n    function workers(address a) external view returns (uint128, uint64, bool, uint32, uint32) { return (100, 0, on[a], on[a] ? 5 : 0, 0); }\n}\n"
+      }
+    },
+    "settings": {
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "evmVersion": "cancun",
+      "outputSelection": {
+        "*": {
+          "*": [
+            "abi",
+            "evm.bytecode.object",
+            "evm.deployedBytecode.object"
+          ]
+        }
+      }
+    }
+  }
+}
