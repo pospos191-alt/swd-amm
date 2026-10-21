@@ -25,6 +25,10 @@
 #     remove-defender 0x… | release 0x… | set-max-bodies N | set-max-regrow N | set-community-fund 0x…
 #     approve-chain KEY | remove-chain KEY   (chain keys NeuroJobs takes requests for, e.g. bsc)
 #     set-challenge-bond ZETAPHY | set-challenge-window SECONDS | set-defender-timeout SECONDS
+#   gov.sh ibc-usdc-denom <channel>                      USDC from Noble via that channel: ibc/<hash>, ERC-20 0x…
+#   gov.sh ibc-usdc-ratelimit <channel> [send%] [recv%] [hours]   cap USDC on it, or change the cap (default 1 1 24)
+#   gov.sh ibc-usdc-erc20 <channel>                      USDC as an ERC-20 (MetaMask, explorer, DEX token lists)
+#   gov.sh ibc-usdc-metadata <channel>                   its bank metadata (USDC, 6 decimals) for a genesis / upgrade
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -185,6 +189,101 @@ case "${1:-}" in
     TXF=${TXF/--gas auto --gas-adjustment 1.5/--gas 600000}
     send tx pq-vote-key
     echo "vote key registered" ;;
+
+  # ---- IBC: USDC from Noble (zetaphy-chain/ibc/README.md) ------------------
+  ibc-usdc-denom|ibc-usdc-ratelimit|ibc-usdc-erc20|ibc-usdc-metadata)
+    ch=${2:?ZETAPHY side channel, e.g. channel-0 (ibc/setup-relayer.sh status)}
+    [[ "$ch" =~ ^channel-[0-9]+$ ]] || { echo "channel: channel-N (the ZETAPHY side of the Noble channel)"; exit 1; }
+    # ICS-20: Noble's uusdc arriving through transfer/<ch> becomes the coin
+    # ibc/ + uppercase hex sha256("transfer/<ch>/uusdc"). Cosmos EVM v0.7.3
+    # gives it the ERC-20 address made of the last 20 bytes of that hash
+    # (utils.GetIBCDenomAddress), served by the ERC-20 precompile (STRv2).
+    hash=$(printf 'transfer/%s/uusdc' "$ch" | sha256sum | awk '{print toupper($1)}')
+    denom="ibc/$hash"; erc20="0x$(echo "${hash:24}" | tr 'A-F' 'a-f')"
+    case "$1" in
+      ibc-usdc-denom)
+        echo "denom  $denom"; echo "erc20  $erc20" ;;
+      ibc-usdc-metadata)
+        # ibc-go writes metadata for a voucher only when the first one arrives
+        # and none exists, and its default (symbol UUSDC, display "uusdc") makes
+        # the ERC-20 report 0 decimals. This entry (for app_state.bank.denom_metadata
+        # of a new chain, or an upgrade handler) gives USDC with 6 decimals.
+        jq -n --arg dn "$denom" --arg ch "$ch" \
+          '{description:("USDC from Noble (IBC transfer/" + $ch + "/uusdc)"),
+            denom_units:[{denom:$dn,exponent:0,aliases:["uusdc"]},{denom:"usdc",exponent:6,aliases:[]}],
+            base:$dn,display:"usdc",name:"USD Coin",symbol:"USDC",uri:"",uri_hash:""}' ;;
+      ibc-usdc-ratelimit)
+        # Low by default: 1% of the USDC on ZETAPHY in and 1% out per 24 hours.
+        send=${3:-1}; recv=${4:-1}; hours=${5:-24}
+        # x/ratelimit caps a share of the coin's supply here, so it refuses a
+        # limit while there is none: bring a little USDC in first.
+        supply=$($ZETAPHYD q bank total-supply-of "$denom" $QF | jq -r '.amount.amount // "0"')
+        [ "$supply" != 0 ] || { echo "no USDC on ZETAPHY through $ch yet; a rate limit needs some first:"
+          echo "  sudo bash setup-relayer.sh send-usdc <your 0x…> 1000000   (1 USDC)"; exit 1; }
+        echo "USDC on ZETAPHY now: $supply uusdc; proposing at most $send% out / $recv% in every $hours h"
+        has=$($ZETAPHYD q ratelimit list-rate-limits $QF 2>/dev/null | jq --arg dn "$denom" --arg ch "$ch" \
+          '[.. | objects | select(.path? != null and .path.denom == $dn and .path.channel_or_client_id == $ch)] | length' || echo 0)
+        [ "$has" = 0 ] && exec bash "$0" propose-ratelimit "$denom" "$ch" "$send" "$recv" "$hours"
+        # A limit is already in force: change it (MsgUpdateRateLimit; its counters restart).
+        for n in "$send" "$recv"; do [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -le 100 ] || { echo "percent: 0 to 100"; exit 1; }; done
+        [[ "$hours" =~ ^[1-9][0-9]*$ ]] || { echo "hours: a whole number above 0"; exit 1; }
+        gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
+        f=$(mktemp)
+        jq -n --arg gov "$gov" --arg dn "$denom" --arg ch "$ch" --arg s "$send" --arg r "$recv" --arg h "$hours" --arg d "$DEPOSIT" \
+          '{messages:[{"@type":"/ratelimit.v1.MsgUpdateRateLimit",authority:$gov,denom:$dn,channel_or_client_id:$ch,
+            max_percent_send:$s,max_percent_recv:$r,duration_hours:$h}],
+            metadata:"",deposit:$d,title:("IBC rate limit change: USDC on " + $ch),
+            summary:("USDC from Noble (" + $dn + "): at most " + $s + "% out / " + $r + "% in through " + $ch + " every " + $h + " hours."),expedited:false}' > "$f"
+        submit tx gov submit-proposal "$f"; rm -f "$f" ;;
+      ibc-usdc-erc20)
+        gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
+        params=$($ZETAPHYD q erc20 params $QF | jq -c .params)
+        if [ "$(echo "$params" | jq -r '.enable_erc20 // false')" != true ]; then
+          # The whole ERC-20 module is switched off: switch it on.
+          f=$(mktemp)
+          jq -n --arg gov "$gov" --argjson p "$params" --arg d "$DEPOSIT" \
+            '{messages:[{"@type":"/cosmos.evm.erc20.v1.MsgUpdateParams",authority:$gov,
+               params:{enable_erc20:true,permissionless_registration:($p.permissionless_registration // false)}}],
+              metadata:"",deposit:$d,title:"Turn on ERC-20 conversion",summary:"So IBC coins such as USDC from Noble show up as ERC-20 tokens.",expedited:false}' > "$f"
+          submit tx gov submit-proposal "$f"; rm -f "$f"
+          echo "after it passes, run: gov.sh ibc-usdc-erc20 $ch"; exit 0
+        fi
+        # v0.7.3 has no proposal that registers a coin: the erc20 IBC
+        # middleware registers each new ibc/ coin by itself (OnRecvPacket),
+        # when the first one arrives. Governance can only pause or resume it.
+        pair=$($ZETAPHYD q erc20 token-pair "$denom" $QF 2>/dev/null | jq -c '.token_pair // empty' || true)
+        if [ -z "$pair" ]; then
+          echo "USDC is not on ZETAPHY yet: the first USDC that arrives through $ch makes it an ERC-20 at"
+          echo "  $erc20"
+          echo "bring some in: sudo bash setup-relayer.sh send-usdc <your 0x…> 1000000   (1 USDC), then run this again"
+          exit 1
+        fi
+        addr=$(echo "$pair" | jq -r .erc20_address)
+        [ "$(echo "$addr" | tr 'A-F' 'a-f')" = "$erc20" ] || { echo "unexpected: the chain has $addr for $denom, not $erc20"; exit 1; }
+        if [ "$(echo "$pair" | jq -r '.enabled // false')" != true ]; then
+          f=$(mktemp)
+          jq -n --arg gov "$gov" --arg dn "$denom" --arg d "$DEPOSIT" --arg a "$addr" \
+            '{messages:[{"@type":"/cosmos.evm.erc20.v1.MsgToggleConversion",authority:$gov,token:$dn}],
+              metadata:"",deposit:$d,title:"Resume USDC (Noble) as an ERC-20",summary:("Turns the ERC-20 " + $a + " of " + $dn + " back on."),expedited:false}' > "$f"
+          submit tx gov submit-proposal "$f"; rm -f "$f"
+          echo "the USDC ERC-20 is paused; after this passes it works again at $addr"; exit 0
+        fi
+        echo "USDC (from Noble via $ch) is the ERC-20 $addr"
+        # decimals() comes from the coin's bank metadata (see ibc-usdc-metadata);
+        # with none, the precompile reads 6 from the "u" of uusdc.
+        meta=$($ZETAPHYD q bank denom-metadata "$denom" $QF 2>/dev/null || true)
+        dec=6
+        [ -n "$meta" ] && dec=$(echo "$meta" | jq -r '.metadata | (.display | split("/") | last) as $d
+          | [.denom_units[] | select(.denom == $d) | .exponent // 0][0] // "?"' 2>/dev/null || echo "?")
+        if [ "$dec" != 6 ]; then
+          echo "WARNING: the chain reports $dec decimals for it (ibc-go's default metadata), so wallets"
+          echo "  show amounts in uusdc. Fixing it needs a chain upgrade that sets: gov.sh ibc-usdc-metadata $ch"
+        fi
+        echo "MetaMask: Import tokens -> this address (symbol USDC, 6 decimals)."
+        echo "Token list entry (explorer, wallet, DEX):"
+        jq -n --arg a "$addr" --arg dn "$denom" --argjson c "${EVM_CHAIN_ID:-77390}" \
+          '{chainId:$c,address:$a,name:"USD Coin (Noble)",symbol:"USDC",decimals:6,extensions:{cosmosDenom:$dn,origin:"noble uusdc"}}' ;;
+    esac ;;
   *)
-    sed -n '8,27p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,31p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

@@ -1,0 +1,13 @@
+{
+  "_comment": "Bridge monitor (.github/workflows/bridge-monitor.yml, zetaphy bridge monitor --monitor-config). Public values only. Empty bridgeGuard/bridgeAirlock fall back to zetaphy-launch/state/77390.json; with neither, the monitor does nothing. rpc: the public https RPC (or the repository variable ZETAPHY_RPC). startBlock: the block deploy-bridge ran at (first scan). sourceRpc + lockbox: optional, to see deposits no lane attested.",
+  "rpc": null,
+  "bridgeGuard": null,
+  "bridgeAirlock": null,
+  "startBlock": null,
+  "volumePct": 80,
+  "largePct": 25,
+  "silentMinutes": 30,
+  "disagreeMinutes": 30,
+  "sourceRpc": null,
+  "lockbox": null
+}

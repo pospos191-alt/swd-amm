@@ -71,6 +71,25 @@ const signer = (ctx) => new NonceManager(ctx.wallet.connect(ctx.provider));
 const wait = async (txp) => { const r = await (await txp).wait(); if (r.status !== 1) throw new Error('transaction reverted'); return r; };
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
 
+// ---------- the bridge's opening gates ----------
+
+/** What opening the lock/mint bridge needs (docs/LAUNCH.md; zetaphy bridge open checks each one). */
+export const BRIDGE_GATES = [
+  'bridge: CLOSED (route disabled). It opens only through `zetaphy bridge open`, once every gate holds:',
+  '  1. a second, independent lane (HyperlaneLane: its own Mailbox/ISM, not NeuroLane\'s runners), on-chain independentLanes() >= 2',
+  '  2. an audit: --audit-report <https url> --audit-sha256 <hex>, recorded on-chain (BridgeGuard.setAudit)',
+  '  3. at least 10 independent Neuro runners (NeuroJobs.activeWorkers)',
+  '  4. guardian and governance are different multisigs (3+ owners, threshold 2+, hardware wallets, no shared owner)',
+  '  5. a small daily limit (starter cap 1,000 tokens; raised x2 at most, 7 days per step) and --i-understand-real-funds',
+];
+
+/** Is the airlock's route enabled in BridgeGuard? */
+export async function bridgeOpen(ctx, o) {
+  const airlock = new Contract(o.bridgeAirlock, NET('BridgeAirlock').abi, ctx.provider);
+  const guard = new Contract(o.bridgeGuard, NET('BridgeGuard').abi, ctx.provider);
+  return (await guard.routes(await airlock.route())).enabled;
+}
+
 // ---------- the steps ----------
 
 export function launchSteps() {
@@ -183,14 +202,18 @@ export function launchSteps() {
     },
     {
       name: 'bridge',
-      describe: 'BridgeGuard + BridgeAirlock + NeuroLane + DecoyBridge (zetaphy deploy-bridge --lockbox …); protects the bridge\'s own contracts and the lockbox',
+      describe: 'BridgeGuard + BridgeAirlock + NeuroLane + DecoyBridge (zetaphy deploy-bridge --lockbox …), deployed CLOSED (route disabled, 1,000-token cap); protects the bridge\'s own contracts and the lockbox',
       artifacts: [['zetaphy-network', 'BridgeGuard'], ['zetaphy-network', 'BridgeAirlock'], ['zetaphy-network', 'NeuroLane'], ['zetaphy-network', 'DecoyBridge']], txs: 10,
       when: (ctx) => (ctx.bridgeLockbox ? true : 'off by default: needs a LockBox on the source chain, --bridge-lockbox <chainId>:0x<LockBox>'),
       async run(ctx, state) {
         const o = outputs(state);
         const { out, cfg } = await net(ctx, state, ['deploy-bridge', '--lockbox', ctx.bridgeLockbox, '--control', o.neuroControl]);
-        return haveCode(ctx, { bridgeGuard: getAddress(cfg.bridgeGuard), bridgeAirlock: getAddress(cfg.airlock), neuroLane: getAddress(cfg.neuroLane),
+        const res = await haveCode(ctx, { bridgeGuard: getAddress(cfg.bridgeGuard), bridgeAirlock: getAddress(cfg.airlock), neuroLane: getAddress(cfg.neuroLane),
           bridgedToken: pick(/BridgedToken (0x[0-9a-fA-F]{40})/, out, 'BridgedToken'), decoyBridge: pick(/DecoyBridge (0x[0-9a-fA-F]{40})/, out, 'DecoyBridge'), bridgeLockbox: ctx.bridgeLockbox });
+        // The launch never opens the bridge: check it is closed, and say what opening needs.
+        if (await bridgeOpen(ctx, res)) throw new Error('the bridge route is enabled right after deploy-bridge: refusing (the launch deploys it closed)');
+        for (const l of BRIDGE_GATES) ctx.log(`  ${l}`);
+        return { ...res, bridgeOpen: false };
       },
     },
     {

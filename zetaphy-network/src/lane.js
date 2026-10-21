@@ -16,6 +16,10 @@
 // released on its account (fail closed).
 // Nothing is attested while Neuro is paused (NeuroControl), or while the
 // pause switch cannot be read (laneControl).
+// The source may be a LockBox or a HyperlaneLockBox (same Locked event and the
+// same transfer id: HyperlaneLane attests the same fields for the same deposit).
+// Attesting while the bridge is closed is harmless: nothing is released until
+// BridgeGuard's route is opened (zetaphy bridge open).
 
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { AbiCoder, keccak256 } from 'ethers';

@@ -25,6 +25,13 @@ interface INeuroControl {
     function paused() external view returns (bool);
 }
 
+/// A lane says who decides what it attests (NeuroLane: its runner records;
+/// HyperlaneLane: its Mailbox). Lanes whose controllers are the same address
+/// are one lane as far as independence goes.
+interface ILaneInfo {
+    function laneController() external view returns (address);
+}
+
 /// @title BridgeAirlock: nothing enters ZETAPHY on one bridge's word (stage 3)
 /// @notice Defence in depth for incoming assets:
 ///   1. Several independent "lanes" (Hyperlane, IBC, the Neuro runner lane...)
@@ -55,6 +62,10 @@ interface INeuroControl {
 ///      deploy-bridge therefore protects the bridge's own keys and the source
 ///      LockBox in the registry, so runners cannot hold every transfer at once.
 ///   Released transfers still pass BridgeGuard's daily limits.
+///   Independence: each lane names its controller (laneController(): NeuroLane
+///   its runner records, HyperlaneLane its Mailbox; a plain key is its own).
+///   independentLanes() counts distinct controllers, and BridgeGuard enables
+///   this airlock's route only while it is 2 or more.
 contract BridgeAirlock {
     struct Transfer {
         uint64 readyFrom;    // when the threshold was reached; quarantine counts from here
@@ -69,17 +80,29 @@ contract BridgeAirlock {
     uint8 public threshold;             // distinct lanes that must agree
     uint64 public quarantine;           // seconds a transfer waits after enough lanes agreed
     mapping(address => bool) public isLane;
+    address[] private laneList;         // the lanes now on, in no particular order
+    uint256 public constant MAX_LANES = 16;
     mapping(address => bool) public isVetoer;
     mapping(address => bool) public isDecoy;
     mapping(address => bool) public tripped;   // marked by a decoy
     mapping(bytes32 => Transfer) public transfers;
     mapping(bytes32 => mapping(address => bool)) public attestedBy;
+    /// By controller (laneControllerOf at attest time): two lanes with one
+    /// controller count once, so the threshold means independent lanes.
+    mapping(bytes32 => mapping(address => bool)) public attestedByController;
     IThreatFlags public threats;        // zero: no vaccine check
 
     event LaneSet(address lane, bool on);
+    event GovernanceSet(address governance);
+    event ThresholdSet(uint8 threshold);
+    event QuarantineSet(uint64 quarantine);
+    event Untripped(address indexed who);
     event VetoerSet(address who, bool on);
     event DecoySet(address decoy, bool on);
-    event Attested(bytes32 indexed id, address indexed lane, uint8 count);
+    /// The transfer's details too, so a monitor sees two lanes that disagree
+    /// about one source deposit (same chain, contract and nonce; another id).
+    event Attested(bytes32 indexed id, address indexed lane, uint8 count, uint256 srcChainId, address srcContract,
+        uint256 indexed srcNonce, address sender, address to, uint256 amount);
     event Vetoed(bytes32 indexed id, address indexed by, string reason);
     event Released(bytes32 indexed id, address indexed to, uint256 amount);
     event Tripped(address indexed who, address indexed decoy);
@@ -108,17 +131,53 @@ contract BridgeAirlock {
 
     modifier onlyGov() { if (msg.sender != governance) revert NotGovernance(); _; }
 
-    function setLane(address lane, bool on) external onlyGov { isLane[lane] = on; emit LaneSet(lane, on); }
+    function setLane(address lane, bool on) external onlyGov {
+        if (on && !isLane[lane]) {
+            require(lane != address(0) && laneList.length < MAX_LANES, "lane");
+            laneList.push(lane);
+        } else if (!on && isLane[lane]) {
+            for (uint256 i = 0; i < laneList.length; i++) {
+                if (laneList[i] == lane) { laneList[i] = laneList[laneList.length - 1]; laneList.pop(); break; }
+            }
+        }
+        isLane[lane] = on;
+        emit LaneSet(lane, on);
+    }
     function setVetoer(address who, bool on) external onlyGov { isVetoer[who] = on; emit VetoerSet(who, on); }
     function setDecoy(address decoy, bool on) external onlyGov { isDecoy[decoy] = on; emit DecoySet(decoy, on); }
     /// Raising the threshold later does not hold back transfers that already reached the old one.
-    function setThreshold(uint8 t) external onlyGov { require(t >= 2, "need 2+"); threshold = t; }
-    function setQuarantine(uint64 q) external onlyGov { quarantine = q; }
-    function setGovernance(address g) external onlyGov { governance = g; }
+    function setThreshold(uint8 t) external onlyGov { require(t >= 2, "need 2+"); threshold = t; emit ThresholdSet(t); }
+    function setQuarantine(uint64 q) external onlyGov { quarantine = q; emit QuarantineSet(q); }
+    function setGovernance(address g) external onlyGov { governance = g; emit GovernanceSet(g); }
     /// The ThreatRegistry whose flags hold transfers (zero turns the check off).
     function setThreats(IThreatFlags r) external onlyGov { threats = r; emit ThreatsSet(address(r)); }
     /// Governance can lift a mark set by mistake.
-    function untrip(address who) external onlyGov { tripped[who] = false; }
+    function untrip(address who) external onlyGov { tripped[who] = false; emit Untripped(who); }
+
+    /// The lanes now on.
+    function lanes() external view returns (address[] memory) { return laneList; }
+    function laneCount() external view returns (uint256) { return laneList.length; }
+
+    /// Who decides what a lane attests: its laneController(), or the lane itself
+    /// (a key, or a contract that does not say).
+    function laneControllerOf(address lane) public view returns (address) {
+        if (lane.code.length == 0) return lane;
+        try ILaneInfo(lane).laneController() returns (address c) { return c == address(0) ? lane : c; } catch { return lane; }
+    }
+
+    /// Lanes with distinct controllers. BridgeGuard will not enable this
+    /// airlock's route while it is below 2: one controller behind two lane
+    /// contracts is still one bridge's word.
+    function independentLanes() external view returns (uint256 n) {
+        uint256 len = laneList.length;
+        address[] memory seen = new address[](len);
+        for (uint256 i = 0; i < len; i++) {
+            address c = laneControllerOf(laneList[i]);
+            bool dup = false;
+            for (uint256 j = 0; j < n; j++) if (seen[j] == c) { dup = true; break; }
+            if (!dup) seen[n++] = c;
+        }
+    }
 
     /// The id every lane computes for one transfer seen on the source chain:
     /// the source contract's own running number, not a tx hash or log
@@ -135,9 +194,13 @@ contract BridgeAirlock {
         if (attestedBy[id][msg.sender]) revert Twice();
         attestedBy[id][msg.sender] = true;
         Transfer storage t = transfers[id];
-        t.attestations += 1;
+        address c = laneControllerOf(msg.sender);
+        if (!attestedByController[id][c]) {
+            attestedByController[id][c] = true;
+            t.attestations += 1;
+        }
         if (t.readyFrom == 0 && t.attestations >= threshold) t.readyFrom = uint64(block.timestamp);
-        emit Attested(id, msg.sender, t.attestations);
+        emit Attested(id, msg.sender, t.attestations, srcChainId, srcContract, srcNonce, sender, to, amount);
     }
 
     function veto(bytes32 id, string calldata reason) external {
@@ -258,6 +321,9 @@ contract NeuroLane {
     mapping(bytes32 => bool) public done;
 
     event RunnerAttested(bytes32 indexed id, address indexed runner, uint8 votes);
+
+    /// The runner records decide what this lane attests (BridgeAirlock.independentLanes).
+    function laneController() external view returns (address) { return address(runners); }
     event RunnerVetoVote(bytes32 indexed id, address indexed runner, uint8 votes);
 
     error NotRunner();

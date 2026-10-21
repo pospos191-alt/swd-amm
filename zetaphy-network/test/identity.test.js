@@ -745,6 +745,7 @@ test('runner tool: the owner is read from the Neuro report and the consent check
   const pub = '0x' + publicKey.export({ format: 'der', type: 'spki' }).subarray(12).toString('hex');
   const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
   let n = BigInt(pub); let b58 = ''; while (n > 0n) { b58 = B58[Number(n % 58n)] + b58; n /= 58n; }
+  b58 = '1'.repeat(pub.slice(2).match(/^(00)*/)[0].length / 2) + b58; // base58 keeps each leading zero byte as '1'
   assert.equal('0x' + base58Decode(b58).toString('hex'), pub);
   const solReport = { solana: { program: 'SPL Token', mintAuthority: b58, freezeAuthority: null } };
   assert.deepEqual(remoteOwners(solReport), [{ key: pub, scheme: 'ed25519', role: 'mint authority' }]);

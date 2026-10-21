@@ -9,9 +9,10 @@ beforeEach(async () => {
   c = await createChain(['deployer', 'o1', 'o2', 'o3', 'thief']);
   ms = await c.deploy('SimpleMultisig', [[a('o1'), a('o2'), a('o3')], 2], 'deployer');
   guard = await c.deploy('BridgeGuard', [a('deployer')], 'deployer');
+  await guard.send('deployer', 'createToken', ['USD Coin (bridged)', 'USDC', 6]); // the hard cap: 1,000 USDC
   await guard.send('deployer', 'setGovernance', [ms.address]); // hand-off: the deployer key no longer matters
 });
-const setRoute = (limit) => guard.iface.encodeFunctionData('setRoute', [encodeBytes32String('r'), a('o1'), limit, true]);
+const setRoute = (limit) => guard.iface.encodeFunctionData('setRoute', [encodeBytes32String('r'), a('o1'), limit, false]);
 
 test('after the hand-off, one key can no longer change bridge settings', async () => {
   await assert.rejects(guard.send('deployer', 'setRoute', [encodeBytes32String('r'), a('thief'), 10n ** 30n, true]), /NotGovernance/);

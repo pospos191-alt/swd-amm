@@ -10,7 +10,8 @@
 | 2 · ปล่อยรางวัลปีละ 10% | `RewardVault`: กองรางวัล 500 ล้านอยู่ในสัญญา ปล่อยรายวันรวมปีละ 10% ของที่เหลือ ไม่มีฟังก์ชันถอน |
 | ประตู 1 | `zetaphy gate` รายงานความคืบหน้าจากข้อมูลบนเชน |
 | 3 · สะพาน: จำกัดยอดต่อวัน + ปุ่มหยุดเฉพาะสะพาน | `BridgeGuard` + `BridgedToken` |
-| 3 · หลายสะพาน + Neuro เป็นสะพาน + สะพานหลอก | `BridgeAirlock` + `NeuroLane` + `DecoyBridge` + `zetaphy bridge watch` |
+| 3 · หลายสะพาน + Neuro เป็นสะพาน + สะพานหลอก | `BridgeAirlock` + `NeuroLane` + `HyperlaneLane` + `DecoyBridge` + `zetaphy bridge watch` |
+| 3 · ประตูเปิดสะพาน + เฝ้าดู (สะพาน **ปิด** เป็นค่าเริ่มต้น) | `zetaphy bridge open` / `bridge monitor` + `.github/workflows/bridge-monitor.yml` |
 | 2 · ค่า AI 90% คนรันร่าง · 5% เผา · 5% กองทุนชุมชน | `NeuroJobs` แบ่งค่างานทุกงาน (งานที่ล้มเหลวคืนผู้ใช้ 100%) |
 | 4 · ร่างงอก/หด + ร่างป้องกัน 4 ร่าง + กักตัว/งอกใหม่ | `NeuroJobs` + `NeuroControl` + `zetaphy neuro regrow` |
 | 4 · ปุ่มหยุด AI (ไม่หยุดเหรียญ) + ทักษะใหม่ต้องผ่านโหวต | `NeuroControl` (เจ้าของคือ gov module ของเชน หรือ multisig) + `gov.sh neuro ...` |
@@ -163,10 +164,15 @@ zetaphy gate
 
 ## ขั้น 3: สะพานที่เสียหายได้ไม่เกินเพดานต่อวัน
 
-`BridgeGuard` คั่นระหว่างสะพานทุกสาย (Hyperlane, IBC) กับเหรียญที่ข้ามมา เช่น USDC บน ZETAPHY
+> **สะพาน lock/mint ปิดอยู่ (CLOSED) เป็นค่าเริ่มต้น** `deploy-bridge` (และขั้น bridge ของ `zetaphy-launch`) ติดตั้งแบบปิด: route ใน `BridgeGuard` ยังไม่เปิด
+> เปิดได้ด้วย `zetaphy bridge open` เมื่อผ่าน **ทุกประตู** ในหัวข้อ "เปิดสะพาน" ข้างล่างเท่านั้น และ `BridgeGuard` เองก็ปฏิเสธการเปิดถ้าไม่มี audit หรือมี lane อิสระไม่ถึง 2 สาย
 
-- **adapter ของสะพานแต่ละสาย** เป็นผู้เดียวที่สั่งผลิต (ขาเข้า) หรือเผา (ขาออก) เหรียญของสายนั้นได้
+`BridgeGuard` คั่นระหว่างสะพานกับเหรียญที่ข้ามมา เช่น USDC บน ZETAPHY
+
+- **adapter ของแต่ละ route** เป็นผู้เดียวที่สั่งผลิต (ขาเข้า) หรือเผา (ขาออก) เหรียญของ route นั้นได้
+  - adapter ที่เปิดได้ต้องเป็น `BridgeAirlock` ที่มี lane อิสระ ≥ 2 สาย (`independentLanes()`) สะพานสายเดียว (Hyperlane หรือ key ใดตรง ๆ) เป็น adapter ไม่ได้
   - แต่ละทิศมีเพดานต่อวันแยกกัน ถ้าสะพานถูกแฮ็ก จะเสียได้ไม่เกินเพดานของวันนั้น
+  - เพดานทุก route ไม่เกิน `maxDailyLimit` (เพดานแข็ง เริ่ม 1,000 โทเคน ดู "เพดานโตทีละขั้น")
 - **guardian** กดหยุดสะพานได้ทันที แต่เปิดคืนไม่ได้และโยกเงินไม่ได้
   - คนที่เปิดคืนได้คือ governance เท่านั้น (gov module หรือ multisig)
   - การหยุดสะพานไม่ทำให้เชนหยุด
@@ -175,9 +181,9 @@ zetaphy gate
 ### ด่านก่อนเข้า ZETAPHY: หลายสะพาน, Neuro เป็นสะพาน, สะพานหลอก
 
 ```
-เชนต้นทาง (LockBox)
+เชนต้นทาง (HyperlaneLockBox: ล็อก + ส่งข้อความ Hyperlane)
    │  ล็อกเหรียญ
-   ├──► สะพาน 1: Hyperlane ─────────┐
+   ├──► สะพาน 1: Hyperlane (HyperlaneLane) ─┐
    ├──► สะพาน 2: Neuro (คนรันร่าง 2/3) ─┤──► BridgeAirlock (ห้องกักกัน) ──► BridgeGuard (เพดานต่อวัน) ──► ZETAPHY
    └──► (สะพานอื่นในอนาคต) ─────────┘          ▲ Neuro / guardian กดยับยั้งได้ระหว่างกักกัน
                                                  ▲ ที่อยู่ที่ไปแตะ DecoyBridge = ห้ามออก
@@ -207,7 +213,7 @@ zetaphy gate
    - **เมื่อธงบังคับใช้แล้ว** (ติดธงมานานกว่า `enforceDelay` หรือผ่านช่องทางด่วน ดูขั้น 4): `NeuroLane` ไม่ยืนยันให้ และ `BridgeAirlock` ปฏิเสธ (`ThreatFlagged`) แต่การโอน **ยังค้างอยู่ ไม่หาย** ปลดธงเมื่อไรก็ปล่อยได้
    - `BridgeGuard` ใช้การกักชุดเดียวกัน (`isContractHeld`: หลัง `holdDelay`, ช่องทางด่วน หรือ `holdNow`) ไม่รอ `enforceDelay`
      - **ขาเข้า: เข้าคิว ไม่ revert** (`InboundHeld`, รหัสใน `held`) ข้อความของ adapter ถือว่าส่งแล้ว จึงไม่ต้องพึ่ง adapter ให้ลองใหม่
-       (ใน repo นี้ไม่มี adapter ของ Hyperlane ที่ลองใหม่เอง และ adapter ภายนอกอาจไม่ลองซ้ำ) ใครก็เรียก `releaseHeld(id)` ได้เมื่อปลดการกักแล้ว
+       (Hyperlane ไม่ส่งข้อความเดิมซ้ำ และ adapter ภายนอกอาจไม่ลองซ้ำ) ใครก็เรียก `releaseHeld(id)` ได้เมื่อปลดการกักแล้ว
        ตอนปล่อยยังต้องผ่าน pause เส้นทางที่ยังเปิด และเพดานต่อวันของเส้นทาง (นับตอนปล่อย ไม่นับตอนเข้าคิว) governance ทิ้งรายการในคิวได้ (`dropHeld`, เช่น จาก adapter ที่ถูกแฮ็ก)
      - **ขาออก: revert** (`FlaggedContract`) ก็แค่ยังไม่เผา เหรียญยังอยู่กับผู้ถือ (เงินที่ขโมยมาพาออกทางสะพานไม่ได้)
      - ทาง `BridgeAirlock`: การโอนที่กักค้างอยู่ใน airlock เอง (`release` ทีหลัง) และ airlock ตรวจผู้รับก่อนเรียก `inbound` อยู่แล้ว
@@ -218,13 +224,105 @@ zetaphy gate
    - `deploy-bridge` ใช้ `control()` ของ NeuroJobs เป็นสวิตช์โดยอัตโนมัติ (`--control` ใช้แทนได้)
    - `bridge watch` อ่านสวิตช์ไม่ได้ (RPC ล่ม) = ลองซ้ำ แล้ว **ไม่ยืนยัน** จนกว่าจะอ่านได้ (ปิดไว้ก่อน)
 
+8. **Hyperlane เป็นสะพานสายที่สอง (`HyperlaneLane`):** อิสระจาก NeuroLane จริง เพราะสิ่งที่ยืนยันมาจาก Mailbox ของ Hyperlane และ ISM (ชุด validator ของ Hyperlane) ไม่ใช่คนรันร่าง
+   - ฝั่งต้นทาง `HyperlaneLockBox.lock(to, amount)` (จ่าย amount + ค่าส่ง `quoteLock`) ล็อกเหรียญ ส่ง event `Locked` แบบเดียวกับ `LockBox` (คนรันร่าง `bridge watch` ได้เหมือนเดิม)
+     และส่งข้อความ `dispatch(destinationDomain, recipient, body)` ผ่าน Mailbox
+   - ฝั่ง ZETAPHY `HyperlaneLane.handle(origin, sender, body)` รับเฉพาะ: ผู้เรียกคือ Mailbox ที่ตั้งไว้, origin domain ที่ตั้งไว้, sender = LockBox (หรือ router) ที่ตั้งไว้,
+     และ body บอกเชนต้นทาง + สัญญาต้นทางตรงกับที่ตั้งไว้ แต่ละรายการรับครั้งเดียว (`Replay`)
+   - body = `abi.encode(srcChainId, srcContract, nonce, sender, to, amount)` ฟิลด์เดียวกับที่ NeuroLane ยืนยัน จึงได้ transfer id เดียวกัน (`BridgeAirlock.transferId`)
+   - governance (multisig) ตั้งค่า (`setConfig`) และ ISM ของตัวเอง (`setInterchainSecurityModule`; 0 = ISM ค่าเริ่มต้นของ Mailbox) ได้ ทุกการเปลี่ยนเป็น event ที่ monitor แจ้งเตือน
+   - interface ของ Hyperlane v3 เขียนเองแบบสั้น (ไม่มีแพ็กเกจ offline) ตรวจกับ `hyperlane-xyz/hyperlane-monorepo` commit `bc8cfcec461930ec005590bc838871f903a297a1` (ดูหัวไฟล์ `contracts/HyperlaneLane.sol`)
+   - ZETAPHY ยังไม่มี Hyperlane: ต้องติดตั้ง Mailbox + ISM + relayer + validator ของ Hyperlane เอง (permissionless) ก่อน และ validator ของ Hyperlane ต้องไม่ใช่กลุ่มเดียวกับคนรันร่าง Neuro
+   - `independentLanes()` นับ lane ตาม "ผู้ควบคุม" (`laneController()`: NeuroLane = NeuroJobs, HyperlaneLane = Mailbox, key ตรง ๆ = ตัวมันเอง) NeuroLane สองตัวบน NeuroJobs เดียวกันนับเป็น 1
+
 ```
 zetaphy deploy-threats --quorum 3 --min-agreed 5 --enforce-delay 3600
-zetaphy deploy-bridge --quarantine 3600 --lane 0x<Hyperlane adapter> --guardian 0x<guardian> --threats 0x<ThreatRegistry> --lockbox 97:0x<LockBox>
+zetaphy deploy-bridge --lockbox 97:0x<HyperlaneLockBox> --quarantine 3600 --threats 0x<ThreatRegistry> \
+  --hyperlane-mailbox 0x<Mailbox บน ZETAPHY> --hyperlane-origin <domain ต้นทาง> [--hyperlane-ism 0x<ISM>] \
+  --guardian 0x<guardian multisig> --governance 0x<governance multisig>
+#   ติดตั้งแบบปิด (route ยังไม่เปิด) เพดานต่อวันเริ่ม 1,000 โทเคน
+#   --guardian / --governance ต้องเป็น multisig (ไม่งั้นไม่ deploy) ใช้ key เดี่ยวได้เฉพาะ --devnet (RPC 127.0.0.1) หรือ --allow-eoa-for-testing
 #   มี ThreatRegistry แล้วต้องมี --lockbox (ไม่งั้นไม่ deploy) เพื่อปกป้อง LockBox ต้นทางเสมอ หรือใส่ --no-lockbox-protect อย่างจงใจ แล้ว threat protect ทีหลัง
 zetaphy threat set-governance gov        # หรือ 0x<multisig> หลัง deploy-bridge ปกป้องคีย์ของสะพานแล้ว
 zetaphy bridge watch --source-rpc https://<เชนต้นทาง> --lockbox 0x... --confirmations 12 --release
 ```
+
+### เปิดสะพาน: ประตูทุกข้อต้องผ่าน
+
+`zetaphy bridge gates ...` ตรวจอย่างเดียว · `zetaphy bridge open ...` ตรวจแล้วเปิด (ถ้าไม่ผ่านแม้ข้อเดียว พิมพ์ทุกข้อที่ขาดแล้วจบด้วย exit 1 ไม่ส่งธุรกรรม)
+
+| # | ประตู | ตรวจที่ |
+|---|---|---|
+| 1 | lane ≥ 2 สายที่ **ผู้ควบคุมต่างกัน** (เช่น NeuroLane + HyperlaneLane) ไม่มี lane ใดที่ผู้ควบคุมหรือ admin เป็น key ของคน deploy ไม่มี admin ของ lane หนึ่งคุมอีก lane ไม่มี lane ที่เป็น key เดี่ยว | `BridgeGuard.setRoute(enabled)` ต้องได้ `independentLanes() ≥ 2` (บนเชน) + CLI ตรวจที่เหลือ และพิมพ์ตาราง lane / controller / admin / ISM ให้คนดูยืนยัน |
+| 2 | audit: `--audit-report <https url> --audit-sha256 <sha256 ของไฟล์รายงาน>` | บนเชน: `BridgeGuard.setAudit` (event `AuditSet`) และ `setRoute(enabled)` revert `AuditMissing` ถ้ายังไม่มี |
+| 3 | คนรันร่าง Neuro อิสระ ≥ 10 (`--min-runners`, ลดได้เฉพาะ devnet) | `NeuroJobs.activeWorkers()` (ข้อมูลบนเชนบอกไม่ได้ว่าคนละคนจริง: ต้องมีคนตรวจเหมือนประตู 1) |
+| 4 | guardian และ governance เป็น multisig คนละตัว (Safe หรือ SimpleMultisig: threshold ≥ 2, owner ≥ 3, ไม่ซ้ำ, ไม่มี key ของคน deploy) ไม่มี owner คนเดียวกันในทั้งสองตัว · governance เป็น gov module ได้ | CLI อ่าน `getOwners/getThreshold` (Safe) หรือ `owners/threshold` (SimpleMultisig) ของ governance ของ BridgeGuard, BridgeAirlock, HyperlaneLane และ `BridgeGuard.guardians()` |
+| 5 | เพดานต่อวันไม่เกิน 1,000 โทเคน (เกินต้อง `--raise-cap`) และไม่เกิน `maxDailyLimit` บนเชน | CLI + บนเชน (`OverCap`) |
+| 6 | เชนที่ไม่ใช่ devnet ต้องใส่ `--i-understand-real-funds` | CLI (devnet = `--devnet` + RPC 127.0.0.1/localhost: devnet กับ testnet ใช้ EVM chain id 77390 เหมือนกัน จึงแยกด้วย chain id ไม่ได้) |
+| 7 | (นอก CLI) bug bounty ที่มีเงินจริงแล้ว (`docs/BUG_BOUNTY.md`) และตัวเฝ้าดูทำงานแล้ว | เจ้าของโครงการ |
+
+```
+zetaphy bridge open --audit-report https://<ผู้ตรวจ>/zetaphy-bridge.pdf --audit-sha256 <sha256sum ของไฟล์> \
+  --daily-limit 1000 --i-understand-real-funds
+#   key นี้ไม่ใช่ governance: พิมพ์ to/data ให้ multisig (setAudit ก่อน แล้ว setRoute) หรือเป็น MsgEVMCall ถ้า governance เป็น gov module
+zetaphy bridge pause        # guardian: หยุดทุกอย่างทันที (เปิดคืนได้เฉพาะ governance: unpause)
+zetaphy bridge close        # governance: ปิด route
+```
+
+### เพดานโตทีละขั้น
+
+- `maxDailyLimit` เริ่มที่ **1,000 โทเคน** (ตามทศนิยมของโทเคน) ตอน `createToken` เป็นเพดานแข็งของทุก route (route ที่ตั้งไว้สูงกว่าก็ใช้เพดานนี้)
+- **ลด:** governance ลดได้ทันที (`proposeMaxDailyLimit` ค่าที่ต่ำกว่า) และยกเลิกการขึ้นที่รออยู่ด้วย
+- **ขึ้น:** governance เสนอได้ไม่เกิน **2 เท่า** ของเพดานปัจจุบัน แล้วรอ **7 วัน** ใครก็เรียก `applyMaxDailyLimit` ได้หลังครบ (ยกเลิกได้ด้วย `cancelMaxDailyLimit`) ทุกขั้นเป็น event ที่ monitor แจ้ง
+- CLI: `zetaphy bridge cap` / `bridge cap propose <โทเคน>` / `bridge cap apply` / `bridge cap cancel`
+- แผนที่แนะนำ (ขึ้นเมื่อ 2 สัปดาห์ก่อนหน้าไม่มีการแจ้งเตือนร้ายแรง และวงเงินสะพานยังน้อยกว่า 1/3 ของ stake ตามประตู 3):
+
+| สัปดาห์ | เพดานต่อวัน |
+|---|---|
+| 0 (เปิด) | 1,000 |
+| 2 | 2,000 |
+| 4 | 4,000 |
+| 6 | 8,000 |
+| 8 | 16,000 |
+| ทุก 2 สัปดาห์ต่อจากนั้น | ×2 จนถึงเป้าที่ governance โหวต |
+
+### multisig + hardware wallet
+
+- **คนละ multisig:** guardian (กด pause) กับ governance (ตั้งค่า เปิด route เปิดคืน) เป็น multisig คนละตัว **คนหนึ่งถือ key เดียว** ไม่มี owner ซ้ำกันระหว่างสองตัว ไม่มี key ของคน deploy
+- **owner แต่ละคนใช้ hardware wallet** (Ledger หรือ Trezor) ผ่าน MetaMask: MetaMask → รูปบัญชี → **Add account or hardware wallet → Add hardware wallet** → เลือก Ledger/Trezor → เลือกบัญชี
+  - เพิ่มเครือข่าย ZETAPHY ใน MetaMask (chain id 77390, RPC สาธารณะ) แล้วใช้ที่อยู่ของบัญชี hardware นั้นเป็น owner
+  - ยืนยันทุกธุรกรรมบนหน้าจอของอุปกรณ์ (ตรวจ `to` และ data) อย่าเก็บ seed ของอุปกรณ์ไว้ในคอมพิวเตอร์หรือคลาวด์
+- **SimpleMultisig** (ในโฟลเดอร์นี้): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` แต่ละ owner `propose` / `confirm` / `execute` จาก MetaMask (เช่นหน้า "Write contract" ของ explorer)
+- **Safe:** เชนมี Safe singleton factory (`0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7`) ติดตั้งตั้งแต่ genesis จึง deploy Safe (singleton, proxy factory) ที่อยู่เดียวกับเชนอื่นได้ด้วย
+  safe-deployments แล้วใช้ Safe{Wallet} แบบ self-host หรือ Safe CLI กับ RPC ของ ZETAPHY · `bridge open` อ่าน `getOwners()` / `getThreshold()` ของ Safe ได้
+- governance เป็น gov module ได้ (`0x7b5F…3dF2`, เปลี่ยนค่าด้วยโหวต) แต่ guardian ควรเป็น multisig ที่กดได้เร็ว
+
+### เฝ้าดู (monitor) และแจ้งเตือน
+
+`zetaphy bridge monitor` อ่านเชนอย่างเดียว (ไม่ใช้ key) จาก event ของ BridgeGuard, BridgeAirlock, NeuroLane, HyperlaneLane, ThreatRegistry และ (ถ้าให้ `--source-rpc --lockbox`) LockBox ต้นทาง แล้วแจ้งเตือนเมื่อ:
+
+| กฎ | เมื่อไร |
+|---|---|
+| `volume` | ยอดเข้าหรือออกวันนี้ ≥ 80% ของเพดาน (`--volume-pct`) · ถึงเพดาน = ร้ายแรง |
+| `lanes-disagree` | การฝากเดียวกัน (เชน สัญญา nonce เดียวกัน) ถูกยืนยันด้วยรายละเอียดต่างกัน (ร้ายแรง) |
+| `lane-missing` | lane หนึ่งยืนยัน อีก lane ไม่ยืนยันภายใน 30 นาที (`--disagree-minutes`) |
+| `lane-silent` | มีการฝากบนเชนต้นทางแต่ไม่มี lane ยืนยันภายใน 30 นาที (`--silent-minutes`, ต้องมี `--source-rpc`) |
+| `release-stalled` | ครบ lane + กักกันแล้วแต่ไม่ถูกปล่อยภายใน 30 นาที (relayer เงียบ หรือถูกกัก) |
+| `veto` / `pause` / `decoy-hit` | มี veto, guardian กด pause, มีคนแตะสะพานหลอก (ร้ายแรง) |
+| `hold` | `InboundHeld` ของ BridgeGuard, `HeldNow` / `FastEnforced` ของ ThreatRegistry |
+| `governance-change` | เปลี่ยน route เพดาน `maxDailyLimit` lane vetoer decoy guardian governance audit registry config/ISM ของ HyperlaneLane, unpause, untrip |
+| `large-transfer` | รายการเดียว ≥ 25% ของเพดานต่อวัน (`--large-pct`) |
+
+ผลเป็น JSON (`--out`) และสรุปภาษาไทย + อังกฤษ (`--summary` และหน้าจอ) แจ้งเตือนเดิมไม่ซ้ำ (เก็บใน `--state` พร้อมบล็อกล่าสุดที่อ่านแล้ว)
+
+**GitHub Actions (`.github/workflows/bridge-monitor.yml`):** รันทุก 15 นาที และกดรันเองได้ (ใส่ `from_block` เพื่ออ่านใหม่)
+1. ใส่ที่อยู่สะพานใน `zetaphy-network/bridge-monitor.json` (`bridgeGuard`, `bridgeAirlock`, `startBlock`, `rpc`) หรือปล่อยว่างให้อ่านจาก `zetaphy-launch/state/77390.json`
+   RPC ใส่ในไฟล์นั้นหรือเป็น repository variable `ZETAPHY_RPC` (Settings → Secrets and variables → Actions → **Variables**)
+2. ยังไม่มีสะพาน = workflow ไม่ทำอะไร (notice แล้วจบ exit 0)
+3. มีแจ้งเตือน = เปิด issue ติดป้าย `bridge-alert` (หรือ comment ใน issue ที่ยังเปิดอยู่) ด้วย `GITHUB_TOKEN` ของ workflow (`issues: write`)
+4. ช่องทางเสริม (ไม่บังคับ, ไม่พิมพ์ค่าลง log): secret `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` และ/หรือ `DISCORD_WEBHOOK_URL`
+5. บล็อกล่าสุดที่อ่านแล้วเก็บใน artifact `bridge-monitor-state` ของ run ที่สำเร็จล่าสุด run ต่อไปอ่านต่อจากนั้น ไม่อ่านซ้ำ
+6. ค่าใช้จ่าย: repo สาธารณะฟรี · repo ส่วนตัวใช้ราว 2,900 นาที/เดือน (เกินโควตาฟรี 2,000) ให้เปลี่ยนเป็นทุก 30 นาทีหรือทุกชั่วโมง
 
 ## ภูมิคุ้มกันและร่างงอก/หด
 
@@ -791,7 +889,9 @@ zetaphy deploy-stable --reserve 1000   # tUSDC, tUSDT และ StableGateway (�
 - `ZETAPHYD=<zetaphyd ที่มีกุญแจโหวต ML-DSA> npm run test:devnet:pqcert`: เชน 2 validator ลงทะเบียนกุญแจโหวต แล้วตรวจบล็อกด้วย `zetaphy pq verify-block`
 - `ZETAPHYD=<zetaphyd> npm run test:devnet:cosmoswallet`: กระเป๋า Cosmos (Keplr, Leap, Cosmostation) เซ็นและส่งธุรกรรมบนเชนจริง
 - `ZETAPHYD=<zetaphyd> npm run test:devnet:neurogov`: โหวตบนเชนจริงหยุด Neuro (gov module เรียก NeuroControl ผ่าน MsgEVMCall) แล้วเปิดใหม่ การโอนเหรียญยังทำงานระหว่างหยุด โหวตถอดเชนออกจากรายชื่อแล้วคำขอเชนนั้นถูกปฏิเสธ และโหวตตั้งเงินวางท้าทาย (2.5 ZETAPHY) กับ `defenderTimeout`
-- `npm run test:devnet:bridge`: สะพาน Neuro ข้ามเชนจริง 2 เชน (ต้นทาง และ ZETAPHY) รวมถึงผู้ส่งที่ติดธงแล้ว guardian บังคับใช้ทันที (`enforce-now`) ถูกปฏิเสธ ผู้ส่งที่ติดธงระดับเตือนไม่ถูกกักจนครบ `holdDelay` แต่ guardian กักทันทีด้วย `hold-now` ทั้งคู่ออกได้หลังปลดธง, `deploy-bridge` ไม่ยอม deploy ถ้าไม่มี `--lockbox` และ `threat export`, รายงานจากผู้ใช้ (`report`, `reports`, `settle`, `claim`)
+- `npm run test:devnet:bridge`: สะพาน Neuro ข้ามเชนจริง 2 เชน (ต้นทาง และ ZETAPHY) รวมถึงผู้ส่งที่ติดธงแล้ว guardian บังคับใช้ทันที (`enforce-now`) ถูกปฏิเสธ ผู้ส่งที่ติดธงระดับเตือนไม่ถูกกักจนครบ `holdDelay` แต่ guardian กักทันทีด้วย `hold-now` ทั้งคู่ออกได้หลังปลดธง, `deploy-bridge` ไม่ยอม deploy ถ้าไม่มี `--lockbox` หรือ guardian เป็น key เดี่ยวนอก devnet และติดตั้งแบบปิด, `bridge open` ไม่เปิดจนผ่านทุกประตู, `bridge monitor` แจ้ง decoy, การเปลี่ยนค่า, ยอดถึงเพดาน และ pause, `threat export`, รายงานจากผู้ใช้ (`report`, `reports`, `settle`, `claim`)
+  - รันบนเครื่องที่ใช้ devnet ร่วมกัน: `flock /tmp/ci-test/devnet.lock env ZETAPHYD=<zetaphyd> npm run test:devnet:bridge`
+- `npm test` รวม `test/hyperlane.test.js` (HyperlaneLane กับ Mailbox จำลอง, ประตูบนเชน, เพดานแข็ง), `test/bridgegate.test.js` (ประตูของ CLI) และ `test/monitor.test.js` (กฎแจ้งเตือน)
 - `npm run test:devnet`: ทดสอบบนเชน ZETAPHY จริง ต้องมี `zetaphyd`
   - สคริปต์ตั้งเชน 1 โหนด (บล็อกละ 1 วินาที)
   - คนรันร่าง 3 คนรับงานจริงจนได้ผลตรวจ 2 ใน 3 และได้รับเงิน

@@ -147,7 +147,7 @@ jobs:
           out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
           out launch '^(zetaphy-launch/|zetaphy-(dex|nft)/web/deployments\.json$|zetaphy-explorer/config\.json$|zetaphy-wallet/index\.html$|zetaphy-snap/snap\.config\.js$)'
-          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl)\.sol|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls)\.integration\.js)$)'
+          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl)\.sol|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc)\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -545,6 +545,7 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:neurogov
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:chainrand
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:preinstalls
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:ibc
 
   program:
     name: program (cargo test + anchor test)

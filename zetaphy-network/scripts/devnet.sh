@@ -9,6 +9,10 @@
 # REST=1 also serves the Cosmos REST API on <rpc-port>+103, as setup-node.sh
 # does on the testnet (Keplr, Leap and Cosmostation read accounts and send txs
 # there). Off by default, so the other devnets open no extra port.
+# EXTRA_COINS="1000000000uusdc" also gives each 0x address those coins (the
+# IBC test uses it for a stand-in of Noble's USDC). COSMOS_CHAIN_ID and
+# EVM_CHAIN_ID pick the chain ids (two devnets side by side need different ones).
+# GENESIS_JQ="<jq filter>" is applied to the genesis last (e.g. denom metadata).
 set -euo pipefail
 HOME_DIR=$1; PORT=$2; shift 2
 BIN=${ZETAPHYD:-zetaphyd}
@@ -39,10 +43,12 @@ if [ -n "${PQ:-}" ]; then
   jqg '.app_state.evm.params.active_static_precompiles=["0x0000000000000000000000000000000000000100","0x0000000000000000000000000000000000000800","0x0000000000000000000000000000000000000801","0x0000000000000000000000000000000000000900"]'
 fi
 
+[ -n "${GENESIS_JQ:-}" ] && jqg "$GENESIS_JQ"
+
 $BIN genesis add-genesis-account "$($BIN keys show validator -a $K)" "100000000000000000000000000$DENOM" --home "$HOME_DIR"
 for a in "$@"; do
   bech=$($BIN debug addr "$a" --home "$HOME_DIR" | awk '/Bech32 Acc/ {print $3}')
-  $BIN genesis add-genesis-account "$bech" "1000000000000000000000000$DENOM" --home "$HOME_DIR"   # 1,000,000 ZETAPHY
+  $BIN genesis add-genesis-account "$bech" "1000000000000000000000000$DENOM${EXTRA_COINS:+,$EXTRA_COINS}" --home "$HOME_DIR"   # 1,000,000 ZETAPHY
 done
 # FAUCET=1: a funded faucet key for zetaphy_faucet (as setup-node.sh does).
 if [ -n "${FAUCET:-}" ]; then

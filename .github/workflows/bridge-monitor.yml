@@ -1,0 +1,189 @@
+# Bridge monitor: every 15 minutes, read the ZETAPHY lock/mint bridge on the public
+# RPC (read-only, no key) and raise alerts: daily volume over 80% of the limit,
+# lanes disagreeing or silent, any veto, pause or decoy hit, holds on flagged
+# parties, governance changes (limits, lanes, roles, audit), large transfers,
+# transfers ready but not released. See zetaphy-network/src/monitor.js and the
+# monitoring section of zetaphy-network/README.md.
+#
+# Addresses and the RPC come from committed, public files:
+#   zetaphy-network/bridge-monitor.json   rpc, bridgeGuard, bridgeAirlock, startBlock, thresholds
+#   zetaphy-launch/state/77390.json       the launch state (bridgeGuard / bridgeAirlock), when the first is empty
+# or the repository variable ZETAPHY_RPC (Settings → Secrets and variables → Actions → Variables).
+# While no bridge is deployed this does nothing: a notice, exit 0.
+#
+# On alerts it opens (or comments on) one GitHub issue labelled `bridge-alert`, with
+# the built-in GITHUB_TOKEN. Optional repository secrets, only used when set and
+# never printed: TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID, DISCORD_WEBHOOK_URL.
+#
+# The last scanned block (and open transfers, alerts already sent) is the artifact
+# `bridge-monitor-state` of the last successful run; each run continues from it, so
+# blocks are never rescanned. Lost (artifacts expire after 30 days unused): the scan
+# restarts from startBlock, or the last 20,000 blocks.
+#
+# Cost: a public repository's Actions minutes are free. In a private repository this
+# schedule uses about 2,900 minutes a month (each run is billed as at least 1 minute),
+# above GitHub Free's 2,000: there, make it */30 or hourly.
+
+name: bridge-monitor
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      from_block:
+        description: "Rescan from this block (empty: continue from the last scan)"
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  issues: write
+  actions: read   # download the previous run's state artifact
+
+concurrency:
+  group: bridge-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Watch the ZETAPHY bridge
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      CONFIG: zetaphy-network/bridge-monitor.json
+      LAUNCH_STATE: zetaphy-launch/state/77390.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is a bridge deployed?
+        id: check
+        env:
+          RPC_VAR: ${{ vars.ZETAPHY_RPC }}
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs');
+          const read = (f) => (fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8')) : {});
+          const cfg = read(process.env.CONFIG);
+          const st = read(process.env.LAUNCH_STATE);
+          const out = Object.assign({}, ...Object.values(st.steps ?? {}).map((s) => s.out ?? {}));
+          const addr = /^0x[0-9a-fA-F]{40}$/;
+          const guard = cfg.bridgeGuard ?? out.bridgeGuard, airlock = cfg.bridgeAirlock ?? out.bridgeAirlock;
+          const rpc = process.env.RPC_VAR || cfg.rpc || '';
+          const deployed = addr.test(guard ?? '') && addr.test(airlock ?? '');
+          if (!deployed) console.log('::notice title=bridge-monitor::No bridge deployed (no BridgeGuard / BridgeAirlock in the monitor config or the launch state): nothing to watch.');
+          else if (!/^https?:\/\//.test(rpc)) { console.log('::error title=bridge-monitor::A bridge is deployed but no RPC is set: put "rpc" in ' + process.env.CONFIG + ' or the repository variable ZETAPHY_RPC.'); process.exit(1); }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `deployed=${deployed}\nrpc=${rpc}\n`);
+          JS
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.deployed == 'true'
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: zetaphy-network/package-lock.json
+
+      - name: Install (runtime dependencies only)
+        if: steps.check.outputs.deployed == 'true'
+        run: npm ci --omit=dev --prefix zetaphy-network
+
+      - name: Restore the last scanned block
+        if: steps.check.outputs.deployed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p state
+          id=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow bridge-monitor.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
+          if [ -n "$id" ] && gh run download "$id" --repo "$GITHUB_REPOSITORY" --name bridge-monitor-state --dir state 2>/dev/null; then
+            echo "continuing from run $id: last block $(node -e 'console.log(require("./state/monitor-state.json").lastBlock)')"
+          else
+            echo "no previous state: first scan from startBlock (or the last 20,000 blocks)"
+          fi
+
+      - name: Scan
+        id: scan
+        if: steps.check.outputs.deployed == 'true'
+        env:
+          RPC: ${{ steps.check.outputs.rpc }}
+          FROM_BLOCK: ${{ inputs.from_block }}
+        run: |
+          export ZETAPHY_HOME="$RUNNER_TEMP/zhome"
+          extra=()
+          if [ -n "$FROM_BLOCK" ]; then
+            [[ "$FROM_BLOCK" =~ ^[0-9]+$ ]] || { echo "::error::from_block must be a block number"; exit 1; }
+            extra=(--from-block "$FROM_BLOCK")
+          fi
+          mkdir -p out
+          node zetaphy-network/cli.js bridge monitor --rpc "$RPC" --monitor-config "$CONFIG" --launch-state "$LAUNCH_STATE" \
+            --state state/monitor-state.json --out out/report.json --summary out/summary.md "${extra[@]}"
+          n=$(node -e 'console.log(require("./out/report.json").alerts.length)')
+          echo "alerts=$n" >> "$GITHUB_OUTPUT"
+          cat out/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the state for the next run
+        if: steps.check.outputs.deployed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-monitor-state
+          path: state/monitor-state.json
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Keep the report
+        if: steps.check.outputs.deployed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bridge-monitor-report
+          path: out/
+          retention-days: 14
+
+      - name: Open or update the bridge-alert issue
+        if: steps.check.outputs.deployed == 'true' && steps.scan.outputs.alerts != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh label create bridge-alert --repo "$GITHUB_REPOSITORY" --color B60205 --description "ZETAPHY bridge monitor alerts" 2>/dev/null || true
+          last=$(node -e 'console.log(require("./state/monitor-state.json").lastBlock)')
+          {
+            cat out/summary.md
+            echo
+            echo "Last scanned block: $last · run: $RUN_URL"
+            echo
+            echo '<details><summary>report.json</summary>'
+            echo
+            echo '```json'
+            head -c 50000 out/report.json
+            echo
+            echo '```'
+            echo '</details>'
+          } > out/issue.md
+          num=$(gh issue list --repo "$GITHUB_REPOSITORY" --label bridge-alert --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --repo "$GITHUB_REPOSITORY" --body-file out/issue.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label bridge-alert --title "Bridge alert: $(node -e 'const r=require("./out/report.json"); console.log(`${r.alerts.length} alert(s), ${r.alerts.filter((a)=>a.severity==="critical").length} critical`)')" --body-file out/issue.md
+          fi
+
+      - name: Telegram / Discord (only when their secrets are set)
+        if: steps.check.outputs.deployed == 'true' && steps.scan.outputs.alerts != '0'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set +x
+          text=$(node -e 'const s=require("fs").readFileSync("out/summary.md","utf8"); process.stdout.write((s.length>3500?s.slice(0,3500)+"\n…":s)+"\n"+process.env.RUN_URL)')
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            body=$(TEXT="$text" node -e 'console.log(JSON.stringify({chat_id: process.env.TELEGRAM_CHAT_ID, text: process.env.TEXT, disable_web_page_preview: true}))')
+            curl -sS -o /dev/null -w 'telegram: HTTP %{http_code}\n' -H 'content-type: application/json' -d "$body" "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" || echo "telegram: not sent"
+          fi
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            body=$(TEXT="$text" node -e 'console.log(JSON.stringify({content: process.env.TEXT.slice(0, 1900)}))')
+            curl -sS -o /dev/null -w 'discord: HTTP %{http_code}\n' -H 'content-type: application/json' -d "$body" "$DISCORD_WEBHOOK_URL" || echo "discord: not sent"
+          fi

@@ -12,7 +12,7 @@ import { runSteps, newState, saveState, loadState, outputs, assertNoSecrets } fr
 import { dexWeb, nftWeb, explorerConfig, walletHtml, snapConfig, publicBase, neuroReportUrl, CONFIG_FILES } from '../src/configs.js';
 import { readDeployerKey, keyFolder } from '../src/key.js';
 import { parseArgs, governanceTarget } from '../launch.js';
-import { launchSteps, adminRoles, evmCallProposal, handoverPlan, GOV_MODULE, GOV_MODULE_BECH32 } from '../src/steps.js';
+import { launchSteps, adminRoles, evmCallProposal, handoverPlan, GOV_MODULE, GOV_MODULE_BECH32, BRIDGE_GATES } from '../src/steps.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'zetaphy-launch-unit-'));
@@ -124,6 +124,9 @@ test('the real step list: order puts configuration before the handover, which is
   assert.notEqual(byName.handover.when({ handover: false }), true);
   assert.equal(byName.handover.when({ handover: true }), true);
   assert.notEqual(byName.bridge.when({}), true, 'the bridge is off by default');
+  assert.match(byName.bridge.describe, /deployed CLOSED/, 'the launch deploys the bridge closed, never open');
+  const gates = BRIDGE_GATES.join('\n');
+  for (const re of [/independentLanes\(\) >= 2/, /--audit-sha256/, /10 independent Neuro runners/, /different multisigs/, /starter cap 1,000/, /--i-understand-real-funds/]) assert.match(gates, re);
   assert.notEqual(byName.identity.when({}), true, 'identity needs --neuro-url');
   for (const n of ['skill', 'wire', 'protect', 'configs', 'snap', 'handover']) assert.equal(byName[n].always, true, `${n} re-checks every run`);
 });

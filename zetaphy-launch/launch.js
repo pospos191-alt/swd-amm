@@ -22,7 +22,7 @@
 //   --community-fund 0x…    Neuro's and the ThreatRegistry's community fund (default: the deployer)
 //   --stable-reserve N      ZETAPHY the StableGateway holds to pay relayed fees (default 100)
 //   --compute-min-agreed N  accepted verdicts a runner needs to take ComputeMarket jobs (default 1)
-//   --bridge-lockbox <chainId>:0x…  also deploy the Neuro bridge (needs a LockBox on the source chain)
+//   --bridge-lockbox <chainId>:0x…  also deploy the Neuro bridge CLOSED (needs a LockBox on the source chain; open later with `zetaphy bridge open` once gates pass)
 //   --skip-snap-build       write snap.config.js but do not run npm run build in zetaphy-snap
 //
 // Steps: neuro skill threats reports identity vault pq stable compute bridge dex nft wire protect configs snap handover

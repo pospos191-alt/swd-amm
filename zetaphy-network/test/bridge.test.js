@@ -9,6 +9,7 @@ const NOBLE = encodeBytes32String('ibc/noble');
 const HYP = encodeBytes32String('hyperlane/base');
 const tokenIface = new Interface(JSON.parse(readFileSync(new URL('../artifacts/BridgedToken.json', import.meta.url), 'utf8')).abi);
 
+const TWO_LANES = '0x600260005260206000f3'; // returns uint256 2
 let c, guard, token;
 const a = (n) => c.acct[n].toString();
 beforeEach(async () => {
@@ -16,6 +17,9 @@ beforeEach(async () => {
   guard = await c.deploy('BridgeGuard', [a('gov')], 'gov');
   await guard.send('gov', 'createToken', ['USD Coin (bridged)', 'USDC', 6]);
   token = await guard.call('token');
+  // The adapters stand in for airlocks: independentLanes() -> 2 for any call (the guard enables only those).
+  for (const n of ['ibcAdapter', 'hypAdapter']) await c.putCode(a(n), TWO_LANES);
+  await guard.send('gov', 'setAudit', ['https://audits.example/zetaphy-bridge.pdf', '0x' + 'a1'.repeat(32)]);
   await guard.send('gov', 'setRoute', [NOBLE, a('ibcAdapter'), 1000n * USDC, true]);
   await guard.send('gov', 'setRoute', [HYP, a('hypAdapter'), 100n * USDC, true]);
   await guard.send('gov', 'setGuardian', [a('guardian'), true]);
@@ -152,4 +156,14 @@ test('vaccine: BridgeGuard holds only after the registry\'s holdDelay (or a guar
   c.advance(86400);
   await assert.rejects(guard.send('alice', 'releaseHeld', [1]), /NoHeld/);
   await assert.rejects(guard.send('gov', 'dropHeld', [1]), /NoHeld/);
+});
+
+test('the hard cap binds all routes together: more routes do not multiply it', async () => {
+  const third = encodeBytes32String('third');
+  await c.putCode(a('attacker'), TWO_LANES);
+  await guard.send('gov', 'setRoute', [third, a('attacker'), 1000n * USDC, true]);
+  await guard.send('ibcAdapter', 'inbound', [NOBLE, a('alice'), 1000n * USDC]);
+  await assert.rejects(guard.send('attacker', 'inbound', [third, a('attacker'), 1n]), /OverLimit/);
+  c.advance(86400);
+  await guard.send('attacker', 'inbound', [third, a('attacker'), 1n]);
 });
