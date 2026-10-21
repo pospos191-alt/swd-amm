@@ -161,6 +161,7 @@ curl -s https://<ชื่อ>.sslip.io -H 'content-type: application/json' \
 - ~~โปรแกรม `zetaphy node start` สำหรับคนรันร่าง Neuro~~ ทำแล้วใน zetaphy-network
 - ~~ลายเซ็นต้านควอนตัม~~ ทำแล้ว (ขั้น 5 ข้างล่าง)
 - ~~เพดานการโอนผ่าน IBC~~ ทำแล้ว (ขั้น 3 ข้างล่าง)
+- ~~สัญญามาตรฐานของ EVM~~ ทำแล้ว: เชนใหม่มี CREATE2 deployer (`0x4e59…956C`), Multicall3 (`0xcA11…CA11`), Permit2 (`0x0000…8BA3`) และ Safe singleton factory (`0x914d…43d7`) ตั้งแต่ genesis (`app_state.evm.preinstalls`) ที่อยู่และโค้ดตรงกับ Ethereum จึงใช้กับกระเป๋าและเครื่องมือ dev ได้ทันที (EIP-2935 เชนติดตั้งเอง ไม่อยู่ในรายการนี้)
 - สะพานเชื่อมเชนจริง (ต้องมีเชนปลายทางและ relayer)
 
 ## ขั้น 3: เพดานการโอนผ่าน IBC (เช่น USDC จาก Noble)

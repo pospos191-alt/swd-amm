@@ -104,6 +104,7 @@ jobs:
       explorer: ${{ steps.f.outputs.explorer }}
       dex: ${{ steps.f.outputs.dex }}
       nft: ${{ steps.f.outputs.nft }}
+      launch: ${{ steps.f.outputs.launch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -145,7 +146,8 @@ jobs:
           out dex '^(zetaphy-dex/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
-          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl)\.sol|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand)\.integration\.js)$)'
+          out launch '^(zetaphy-launch/|zetaphy-(dex|nft)/web/deployments\.json$|zetaphy-explorer/config\.json$|zetaphy-wallet/index\.html$|zetaphy-snap/snap\.config\.js$)'
+          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl)\.sol|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls)\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -230,6 +232,30 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Unit tests (solc-compiled launcher, simulated chain and explorers)
+        run: npm test
+
+  zetaphy-launch:
+    name: zetaphy-launch (step runner and config writers)
+    needs: changes
+    if: needs.changes.outputs.launch == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: zetaphy-launch
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Unit tests (resume, dry-run, --only, state without secrets, config writers)
         run: npm test
 
   zetaphy-network:
@@ -518,6 +544,7 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:cosmoswallet
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:neurogov
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:chainrand
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:preinstalls
 
   program:
     name: program (cargo test + anchor test)
