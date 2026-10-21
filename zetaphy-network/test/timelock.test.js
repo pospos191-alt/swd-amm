@@ -134,6 +134,16 @@ test('BridgeGuard: guardians pause, lower the cap, cancel a raise and close a ro
   // restarting goes through the timelock
   await govern(guard, 'unpause');
   assert.equal(await guard.call('paused'), false);
+  // a guardian's cut, even to 0, is not permanent: governance restores the cap
+  // it cut from in one raise (CAP_DELAY still applies), not in x2 steps from 0
+  await guard.send('guardian', 'lowerMaxDailyLimit', [0n]);
+  assert.equal(await guard.call('restoreMaxDailyLimit'), 1000n * ZETA, 'the highest cap before the cuts');
+  await assert.rejects(govern(guard, 'proposeMaxDailyLimit', [1001n * ZETA]), undefined, 'not above the restore point (CapStep)');
+  await govern(guard, 'proposeMaxDailyLimit', [1000n * ZETA]);
+  c.advance(await guard.call('CAP_DELAY'));
+  await guard.send('anyone', 'applyMaxDailyLimit');
+  assert.equal(await guard.call('maxDailyLimit'), 1000n * ZETA);
+  assert.equal(await guard.call('restoreMaxDailyLimit'), 0n, 'used up');
 });
 
 test('BridgeAirlock: guardians of the guard remove a lane or a marker and raise threshold / quarantine at once; the rest waits', async () => {

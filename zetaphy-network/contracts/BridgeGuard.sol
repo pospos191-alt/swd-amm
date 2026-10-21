@@ -82,8 +82,9 @@ contract BridgedToken {
 ///             whose controllers differ (independentLanes() >= 2);
 ///           - a hard cap, maxDailyLimit, over every route's daily limit and over all routes together per day. It
 ///             starts at 1,000 whole tokens (createToken), is lowered at once,
-///             and is raised only by governance, at most x2 per step, each step
-///             7 days after it was proposed: caps grow gradually and in public.
+///             and is raised only by governance, at most x2 per step (or back up
+///             to the cap before a lowerMaxDailyLimit cut), each step 7 days after
+///             it was proposed: caps grow gradually and in public.
 ///         Governance should be the ZetaphyTimelock (proposers: the chain's gov
 ///         module or a multisig). Guardians act at once, but only to reduce risk:
 ///         pause, lowerMaxDailyLimit, cancelMaxDailyLimit, disableRoute.
@@ -113,6 +114,10 @@ contract BridgeGuard {
     uint128 public pendingMaxDailyLimit;
     uint64 public pendingMaxAt;      // when the pending raise may be applied (0: none)
     uint64 public constant CAP_DELAY = 7 days;
+    /// The highest cap before lowerMaxDailyLimit cut it (0: none). Governance may
+    /// propose a raise back up to it in one step (still CAP_DELAY), so a guardian's
+    /// emergency cut (even to 0) is never undone only by x2 steps of 7 days each.
+    uint128 public restoreMaxDailyLimit;
     uint128 public constant STARTER_UNITS = 1000; // whole tokens: the cap at createToken
     /// Every route together, per direction and day: the hard cap binds the
     /// guard, so more routes cannot multiply it.
@@ -207,7 +212,8 @@ contract BridgeGuard {
     }
 
     /// Lowering the cap applies at once (and cancels a pending raise); a raise
-    /// (at most x2 of the cap) waits CAP_DELAY, then anyone applies it.
+    /// (at most x2 of the cap, or up to restoreMaxDailyLimit) waits CAP_DELAY,
+    /// then anyone applies it.
     function proposeMaxDailyLimit(uint128 v) external onlyGov {
         if (v <= maxDailyLimit) {
             maxDailyLimit = v;
@@ -217,6 +223,7 @@ contract BridgeGuard {
             return;
         }
         uint256 most = uint256(maxDailyLimit) * 2;
+        if (restoreMaxDailyLimit > most) most = restoreMaxDailyLimit;
         if (v > most) revert CapStep(uint128(most));
         pendingMaxDailyLimit = v;
         pendingMaxAt = uint64(block.timestamp) + CAP_DELAY;
@@ -230,6 +237,7 @@ contract BridgeGuard {
         maxDailyLimit = pendingMaxDailyLimit;
         pendingMaxAt = 0;
         pendingMaxDailyLimit = 0;
+        if (maxDailyLimit >= restoreMaxDailyLimit) restoreMaxDailyLimit = 0;
         emit MaxDailyLimitSet(maxDailyLimit);
     }
 
@@ -251,6 +259,7 @@ contract BridgeGuard {
     function lowerMaxDailyLimit(uint128 v) external {
         _govOrGuardian();
         if (v >= maxDailyLimit) revert CapStep(maxDailyLimit);
+        if (maxDailyLimit > restoreMaxDailyLimit) restoreMaxDailyLimit = maxDailyLimit;
         maxDailyLimit = v;
         pendingMaxAt = 0;
         pendingMaxDailyLimit = 0;

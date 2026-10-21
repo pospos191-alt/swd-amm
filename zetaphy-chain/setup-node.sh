@@ -1365,10 +1365,10 @@ index 0000000..a68e4a1
 +}
 diff --git a/evmd/zetaphy_ibchold.go b/evmd/zetaphy_ibchold.go
 new file mode 100644
-index 0000000..4ec30cd
+index 0000000..dcdeab3
 --- /dev/null
 +++ b/evmd/zetaphy_ibchold.go
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,458 @@
 +package evmd
 +
 +// ZETAPHY IBC large-transfer hold.
@@ -1383,8 +1383,10 @@ index 0000000..4ec30cd
 +//   - After the delay, BeginBlock delivers it through the rest of the stack
 +//     (rate limit, callbacks, ERC-20, transfer) as if it had just arrived,
 +//     and writes the acknowledgement that stack gives. Over the rate limit
-+//     at that moment, or any other failure: an error acknowledgement, and
-+//     the source chain refunds the sender.
++//     at that moment, or any other failure (a panic, or running out of the
++//     IBCHoldReleaseGas each delivery gets): an error acknowledgement, and
++//     the source chain refunds the sender. A block stops releasing after
++//     ibcReleasesPerBlock transfers or ibcReleaseBlockGas gas.
 +//   - Before that, the guardian (a governance-set account or contract, e.g.
 +//     a multisig; governance itself can too) may cancel it: an error
 +//     acknowledgement is written and the source chain refunds the sender.
@@ -1406,6 +1408,7 @@ index 0000000..4ec30cd
 +	errorsmod "cosmossdk.io/errors"
 +	sdkmath "cosmossdk.io/math"
 +
++	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
 +	sdk "github.com/cosmos/cosmos-sdk/types"
 +	errortypes "github.com/cosmos/cosmos-sdk/types/errors"
 +	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -1425,7 +1428,17 @@ index 0000000..4ec30cd
 +	IBCHoldMinDelay     = 60
 +	IBCHoldMaxDelay     = 7 * 86400
 +	ibcReleasesPerBlock = 20
++	// ibcReleaseBlockGas: BeginBlock stops releasing once the deliveries of
++	// this block used this much gas; the rest wait for the next block.
++	ibcReleaseBlockGas = 10_000_000
 +)
++
++// IBCHoldReleaseGas caps the gas of one delivery in BeginBlock (whose own
++// gas meter is infinite): a transfer whose delivery runs out (e.g. an
++// ERC-20 conversion into a contract that burns gas) gets an error
++// acknowledgement and is refunded on the source chain. A variable only so
++// the fork tests can lower it.
++var IBCHoldReleaseGas uint64 = 3_000_000
 +
 +// ibcHold is a held inbound transfer.
 +type ibcHold struct {
@@ -1635,16 +1648,22 @@ index 0000000..4ec30cd
 +		ids = append(ids, readU64(it.Key()[9:]))
 +	}
 +	_ = it.Close()
++	var used uint64
 +	for i, id := range ids {
++		if used >= ibcReleaseBlockGas {
++			break // the rest stay queued for the next block
++		}
 +		st.Delete(keys[i])
-+		app.ibcHoldRelease(ctx, id)
++		used += app.ibcHoldRelease(ctx, id)
 +	}
 +}
 +
-+func (app *EVMD) ibcHoldRelease(ctx sdk.Context, id uint64) {
++// ibcHoldRelease delivers one held transfer and returns the gas its
++// delivery used (at most IBCHoldReleaseGas).
++func (app *EVMD) ibcHoldRelease(ctx sdk.Context, id uint64) uint64 {
 +	h, packet, err := app.ibcHoldGet(ctx, id)
 +	if err != nil {
-+		return
++		return 0
 +	}
 +	st := ctx.KVStore(app.GetKey(pqStoreKey))
 +	stuck := func(why string) {
@@ -1655,24 +1674,28 @@ index 0000000..4ec30cd
 +		ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_ibc_hold_stuck", sdk.NewAttribute("id", fmt.Sprint(id)), sdk.NewAttribute("reason", why)))
 +	}
 +	appCtx, writeApp := ctx.CacheContext()
++	meter := storetypes.NewGasMeter(IBCHoldReleaseGas)
++	appCtx = appCtx.WithGasMeter(meter)
 +	var ack ibcexported.Acknowledgement
 +	if perr := func() (perr error) {
 +		defer func() {
 +			if r := recover(); r != nil {
-+				perr = fmt.Errorf("delivery panicked: %v", r)
++				perr = fmt.Errorf("delivery failed: %v", r)
 +			}
 +		}()
 +		ack = app.ibcHoldStack.app.OnRecvPacket(appCtx, h.Version, packet, h.Relayer)
 +		return nil
 +	}(); perr != nil {
-+		stuck(perr.Error())
-+		return
++		// Out of gas or a panic: nothing of the delivery is kept, the source
++		// chain refunds the sender (only the ABCI code is in the ack bytes).
++		ack = channeltypes.NewErrorAcknowledgement(perr)
 +	}
++	used := meter.GasConsumedToLimit()
 +	if ack != nil {
 +		ackCtx, writeAck := ctx.CacheContext()
 +		if err := app.IBCKeeper.ChannelKeeper.WriteAcknowledgement(ackCtx, packet, ack); err != nil {
 +			stuck(err.Error())
-+			return
++			return used
 +		}
 +		writeAck()
 +	}
@@ -1682,6 +1705,7 @@ index 0000000..4ec30cd
 +	st.Delete(holdKey(id))
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_ibc_hold_released", sdk.NewAttribute("id", fmt.Sprint(id)),
 +		sdk.NewAttribute("success", fmt.Sprint(ack == nil || ack.Success()))))
++	return used
 +}
 +
 +// ibcHoldCancel returns a held transfer to its sender (an error
@@ -5336,10 +5360,10 @@ index 6b7b956..fc7430b 100644
  
  // NewKeeper generates new evm module keeper
 diff --git a/x/vm/keeper/precompiles.go b/x/vm/keeper/precompiles.go
-index ee26a8e..3c75664 100644
+index ee26a8e..d65c670 100644
 --- a/x/vm/keeper/precompiles.go
 +++ b/x/vm/keeper/precompiles.go
-@@ -27,6 +27,15 @@ func (k *Keeper) GetPrecompileInstance(
+@@ -27,11 +27,23 @@ func (k *Keeper) GetPrecompileInstance(
  		attribute.String("address", address.Hex()),
  	))
  	defer func() { evmtrace.EndSpanErr(span, err) }()
@@ -5355,8 +5379,16 @@ index ee26a8e..3c75664 100644
  	params := k.GetParams(ctx)
  	// Get the precompile from the static precompiles
  	if precompile, found, err := k.GetStaticPrecompileInstance(&params, address); err != nil {
+ 		return nil, false, err
+ 	} else if found {
++		if address == p256Address { // ZETAPHY: P256VERIFY answers nothing from Q-day on (zetaphy_ecrecover.go)
++			precompile = pqP256{precompile}
++		}
+ 		addressMap := make(map[common.Address]vm.PrecompiledContract)
+ 		addressMap[address] = precompile
+ 		return &Precompiles{
 diff --git a/x/vm/keeper/state_transition.go b/x/vm/keeper/state_transition.go
-index 0c160b4..b165687 100644
+index 0c160b4..b6815dc 100644
 --- a/x/vm/keeper/state_transition.go
 +++ b/x/vm/keeper/state_transition.go
 @@ -60,7 +60,7 @@ func (k *Keeper) NewEVMWithOverridePrecompiles(
@@ -5368,20 +5400,23 @@ index 0c160b4..b165687 100644
  	}
  
  	ethCfg := types.GetEthChainConfig()
-@@ -422,6 +422,7 @@ func (k *Keeper) ApplyMessageWithConfig(ctx sdk.Context, stateDB *statedb.StateD
+@@ -422,6 +422,10 @@ func (k *Keeper) ApplyMessageWithConfig(ctx sdk.Context, stateDB *statedb.StateD
  				precompiles[address] = precompile
  			}
  		}
 +		precompiles[ecrecoverAddress] = pqEcrecover{} // ZETAPHY
++		if p, ok := precompiles[p256Address]; ok {
++			precompiles[p256Address] = pqP256{p} // ZETAPHY
++		}
  		if err := overrides.Apply(stateDB, precompiles); err != nil {
  			return nil, errorsmod.Wrap(err, "failed to apply state override")
  		}
 diff --git a/x/vm/keeper/zetaphy_ecrecover.go b/x/vm/keeper/zetaphy_ecrecover.go
 new file mode 100644
-index 0000000..73cdb39
+index 0000000..bc95e2e
 --- /dev/null
 +++ b/x/vm/keeper/zetaphy_ecrecover.go
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,70 @@
 +package keeper
 +
 +import (
@@ -5399,7 +5434,9 @@ index 0000000..73cdb39
 +//
 +// Security core (evmd/zetaphy_qday.go):
 +//   - from the Q-day height on, ecrecover returns nothing for every
-+//     signature: an ECDSA signature no longer proves anything;
++//     signature: an ECDSA signature no longer proves anything; the same for
++//     P256VERIFY (0x…0100, secp256r1, also ECDSA), which then answers
++//     "invalid" (empty output, as RIP-7212 does for a bad signature);
 +//   - before it, a successful recovery of an account that holds funds but
 +//     never sent a transaction marks it "exposed" (its public key is now on
 +//     chain), so it cannot use the commit–reveal migration meant for keys
@@ -5408,6 +5445,7 @@ index 0000000..73cdb39
 +
 +var (
 +	ecrecoverAddress = common.BytesToAddress([]byte{1})
++	p256Address      = common.HexToAddress(types.P256PrecompileAddress)
 +	gethEcrecover    = vm.PrecompiledContractsPrague[ecrecoverAddress]
 +)
 +
@@ -5438,6 +5476,16 @@ index 0000000..73cdb39
 +		evm.StateDB.SetState(types.PQLockAddress, types.ExposedSlot(who), common.Hash{31: 1})
 +	}
 +	return out, nil
++}
++
++// pqP256 wraps the P256VERIFY precompile: from Q-day on it answers nothing.
++type pqP256 struct{ vm.PrecompiledContract }
++
++func (p pqP256) Run(evm *vm.EVM, c *vm.Contract, ro bool) ([]byte, error) {
++	if types.QDayReached(evm.StateDB.GetState, evm.Context.BlockNumber) {
++		return nil, nil
++	}
++	return p.PrecompiledContract.Run(evm, c, ro)
 +}
 diff --git a/x/vm/keeper/zetaphy_random.go b/x/vm/keeper/zetaphy_random.go
 new file mode 100644

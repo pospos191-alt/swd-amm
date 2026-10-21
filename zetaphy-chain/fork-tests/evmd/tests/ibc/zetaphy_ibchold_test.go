@@ -155,6 +155,31 @@ func (s *IBCHoldTestSuite) TestGuardianReturnsHeldTransfer() {
 	s.Require().True(s.balanceA().IsZero())
 }
 
+// A delivery that runs out of its BeginBlock gas (e.g. an ERC-20 conversion
+// into a contract that burns gas) is not kept: an error acknowledgement, and
+// the source chain refunds the sender.
+func (s *IBCHoldTestSuite) TestReleaseOutOfGasRefunds() {
+	prev := evmd.IBCHoldReleaseGas
+	evmd.IBCHoldReleaseGas = 1_000
+	defer func() { evmd.IBCHoldReleaseGas = prev }()
+	bApp := s.chainB.GetSimApp()
+	sender := s.chainB.SenderAccount.GetAddress()
+	p := s.sendFromB(6000)
+	afterSend := bApp.BankKeeper.GetBalance(s.chainB.GetContext(), sender, s.bDenom).Amount
+	s.Require().NoError(s.path.EndpointA.UpdateClient())
+	s.Require().NoError(s.path.EndpointA.RecvPacket(p))
+	s.coordinator.IncrementTimeBy(61 * time.Minute)
+	s.coordinator.CommitBlock(s.evmChainA)
+	s.coordinator.CommitBlock(s.evmChainA)
+	s.Require().True(s.balanceA().IsZero(), "nothing delivered")
+	_, acked := s.ackOnA(p)
+	s.Require().True(acked, "error acknowledgement written")
+	ack := channeltypes.NewErrorAcknowledgement(errHeldReturned)
+	s.Require().NoError(s.path.EndpointB.UpdateClient())
+	s.Require().NoError(s.path.EndpointB.AcknowledgePacket(p, ack.Acknowledgement()))
+	s.Require().Equal(afterSend.AddRaw(6000), bApp.BankKeeper.GetBalance(s.chainB.GetContext(), sender, s.bDenom).Amount)
+}
+
 // The "*" rule: a share of the denom's supply on this chain. The first
 // transfer of a new voucher (supply 0) is held; once the supply is large,
 // a small share passes.

@@ -7,7 +7,9 @@ package evmd
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"math/big"
 	"testing"
 	"time"
@@ -598,4 +600,28 @@ func TestThreatGateAnteMsgEVMCall(t *testing.T) {
 	require.ErrorIs(t, app.threatGateTx(ctx, b.GetTx()), ErrThreatFlagged)
 	require.NoError(t, b.SetMsgs(&MsgEVMCall{Sender: secGovAddr(), To: scam.Hex(), GasLimit: 50000}))
 	require.NoError(t, app.threatGateTx(ctx, b.GetTx()), "governance")
+}
+
+// From Q-day on, P256VERIFY (secp256r1, also ECDSA) answers "invalid" like ecrecover.
+func TestQDayP256(t *testing.T) {
+	app, ctx := secApp(t)
+	user := secPQAccount(t, app, ctx)
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	h := sha256.Sum256([]byte("permit"))
+	r, s, err := ecdsa.Sign(rand.Reader, k, h[:])
+	require.NoError(t, err)
+	in := append(h[:], common.LeftPadBytes(r.Bytes(), 32)...)
+	in = append(in, common.LeftPadBytes(s.Bytes(), 32)...)
+	in = append(in, common.LeftPadBytes(k.X.Bytes(), 32)...)
+	in = append(in, common.LeftPadBytes(k.Y.Bytes(), 32)...)
+	verify := func(c sdk.Context) []byte {
+		out, err := app.evmCall(c, &MsgEVMCall{Sender: user.String(), To: evmtypes.P256PrecompileAddress, Data: in, GasLimit: 100000})
+		require.NoError(t, err)
+		return out.(*MsgEVMCallResponse).Ret
+	}
+	require.Equal(t, common.LeftPadBytes([]byte{1}, 32), verify(ctx), "valid before Q-day")
+	secSetQDay(t, app, ctx, 20, 2)
+	require.Equal(t, common.LeftPadBytes([]byte{1}, 32), verify(ctx), "Q-day scheduled, not reached")
+	require.Empty(t, verify(ctx.WithBlockHeight(20)), "Q-day: no signature is valid")
 }
