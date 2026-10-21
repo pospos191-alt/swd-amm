@@ -17,7 +17,7 @@
 #
 # Committed, public files (addresses, the RPC, and DEFAULT thresholds):
 #   zetaphy-network/bridge-monitor.json   rpc, bridgeGuard, bridgeAirlock, startBlock, default thresholds
-#   zetaphy-launch/state/77390.json       the launch state (bridgeGuard / bridgeAirlock), when the first is empty
+#   zetaphy-launch/state/77390.json       the launch state (bridgeGuard / bridgeAirlock, timelock, oracle), when the first is empty
 # Repository variables (Settings → Secrets and variables → Actions → Variables):
 #   ZETAPHY_RPC            the RPC, instead of "rpc" in the file above
 #   BRIDGE_ALERT_ISSUES    "on": also open issues labelled bridge-alert here (with the built-in GITHUB_TOKEN)
@@ -108,9 +108,10 @@ jobs:
           const addr = /^0x[0-9a-fA-F]{40}$/;
           const guard = cfg.bridgeGuard ?? out.bridgeGuard, airlock = cfg.bridgeAirlock ?? out.bridgeAirlock;
           const rpc = process.env.RPC_VAR || cfg.rpc || '';
-          const deployed = addr.test(guard ?? '') && addr.test(airlock ?? '');
-          if (!deployed) console.log('::notice title=bridge-monitor::No bridge deployed (no BridgeGuard / BridgeAirlock in the monitor config or the launch state): nothing to watch.');
-          else if (!/^https?:\/\//.test(rpc)) { console.log('::error title=bridge-monitor::A bridge is deployed but no RPC is set: put "rpc" in ' + process.env.CONFIG + ' or the repository variable ZETAPHY_RPC.'); process.exit(1); }
+          // the bridge, or the governance timelock / price oracle (watched even without a bridge)
+          const deployed = (addr.test(guard ?? '') && addr.test(airlock ?? '')) || addr.test(cfg.timelock ?? out.timelock ?? '') || addr.test(cfg.oracle ?? out.oracle ?? '');
+          if (!deployed) console.log('::notice title=bridge-monitor::Nothing deployed to watch (no bridge, timelock or oracle in the monitor config or the launch state).');
+          else if (!/^https?:\/\//.test(rpc)) { console.log('::error title=bridge-monitor::Contracts are deployed but no RPC is set: put "rpc" in ' + process.env.CONFIG + ' or the repository variable ZETAPHY_RPC.'); process.exit(1); }
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `deployed=${deployed}\nrpc=${rpc}\n`);
           JS
 

@@ -195,7 +195,8 @@ Framework Preset **Other**, ไม่ต้องตั้ง Build/Output (ม�
      - governance เป็น **gov**: ดาวน์โหลด artifact `timelock-proposal` แล้วเสนอโหวตบนเครื่อง (ข้อ 4)
    - ครบ 48 ชั่วโมงแล้ว: `action` = **execute**, `id` = เลข operation (ใครก็ทำได้ workflow ใช้ key ของ deployer แค่จ่ายค่าแก๊ส)
    - `action` = **status** ดูระยะรอ ใครถือ role และสถานะของ operation (Waiting / Ready / Done) · **cancel** พิมพ์สิ่งที่ canceller ต้องส่ง
-   - ตัวเฝ้า (`bridge monitor`) แจ้งเตือนทุกการตั้งเวลา (สัญญา ฟังก์ชัน และเวลาที่ทำได้) การเรียกจริง และการยกเลิก
+   - ตัวเฝ้า (`bridge monitor`, workflow **bridge-monitor**) แจ้งเตือนทุกการตั้งเวลา (สัญญา ฟังก์ชัน และเวลาที่ทำได้) การเรียกจริง และการยกเลิก
+     แม้ยังไม่มีสะพาน หลัง handover ให้เปิดบรรทัด `schedule` ใน `.github/workflows/bridge-monitor.yml` (เช่นทุก 6 ชั่วโมง `'7 */6 * * *'` ฟรีเมื่อ repo เป็น public) ระยะรอ 48 ชั่วโมงจึงมีเวลาเห็นและยกเลิก
 4. **เสนอโหวต (governance = gov) บนเครื่อง:** หน้า Oracle → ไอคอน **Cloud Shell** `>_` มุมขวาบน →
    เมนูเฟือง ⚙ ของ Cloud Shell → **Upload** → เลือกไฟล์ private key ที่ Save ไว้ในข้อ 1 แล้วพิมพ์:
    ```bash

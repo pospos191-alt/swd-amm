@@ -12,6 +12,7 @@ const IFACE = new Interface([
   'function ownerCount() view returns (uint256)', 'function owners(uint256) view returns (address)', 'function threshold() view returns (uint8)',
   'function governance() view returns (address)', 'function owner() view returns (address)', 'function admin() view returns (address)',
   'function runners() view returns (address)', 'function mailbox() view returns (address)', 'function interchainSecurityModule() view returns (address)',
+  'function getMinDelay() view returns (uint256)', 'function getRoleMemberCount(bytes32) view returns (uint256)', 'function getRoleMember(bytes32, uint256) view returns (address)',
 ]);
 
 /** contracts: { address: { fn: value | (args) => value } } — addresses not listed are EOAs. */
@@ -141,4 +142,27 @@ test('governance calls: sent when this key is governance, else printed (to, data
   out.length = 0;
   await govCall(k(GOV_MODULE), { me: DEPLOYER }, (l) => out.push(l), 'setRoute', args, 'enable');
   assert.match(out.join('\n'), /MsgEVMCall proposal/);
+});
+
+test('governance behind a ZetaphyTimelock: its delay, its own admin role and its proposers are checked', async () => {
+  const MS = A(0x51), GUARD = A(0x52), TL = A(0x7e);
+  const PROPOSER = '0xb09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc1';
+  const timelock = (delay, proposers, admins) => ({ getMinDelay: delay,
+    getRoleMemberCount: ([r]) => (r === PROPOSER ? proposers.length : admins.length),
+    getRoleMember: ([r, i]) => (r === PROPOSER ? proposers : admins)[Number(i)] });
+  const ms = simple([A(1), A(2), A(3)], 2), guard = simple([A(4), A(5), A(6)], 2);
+  const ok = fakeProvider({ [TL]: timelock(172800n, [MS], [TL]), [MS]: ms, [GUARD]: guard });
+  const info = await multisigInfo(ok, TL);
+  assert.equal(info.kind, 'timelock');
+  assert.equal(info.proposers[0].kind, 'simple');
+  assert.deepEqual((await roleChecks(ok, { governance: [TL], guardians: [GUARD] }, { deployer: DEPLOYER })).problems, []);
+  const gov = fakeProvider({ [TL]: timelock(172800n, [GOV_MODULE], [TL]), [GUARD]: guard });
+  assert.deepEqual((await roleChecks(gov, { governance: [TL], guardians: [GUARD] }, { deployer: DEPLOYER })).problems, []);
+  const bad = fakeProvider({ [TL]: timelock(3600n, [DEPLOYER], [DEPLOYER]), [GUARD]: guard });
+  const p = (await roleChecks(bad, { governance: [TL], guardians: [GUARD] }, { deployer: DEPLOYER })).problems.join('\n');
+  assert.match(p, /3600 s delay: at least 86400/);
+  assert.match(p, /must be its own only admin/);
+  assert.match(p, /proposer of timelock .* is a single key/);
+  const shared = fakeProvider({ [TL]: timelock(172800n, [MS], [TL]), [MS]: ms, [GUARD]: simple([A(1), A(5), A(6)], 2) });
+  assert.match((await roleChecks(shared, { governance: [TL], guardians: [GUARD] }, { deployer: DEPLOYER })).problems.join('\n'), /hold keys in both/);
 });
