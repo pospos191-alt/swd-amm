@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="th" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="ZETAPHY block explorer by SAWASDEE COIN: blocks, transactions, addresses, tokens, validators and post-quantum (ML-DSA-44) block certificates.">
+<title>ZETAPHY Explorer · SAWASDEE COIN</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<!-- The node is set in config.json (for everyone) or on the Settings page (this browser). -->
+<script type="module" src="src/app.js"></script>
+</head>
+<body>
+<header class="app-header">
+  <div class="hdr-row">
+    <a class="hdr-brand" href="#/" title="SAWASDEE COIN · ZETAPHY Explorer">
+      <img src="favicon.svg" alt="" width="28" height="28">
+      <span class="hdr-brand-text">SAWASDEE COIN</span>
+      <span class="hdr-brand-sub">ZETAPHY Explorer</span>
+    </a>
+    <nav class="nav" aria-label="main">
+      <a href="#/" data-i18n="navHome">หน้าแรก</a>
+      <a href="#/validators" data-i18n="navValidators">Validator</a>
+      <a href="#/settings" data-i18n="navSettings">ตั้งค่า</a>
+    </nav>
+    <div class="hdr-actions">
+      <button type="button" id="lang-toggle" class="secondary icon-btn" data-i18n-title="langTitle">EN</button>
+      <button type="button" id="theme-toggle" class="secondary icon-btn" data-i18n-title="themeTitle">☀</button>
+    </div>
+  </div>
+  <form id="search-form" class="search" role="search">
+    <input id="search" type="search" spellcheck="false" autocomplete="off" autocapitalize="off" data-i18n-placeholder="searchPlaceholder" aria-label="search">
+    <button type="submit" data-i18n="searchButton">ค้นหา</button>
+  </form>
+</header>
+<div id="banner" class="banner" role="status" hidden></div>
+<main id="main"><p class="loading">…</p></main>
+<footer class="footer">
+  <p><span data-i18n="footer"></span> <span data-i18n="footerUnaudited"></span></p>
+  <p><a href="https://sawasdeecoin.com/" rel="noopener noreferrer" target="_blank">sawasdeecoin.com</a></p>
+</footer>
+</body>
+</html>

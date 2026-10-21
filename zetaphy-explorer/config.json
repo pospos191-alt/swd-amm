@@ -1,0 +1,9 @@
+{
+  "node": "https://<node-host>",
+  "evmRpc": "",
+  "cometRpc": "",
+  "rest": "",
+  "threatRegistry": "",
+  "neuroReportUrl": "",
+  "scanBlocks": 100
+}
