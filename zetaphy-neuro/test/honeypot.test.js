@@ -15,6 +15,7 @@ import { simFindings } from '../src/analyze.js';
 import { TRADESIM_CODE, TRADESIM_RUN } from '../src/tradesim.generated.js';
 import { compileTradeSim } from '../scripts/build-tradesim.js';
 import { createLocalChain } from './helpers/local-chain.js';
+import { FLAGGED } from './helpers/test-signatures.js';
 
 const ids = (r) => r.analysis.findings.map((f) => f.id);
 const find = (r, id) => r.analysis.findings.find((f) => f.id === id);
@@ -259,10 +260,10 @@ describe('TradeSim on an in-memory EVM (mock Uniswap V2 at PancakeSwap addresses
     assert.equal(r.analysis.level, 'high');
     assert.notEqual(r.analysis.rulesLevel, 'high', 'no name rule flags it');
     assert.match(explain(r, 'th').lines[1].text, /^ทดสอบขายไม่ผ่าน/, 'shown right under what the token is');
-    // Once it is in Neuro's known-bad dataset, the fixed rules flag it too,
-    // and the trade result still comes first.
-    const known = await sim(t);
-    assert.equal(find(known, 'similar-flagged').params.percent, 100);
+    // Once the network flags this exact code (an entry with an on-chain flag
+    // reference), the fixed rules flag it too, and the trade result still comes first.
+    const known = await readContract('bsc', t, { rpc: chain.rpc, simulate: true, threatSignatures: FLAGGED });
+    assert.deepEqual([find(known, 'similar-flagged').params.percent, find(known, 'similar-flagged').severity], [100, 'high']);
     assert.equal(known.analysis.rulesLevel, 'high');
     assert.match(explain(known, 'th').lines[1].text, /^ทดสอบขายไม่ผ่าน/);
   });

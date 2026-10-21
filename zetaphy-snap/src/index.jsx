@@ -5,15 +5,19 @@
 //   zetaphy_signTx      -> builds the tx from structured messages (intents) with pqtx.js,
 //                          shows it in plain words (snap_dialog), and only if the user
 //                          approves returns { signature, txHex, txHash, bodyBytes, authInfoBytes }
-//   zetaphy_getThreatSource -> { rpc, registry, overridden } the transaction insight uses
+//   zetaphy_getThreatSource -> { rpc, registry, overridden } the insights use; only for the
+//                          ZETAPHY wallet's origin (WALLET_ORIGINS): whether a user set a
+//                          custom source is nobody else's business (and could fingerprint them)
 //   zetaphy_setThreatSource -> { rpc, registry } or { reset: true }; only from the ZETAPHY
 //                          wallet's origin (WALLET_ORIGINS), and only after the user approves
 //   onTransaction       -> the vaccine for any EVM transaction in MetaMask (threats.js)
+//   onSignature         -> the same for EIP-712 typed data (Permit, Permit2, Seaport-style orders)
 //
 // The seed and the secret key are made for each request, used, wiped, and never
 // returned, stored or sent anywhere. Signing uses no network: the dapp broadcasts
-// the tx. The only network use is the transaction insight's read-only calls to the
-// ZETAPHY RPC (threats.js says exactly what is sent).
+// the tx. The only network use is the insights' read-only calls to the ZETAPHY RPC,
+// which sees the checked addresses, their chain and the user's IP before the user
+// confirms (threats.js says exactly what is sent, and what can be linked).
 import { InvalidParamsError, MethodNotFoundError, UnauthorizedError, UserRejectedRequestError } from '@metamask/snaps-sdk';
 import { Box, Heading, Row, Text } from '@metamask/snaps-sdk/jsx';
 import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
@@ -22,7 +26,7 @@ import { describeTx } from './describe.js';
 import { Confirmation } from './dialog.jsx';
 import { buildTx, bytesToHex, messageFromIntent } from './pqtx.js';
 import { parseSignRequest } from './request.js';
-import { checkTransaction, threatSource, setThreatSource, parseThreatSource, WALLET_ORIGINS } from './threats.js';
+import { checkTransaction, checkSignature, threatSource, setThreatSource, parseThreatSource, WALLET_ORIGINS } from './threats.js';
 import { insight } from './insight.jsx';
 
 async function withAccount(fn) {
@@ -104,13 +108,25 @@ async function changeThreatSource(origin, params) {
 }
 
 export const onTransaction = async ({ transaction, chainId }) => {
+  const source = await threatSource();
   let result;
   try {
-    result = await checkTransaction({ transaction, chainId }, await threatSource());
+    result = await checkTransaction({ transaction, chainId }, source);
   } catch (e) {
     result = { state: 'unchecked', findings: [], error: e?.message ?? String(e) };
   }
-  return insight(result);
+  return insight(result, { kind: 'transaction', source });
+};
+
+export const onSignature = async ({ signature }) => {
+  const source = await threatSource();
+  let result;
+  try {
+    result = await checkSignature({ signature }, source);
+  } catch (e) {
+    result = { state: 'unchecked', findings: [], error: e?.message ?? String(e) };
+  }
+  return result ? insight(result, { kind: 'signature', source }) : null; // not typed data: nothing to say
 };
 
 export const onRpcRequest = async ({ origin, request }) => {
@@ -120,6 +136,7 @@ export const onRpcRequest = async ({ origin, request }) => {
     case 'zetaphy_signTx':
       return signTx(origin, request.params);
     case 'zetaphy_getThreatSource':
+      if (!WALLET_ORIGINS.includes(origin)) throw new UnauthorizedError('Only the ZETAPHY wallet may read the threat source.');
       return threatSource();
     case 'zetaphy_setThreatSource':
       return changeThreatSource(origin, request.params);

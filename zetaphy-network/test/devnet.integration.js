@@ -95,7 +95,7 @@ test('a job goes from request to a paid 2-of-3 verdict on a real ZETAPHY chain',
   console.log(`job 0 verdict ${job.result}, ${paid} runners paid`);
 });
 
-test('a challenge opens round 2 with fresh runners, drawn from PREVRANDAO; it confirms the verdict', { timeout: 300_000 }, async () => {
+test('a challenge opens round 2 with fresh runners, drawn from blockhash(challenge block + 1); it confirms the verdict', { timeout: 300_000 }, async () => {
   const withJobs = (a) => [...a, '--jobs', jobsAddr];
   for (const w of ['w4', 'w5']) {
     const r = await cli(w, withJobs(['node', 'register']));
@@ -109,7 +109,9 @@ test('a challenge opens round 2 with fresh runners, drawn from PREVRANDAO; it co
   const { job, logs } = await runUntilDone(id, jobs);
   assert.equal(job.status, 2n, logs.join('\n'));
   assert.notEqual((await jobs.jobInfo(id)).rand, '0x' + '00'.repeat(32), 'round 1 was drawn');
-  const ch = await cli('user', withJobs(['job', 'challenge', String(id)]));
+  await assert.rejects(Promise.resolve().then(async () => { const r = await cli('user', withJobs(['job', 'challenge', String(id)])); if (r.code) throw new Error(r.out); }), /--verdict/);
+  // The challenger names the verdict it says is right (here a wrong one: round 2 confirms).
+  const ch = await cli('user', withJobs(['job', 'challenge', String(id), '--verdict', '0x' + '77'.repeat(32)]));
   assert.equal(ch.code, 0, ch.out);
   assert.match(ch.out, /challenged with 1\.0 ZETAPHY/);
   const outs = [];

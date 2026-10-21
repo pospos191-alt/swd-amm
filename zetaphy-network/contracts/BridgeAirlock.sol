@@ -9,14 +9,15 @@ interface IGuardInbound {
     function inbound(bytes32 route, address to, uint256 amount) external;
 }
 
-/// ThreatRegistry's views (Reason as its uint8 value). is*Flagged: as soon as
-/// the runners' quorum flagged (warning level). is*Enforced: once the flag is
-/// the registry's enforceDelay old, or at once through its fast lane.
+/// ThreatRegistry's views (Reason as its uint8 value). is*Held: once the flag is
+/// the registry's holdDelay old (e.g. 10 minutes), or at once through its fast
+/// lane or a guardian's holdNow. is*Enforced: once the flag is the registry's
+/// enforceDelay old, or at once through its fast lane.
 interface IThreatFlags {
     function isAddressEnforced(uint256 chainId, address who) external view returns (bool, uint8);
     function isContractEnforced(address who) external view returns (bool, uint8);
-    function isAddressFlagged(uint256 chainId, address who) external view returns (bool, uint8);
-    function isContractFlagged(address who) external view returns (bool, uint8);
+    function isAddressHeld(uint256 chainId, address who) external view returns (bool, uint8);
+    function isContractHeld(address who) external view returns (bool, uint8);
 }
 
 /// NeuroControl (Neuro's stop switch); only `paused()` is used here.
@@ -36,15 +37,23 @@ interface INeuroControl {
 ///   4. Vaccine: with a ThreatRegistry set, a transfer whose source sender or
 ///      source contract (on its chain), or whose ZETAPHY recipient (address or
 ///      code), is flagged by the Neuro runners is not released:
-///        - flagged, not enforced yet (warning level): held at once. release
-///          reverts with ThreatHeld; a hold is reversible, so it needs no
-///          waiting period. It comes out once the flag is cleared (same
-///          quorum) or governance protects the key.
+///        - flagged, within the registry's holdDelay (e.g. 10 minutes): not
+///          held yet, so a 2-runner quorum alone cannot freeze anyone's
+///          transfers at once; governance or a guardian can holdNow(key)
+///          meanwhile (the registry's fast lane holds at once too).
+///        - held (past holdDelay, fast lane or holdNow), not enforced yet:
+///          release reverts with ThreatHeld. It comes out once the flag is
+///          cleared (same quorum, or an upheld appeal) or governance protects
+///          the key; nothing else releases it.
 ///        - enforced (past the registry's enforceDelay, or at once through its
 ///          fast lane): refused, release reverts with ThreatFlagged, as long as
 ///          the flag stands. The transfer stays, so it still comes out if the
 ///          flag is cleared or the key protected.
 ///      For a hold that outlives any flag, the Neuro lane or a guardian vetoes.
+///      The coins stay locked in the source chain's LockBox meanwhile: it has no
+///      refund path, so a held (or vetoed) transfer is not paid back there.
+///      deploy-bridge therefore protects the bridge's own keys and the source
+///      LockBox in the registry, so runners cannot hold every transfer at once.
 ///   Released transfers still pass BridgeGuard's daily limits.
 contract BridgeAirlock {
     struct Transfer {
@@ -85,7 +94,7 @@ contract BridgeAirlock {
     error Blocked();
     /// what: 1 source sender, 2 source contract, 3 ZETAPHY recipient (enforced flag)
     error ThreatFlagged(uint8 what);
-    /// the same, for a flag that is not enforced yet: held until it is cleared
+    /// the same, for a held flag that is not enforced yet: held until it is cleared
     error ThreatHeld(uint8 what);
 
     constructor(IGuardInbound guard_, bytes32 route_, address governance_, uint8 threshold_, uint64 quarantine_) {
@@ -167,10 +176,10 @@ contract BridgeAirlock {
         return _party(srcChainId, srcContract, sender, to, true);
     }
 
-    /// 0 when no party of this transfer is flagged at all, else which one is
-    /// (warning level included: the registry's is*Flagged views). A transfer
-    /// with a held party is not released; NeuroLane watchers ask this before
-    /// they release.
+    /// 0 when no party of this transfer is held, else which one is (the
+    /// registry's is*Held views: past holdDelay, fast lane or holdNow). A
+    /// transfer with a held party is not released; NeuroLane watchers ask this
+    /// before they release.
     function heldParty(uint256 srcChainId, address srcContract, address sender, address to) public view returns (uint8) {
         return _party(srcChainId, srcContract, sender, to, false);
     }
@@ -179,11 +188,11 @@ contract BridgeAirlock {
         IThreatFlags r = threats;
         if (address(r) == address(0)) return 0;
         bool f;
-        (f, ) = enforced ? r.isAddressEnforced(srcChainId, sender) : r.isAddressFlagged(srcChainId, sender);
+        (f, ) = enforced ? r.isAddressEnforced(srcChainId, sender) : r.isAddressHeld(srcChainId, sender);
         if (f) return 1;
-        (f, ) = enforced ? r.isAddressEnforced(srcChainId, srcContract) : r.isAddressFlagged(srcChainId, srcContract);
+        (f, ) = enforced ? r.isAddressEnforced(srcChainId, srcContract) : r.isAddressHeld(srcChainId, srcContract);
         if (f) return 2;
-        (f, ) = enforced ? r.isContractEnforced(to) : r.isContractFlagged(to);
+        (f, ) = enforced ? r.isContractEnforced(to) : r.isContractHeld(to);
         if (f) return 3;
         return 0;
     }

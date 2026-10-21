@@ -81,27 +81,38 @@ node cli.js fingerprint bsc 0x<เหรียญหนึ่งตัวที�
 ## โค้ดคล้ายโค้ดที่ติดธง และรูปแบบที่ยังไม่รู้จัก
 
 กฎตายตัวจับได้แค่สิ่งที่รู้จักชื่อ โค้ดที่ลอกจากโค้ดที่ติดธงแล้วเปลี่ยนชื่อฟังก์ชัน เพิ่ม getter
-หรือย้ายเงื่อนไขนิดหน่อย จะได้ลายนิ้วมือใหม่ Neuro จึงวัดว่าโค้ด **ใกล้** โค้ดที่ติดธงแค่ไหน (`src/similarity.js`)
+หรือย้ายเงื่อนไขนิดหน่อย จะได้ลายนิ้วมือใหม่ Neuro จึงวัดว่าโค้ด **ใกล้** โค้ดในชุดข้อมูลแค่ไหน (`src/similarity.js`)
 ยังเป็นกฎตายตัว: ใช้แค่ hash จำนวนเต็ม ไม่ใช้ AI ไม่สุ่ม ทุกเครื่องได้ตัวเลขเดียวกัน
 
 - ตัดข้อมูลของ PUSH ทุกตัว (ที่อยู่ ค่าคงที่ ตำแหน่ง jump) และ metadata ของคอมไพเลอร์ออก เหลือแต่ลำดับ opcode
-- ตัดส่วนที่เหรียญทุกตัวมีเหมือนกันออก (baseline: ERC-20 ธรรมดา และ ERC-20 + Ownable + mint)
-  ไม่อย่างนั้นเหรียญทั่วไปกับโค้ดที่ติดธงจะดูเหมือนกันเกือบหมด เพราะส่วนใหญ่คือ ERC-20 เดียวกัน
+- ตัดส่วนที่เหรียญสุจริตมีเหมือนกันออก (baseline ใน `scripts/baseline-tokens.sol`: ERC-20 แบบสั้น, ERC-20 + Ownable + mint
+  และแบบ OpenZeppelin v5: ERC20, + Pausable, + Permit, + Burnable, + Capped, Ownable2Step, AccessControl และ blacklist ธรรมดา
+  คอมไพล์ด้วย solc 0.8.26 ทั้งเปิดและปิด optimizer) ไม่อย่างนั้นโค้ดไลบรารีที่ไม่อยู่ใน baseline จะดันเหรียญสุจริตให้ดูคล้ายเกิน 60% ได้
 - เทียบส่วนที่เหลือ: MinHash (128 ค่า) ของชุด opcode 4 ตัวติดกัน และ Jaccard ของ selector ที่เหลือ
   คะแนน = max(opcode, (opcode + selector) / 2) เปลี่ยนชื่อฟังก์ชันจึงหนีไม่พ้น
-- คะแนนตั้งแต่ 60% เตือน "โค้ดนี้คล้ายโค้ดที่ผู้รัน Neuro ติดธงไว้ X% (ลายนิ้วมือ fp…)" ระดับต่ำ, 75% ระดับกลาง, 90% ระดับสูง
-  (โค้ดเดียวกันเป๊ะ = 100%) ส่วนที่เหลือของโค้ดต้องมีอย่างน้อย 8 ชุด ไม่งั้นไม่เทียบ
-- อยู่ใน verdict ที่คนรันร่างต้องตรงกัน เพราะขึ้นกับโค้ดและชุดข้อมูลเท่านั้น
+- คะแนนตั้งแต่ 60% เตือนระดับต่ำ, 75% ระดับกลาง (โค้ดเดียวกันเป๊ะ = 100%) ส่วนที่เหลือของโค้ดต้องมีอย่างน้อย 8 ชุด ไม่งั้นไม่เทียบ
+- **เป็นข้อมูลประกอบ ไม่ใช่หลักฐาน:** ระดับสูงสุดคือกลาง ยกเว้นลายนิ้วมือตรงเป๊ะกับรายการที่มีการอ้างอิงธงบนเชน จึงเป็นระดับสูง
+- **ถ้อยคำตามที่มา:** ขึ้นว่า "คล้ายโค้ดที่ผู้รัน Neuro ติดธงไว้" (`similar-flagged`) เฉพาะรายการที่อ้างอิงธงบนเชน
+  (`flag: { key, reportHash }` คือคีย์ใน ThreatRegistry และ reportHash ของหลักฐานการติดธง) รายการที่ไม่มีการอ้างอิง
+  ขึ้นว่า "คล้ายตัวอย่างอ้างอิงในชุดข้อมูลของ Neuro" (`similar-reference`) และบอกชัดว่าไม่ใช่โค้ดที่ติดธง
+- **หลบได้:** แทรก opcode ที่ไม่ทำอะไร (เช่น PUSH/POP) ทุก ๆ ไม่กี่คำสั่ง สลับลำดับฟังก์ชัน หรือคอมไพล์ใหม่ด้วย solc
+  รุ่นอื่น / ตั้ง optimizer อื่น ก็เปลี่ยน 4-gram ส่วนใหญ่ได้ คะแนนจะต่ำกว่าเกณฑ์ ตรวจไม่พบจึงไม่ได้แปลว่าปลอดภัย
+  กฎตายตัวและการจำลองซื้อขายยังทำงานตามปกติ (พิจารณาเพิ่มลักษณะที่สองแบบ selector + โครงสร้าง storage แล้ว
+  แต่ selector เทียบอยู่แล้ว และช่อง storage ขยับตามลำดับการสืบทอด จึงไม่คุ้ม ยังไม่เพิ่ม)
+- อยู่ใน verdict ที่คนรันร่างต้องตรงกัน เพราะขึ้นกับโค้ดและชุดข้อมูลเท่านั้น (`verdict` และ `reportHash` คงที่)
 - ครอบคลุมเฉพาะ EVM bytecode: เชนอื่นอ่านจากค่าตั้งบนเชน ไม่ใช่โค้ด และยังไม่ได้ทำกับ WASM ของ Stylus
 
-ชุดข้อมูลโค้ดที่ติดธงอยู่ในโค้ดเอง (`src/threat-signatures.js`) เพราะ ThreatRegistry เก็บแค่คีย์ `fp1` ไม่เก็บโค้ด
-แต่ละรายการคือลายนิ้วมือ + ลายเซ็นย่อ (selector ที่เหลือ + MinHash) ราว 1 KB
-- ตั้งต้นจากสัญญาตัวอย่างที่เขียนขึ้นเองในชุดทดสอบ (ไม่ใช่โครงการจริง): ScamToken, QuietHoneypot, NotLaunched (หมวด "ซื้อได้แต่ขายไม่ได้"), HiddenPowers (หมวด "สร้างเหรียญเพิ่มแบบไม่เปิดเผย"),
-  Killable (SELFDESTRUCT) ทั้งเปิดและปิด optimizer สร้างด้วย `npm run threat-signatures` ไม่ดึงอะไรจากเน็ต
-- FakeUSDT (สัญญาทดสอบ) ไม่ได้ใส่: โค้ดของมันคือเหรียญ mint ได้ธรรมดา ต่างแค่ชื่อ ซึ่งกฎ "สัญลักษณ์เหมือนเหรียญทางการแต่คนละที่อยู่" จับอยู่แล้ว
-- เพิ่มสัญญาที่ติดธงจริงใน ThreatRegistry: `node cli.js signature bsc 0x... --reason cannot-sell-in-simulation` แล้ววางรายการใน `ADDED`
-  (`--reason` รับรหัสข้อเท็จจริงของโค้ดใน ThreatRegistry ตาม `src/threat-reasons.js` รายงานแสดงเป็นคำบรรยายที่เป็นกลาง ดู `REASON` ใน `src/lang/*.js`)
-  ทักษะ (skill id) คือ hash ของ `src/` ทั้งหมด ชุดข้อมูลใหม่จึงเป็นทักษะใหม่ ต้องผ่านโหวตก่อนคนรันร่างจะใช้
+ชุดข้อมูลอยู่ในโค้ดเอง (`src/threat-signatures.js`) เพราะ ThreatRegistry เก็บแค่คีย์ ไม่เก็บโค้ด
+แต่ละรายการคือลายนิ้วมือ + ลายเซ็นย่อ (selector ที่เหลือ + MinHash) ราว 1 KB + ที่มา (`flag`)
+- **ชุดข้อมูลจริงเริ่มต้นว่างเปล่า** ยังไม่มีสัญญาไหนที่ผู้รันร่างติดธง และสัญญาทดสอบไม่ใช่โค้ดที่ติดธง
+- ตัวอย่างอ้างอิงสำหรับชุดทดสอบ (ScamToken, QuietHoneypot, NotLaunched, HiddenPowers, Killable ทั้งเปิดและปิด optimizer)
+  อยู่ที่ `test/fixtures/reference-samples.generated.js` ใช้ในเทสต์เท่านั้น ไม่อยู่ใน `src/` จึงไม่อยู่ในทักษะ
+  สร้างใหม่ทั้ง baseline และตัวอย่างด้วย `npm run threat-signatures` ไม่ดึงอะไรจากเน็ต
+- เพิ่มสัญญาที่ติดธงจริงใน ThreatRegistry: ตรวจ `evidenceOf(key)` ก่อน แล้ว
+  `node cli.js signature bsc 0x... --reason cannot-sell-in-simulation --flag-key 0x<คีย์> --report-hash 0x<reportHash>` แล้ววางรายการใน `ADDED`
+  (`--reason` รับรหัสข้อเท็จจริงของโค้ดใน ThreatRegistry ตาม `src/threat-reasons.js` รายงานแสดงเป็นคำบรรยายที่เป็นกลาง ดู `REASON` ใน `src/lang/*.js`
+  ถ้าไม่ใส่ `--flag-key` / `--report-hash` รายการนั้นจะแสดงเป็น "ตัวอย่างอ้างอิง" เท่านั้น)
+  ทักษะ (skill id) คือ hash ของ `src/` ทั้งหมด ชุดข้อมูลใหม่ (หรือ baseline ใหม่) จึงเป็นทักษะใหม่ ต้องผ่านโหวตก่อนคนรันร่างจะใช้
 
 สัญญาณ **"Neuro ยังไม่รู้จักรูปแบบนี้ ระวัง"** (ระดับต่ำ): ฟังก์ชันที่ไม่รู้จักชื่อ 2 ตัวขึ้นไป
 และเป็นครึ่งหนึ่งขึ้นไปของทั้งหมด (หรือไม่มีฟังก์ชันที่รู้จักเลย) และโค้ดย้ายเงินได้ (CALL, CREATE, SELFDESTRUCT ฯลฯ)
@@ -222,7 +233,8 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
       รอผล live check บน mainnet (ที่อยู่ DEX และ RPC ที่รองรับ state override) จาก CI
 - [ ] จำลองซื้อขายผ่าน pool แบบ V3 และ DEX อื่น (Aerodrome บน Base, Camelot บน Arbitrum)
 - [x] เตือนโค้ดคล้ายโค้ดที่ติดธง (EVM) + สัญญาณ "ยังไม่รู้จักรูปแบบนี้"
-- [ ] ใส่สัญญาที่ติดธงจริงบน mainnet ในชุดข้อมูล และตั้ง baseline จากเหรียญ OpenZeppelin ที่คอมไพล์หลายเวอร์ชัน
+- [x] baseline จากรูปแบบ OpenZeppelin ที่พบบ่อย (solc 0.8.26 เปิด/ปิด optimizer) และชุดข้อมูลจริงเริ่มว่าง
+- [ ] ใส่สัญญาที่ติดธงจริงบน mainnet ในชุดข้อมูล (พร้อมคีย์และ reportHash ของธง) และขยาย baseline ด้วยเหรียญ OpenZeppelin จริงที่คอมไพล์หลายเวอร์ชัน solc
       (ตอนนี้ baseline และรายการตั้งต้นมาจาก solc 0.8.26 เท่านั้น สำเนาที่คอมไพล์ด้วยเวอร์ชันอื่นอาจหลุด)
 - [x] ถ้อยคำเป็นกลาง (ข้อเท็จจริงของโค้ด ไม่ตัดสินคน) + คำปฏิเสธความรับผิด 7 ภาษา + หลักฐานตรวจซ้ำในทุกรายงาน (`docs/LEGAL.md`)
 - [ ] ช่องทางชี้แจง/อุทธรณ์บนเชนใน ThreatRegistry
@@ -245,9 +257,15 @@ EVM tokens also get a buy/sell test (`src/honeypot.js`): one `eth_call` with a
 state override runs `contracts/TradeSim.sol`, which buys through the chain's main
 Uniswap-V2-style DEX and sells straight back, so a token you can buy but not
 sell, or that takes a hidden tax, is caught whatever its functions are named.
-EVM code is also compared with a small in-repo dataset of flagged code
-(`src/similarity.js`, `src/threat-signatures.js`): opcode 4-gram MinHash plus
-selector Jaccard after removing ERC-20 boilerplate, warning from 60% similarity;
+EVM code is also compared with an in-repo similarity dataset
+(`src/similarity.js`, `src/threat-signatures.js`, shipped empty; test reference
+samples live in `test/fixtures/`): opcode 4-gram MinHash plus selector Jaccard
+after removing honest library code (minimal and OpenZeppelin-style ERC-20,
+Pausable, Permit, Burnable, Capped, Ownable2Step, AccessControl, blacklist),
+warning from 60% similarity, informational (at most medium unless the exact
+code of an on-chain flag), and worded "flagged by runners" only for entries that
+cite their ThreatRegistry flag key and reportHash (otherwise "similar to a
+reference sample"); filler opcodes or a recompile evade it;
 and code that is mostly unnamed functions and can move value gets a low
 "Neuro doesn't recognise this pattern yet" warning instead of "nothing found".
 Wording states verifiable code facts ("the owner can mint new tokens", "in a

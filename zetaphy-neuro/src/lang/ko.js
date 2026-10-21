@@ -61,6 +61,7 @@ export const T = {
     'fee-exempt': (p) => `선택한 지갑의 세금을 면제할 수 있습니다 (${list(p.functions)}). 세금이 있는 토큰에서는 흔하지만, 일부 지갑에 유리합니다.`,
     'network-flagged': (p) => `Neuro ZETAPHY 네트워크 러너들이 투표로 이 코드를 ThreatRegistry에 기록했습니다${p.reason ? ` (분류: ${REASON[p.reason] ?? p.reason})` : ''}. 같은 코드를 쓰는 모든 컨트랙트에 같은 경고가 표시됩니다.`,
     'similar-flagged': (p) => `이 코드는 Neuro 러너들이 플래그한 코드와 ${p.percent}% 유사합니다 (핑거프린트 ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, 분류: ${REASON[p.reason] ?? p.reason}` : ''}). 플래그된 코드를 조금 고친 복사본은 대개 같은 방식으로 동작합니다.`,
+    'similar-reference': (p) => `이 코드는 Neuro 데이터셋의 참고 샘플과 ${p.percent}% 유사합니다 (핑거프린트 ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, 분류: ${REASON[p.reason] ?? p.reason}` : ''}). 이 샘플은 Neuro 러너들이 온체인에서 플래그한 코드가 아닙니다. 유사성은 더 자세히 살펴보라는 신호일 뿐 증거가 아닙니다.`,
     'tax-wallet': (p) => `세금을 받는 지갑을 바꿀 수 있습니다 (${list(p.functions)}). 세금이 있는 토큰에서는 흔합니다.`,
     'selfdestruct': () => '코드에 SELFDESTRUCT가 들어 있습니다. 실행되면 컨트랙트를 지우거나 그 안의 자금을 옮길 수 있습니다.',
     'delegatecall': () => '이 코드는 다른 컨트랙트의 코드를 자기 코드처럼 실행할 수 있습니다 (DELEGATECALL). 실제로 실행되는 코드가 여기 보이는 코드와 다를 수 있습니다.',

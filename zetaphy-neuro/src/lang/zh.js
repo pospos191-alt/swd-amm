@@ -61,6 +61,7 @@ export const T = {
     'fee-exempt': (p) => `可以让指定钱包免税（${list(p.functions)}）。在收税代币中很常见，但会让部分钱包占便宜。`,
     'network-flagged': (p) => `Neuro ZETAPHY 网络的运行者已投票将这段代码记录在 ThreatRegistry 中${p.reason ? `（类别：${REASON[p.reason] ?? p.reason}）` : ''}。所有使用相同代码的合约都会收到同样的警告。`,
     'similar-flagged': (p) => `此代码与 Neuro 运行者标记过的代码相似 ${p.percent}%（指纹 ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `，类别：${REASON[p.reason] ?? p.reason}` : ''}）。对已标记代码稍作修改的副本，行为通常相同。`,
+    'similar-reference': (p) => `此代码与 Neuro 数据集中的参考样本相似 ${p.percent}%（指纹 ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `，类别：${REASON[p.reason] ?? p.reason}` : ''}）。该样本并非 Neuro 运行者在链上标记的代码。相似只是提示需要仔细查看，并非证据。`,
     'tax-wallet': (p) => `可以更改接收税款的钱包（${list(p.functions)}）。在收税代币中很常见。`,
     'selfdestruct': () => '代码中包含 SELFDESTRUCT。一旦触发，可能清除合约或转走其中的资金。',
     'delegatecall': () => '代码可以把另一个合约的代码当作自己的来运行（DELEGATECALL），因此实际运行的代码可能不是这里显示的代码。',

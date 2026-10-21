@@ -32,7 +32,7 @@ const ORDER = { high: 0, medium: 1, low: 2, good: 3, info: 4 };
 // Who issued it (or that it copies someone) belongs right under what it is.
 const ISSUER = new Set(['known-issuer', 'lookalike']);
 // Resemblance is softer evidence than a direct finding: after those of the same severity.
-const SOFTER = new Set(['similar-flagged']);
+const SOFTER = new Set(['similar-flagged', 'similar-reference']);
 const rank = (f) => (IDENTITY.has(f.id) ? -2 : ISSUER.has(f.id) ? -1 : CAVEAT.has(f.id) ? 9 : (ORDER[f.severity] ?? 5) + (SOFTER.has(f.id) ? 0.5 : 0));
 
 /** Picks a supported language code ('th' if unknown). */

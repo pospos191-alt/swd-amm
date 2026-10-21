@@ -15,6 +15,8 @@ import { verifyTypedData } from 'ethers';
 // (eip155:1) plays the role of "this chain" (on ZETAPHY it is "zetaphy").
 const WEB = 'https://neuro.example/web/';
 const QUORUM = 2; // runner attestations a remote claim needs in these tests
+const MIN_AGREED = 5; // accepted verdicts a runner needs to attest or contest a remote claim
+const DELAY = 3 * 86400; // contest window of a remote claim
 const MOCK_ADDR = Object.fromEntries(Object.entries({ runners: 'a1', token: 'a2', renounced: 'a3', w1271: 'a4' }).map(([k, v]) => [k, getAddress('0x' + v.padStart(40, '0'))]));
 
 function compileMocks() {
@@ -31,7 +33,7 @@ let IDR; // checksummed registry address
 
 beforeEach(async () => {
   c = await createChain(['admin', 'squatter', 'alice', 'bob', 'carol', 'mallory', 'r1', 'r2', 'newbie']);
-  idr = await c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), MOCK_ADDR.runners, QUORUM], 'admin');
+  idr = await c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), MOCK_ADDR.runners, QUORUM, MIN_AGREED, DELAY], 'admin');
   IDR = getAddress(idr.address);
   await c.putCode(MOCK_ADDR.runners, MOCKS.MockRunners.code);
   await c.putCode(MOCK_ADDR.token, MOCKS.MockOwned.code);
@@ -566,9 +568,15 @@ async function bundleFor(id, { owner, ownerKey, newOwner, runners = RUNNER_KEYS.
 }
 const submit = (who, b, sigs = sortedAttestations(b.attestations)) =>
   idr.send(who, 'claimRemote', [b.agentId, b.newOwner, b.ownerKey, b.deadline, b.ownerSig ?? '0x', sigs]);
+/** Proposes a claim, waits out the contest window and runs it. */
+async function submitAndFinalize(who, b) {
+  const logs = await submit(who, b);
+  c.advance(DELAY);
+  return [...logs, ...await idr.send(who, 'finalizeClaim', [b.agentId])];
+}
 
 test('claimRemote (EVM owner): the owner\'s EIP-712 consent is checked on chain, plus a quorum of runner attestations', async () => {
-  for (const w of RUNNER_KEYS) await setRunner(w, true, 3, 0);
+  for (const w of RUNNER_KEYS) await setRunner(w, true, MIN_AGREED, 0);
   const owner = Wallet.createRandom();
   const { id } = await registerTarget('squatter', 'bsc', '0x' + 'ee'.repeat(20));
   assert.equal(await idr.call('claimQuorum'), BigInt(QUORUM));
@@ -585,33 +593,36 @@ test('claimRemote (EVM owner): the owner\'s EIP-712 consent is checked on chain,
   await assert.rejects(submit('bob', forged), /InvalidSignature/);
   // ... and the owner's consent cannot be redirected to another new owner
   await assert.rejects(submit('bob', { ...b, newOwner: addr('mallory') }), /InvalidSignature/);
-  // runners must be in good standing (active, agreed > 0, rejected <= agreed)
+  // runners must be in good standing (active, agreed >= claimMinAgreed, rejected <= agreed)
+  assert.equal(await idr.call('claimMinAgreed'), BigInt(MIN_AGREED));
   const newbie = Wallet.createRandom();
   await setRunner(newbie, true, 0, 0);
   await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), runners: [RUNNER_KEYS[0], newbie] })), /NotRunner/);
-  await setRunner(newbie, true, 1, 2);
+  await setRunner(newbie, true, MIN_AGREED - 1, 0); // a few accepted verdicts are not enough to take identities
+  await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), runners: [RUNNER_KEYS[0], newbie] })), /NotRunner/);
+  await setRunner(newbie, true, MIN_AGREED, MIN_AGREED + 1);
   await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), runners: [RUNNER_KEYS[0], newbie] })), /NotRunner/);
   await setRunner(newbie, false, 9, 0);
   await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), runners: [RUNNER_KEYS[0], newbie] })), /NotRunner/);
   // deadlines
   await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), ttl: 2n * 86400n })), /DeadlineTooFar/);
 
-  // anyone may submit a good bundle; the signatures decide who gets it
-  const logs = await submit('bob', b);
+  // anyone may submit a good bundle; the signatures decide who gets it, after the contest window
+  const logs = await submitAndFinalize('bob', b);
   assert.equal(await idr.call('ownerOf', [id]), addr('alice'));
   assert.equal(await idr.call('getAgentWallet', [id]), addr('alice'));
-  assert.equal(await idr.call('claimNonce', [id]), 1n);
-  const rc = ev(logs, 'RemoteClaimed')[0].args;
+  assert.equal(await idr.call('claimNonce', [id]), 2n); // spent by the proposal, and again by the takeover
+  const rc = ev(logs, 'RemoteClaimProposed')[0].args;
   assert.equal(rc.ownerKey, owner.address.toLowerCase());
   assert.deepEqual([...rc.runners], b.attestations.map((a) => a.runner).sort((x, y) => (BigInt(x) < BigInt(y) ? -1 : 1)));
+  assert.equal(ev(logs, 'RemoteClaimFinalized')[0].args.newOwner, addr('alice'));
   assert.equal(ev(logs, 'Claimed')[0].args.previousOwner, IDR);
 
-  // replay: the nonce moved, so the same signatures no longer verify
-  await assert.rejects(submit('carol', { ...b, newOwner: addr('alice') }), /InvalidSignature|AlreadyHolder/);
-  await assert.rejects(submit('carol', b), /InvalidSignature/);
+  // replay: the nonce moved, so the same signatures no longer verify (within their deadline: see the contest test)
+  await assert.rejects(submit('carol', b), /InvalidSignature|NotRunner|Expired/);
   // control follows the owner on the other chain: a new owner there claims again with a fresh bundle
   const owner2 = Wallet.createRandom();
-  await submit('carol', await bundleFor(id, { owner: owner2, newOwner: addr('carol') }));
+  await submitAndFinalize('carol', await bundleFor(id, { owner: owner2, newOwner: addr('carol') }));
   assert.equal(await idr.call('ownerOf', [id]), addr('carol'));
   // expiry
   const late = await bundleFor(id, { owner: owner2, newOwner: addr('bob') });
@@ -620,12 +631,12 @@ test('claimRemote (EVM owner): the owner\'s EIP-712 consent is checked on chain,
 });
 
 test('claimRemote (non-EVM owner, e.g. Solana ed25519): the runners\' quorum is the proof; local targets use claim()', async () => {
-  for (const w of RUNNER_KEYS) await setRunner(w, true, 3, 0);
+  for (const w of RUNNER_KEYS) await setRunner(w, true, MIN_AGREED, 0);
   const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
   const { id } = await registerTarget('squatter', 'sol', mint);
   const authority = '0x' + 'ab'.repeat(32); // the mint authority's ed25519 key
   const b = await bundleFor(id, { ownerKey: authority, newOwner: addr('alice'), consentBy: null });
-  await submit('bob', b); // no ownerSig on chain: runners checked it off-chain
+  await submitAndFinalize('bob', b); // no ownerSig on chain: runners checked it off-chain
   assert.equal(await idr.call('ownerOf', [id]), addr('alice'));
   // still needs the quorum
   const one = await bundleFor(id, { ownerKey: authority, newOwner: addr('bob'), consentBy: null, runners: [RUNNER_KEYS[2]] });
@@ -637,10 +648,81 @@ test('claimRemote (non-EVM owner, e.g. Solana ed25519): the runners\' quorum is 
   await idr.send('alice', 'claim', [local.id]);
   assert.equal(await idr.call('claimNonce', [local.id]), 1n);
   // a registry deployed without runners has remote claims off
-  const off = await c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), '0x' + '00'.repeat(20), 0], 'admin');
+  const off = await c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), '0x' + '00'.repeat(20), 0, 0, 0], 'admin');
   const offId = ev(await off.send('alice', 'registerTarget', ['sol', mint]), 'Registered')[0].args.agentId;
   await assert.rejects(off.send('bob', 'claimRemote', [offId, addr('alice'), authority, c.now() + 60n, '0x', []]), /RemoteClaimsOff/);
-  await assert.rejects(c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), MOCK_ADDR.runners, 0], 'admin'), /deploy failed/);
+  await assert.rejects(off.send('bob', 'contestClaim', [offId]), /NoPendingClaim/);
+  // remote claims on need a quorum, a runner bar and a contest window of 1 hour to 30 days
+  for (const [q, m, d] of [[0, MIN_AGREED, DELAY], [QUORUM, 0, DELAY], [QUORUM, MIN_AGREED, 3599], [QUORUM, MIN_AGREED, 30 * 86400 + 1]]) {
+    await assert.rejects(c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), MOCK_ADDR.runners, q, m, d], 'admin'), /deploy failed/, `${q} ${m} ${d}`);
+  }
+});
+
+test('claimRemote only proposes: it waits claimDelay, and one honest runner or the holder can contest it', async () => {
+  for (const w of RUNNER_KEYS) await setRunner(w, true, MIN_AGREED, 0);
+  // r1: a runner meeting the bar (not in the quorum); r2: active but below it
+  await setRunner({ address: addr('r1') }, true, MIN_AGREED, 0);
+  await setRunner({ address: addr('r2') }, true, MIN_AGREED - 1, 0);
+  assert.equal(await idr.call('claimDelay'), BigInt(DELAY));
+
+  // a colluding quorum "attests" that its own key owns an unclaimed Solana mint
+  const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  const { id } = await registerTarget('squatter', 'sol', mint);
+  const fake = await bundleFor(id, { ownerKey: '0x' + 'ba'.repeat(32), newOwner: addr('mallory'), consentBy: null });
+  const pl = await submit('mallory', fake);
+  const prop = ev(pl, 'RemoteClaimProposed')[0].args;
+  assert.equal(prop.newOwner, addr('mallory'));
+  assert.equal(prop.readyAt, c.now() + BigInt(DELAY));
+  assert.equal(ev(pl, 'Claimed').length, 0);
+  assert.equal(await idr.call('ownerOf', [id]), IDR, 'nothing moves at proposal time');
+  assert.deepEqual([...await idr.call('pendingClaim', [id])], [addr('mallory'), prop.readyAt]);
+  assert.equal(await idr.call('claimNonce', [id]), 1n, 'the attestations are spent at once');
+  // too early to run; one pending claim at a time
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [id]), /ClaimNotReady/);
+  await assert.rejects(submit('mallory', await bundleFor(id, { ownerKey: '0x' + 'ba'.repeat(32), newOwner: addr('bob'), consentBy: null })), /ClaimPending/);
+  // outsiders, the registrant and runners below the bar cannot contest
+  for (const who of ['bob', 'squatter', 'r2']) await assert.rejects(idr.send(who, 'contestClaim', [id]), /NotAuthorized/, who);
+  // ONE honest runner in good standing cancels it
+  const cl = await idr.send('r1', 'contestClaim', [id]);
+  assert.deepEqual([ev(cl, 'RemoteClaimContested')[0].args.by, ev(cl, 'RemoteClaimContested')[0].args.newOwner], [addr('r1'), addr('mallory')]);
+  assert.deepEqual([...await idr.call('pendingClaim', [id])], ['0x' + '00'.repeat(20), 0n]);
+  // the same signatures cannot be resubmitted (nonce moved; still before their deadline)
+  await assert.rejects(submit('mallory', fake), /InvalidSignature|NotRunner/); // stale digests recover to non-runners
+  c.advance(DELAY);
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [id]), /NoPendingClaim/);
+  await assert.rejects(idr.send('r1', 'contestClaim', [id]), /NoPendingClaim/);
+  assert.equal(await idr.call('ownerOf', [id]), IDR);
+
+  // an EVM identity already claimed by alice: a takeover proposal can be contested by alice herself
+  const owner = Wallet.createRandom();
+  const t = await registerTarget('squatter', 'bsc', '0x' + 'e1'.repeat(20));
+  await submitAndFinalize('bob', await bundleFor(t.id, { owner, newOwner: addr('alice') }));
+  assert.equal(await idr.call('ownerOf', [t.id]), addr('alice'));
+  const attacker = Wallet.createRandom(); // the quorum attests that the attacker's key owns the target
+  await submit('mallory', await bundleFor(t.id, { owner: attacker, newOwner: addr('mallory') }));
+  await assert.rejects(idr.send('mallory', 'contestClaim', [t.id]), /NotAuthorized/);
+  await idr.send('alice', 'contestClaim', [t.id]);
+  c.advance(DELAY);
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [t.id]), /NoPendingClaim/);
+  assert.equal(await idr.call('ownerOf', [t.id]), addr('alice'));
+  // the holder's approved operator may contest too
+  await submit('mallory', await bundleFor(t.id, { owner: attacker, newOwner: addr('mallory') }));
+  await idr.send('alice', 'setApprovalForAll', [addr('carol'), true]);
+  await idr.send('carol', 'contestClaim', [t.id]);
+
+  // the window closes: no contest after readyAt, and anyone may run the claim then
+  const good = await bundleFor(t.id, { owner, newOwner: addr('bob') });
+  await submit('bob', good);
+  c.advance(DELAY - 1);
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [t.id]), /ClaimNotReady/);
+  c.advance(1);
+  await assert.rejects(idr.send('alice', 'contestClaim', [t.id]), /ContestClosed/);
+  const fl = await idr.send('mallory', 'finalizeClaim', [t.id]);
+  assert.equal(ev(fl, 'Claimed')[0].args.previousOwner, addr('alice'));
+  assert.equal(await idr.call('ownerOf', [t.id]), addr('bob'));
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [t.id]), /NoPendingClaim/);
+  // proposing the current holder again is refused up front
+  await assert.rejects(submit('bob', await bundleFor(t.id, { owner, newOwner: addr('bob') })), /AlreadyHolder/);
 });
 
 test('runner tool: the owner is read from the Neuro report and the consent checked before signing', async () => {

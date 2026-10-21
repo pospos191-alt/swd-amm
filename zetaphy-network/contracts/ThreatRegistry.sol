@@ -30,28 +30,40 @@ interface IIdentityOwners {
 ///         voteBatch lets a runner vote on a fingerprint together with the code
 ///         hashes and addresses it found for it, in one tx (one evidence for the
 ///         batch); each key still needs its own quorum. BridgeAirlock / BridgeGuard
-///         refuse flagged sources and recipients, and the ZETAPHY wallet refuses to
-///         sign calls to flagged code.
+///         hold (and, once enforced, refuse) flagged sources and recipients, and
+///         the ZETAPHY wallet refuses to sign calls to code with an enforced flag.
 ///
 ///         Evidence: every flag vote carries one (reportHash != 0, uri at most
 ///         MAX_URI bytes); every vote's evidence is in its Voted event, and the
 ///         evidence of the round's first flag vote (the one whose reason the flag
 ///         shows) is stored: evidenceOf(key).
 ///
-///         Right of reply: the party behind a key may post a response (at most
-///         MAX_RESPONSE bytes) that wallets show next to the flag: responseOf(key).
-///         Who may answer for a key (respond / appeal, `_mayAnswer`):
-///           - addressKey(block.chainid, a) or codeKey(a.codehash) for a contract a
-///             on ZETAPHY: a itself or its current owner();
+///         Right of reply: the parties behind a key may post responses (at most
+///         MAX_RESPONSE bytes each) that wallets show next to the flag, each with
+///         its author's address. Responses are kept per (key, author): an author
+///         changes or removes (empty text) only its own, never another's; at most
+///         MAX_RESPONSES per key (a new author past that replaces the oldest one,
+///         never the governance-assigned responder's). responseAt(key, i) lists
+///         them: the governance-assigned responder's first, then newest first;
+///         responseOf(key) is responseAt(key, 0).
+///         Who may answer for a key (respond / appeal, `mayAnswer`):
+///           - addressKey(block.chainid, a) for an address a on ZETAPHY: a itself or,
+///             for a contract, its current owner();
 ///           - addressKey(id, a) on any EVM chain (and on ZETAPHY): the owner of
 ///             the claimed ERC-8004 identity of "eip155:<id>:<a>" in NeuroIdentity
 ///             (optional: `identity`, zero = off);
-///           - any key: the responder governance assigned to it (`responder`), e.g.
-///             for fp1 keys, which no contract can be tied to on chain. Once
-///             assigned, only it may answer for that key.
+///           - codeKey(h) and fp1 keys: ONLY the responder governance assigned to
+///             the key (`responder`). Anyone can deploy a contract with the same
+///             code and an owner() of their choosing, so code and fingerprint keys
+///             have no on-chain owner to ask;
+///           - any key: once governance assigned a responder, only it may answer
+///             for that key (setResponder(key, 0) gives address keys back to the
+///             routes above). Others' existing responses stay until their authors
+///             remove them.
 ///         A response never changes the flag.
 ///
-///         Appeal: whoever may answer for a flagged key may appeal(key), paying
+///         Appeal: whoever may answer for a flagged key (mayAnswer: so for code and
+///         fp1 keys only their assigned responder) may appeal(key), paying
 ///         `appealBond` (appeals are off until governance sets a community fund).
 ///         That opens an appeal round, voted with voteAppeal, by runners who
 ///         neither voted for the flag nor backed it (voted/backed of the round that
@@ -68,25 +80,35 @@ interface IIdentityOwners {
 ///             governance protecting the key): the bond is refunded.
 ///         Funds are never pushed inside these calls: refunds are credited
 ///         (`owed`, taken with withdraw) and the fund's share with payFund, so
-///         a failing receiver cannot block a vote. Strikes slash nothing: the
+///         a failing receiver cannot block a vote. payFund pays the last non-zero
+///         community fund governance set (`fundPayee`), so turning appeals off
+///         (fund = 0) never sends kept bonds to address(0). Strikes slash nothing: the
 ///         runners' bonds are in NeuroJobs, and an automatic penalty would let a
 ///         colluding appeal quorum silence honest runners; governance and the
 ///         runners' tools can read them.
 ///
 ///         Checks on the runners (a small quorum must not freeze bridges or wallets):
-///           - Warning vs enforcement. isFlagged / is*Flagged answer at once
-///             (Neuro warns, the wallet shows a warning). is*Enforced answer true
-///             only once a flag is `enforceDelay` old; everything that BLOCKS
-///             (BridgeGuard, BridgeAirlock, NeuroLane watchers, the wallet's
-///             refusal) reads those, so governance has that long to look.
-///             Things that only HOLD (reversible: BridgeAirlock's release, a
-///             BridgeGuard call the adapter retries) hold at once on is*Flagged.
+///           - Warning, hold and enforcement. isFlagged / is*Flagged answer at
+///             once (Neuro warns, the wallet shows a warning). is*Held answer true
+///             once a flag is `holdDelay` old (a governance knob, e.g. 10 minutes,
+///             below enforceDelay), or at once when it is fast (below) or a guardian
+///             or governance called holdNow(key). Things that only HOLD (reversible:
+///             BridgeAirlock's release, BridgeGuard's inbound queue and outbound)
+///             read those, so two runners alone cannot freeze anyone's bridging
+///             at once: governance and guardians get holdDelay to look. is*Enforced
+///             answer true only once a flag is `enforceDelay` old; everything that
+///             REFUSES (BridgeAirlock's ThreatFlagged, NeuroLane watchers, the
+///             wallet's refusal) reads those.
+///             What ends a hold: the flag cleared (QUORUM clear votes, or an upheld
+///             appeal) or governance protecting the key. Nothing else does: a
+///             source-chain LockBox has no refund path, so a held transfer waits
+///             in BridgeAirlock (and a held mint in BridgeGuard's queue) until then.
 ///           - Fast lane. A flag is enforced at once (no enforceDelay) when
 ///             `fastQuorum` distinct runners stand behind it (a supermajority,
 ///             governance's knob, default 2 x quorum; runners can still add
 ///             their vote to a flag that is already standing), or when
-///             governance or a guardian calls enforceNow(key). Clearing (same
-///             quorum) or protecting the key lifts it as before.
+///             governance or a guardian calls enforceNow(key) (which holds at once
+///             too). Clearing (same quorum) or protecting the key lifts it as before.
 ///           - Protected keys. Governance (the chain's gov module through
 ///             MsgEVMCall, or a multisig) can protect keys, e.g. the bridge's
 ///             own contracts and code hashes or a common token's code. A
@@ -146,6 +168,7 @@ contract ThreatRegistry {
     bytes16 private constant HEX = "0123456789abcdef";
     uint256 public constant MAX_URI = 200;
     uint256 public constant MAX_RESPONSE = 500;
+    uint256 public constant MAX_RESPONSES = 8;     // per key
     uint256 public constant MAX_APPEAL_BOND = 1000 ether;
     uint64 public constant MIN_APPEAL_WINDOW = 1 days;
     uint64 public constant MAX_APPEAL_WINDOW = 90 days;
@@ -169,16 +192,23 @@ contract ThreatRegistry {
     mapping(bytes32 => bool) public protectedKey;
     /// Distinct flag votes that enforce a standing flag at once (0: off).
     uint8 public fastQuorum;
-    /// Guardians (set by governance) may enforceNow; they cannot flag, clear or protect.
+    /// Guardians (set by governance) may enforceNow / holdNow; they cannot flag, clear or protect.
     mapping(address => bool) public guardian;
+    /// Seconds a flag waits before the is*Held views (which hold bridging) report it.
+    uint64 public holdDelay;
+    /// A guardian's (or governance's) holdNow: the flag's round it holds at once, and when.
+    struct HoldNow { uint32 round; uint64 at; }
+    mapping(bytes32 => HoldNow) public heldNow;
 
     // ---- right of reply and appeal ----
     IIdentityOwners public identity;               // zero: the identity route is off
     mapping(bytes32 => address) public responder;  // governance-assigned; exclusive once set
-    mapping(bytes32 => Response) private _responses;
+    mapping(bytes32 => mapping(address => Response)) private _responses; // per (key, author)
+    mapping(bytes32 => address[]) private _authors;                      // authors with a response, least recently updated first
     uint128 public appealBond;
     uint64 public appealWindow = 14 days;
     address public communityFund;                  // zero: appeals off
+    address public fundPayee;                      // the last non-zero communityFund: where payFund sends
     mapping(bytes32 => Appeal) public appeals;
     mapping(bytes32 => uint32) public appealCount; // appeal ids per key, from 1
     mapping(bytes32 => mapping(uint32 => mapping(address => bool))) public appealVoted;
@@ -205,6 +235,8 @@ contract ThreatRegistry {
     event AppealClosed(bytes32 indexed key, uint32 indexed id, uint8 outcome); // 1 cleared, 2 kept, 3 expired, 4 flag cleared otherwise
     event Struck(address indexed runner, bytes32 indexed key, uint32 strikes);
     event Paid(address indexed to, uint256 amount);
+    event HoldDelaySet(uint64 delay);
+    event HeldNow(bytes32 indexed key, address indexed by);
 
     error NotRunner();
     error AlreadyVoted();
@@ -224,6 +256,7 @@ contract ThreatRegistry {
     error NotYet();
     error NotFresh();
     error PayFailed();
+    error NoFund();
 
     constructor(IRunners runners_, uint8 quorum_, uint32 minAgreed_, address governance_, uint64 enforceDelay_) {
         require(quorum_ >= 2, "quorum");
@@ -235,6 +268,7 @@ contract ThreatRegistry {
         governance = governance_;
         enforceDelay = enforceDelay_;
         fastQuorum = quorum_ > 127 ? 255 : quorum_ * 2;
+        holdDelay = enforceDelay_ >= 20 minutes ? 10 minutes : enforceDelay_ / 2;
     }
 
     modifier onlyGov() { if (msg.sender != governance) revert NotGovernance(); _; }
@@ -248,8 +282,17 @@ contract ThreatRegistry {
     /// Applies to flags already standing too (they are measured from when they were set).
     function setEnforceDelay(uint64 d) external onlyGov {
         require(d <= MAX_ENFORCE_DELAY, "delay");
+        require(holdDelay == 0 || d > holdDelay, "holdDelay"); // holds start before enforcement
         enforceDelay = d;
         emit EnforceDelaySet(d);
+    }
+
+    /// Seconds before a flag holds bridging (is*Held), unless fast or held now.
+    /// Below enforceDelay (or 0: a flag holds at once). Applies to standing flags too.
+    function setHoldDelay(uint64 d) external onlyGov {
+        require(d == 0 || d < enforceDelay, "holdDelay");
+        holdDelay = d;
+        emit HoldDelaySet(d);
     }
 
     /// Fast lane: this many distinct runners behind a flag enforce it at once.
@@ -286,6 +329,7 @@ contract ThreatRegistry {
         appealBond = bond;
         appealWindow = window;
         communityFund = fund;
+        if (fund != address(0)) fundPayee = fund;
         emit AppealsSet(bond, window, fund);
     }
 
@@ -298,6 +342,18 @@ contract ThreatRegistry {
         if (!e.flagged) revert NotFlagged();
         if (e.fast) revert NoChange();
         _fast(e, key);
+    }
+
+    /// Governance or a guardian holds a standing flag at once (no holdDelay):
+    /// bridging of its party stops now, as reversible as any hold. Only a flag
+    /// the runners' quorum already set; it ends with the flag (clear / protect).
+    function holdNow(bytes32 key) external {
+        if (msg.sender != governance && !guardian[msg.sender]) revert NotGuardian();
+        Entry storage e = entries[key];
+        if (!e.flagged) revert NotFlagged();
+        if (e.fast || heldNow[key].round == e.round) revert NoChange();
+        heldNow[key] = HoldNow(e.round, uint64(block.timestamp));
+        emit HeldNow(key, msg.sender);
     }
 
     function _fast(Entry storage e, bytes32 key) private {
@@ -478,33 +534,97 @@ contract ThreatRegistry {
         return w >> 160 == 0 ? address(uint160(w)) : address(0);
     }
 
-    /// May msg.sender answer for `key` as the party behind (chainId, account)? (See the notice.)
+    /// May `who` answer for `key` as the party behind (chainId, account)? (See the notice.)
+    /// Code keys and fp1 keys: only their governance-assigned responder.
     function mayAnswer(bytes32 key, uint256 chainId, address account, address who) public view returns (bool) {
         address r = responder[key];
         if (r != address(0) || chainId == 0) return r != address(0) && who == r;
-        if (who == address(0)) return false;
-        bool local = chainId == block.chainid;
-        if (key != addressKey(chainId, account)) {
-            // On this chain, the code key of a contract answers too (every copy's owner is a party to it).
-            if (!local || account.code.length == 0 || key != codeKey(account.codehash)) return false;
-        }
-        if (local && (who == account || who == _ownerOf(account))) return true;
+        if (who == address(0) || key != addressKey(chainId, account)) return false;
+        if (chainId == block.chainid && (who == account || who == _ownerOf(account))) return true;
         return who == _identityOwner(chainId, account);
     }
 
-    /// Post (or replace; empty text removes) the response to the flag on `key`,
-    /// as the party behind (chainId, account): see the notice. Never changes the flag.
+    /// Post or replace msg.sender's own response to the flag on `key`, as the
+    /// party behind (chainId, account) (see the notice). Empty text removes
+    /// msg.sender's own response (always allowed to its author). Never changes the flag.
     function respond(bytes32 key, uint256 chainId, address account, string calldata text) external {
         if (bytes(text).length > MAX_RESPONSE) revert TooLong();
+        Response storage cur = _responses[key][msg.sender];
+        bool had = cur.by != address(0);
+        if (bytes(text).length == 0) {
+            if (!had) revert NoChange();
+            emit Responded(key, msg.sender, cur.chainId, cur.account, text);
+            delete _responses[key][msg.sender];
+            _dropAuthor(key, msg.sender);
+            return;
+        }
         if (!mayAnswer(key, chainId, account, msg.sender)) revert NotResponder();
-        if (bytes(text).length == 0) delete _responses[key];
-        else _responses[key] = Response(msg.sender, uint64(block.timestamp), chainId, account, text);
+        if (had) _dropAuthor(key, msg.sender);
+        else if (_authors[key].length >= MAX_RESPONSES) _evictOldest(key);
+        _authors[key].push(msg.sender);
+        _responses[key][msg.sender] = Response(msg.sender, uint64(block.timestamp), chainId, account, text);
         emit Responded(key, msg.sender, chainId, account, text);
     }
 
+    function _dropAuthor(bytes32 key, address who) private {
+        address[] storage a = _authors[key];
+        uint256 n = a.length;
+        for (uint256 i = 0; i < n; i++) {
+            if (a[i] != who) continue;
+            for (uint256 j = i + 1; j < n; j++) a[j - 1] = a[j]; // keep the order
+            a.pop();
+            return;
+        }
+    }
+
+    /// Full: the least recently updated response goes, never the assigned responder's.
+    function _evictOldest(bytes32 key) private {
+        address[] storage a = _authors[key];
+        address keep = responder[key];
+        for (uint256 i = 0; i < a.length; i++) {
+            if (a[i] == keep) continue;
+            address old = a[i];
+            delete _responses[key][old];
+            _dropAuthor(key, old);
+            return;
+        }
+    }
+
+    /// How many responses `key` has (at most MAX_RESPONSES, plus none).
+    function responseCount(bytes32 key) external view returns (uint256) {
+        return _authors[key].length;
+    }
+
+    /// The i-th response to `key`: the governance-assigned responder's first (if
+    /// it posted one), then the others newest first. Past the end: all zero.
+    function responseAt(bytes32 key, uint256 i) public view returns (string memory text, address by, uint64 at, uint256 chainId, address account) {
+        address[] storage a = _authors[key];
+        address r = responder[key];
+        bool rFirst = r != address(0) && _responses[key][r].by != address(0);
+        address who;
+        if (rFirst && i == 0) who = r;
+        else {
+            uint256 k = rFirst ? i - 1 : i; // index among the others, newest first
+            for (uint256 j = a.length; j > 0; j--) {
+                if (rFirst && a[j - 1] == r) continue;
+                if (k == 0) { who = a[j - 1]; break; }
+                k--;
+            }
+        }
+        if (who == address(0)) return ("", address(0), 0, 0, address(0));
+        Response storage x = _responses[key][who];
+        return (x.text, x.by, x.at, x.chainId, x.account);
+    }
+
+    /// The first response (responseAt(key, 0)): the assigned responder's, else the newest.
     function responseOf(bytes32 key) external view returns (string memory text, address by, uint64 at, uint256 chainId, address account) {
-        Response storage r = _responses[key];
-        return (r.text, r.by, r.at, r.chainId, r.account);
+        return responseAt(key, 0);
+    }
+
+    /// `who`'s own response to `key` (empty: none).
+    function responseBy(bytes32 key, address who) external view returns (string memory text, uint64 at, uint256 chainId, address account) {
+        Response storage x = _responses[key][who];
+        return (x.text, x.at, x.chainId, x.account);
     }
 
     /// The evidence of the flag on `key` (of the round's first flag vote; while
@@ -584,11 +704,15 @@ contract ThreatRegistry {
         _pay(msg.sender, amount);
     }
 
-    /// Send kept bonds to the community fund (anyone may call it).
+    /// Send kept bonds to the community fund (anyone may call it): the last
+    /// non-zero fund governance set, even after appeals were turned off.
     function payFund() external {
         uint256 amount = fundOwed;
+        if (amount == 0) return;
+        address to = fundPayee;
+        if (to == address(0)) revert NoFund();
         fundOwed = 0;
-        _pay(communityFund, amount);
+        _pay(to, amount);
     }
 
     function _pay(address to, uint256 amount) private {
@@ -620,6 +744,41 @@ contract ThreatRegistry {
         (bool f, Reason r) = isAddressFlagged(block.chainid, who);
         if (f) return (f, r);
         return isCodeFlagged(who.codehash);
+    }
+
+    // ---- hold views: true once the flag is holdDelay old, at once through the fast
+    //      lane or holdNow (these hold bridging, reversibly) ----
+
+    /// When a standing flag starts to hold (0: not flagged).
+    function heldFrom(bytes32 key) public view returns (uint64 from) {
+        Entry storage e = entries[key];
+        if (!e.flagged) return 0;
+        from = e.updatedAt + holdDelay;
+        if (e.fast && e.fastAt < from) from = e.fastAt;
+        HoldNow storage h = heldNow[key];
+        if (h.round == e.round && h.at < from) from = h.at;
+    }
+
+    function isHeld(bytes32 key) public view returns (bool, Reason) {
+        Entry storage e = entries[key];
+        if (!e.flagged) return (false, Reason.None);
+        if (e.fast || heldNow[key].round == e.round || block.timestamp >= uint256(e.updatedAt) + holdDelay) return (true, e.reason);
+        return (false, Reason.None);
+    }
+
+    function isCodeHeld(bytes32 codeHash) public view returns (bool, Reason) {
+        if (codeHash == bytes32(0) || codeHash == EMPTY_CODEHASH) return (false, Reason.None);
+        return isHeld(codeKey(codeHash));
+    }
+
+    function isAddressHeld(uint256 chainId, address who) public view returns (bool, Reason) {
+        return isHeld(addressKey(chainId, who));
+    }
+
+    function isContractHeld(address who) external view returns (bool, Reason) {
+        (bool f, Reason r) = isAddressHeld(block.chainid, who);
+        if (f) return (f, r);
+        return isCodeHeld(who.codehash);
     }
 
     // ---- enforcement views: true only once the flag is enforceDelay old, or at once

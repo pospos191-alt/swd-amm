@@ -71,7 +71,7 @@ func TestPQCertificateRule(t *testing.T) {
 		}
 		return out
 	}
-	check := func(txs ...[]byte) error { return app.pqCheckCert(ctx, H+1, votes, txs) }
+	check := func(txs ...[]byte) error { return app.pqCheckCert(ctx, H+1, nil, votes, txs) }
 
 	// No keys registered: nothing is required.
 	require.NoError(t, check())
@@ -120,7 +120,7 @@ func TestPQCertificateRule(t *testing.T) {
 		}
 		ext = append(ext, abci.ExtendedVoteInfo{Validator: abci.Validator{Address: v.addr, Power: 25}, VoteExtension: s, BlockIdFlag: flag})
 	}
-	c := app.pqCertOf([][]byte{app.pqBuildCert(ctx, H+1, ext)})
+	c := app.pqCertOf([][]byte{app.pqBuildCert(ctx, H+1, nil, ext)})
 	require.NotNil(t, c)
 	require.Equal(t, uint64(H), c.Height)
 	require.Len(t, c.Attestations, pqAttestationSize, "only the commit vote")

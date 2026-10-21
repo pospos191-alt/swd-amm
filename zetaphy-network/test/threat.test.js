@@ -443,7 +443,7 @@ test('evidence: every flag vote carries a reportHash (uri at most 200 bytes); th
   for (const k of keys) assert.deepEqual([...await reg.call('evidenceOf', [k])].slice(0, 2), [REPORT, URI]);
 });
 
-test('right of reply: the contract itself, its owner(), the claimed identity owner, or a responder governance names; it never changes the flag', async () => {
+test('right of reply: the address itself (a contract or its owner()), the claimed identity owner, or a responder governance names; it never changes the flag', async () => {
   const owned = await c.deployRaw(MOCK_ART.MockOwned, [addr('user')], 'user');
   const chain = 1n; // the test chain's id
   const ak = await reg.call('addressKey', [chain, owned.address]);
@@ -463,22 +463,25 @@ test('right of reply: the contract itself, its owner(), the claimed identity own
   assert.equal(r.by.toLowerCase(), addr('user').toLowerCase());
   assert.equal(r.account.toLowerCase(), owned.address.toLowerCase());
   assert.deepEqual([...await reg.call('isFlagged', [ak])], before, 'a response never changes the flag');
-  await reg.send('user', 'respond', [ak, chain, owned.address, 'y'.repeat(500)]);
-  // Its code key too (every copy's owner is a party to it), only with a contract that has that code.
+  await reg.send('user', 'respond', [ak, chain, owned.address, 'y'.repeat(500)]); // its author replaces its own
+  assert.equal(await reg.call('responseCount', [ak]), 1n);
+  // Its code key: no longer through owner() (anyone can deploy the same code with an owner of their own).
   const ck = await reg.call('codeKey', [keccak256(MOCK_ART.MockOwned.deployedBytecode)]);
-  await reg.send('user', 'respond', [ck, chain, owned.address, 'about the code']);
-  assert.equal((await reg.call('responseOf', [ck])).text, 'about the code');
-  await assert.rejects(reg.send('user', 'respond', [ck, 56n, owned.address, 'x']), /NotResponder/); // code keys: this chain only
-  // The contract itself (a call from it).
+  await assert.rejects(reg.send('user', 'respond', [ck, chain, owned.address, 'about the code']), /NotResponder/);
+  // The contract itself (a call from it): a second response, its own.
   await owned.send('user', 'exec', [reg.address, reg.iface.encodeFunctionData('respond', [ak, chain, owned.address, 'from the contract'])]);
-  assert.equal((await reg.call('responseOf', [ak])).by.toLowerCase(), owned.address.toLowerCase());
-  // A new owner() takes over; the old one no longer can.
+  assert.equal((await reg.call('responseOf', [ak])).by.toLowerCase(), owned.address.toLowerCase()); // newest first
+  assert.equal(await reg.call('responseCount', [ak]), 2n);
+  assert.equal((await reg.call('responseAt', [ak, 1])).text, 'y'.repeat(500));
+  // A new owner() takes over: the old one can no longer change its response, but may still remove it.
   await owned.send('user', 'setOwner', [addr('w3')]);
   await assert.rejects(reg.send('user', 'respond', [ak, chain, owned.address, 'old owner']), /NotResponder/);
-  await reg.send('w3', 'respond', [ak, chain, owned.address, '']); // empty: removes it
+  await assert.rejects(reg.send('w3', 'respond', [ak, chain, owned.address, '']), /NoChange/); // nobody removes another's
+  await reg.send('user', 'respond', [ak, chain, owned.address, '']); // empty: removes its own
   r = await reg.call('responseOf', [ak]);
-  assert.equal(r.text, '');
-  assert.equal(r.by, ZERO_ADDR);
+  assert.equal(r.text, 'from the contract');
+  assert.equal(await reg.call('responseCount', [ak]), 1n);
+  assert.equal((await reg.call('responseAt', [ak, 1])).by, ZERO_ADDR); // past the end: empty
 
   // Another chain: the owner of the claimed ERC-8004 identity of "eip155:56:<address>" (NeuroIdentity).
   const remote = '0x' + 'ab'.repeat(20);
@@ -645,6 +648,93 @@ test('vaccine.js (wallet and snap): the same keys as the registry, its evidence 
   assert.deepEqual(v.readEvidence(ev), { reportHash: REPORT, uri: URI, by: addr('w1').toLowerCase(), at: 9 });
   assert.equal(v.readEvidence(reg.iface.encodeFunctionResult('evidenceOf', [ZERO32, '', ZERO_ADDR, 0n])).reportHash, null);
   const rs = reg.iface.encodeFunctionResult('responseOf', ['ok‮\nreply', addr('user'), 3n, 56n, a]);
-  assert.deepEqual(v.readResponse(rs), { text: 'ok reply', by: addr('user').toLowerCase(), at: 3, chainId: 56n, account: a });
-  assert.deepEqual(v.detailQueries(FP), { evidence: '0x' + reg.iface.getFunction('evidenceOf').selector.slice(2) + FP.slice(2), response: '0x' + reg.iface.getFunction('responseOf').selector.slice(2) + FP.slice(2) });
+  assert.deepEqual(v.readResponse(rs), { text: 'ok reply', by: addr('user').toLowerCase(), at: 3, chainId: 56n, account: a, assigned: false });
+  assert.equal(v.readResponse(reg.iface.encodeFunctionResult('responseAt', ['named', addr('user'), 3n, 0n, ZERO_ADDR])).assigned, true);
+  assert.deepEqual(v.detailQueries(FP), { evidence: reg.iface.encodeFunctionData('evidenceOf', [FP]), response: reg.iface.encodeFunctionData('responseOf', [FP]),
+    responses: [0, 1, 2].map((i) => reg.iface.encodeFunctionData('responseAt', [FP, i])) });
+});
+
+test('code and fp1 keys: a copy of the code with an owner() of its own cannot respond, replace, delete or appeal; only the governance-assigned responder can', async () => {
+  const { r } = await appealSetup();
+  await r.send('owner', 'setAppeals', [APPEAL_BOND, 86400, FUND]);
+  const real = await c.deployRaw(MOCK_ART.MockOwned, [addr('user')], 'user');
+  const impostor = await c.deployRaw(MOCK_ART.MockOwned, [addr('w3')], 'w3'); // same runtime code, its own owner()
+  const ck = await r.call('codeKey', [keccak256(MOCK_ART.MockOwned.deployedBytecode)]);
+  for (const w of ['w1', 'w2']) await r.send(w, 'vote', [ck, true, R.OwnerCanBlockTransfers, ...EV]);
+  for (const [who, subject] of [['w3', impostor.address], ['user', real.address]]) {
+    assert.equal(await r.call('mayAnswer', [ck, 1n, subject, addr(who)]), false);
+    await assert.rejects(r.send(who, 'respond', [ck, 1n, subject, 'mine']), /NotResponder/);
+    await assert.rejects(r.send(who, 'appeal', [ck, 1n, subject], APPEAL_BOND), /NotResponder/);
+  }
+  await assert.rejects(impostor.send('w3', 'exec', [r.address, r.iface.encodeFunctionData('respond', [ck, 1n, impostor.address, 'the contract'])])); // NotResponder, bubbled up
+  await assert.rejects(r.send('w3', 'respond', [FP, 0n, ZERO_ADDR, 'x']), /NotResponder/);
+  // The impostor still answers for its own address (that key is its own).
+  await r.send('w3', 'respond', [await r.call('addressKey', [1n, impostor.address]), 1n, impostor.address, 'about my address']);
+  // Governance names the responder of the code key: only it answers and appeals.
+  await r.send('owner', 'setResponder', [ck, addr('user')]);
+  await r.send('user', 'respond', [ck, 0n, ZERO_ADDR, 'the code\'s publisher answers']);
+  await assert.rejects(r.send('w3', 'respond', [ck, 0n, ZERO_ADDR, '']), /NoChange/); // nothing of its own to remove
+  await assert.rejects(r.send('w3', 'appeal', [ck, 0n, ZERO_ADDR], APPEAL_BOND), /NotResponder/);
+  const resp = await r.call('responseOf', [ck]);
+  assert.equal(resp.text, 'the code\'s publisher answers');
+  assert.equal(resp.chainId, 0n); // a governance-assigned responder
+  await r.send('user', 'appeal', [ck, 0n, ZERO_ADDR], APPEAL_BOND);
+  await assert.rejects(r.send('user', 'appeal', [ck, 0n, ZERO_ADDR], APPEAL_BOND), /AppealOpen/); // one open appeal per key
+});
+
+test('responses are per author: nobody changes another\'s; the assigned responder\'s first, then newest first; at most MAX_RESPONSES (the oldest goes)', async () => {
+  const owned = await c.deployRaw(MOCK_ART.MockOwned, [addr('user')], 'user');
+  const ak = await reg.call('addressKey', [1n, owned.address]);
+  assert.equal(await reg.call('MAX_RESPONSES'), 8n);
+  const authors = ['user', 'w1', 'w2', 'w3', 'w4', 'newbie', 'owner'];
+  for (const w of authors) {
+    await owned.send('user', 'setOwner', [addr(w)]); // (the mock lets anyone set it)
+    await reg.send(w, 'respond', [ak, 1n, owned.address, `from ${w}`]);
+    c.advance(1);
+  }
+  await owned.send('owner', 'exec', [reg.address, reg.iface.encodeFunctionData('respond', [ak, 1n, owned.address, 'from the contract'])]);
+  assert.equal(await reg.call('responseCount', [ak]), 8n);
+  assert.equal((await reg.call('responseAt', [ak, 0])).text, 'from the contract');
+  assert.equal((await reg.call('responseAt', [ak, 7])).text, 'from user');
+  assert.equal((await reg.call('responseBy', [ak, addr('w2')])).text, 'from w2');
+  // A ninth author: the least recently updated response (user's) goes.
+  await owned.send('owner', 'setOwner', [addr('govModule')]);
+  await reg.send('govModule', 'respond', [ak, 1n, owned.address, 'from the ninth']);
+  assert.equal(await reg.call('responseCount', [ak]), 8n);
+  assert.equal((await reg.call('responseBy', [ak, addr('user')])).text, '');
+  assert.equal((await reg.call('responseAt', [ak, 0])).text, 'from the ninth');
+  // Governance assigns a responder: its response is listed first even when older.
+  await reg.send('owner', 'setResponder', [ak, addr('w2')]);
+  await reg.send('w2', 'respond', [ak, 0n, ZERO_ADDR, 'w2 as the assigned responder']);
+  c.advance(1);
+  await assert.rejects(reg.send('govModule', 'respond', [ak, 1n, owned.address, 'changed']), /NotResponder/); // exclusive now
+  await reg.send('govModule', 'respond', [ak, 1n, owned.address, '']); // but it may remove its own
+  let first = await reg.call('responseAt', [ak, 0]);
+  assert.equal(first.text, 'w2 as the assigned responder');
+  assert.equal(first.by.toLowerCase(), addr('w2').toLowerCase());
+  assert.equal((await reg.call('responseAt', [ak, 1])).text, 'from the contract'); // then the newest of the others
+  assert.equal(await reg.call('responseCount', [ak]), 7n);
+  // Nobody can remove the assigned responder's response but itself.
+  await assert.rejects(reg.send('govModule', 'respond', [ak, 0n, ZERO_ADDR, '']), /NoChange/);
+  first = await reg.call('responseOf', [ak]);
+  assert.equal(first.text, 'w2 as the assigned responder');
+});
+
+test('payFund: kept bonds go to the last community fund even after appeals are turned off, never to address(0)', async () => {
+  const { r, key, subject, flagIt } = await appealSetup();
+  await r.send('w4', 'payFund'); // nothing owed: a no-op
+  await r.send('owner', 'setAppeals', [APPEAL_BOND, 86400, FUND]);
+  assert.equal((await r.call('fundPayee')).toLowerCase(), FUND);
+  await flagIt();
+  await r.send('user', 'appeal', [key, ...subject], APPEAL_BOND);
+  for (const w of ['w3', 'w4']) await r.send(w, 'voteAppeal', [key, false, ...EV]); // kept
+  assert.equal(await r.call('fundOwed'), APPEAL_BOND);
+  await r.send('owner', 'setAppeals', [APPEAL_BOND, 86400, ZERO_ADDR]); // appeals off
+  assert.equal(await r.call('communityFund'), ZERO_ADDR);
+  const zeroBefore = await c.balance(Address.fromString(ZERO_ADDR));
+  await r.send('w4', 'payFund');
+  assert.equal(await c.balance(Address.fromString(FUND)), APPEAL_BOND);
+  assert.equal(await c.balance(Address.fromString(ZERO_ADDR)), zeroBefore);
+  assert.equal(await r.call('fundOwed'), 0n);
+  assert.equal(await regBalance(r), 0n);
 });

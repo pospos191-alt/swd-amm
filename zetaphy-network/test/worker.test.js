@@ -249,10 +249,11 @@ test('real contract: runners draw the lottery, a watcher challenges a lying pair
   const W = Object.fromEntries(['l1', 'l2', 'h1', 'r1', 'r2'].map((n) => [n, m.worker(n, { lie: n.startsWith('l') })]));
   const watcher = m.worker('watcher', { watch: { maxPerDay: 2n * ZETA } });
   await m.nj.send('user', 'request', [encodeBytes32String('bsc'), T], ZETA);
-  assert.equal((await m.nj.call('jobInfo', [0])).rand, '0x' + '00'.repeat(32));
-  m.k.advance(40); // a third of the window: every runner qualifies here
-  for (const n of ['l1', 'l2', 'h1']) await W[n].tick(); // the first one draws, then commits
-  assert.notEqual((await m.nj.call('jobInfo', [0])).rand, '0x' + '00'.repeat(32));
+  const lazy = (await m.nj.call('jobInfo', [0])).rand; // fixed by blockhash(request block + 1), before anyone stores it
+  assert.notEqual(lazy, '0x' + '00'.repeat(32));
+  m.k.advance(80); // the last third of the window: every runner qualifies here
+  for (const n of ['l1', 'l2', 'h1']) await W[n].tick(); // the first commit stores the draw
+  assert.equal((await m.nj.call('jobInfo', [0])).rand, lazy);
   assert.equal((await m.nj.call('getJob', [0])).commits, 3n);
   for (const n of ['l1', 'l2', 'h1']) await W[n].tick(); // seats full: reveal
   const job = await m.nj.call('getJob', [0]);
@@ -262,8 +263,9 @@ test('real contract: runners draw the lottery, a watcher challenges a lying pair
   const out = await watcher.tick();
   assert.match(out.join('\n'), /job 0: watch: CHALLENGED with 2\.0 ZETAPHY/);
   assert.equal((await m.nj.call('challengeInfo', [0])).state, 1n);
+  assert.deepEqual([...await m.nj.call('challengeRound', [0])], [1n, await verdictOf(report)]); // it claimed its own verdict
   // Round 2: the round-1 seats stay out, fresh runners take the seats.
-  m.k.advance(40);
+  m.k.advance(80);
   for (const n of ['l1', 'r1', 'r2']) await W[n].tick();
   assert.match(m.logs.r1.join('\n'), /job 0: committed in round 2/);
   assert.equal(m.logs.l1?.some((l) => /round 2/.test(l)) ?? false, false);
@@ -307,4 +309,56 @@ test('a defender sends a heartbeat about every defenderTimeout/4, and keeps its 
   m.k.advance(1);
   assert.equal(await m.nj.call('isDefender', [m.ad('d1')]), true);
   assert.equal(await m.nj.call('isDefender', [m.ad('d2')]), false); // d2 ran no worker
+});
+
+test('send: 50% gas headroom; an estimate refused with TooEarly waits for the next block and tries again', async () => {
+  const { send } = await import('../src/worker.js');
+  let block = 7, estimates = 0;
+  const sent = [];
+  const fn = Object.assign(async (...a) => { sent.push(a); return { wait: async () => ({}) }; }, {
+    fragment: { inputs: [{}, {}] },
+    _contract: { runner: { provider: { getBlockNumber: async () => block++ } } },
+    estimateGas: async (...a) => {
+      estimates++;
+      if (estimates === 1) throw Object.assign(new Error('execution reverted: TooEarly()'), { data: '0x085de625' });
+      assert.deepEqual(a, [1n, '0xab', { value: 5n }]);
+      return 100_000n;
+    },
+  });
+  await send(fn, 1n, '0xab', { value: 5n });
+  assert.equal(estimates, 2);
+  assert.deepEqual(sent, [[1n, '0xab', { value: 5n, gasLimit: 150_000n }]]);
+  // Any other revert is not retried.
+  const bad = Object.assign(async () => {}, { fragment: { inputs: [] }, _contract: fn._contract, estimateGas: async () => { throw new Error('execution reverted: NotChosen()'); } });
+  await assert.rejects(send(bad), /NotChosen/);
+});
+
+test('real contract: a challenge that ended Disputed is challenged again by a watcher; the old round\'s seat is let go', async () => {
+  const m = await market(['w1', 'w2', 'c1', 'r1', 'r2', 'watcher']);
+  const W = { w1: m.worker('w1', { lie: true }), w2: m.worker('w2', { lie: true }), r1: m.worker('r1') };
+  const watcher = m.worker('watcher', { watch: { maxPerDay: 10n * ZETA } });
+  await m.nj.send('user', 'request', [encodeBytes32String('bsc'), T], ZETA);
+  m.k.advance(80);
+  for (const n of ['w1', 'w2']) await W[n].tick();
+  m.k.advance(120);
+  for (const n of ['w1', 'w2']) await W[n].tick();
+  assert.equal((await m.nj.call('getJob', [0])).status, 2n);
+  // c1 challenges (a challenge that goes nowhere); only r1 sits, alone: no quorum.
+  const need = await m.nj.call('challengeBondOf', [0]);
+  await m.nj.send('c1', 'challenge', [0, '0x' + '77'.repeat(32)], need);
+  m.k.advance(80);
+  assert.match((await W.r1.tick()).join('\n'), /committed in round 2/);
+  m.k.advance(120);
+  assert.match((await W.r1.tick()).join('\n'), /revealed in round 2/);
+  assert.equal((await m.nj.call('challengeInfo', [0])).state, 4n); // Disputed: c1 got 80% back, r1 20%
+  assert.equal(await m.nj.call('credit', [m.ad('r1')]), need / 5n);
+  // The watcher still disagrees with the verdict: it opens the next round.
+  assert.match((await watcher.tick()).join('\n'), /job 0: watch: CHALLENGED/);
+  assert.equal((await m.nj.call('challengeRound', [0])).count, 2n);
+  assert.equal((await m.nj.call('challengeInfo', [0])).state, 1n);
+  // r1 sat in the earlier round: it lets that seat go and may not sit again.
+  assert.match((await W.r1.tick()).join('\n'), /round 2 closed/);
+  assert.deepEqual(W.r1.state.seats2, {});
+  assert.equal(await m.nj.call('challengeEligible', [0, m.ad('r1')]), false);
+  assert.deepEqual(await watcher.tick(), []); // nothing more to do while its round runs
 });

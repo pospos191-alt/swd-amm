@@ -66,13 +66,13 @@ test('a flagged source contract or recipient is refused too', async () => {
   }
 });
 
-test('a flag not enforced yet (warning level) holds the release, not the attestation; released once cleared', async () => {
+test('a held flag not enforced yet holds the release, not the attestation; released once cleared', async () => {
   let warn = true;
   const { w, attested, released } = setup({ held: (sender) => (warn && sender === MALLORY ? 1n : 0n) });
   const out = await w.tick();
   assert.deepEqual(attested, [0n, 1n], 'attesting is safe: the airlock holds it anyway');
   assert.deepEqual(released, [0n]);
-  assert.ok(out.some((l) => /lock #1: not released \(source sender is flagged in the ThreatRegistry \(not enforced yet\), held until the flag is cleared\)/.test(l)), out.join('\n'));
+  assert.ok(out.some((l) => /lock #1: not released \(source sender is held in the ThreatRegistry \(flagged, not enforced yet\), held until the flag is cleared or the key protected\)/.test(l)), out.join('\n'));
   assert.equal(w.state.pending.length, 1, 'held, not dropped');
   warn = false;
   await w.tick();

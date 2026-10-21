@@ -4,14 +4,27 @@
 import { EVM } from '@ethereumjs/evm';
 import { Common, Chain, Hardfork } from '@ethereumjs/common';
 import { Address, Account, hexToBytes, bytesToHex } from '@ethereumjs/util';
-import { Interface } from 'ethers';
+import { Interface, keccak256, toBeHex } from 'ethers';
 import { readFileSync } from 'node:fs';
 
 export const ZETA = 10n ** 18n;
 
 /** @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds */
 export async function createChain(names = [], fundAddresses = {}) {
-  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }) });
+  // BLOCKHASH: a fixed hash per block number (keccak of a salt and the
+  // number), like a real chain; setBlockHashSalt() gives another history,
+  // noBlockHash() a chain whose BLOCKHASH is always 0. The EVM itself
+  // returns 0 outside the last 256 blocks.
+  let hashSalt = '0x' + '00'.repeat(32);
+  let hashes = true;
+  const blockchain = {
+    async getBlock(n) {
+      const h = hashes ? hexToBytes(keccak256(hashSalt + toBeHex(BigInt(n), 32).slice(2))) : new Uint8Array(32);
+      return { hash: () => h };
+    },
+    shallowCopy() { return this; },
+  };
+  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }), blockchain });
   const sm = evm.stateManager;
   let time = 1_800_000_000n;
   let number = 1n;
@@ -35,8 +48,11 @@ export async function createChain(names = [], fundAddresses = {}) {
   });
 
   async function exec(from, to, data, value = 0n) {
-    const r = await evm.runCall({ caller: acct[from] ?? from, to, data: hexToBytes(data), value, gasLimit: 10_000_000n, block: block() });
-    number += 1n;
+    const r = await evm.runCall({ caller: acct[from] ?? from, to, data: hexToBytes(data), value, gasLimit: 15_000_000n, block: block() });
+    // Every transaction (and call) gets its own block, with an empty block
+    // after it, so the next one can already read the block hash NeuroJobs'
+    // lottery uses (blockhash(start block + 1)), as two blocks later on a chain.
+    number += 2n;
     return r;
   }
 
@@ -50,6 +66,12 @@ export async function createChain(names = [], fundAddresses = {}) {
     /** PREVRANDAO (block.prevrandao) of the next blocks, as a 0x… 32-byte hex. */
     setPrevRandao(hex) { prevRandao = hexToBytes(hex); },
     blockNumber: () => number,
+    /** Moves the block number on by n empty blocks. */
+    mine(n = 1) { number += BigInt(n); },
+    /** Another block-hash history from here on (a 0x… 32-byte salt). */
+    setBlockHashSalt(hex) { hashSalt = hex; },
+    /** BLOCKHASH returns 0 for every block (a chain without it). */
+    noBlockHash() { hashes = false; },
     async transfer(from, to, value) {
       const r = await exec(from, Address.fromString(to), '0x', value);
       if (r.execResult.exceptionError) throw new Error('transfer failed');

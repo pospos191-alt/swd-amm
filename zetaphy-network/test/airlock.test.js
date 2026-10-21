@@ -203,17 +203,21 @@ test('NeuroLane attests nothing while Neuro is paused (NeuroControl), and again 
   assert.equal((await airlock.call('status', [id]))[0], 1n); // the lane's attestation reached the airlock
 });
 
-test('vaccine: a flag holds a transfer at once (ThreatHeld); refused once enforced (ThreatFlagged); released after a clear', async () => {
+test('vaccine: a flag holds a transfer after holdDelay (ThreatHeld); refused once enforced (ThreatFlagged); released after a clear', async () => {
   const { reg, flag } = await registry(3600);
+  assert.equal(await reg.call('holdDelay'), 600n); // the default: 10 minutes, below the enforceDelay
   const t = tx(20, 'alice', 4n, 'attacker');
   await ready(t);
   const key = await reg.call('addressKey', [SRC, a('attacker')]);
   await flag(key);
   assert.equal((await reg.call('isAddressFlagged', [SRC, a('attacker')]))[0], true); // Neuro warns at once
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 0n); // two runners alone hold nothing yet
+  assert.equal(await reg.call('heldFrom', [key]), c.now() + 600n);
+  c.advance(600);
   assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 0n); // not enforced yet
   assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 1n); // but held
   await assert.rejects(airlock.send('user', 'release', t), /ThreatHeld/);
-  c.advance(3600);
+  c.advance(3000);
   assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 1n);
   await assert.rejects(airlock.send('user', 'release', t), /ThreatFlagged/);
   // A clear (same quorum) lets it out; nothing was lost while it was held.
@@ -232,15 +236,17 @@ test('vaccine: a held transfer comes out when the flag is cleared before it is e
   for (const t of [bySender, byRecipient]) await ready(t);
   await flag(await reg.call('addressKey', [SRC, a('attacker')]));
   await flag(await reg.call('codeKey', [h]));
+  c.advance(600); // holdDelay
   await assert.rejects(airlock.send('user', 'release', bySender), /ThreatHeld/);
   await assert.rejects(airlock.send('user', 'release', byRecipient), /ThreatHeld/);
   assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), lure.address]), 3n);
   await flag(await reg.call('addressKey', [SRC, LOCKBOX]));
+  await reg.send('gov', 'holdNow', [await reg.call('addressKey', [SRC, LOCKBOX])]);
   assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), a('alice')]), 2n);
   // Governance protects the lockbox: no longer held on its account.
   await reg.send('gov', 'setProtected', [[await reg.call('addressKey', [SRC, LOCKBOX])], true]);
   assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), a('alice')]), 0n);
-  c.advance(1800); // still inside the enforceDelay: cleared before it was ever enforced
+  c.advance(1200); // still inside the enforceDelay: cleared before it was ever enforced
   await flag(await reg.call('addressKey', [SRC, a('attacker')]), false);
   await flag(await reg.call('codeKey', [h]), false);
   await airlock.send('user', 'release', bySender);
@@ -254,7 +260,7 @@ test('vaccine: a fast-lane flag (fastQuorum or enforceNow) refuses at once, befo
   await ready(t);
   const key = await reg.call('addressKey', [SRC, a('attacker')]);
   await flag(key);
-  await assert.rejects(airlock.send('user', 'release', t), /ThreatHeld/);
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 0n); // within holdDelay: not held yet
   await reg.send('gov', 'enforceNow', [key]);
   assert.equal(await airlock.call('flaggedParty', [SRC, LOCKBOX, a('attacker'), a('alice')]), 1n);
   await assert.rejects(airlock.send('user', 'release', t), /ThreatFlagged/);
@@ -285,4 +291,47 @@ test('vaccine: governance protects the route\'s own keys (lockbox, airlock), so 
   await ready(t);
   await airlock.send('user', 'release', t);
   assert.equal(await bal('alice'), 500n * 10n ** 6n);
+});
+
+test('holds by two runners: nothing is held within holdDelay; a guardian\'s holdNow or the fast lane holds at once; a clear ends it', async () => {
+  const { reg, flag } = await registry(3600);
+  await reg.send('gov', 'setGuardian', [a('guardian'), true]);
+  // Two runners flag alice's source address: inside holdDelay her transfer still goes through.
+  const t = tx(30, 'alice', 7n, 'alice');
+  await ready(t);
+  const key = await reg.call('addressKey', [SRC, a('alice')]);
+  await flag(key);
+  assert.equal((await reg.call('isAddressFlagged', [SRC, a('alice')]))[0], true); // the warning is immediate
+  assert.equal((await reg.call('isAddressHeld', [SRC, a('alice')]))[0], false);
+  await airlock.send('user', 'release', t);
+  assert.equal(await bal('alice'), 7n);
+  // A guardian (or governance) holds at once; runners and outsiders cannot.
+  const t2 = tx(31, 'alice', 8n, 'alice');
+  await ready(t2);
+  for (const who of ['r1', 'user']) await assert.rejects(reg.send(who, 'holdNow', [key]), /NotGuardian/);
+  const ev = await reg.send('guardian', 'holdNow', [key]);
+  assert.ok(ev.some((e) => e?.name === 'HeldNow'));
+  await assert.rejects(reg.send('guardian', 'holdNow', [key]), /NoChange/);
+  assert.equal(await reg.call('heldFrom', [key]), c.now());
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), a('alice')]), 1n);
+  await assert.rejects(airlock.send('user', 'release', t2), /ThreatHeld/);
+  await assert.rejects(reg.send('guardian', 'holdNow', [await reg.call('addressKey', [SRC, a('mallory')])]), /NotFlagged/);
+  // A clear ends the hold, and a later flag of the same key starts from holdDelay again.
+  await flag(key, false);
+  await airlock.send('user', 'release', t2);
+  await flag(key);
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), a('alice')]), 0n);
+  // The fast lane (fastQuorum runners) holds at once too.
+  for (const r of ['r2', 'r4']) await reg.send(r, 'vote', [key, true, R.CannotSellInSimulation, ...EV]);
+  assert.equal(await airlock.call('heldParty', [SRC, LOCKBOX, a('alice'), a('alice')]), 1n);
+  // Governance's knob: below enforceDelay (or 0: hold at once); enforceDelay stays above it.
+  await assert.rejects(reg.send('guardian', 'setHoldDelay', [60]), /NotGovernance/);
+  await assert.rejects(reg.send('gov', 'setHoldDelay', [3600]));
+  await assert.rejects(reg.send('gov', 'setEnforceDelay', [600])); // not at or below holdDelay
+  await reg.send('gov', 'setHoldDelay', [0]);
+  assert.equal(await reg.call('holdDelay'), 0n);
+  await reg.send('gov', 'setEnforceDelay', [0]);
+  await assert.rejects(reg.send('gov', 'setHoldDelay', [1]));
+  const r0 = await c.deploy('ThreatRegistry', [jobs.address, 2, 1, a('gov'), 600], 'gov');
+  assert.equal(await r0.call('holdDelay'), 300n); // a short enforceDelay: half of it
 });

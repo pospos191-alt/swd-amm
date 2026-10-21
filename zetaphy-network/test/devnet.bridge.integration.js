@@ -7,10 +7,13 @@
 // Vaccine: a sender flagged in the ThreatRegistry (`zetaphy threat flag`) and
 // enforced at once by a guardian (`threat enforce-now`, the fast lane) is not
 // attested, and its transfer waits until the runners clear the flag. A sender
-// flagged but not enforced yet (inside the 1 h enforceDelay) is attested but
-// held: not released until the flag is cleared. deploy-bridge protects the
-// bridge's own keys (lockbox included), so the runners cannot flag them;
-// NeuroLane's pause switch is the NeuroJobs' NeuroControl by default.
+// flagged but not enforced yet (inside the 1 h enforceDelay) holds nothing for
+// the registry's holdDelay (10 min: two runners alone cannot freeze anyone at
+// once); a guardian's `threat hold-now` holds it at once: attested but not
+// released until the flag is cleared. deploy-bridge refuses to run without
+// --lockbox (with a registry) and protects the bridge's own keys (lockbox
+// included), so the runners cannot flag them; NeuroLane's pause switch is the
+// NeuroJobs' NeuroControl by default.
 // Also: `threat export` (the data feed for other wallets) and user reports
 // (`deploy-reports`, `threat report`, `threat reports`, `settle`, `claim`).
 
@@ -72,11 +75,17 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   assert.match(th.out, /flags enforced after 3600s/);
   assert.match(th.out, /fast lane: a flag 4 runners stand behind is enforced at once/);
   assert.match(th.out, new RegExp(`guardian ${W.user.address}: may enforce`));
+  assert.match(th.out, /bridge holds: a flag holds bridging after 600s/);
   const threats = /ThreatRegistry (0x[0-9a-fA-F]{40})/.exec(th.out)[1];
   // Source side first: a LockBox, so deploy-bridge can protect its address.
   const lb = await new ContractFactory(art('LockBox').abi, art('LockBox').bytecode, W.gov.connect(sp)).deploy();
   await lb.waitForDeployment();
   const lockbox = new Contract(await lb.getAddress(), art('LockBox').abi, sp);
+  // Without --lockbox (and with a registry) deploy-bridge refuses, before deploying anything.
+  const noLb = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--threats', threats]);
+  assert.notEqual(noLb.code, 0, noLb.out);
+  assert.match(noLb.out, /needs --lockbox <source chain id>:0x<LockBox>, so the source lockbox is protected \(or pass --no-lockbox-protect/);
+  assert.doesNotMatch(noLb.out, /BridgeGuard 0x/);
   const b = await cli('gov', ['deploy-bridge', '--jobs', jobsAddr, '--quarantine', '8', '--lane', W.hyperlane.address, '--min-agreed', '1', '--threats', threats,
     '--lockbox', `4097:${lockbox.target}`]);
   assert.equal(b.code, 0, b.out);
@@ -114,10 +123,16 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   chk = (await cli('r3', ['threat', 'check', `4097:${W.mallory.address}`, '--threats', threats])).out;
   assert.match(chk, /FLAGGED \(sweeps-approved-tokens, enforced \(fast lane\)\)/, chk);
   await (await lockbox.connect(W.mallory.connect(sp)).lock(W.mallory.address, { value: parseEther('3') })).wait();
-  // Eve is flagged too, but only at warning level (not enforced for an hour): her transfer is held at once.
+  // Eve is flagged too, but only at warning level (not enforced for an hour), and two runners alone hold
+  // nothing for the 10 min holdDelay; the guardian holds her at once (threat hold-now).
   await vote('flag', W.eve.address);
-  const eveChk = (await cli('r3', ['threat', 'check', `4097:${W.eve.address}`, '--threats', threats])).out;
+  let eveChk = (await cli('r3', ['threat', 'check', `4097:${W.eve.address}`, '--threats', threats])).out;
   assert.match(eveChk, /FLAGGED \(sweeps-approved-tokens, warning only until/);
+  assert.match(eveChk, /bridge hold: from .* \(hold-delay; at once if governance or a guardian runs threat hold-now\)/, eveChk);
+  assert.match((await cli('alice', ['threat', 'hold-now', `4097:${W.eve.address}`, '--threats', threats])).out, /neither governance nor a guardian/);
+  assert.match((await cli('user', ['threat', 'hold-now', `4097:${W.eve.address}`, '--threats', threats])).out, /held now/);
+  eveChk = (await cli('r3', ['threat', 'check', `4097:${W.eve.address}`, '--threats', threats])).out;
+  assert.match(eveChk, /bridge hold: holding/, eveChk);
   assert.match(eveChk, /Automated code analysis, not an accusation/);
   assert.match(eveChk, /evidence: reportHash 0x(e7){32} \(neuro report\)/); // every flag carries its evidence
   await (await lockbox.connect(W.eve.connect(sp)).lock(W.eve.address, { value: parseEther('2') })).wait();
@@ -136,7 +151,7 @@ test('assets cross only with two independent lanes, after quarantine, and never 
     '--airlock', cfg.BridgeAirlock, '--neuroLane', cfg.NeuroLane, ...extra]);
   const token = new Contract(cfg.BridgedToken, art('BridgedToken').abi, zp);
   const logs = [];
-  const eveHeld = /lock #3: not released \(source sender is flagged in the ThreatRegistry \(not enforced yet\), held until the flag is cleared\)/;
+  const eveHeld = /lock #3: not released \(source sender is held in the ThreatRegistry \(flagged, not enforced yet\), held until the flag is cleared or the key protected\)/;
   for (let i = 0; i < 30 && ((await token.balanceOf(W.alice.address)) === 0n || !eveHeld.test(logs.join('\n'))); i++) {
     const outs = await Promise.all(['r1', 'r2', 'r3'].map((r) => watch(r, ['--release'])));
     logs.push(...outs.map((o) => o.out));
@@ -170,7 +185,8 @@ test('assets cross only with two independent lanes, after quarantine, and never 
   const malloryKey = (await reg.addressKey(4097n, W.mallory.address)).toLowerCase();
   const eveKey = (await reg.addressKey(4097n, W.eve.address)).toLowerCase();
   assert.deepEqual(feed.keys.find((k) => k.key === malloryKey), { ...feed.keys.find((k) => k.key === malloryKey), reason: 'sweeps-approved-tokens', enforced: true, fast: true });
-  assert.deepEqual(feed.keys.find((k) => k.key === eveKey), { ...feed.keys.find((k) => k.key === eveKey), reason: 'sweeps-approved-tokens', enforced: false, fast: false });
+  assert.deepEqual(feed.keys.find((k) => k.key === eveKey), { ...feed.keys.find((k) => k.key === eveKey), reason: 'sweeps-approved-tokens', enforced: false, fast: false, held: true });
+  assert.equal(feed.holdDelay, 600);
   assert.equal(feed.keys.length, 2, ex.out);
 
   // The flags are cleared by the same quorum: the refused and the held transfers come through.

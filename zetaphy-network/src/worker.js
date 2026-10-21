@@ -6,10 +6,15 @@
 // The salt and verdict are saved to disk BEFORE the commit is sent, so a
 // crash or restart can always reveal (a commit that is never revealed costs
 // part of the bond).
-// Lottery: nobody is eligible before a job's lottery is drawn (in a block
-// after the request, from PREVRANDAO). A runner that sees an undrawn job
-// calls draw(id) itself, then checks eligible(); a draw sent in the request
-// block is refused and simply retried next tick.
+// Lottery: a round's lottery is keccak(seed, blockhash(start block + 1),
+// round), fixed by a block nobody picks; eligible() computes it from block
+// start + 2 on, so a runner just checks eligible() every tick. jobInfo().rand
+// is 0 until then (or when the hash fell out of the 256-block window: the
+// runner then calls draw(id), which moves the round to a new block).
+// Gas: estimates run against the latest block while the transaction lands in
+// a later one (another minute of the load meter, a draw stored meanwhile),
+// so every send gets 50% headroom; an estimate refused with TooEarly (the
+// lottery block is not there yet) waits a block and tries again.
 // Governance (NeuroControl): a runner only takes jobs whose recorded skill is
 // its own skill id (src/skill.js: the Neuro code it runs), and takes no new
 // jobs while Neuro is paused; seats it already holds are still revealed.
@@ -26,9 +31,12 @@
 // defenderTimeout/4, or it loses its seat (gas only).
 // Watcher (opt-in, `zetaphy node start --watch-verdicts`): re-runs Neuro on
 // finalized jobs still inside their challenge window and challenges a verdict
-// that differs from its own, spending at most maxPerDay on challenge bonds a
-// day (chain time). It asks for its bond back (challengeExpire) if round 2
-// runs out of time.
+// that differs from its own (claiming its own verdict), spending at most
+// maxPerDay on challenge bonds a day (chain time). It closes its round with
+// challengeExpire if it runs out of time (80% of the bond back). A challenge
+// that ended Disputed (no quorum) may be challenged again inside the new
+// window (up to the contract's cap): the watcher does so if it still
+// disagrees, so a self-challenge that goes nowhere cannot lock out real ones.
 
 import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
 import { AbiCoder, keccak256, hexlify, randomBytes, decodeBytes32String, formatEther } from 'ethers';
@@ -59,12 +67,41 @@ function saveState(file, state) {
 
 const msgOf = (e) => e.shortMessage ?? e.message;
 
-/** Sends a contract call with 50% gas headroom: runners often commit in the same block
- *  (right after the draw), and an exact estimate then runs out of gas on the later ones. */
-async function send(fn, ...args) {
+const isTooEarly = (e) => /TooEarly/.test(`${e?.shortMessage ?? ''} ${e?.message ?? ''} ${e?.revert?.name ?? ''}`)
+  || e?.data === '0x085de625'; // TooEarly()
+
+/** The provider of an ethers contract method, if any (to wait for the next block). */
+const providerOf = (fn) => fn?._contract?.runner?.provider ?? null;
+
+/** Waits until the chain has a block after `from` (at most ~tries x 500 ms). */
+async function nextBlock(provider, from, tries = 40) {
+  for (let i = 0; i < tries; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    if (await provider.getBlockNumber() > from) return;
+  }
+}
+
+/** Sends a contract call with 50% gas headroom: the estimate runs on the latest block,
+ *  the transaction lands in a later one (runners often commit in the same block; the
+ *  load meter may have moved to another minute), and an exact estimate then runs out
+ *  of gas. An estimate refused with TooEarly (the lottery block is not there yet) waits
+ *  for the next block and tries again, a few times, instead of giving up. */
+export async function send(fn, ...args) {
   if (typeof fn.estimateGas !== 'function') return fn(...args);
-  const gas = await fn.estimateGas(...args);
-  return fn(...args, { gasLimit: gas + gas / 2n });
+  const n = fn.fragment?.inputs?.length;
+  const overrides = n != null && args.length > n ? args.pop() : {};
+  const provider = providerOf(fn);
+  for (let attempt = 0; ; attempt++) {
+    let gas;
+    try {
+      gas = await fn.estimateGas(...args, overrides);
+    } catch (e) {
+      if (!isTooEarly(e) || !provider || attempt >= 3) throw e;
+      await nextBlock(provider, await provider.getBlockNumber());
+      continue;
+    }
+    return fn(...args, { ...overrides, gasLimit: gas + gas / 2n });
+  }
 }
 
 /**
@@ -118,10 +155,11 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     return true;
   }
 
-  /** Draws the lottery if nobody has yet (`rand` = the round's current lottery, 0 = not drawn). */
+  /** `rand` 0: the lottery block is not there yet (draw reverts, fine), or its hash
+   *  fell out of the 256-block window unused: draw() moves the round to a new block. */
   async function drawIfNeeded(id, rand) {
     if (rand == null || rand !== ZERO32 || !jobs.draw) return;
-    try { await (await send(jobs.draw, id)).wait(); } catch { /* the request block, or someone drew first: fine */ }
+    try { await (await send(jobs.draw, id)).wait(); } catch { /* too early, or someone drew first: fine */ }
   }
 
   /** Round 1 (round 2: second=true): compute, save, then commit. */
@@ -130,7 +168,7 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     if (v.skip) return v.skip;
     const salt = hexlify(randomBytes(32));
     const book = second ? state.seats2 : state.seats;
-    book[id] = { verdict: v.verdict, salt, revealed: false };
+    book[id] = { verdict: v.verdict, salt, revealed: false, ...(second && job.round != null ? { round: job.round } : {}) };
     saveState(stateFile, state); // before the transaction, see top of file
     try {
       const c = commitmentOf(v.verdict, me, salt);
@@ -218,7 +256,13 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     state.cursor = cursor;
   }
 
-  /** Round 2 of challenged jobs: same as round 1, through the challenge* calls. */
+  /** Which challenge of job `id` is the latest (1, 2, ...); null on contracts without challengeRound. */
+  async function challengeNo(id) {
+    if (!jobs.challengeRound) return null;
+    return Number((await jobs.challengeRound(id)).count);
+  }
+
+  /** Challenge rounds of challenged jobs: same as round 1, through the challenge* calls. */
   async function roundTwo(now, stopped, done) {
     if (!jobs.challengeCount) return;
     const n = Number(await jobs.challengeCount());
@@ -227,7 +271,14 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     for (let i = state.chCursor; i < n; i++) ids.add(Number(await jobs.challenged(i)));
     for (const id of [...ids].sort((a, b) => a - b)) {
       const ch = await jobs.challengeInfo(id);
-      const seat = state.seats2[id];
+      const no = await challengeNo(id);
+      let seat = state.seats2[id];
+      if (seat && seat.round != null && no != null && seat.round !== no) {
+        // Our seat was in an earlier challenge round, which ended (Disputed: no grace).
+        delete state.seats2[id];
+        done.push(`job ${id}: round 2 closed`);
+        seat = undefined;
+      }
       const windowOver = now >= ch.start + commitWindow;
       if (ch.state !== CH.OPEN) {
         if (seat) await afterQuorum(id, seat, BigInt(ch.settleAt), now, done, true);
@@ -241,7 +292,7 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
         if (!(await jobs.challengeEligible(id, me))) continue;
         const job = await jobs.getJob(id);
         try {
-          done.push(`job ${id}: ${await tryCommit(id, { chain: job.chain, target: job.target, chStart: ch.start }, now, true)}`);
+          done.push(`job ${id}: ${await tryCommit(id, { chain: job.chain, target: job.target, chStart: ch.start, round: no }, now, true)}`);
         } catch (e) { done.push(`job ${id}: not committed in round 2 (${msgOf(e)})`); }
       } else if (!seat.revealed && (ch.commits >= 3n || windowOver)) {
         done.push(await sendReveal(id, seat, false, true));
@@ -262,7 +313,7 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     const last = BigInt((await jobs.workers(me)).lastSeen ?? 0n);
     if (now - last < timeout / 4n) return;
     try {
-      await (await jobs.heartbeat()).wait();
+      await (await send(jobs.heartbeat)).wait();
       done.push(`heartbeat sent (defender${seated ? '' : ' on the roster'}; timeout ${timeout}s)`);
     } catch (e) { done.push(`heartbeat not sent (${msgOf(e)})`); }
   }
@@ -275,9 +326,9 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     // Our own challenges that ran out of time without a round-2 quorum: get the bond back.
     for (const id of [...state.watch.mine]) {
       const ch = await jobs.challengeInfo(id);
-      if (ch.state !== CH.OPEN) { state.watch.mine = state.watch.mine.filter((x) => x !== id); done.push(`job ${id}: our challenge ended: ${['', 'open', 'confirmed (bond lost)', 'OVERTURNED (bond back + a share of the slash)', 'disputed (bond back)'][Number(ch.state)]}`); continue; }
+      if (ch.state !== CH.OPEN) { state.watch.mine = state.watch.mine.filter((x) => x !== id); done.push(`job ${id}: our challenge ended: ${['', 'open', 'confirmed or overturned to another verdict (bond lost)', 'OVERTURNED (bond back + a share of the slash)', 'disputed (80% of the bond back)'][Number(ch.state)]}`); continue; }
       if (now >= ch.start + BigInt(await jobs.jobTimeout())) {
-        try { await (await jobs.challengeExpire(id)).wait(); done.push(`job ${id}: round 2 timed out without a quorum: bond back (verdict disputed)`); } catch (e) { done.push(`job ${id}: challengeExpire not sent (${msgOf(e)})`); }
+        try { await (await send(jobs.challengeExpire, id)).wait(); done.push(`job ${id}: challenge round timed out without a quorum: 80% of the bond back (verdict disputed)`); } catch (e) { done.push(`job ${id}: challengeExpire not sent (${msgOf(e)})`); }
       }
     }
     if (stopped) return; // paused: no challenges (the jobs wait for the unpause)
@@ -288,25 +339,43 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
       if (job.status !== DONE) continue;
       const as = await jobs.assurance(id);
       if (as.state !== CH.NONE || now >= as.challengeUntil) continue;
-      if (await isForeign(id, done)) continue;
-      let v;
-      try { v = await ourVerdict(job); } catch (e) { done.push(`job ${id}: watch: could not re-run (${msgOf(e)})`); continue; }
-      if (v.skip) continue;
-      if (lc(v.verdict) === lc(job.result)) continue;
-      const bond = BigInt(await jobs.challengeBondOf(id));
-      const spent = BigInt(state.watch.spent);
-      if (spent + bond > watch.maxPerDay) {
-        done.push(`job ${id}: watch: our verdict differs, but a challenge (${formatEther(bond)} ZETAPHY) would pass today's limit (${formatEther(spent)} of ${formatEther(watch.maxPerDay)} spent)`);
-        continue;
-      }
-      try {
-        await (await jobs.challenge(id, { value: bond })).wait();
-        state.watch.spent = String(spent + bond);
-        state.watch.mine.push(id);
-        done.push(`job ${id}: watch: CHALLENGED with ${formatEther(bond)} ZETAPHY (ours ${v.verdict}, theirs ${job.result})`);
-      } catch (e) { done.push(`job ${id}: watch: challenge not sent (${msgOf(e)})`); }
+      await challengeIfWrong(id, job, done);
     }
     state.watchCursor = id;
+    // Challenges that ended Disputed: a new one may open inside the new window.
+    if (!jobs.challengeCount) return;
+    const n = Number(await jobs.challengeCount());
+    let i = state.watchChCursor ?? 0;
+    for (; i < n; i++) {
+      const cid = Number(await jobs.challenged(i));
+      const as = await jobs.assurance(cid);
+      if (as.state === CH.OPEN) break; // still running: look again later
+      if (as.state !== CH.DISPUTED || as.settled || now >= as.challengeUntil || state.watch.mine.includes(cid)) continue;
+      await challengeIfWrong(cid, await jobs.getJob(cid), done);
+      if (state.watch.mine.includes(cid)) { i++; break; } // our new round: the cursor waits behind it
+    }
+    state.watchChCursor = i;
+  }
+
+  /** Re-runs Neuro on a finalized job and challenges it (claiming our verdict) if we disagree. */
+  async function challengeIfWrong(id, job, done) {
+    if (await isForeign(id, done)) return;
+    let v;
+    try { v = await ourVerdict(job); } catch (e) { done.push(`job ${id}: watch: could not re-run (${msgOf(e)})`); return; }
+    if (v.skip) return;
+    if (lc(v.verdict) === lc(job.result)) return;
+    const bond = BigInt(await jobs.challengeBondOf(id));
+    const spent = BigInt(state.watch.spent);
+    if (spent + bond > watch.maxPerDay) {
+      done.push(`job ${id}: watch: our verdict differs, but a challenge (${formatEther(bond)} ZETAPHY) would pass today's limit (${formatEther(spent)} of ${formatEther(watch.maxPerDay)} spent)`);
+      return;
+    }
+    try {
+      await (await send(jobs.challenge, id, v.verdict, { value: bond })).wait();
+      state.watch.spent = String(spent + bond);
+      state.watch.mine.push(id);
+      done.push(`job ${id}: watch: CHALLENGED with ${formatEther(bond)} ZETAPHY (ours ${v.verdict}, theirs ${job.result})`);
+    } catch (e) { done.push(`job ${id}: watch: challenge not sent (${msgOf(e)})`); }
   }
 
   async function tick() {

@@ -194,7 +194,8 @@ func TestPQDeadBurn(t *testing.T) {
 }
 
 // BLOCKHASH: the EIP-2935 history contract is installed by the first
-// BeginBlocker that lacks it, so the EVM keeper records each block's hash.
+// BeginBlocker that lacks it, so the EVM keeper records each block's hash
+// (in EndBlock).
 func TestPQBlockHashHistory(t *testing.T) {
 	app, ctx := pqApp(t)
 	hist := ethparams.HistoryStorageAddress
@@ -211,8 +212,10 @@ func TestPQBlockHashHistory(t *testing.T) {
 	hashes := map[int64][]byte{}
 	for h := int64(3); h <= 6; h++ {
 		hashes[h] = bytes.Repeat([]byte{byte(h)}, 32)
-		_, err := app.BeginBlocker(ctx.WithBlockHeight(h).WithHeaderHash(hashes[h]))
+		c := ctx.WithBlockHeight(h).WithHeaderHash(hashes[h])
+		_, err := app.BeginBlocker(c)
 		require.NoError(t, err)
+		require.NoError(t, app.EVMKeeper.EndBlock(c)) // the EVM module records the block's hash at its end
 	}
 	require.True(t, app.EVMKeeper.IsContract(ctx, hist))
 	require.Equal(t, int64(5), app.BankKeeper.GetBalance(ctx, hist.Bytes(), evmtypes.GetEVMCoinDenom()).Amount.Int64())

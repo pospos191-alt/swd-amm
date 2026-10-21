@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-/// ThreatRegistry's view for code on ZETAPHY (Reason as its uint8 value): true
-/// as soon as the runners' quorum flagged its address or code (warning level).
+/// ThreatRegistry's hold view for code on ZETAPHY (Reason as its uint8 value):
+/// true once a flag on its address or code is the registry's holdDelay old, or at
+/// once through the registry's fast lane or a guardian's holdNow.
 interface IContractThreats {
-    function isContractFlagged(address who) external view returns (bool, uint8);
+    function isContractHeld(address who) external view returns (bool, uint8);
 }
 
 /// @title BridgedToken: a token that exists on ZETAPHY only through a bridge
@@ -52,17 +53,23 @@ contract BridgedToken {
 ///             lose at most one day's limit, not everything;
 ///           - a pause that only guardians can pull and only governance can
 ///             release. Pausing stops the bridges, never the chain.
-///           - vaccine (with a ThreatRegistry set): no coins to, or out of, a
-///             contract whose address or code the Neuro runners flagged, from
-///             the moment it is flagged (warning level; no enforceDelay here).
-///             This is a hold, not a loss: the call reverts, so the adapter's
-///             message stays pending (an inbound mint is retried, an outbound
-///             burn simply did not happen) and goes through once the flag is
-///             cleared or governance protects the key. Reverting is how a
-///             direct path holds, so it needs no separate hold state. The adapter
-///             itself is NOT checked: governance chose it and can disable its
-///             route; a runner flag on its code hash or address must not be
-///             able to freeze a whole route.
+///           - vaccine (with a ThreatRegistry set): no coins to, or out of, an
+///             address or contract the registry holds (is*Held: a flag that is
+///             holdDelay old, e.g. 10 minutes, or held at once by the fast lane or
+///             a guardian's holdNow; two runners alone cannot freeze anyone at
+///             once). This is a hold, not a loss:
+///               - inbound: the mint is QUEUED, not reverted (InboundHeld, an id
+///                 in `held`). The adapter's message is delivered, so nothing
+///                 depends on an adapter retrying. Anyone calls releaseHeld(id)
+///                 once the hold ends (the flag cleared, or governance protects
+///                 the key); it then passes the pause, the route (still enabled)
+///                 and the route's daily limit like any inbound. Governance can
+///                 dropHeld(id) a queued mint (e.g. from a hacked adapter).
+///               - outbound: the call reverts (the burn simply did not happen;
+///                 the holder keeps the coins).
+///             The adapter itself is NOT checked: governance chose it and can
+///             disable its route; a runner flag on its code hash or address must
+///             not be able to freeze a whole route.
 ///         Governance should be the chain's gov module or a multisig.
 contract BridgeGuard {
     struct Route {
@@ -81,6 +88,15 @@ contract BridgeGuard {
     mapping(bytes32 => Route) public routes;
     IContractThreats public threats; // zero: no vaccine check
 
+    /// Inbound mints held by the vaccine, waiting for releaseHeld.
+    struct HeldMint {
+        bytes32 route;
+        address to;
+        uint256 amount;
+        bool done;       // released or dropped
+    }
+    HeldMint[] public held;
+
     event RouteSet(bytes32 indexed id, address adapter, uint128 dailyLimit, bool enabled);
     event GuardianSet(address indexed who, bool allowed);
     event Paused(address indexed by);
@@ -88,6 +104,9 @@ contract BridgeGuard {
     event Inbound(bytes32 indexed route, address indexed to, uint256 amount);
     event Outbound(bytes32 indexed route, address indexed from, uint256 amount);
     event ThreatsSet(address registry);
+    event InboundHeld(uint256 indexed id, bytes32 indexed route, address indexed to, uint256 amount);
+    event HeldReleased(uint256 indexed id, address indexed to, uint256 amount);
+    event HeldDropped(uint256 indexed id);
 
     error NotGovernance();
     error NotGuardian();
@@ -95,6 +114,7 @@ contract BridgeGuard {
     error BridgePaused();
     error OverLimit(uint256 remaining);
     error FlaggedContract(address who);
+    error NoHeld();
 
     constructor(address governance_) {
         governance = governance_;
@@ -136,12 +156,48 @@ contract BridgeGuard {
         emit Unpaused();
     }
 
+    /// A held recipient: the mint is queued (InboundHeld), not reverted, and
+    /// counts against the daily limit only when it is released.
     function inbound(bytes32 id, address to, uint256 amount) external {
         Route storage r = _use(id, amount, true);
-        _clean(to);
+        if (_isHeld(to)) {
+            held.push(HeldMint(id, to, amount, false));
+            emit InboundHeld(held.length - 1, id, to, amount);
+            return;
+        }
         r.inToday += uint128(amount);
         token.mint(to, amount);
         emit Inbound(id, to, amount);
+    }
+
+    /// Anyone: mint a queued inbound once its recipient is no longer held.
+    /// Passes the pause, the route being enabled and its daily limit, as inbound does.
+    function releaseHeld(uint256 hid) external {
+        if (hid >= held.length || held[hid].done) revert NoHeld();
+        HeldMint storage h = held[hid];
+        if (paused) revert BridgePaused();
+        Route storage r = routes[h.route];
+        if (!r.enabled) revert NotAdapter();
+        _clean(h.to);
+        uint64 today = uint64(block.timestamp / 1 days);
+        if (r.day != today) { r.day = today; r.inToday = 0; r.outToday = 0; }
+        if (r.inToday + h.amount > r.dailyLimit) revert OverLimit(r.dailyLimit - r.inToday);
+        h.done = true;
+        r.inToday += uint128(h.amount);
+        token.mint(h.to, h.amount);
+        emit HeldReleased(hid, h.to, h.amount);
+        emit Inbound(h.route, h.to, h.amount);
+    }
+
+    /// Governance drops a queued mint (e.g. one a hacked adapter sent).
+    function dropHeld(uint256 hid) external onlyGov {
+        if (hid >= held.length || held[hid].done) revert NoHeld();
+        held[hid].done = true;
+        emit HeldDropped(hid);
+    }
+
+    function heldCount() external view returns (uint256) {
+        return held.length;
     }
 
     function outbound(bytes32 id, address from, uint256 amount) external {
@@ -159,12 +215,15 @@ contract BridgeGuard {
         outLeft = r.dailyLimit - (fresh ? 0 : r.outToday);
     }
 
-    /// Vaccine: holds back a party (the coins' owner) that is flagged.
+    /// Vaccine: holds back a party (the coins' owner) that the registry holds.
     function _clean(address who) private view {
+        if (_isHeld(who)) revert FlaggedContract(who);
+    }
+
+    function _isHeld(address who) private view returns (bool f) {
         IContractThreats t = threats;
-        if (address(t) == address(0)) return;
-        (bool f, ) = t.isContractFlagged(who);
-        if (f) revert FlaggedContract(who);
+        if (address(t) == address(0)) return false;
+        (f, ) = t.isContractHeld(who);
     }
 
     function _use(bytes32 id, uint256 amount, bool isIn) private returns (Route storage r) {

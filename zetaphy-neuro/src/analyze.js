@@ -41,8 +41,8 @@ const LINK_RE = /(https?:\/\/|www\.|\b[a-z0-9-]{2,}\.(com|net|org|io|xyz|app|sit
  * @param {{symbol:string,issuer:string,address:string}|null} [input.lookalike]  official token whose symbol this one copies
  * @param {string[]} [input.unknownSelectors]  dispatcher functions with no known name
  * @param {{flagged: boolean, reason?: string}|null} [input.threat]  ZETAPHY ThreatRegistry verdict for this code
- * @param {{percent:number, severity:string, fingerprint:string, reason?:string}|null} [input.similar]
- *   closest entry of Neuro's flagged-code dataset (src/similarity.js)
+ * @param {{percent:number, severity:string, fingerprint:string, reason?:string, flagged?:boolean}|null} [input.similar]
+ *   closest entry of Neuro's similarity dataset (src/similarity.js); flagged = it has an on-chain flag reference
  * @param {number} [input.dispatched]  how many functions the dispatcher offers (EVM), for the unknown-pattern signal
  * @returns {{level:'high'|'medium'|'low'|'info', control:string, findings:Array}}
  */
@@ -88,10 +88,16 @@ export function analyze(input) {
   if (known) add('known-issuer', 'good', { symbol: known.symbol, issuer: known.issuer, kind: known.kind });
   // Neuro runners voted to record this exact code in the ThreatRegistry (immune system, stage 4).
   if (input.threat?.flagged) add('network-flagged', 'high', { reason: input.threat.reason });
-  // Not flagged itself, but close to code that is (a renamed or lightly
-  // edited copy). Severity grows with the similarity (src/similarity.js).
+  // Not flagged itself, but close to reference code (a renamed or lightly
+  // edited copy). Severity grows with the similarity and is capped at medium
+  // unless it is the exact code of an on-chain flag (src/similarity.js).
+  // "Flagged by runners" only for entries with an on-chain flag reference;
+  // otherwise it is a reference sample and is worded so.
   const similar = input.similar && !input.threat?.flagged ? input.similar : null;
-  if (similar) add('similar-flagged', similar.severity, { percent: similar.percent, fingerprint: similar.fingerprint, reason: similar.reason });
+  if (similar) {
+    add(similar.flagged ? 'similar-flagged' : 'similar-reference', similar.severity,
+      { percent: similar.percent, fingerprint: similar.fingerprint, reason: similar.reason });
+  }
   if (input.lookalike) {
     add('lookalike', 'high', { symbol: t.symbol, official: input.lookalike.address, issuer: input.lookalike.issuer });
   }

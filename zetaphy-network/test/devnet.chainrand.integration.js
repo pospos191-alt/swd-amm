@@ -7,6 +7,9 @@
 //   - a transaction sees the same value as eth_call on that block
 //   - BLOCKHASH(n-1) is the real CometBFT hash of block n-1
 //   - ZETAPHY sent to 0x…dEaD leaves the total supply within a few blocks
+//   - the EIP-2935 history contract, called directly, returns the real hashes
+//   - all of these are on from block 1 (genesis activation height, key 08 of
+//     app_state.zetaphypq, written by `zetaphyd init`)
 // Needs a zetaphyd built with the patch:
 //   ZETAPHYD=/path/to/zetaphyd npm run test:devnet:chainrand
 
@@ -231,4 +234,21 @@ test('ZETAPHY sent to 0x…dEaD is burned: total supply drops by that amount, dE
   const s1 = supplyAt(afterH);
   assert.equal(s0 - s1, value + fee, 'supply drops by the dEaD burn plus the usual 50% fee burn');
   assert.ok(s0 - s1 >= value);
+});
+
+// The EIP-2935 history contract (installed by the chain at block 1) answers
+// direct calls with CometBFT's block hashes, like BLOCKHASH. Its ring has
+// 8191 slots, as the EVM module's (unit test across the wrap:
+// fork-tests/evmd/zetaphy_v2_test.go, TestPQHistoryContractRing).
+test('v2 on from genesis; the EIP-2935 history contract serves the real block hashes', { timeout: 60_000 }, async () => {
+  const gen = JSON.parse(readFileSync(join(H, 'config', 'genesis.json'), 'utf8'));
+  assert.deepEqual(gen.app_state.zetaphypq.filter((e) => e.key === '08'), [{ key: '08', value: '0000000000000001' }]);
+  assert.equal(String(gen.app_state.evm.params.history_serve_window), '8191');
+  const HIST = '0x0000F90827F1C53a10cb7A02335B175320002935';
+  const tip = await cometHeight();
+  for (let h = Math.max(2, tip - 6); h < tip; h++) {
+    const got = await provider.call({ to: HIST, data: zeroPadValue(toBeHex(h), 32), blockTag: tip });
+    assert.equal(got, await blockHash(h), `history contract, block ${h}`);
+  }
+  await assert.rejects(provider.call({ to: HIST, data: zeroPadValue(toBeHex(tip), 32), blockTag: tip }), 'the queried block itself is not served');
 });

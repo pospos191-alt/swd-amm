@@ -8,9 +8,9 @@ import { installSnap } from '@metamask/snaps-jest';
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { threatQueries, fingerprint1, codeHash, SLOT_IMPL, SLOT_BEACON, SEL_IMPLEMENTATION, addressKey, codeKey, detailQueries, REASON_TEXT } from '../../zetaphy-network/src/vaccine.js';
+import { threatQueries, fingerprint1, codeHash, SLOT_IMPL, SLOT_BEACON, SEL_IMPLEMENTATION, addressKey, codeKey, detailQueries, REASON_TEXT, selector } from '../../zetaphy-network/src/vaccine.js';
 import { codeFingerprint } from '../../zetaphy-neuro/src/fingerprint.js';
-import { destinations, checkTransaction } from '../src/threats.js';
+import { destinations, analyzeCall, typedDataTargets, checkTransaction, checkSignature } from '../src/threats.js';
 import { insight } from '../src/insight.jsx';
 
 const SNAP_ID = 'local:http://localhost:18096';
@@ -27,7 +27,7 @@ const flagAnswer = (on, reason) => '0x' + word(on ? 1 : 0) + word(on ? reason : 
 // evidenceOf / responseOf answers (ABI: (bytes32, string, address, uint64) and (string, address, uint64, uint256, address)).
 const strTail = (str) => { const h = Buffer.from(str).toString('hex'); return word(h.length / 2) + h.padEnd(64 * Math.ceil(h.length / 64), '0'); };
 const evidenceAnswer = (hash, uri) => '0x' + hash.slice(2) + word(128) + word('0x99') + word(5) + strTail(uri);
-const responseAnswer = (text, by) => '0x' + word(160) + word(by) + word(7) + word(56) + word(TARGET) + strTail(text);
+const responseAnswer = (text, by, chainId = 56) => '0x' + word(160) + word(by) + word(7) + word(chainId) + word(chainId ? TARGET : 0) + strTail(text);
 const REPORT = '0x' + 'e7'.repeat(32);
 
 // ---- the stand-in ZETAPHY RPC ----
@@ -64,9 +64,12 @@ beforeAll(async () => {
 });
 afterAll(() => new Promise((r) => server.close(r)));
 
-// ---- the transaction's own chain (MetaMask's provider, mocked) ----
-function mockChain(snap, { codes = {}, storage = {}, beacons = {}, fail = false } = {}) {
+// ---- the transaction's own chain (MetaMask's provider, mocked; MetaMask on BSC, 56, unless `chain`) ----
+const switches = []; // wallet_switchEthereumChain calls: the snap must never make one
+function mockChain(snap, { codes = {}, storage = {}, beacons = {}, fail = false, chain = '0x38' } = {}) {
   return snap.mockJsonRpc((request) => {
+    if (request.method === 'eth_chainId') return chain;
+    if (request.method === 'wallet_switchEthereumChain') { switches.push(request.params); return null; }
     if (!/^eth_/.test(request.method) || !Array.isArray(request.params)) return undefined;
     const [a, b] = request.params;
     if (request.method === 'eth_getCode') { if (fail) throw new Error('chain down'); return codes[a.toLowerCase()] ?? '0x'; }
@@ -119,7 +122,7 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
     mockChain(snap);
     const r = await inspect(snap, { to: TARGET });
     expect(r.severity).toBeNull();
-    expect(r.text).toMatch(/ZETAPHY Neuro ตรวจไม่ได้ \/ ZETAPHY Neuro couldn't check this transaction\nno ThreatRegistry configured/);
+    expect(r.text).toMatch(/ZETAPHY Neuro ตรวจธุรกรรมนี้ไม่ได้ \/ ZETAPHY Neuro couldn't check this transaction\nno ThreatRegistry configured/);
   });
 
   it('only the ZETAPHY wallet\'s origin may change the threat source, after the user approves; bad input is refused', async () => {
@@ -136,14 +139,16 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
     expect((await pending).response.error.code).toBe(4001);
     expect((await snap.request({ origin: WALLET, method: 'zetaphy_getThreatSource' })).response.result.overridden).toBe(false);
     await useLocalRpc(snap);
-    expect((await snap.request({ origin: 'https://any.example', method: 'zetaphy_getThreatSource' })).response.result.registry).toBe(REGISTRY);
+    expect((await snap.request({ origin: WALLET, method: 'zetaphy_getThreatSource' })).response.result.registry).toBe(REGISTRY);
+    // Other sites cannot read it (whether a user set a custom source could fingerprint them).
+    expect((await snap.request({ origin: 'https://any.example', method: 'zetaphy_getThreatSource' })).response.error.code).toBe(4100);
     // Back to the built-in source.
     const reset = snap.request({ origin: WALLET, method: 'zetaphy_setThreatSource', params: { reset: true } });
     await (await reset.getInterface()).ok();
     expect((await reset).response.result.overridden).toBe(false);
   });
 
-  it('nothing flagged: a short "checked by ZETAPHY Neuro"; what is sent is only destinations, code hashes and fingerprints', async () => {
+  it('nothing flagged: "no flag on what was checked", listing exactly what was checked; what is sent is only destinations, code hashes and fingerprints', async () => {
     const snap = await installSnap(SNAP_ID);
     await useLocalRpc(snap);
     mockChain(snap, { codes: { [TARGET]: TARGET_CODE } });
@@ -151,7 +156,11 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
     rpc.requests.length = 0;
     const r = await inspect(snap, { to: TARGET, from: '0x' + '99'.repeat(20), value: '0x1' });
     expect(r.severity).toBeNull();
-    expect(r.text).toContain('ตรวจโดย ZETAPHY Neuro แล้ว: ไม่ติดธง / Checked by ZETAPHY Neuro: not flagged');
+    expect(r.text).toContain('ZETAPHY Neuro: ไม่พบธงในสิ่งที่ตรวจ / no flag on what was checked');
+    expect(r.text).toContain(`ตรวจแล้ว / checked: ปลายทาง / Destination: ${TARGET}`);
+    expect(r.text).toContain('Only checked: the destination (to) plus the spender or recipient the call names (its first argument; the second for transferFrom and Permit2 approve)');
+    expect(r.text).not.toMatch(/inner calls not checked/);
+    expect(r.text).toContain(`custom threat source in use (zetaphy_setThreatSource): RPC ${url}, ThreatRegistry ${REGISTRY}`);
     expect(rpc.requests).toHaveLength(1); // one batch
     const sent = JSON.stringify(rpc.requests[0]);
     expect(sent).not.toContain('99'.repeat(20)); // never the user's own account
@@ -207,7 +216,7 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
     const approve = '0x095ea7b3' + word(SPENDER) + 'f'.repeat(64);
     const r = await inspect(snap, { to: TARGET, data: approve });
     expect(r.severity).toBe('critical');
-    expect(r.text).toContain(`ผู้ได้สิทธิ์ใช้เหรียญ (approve) / Spender (approve): ${SPENDER}`);
+    expect(r.text).toContain(`ผู้ได้สิทธิ์ใช้เหรียญ (approve / permit) / Spender (approve / permit): ${SPENDER}`);
   });
 
   it('proxies: the code behind an EIP-1167 clone, an EIP-1967 implementation or a beacon is checked as the destination', async () => {
@@ -231,7 +240,7 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
     // The same proxy in front of clean code: clean.
     rpc.answers.clear();
     mockChain(snap, { codes: { [TARGET]: clone, [IMPL]: IMPL_CODE } });
-    expect((await inspect(snap, { to: TARGET })).text).toContain('Checked by ZETAPHY Neuro: not flagged');
+    expect((await inspect(snap, { to: TARGET })).text).toContain('no flag on what was checked');
   });
 
   it('check failed: the ZETAPHY RPC down, not ZETAPHY, or the chain unreadable: "couldn\'t check" (never "clean")', async () => {
@@ -267,29 +276,29 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
     const key = addressKey(56n, TARGET);
     const OWNER = '0x' + '0a'.repeat(20);
     rpc.answers.set(detailQueries(key).evidence, evidenceAnswer(REPORT, 'neuro:bsc:0x3333'));
-    rpc.answers.set(detailQueries(key).response, responseAnswer('pause() is for emergencies;\u202e audited', OWNER));
+    rpc.answers.set(detailQueries(key).responses[0], responseAnswer('pause() is for emergencies;\u202e audited', OWNER));
     rpc.requests.length = 0;
     let r = await inspect(snap, { to: TARGET });
     expect(r.severity).toBe('critical');
     expect(r.text).toContain(`reason: ${REASON_TEXT[3].en}`);
     expect(r.text).toContain(`หลักฐาน / evidence: reportHash ${REPORT} (neuro:bsc:0x3333)`);
     expect(r.text).toContain('reproduce: run Neuro on the same code (zetaphy-neuro: node cli.js <chain> <address> --json) and compare the reportHash');
-    expect(r.text).toContain(`คำชี้แจงของเจ้าของ / owner's response (${OWNER}): "pause() is for emergencies; audited"`);
+    expect(r.text).toContain(`คำชี้แจงจาก / response from ${OWNER} (สำหรับ / for 56:${TARGET}): "pause() is for emergencies; audited"`);
     expect(r.text).toContain('ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา / Automated code analysis, not an accusation');
     expect(rpc.requests).toHaveLength(2); // the check, then the details of what was flagged
     const asked = rpc.requests[1].filter((x) => x.method === 'eth_call').map((x) => x.params[0].data);
     expect(asked).toContain(detailQueries(key).evidence);
-    expect(asked).toContain(detailQueries(key).response);
+    for (const q of detailQueries(key).responses) expect(asked).toContain(q);
     // A response on another key of the same destination (its code) is shown too; nothing stored: said so.
     rpc.answers.delete(detailQueries(key).evidence);
-    rpc.answers.delete(detailQueries(key).response);
-    rpc.answers.set(detailQueries(codeKey(codeHash(TARGET_CODE))).response, responseAnswer('about the code', OWNER));
+    rpc.answers.delete(detailQueries(key).responses[0]);
+    rpc.answers.set(detailQueries(codeKey(codeHash(TARGET_CODE))).responses[0], responseAnswer('about the code', OWNER));
     r = await inspect(snap, { to: TARGET });
     expect(r.text).toContain('หลักฐาน / evidence: อ่านไม่ได้ / could not be read'); // the stand-in answers 64 zero bytes: not an evidenceOf answer
-    expect(r.text).toContain(`(${OWNER}): "about the code"`);
-    rpc.answers.delete(detailQueries(codeKey(codeHash(TARGET_CODE))).response);
+    expect(r.text).toContain(`response from ${OWNER} (สำหรับ / for 56:${TARGET}): "about the code"`);
+    rpc.answers.delete(detailQueries(codeKey(codeHash(TARGET_CODE))).responses[0]);
     r = await inspect(snap, { to: TARGET });
-    expect(r.text).toContain('เจ้าของยังไม่ได้ชี้แจง / no response from the owner yet');
+    expect(r.text).toContain('ยังไม่มีคำชี้แจง / no response yet');
     rpc.answers.set(detailQueries(key).evidence, evidenceAnswer('0x' + '00'.repeat(32), ''));
     r = await inspect(snap, { to: TARGET });
     expect(r.text).toContain('หลักฐาน / evidence: ไม่มีบันทึกไว้ / none stored');
@@ -299,13 +308,192 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
   it('destinations: `to`, plus the spender / operator / recipient an approve, setApprovalForAll or transfer names; a creation has none', async () => {
     // (snaps-jest cannot send a transaction without `to`, so this one calls the snap's code directly.)
     expect(destinations({ data: '0x6080' })).toEqual([]);
-    expect(await checkTransaction({ transaction: { data: '0x6080' }, chainId: 'eip155:1' }, { rpc: url, registry: REGISTRY })).toEqual({ state: 'none', findings: [] });
-    expect(insight({ state: 'none' }).content.props.children).toMatch(/a contract creation has no destination to check/);
+    expect(await checkTransaction({ transaction: { data: '0x6080' }, chainId: 'eip155:1' }, { rpc: url, registry: REGISTRY })).toEqual({ state: 'none', findings: [], checked: [] });
+    expect(linesOf(insight({ state: 'none' }).content).join('\n')).toMatch(/a contract creation has no destination to check/);
     const t = TARGET;
     expect(destinations({ to: t, data: '0xa22cb465' + word(SPENDER) + word(1) })).toEqual([{ address: t, role: 'to' }, { address: SPENDER, role: 'operator' }]);
     expect(destinations({ to: t, data: '0xa9059cbb' + word(SPENDER) + word(5) })).toEqual([{ address: t, role: 'to' }, { address: SPENDER, role: 'recipient' }]);
     expect(destinations({ to: t, data: '0x39509351' + word(SPENDER) + word(5) })[1].role).toBe('spender');
     expect(destinations({ to: t, data: '0x095ea7b3' + 'ff'.repeat(32) + word(5) })).toEqual([{ address: t, role: 'to' }]); // not an address word
     expect(destinations({ to: t, data: '0x12345678' + word(SPENDER) })).toEqual([{ address: t, role: 'to' }]);
+  });
+  // ---- what the call data names: transferFrom, Permit2, batches ----
+  const sel = (sig) => selector(sig);
+  const hexOf = (d) => d.replace(/^0x/, '');
+  const padBytes = (d) => { const h = hexOf(d); return word(h.length / 2) + h.padEnd(64 * Math.ceil(h.length / 64), '0'); };
+  /** ABI of a bytes[] (its data part, without the head offset). */
+  const bytesArrayData = (items) => {
+    let off = 32 * items.length;
+    const heads = [];
+    const tails = [];
+    for (const it of items) { heads.push(word(off)); const t = padBytes(it); tails.push(t); off += t.length / 2; }
+    return word(items.length) + heads.join('') + tails.join('');
+  };
+  const multicall = (items) => '0x' + sel('multicall(bytes[])') + word(32) + bytesArrayData(items);
+  const aggregate3 = (calls) => {
+    let off = 32 * calls.length;
+    const heads = [];
+    const tails = [];
+    for (const [target, data] of calls) { heads.push(word(off)); const t = word(target) + word(1) + word(96) + padBytes(data); tails.push(t); off += t.length / 2; }
+    return '0x' + sel('aggregate3((address,bool,bytes)[])') + word(32) + word(calls.length) + heads.join('') + tails.join('');
+  };
+  const FROM = '0x' + '99'.repeat(20);
+  const OTHER = '0x' + '8888888888888888888888888888888888888888'.slice(0, 40);
+  const approveData = (who) => '0x095ea7b3' + word(who) + word(5);
+
+  it('call data: transferFrom / safeTransferFrom recipient (2nd), Permit2 approve spender (2nd), setApprovalForAll operator; multicall and aggregate3 decoded; execute says inner calls not checked', async () => {
+    const t = TARGET;
+    expect(destinations({ to: t, data: '0x' + sel('transferFrom(address,address,uint256)') + word(FROM) + word(SPENDER) + word(5) }))
+      .toEqual([{ address: t, role: 'to' }, { address: SPENDER, role: 'recipient' }]); // never the `from` (the user)
+    expect(destinations({ to: t, data: '0x' + sel('safeTransferFrom(address,address,uint256,bytes)') + word(FROM) + word(SPENDER) + word(1) + word(128) + word(0) })[1])
+      .toEqual({ address: SPENDER, role: 'recipient' });
+    expect(destinations({ to: t, data: '0x' + sel('approve(address,address,uint160,uint48)') + word(IMPL) + word(SPENDER) + word(5) + word(9) }))
+      .toEqual([{ address: t, role: 'to' }, { address: SPENDER, role: 'spender' }]);
+    expect(destinations({ to: t, data: '0x' + sel('setApprovalForAll(address,bool)') + word(SPENDER) + word(1) })[1]).toEqual({ address: SPENDER, role: 'operator' });
+    expect(analyzeCall({ to: t, data: multicall([approveData(SPENDER), '0xa9059cbb' + word(IMPL) + word(1)]) }))
+      .toEqual({ destinations: [{ address: t, role: 'to' }, { address: SPENDER, role: 'spender' }, { address: IMPL, role: 'recipient' }], innerUnchecked: false });
+    const deadline = '0x' + sel('multicall(uint256,bytes[])') + word(99) + word(64) + bytesArrayData([approveData(SPENDER)]);
+    expect(destinations({ to: t, data: deadline })[1]).toEqual({ address: SPENDER, role: 'spender' });
+    expect(analyzeCall({ to: t, data: aggregate3([[IMPL, approveData(SPENDER)]]) }))
+      .toEqual({ destinations: [{ address: t, role: 'to' }, { address: IMPL, role: 'inner' }, { address: SPENDER, role: 'spender' }], innerUnchecked: false });
+    expect(analyzeCall({ to: t, data: '0x' + sel('execute(bytes,bytes[])') + word(64) + word(96) + word(0) + word(0) }).innerUnchecked).toBe(true);
+    expect(analyzeCall({ to: t, data: '0x' + sel('multicall(bytes[])') + word(32) + word(1000) }).innerUnchecked).toBe(true); // malformed: said so
+  });
+
+  it('a flagged spender inside a multicall is caught; an execute(...) batch says "inner calls not checked"', async () => {
+    const snap = await installSnap(SNAP_ID);
+    await useLocalRpc(snap);
+    mockChain(snap, { codes: { [TARGET]: TARGET_CODE } });
+    rpc.answers.clear();
+    flag(56n, SPENDER, '0x', 'address', 6, true);
+    let r = await inspect(snap, { to: TARGET, data: multicall(['0xa9059cbb' + word(IMPL) + word(1), approveData(SPENDER)]) });
+    expect(r.severity).toBe('critical');
+    expect(r.text).toContain(`ผู้ได้สิทธิ์ใช้เหรียญ (approve / permit) / Spender (approve / permit): ${SPENDER}`);
+    rpc.answers.clear();
+    flag(56n, OTHER, '0x', 'address', 1, true);
+    r = await inspect(snap, { to: TARGET, data: '0x' + sel('transferFrom(address,address,uint256)') + word(FROM) + word(OTHER) + word(5) });
+    expect(r.severity).toBe('critical');
+    expect(r.text).toContain(`ผู้รับเหรียญ / Token recipient: ${OTHER}`);
+    rpc.answers.clear();
+    r = await inspect(snap, { to: TARGET, data: '0x' + sel('execute(bytes,bytes[])') + word(64) + word(96) + word(0) + word(0) });
+    expect(r.text).toContain('no flag on what was checked');
+    expect(r.text).toContain('inner calls not checked');
+  });
+
+  it('never switches the user\'s network: another chain in MetaMask means "couldn\'t check this chain" (an address flag still shows)', async () => {
+    const snap = await installSnap(SNAP_ID);
+    await useLocalRpc(snap);
+    mockChain(snap, { codes: { [TARGET]: TARGET_CODE }, chain: '0x1' }); // MetaMask on Ethereum, the transaction on BSC
+    rpc.answers.clear();
+    switches.length = 0;
+    let r = await inspect(snap, { to: TARGET });
+    expect(r.text).toMatch(/couldn't check this transaction\ncouldn't check this chain: MetaMask's current network is eip155:1, this is eip155:56 \(the snap never switches networks\)/);
+    flag(56n, TARGET, null, 'address', 1, true);
+    r = await inspect(snap, { to: TARGET });
+    expect(r.severity).toBe('critical');
+    expect(switches).toEqual([]);
+  });
+
+  it('every insight says when a custom threat source is in use; the built-in one is not mentioned', async () => {
+    const snap = await installSnap(SNAP_ID);
+    mockChain(snap, { codes: { [TARGET]: TARGET_CODE } });
+    expect((await inspect(snap, { to: TARGET })).text).not.toMatch(/custom threat source/);
+    await useLocalRpc(snap);
+    const note = `custom threat source in use (zetaphy_setThreatSource): RPC ${url}, ThreatRegistry ${REGISTRY}`;
+    rpc.answers.clear();
+    expect((await inspect(snap, { to: TARGET })).text).toContain(note); // clean
+    flag(56n, TARGET, TARGET_CODE, 'address', 1, false);
+    expect((await inspect(snap, { to: TARGET })).text).toContain(note); // warned
+    flag(56n, TARGET, TARGET_CODE, 'address', 1, true);
+    expect((await inspect(snap, { to: TARGET })).text).toContain(note); // enforced
+    rpc.status = 500;
+    expect((await inspect(snap, { to: TARGET })).text).toContain(note); // unchecked
+    rpc.status = 200;
+  });
+
+  it('responses: each shown with its author; the governance-assigned responder\'s first', async () => {
+    const snap = await installSnap(SNAP_ID);
+    await useLocalRpc(snap);
+    mockChain(snap, { codes: { [TARGET]: TARGET_CODE } });
+    rpc.answers.clear();
+    flag(56n, TARGET, TARGET_CODE, 'address', 3, true);
+    const key = addressKey(56n, TARGET);
+    const GOVR = '0x' + '0b'.repeat(20);
+    const OWNER = '0x' + '0a'.repeat(20);
+    rpc.answers.set(detailQueries(key).responses[0], responseAnswer('the assigned responder speaks', GOVR, 0));
+    rpc.answers.set(detailQueries(key).responses[1], responseAnswer('the owner speaks', OWNER));
+    const r = await inspect(snap, { to: TARGET });
+    const assigned = r.text.indexOf(`response from the governance-assigned responder (${GOVR}): "the assigned responder speaks"`);
+    const owner = r.text.indexOf(`response from ${OWNER} (สำหรับ / for 56:${TARGET}): "the owner speaks"`);
+    expect(assigned).toBeGreaterThan(-1);
+    expect(owner).toBeGreaterThan(assigned);
+  });
+
+  // ---- signature insight: EIP-712 Permit, Permit2, Seaport-style orders ----
+  const USER = '0x' + '99'.repeat(20);
+  const sign = (snap, data, signatureMethod = 'eth_signTypedData_v4') => snap.onSignature({ from: USER, data, signatureMethod });
+  async function inspectSig(snap, data, method) {
+    const res = await sign(snap, data, method);
+    expect(res.response.error).toBeUndefined();
+    const ui = await res.getInterface();
+    return { severity: res.response.result?.severity ?? null, text: linesOf(ui.content).join('\n') };
+  }
+  const permit = (chainId = 56) => ({ types: {}, primaryType: 'Permit', domain: { name: 'Token', version: '1', chainId, verifyingContract: TARGET },
+    message: { owner: USER, spender: SPENDER, value: '1000', nonce: 0, deadline: 9999999999 } });
+
+  it('signatures: a flagged Permit spender is critical; Permit2 and Seaport zone / recipients are checked; the signer is never sent', async () => {
+    const snap = await installSnap(SNAP_ID);
+    await useLocalRpc(snap);
+    mockChain(snap, { codes: { [TARGET]: TARGET_CODE } });
+    rpc.answers.clear();
+    rpc.requests.length = 0;
+    flag(56n, SPENDER, '0x', 'address', 6, true);
+    let r = await inspectSig(snap, permit());
+    expect(r.severity).toBe('critical');
+    expect(r.text).toContain(`ผู้ได้สิทธิ์ใช้เหรียญ (approve / permit) / Spender (approve / permit): ${SPENDER}`);
+    expect(r.text).toContain('an address this signature involves');
+    expect(JSON.stringify(rpc.requests)).not.toContain('99'.repeat(20));
+    // Permit2 (PermitSingle), as a JSON string with a hex chain id: flagged, not enforced -> a warning.
+    rpc.answers.clear();
+    flag(56n, SPENDER, '0x', 'address', 6, false);
+    const permit2 = { types: {}, primaryType: 'PermitSingle', domain: { name: 'Permit2', chainId: '0x38', verifyingContract: IMPL },
+      message: { details: { token: TARGET, amount: '1', expiration: 1, nonce: 0 }, spender: SPENDER, sigDeadline: 1 } };
+    r = await inspectSig(snap, permit2, 'eth_signTypedData_v3');
+    expect(typedDataTargets({ signatureMethod: 'eth_signTypedData_v4', from: USER, data: JSON.stringify(permit2) })) // a JSON string is read too
+      .toEqual({ chainId: 56n, destinations: [{ address: IMPL, role: 'verifying' }, { address: SPENDER, role: 'spender' }] });
+    expect(r.severity).toBeNull();
+    expect(r.text).toContain('Warning from ZETAPHY Neuro');
+    // A Seaport-style order: zone and the recipients other than the offerer.
+    rpc.answers.clear();
+    rpc.requests.length = 0;
+    const order = { types: {}, primaryType: 'OrderComponents', domain: { name: 'Seaport', chainId: 56, verifyingContract: TARGET },
+      message: { offerer: USER, zone: BEACON, offer: [], consideration: [{ recipient: USER }, { recipient: OTHER }] } };
+    r = await inspectSig(snap, order);
+    expect(r.text).toContain('no flag on what was checked');
+    expect(r.text).toContain(`zone ของคำสั่งซื้อขาย / Order zone: ${BEACON}`);
+    expect(r.text).toContain(`ตรวจแล้ว / checked: ผู้รับเหรียญ / Token recipient: ${OTHER}`);
+    expect(r.text).toContain(`สัญญาที่ลายเซ็นนี้ใช้กับ / Contract this signature is for: ${TARGET}`);
+    expect(r.text).toContain('Only checked: the contract this signature is for and the spender, operator, zone or recipients it names');
+    expect(JSON.stringify(rpc.requests)).not.toContain('99'.repeat(20));
+    expect(typedDataTargets({ signatureMethod: 'eth_signTypedData_v4', from: USER, data: order }).destinations.map((d) => d.role)).toEqual(['verifying', 'zone', 'recipient']);
+  });
+
+  it('signatures: personal_sign has no insight; typed data without a chain, or on another chain than MetaMask\'s, says why it could not check (no switch)', async () => {
+    const snap = await installSnap(SNAP_ID);
+    await useLocalRpc(snap);
+    mockChain(snap, { codes: { [TARGET]: TARGET_CODE } });
+    switches.length = 0;
+    // (snaps-jest expects an interface from onSignature, so this one calls the snap's code directly.)
+    expect(typedDataTargets({ signatureMethod: 'personal_sign', from: USER, data: '0x68656c6c6f' })).toBeNull();
+    expect(typedDataTargets({ signatureMethod: 'eth_signTypedData', from: USER, data: [{ type: 'string', name: 'm', value: 'hi' }] })).toBeNull();
+    expect(await checkSignature({ signature: { signatureMethod: 'personal_sign', from: USER, data: '0x68656c6c6f' } }, { rpc: url, registry: REGISTRY })).toBeNull();
+    const noChain = permit();
+    delete noChain.domain.chainId;
+    let r = await inspectSig(snap, noChain);
+    expect(r.text).toMatch(/couldn't check this signature\nthe typed data names no chain \(domain.chainId\)/);
+    rpc.answers.clear();
+    r = await inspectSig(snap, permit(1));
+    expect(r.text).toMatch(/couldn't check this signature\ncouldn't check this chain: MetaMask's current network is eip155:56, this is eip155:1/);
+    expect(switches).toEqual([]);
   });
 });

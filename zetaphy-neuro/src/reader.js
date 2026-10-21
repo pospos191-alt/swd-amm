@@ -69,8 +69,9 @@ function canonical(v) {
  *   threatLookup: async (fingerprint) => ({flagged, reason}) from the ZETAPHY ThreatRegistry
  *   simulate: run the trade simulation (honeypot check); default on unless
  *     the caller injects an RPC (tests opt in)
- *   threatSignatures: flagged-code dataset for similarity warnings
- *     (default src/threat-signatures.js; false = off)
+ *   threatSignatures: similarity dataset for "similar to flagged code /
+ *     a reference sample" warnings (default src/threat-signatures.js, which
+ *     ships empty; false = off)
  */
 export async function readContract(chainKey, address, opts = {}) {
   // opts.chainConfig lets a caller read a chain the website does not list
@@ -236,8 +237,9 @@ export async function readContract(chainKey, address, opts = {}) {
   if (opts.threatLookup) {
     try { threat = await opts.threatLookup(report.fingerprint); } catch { threat = null; }
   }
-  // Similarity to flagged code (src/similarity.js): code only, so every
-  // runner gets the same answer from the same dataset.
+  // Similarity to the dataset's entries (src/similarity.js): code only, so
+  // every runner gets the same answer from the same dataset. Informational:
+  // capped at medium unless it is the exact code of an on-chain flag.
   let similar = null;
   const dataset = opts.threatSignatures === false ? null : (opts.threatSignatures ?? THREAT_SIGNATURES);
   if (dataset && !threat?.flagged) {

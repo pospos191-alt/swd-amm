@@ -61,6 +61,7 @@ export const T = {
     'fee-exempt': (p) => `Can exempt chosen wallets from tax (${list(p.functions)}). Common in taxed tokens, but it gives some wallets an edge.`,
     'network-flagged': (p) => `Neuro ZETAPHY network runners voted to record this exact code in the ThreatRegistry${p.reason ? ` (category: ${REASON[p.reason] ?? p.reason})` : ''}. Every contract with the same code gets the same warning.`,
     'similar-flagged': (p) => `This code is ${p.percent}% similar to code that Neuro runners flagged (fingerprint ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, category: ${REASON[p.reason] ?? p.reason}` : ''}). Lightly edited copies of flagged code usually behave the same way.`,
+    'similar-reference': (p) => `This code is ${p.percent}% similar to a reference sample in Neuro's dataset (fingerprint ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, category: ${REASON[p.reason] ?? p.reason}` : ''}). The sample is not code that Neuro runners flagged on chain. Similarity is a hint to look closer, not proof.`,
     'tax-wallet': (p) => `Can change the wallet that receives the tax (${list(p.functions)}). Common in taxed tokens.`,
     'selfdestruct': () => 'The code contains SELFDESTRUCT. If triggered, it can wipe the contract or move its funds.',
     'delegatecall': () => 'The code can run another contract\'s code as its own (DELEGATECALL), so the code that really runs may not be the code shown here.',

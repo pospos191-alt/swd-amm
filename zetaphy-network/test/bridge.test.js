@@ -80,17 +80,26 @@ async function vaccinated() {
   return { reg, flag, drainer: drainer.address, codeKey: await reg.call('codeKey', [h]) };
 }
 
-test('vaccine: coins are refused to and from a contract whose code is flagged, until the flag is cleared', async () => {
+test('vaccine: coins to a held contract are queued, not minted (nor lost); coins cannot leave it; released once the flag is cleared', async () => {
   const { flag, drainer, codeKey } = await vaccinated();
   await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 50n * USDC]); // before the flag
   await flag(codeKey);
-  await assert.rejects(guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]), /FlaggedContract/);
+  const ev = await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]); // delivered: the adapter need not retry
+  const h = ev.find((e) => e?.name === 'InboundHeld');
+  assert.equal(h.args.id, 0n);
+  assert.equal(h.args.to.toLowerCase(), drainer.toLowerCase());
+  assert.equal(await guard.call('heldCount'), 1n);
+  assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [drainer]), 50n * USDC); // nothing minted yet
   await assert.rejects(guard.send('hypAdapter', 'outbound', [HYP, drainer, 1n]), /FlaggedContract/); // stolen coins cannot leave
+  await assert.rejects(guard.send('alice', 'releaseHeld', [0]), /FlaggedContract/); // still held
   await guard.send('ibcAdapter', 'inbound', [NOBLE, a('alice'), 1n]); // everyone else is unaffected
-  // The refused message is not lost: the adapter retries it after the flag is cleared.
+  // The held mint is not lost: anyone releases it once the flag is cleared; once only.
   await flag(codeKey, false);
-  await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]);
+  const rel = await guard.send('attacker', 'releaseHeld', [0]);
+  assert.ok(rel.some((e) => e?.name === 'HeldReleased'));
   assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [drainer]), 50n * USDC + 1n);
+  await assert.rejects(guard.send('attacker', 'releaseHeld', [0]), /NoHeld/);
+  await assert.rejects(guard.send('attacker', 'releaseHeld', [1]), /NoHeld/);
 });
 
 test('vaccine: an adapter cannot be blocked by a runner flag (code hash or address); only governance sets the registry', async () => {
@@ -104,23 +113,43 @@ test('vaccine: an adapter cannot be blocked by a runner flag (code hash or addre
   assert.equal((await reg.call('isContractEnforced', [a('hypAdapter')]))[0], true);
   await guard.send('hypAdapter', 'inbound', [HYP, a('alice'), 1n]); // the route keeps working
   await guard.send('hypAdapter', 'outbound', [HYP, a('alice'), 1n]);
-  await flag(codeKey); // a flagged recipient is still refused on that route
-  await assert.rejects(guard.send('hypAdapter', 'inbound', [HYP, drainer, 1n]), /FlaggedContract/);
+  await flag(codeKey); // a flagged recipient is still held on that route
+  assert.ok((await guard.send('hypAdapter', 'inbound', [HYP, drainer, 1n])).some((e) => e?.name === 'InboundHeld'));
   await guard.send('gov', 'setThreats', ['0x' + '00'.repeat(20)]); // zero: no check
   await guard.send('hypAdapter', 'inbound', [HYP, drainer, 1n]);
+  assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [drainer]), 1n);
 });
 
-test('vaccine: BridgeGuard holds at once, inside the enforceDelay (the revert leaves the adapter\'s message pending); a clear lets it through', async () => {
+test('vaccine: BridgeGuard holds only after the registry\'s holdDelay (or a guardian\'s holdNow); held mints pass the pause, the route and its limit when released; governance may drop one', async () => {
   const { reg, flag, drainer, codeKey } = await vaccinated();
   await reg.send('gov', 'setEnforceDelay', [3600]);
+  await reg.send('gov', 'setHoldDelay', [600]);
   await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 5n]);
   await flag(codeKey);
-  assert.equal((await reg.call('isContractEnforced', [drainer]))[0], false); // warning level only
-  await assert.rejects(guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]), /FlaggedContract/);
-  await assert.rejects(guard.send('hypAdapter', 'outbound', [HYP, drainer, 1n]), /FlaggedContract/);
-  c.advance(1800);
-  await flag(codeKey, false); // cleared before it was ever enforced
+  // Two runners alone: nothing held for holdDelay.
+  assert.equal((await reg.call('isContractHeld', [drainer]))[0], false);
   await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 1n]);
   await guard.send('hypAdapter', 'outbound', [HYP, drainer, 1n]);
   assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [drainer]), 5n);
+  // A guardian of the registry holds at once.
+  await reg.send('gov', 'setGuardian', [a('guardian'), true]);
+  await reg.send('guardian', 'holdNow', [codeKey]);
+  assert.equal((await reg.call('isContractEnforced', [drainer]))[0], false); // held, not enforced
+  assert.ok((await guard.send('ibcAdapter', 'inbound', [NOBLE, drainer, 2n])).some((e) => e?.name === 'InboundHeld'));
+  await assert.rejects(guard.send('hypAdapter', 'outbound', [HYP, drainer, 1n]), /FlaggedContract/);
+  assert.ok((await guard.send('hypAdapter', 'inbound', [HYP, drainer, 100n * USDC])).some((e) => e?.name === 'InboundHeld')); // id 1
+  await flag(codeKey, false); // cleared before it was ever enforced
+  // Releasing: the pause stops it, a full day's limit waits, a disabled route refuses.
+  await guard.send('guardian', 'pause');
+  await assert.rejects(guard.send('alice', 'releaseHeld', [0]), /BridgePaused/);
+  await guard.send('gov', 'unpause');
+  await guard.send('hypAdapter', 'inbound', [HYP, a('alice'), 1n]);
+  await assert.rejects(guard.send('alice', 'releaseHeld', [1]), /OverLimit/);
+  await guard.send('alice', 'releaseHeld', [0]);
+  assert.equal(await c.callAt(token, tokenIface, 'balanceOf', [drainer]), 7n);
+  await assert.rejects(guard.send('alice', 'dropHeld', [1]), /NotGovernance/);
+  await guard.send('gov', 'dropHeld', [1]);
+  c.advance(86400);
+  await assert.rejects(guard.send('alice', 'releaseHeld', [1]), /NoHeld/);
+  await assert.rejects(guard.send('gov', 'dropHeld', [1]), /NoHeld/);
 });

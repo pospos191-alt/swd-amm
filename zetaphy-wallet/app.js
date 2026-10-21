@@ -290,8 +290,9 @@ const T = {
     threatEvidence: 'หลักฐาน: reportHash {hash}{uri} · ' + REPRODUCE.th,
     threatNoEvidence: 'หลักฐาน: ไม่มีบันทึกไว้',
     threatEvidenceUnread: 'หลักฐาน: อ่านไม่ได้',
-    threatResponse: 'คำชี้แจงของเจ้าของ ({by}): "{text}"',
-    threatNoResponse: 'เจ้าของยังไม่ได้ชี้แจง',
+    threatResponse: 'คำชี้แจงจาก {by}: "{text}"',
+    threatResponseAssigned: 'คำชี้แจงจากผู้ชี้แจงที่ governance แต่งตั้ง ({by}): "{text}"',
+    threatNoResponse: 'ยังไม่มีคำชี้แจง',
     threatDisclaimer: DISCLAIMER.th,
   },
   en: {
@@ -550,8 +551,9 @@ const T = {
     threatEvidence: 'Evidence: reportHash {hash}{uri} · ' + REPRODUCE.en,
     threatNoEvidence: 'Evidence: none stored',
     threatEvidenceUnread: 'Evidence: could not be read',
-    threatResponse: 'Response from the owner ({by}): "{text}"',
-    threatNoResponse: 'No response from the owner yet',
+    threatResponse: 'Response from {by}: "{text}"',
+    threatResponseAssigned: 'Response from the governance-assigned responder ({by}): "{text}"',
+    threatNoResponse: 'No response yet',
     threatDisclaimer: DISCLAIMER.en,
   },
 };
@@ -1255,21 +1257,29 @@ async function vaccinate(targets, { strict = false } = {}) {
 const KEY_OF = { address: (target) => addressKey(EVM_CHAIN_ID, target), fingerprint: (_, fp) => '0x' + fp, code: (_, hash) => codeKey(hash) };
 
 /**
- * A flag's evidence (evidenceOf) and the response of the party behind it (responseOf: the
- * flagged key's, else any other key of the same destination's). Best effort: an unreadable
- * answer is said so; it never turns a refusal into a send.
+ * A flag's evidence (evidenceOf) and the responses of the parties behind it (responseAt:
+ * per author, the governance-assigned responder's first, then the newest; the flagged key's,
+ * then the other keys of the same destination), each shown with its author, at most 3.
+ * Best effort: an unreadable answer is said so; it never turns a refusal into a send.
  */
 async function threatDetails(reg, key, keys) {
   const call = (data) => checkedCall('eth_call', [{ to: reg, data }, 'latest']);
-  let evidence = null; let response = null; let unread = false;
+  let evidence = null; let unread = false;
   try { evidence = readEvidence(await call(detailQueries(key).evidence)); } catch { unread = true; }
+  const responses = [];
   for (const k of [key, ...keys.filter((x) => x !== key)]) {
-    try { const r = readResponse(await call(detailQueries(k).response)); if (r.text) { response = r; break; } } catch { /* none shown */ }
+    for (const q of detailQueries(k).responses) {
+      let r;
+      try { r = readResponse(await call(q)); } catch { break; } // none shown
+      if (!r.text) break; // no more for this key
+      if (!responses.some((x) => x.by === r.by)) responses.push(r);
+    }
   }
+  responses.sort((a, b) => Number(b.assigned) - Number(a.assigned));
   return {
     toString: () => [
       evidence?.reportHash ? t('threatEvidence', { hash: evidence.reportHash, uri: evidence.uri ? ` (${evidence.uri})` : '' }) : t(unread ? 'threatEvidenceUnread' : 'threatNoEvidence'),
-      response ? t('threatResponse', { by: response.by, text: response.text }) : t('threatNoResponse'),
+      ...(responses.length ? responses.slice(0, 3).map((r) => t(r.assigned ? 'threatResponseAssigned' : 'threatResponse', { by: r.by, text: r.text })) : [t('threatNoResponse')]),
       t('threatDisclaimer'),
     ].join(' · '),
   };

@@ -58,8 +58,14 @@ export const REPRODUCE = {
 };
 /** Reason number -> { th, en } ('#n' for a number this code does not know). */
 export const reasonText = (n) => REASON_TEXT[n] && n > 0 ? REASON_TEXT[n] : { th: `#${n}`, en: `#${n}` };
-/** The views that explain a flag: its evidence and the response of the party behind it. */
-export const DETAIL_SEL = { evidence: selector('evidenceOf(bytes32)'), response: selector('responseOf(bytes32)') };
+/**
+ * The views that explain a flag: its evidence and the responses of the parties behind
+ * it. Responses are per author (ThreatRegistry.responseAt(key, i)): the responder
+ * governance assigned first, then the newest; every response is shown with its author.
+ */
+export const DETAIL_SEL = { evidence: selector('evidenceOf(bytes32)'), response: selector('responseOf(bytes32)'), responseAt: selector('responseAt(bytes32,uint256)') };
+/** How many responses per key a wallet or the snap shows (the registry keeps up to 8). */
+export const MAX_SHOWN_RESPONSES = 3;
 
 // EIP-1967 slots: keccak256(name) - 1.
 const slotOf = (name) => '0x' + (BigInt('0x' + toHex(keccak_256(enc.encode(name)))) - 1n).toString(16).padStart(64, '0');
@@ -145,8 +151,15 @@ export function threatKey(what, chainId, address, code) {
   return '0x' + fingerprint1(code).slice(4);
 }
 
-/** eth_call data of evidenceOf(key) and responseOf(key). */
-export const detailQueries = (key) => ({ evidence: '0x' + DETAIL_SEL.evidence + key.slice(2), response: '0x' + DETAIL_SEL.response + key.slice(2) });
+/**
+ * eth_call data of evidenceOf(key), responseOf(key) and responseAt(key, i) for the
+ * first MAX_SHOWN_RESPONSES responses (an answer with empty text: no more).
+ */
+export const detailQueries = (key) => ({
+  evidence: '0x' + DETAIL_SEL.evidence + key.slice(2),
+  response: '0x' + DETAIL_SEL.response + key.slice(2),
+  responses: Array.from({ length: MAX_SHOWN_RESPONSES }, (_, i) => '0x' + DETAIL_SEL.responseAt + key.slice(2) + word(i)),
+});
 
 // Text another party wrote (a URI, a response): shown as plain text, without
 // control or bidi/invisible characters, at most `max` characters.
@@ -172,12 +185,16 @@ export function readEvidence(hex) {
   return { reportHash: reportHash === ZERO_HASH ? null : reportHash, uri: plainText(abiString(b, 32), 200), by: wordAddr(b, 64), at: Number(BigInt('0x' + toHex(b.slice(96, 128)))) };
 }
 
-/** responseOf's answer: { text, by, at, chainId, account } (text '': no response). Throws on a malformed answer. */
+/**
+ * responseOf's / responseAt's answer: { text, by, at, chainId, account, assigned } (text '':
+ * no response; assigned: posted by the responder governance assigned, chainId 0). Throws on a malformed answer.
+ */
 export function readResponse(hex) {
   const b = fromHex(hex);
   if (b.length < 160) throw new Error('not a responseOf answer');
+  const chainId = BigInt('0x' + toHex(b.slice(96, 128)));
   return { text: plainText(abiString(b, 0)), by: wordAddr(b, 32), at: Number(BigInt('0x' + toHex(b.slice(64, 96)))),
-    chainId: BigInt('0x' + toHex(b.slice(96, 128))), account: wordAddr(b, 128) };
+    chainId, account: wordAddr(b, 128), assigned: chainId === 0n };
 }
 
 /**

@@ -5,11 +5,14 @@
 // Vaccine: a transfer whose source sender, source contract or ZETAPHY
 // recipient has an enforced flag in the ThreatRegistry (BridgeAirlock.flaggedParty:
 // past the registry's enforceDelay, or at once through its fast lane) is
-// neither attested nor released. One whose party is flagged but not enforced
-// yet (BridgeAirlock.heldParty, warning level) is attested but held: not
-// released, as the airlock itself would refuse (ThreatHeld). Either way it
-// stays pending and goes through if the flag is cleared or governance
-// protects the key. If a check cannot be made, nothing is attested or
+// neither attested nor released. One whose party is held but not enforced
+// yet (BridgeAirlock.heldParty: the registry's is*Held, i.e. a flag past its
+// holdDelay, on the fast lane, or held at once by a guardian's holdNow) is
+// attested but not released, as the airlock itself would refuse (ThreatHeld).
+// A flag younger than holdDelay holds nothing (two runners alone cannot freeze
+// anyone's bridging at once). Either way a held transfer stays pending and goes
+// through once the flag is cleared or governance protects the key; the source
+// LockBox has no refund path meanwhile. If a check cannot be made, nothing is attested or
 // released on its account (fail closed).
 // Nothing is attested while Neuro is paused (NeuroControl), or while the
 // pause switch cannot be read (laneControl).
@@ -115,11 +118,11 @@ export function createLaneWatcher({ lockbox, lane, airlock, me, srcChainId, conf
       try { flagged = Number(await airlock.flaggedParty(t[0], t[1], t[3], t[4])); } catch { flagged = -1; }
       const held = flagged > 0 ? `${PARTY[flagged] ?? 'a party'} is flagged in the ThreatRegistry (enforced), held until the flag is cleared`
         : 'could not check the ThreatRegistry';
-      // Warning-level flags (not enforced yet) hold the release only. Asked only when it matters.
+      // Held flags (not enforced yet) hold the release only. Asked only when it matters.
       const warned = async () => {
         let w;
         try { w = Number(await airlock.heldParty(t[0], t[1], t[3], t[4])); } catch { w = -1; }
-        return w === 0 ? null : w > 0 ? `${PARTY[w] ?? 'a party'} is flagged in the ThreatRegistry (not enforced yet), held until the flag is cleared`
+        return w === 0 ? null : w > 0 ? `${PARTY[w] ?? 'a party'} is held in the ThreatRegistry (flagged, not enforced yet), held until the flag is cleared or the key protected`
           : 'could not check the ThreatRegistry';
       };
       // 2. Attest (retried every tick until it lands or the lane is done).

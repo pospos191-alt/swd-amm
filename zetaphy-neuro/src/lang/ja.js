@@ -61,6 +61,7 @@ export const T = {
     'fee-exempt': (p) => `選んだウォレットだけ手数料（税）を免除できます（${list(p.functions)}）。手数料付きトークンではよくありますが、一部のウォレットが有利になります。`,
     'network-flagged': (p) => `Neuro ZETAPHY ネットワークのランナーが投票し、このコードを ThreatRegistry に記録しました${p.reason ? `（区分: ${REASON[p.reason] ?? p.reason}）` : ''}。同じコードを使うすべてのコントラクトに同じ警告が表示されます。`,
     'similar-flagged': (p) => `このコードは Neuro のランナーがフラグを付けたコードと ${p.percent}% 類似しています（フィンガープリント ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `、区分: ${REASON[p.reason] ?? p.reason}` : ''}）。フラグ付きのコードを少し書き換えたコピーは、たいてい同じ動作をします。`,
+    'similar-reference': (p) => `このコードは Neuro のデータセットにある参照サンプルと ${p.percent}% 類似しています（フィンガープリント ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `、区分: ${REASON[p.reason] ?? p.reason}` : ''}）。このサンプルは Neuro のランナーがオンチェーンでフラグを付けたコードではありません。類似は詳しく確認するための手がかりで、証拠ではありません。`,
     'tax-wallet': (p) => `手数料（税）を受け取るウォレットを変更できます（${list(p.functions)}）。手数料付きトークンではよくあることです。`,
     'selfdestruct': () => 'コードに SELFDESTRUCT が含まれています。実行されると、コントラクトが消されたり、資金が移動されたりする可能性があります。',
     'delegatecall': () => '別のコントラクトのコードを自分のものとして実行できます（DELEGATECALL）。そのため、実際に動くコードはここに表示されたものと違う可能性があります。',

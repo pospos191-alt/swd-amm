@@ -4,7 +4,10 @@
 //   node cli.js fingerprint <evm chain> <address>
 //       prints a template entry to paste into src/templates.js
 //   node cli.js signature <evm chain> <address> [--reason <ThreatRegistry code fact, src/threat-reasons.js>]
-//       prints a flagged-code entry to paste into src/threat-signatures.js (ADDED).
+//                         [--flag-key 0x<ThreatRegistry key> --report-hash 0x<evidence reportHash>]
+//       prints a dataset entry to paste into src/threat-signatures.js (ADDED).
+//       Only an entry with --flag-key/--report-hash (the on-chain flag) is shown
+//       to users as "flagged by Neuro runners"; without them it is a "reference sample".
 //       --reason takes the ThreatRegistry category codes; the report shows them
 //       as neutral descriptions of the code's behaviour (REASON in src/lang/*.js).
 
@@ -22,13 +25,15 @@ import { CHAINS, explorerUrl } from './src/chains.js';
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
-const positional = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--lang' && args[i - 1] !== '--reason');
+const VALUED = ['--lang', '--reason', '--flag-key', '--report-hash'];
+const positional = args.filter((a, i) => !a.startsWith('--') && !VALUED.includes(args[i - 1]));
 const chains = Object.keys(CHAINS).join('|');
 
 function usage() {
   console.error(`usage: node cli.js <${chains}> <address> [--lang ${Object.keys(LANGS).join('|')}] [--json]
        node cli.js fingerprint <${chains}> <address>
-       node cli.js signature <${chains}> <address> [--reason cannot-sell-in-simulation|unlimited-mint|owner-can-block-transfers|owner-can-move-holder-funds|same-name-as-known-token|sweeps-approved-tokens|other]`);
+       node cli.js signature <${chains}> <address> [--reason cannot-sell-in-simulation|unlimited-mint|owner-can-block-transfers|owner-can-move-holder-funds|same-name-as-known-token|sweeps-approved-tokens|other]
+                             [--flag-key 0x<ThreatRegistry key> --report-hash 0x<evidence reportHash>]`);
   process.exit(2);
 }
 
@@ -57,18 +62,20 @@ async function fingerprint(chain, address) {
 
 // A flagged contract's entry for Neuro's known-bad code dataset. Reads the
 // code that actually runs (the implementation behind a proxy).
-async function signature(chain, address, reason) {
+async function signature(chain, address, reason, flagRef) {
   const c = CHAINS[chain];
   if (c?.kind !== 'evm') throw new Error('similarity covers EVM bytecode only');
   const r = await readContract(chain, address, { sourcify: false, simulate: false, threatSignatures: false });
   if (!r.fingerprint) throw new Error('no EVM contract code at this address');
   const rpc = createRpc(c.rpcs, c.id);
   const code = await rpc.call('eth_getCode', [r.proxy?.implementation ?? r.address, 'latest']);
-  const e = await makeEntry(code, THREAT_SIGNATURES.baseline, { reason, source: `${chain} ${r.proxy?.implementation ?? r.address}` });
+  const e = await makeEntry(code, THREAT_SIGNATURES.baseline, { reason, source: `${chain} ${r.proxy?.implementation ?? r.address}`, flag: flagRef });
   const risky = r.analysis.findings.filter((f) => f.severity === 'high' || f.severity === 'medium').map((f) => f.id);
   console.log(`// ${c.name} ${r.address}  (${r.token?.symbol ?? '?'}), rules found: ${risky.join(', ') || 'nothing high or medium'}`);
   if (e.n < 8) console.log('// WARNING: almost all of this code is ordinary token boilerplate; only an exact copy will match.');
   console.log('// Add only code the network flagged in the ThreatRegistry, with the behaviour documented and reproducible. Paste into ADDED in src/threat-signatures.js.');
+  if (!flagRef) console.log('// No --flag-key/--report-hash: users will see this as "similar to a reference sample", never "flagged by runners".');
+  else console.log(`// Check the flag first: ThreatRegistry.evidenceOf(${flagRef.key}) must return reportHash ${flagRef.reportHash}.`);
   console.log(entrySource(e));
 }
 
@@ -77,7 +84,10 @@ try {
     if (!positional[1] || !positional[2]) usage();
     const reason = opt('--reason', 'cannot-sell-in-simulation');
     if (!THREAT_REASONS.slice(1).includes(reason)) usage();
-    await signature(positional[1], positional[2], reason);
+    const key = opt('--flag-key');
+    const reportHash = opt('--report-hash');
+    if (!!key !== !!reportHash) usage();
+    await signature(positional[1], positional[2], reason, key ? { key, reportHash } : null);
   } else if (positional[0] === 'fingerprint') {
     if (!positional[1] || !positional[2]) usage();
     await fingerprint(positional[1], positional[2]);

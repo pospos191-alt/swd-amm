@@ -1,4 +1,5 @@
-// Similarity to code flagged by Neuro runners (EVM bytecode only).
+// Similarity to reference code (EVM bytecode only): code that Neuro runners
+// flagged in the ThreatRegistry, or a reference sample of a known-bad pattern.
 //
 // The fingerprint (src/fingerprint.js) matches a template exactly: change one
 // instruction and it no longer matches. A copy of flagged code that
@@ -14,13 +15,34 @@
 // 3. Remove the boilerplate: most flagged code is an ordinary ERC-20 with a
 //    few lines changed, so two ordinary tokens and flagged code share most of their
 //    shingles. Shingles (and dispatcher selectors) found in the BASELINE, the
-//    code of plain reference tokens (src/threat-signatures.generated.js),
-//    are dropped. What remains is what makes this contract different.
+//    code of honest reference tokens (scripts/baseline-tokens.sol: minimal
+//    ERC-20s and OpenZeppelin-style ERC-20 + Pausable / Permit / Burnable /
+//    Capped / Ownable / Ownable2Step / AccessControl / a plain blacklist,
+//    optimizer on and off; src/threat-signatures.generated.js), are dropped.
+//    What remains is what makes this contract different, so library code alone
+//    never makes an honest token look similar.
 // 4. Compare: Jaccard similarity of the remaining shingle sets, estimated
 //    with a MinHash of MINHASH_K 32-bit hashes (so a dataset entry is about
 //    1 KB), and Jaccard of the remaining selector sets. Renaming functions
 //    is the cheapest way to dodge a selector match, so selectors can only
 //    raise the score: score = max(opcodes, (opcodes + selectors) / 2).
+//
+// INFORMATIONAL, not proof:
+// - Provenance: an entry says "flagged by runners" only when it carries an
+//   on-chain reference (flag: {key, reportHash}: the ThreatRegistry key and
+//   the evidence reportHash of the flag vote). Without one it is a "reference
+//   sample" and is worded that way (finding similar-reference).
+// - Severity is at most medium. Only an EXACT fingerprint match to an entry
+//   with an on-chain flag reference is high (the same code the network flagged).
+// - Evasion: this catches lazy copies, not a determined author. Inserting
+//   filler opcodes (e.g. PUSH/POP pairs) every few instructions, reordering
+//   functions, or recompiling with another solc version or optimizer setting
+//   changes most 4-grams, so the score drops below the threshold. Missing a
+//   copy is expected; the fixed rules and the trade simulation still apply.
+// - A second feature (e.g. a selector-set + storage-slot sketch) was
+//   considered: selectors are already compared above, and storage slots move
+//   with inheritance order and packing, so it would add little robustness for
+//   its cost. Not added.
 //
 // Other VMs are not covered: Solana, Move, TON, CosmWasm, NEAR, Starknet and
 // Bitcoin runes are read through their on-chain settings, not their code, and
@@ -148,7 +170,7 @@ export function similarityPercent(a, b) {
   return Math.round(Math.max(op, (op + sel) / 2) * 100);
 }
 
-/** Severity for a percent, or null under the reporting threshold. */
+/** Severity for a percent, or null under the reporting threshold (before the cap in closestFlagged). */
 export function severityFor(percent) {
   if (percent >= THRESHOLDS.high * 100) return 'high';
   if (percent >= THRESHOLDS.medium * 100) return 'medium';
@@ -156,12 +178,26 @@ export function severityFor(percent) {
   return null;
 }
 
+const BYTES32 = /^0x[0-9a-f]{64}$/;
+const ZERO32 = '0x' + '0'.repeat(64);
 /**
- * The flagged entry closest to this code, if close enough.
+ * True when an entry names the on-chain flag behind it: the ThreatRegistry key
+ * (fp1 / code / address key, bytes32) and the reportHash of the flag's
+ * evidence (non-zero). Only such entries may be called "flagged by runners".
+ */
+export function hasFlagRef(e) {
+  const f = e?.flag;
+  return !!f && BYTES32.test(f.key ?? '') && BYTES32.test(f.reportHash ?? '') && f.key !== ZERO32 && f.reportHash !== ZERO32;
+}
+
+/**
+ * The dataset entry closest to this code, if close enough.
  * @param {string} codeHex  runtime code that actually runs
  * @param {string|null} fingerprint  its fp1 (an exact match is 100%)
  * @param {{baseline:object, entries:Array}} dataset  src/threat-signatures.js
- * @returns {{percent:number, severity:string, fingerprint:string, reason:string}|null}
+ * @returns {{percent:number, severity:string, fingerprint:string, reason:string, flagged:boolean, exact:boolean}|null}
+ *   flagged: the entry has an on-chain flag reference (hasFlagRef); severity is
+ *   capped at medium unless the match is exact AND flagged.
  */
 export function closestFlagged(codeHex, fingerprint, dataset) {
   if (!dataset?.entries?.length) return null;
@@ -169,22 +205,30 @@ export function closestFlagged(codeHex, fingerprint, dataset) {
   let best = null;
   for (const e of dataset.entries) {
     if (e.baseline !== dataset.baseline.id) continue; // made against another baseline: rebuild it
-    const percent = fingerprint && e.fingerprint === fingerprint ? 100 : similarityPercent(sig, e);
-    // Ties go to the smaller fingerprint, so every runner names the same one.
-    if (!best || percent > best.percent || (percent === best.percent && e.fingerprint < best.fingerprint)) {
-      best = { percent, fingerprint: e.fingerprint, reason: e.reason };
+    const exact = !!fingerprint && e.fingerprint === fingerprint;
+    const percent = exact ? 100 : similarityPercent(sig, e);
+    const flagged = hasFlagRef(e);
+    // Ties: an entry with an on-chain flag first, then the smaller fingerprint,
+    // so every runner names the same one.
+    if (!best || percent > best.percent || (percent === best.percent
+      && (flagged > best.flagged || (flagged === best.flagged && e.fingerprint < best.fingerprint)))) {
+      best = { percent, fingerprint: e.fingerprint, reason: e.reason, flagged, exact };
     }
   }
-  const severity = best && severityFor(best.percent);
+  let severity = best && severityFor(best.percent);
+  if (severity === 'high' && !(best.exact && best.flagged)) severity = 'medium';
   return severity ? { ...best, severity } : null;
 }
 
 /**
- * A dataset entry for flagged runtime code (scripts/build-threat-signatures.js
- * and `node cli.js signature`).
+ * A dataset entry for runtime code (scripts/build-threat-signatures.js and
+ * `node cli.js signature`). `flag` ({key, reportHash}, both 0x + 32 bytes):
+ * the ThreatRegistry flag this code is recorded under; null for a reference sample.
  */
-export async function makeEntry(codeHex, baseline, { reason, source }) {
-  return { fingerprint: await codeFingerprint(codeHex), reason, source, ...similaritySignature(codeHex, baseline) };
+export async function makeEntry(codeHex, baseline, { reason, source, flag = null }) {
+  const f = flag ? { key: String(flag.key).toLowerCase(), reportHash: String(flag.reportHash).toLowerCase() } : null;
+  if (f && !hasFlagRef({ flag: f })) throw new Error('flag: key and reportHash must be non-zero 0x + 32-byte hex');
+  return { fingerprint: await codeFingerprint(codeHex), reason, source, flag: f, ...similaritySignature(codeHex, baseline) };
 }
 
 /** An entry as JavaScript source, ready to paste into src/threat-signatures.js. */
@@ -195,6 +239,7 @@ export function entrySource(e, indent = '  ') {
 ${indent}  fingerprint: '${e.fingerprint}',
 ${indent}  reason: '${e.reason}',
 ${indent}  source: ${JSON.stringify(String(e.source)).replace(/'/g, "\\'").replace(/^"|"$/g, "'")},
+${indent}  flag: ${e.flag ? `{ key: '${e.flag.key}', reportHash: '${e.flag.reportHash}' }` : 'null'},
 ${indent}  baseline: '${e.baseline}',
 ${indent}  selectors: ${q(e.selectors)},
 ${indent}  n: ${e.n},

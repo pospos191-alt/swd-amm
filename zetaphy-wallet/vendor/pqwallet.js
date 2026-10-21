@@ -2204,7 +2204,8 @@ var REPRODUCE = {
   th: "\u0E15\u0E23\u0E27\u0E08\u0E0B\u0E49\u0E33: \u0E23\u0E31\u0E19 Neuro \u0E01\u0E31\u0E1A\u0E42\u0E04\u0E49\u0E14\u0E40\u0E14\u0E35\u0E22\u0E27\u0E01\u0E31\u0E19 (zetaphy-neuro: node cli.js <chain> <address> --json) \u0E41\u0E25\u0E49\u0E27\u0E40\u0E17\u0E35\u0E22\u0E1A reportHash",
   en: "reproduce: run Neuro on the same code (zetaphy-neuro: node cli.js <chain> <address> --json) and compare the reportHash"
 };
-var DETAIL_SEL = { evidence: selector("evidenceOf(bytes32)"), response: selector("responseOf(bytes32)") };
+var DETAIL_SEL = { evidence: selector("evidenceOf(bytes32)"), response: selector("responseOf(bytes32)"), responseAt: selector("responseAt(bytes32,uint256)") };
+var MAX_SHOWN_RESPONSES = 3;
 var slotOf = (name) => "0x" + (BigInt("0x" + toHex(keccak_256(enc.encode(name)))) - 1n).toString(16).padStart(64, "0");
 var SLOT_IMPL = slotOf("eip1967.proxy.implementation");
 var SLOT_BEACON = slotOf("eip1967.proxy.beacon");
@@ -2242,7 +2243,11 @@ var strWords = (str) => {
 var keccakHex = (hex) => "0x" + toHex(keccak_256(fromHex(hex)));
 var codeKey = (codeHashHex) => keccakHex(word(64) + codeHashHex.replace(/^0x/, "").padStart(64, "0") + strWords("zetaphy.threat.code"));
 var addressKey = (chainId, address) => keccakHex(word(96) + word(chainId) + address.toLowerCase().slice(2).padStart(64, "0") + strWords("zetaphy.threat.address"));
-var detailQueries = (key2) => ({ evidence: "0x" + DETAIL_SEL.evidence + key2.slice(2), response: "0x" + DETAIL_SEL.response + key2.slice(2) });
+var detailQueries = (key2) => ({
+  evidence: "0x" + DETAIL_SEL.evidence + key2.slice(2),
+  response: "0x" + DETAIL_SEL.response + key2.slice(2),
+  responses: Array.from({ length: MAX_SHOWN_RESPONSES }, (_, i) => "0x" + DETAIL_SEL.responseAt + key2.slice(2) + word(i))
+});
 var INVISIBLE = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}]/gu;
 var plainText = (s, max = 500) => String(s).replace(/[\r\n\t]+/g, " ").replace(INVISIBLE, "").trim().slice(0, max);
 function abiString(b, at) {
@@ -2264,12 +2269,14 @@ function readEvidence(hex) {
 function readResponse(hex) {
   const b = fromHex(hex);
   if (b.length < 160) throw new Error("not a responseOf answer");
+  const chainId = BigInt("0x" + toHex(b.slice(96, 128)));
   return {
     text: plainText(abiString(b, 0)),
     by: wordAddr(b, 32),
     at: Number(BigInt("0x" + toHex(b.slice(64, 96)))),
-    chainId: BigInt("0x" + toHex(b.slice(96, 128))),
-    account: wordAddr(b, 128)
+    chainId,
+    account: wordAddr(b, 128),
+    assigned: chainId === 0n
   };
 }
 export {

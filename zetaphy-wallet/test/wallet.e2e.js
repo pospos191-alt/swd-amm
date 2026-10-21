@@ -46,11 +46,11 @@ const REG_SEL = { fingerprint: [sel4('isFlagged(bytes32)'), sel4('isEnforced(byt
   address: [sel4('isAddressFlagged(uint256,address)'), sel4('isAddressEnforced(uint256,address)')] };
 const SLOT_IMPL = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'; // EIP-1967
 const SLOT_BEACON = '0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50';
-// The views that explain a flag: evidenceOf(key) -> (bytes32, string, address, uint64), responseOf(key) -> (string, address, uint64, uint256, address).
-const DETAIL_SEL = { evidence: sel4('evidenceOf(bytes32)'), response: sel4('responseOf(bytes32)') };
+// The views that explain a flag: evidenceOf(key) -> (bytes32, string, address, uint64), responseAt(key, i) -> (string, address, uint64, uint256, address).
+const DETAIL_SEL = { evidence: sel4('evidenceOf(bytes32)'), responseAt: sel4('responseAt(bytes32,uint256)') };
 const strTail = (str) => { const h = Buffer.from(str).toString('hex'); return word(h.length / 2) + h.padEnd(64 * Math.ceil(h.length / 64), '0'); };
 const abiEvidence = (hash, uri) => '0x' + hash.slice(2) + word(128) + word(0x99) + word(5) + strTail(uri);
-const abiResponse = (text, by) => '0x' + word(160) + word(by) + word(7) + word(77390) + word(TOKEN) + strTail(text);
+const abiResponse = (text, by, chainId = 77390) => '0x' + word(160) + word(by) + word(7) + word(chainId) + word(chainId ? TOKEN : 0) + strTail(text);
 const REPORT = '0x' + 'e7'.repeat(32);
 // Neutral reason texts (zetaphy-network/src/vaccine.js REASON_TEXT) of the reasons these tests use.
 const RT = { 1: 'in a simulated trade, buying worked but selling failed or returned almost nothing', 2: 'an address can mint new tokens without a cap',
@@ -206,11 +206,12 @@ async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
           : kind === 'code' ? node.flags?.code?.includes('0x' + arg)
             : kind === 'address' && BigInt('0x' + arg.slice(0, 64)) === 77390n ? node.flags?.address?.includes('0x' + arg.slice(64 + 24)) : undefined;
         if (hit && enforcedView && node.flags?.warnOnly) hit = false;
-        // evidenceOf / responseOf: node.evidence { reportHash, uri } for every key; node.responses { key: { text, by } }.
+        // evidenceOf / responseAt: node.evidence { reportHash, uri } for every key; node.responses { key: [{ text, by, chainId? }] }
+        // (in the registry's order: the governance-assigned responder's first, then the newest).
         if (sel === DETAIL_SEL.evidence) hit = null, result = node.evidence ? abiEvidence(node.evidence.reportHash, node.evidence.uri) : abiEvidence('0x' + '00'.repeat(32), '');
-        if (sel === DETAIL_SEL.response) {
-          const r = node.responses?.['0x' + arg];
-          hit = null; result = r ? abiResponse(r.text, r.by) : abiResponse('', 0);
+        if (sel === DETAIL_SEL.responseAt) {
+          const r = [].concat(node.responses?.['0x' + arg.slice(0, 64)] ?? [])[Number(BigInt('0x' + arg.slice(64, 128)))];
+          hit = null; result = r ? abiResponse(r.text, r.by, r.chainId) : abiResponse('', 0);
         }
         if (hit === null) { /* answered above */ }
         else if (node.registryDown) error = { code: -32000, message: 'execution reverted' };
@@ -1510,21 +1511,23 @@ test('vaccine: every refusal and warning shows the code fact, its evidence (repo
   let note = await page.textContent('#token-confirm .vaccine-note');
   assert.match(note, /reason: uses the same name or symbol as a known token at a different address/);
   assert.match(note, new RegExp(`Evidence: reportHash ${REPORT} \\(neuro:zetaphy:0x3333\\) · reproduce: run Neuro on the same code \\(zetaphy-neuro: node cli.js <chain> <address> --json\\) and compare the reportHash`));
-  assert.match(note, /No response from the owner yet · Automated code analysis, not an accusation/);
+  assert.match(note, /No response yet · Automated code analysis, not an accusation/);
   assert.ok(calls.some((c) => c.to.toLowerCase() === REGISTRY && c.data === '0x' + DETAIL_SEL.evidence + key.slice(2)), 'evidenceOf(the flagged key)');
-  // The owner answered (bidi and newline characters are dropped): shown next to the warning.
-  node.responses = { [key]: { text: 'pause() is for emergencies only;\u202e audit: example.org/audit\nthanks', by: OWNER } };
+  // The owner answered (bidi and newline characters are dropped): shown next to the warning, with its author;
+  // a governance-assigned responder's response first.
+  const GOVR = '0x' + '0b'.repeat(20);
+  node.responses = { [key]: [{ text: 'assigned responder here', by: GOVR, chainId: 0 }, { text: 'pause() is for emergencies only;\u202e audit: example.org/audit\nthanks', by: OWNER }] };
   await page.click('#token-review');
-  await page.waitForFunction(() => /Response from the owner/.test(document.querySelector('#token-confirm .vaccine-note').textContent));
+  await page.waitForFunction(() => /Response from/.test(document.querySelector('#token-confirm .vaccine-note').textContent));
   note = await page.textContent('#token-confirm .vaccine-note');
-  assert.ok(note.includes(`Response from the owner (${OWNER}): "pause() is for emergencies only; audit: example.org/audit thanks"`), note);
+  assert.ok(note.includes(`Response from the governance-assigned responder (${GOVR}): "assigned responder here" · Response from ${OWNER}: "pause() is for emergencies only; audit: example.org/audit thanks"`), note);
   // Enforced: refused, with the same evidence, response and disclaimer.
   node.flags.warnOnly = false;
   await page.click('#token-review');
-  await statusMatches(page, /Not signed: 0x3333.* is flagged .*reason: uses the same name.*Evidence: reportHash 0x(e7){32}.*Response from the owner \(0x(0a){20}\): "pause\(\) is for emergencies only; audit.*Automated code analysis, not an accusation/);
+  await statusMatches(page, /Not signed: 0x3333.* is flagged .*reason: uses the same name.*Evidence: reportHash 0x(e7){32}.*Response from 0x(0a){20}: "pause\(\) is for emergencies only; audit.*Automated code analysis, not an accusation/);
   // In Thai, the same status re-rendered: neutral texts, the owner's words, the disclaimer.
   await page.click('#lang');
-  await statusMatches(page, /ไม่เซ็น: 0x3333.*เหตุผล: ใช้ชื่อหรือสัญลักษณ์เดียวกับเหรียญที่รู้จัก แต่อยู่คนละที่อยู่.*หลักฐาน: reportHash 0x(e7){32}.*ตรวจซ้ำ: รัน Neuro.*คำชี้แจงของเจ้าของ \(0x(0a){20}\): "pause\(\) is for emergencies.*ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา/);
+  await statusMatches(page, /ไม่เซ็น: 0x3333.*เหตุผล: ใช้ชื่อหรือสัญลักษณ์เดียวกับเหรียญที่รู้จัก แต่อยู่คนละที่อยู่.*หลักฐาน: reportHash 0x(e7){32}.*ตรวจซ้ำ: รัน Neuro.*คำชี้แจงจาก 0x(0a){20}: "pause\(\) is for emergencies.*ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา/);
   for (const w of ['scam', 'drainer', 'phishing', 'honeypot', 'หลอกลวง', 'ดูดเงิน']) assert.ok(!(await page.textContent('#status')).toLowerCase().includes(w), w);
   // No evidence stored: still refused (never a send), and said so.
   node.evidence = undefined;

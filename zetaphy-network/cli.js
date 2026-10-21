@@ -12,8 +12,9 @@
 //   zetaphy job request <chain> <address> [--fee N]   ask the network to check a contract
 //   zetaphy job get <id>
 //   zetaphy job settle <id>            after a quorum's reveal grace: penalize seats that never revealed (anyone may)
-//   zetaphy job challenge <id> [--bond N]   dispute a verdict inside its challenge window: opens round 2 with 3 fresh
-//                                      runners (bond: at least max(2 x fee, the voted challenge bond); see job get)
+//   zetaphy job challenge <id> --verdict 0x<bytes32> [--bond N]   dispute a verdict inside its challenge window, naming
+//                                      the right one: opens a round with 3 fresh runners (bond: at least max(2 x fee,
+//                                      the voted challenge bond); see job get). No quorum: 80% back, may be re-challenged
 //   zetaphy job request-stable <chain> <address> --relay URL [--token usdc --fee 0.1 --tip 0.01]
 //                                      pay in test USDC/USDT through a relay: no ZETAPHY needed
 //   zetaphy faucet <usdc|usdt> --relay URL   test stablecoins for this wallet (the relay pays gas)
@@ -47,6 +48,7 @@
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x... --governance 0x<multisig>
 //                          --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --lockbox <chainId>:0x<LockBox>]
+//                                      with a ThreatRegistry, --lockbox is required (or --no-lockbox-protect, explicitly)
 //                                      BridgeGuard + BridgeAirlock + NeuroLane + a DecoyBridge; NeuroLane's pause
 //                                      switch defaults to the NeuroJobs' control(); the bridge's own contracts (and
 //                                      the lockbox) are protected in the ThreatRegistry
@@ -66,7 +68,7 @@
 //                                      (on a standing flag: backs it, toward the fast lane's fastQuorum)
 //   zetaphy threat clear <target>... | zetaphy threat check <target>...
 //   zetaphy threat protect|unprotect <target>... | threat enforce-delay <seconds> | threat set-governance <0x…|gov>
-//   zetaphy threat fast-quorum <n, 0 = off> | threat guardian <0x…:on|off>
+//   zetaphy threat fast-quorum <n, 0 = off> | threat guardian <0x…:on|off> | threat hold-delay <seconds, below enforce-delay>
 //                                      governance only: sent if this key is governance, else printed as calldata
 //                                      for a multisig proposal or a MsgEVMCall (gov module)
 //   zetaphy threat enforce-now <target>...   governance or a guardian: enforce standing flags at once
@@ -76,8 +78,10 @@
 //   zetaphy deploy-reports [--fee 0.1 --ttl 2592000 --community-fund 0x...]   ThreatReports (user reports, fee to the voters)
 //   zetaphy threat report <target> --note "..." [--chain bsc]   report a suspicious contract (pays the report fee)
 //   zetaphy threat reports [--all --last 50] | threat settle <id> | threat claim <id>
-//   zetaphy threat respond <target> --text "..." (≤500 bytes, empty removes it)   right of reply: the contract itself, its
-//                                      owner(), the claimed NeuroIdentity owner (<chainId>:0x…), or the responder governance named
+//   zetaphy threat respond <target> --text "..." (≤500 bytes, empty removes your own)   right of reply, one per author: for an
+//                                      address, the address itself or its owner() (on ZETAPHY) or the claimed NeuroIdentity owner
+//                                      (<chainId>:0x…); for code: and fp1: keys only the responder governance named
+//   zetaphy threat hold-now <target>...   governance or a guardian: hold bridging for standing flags at once (no hold-delay)
 //   zetaphy threat appeal <target>     the same party: appeal a flag (pays the appeal bond); fresh runners vote on it:
 //   zetaphy threat appeal-vote <target> --clear|--keep --evidence <reportHash> [--uri ...] | threat appeal-expire <target>
 //   zetaphy threat withdraw | threat pay-fund   refunded appeal bonds / kept bonds to the community fund
@@ -104,7 +108,8 @@
 //   zetaphy deploy-vault [--validators 0x... --validators-share 30 --fund N --governance 0x<multisig>]
 //                                      RewardVault: releases the reward pool at 10% a year (no withdraw)
 //   zetaphy vault status | release     what has vested; pay it out (anyone may; node start does it daily)
-//   zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --claim-quorum 3 --governance 0x<multisig>]
+//   zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --claim-quorum 3 --claim-min-agreed 5
+//                           --claim-delay 259200 --governance 0x<multisig>]
 //                                      NeuroIdentity (ERC-8004 identity: 1 contract = 1 agent) + NeuroValidation (runner verdicts)
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
 //   zetaphy identity get <chain> <address> | <agentId>   who controls it, its Neuro report link, runner verdicts
@@ -112,7 +117,9 @@
 //   zetaphy identity claim-request <agentId> --new-owner 0x… --owner-key <key> [--ttl s --out claim.json]
 //                                      start claiming the identity of a target on ANOTHER chain (its owner there signs)
 //   zetaphy identity attest-claim <claim.json> [--owner-sig 0x…]   a runner reads the owner on that chain and signs
-//   zetaphy identity claim-remote <claim.json>          submit once a quorum of runners attested (NeuroIdentity.claimRemote)
+//   zetaphy identity claim-remote <claim.json>          propose once a quorum of runners attested (NeuroIdentity.claimRemote)
+//   zetaphy identity finalize-claim <agentId>           run a proposed claim after its contest window (claimDelay; anyone)
+//   zetaphy identity contest-claim <agentId>            cancel a proposed claim in its window (the holder, or a runner meeting the bar)
 //   zetaphy identity verdict <agentId> <verdict 0x…> <score 0-100> [--tag t --uri u]   a bonded runner posts (or replaces) its verdict
 //   zetaphy msg sign <hello|verdict|threat-report|ack> --from <agentId> (--payload '<json>' | --payload-file f) [--to <agentId> --ttl 3600 --out f]
 //                                      signer: the agent's owner/operator/agentWallet, or a runner for an unclaimed Neuro identity
@@ -129,7 +136,7 @@ import { fileURLToPath } from 'node:url';
 import { JsonRpcProvider, Contract, ContractFactory, Interface, formatEther, parseEther, parseUnits, formatUnits, encodeBytes32String, decodeBytes32String, NonceManager, Signature, keccak256 } from 'ethers';
 import { HOME, loadOrCreateKey, sealWorkerKey } from './src/keys.js';
 import { detectHardware, pickProfile } from './src/hardware.js';
-import { createWorker, SUPPORTED_CHAINS } from './src/worker.js';
+import { createWorker, SUPPORTED_CHAINS, send as padded } from './src/worker.js';
 import { skillId, skillFiles } from './src/skill.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
@@ -403,7 +410,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (group === 'node' && cmd === 'register') {
     const c = await connect(s);
     const bond = opt.bond ? parseEther(String(opt.bond)) : await c.jobs.workerBond();
-    await (await c.jobs.register({ value: bond })).wait();
+    await (await padded(c.jobs.register, { value: bond })).wait();
     write(`registered ${c.me} with a bond of ${zeta(bond)}`);
     return 0;
   }
@@ -423,7 +430,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (group === 'node' && ['withdraw', 'unbond', 'withdraw-bond'].includes(cmd)) {
     const c = await connect(s);
     const fn = { withdraw: 'withdraw', unbond: 'requestUnbond', 'withdraw-bond': 'withdrawBond' }[cmd];
-    await (await c.jobs[fn]()).wait();
+    await (await padded(c.jobs[fn])).wait();
     write(`${cmd}: done`);
     return 0;
   }
@@ -433,7 +440,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     if (!chainKey || !target) throw new Error('usage: zetaphy job request <chain> <address> [--fee N]');
     const c = await connect(s);
     const fee = opt.fee ? parseEther(String(opt.fee)) : await c.jobs.minFee();
-    const rc = await (await c.jobs.request(encodeBytes32String(chainKey), target, { value: fee })).wait();
+    // Padded gas: the request's cost depends on the load meter's minute, which
+    // may change between the estimate (latest block) and the block it lands in.
+    const rc = await (await padded(c.jobs.request, encodeBytes32String(chainKey), target, { value: fee })).wait();
     const ev = rc.logs.map((l) => { try { return c.jobs.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === 'JobRequested');
     write(`job ${ev.args.id} requested: ${chainKey} ${target}, fee ${zeta(fee)}`);
     return 0;
@@ -442,23 +451,26 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (group === 'job' && cmd === 'settle') {
     if (!/^\d+$/.test(rest[0] ?? '')) throw new Error('usage: zetaphy job settle <id>');
     const c = await connect(s);
-    const rc = await (await c.jobs.settle(BigInt(rest[0]))).wait();
+    const rc = await (await padded(c.jobs.settle, BigInt(rest[0]))).wait();
     const missed = rc.logs.map((l) => { try { return c.jobs.interface.parseLog(l); } catch { return null; } }).filter((e) => e?.name === 'Missed');
     write(`job ${rest[0]} settled: ${missed.length ? missed.map((e) => `${e.args.worker} never revealed (penalized, one strike)`).join('; ') : 'nothing to penalize'}`);
     return 0;
   }
 
   if (group === 'job' && cmd === 'challenge') {
-    if (!/^\d+$/.test(rest[0] ?? '')) throw new Error('usage: zetaphy job challenge <id> [--bond N]');
+    if (!/^\d+$/.test(rest[0] ?? '')) throw new Error('usage: zetaphy job challenge <id> --verdict 0x<bytes32> [--bond N]');
+    const claim = String(opt.verdict ?? '');
+    if (!/^0x[0-9a-fA-F]{64}$/.test(claim)) throw new Error('--verdict 0x<64 hex>: the verdict you say is right (from your own Neuro run; it must differ from the job\'s)');
     const c = await connect(s);
     const id = BigInt(rest[0]);
     const need = await c.jobs.challengeBondOf(id);
     const bond = opt.bond ? parseEther(String(opt.bond)) : need;
     if (bond < need) throw new Error(`the bond must be at least ${zeta(need)}`);
     const as = await c.jobs.assurance(id);
-    await (await c.jobs.challenge(id, { value: bond })).wait();
-    write(`job ${id} challenged with ${zeta(bond)} (window was open until ${new Date(Number(as.challengeUntil) * 1000).toISOString()}): round 2 draws 3 fresh runners;`);
-    write('  overturned: your bond back + half of the slashed bonds · confirmed: you lose the bond · no quorum: bond back, verdict marked disputed');
+    await (await padded(c.jobs.challenge, id, claim, { value: bond })).wait();
+    write(`job ${id} challenged with ${zeta(bond)}, claiming ${claim} (window was open until ${new Date(Number(as.challengeUntil) * 1000).toISOString()}): a challenge round draws 3 fresh runners;`);
+    write('  overturned to your verdict: bond back + half of the slashed bonds · confirmed, or overturned to another verdict: you lose the bond');
+    write('  no quorum: 80% back (20% to the seats that revealed), verdict marked disputed, and it may be challenged again (3 rounds in all)');
     return 0;
   }
 
@@ -471,9 +483,11 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       const as = await c.jobs.assurance(id);
       out.confirmedBy = Number(as.agreedBy); // "ยืนยันแล้วโดย N คน"
       out.challenge = CHALLENGE[Number(as.state)];
+      const rounds = Number((await c.jobs.challengeRound(id)).count);
+      if (rounds) out.challenges = rounds;
       out.challengeUntil = new Date(Number(as.challengeUntil) * 1000).toISOString();
       out.final = as.settled;
-      if (as.state === 0n && !as.settled) out.challengeBond = zeta(await c.jobs.challengeBondOf(id));
+      if ((as.state === 0n || as.state === 4n) && !as.settled) out.challengeBond = zeta(await c.jobs.challengeBondOf(id));
     }
     write(JSON.stringify(out, null, 2));
     return 0;
@@ -495,9 +509,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const address = await contract.getAddress();
     const nj = new Contract(address, ART.abi, c.signer);
     const control = opt.control ? String(opt.control) : fresh.address;
-    await (await nj.setControl(control)).wait();
+    await (await padded(nj.setControl, control)).wait();
     if (fresh) await configureControl(c, fresh, opt, write);
-    if (opt.fund) await (await nj.fund({ value: parseEther(String(opt.fund)) })).wait();
+    if (opt.fund) await (await padded(nj.fund, { value: parseEther(String(opt.fund)) })).wait();
     settings({ ...opt, jobs: address }, {});
     write(`NeuroJobs deployed at ${address}${opt.fund ? `, reward pool ${opt.fund} ZETAPHY` : ''}, governed by NeuroControl ${control}`);
     return 0;
@@ -915,7 +929,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       else if (ADDR_RE.test(t)) {
         out.push([`${t} (address on ZETAPHY)`, await reg.addressKey(EVM_CHAIN_ID, t), EVM_CHAIN_ID, t]);
         const code = await provider.getCode(t);
-        if (code !== '0x') out.push([`${t} (its code)`, await reg.codeKey(keccak256(code)), EVM_CHAIN_ID, t]);
+        if (code !== '0x') out.push([`${t} (its code: only its governance-named responder)`, await reg.codeKey(keccak256(code)), 0n, ZERO_ADDR]);
       } else for (const [label, key] of await threatKeys(reg, provider, [t])) out.push([label, key, 0n, ZERO_ADDR]);
     }
     return out;
@@ -935,6 +949,11 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   }
 
   if (group === 'deploy-bridge') {
+    // With a ThreatRegistry, the source LockBox must be protected (else two runners could hold every transfer
+    // of the route, and the LockBox has no refund path): --lockbox, or an explicit --no-lockbox-protect.
+    if (s.threats && opt.lockbox == null && !opt['no-lockbox-protect']) {
+      throw new Error('deploy-bridge with a ThreatRegistry needs --lockbox <source chain id>:0x<LockBox>, so the source lockbox is protected (or pass --no-lockbox-protect to deploy without that, and protect it later: zetaphy threat protect <chainId>:0x<LockBox>)');
+    }
     const c = await connect(s);
     const deploy = async (a, args) => { const k = await new ContractFactory(a.abi, a.bytecode, c.signer).deploy(...args); await k.waitForDeployment(); return new Contract(await k.getAddress(), a.abi, c.signer); };
     const route = encodeBytes32String('airlock');
@@ -963,7 +982,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       const own = [guard.target, await guard.token(), airlock.target, lane.target];
       const keys = await threatKeys(reg, c.provider, [...own, ...(opt.lockbox ? [String(opt.lockbox)] : [])]);
       await governAction(reg, c, write, 'setProtected', [keys.map((k) => k[1]), true], `protect the bridge's own contracts${opt.lockbox ? ' and the lockbox' : ''}`);
-      if (!opt.lockbox) write('note: pass --lockbox <chainId>:0x<LockBox> (or later: zetaphy threat protect <chainId>:0x<LockBox>) to protect the source lockbox too');
+      if (!opt.lockbox) write('WARNING: --no-lockbox-protect: the source lockbox is NOT protected; protect it now: zetaphy threat protect <chainId>:0x<LockBox>');
     } else write('warning: no ThreatRegistry (--threats or deploy-threats), so flagged code is not refused by the bridge');
     const gov = governanceOf(opt, write);
     if (gov) {
@@ -1021,6 +1040,11 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     }
     const fq = await regc.fastQuorum();
     write(fq === 0n ? 'fast lane: off (only enforceNow by governance or a guardian)' : `fast lane: a flag ${fq} runners stand behind is enforced at once`);
+    if (opt['hold-delay'] != null) {
+      if (!/^\d{1,8}$/.test(String(opt['hold-delay']))) throw new Error('--hold-delay: seconds, below --enforce-delay (0: a flag holds bridging at once)');
+      await (await regc.setHoldDelay(BigInt(opt['hold-delay']))).wait();
+    }
+    write(`bridge holds: a flag holds bridging after ${await regc.holdDelay()}s (at once: fast lane, or holdNow by governance or a guardian)`);
     for (const g of [].concat(opt.guardian ?? [])) {
       if (!ADDR_RE.test(String(g))) throw new Error('--guardian must be a 0x address');
       await (await regc.setGuardian(String(g), true)).wait();
@@ -1085,9 +1109,18 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
         const when = !flagged ? '' : fast ? ', enforced (fast lane)' : from <= now ? ', enforced' : `, warning only until ${new Date(Number(from) * 1000).toISOString()} (then enforced)`;
         const prot = (await reg.protectedKey(key)) ? ' (protected by governance)' : '';
         write(`${label}: ${flagged ? `FLAGGED (${REASONS[Number(reason)] ?? reason}${when})` : 'not flagged'}${prot}`);
-        const [ev, rs, ap] = await Promise.all([reg.evidenceOf(key), reg.responseOf(key), reg.appeals(key)]);
+        if (flagged) {
+          const [[held], hf] = await Promise.all([reg.isHeld(key), reg.heldFrom(key)]);
+          write(held ? '  bridge hold: holding (BridgeAirlock / BridgeGuard hold its transfers until the flag is cleared or the key protected)'
+            : `  bridge hold: from ${new Date(Number(hf) * 1000).toISOString()} (hold-delay; at once if governance or a guardian runs threat hold-now)`);
+        }
+        const [ev, rsCount, ap] = await Promise.all([reg.evidenceOf(key), reg.responseCount(key), reg.appeals(key)]);
         if (ev.reportHash !== ZERO_HASH) write(`  evidence: reportHash ${ev.reportHash}${ev.uri ? ` (${ev.uri})` : ''}, by ${ev.by}; reproduce: run Neuro on the same code and compare the reportHash`);
-        if (rs.text) write(`  response from ${rs.by} (${rs.chainId === 0n ? 'responder named by governance' : `for ${rs.chainId}:${rs.account}`}): ${JSON.stringify(rs.text)}`);
+        // Responses, one per author: the governance-named responder's first, then the newest.
+        for (let i = 0n; i < rsCount && i < 8n; i++) {
+          const rs = await reg.responseAt(key, i);
+          if (rs.text) write(`  response from ${rs.by} (${rs.chainId === 0n ? 'responder named by governance' : `for ${rs.chainId}:${rs.account}`}): ${JSON.stringify(rs.text)}`);
+        }
         if (ap.appellant !== ZERO_ADDR) write(`  appeal open by ${ap.appellant} since ${new Date(Number(ap.openedAt) * 1000).toISOString()}: ${ap.clearVotes} vote(s) to clear, ${ap.keepVotes} to keep`);
       }
       return 0;
@@ -1102,7 +1135,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   }
 
   // ---- vaccine: fast lane, the data feed for other wallets, and user reports ----
-  if (group === 'threat' && ['fast-quorum', 'guardian', 'enforce-now', 'export'].includes(cmd)) {
+  if (group === 'threat' && ['fast-quorum', 'guardian', 'enforce-now', 'hold-now', 'hold-delay', 'export'].includes(cmd)) {
     if (!s.threats) throw new Error('set --threats 0x<ThreatRegistry> (or run deploy-threats)');
     const c = await connect(s, { needJobs: false });
     const reg = new Contract(s.threats, B.ThreatRegistry.abi, c.signer);
@@ -1115,6 +1148,24 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       const m = /^(0x[0-9a-fA-F]{40}):(on|off)$/.exec(String(rest[0] ?? ''));
       if (!m) throw new Error('usage: zetaphy threat guardian 0x<address>:on|off');
       await governAction(reg, c, write, 'setGuardian', [m[1], m[2] === 'on'], `${m[2] === 'on' ? 'let' : 'stop'} ${m[1]} enforce flags at once`);
+      return 0;
+    }
+    if (cmd === 'hold-delay') {
+      if (!/^\d{1,8}$/.test(String(rest[0] ?? ''))) throw new Error('usage: zetaphy threat hold-delay <seconds, below the enforce-delay; 0 = a flag holds bridging at once>');
+      await governAction(reg, c, write, 'setHoldDelay', [BigInt(rest[0])], `hold bridging ${rest[0]}s after a flag`);
+      return 0;
+    }
+    if (cmd === 'hold-now') {
+      if (!rest.length) throw new Error('usage: zetaphy threat hold-now <target>... (governance or a guardian)');
+      const keys = await threatKeys(reg, c.provider, rest);
+      const gov = String(await reg.governance()).toLowerCase();
+      const mayAct = gov === c.me.toLowerCase() || (await reg.guardian(c.me));
+      for (const [label, key] of keys) {
+        if (!(await reg.isFlagged(key))[0]) { write(`${label}: not flagged, nothing to hold`); continue; }
+        if ((await reg.isHeld(key))[0]) { write(`${label}: already held`); continue; }
+        if (mayAct) { await (await reg.holdNow(key)).wait(); write(`${label}: held now (bridging of it stops until the flag is cleared or the key protected)`); continue; }
+        write(`${label}: this key is neither governance nor a guardian. Have one call:\n  to ${reg.target}\n  data ${reg.interface.encodeFunctionData('holdNow', [key])}`);
+      }
       return 0;
     }
     if (cmd === 'enforce-now') {
@@ -1133,7 +1184,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     // export: every standing flag, read at one block, as JSON other wallets and extensions can load.
     const block = await c.provider.getBlock('latest');
     const at = { blockTag: block.number };
-    const [count, delay, fastQuorum] = await Promise.all([reg.flaggedCount(at), reg.enforceDelay(at), reg.fastQuorum(at)]);
+    const [count, delay, fastQuorum, holdDelay] = await Promise.all([reg.flaggedCount(at), reg.enforceDelay(at), reg.fastQuorum(at), reg.holdDelay(at)]);
     const { REASONS, DISCLAIMER } = await import('./src/vaccine.js');
     const all = [];
     for (let i = 0n; i < count; i += 20n) {
@@ -1142,24 +1193,29 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     }
     const keys = [];
     for (const key of [...new Set(all.map((k) => k.toLowerCase()))]) {
-      const [e, [enforced], from, ev, rs, ap] = await Promise.all([reg.entries(key, at), reg.isEnforced(key, at), reg.enforcedFrom(key, at),
-        reg.evidenceOf(key, at), reg.responseOf(key, at), reg.appeals(key, at)]);
+      const [e, [enforced], from, ev, rsCount, ap, [held], heldFrom] = await Promise.all([reg.entries(key, at), reg.isEnforced(key, at), reg.enforcedFrom(key, at),
+        reg.evidenceOf(key, at), reg.responseCount(key, at), reg.appeals(key, at), reg.isHeld(key, at), reg.heldFrom(key, at)]);
+      // One response per author: the governance-named responder's first, then the newest (at most 8).
+      const responses = (await Promise.all(Array.from({ length: Number(rsCount > 8n ? 8n : rsCount) }, (_, i) => reg.responseAt(key, i, at))))
+        .filter((r) => r.text).map((r) => ({ text: r.text, by: r.by, at: Number(r.at), assigned: r.chainId === 0n, ...(r.chainId === 0n ? {} : { chainId: Number(r.chainId), account: r.account }) }));
       if (!e.flagged) continue; // cleared or protected since
       keys.push({ key, reason: REASONS[Number(e.reason)] ?? Number(e.reason), enforced, enforcedFrom: Number(from), fast: e.fast, flaggedAt: Number(e.updatedAt),
         evidence: { reportHash: ev.reportHash, uri: ev.uri, by: ev.by },
-        response: rs.text ? { text: rs.text, by: rs.by, at: Number(rs.at) } : null,
+        held, heldFrom: Number(heldFrom),
+        response: responses[0] ? { text: responses[0].text, by: responses[0].by, at: responses[0].at } : null, // the first of `responses` (format /2)
+        responses,
         appealOpen: ap.appellant !== ZERO_ADDR });
     }
     const feed = {
       format: 'zetaphy-threats/2',
       registry: reg.target, chainId: Number(EVM_CHAIN_ID), block: block.number, timestamp: block.timestamp,
-      enforceDelay: Number(delay), fastQuorum: Number(fastQuorum),
+      enforceDelay: Number(delay), fastQuorum: Number(fastQuorum), holdDelay: Number(holdDelay),
       keyOf: {
         fingerprint: 'fp1 sha256 (zetaphy-neuro/src/fingerprint.js), as 0x + 64 hex',
         code: 'keccak256(abi.encode("zetaphy.threat.code", keccak256(runtime code)))',
         address: 'keccak256(abi.encode("zetaphy.threat.address", uint256 EVM chain id, address))',
       },
-      policy: 'enforced: refuse. flagged, not enforced: warn. Not listed: not flagged at this block. Show the reason as a code fact, the evidence and the response with every warning.',
+      policy: 'enforced: refuse. flagged, not enforced: warn. Not listed: not flagged at this block. Show the reason as a code fact, the evidence and the responses (each with its author) with every warning.',
       disclaimer: DISCLAIMER,
       reasons: 'what the code does, or did in a reproducible test (ThreatRegistry.Reason); never a claim about intent',
       keys,
@@ -1208,7 +1264,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       if (text === null || Buffer.byteLength(text) > 500) throw new Error('usage: zetaphy threat respond <target> --text "..." (at most 500 bytes; "" removes the response)');
       let done = 0;
       for (const [label, key, chainId, account] of subjects) {
-        if (!(await reg.mayAnswer(key, chainId, account, c.me))) { write(`${label}: this key may not answer for it (the contract itself, its owner(), the claimed NeuroIdentity owner, or the responder governance named)`); continue; }
+        if (!text) {
+          if (!(await reg.responseBy(key, c.me)).text) { write(`${label}: this key has no response there to remove`); continue; }
+        } else if (!(await reg.mayAnswer(key, chainId, account, c.me))) { write(`${label}: this key may not answer for it (for an address: the address itself, its owner() on ZETAPHY, or the claimed NeuroIdentity owner; for code: and fp1: keys only the responder governance named)`); continue; }
         await (await reg.respond(key, chainId, account, text)).wait();
         write(`${label}: response ${text ? 'posted' : 'removed'} (shown next to the flag; it does not change the flag)`);
         done++;

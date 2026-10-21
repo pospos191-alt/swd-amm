@@ -61,6 +61,7 @@ export const T = {
     'fee-exempt': (p) => `Có thể miễn thuế cho một số ví được chọn (${list(p.functions)}). Thường gặp ở token có thuế, nhưng điều này cho một số ví lợi thế hơn người khác.`,
     'network-flagged': (p) => `Các runner của mạng Neuro ZETAPHY đã bỏ phiếu ghi mã này vào ThreatRegistry${p.reason ? ` (nhóm: ${REASON[p.reason] ?? p.reason})` : ''}. Mọi hợp đồng có cùng mã đều nhận cảnh báo tương tự.`,
     'similar-flagged': (p) => `Mã này giống ${p.percent}% với mã mà các runner Neuro đã gắn cờ (dấu vân tay ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, nhóm: ${REASON[p.reason] ?? p.reason}` : ''}). Bản sao sửa nhẹ của mã đã gắn cờ thường hoạt động giống vậy.`,
+    'similar-reference': (p) => `Mã này giống ${p.percent}% với một mẫu tham chiếu trong bộ dữ liệu của Neuro (dấu vân tay ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, nhóm: ${REASON[p.reason] ?? p.reason}` : ''}). Mẫu này không phải mã đã bị các runner Neuro gắn cờ trên chuỗi. Độ tương đồng chỉ là gợi ý để xem kỹ hơn, không phải bằng chứng.`,
     'tax-wallet': (p) => `Có thể đổi ví nhận tiền thuế (${list(p.functions)}). Thường gặp ở token có thuế.`,
     'selfdestruct': () => 'Mã có chứa SELFDESTRUCT. Nếu được kích hoạt, nó có thể xóa sạch hợp đồng hoặc chuyển tiền của hợp đồng đi nơi khác.',
     'delegatecall': () => 'Mã có thể chạy mã của một hợp đồng khác như mã của chính nó (DELEGATECALL), nên mã thực sự chạy có thể khác với mã hiển thị ở đây.',

@@ -17,13 +17,15 @@ const ZETAPHY_CAIP2 = `eip155:${EVM_CHAIN_ID}`;
 const JOBS_ABI = ['function workers(address) view returns (uint128 bond, uint64 unbondAt, bool active, uint32 agreed, uint32 rejected)'];
 
 export const IDENTITY_USAGE = `usage:
-  zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --claim-quorum 3 --governance 0x<multisig>]
+  zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --claim-quorum 3 --claim-min-agreed 5 --claim-delay 259200 --governance 0x<multisig>]
   zetaphy identity register <chain> <address>
   zetaphy identity get <chain> <address> | <agentId>
   zetaphy identity claim <agentId>
   zetaphy identity claim-request <agentId> --new-owner 0x… --owner-key <owner on its chain> [--ttl 86400 --out claim.json]
   zetaphy identity attest-claim <claim.json> [--owner-sig 0x…]     (runners: check the owner on its chain, then sign)
-  zetaphy identity claim-remote <claim.json>
+  zetaphy identity claim-remote <claim.json>          (proposes; runs after the contest window)
+  zetaphy identity finalize-claim <agentId>           (anyone, once the window has passed)
+  zetaphy identity contest-claim <agentId>            (the current holder, or any runner meeting the bar)
   zetaphy identity verdict <agentId> <verdict 0x…32 bytes> <score 0-100> [--tag neuro-v1 --uri URL]
   zetaphy msg sign <${Object.keys(KINDS).join('|')}> --from <agentId> (--payload '<json>' | --payload-file f) [--to <agentId> --ttl 3600 --source-chain ${ZETAPHY_CAIP2} --no-inline --out msg.json]
   zetaphy msg verify <file> [--me <agentId>]`;
@@ -75,6 +77,8 @@ async function printIdentity(write, idr, id, provider, ctx) {
   write(`  chain ${chain}, address ${account}`);
   write(`  registered by ${registeredBy} at ${new Date(Number(registeredAt) * 1000).toISOString()}`);
   write(`  control: ${claimed ? `claimed by ${holder}` : 'unclaimed (held by the registry; nobody can speak for it)'}`);
+  const [pendingOwner, readyAt] = await idr.pendingClaim(id);
+  if (readyAt > 0n) write(`  pending remote claim: to ${pendingOwner} after ${new Date(Number(readyAt) * 1000).toISOString()} (contestable until then)`);
   write(`  Neuro report: ${neuro.services[0].endpoint}`);
   if (claimed && !uri.startsWith('data:')) write(`  agentURI set by the owner: ${uri} (the owner's words, not Neuro's)`);
   write(`  registry: ${neuro.registrations[0].agentRegistry}`);
@@ -99,13 +103,18 @@ export async function identityCommand({ group, cmd, rest, opt, env, write, s, co
     const I = art('NeuroIdentity');
     // Remote claims (targets on other chains) need NeuroJobs runners; without --jobs they stay off.
     const quorum = s.jobs ? Number(opt['claim-quorum'] ?? 3) : 0;
+    const claimMinAgreed = s.jobs ? Number(opt['claim-min-agreed'] ?? 5) : 0;
+    const claimDelay = s.jobs ? Number(opt['claim-delay'] ?? 3 * 86400) : 0;
     if (s.jobs && (!Number.isInteger(quorum) || quorum < 1)) throw new Error('--claim-quorum must be a whole number of runners, at least 1');
+    if (s.jobs && (!Number.isInteger(claimMinAgreed) || claimMinAgreed < 1 || claimMinAgreed > 2 ** 32 - 1)) throw new Error('--claim-min-agreed must be a whole number, at least 1');
+    if (s.jobs && (!Number.isInteger(claimDelay) || claimDelay < 3600 || claimDelay > 30 * 86400)) throw new Error('--claim-delay must be 3600-2592000 seconds (1 hour to 30 days)');
     const k = await new ContractFactory(I.abi, I.bytecode, c.signer).deploy(String(opt.web), opt.image ? String(opt.image) : '', ...chainArgs(),
-      s.jobs ?? ZeroAddress, quorum);
+      s.jobs ?? ZeroAddress, quorum, claimMinAgreed, claimDelay);
     await k.waitForDeployment();
     const identity = await k.getAddress();
     write(`NeuroIdentity (ERC-8004 identity registry) ${identity}`);
-    write(s.jobs ? `remote claims: ${quorum} NeuroJobs runner attestation(s) at ${s.jobs} (fixed for this deployment)` : 'remote claims: off (no NeuroJobs address, --jobs)');
+    write(s.jobs ? `remote claims: ${quorum} NeuroJobs runner attestation(s) at ${s.jobs}, each runner with at least ${claimMinAgreed} accepted verdict(s); `
+      + `a claim waits ${claimDelay} s, during which the holder or any such runner can contest it (fixed for this deployment)` : 'remote claims: off (no NeuroJobs address, --jobs)');
     const patch = { identity };
     if (s.jobs) {
       const V = art('NeuroValidation');
@@ -218,7 +227,8 @@ export async function identityCommand({ group, cmd, rest, opt, env, write, s, co
       const { wallet } = loadOrCreateKey();
       if (s.jobs) {
         const w = await new Contract(s.jobs, JOBS_ABI, provider).workers(wallet.address);
-        if (!(w.active && w.agreed > 0n && w.rejected <= w.agreed)) write(`warning: ${wallet.address} is not a runner in good standing yet; the registry will not count this attestation`);
+        const bar = BigInt(await idr.claimMinAgreed());
+        if (!(w.active && w.agreed >= bar && w.rejected <= w.agreed)) write(`warning: ${wallet.address} is not a runner in good standing for claims yet (active, at least ${bar} accepted verdicts, rejected <= agreed); the registry will not count this attestation`);
       }
       b.attestations = [...(b.attestations ?? []).filter((a) => a.runner.toLowerCase() !== wallet.address.toLowerCase()), await signAttestation(wallet, b)];
       writeFileSync(file, JSON.stringify(b, null, 2) + '\n');
@@ -236,7 +246,26 @@ export async function identityCommand({ group, cmd, rest, opt, env, write, s, co
       const need = await idr.claimQuorum();
       if (BigInt(sigs.length) < need) throw new Error(`${sigs.length} attestation(s); the registry needs ${need}`);
       await (await idr.claimRemote(agentArg(b.agentId), b.newOwner, b.ownerKey, BigInt(b.deadline), b.ownerSig ?? '0x', sigs)).wait();
-      write(`agent ${b.agentId} (${b.target}) is now controlled by ${b.newOwner}`);
+      const [, readyAt] = await idr.pendingClaim(agentArg(b.agentId));
+      write(`claim PROPOSED: agent ${b.agentId} (${b.target}) goes to ${b.newOwner} after ${new Date(Number(readyAt) * 1000).toISOString()}`);
+      write(`  until then the current holder or any runner in good standing can cancel it (zetaphy identity contest-claim ${b.agentId})`);
+      write(`  afterwards anyone runs it: zetaphy identity finalize-claim ${b.agentId}`);
+      return 0;
+    }
+    if (cmd === 'finalize-claim' || cmd === 'contest-claim') {
+      const id = agentArg(rest[0]);
+      const c = await connect(s, { needJobs: false });
+      const idr = await identityContract(ctx, c.signer);
+      const [newOwner, readyAt] = await idr.pendingClaim(id);
+      if (readyAt === 0n) { write(`agent ${id} has no pending remote claim`); return 1; }
+      const when = new Date(Number(readyAt) * 1000).toISOString();
+      if (cmd === 'finalize-claim') {
+        await (await idr.finalizeClaim(id)).wait();
+        write(`agent ${id} is now controlled by ${newOwner}`);
+      } else {
+        await (await idr.contestClaim(id)).wait();
+        write(`contested: the claim giving agent ${id} to ${newOwner} (due ${when}) is cancelled; a new claim needs fresh signatures`);
+      }
       return 0;
     }
     if (cmd === 'verdict') {

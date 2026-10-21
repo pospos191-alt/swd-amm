@@ -33,14 +33,23 @@ interface IClaimRunners {
 ///         - A target on another chain is claimed with `claimRemote`: its owner
 ///           (owner()/getOwner()/EIP-1967 admin on EVM, mint or upgrade
 ///           authority on Solana, ...) signs a consent off-chain, and at least
-///           `claimQuorum` bonded Neuro runners (NeuroJobs: active, agreed > 0,
-///           rejected <= agreed) attest with EIP-712 signatures that this key
-///           is the target's owner on its chain right now. For an EVM owner the
-///           consent itself is also checked here (ecrecover). Trust: the
-///           runners' quorum is trusted to have read the owner correctly; for a
-///           non-EVM owner (ed25519, ...) it is also trusted to have checked
-///           the consent signature. Each claim uses the agent's `claimNonce`,
-///           so attestations cannot be replayed.
+///           `claimQuorum` bonded Neuro runners (NeuroJobs: active,
+///           agreed >= claimMinAgreed, rejected <= agreed, the bar ThreatRegistry
+///           uses) attest with EIP-712 signatures that this key is the target's
+///           owner on its chain right now. For an EVM owner the consent itself
+///           is also checked here (ecrecover). Trust: the runners' quorum is
+///           trusted to have read the owner correctly; for a non-EVM owner
+///           (ed25519, ...) it is also trusted to have checked the consent
+///           signature. Each claim uses the agent's `claimNonce`, so
+///           attestations cannot be replayed.
+///         - A remote claim only PROPOSES the takeover. It runs after
+///           `claimDelay` (`finalizeClaim`, anyone may call it). Until then the
+///           current holder (if the identity is claimed) or any ONE runner that
+///           meets the bar can `contestClaim`, which cancels it; the claimant
+///           must then gather fresh signatures. One honest runner (or the real
+///           holder) is therefore enough to stop a colluding quorum. The price:
+///           one rogue runner can also delay an honest claim, which fails safe
+///           (the identity stays where it is).
 ///         - One spelling per target on chain: EVM/Move hex is lowercase, TON
 ///           friendly addresses (base64url, bounceable or not, testnet flag)
 ///           are converted to raw `0:hex` / `-1:hex` after their CRC16 check,
@@ -114,6 +123,13 @@ contract NeuroIdentity {
     IClaimRunners public immutable claimRunners;
     /// Runner attestations a remote claim needs.
     uint256 public immutable claimQuorum;
+    /// Accepted verdicts (NeuroJobs `agreed`) a runner needs before it may attest or contest a remote claim.
+    uint32 public immutable claimMinAgreed;
+    /// Seconds a remote claim waits (contest window) before `finalizeClaim` can run it.
+    uint64 public immutable claimDelay;
+    struct PendingClaim { address newOwner; uint64 readyAt; }
+    /// The remote claim waiting for its contest window to end (readyAt 0 = none).
+    mapping(uint256 => PendingClaim) public pendingClaim;
     /// Bumped by every claim (local or remote): attestations and consents name it, so each is used once.
     mapping(uint256 => uint256) public claimNonce;
     /// Spelling rules (NeuroTargets), created by the constructor.
@@ -134,7 +150,9 @@ contract NeuroIdentity {
     // Neuro
     event TargetRegistered(uint256 indexed agentId, bytes32 indexed targetHash, string target, address indexed registeredBy);
     event Claimed(uint256 indexed agentId, address indexed by, address indexed previousOwner);
-    event RemoteClaimed(uint256 indexed agentId, address indexed newOwner, bytes ownerKey, address[] runners);
+    event RemoteClaimProposed(uint256 indexed agentId, address indexed newOwner, bytes ownerKey, address[] runners, uint64 readyAt);
+    event RemoteClaimContested(uint256 indexed agentId, address indexed by, address indexed newOwner);
+    event RemoteClaimFinalized(uint256 indexed agentId, address indexed newOwner);
     event ChainAdded(string key, string caip2, uint8 rule);
     event WebBaseSet(string webBase, string imageURI);
     event AdminSet(address admin);
@@ -162,6 +180,10 @@ contract NeuroIdentity {
     error BadNonce();
     error NotRunner(address signer);
     error Quorum(uint256 have, uint256 need);
+    error ClaimPending();
+    error NoPendingClaim();
+    error ClaimNotReady(uint64 readyAt);
+    error ContestClosed();
 
     bytes32 private constant AGENT_WALLET_SET_TYPEHASH =
         keccak256("AgentWalletSet(uint256 agentId,address newWallet,address owner,uint256 deadline)");
@@ -181,12 +203,15 @@ contract NeuroIdentity {
     bytes32 private constant KEY_REGISTERED_BY = keccak256("neuro.registeredBy");
 
     constructor(string memory webBase_, string memory image_, string[] memory keys, string[] memory caip2s, uint8[] memory rules,
-        address runners_, uint256 quorum_) {
+        address runners_, uint256 quorum_, uint32 minAgreed_, uint64 claimDelay_) {
         if (keys.length != caip2s.length || keys.length != rules.length) revert BadValue();
-        if (runners_ != address(0) && quorum_ == 0) revert BadValue();
+        // remote claims on: a quorum, a runner bar and a contest window of 1 hour to 30 days
+        if (runners_ != address(0) && (quorum_ == 0 || minAgreed_ == 0 || claimDelay_ < 1 hours || claimDelay_ > 30 days)) revert BadValue();
         claimRunners = IClaimRunners(runners_);
         targetFormat = new NeuroTargets();
         claimQuorum = quorum_;
+        claimMinAgreed = minAgreed_;
+        claimDelay = claimDelay_;
         admin = msg.sender;
         localCaip2Hash = keccak256(bytes(string.concat("eip155:", _toString(block.chainid))));
         _setWeb(webBase_, image_);
@@ -453,8 +478,9 @@ contract NeuroIdentity {
         _takeOver(agentId, msg.sender);
     }
 
-    /// Takes control of the identity of a target on ANOTHER chain, for
-    /// `newOwner`. Anyone may submit it; the signatures decide.
+    /// PROPOSES that `newOwner` takes control of the identity of a target on
+    /// ANOTHER chain. Anyone may submit it; the signatures decide. The takeover
+    /// runs with `finalizeClaim` after `claimDelay`, unless contested first.
     /// @param ownerKey   the target's owner/authority on its chain, as bytes
     ///                   (20-byte address on EVM, 32-byte ed25519 key on Solana, ...)
     /// @param ownerSig   for an EVM target: the owner's EIP-712 RemoteClaimConsent
@@ -464,14 +490,49 @@ contract NeuroIdentity {
     function claimRemote(uint256 agentId, address newOwner, bytes calldata ownerKey, uint256 deadline,
         bytes calldata ownerSig, bytes[] calldata attestations) external {
         if (address(claimRunners) == address(0)) revert RemoteClaimsOff();
+        if (pendingClaim[agentId].readyAt != 0) revert ClaimPending();
         (bytes memory fields, bool evmOwner) = _claimFields(agentId, newOwner, ownerKey, deadline);
         // An EVM owner proves its consent here, so the runners cannot move the
         // identity for a real owner who never asked.
         if (evmOwner && (ownerKey.length != 20 || _recover(_typed(CONSENT_TYPEHASH, fields), ownerSig) != address(bytes20(ownerKey)))) {
             revert InvalidSignature();
         }
-        emit RemoteClaimed(agentId, newOwner, ownerKey, _runnerQuorum(_typed(ATTEST_TYPEHASH, fields), attestations));
-        _takeOver(agentId, newOwner);
+        address[] memory runners = _runnerQuorum(_typed(ATTEST_TYPEHASH, fields), attestations);
+        if (_owners[agentId] == newOwner) revert AlreadyHolder();
+        claimNonce[agentId]++; // these signatures are spent, whether the claim runs or is contested
+        uint64 readyAt = uint64(block.timestamp) + claimDelay;
+        pendingClaim[agentId] = PendingClaim(newOwner, readyAt);
+        emit RemoteClaimProposed(agentId, newOwner, ownerKey, runners, readyAt);
+    }
+
+    /// Runs a remote claim whose contest window has passed. Anyone may call it.
+    function finalizeClaim(uint256 agentId) external {
+        PendingClaim memory p = pendingClaim[agentId];
+        if (p.readyAt == 0) revert NoPendingClaim();
+        if (block.timestamp < p.readyAt) revert ClaimNotReady(p.readyAt);
+        delete pendingClaim[agentId];
+        emit RemoteClaimFinalized(agentId, p.newOwner);
+        if (_owners[agentId] != p.newOwner) _takeOver(agentId, p.newOwner);
+    }
+
+    /// Cancels a pending remote claim during its window. Callable by the
+    /// current holder (owner/operator of a claimed identity) or by any one
+    /// runner that meets the attestation bar.
+    function contestClaim(uint256 agentId) external {
+        PendingClaim memory p = pendingClaim[agentId];
+        if (p.readyAt == 0) revert NoPendingClaim();
+        if (block.timestamp >= p.readyAt) revert ContestClosed();
+        address holder = _owners[agentId];
+        if (!(holder != address(this) && _isAuthorized(holder, msg.sender, agentId)) && !_goodRunner(msg.sender)) revert NotAuthorized();
+        delete pendingClaim[agentId];
+        emit RemoteClaimContested(agentId, msg.sender, p.newOwner);
+    }
+
+    /// A runner in good standing: active, agreed >= claimMinAgreed, rejected <= agreed.
+    function _goodRunner(address r) internal view returns (bool) {
+        if (address(claimRunners) == address(0)) return false;
+        (, , bool active, uint32 agreed, uint32 rejected) = claimRunners.workers(r);
+        return active && agreed >= claimMinAgreed && rejected <= agreed;
     }
 
     /// The signed fields of a remote claim (EIP-712: string and bytes members
@@ -497,8 +558,7 @@ contract NeuroIdentity {
         for (uint256 i; i < sigs.length; i++) {
             address r = _recover(digest, sigs[i]);
             if (r <= last) revert InvalidSignature(); // zero, unsorted or repeated
-            (, , bool active, uint32 agreed, uint32 rejected) = claimRunners.workers(r);
-            if (!active || agreed == 0 || rejected > agreed) revert NotRunner(r);
+            if (!_goodRunner(r)) revert NotRunner(r);
             signers[i] = last = r;
         }
     }

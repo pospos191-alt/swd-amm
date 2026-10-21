@@ -61,6 +61,7 @@ export const T = {
     'fee-exempt': (p) => `Dapat membebaskan dompet tertentu dari pajak (${list(p.functions)}). Umum pada token berpajak, tetapi memberi keuntungan bagi dompet tertentu.`,
     'network-flagged': (p) => `Para runner jaringan Neuro ZETAPHY memilih untuk mencatat kode ini di ThreatRegistry${p.reason ? ` (kategori: ${REASON[p.reason] ?? p.reason})` : ''}. Setiap kontrak dengan kode yang sama mendapat peringatan yang sama.`,
     'similar-flagged': (p) => `Kode ini ${p.percent}% mirip dengan kode yang ditandai oleh runner Neuro (sidik jari ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, kategori: ${REASON[p.reason] ?? p.reason}` : ''}). Salinan yang sedikit diubah dari kode yang ditandai biasanya berperilaku sama.`,
+    'similar-reference': (p) => `Kode ini ${p.percent}% mirip dengan sampel referensi dalam dataset Neuro (sidik jari ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, kategori: ${REASON[p.reason] ?? p.reason}` : ''}). Sampel ini bukan kode yang ditandai runner Neuro di on-chain. Kemiripan hanya petunjuk untuk diperiksa lebih teliti, bukan bukti.`,
     'tax-wallet': (p) => `Dapat mengganti dompet penerima pajak (${list(p.functions)}). Umum pada token berpajak.`,
     'selfdestruct': () => 'Kode berisi SELFDESTRUCT. Jika dipicu, kontrak bisa dihapus atau dananya dipindahkan.',
     'delegatecall': () => 'Kode dapat menjalankan kode kontrak lain seolah-olah miliknya sendiri (DELEGATECALL), jadi kode yang benar-benar berjalan mungkin bukan kode yang ditampilkan di sini.',

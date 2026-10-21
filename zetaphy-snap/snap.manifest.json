@@ -8,7 +8,7 @@
     "directory": "zetaphy-snap"
   },
   "source": {
-    "shasum": "ugo6b0GY/H3Mv5kPhllFN3ggoFY0shpLp1/F4ctCLds=",
+    "shasum": "Sh+PAEKtNXJElxNi1Tt9tILEJ/rNfwoxsvf8MsICXSk=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",
@@ -25,6 +25,9 @@
     },
     "endowment:transaction-insight": {
       "allowTransactionOrigin": false
+    },
+    "endowment:signature-insight": {
+      "allowSignatureOrigin": false
     },
     "endowment:ethereum-provider": {},
     "endowment:network-access": {},
