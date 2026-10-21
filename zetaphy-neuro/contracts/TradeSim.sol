@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Neuro trade simulation (honeypot check). NEVER deployed: Neuro places this
-// code at a throwaway address inside ONE eth_call (a "state override"), so
-// nothing is signed, sent or stored on any chain. Inside that call it buys a
-// little of a token through a Uniswap-V2-style router, sells it straight
-// back, and reports what came out against what the router quoted.
+// code at a throwaway address picked per check (src/honeypot.js) inside ONE
+// eth_call (a "state override"), so nothing is signed, sent or stored on any
+// chain. Inside that call it buys a little of a token through a
+// Uniswap-V2-style router, sells it straight back, and reports what came out
+// against what the router quoted.
 //
 // Compiled into src/tradesim.generated.js by `npm run tradesim`
 // (test/tradesim.test.js fails if the two drift apart).
@@ -39,7 +40,10 @@ contract TradeSim {
 
     /// Never reverts on the token's account: every step that touches the
     /// token is wrapped, so a honeypot shows up as a stage, not an error.
-    function run(address router, address factory, address weth, address token, uint256 amountIn)
+    /// amountIn and sellBps are picked per check by src/honeypot.js (random,
+    /// or derived from a NeuroJobs job), so a token cannot recognise this
+    /// check by a fixed trade size.
+    function run(address router, address factory, address weth, address token, uint256 amountIn, uint256 sellBps)
         external
         returns (Result memory r)
     {
@@ -71,13 +75,18 @@ contract TradeSim {
         r.stage = SELL_FAILED;
         if (r.bought == 0) return r;
 
-        // Sell 99%: a few tokens refuse to send a wallet's entire balance,
-        // which is a nuisance, not a honeypot.
-        uint256 amount = r.bought - r.bought / 100;
+        // Sell sellBps/10000 of it (90-99.9%): not everything, since a few
+        // tokens refuse to send a wallet's entire balance (a nuisance, not a
+        // honeypot), and not a fixed share, which a token could test for.
+        if (sellBps == 0 || sellBps > 10000) sellBps = 9900;
+        uint256 amount = r.bought * sellBps / 10000;
+        if (amount == 0) amount = r.bought;
         path[0] = token;
         path[1] = weth;
         r.expectedSell = _quote(R, amount, path);
-        if (!_approve(token, router, amount)) return r;
+        // Unlimited approval, as most wallets give a DEX router: an exact
+        // allowance would set this check apart from ordinary sellers.
+        if (!_approve(token, router, type(uint256).max)) return r;
         uint256 ethBefore = address(this).balance;
         g = gasleft();
         try R.swapExactTokensForETHSupportingFeeOnTransferTokens(amount, 0, path, address(this), block.timestamp) {

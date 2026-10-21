@@ -39,8 +39,11 @@ interface ILaneInfo {
 ///      create money.
 ///   2. Even then the transfer waits in quarantine. During it, vetoers (the
 ///      Neuro lane by quorum, or a guardian) can stop it.
-///   3. Decoy bridges (DecoyBridge) mark whoever pokes them; a transfer from
-///      or to a marked address is never released.
+///   3. Markers: keys governance names (setMarker), typically the bridge
+///      monitor's own low-privilege key, can mark an address (trip). A
+///      transfer from or to a marked address is not released until governance
+///      lifts the mark (untrip). Why an address is marked is decided off-chain
+///      by the marker; the airlock keeps no list of what it watches.
 ///   4. Vaccine: with a ThreatRegistry set, a transfer whose source sender or
 ///      source contract (on its chain), or whose ZETAPHY recipient (address or
 ///      code), is flagged by the Neuro runners is not released:
@@ -83,8 +86,10 @@ contract BridgeAirlock {
     address[] private laneList;         // the lanes now on, in no particular order
     uint256 public constant MAX_LANES = 16;
     mapping(address => bool) public isVetoer;
-    mapping(address => bool) public isDecoy;
-    mapping(address => bool) public tripped;   // marked by a decoy
+    /// Keys that may mark addresses (trip). See trip(): a marker can only mark.
+    mapping(address => bool) public isMarker;
+    uint256 public markerCount;         // markers now on
+    mapping(address => bool) public tripped;   // marked by a marker; cleared by governance (untrip)
     mapping(bytes32 => Transfer) public transfers;
     mapping(bytes32 => mapping(address => bool)) public attestedBy;
     /// By controller (laneControllerOf at attest time): two lanes with one
@@ -98,20 +103,20 @@ contract BridgeAirlock {
     event QuarantineSet(uint64 quarantine);
     event Untripped(address indexed who);
     event VetoerSet(address who, bool on);
-    event DecoySet(address decoy, bool on);
+    event MarkerSet(address marker, bool on);
     /// The transfer's details too, so a monitor sees two lanes that disagree
     /// about one source deposit (same chain, contract and nonce; another id).
     event Attested(bytes32 indexed id, address indexed lane, uint8 count, uint256 srcChainId, address srcContract,
         uint256 indexed srcNonce, address sender, address to, uint256 amount);
     event Vetoed(bytes32 indexed id, address indexed by, string reason);
     event Released(bytes32 indexed id, address indexed to, uint256 amount);
-    event Tripped(address indexed who, address indexed decoy);
+    event Tripped(address indexed who, address indexed by);
     event ThreatsSet(address registry);
 
     error NotGovernance();
     error NotLane();
     error NotVetoer();
-    error NotDecoy();
+    error NotMarker();
     error Twice();
     error NotReady();
     error Blocked();
@@ -144,7 +149,16 @@ contract BridgeAirlock {
         emit LaneSet(lane, on);
     }
     function setVetoer(address who, bool on) external onlyGov { isVetoer[who] = on; emit VetoerSet(who, on); }
-    function setDecoy(address decoy, bool on) external onlyGov { isDecoy[decoy] = on; emit DecoySet(decoy, on); }
+    /// Names (or removes) a marker: typically the bridge monitor's own key, which
+    /// holds no other role. Governance removes a lost or misused marker key here.
+    function setMarker(address marker, bool on) external onlyGov {
+        if (on != isMarker[marker]) {
+            if (on) markerCount += 1;
+            else markerCount -= 1;
+        }
+        isMarker[marker] = on;
+        emit MarkerSet(marker, on);
+    }
     /// Raising the threshold later does not hold back transfers that already reached the old one.
     function setThreshold(uint8 t) external onlyGov { require(t >= 2, "need 2+"); threshold = t; emit ThresholdSet(t); }
     function setQuarantine(uint64 q) external onlyGov { quarantine = q; emit QuarantineSet(q); }
@@ -211,9 +225,15 @@ contract BridgeAirlock {
         emit Vetoed(id, msg.sender, reason);
     }
 
-    /// Called by a DecoyBridge: whoever touched it is marked.
+    /// A marker marks `who`: release() then refuses (Blocked) every transfer
+    /// whose source sender or ZETAPHY recipient is `who`, until governance
+    /// untrips it. That is all a marker can do: it cannot attest, veto,
+    /// release, mint, pause or move any funds, and a mark loses nothing (the
+    /// transfer stays and comes out once the mark is lifted). So a stolen or
+    /// misused marker key can at worst delay some addresses' transfers until
+    /// governance removes the marker (setMarker) and lifts its marks.
     function trip(address who) external {
-        if (!isDecoy[msg.sender]) revert NotDecoy();
+        if (!isMarker[msg.sender]) revert NotMarker();
         tripped[who] = true;
         emit Tripped(who, msg.sender);
     }
@@ -264,42 +284,6 @@ contract BridgeAirlock {
         Transfer storage t = transfers[id];
         return (t.attestations, t.released, t.vetoed, t.readyFrom == 0 ? 0 : t.readyFrom + quarantine);
     }
-}
-
-/// @title DecoyBridge: looks like a bridge, holds nothing, marks who pokes it
-/// @notice Attackers scan for bridge contracts and try their functions. Any
-///         state-changing call here marks the direct caller (msg.sender) in
-///         the airlock, so its transfers are never released. Only the direct
-///         caller: marking tx.origin would let anyone get an innocent user
-///         marked by luring them into a contract that pokes the decoy.
-///         It does NOT pause anything: otherwise anyone could stop the
-///         bridges by calling a decoy.
-contract DecoyBridge {
-    BridgeAirlock public immutable airlock;
-    string public name;
-    uint256 public trips;
-
-    constructor(BridgeAirlock airlock_, string memory name_) {
-        airlock = airlock_;
-        name = name_;
-    }
-
-    function _mark() private {
-        trips += 1;
-        airlock.trip(msg.sender);
-    }
-
-    // The usual entry points of bridge contracts.
-    function mint(address, uint256) external { _mark(); }
-    function release(address, uint256) external { _mark(); }
-    function withdraw(uint256) external { _mark(); }
-    function process(bytes calldata, bytes calldata) external { _mark(); }
-    function handle(uint32, bytes32, bytes calldata) external payable { _mark(); }
-    function executeMessage(bytes calldata) external { _mark(); }
-    function upgradeTo(address) external { _mark(); }
-    function transferOwnership(address) external { _mark(); }
-    fallback() external payable { _mark(); }
-    receive() external payable { _mark(); }
 }
 
 /// @title NeuroLane: Neuro runners as one of the airlock's bridges

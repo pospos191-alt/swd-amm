@@ -49,14 +49,15 @@
 //   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
 //                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
 //                          --hyperlane-mailbox 0x… [--hyperlane-origin <domain> --hyperlane-sender 0x… --hyperlane-ism 0x…]
-//                          --devnet | --allow-eoa-for-testing]
-//                                      BridgeGuard + BridgeAirlock + NeuroLane (+ HyperlaneLane) + a DecoyBridge, CLOSED:
+//                          --marker 0x<monitor key address> --devnet | --allow-eoa-for-testing]
+//                                      BridgeGuard + BridgeAirlock + NeuroLane (+ HyperlaneLane), CLOSED:
 //                                      the route is disabled until zetaphy bridge open. A --guardian / --governance must be
 //                                      a multisig (Safe or SimpleMultisig, 3+ owners, threshold 2+) or (governance) the gov
 //                                      module; a single key only with --devnet (local RPC) or --allow-eoa-for-testing.
 //                                      Daily limit: at most 1,000 tokens (the starter cap; on-chain maxDailyLimit). NeuroLane's
 //                                      pause switch defaults to the NeuroJobs' control(); the bridge's own contracts (and
-//                                      the lockbox) are protected in the ThreatRegistry
+//                                      the lockbox) are protected in the ThreatRegistry. --marker: a key that may mark
+//                                      addresses (airlock.trip; e.g. the bridge monitor's own key, BRIDGE_MARKER_KEY)
 //   zetaphy bridge gates|open --audit-report <https url> --audit-sha256 <hex> [--daily-limit 1000 --min-runners 10
 //                          --raise-cap --i-understand-real-funds --devnet --allow-eoa-for-testing]
 //                                      open the bridge only when every gate holds: 2+ lanes with distinct controllers
@@ -64,10 +65,16 @@
 //                                      multisig guardian and governance (no shared owner), the cap; gates only checks
 //   zetaphy bridge close | pause        governance closes the route; a guardian pauses everything (only governance unpauses)
 //   zetaphy bridge cap [show | propose <tokens> | apply | cancel]   the hard cap: a raise (x2 at most) waits 7 days
-//   zetaphy bridge monitor [--monitor-config f --launch-state f --state f --out report.json --summary f --volume-pct 80
-//                          --large-pct 25 --silent-minutes 30 --source-rpc URL --lockbox 0x… --fail-on-alert]
-//                                      read-only scan: alerts (volume, lanes disagreeing or silent, veto, pause, decoy hit,
-//                                      holds, governance changes, large transfers) as JSON + a Thai / English summary
+//   zetaphy bridge marker 0x<key> [--off]   governance names (or removes) a marker: a key that may mark addresses
+//   zetaphy bridge untrip 0x<address>       governance lifts a mark (the address's bridge transfers can come out again)
+//   zetaphy bridge monitor [--monitor-config f --launch-state f --state f --out report.json --summary f --issue f --quiet
+//                          --volume-pct 80 --large-pct 25 --silent-minutes 30 --source-rpc URL --lockbox 0x… --fail-on-alert]
+//                                      scan: alerts (volume, lanes disagreeing or silent, veto, pause, marks, holds,
+//                                      governance changes, large transfers) as JSON + a Thai / English summary.
+//                                      From the environment only (secrets): BRIDGE_MONITOR_THRESHOLDS (JSON over the
+//                                      config's thresholds), BRIDGE_WATCHLIST (JSON [{address, callerTopic?}]: every log
+//                                      of these contracts is an alert, never named in the output) and BRIDGE_MARKER_KEY
+//                                      (a marker: marks their callers). --quiet: one line of counts (for public logs)
 //   zetaphy bridge watch --source-rpc URL --lockbox 0x... [--confirmations 12 --release]
 //                                      be one voice of the Neuro bridge (skips flagged sources, stops while Neuro is
 //                                      paused or its switch cannot be read)
@@ -172,7 +179,7 @@ const STABLE = art('TestStable');
 const GATEWAY = art('StableGateway');
 const QWALLET = art('QuantumWallet');
 const QFACTORY = art('QuantumWalletFactory');
-const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'HyperlaneLane', 'DecoyBridge', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault', 'ThreatRegistry', 'ThreatReports'].map((n) => [n, art(n)]));
+const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'HyperlaneLane', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault', 'ThreatRegistry', 'ThreatReports'].map((n) => [n, art(n)]));
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 /** --governance: who takes over the admin role after setup (a multisig). */
 function governanceOf(opt, write) {
@@ -980,6 +987,8 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     if (opt.enable || opt.open) throw new Error('deploy-bridge deploys the bridge CLOSED; open it with zetaphy bridge open once every gate is met');
     const hyp = opt['hyperlane-mailbox'];
     if (hyp != null && (!ADDR_RE.test(String(hyp)) || !opt.lockbox)) throw new Error('--hyperlane-mailbox 0x<Mailbox on ZETAPHY> needs --lockbox <chainId>:0x<HyperlaneLockBox>');
+    const markers = [].concat(opt.marker ?? []).map(String);
+    if (markers.some((m) => !ADDR_RE.test(m))) throw new Error('--marker must be a 0x address (the key that may mark addresses, e.g. the bridge monitor\'s)');
     const devnet = devnetOf(s.rpc, opt);
     const decimals = Number(opt.decimals ?? 18);
     const limitUnits = parseUnits(String(opt['daily-limit'] ?? STARTER_UNITS), decimals);
@@ -1008,8 +1017,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const control = opt.control ? String(opt.control) : String(await c.jobs.control());
     if (control === ZERO_ADDR) write('warning: NeuroJobs has no NeuroControl, so NeuroLane has no pause switch (pass --control 0x...)');
     const lane = await deploy(B.NeuroLane, [s.jobs, airlock.target, Number(opt.quorum ?? 2), Number(opt['min-agreed'] ?? 5), control]);
-    const decoy = await deploy(B.DecoyBridge, [airlock.target, 'ZETAPHY Bridge']);
-    for (const tx of [airlock.setLane(lane.target, true), airlock.setVetoer(lane.target, true), airlock.setDecoy(decoy.target, true)]) await (await tx).wait();
+    for (const tx of [airlock.setLane(lane.target, true), airlock.setVetoer(lane.target, true)]) await (await tx).wait();
+    // Markers: keys that may mark an address (its bridge transfers wait until governance untrips it); they move no funds.
+    for (const m of markers) { await (await airlock.setMarker(m, true)).wait(); write(`marker ${m}: may mark addresses (BridgeAirlock.trip)`); }
     // The second lane: Hyperlane (its Mailbox on ZETAPHY; messages from the source chain's HyperlaneLockBox).
     let hypLane = null;
     if (hyp) {
@@ -1041,13 +1051,13 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       write(`admin of BridgeGuard, BridgeAirlock${hypLane ? ' and HyperlaneLane' : ''} handed to ${gov}`);
     }
     settings({ ...opt, airlock: airlock.target, neuroLane: lane.target, bridgeGuard: guard.target, ...(hypLane ? { hyperlaneLane: hypLane.target } : {}) }, {});
-    write(`BridgeGuard ${guard.target}\nBridgedToken ${await guard.token()}\nBridgeAirlock ${airlock.target}\nNeuroLane ${lane.target}${hypLane ? `\nHyperlaneLane ${hypLane.target}` : ''}\nDecoyBridge ${decoy.target}`);
+    write(`BridgeGuard ${guard.target}\nBridgedToken ${await guard.token()}\nBridgeAirlock ${airlock.target}\nNeuroLane ${lane.target}${hypLane ? `\nHyperlaneLane ${hypLane.target}` : ''}`);
     write(`bridge CLOSED (route disabled, daily limit ${tokenAmount(limitUnits, decimals)}, hard cap ${tokenAmount(await guard.maxDailyLimit(), decimals)}).`);
     write('To open: a second independent lane, an audit, 10+ Neuro runners, multisig guardian + governance, then zetaphy bridge open --audit-report <url> --audit-sha256 <hex>');
     return 0;
   }
 
-  if (group === 'bridge' && ['open', 'gates', 'close', 'pause', 'cap', 'monitor'].includes(cmd)) {
+  if (group === 'bridge' && ['open', 'gates', 'close', 'pause', 'cap', 'marker', 'untrip', 'monitor'].includes(cmd)) {
     return bridgeCommand({ group, cmd, rest, opt, env, write, s, connect, connectRpc });
   }
 

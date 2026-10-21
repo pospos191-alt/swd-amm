@@ -103,7 +103,7 @@ test('launch: every contract deployed and every config written with real address
   assert.ok(!readFileSync(stateFile, 'utf8').includes(deployer.privateKey.slice(2)), 'the state holds no key');
   const o = outs();
   for (const k of ['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'neuroIdentity', 'neuroValidation', 'rewardVault', 'quantumWalletFactory',
-    'tUSDC', 'tUSDT', 'stableGateway', 'computeMarket', 'bridgeGuard', 'bridgeAirlock', 'neuroLane', 'decoyBridge']) await hasCode(o[k], k);
+    'tUSDC', 'tUSDT', 'stableGateway', 'computeMarket', 'bridgeGuard', 'bridgeAirlock', 'neuroLane']) await hasCode(o[k], k);
   assert.match(r.out, /Governance: the deployer is the admin/);
   assert.match(r.out, /gov\.sh neuro approve-skill/);
 

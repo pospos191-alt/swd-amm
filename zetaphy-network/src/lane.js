@@ -161,7 +161,7 @@ export function createLaneWatcher({ lockbox, lane, airlock, me, srcChainId, conf
           } catch (err) {
             const name = why(err, airlock);
             out.push(`lock #${t[2]}: not released (${name})`);
-            if (/Blocked/.test(name)) continue; // decoy-marked or vetoed: never passes, stop retrying
+            if (/Blocked/.test(name)) continue; // marked (until governance untrips) or vetoed: stop retrying
             // ThreatHeld / ThreatFlagged (a flag landed meanwhile): kept, retried next tick.
           }
         }
