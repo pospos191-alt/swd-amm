@@ -31,6 +31,8 @@
 
 ## 1. สร้างเครื่อง Oracle และวาง `cloud-init.sh`
 
+> ใช้ **Google Cloud e2-micro** แทนได้: ทำตามหัวข้อ "Google Cloud e2-micro (ฟรีถาวร)" ใน [`zetaphy-chain/README.md`](../zetaphy-chain/README.md) (วาง `setup-node.sh` ทั้งไฟล์, เปิดพอร์ต 26656, ตั้ง Budget alert $1) แล้วข้ามไปข้อ 2
+
 ทำตาม [`zetaphy-chain/README.md`](../zetaphy-chain/README.md) หัวข้อ "ตั้งเครื่องบน Oracle Cloud" สรุป:
 1. **cloud.oracle.com** → สมัคร Free Tier → Home Region **Singapore**
 2. เมนู ☰ → **Compute → Instances → Create instance**

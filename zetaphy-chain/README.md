@@ -83,7 +83,7 @@
 ถ้าผ่านไปนานแล้วยังไม่ทำงาน: หน้าเครื่อง → **Resources → Console connection**
 แล้วดู log ที่ `/var/log/zetaphy-setup.log`
 
-### แผนสำรอง: Google Cloud (ถ้าสมัคร Oracle ไม่ผ่าน)
+### Google Cloud e2-micro (ฟรีถาวร)
 
 Google Cloud ให้เครื่อง **e2-micro** ฟรีถาวรเครื่องเดียว (RAM 1 GB, ดิสก์ 30 GB, เฉพาะเขต US)
 เล็กกว่า Oracle มาก: build นาน 1–2 ชั่วโมงขึ้นไป (สคริปต์เพิ่ม swap 4 GB ให้เอง) และ RAM ตึง
@@ -96,8 +96,21 @@ Google Cloud ให้เครื่อง **e2-micro** ฟรีถาวร�
      Value = เนื้อไฟล์ [`setup-node.sh`](./setup-node.sh) ทั้งไฟล์ (Google รับได้ใหญ่กว่า Oracle จึงไม่ต้องใช้ `cloud-init.sh`)
      ถ้าจะรับเหรียญทดลอง แก้บรรทัด `OWNER_EVM_ADDRESS="${OWNER_EVM_ADDRESS:-}"` เป็น `OWNER_EVM_ADDRESS="0x…"`
 3. **VPC network → Firewall → Create firewall rule:** Targets = All instances, Source `0.0.0.0/0`,
-   TCP `8545,26656`
+   TCP `26656` เท่านั้น (ไม่ต้องเปิด 8545: กระเป๋าและเว็บใช้ `https://<IP มีขีด>.sslip.io` ซึ่งบีบอัดข้อมูล ประหยัดกว่า)
 4. ตรวจแบบเดียวกับข้อ 4 ข้างบน (ใช้ External IP ของเครื่อง) ดู log ได้ที่ปุ่ม **SSH** ในหน้าเครื่อง: `sudo tail -f /var/log/zetaphy-setup.log`
+5. **กันเสียเงิน (สำคัญ):** **Billing → Budgets & alerts → Create budget** ตั้ง $1 และให้ส่งอีเมลที่ 50% / 100%
+
+**ส่งข้อมูลออกฟรีแค่ 1 GB/เดือน** ส่วนที่เกินคิดเงิน สคริปต์รู้เองว่าเป็น e2-micro แล้วเปิด **โหมดประหยัด** ให้:
+- peer น้อย (เข้า 4 / ออก 2) และจำกัดความเร็วส่งต่อ peer 256 KB/s
+- บีบอัด (gzip/zstd) ทุกคำตอบผ่าน https และจำกัดขนาดคำตอบ RPC (logs 500 รายการ, batch 20)
+- **ตัวเฝ้าโควต้า** ทุก 10 นาที: ถ้าเดือนนี้ส่งออกเกิน 800 MB จะปิด RPC สาธารณะชั่วคราว
+  (เชนยังเดินต่อ บล็อกไม่หยุด) แล้วเปิดเองเมื่อขึ้นเดือนใหม่
+  ดูยอด: ปุ่ม **SSH** → `cat /var/lib/zetaphy-egress/status`
+- บังคับเปิด/ปิด: แก้บรรทัด `LOW_EGRESS="${LOW_EGRESS:-auto}"` ในสคริปต์เป็น `1` หรือ `0`,
+  เปลี่ยนเพดานที่ `EGRESS_LIMIT_MB`
+
+ข้อจำกัด: RAM 1 GB พอสำหรับเชนอย่างเดียว ยังไม่ควรรัน relayer IBC หรือตัวรัน Neuro บนเครื่องนี้
+เมื่อจะเปิดให้คนทั่วไปใช้ ให้ย้ายไปเครื่องที่ใหญ่กว่า (เช่น Contabo / OVH) ด้วยสคริปต์เดิมและไฟล์กุญแจ validator
 
 ---
 
