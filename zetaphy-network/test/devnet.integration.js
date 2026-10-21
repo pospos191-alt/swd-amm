@@ -1,6 +1,7 @@
 // End-to-end on a real ZETAPHY chain (zetaphyd, 1 s blocks): deploy NeuroJobs,
 // three runners register, a user posts a job, the runners run Neuro on their
-// own, commit, reveal, reach 2-of-3 and get paid. Needs the zetaphyd binary,
+// own, commit, reveal, reach 2-of-3 and get paid; a challenge then opens round
+// 2 with two fresh runners (w4, w5). Needs the zetaphyd binary,
 // so it is not part of `npm test`; run with `npm run test:devnet`.
 
 import { test, before, after } from 'node:test';
@@ -14,7 +15,7 @@ import { Wallet, JsonRpcProvider, Contract, formatEther } from 'ethers';
 const PORT = 18645;
 const RPC = `http://127.0.0.1:${PORT}`;
 const root = mkdtempSync(join(tmpdir(), 'zetaphy-devnet-'));
-const actors = Object.fromEntries(['deployer', 'user', 'w1', 'w2', 'w3', 'relay'].map((n) => [n, Wallet.createRandom()]));
+const actors = Object.fromEntries(['deployer', 'user', 'w1', 'w2', 'w3', 'relay', 'w4', 'w5'].map((n) => [n, Wallet.createRandom()]));
 // 'poor' holds no ZETAPHY at all: it is NOT funded at genesis.
 const poor = Wallet.createRandom();
 const RELAY_PORT = PORT + 7;
@@ -92,6 +93,43 @@ test('a job goes from request to a paid 2-of-3 verdict on a real ZETAPHY chain',
     assert.ok(gained > credit - 10n ** 16n, `withdrew ${formatEther(gained)} of ${formatEther(credit)}`);
   }
   console.log(`job 0 verdict ${job.result}, ${paid} runners paid`);
+});
+
+test('a challenge opens round 2 with fresh runners, drawn from blockhash(challenge block + 1); it confirms the verdict', { timeout: 300_000 }, async () => {
+  const withJobs = (a) => [...a, '--jobs', jobsAddr];
+  for (const w of ['w4', 'w5']) {
+    const r = await cli(w, withJobs(['node', 'register']));
+    assert.equal(r.code, 0, r.out);
+  }
+  const provider = new JsonRpcProvider(RPC, undefined, { staticNetwork: true });
+  const jobs = new Contract(jobsAddr, ART.abi, provider);
+  const req = await cli('user', withJobs(['job', 'request', 'zetaphy', jobsAddr]));
+  const id = BigInt(/job (\d+) requested/.exec(req.out)?.[1] ?? NaN);
+  // Round 1: w1-w3 only (w4 and w5 stay free for round 2).
+  const { job, logs } = await runUntilDone(id, jobs);
+  assert.equal(job.status, 2n, logs.join('\n'));
+  assert.notEqual((await jobs.jobInfo(id)).rand, '0x' + '00'.repeat(32), 'round 1 was drawn');
+  await assert.rejects(Promise.resolve().then(async () => { const r = await cli('user', withJobs(['job', 'challenge', String(id)])); if (r.code) throw new Error(r.out); }), /--verdict/);
+  // The challenger names the verdict it says is right (here a wrong one: round 2 confirms).
+  const ch = await cli('user', withJobs(['job', 'challenge', String(id), '--verdict', '0x' + '77'.repeat(32)]));
+  assert.equal(ch.code, 0, ch.out);
+  assert.match(ch.out, /challenged with 1\.0 ZETAPHY/);
+  const outs = [];
+  let info;
+  for (let round = 0; round < 40; round++) {
+    outs.push(...(await Promise.all(['w4', 'w5'].map((w) => cli(w, withJobs(['node', 'start', '--once']))))).map((o) => o.out));
+    info = await jobs.challengeInfo(id);
+    if (info.state !== 1n) break;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  assert.equal(info.state, 2n, `round 2 not confirmed:\n${outs.join('\n')}`);
+  assert.match(outs.join('\n'), /committed in round 2/);
+  const g = await cli('user', withJobs(['job', 'get', String(id)]));
+  assert.match(g.out, /"confirmedBy": [45]/, g.out); // 2 (or 3) in round 1 + 2 in round 2
+  assert.match(g.out, /"challenge": "confirmed"/, g.out);
+  // The challenger's 1 ZETAPHY went to round 2 (half) and round 1's winners (half).
+  assert.equal(await jobs.credit(actors.w4.address), 10n ** 18n / 4n);
+  console.log(`job ${id}: challenged, round 2 (w4, w5) confirmed ${job.result}`);
 });
 
 async function runUntilDone(id, jobs) {

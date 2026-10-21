@@ -9,20 +9,29 @@ export const UI = {
   subtitle: 'Reads and explains contracts · tier 1, read-only', chain: 'Chain', address: 'Contract or token address', check: 'Check contract',
   details: 'Details', reading: 'Reading from the chain…', badAddress: 'Invalid address for this chain. Accepted formats: ',
   failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data only. Not investment advice.', stats: 'Usage stats', language: 'Language',
+  disclaimer: 'This is automated, reproducible code analysis, not an accusation against any person or project, and not investment advice. The contract owner can respond or request a correction.',
+  correction: 'How to respond or request a correction',
+  reproduce: 'Check it yourself',
+  reproduceHow: 'Anyone can re-run this check with the command below (in the zetaphy-neuro folder). The verdict ID covers only what the rules decided, so it matches while the contract\'s code and settings stay the same. The report ID also covers numbers that change, such as supply.',
+  asWritten: 'Name and symbol are shown as written in the contract; Neuro does not confirm them.',
   m: {
     chain: 'Chain', address: 'Address', proxy: 'Proxy', implementation: 'Implementation', owner: 'Owner', functions: 'Known functions', report: 'Report ID', explorer: 'Open in explorer', fingerprint: 'Code fingerprint (for template registration)', unknown: 'Unnamed functions',
     program: 'Token program', mintAuth: 'Mint authority', freezeAuth: 'Freeze authority', extensions: 'Extensions', upgradeAuth: 'Upgrade authority', none: 'none',
     package: 'Package', standard: 'Standard', admin: 'Admin', holders: 'Holders', listed: 'tonapi list', raw: 'Raw address',
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Creator', migrations: 'Code replaced', hook: 'Transfer hook contract', source: 'Verified source', format: 'Code format', delegation: 'Code this wallet runs', walletCode: 'Holder wallet code', nearKeys: 'Full-access keys', codeHash: 'Code hash', cairo: 'Cairo version', maxSupply: 'Maximum supply', tokenId: 'Token ID',
     pool: 'Liquidity pool', simTax: 'Simulated tax (buy / sell)', simFailed: 'sell failed',
+    verdict: 'Verdict ID (rules only)', command: 'Command', rule: 'rule',
   },
 };
+
+// ThreatRegistry categories (src/threat-reasons.js), as neutral descriptions of what the code does.
+export const REASON = { 'cannot-sell-in-simulation': 'in a simulated trade, selling failed or returned almost nothing', 'unlimited-mint': 'an address can mint new tokens without a cap', 'owner-can-block-transfers': 'an owner or admin can stop transfers or sales', 'owner-can-move-holder-funds': 'an owner or admin can move or burn funds held by others', 'same-name-as-known-token': 'same name or symbol as a known token, at a different address', 'sweeps-approved-tokens': 'in a reproducible test, it moved approved tokens to an address the holder did not choose', 'other': 'another code fact (see the evidence)' };
 
 export const T = {
     'no-code': () => 'This address has no contract code. It may be a plain wallet, or the wrong chain is selected.',
     'erc20': (p) => `ERC-20 token "${p.name ?? '?'}" (${p.symbol ?? '?'}), total supply ${fmtSupply(p.totalSupply, p.decimals)}.`,
     'not-erc20': () => 'No standard ERC-20 functions found. This contract may not be a token.',
-    'name-has-link': () => 'The token name or symbol contains a link or website name, a common scam (free "airdrop" tokens that lure you to a fake site). Do not visit it or connect your wallet.',
+    'name-has-link': () => 'The token name or symbol, as written in the contract, contains a link or website name. Tokens sent unasked with a link in the name are often used to send people to outside websites. Do not visit it or connect your wallet because of the token name.',
     'proxy-minimal': (p) => `Minimal clone (EIP-1167) that always runs the code at ${p.implementation}. The code cannot be changed.`,
     'proxy-upgradeable': (p) => (p.issuer
       ? `${p.issuer} can upgrade the contract's code, the usual way issuers fix or extend it.`
@@ -44,19 +53,22 @@ export const T = {
       ? `Can adjust the tax (${list(p.functions)}), but the ${p.project} template only allows lowering it.`
       : `Can change the buy/sell tax (${list(p.functions)}). A very high sell tax means selling returns almost nothing.`),
     'known-issuer': (p) => `Official ${p.symbol} contract issued by ${p.issuer} (matches the registered address). The powers below belong to the issuer; the main risk is trust in the issuer, not hidden code.`,
-    'lookalike': (p) => `Uses the symbol ${p.symbol} like ${p.issuer}'s token but is NOT the official address (${p.official}). Possibly a fake; do not buy or accept it until you check the address.`,
+    'lookalike': (p) => `Uses the symbol ${p.symbol}, the same as ${p.issuer}'s token, but this is NOT the address registered for it (${p.official}). This contract is not the registered ${p.issuer} token; check the address before buying or accepting it.`,
     'template-match': (p) => `Matches the registered ${p.project} token template (${p.name}). The template's rules are not audited yet.`,
     'template-mismatch': (p) => `Code matches the ${p.project} template but has a power the template says it lacks (${list(p.functions)}). The template record may be wrong; do not trust it until checked.`,
     'trading-switch': (p) => `Has a trading on/off switch (${list(p.functions)}). Before it is on, you may be able to buy but not sell.`,
     'can-limit': (p) => `Can set per-transaction or per-wallet limits (${list(p.functions)}). Very low limits can block selling.`,
     'fee-exempt': (p) => `Can exempt chosen wallets from tax (${list(p.functions)}). Common in taxed tokens, but it gives some wallets an edge.`,
-    'network-flagged': (p) => `The Neuro ZETAPHY network voted this code dangerous${p.reason ? ` (${p.reason})` : ''}. Every contract with the same code gets the same warning.`,
+    'network-flagged': (p) => `Neuro ZETAPHY network runners voted to record this exact code in the ThreatRegistry${p.reason ? ` (category: ${REASON[p.reason] ?? p.reason})` : ''}. Every contract with the same code gets the same warning.`,
+    'similar-flagged': (p) => `This code is ${p.percent}% similar to code that Neuro runners flagged (fingerprint ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, category: ${REASON[p.reason] ?? p.reason}` : ''}). Lightly edited copies of flagged code usually behave the same way.`,
+    'similar-reference': (p) => `This code is ${p.percent}% similar to a reference sample in Neuro's dataset (fingerprint ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, category: ${REASON[p.reason] ?? p.reason}` : ''}). The sample is not code that Neuro runners flagged on chain. Similarity is a hint to look closer, not proof.`,
     'tax-wallet': (p) => `Can change the wallet that receives the tax (${list(p.functions)}). Common in taxed tokens.`,
     'selfdestruct': () => 'The code contains SELFDESTRUCT. If triggered, it can wipe the contract or move its funds.',
     'delegatecall': () => 'The code can run another contract\'s code as its own (DELEGATECALL), so the code that really runs may not be the code shown here.',
     'nothing-found': () => 'No special powers or dangerous instructions found by these rules.',
     'unknown-functions': (p) => `${p.count} more function(s) Neuro cannot name (${(p.selectors ?? []).map((x) => '0x' + x).join(', ')}), so what they do is unknown. While an owner still controls the contract, they may be privileged, e.g. setting a tax or trading limits.`,
-    'bytecode-only': () => 'Checked from on-chain code with fixed rules. Scams that hide behind unusual function names can be missed. Not investment advice.',
+    'unknown-pattern': (p) => `Neuro doesn't recognise this pattern yet, be careful: ${p.share}% of its functions have no known name, and the code can move coins or tokens. Finding nothing here does not mean it is safe.`,
+    'bytecode-only': () => 'Checked from on-chain code with fixed rules. Powers hidden behind unusual function names can be missed. Not investment advice.',
     // Solana
     'sol-not-found': () => 'No account at this address on Solana. It may be mistyped, or the wrong chain is selected.',
     'sol-not-token': (p) => `This address is not a token mint on Solana; it is an account of program ${p.owner}.`,
@@ -67,11 +79,11 @@ export const T = {
     'sol-mint-renounced': () => 'Mint authority is renounced: the supply can never grow.',
     'sol-freeze-authority': (p) => (p.issuer
       ? `${p.issuer} can freeze accounts (freeze authority), usually for stolen funds or legal orders.`
-      : `Accounts can still be frozen (freeze authority: ${p.authority}). A frozen account cannot sell or transfer, a common Solana scam.`),
+      : `Accounts can still be frozen (freeze authority: ${p.authority}). A frozen account cannot sell or transfer.`),
     'sol-freeze-renounced': () => 'Freeze authority is renounced: nobody can freeze your tokens.',
     'sol-permanent-delegate': (p) => (p.issuer
       ? `${p.issuer} can move or burn tokens from any account (permanent delegate), used for legal seizures.`
-      : `A permanent delegate (${p.delegate}) can move or burn tokens from EVERY wallet without permission. Very dangerous.`),
+      : `A permanent delegate (${p.delegate}) can move or burn tokens from EVERY wallet without permission. Very high risk to holders.`),
     'sol-transfer-fee': (p) => `Charges ${p.percent}% on every transfer${p.authority ? `, and the fee authority (${p.authority}) can raise it as high as 100%` : ''}.`,
     'sol-transfer-hook': (p) => `Every transfer runs an extra program (transfer hook: ${p.programId}) that can enforce its own rules, such as blocking sells.`,
     'sol-default-frozen': () => 'New accounts for this token start frozen: after buying you may be unable to move or sell until unfrozen.',
@@ -144,7 +156,7 @@ export const T = {
       if ((p.interfaces ?? []).includes('jetton_wallet')) return 'This is one holder\'s jetton wallet, not the token itself. Enter the token\'s main address (jetton master).';
       return `This TON contract is not a token${p.interfaces?.length ? ` (${list(p.interfaces)})` : ''}.`;
     },
-    'ton-scam': () => 'tonapi.io marks this token or its admin as linked to scams. Do not buy or accept it.',
+    'ton-scam': () => 'tonapi.io (a third party) has put a warning label on this token or its admin account. This is tonapi.io\'s label, not a result of this code check; check its reason before buying or accepting the token.',
     'ton-jetton': (p) => `TON token (jetton) "${p.name ?? '?'}" (${p.symbol ?? '?'}), total supply ${fmtSupply(p.totalSupply, p.decimals)}${p.holders != null ? `, ${fmtSupply(p.holders, 0)} holders` : ''}.`,
     'ton-listed': () => 'On tonapi.io\'s list of checked tokens (whitelist). That is a third party\'s list, not a guarantee.',
     'ton-frozen': () => 'This token contract is frozen for unpaid storage fees and cannot be used right now.',
@@ -176,8 +188,8 @@ export const T = {
     'eip7702': (p) => `This address is an ordinary wallet whose owner set it to run the code of contract ${p.target} (EIP-7702). It is not a token. That code can do whatever it was written to do with the wallet's funds; check ${p.target} too.`,
     'source-verified': (p) => `Public source code that Sourcify confirmed ${p.match === 'exact' ? 'matches the on-chain code byte for byte' : 'matches the on-chain code'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Read it at ${p.url}`,
     'source-unverified': () => 'No source code on Sourcify. It may still be published on the chain\'s explorer; if it is published nowhere, be extra careful.',
-    // Trade simulation (honeypot check, src/honeypot.js)
-    'sim-cannot-sell': (p) => `Honeypot warning: in a simulated trade through ${p.dex}, buying worked but selling ${p.sell == null ? 'failed' : `gave back almost nothing (${p.sell}% lost)`}. If you buy, you may not be able to sell. (A few tokens block selling only right after a buy; this check cannot tell the two apart.)`,
+    // Trade simulation (buy/sell test, src/honeypot.js)
+    'sim-cannot-sell': (p) => `Sell test failed: in a simulated trade through ${p.dex}, buying worked but selling ${p.sell == null ? 'failed' : `gave back almost nothing (${p.sell}% lost)`}. If you buy, you may not be able to sell. (A few tokens block selling only right after a buy; this check cannot tell the two apart.)`,
     'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
       ? `A simulated buy through ${p.dex} delivered no tokens at all: the whole purchase was taken.`
       : `A simulated trade through ${p.dex} lost ${p.buy ?? '?'}% when buying and ${p.sell ?? '?'}% when selling, taken by the token as tax. You get back that much less than the price suggests.`),

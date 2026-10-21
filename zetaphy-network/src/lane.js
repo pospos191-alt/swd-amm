@@ -3,11 +3,17 @@
 // confirmations, attests each transfer once to NeuroLane on ZETAPHY, and
 // (optionally) releases transfers whose quarantine is over.
 // Vaccine: a transfer whose source sender, source contract or ZETAPHY
-// recipient is flagged in the ThreatRegistry (BridgeAirlock.flaggedParty) is
-// neither attested nor released; it stays pending and goes through if the
-// flag is cleared or governance protects the key. "Flagged" here means
-// enforced: the registry's enforceDelay has passed (Neuro's warnings come
-// sooner). If the check cannot be made, nothing is attested (fail closed).
+// recipient has an enforced flag in the ThreatRegistry (BridgeAirlock.flaggedParty:
+// past the registry's enforceDelay, or at once through its fast lane) is
+// neither attested nor released. One whose party is held but not enforced
+// yet (BridgeAirlock.heldParty: the registry's is*Held, i.e. a flag past its
+// holdDelay, on the fast lane, or held at once by a guardian's holdNow) is
+// attested but not released, as the airlock itself would refuse (ThreatHeld).
+// A flag younger than holdDelay holds nothing (two runners alone cannot freeze
+// anyone's bridging at once). Either way a held transfer stays pending and goes
+// through once the flag is cleared or governance protects the key; the source
+// LockBox has no refund path meanwhile. If a check cannot be made, nothing is attested or
+// released on its account (fail closed).
 // Nothing is attested while Neuro is paused (NeuroControl), or while the
 // pause switch cannot be read (laneControl).
 
@@ -112,6 +118,13 @@ export function createLaneWatcher({ lockbox, lane, airlock, me, srcChainId, conf
       try { flagged = Number(await airlock.flaggedParty(t[0], t[1], t[3], t[4])); } catch { flagged = -1; }
       const held = flagged > 0 ? `${PARTY[flagged] ?? 'a party'} is flagged in the ThreatRegistry (enforced), held until the flag is cleared`
         : 'could not check the ThreatRegistry';
+      // Held flags (not enforced yet) hold the release only. Asked only when it matters.
+      const warned = async () => {
+        let w;
+        try { w = Number(await airlock.heldParty(t[0], t[1], t[3], t[4])); } catch { w = -1; }
+        return w === 0 ? null : w > 0 ? `${PARTY[w] ?? 'a party'} is held in the ThreatRegistry (flagged, not enforced yet), held until the flag is cleared or the key protected`
+          : 'could not check the ThreatRegistry';
+      };
       // 2. Attest (retried every tick until it lands or the lane is done).
       const key = voteKey(id);
       if (paused === false && !(await lane.votedBy(key, me)) && !(await lane.done(key))) {
@@ -132,6 +145,8 @@ export function createLaneWatcher({ lockbox, lane, airlock, me, srcChainId, conf
         if (released || vetoed) continue; // finished: forget it
         if (count >= threshold && readyAt > 0n && now >= readyAt) {
           if (flagged !== 0) { out.push(`lock #${t[2]}: not released (${held})`); keep.push(raw); continue; }
+          const hold = await warned();
+          if (hold) { out.push(`lock #${t[2]}: not released (${hold})`); keep.push(raw); continue; }
           try {
             // Estimate first: a NonceManager signer takes a nonce before it estimates,
             // so a release that reverts there would leave a gap the next tx waits behind.
@@ -143,6 +158,7 @@ export function createLaneWatcher({ lockbox, lane, airlock, me, srcChainId, conf
             const name = why(err, airlock);
             out.push(`lock #${t[2]}: not released (${name})`);
             if (/Blocked/.test(name)) continue; // decoy-marked or vetoed: never passes, stop retrying
+            // ThreatHeld / ThreatFlagged (a flag landed meanwhile): kept, retried next tick.
           }
         }
       }

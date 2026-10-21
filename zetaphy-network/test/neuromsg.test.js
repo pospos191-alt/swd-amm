@@ -20,7 +20,7 @@ const checks = {
 const expect = { chainId: 77390, registry: REGISTRY };
 const V = '0x' + '11'.repeat(32);
 
-const threat = { chain: 'bsc', address: '0x' + 'ab'.repeat(20), fingerprint: '0x' + 'f1'.repeat(32), reason: 'drainer', note: 'approve() drains every holder' };
+const threat = { chain: 'bsc', address: '0x' + 'ab'.repeat(20), fingerprint: '0x' + 'f1'.repeat(32), reason: 'sweeps-approved-tokens', note: 'in a fork test, transferFrom moved approved tokens to 0xdead' };
 const sign = (w, over = {}) => signMessage(w, { chainId: 77390, registry: REGISTRY, fromAgent: 12, toAgent: 0, sourceChain: 'eip155:56', kind: 'threat-report', payload: threat, now: NOW, ...over });
 const verify = (env, over = {}) => verifyMessage(env, { expect, now: NOW + 10, ...checks, ...over });
 
@@ -95,7 +95,7 @@ test('tampering with any signed field, the payload or the domain is caught', asy
     kind: (e) => { e.message.kind = 'verdict'; },
     nonce: (e) => { e.message.nonce = String(BigInt(e.message.nonce) + 1n); },
     expiry: (e) => { e.message.expiry = String(Number(e.message.expiry) + 1); },
-    payloadHashAndPayload: (e) => { e.payload.reason = 'honeypot'; e.message.payloadHash = payloadHash(e.payload); },
+    payloadHashAndPayload: (e) => { e.payload.reason = 'cannot-sell-in-simulation'; e.message.payloadHash = payloadHash(e.payload); },
     signature: (e) => { e.signature = e.signature.slice(0, -2) + (e.signature.endsWith('1b') ? '1c' : '1b'); },
   };
   for (const [name, mutate] of Object.entries(cases)) {
@@ -106,7 +106,7 @@ test('tampering with any signed field, the payload or the domain is caught', asy
     assert.equal(r.ok, false, name);
   }
   const e = structuredClone(env);
-  e.payload.reason = 'honeypot'; // payload changed, hash not
+  e.payload.reason = 'cannot-sell-in-simulation'; // payload changed, hash not
   assert.deepEqual([(await verify(e)).ok, (await verify(e)).reason], [false, 'payload does not match payloadHash']);
   const d = structuredClone(env);
   d.domain.verifyingContract = '0x00000000000000000000000000000000000000b2';

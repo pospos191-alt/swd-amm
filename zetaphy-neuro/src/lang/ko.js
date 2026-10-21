@@ -9,20 +9,29 @@ export const UI = {
   subtitle: '컨트랙트를 읽고 설명합니다 · 1단계, 읽기 전용', chain: '체인', address: '컨트랙트 또는 토큰 주소', check: '컨트랙트 검사',
   details: '세부 정보', reading: '체인에서 읽는 중…', badAddress: '이 체인에 맞지 않는 주소입니다. 사용 가능한 형식: ',
   failed: '읽지 못했습니다: ', footer: '지갑 연결을 요청하지 않으며 거래를 보내지 않습니다. 공개된 체인 데이터만 읽습니다. 투자 조언이 아닙니다.', stats: '사용 통계', language: '언어',
+  disclaimer: '이 내용은 재현 가능한 자동 코드 분석이며, 어떤 개인이나 프로젝트에 대한 고발이 아니고 투자 조언도 아닙니다. 컨트랙트 소유자는 답변하거나 정정을 요청할 수 있습니다.',
+  correction: '답변 또는 정정 요청 방법',
+  reproduce: '직접 다시 확인하기',
+  reproduceHow: '누구나 아래 명령(zetaphy-neuro 폴더에서 실행)으로 이 검사를 다시 할 수 있습니다. 판정 ID는 규칙이 판단한 내용만 담으므로 컨트랙트의 코드와 설정이 같으면 일치합니다. 보고서 ID에는 공급량처럼 바뀌는 숫자도 포함됩니다.',
+  asWritten: '이름과 심볼은 컨트랙트에 적힌 그대로 표시하며 Neuro가 확인한 것이 아닙니다.',
   m: {
     chain: '체인', address: '주소', proxy: 'Proxy', implementation: '실제 코드 (implementation)', owner: '소유자', functions: '알려진 함수', report: '보고서 ID', explorer: 'explorer에서 열기', fingerprint: '코드 지문 (템플릿 등록용)', unknown: '이름을 알 수 없는 함수',
     program: '토큰 프로그램', mintAuth: '발행 권한', freezeAuth: '동결 권한', extensions: '확장 기능', upgradeAuth: '업그레이드 권한', none: '없음',
     package: '패키지', standard: '표준', admin: '관리자', holders: '보유자 수', listed: 'tonapi 목록', raw: '원본 주소 (raw)',
     idl: 'Anchor IDL', codeId: 'code ID', label: '라벨 (label)', creator: '생성자', migrations: '코드 교체 횟수', hook: '전송 검사 컨트랙트 (hook)', source: '검증된 소스 코드', format: '코드 형식', delegation: '이 지갑이 실행하는 코드', walletCode: '보유자 지갑 코드', nearKeys: '전체 접근 키 (full-access key)', codeHash: '코드 해시', cairo: 'Cairo 버전', maxSupply: '최대 공급량', tokenId: '토큰 ID',
     pool: '유동성 풀', simTax: '시뮬레이션 세금 (구매 / 판매)', simFailed: '판매 실패',
+    verdict: '판정 ID (규칙만)', command: '명령', rule: '규칙',
   },
 };
+
+// ThreatRegistry categories (src/threat-reasons.js), as neutral descriptions of what the code does.
+export const REASON = { 'cannot-sell-in-simulation': '모의 거래에서 매도가 실패하거나 거의 돌려받지 못함', 'unlimited-mint': '어떤 주소가 상한 없이 발행할 수 있음', 'owner-can-block-transfers': '소유자나 관리자가 전송이나 매도를 막을 수 있음', 'owner-can-move-holder-funds': '소유자나 관리자가 다른 사람이 보유한 자금을 옮기거나 소각할 수 있음', 'same-name-as-known-token': '알려진 토큰과 같은 이름이나 심볼이지만 주소가 다름', 'sweeps-approved-tokens': '재현 가능한 테스트에서 승인받은 토큰을 보유자가 고르지 않은 주소로 옮김', 'other': '기타 코드 사실 (증거 참조)' };
 
 export const T = {
     'no-code': () => '이 주소에는 컨트랙트 코드가 없습니다. 일반 지갑이거나 체인을 잘못 선택했을 수 있습니다.',
     'erc20': (p) => `ERC-20 토큰 "${p.name ?? '?'}" (${p.symbol ?? '?'}), 총 발행량 ${fmtSupply(p.totalSupply, p.decimals)}개입니다.`,
     'not-erc20': () => '표준 ERC-20 함수를 찾지 못했습니다. 이 컨트랙트는 토큰이 아닐 수 있습니다.',
-    'name-has-link': () => '토큰 이름이나 심볼에 링크나 웹사이트 이름이 들어 있습니다. 흔한 사기 수법입니다 (무료 "에어드롭" 토큰으로 가짜 사이트에 유인). 그 사이트에 들어가거나 지갑을 연결하지 마십시오.',
+    'name-has-link': () => '토큰 이름이나 심볼(컨트랙트에 적힌 그대로)에 링크나 웹사이트 이름이 들어 있습니다. 요청하지 않았는데 보내진, 이름에 링크가 있는 토큰은 사람들을 외부 사이트로 이끄는 데 자주 쓰입니다. 토큰 이름을 보고 그 사이트에 들어가거나 지갑을 연결하지 마십시오.',
     'proxy-minimal': (p) => `최소 복제 컨트랙트(EIP-1167)로, 항상 ${p.implementation}의 코드를 실행합니다. 코드를 바꿀 수 없습니다.`,
     'proxy-upgradeable': (p) => (p.issuer
       ? `${p.issuer}이(가) 컨트랙트 코드를 업그레이드할 수 있습니다. 발행사가 수정하거나 기능을 추가할 때 쓰는 일반적인 방식입니다.`
@@ -44,19 +53,22 @@ export const T = {
       ? `세금을 조정할 수 있지만 (${list(p.functions)}), ${p.project} 템플릿은 낮추는 것만 허용합니다.`
       : `매수/매도 세금을 바꿀 수 있습니다 (${list(p.functions)}). 매도 세금이 매우 높으면 팔아도 거의 남는 것이 없습니다.`),
     'known-issuer': (p) => `${p.issuer}이(가) 발행한 ${p.symbol}의 공식 컨트랙트입니다 (등록된 주소와 일치). 아래 권한은 발행사의 것이며, 주된 위험은 숨겨진 코드가 아니라 발행사를 믿을 수 있는지입니다.`,
-    'lookalike': (p) => `${p.issuer}의 토큰과 같은 심볼 ${p.symbol}을(를) 쓰지만 공식 주소(${p.official})가 아닙니다. 가짜일 수 있습니다. 주소를 확인하기 전에는 사거나 받지 마십시오.`,
+    'lookalike': (p) => `${p.issuer}의 토큰과 같은 심볼 ${p.symbol}을(를) 쓰지만 등록된 주소(${p.official})가 아닙니다. 이 컨트랙트는 등록된 ${p.issuer} 토큰이 아닙니다. 사거나 받기 전에 주소를 확인하십시오.`,
     'template-match': (p) => `등록된 ${p.project} 토큰 템플릿(${p.name})과 일치합니다. 이 템플릿의 규칙은 아직 감사(audit)를 받지 않았습니다.`,
     'template-mismatch': (p) => `코드는 ${p.project} 템플릿과 일치하지만, 템플릿에는 없다고 되어 있는 권한이 있습니다 (${list(p.functions)}). 템플릿 기록이 틀렸을 수 있으니 확인 전까지 믿지 마십시오.`,
     'trading-switch': (p) => `거래를 켜고 끄는 스위치가 있습니다 (${list(p.functions)}). 켜지기 전에는 살 수는 있어도 팔지 못할 수 있습니다.`,
     'can-limit': (p) => `거래당 또는 지갑당 한도를 정할 수 있습니다 (${list(p.functions)}). 한도가 아주 낮으면 팔지 못할 수 있습니다.`,
     'fee-exempt': (p) => `선택한 지갑의 세금을 면제할 수 있습니다 (${list(p.functions)}). 세금이 있는 토큰에서는 흔하지만, 일부 지갑에 유리합니다.`,
-    'network-flagged': (p) => `Neuro ZETAPHY 네트워크가 이 코드를 위험하다고 투표했습니다${p.reason ? ` (${({ drainer: '자금 탈취', honeypot: '살 수는 있지만 팔 수 없음', 'hidden-mint': '숨겨진 발행', 'fake-token': '가짜 토큰', phishing: '피싱' })[p.reason] ?? p.reason})` : ''}. 같은 코드를 쓰는 모든 컨트랙트에 같은 경고가 표시됩니다.`,
+    'network-flagged': (p) => `Neuro ZETAPHY 네트워크 러너들이 투표로 이 코드를 ThreatRegistry에 기록했습니다${p.reason ? ` (분류: ${REASON[p.reason] ?? p.reason})` : ''}. 같은 코드를 쓰는 모든 컨트랙트에 같은 경고가 표시됩니다.`,
+    'similar-flagged': (p) => `이 코드는 Neuro 러너들이 플래그한 코드와 ${p.percent}% 유사합니다 (핑거프린트 ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, 분류: ${REASON[p.reason] ?? p.reason}` : ''}). 플래그된 코드를 조금 고친 복사본은 대개 같은 방식으로 동작합니다.`,
+    'similar-reference': (p) => `이 코드는 Neuro 데이터셋의 참고 샘플과 ${p.percent}% 유사합니다 (핑거프린트 ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, 분류: ${REASON[p.reason] ?? p.reason}` : ''}). 이 샘플은 Neuro 러너들이 온체인에서 플래그한 코드가 아닙니다. 유사성은 더 자세히 살펴보라는 신호일 뿐 증거가 아닙니다.`,
     'tax-wallet': (p) => `세금을 받는 지갑을 바꿀 수 있습니다 (${list(p.functions)}). 세금이 있는 토큰에서는 흔합니다.`,
     'selfdestruct': () => '코드에 SELFDESTRUCT가 들어 있습니다. 실행되면 컨트랙트를 지우거나 그 안의 자금을 옮길 수 있습니다.',
     'delegatecall': () => '이 코드는 다른 컨트랙트의 코드를 자기 코드처럼 실행할 수 있습니다 (DELEGATECALL). 실제로 실행되는 코드가 여기 보이는 코드와 다를 수 있습니다.',
     'nothing-found': () => '이 규칙으로는 특별 권한이나 위험한 명령을 찾지 못했습니다.',
     'unknown-functions': (p) => `Neuro가 이름을 알 수 없는 함수가 ${p.count}개 더 있습니다 (${(p.selectors ?? []).map((x) => '0x' + x).join(', ')}). 무슨 일을 하는지 알 수 없습니다. 소유자가 아직 컨트랙트를 관리하고 있다면, 세금이나 거래 한도 설정 같은 특별 권한일 수 있습니다.`,
-    'bytecode-only': () => '체인에 있는 코드를 정해진 규칙으로 검사했습니다. 특이한 함수 이름 뒤에 숨은 사기는 놓칠 수 있습니다. 투자 조언이 아닙니다.',
+    'unknown-pattern': (p) => `Neuro가 아직 모르는 패턴입니다. 조심하세요: 함수의 ${p.share}%가 알려진 이름이 없고, 코드가 코인이나 토큰을 옮길 수 있습니다. 여기서 아무것도 찾지 못했다고 안전한 것은 아닙니다.`,
+    'bytecode-only': () => '체인에 있는 코드를 정해진 규칙으로 검사했습니다. 특이한 함수 이름 뒤에 숨은 권한은 놓칠 수 있습니다. 투자 조언이 아닙니다.',
     // Solana
     'sol-not-found': () => 'Solana에서 이 주소의 계정을 찾지 못했습니다. 잘못 입력했거나 체인을 잘못 선택했을 수 있습니다.',
     'sol-not-token': (p) => `이 주소는 Solana의 토큰 민트(mint)가 아니라 프로그램 ${p.owner}의 계정입니다.`,
@@ -67,11 +79,11 @@ export const T = {
     'sol-mint-renounced': () => '발행 권한(mint authority)이 포기되었습니다. 발행량이 더 늘어날 수 없습니다.',
     'sol-freeze-authority': (p) => (p.issuer
       ? `${p.issuer}이(가) 계정을 동결할 수 있습니다 (freeze authority). 보통 도난 자금이나 법적 명령에 사용됩니다.`
-      : `아직 계정을 동결할 수 있습니다 (freeze authority: ${p.authority}). 동결된 계정은 팔거나 보낼 수 없습니다. Solana에서 흔한 사기 수법입니다.`),
+      : `아직 계정을 동결할 수 있습니다 (freeze authority: ${p.authority}). 동결된 계정은 팔거나 보낼 수 없습니다.`),
     'sol-freeze-renounced': () => '동결 권한(freeze authority)이 포기되었습니다. 아무도 당신의 토큰을 동결할 수 없습니다.',
     'sol-permanent-delegate': (p) => (p.issuer
       ? `${p.issuer}이(가) 어떤 계정에서든 토큰을 옮기거나 소각할 수 있습니다 (permanent delegate). 법적 압류에 사용됩니다.`
-      : `영구 위임자(permanent delegate: ${p.delegate})가 허락 없이 모든 지갑에서 토큰을 옮기거나 소각할 수 있습니다. 매우 위험합니다.`),
+      : `영구 위임자(permanent delegate: ${p.delegate})가 허락 없이 모든 지갑에서 토큰을 옮기거나 소각할 수 있습니다. 보유자에게 위험이 매우 큽니다.`),
     'sol-transfer-fee': (p) => `전송할 때마다 ${p.percent}%의 수수료를 뗍니다${p.authority ? `. 수수료 관리자(${p.authority})는 이를 최대 100%까지 올릴 수 있습니다` : ''}.`,
     'sol-transfer-hook': (p) => `전송할 때마다 추가 프로그램이 실행됩니다 (transfer hook: ${p.programId}). 이 프로그램은 매도 차단 같은 자체 규칙을 강제할 수 있습니다.`,
     'sol-default-frozen': () => '이 토큰의 새 계정은 동결된 상태로 시작합니다. 산 뒤에도 동결이 풀릴 때까지 옮기거나 팔 수 없을 수 있습니다.',
@@ -144,7 +156,7 @@ export const T = {
       if ((p.interfaces ?? []).includes('jetton_wallet')) return '이것은 한 보유자의 토큰 지갑(jetton wallet)이며 토큰 자체가 아닙니다. 토큰의 메인 주소(jetton master)를 입력하십시오.';
       return `이 TON 컨트랙트는 토큰이 아닙니다${p.interfaces?.length ? ` (${list(p.interfaces)})` : ''}.`;
     },
-    'ton-scam': () => 'tonapi.io가 이 토큰이나 관리자를 사기와 관련 있다고 표시했습니다. 사거나 받지 마십시오.',
+    'ton-scam': () => 'tonapi.io(제3자)가 이 토큰이나 관리자 계정에 경고 표시를 붙였습니다. 이것은 tonapi.io의 표시이며 이번 코드 검사의 결과가 아닙니다. 사거나 받기 전에 그 이유를 확인하십시오.',
     'ton-jetton': (p) => `TON 토큰(jetton) "${p.name ?? '?'}" (${p.symbol ?? '?'}), 총 발행량 ${fmtSupply(p.totalSupply, p.decimals)}개${p.holders != null ? `, 보유자 ${fmtSupply(p.holders, 0)}명` : ''}입니다.`,
     'ton-listed': () => 'tonapi.io가 확인한 토큰 목록(whitelist)에 있습니다. 제3자의 목록일 뿐 보증은 아닙니다.',
     'ton-frozen': () => '이 토큰 컨트랙트는 저장 수수료 미납으로 동결되어 지금은 사용할 수 없습니다.',
@@ -176,8 +188,8 @@ export const T = {
     'eip7702': (p) => `이 주소는 일반 지갑이며, 소유자가 컨트랙트 ${p.target}의 코드를 실행하도록 설정했습니다 (EIP-7702). 토큰이 아닙니다. 그 코드는 작성된 대로 지갑의 자금으로 무엇이든 할 수 있으므로, ${p.target}도 검사하십시오.`,
     'source-verified': (p) => `Sourcify가 ${p.match === 'exact' ? '체인의 코드와 바이트 단위까지 일치한다고' : '체인의 코드와 일치한다고'} 확인한 공개 소스 코드가 있습니다 (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). ${p.url}에서 읽을 수 있습니다.`,
     'source-unverified': () => 'Sourcify에 소스 코드가 없습니다. 체인의 explorer에는 공개되어 있을 수 있습니다. 어디에도 공개되어 있지 않다면 특히 주의하십시오.',
-    // Trade simulation (honeypot check, src/honeypot.js)
-    'sim-cannot-sell': (p) => `허니팟 경고: ${p.dex}에서 거래를 시뮬레이션해 보니 살 수는 있었지만 ${p.sell == null ? '팔 수 없었습니다' : `팔아도 거의 돌려받지 못했습니다 (${p.sell}% 손실)`}. 사면 팔지 못할 수 있습니다. (일부 토큰은 산 직후에만 판매를 막는데, 이 검사로는 두 경우를 구별할 수 없습니다.)`,
+    // Trade simulation (buy/sell test, src/honeypot.js)
+    'sim-cannot-sell': (p) => `판매 테스트 실패: ${p.dex}에서 거래를 시뮬레이션해 보니 살 수는 있었지만 ${p.sell == null ? '팔 수 없었습니다' : `팔아도 거의 돌려받지 못했습니다 (${p.sell}% 손실)`}. 사면 팔지 못할 수 있습니다. (일부 토큰은 산 직후에만 판매를 막는데, 이 검사로는 두 경우를 구별할 수 없습니다.)`,
     'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
       ? `${p.dex}에서 구매를 시뮬레이션해 보니 토큰을 하나도 받지 못했습니다. 낸 돈 전부가 빠져나갑니다.`
       : `${p.dex}에서 거래를 시뮬레이션해 보니 살 때 ${p.buy ?? '?'}%, 팔 때 ${p.sell ?? '?'}%가 토큰의 세금으로 빠져나갔습니다. 가격으로 예상한 것보다 그만큼 적게 돌려받습니다.`),

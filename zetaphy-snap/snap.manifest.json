@@ -8,7 +8,7 @@
     "directory": "zetaphy-snap"
   },
   "source": {
-    "shasum": "FG1wg3VbB7jwwQ3GzzpIkl37+ReJXG5JBLlc+mojM+o=",
+    "shasum": "Sh+PAEKtNXJElxNi1Tt9tILEJ/rNfwoxsvf8MsICXSk=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",
@@ -23,8 +23,17 @@
       "dapps": true,
       "snaps": false
     },
+    "endowment:transaction-insight": {
+      "allowTransactionOrigin": false
+    },
+    "endowment:signature-insight": {
+      "allowSignatureOrigin": false
+    },
+    "endowment:ethereum-provider": {},
+    "endowment:network-access": {},
     "snap_dialog": {},
-    "snap_getEntropy": {}
+    "snap_getEntropy": {},
+    "snap_manageState": {}
   },
   "platformVersion": "11.2.0",
   "manifestVersion": "0.1"

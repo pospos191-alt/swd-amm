@@ -9,20 +9,29 @@ export const UI = {
   subtitle: 'Membaca dan menjelaskan kontrak · tingkat 1, hanya baca', chain: 'Jaringan', address: 'Alamat kontrak atau token', check: 'Periksa kontrak',
   details: 'Detail', reading: 'Membaca data dari jaringan…', badAddress: 'Alamat tidak valid untuk jaringan ini. Format yang diterima: ',
   failed: 'Gagal membaca: ', footer: 'Tidak pernah meminta Anda menghubungkan dompet dan tidak pernah mengirim transaksi. Hanya membaca data publik dari jaringan. Bukan saran investasi.', stats: 'Statistik penggunaan', language: 'Bahasa',
+  disclaimer: 'Ini adalah analisis kode otomatis yang dapat diulang, bukan tuduhan terhadap orang atau proyek mana pun, dan bukan saran investasi. Pemilik kontrak dapat menanggapi atau meminta koreksi.',
+  correction: 'Cara menanggapi atau meminta koreksi',
+  reproduce: 'Periksa sendiri',
+  reproduceHow: 'Siapa pun dapat menjalankan ulang pemeriksaan ini dengan perintah di bawah (di folder zetaphy-neuro). ID putusan hanya mencakup apa yang diputuskan aturan, jadi hasilnya sama selama kode dan pengaturan kontrak tidak berubah. ID laporan juga mencakup angka yang berubah seperti total pasokan.',
+  asWritten: 'Nama dan simbol ditampilkan seperti tertulis di kontrak; Neuro tidak mengonfirmasinya.',
   m: {
     chain: 'Jaringan', address: 'Alamat', proxy: 'Proxy', implementation: 'Kode utama (implementation)', owner: 'Pemilik', functions: 'Fungsi yang dikenali', report: 'ID laporan', explorer: 'Buka di explorer', fingerprint: 'Sidik jari kode (untuk pendaftaran templat)', unknown: 'Fungsi tanpa nama',
     program: 'Program token', mintAuth: 'Hak mencetak (mint authority)', freezeAuth: 'Hak membekukan (freeze authority)', extensions: 'Ekstensi', upgradeAuth: 'Hak upgrade (upgrade authority)', none: 'tidak ada',
     package: 'Paket', standard: 'Standar', admin: 'Admin', holders: 'Pemegang', listed: 'Daftar tonapi', raw: 'Alamat mentah (raw)',
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Label', creator: 'Pembuat', migrations: 'Kode pernah diganti', hook: 'Kontrak transfer hook', source: 'Kode sumber terverifikasi', format: 'Format kode', delegation: 'Kode yang dijalankan dompet ini', walletCode: 'Kode dompet pemegang', nearKeys: 'Kunci akses penuh (full-access key)', codeHash: 'Hash kode', cairo: 'Versi Cairo', maxSupply: 'Pasokan maksimum', tokenId: 'ID token',
     pool: 'Pool likuiditas', simTax: 'Pajak simulasi (beli / jual)', simFailed: 'gagal menjual',
+    verdict: 'ID putusan (hanya aturan)', command: 'Perintah', rule: 'aturan',
   },
 };
+
+// ThreatRegistry categories (src/threat-reasons.js), as neutral descriptions of what the code does.
+export const REASON = { 'cannot-sell-in-simulation': 'dalam simulasi perdagangan, penjualan gagal atau hampir tidak mengembalikan apa pun', 'unlimited-mint': 'sebuah alamat dapat mencetak token baru tanpa batas', 'owner-can-block-transfers': 'pemilik atau admin dapat menghentikan transfer atau penjualan', 'owner-can-move-holder-funds': 'pemilik atau admin dapat memindahkan atau membakar dana milik orang lain', 'same-name-as-known-token': 'nama atau simbol sama dengan token yang dikenal, di alamat berbeda', 'sweeps-approved-tokens': 'dalam uji yang dapat diulang, memindahkan token yang disetujui ke alamat yang tidak dipilih pemegang', 'other': 'fakta kode lainnya (lihat bukti)' };
 
 export const T = {
     'no-code': () => 'Alamat ini tidak memiliki kode kontrak. Mungkin ini dompet biasa, atau jaringan yang dipilih salah.',
     'erc20': (p) => `Token ERC-20 "${p.name ?? '?'}" (${p.symbol ?? '?'}), total pasokan ${fmtSupply(p.totalSupply, p.decimals)}.`,
     'not-erc20': () => 'Tidak ditemukan fungsi standar ERC-20. Kontrak ini mungkin bukan token.',
-    'name-has-link': () => 'Nama atau simbol token berisi tautan atau nama situs web. Ini penipuan yang umum (token "airdrop" gratis yang memancing Anda ke situs palsu). Jangan buka situs itu dan jangan hubungkan dompet Anda.',
+    'name-has-link': () => 'Nama atau simbol token (seperti tertulis di kontrak) berisi tautan atau nama situs web. Token yang dikirim tanpa diminta dengan tautan di namanya sering dipakai untuk mengarahkan orang ke situs luar. Jangan buka situs itu atau hubungkan dompet Anda karena nama token.',
     'proxy-minimal': (p) => `Klon minimal (EIP-1167) yang selalu menjalankan kode di ${p.implementation}. Kodenya tidak bisa diubah.`,
     'proxy-upgradeable': (p) => (p.issuer
       ? `${p.issuer} dapat meng-upgrade kode kontrak. Ini cara biasa penerbit memperbaiki atau menambah fitur.`
@@ -44,19 +53,22 @@ export const T = {
       ? `Dapat mengubah pajak (${list(p.functions)}), tetapi templat ${p.project} hanya mengizinkan pajak diturunkan.`
       : `Dapat mengubah pajak beli/jual (${list(p.functions)}). Pajak jual yang sangat tinggi berarti hasil penjualan hampir nol.`),
     'known-issuer': (p) => `Kontrak resmi ${p.symbol} yang diterbitkan oleh ${p.issuer} (cocok dengan alamat yang terdaftar). Kekuasaan di bawah ini milik penerbit; risiko utamanya adalah kepercayaan pada penerbit, bukan kode tersembunyi.`,
-    'lookalike': (p) => `Memakai simbol ${p.symbol} seperti token milik ${p.issuer}, tetapi BUKAN alamat resmi (${p.official}). Kemungkinan palsu; jangan beli atau terima sebelum Anda memeriksa alamatnya.`,
+    'lookalike': (p) => `Memakai simbol ${p.symbol} seperti token milik ${p.issuer}, tetapi BUKAN alamat yang terdaftar (${p.official}). Kontrak ini bukan token ${p.issuer} yang terdaftar; periksa alamatnya sebelum membeli atau menerima.`,
     'template-match': (p) => `Cocok dengan templat token ${p.project} yang terdaftar (${p.name}). Aturan templat ini belum diaudit.`,
     'template-mismatch': (p) => `Kode cocok dengan templat ${p.project}, tetapi memiliki kekuasaan yang menurut templat tidak ada (${list(p.functions)}). Catatan templat mungkin salah; jangan dipercaya sebelum diperiksa.`,
     'trading-switch': (p) => `Memiliki tombol buka/tutup perdagangan (${list(p.functions)}). Sebelum dibuka, Anda mungkin bisa membeli tetapi tidak bisa menjual.`,
     'can-limit': (p) => `Dapat mengatur batas per transaksi atau per dompet (${list(p.functions)}). Batas yang sangat rendah bisa menghalangi penjualan.`,
     'fee-exempt': (p) => `Dapat membebaskan dompet tertentu dari pajak (${list(p.functions)}). Umum pada token berpajak, tetapi memberi keuntungan bagi dompet tertentu.`,
-    'network-flagged': (p) => `Jaringan Neuro ZETAPHY memilih kode ini sebagai berbahaya${p.reason ? ` (${p.reason})` : ''}. Setiap kontrak dengan kode yang sama mendapat peringatan yang sama.`,
+    'network-flagged': (p) => `Para runner jaringan Neuro ZETAPHY memilih untuk mencatat kode ini di ThreatRegistry${p.reason ? ` (kategori: ${REASON[p.reason] ?? p.reason})` : ''}. Setiap kontrak dengan kode yang sama mendapat peringatan yang sama.`,
+    'similar-flagged': (p) => `Kode ini ${p.percent}% mirip dengan kode yang ditandai oleh runner Neuro (sidik jari ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, kategori: ${REASON[p.reason] ?? p.reason}` : ''}). Salinan yang sedikit diubah dari kode yang ditandai biasanya berperilaku sama.`,
+    'similar-reference': (p) => `Kode ini ${p.percent}% mirip dengan sampel referensi dalam dataset Neuro (sidik jari ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, kategori: ${REASON[p.reason] ?? p.reason}` : ''}). Sampel ini bukan kode yang ditandai runner Neuro di on-chain. Kemiripan hanya petunjuk untuk diperiksa lebih teliti, bukan bukti.`,
     'tax-wallet': (p) => `Dapat mengganti dompet penerima pajak (${list(p.functions)}). Umum pada token berpajak.`,
     'selfdestruct': () => 'Kode berisi SELFDESTRUCT. Jika dipicu, kontrak bisa dihapus atau dananya dipindahkan.',
     'delegatecall': () => 'Kode dapat menjalankan kode kontrak lain seolah-olah miliknya sendiri (DELEGATECALL), jadi kode yang benar-benar berjalan mungkin bukan kode yang ditampilkan di sini.',
     'nothing-found': () => 'Aturan ini tidak menemukan kekuasaan khusus atau instruksi berbahaya.',
     'unknown-functions': (p) => `Ada ${p.count} fungsi lain yang tidak bisa dikenali Neuro (${(p.selectors ?? []).map((x) => '0x' + x).join(', ')}), jadi fungsinya tidak diketahui. Selama masih ada pemilik yang mengendalikan kontrak, fungsi ini mungkin fungsi khusus, misalnya untuk mengatur pajak atau batas perdagangan.`,
-    'bytecode-only': () => 'Diperiksa dari kode on-chain dengan aturan tetap. Penipuan yang bersembunyi di balik nama fungsi yang tidak biasa bisa terlewat. Bukan saran investasi.',
+    'unknown-pattern': (p) => `Neuro belum mengenali pola ini, hati-hati: ${p.share}% fungsinya tidak punya nama yang dikenal, dan kodenya bisa memindahkan koin atau token. Tidak menemukan apa pun di sini bukan berarti aman.`,
+    'bytecode-only': () => 'Diperiksa dari kode on-chain dengan aturan tetap. Kewenangan yang tersembunyi di balik nama fungsi yang tidak biasa bisa terlewat. Bukan saran investasi.',
     // Solana
     'sol-not-found': () => 'Tidak ada akun di alamat ini di Solana. Mungkin salah ketik, atau jaringan yang dipilih salah.',
     'sol-not-token': (p) => `Alamat ini bukan token mint di Solana; ini adalah akun milik program ${p.owner}.`,
@@ -67,11 +79,11 @@ export const T = {
     'sol-mint-renounced': () => 'Hak mencetak (mint authority) sudah dilepas: jumlah pasokan tidak akan pernah bertambah.',
     'sol-freeze-authority': (p) => (p.issuer
       ? `${p.issuer} dapat membekukan akun (freeze authority), biasanya untuk dana curian atau perintah hukum.`
-      : `Akun masih bisa dibekukan (freeze authority: ${p.authority}). Akun yang dibekukan tidak bisa menjual atau mentransfer, penipuan yang umum di Solana.`),
+      : `Akun masih bisa dibekukan (freeze authority: ${p.authority}). Akun yang dibekukan tidak bisa menjual atau mentransfer.`),
     'sol-freeze-renounced': () => 'Hak membekukan (freeze authority) sudah dilepas: tidak ada yang bisa membekukan token Anda.',
     'sol-permanent-delegate': (p) => (p.issuer
       ? `${p.issuer} dapat memindahkan atau membakar token dari akun mana pun (permanent delegate), digunakan untuk penyitaan hukum.`
-      : `Seorang wakil permanen (permanent delegate: ${p.delegate}) dapat memindahkan atau membakar token dari SEMUA dompet tanpa izin. Sangat berbahaya.`),
+      : `Seorang wakil permanen (permanent delegate: ${p.delegate}) dapat memindahkan atau membakar token dari SEMUA dompet tanpa izin. Risiko sangat tinggi bagi pemegang.`),
     'sol-transfer-fee': (p) => `Memungut biaya ${p.percent}% untuk setiap transfer${p.authority ? `, dan pemegang hak biaya (${p.authority}) dapat menaikkannya hingga 100%` : ''}.`,
     'sol-transfer-hook': (p) => `Setiap transfer menjalankan program tambahan (transfer hook: ${p.programId}) yang dapat menerapkan aturannya sendiri, misalnya memblokir penjualan.`,
     'sol-default-frozen': () => 'Akun baru untuk token ini langsung dalam keadaan beku: setelah membeli, Anda mungkin tidak bisa memindahkan atau menjual sampai dibuka.',
@@ -144,7 +156,7 @@ export const T = {
       if ((p.interfaces ?? []).includes('jetton_wallet')) return 'Ini adalah jetton wallet milik satu pemegang, bukan token itu sendiri. Masukkan alamat utama token (jetton master).';
       return `Kontrak TON ini bukan token${p.interfaces?.length ? ` (${list(p.interfaces)})` : ''}.`;
     },
-    'ton-scam': () => 'tonapi.io menandai token ini atau admin-nya terkait dengan penipuan. Jangan beli atau terima token ini.',
+    'ton-scam': () => 'tonapi.io (pihak ketiga) memberi label peringatan pada token ini atau akun admin-nya. Ini label dari tonapi.io, bukan hasil pemeriksaan kode ini; periksa alasannya sebelum membeli atau menerima token.',
     'ton-jetton': (p) => `Token TON (jetton) "${p.name ?? '?'}" (${p.symbol ?? '?'}), total pasokan ${fmtSupply(p.totalSupply, p.decimals)}${p.holders != null ? `, ${fmtSupply(p.holders, 0)} pemegang` : ''}.`,
     'ton-listed': () => 'Ada di daftar token terperiksa milik tonapi.io (whitelist). Itu daftar dari pihak ketiga, bukan jaminan.',
     'ton-frozen': () => 'Kontrak token ini dibekukan karena biaya penyimpanan belum dibayar dan saat ini tidak bisa digunakan.',
@@ -176,8 +188,8 @@ export const T = {
     'eip7702': (p) => `Alamat ini adalah dompet biasa yang pemiliknya mengaturnya untuk menjalankan kode kontrak ${p.target} (EIP-7702). Ini bukan token. Kode itu dapat melakukan apa saja yang tertulis di dalamnya terhadap dana di dompet ini; periksa juga ${p.target}.`,
     'source-verified': (p) => `Ada kode sumber publik yang sudah dikonfirmasi Sourcify ${p.match === 'exact' ? 'sama persis byte demi byte dengan kode on-chain' : 'sesuai dengan kode on-chain'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Baca di ${p.url}`,
     'source-unverified': () => 'Tidak ada kode sumber di Sourcify. Kode sumbernya mungkin tetap dipublikasikan di explorer jaringan ini; jika tidak dipublikasikan di mana pun, berhati-hatilah.',
-    // Trade simulation (honeypot check, src/honeypot.js)
-    'sim-cannot-sell': (p) => `Peringatan honeypot: dalam simulasi perdagangan lewat ${p.dex}, membeli berhasil tetapi ${p.sell == null ? 'menjual gagal' : `menjual hampir tidak mengembalikan apa-apa (hilang ${p.sell}%)`}. Jika Anda membeli, Anda mungkin tidak bisa menjual. (Sebagian kecil token hanya memblokir penjualan sesaat setelah pembelian; pemeriksaan ini tidak bisa membedakan keduanya.)`,
+    // Trade simulation (buy/sell test, src/honeypot.js)
+    'sim-cannot-sell': (p) => `Uji jual gagal: dalam simulasi perdagangan lewat ${p.dex}, membeli berhasil tetapi ${p.sell == null ? 'menjual gagal' : `menjual hampir tidak mengembalikan apa-apa (hilang ${p.sell}%)`}. Jika Anda membeli, Anda mungkin tidak bisa menjual. (Sebagian kecil token hanya memblokir penjualan sesaat setelah pembelian; pemeriksaan ini tidak bisa membedakan keduanya.)`,
     'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
       ? `Simulasi pembelian lewat ${p.dex} tidak menghasilkan token sama sekali: seluruh pembelian diambil.`
       : `Simulasi perdagangan lewat ${p.dex} kehilangan ${p.buy ?? '?'}% saat membeli dan ${p.sell ?? '?'}% saat menjual, diambil token sebagai pajak. Anda menerima kembali sebanyak itu lebih sedikit dari harga yang terlihat.`),

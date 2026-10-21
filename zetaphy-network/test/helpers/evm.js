@@ -4,17 +4,31 @@
 import { EVM } from '@ethereumjs/evm';
 import { Common, Chain, Hardfork } from '@ethereumjs/common';
 import { Address, Account, hexToBytes, bytesToHex } from '@ethereumjs/util';
-import { Interface } from 'ethers';
+import { Interface, keccak256, toBeHex } from 'ethers';
 import { readFileSync } from 'node:fs';
 
 export const ZETA = 10n ** 18n;
 
 /** @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds */
 export async function createChain(names = [], fundAddresses = {}) {
-  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }) });
+  // BLOCKHASH: a fixed hash per block number (keccak of a salt and the
+  // number), like a real chain; setBlockHashSalt() gives another history,
+  // noBlockHash() a chain whose BLOCKHASH is always 0. The EVM itself
+  // returns 0 outside the last 256 blocks.
+  let hashSalt = '0x' + '00'.repeat(32);
+  let hashes = true;
+  const blockchain = {
+    async getBlock(n) {
+      const h = hashes ? hexToBytes(keccak256(hashSalt + toBeHex(BigInt(n), 32).slice(2))) : new Uint8Array(32);
+      return { hash: () => h };
+    },
+    shallowCopy() { return this; },
+  };
+  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }), blockchain });
   const sm = evm.stateManager;
   let time = 1_800_000_000n;
   let number = 1n;
+  let prevRandao = new Uint8Array(32); // constant 0, like a chain without PREVRANDAO; setPrevRandao() changes it
   const acct = {};
   for (const [i, n] of names.entries()) {
     const a = Address.fromString('0x' + (i + 1).toString(16).padStart(40, '0').replace(/^0/, 'a'));
@@ -28,14 +42,17 @@ export async function createChain(names = [], fundAddresses = {}) {
   }
   const block = () => ({
     header: {
-      number, timestamp: time, coinbase: Address.zero(), difficulty: 0n, prevRandao: new Uint8Array(32),
+      number, timestamp: time, coinbase: Address.zero(), difficulty: 0n, prevRandao,
       gasLimit: 30_000_000n, baseFeePerGas: 0n, cliqueSigner: () => Address.zero(), getBlobGasPrice: () => 0n,
     },
   });
 
   async function exec(from, to, data, value = 0n) {
-    const r = await evm.runCall({ caller: acct[from] ?? from, to, data: hexToBytes(data), value, gasLimit: 10_000_000n, block: block() });
-    number += 1n;
+    const r = await evm.runCall({ caller: acct[from] ?? from, to, data: hexToBytes(data), value, gasLimit: 15_000_000n, block: block() });
+    // Every transaction (and call) gets its own block, with an empty block
+    // after it, so the next one can already read the block hash NeuroJobs'
+    // lottery uses (blockhash(start block + 1)), as two blocks later on a chain.
+    number += 2n;
     return r;
   }
 
@@ -46,6 +63,15 @@ export async function createChain(names = [], fundAddresses = {}) {
       await sm.putContractCode(Address.fromString(addressHex), hexToBytes(runtimeHex));
     },
     advance(seconds) { time += BigInt(seconds); },
+    /** PREVRANDAO (block.prevrandao) of the next blocks, as a 0x… 32-byte hex. */
+    setPrevRandao(hex) { prevRandao = hexToBytes(hex); },
+    blockNumber: () => number,
+    /** Moves the block number on by n empty blocks. */
+    mine(n = 1) { number += BigInt(n); },
+    /** Another block-hash history from here on (a 0x… 32-byte salt). */
+    setBlockHashSalt(hex) { hashSalt = hex; },
+    /** BLOCKHASH returns 0 for every block (a chain without it). */
+    noBlockHash() { hashes = false; },
     async transfer(from, to, value) {
       const r = await exec(from, Address.fromString(to), '0x', value);
       if (r.execResult.exceptionError) throw new Error('transfer failed');
@@ -69,7 +95,10 @@ export async function createChain(names = [], fundAddresses = {}) {
     now: () => time,
     balance: async (who) => (await sm.getAccount(acct[who] ?? who))?.balance ?? 0n,
     async deploy(artifactName, args, from) {
-      const art = JSON.parse(readFileSync(new URL(`../../artifacts/${artifactName}.json`, import.meta.url), 'utf8'));
+      return this.deployRaw(JSON.parse(readFileSync(new URL(`../../artifacts/${artifactName}.json`, import.meta.url), 'utf8')), args, from);
+    },
+    /** Deploys {abi, bytecode} (e.g. compiled inside a test). */
+    async deployRaw(art, args, from) {
       const iface = new Interface(art.abi);
       const r = await exec(from, undefined, art.bytecode + iface.encodeDeploy(args).slice(2));
       if (r.execResult.exceptionError) throw new Error(`deploy failed: ${r.execResult.exceptionError.error}`);

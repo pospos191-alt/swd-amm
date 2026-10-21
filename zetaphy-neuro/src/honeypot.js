@@ -1,6 +1,7 @@
-// Honeypot check: a simulated buy and sell of an EVM token.
+// Buy/sell test: a simulated buy and sell of an EVM token (often called a
+// "honeypot check"; reports describe the result, never label the token).
 //
-// The rules read function names, so a scam that blocks selling or takes a
+// The rules read function names, so code that blocks selling or takes a
 // hidden tax under an unusual name can slip past them. A real trade cannot:
 // either the tokens come back out or they do not. This is the honeypot.is
 // technique, done with read-only calls only:

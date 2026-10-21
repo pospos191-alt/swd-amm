@@ -3,6 +3,7 @@
 import { readContract } from '../src/reader.js';
 import { explain, LANGS, uiText, pickLang } from '../src/explain.js';
 import { CHAINS, isChainAddress, explorerUrl } from '../src/chains.js';
+import { verdictOf } from '../src/verdict.js';
 
 const $ = (id) => document.getElementById(id);
 // What an address looks like on each kind of chain (placeholder and error hint).
@@ -48,13 +49,22 @@ function render(report) {
   const { m } = uiText(lang);
   $('verdict').className = `verdict ${out.level}`;
   $('title').textContent = out.title;
+  const ui = uiText(lang);
   const list = $('findings');
+  // Each finding says where its evidence is: the report it belongs to and
+  // the command that recomputes it (the "check it yourself" box below).
   list.replaceChildren(...out.lines.map((l) => {
     const li = document.createElement('li');
     li.className = l.severity;
-    li.textContent = l.text;
+    li.append(l.text);
+    // Plain text, no link: nothing inside #findings is markup (token names live here).
+    const ev = document.createElement('small');
+    ev.className = 'evidence';
+    ev.textContent = `${m.report} ${String(report.reportHash ?? '').slice(0, 12)}… · ${ui.reproduce} ↓`;
+    li.append(ev);
     return li;
   }));
+  renderEvidence(report, m);
   const rows = [[m.chain, CHAINS[report.chain].name], [m.address, report.address]];
   if (report.proxy?.kind) rows.push([m.proxy, report.proxy.kind]);
   if (report.proxy?.implementation) rows.push([m.implementation, report.proxy.implementation]);
@@ -135,6 +145,21 @@ function render(report) {
   a.textContent = new URL(a.href).hostname;
   dd.append(a); dl.append(dt, dd);
   $('result').hidden = false;
+}
+
+// Report ID, verdict ID and the CLI command that recomputes both.
+function renderEvidence(report, m) {
+  const cmd = `node cli.js ${report.chain} ${report.address} --lang ${lang}`;
+  const rows = [[m.report, report.reportHash], [m.verdict, '…'], [m.command, cmd]];
+  const dl = $('evidence');
+  dl.replaceChildren();
+  const cells = rows.map(([k, v]) => {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = v;
+    dl.append(dt, dd);
+    return dd;
+  });
+  verdictOf(report).then((v) => { if (last === report) cells[1].textContent = v; }).catch(() => { cells[1].textContent = '?'; });
 }
 
 // Counts one "check" toward the monthly user goal. Sends nothing about the

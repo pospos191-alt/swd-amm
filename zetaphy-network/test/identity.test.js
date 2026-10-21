@@ -4,11 +4,19 @@ import { readFileSync } from 'node:fs';
 import solc from 'solc';
 import { Interface, Wallet, ZeroHash, keccak256, toUtf8Bytes, id as topicId, getBytes, getAddress } from 'ethers';
 import { createChain } from './helpers/evm.js';
-import { chainArgs, canonicalTarget, decodeAgentURI, NEURO_CHAINS } from '../src/identity.js';
+import {
+  chainArgs, canonicalTarget, decodeAgentURI, NEURO_CHAINS, tonRaw, claimDomain, claimValues, CLAIM_TYPES, consentText, remoteOwners,
+  checkClaimBundle, signAttestation, sortedAttestations, verifyEd25519, base58Decode,
+} from '../src/identity.js';
+import { generateKeyPairSync, sign as edSign } from 'node:crypto';
+import { verifyTypedData } from 'ethers';
 
 // Test chain: @ethereumjs Mainnet common, so block.chainid = 1 and "eth"
 // (eip155:1) plays the role of "this chain" (on ZETAPHY it is "zetaphy").
 const WEB = 'https://neuro.example/web/';
+const QUORUM = 2; // runner attestations a remote claim needs in these tests
+const MIN_AGREED = 5; // accepted verdicts a runner needs to attest or contest a remote claim
+const DELAY = 3 * 86400; // contest window of a remote claim
 const MOCK_ADDR = Object.fromEntries(Object.entries({ runners: 'a1', token: 'a2', renounced: 'a3', w1271: 'a4' }).map(([k, v]) => [k, getAddress('0x' + v.padStart(40, '0'))]));
 
 function compileMocks() {
@@ -25,7 +33,7 @@ let IDR; // checksummed registry address
 
 beforeEach(async () => {
   c = await createChain(['admin', 'squatter', 'alice', 'bob', 'carol', 'mallory', 'r1', 'r2', 'newbie']);
-  idr = await c.deploy('NeuroIdentity', [WEB, '', ...chainArgs()], 'admin');
+  idr = await c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), MOCK_ADDR.runners, QUORUM, MIN_AGREED, DELAY], 'admin');
   IDR = getAddress(idr.address);
   await c.putCode(MOCK_ADDR.runners, MOCKS.MockRunners.code);
   await c.putCode(MOCK_ADDR.token, MOCKS.MockOwned.code);
@@ -159,7 +167,7 @@ test('canonicalTarget gives the registry one spelling per target on every Neuro 
   assert.equal(canonicalTarget('ETH', '0xABCDEF0000000000000000000000000000000001').account, '0xabcdef0000000000000000000000000000000001');
   assert.equal(canonicalTarget('sui', '0x2::sui::SUI').account, '0x' + '0'.repeat(63) + '2::sui::SUI');
   assert.equal(canonicalTarget('starknet', '0x4718F5').account, '0x' + '0'.repeat(58) + '4718f5');
-  assert.equal(canonicalTarget('bitcoin', 'UNCOMMON•GOODS').account, 'UNCOMMON%E2%80%A2GOODS');
+  assert.equal(canonicalTarget('bitcoin', 'UNCOMMON•GOODS').account, 'UNCOMMONGOODS');
   assert.equal(canonicalTarget('osmosis', 'OSMO1QQ').account, 'osmo1qq');
   assert.throws(() => canonicalTarget('eth', '0x123'), /not an EVM address/);
   assert.throws(() => canonicalTarget('dogechain', '0x' + '11'.repeat(20)), /unknown chain/);
@@ -200,7 +208,7 @@ test('agentURI is an on-chain ERC-8004 registration file pointing at the Neuro r
   assert.equal(reg2.image, 'https://neuro2.example/icon.png');
   // a rune name with percent-escapes is still valid JSON and a valid link
   const r = await registerTarget('alice', 'bitcoin', 'UNCOMMON•GOODS');
-  assert.equal(decodeAgentURI(await idr.call('tokenURI', [r.id])).services[0].endpoint, `https://neuro2.example/web/?chain=bitcoin&address=UNCOMMON%E2%80%A2GOODS`);
+  assert.equal(decodeAgentURI(await idr.call('tokenURI', [r.id])).services[0].endpoint, `https://neuro2.example/web/?chain=bitcoin&address=UNCOMMONGOODS`);
 });
 
 // ------------------------------------------------------------------ owner claim
@@ -468,12 +476,290 @@ test('one spelling on chain for Sui/Aptos (padded lowercase hex), Solana (base58
   for (const bad of [mint.replace('E', '%45'), mint.slice(0, 31), mint + 'abc', mint.replace('E', '0'), mint.replace('E', 'O'), mint.replace('E', 'l'), mint.replace('E', '_')]) {
     await assert.rejects(idr.send('alice', 'registerTarget', ['sol', bad]), /BadAccount/, bad);
   }
-  // text chains: an escape is only for a byte that needs one
-  await idr.send('alice', 'registerTarget', ['bitcoin', 'UNCOMMON%E2%80%A2GOODS']);
-  for (const bad of ['UNCOMMON%E2%80%A2GOOD%53', '%41BC', 'a%2Db', 'a%3Ab']) await assert.rejects(idr.send('alice', 'registerTarget', ['bitcoin', bad]), /BadAccount/, bad);
+  // text chains (a chain added with rule 0): an escape is only for a byte that needs one
+  await idr.send('admin', 'addChain', ['textchain', 'text:1', 0]);
+  await idr.send('alice', 'registerTarget', ['textchain', 'UNCOMMON%E2%80%A2GOODS']);
+  for (const bad of ['UNCOMMON%E2%80%A2GOOD%53', '%41BC', 'a%2Db', 'a%3Ab']) await assert.rejects(idr.send('alice', 'registerTarget', ['textchain', bad]), /BadAccount/, bad);
+  // runes: only A-Z (spacers dropped)
+  for (const bad of ['UNCOMMON%E2%80%A2GOOD%53', '%41BC', 'uncommongoods', 'A-B', '840000:3', 'A'.repeat(29), '•', '']) {
+    await assert.rejects(idr.send('alice', 'registerTarget', ['bitcoin', bad]), /BadAccount/, bad);
+  }
   // the CLI refuses what the registry would, with a readable error
   assert.throws(() => canonicalTarget('sui', '0x2::coin::Coin<0x2::sui::SUI>'), /not a sui address or coin type/);
   assert.throws(() => canonicalTarget('aptos', 'hello'), /not a aptos address/);
   assert.throws(() => canonicalTarget('sol', mint + '%'), /base58/);
   assert.equal(canonicalTarget('aptos', '0xAB::Coin::Name').account, '0x' + '0'.repeat(62) + 'ab::Coin::Name');
+});
+
+// ------------------------------------------------------------------ one target, one identity, any spelling
+
+/** A TON friendly address for a raw one (what wallets show). */
+function tonFriendly(raw, { bounceable = true, testnet = false, url = true } = {}) {
+  const [wc, h] = raw.split(':');
+  const b = Buffer.alloc(36);
+  b[0] = (bounceable ? 0x11 : 0x51) | (testnet ? 0x80 : 0);
+  b[1] = wc === '-1' ? 0xff : 0;
+  Buffer.from(h, 'hex').copy(b, 2);
+  let crc = 0;
+  for (const x of b.subarray(0, 34)) { crc ^= x << 8; for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff; }
+  b.writeUInt16BE(crc, 34);
+  const s = b.toString('base64');
+  return url ? s.replace(/\+/g, '-').replace(/\//g, '_') : s;
+}
+
+test('TON: every spelling of one address (raw, EQ…, UQ…, testnet, base64/base64url) is ONE identity, converted on chain', async () => {
+  const raw = '0:b113a994b5024a16719f69139328eb759596c38a25f59028b146fecdc3621dfe';
+  const eq = 'EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs';
+  assert.equal(tonFriendly(raw), eq);
+  // the registry converts the friendly form itself (not only the CLI)
+  const logs = await idr.send('alice', 'registerTarget', ['ton', eq]);
+  const id = ev(logs, 'Registered')[0].args.agentId;
+  assert.equal((await idr.call('getTarget', [id]))[2], raw);
+  assert.equal(ev(logs, 'TargetRegistered')[0].args.target, `tvm:-239:${raw}`);
+  const spellings = [raw, raw.toUpperCase().replace('0:', '0:'), tonFriendly(raw, { bounceable: false }), tonFriendly(raw, { testnet: true }),
+    tonFriendly(raw, { bounceable: false, testnet: true }), tonFriendly(raw, { url: false })];
+  for (const sp of spellings) {
+    assert.equal(await idr.call('agentIdOf', ['ton', sp]), id, sp);
+    assert.equal(await idr.call('canonicalAccount', ['ton', sp]), raw, sp);
+    assert.equal(canonicalTarget('ton', sp).account, raw, `CLI agrees: ${sp}`);
+    await assert.rejects(idr.send('bob', 'registerTarget', ['ton', sp]), /AlreadyRegistered/, sp);
+  }
+  // masterchain is another account
+  const master = '-1:' + 'ab'.repeat(32);
+  await idr.send('alice', 'registerTarget', ['ton', tonFriendly(master)]);
+  assert.equal(await idr.call('agentIdOf', ['ton', master]), id + 1n);
+  // a broken checksum, a bad tag, a bad workchain or a wrong length is refused (and unknown to agentIdOf)
+  const flip = eq.slice(0, 47) + (eq[47] === 's' ? 't' : 's');
+  const badTag = Buffer.from(tonFriendly(raw, { url: false }), 'base64'); badTag[0] = 0x22;
+  for (const bad of [flip, badTag.toString('base64'), '1:' + 'ab'.repeat(32), '0:' + 'ab'.repeat(31), eq.slice(1), '0:' + 'gg'.repeat(32)]) {
+    await assert.rejects(idr.send('alice', 'registerTarget', ['ton', bad]), /BadAccount/, bad);
+    assert.equal(await idr.call('agentIdOf', ['ton', bad]), 0n);
+  }
+  assert.throws(() => tonRaw(flip), /checksum/);
+});
+
+test('runes: with or without spacers (•, %E2%80%A2 or .) is ONE identity, stored A-Z', async () => {
+  const id = (await registerTarget('alice', 'bitcoin', 'UNCOMMON•GOODS')).id;
+  assert.equal((await idr.call('getTarget', [id]))[2], 'UNCOMMONGOODS');
+  for (const sp of ['UNCOMMON•GOODS', 'UNCOMMON%E2%80%A2GOODS', 'UNCOMMON.GOODS', 'UNCOMMONGOODS', 'U•N•C•O•M•M•O•N•G•O•O•D•S']) {
+    assert.equal(await idr.call('agentIdOf', ['bitcoin', sp]), id, sp);
+    await assert.rejects(idr.send('bob', 'registerTarget', ['bitcoin', sp]), /AlreadyRegistered/, sp);
+  }
+  assert.equal(await idr.call('agentIdOf', ['bitcoin', 'uncommon•goods']), 0n, 'lowercase is refused on chain');
+  assert.equal(canonicalTarget('bitcoin', 'uncommon.goods').account, 'UNCOMMONGOODS', 'the CLI upper-cases first');
+  assert.throws(() => canonicalTarget('bitcoin', '840000:3'), /rune id/);
+});
+
+// ------------------------------------------------------------------ remote claims (targets on other chains)
+
+const RUNNER_KEYS = [Wallet.createRandom(), Wallet.createRandom(), Wallet.createRandom()];
+async function setRunner(w, active, agreed, rejected) {
+  await c.sendTo('admin', MOCK_ADDR.runners, MOCKS.MockRunners.iface, 'set', [w.address, active, agreed, rejected]);
+}
+
+/** A claim bundle for agent `id`, signed by `owner` (EVM consent) and the given runners. */
+async function bundleFor(id, { owner, ownerKey, newOwner, runners = RUNNER_KEYS.slice(0, QUORUM), ttl = 3600n, consentBy = owner }) {
+  const [, caip10] = await idr.call('getTarget', [id]);
+  const b = { chainId: '1', registry: IDR, agentId: String(id), target: caip10, newOwner, ownerKey: ownerKey ?? owner.address.toLowerCase(),
+    nonce: String(await idr.call('claimNonce', [id])), deadline: String(c.now() + ttl), ownerSig: null, attestations: [] };
+  if (consentBy) b.ownerSig = await consentBy.signTypedData(claimDomain(1, IDR), CLAIM_TYPES.consent, claimValues(b));
+  for (const r of runners) b.attestations.push(await signAttestation(r, b));
+  return b;
+}
+const submit = (who, b, sigs = sortedAttestations(b.attestations)) =>
+  idr.send(who, 'claimRemote', [b.agentId, b.newOwner, b.ownerKey, b.deadline, b.ownerSig ?? '0x', sigs]);
+/** Proposes a claim, waits out the contest window and runs it. */
+async function submitAndFinalize(who, b) {
+  const logs = await submit(who, b);
+  c.advance(DELAY);
+  return [...logs, ...await idr.send(who, 'finalizeClaim', [b.agentId])];
+}
+
+test('claimRemote (EVM owner): the owner\'s EIP-712 consent is checked on chain, plus a quorum of runner attestations', async () => {
+  for (const w of RUNNER_KEYS) await setRunner(w, true, MIN_AGREED, 0);
+  const owner = Wallet.createRandom();
+  const { id } = await registerTarget('squatter', 'bsc', '0x' + 'ee'.repeat(20));
+  assert.equal(await idr.call('claimQuorum'), BigInt(QUORUM));
+  const b = await bundleFor(id, { owner, newOwner: addr('alice') });
+
+  // too few runners
+  await assert.rejects(submit('bob', b, sortedAttestations(b.attestations).slice(0, 1)), /Quorum/);
+  // the same runner twice, or out of order
+  const s = sortedAttestations(b.attestations);
+  await assert.rejects(submit('bob', b, [s[0], s[0]]), /InvalidSignature/);
+  await assert.rejects(submit('bob', b, [s[1], s[0]]), /InvalidSignature/);
+  // the runners alone cannot fake the owner's consent: a consent by another key is refused
+  const forged = await bundleFor(id, { owner, newOwner: addr('alice'), consentBy: Wallet.createRandom() });
+  await assert.rejects(submit('bob', forged), /InvalidSignature/);
+  // ... and the owner's consent cannot be redirected to another new owner
+  await assert.rejects(submit('bob', { ...b, newOwner: addr('mallory') }), /InvalidSignature/);
+  // runners must be in good standing (active, agreed >= claimMinAgreed, rejected <= agreed)
+  assert.equal(await idr.call('claimMinAgreed'), BigInt(MIN_AGREED));
+  const newbie = Wallet.createRandom();
+  await setRunner(newbie, true, 0, 0);
+  await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), runners: [RUNNER_KEYS[0], newbie] })), /NotRunner/);
+  await setRunner(newbie, true, MIN_AGREED - 1, 0); // a few accepted verdicts are not enough to take identities
+  await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), runners: [RUNNER_KEYS[0], newbie] })), /NotRunner/);
+  await setRunner(newbie, true, MIN_AGREED, MIN_AGREED + 1);
+  await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), runners: [RUNNER_KEYS[0], newbie] })), /NotRunner/);
+  await setRunner(newbie, false, 9, 0);
+  await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), runners: [RUNNER_KEYS[0], newbie] })), /NotRunner/);
+  // deadlines
+  await assert.rejects(submit('bob', await bundleFor(id, { owner, newOwner: addr('alice'), ttl: 2n * 86400n })), /DeadlineTooFar/);
+
+  // anyone may submit a good bundle; the signatures decide who gets it, after the contest window
+  const logs = await submitAndFinalize('bob', b);
+  assert.equal(await idr.call('ownerOf', [id]), addr('alice'));
+  assert.equal(await idr.call('getAgentWallet', [id]), addr('alice'));
+  assert.equal(await idr.call('claimNonce', [id]), 2n); // spent by the proposal, and again by the takeover
+  const rc = ev(logs, 'RemoteClaimProposed')[0].args;
+  assert.equal(rc.ownerKey, owner.address.toLowerCase());
+  assert.deepEqual([...rc.runners], b.attestations.map((a) => a.runner).sort((x, y) => (BigInt(x) < BigInt(y) ? -1 : 1)));
+  assert.equal(ev(logs, 'RemoteClaimFinalized')[0].args.newOwner, addr('alice'));
+  assert.equal(ev(logs, 'Claimed')[0].args.previousOwner, IDR);
+
+  // replay: the nonce moved, so the same signatures no longer verify (within their deadline: see the contest test)
+  await assert.rejects(submit('carol', b), /InvalidSignature|NotRunner|Expired/);
+  // control follows the owner on the other chain: a new owner there claims again with a fresh bundle
+  const owner2 = Wallet.createRandom();
+  await submitAndFinalize('carol', await bundleFor(id, { owner: owner2, newOwner: addr('carol') }));
+  assert.equal(await idr.call('ownerOf', [id]), addr('carol'));
+  // expiry
+  const late = await bundleFor(id, { owner: owner2, newOwner: addr('bob') });
+  c.advance(3601);
+  await assert.rejects(submit('bob', late), /Expired/);
+});
+
+test('claimRemote (non-EVM owner, e.g. Solana ed25519): the runners\' quorum is the proof; local targets use claim()', async () => {
+  for (const w of RUNNER_KEYS) await setRunner(w, true, MIN_AGREED, 0);
+  const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  const { id } = await registerTarget('squatter', 'sol', mint);
+  const authority = '0x' + 'ab'.repeat(32); // the mint authority's ed25519 key
+  const b = await bundleFor(id, { ownerKey: authority, newOwner: addr('alice'), consentBy: null });
+  await submitAndFinalize('bob', b); // no ownerSig on chain: runners checked it off-chain
+  assert.equal(await idr.call('ownerOf', [id]), addr('alice'));
+  // still needs the quorum
+  const one = await bundleFor(id, { ownerKey: authority, newOwner: addr('bob'), consentBy: null, runners: [RUNNER_KEYS[2]] });
+  await assert.rejects(submit('bob', one), /Quorum/);
+  // a ZETAPHY target is claimed with claim(), never with runner signatures
+  const local = await registerTarget('squatter', 'eth', MOCK_ADDR.token);
+  await assert.rejects(submit('bob', await bundleFor(local.id, { ownerKey: authority, newOwner: addr('mallory'), consentBy: null })), /NotRemote/);
+  // and a local claim also moves the nonce (pending remote signatures die)
+  await idr.send('alice', 'claim', [local.id]);
+  assert.equal(await idr.call('claimNonce', [local.id]), 1n);
+  // a registry deployed without runners has remote claims off
+  const off = await c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), '0x' + '00'.repeat(20), 0, 0, 0], 'admin');
+  const offId = ev(await off.send('alice', 'registerTarget', ['sol', mint]), 'Registered')[0].args.agentId;
+  await assert.rejects(off.send('bob', 'claimRemote', [offId, addr('alice'), authority, c.now() + 60n, '0x', []]), /RemoteClaimsOff/);
+  await assert.rejects(off.send('bob', 'contestClaim', [offId]), /NoPendingClaim/);
+  // remote claims on need a quorum, a runner bar and a contest window of 1 hour to 30 days
+  for (const [q, m, d] of [[0, MIN_AGREED, DELAY], [QUORUM, 0, DELAY], [QUORUM, MIN_AGREED, 3599], [QUORUM, MIN_AGREED, 30 * 86400 + 1]]) {
+    await assert.rejects(c.deploy('NeuroIdentity', [WEB, '', ...chainArgs(), MOCK_ADDR.runners, q, m, d], 'admin'), /deploy failed/, `${q} ${m} ${d}`);
+  }
+});
+
+test('claimRemote only proposes: it waits claimDelay, and one honest runner or the holder can contest it', async () => {
+  for (const w of RUNNER_KEYS) await setRunner(w, true, MIN_AGREED, 0);
+  // r1: a runner meeting the bar (not in the quorum); r2: active but below it
+  await setRunner({ address: addr('r1') }, true, MIN_AGREED, 0);
+  await setRunner({ address: addr('r2') }, true, MIN_AGREED - 1, 0);
+  assert.equal(await idr.call('claimDelay'), BigInt(DELAY));
+
+  // a colluding quorum "attests" that its own key owns an unclaimed Solana mint
+  const mint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+  const { id } = await registerTarget('squatter', 'sol', mint);
+  const fake = await bundleFor(id, { ownerKey: '0x' + 'ba'.repeat(32), newOwner: addr('mallory'), consentBy: null });
+  const pl = await submit('mallory', fake);
+  const prop = ev(pl, 'RemoteClaimProposed')[0].args;
+  assert.equal(prop.newOwner, addr('mallory'));
+  assert.equal(prop.readyAt, c.now() + BigInt(DELAY));
+  assert.equal(ev(pl, 'Claimed').length, 0);
+  assert.equal(await idr.call('ownerOf', [id]), IDR, 'nothing moves at proposal time');
+  assert.deepEqual([...await idr.call('pendingClaim', [id])], [addr('mallory'), prop.readyAt]);
+  assert.equal(await idr.call('claimNonce', [id]), 1n, 'the attestations are spent at once');
+  // too early to run; one pending claim at a time
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [id]), /ClaimNotReady/);
+  await assert.rejects(submit('mallory', await bundleFor(id, { ownerKey: '0x' + 'ba'.repeat(32), newOwner: addr('bob'), consentBy: null })), /ClaimPending/);
+  // outsiders, the registrant and runners below the bar cannot contest
+  for (const who of ['bob', 'squatter', 'r2']) await assert.rejects(idr.send(who, 'contestClaim', [id]), /NotAuthorized/, who);
+  // ONE honest runner in good standing cancels it
+  const cl = await idr.send('r1', 'contestClaim', [id]);
+  assert.deepEqual([ev(cl, 'RemoteClaimContested')[0].args.by, ev(cl, 'RemoteClaimContested')[0].args.newOwner], [addr('r1'), addr('mallory')]);
+  assert.deepEqual([...await idr.call('pendingClaim', [id])], ['0x' + '00'.repeat(20), 0n]);
+  // the same signatures cannot be resubmitted (nonce moved; still before their deadline)
+  await assert.rejects(submit('mallory', fake), /InvalidSignature|NotRunner/); // stale digests recover to non-runners
+  c.advance(DELAY);
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [id]), /NoPendingClaim/);
+  await assert.rejects(idr.send('r1', 'contestClaim', [id]), /NoPendingClaim/);
+  assert.equal(await idr.call('ownerOf', [id]), IDR);
+
+  // an EVM identity already claimed by alice: a takeover proposal can be contested by alice herself
+  const owner = Wallet.createRandom();
+  const t = await registerTarget('squatter', 'bsc', '0x' + 'e1'.repeat(20));
+  await submitAndFinalize('bob', await bundleFor(t.id, { owner, newOwner: addr('alice') }));
+  assert.equal(await idr.call('ownerOf', [t.id]), addr('alice'));
+  const attacker = Wallet.createRandom(); // the quorum attests that the attacker's key owns the target
+  await submit('mallory', await bundleFor(t.id, { owner: attacker, newOwner: addr('mallory') }));
+  await assert.rejects(idr.send('mallory', 'contestClaim', [t.id]), /NotAuthorized/);
+  await idr.send('alice', 'contestClaim', [t.id]);
+  c.advance(DELAY);
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [t.id]), /NoPendingClaim/);
+  assert.equal(await idr.call('ownerOf', [t.id]), addr('alice'));
+  // the holder's approved operator may contest too
+  await submit('mallory', await bundleFor(t.id, { owner: attacker, newOwner: addr('mallory') }));
+  await idr.send('alice', 'setApprovalForAll', [addr('carol'), true]);
+  await idr.send('carol', 'contestClaim', [t.id]);
+
+  // the window closes: no contest after readyAt, and anyone may run the claim then
+  const good = await bundleFor(t.id, { owner, newOwner: addr('bob') });
+  await submit('bob', good);
+  c.advance(DELAY - 1);
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [t.id]), /ClaimNotReady/);
+  c.advance(1);
+  await assert.rejects(idr.send('alice', 'contestClaim', [t.id]), /ContestClosed/);
+  const fl = await idr.send('mallory', 'finalizeClaim', [t.id]);
+  assert.equal(ev(fl, 'Claimed')[0].args.previousOwner, addr('alice'));
+  assert.equal(await idr.call('ownerOf', [t.id]), addr('bob'));
+  await assert.rejects(idr.send('mallory', 'finalizeClaim', [t.id]), /NoPendingClaim/);
+  // proposing the current holder again is refused up front
+  await assert.rejects(submit('bob', await bundleFor(t.id, { owner, newOwner: addr('bob') })), /AlreadyHolder/);
+});
+
+test('runner tool: the owner is read from the Neuro report and the consent checked before signing', async () => {
+  // EVM: owner() / getOwner() and the EIP-1967 admin count
+  const owner = Wallet.createRandom();
+  const evmReport = { owner: owner.address, proxy: { kind: 'eip1967', admin: '0x' + '0a'.repeat(20) } };
+  assert.deepEqual(remoteOwners(evmReport).map((o) => [o.role, o.scheme]), [['owner() / getOwner()', 'secp256k1'], ['EIP-1967 admin', 'secp256k1']]);
+  assert.deepEqual(remoteOwners({ owner: '0x' + '00'.repeat(20) }), [], 'renounced: nobody');
+  const { id } = await registerTarget('squatter', 'bsc', '0x' + 'ef'.repeat(20));
+  const b = await bundleFor(id, { owner, newOwner: addr('alice'), runners: [] });
+  b.deadline = String(Math.floor(Date.now() / 1000) + 600); // checked against the wall clock off-chain
+  b.ownerSig = await owner.signTypedData(claimDomain(1, IDR), CLAIM_TYPES.consent, claimValues(b));
+  assert.equal((await checkClaimBundle(b, remoteOwners(evmReport), { verifyTypedData })).ok, true);
+  assert.match((await checkClaimBundle({ ...b, ownerKey: '0x' + '0b'.repeat(20) }, remoteOwners(evmReport), { verifyTypedData })).reason, /not the target's owner/);
+  assert.match((await checkClaimBundle({ ...b, newOwner: addr('mallory') }, remoteOwners(evmReport), { verifyTypedData })).reason, /not from the owner/);
+  assert.match((await checkClaimBundle({ ...b, ownerSig: null }, remoteOwners(evmReport), { verifyTypedData })).reason, /not signed/);
+
+  // Solana: the mint/upgrade authority, an ed25519 key; the consent is a text message
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const pub = '0x' + publicKey.export({ format: 'der', type: 'spki' }).subarray(12).toString('hex');
+  const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  let n = BigInt(pub); let b58 = ''; while (n > 0n) { b58 = B58[Number(n % 58n)] + b58; n /= 58n; }
+  assert.equal('0x' + base58Decode(b58).toString('hex'), pub);
+  const solReport = { solana: { program: 'SPL Token', mintAuthority: b58, freezeAuthority: null } };
+  assert.deepEqual(remoteOwners(solReport), [{ key: pub, scheme: 'ed25519', role: 'mint authority' }]);
+  const sb = { ...b, ownerKey: pub };
+  const text = consentText(sb);
+  assert.match(text, /^ZETAPHY Neuro identity claim\nregistry: eip155:1:0x[0-9a-f]{40}\nagent: \d+\ntarget: eip155:56:0x(ef){20}\nnew owner: 0x/);
+  sb.ownerSig = '0x' + edSign(null, Buffer.from(text), privateKey).toString('hex');
+  assert.equal(await verifyEd25519(pub, text, sb.ownerSig), true);
+  assert.equal((await checkClaimBundle(sb, remoteOwners(solReport), { verifyTypedData })).ok, true);
+  assert.equal((await checkClaimBundle({ ...sb, nonce: '7' }, remoteOwners(solReport), { verifyTypedData })).ok, false, 'bound to the nonce');
+  // owners Neuro reads but cannot check a consent for yet are refused, not guessed
+  assert.match((await checkClaimBundle({ ...b, ownerKey: '0:' + 'ad'.repeat(32) }, remoteOwners({ ton: { admin: '0:' + 'ad'.repeat(32) } }), { verifyTypedData })).reason, /no consent check/);
+
+  // the attestation a runner signs is exactly what the registry checks
+  const att = await signAttestation(RUNNER_KEYS[0], b);
+  assert.equal(verifyTypedData(claimDomain(1, IDR), CLAIM_TYPES.attestation, claimValues(b), att.sig), RUNNER_KEYS[0].address);
+  assert.equal(sortedAttestations([att, att]).length, 1, 'one per runner');
 });

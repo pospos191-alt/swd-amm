@@ -5,6 +5,11 @@ interface IERC721Receiver {
     function onERC721Received(address operator, address from, uint256 tokenId, bytes calldata data) external returns (bytes4);
 }
 
+/// NeuroJobs' runner record (the only part of NeuroJobs this registry reads).
+interface IClaimRunners {
+    function workers(address) external view returns (uint128 bond, uint64 unbondAt, bool active, uint32 agreed, uint32 rejected);
+}
+
 /// @title NeuroIdentity: one contract = one on-chain identity (ERC-8004 Identity Registry)
 /// @notice An ERC-8004 ("Trustless Agents") Identity Registry: an ERC-721 whose
 ///         tokenId is the agentId and whose tokenURI (agentURI) resolves to the
@@ -25,7 +30,30 @@ interface IERC721Receiver {
 ///           contract on this chain: a call from the contract itself, or from
 ///           the address its `owner()` returns. Control follows the contract:
 ///           whoever can prove it now can claim again, even after a transfer.
-///           Targets on other chains cannot be claimed here (no proof yet).
+///         - A target on another chain is claimed with `claimRemote`: its owner
+///           (owner()/getOwner()/EIP-1967 admin on EVM, mint or upgrade
+///           authority on Solana, ...) signs a consent off-chain, and at least
+///           `claimQuorum` bonded Neuro runners (NeuroJobs: active,
+///           agreed >= claimMinAgreed, rejected <= agreed, the bar ThreatRegistry
+///           uses) attest with EIP-712 signatures that this key is the target's
+///           owner on its chain right now. For an EVM owner the consent itself
+///           is also checked here (ecrecover). Trust: the runners' quorum is
+///           trusted to have read the owner correctly; for a non-EVM owner
+///           (ed25519, ...) it is also trusted to have checked the consent
+///           signature. Each claim uses the agent's `claimNonce`, so
+///           attestations cannot be replayed.
+///         - A remote claim only PROPOSES the takeover. It runs after
+///           `claimDelay` (`finalizeClaim`, anyone may call it). Until then the
+///           current holder (if the identity is claimed) or any ONE runner that
+///           meets the bar can `contestClaim`, which cancels it; the claimant
+///           must then gather fresh signatures. One honest runner (or the real
+///           holder) is therefore enough to stop a colluding quorum. The price:
+///           one rogue runner can also delay an honest claim, which fails safe
+///           (the identity stays where it is).
+///         - One spelling per target on chain: EVM/Move hex is lowercase, TON
+///           friendly addresses (base64url, bounceable or not, testnet flag)
+///           are converted to raw `0:hex` / `-1:hex` after their CRC16 check,
+///           and a Bitcoin rune loses its spacers (• or .) and must be A-Z.
 ///         - A claimed identity behaves as a normal ERC-8004 agent (custom
 ///           agentURI, metadata, agentWallet, transfer). `neuroURI()` and
 ///           `getTarget()` still show what the identity is about, whatever its
@@ -60,6 +88,8 @@ contract NeuroIdentity {
     uint8 public constant RULE_EVM = 2;       // 0x + 40 lowercase hex
     uint8 public constant RULE_MOVE = 3;      // 0x + 64 lowercase hex [::module::Name] (Sui, Aptos)
     uint8 public constant RULE_BASE58 = 4;    // 32-44 base58 characters (Solana)
+    uint8 public constant RULE_TON = 5;       // stored raw: "0:" / "-1:" + 64 lowercase hex (friendly form converted)
+    uint8 public constant RULE_RUNE = 6;      // stored A-Z only, 1-28 letters (spacers removed)
 
     string public constant name = "Neuro Agent Identity";
     string public constant symbol = "NEURO";
@@ -88,6 +118,23 @@ contract NeuroIdentity {
     string public webBase;   // Neuro web, e.g. "https://neuro.example/web/"
     string public imageURI;
 
+    /// NeuroJobs (runner records) for claimRemote; zero = remote claims off. Fixed at deploy:
+    /// whoever could change it could pick the runners and take any identity.
+    IClaimRunners public immutable claimRunners;
+    /// Runner attestations a remote claim needs.
+    uint256 public immutable claimQuorum;
+    /// Accepted verdicts (NeuroJobs `agreed`) a runner needs before it may attest or contest a remote claim.
+    uint32 public immutable claimMinAgreed;
+    /// Seconds a remote claim waits (contest window) before `finalizeClaim` can run it.
+    uint64 public immutable claimDelay;
+    struct PendingClaim { address newOwner; uint64 readyAt; }
+    /// The remote claim waiting for its contest window to end (readyAt 0 = none).
+    mapping(uint256 => PendingClaim) public pendingClaim;
+    /// Bumped by every claim (local or remote): attestations and consents name it, so each is used once.
+    mapping(uint256 => uint256) public claimNonce;
+    /// Spelling rules (NeuroTargets), created by the constructor.
+    NeuroTargets public immutable targetFormat;
+
     // -------------------------------------------------------------- events
 
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
@@ -103,6 +150,9 @@ contract NeuroIdentity {
     // Neuro
     event TargetRegistered(uint256 indexed agentId, bytes32 indexed targetHash, string target, address indexed registeredBy);
     event Claimed(uint256 indexed agentId, address indexed by, address indexed previousOwner);
+    event RemoteClaimProposed(uint256 indexed agentId, address indexed newOwner, bytes ownerKey, address[] runners, uint64 readyAt);
+    event RemoteClaimContested(uint256 indexed agentId, address indexed by, address indexed newOwner);
+    event RemoteClaimFinalized(uint256 indexed agentId, address indexed newOwner);
     event ChainAdded(string key, string caip2, uint8 rule);
     event WebBaseSet(string webBase, string imageURI);
     event AdminSet(address admin);
@@ -125,6 +175,15 @@ contract NeuroIdentity {
     error AlreadyHolder();
     error UnsafeRecipient();
     error RegistryCustody();
+    error RemoteClaimsOff();
+    error NotRemote();
+    error BadNonce();
+    error NotRunner(address signer);
+    error Quorum(uint256 have, uint256 need);
+    error ClaimPending();
+    error NoPendingClaim();
+    error ClaimNotReady(uint64 readyAt);
+    error ContestClosed();
 
     bytes32 private constant AGENT_WALLET_SET_TYPEHASH =
         keccak256("AgentWalletSet(uint256 agentId,address newWallet,address owner,uint256 deadline)");
@@ -133,12 +192,26 @@ contract NeuroIdentity {
     bytes32 private constant NAME_HASH = keccak256("ERC8004IdentityRegistry");
     bytes32 private constant VERSION_HASH = keccak256("1");
     uint256 private constant MAX_DEADLINE_DELAY = 5 minutes;
+    /// A remote claim gathers several runners' signatures: allow up to a day.
+    uint256 private constant MAX_CLAIM_DELAY = 1 days;
+    bytes32 private constant CONSENT_TYPEHASH = keccak256(
+        "RemoteClaimConsent(uint256 agentId,address newOwner,string target,bytes ownerKey,uint256 nonce,uint256 deadline)");
+    bytes32 private constant ATTEST_TYPEHASH = keccak256(
+        "RemoteClaimAttestation(uint256 agentId,address newOwner,string target,bytes ownerKey,uint256 nonce,uint256 deadline)");
     bytes32 private constant KEY_WALLET = keccak256("agentWallet");
     bytes32 private constant KEY_TARGET = keccak256("neuro.target");
     bytes32 private constant KEY_REGISTERED_BY = keccak256("neuro.registeredBy");
 
-    constructor(string memory webBase_, string memory image_, string[] memory keys, string[] memory caip2s, uint8[] memory rules) {
+    constructor(string memory webBase_, string memory image_, string[] memory keys, string[] memory caip2s, uint8[] memory rules,
+        address runners_, uint256 quorum_, uint32 minAgreed_, uint64 claimDelay_) {
         if (keys.length != caip2s.length || keys.length != rules.length) revert BadValue();
+        // remote claims on: a quorum, a runner bar and a contest window of 1 hour to 30 days
+        if (runners_ != address(0) && (quorum_ == 0 || minAgreed_ == 0 || claimDelay_ < 1 hours || claimDelay_ > 30 days)) revert BadValue();
+        claimRunners = IClaimRunners(runners_);
+        targetFormat = new NeuroTargets();
+        claimQuorum = quorum_;
+        claimMinAgreed = minAgreed_;
+        claimDelay = claimDelay_;
         admin = msg.sender;
         localCaip2Hash = keccak256(bytes(string.concat("eip155:", _toString(block.chainid))));
         _setWeb(webBase_, image_);
@@ -373,10 +446,10 @@ contract NeuroIdentity {
     /// Registers the Neuro of `account` on Neuro chain `chain` (e.g. "bsc").
     /// Anyone may call it; the identity stays held by this registry until the
     /// target's owner claims it. Reverts AlreadyRegistered(id) if it exists.
-    function registerTarget(string calldata chain, string calldata account) external returns (uint256 agentId) {
+    function registerTarget(string calldata chain, string calldata typed) external returns (uint256 agentId) {
         Chain storage c = _chains[chain];
         if (!c.exists) revert UnknownChain();
-        _checkAccount(bytes(account), c.rule);
+        string memory account = _canonical(bytes(typed), c.rule);
         string memory caip10 = string.concat(c.caip2, ":", account);
         bytes32 h = keccak256(bytes(caip10));
         if (agentOfTarget[h] != 0) revert AlreadyRegistered(agentOfTarget[h]);
@@ -402,20 +475,124 @@ contract NeuroIdentity {
             ok = s && r.length >= 32 && abi.decode(r, (uint256)) == uint256(uint160(msg.sender));
         }
         if (!ok) revert NotTargetOwner();
+        _takeOver(agentId, msg.sender);
+    }
+
+    /// PROPOSES that `newOwner` takes control of the identity of a target on
+    /// ANOTHER chain. Anyone may submit it; the signatures decide. The takeover
+    /// runs with `finalizeClaim` after `claimDelay`, unless contested first.
+    /// @param ownerKey   the target's owner/authority on its chain, as bytes
+    ///                   (20-byte address on EVM, 32-byte ed25519 key on Solana, ...)
+    /// @param ownerSig   for an EVM target: the owner's EIP-712 RemoteClaimConsent
+    ///                   signature, checked here. Otherwise ignored (the runners checked it).
+    /// @param attestations 65-byte EIP-712 RemoteClaimAttestation signatures by
+    ///                   distinct runners, sorted by signer address (ascending).
+    function claimRemote(uint256 agentId, address newOwner, bytes calldata ownerKey, uint256 deadline,
+        bytes calldata ownerSig, bytes[] calldata attestations) external {
+        if (address(claimRunners) == address(0)) revert RemoteClaimsOff();
+        if (pendingClaim[agentId].readyAt != 0) revert ClaimPending();
+        (bytes memory fields, bool evmOwner) = _claimFields(agentId, newOwner, ownerKey, deadline);
+        // An EVM owner proves its consent here, so the runners cannot move the
+        // identity for a real owner who never asked.
+        if (evmOwner && (ownerKey.length != 20 || _recover(_typed(CONSENT_TYPEHASH, fields), ownerSig) != address(bytes20(ownerKey)))) {
+            revert InvalidSignature();
+        }
+        address[] memory runners = _runnerQuorum(_typed(ATTEST_TYPEHASH, fields), attestations);
+        if (_owners[agentId] == newOwner) revert AlreadyHolder();
+        claimNonce[agentId]++; // these signatures are spent, whether the claim runs or is contested
+        uint64 readyAt = uint64(block.timestamp) + claimDelay;
+        pendingClaim[agentId] = PendingClaim(newOwner, readyAt);
+        emit RemoteClaimProposed(agentId, newOwner, ownerKey, runners, readyAt);
+    }
+
+    /// Runs a remote claim whose contest window has passed. Anyone may call it.
+    function finalizeClaim(uint256 agentId) external {
+        PendingClaim memory p = pendingClaim[agentId];
+        if (p.readyAt == 0) revert NoPendingClaim();
+        if (block.timestamp < p.readyAt) revert ClaimNotReady(p.readyAt);
+        delete pendingClaim[agentId];
+        emit RemoteClaimFinalized(agentId, p.newOwner);
+        if (_owners[agentId] != p.newOwner) _takeOver(agentId, p.newOwner);
+    }
+
+    /// Cancels a pending remote claim during its window. Callable by the
+    /// current holder (owner/operator of a claimed identity) or by any one
+    /// runner that meets the attestation bar.
+    function contestClaim(uint256 agentId) external {
+        PendingClaim memory p = pendingClaim[agentId];
+        if (p.readyAt == 0) revert NoPendingClaim();
+        if (block.timestamp >= p.readyAt) revert ContestClosed();
+        address holder = _owners[agentId];
+        if (!(holder != address(this) && _isAuthorized(holder, msg.sender, agentId)) && !_goodRunner(msg.sender)) revert NotAuthorized();
+        delete pendingClaim[agentId];
+        emit RemoteClaimContested(agentId, msg.sender, p.newOwner);
+    }
+
+    /// A runner in good standing: active, agreed >= claimMinAgreed, rejected <= agreed.
+    function _goodRunner(address r) internal view returns (bool) {
+        if (address(claimRunners) == address(0)) return false;
+        (, , bool active, uint32 agreed, uint32 rejected) = claimRunners.workers(r);
+        return active && agreed >= claimMinAgreed && rejected <= agreed;
+    }
+
+    /// The signed fields of a remote claim (EIP-712: string and bytes members
+    /// hashed, static words after the typehash), and whether the target is EVM.
+    function _claimFields(uint256 agentId, address newOwner, bytes calldata ownerKey, uint256 deadline)
+        internal view returns (bytes memory, bool)
+    {
+        Target storage t = _targets[agentId];
+        if (bytes(t.chain).length == 0) revert NotTarget();
+        Chain storage c = _chains[t.chain];
+        if (keccak256(bytes(c.caip2)) == localCaip2Hash) revert NotRemote();
+        if (newOwner == address(0) || newOwner == address(this) || ownerKey.length == 0 || ownerKey.length > 64) revert BadValue();
+        if (block.timestamp > deadline) revert Expired();
+        if (deadline > block.timestamp + MAX_CLAIM_DELAY) revert DeadlineTooFar();
+        return (abi.encode(agentId, newOwner, keccak256(bytes(_caip10(t))), keccak256(ownerKey), claimNonce[agentId], deadline), c.rule == RULE_EVM);
+    }
+
+    /// Signers of `digest`: distinct, ascending, each a runner in good standing, at least claimQuorum of them.
+    function _runnerQuorum(bytes32 digest, bytes[] calldata sigs) internal view returns (address[] memory signers) {
+        if (sigs.length < claimQuorum) revert Quorum(sigs.length, claimQuorum);
+        signers = new address[](sigs.length);
+        address last;
+        for (uint256 i; i < sigs.length; i++) {
+            address r = _recover(digest, sigs[i]);
+            if (r <= last) revert InvalidSignature(); // zero, unsorted or repeated
+            if (!_goodRunner(r)) revert NotRunner(r);
+            signers[i] = last = r;
+        }
+    }
+
+    function _typed(bytes32 typehash, bytes memory fields) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked("\x19\x01", domainSeparator(), keccak256(abi.encodePacked(typehash, fields))));
+    }
+
+    function _takeOver(uint256 agentId, address to) internal {
         address prev = _owners[agentId];
-        if (prev == msg.sender) revert AlreadyHolder();
-        _transfer(prev, msg.sender, agentId);
-        _metadata[agentId]["agentWallet"] = abi.encodePacked(msg.sender);
-        emit MetadataSet(agentId, "agentWallet", "agentWallet", abi.encodePacked(msg.sender));
-        emit Claimed(agentId, msg.sender, prev);
+        if (prev == to) revert AlreadyHolder();
+        claimNonce[agentId]++;
+        _transfer(prev, to, agentId);
+        _metadata[agentId]["agentWallet"] = abi.encodePacked(to);
+        emit MetadataSet(agentId, "agentWallet", "agentWallet", abi.encodePacked(to));
+        emit Claimed(agentId, to, prev);
         emit MetadataUpdate(agentId);
     }
 
-    /// agentId of a target, 0 if none (or if the chain is unknown).
+    /// agentId of a target, 0 if none (or if the chain is unknown). Any accepted
+    /// spelling works (e.g. a TON friendly address, a rune with spacers).
     function agentIdOf(string calldata chain, string calldata account) external view returns (uint256) {
         Chain storage c = _chains[chain];
         if (!c.exists) return 0;
-        return agentOfTarget[keccak256(bytes(string.concat(c.caip2, ":", account)))];
+        (bool ok, string memory a) = targetFormat.canonical(bytes(account), c.rule);
+        if (!ok) return 0;
+        return agentOfTarget[keccak256(bytes(string.concat(c.caip2, ":", a)))];
+    }
+
+    /// The one spelling the registry stores for `account` on `chain`; reverts BadAccount.
+    function canonicalAccount(string calldata chain, string calldata account) external view returns (string memory) {
+        Chain storage c = _chains[chain];
+        if (!c.exists) revert UnknownChain();
+        return _canonical(bytes(account), c.rule);
     }
 
     function getTarget(uint256 agentId) external view returns (
@@ -499,7 +676,7 @@ contract NeuroIdentity {
     function _addChain(string memory key, string memory caip2, uint8 rule) internal {
         bytes memory k = bytes(key);
         bytes memory c = bytes(caip2);
-        if (k.length == 0 || k.length > 32 || c.length < 5 || c.length > 41 || rule > RULE_BASE58) revert BadValue();
+        if (k.length == 0 || k.length > 32 || c.length < 5 || c.length > 41 || rule > RULE_RUNE) revert BadValue();
         for (uint256 i; i < k.length; i++) {
             bytes1 b = k[i];
             if (!((b >= "a" && b <= "z") || (b >= "0" && b <= "9") || b == "-")) revert BadValue();
@@ -537,58 +714,10 @@ contract NeuroIdentity {
         }
     }
 
-    function _checkAccount(bytes memory a, uint8 rule) internal pure {
-        if (a.length == 0 || a.length > 128) revert BadAccount();
-        if (rule == RULE_EVM) {
-            if (a.length != 42 || a[0] != "0" || a[1] != "x") revert BadAccount();
-            for (uint256 i = 2; i < 42; i++) if (_hexVal(a[i], false) > 15) revert BadAccount();
-            return;
-        }
-        if (rule == RULE_MOVE) return _checkMove(a);
-        if (rule == RULE_BASE58) {
-            if (a.length < 32 || a.length > 44) revert BadAccount();
-            for (uint256 i; i < a.length; i++) {
-                bytes1 b = a[i];
-                if (!_alnum(b) || b == "0" || b == "O" || b == "I" || b == "l") revert BadAccount();
-            }
-            return;
-        }
-        for (uint256 i; i < a.length; i++) {
-            bytes1 b = a[i];
-            if (_safeLower(b)) continue;
-            if (rule == RULE_TEXT) {
-                if (b >= "A" && b <= "Z") continue;
-                // %XX with uppercase hex, the one canonical spelling of an escaped byte;
-                // a byte that needs no escape (e.g. %41 for "A") is a second spelling, so refused
-                if (b == "%" && i + 2 < a.length && _hexVal(a[i + 1], true) < 16 && _hexVal(a[i + 2], true) < 16) {
-                    bytes1 d = bytes1(_hexVal(a[i + 1], true) * 16 + _hexVal(a[i + 2], true));
-                    if (_safeLower(d) || (d >= "A" && d <= "Z")) revert BadAccount();
-                    i += 2;
-                    continue;
-                }
-            }
-            revert BadAccount();
-        }
-    }
-
-    /// Move: "0x" + 64 lowercase hex (the padded address), optionally followed
-    /// by "::module::Name" with identifiers [A-Za-z_][A-Za-z0-9_]*.
-    function _checkMove(bytes memory a) internal pure {
-        if (a.length < 66 || a[0] != "0" || a[1] != "x") revert BadAccount();
-        for (uint256 j = 2; j < 66; j++) if (_hexVal(a[j], false) > 15) revert BadAccount();
-        if (a.length == 66) return;
-        uint256 i = 66;
-        for (uint256 part; part < 2; part++) {
-            if (i + 2 >= a.length || a[i] != ":" || a[i + 1] != ":") revert BadAccount();
-            i += 2;
-            bytes1 f = a[i];
-            if (!((f >= "a" && f <= "z") || (f >= "A" && f <= "Z") || f == "_")) revert BadAccount();
-            while (i < a.length && a[i] != ":") {
-                if (!_alnum(a[i]) && a[i] != "_") revert BadAccount();
-                i++;
-            }
-        }
-        if (i != a.length) revert BadAccount();
+    function _canonical(bytes memory a, uint8 rule) internal view returns (string memory) {
+        (bool ok, string memory out) = targetFormat.canonical(a, rule);
+        if (!ok) revert BadAccount();
+        return out;
     }
 
     function _safeLower(bytes1 b) internal pure returns (bool) {
@@ -653,5 +782,186 @@ contract NeuroIdentity {
             out[j++] = i + 2 < n ? table[triple & 63] : bytes1("=");
         }
         return string(out);
+    }
+}
+
+/// @title NeuroTargets: the one spelling of a target account (NeuroIdentity's helper)
+/// @notice Pure functions, split out so NeuroIdentity stays under the 24,576-byte
+///         code limit. NeuroIdentity creates its own copy in its constructor.
+contract NeuroTargets {
+    uint8 internal constant RULE_TEXT = 0;
+    uint8 internal constant RULE_LOWER = 1;
+    uint8 internal constant RULE_EVM = 2;
+    uint8 internal constant RULE_MOVE = 3;
+    uint8 internal constant RULE_BASE58 = 4;
+    uint8 internal constant RULE_TON = 5;
+    uint8 internal constant RULE_RUNE = 6;
+
+    /// (true, the one spelling) or (false, "") if `a` is not an account of that rule.
+    function canonical(bytes memory a, uint8 rule) external pure returns (bool, string memory) {
+        if (rule == RULE_TON) return _tonRaw(a);
+        if (rule == RULE_RUNE) return _runeName(a);
+        if (a.length > 128 || !_accountOk(a, rule)) return (false, "");
+        return (true, string(a));
+    }
+
+    /// TON: raw `0:` / `-1:` + 64 hex (either case, stored lowercase), or the
+    /// 48-character friendly form (base64 or base64url; bounceable 0x11 or
+    /// non-bounceable 0x51, optionally | 0x80 testnet) with a valid CRC16.
+    function _tonRaw(bytes memory a) internal pure returns (bool, string memory) {
+        bytes memory out = new bytes(67);
+        uint256 n;
+        bytes memory hash;
+        if (a.length == 48) {
+            bytes memory d = new bytes(36);
+            for (uint256 i; i < 48; i += 4) {
+                uint256 w;
+                for (uint256 j; j < 4; j++) {
+                    uint8 v = _b64(a[i + j]);
+                    if (v > 63) return (false, "");
+                    w = (w << 6) | v;
+                }
+                uint256 k = (i / 4) * 3;
+                d[k] = bytes1(uint8(w >> 16));
+                d[k + 1] = bytes1(uint8(w >> 8));
+                d[k + 2] = bytes1(uint8(w));
+            }
+            uint8 tag = uint8(d[0]) & 0x7f; // 0x80 = testnet only
+            if (tag != 0x11 && tag != 0x51) return (false, "");
+            uint256 crc;
+            for (uint256 i; i < 34; i++) {
+                crc ^= uint256(uint8(d[i])) << 8;
+                for (uint256 b; b < 8; b++) crc = crc & 0x8000 != 0 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+            }
+            if (crc != (uint256(uint8(d[34])) << 8 | uint8(d[35]))) return (false, "");
+            if (d[1] == 0x00) { out[0] = "0"; n = 1; }
+            else if (d[1] == 0xff) { out[0] = "-"; out[1] = "1"; n = 2; }
+            else return (false, "");
+            hash = new bytes(32);
+            for (uint256 i; i < 32; i++) hash[i] = d[i + 2];
+        } else {
+            if (a.length == 66 && a[0] == "0" && a[1] == ":") { out[0] = "0"; n = 1; }
+            else if (a.length == 67 && a[0] == "-" && a[1] == "1" && a[2] == ":") { out[0] = "-"; out[1] = "1"; n = 2; }
+            else return (false, "");
+            hash = new bytes(32);
+            for (uint256 i; i < 32; i++) {
+                uint8 hi = _hexAny(a[n + 1 + 2 * i]);
+                uint8 lo = _hexAny(a[n + 2 + 2 * i]);
+                if (hi > 15 || lo > 15) return (false, "");
+                hash[i] = bytes1(hi * 16 + lo);
+            }
+        }
+        out[n] = ":";
+        bytes16 digits = "0123456789abcdef";
+        for (uint256 i; i < 32; i++) {
+            out[n + 1 + 2 * i] = digits[uint8(hash[i]) >> 4];
+            out[n + 2 + 2 * i] = digits[uint8(hash[i]) & 15];
+        }
+        assembly { mstore(out, add(n, 65)) }
+        return (true, string(out));
+    }
+
+    /// Rune name: spacers (U+2022 "•" as UTF-8 or %E2%80%A2, and ".") are
+    /// dropped; what is left must be 1-28 letters A-Z.
+    function _runeName(bytes memory a) internal pure returns (bool, string memory) {
+        bytes memory out = new bytes(a.length);
+        uint256 n;
+        for (uint256 i; i < a.length; i++) {
+            bytes1 b = a[i];
+            if (b >= "A" && b <= "Z") { out[n++] = b; continue; }
+            if (b == ".") continue;
+            if (b == 0xe2 && i + 2 < a.length && a[i + 1] == 0x80 && a[i + 2] == 0xa2) { i += 2; continue; }
+            if (b == "%" && i + 8 < a.length && keccak256(abi.encodePacked(a[i + 1], a[i + 2], a[i + 3], a[i + 4], a[i + 5], a[i + 6], a[i + 7], a[i + 8]))
+                == keccak256("E2%80%A2")) { i += 8; continue; }
+            return (false, "");
+        }
+        if (n == 0 || n > 28) return (false, "");
+        assembly { mstore(out, n) }
+        return (true, string(out));
+    }
+
+    function _b64(bytes1 c) internal pure returns (uint8) {
+        if (c >= "A" && c <= "Z") return uint8(c) - 65;
+        if (c >= "a" && c <= "z") return uint8(c) - 71;
+        if (c >= "0" && c <= "9") return uint8(c) + 4;
+        if (c == "-" || c == "+") return 62;
+        if (c == "_" || c == "/") return 63;
+        return 255;
+    }
+
+    function _hexAny(bytes1 b) internal pure returns (uint8) {
+        uint8 v = _hexVal(b, false);
+        return v < 16 ? v : _hexVal(b, true);
+    }
+
+    /// The account checks of the other rules: the input must already be the one spelling.
+    function _accountOk(bytes memory a, uint8 rule) internal pure returns (bool) {
+        if (a.length == 0 || a.length > 128) return false;
+        if (rule == RULE_EVM) {
+            if (a.length != 42 || a[0] != "0" || a[1] != "x") return false;
+            for (uint256 i = 2; i < 42; i++) if (_hexVal(a[i], false) > 15) return false;
+            return true;
+        }
+        if (rule == RULE_MOVE) return _moveOk(a);
+        if (rule == RULE_BASE58) {
+            if (a.length < 32 || a.length > 44) return false;
+            for (uint256 i; i < a.length; i++) {
+                bytes1 b = a[i];
+                if (!_alnum(b) || b == "0" || b == "O" || b == "I" || b == "l") return false;
+            }
+            return true;
+        }
+        for (uint256 i; i < a.length; i++) {
+            bytes1 b = a[i];
+            if (_safeLower(b)) continue;
+            if (rule == RULE_TEXT) {
+                if (b >= "A" && b <= "Z") continue;
+                // %XX with uppercase hex, the one canonical spelling of an escaped byte;
+                // a byte that needs no escape (e.g. %41 for "A") is a second spelling, so refused
+                if (b == "%" && i + 2 < a.length && _hexVal(a[i + 1], true) < 16 && _hexVal(a[i + 2], true) < 16) {
+                    bytes1 d = bytes1(_hexVal(a[i + 1], true) * 16 + _hexVal(a[i + 2], true));
+                    if (_safeLower(d) || (d >= "A" && d <= "Z")) return false;
+                    i += 2;
+                    continue;
+                }
+            }
+            return false;
+        }
+        return true;
+    }
+
+    /// Move: "0x" + 64 lowercase hex (the padded address), optionally followed
+    /// by "::module::Name" with identifiers [A-Za-z_][A-Za-z0-9_]*.
+    function _moveOk(bytes memory a) internal pure returns (bool) {
+        if (a.length < 66 || a[0] != "0" || a[1] != "x") return false;
+        for (uint256 j = 2; j < 66; j++) if (_hexVal(a[j], false) > 15) return false;
+        if (a.length == 66) return true;
+        uint256 i = 66;
+        for (uint256 part; part < 2; part++) {
+            if (i + 2 >= a.length || a[i] != ":" || a[i + 1] != ":") return false;
+            i += 2;
+            bytes1 f = a[i];
+            if (!((f >= "a" && f <= "z") || (f >= "A" && f <= "Z") || f == "_")) return false;
+            while (i < a.length && a[i] != ":") {
+                if (!_alnum(a[i]) && a[i] != "_") return false;
+                i++;
+            }
+        }
+        return i == a.length;
+    }
+
+    function _safeLower(bytes1 b) internal pure returns (bool) {
+        return (b >= "a" && b <= "z") || (b >= "0" && b <= "9") || b == "." || b == "_" || b == ":" || b == "-";
+    }
+
+    function _hexVal(bytes1 b, bool upper) internal pure returns (uint8) {
+        if (b >= "0" && b <= "9") return uint8(b) - 48;
+        if (!upper && b >= "a" && b <= "f") return uint8(b) - 87;
+        if (upper && b >= "A" && b <= "F") return uint8(b) - 55;
+        return 255;
+    }
+
+    function _alnum(bytes1 b) internal pure returns (bool) {
+        return (b >= "a" && b <= "z") || (b >= "A" && b <= "Z") || (b >= "0" && b <= "9");
     }
 }

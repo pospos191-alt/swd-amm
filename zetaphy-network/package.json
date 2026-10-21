@@ -15,7 +15,8 @@
     "test:devnet:bridge": "node --test test/devnet.bridge.integration.js",
     "test:devnet:pqcert": "node --test test/devnet.pqcert.integration.js",
     "test:devnet:cosmoswallet": "node --test test/devnet.cosmoswallet.integration.js",
-    "test:devnet:neurogov": "node --test test/devnet.neurogov.integration.js"
+    "test:devnet:neurogov": "node --test test/devnet.neurogov.integration.js",
+    "test:devnet:chainrand": "node --test test/devnet.chainrand.integration.js"
   },
   "engines": {
     "node": ">=20"

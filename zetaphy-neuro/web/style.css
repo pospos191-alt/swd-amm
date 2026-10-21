@@ -32,6 +32,13 @@ input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 
 #findings li.good::before { background: var(--good); }
 #findings { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 10px; }
 #findings li { position: relative; padding-left: 20px; overflow-wrap: anywhere; }
+#findings .evidence { display: block; color: var(--muted); font-size: .8rem; }
+.disclaimer { color: var(--muted); font-size: .85rem; margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.reproduce { border-top: 1px solid var(--line); padding: 4px 0 10px; }
+.reproduce h2 { font-size: 1rem; margin: 10px 0 2px; }
+.reproduce p { color: var(--muted); font-size: .85rem; margin: 0; }
+.legal h2 { font-size: 1.1rem; margin: 22px 0 6px; }
+.legal li { margin: 4px 0; }
 details { border-top: 1px solid var(--line); padding-top: 10px; }
 summary { cursor: pointer; color: var(--muted); }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 10px 0 0; font-size: .9rem; }

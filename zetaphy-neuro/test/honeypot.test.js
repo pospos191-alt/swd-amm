@@ -7,7 +7,7 @@
 import { test, describe, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { readContract } from '../src/reader.js';
-import { explain } from '../src/explain.js';
+import { explain, LANGS } from '../src/explain.js';
 import { verdictOf } from '../src/verdict.js';
 import { CHAINS } from '../src/chains.js';
 import { SIM_ADDRESS, taxPercent, runCalldata } from '../src/honeypot.js';
@@ -15,6 +15,7 @@ import { simFindings } from '../src/analyze.js';
 import { TRADESIM_CODE, TRADESIM_RUN } from '../src/tradesim.generated.js';
 import { compileTradeSim } from '../scripts/build-tradesim.js';
 import { createLocalChain } from './helpers/local-chain.js';
+import { FLAGGED } from './helpers/test-signatures.js';
 
 const ids = (r) => r.analysis.findings.map((f) => f.id);
 const find = (r, id) => r.analysis.findings.find((f) => f.id === id);
@@ -90,7 +91,7 @@ const result = (stage, expectedBuy, bought, expectedSell = 0, sold = 0) =>
   '0x' + [stage, expectedBuy, bought, expectedSell, sold, 90000, 60000].map(uint).join('');
 const read = (rpc, address = TOKEN) => readContract('bsc', address, { rpc, simulate: true });
 
-test('pool found, sell reverts: classic honeypot is high risk', async () => {
+test('pool found, sell reverts: buy-but-not-sell is high risk', async () => {
   const rpc = fakeRpc({ sim: result(4, 1000, 1000, 50) });
   const r = await read(rpc);
   const f = find(r, 'sim-cannot-sell');
@@ -109,7 +110,12 @@ test('pool found, sell reverts: classic honeypot is high risk', async () => {
   assert.ok(BigInt(call.params[2][SIM_ADDRESS].balance) >= BigInt(DEX.amountIn));
   assert.equal(call.params[0].data, runCalldata(DEX, TOKEN));
   assert.ok(call.params[0].data.includes(word(DEX.router)) && call.params[0].data.includes(word(TOKEN)));
-  assert.match(explain(r, 'th').lines.find((l) => l.id === 'sim-cannot-sell').text, /honeypot.*ขายไม่ได้/);
+  assert.match(explain(r, 'th').lines.find((l) => l.id === 'sim-cannot-sell').text, /^ทดสอบขายไม่ผ่าน: .*ซื้อได้แต่ขายไม่ได้/);
+  for (const L of Object.values(LANGS)) {
+    // Wording states what the simulation saw; it never labels the token.
+    const text = L.T['sim-cannot-sell']({ dex: 'PancakeSwap V2', buy: 0, sell: null });
+    assert.doesNotMatch(text, /honeypot|scam|貔貅|ハニーポット|허니팟/i);
+  }
   assert.match(explain(r, 'en').lines.find((l) => l.id === 'sim-cannot-sell').text, /selling failed/);
 });
 
@@ -245,13 +251,21 @@ describe('TradeSim on an in-memory EVM (mock Uniswap V2 at PancakeSwap addresses
     assert.match(explain(r, 'en').lines.find((l) => l.id === 'sim-cannot-sell').text, /almost nothing/);
   });
 
-  test('honeypot behind a harmless name: rules see little, the trade catches it', async () => {
-    const r = await sim(await listed('QuietHoneypot', '', 'syncRewards(address)'));
+  test('sell block behind a harmless name: rules see little, the trade catches it', async () => {
+    const t = await listed('QuietHoneypot', '', 'syncRewards(address)');
+    // As a brand-new honeypot: no known-bad code to compare with.
+    const r = await readContract('bsc', t, { rpc: chain.rpc, simulate: true, threatSignatures: false });
     assert.equal(r.sim.stage, 'sell-failed');
     assert.equal(find(r, 'sim-cannot-sell').severity, 'high');
     assert.equal(r.analysis.level, 'high');
     assert.notEqual(r.analysis.rulesLevel, 'high', 'no name rule flags it');
-    assert.match(explain(r, 'th').lines[1].text, /honeypot/, 'shown right under what the token is');
+    assert.match(explain(r, 'th').lines[1].text, /^ทดสอบขายไม่ผ่าน/, 'shown right under what the token is');
+    // Once the network flags this exact code (an entry with an on-chain flag
+    // reference), the fixed rules flag it too, and the trade result still comes first.
+    const known = await readContract('bsc', t, { rpc: chain.rpc, simulate: true, threatSignatures: FLAGGED });
+    assert.deepEqual([find(known, 'similar-flagged').params.percent, find(known, 'similar-flagged').severity], [100, 'high']);
+    assert.equal(known.analysis.rulesLevel, 'high');
+    assert.match(explain(known, 'th').lines[1].text, /^ทดสอบขายไม่ผ่าน/);
   });
 
   test('trading not open: the buy fails, reported as skipped', async () => {

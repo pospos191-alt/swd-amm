@@ -21,6 +21,8 @@ import { decodeAddress, decodeUint, decodeString, cleanText } from './abi.js';
 import { analyze, analyzeOpaque, analyzeDelegated, withSimulation } from './analyze.js';
 import { simulateTrade } from './honeypot.js';
 import { codeFingerprint } from './fingerprint.js';
+import { closestFlagged } from './similarity.js';
+import { THREAT_SIGNATURES } from './threat-signatures.js';
 import { TEMPLATES } from './templates.js';
 import { knownToken, lookalikeOf } from './known-tokens.js';
 
@@ -67,6 +69,9 @@ function canonical(v) {
  *   threatLookup: async (fingerprint) => ({flagged, reason}) from the ZETAPHY ThreatRegistry
  *   simulate: run the trade simulation (honeypot check); default on unless
  *     the caller injects an RPC (tests opt in)
+ *   threatSignatures: similarity dataset for "similar to flagged code /
+ *     a reference sample" warnings (default src/threat-signatures.js, which
+ *     ships empty; false = off)
  */
 export async function readContract(chainKey, address, opts = {}) {
   // opts.chainConfig lets a caller read a chain the website does not list
@@ -232,6 +237,15 @@ export async function readContract(chainKey, address, opts = {}) {
   if (opts.threatLookup) {
     try { threat = await opts.threatLookup(report.fingerprint); } catch { threat = null; }
   }
+  // Similarity to the dataset's entries (src/similarity.js): code only, so
+  // every runner gets the same answer from the same dataset. Informational:
+  // capped at medium unless it is the exact code of an on-chain flag.
+  let similar = null;
+  const dataset = opts.threatSignatures === false ? null : (opts.threatSignatures ?? THREAT_SIGNATURES);
+  if (dataset && !threat?.flagged) {
+    similar = closestFlagged(logicCode && logicCode !== '0x' ? logicCode : code, report.fingerprint, dataset);
+  }
+  const dispatched = new Set([...own.selectors, ...logic.selectors]).size;
   // Verified source (Sourcify): on by default for real reads, off when the
   // caller injects an RPC (tests) or passes sourcify:false (network runners,
   // whose verdicts must not depend on a third party's answer).
@@ -270,7 +284,7 @@ export async function readContract(chainKey, address, opts = {}) {
   } else if (source === null) {
     report.source = null; // checked: not on Sourcify
   }
-  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike, unknownSelectors: unknown, threat, source });
+  report.analysis = analyze({ hasCode, functions, opcodes: logic.opcodes, proxy, token, owner, template, known, lookalike, unknownSelectors: unknown, threat, source, similar, dispatched });
   report.functions = functions.map((f) => f.sig).sort();
   if (unknown.length) report.unknownSelectors = unknown;
   if (isTokenContract(functions)) await simulate(report, { rpc, chain, chainKey, addr, known, opts });

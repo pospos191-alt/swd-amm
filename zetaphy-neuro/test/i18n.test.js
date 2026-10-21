@@ -3,19 +3,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LANGS, explain, uiText, pickLang } from '../src/explain.js';
+import { THREAT_REASONS, reasonCode } from '../src/threat-reasons.js';
 import * as en from '../src/lang/en.js';
 
 const FULL = {
   name: 'Name', symbol: 'SYM', decimals: 6, totalSupply: '123456789', functions: ['m::mint', 'm::pause'], issuer: 'Circle',
   holder: '0xabc', where: 'object', policy: 'compatible', package: '0xpkg', address: '0xaddr', account: true, standard: 'Coin',
   maxSupply: '999', structs: ['m::Refs'], packages: ['pkg'], interfaces: ['jetton_wallet'], wallet: false, admin: '0:ad', holders: 12,
-  owner: '0xowner', implementation: '0ximpl', project: 'ZETAPHY', reason: 'drainer', count: 2, selectors: ['12345678'],
+  owner: '0xowner', implementation: '0ximpl', project: 'ZETAPHY', reason: 'sweeps-approved-tokens', count: 2, selectors: ['12345678'],
   official: '0xofficial', program: 'SPL Token', authority: 'Auth', delegate: 'Del', percent: 5, maxFee: '1', programId: 'Prog',
   paused: true, decreaseOnly: false, kind: 'stablecoin', type: '0x2::sui::SUI',
   target: '0xtarget', match: 'exact', language: 'Solidity', compiler: 'v0.8.26', url: 'https://repo.sourcify.dev/1/0xa',
   label: 'pool', codeId: '42', codeHash: 'abc123', compiler: 'func', minter: 'osmo1minter', cap: '100', creator: 'osmo1creator', contract: 'osmo1hook',
   id: '840000:3', end: 900000, unlimited: false, share: 42.5, deployer: 'bc1pdeployer', size: 20480,
   dex: 'PancakeSwap V2', native: 'WBNB', buy: 4.5, sell: 12, why: 'no-pool',
+  fingerprint: 'fp1:0123456789abcdef',
 };
 // Branches: no issuer, no holder, other `where`, wallet / other interfaces.
 const VARIANTS = [
@@ -88,4 +90,64 @@ test('each language is written in its own script', () => {
   assert.match(sample('ko'), /[가-힯]/);
   assert.match(sample('vi'), /[ạảấầẩẫậắằẳẵặẹẻẽếềểễệịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹđ]/);
   assert.match(sample('id'), /\b(dan|tidak|bisa)\b/);
+});
+
+// Wording states verifiable code facts, never a verdict about a person or
+// project (docs/LEGAL.md). Finding ids (hashed into verdicts) may keep old
+// names such as 'ton-scam'; only what a user reads is checked here.
+const ACCUSATORY = /\bscam|fraud|\brug\b|rug ?pull|drainer|phishing|honeypot|หลอกลวง|กลโกง|กลลวง|โกง|ฉ้อโกง|เหรียญปลอม|骗|诈|欺诈|貔貅|詐欺|ハニーポット|フィッシング|偽物|사기|허니팟|피싱|가짜|lừa đảo|hàng giả|penipu|palsu/i;
+
+test('no message, reason or UI text uses an accusatory label', () => {
+  for (const [code, L] of Object.entries(LANGS)) {
+    for (const [k, fn] of Object.entries(L.T)) {
+      for (const p of VARIANTS.filter((v) => keeps(k, v))) {
+        for (const reason of [undefined, ...Object.keys(en.REASON)]) {
+          const s = fn({ ...p, reason });
+          assert.doesNotMatch(s, ACCUSATORY, `${code} ${k}: ${s}`);
+        }
+      }
+    }
+    for (const s of Object.values(L.REASON)) assert.doesNotMatch(s, ACCUSATORY, `${code} REASON: ${s}`);
+    const ui = uiText(code);
+    for (const k of ['disclaimer', 'correction', 'reproduce', 'reproduceHow', 'asWritten', 'footer']) {
+      assert.doesNotMatch(ui[k], ACCUSATORY, `${code} UI.${k}`);
+    }
+  }
+});
+
+test('every language describes every ThreatRegistry category and has the disclaimer', () => {
+  // ThreatRegistry.Reason (src/threat-reasons.js, without 'none'): code facts, never intent.
+  const reasons = THREAT_REASONS.slice(1);
+  for (const [code, L] of Object.entries(LANGS)) {
+    assert.deepEqual(Object.keys(L.REASON), reasons, `${code}: REASON keys`);
+    const flagged = L.T['network-flagged']({ reason: 'cannot-sell-in-simulation' });
+    assert.ok(flagged.includes(L.REASON['cannot-sell-in-simulation']), `${code}: category shown as its description`);
+    assert.ok(!/cannot-sell-in-simulation/.test(flagged), `${code}: raw category code not shown`);
+    for (const r of reasons) assert.doesNotMatch(L.REASON[r], ACCUSATORY, `${code}: REASON.${r}`);
+    for (const k of ['disclaimer', 'correction', 'reproduce', 'reproduceHow', 'asWritten']) {
+      assert.ok(L.UI[k]?.length > 3, `${code}: UI.${k}`);
+    }
+    for (const k of ['verdict', 'command', 'rule']) assert.ok(L.UI.m[k]?.length > 0, `${code}: UI.m.${k}`);
+  }
+});
+
+test('names and symbols are shown as written in the contract, not as Neuro\'s claim', () => {
+  const report = { analysis: { level: 'info', findings: [
+    { id: 'erc20', severity: 'info', params: { name: 'Totally Official', symbol: 'USDT', decimals: 0, totalSupply: '1' } },
+    { id: 'not-erc20', severity: 'info', params: {} },
+  ] } };
+  for (const code of Object.keys(LANGS)) {
+    const out = explain(report, code);
+    assert.ok(out.lines[0].text.endsWith(uiText(code).asWritten), `${code}: ${out.lines[0].text}`);
+    assert.ok(!out.lines[1].text.includes(uiText(code).asWritten), `${code}: only on lines that show a name`);
+  }
+});
+
+test('reasonCode: a ThreatRegistry.Reason number becomes its code fact (the same order as the contract)', () => {
+  assert.equal(reasonCode(0), undefined);
+  assert.equal(reasonCode(1n), 'cannot-sell-in-simulation');
+  assert.equal(reasonCode(5), 'same-name-as-known-token');
+  assert.equal(reasonCode(7), 'other');
+  assert.equal(reasonCode(99), 'other');
+  assert.equal(THREAT_REASONS.length, 8);
 });

@@ -1,6 +1,8 @@
-// Test helper: compiles test/helpers/contracts.sol and runs it on an
-// in-memory EVM, exposed through the same read-only RPC shape the reader uses.
-// This lets tests read real compiled contracts without any network.
+// Test helper: compiles test/helpers/contracts.sol (plus the similarity
+// baseline, scripts/baseline-tokens.sol, and test/helpers/honest-tokens.sol)
+// and runs it on an in-memory EVM, exposed through the same read-only RPC
+// shape the reader uses. This lets tests read real compiled contracts without
+// any network.
 
 import { readFileSync } from 'node:fs';
 import solc from 'solc';
@@ -9,7 +11,12 @@ import { Common, Chain, Hardfork } from '@ethereumjs/common';
 import { Address, Account, hexToBytes, bytesToHex, setLengthLeft } from '@ethereumjs/util';
 import { selectorOf } from '../../scripts/keccak.js';
 
-const SOURCE = readFileSync(new URL('./contracts.sol', import.meta.url), 'utf8');
+// Contract names are unique across the files, so one {name: bytecode} map serves all.
+const SOURCES = {
+  'contracts.sol': { content: readFileSync(new URL('./contracts.sol', import.meta.url), 'utf8') },
+  'baseline-tokens.sol': { content: readFileSync(new URL('../../scripts/baseline-tokens.sol', import.meta.url), 'utf8') },
+  'honest-tokens.sol': { content: readFileSync(new URL('./honest-tokens.sol', import.meta.url), 'utf8') },
+};
 const DEPLOYER = Address.fromString('0x1111111111111111111111111111111111111111');
 const cache = new Map();
 const abiCache = new Map();
@@ -19,16 +26,16 @@ export function compile({ optimize = true } = {}) {
   if (cache.has(optimize)) return cache.get(optimize);
   const input = {
     language: 'Solidity',
-    sources: { 'contracts.sol': { content: SOURCE } },
+    sources: SOURCES,
     settings: { optimizer: { enabled: optimize, runs: 200 }, outputSelection: { '*': { '*': ['evm.bytecode.object', 'abi'] } } },
   };
   const out = JSON.parse(solc.compile(JSON.stringify(input)));
   const errors = (out.errors ?? []).filter((e) => e.severity === 'error');
   if (errors.length) throw new Error(errors.map((e) => e.formattedMessage).join('\n'));
-  const bins = Object.fromEntries(
-    Object.entries(out.contracts['contracts.sol']).map(([k, v]) => [k, v.evm.bytecode.object]));
+  const all = Object.values(out.contracts).flatMap((byName) => Object.entries(byName));
+  const bins = Object.fromEntries(all.map(([k, v]) => [k, v.evm.bytecode.object]));
   cache.set(optimize, bins);
-  abiCache.set(optimize, Object.fromEntries(Object.entries(out.contracts['contracts.sol']).map(([k, v]) => [k, v.abi])));
+  abiCache.set(optimize, Object.fromEntries(all.map(([k, v]) => [k, v.abi])));
   return bins;
 }
 

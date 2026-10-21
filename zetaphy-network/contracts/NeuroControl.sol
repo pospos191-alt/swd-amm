@@ -22,6 +22,11 @@ pragma solidity 0.8.26;
 ///             requests for. A request for any other chain reverts, so fake
 ///             requests for chains no runner reads cannot inflate the bodies.
 ///             `zetaphy deploy` seeds it with the chains the runner supports.
+///           - challenges: challengeBond (the least bond to challenge a
+///             verdict; NeuroJobs asks max(2 x fee, this)), challengeWindow
+///             (seconds after a quorum in which anyone may challenge; 0 =
+///             NeuroJobs' jobTimeout) and defenderTimeout (a defender silent
+///             longer than this loses its seat at the next regrow).
 ///         Governance is the chain's gov module (its EVM address, called
 ///         through a MsgEVMCall proposal: zetaphy-chain/gov.sh neuro ...) or
 ///         a SimpleMultisig.
@@ -34,6 +39,7 @@ pragma solidity 0.8.26;
 ///           maxBodies() / maxRegrowPerHour() returns (uint256)
 ///           communityFund() returns (address)
 ///           chainAllowed(bytes32) returns (bool)
+///           challengeBond() / challengeWindow() / defenderTimeout() returns (uint256)
 contract NeuroControl {
     /// Locked forever: no key exists for it.
     address public constant BURN = 0x000000000000000000000000000000000000dEaD;
@@ -42,6 +48,9 @@ contract NeuroControl {
     uint256 public constant MAX_BODIES = 1000;
     uint256 public constant MAX_ROSTER = 32;
     uint256 public constant MAX_CHAINS_PER_CALL = 64;
+    /// Bounds of the challenge window and the defender timeout (seconds).
+    uint256 public constant MIN_WINDOW = 60;
+    uint256 public constant MAX_WINDOW = 7 days;
 
     address public governance;
     mapping(address => bool) public guardian;
@@ -64,6 +73,13 @@ contract NeuroControl {
     /// Chain keys (bytes32 of e.g. "bsc") NeuroJobs accepts requests for.
     mapping(bytes32 => bool) public chainAllowed;
 
+    /// Least challenge bond (NeuroJobs asks max(2 x job fee, this)).
+    uint256 public challengeBond = 1 ether;
+    /// Seconds after a quorum in which a verdict may be challenged; 0 = NeuroJobs' jobTimeout.
+    uint256 public challengeWindow;
+    /// A defender whose last heartbeat (or commit/reveal) is older than this loses its seat.
+    uint256 public defenderTimeout = 6 hours;
+
     event GovernanceChanged(address governance);
     event GuardianSet(address indexed who, bool allowed);
     event Paused(address indexed by);
@@ -79,6 +95,9 @@ contract NeuroControl {
     event CommunityFund(address fund);
     event ChainApproved(bytes32 indexed chain);
     event ChainRemoved(bytes32 indexed chain);
+    event ChallengeBond(uint256 value);
+    event ChallengeWindow(uint256 value);
+    event DefenderTimeout(uint256 value);
 
     error NotGovernance();
     error NotGuardian();
@@ -197,6 +216,27 @@ contract NeuroControl {
         if (fund == address(0)) revert BadValue();
         communityFund = fund;
         emit CommunityFund(fund);
+    }
+
+    // ---- challenges and defender liveness ----
+
+    function setChallengeBond(uint256 amount) external onlyGovernance {
+        if (amount == 0) revert BadValue();
+        challengeBond = amount;
+        emit ChallengeBond(amount);
+    }
+
+    /// 0 goes back to NeuroJobs' jobTimeout.
+    function setChallengeWindow(uint256 secs) external onlyGovernance {
+        if (secs != 0 && (secs < MIN_WINDOW || secs > MAX_WINDOW)) revert BadValue();
+        challengeWindow = secs;
+        emit ChallengeWindow(secs);
+    }
+
+    function setDefenderTimeout(uint256 secs) external onlyGovernance {
+        if (secs < MIN_WINDOW || secs > MAX_WINDOW) revert BadValue();
+        defenderTimeout = secs;
+        emit DefenderTimeout(secs);
     }
 
     // ---- chains NeuroJobs takes requests for ----

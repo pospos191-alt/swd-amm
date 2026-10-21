@@ -11,6 +11,8 @@ const OP = {
   PUSH1: 0x60,
   PUSH32: 0x7f,
   INVALID: 0xfe,
+  CREATE: 0xf0,
+  CALL: 0xf1,
   CALLCODE: 0xf2,
   DELEGATECALL: 0xf4,
   CREATE2: 0xf5,
@@ -53,7 +55,9 @@ export function minimalProxyTarget(code) {
  * Scans bytecode. Returns:
  *  - functions: known functions found in the dispatcher [{selector, sig, cat}]
  *  - unknownSelectors: dispatcher selectors we have no name for (sorted hex)
+ *  - selectors: every selector the dispatcher compares against (sorted hex)
  *  - opcodes: flags for dangerous opcodes that appear as real instructions
+ *    (call/create: value-moving, used by the "unknown pattern" signal)
  *  - size: code size in bytes
  */
 export function scanBytecode(codeHex) {
@@ -61,7 +65,7 @@ export function scanBytecode(codeHex) {
   const end = codeLengthWithoutMetadata(code);
   const found = new Map();
   const dispatched = new Set();
-  const opcodes = { selfdestruct: false, delegatecall: false, callcode: false, create2: false };
+  const opcodes = { selfdestruct: false, delegatecall: false, callcode: false, create2: false, call: false, create: false };
 
   for (let pc = 0; pc < end; pc++) {
     const op = code[pc];
@@ -84,8 +88,10 @@ export function scanBytecode(codeHex) {
     else if (op === OP.DELEGATECALL) opcodes.delegatecall = true;
     else if (op === OP.CALLCODE) opcodes.callcode = true;
     else if (op === OP.CREATE2) opcodes.create2 = true;
+    else if (op === OP.CALL) opcodes.call = true;
+    else if (op === OP.CREATE) opcodes.create = true;
   }
 
   const unknownSelectors = [...dispatched].filter((s) => !SELECTORS[s]).sort();
-  return { size: code.length, functions: [...found.values()], unknownSelectors, opcodes };
+  return { size: code.length, functions: [...found.values()], unknownSelectors, selectors: [...dispatched].sort(), opcodes };
 }

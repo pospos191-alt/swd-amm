@@ -13,7 +13,10 @@
 - **กฎตายตัว ไม่ใช้ AI**: ผลเหมือนเดิมทุกครั้ง มี `reportHash` ให้เครื่องอื่นตรวจซ้ำได้
   (ตามจุดอ่อนข้อ 1 ในแผน: งานต้องตรวจซ้ำได้)
 - **ไม่เชื่อข้อความจากสัญญา**: ชื่อ/สัญลักษณ์เหรียญถูกกรองอักขระควบคุมและแสดงเป็นข้อความเท่านั้น
-  ชื่อที่มีลิงก์ถูกเตือนว่าเป็นกลลวง
+  ชื่อที่มีลิงก์จะได้คำเตือนว่าชื่อนั้นมีลิงก์ ชื่อทุกชื่อแสดง "ตามที่เขียนไว้ในสัญญา" ไม่ใช่คำยืนยันของ Neuro
+- **บอกข้อเท็จจริงของโค้ด ไม่ตัดสินคน**: ทุกข้อความบอกว่าโค้ดทำอะไรได้หรือการจำลองให้ผลอะไร
+  ไม่ใช้คำอย่าง "หลอกลวง" หรือ "scam" ทุกรายงานมีคำปฏิเสธความรับผิด 7 ภาษา, รหัสรายงาน, รหัสผลตัดสิน
+  และคำสั่ง CLI สำหรับตรวจซ้ำ พร้อมลิงก์วิธีชี้แจง/ขอแก้ไข (`web/legal.html`, นโยบายเต็มที่ [`docs/LEGAL.md`](../docs/LEGAL.md))
 
 ## ใช้งาน
 
@@ -75,6 +78,46 @@ node cli.js fingerprint bsc 0x<เหรียญหนึ่งตัวที�
 (เมื่อใส่ `tax-decrease-only` หลังอ่านโค้ดตั้งภาษีแล้ว) ถ้าโค้ดมีสิทธิ์ที่แม่แบบบอกว่าไม่มี
 จะเตือนระดับสูงทันที แทนที่จะเชื่อข้อมูลแม่แบบ
 
+## โค้ดคล้ายโค้ดที่ติดธง และรูปแบบที่ยังไม่รู้จัก
+
+กฎตายตัวจับได้แค่สิ่งที่รู้จักชื่อ โค้ดที่ลอกจากโค้ดที่ติดธงแล้วเปลี่ยนชื่อฟังก์ชัน เพิ่ม getter
+หรือย้ายเงื่อนไขนิดหน่อย จะได้ลายนิ้วมือใหม่ Neuro จึงวัดว่าโค้ด **ใกล้** โค้ดในชุดข้อมูลแค่ไหน (`src/similarity.js`)
+ยังเป็นกฎตายตัว: ใช้แค่ hash จำนวนเต็ม ไม่ใช้ AI ไม่สุ่ม ทุกเครื่องได้ตัวเลขเดียวกัน
+
+- ตัดข้อมูลของ PUSH ทุกตัว (ที่อยู่ ค่าคงที่ ตำแหน่ง jump) และ metadata ของคอมไพเลอร์ออก เหลือแต่ลำดับ opcode
+- ตัดส่วนที่เหรียญสุจริตมีเหมือนกันออก (baseline ใน `scripts/baseline-tokens.sol`: ERC-20 แบบสั้น, ERC-20 + Ownable + mint
+  และแบบ OpenZeppelin v5: ERC20, + Pausable, + Permit, + Burnable, + Capped, Ownable2Step, AccessControl และ blacklist ธรรมดา
+  คอมไพล์ด้วย solc 0.8.26 ทั้งเปิดและปิด optimizer) ไม่อย่างนั้นโค้ดไลบรารีที่ไม่อยู่ใน baseline จะดันเหรียญสุจริตให้ดูคล้ายเกิน 60% ได้
+- เทียบส่วนที่เหลือ: MinHash (128 ค่า) ของชุด opcode 4 ตัวติดกัน และ Jaccard ของ selector ที่เหลือ
+  คะแนน = max(opcode, (opcode + selector) / 2) เปลี่ยนชื่อฟังก์ชันจึงหนีไม่พ้น
+- คะแนนตั้งแต่ 60% เตือนระดับต่ำ, 75% ระดับกลาง (โค้ดเดียวกันเป๊ะ = 100%) ส่วนที่เหลือของโค้ดต้องมีอย่างน้อย 8 ชุด ไม่งั้นไม่เทียบ
+- **เป็นข้อมูลประกอบ ไม่ใช่หลักฐาน:** ระดับสูงสุดคือกลาง ยกเว้นลายนิ้วมือตรงเป๊ะกับรายการที่มีการอ้างอิงธงบนเชน จึงเป็นระดับสูง
+- **ถ้อยคำตามที่มา:** ขึ้นว่า "คล้ายโค้ดที่ผู้รัน Neuro ติดธงไว้" (`similar-flagged`) เฉพาะรายการที่อ้างอิงธงบนเชน
+  (`flag: { key, reportHash }` คือคีย์ใน ThreatRegistry และ reportHash ของหลักฐานการติดธง) รายการที่ไม่มีการอ้างอิง
+  ขึ้นว่า "คล้ายตัวอย่างอ้างอิงในชุดข้อมูลของ Neuro" (`similar-reference`) และบอกชัดว่าไม่ใช่โค้ดที่ติดธง
+- **หลบได้:** แทรก opcode ที่ไม่ทำอะไร (เช่น PUSH/POP) ทุก ๆ ไม่กี่คำสั่ง สลับลำดับฟังก์ชัน หรือคอมไพล์ใหม่ด้วย solc
+  รุ่นอื่น / ตั้ง optimizer อื่น ก็เปลี่ยน 4-gram ส่วนใหญ่ได้ คะแนนจะต่ำกว่าเกณฑ์ ตรวจไม่พบจึงไม่ได้แปลว่าปลอดภัย
+  กฎตายตัวและการจำลองซื้อขายยังทำงานตามปกติ (พิจารณาเพิ่มลักษณะที่สองแบบ selector + โครงสร้าง storage แล้ว
+  แต่ selector เทียบอยู่แล้ว และช่อง storage ขยับตามลำดับการสืบทอด จึงไม่คุ้ม ยังไม่เพิ่ม)
+- อยู่ใน verdict ที่คนรันร่างต้องตรงกัน เพราะขึ้นกับโค้ดและชุดข้อมูลเท่านั้น (`verdict` และ `reportHash` คงที่)
+- ครอบคลุมเฉพาะ EVM bytecode: เชนอื่นอ่านจากค่าตั้งบนเชน ไม่ใช่โค้ด และยังไม่ได้ทำกับ WASM ของ Stylus
+
+ชุดข้อมูลอยู่ในโค้ดเอง (`src/threat-signatures.js`) เพราะ ThreatRegistry เก็บแค่คีย์ ไม่เก็บโค้ด
+แต่ละรายการคือลายนิ้วมือ + ลายเซ็นย่อ (selector ที่เหลือ + MinHash) ราว 1 KB + ที่มา (`flag`)
+- **ชุดข้อมูลจริงเริ่มต้นว่างเปล่า** ยังไม่มีสัญญาไหนที่ผู้รันร่างติดธง และสัญญาทดสอบไม่ใช่โค้ดที่ติดธง
+- ตัวอย่างอ้างอิงสำหรับชุดทดสอบ (ScamToken, QuietHoneypot, NotLaunched, HiddenPowers, Killable ทั้งเปิดและปิด optimizer)
+  อยู่ที่ `test/fixtures/reference-samples.generated.js` ใช้ในเทสต์เท่านั้น ไม่อยู่ใน `src/` จึงไม่อยู่ในทักษะ
+  สร้างใหม่ทั้ง baseline และตัวอย่างด้วย `npm run threat-signatures` ไม่ดึงอะไรจากเน็ต
+- เพิ่มสัญญาที่ติดธงจริงใน ThreatRegistry: ตรวจ `evidenceOf(key)` ก่อน แล้ว
+  `node cli.js signature bsc 0x... --reason cannot-sell-in-simulation --flag-key 0x<คีย์> --report-hash 0x<reportHash>` แล้ววางรายการใน `ADDED`
+  (`--reason` รับรหัสข้อเท็จจริงของโค้ดใน ThreatRegistry ตาม `src/threat-reasons.js` รายงานแสดงเป็นคำบรรยายที่เป็นกลาง ดู `REASON` ใน `src/lang/*.js`
+  ถ้าไม่ใส่ `--flag-key` / `--report-hash` รายการนั้นจะแสดงเป็น "ตัวอย่างอ้างอิง" เท่านั้น)
+  ทักษะ (skill id) คือ hash ของ `src/` ทั้งหมด ชุดข้อมูลใหม่ (หรือ baseline ใหม่) จึงเป็นทักษะใหม่ ต้องผ่านโหวตก่อนคนรันร่างจะใช้
+
+สัญญาณ **"Neuro ยังไม่รู้จักรูปแบบนี้ ระวัง"** (ระดับต่ำ): ฟังก์ชันที่ไม่รู้จักชื่อ 2 ตัวขึ้นไป
+และเป็นครึ่งหนึ่งขึ้นไปของทั้งหมด (หรือไม่มีฟังก์ชันที่รู้จักเลย) และโค้ดย้ายเงินได้ (CALL, CREATE, SELFDESTRUCT ฯลฯ)
+ไม่ได้แปลว่าโค้ดมีปัญหา แต่จะไม่บอกว่า "ไม่พบความเสี่ยง" ทั้งที่ Neuro แค่ไม่รู้จัก
+
 ## สิ่งที่ตรวจ
 
 **Solana** (`src/solana.js`) อ่านบัญชีเหรียญ (mint) โดยตรง: สิทธิ์สร้างเหรียญเพิ่ม, สิทธิ์อายัดบัญชี,
@@ -94,9 +137,9 @@ set_fee, burn_from ฯลฯ)
 โค้ดเสริมตอนฝาก/ถอน (dispatch hook), นโยบายอัปเกรดแพ็กเกจ และชื่อฟังก์ชันเหมือน Sui
 
 **TON** (`src/ton.js`) อ่าน jetton master ผ่าน tonapi.io: สร้างเหรียญเพิ่มได้ไหม, ผู้ดูแลยังอยู่หรือสละแล้ว,
-ป้ายหลอกลวง/รายชื่อที่ตรวจแล้วของ tonapi และสัญญาที่ถูกแช่แข็ง ตรวจ checksum ของที่อยู่ก่อนเรียกเน็ต
+ป้ายเตือน/รายชื่อที่ตรวจแล้วของ tonapi (แสดงว่าเป็นป้ายของ tonapi ไม่ใช่ผลตรวจของ Neuro) และสัญญาที่ถูกแช่แข็ง ตรวจ checksum ของที่อยู่ก่อนเรียกเน็ต
 และไม่รับที่อยู่ testnet และตรวจกระเป๋าเหรียญ (jetton wallet) ของผู้ถือรายใหญ่สุด: ถ้า tonapi ไม่รู้จักว่าเป็น
-กระเป๋ามาตรฐาน จะเตือนระดับสูง เพราะโค้ดกระเป๋าแบบกำหนดเองคือที่ซ่อนของเหรียญ "ซื้อได้ ขายไม่ได้" บน TON
+กระเป๋ามาตรฐาน จะเตือนระดับสูง เพราะโค้ดกระเป๋าแบบกำหนดเองปฏิเสธการส่งได้ ทำให้ซื้อได้แต่อาจขายไม่ได้
 
 ข้อจำกัดของ Sui/Aptos: ตรวจจากชื่อฟังก์ชันและข้อมูลบนเชน ยังไม่ได้อ่านเนื้อในทุกฟังก์ชัน
 
@@ -121,7 +164,7 @@ set_fee, burn_from ฯลฯ)
 
 | ผลตรวจ | ระดับ |
 |---|---|
-| ชื่อเหรียญมีลิงก์/ชื่อเว็บ (เหรียญหลอกแจกฟรี) | สูง |
+| ชื่อเหรียญ (ตามที่เขียนในสัญญา) มีลิงก์/ชื่อเว็บ | สูง |
 | อัปเกรดโค้ดได้ (EIP-1967 / beacon / `upgradeTo`) | สูง |
 | สร้างเหรียญเพิ่ม, บล็อกกระเป๋า, หยุดการโอน | สูง (ต่ำ ถ้าเจ้าของสละสิทธิ์แล้ว) |
 | เปลี่ยนภาษี, สวิตช์เปิดปิดเทรด, เพดานต่อรายการ | ปานกลาง (ต่ำ ถ้าสละสิทธิ์แล้ว) |
@@ -130,14 +173,14 @@ set_fee, burn_from ฯลฯ)
 | สำเนา EIP-1167, เจ้าของปัจจุบัน, ยกเว้นภาษีบางกระเป๋า | ข้อมูล |
 | ตรงกับแม่แบบ ZETAPHY ที่ลงทะเบียน | ดี (ภาษีลดได้อย่างเดียว = ต่ำ) |
 | สัญญาทางการของ USDT, USDC, WETH ฯลฯ (`src/known-tokens.js`) | ดี และลดสิทธิ์ของผู้ออกเหรียญเหลือ "ต่ำ" พร้อมบอกชื่อผู้ออก |
-| ใช้สัญลักษณ์เหมือนเหรียญทางการ แต่คนละที่อยู่ (เหรียญปลอม) | สูง |
+| ใช้สัญลักษณ์เหมือนเหรียญทางการ แต่ไม่ใช่ที่อยู่ที่ลงทะเบียนไว้ | สูง |
 | ตรงแม่แบบแต่มีสิทธิ์ที่แม่แบบบอกว่าไม่มี | สูง |
-| จำลองซื้อขาย: ซื้อได้แต่ขายไม่ได้ หรือขายแล้วแทบไม่ได้เงินคืน (honeypot) | สูง |
+| จำลองซื้อขาย: ซื้อได้แต่ขายไม่ได้ หรือขายแล้วแทบไม่ได้เงินคืน | สูง |
 | จำลองซื้อขาย: ภาษีซื้อหรือขายเกิน 50% | สูง (10% ขึ้นไป = ปานกลาง) |
 | จำลองซื้อแล้วขายคืนได้ ภาษีต่ำกว่า 10% ทั้งสองทาง | ดี (พร้อมเตือนว่าเป็นผล ณ บล็อกนี้ เจ้าของอาจเปลี่ยนภายหลัง) |
 | ไม่พบ pool บน DEX หลัก / RPC ไม่ยอมให้ override / ซื้อไม่สำเร็จ | ข้อมูล (บอกว่าข้ามการจำลอง ไม่เคยบอกว่า "ปลอดภัย") |
 
-**จำลองซื้อขาย (honeypot check, `src/honeypot.js`)** วิธีเดียวกับ honeypot.is แต่ใช้แค่ `eth_call`:
+**จำลองซื้อขาย (ทดสอบซื้อแล้วขายคืน, `src/honeypot.js`)** วิธีเดียวกับ honeypot.is แต่ใช้แค่ `eth_call`:
 1. หา pool แบบ Uniswap V2 ของเหรียญคู่กับเหรียญหลักของเชนที่ห่อแล้ว (`factory.getPair(token, WETH)`)
    บน DEX หลัก: Uniswap V2 (Ethereum, Base, Arbitrum) และ PancakeSwap V2 (BNB Chain) ตั้งค่าไว้ที่ `dex` ใน `src/chains.js`
 2. ถ้ามี pool เรียก `eth_call` ครั้งเดียวพร้อม state override (พารามิเตอร์ตัวที่สาม) วางสัญญาช่วย
@@ -154,10 +197,10 @@ set_fee, burn_from ฯลฯ)
 เหรียญทางการใน `src/known-tokens.js` ไม่ถูกจำลอง ผลจำลองไม่นับในคำตัดสินของเครือข่าย Neuro
 (`src/verdict.js`) เพราะขึ้นกับบล็อกและ RPC ของผู้รันแต่ละคน
 ข้อจำกัด: จำลองจากสัญญา ไม่ใช่กระเป๋าธรรมดา เหรียญที่กันการซื้อจากสัญญาจะขึ้นว่า "ซื้อไม่สำเร็จ"
-และเหรียญที่ห้ามขายเฉพาะในบล็อกเดียวกับที่ซื้อจะดูเหมือน honeypot ยังไม่รองรับ pool แบบ V3 หรือ DEX อื่น (เช่น Aerodrome บน Base)
+และเหรียญที่ห้ามขายเฉพาะในบล็อกเดียวกับที่ซื้อจะขึ้นว่า "ขายไม่ได้" เหมือนกัน (ข้อความบอกข้อจำกัดนี้ไว้) ยังไม่รองรับ pool แบบ V3 หรือ DEX อื่น (เช่น Aerodrome บน Base)
 
 ข้อจำกัดของกฎชื่อฟังก์ชัน: ตรวจจากชื่อฟังก์ชันที่รู้จัก (`src/signatures.js`) ในโค้ดบนเชน
-กลโกงที่ตั้งชื่อฟังก์ชันแปลกๆ อาจหลุดได้ (การจำลองซื้อขายช่วยปิดช่องนี้สำหรับเหรียญที่มี pool)
+สิทธิ์พิเศษที่ซ่อนหลังชื่อฟังก์ชันแปลกๆ อาจหลุดได้ (การจำลองซื้อขายช่วยปิดช่องนี้สำหรับเหรียญที่มี pool)
 เพิ่มชื่อใหม่ใน `src/signatures.js` แล้วรัน `npm run selectors`
 
 ## ทดสอบ
@@ -166,6 +209,7 @@ set_fee, burn_from ฯลฯ)
 npm test          # คอมไพล์สัญญาตัวอย่างจริง (test/helpers/contracts.sol) รันบน EVM ในเครื่อง
                   # ทั้งเปิดและปิด optimizer + ลายนิ้วมือ/แม่แบบ + ตัวนับผู้ใช้
                   # + จำลองซื้อขายด้วย DEX จำลอง (Uniswap V2) ที่ที่อยู่ของ PancakeSwap จริง
+                  # + โค้ดคล้ายโค้ดที่ติดธง (สำเนาที่แก้นิดหน่อยต้องโดนเตือน เหรียญทั่วไปต้องไม่โดน)
 npm run test:web  # เปิดหน้าเว็บใน Chromium ตอบ RPC จากเชนทดสอบ ไม่ใช้เน็ต
 ```
 
@@ -176,7 +220,7 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 - [x] ตัวนับผู้ใช้ต่อเดือนแบบไม่เก็บข้อมูลส่วนตัว + หน้าสถิติเทียบเป้า 1,000
 - [x] ระบบจำแม่แบบเหรียญ ZETAPHY (รอที่อยู่เหรียญตัวอย่างหนึ่งตัวต่อเชนเพื่อลงทะเบียน)
 - [x] ลองกับสัญญาจริงบน mainnet แล้ว (USDT บน BNB Chain, 19 ต.ค. 2026)
-- [x] รู้จักเหรียญทางการรายใหญ่ และจับเหรียญปลอมที่ใช้ชื่อเลียนแบบ
+- [x] รู้จักเหรียญทางการรายใหญ่ และเตือนเหรียญที่ใช้สัญลักษณ์เดียวกันแต่คนละที่อยู่
 - [x] รองรับ Ethereum และ Solana
 - [x] รองรับ Sui, Aptos (ภาษา Move) และ TON (ทดสอบกับข้อมูลตามรูปแบบจริงของแต่ละเชน ยังไม่ได้ลองกับ mainnet จากเครื่องนี้)
 - [ ] ให้เจ้าของภาษาตรวจคำแปล จีน ญี่ปุ่น เกาหลี เวียดนาม อินโดนีเซีย
@@ -185,9 +229,15 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 - [x] Starknet (Cairo) · Bitcoin Runes
 - [ ] BRC-20 (ต้องหา API ฟรีที่ไม่ต้องใช้คีย์)
 - [x] อ่านเนื้อใน WASM ของ Stylus
-- [x] จำลองซื้อขาย (honeypot check) บน EVM ผ่าน Uniswap V2 / PancakeSwap V2 ทดสอบบน EVM ในเครื่องแล้ว
+- [x] จำลองซื้อขาย (ทดสอบซื้อแล้วขายคืน) บน EVM ผ่าน Uniswap V2 / PancakeSwap V2 ทดสอบบน EVM ในเครื่องแล้ว
       รอผล live check บน mainnet (ที่อยู่ DEX และ RPC ที่รองรับ state override) จาก CI
 - [ ] จำลองซื้อขายผ่าน pool แบบ V3 และ DEX อื่น (Aerodrome บน Base, Camelot บน Arbitrum)
+- [x] เตือนโค้ดคล้ายโค้ดที่ติดธง (EVM) + สัญญาณ "ยังไม่รู้จักรูปแบบนี้"
+- [x] baseline จากรูปแบบ OpenZeppelin ที่พบบ่อย (solc 0.8.26 เปิด/ปิด optimizer) และชุดข้อมูลจริงเริ่มว่าง
+- [ ] ใส่สัญญาที่ติดธงจริงบน mainnet ในชุดข้อมูล (พร้อมคีย์และ reportHash ของธง) และขยาย baseline ด้วยเหรียญ OpenZeppelin จริงที่คอมไพล์หลายเวอร์ชัน solc
+      (ตอนนี้ baseline และรายการตั้งต้นมาจาก solc 0.8.26 เท่านั้น สำเนาที่คอมไพล์ด้วยเวอร์ชันอื่นอาจหลุด)
+- [x] ถ้อยคำเป็นกลาง (ข้อเท็จจริงของโค้ด ไม่ตัดสินคน) + คำปฏิเสธความรับผิด 7 ภาษา + หลักฐานตรวจซ้ำในทุกรายงาน (`docs/LEGAL.md`)
+- [ ] ช่องทางชี้แจง/อุทธรณ์บนเชนใน ThreatRegistry
 - [ ] ชั้นอธิบายด้วย AI (ทางเลือก): ส่งเฉพาะผลตรวจ ไม่ให้สิทธิ์เรียกเครื่องมือ (จุดอ่อนข้อ 12)
 
 ---
@@ -203,8 +253,25 @@ Japanese, Korean, Vietnamese and Indonesian, a reproducible `reportHash`, a CLI 
 Also: a privacy-preserving monthly user counter (`api/usage.js`, Vercel +
 Upstash Redis) with a stats page, and code-fingerprint templates to recognise
 ZETAPHY launcher tokens (`node cli.js fingerprint <chain> <address>`).
-EVM tokens also get a honeypot check (`src/honeypot.js`): one `eth_call` with a
+EVM tokens also get a buy/sell test (`src/honeypot.js`): one `eth_call` with a
 state override runs `contracts/TradeSim.sol`, which buys through the chain's main
 Uniswap-V2-style DEX and sells straight back, so a token you can buy but not
 sell, or that takes a hidden tax, is caught whatever its functions are named.
+EVM code is also compared with an in-repo similarity dataset
+(`src/similarity.js`, `src/threat-signatures.js`, shipped empty; test reference
+samples live in `test/fixtures/`): opcode 4-gram MinHash plus selector Jaccard
+after removing honest library code (minimal and OpenZeppelin-style ERC-20,
+Pausable, Permit, Burnable, Capped, Ownable2Step, AccessControl, blacklist),
+warning from 60% similarity, informational (at most medium unless the exact
+code of an on-chain flag), and worded "flagged by runners" only for entries that
+cite their ThreatRegistry flag key and reportHash (otherwise "similar to a
+reference sample"); filler opcodes or a recompile evade it;
+and code that is mostly unnamed functions and can move value gets a low
+"Neuro doesn't recognise this pattern yet" warning instead of "nothing found".
+Wording states verifiable code facts ("the owner can mint new tokens", "in a
+simulated buy/sell, the token could be bought but not sold"), never verdicts about
+people or projects. Every report (web and CLI) shows a 7-language disclaimer, the
+report ID, the rules-only verdict ID and the CLI command that reproduces it, and
+links to the correction / right-of-reply process (`web/legal.html`,
+[`docs/LEGAL.md`](../docs/LEGAL.md)).
 Run `npm test` and `npm run test:web`.

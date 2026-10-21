@@ -26,7 +26,8 @@ test('only governance changes the knobs', async () => {
   const calls = [['unpause', []], ['setGuardian', [a('thief'), true]], ['setGovernance', [a('thief')]], ['approveSkill', [SKILL]],
     ['revokeSkill', [SKILL]], ['setActiveSkill', [SKILL]], ['approveDefender', [a('r1')]], ['removeDefender', [a('r1')]],
     ['release', [a('r1')]], ['setMaxBodies', [100]], ['setMaxRegrowPerHour', [4]], ['setCommunityFund', [a('thief')]],
-    ['approveChain', [BSC]], ['approveChains', [[BSC]]], ['removeChain', [BSC]]];
+    ['approveChain', [BSC]], ['approveChains', [[BSC]]], ['removeChain', [BSC]],
+    ['setChallengeBond', [1n]], ['setChallengeWindow', [600]], ['setDefenderTimeout', [600]]];
   for (const [fn, args] of calls) await assert.rejects(ctl.send('thief', fn, args), /NotGovernance/, fn);
   await assert.rejects(ctl.send('thief', 'pause'), /NotGuardian/);
 });
@@ -80,6 +81,24 @@ test('defender roster, release, sizes and community fund', async () => {
   assert.equal((await ctl.call('communityFund')).toLowerCase(), a('r2').toLowerCase());
 });
 
+test('challenge bond, challenge window and defender timeout: defaults and bounds', async () => {
+  assert.equal(await ctl.call('challengeBond'), 10n ** 18n);
+  assert.equal(await ctl.call('challengeWindow'), 0n); // 0 = NeuroJobs' jobTimeout
+  assert.equal(await ctl.call('defenderTimeout'), 6n * 3600n);
+  await assert.rejects(ctl.send('gov', 'setChallengeBond', [0]), /BadValue/);
+  await ctl.send('gov', 'setChallengeBond', [5n * 10n ** 18n]);
+  assert.equal(await ctl.call('challengeBond'), 5n * 10n ** 18n);
+  for (const bad of [59, 7 * 86400 + 1]) {
+    await assert.rejects(ctl.send('gov', 'setChallengeWindow', [bad]), /BadValue/);
+    await assert.rejects(ctl.send('gov', 'setDefenderTimeout', [bad]), /BadValue/);
+  }
+  await assert.rejects(ctl.send('gov', 'setDefenderTimeout', [0]), /BadValue/);
+  await ctl.send('gov', 'setChallengeWindow', [3600]);
+  await ctl.send('gov', 'setChallengeWindow', [0]); // back to the default
+  await ctl.send('gov', 'setDefenderTimeout', [1800]);
+  assert.equal(await ctl.call('defenderTimeout'), 1800n);
+});
+
 test('chain allowlist: governance approves (one or many) and removes chain keys', async () => {
   assert.equal(await ctl.call('chainAllowed', [BSC]), false);
   await ctl.send('gov', 'approveChains', [[BSC, ETH]]);
@@ -126,7 +145,9 @@ esac
   const gov = (...args) => execFileSync(new URL('../../zetaphy-chain/gov.sh', import.meta.url).pathname, args, { env: { ...process.env, ZETAPHYD: fake }, encoding: 'utf8' });
   for (const [action, value] of [['pause'], ['unpause'], ['approve-skill', ID], ['revoke-skill', ID], ['set-active-skill', ID], ['approve-defender', RUNNER],
     ['remove-defender', RUNNER], ['release', RUNNER], ['set-max-bodies', '12'], ['set-max-regrow', '3'], ['set-community-fund', RUNNER],
-    ['approve-chain', 'bsc'], ['remove-chain', 'arbitrum'], ['approve-chain', 'my-chain-2']]) {
+    ['approve-chain', 'bsc'], ['remove-chain', 'arbitrum'], ['approve-chain', 'my-chain-2'],
+    ['set-challenge-bond', '2.5'], ['set-challenge-bond', '1000'], ['set-challenge-bond', '0.000000000000000001'], ['set-challenge-bond', '123456789012.123456789012345678'],
+    ['set-challenge-window', '3600'], ['set-defender-timeout', '21600']]) {
     const out = gov('neuro', action, ...(value ? [value] : []), CTL);
     assert.match(out, /proposal 1 submitted/);
     const p = JSON.parse(readFileSync(join(dir, 'p.json'), 'utf8'));
@@ -141,4 +162,8 @@ esac
   assert.throws(() => gov('neuro', 'explode', CTL));
   assert.throws(() => gov('neuro', 'approve-chain', 'BSC!', CTL));
   assert.throws(() => neuroCall('approve-chain', 'x'.repeat(32)));
+  for (const bad of ['0', '0.0', '1.', '-1', '1e18', '0.0000000000000000001']) {
+    assert.throws(() => gov('neuro', 'set-challenge-bond', bad, CTL), undefined, bad);
+    assert.throws(() => neuroCall('set-challenge-bond', bad), undefined, bad);
+  }
 });

@@ -24,6 +24,7 @@
 #     pause | unpause | approve-skill ID | revoke-skill ID | set-active-skill ID | approve-defender 0x…
 #     remove-defender 0x… | release 0x… | set-max-bodies N | set-max-regrow N | set-community-fund 0x…
 #     approve-chain KEY | remove-chain KEY   (chain keys NeuroJobs takes requests for, e.g. bsc)
+#     set-challenge-bond ZETAPHY | set-challenge-window SECONDS | set-defender-timeout SECONDS
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -134,14 +135,28 @@ case "${1:-}" in
     declare -A SEL=([pause]=8456cb59 [unpause]=3f4ba83a [approve-skill]=53c91c08 [revoke-skill]=615ef428
       [set-active-skill]=dcad4460 [approve-defender]=ccaa1df0 [remove-defender]=874d8a07 [release]=19165587
       [set-max-bodies]=3f1f3008 [set-max-regrow]=ecd0e17e [set-community-fund]=37339a16
-      [approve-chain]=2c003714 [remove-chain]=2ccde4b6)
+      [approve-chain]=2c003714 [remove-chain]=2ccde4b6
+      [set-challenge-bond]=18c281a6 [set-challenge-window]=01c1aa0d [set-defender-timeout]=d1d4a2e5)
     sel=${SEL[$act]:-}; [ -n "$sel" ] || { echo "neuro: unknown action $act"; exit 1; }
     case "$act" in
       pause|unpause) arg=""; ctl=${3:?NeuroControl 0x…}; word="" ;;
       *) val=${3:?value}; ctl=${4:?NeuroControl 0x…}
          case "$act" in
            *-skill) [[ "$val" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "skill id: 0x + 64 hex (zetaphy neuro skill-id)"; exit 1; }; word=${val#0x} ;;
-           set-max-*) [[ "$val" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "a whole number above 0"; exit 1; }; word=$(printf '%064x' "$val") ;;
+           set-max-*|set-challenge-window|set-defender-timeout)
+                    [[ "$val" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "a whole number above 0"; exit 1; }; word=$(printf '%064x' "$val") ;;
+           set-challenge-bond)
+                    # ZETAPHY (up to 18 decimals) -> wei -> 32-byte hex, by long division (bash has 64-bit numbers only).
+                    [[ "$val" =~ ^([0-9]{1,12})(\.([0-9]{1,18}))?$ ]] || { echo "an amount of ZETAPHY, e.g. 2.5"; exit 1; }
+                    frac=${BASH_REMATCH[3]}; zeros=000000000000000000; n=${BASH_REMATCH[1]}${frac}${zeros:0:$((18 - ${#frac}))}
+                    n=$(echo "$n" | sed 's/^0*//'); [ -n "$n" ] || { echo "an amount of ZETAPHY above 0"; exit 1; }
+                    word=""
+                    while [ -n "$n" ]; do
+                      q=""; r=0
+                      for ((i = 0; i < ${#n}; i++)); do d=$((r * 10 + ${n:i:1})); q+=$((d / 16)); r=$((d % 16)); done
+                      word=$(printf '%x' "$r")$word; n=$(echo "$q" | sed 's/^0*//')
+                    done
+                    word=$(printf '%064s' "$word" | tr ' ' 0) ;;
            *-chain) [[ "$val" =~ ^[a-z0-9-]{1,31}$ ]] || { echo "chain key: 1-31 of a-z 0-9 - (e.g. bsc)"; exit 1; }
                     word=$(printf '%s' "$val" | od -An -tx1 | tr -d ' \n'); word=$word$(printf '%0*d' $((64 - ${#word})) 0) ;;
            *) [[ "$val" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "address: 0x + 40 hex"; exit 1; }; word=000000000000000000000000${val#0x} ;;
@@ -171,5 +186,5 @@ case "${1:-}" in
     send tx pq-vote-key
     echo "vote key registered" ;;
   *)
-    sed -n '8,26p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,27p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

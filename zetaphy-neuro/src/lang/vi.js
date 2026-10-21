@@ -9,20 +9,29 @@ export const UI = {
   subtitle: 'Đọc và giải thích hợp đồng · cấp 1, chỉ đọc', chain: 'Chuỗi', address: 'Địa chỉ hợp đồng hoặc token', check: 'Kiểm tra hợp đồng',
   details: 'Chi tiết', reading: 'Đang đọc dữ liệu từ chuỗi…', badAddress: 'Địa chỉ không hợp lệ cho chuỗi này. Các định dạng được chấp nhận: ',
   failed: 'Không đọc được: ', footer: 'Không bao giờ yêu cầu kết nối ví và không bao giờ gửi giao dịch. Chỉ đọc dữ liệu công khai trên chuỗi. Không phải lời khuyên đầu tư.', stats: 'Thống kê sử dụng', language: 'Ngôn ngữ',
+  disclaimer: 'Đây là phân tích mã tự động, có thể kiểm chứng lại, không phải lời buộc tội bất kỳ cá nhân hay dự án nào và không phải lời khuyên đầu tư. Chủ hợp đồng có thể phản hồi hoặc yêu cầu đính chính.',
+  correction: 'Cách phản hồi hoặc yêu cầu đính chính',
+  reproduce: 'Tự kiểm tra lại',
+  reproduceHow: 'Ai cũng có thể chạy lại phép kiểm tra này bằng lệnh bên dưới (trong thư mục zetaphy-neuro). Mã phán định chỉ gồm những gì các quy tắc kết luận, nên sẽ trùng khớp khi mã và thiết lập của hợp đồng không đổi. Mã báo cáo còn gồm các con số thay đổi như tổng cung.',
+  asWritten: 'Tên và ký hiệu được hiển thị như ghi trong hợp đồng; Neuro không xác nhận chúng.',
   m: {
     chain: 'Chuỗi', address: 'Địa chỉ', proxy: 'Proxy', implementation: 'Mã thực thi', owner: 'Chủ sở hữu', functions: 'Hàm đã nhận diện', report: 'Mã báo cáo', explorer: 'Mở trên explorer', fingerprint: 'Dấu vân tay mã (để đăng ký mẫu)', unknown: 'Hàm chưa rõ tên',
     program: 'Chương trình token', mintAuth: 'Quyền tạo token (mint authority)', freezeAuth: 'Quyền đóng băng (freeze authority)', extensions: 'Tiện ích mở rộng', upgradeAuth: 'Quyền nâng cấp', none: 'không có',
     package: 'Gói', standard: 'Tiêu chuẩn', admin: 'Quản trị viên', holders: 'Số người nắm giữ', listed: 'Danh sách tonapi', raw: 'Địa chỉ gốc (raw)',
     idl: 'Anchor IDL', codeId: 'Code ID', label: 'Nhãn', creator: 'Người tạo', migrations: 'Số lần thay mã', hook: 'Hợp đồng kiểm soát chuyển token', source: 'Mã nguồn đã xác minh', format: 'Định dạng mã', delegation: 'Mã mà ví này chạy', walletCode: 'Mã ví của người nắm giữ', nearKeys: 'Khóa toàn quyền (full-access key)', codeHash: 'Mã băm của mã', cairo: 'Phiên bản Cairo', maxSupply: 'Nguồn cung tối đa', tokenId: 'Mã token',
     pool: 'Pool thanh khoản', simTax: 'Thuế khi mô phỏng (mua / bán)', simFailed: 'bán thất bại',
+    verdict: 'Mã phán định (chỉ quy tắc)', command: 'Lệnh', rule: 'quy tắc',
   },
 };
+
+// ThreatRegistry categories (src/threat-reasons.js), as neutral descriptions of what the code does.
+export const REASON = { 'cannot-sell-in-simulation': 'trong giao dịch mô phỏng, bán thất bại hoặc gần như không nhận lại gì', 'unlimited-mint': 'một địa chỉ có thể đúc thêm token không giới hạn', 'owner-can-block-transfers': 'chủ sở hữu hoặc quản trị viên có thể chặn chuyển hoặc bán', 'owner-can-move-holder-funds': 'chủ sở hữu hoặc quản trị viên có thể chuyển hoặc đốt tiền của người khác', 'same-name-as-known-token': 'cùng tên hoặc ký hiệu với một token đã biết nhưng khác địa chỉ', 'sweeps-approved-tokens': 'trong một thử nghiệm tái lập được, đã chuyển token được phê duyệt tới địa chỉ người nắm giữ không chọn', 'other': 'sự thật khác về mã (xem bằng chứng)' };
 
 export const T = {
     'no-code': () => 'Địa chỉ này không có mã hợp đồng. Có thể đây chỉ là một ví thông thường, hoặc bạn đã chọn sai chuỗi.',
     'erc20': (p) => `Token ERC-20 "${p.name ?? '?'}" (${p.symbol ?? '?'}), tổng cung ${fmtSupply(p.totalSupply, p.decimals)}.`,
     'not-erc20': () => 'Không tìm thấy các hàm ERC-20 tiêu chuẩn. Hợp đồng này có thể không phải là token.',
-    'name-has-link': () => 'Tên hoặc ký hiệu token chứa đường link hoặc tên trang web, một chiêu lừa đảo phổ biến (token "airdrop" miễn phí dụ bạn vào trang giả mạo). Đừng truy cập trang đó và đừng kết nối ví.',
+    'name-has-link': () => 'Tên hoặc ký hiệu token (như được ghi trong hợp đồng) chứa đường link hoặc tên trang web. Token được gửi đến dù bạn không yêu cầu, có link trong tên, thường được dùng để dẫn người dùng tới trang web bên ngoài. Đừng truy cập trang đó hoặc kết nối ví chỉ vì tên token.',
     'proxy-minimal': (p) => `Bản sao tối giản (EIP-1167) luôn chạy mã tại ${p.implementation}. Mã này không thể thay đổi.`,
     'proxy-upgradeable': (p) => (p.issuer
       ? `${p.issuer} có thể nâng cấp mã của hợp đồng, cách thông thường để nhà phát hành sửa lỗi hoặc bổ sung tính năng.`
@@ -44,19 +53,22 @@ export const T = {
       ? `Có thể điều chỉnh thuế (${list(p.functions)}), nhưng mẫu ${p.project} chỉ cho phép giảm thuế.`
       : `Có thể thay đổi thuế mua/bán (${list(p.functions)}). Nếu thuế bán rất cao, bán ra gần như không nhận lại được gì.`),
     'known-issuer': (p) => `Hợp đồng ${p.symbol} chính thức do ${p.issuer} phát hành (khớp với địa chỉ đã đăng ký). Các quyền bên dưới thuộc về nhà phát hành; rủi ro chính là bạn có tin nhà phát hành hay không, chứ không phải mã ẩn.`,
-    'lookalike': (p) => `Dùng ký hiệu ${p.symbol} giống token của ${p.issuer} nhưng KHÔNG phải địa chỉ chính thức (${p.official}). Có thể là hàng giả; đừng mua hoặc nhận token này cho đến khi bạn kiểm tra lại địa chỉ.`,
+    'lookalike': (p) => `Dùng ký hiệu ${p.symbol} giống token của ${p.issuer} nhưng KHÔNG phải địa chỉ đã đăng ký (${p.official}). Hợp đồng này không phải token ${p.issuer} đã đăng ký; hãy kiểm tra địa chỉ trước khi mua hoặc nhận.`,
     'template-match': (p) => `Khớp với mẫu token ${p.project} đã đăng ký (${p.name}). Các quy tắc của mẫu này chưa được kiểm toán.`,
     'template-mismatch': (p) => `Mã khớp với mẫu ${p.project} nhưng lại có một quyền mà mẫu ghi là không có (${list(p.functions)}). Thông tin mẫu có thể sai; đừng tin cho đến khi được kiểm tra.`,
     'trading-switch': (p) => `Có công tắc bật/tắt giao dịch (${list(p.functions)}). Trước khi bật, bạn có thể mua được nhưng không bán được.`,
     'can-limit': (p) => `Có thể đặt giới hạn cho mỗi giao dịch hoặc mỗi ví (${list(p.functions)}). Giới hạn quá thấp có thể khiến bạn không bán được.`,
     'fee-exempt': (p) => `Có thể miễn thuế cho một số ví được chọn (${list(p.functions)}). Thường gặp ở token có thuế, nhưng điều này cho một số ví lợi thế hơn người khác.`,
-    'network-flagged': (p) => `Mạng lưới Neuro ZETAPHY đã bỏ phiếu đánh giá mã này là nguy hiểm${p.reason ? ` (${p.reason})` : ''}. Mọi hợp đồng có cùng mã đều nhận cảnh báo tương tự.`,
+    'network-flagged': (p) => `Các runner của mạng Neuro ZETAPHY đã bỏ phiếu ghi mã này vào ThreatRegistry${p.reason ? ` (nhóm: ${REASON[p.reason] ?? p.reason})` : ''}. Mọi hợp đồng có cùng mã đều nhận cảnh báo tương tự.`,
+    'similar-flagged': (p) => `Mã này giống ${p.percent}% với mã mà các runner Neuro đã gắn cờ (dấu vân tay ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, nhóm: ${REASON[p.reason] ?? p.reason}` : ''}). Bản sao sửa nhẹ của mã đã gắn cờ thường hoạt động giống vậy.`,
+    'similar-reference': (p) => `Mã này giống ${p.percent}% với một mẫu tham chiếu trong bộ dữ liệu của Neuro (dấu vân tay ${String(p.fingerprint ?? '').slice(0, 12)}…${p.reason ? `, nhóm: ${REASON[p.reason] ?? p.reason}` : ''}). Mẫu này không phải mã đã bị các runner Neuro gắn cờ trên chuỗi. Độ tương đồng chỉ là gợi ý để xem kỹ hơn, không phải bằng chứng.`,
     'tax-wallet': (p) => `Có thể đổi ví nhận tiền thuế (${list(p.functions)}). Thường gặp ở token có thuế.`,
     'selfdestruct': () => 'Mã có chứa SELFDESTRUCT. Nếu được kích hoạt, nó có thể xóa sạch hợp đồng hoặc chuyển tiền của hợp đồng đi nơi khác.',
     'delegatecall': () => 'Mã có thể chạy mã của một hợp đồng khác như mã của chính nó (DELEGATECALL), nên mã thực sự chạy có thể khác với mã hiển thị ở đây.',
     'nothing-found': () => 'Các quy tắc này không phát hiện quyền đặc biệt hay lệnh nguy hiểm nào.',
     'unknown-functions': (p) => `Còn ${p.count} hàm mà Neuro không xác định được tên (${(p.selectors ?? []).map((x) => '0x' + x).join(', ')}), nên không rõ chúng làm gì. Khi hợp đồng vẫn còn chủ sở hữu kiểm soát, đó có thể là các hàm đặc quyền, ví dụ đặt thuế hoặc giới hạn giao dịch.`,
-    'bytecode-only': () => 'Kiểm tra từ mã trên chuỗi theo các quy tắc cố định. Các chiêu lừa đảo ẩn sau tên hàm lạ có thể bị bỏ sót. Không phải lời khuyên đầu tư.',
+    'unknown-pattern': (p) => `Neuro chưa nhận ra mẫu này, hãy cẩn thận: ${p.share}% hàm không có tên đã biết, và mã có thể chuyển coin hoặc token. Không tìm thấy gì ở đây không có nghĩa là an toàn.`,
+    'bytecode-only': () => 'Kiểm tra từ mã trên chuỗi theo các quy tắc cố định. Các quyền ẩn sau tên hàm lạ có thể bị bỏ sót. Không phải lời khuyên đầu tư.',
     // Solana
     'sol-not-found': () => 'Không có tài khoản nào tại địa chỉ này trên Solana. Có thể bạn nhập sai, hoặc đã chọn sai chuỗi.',
     'sol-not-token': (p) => `Địa chỉ này không phải là token mint trên Solana; đây là một tài khoản của chương trình ${p.owner}.`,
@@ -67,11 +79,11 @@ export const T = {
     'sol-mint-renounced': () => 'Quyền tạo token (mint authority) đã được từ bỏ: tổng cung không bao giờ tăng thêm được.',
     'sol-freeze-authority': (p) => (p.issuer
       ? `${p.issuer} có thể đóng băng tài khoản (freeze authority), thường để xử lý tiền bị đánh cắp hoặc theo lệnh pháp lý.`
-      : `Tài khoản vẫn có thể bị đóng băng (freeze authority: ${p.authority}). Tài khoản bị đóng băng không bán hay chuyển được, một chiêu lừa đảo phổ biến trên Solana.`),
+      : `Tài khoản vẫn có thể bị đóng băng (freeze authority: ${p.authority}). Tài khoản bị đóng băng không bán hay chuyển được.`),
     'sol-freeze-renounced': () => 'Quyền đóng băng (freeze authority) đã được từ bỏ: không ai có thể đóng băng token của bạn.',
     'sol-permanent-delegate': (p) => (p.issuer
       ? `${p.issuer} có thể chuyển đi hoặc hủy token từ bất kỳ tài khoản nào (permanent delegate), dùng cho việc thu giữ theo pháp luật.`
-      : `Một bên được ủy quyền vĩnh viễn (permanent delegate: ${p.delegate}) có thể chuyển đi hoặc hủy token từ MỌI ví mà không cần sự cho phép. Rất nguy hiểm.`),
+      : `Một bên được ủy quyền vĩnh viễn (permanent delegate: ${p.delegate}) có thể chuyển đi hoặc hủy token từ MỌI ví mà không cần sự cho phép. Rủi ro rất cao cho người nắm giữ.`),
     'sol-transfer-fee': (p) => `Thu phí ${p.percent}% cho mỗi lần chuyển token${p.authority ? `, và bên giữ quyền thu phí (${p.authority}) có thể tăng phí lên tới 100%` : ''}.`,
     'sol-transfer-hook': (p) => `Mỗi lần chuyển token đều chạy thêm một chương trình khác (transfer hook: ${p.programId}) có thể áp đặt quy tắc riêng, ví dụ chặn bán.`,
     'sol-default-frozen': () => 'Tài khoản mới của token này bị đóng băng ngay từ đầu: sau khi mua, bạn có thể không chuyển hay bán được cho đến khi được mở băng.',
@@ -144,7 +156,7 @@ export const T = {
       if ((p.interfaces ?? []).includes('jetton_wallet')) return 'Đây là jetton wallet của một người nắm giữ, không phải bản thân token. Hãy nhập địa chỉ chính của token (jetton master).';
       return `Hợp đồng TON này không phải là token${p.interfaces?.length ? ` (${list(p.interfaces)})` : ''}.`;
     },
-    'ton-scam': () => 'tonapi.io đánh dấu token này hoặc quản trị viên của nó có liên quan đến lừa đảo. Đừng mua hoặc nhận token này.',
+    'ton-scam': () => 'tonapi.io (bên thứ ba) đã gắn nhãn cảnh báo cho token này hoặc tài khoản quản trị của nó. Đây là nhãn của tonapi.io, không phải kết quả của lần kiểm tra mã này; hãy xem lý do trước khi mua hoặc nhận token.',
     'ton-jetton': (p) => `Token TON (jetton) "${p.name ?? '?'}" (${p.symbol ?? '?'}), tổng cung ${fmtSupply(p.totalSupply, p.decimals)}${p.holders != null ? `, ${fmtSupply(p.holders, 0)} người nắm giữ` : ''}.`,
     'ton-listed': () => 'Có trong danh sách token đã được kiểm tra của tonapi.io (whitelist). Đó là danh sách của bên thứ ba, không phải sự bảo đảm.',
     'ton-frozen': () => 'Hợp đồng token này đang bị đóng băng do chưa trả phí lưu trữ và hiện không thể sử dụng.',
@@ -176,8 +188,8 @@ export const T = {
     'eip7702': (p) => `Địa chỉ này là một ví thông thường mà chủ ví đã cài để chạy mã của hợp đồng ${p.target} (EIP-7702). Đây không phải token. Mã đó có thể làm bất cứ điều gì nó được viết ra để làm với tiền trong ví; hãy kiểm tra cả ${p.target}.`,
     'source-verified': (p) => `Có mã nguồn công khai mà Sourcify xác nhận ${p.match === 'exact' ? 'khớp từng byte với mã trên chuỗi' : 'khớp với mã trên chuỗi'} (${[p.name, p.language, p.compiler].filter(Boolean).join(', ')}). Xem tại ${p.url}`,
     'source-unverified': () => 'Không có mã nguồn trên Sourcify. Mã nguồn có thể vẫn được công bố trên explorer của chuỗi; nếu không được công bố ở đâu cả, hãy đặc biệt cẩn thận.',
-    // Trade simulation (honeypot check, src/honeypot.js)
-    'sim-cannot-sell': (p) => `Cảnh báo honeypot: khi mô phỏng giao dịch qua ${p.dex}, mua được nhưng ${p.sell == null ? 'không bán được' : `bán ra gần như không nhận lại gì (mất ${p.sell}%)`}. Nếu mua, bạn có thể không bán được. (Một số ít token chỉ chặn bán ngay sau khi mua; phép kiểm tra này không phân biệt được hai trường hợp.)`,
+    // Trade simulation (buy/sell test, src/honeypot.js)
+    'sim-cannot-sell': (p) => `Thử bán không thành công: khi mô phỏng giao dịch qua ${p.dex}, mua được nhưng ${p.sell == null ? 'không bán được' : `bán ra gần như không nhận lại gì (mất ${p.sell}%)`}. Nếu mua, bạn có thể không bán được. (Một số ít token chỉ chặn bán ngay sau khi mua; phép kiểm tra này không phân biệt được hai trường hợp.)`,
     'sim-high-tax': (p) => (p.buy >= 100 && p.sell == null
       ? `Mô phỏng mua qua ${p.dex} không nhận được token nào: toàn bộ số tiền mua đã bị lấy mất.`
       : `Mô phỏng giao dịch qua ${p.dex} bị mất ${p.buy ?? '?'}% khi mua và ${p.sell ?? '?'}% khi bán, do token thu làm thuế. Bạn nhận lại ít hơn giá hiển thị đúng bằng phần đó.`),

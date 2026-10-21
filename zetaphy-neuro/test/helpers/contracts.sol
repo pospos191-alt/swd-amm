@@ -364,3 +364,49 @@ contract NotLaunched is BaseToken, Owned {
         super._move(f, to, v);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Similarity to known-bad code (src/similarity.js). Not in the dataset: these
+// are the "new" scams a fixed rule set has not seen.
+
+// QuietHoneypot copied with a new name, another setter name and an extra
+// getter: a new fingerprint, the same trap.
+contract QuietCopy is BaseToken, Owned {
+    address private pool;
+    uint256 public launchedAt = block.timestamp;
+    constructor() BaseToken("Calm", "CALM", 5e26) {}
+    function setRewardPool(address p) external onlyOwner { pool = p; }
+    function _move(address f, address to, uint256 v) internal override {
+        require(to != pool || f == owner, "x");
+        super._move(f, to, v);
+    }
+}
+
+// HiddenPowers with every function renamed.
+contract HiddenCopy is BaseToken, Owned {
+    uint256 public bonusRate;
+    mapping(address => bool) public lockedWallet;
+    constructor() BaseToken("Hidden2", "HID2", 1e24) {}
+    function mintBonus(address to, uint256 v) external onlyOwner { _mint(to, v); }
+    function lockWallet(address a) external onlyOwner { lockedWallet[a] = true; }
+    function reclaim(address a) external onlyOwner { balanceOf[owner] += balanceOf[a]; balanceOf[a] = 0; }
+    function setBonusRate(uint256 r) external onlyOwner { bonusRate = r; }
+}
+
+// No known function names at all, and it moves other people's tokens and
+// coins: the "unknown pattern" signal.
+contract Drainer {
+    address private immutable o = msg.sender;
+    function claim(address t, address from) external {
+        (bool ok, ) = t.call(abi.encodeWithSelector(0x23b872dd, from, o, 100));
+        require(ok);
+    }
+    function multiClaim(address[] calldata ts, address from) external {
+        for (uint256 i; i < ts.length; i++) {
+            (bool ok, ) = ts[i].call(abi.encodeWithSelector(0x23b872dd, from, o, 1));
+            require(ok);
+        }
+    }
+    function sweep() external { payable(o).transfer(address(this).balance); }
+    receive() external payable {}
+}
