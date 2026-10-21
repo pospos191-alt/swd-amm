@@ -84,7 +84,9 @@ contract BridgedToken {
 ///             starts at 1,000 whole tokens (createToken), is lowered at once,
 ///             and is raised only by governance, at most x2 per step, each step
 ///             7 days after it was proposed: caps grow gradually and in public.
-///         Governance should be the chain's gov module or a multisig.
+///         Governance should be the ZetaphyTimelock (proposers: the chain's gov
+///         module or a multisig). Guardians act at once, but only to reduce risk:
+///         pause, lowerMaxDailyLimit, cancelMaxDailyLimit, disableRoute.
 contract BridgeGuard {
     struct Route {
         address adapter;      // the only caller allowed for this route
@@ -231,10 +233,40 @@ contract BridgeGuard {
         emit MaxDailyLimitSet(maxDailyLimit);
     }
 
-    function cancelMaxDailyLimit() external onlyGov {
+    /// Governance or a guardian: drop a pending raise (reducing risk never waits).
+    function cancelMaxDailyLimit() external {
+        _govOrGuardian();
         pendingMaxAt = 0;
         pendingMaxDailyLimit = 0;
         emit MaxDailyLimitCancelled();
+    }
+
+    // ---- emergency: guardians act at once, but only to reduce risk ----
+    // With governance behind a timelock (ZetaphyTimelock, 48 h), everything that
+    // raises risk or changes rules (enable a route, raise a cap, unpause, new
+    // guardians, audit, registry, governance) waits the delay. These calls only
+    // shrink what can cross, so a guardian (a multisig) makes them at once.
+
+    /// Lower the hard cap (never raise it) and drop a pending raise.
+    function lowerMaxDailyLimit(uint128 v) external {
+        _govOrGuardian();
+        if (v >= maxDailyLimit) revert CapStep(maxDailyLimit);
+        maxDailyLimit = v;
+        pendingMaxAt = 0;
+        pendingMaxDailyLimit = 0;
+        emit MaxDailyLimitSet(v);
+    }
+
+    /// Close a route (its adapter and limit are kept; enabling it again is governance's).
+    function disableRoute(bytes32 id) external {
+        _govOrGuardian();
+        Route storage r = routes[id];
+        r.enabled = false;
+        emit RouteSet(id, r.adapter, r.dailyLimit, false);
+    }
+
+    function _govOrGuardian() private view {
+        if (!guardian[msg.sender] && msg.sender != governance) revert NotGuardian();
     }
     /// The ThreatRegistry whose flags refuse coins (zero turns the check off).
     function setThreats(IContractThreats r) external onlyGov { threats = r; emit ThreatsSet(address(r)); }
