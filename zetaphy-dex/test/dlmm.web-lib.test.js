@@ -17,7 +17,7 @@ const A2 = '0x' + 'ab'.repeat(20);
 test('every DLMM selector is keccak256(signature)[0..4] and exists in the contracts the page calls', () => {
   for (const [sig, sel] of Object.entries(DSEL)) assert.equal(sel, id(sig).slice(0, 10), sig);
   const fns = new Interface([...art('ZetaphyDlmmRouter').abi, ...art('ZetaphyDlmmPair').abi, ...art('ZetaphyDlmmFactory').abi, ...art('TestToken').abi]);
-  for (const sig of Object.keys(DSEL)) assert.ok(fns.getFunction(sig.replace(/\(\(/, '((')), sig);
+  for (const sig of Object.keys(DSEL)) assert.ok(fns.getFunction(sig), sig);
   const seen = new Set();
   const errs = new Interface([...art('ZetaphyDlmmRouter').abi, ...art('ZetaphyDlmmPair').abi, ...art('ZetaphyDlmmFactory').abi].filter((x) => x.type === 'error' && !seen.has(x.name) && seen.add(x.name)));
   for (const [sel, name] of Object.entries(DLMM_ERRORS)) assert.equal(errs.getError(name).selector, sel, name);
