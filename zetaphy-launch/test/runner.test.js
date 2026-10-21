@@ -11,8 +11,8 @@ import { Wallet } from 'ethers';
 import { runSteps, newState, saveState, loadState, outputs, assertNoSecrets } from '../src/runner.js';
 import { dexWeb, nftWeb, explorerConfig, walletHtml, snapConfig, publicBase, neuroReportUrl, CONFIG_FILES } from '../src/configs.js';
 import { readDeployerKey, keyFolder } from '../src/key.js';
-import { parseArgs, governanceTarget } from '../launch.js';
-import { launchSteps, adminRoles, evmCallProposal, handoverPlan, GOV_MODULE, GOV_MODULE_BECH32, BRIDGE_GATES } from '../src/steps.js';
+import { parseArgs, governanceTarget, timelockDelay, addressList, isLoopback } from '../launch.js';
+import { launchSteps, adminRoles, guardianRoles, evmCallProposal, handoverPlan, GOV_MODULE, GOV_MODULE_BECH32, BRIDGE_GATES, DEFAULT_DELAY, MIN_DELAY, TIMELOCK_ROLES } from '../src/steps.js';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const tmp = () => mkdtempSync(join(tmpdir(), 'zetaphy-launch-unit-'));
@@ -119,10 +119,13 @@ test('the state file holds no secrets', () => {
 
 test('the real step list: order puts configuration before the handover, which is opt-in', () => {
   const names = launchSteps().map((s) => s.name);
-  assert.deepEqual(names, ['neuro', 'skill', 'threats', 'reports', 'identity', 'vault', 'pq', 'stable', 'compute', 'bridge', 'dex', 'nft', 'wire', 'protect', 'configs', 'snap', 'handover']);
+  assert.deepEqual(names, ['neuro', 'skill', 'threats', 'reports', 'identity', 'vault', 'pq', 'stable', 'compute', 'bridge', 'dex', 'nft', 'oracle', 'wire', 'protect', 'configs', 'snap', 'timelock', 'handover']);
   const byName = Object.fromEntries(launchSteps().map((s) => [s.name, s]));
   assert.notEqual(byName.handover.when({ handover: false }), true);
   assert.equal(byName.handover.when({ handover: true }), true);
+  assert.notEqual(byName.timelock.when({ handover: false }), true, 'the timelock is deployed for the handover');
+  assert.equal(byName.timelock.when({ handover: true }), true);
+  assert.ok(names.indexOf('timelock') === names.indexOf('handover') - 1, 'right before the handover');
   assert.notEqual(byName.bridge.when({}), true, 'the bridge is off by default');
   assert.match(byName.bridge.describe, /deployed CLOSED/, 'the launch deploys the bridge closed, never open');
   // Every artifact a step prices (the cost estimate) is committed.
@@ -231,18 +234,42 @@ test('the deployer key: from a 0600 file or the environment; never in an error m
   assert.equal(existsSync(kf.dir), false);
 });
 
-test('handover: roles, the gov proposal for the DEX, the printed plan', () => {
-  const o = { neuroControl: A(1), threatRegistry: A(2), stableGateway: A(3), dex: { contracts: { factory: A(4) } }, nft: { marketplace: A(5) } };
+test('handover: every admin role to the timelock (the DEX factory two-step), guardians, the printed plan', () => {
+  const o = { neuroControl: A(1), threatRegistry: A(2), stableGateway: A(3), dex: { contracts: { factory: A(4) } }, nft: { marketplace: A(5) },
+    bridgeGuard: A(6), bridgeAirlock: A(7), oracle: A(8), pythRelay: A(9), rewardVault: A(10), neuroIdentity: A(11) };
   const roles = adminRoles(o);
-  assert.deepEqual(roles.map((r) => r.address), [A(1), A(2), A(3), A(5), A(4)]);
+  assert.deepEqual(roles.map((r) => r.address), [A(1), A(2), A(10), A(3), A(11), A(6), A(7), A(8), A(9), A(5), A(4)]);
   assert.equal(roles.find((r) => r.address === A(4)).twoStep, true);
+  assert.deepEqual(roles.map((r) => r.read), ['governance', 'governance', 'governance', 'owner', 'admin', 'governance', 'governance', 'governance', 'governance', 'governance', 'governance']);
+  assert.deepEqual(guardianRoles(o).map((r) => r.address), [A(6), A(1), A(2), A(8), A(3)], 'the emergency switches: bridge, Neuro, holds, price feeds, the gateway');
   const p = evmCallProposal({ to: A(4), data: '0x0e18b681', title: 't', summary: 's' });
   assert.equal(p.messages[0]['@type'], '/zetaphy.pq.v1.MsgEVMCall');
   assert.equal(p.messages[0].Sender, GOV_MODULE_BECH32);
   assert.equal(p.messages[0].Data, Buffer.from('0e18b681', 'hex').toString('base64'));
   const state = { chainId: 77390, steps: { x: { doneAt: 't', out: o } } };
-  const plan = handoverPlan({ governance: null, address: A(9), publicRpc: 'https://h' }, state);
+  const plan = handoverPlan({ governance: null, address: A(99), publicRpc: 'https://h' }, state);
   assert.match(plan, /handover = yes/);
-  assert.match(plan, new RegExp(`gov\\.sh neuro pause ${A(1)}`));
-  assert.match(plan, /dex-accept-governance\.json/);
+  assert.match(plan, /ZetaphyTimelock \(48 h delay\)/);
+  assert.match(plan, /guardian = 0x<multisig>/);
+  assert.match(plan, /zetaphy timelock schedule/);
+  assert.match(plan, /zetaphy timelock execute <id>/);
+  assert.match(plan, new RegExp(`DEX factory .* ${A(4)}`));
+  assert.equal(TIMELOCK_ROLES.proposer, '0xb09aa5aeb3702cfd50b6b62bc4532604938f21248a27a1d5ca736082b6819cc1');
+});
+
+test('timelock options: 48 h by default, never below 24 h outside a local devnet; address lists', () => {
+  assert.equal(DEFAULT_DELAY, 172800);
+  assert.equal(MIN_DELAY, 86400);
+  assert.equal(timelockDelay(undefined, false), 172800);
+  assert.equal(timelockDelay('86400', false), 86400);
+  assert.throws(() => timelockDelay('3600', false), /only with --devnet/);
+  assert.equal(timelockDelay('30', true), 30);
+  assert.throws(() => timelockDelay('-1', true), /seconds/);
+  assert.throws(() => timelockDelay(String(31 * 86400), true), /at most 30 days/);
+  assert.equal(isLoopback('http://127.0.0.1:8545'), true);
+  assert.equal(isLoopback('https://1-2-3-4.sslip.io'), false);
+  assert.deepEqual(addressList(`${A(1).toLowerCase()}, ${A(2)}`, 'x'), [A(1), A(2)]);
+  assert.throws(() => addressList('0x12', '--guardian'), /--guardian/);
+  assert.deepEqual(addressList(undefined, 'x'), []);
+  assert.deepEqual(parseArgs(['--devnet', '--handover', '--guardian', A(1)]), { devnet: true, handover: true, guardian: A(1) });
 });
