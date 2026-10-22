@@ -196,6 +196,8 @@ Framework Preset **Other**, ไม่ต้องตั้ง Build/Output (ม�
     ก่อน handover ตรวจว่าไม่มี: `zetaphyd q authz grants-by-granter <ที่อยู่ zetaphy1… ของ deployer>` ต้องว่าง; ใช้ key ของ deployer เฉพาะกับ launch เท่านั้น และหลัง handover ถือว่า key นี้เลิกใช้แล้ว
 
 1. เตรียม multisig ฉุกเฉิน (guardian): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` หรือ Safe (ดู "multisig + hardware wallet" ใน `zetaphy-network/README.md`) แต่ละ owner ใช้ hardware wallet ของตัวเอง
+   - หรือให้ workflow สร้างให้: เว้น `guardian` ว่าง แล้วใส่ `guardian_owners` = `0xA,0xB` (SimpleMultisig ใหม่ ต้องเซ็น 2 ราย deployer เป็นผู้ deploy แต่ไม่ได้เป็นเจ้าของ ที่อยู่เก็บใน state ชื่อ `guardianMultisig`)
+   - เฉพาะ testnet: ใช้ 2 บัญชีใน MetaMask เดียวกันได้ ก่อน mainnet guardian ต้องเป็นคนต่างกัน 3 คนขึ้นไปที่ใช้ hardware wallet (ข้อ 4 ด้านล่าง)
 2. **Actions → launch-testnet → Run workflow**: `rpc` เดิม, `dry_run` = **no**, `governance` = **gov** (หรือ `0x<multisig>`), `guardian` = **0x<multisig ฉุกเฉิน>**, `handover` = **yes**
    - deployer ส่งธุรกรรมเองทั้งหมด (ไม่ต้องโหวต) แล้ว merge PR (state มีที่อยู่ `timelock`)
 3. **เปลี่ยนค่าหลังจากนี้ (ทุกอย่างทำในเบราว์เซอร์):** **Actions → timelock → Run workflow**
@@ -334,7 +336,7 @@ workflow เรียก `node zetaphy-launch/launch.js` (โค้ดอ่า�
 - key: รับจากไฟล์ (`--key-file`, chmod 600) หรือ env เท่านั้น ไม่รับบนบรรทัดคำสั่ง ไม่พิมพ์ ไม่เขียนลง state; workflow เขียน secret ลงไฟล์ 0600 ใน `$RUNNER_TEMP` แล้วลบทิ้งท้าย run
 - ขั้น `oracle`: TwapRecorder + ZetaphyPythRelay + ZetaphyOracle (ZETAPHY/USD จากพูล WZETAPHY/tUSD ของ DEX, เติม Pyth ด้วย `--pyth-zeta-feed`) แล้วให้ StableGateway คิดราคาผ่าน oracle
   ราคามีหลังหน้าต่าง TWAP เต็ม (ต้องมีคน poke เช่น `zetaphy relay start --poke-oracle 60`) · `--stable-testnet-price 0.01` = ทางสำรอง testnet ราคาคงที่ (ติดป้าย ปิดได้ผ่าน timelock)
-- ขั้น `timelock` + `handover` (เฉพาะ `--handover`): ดูข้อ 8 · `--guardian` บังคับ · `--timelock-delay` ค่าเริ่ม 172800 (ต่ำกว่า 86400 ได้เฉพาะ `--devnet` กับ RPC 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
+- ขั้น `timelock` + `handover` (เฉพาะ `--handover`): ดูข้อ 8 · ต้องมี `--guardian` (multisig ที่มีอยู่) หรือ `--guardian-owners 0xA,0xB [--guardian-threshold 2]` (ขั้น `guardian` deploy SimpleMultisig ใหม่) · `--timelock-delay` ค่าเริ่ม 172800 (ต่ำกว่า 86400 ได้เฉพาะ `--devnet` กับ RPC 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
 - ทดสอบ: `cd zetaphy-launch && npm test` (ตัวรันขั้น, state, ตัวเขียน config, ตัวเลือก timelock) และ `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (เชนจริงบนเครื่อง CI: deploy ทั้งหมดรวม DLMM, oracle, smoke DEX/NFT/Neuro, handover ให้ timelock + ตรวจบนเชน, guardian หยุดทันที, โหวตตั้งเวลาแล้วใครก็ execute หลังครบเวลา, ตัวเฝ้ารายงาน)
 
 ## 17. ความปลอดภัยในแกนกลางของเชน (หลัง reset genesis)

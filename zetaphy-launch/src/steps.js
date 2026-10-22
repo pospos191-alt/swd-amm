@@ -388,6 +388,24 @@ export function launchSteps() {
       },
     },
     {
+      name: 'guardian',
+      describe: 'the emergency multisig (SimpleMultisig, --guardian-owners / --guardian-threshold): deployed by the deployer, which holds no role in it',
+      artifacts: [['zetaphy-network', 'SimpleMultisig']],
+      when: (ctx) => (ctx.guardianOwners?.length ? true : 'no --guardian-owners (pass --guardian 0x<multisig> to use an existing one)'),
+      async run(ctx) {
+        const owners = ctx.guardianOwners;
+        if (owners.some((x) => same(x, ctx.address))) throw new Error('--guardian-owners: the deployer key cannot own the guardian');
+        const a = NET('SimpleMultisig');
+        const k = await new ContractFactory(a.abi, a.bytecode, signer(ctx)).deploy(owners, ctx.guardianThreshold);
+        await k.deploymentTransaction().wait();
+        const m = new Contract(await k.getAddress(), a.abi, ctx.provider);
+        for (const x of owners) if (!(await m.isOwner(x))) throw new Error(`guardian multisig: ${x} is not an owner`);
+        if (Number(await m.threshold()) !== ctx.guardianThreshold) throw new Error('guardian multisig: wrong threshold');
+        ctx.log(`  guardian multisig ${await k.getAddress()}: ${ctx.guardianThreshold} of ${owners.length} (${owners.join(', ')})`);
+        return { ...(await haveCode(ctx, { guardianMultisig: await k.getAddress() })), guardianOwners: owners, guardianThreshold: ctx.guardianThreshold };
+      },
+    },
+    {
       name: 'timelock',
       describe: 'ZetaphyTimelock (OpenZeppelin TimelockController 5.4.0): deployed with the deployer as its only proposer and a zero delay; the handover gives it every admin role, its real proposers and the delay, then the deployer renounces',
       artifacts: [['zetaphy-network', 'ZetaphyTimelock']],
@@ -586,8 +604,9 @@ async function cleanBootstrap(ctx, state, o, tl, own, realDelay, when) {
 async function handover(ctx, state) {
   const target = ctx.governance;
   if (!target || same(target, ctx.address)) throw new Error('--handover needs --governance gov or --governance 0x<multisig>');
-  if (!ctx.guardian) throw new Error('--handover needs --guardian 0x<emergency multisig>');
   const o = outputs(state);
+  if (!ctx.guardian && o.guardianMultisig) ctx.guardian = o.guardianMultisig;
+  if (!ctx.guardian) throw new Error('--handover needs --guardian 0x<emergency multisig> (or --guardian-owners)');
   if (!o.timelock) throw new Error('no timelock yet: the timelock step runs before the handover');
   const s = signer(ctx);
   const tl = new Contract(o.timelock, NET('ZetaphyTimelock').abi, s);

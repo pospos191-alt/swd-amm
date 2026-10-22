@@ -277,6 +277,9 @@ test('handler: strict input validation, same-site only, POST only', async () => 
   assert.equal((await ask({ chain: 'bsc', address: ADDR }, { method: 'GET' })).status, 405);
   assert.equal((await ask({ chain: 'bsc', address: ADDR }, { origin: 'https://evil.example', host: 'neuro.example' })).status, 403);
   assert.equal((await ask({ chain: 'bsc', address: ADDR }, { origin: 'https://neuro.example', host: 'neuro.example' })).status, 200);
+  // the hub, which proxies /api/* here, is let in; an allowed list never opens it to others
+  assert.equal((await ask({ chain: 'bsc', address: ADDR }, { origin: 'https://app.example', host: 'neuro.example', allowedHosts: ['app.example'] })).status, 200);
+  assert.equal((await ask({ chain: 'bsc', address: ADDR }, { origin: 'https://evil.example', host: 'neuro.example', allowedHosts: ['app.example'] })).status, 403);
   assert.ok(!calls.some((m) => m !== 'eth_getCode' && m !== 'eth_getStorageAt' && m !== 'eth_call'));
   // Mixed-case EVM address is fine; non-EVM chains have nothing to match.
   assert.equal((await ask({ chain: 'bsc', address: ADDR.toUpperCase().replace('0X', '0x') })).status, 200);

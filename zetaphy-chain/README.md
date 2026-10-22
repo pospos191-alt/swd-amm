@@ -187,6 +187,9 @@ then run the same setup command again with `PUBLIC_HOST=rpc.<your domain>` added
 and gets the certificate; `keplr.json` and `evm-chain.json` use the new name. Running the script again keeps the chain,
 keys and genesis.
 
+WebSocket: `wss://<name>/ws` (EVM JSON-RPC, e.g. `eth_subscribe` for new blocks and logs), forwarded by Caddy to 8546 on the machine.
+A node set up before this version gets it by running the same setup command again.
+
 ## Security (testnet only)
 
 - Coins on this chain have no value. Do not advertise or sell them

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="th" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="ZETAPHY: wallet, swap, staking and voting, NFT, explorer and Neuro contract checks on one page.">
+<meta name="theme-color" content="#05070a">
+<title>ZETAPHY</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="./hub.css">
+<script type="module" src="./hub.js"></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="side" aria-label="ZETAPHY">
+    <a class="brand" href="?tab=home" data-tab="home">
+      <img src="./logo.svg" alt="" width="34" height="34">
+      <span class="brand-name">ZETAPHY</span>
+    </a>
+    <nav class="tabs" id="tabs" aria-label="apps">
+      <!-- filled by hub.js from TABS -->
+    </nav>
+    <div class="side-foot">
+      <span class="net" id="net" data-tip-key="tipNet"><i class="dot"></i><span id="net-text">…</span></span>
+    </div>
+  </aside>
+
+  <header class="top">
+    <div class="title">
+      <h1 id="page-title">ZETAPHY</h1>
+      <span class="info" id="page-info" tabindex="0" role="note" aria-label="info">i</span>
+      <span class="badge" data-tip-key="tipTestnet" tabindex="0">Testnet</span>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="btn ghost" id="add-net" data-tip-key="tipAddNet"><span data-i18n="addNet">เพิ่มเครือข่าย</span></button>
+      <button type="button" class="btn ghost" id="lang" aria-label="language">EN</button>
+    </div>
+  </header>
+
+  <main class="stage" id="stage">
+    <!-- Overview -->
+    <section class="panel" id="panel-home" hidden>
+      <div class="stats">
+        <div class="stat" data-tip-key="tipHeight" tabindex="0"><span class="k" data-i18n="height">บล็อกล่าสุด</span><span class="v mono" id="s-height">–</span></div>
+        <div class="stat" data-tip-key="tipBlockTime" tabindex="0"><span class="k" data-i18n="blockTime">เวลาต่อบล็อก</span><span class="v mono" id="s-time">–</span></div>
+        <div class="stat" data-tip-key="tipValidators" tabindex="0"><span class="k" data-i18n="validators">Validator</span><span class="v mono" id="s-vals">–</span></div>
+        <div class="stat" data-tip-key="tipBonded" tabindex="0"><span class="k" data-i18n="bonded">ZETAPHY ที่ stake</span><span class="v mono" id="s-bonded">–</span></div>
+      </div>
+      <div class="home-grid">
+        <div class="card start">
+          <h2 data-i18n="startTitle">เริ่มใช้งาน</h2>
+          <ol class="steps">
+            <li>
+              <span class="step-n">1</span>
+              <div class="step-body">
+                <div class="step-head"><b data-i18n="step1">เพิ่มเครือข่าย ZETAPHY</b><span class="info" data-tip-key="tipStep1" tabindex="0">i</span></div>
+                <div class="row">
+                  <button type="button" class="btn" id="add-metamask">MetaMask</button>
+                  <button type="button" class="btn ghost" id="add-keplr">Keplr</button>
+                </div>
+              </div>
+            </li>
+            <li>
+              <span class="step-n">2</span>
+              <div class="step-body">
+                <div class="step-head"><b data-i18n="step2">รับ ZETAPHY ทดลอง</b><span class="info" data-tip-key="tipFaucet" tabindex="0">i</span></div>
+                <form class="row" id="faucet-form" autocomplete="off">
+                  <input id="faucet-addr" class="mono" spellcheck="false" placeholder="0x… / zetaphy1…" aria-label="address">
+                  <button type="submit" class="btn" data-i18n="faucetBtn">รับ</button>
+                </form>
+                <div class="msg" id="faucet-msg" role="status"></div>
+              </div>
+            </li>
+            <li>
+              <span class="step-n">3</span>
+              <div class="step-body">
+                <div class="step-head"><b data-i18n="step3">ลองใช้งาน</b></div>
+                <div class="chips" id="quick"></div>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="card blocks">
+          <div class="card-head"><h2 data-i18n="latestBlocks">บล็อกล่าสุด</h2><a href="?tab=explorer" data-tab="explorer" class="more" data-i18n="viewAll">ดูทั้งหมด</a></div>
+          <table class="tbl">
+            <thead><tr><th data-i18n="colHeight">บล็อก</th><th data-i18n="colTxs">ธุรกรรม</th><th data-i18n="colProposer">ผู้สร้าง</th><th data-i18n="colAge">เมื่อ</th></tr></thead>
+            <tbody id="blocks"><tr><td colspan="4" class="dim">…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="card net-card">
+          <h2 data-i18n="network">เครือข่าย</h2>
+          <dl class="kv" id="endpoints"></dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stake & vote (native: the staking / distribution / gov precompiles through MetaMask) -->
+    <section class="panel" id="panel-stake" hidden>
+      <div class="stake-grid">
+        <div class="card vals">
+          <div class="card-head"><h2 data-i18n="validatorsTitle">Validator</h2><span class="info" data-tip-key="tipValList" tabindex="0">i</span></div>
+          <div class="scroll">
+            <table class="tbl">
+              <thead><tr><th>#</th><th data-i18n="colName">ชื่อ</th><th data-i18n="colPower">พลังโหวต</th><th data-i18n="colCommission">ค่าธรรมเนียม</th><th></th></tr></thead>
+              <tbody id="vals"><tr><td colspan="5" class="dim">…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="col">
+          <div class="card mine">
+            <div class="card-head"><h2 data-i18n="myStake">การ stake ของฉัน</h2><span class="info" data-tip-key="tipMyStake" tabindex="0">i</span></div>
+            <div id="mine-body">
+              <button type="button" class="btn" id="connect" data-i18n="connect">เชื่อมต่อ MetaMask</button>
+            </div>
+          </div>
+          <div class="card props">
+            <div class="card-head"><h2 data-i18n="proposals">ข้อเสนอ (โหวต)</h2><span class="info" data-tip-key="tipProposals" tabindex="0">i</span></div>
+            <div class="scroll"><ul class="plist" id="props"><li class="dim">…</li></ul></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- The apps (same origin, under /wallet/ /swap/ /nft/ /explorer/ /neuro/): iframes made by hub.js -->
+    <div class="frames" id="frames"></div>
+  </main>
+</div>
+
+<div class="tip" id="tip" role="tooltip" hidden></div>
+
+<dialog id="amount-dlg">
+  <form method="dialog" id="amount-form">
+    <h3 id="amount-title"></h3>
+    <p class="dim small" id="amount-sub"></p>
+    <div class="row">
+      <input id="amount" class="mono" inputmode="decimal" autocomplete="off" placeholder="0.0" aria-label="amount">
+      <span class="unit">ZTPHY</span>
+    </div>
+    <p class="msg" id="amount-msg" role="status"></p>
+    <div class="row end">
+      <button type="button" class="btn ghost" value="cancel" id="amount-cancel" data-i18n="cancel">ยกเลิก</button>
+      <button type="submit" class="btn" id="amount-ok" data-i18n="confirm">ยืนยัน</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

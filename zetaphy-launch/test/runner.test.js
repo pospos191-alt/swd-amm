@@ -11,7 +11,7 @@ import { Wallet } from 'ethers';
 import { runSteps, newState, saveState, loadState, outputs, assertNoSecrets } from '../src/runner.js';
 import { dexWeb, nftWeb, explorerConfig, walletHtml, snapConfig, publicBase, neuroReportUrl, CONFIG_FILES } from '../src/configs.js';
 import { readDeployerKey, keyFolder } from '../src/key.js';
-import { parseArgs, governanceTarget, timelockDelay, addressList, isLoopback } from '../launch.js';
+import { parseArgs, governanceTarget, timelockDelay, addressList, isLoopback, main } from '../launch.js';
 import { launchSteps, adminRoles, guardianRoles, evmCallProposal, handoverPlan, GOV_MODULE, GOV_MODULE_BECH32, BRIDGE_GATES, DEFAULT_DELAY, MIN_DELAY, TIMELOCK_ROLES,
   missingNonces, sortOperations, isHandoverShape, handoverSalt } from '../src/steps.js';
 import { Interface } from 'ethers';
@@ -121,13 +121,16 @@ test('the state file holds no secrets', () => {
 
 test('the real step list: order puts configuration before the handover, which is opt-in', () => {
   const names = launchSteps().map((s) => s.name);
-  assert.deepEqual(names, ['neuro', 'skill', 'threats', 'reports', 'identity', 'vault', 'pq', 'stable', 'compute', 'bridge', 'dex', 'dlmm', 'nft', 'oracle', 'wire', 'protect', 'configs', 'snap', 'timelock', 'handover']);
+  assert.deepEqual(names, ['neuro', 'skill', 'threats', 'reports', 'identity', 'vault', 'pq', 'stable', 'compute', 'bridge', 'dex', 'dlmm', 'nft', 'oracle', 'wire', 'protect', 'configs', 'snap', 'guardian', 'timelock', 'handover']);
   const byName = Object.fromEntries(launchSteps().map((s) => [s.name, s]));
   assert.notEqual(byName.handover.when({ handover: false }), true);
   assert.equal(byName.handover.when({ handover: true }), true);
   assert.notEqual(byName.timelock.when({ handover: false }), true, 'the timelock is deployed for the handover');
   assert.equal(byName.timelock.when({ handover: true }), true);
   assert.ok(names.indexOf('timelock') === names.indexOf('handover') - 1, 'right before the handover');
+  assert.notEqual(byName.guardian.when({}), true, 'the guardian multisig is deployed only with --guardian-owners');
+  assert.equal(byName.guardian.when({ guardianOwners: ['0x' + '1'.repeat(40), '0x' + '2'.repeat(40)] }), true);
+  assert.ok(names.indexOf('guardian') < names.indexOf('handover'), 'the guardian exists before the handover names it');
   assert.notEqual(byName.bridge.when({}), true, 'the bridge is off by default');
   assert.match(byName.bridge.describe, /deployed CLOSED/, 'the launch deploys the bridge closed, never open');
   // Every artifact a step prices (the cost estimate) is committed.
@@ -319,3 +322,15 @@ test('handover audit: only the launch\'s batch may be left from the zero-delay b
   assert.notEqual(handoverSalt(77390, T), handoverSalt(77390, A(78)));
 });
 const ZERO_ROLE = '0x' + '00'.repeat(32);
+
+test('--guardian-owners: 2+ distinct owners, threshold 2..owners, not together with --guardian (checked before any key is read)', async () => {
+  const A = '0x' + 'a'.repeat(40), B = '0x' + 'b'.repeat(40);
+  const run = (...a) => main(['--rpc', 'https://rpc.example.com', '--governance', 'gov', '--handover', ...a], {}, () => {});
+  await assert.rejects(run(), /--handover needs --guardian 0x<emergency multisig> or --guardian-owners/);
+  await assert.rejects(run('--guardian-owners', A), /2 to 20 owners/);
+  await assert.rejects(run('--guardian-owners', `${A},${A}`), /listed twice/);
+  await assert.rejects(run('--guardian-owners', `${A},${B}`, '--guardian-threshold', '3'), /threshold of at least 2/);
+  await assert.rejects(run('--guardian-owners', `${A},${B}`, '--guardian-threshold', '1'), /threshold of at least 2/);
+  await assert.rejects(run('--guardian-owners', `${A},${B}`, '--guardian', A), /pass one/);
+  await assert.rejects(run('--guardian-owners', 'nope'), /0x addresses/);
+});
