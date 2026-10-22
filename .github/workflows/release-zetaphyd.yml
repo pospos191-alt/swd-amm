@@ -1,0 +1,103 @@
+# Prebuilt zetaphyd: builds the chain binary exactly as setup-node.sh does on
+# a server (pinned Cosmos EVM commit + the embedded ZETAPHY patch, `make
+# install`), for Ubuntu 24.04 on x86_64 and ARM64, and publishes it with its
+# SHA-256 as a GitHub Release named after the setup-node.sh fingerprint.
+#
+# Small machines (1 GB RAM) need hours to compile, or never finish linking.
+# They can install this binary instead: setup-node.sh takes it through
+# ZETAPHYD_BIN=<file> (see zetaphy-chain/README.md, "ไฟล์เชนสำเร็จรูป").
+# Anyone can rebuild from the same sources and compare the hash.
+name: release-zetaphyd
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['zetaphy-chain/setup-node.sh']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-zetaphyd
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      SRC: ${{ github.workspace }}/../cosmos-evm
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.9'
+          cache: false
+
+      - name: Pinned Cosmos EVM source + the ZETAPHY patch
+        run: |
+          tag=$(sed -n 's/^COSMOS_EVM_TAG="\(.*\)"/\1/p' zetaphy-chain/setup-node.sh)
+          commit=$(sed -n 's/^COSMOS_EVM_COMMIT="\(.*\)"/\1/p' zetaphy-chain/setup-node.sh)
+          git clone -q --depth 1 --branch "$tag" https://github.com/cosmos/evm.git "$SRC"
+          [ "$(git -C "$SRC" rev-parse HEAD)" = "$commit" ]
+          bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
+
+      - name: Build (make install, as on the server)
+        working-directory: ${{ env.SRC }}
+        run: |
+          make install
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$(go env GOPATH)/bin/evmd" "$RUNNER_TEMP/out/zetaphyd-linux-${{ matrix.arch }}"
+          "$RUNNER_TEMP/out/zetaphyd-linux-${{ matrix.arch }}" version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zetaphyd-linux-${{ matrix.arch }}
+          path: ${{ runner.temp }}/out/zetaphyd-linux-${{ matrix.arch }}
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Publish the release (setup-node.sh fingerprint as the tag)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          short=$(sha256sum zetaphy-chain/setup-node.sh | cut -c1-12)
+          tag="zetaphyd-$short"
+          cd out
+          sha256sum zetaphyd-linux-* > SHA256SUMS
+          cat SHA256SUMS
+          {
+            echo "zetaphyd built by GitHub Actions from \`zetaphy-chain/setup-node.sh\` $short (commit ${GITHUB_SHA})."
+            echo
+            echo "Ubuntu 24.04, x86_64 (amd64) and ARM64. Install on a node with ZETAPHYD_BIN=<file> (see zetaphy-chain/README.md)."
+            echo
+            echo '```'
+            cat SHA256SUMS
+            echo '```'
+          } > notes.md
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" zetaphyd-linux-* SHA256SUMS --clobber
+          else
+            gh release create "$tag" zetaphyd-linux-* SHA256SUMS --title "zetaphyd $short" --notes-file notes.md --target "$GITHUB_SHA"
+          fi
