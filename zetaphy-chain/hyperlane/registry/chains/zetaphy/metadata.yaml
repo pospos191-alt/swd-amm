@@ -1,0 +1,24 @@
+# ZETAPHY testnet for Hyperlane (registry format: @hyperlane-xyz/cli 45.0.1 examples/chain-config.yaml)
+name: zetaphy
+displayName: ZETAPHY Testnet
+chainId: 77390
+domainId: 77390
+protocol: ethereum
+isTestnet: true
+rpcUrls:
+  - http: https://rpc.sawasdeecoin.com
+    pagination:
+      maxBlockRange: 500   # the node's eth_getLogs block-range-cap
+nativeToken:
+  name: ZETAPHY
+  symbol: ZTPHY
+  decimals: 18
+blocks:
+  confirmations: 1
+  reorgPeriod: 1           # CometBFT: final at once
+  estimateBlockTime: 5
+blockExplorers:
+  - name: ZETAPHY Explorer
+    url: https://explorer.sawasdeecoin.com
+    apiUrl: https://explorer.sawasdeecoin.com/api
+    family: other
