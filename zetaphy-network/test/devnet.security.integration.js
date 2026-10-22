@@ -85,7 +85,17 @@ async function refused(p, re) {
   assert.match(String(err.error?.message ?? err.info?.error?.message ?? err.shortMessage ?? err.message), re);
   return err;
 }
-const fund = async (to, amount = '20') => (await actors.deployer.connect(provider).sendTransaction({ to, value: parseEther(amount) })).wait();
+// Signed here and followed by its hash: right after the chain starts, the
+// node can answer "nonce too low" for this very transaction (it already took
+// it), so that reply is not a failure; the receipt decides.
+async function fund(to, amount = '20') {
+  const w = actors.deployer.connect(provider);
+  const raw = await w.signTransaction(await w.populateTransaction({ to, value: parseEther(amount) }));
+  try { await provider.broadcastTransaction(raw); } catch (e) { if (e.code !== 'NONCE_EXPIRED') throw e; }
+  const r = await provider.waitForTransaction(keccak256(raw), 1, 60_000);
+  if (r?.status !== 1) throw new Error(`funding ${to} failed`);
+  return r;
+}
 const nextBlock = (n = 2) => sleep(1300 * n);
 async function height() { return Number(await provider.getBlockNumber()); }
 /** A Cosmos tx's result in its block (code, raw_log), once it is in one. */
