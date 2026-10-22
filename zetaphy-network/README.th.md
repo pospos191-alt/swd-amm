@@ -276,6 +276,22 @@ zetaphy bridge pause        # guardian: หยุดทุกอย่างท�
 zetaphy bridge close        # governance: ปิด route
 ```
 
+**โหมดทดสอบ (เหรียญทดลองเท่านั้น ไม่ผ่าน audit):** `--testnet` ใช้ได้เฉพาะ ZETAPHY testnet สาธารณะ CLI ตรวจว่า chain id เป็น 77390 และบล็อก 1 เป็น `0xbfda796f…754295a`
+- เชนอื่นถูกปฏิเสธ และใช้คู่กับ `--devnet` หรือ `--i-understand-real-funds` ไม่ได้
+- **ผ่อนเฉพาะ:**
+  - audit ใช้ประกาศ testnet [docs/BRIDGE-TESTNET.md](../docs/BRIDGE-TESTNET.md) (url ตรงตัว และ sha256 ของไฟล์)
+  - คนรันร่าง Neuro 1 คนพอ
+  - multisig ของ guardian และ governance มี owner 2 คนพอ (threshold ยังต้อง 2 ขึ้นไป และห้ามมี key ของคน deploy)
+  - ใช้แทน `--i-understand-real-funds`
+- **เข้มขึ้น:** เพดานต่อวันไม่เกิน **100 โทเคน** แม้ใส่ `--raise-cap`
+- **ข้อที่เหลือยังบังคับครบ:** lane อิสระ 2 สายขึ้นไป และเพดานแข็งบนเชน
+- ทุกบรรทัดที่พิมพ์ขึ้นต้นด้วย `[TESTNET (not audited)]`
+- mainnet ต้องมี audit จริงและผ่านทุกประตู
+```
+zetaphy bridge open --testnet --audit-report https://github.com/pospos191-alt/swd-amm/blob/main/docs/BRIDGE-TESTNET.md \
+  --audit-sha256 $(sha256sum docs/BRIDGE-TESTNET.md | cut -d' ' -f1) --daily-limit 100
+```
+
 ### เพดานโตทีละขั้น
 
 - `maxDailyLimit` เริ่มที่ **1,000 โทเคน** (ตามทศนิยมของโทเคน) ตอน `createToken` เป็นเพดานแข็งของทุก route (route ที่ตั้งไว้สูงกว่าก็ใช้เพดานนี้)

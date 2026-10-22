@@ -6,7 +6,7 @@ import { Contract, Wallet, NonceManager, getAddress, parseUnits, formatUnits } f
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { timelockHint } from './timelockcli.js';
-import { devnetOf, auditArgs, roleChecks, laneChecks, capProblems, runnerProblems, STARTER_UNITS, MIN_RUNNERS, GOV_MODULE } from './bridgegate.js';
+import { devnetOf, testnetOf, testnetWrite, testnetAuditProblems, auditArgs, roleChecks, laneChecks, capProblems, runnerProblems, STARTER_UNITS, MIN_RUNNERS, TESTNET_MIN_RUNNERS, TESTNET_DAILY_CAP, GOV_MODULE } from './bridgegate.js';
 import { evaluate, newState, report, snapshotOf, readEvents, readLocks, loadMonitorConfig, DEFAULTS, parseThresholds, parseWatchlist, markerKeyOf,
   stateKeyOf, sealState, openState, applyMarks, countsLine, issueText, oracleFeedsOf, govTimelockEvents, readGovProposals, fillEvmCalls } from './monitor.js';
 
@@ -42,16 +42,20 @@ function bridgeContracts(s, opt, runner) {
 
 /** Every gate, read from the chain. Returns { problems, warnings, lanes, roles, ... }; prints the table for a human. */
 export async function openGates({ provider, guard, airlock, jobs, deployer, rpc, opt, write }) {
+  const testnet = await testnetOf(provider, opt); // throws on a chain that is not the public testnet
+  if (testnet) write = testnetWrite(write);
   const devnet = devnetOf(rpc, opt);
   const allowEoa = !!opt['allow-eoa-for-testing'];
   const problems = [], warnings = [];
-  // audit
+  // audit (on the testnet: the testnet notice, docs/BRIDGE-TESTNET.md)
   let audit = null;
   try { audit = auditArgs(opt['audit-report'], opt['audit-sha256']); } catch (e) { problems.push(e.message); }
+  if (testnet) problems.push(...testnetAuditProblems(audit));
   // runners
-  const min = Number(opt['min-runners'] ?? MIN_RUNNERS);
+  const floor = testnet ? TESTNET_MIN_RUNNERS : MIN_RUNNERS;
+  const min = Number(opt['min-runners'] ?? floor);
   if (!Number.isInteger(min) || min < 1) problems.push('--min-runners: a whole number');
-  else if (min < MIN_RUNNERS && !devnet) problems.push(`--min-runners ${min}: below ${MIN_RUNNERS} only on a devnet`);
+  else if (min < floor && !devnet) problems.push(`--min-runners ${min}: below ${MIN_RUNNERS} only on a devnet (or ${TESTNET_MIN_RUNNERS} with --testnet)`);
   const runners = await runnerProblems(jobs, min);
   problems.push(...runners.problems);
   // lanes
@@ -59,19 +63,19 @@ export async function openGates({ provider, guard, airlock, jobs, deployer, rpc,
   problems.push(...lanes.problems); warnings.push(...lanes.warnings);
   // roles: governance of the guard, the airlock and every lane that has one; the guard's guardians
   const governance = [await guard.governance(), await airlock.governance(), ...lanes.lanes.map((l) => l.admin).filter(Boolean)];
-  const roles = await roleChecks(provider, { governance, guardians: await guard.guardians() }, { deployer, devnet, allowEoa });
+  const roles = await roleChecks(provider, { governance, guardians: await guard.guardians() }, { deployer, devnet, allowEoa, testnet });
   problems.push(...roles.problems); warnings.push(...roles.warnings);
   // caps
   const token = new Contract(await guard.token(), TOKEN, provider);
   const decimals = Number(await token.decimals());
-  const limitUnits = parseUnits(String(opt['daily-limit'] ?? STARTER_UNITS), decimals);
+  const limitUnits = parseUnits(String(opt['daily-limit'] ?? (testnet ? TESTNET_DAILY_CAP : STARTER_UNITS)), decimals);
   const maxDailyLimit = await guard.maxDailyLimit();
-  problems.push(...capProblems({ limitUnits, decimals, raiseCap: !!opt['raise-cap'], maxDailyLimit }));
-  // real funds
-  if (!devnet && !opt['i-understand-real-funds']) problems.push('this is not a devnet: pass --i-understand-real-funds once every gate above is met (real users\' money will cross)');
+  problems.push(...capProblems({ limitUnits, decimals, raiseCap: !!opt['raise-cap'], maxDailyLimit, testnet }));
+  // real funds (the testnet has test coins only: --testnet stands in for the flag)
+  if (!devnet && !testnet && !opt['i-understand-real-funds']) problems.push('this is not a devnet: pass --i-understand-real-funds once every gate above is met (real users\' money will cross)');
   if (await guard.paused()) warnings.push('BridgeGuard is paused: the route opens, but nothing crosses until governance unpauses');
 
-  write(`Bridge ${devnet ? '(devnet)' : '(NOT a devnet)'}: BridgeGuard ${guard.target}, BridgeAirlock ${airlock.target}, threshold ${await airlock.threshold()}, quarantine ${await airlock.quarantine()}s`);
+  write(`Bridge ${devnet ? '(devnet)' : testnet ? '(public testnet, test coins only)' : '(NOT a devnet)'}: BridgeGuard ${guard.target}, BridgeAirlock ${airlock.target}, threshold ${await airlock.threshold()}, quarantine ${await airlock.quarantine()}s`);
   write(`Lanes (${lanes.independent} independent, by controller): check each by hand`);
   for (const l of lanes.lanes) write(`  ${l.kind.padEnd(13)} ${l.lane}  controller ${l.controller}  admin ${l.admin ?? '(none: immutable)'}${l.ism !== undefined ? `  ISM ${l.ism}` : ''}`);
   write('Roles:');
@@ -82,7 +86,7 @@ export async function openGates({ provider, guard, airlock, jobs, deployer, rpc,
   write(`Daily limit: ${units(limitUnits, decimals)} (hard cap ${units(maxDailyLimit, decimals)}, starter ${STARTER_UNITS})`);
   write(`Audit: ${audit ? `${audit.url} sha256 ${audit.sha}` : '(missing)'}${(await guard.auditSha256()) !== '0x' + '0'.repeat(64) ? ` (on-chain now: ${await guard.auditUrl()} ${await guard.auditSha256()})` : ''}`);
   for (const w of warnings) write(`warning: ${w}`);
-  return { problems, warnings, audit, limitUnits, lanes, roles, runners, devnet, markers };
+  return { problems, warnings, audit, limitUnits, lanes, roles, runners, devnet, testnet, markers };
 }
 
 export async function bridgeCommand({ cmd, rest, opt, env, write, s, connect, connectRpc }) {
@@ -90,6 +94,7 @@ export async function bridgeCommand({ cmd, rest, opt, env, write, s, connect, co
     const c = await connect(s);
     const { guard, airlock } = bridgeContracts(s, opt, c.signer);
     const g = await openGates({ provider: c.provider, guard, airlock, jobs: c.jobs, deployer: c.me, rpc: s.rpc, opt, write });
+    if (g.testnet) write = testnetWrite(write);
     if (g.problems.length) {
       write(`\nThe bridge stays CLOSED: ${g.problems.length} gate(s) not met:`);
       for (const p of g.problems) write(`  - ${p}`);

@@ -14,14 +14,60 @@
 //   5. a daily limit at most the starter cap (1,000 tokens) unless --raise-cap,
 //      and never above BridgeGuard.maxDailyLimit (raised only after a 7-day timelock);
 //   6. --i-understand-real-funds on anything but a devnet.
+// --testnet (only on the public ZETAPHY testnet: chain id 77390 and its block 1 hash)
+// relaxes 2-4 for test coins: the audit is the testnet notice (docs/BRIDGE-TESTNET.md),
+// 1+ runners, 2-owner multisigs; the daily limit is at most 100 tokens; it replaces 6.
 // These functions read the chain and return problems (strings); they send nothing.
 
 import { Interface, getAddress, id, ZeroHash } from 'ethers';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 export const STARTER_UNITS = 1000n;
 export const MIN_RUNNERS = 10;
 export const GOV_MODULE = '0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2';
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+// The public ZETAPHY testnet: EVM chain id and the hash of block 1 (zetaphy-launch's "genesisHash").
+export const TESTNET_CHAIN_ID = 77390n;
+export const TESTNET_GENESIS = '0xbfda796f182e1b3a4b78f039100035ab24287d06bbe19e4e746826d86754295a';
+export const TESTNET_NOTICE_URL = 'https://github.com/pospos191-alt/swd-amm/blob/main/docs/BRIDGE-TESTNET.md';
+export const TESTNET_DAILY_CAP = 100n;
+export const TESTNET_MIN_RUNNERS = 1;
+export const TESTNET_MIN_OWNERS = 2;
+export const TESTNET_BANNER = 'TESTNET (not audited)';
+
+/** sha256 (0x...) of the testnet notice in this repo: the "audit" --testnet records on-chain. */
+export function testnetNoticeSha(file = new URL('../../docs/BRIDGE-TESTNET.md', import.meta.url)) {
+  return '0x' + createHash('sha256').update(readFileSync(file)).digest('hex');
+}
+
+/**
+ * Testnet mode: only with --testnet on the public ZETAPHY testnet (chain id and block 1
+ * hash both match). Never with --devnet or --i-understand-real-funds.
+ */
+export async function testnetOf(provider, opt = {}) {
+  if (!opt.testnet) return false;
+  if (opt.devnet) throw new Error('--testnet and --devnet are exclusive: --testnet is the public ZETAPHY testnet, --devnet a local one');
+  if (opt['i-understand-real-funds']) throw new Error('--testnet with --i-understand-real-funds: the testnet has test coins only; real funds need every gate, without --testnet');
+  const { chainId } = await provider.getNetwork();
+  if (BigInt(chainId) !== TESTNET_CHAIN_ID) throw new Error(`--testnet: this RPC is chain ${chainId}, not the ZETAPHY testnet (${TESTNET_CHAIN_ID})`);
+  const h = (await provider.getBlock(1))?.hash ?? null;
+  if (!h || !same(h, TESTNET_GENESIS)) throw new Error(`--testnet: block 1 is ${h ?? 'missing'}, not the ZETAPHY testnet's ${TESTNET_GENESIS} (another chain with id ${TESTNET_CHAIN_ID})`);
+  return true;
+}
+
+/** In testnet mode the audit must be exactly the testnet notice and its sha256. */
+export function testnetAuditProblems(audit, sha = testnetNoticeSha()) {
+  if (!audit) return [];
+  const p = [];
+  if (audit.url !== TESTNET_NOTICE_URL) p.push(`--testnet: --audit-report must be the testnet notice ${TESTNET_NOTICE_URL}`);
+  if (!same(audit.sha, sha)) p.push(`--testnet: --audit-sha256 must be ${sha} (sha256 of docs/BRIDGE-TESTNET.md)`);
+  return p;
+}
+
+/** A write() that prefixes every line with the testnet banner. */
+export const testnetWrite = (write) => (text) => write(String(text).split('\n').map((l) => `[${TESTNET_BANNER}] ${l}`).join('\n'));
 
 /** A loopback RPC (127.x, localhost, ::1). */
 export function isLoopback(rpcUrl) {
@@ -101,13 +147,13 @@ async function timelockInfo(provider, a) {
   return { address: a, kind: 'timelock', delay: Number(delay), proposers: infos, admins };
 }
 
-/** Problems of one multisig: threshold >= 2, owners >= 3, distinct, none the deployer. */
-export function multisigProblems(info, { deployer, label }) {
+/** Problems of one multisig: threshold >= 2, owners >= 3 (2 on the testnet), distinct, none the deployer. */
+export function multisigProblems(info, { deployer, label, minOwners = 3 }) {
   const p = [];
   if (info.kind !== 'safe' && info.kind !== 'simple') return p;
   const owners = info.owners ?? [];
   if (info.threshold < 2) p.push(`${label} ${info.address}: threshold ${info.threshold}, needs at least 2`);
-  if (owners.length < 3) p.push(`${label} ${info.address}: ${owners.length} owner(s), needs at least 3 (each on its own hardware wallet)`);
+  if (owners.length < minOwners) p.push(`${label} ${info.address}: ${owners.length} owner(s), needs at least ${minOwners} (each on its own hardware wallet)`);
   if (new Set(owners.map((o) => o.toLowerCase())).size !== owners.length) p.push(`${label} ${info.address}: an owner is listed twice`);
   if (info.threshold > owners.length) p.push(`${label} ${info.address}: threshold ${info.threshold} above its ${owners.length} owners`);
   if (deployer && owners.some((o) => same(o, deployer))) p.push(`${label} ${info.address}: the deployer key ${deployer} is one of its owners`);
@@ -118,7 +164,7 @@ export function multisigProblems(info, { deployer, label }) {
  * Roles: governance (one or more addresses that must each be a multisig or the gov module)
  * and guardians (multisigs). Returns { problems, warnings, infos }.
  */
-export async function roleChecks(provider, { governance = [], guardians = [] }, { deployer, devnet = false, allowEoa = false } = {}) {
+export async function roleChecks(provider, { governance = [], guardians = [] }, { deployer, devnet = false, allowEoa = false, testnet = false } = {}) {
   const problems = [], warnings = [], infos = [];
   const look = async (addr, role) => { const i = { ...(await multisigInfo(provider, addr)), role }; infos.push(i); return i; };
   const govInfos = [];
@@ -146,7 +192,7 @@ export async function roleChecks(provider, { governance = [], guardians = [] }, 
       continue;
     }
     if (i.kind === 'contract') { problems.push(`${label} ${i.address}: a contract that is neither a Safe nor a SimpleMultisig (cannot read its owners and threshold)`); continue; }
-    problems.push(...multisigProblems(i, { deployer, label }));
+    problems.push(...multisigProblems(i, { deployer, label, minOwners: testnet ? TESTNET_MIN_OWNERS : 3 }));
   }
   for (const g of govInfos.filter((x) => x.kind !== 'timelock')) {
     for (const d of guardInfos) {
@@ -198,11 +244,12 @@ export async function laneChecks(provider, airlock, { deployer, devnet = false, 
   return { problems, warnings, lanes, independent };
 }
 
-/** Daily limit (whole tokens) against the starter cap and the on-chain hard cap (token units). */
-export function capProblems({ limitUnits, decimals, raiseCap = false, maxDailyLimit = null }) {
+/** Daily limit (whole tokens) against the starter cap (100 on the testnet, no raise) and the on-chain hard cap (token units). */
+export function capProblems({ limitUnits, decimals, raiseCap = false, maxDailyLimit = null, testnet = false }) {
   const p = [];
   const units = BigInt(limitUnits);
   const starter = STARTER_UNITS * 10n ** BigInt(decimals);
+  if (testnet && units > TESTNET_DAILY_CAP * 10n ** BigInt(decimals)) p.push(`--testnet: daily limit at most ${TESTNET_DAILY_CAP} tokens`);
   if (units > starter && !raiseCap) p.push(`daily limit above the starter cap (${STARTER_UNITS} tokens): pass --raise-cap if governance decided so`);
   if (maxDailyLimit != null && units > BigInt(maxDailyLimit)) p.push(`daily limit above BridgeGuard.maxDailyLimit (${maxDailyLimit} units): raise the cap first (zetaphy bridge cap propose: x2 per step, 7 days each)`);
   if (units === 0n) p.push('daily limit 0: nothing could cross');
