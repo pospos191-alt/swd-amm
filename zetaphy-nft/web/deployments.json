@@ -1,10 +1,22 @@
 {
   "network": "zetaphy-testnet",
   "chainId": 77390,
-  "rpc": "",
-  "factory": "",
-  "marketplace": "",
-  "threatRegistry": "",
-  "deployBlock": 0,
-  "note": "Written by `node cli.js deploy --out web/deployments.json`. Empty until the contracts are deployed on the testnet."
+  "rpc": "https://rpc.sawasdeecoin.com",
+  "factory": "0x4a5C1E2eA9cd36A75f66DCACA2A3C852e2779833",
+  "marketplace": "0x8fB5B0ea6bC0840060c148028d74a846b80fbEc3",
+  "threatRegistry": "0xaB5745b61f83975E68F6546be9F83651df12417f",
+  "governance": "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245",
+  "feeRecipient": "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245",
+  "feeBps": 100,
+  "deployBlock": 3491,
+  "deployedAt": "2026-10-22T09:18:18.166Z",
+  "collectionCodeHashes": {
+    "erc721": "0x9a2d953596ca845d6a1152089103e231643e325f89ac9f15b34f2b5c67657e2f",
+    "erc1155": "0x6e72e6235d2f93b50ebf92a6d085af497dfe0a0597216c1936b93a901a6e28c5"
+  },
+  "collectionCodeKeys": {
+    "erc721": "0x585799f8200bf7a24713eb7830314099514478eb8de1fd8d18f44f1f6db6e697",
+    "erc1155": "0x44a82a3c05768edeefb07ead3517fdd3ff91f3b11ae55b3a4654a3608fb64b8c"
+  },
+  "codeKeysProtected": true
 }

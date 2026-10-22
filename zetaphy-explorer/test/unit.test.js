@@ -293,9 +293,9 @@ test('config: https only, no credentials, placeholder detection, endpoints with 
   assert.equal(neuroLink({ neuroReportUrl: 'https://neuro.example/web/?chain=zetaphy&address={address}', evmChainId: 77390 }, A), `https://neuro.example/web/?chain=zetaphy&address=${A}`);
   assert.equal(neuroLink({ neuroReportUrl: 'javascript:alert({address})' }, A), '');
   assert.equal(neuroLink({ neuroReportUrl: '' }, A), '');
-  // the shipped config.json is valid and still the placeholder
+  // the shipped config.json is valid: the placeholder, or the live node the launch wrote (https)
   const shipped = sanitizeConfig(JSON.parse(read('config.json')));
-  assert.equal(isPlaceholder(shipped), true);
+  if (!isPlaceholder(shipped)) assert.match(shipped.node, /^https:\/\//);
 });
 
 // ---------------- rpc queue and cache ----------------

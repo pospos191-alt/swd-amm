@@ -67,7 +67,7 @@ async function launch() {
 }
 
 before(async () => {
-  server = spawn(process.execPath, ['scripts/serve.js', String(PORT)], { stdio: 'pipe', cwd: new URL('..', import.meta.url) });
+  server = spawn(process.execPath, ['scripts/serve.js', String(PORT)], { stdio: 'pipe', cwd: new URL('..', import.meta.url), env: { ...process.env, WALLET_PLACEHOLDER_CONFIG: '1' } });
   await new Promise((r) => server.stdout.once('data', r));
   browser = await launch();
 });

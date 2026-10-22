@@ -14,7 +14,11 @@ import { destinations, analyzeCall, typedDataTargets, checkTransaction, checkSig
 import { insight } from '../src/insight.jsx';
 
 const SNAP_ID = 'local:http://localhost:18096';
-const WALLET = 'https://wallet.zetaphy.invalid'; // snap.config.js ZETAPHY_WALLET_ORIGINS
+// The built-in constants, as the launch wrote them into snap.config.js (placeholders before a launch).
+const SNAP_ENV = readFileSync(resolve(import.meta.dirname ?? new URL('.', import.meta.url).pathname, '../snap.config.js'), 'utf8');
+const builtIn = (name) => new RegExp(`${name}: '([^']*)'`).exec(SNAP_ENV)[1];
+const WALLET = builtIn('ZETAPHY_WALLET_ORIGINS').split(',')[0].trim(); // the first origin allowed to set the threat source
+const BUILT_IN_REGISTRY = builtIn('ZETAPHY_THREAT_REGISTRY');
 const REGISTRY = '0x7777777777777777777777777777777777777777';
 const TARGET = '0x3333333333333333333333333333333333333333';
 const IMPL = '0x4444444444444444444444444444444444444444';
@@ -117,12 +121,17 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
     for (const code of [TARGET_CODE, IMPL_CODE, art.deployedBytecode]) expect(fingerprint1(code)).toBe(await codeFingerprint(code));
   });
 
-  it('with the built-in placeholders (no registry yet): "couldn\'t check"', async () => {
+  it('with the built-in threat source: "couldn\'t check" with no registry; a launched build answers from the live chain or says it couldn\'t', async () => {
     const snap = await installSnap(SNAP_ID);
     mockChain(snap);
     const r = await inspect(snap, { to: TARGET });
     expect(r.severity).toBeNull();
-    expect(r.text).toMatch(/ZETAPHY Neuro ตรวจธุรกรรมนี้ไม่ได้ \/ ZETAPHY Neuro couldn't check this transaction\nno ThreatRegistry configured/);
+    if (/^0x0{40}$/.test(BUILT_IN_REGISTRY)) {
+      expect(r.text).toMatch(/ZETAPHY Neuro ตรวจธุรกรรมนี้ไม่ได้ \/ ZETAPHY Neuro couldn't check this transaction\nno ThreatRegistry configured/);
+    } else {
+      // A launched build asks the live chain (when reachable from here) or says it couldn't; never anything else for a clean address.
+      expect(r.text).toMatch(/^ZETAPHY Neuro(?: ตรวจธุรกรรมนี้ไม่ได้ \/ ZETAPHY Neuro couldn't check this transaction\n|: ไม่พบธงในสิ่งที่ตรวจ \/ no flag on what was checked\n)/);
+    }
   });
 
   it('only the ZETAPHY wallet\'s origin may change the threat source, after the user approves; bad input is refused', async () => {

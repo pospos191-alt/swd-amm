@@ -195,7 +195,8 @@ test('config writers: snap.config.js constants (and only those)', () => {
   assert.match(after, /ZETAPHY_WALLET_ORIGINS: 'https:\/\/wallet\.example\.org'/);
   assert.equal(after.split('\n').length, before.split('\n').length);
   const keep = snapConfig(before, { ...OUT, walletOrigin: null });
-  assert.match(keep, /ZETAPHY_WALLET_ORIGINS: 'https:\/\/wallet\.zetaphy\.invalid'/, 'no --wallet-origin: kept');
+  const committedOrigins = /ZETAPHY_WALLET_ORIGINS: '([^']*)'/.exec(before)[1]; // a placeholder until launch writes the real one
+  assert.ok(keep.includes(`ZETAPHY_WALLET_ORIGINS: '${committedOrigins}'`), 'no --wallet-origin: kept');
   assert.throws(() => snapConfig(before, { ...OUT, walletOrigin: "https://x.org/'+evil" }), /origin/);
   assert.throws(() => snapConfig(before, { ...OUT, threatRegistry: '' }), /ThreatRegistry/);
 });
