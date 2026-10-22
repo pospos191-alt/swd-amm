@@ -121,13 +121,17 @@ describe('the vaccine in plain MetaMask: transaction insights', () => {
     for (const code of [TARGET_CODE, IMPL_CODE, art.deployedBytecode]) expect(fingerprint1(code)).toBe(await codeFingerprint(code));
   });
 
-  it('with the built-in threat source: "couldn\'t check" until it answers (no registry yet, or not reachable from the test)', async () => {
+  it('with the built-in threat source: "couldn\'t check" with no registry; a launched build answers from the live chain or says it couldn\'t', async () => {
     const snap = await installSnap(SNAP_ID);
     mockChain(snap);
     const r = await inspect(snap, { to: TARGET });
     expect(r.severity).toBeNull();
-    expect(r.text).toMatch(/ZETAPHY Neuro ตรวจธุรกรรมนี้ไม่ได้ \/ ZETAPHY Neuro couldn't check this transaction\n/);
-    if (/^0x0{40}$/.test(BUILT_IN_REGISTRY)) expect(r.text).toMatch(/\nno ThreatRegistry configured/);
+    if (/^0x0{40}$/.test(BUILT_IN_REGISTRY)) {
+      expect(r.text).toMatch(/ZETAPHY Neuro ตรวจธุรกรรมนี้ไม่ได้ \/ ZETAPHY Neuro couldn't check this transaction\nno ThreatRegistry configured/);
+    } else {
+      // A launched build asks the live chain (when reachable from here) or says it couldn't; never anything else for a clean address.
+      expect(r.text).toMatch(/^ZETAPHY Neuro(?: ตรวจธุรกรรมนี้ไม่ได้ \/ ZETAPHY Neuro couldn't check this transaction\n|: ไม่พบธงในสิ่งที่ตรวจ \/ no flag on what was checked\n)/);
+    }
   });
 
   it('only the ZETAPHY wallet\'s origin may change the threat source, after the user approves; bad input is refused', async () => {
