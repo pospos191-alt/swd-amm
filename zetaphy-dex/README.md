@@ -1,332 +1,334 @@
+**English** | [ภาษาไทย](README.th.md)
+
 # ZETAPHY DEX (ZETAPHY Swap)
 
-กระดานแลกเปลี่ยนเหรียญแบบ AMM (สูตร x·y = k) พร้อมพูลสภาพคล่อง สำหรับเชน **ZETAPHY** (Cosmos EVM,
-EVM chain id `77390`, chain id `zetaphy_77390-1`, เหรียญหลัก ZETAPHY ตัวย่อในกระเป๋า **ZTPHY**, ทศนิยม 18)
+An AMM token exchange (x·y = k formula) with liquidity pools for the **ZETAPHY** chain (Cosmos EVM,
+EVM chain id `77390`, chain id `zetaphy_77390-1`, native coin ZETAPHY, wallet ticker **ZTPHY**, 18 decimals)
 
-> ⚠️ **Testnet เท่านั้น เหรียญไม่มีมูลค่า สัญญายังไม่ผ่านการตรวจสอบความปลอดภัย (unaudited)** อ่านหัวข้อ "ความเสี่ยง" ก่อนใช้
+> ⚠️ **Testnet only. The coins have no value. The contracts have not passed a security audit (unaudited).** Read the "Risks" section before use.
 
-- สัญญา, สคริปต์ build, CLI สำหรับ deploy และชุดทดสอบ: โฟลเดอร์นี้ (`zetaphy-dex/`)
-- หน้าเว็บ: `web/` เผยแพร่ที่ **https://swap.sawasdeecoin.com/** (โปรเจกต์ Vercel ของตัวเอง บน origin ของตัวเอง)
-  ที่อยู่เดิม `https://swd-amm.sawasdeecoin.com/zetaphy/` redirect (308) มาที่นี่
+- Contracts, build scripts, deploy CLI and test suite: this folder (`zetaphy-dex/`)
+- Web page: `web/`, published at **https://swap.sawasdeecoin.com/** (its own Vercel project on its own origin)
+  The old address `https://swd-amm.sawasdeecoin.com/zetaphy/` redirects (308) here
 
-## โครงสร้าง
+## Structure
 
-| ไฟล์ | หน้าที่ |
+| File | Purpose |
 |---|---|
-| `contracts/ZetaphyFactory.sol` | สร้างพูล (CREATE2) หนึ่งพูลต่อคู่เหรียญ และเก็บค่าที่ governance ตั้งได้ (`feeTo`, `threatRegistry`) |
-| `contracts/ZetaphyPair.sol` | พูล x·y = k + เหรียญ LP (ZLP) |
-| `contracts/ZetaphyRouter.sol` | ฟังก์ชันที่ผู้ใช้เรียก: เพิ่ม/ถอนสภาพคล่อง แลกเปลี่ยน (หลายทอด), deadline, slippage, เหรียญหักค่าธรรมเนียมเมื่อโอน, ตรวจ Neuro |
-| `contracts/WZETAPHY.sol` | wrapped native แบบ WETH (ใช้ในเทสต์ และบนเชนอื่นที่ไม่มี precompile) |
-| `contracts/TestToken.sol` | เหรียญทดสอบ (ไม่มีมูลค่า) สำหรับ testnet |
-| `contracts/test/*.sol` | สัญญาที่ใช้เฉพาะในเทสต์ (flash borrower, เหรียญ reentrancy, mock runners, `RevertProbe` ตรวจยอดหลัง revert, registry ที่กินแก๊ส, `ForceSend`) |
-| `artifacts/*.json` | ผล compile (commit ไว้ CLI ไม่ต้องใช้ compiler) `npm run build -- --check` ตรวจว่าตรงกับซอร์ส |
-| `cli.js` | deploy และตั้งค่า governance |
-| `test/` | unit test (EVM ในหน่วยความจำ), fuzz, e2e บนเบราว์เซอร์, integration บน devnet จริง |
-| `web/` | หน้าเว็บ (HTML/CSS/JS ล้วน ไม่มีโค้ดของบุคคลที่สาม) และ `web/vercel.json` (CSP และ header ความปลอดภัย) |
+| `contracts/ZetaphyFactory.sol` | Creates pools (CREATE2), one pool per token pair, and stores the values governance can set (`feeTo`, `threatRegistry`) |
+| `contracts/ZetaphyPair.sol` | x·y = k pool + LP token (ZLP) |
+| `contracts/ZetaphyRouter.sol` | Functions users call: add/remove liquidity, swap (multi-hop), deadline, slippage, fee-on-transfer tokens, Neuro check |
+| `contracts/WZETAPHY.sol` | WETH-style wrapped native (used in tests and on other chains without the precompile) |
+| `contracts/TestToken.sol` | Test token (no value) for testnet |
+| `contracts/test/*.sol` | Contracts used only in tests (flash borrower, reentrancy token, mock runners, `RevertProbe` to check balances after a revert, gas-burning registry, `ForceSend`) |
+| `artifacts/*.json` | Compile output (committed so the CLI does not need a compiler). `npm run build -- --check` checks that it matches the source |
+| `cli.js` | Deploy and governance settings |
+| `test/` | Unit tests (in-memory EVM), fuzz, browser e2e, integration on a real devnet |
+| `web/` | Web page (plain HTML/CSS/JS, no third-party code) and `web/vercel.json` (CSP and security headers) |
 
-## การออกแบบ
+## Design
 
-**สูตรและสัญญา:** ใช้คณิตศาสตร์ของ Uniswap V2 (whitepaper) ซึ่งพิสูจน์แล้วในการใช้งานจริง แต่ **เขียนโค้ดใหม่ทั้งหมด
-ภายใต้สัญญาอนุญาต MIT** (ไม่ได้คัดลอกโค้ด GPL ของ Uniswap) Solidity 0.8.26, optimizer 200, evm `cancun` เหมือนส่วนอื่นของ repo
-ชื่อและลำดับอาร์กิวเมนต์ของ router ตรงกับ V2 (เช่น `swapExactETHForTokens`) เพื่อให้กระเป๋าที่ถอดรหัส V2 ได้แสดงผลถูก
-คำว่า "ETH" ในชื่อฟังก์ชันหมายถึงเหรียญหลักของเชน (ZETAPHY)
+**Formula and contracts:** Uses the Uniswap V2 math (whitepaper), which is proven in production, but the code is **completely rewritten
+under the MIT license** (no Uniswap GPL code was copied). Solidity 0.8.26, optimizer 200, evm `cancun`, same as the rest of the repo.
+Router function names and argument order match V2 (for example `swapExactETHForTokens`) so wallets that decode V2 display them correctly.
+"ETH" in function names means the chain's native coin (ZETAPHY).
 
-- ค่าธรรมเนียม **0.3%** ของจำนวนที่จ่าย เข้าพูล (ผู้ให้สภาพคล่องได้)
-- **protocol fee** ปิดเป็นค่าเริ่มต้น governance เปิดด้วย `setFeeTo(addr)`: 1/6 ของการเติบโตของ √k (= 0.05% ของ volume) เป็น LP ให้ `feeTo`
-- **TWAP:** `price0CumulativeLast` / `price1CumulativeLast` (UQ112.112 × วินาที)
-- **reentrancy lock** ทุกฟังก์ชันที่เปลี่ยนสถานะของพูล
+- A **0.3%** fee on the amount paid goes to the pool (liquidity providers earn it)
+- **Protocol fee** is off by default. Governance turns it on with `setFeeTo(addr)`: 1/6 of the growth of √k (= 0.05% of volume) as LP to `feeTo`
+- **TWAP:** `price0CumulativeLast` / `price1CumulativeLast` (UQ112.112 × seconds)
+- **Reentrancy lock** on every function that changes pool state
 - `skim` / `sync`
-- **MINIMUM_LIQUIDITY:** 1000 หน่วยเล็กสุดของ LP แรกถูกล็อกที่ `address(0)` ตลอดไป
-- router ตรวจ **deadline** และ **slippage** (amountOutMin / amountInMax / amountAMin / amountBMin) ทุกฟังก์ชัน
-- รองรับ **เหรียญหักค่าธรรมเนียมเมื่อโอน** ผ่านฟังก์ชัน `…SupportingFeeOnTransferTokens`
-- **flash swap:** `swap(..., data)` ส่งเหรียญก่อนแล้วเรียก `zetaphyDexCall` ต้องคืนพร้อมค่าธรรมเนียมภายในธุรกรรมเดียว
-- **การฝากครั้งแรก (ต่างจาก V2):** ตราบที่พูลยังไม่มีใครถือ LP (`totalSupply == 0`) router ใช้จำนวนที่ผู้ใช้ใส่ (desired) ตรง ๆ
-  แม้พูลจะมี reserve แล้ว (มีคนโอนเหรียญเข้าแล้วเรียก `sync`) ผู้ฝากรายแรกจึงเป็นผู้กำหนดราคาเอง และยอดที่ถูกโอนเข้ามาก่อนกลายเป็นของผู้ฝากรายแรก
-  (ได้ LP ทั้งหมดยกเว้น 1000 ที่ล็อก) ผู้โจมตีตั้งราคาให้ผู้ฝากรายแรกไม่ได้ และมีแต่เสียเหรียญที่โอนเข้าไป หน้าเว็บก็ถือว่าเป็นพูลใหม่ด้วย (ดูหัวข้อหน้าเว็บ)
+- **MINIMUM_LIQUIDITY:** 1000 smallest units of the first LP are locked at `address(0)` forever
+- The router checks **deadline** and **slippage** (amountOutMin / amountInMax / amountAMin / amountBMin) in every function
+- Supports **fee-on-transfer tokens** through the `…SupportingFeeOnTransferTokens` functions
+- **Flash swap:** `swap(..., data)` sends the tokens first and then calls `zetaphyDexCall`; they must be returned with the fee within the same transaction
+- **First deposit (differs from V2):** while nobody holds LP in the pool (`totalSupply == 0`), the router uses the amounts the user enters (desired) directly,
+  even if the pool already has reserves (someone transferred tokens in and called `sync`). So the first depositor sets the price, and any balance transferred in earlier goes to the first depositor
+  (they get all the LP except the 1000 that are locked). An attacker cannot set the price for the first depositor and only loses the tokens they transferred in. The web page also treats this as a new pool (see the web page section)
 
-**เหรียญหลัก (native) บน ZETAPHY:** ตรวจแล้วว่า precompile `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` คือ WERC20 ของ Cosmos EVM
-(`precompiles/werc20`): มี `transfer` / `approve` / `transferFrom` / `balanceOf` แบบ ERC-20 โดย **ยอดคือยอด native ของบัญชีนั้นเลย**,
-`deposit()` คืนเหรียญให้ผู้เรียกทันที (จึงเป็นการ "wrap" ที่ไม่ต้องทำอะไร) และ `withdraw()` ไม่ทำอะไร (แค่ตรวจยอด)
-router ใช้แค่ `deposit` / `withdraw` / `transfer` / `balanceOf` จึงใช้ precompile เป็น `WETH()` ได้โดยตรง **ไม่ต้อง deploy WZETAPHY บน ZETAPHY**
-(`cli.js deploy` ตรวจ precompile ก่อนและเลือกให้เอง) ทดสอบแล้วบน devnet จริง: ยอด native ของพูล = reserve ของพูลพอดี
+**Native coin on ZETAPHY:** We checked that the precompile `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` is the Cosmos EVM WERC20
+(`precompiles/werc20`): it has ERC-20 style `transfer` / `approve` / `transferFrom` / `balanceOf`, where **the balance is the account's native balance itself**,
+`deposit()` immediately returns the coins to the caller (so the "wrap" does nothing), and `withdraw()` does nothing (it only checks the balance).
+The router only uses `deposit` / `withdraw` / `transfer` / `balanceOf`, so it can use the precompile as `WETH()` directly. **There is no need to deploy WZETAPHY on ZETAPHY**
+(`cli.js deploy` checks for the precompile first and picks it automatically). Tested on a real devnet: the pool's native balance = the pool's reserve exactly.
 
-**Neuro (จุดเด่นของ ZETAPHY):**
+**Neuro (a key ZETAPHY feature):**
 
-- *บนเชน (เลือกเปิดได้):* governance ตั้ง `factory.setThreatRegistry(<ThreatRegistry>)` (ค่าเริ่มต้น `0` = ปิด)
-  เมื่อเปิด router จะ **ปฏิเสธการซื้อ (swap เข้า) และการเพิ่มสภาพคล่อง** ของเหรียญที่ธงใน ThreatRegistry "มีผลบังคับ" แล้ว
-  (`isContractEnforced(token)`: ที่อยู่ของเหรียญบนเชนนี้ หรือโค้ดของมันแบบไบต์ต่อไบต์) ด้วย error `TokenEnforced(token, reason)`
-  **การขายเป็นเหรียญหลัก (ZTPHY) และการถอนสภาพคล่องไม่ถาม registry จึงทำได้เสมอ** ผู้ถือจึงไม่ติดอยู่
-  (การขายเหรียญ X เป็นเหรียญ Y ยังถาม registry เรื่อง Y)
-  ถ้า registry ที่ตั้งไว้ไม่ตอบ, ตอบผิดรูปแบบ หรือใช้แก๊สเกิน `REGISTRY_GAS` (100,000 ต่อการถาม) router จะ **ปฏิเสธ (fail closed,
-  `RegistryUnavailable`) ทั้ง router**: ทุกการซื้อเหรียญและทุกการเพิ่มสภาพคล่องหยุด จนกว่า governance จะตั้ง registry เป็น `0`
-  (ปลดทันที) หรือเปลี่ยนเป็นตัวที่ตอบได้ ตอนตั้งค่า factory ตรวจว่าที่อยู่นั้นตอบ `isContractEnforced` ได้ภายในแก๊สเดียวกัน (กันพิมพ์ผิด)
-  แต่พิสูจน์ไม่ได้ว่าจะตอบต่อไปในอนาคต
-- *หน้าเว็บ:* ตรวจเหรียญก่อนซื้อ ก่อนเพิ่มสภาพคล่อง และก่อนนำเข้าด้วยที่อยู่ ด้วยคีย์เดียวกับกระเป๋า ZETAPHY
-  (`zetaphy-network/src/vaccine.js`): ที่อยู่/โค้ด (`isContractFlagged`/`isContractEnforced`), ลายนิ้วมือ fp1 ของ Neuro
-  (`isFlagged`/`isEnforced`) และโค้ดปลายทางของ proxy (EIP-1167, EIP-1967) ธงที่ยังไม่บังคับ = **เตือน** และต้องติ๊กยืนยัน,
-  ธงที่บังคับแล้ว = **ปฏิเสธ** registry ที่หน้าเว็บใช้คือ `neuroRegistry` ใน `deployments.json` หรือ `factory.threatRegistry()`
-- ถ้อยคำเป็นกลางตาม `docs/LEGAL.md` (บอกข้อเท็จจริงของโค้ด ไม่ตัดสินเจตนา) และแสดงข้อความ
-  **"ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา"** ทุกครั้งที่แสดงผล Neuro
+- *On-chain (optional):* governance sets `factory.setThreatRegistry(<ThreatRegistry>)` (default `0` = off).
+  When on, the router **refuses buys (swap in) and liquidity adds** for tokens whose ThreatRegistry flag is already "enforced"
+  (`isContractEnforced(token)`: the token's address on this chain, or its code byte for byte) with the error `TokenEnforced(token, reason)`.
+  **Selling to the native coin (ZTPHY) and removing liquidity do not query the registry, so they always work.** Holders are never stuck.
+  (Selling token X for token Y still queries the registry about Y.)
+  If the configured registry does not respond, responds in the wrong format, or uses more gas than `REGISTRY_GAS` (100,000 per query), the router **refuses (fail closed,
+  `RegistryUnavailable`) for the whole router**: every token buy and every liquidity add stops until governance sets the registry to `0`
+  (unblocks immediately) or changes it to one that responds. When it is set, the factory checks that the address can answer `isContractEnforced` within the same gas (to catch typos),
+  but it cannot prove that it will keep answering in the future.
+- *Web page:* checks tokens before buying, before adding liquidity, and before importing by address, using the same keys as the ZETAPHY wallet
+  (`zetaphy-network/src/vaccine.js`): address/code (`isContractFlagged`/`isContractEnforced`), Neuro fp1 fingerprint
+  (`isFlagged`/`isEnforced`), and the target code behind proxies (EIP-1167, EIP-1967). A flag that is not yet enforced = **warning**, and the user must tick to confirm;
+  an enforced flag = **refused**. The registry the web page uses is `neuroRegistry` in `deployments.json` or `factory.threatRegistry()`
+- Neutral wording per `docs/LEGAL.md` (states facts about the code, does not judge intent), and shows the message
+  **"Automated code analysis data, not an accusation"** every time Neuro results are shown
 
-**governance ทำอะไรได้/ไม่ได้ (บอกตามจริง):**
+**What governance can and cannot do (stated plainly):**
 
-- *ทำได้:* ตั้ง `feeTo`, ตั้ง/ปิด `threatRegistry`, `router.sweep(to)` (ส่งเหรียญหลักที่หลงเข้า router ต่อ ดูด้านล่าง),
-  โอนสิทธิ์ governance (สองขั้น: `setGovernance` แล้ว `acceptGovernance`)
-- *หยุดการซื้อผ่าน router ได้:* เพราะการตรวจ registry เป็นแบบ fail closed governance (หรือ registry ที่ governance เลือก)
-  ทำให้ router ปฏิเสธทุกการซื้อและทุกการเพิ่มสภาพคล่องได้ ด้วย registry ที่หยุดตอบหรือตอบว่า "บังคับ" กับทุกเหรียญ
-  การขายเป็นเหรียญหลักและการถอนสภาพคล่องยังทำได้ และตัวพูลเองไม่ถาม registry (เรียกพูลตรงได้เสมอ) ตั้ง registry เป็น `0` เพื่อปลด
-- *ทำไม่ได้:* ย้ายเงินของใคร หยุดตัวพูล หรือเปลี่ยนค่าธรรมเนียม 0.3% สัญญาไม่มี proxy อัปเกรดไม่ได้
-- ควรโอน governance ให้ multisig (เช่น `SimpleMultisig` ใน zetaphy-network) หลัง deploy
+- *Can:* set `feeTo`, set/disable `threatRegistry`, `router.sweep(to)` (forward native coins that strayed into the router, see below),
+  transfer governance rights (two steps: `setGovernance` then `acceptGovernance`)
+- *Can stop buys through the router:* because the registry check is fail closed, governance (or a registry chosen by governance)
+  can make the router refuse every buy and every liquidity add, with a registry that stops responding or answers "enforced" for every token.
+  Selling to the native coin and removing liquidity still work, and the pool itself does not query the registry (calling the pool directly always works). Set the registry to `0` to unblock
+- *Cannot:* move anyone's funds, stop the pool itself, or change the 0.3% fee. The contracts have no proxy and cannot be upgraded
+- Governance should be transferred to a multisig (for example `SimpleMultisig` in zetaphy-network) after deploy
 
-**เหรียญหลักที่หลงเข้า router:** `receive()` รับเหรียญหลักจาก WETH เท่านั้น แต่บน ZETAPHY ใครก็โอนเหรียญหลักเข้า router ได้ผ่าน
-`transfer` ของ precompile (หรือ self-destruct) โดยไม่ผ่าน `receive()` เหรียญนั้นไม่มีเจ้าของใน router: governance เรียก
-`router.sweep(to)` ส่งยอดเหรียญหลักทั้งหมดของ router ไปที่ `to` ได้ ปลอดภัยเพราะ router ไม่ถือเงินของผู้ใช้ข้ามธุรกรรม
-(ทุกฟังก์ชันส่งต่อหรือคืนเหรียญจนหมดในธุรกรรมเดียวกัน มีเทสต์ตรวจว่ายอดของ router เป็น 0 หลังการ swap ทุกแบบ)
+**Native coins that stray into the router:** `receive()` accepts native coins only from WETH, but on ZETAPHY anyone can transfer native coins into the router through
+the precompile's `transfer` (or self-destruct) without going through `receive()`. Those coins have no owner in the router: governance can call
+`router.sweep(to)` to send the router's entire native balance to `to`. This is safe because the router does not hold user funds across transactions
+(every function forwards or returns all tokens within the same transaction; a test checks that the router's balance is 0 after every kind of swap).
 
-## Build และทดสอบ
+## Build and test
 
 ```bash
 cd zetaphy-dex
 npm install
-npm run build            # compile -> artifacts/  (npm run build -- --check: ตรวจว่า artifacts ตรงกับซอร์ส)
-npm test                 # unit + fuzz + build check + web libs + CLI (EVM ในหน่วยความจำ, ไม่ต้องใช้โหนด)
-PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:web          # หน้าเว็บใน Chromium + กระเป๋าจำลอง + RPC จำลอง (EVM จริงในหน่วยความจำ)
-ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet        # deploy บน devnet จริง, swap ZTPHY <-> เหรียญทดสอบ, Neuro
-ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:web:devnet    # หน้าเว็บเดียวกันกับ devnet จริง
+npm run build            # compile -> artifacts/  (npm run build -- --check: check that artifacts match the source)
+npm test                 # unit + fuzz + build check + web libs + CLI (in-memory EVM, no node needed)
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:web          # web page in Chromium + mock wallet + mock RPC (real in-memory EVM)
+ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet        # deploy on a real devnet, swap ZTPHY <-> test tokens, Neuro
+ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:web:devnet    # the same web page against a real devnet
 ```
 
-เทสต์ devnet ใช้พอร์ต `ZDEX_DEVNET_PORT` (ค่าเริ่มต้น 24545 และถัดไปอีก ~110) และเปิดโหนดชั่วคราวด้วย `zetaphy-network/scripts/devnet.sh`
-สิ่งที่ครอบคลุม: เพิ่ม/ถอนสภาพคล่อง, swap ทั้งสองทาง (exact in / exact out), หลายทอด, price impact, ค่าธรรมเนียม LP และ protocol fee,
-minimum liquidity, K invariant, flash swap, reentrancy (ทุกฟังก์ชันของพูล), deadline, slippage, เหรียญหักค่าธรรมเนียมเมื่อโอน,
-การปฏิเสธของ registry (ThreatRegistry จริง), TWAP, skim/sync, governance และ fuzz ของ invariant (ตั้ง seed ได้: `ZDEX_FUZZ_SEED`, `ZDEX_FUZZ_STEPS`)
+Devnet tests use port `ZDEX_DEVNET_PORT` (default 24545 and ~110 after it) and start a temporary node with `zetaphy-network/scripts/devnet.sh`.
+Coverage: add/remove liquidity, swaps in both directions (exact in / exact out), multi-hop, price impact, LP fee and protocol fee,
+minimum liquidity, K invariant, flash swap, reentrancy (every pool function), deadline, slippage, fee-on-transfer tokens,
+registry refusals (real ThreatRegistry), TWAP, skim/sync, governance, and invariant fuzzing (seed is configurable: `ZDEX_FUZZ_SEED`, `ZDEX_FUZZ_STEPS`).
 
-เทสต์จากผลตรวจความปลอดภัย (`test/security.test.js`, `test/web-lib.test.js`, หน้าเว็บ e2e และ devnet):
-การฝากครั้งแรกหลัง donation + `sync` (M3), registry ที่ใช้แก๊สเกินแล้ว fail closed และปลดด้วย `0` (L5), `sweep` (L9),
-CLI ปฏิเสธไฟล์กุญแจที่คนอื่นอ่านได้และเชนที่ไม่ใช่ 77390 (L7), หน้าเว็บกับ localStorage ที่ถูกเขียนทับ (M4), ตรวจ chain id ก่อนเซ็น (L1)
-และบน devnet จริง (S1): `RevertProbe` เรียก router/พูลที่ย้ายเหรียญหลักผ่าน precompile แล้ว revert (ไม่ถึงขั้นต่ำของ router,
-ตรวจ K ของพูลไม่ผ่าน, และ revert เองหลัง swap สำเร็จ) ยอด native และยอดผ่าน precompile ของพูลและของสัญญากลับเป็นเหมือนเดิมพอดี
-ทั้งภายในธุรกรรมและหลังธุรกรรม และ `deposit{value}` ที่สัญญาเรียกคืนเหรียญให้สัญญานั้นจริง
+Tests from the security review (`test/security.test.js`, `test/web-lib.test.js`, web e2e and devnet):
+first deposit after a donation + `sync` (M3), a registry that uses too much gas fails closed and is unblocked with `0` (L5), `sweep` (L9),
+the CLI refuses key files readable by others and chains other than 77390 (L7), the web page with overwritten localStorage (M4), chain id check before signing (L1),
+and on a real devnet (S1): `RevertProbe` calls the router/pool that move native coins through the precompile and then revert (below the router minimum,
+pool K check fails, and its own revert after a successful swap). The native and precompile balances of the pool and of the contract return to exactly the same values
+both inside the transaction and after it, and `deposit{value}` called by a contract really returns the coins to that contract.
 
-## Deploy สัญญา
+## Deploying the contracts
 
-ใช้กุญแจสำหรับ testnet เท่านั้น เก็บในไฟล์ **ห้ามวางกุญแจในแชตหรือบน command line** CLI รับเฉพาะ `--key-file <ไฟล์>`
-(หรือตัวแปร `ZETAPHY_DEX_KEY_FILE`) ไฟล์เป็น private key แบบ hex หรือ keystore JSON (ถอดรหัสด้วย `ZETAPHY_PASSPHRASE`)
-**CLI ปฏิเสธไฟล์กุญแจที่ group หรือคนอื่นอ่าน/เขียนได้** (แจ้งให้ `chmod 600 <ไฟล์>`)
-`deploy` ทำงานเฉพาะบน ZETAPHY (EVM chain id 77390) ถ้า RPC ตอบ chain id อื่นจะปฏิเสธ เว้นแต่ใส่ `--any-chain`
+Use testnet-only keys, stored in a file. **Never paste keys into chat or onto the command line.** The CLI only accepts `--key-file <file>`
+(or the `ZETAPHY_DEX_KEY_FILE` variable). The file is a hex private key or a keystore JSON (decrypted with `ZETAPHY_PASSPHRASE`).
+**The CLI refuses key files that group or others can read/write** (it tells you to `chmod 600 <file>`).
+`deploy` only works on ZETAPHY (EVM chain id 77390). If the RPC reports another chain id it refuses, unless you pass `--any-chain`.
 
 ```bash
 cd zetaphy-dex
-# 1) deploy (บน ZETAPHY จะใช้ native precompile เป็น WETH ให้เอง)
-node cli.js deploy --rpc https://<rpc ของ ZETAPHY> --key-file ~/.zetaphy/dex-deployer.key \
-  --public-rpc https://<rpc ที่หน้าเว็บใช้> \
-  --registry <ที่อยู่ ThreatRegistry ถ้าต้องการเปิดการตรวจบนเชน> \
+# 1) deploy (on ZETAPHY it uses the native precompile as WETH automatically)
+node cli.js deploy --rpc https://<ZETAPHY rpc> --key-file ~/.zetaphy/dex-deployer.key \
+  --public-rpc https://<rpc used by the web page> \
+  --registry <ThreatRegistry address, if you want to enable the on-chain check> \
   --test-tokens \
-  --web            # ไม่ใส่ชื่อไฟล์ = web/deployments.json
-# 2) ดูสถานะ
+  --web            # no file name = web/deployments.json
+# 2) view status
 node cli.js status --rpc https://<rpc>
-# 3) ตั้ง/ปิด Neuro registry ภายหลัง (ต้องเป็น governance), เปิด/ปิด protocol fee
-node cli.js set-registry <0xRegistry|0x0> --rpc https://<rpc> --key-file <ไฟล์>
-node cli.js set-fee-to  <0xAddr|0x0>     --rpc https://<rpc> --key-file <ไฟล์>
-# 4) โอน governance ให้ multisig (ฝั่ง multisig ต้องเรียก acceptGovernance())
-node cli.js deploy ... --governance <0xMultisig>     # หรือเรียก setGovernance เองภายหลัง
+# 3) set/disable the Neuro registry later (must be governance), turn the protocol fee on/off
+node cli.js set-registry <0xRegistry|0x0> --rpc https://<rpc> --key-file <file>
+node cli.js set-fee-to  <0xAddr|0x0>     --rpc https://<rpc> --key-file <file>
+# 4) transfer governance to a multisig (the multisig must call acceptGovernance())
+node cli.js deploy ... --governance <0xMultisig>     # or call setGovernance yourself later
 ```
 
-ตัวเลือกอื่น: `--wnative deploy` (deploy WZETAPHY แทน precompile, สำหรับเชนอื่น ใช้คู่กับ `--any-chain`), `--fee-to`, `--out <ไฟล์>`
-ผลลัพธ์เขียนที่ `deployments/<chainId>.json` และ (ถ้าใส่ `--web`) ที่ `web/deployments.json` ซึ่งหน้าเว็บอ่าน (`--web <ไฟล์>` เขียนที่อื่นแทนได้)
-`--test-tokens` สร้าง tUSD และ tSWD (ไม่มีมูลค่า) พร้อมพูลกับ ZTPHY และ `mint-test <token> <to> <amount>` แจกเพิ่มได้
+Other options: `--wnative deploy` (deploy WZETAPHY instead of the precompile, for other chains; use with `--any-chain`), `--fee-to`, `--out <file>`.
+Output is written to `deployments/<chainId>.json` and (with `--web`) to `web/deployments.json`, which the web page reads (`--web <file>` writes elsewhere instead).
+`--test-tokens` creates tUSD and tSWD (no value) with pools against ZTPHY, and `mint-test <token> <to> <amount>` hands out more.
 
-หลัง deploy ให้ commit `web/deployments.json` (ไม่มีความลับ มีแค่ที่อยู่สัญญาและ RPC สาธารณะ) Vercel จะ deploy หน้าเว็บใหม่เอง
+After deploy, commit `web/deployments.json` (it has no secrets, only contract addresses and the public RPC). Vercel redeploys the web page automatically.
 
-## หน้าเว็บบน Vercel
+## Web page on Vercel
 
-หน้าเว็บอยู่ใน `web/` และ deploy เป็น **โปรเจกต์ Vercel แยกของตัวเอง** ที่ **https://swap.sawasdeecoin.com/**
-(static ล้วน ไม่มี server ไม่มีขั้น build) จึงไม่ใช้ origin ร่วมกับเว็บ test-ui ที่ CSP หลวมกว่า (`'unsafe-inline'`, สคริปต์จาก CDN)
-หัวเว็บหลัก (`test-ui/index.html`) มีลิงก์ "ZETAPHY Swap" ไปที่ `https://swap.sawasdeecoin.com/` (เปิดแท็บใหม่, `rel="noopener"`)
-และ `test-ui/vercel.json` redirect `/zetaphy` กับ `/zetaphy/*` แบบถาวร (308) ไปที่ path เดียวกันบน `swap.sawasdeecoin.com` ลิงก์เก่าจึงยังใช้ได้
+The web page is in `web/` and is deployed as **its own separate Vercel project** at **https://swap.sawasdeecoin.com/**
+(fully static, no server, no build step). So it does not share an origin with the test-ui site, which has a looser CSP (`'unsafe-inline'`, scripts from a CDN).
+The main site header (`test-ui/index.html`) has a "ZETAPHY Swap" link to `https://swap.sawasdeecoin.com/` (opens a new tab, `rel="noopener"`),
+and `test-ui/vercel.json` permanently redirects (308) `/zetaphy` and `/zetaphy/*` to the same path on `swap.sawasdeecoin.com`, so old links still work.
 
-ตั้งค่าครั้งแรก (เจ้าของทำครั้งเดียว):
+First-time setup (the owner does this once):
 
-1. Vercel → **Add New… → Project** → import repo `swd-amm` เดิม (โปรเจกต์ใหม่ แยกจากโปรเจกต์ของ test-ui)
-2. **Root Directory: `zetaphy-dex/web`**, Framework Preset: **Other**, ไม่ต้องมี Build Command / Output Directory (ปล่อยว่าง) แล้ว Deploy
-   (`web/vercel.json` ใส่ CSP และ header ความปลอดภัยให้ทุก path)
-3. DNS ของ `sawasdeecoin.com`: เพิ่มระเบียน **CNAME `swap` → `cname.vercel-dns.com`**
-   (ถ้า DNS ของโดเมนอยู่ที่ Vercel เอง ข้ามขั้นนี้ได้ Vercel สร้างให้)
-4. ในโปรเจกต์ใหม่ → **Settings → Domains** → เพิ่ม **`swap.sawasdeecoin.com`** รอสถานะ Valid Configuration (Vercel ออกใบรับรอง HTTPS ให้เอง)
-5. ตรวจ: `curl -sI https://swap.sawasdeecoin.com/ | grep -i content-security-policy` ต้องขึ้นต้นด้วย `default-src 'none'; script-src 'self'`
-   และ `curl -sI https://swd-amm.sawasdeecoin.com/zetaphy/` ต้องได้ 308 ไปที่ `https://swap.sawasdeecoin.com/`
+1. Vercel → **Add New… → Project** → import the existing `swd-amm` repo (a new project, separate from the test-ui project)
+2. **Root Directory: `zetaphy-dex/web`**, Framework Preset: **Other**, no Build Command / Output Directory needed (leave empty), then Deploy
+   (`web/vercel.json` adds the CSP and security headers to every path)
+3. DNS for `sawasdeecoin.com`: add the record **CNAME `swap` → `cname.vercel-dns.com`**
+   (if the domain's DNS is on Vercel itself, skip this step; Vercel creates it for you)
+4. In the new project → **Settings → Domains** → add **`swap.sawasdeecoin.com`** and wait for the status Valid Configuration (Vercel issues the HTTPS certificate automatically)
+5. Check: `curl -sI https://swap.sawasdeecoin.com/ | grep -i content-security-policy` must start with `default-src 'none'; script-src 'self'`
+   and `curl -sI https://swd-amm.sawasdeecoin.com/zetaphy/` must return 308 to `https://swap.sawasdeecoin.com/`
 
-- ตั้งค่า: `web/deployments.json` (จาก `cli.js deploy --web`) และ `web/tokenlist.json`
-  (รูปแบบ token list ของ Uniswap: `{ chainId: 77390, address, name, symbol, decimals }`)
-- RPC ที่หน้าเว็บใช้ต้องเป็น https และเปิด CORS ให้เบราว์เซอร์เรียกได้ (เหมือนที่ zetaphy-wallet ใช้) ผู้ใช้เปลี่ยน RPC ได้ใน "ตั้งค่า"
-  แต่ถ้าไม่ใช่ RPC ของ `deployments.json` หน้าเว็บแสดงแถบเตือนตลอด (พร้อมปุ่มกลับไปใช้ค่าเริ่มต้น) และ **ไม่ส่ง RPC นั้นให้กระเป๋า**
-  (`wallet_addEthereumChain` ใช้ RPC ของ `deployments.json` เสมอ) ถ้าไม่มี RPC หน้าเว็บจะอ่านผ่านกระเป๋าที่เชื่อมต่อและอยู่บน ZETAPHY
-- พูลที่มี reserve แต่ยังไม่มีใครถือ LP (มีคนโอนเหรียญเข้าแล้ว `sync`): หน้าเว็บถือเป็นพูลใหม่ ไม่คำนวณจำนวนอีกฝั่งจาก reserve
-  ให้ผู้ใช้ใส่ทั้งสองฝั่งเอง แสดงคำเตือน "พูลนี้มียอดเหรียญอยู่แต่ยังไม่มีใครถือ LP — คุณเป็นผู้กำหนดราคา" และส่ง **ขั้นต่ำ = จำนวนที่ใส่**
-  (router จึง revert ถ้าสัดส่วนเปลี่ยน) ฝั่งสัญญา router ก็ใช้จำนวนที่ใส่ตรง ๆ เมื่อ `totalSupply == 0` (ดู "การออกแบบ")
-- ก่อน `eth_sendTransaction` ทุกครั้ง หน้าเว็บถาม `eth_chainId` จากกระเป๋าอีกครั้ง ถ้าไม่ใช่ 77390 จะไม่ส่ง และใส่ `chainId: 0x12e4e` ในธุรกรรม
-- ก่อนซื้อและก่อนเพิ่มสภาพคล่อง ถาม Neuro ใหม่ (ไม่ใช้แคช) อีกครั้งตอนกดยืนยัน
-- ความปลอดภัย: `web/vercel.json` ใส่ CSP เข้มงวดให้ทุก path (`default-src 'none'; script-src 'self'; style-src 'self'`
-  ไม่มี inline, ไม่มีสคริปต์จากที่อื่น, `connect-src` เฉพาะ https และ localhost, `frame-ancestors 'none'`)
-  พร้อม HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy` และ COOP `same-origin`
-  หน้าเว็บใช้ `textContent` เท่านั้น กรองชื่อ/สัญลักษณ์เหรียญ (ตัดอักขระควบคุม/bidi/zero-width, จำกัดความยาว, เตือนชื่อซ้ำกับรายการ)
-  และ **อนุญาต (approve) เท่าที่ต้องใช้พอดี** ไม่ใช่ไม่จำกัด ไม่มีไลบรารีของบุคคลที่สาม (ABI encoder เขียนเอง, selector คำนวณไว้แล้วและมีเทสต์ตรวจ)
-- กระเป๋า: EIP-6963 (MetaMask, Rabby, OKX, Trust, Binance Wallet, Coinbase, Brave, Phantom ฯลฯ) และ provider แบบเก่า
-  (`window.ethereum`, `window.binancew3w`) เพิ่มเครือข่ายด้วย `wallet_addEthereumChain` (ticker ZTPHY) บนมือถือที่ไม่มีกระเป๋ามีลิงก์เปิดในแอปกระเป๋า
-- ภาษาไทย/อังกฤษ, โหมดสว่าง/มืด, ใช้บนมือถือได้ (ทดสอบที่ความกว้าง 360 px)
+- Configuration: `web/deployments.json` (from `cli.js deploy --web`) and `web/tokenlist.json`
+  (Uniswap token list format: `{ chainId: 77390, address, name, symbol, decimals }`)
+- The RPC the web page uses must be https and allow CORS so browsers can call it (same as zetaphy-wallet uses). Users can change the RPC in "Settings",
+  but if it is not the RPC from `deployments.json`, the web page shows a warning bar the whole time (with a button to go back to the default) and **does not pass that RPC to the wallet**
+  (`wallet_addEthereumChain` always uses the RPC from `deployments.json`). If there is no RPC, the web page reads through the connected wallet when it is on ZETAPHY
+- A pool that has reserves but no LP holders yet (someone transferred tokens in and called `sync`): the web page treats it as a new pool and does not compute the other side's amount from the reserves.
+  The user enters both sides, the page shows the warning "This pool has a token balance but nobody holds LP yet — you set the price", and sends **minimum = the amount entered**
+  (so the router reverts if the ratio changes). On the contract side, the router also uses the entered amounts directly when `totalSupply == 0` (see "Design")
+- Before every `eth_sendTransaction`, the web page asks the wallet for `eth_chainId` again. If it is not 77390 it does not send, and it puts `chainId: 0x12e4e` in the transaction
+- Before buying and before adding liquidity, it queries Neuro again (no cache) when the user presses confirm
+- Security: `web/vercel.json` sets a strict CSP on every path (`default-src 'none'; script-src 'self'; style-src 'self'`,
+  no inline, no scripts from elsewhere, `connect-src` only https and localhost, `frame-ancestors 'none'`)
+  plus HSTS, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and COOP `same-origin`.
+  The web page only uses `textContent`, filters token names/symbols (strips control/bidi/zero-width characters, limits length, warns about names that duplicate the list)
+  and **approves exactly the amount needed**, not unlimited. No third-party libraries (hand-written ABI encoder, selectors precomputed and checked by tests)
+- Wallets: EIP-6963 (MetaMask, Rabby, OKX, Trust, Binance Wallet, Coinbase, Brave, Phantom, etc.) and legacy providers
+  (`window.ethereum`, `window.binancew3w`). Adds the network with `wallet_addEthereumChain` (ticker ZTPHY). On mobile without a wallet there are links to open in a wallet app
+- Thai/English, light/dark mode, works on mobile (tested at 360 px width)
 
-**ค่าที่เก็บใน localStorage ไม่ถูกเชื่อ (M4):** เดิมหน้า DEX อยู่ที่ `/zetaphy/` บน origin เดียวกับ test-ui ซึ่ง CSP หลวมกว่า
-ถ้าเว็บนั้นมีช่องโหว่ XSS สคริปต์จะเขียน localStorage ของหน้า DEX ได้ ตอนนี้หน้า DEX ย้ายไปอยู่บน `swap.sawasdeecoin.com` ของตัวเองแล้ว
-(เบราว์เซอร์แยก storage, DOM และ service worker ตาม origin) แต่ยังคงตรวจทุกค่าที่อ่านกลับอย่างเข้มงวด (`web/lib/storage.js`)
-เพราะค่าใน localStorage ยังถูกเขียนได้จากทางอื่น (ส่วนขยายของเบราว์เซอร์, โปรไฟล์เก่า, บั๊กในอนาคต) และไม่เชื่อค่าเหล่านั้นในเรื่องที่เกี่ยวกับเงิน:
+**Values stored in localStorage are not trusted (M4):** the DEX page used to live at `/zetaphy/` on the same origin as test-ui, which has a looser CSP.
+If that site had an XSS hole, a script could write the DEX page's localStorage. The DEX page has now moved to its own `swap.sawasdeecoin.com`
+(the browser separates storage, DOM and service workers by origin), but it still strictly checks every value it reads back (`web/lib/storage.js`),
+because localStorage values can still be written by other means (browser extensions, old profiles, future bugs), and it does not trust those values for anything involving money:
 
-- slippage ที่เก็บไว้ต้องเป็นจำนวนเต็ม 1–500 bps (**สูงสุด 5%**) มิฉะนั้นใช้ 0.5% และถ้า **เกิน 1%** ต้องติ๊กยืนยันใหม่ทุกครั้งก่อน
-  swap / เพิ่ม / ถอนสภาพคล่อง (ไม่เก็บการยืนยันไว้)
-- RPC ที่เก็บไว้ต้องอยู่ในรูปที่หน้าเว็บบันทึกเองพอดี (https หรือ localhost) ถ้าไม่ใช่ค่าเริ่มต้นมีแถบเตือนตลอดและไม่ส่งให้กระเป๋า
-- สวิตช์ "เหรียญหักค่าธรรมเนียมเมื่อโอน" ไม่ถูกเก็บ (ปิดทุกครั้งที่เปิดหน้า)
-- เหรียญที่นำเข้าเอง: อ่านกลับเฉพาะรายการของ chain 77390 ที่ผ่านการตรวจ ไม่ซ้ำ ไม่เกิน 50 รายการ แสดงป้าย
-  **"นำเข้าเอง ไม่อยู่ในรายการ"** ในตัวเลือกเหรียญและในรายการ และเตือนพร้อมที่อยู่สัญญาเมื่อเลือกใช้ และถาม Neuro ใหม่ตอนกดยืนยัน
-- id กระเป๋า ภาษา และธีม ต้องตรงรูปแบบที่กำหนด
+- Stored slippage must be an integer of 1–500 bps (**max 5%**), otherwise 0.5% is used. If it is **above 1%**, the user must tick to confirm again every time before
+  swap / add / remove liquidity (the confirmation is not stored)
+- A stored RPC must be in exactly the form the web page saves itself (https or localhost). If it is not the default, a warning bar shows the whole time and it is not passed to the wallet
+- The "Fee-on-transfer token" switch is not stored (it is off every time the page opens)
+- Self-imported tokens: only entries for chain 77390 that pass the checks are read back, no duplicates, at most 50 entries. They show the label
+  **"Self-imported, not on the list"** in the token picker and in the list, show a warning with the contract address when selected, and Neuro is queried again on confirm
+- Wallet id, language and theme must match the defined formats
 
-- ดูในเครื่อง: `cd zetaphy-dex && python3 -m http.server -d web 8000` (หรือ server static ใดก็ได้ที่ root คือ `web/`) แล้วเปิด
-  `http://localhost:8000/` (server นี้ไม่ส่ง header ของ `vercel.json`; `npm run test:web` ทดสอบภายใต้ CSP จริง)
+- View locally: `cd zetaphy-dex && python3 -m http.server -d web 8000` (or any static server with `web/` as root), then open
+  `http://localhost:8000/` (this server does not send the `vercel.json` headers; `npm run test:web` tests under the real CSP)
 
-## ความเสี่ยง
+## Risks
 
-- **ยังไม่ผ่านการตรวจสอบความปลอดภัย (audit)** ใช้บน testnet เท่านั้น เหรียญไม่มีมูลค่า ไม่ใช่คำแนะนำการลงทุน
-- ผู้ให้สภาพคล่องรายแรกเป็นผู้กำหนดราคาเริ่มต้น พูลเล็กราคาเปลี่ยนแรง (price impact) และถูก front-run / sandwich ได้: ตั้ง slippage ให้แคบ
-  พูลที่มี LP น้อยมากแต่ราคาผิดจากตลาด (มีคนฝากครั้งแรกไว้นิดเดียวที่ราคาแปลก ๆ) หน้าเว็บจะคำนวณตามราคาของพูลนั้น ตรวจราคาก่อนเพิ่มสภาพคล่องเสมอ
-- TWAP ของพูลที่สภาพคล่องต่ำถูกบิดได้ง่าย อย่าใช้เป็น oracle ราคาโดยไม่มีมาตรการเพิ่ม
-- เหรียญที่หักค่าธรรมเนียมเมื่อโอน / rebase / มีเจ้าของบล็อกการโอนได้ อาจทำให้ธุรกรรมล้มหรือได้น้อยกว่าที่เห็น
-  (เปิดตัวเลือก "เหรียญหักค่าธรรมเนียมเมื่อโอน" ในตั้งค่า)
-- ผลตรวจ Neuro ดีเท่ากับข้อมูลใน ThreatRegistry: "ไม่พบธง" ไม่ได้แปลว่าปลอดภัย และธงคือผลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา
-- เมื่อเปิดการตรวจบนเชน ถ้า registry หยุดตอบ (หรือใช้แก๊สเกิน 100,000) การซื้อ/เพิ่มสภาพคล่องผ่าน router จะถูกปฏิเสธทั้งหมดจนกว่า
-  governance จะแก้หรือตั้งเป็น `0` (ขายเป็นเหรียญหลักและถอนได้เสมอ) นี่คือการออกแบบให้ fail closed ไม่ใช่ข้อบกพร่อง
-- ใครก็ส่งเหรียญหลักเข้าพูลโดยตรงผ่าน bank send ได้ (ยอดเกิน reserve): `skim` ดึงออก `sync` ปรับ reserve ตาม
-- ไม่มี `permit` (EIP-2612) สำหรับ LP: การถอนต้อง approve ก่อน (หน้าเว็บ approve เท่าที่ถอนพอดี)
+- **Not yet security audited.** Use on testnet only. The coins have no value. This is not investment advice
+- The first liquidity provider sets the initial price. Small pools move price sharply (price impact) and can be front-run / sandwiched: set a tight slippage.
+  For a pool with very little LP but a price off the market (someone made a tiny first deposit at an odd price), the web page calculates using that pool's price. Always check the price before adding liquidity
+- The TWAP of a low-liquidity pool is easy to distort. Do not use it as a price oracle without extra safeguards
+- Fee-on-transfer / rebase tokens / tokens whose owner can block transfers may make transactions fail or return less than shown
+  (turn on the "Fee-on-transfer token" option in Settings)
+- Neuro results are only as good as the data in ThreatRegistry: "no flag found" does not mean safe, and a flag is automated code analysis, not an accusation
+- When the on-chain check is on, if the registry stops responding (or uses more than 100,000 gas), all buys/liquidity adds through the router are refused until
+  governance fixes it or sets it to `0` (selling to the native coin and removing liquidity always work). This is a deliberate fail-closed design, not a defect
+- Anyone can send native coins straight into a pool via bank send (balance above reserve): `skim` takes them out, `sync` updates the reserves to match
+- No `permit` (EIP-2612) for LP: removing liquidity needs an approve first (the web page approves exactly the amount being removed)
 
-## สัญญาอนุญาต
+## License
 
-MIT (ดู `LICENSE`) เขียนใหม่ทั้งหมด ไม่มีโค้ดจาก Uniswap (GPL-3.0) ใช้เพียงสูตรคณิตศาสตร์ที่เผยแพร่ใน whitepaper
+MIT (see `LICENSE`). Completely rewritten, with no code from Uniswap (GPL-3.0). Only the math formulas published in the whitepaper are used.
 
-## DLMM (สภาพคล่องแบบแบ่งช่องราคา / bins) — ⚠️ ยังไม่ผ่านการตรวจสอบความปลอดภัย (UNAUDITED)
+## DLMM (liquidity split into price bins) — ⚠️ not yet security audited (UNAUDITED)
 
-> ⚠️ **ส่วนนี้ใหม่ ยังไม่ผ่าน audit ใช้บน testnet เท่านั้น** เหรียญทดสอบไม่มีมูลค่า ไม่ใช่คำแนะนำการลงทุน
+> ⚠️ **This section is new, not yet audited, and for testnet only.** Test tokens have no value. This is not investment advice.
 
-DLMM คือพูลที่แบ่งสภาพคล่องเป็น **ช่องราคา (bin)** แต่ละช่องมีราคาคงที่ ผู้ให้สภาพคล่องเลือกช่วงราคาที่จะวางเหรียญเองได้
-(สภาพคล่องกระจุกตัว) เป็นการพอร์ตการออกแบบ DLMM ของเราเองบน Solana (`programs/swd_amm/src/dlmm.rs`
-และค่าธรรมเนียมตามความผันผวนจาก `swdmm_math.rs`) มาเป็น Solidity **เขียนใหม่ทั้งหมดภายใต้ MIT**
-(ตรวจแล้ว: Trader Joe Liquidity Book `traderjoe-xyz/joe-v2` ใช้สัญญาอนุญาต MIT แต่ **ไม่ได้คัดลอกโค้ดของใครมา**)
-แยกจาก AMM x·y = k เดิมโดยสมบูรณ์ (ไม่ได้แก้ Factory / Pair / Router เดิม)
+DLMM is a pool that splits liquidity into **price bins**. Each bin has a fixed price. Liquidity providers choose the price range where they place their tokens
+(concentrated liquidity). It is a port of our own DLMM design on Solana (`programs/swd_amm/src/dlmm.rs`
+and the volatility-based fee from `swdmm_math.rs`) to Solidity, **completely rewritten under MIT**
+(checked: Trader Joe Liquidity Book `traderjoe-xyz/joe-v2` uses the MIT license, but **no one's code was copied**).
+It is fully separate from the existing x·y = k AMM (the existing Factory / Pair / Router were not modified).
 
-| ไฟล์ | หน้าที่ |
+| File | Purpose |
 |---|---|
-| `contracts/dlmm/DlmmMath.sol` | คณิตศาสตร์ fixed-point 128.128 (ราคาของแต่ละ bin, mulDiv 512 บิต) และ bitmap หา bin ถัดไปที่มีสภาพคล่อง |
-| `contracts/dlmm/ZetaphyDlmmPair.sol` | พูล DLMM (bins, swap ข้าม bin, ฝาก/ถอน, ค่าธรรมเนียม, บัญชีหุ้นต่อ bin) และ `ZetaphyDlmmPairDeployer` (เก็บโค้ดของพูล) |
-| `contracts/dlmm/ZetaphyDlmmFactory.sol` | สร้างพูล 1 พูลต่อ (คู่เหรียญ, bin step) และค่าที่ governance ตั้งได้ |
-| `contracts/dlmm/ZetaphyDlmmRouter.sol` | ฟังก์ชันที่ผู้ใช้เรียก: เพิ่ม/ถอนสภาพคล่องเป็นช่วง, swap (exact in / exact out, หลายทอด), เหรียญหลัก, ตรวจ Neuro |
-| `contracts/test/DlmmTestHelpers.sol` | สัญญาสำหรับเทสต์เท่านั้น |
-| `dlmm-cli.js` | deploy DLMM (factory + router + preset เริ่มต้น) และตั้งค่า governance |
-| `web/dlmm.js`, `web/lib/dlmm.js` | แท็บ DLMM ในหน้าเว็บ (เลือกคู่/bin step, ดู bin รอบราคา, เพิ่ม/ถอนสภาพคล่องเป็นช่วง, swap) |
-| `test/dlmm*.test.js`, `test/web.dlmm.e2e.js`, `test/devnet.dlmm.integration.js` | เทสต์ (ดูด้านล่าง) |
+| `contracts/dlmm/DlmmMath.sol` | 128.128 fixed-point math (price of each bin, 512-bit mulDiv) and a bitmap to find the next bin with liquidity |
+| `contracts/dlmm/ZetaphyDlmmPair.sol` | DLMM pool (bins, swaps across bins, deposit/withdraw, fees, per-bin share accounting) and `ZetaphyDlmmPairDeployer` (holds the pool code) |
+| `contracts/dlmm/ZetaphyDlmmFactory.sol` | Creates 1 pool per (token pair, bin step) and stores the values governance can set |
+| `contracts/dlmm/ZetaphyDlmmRouter.sol` | Functions users call: add/remove liquidity over a range, swap (exact in / exact out, multi-hop), native coin, Neuro check |
+| `contracts/test/DlmmTestHelpers.sol` | Contracts for tests only |
+| `dlmm-cli.js` | Deploy DLMM (factory + router + default presets) and governance settings |
+| `web/dlmm.js`, `web/lib/dlmm.js` | DLMM tab on the web page (choose pair/bin step, view bins around the price, add/remove liquidity over a range, swap) |
+| `test/dlmm*.test.js`, `test/web.dlmm.e2e.js`, `test/devnet.dlmm.integration.js` | Tests (see below) |
 
-**การทำงาน**
+**How it works**
 
-- **ราคาของ bin:** bin หมายเลข `id` มีราคา `(1 + binStep/10000)^id` (หน่วย: tokenY ต่อ tokenX แบบหน่วยเล็กสุด ไม่สนทศนิยม)
-  `binStep` เป็น bps เช่น 10 = ห่างกัน 0.1% ต่อ bin คำนวณแบบ fixed-point 128.128 ราคาอยู่ในช่วง 2⁻⁹⁶ ถึง 2⁹⁶
-  (bin ที่อยู่นอกช่วงนี้ใช้ไม่ได้) tokenX คือเหรียญที่ที่อยู่ (address) น้อยกว่า
-- **active bin** คือราคาปัจจุบัน: bin ที่สูงกว่าราคาถือ X อย่างเดียว (ขาย X เมื่อราคาขึ้นถึง), bin ที่ต่ำกว่าถือ Y อย่างเดียว,
-  active bin ถือได้ทั้งสองอย่าง การฝากต้องเป็นไปตามกฎนี้
-- **swap** เริ่มที่ active bin แล้วข้ามไปทีละ bin ที่มีสภาพคล่อง (ข้าม bin ว่างได้ทันทีด้วย bitmap) ในแต่ละ bin ราคาไม่ขยับ
-  ข้ามได้สูงสุด 100 bin ต่อ swap (ถ้าต้องมากกว่านั้นให้แบ่งเป็นหลายครั้ง) ถ้าสภาพคล่องไม่พอ ธุรกรรมจะ revert ทั้งหมด (ไม่มีการเติมบางส่วน)
-- **การปัดเศษเข้าข้างพูลเสมอ:** จำนวนที่ผู้ใช้จ่ายและค่าธรรมเนียมปัดขึ้น จำนวนที่ได้รับและหุ้นที่ได้ปัดลง
-- **หุ้น (shares) แยกต่อ bin** (บัญชีภายในแบบ ERC-1155 ไม่มี callback): ฝากครั้งแรกใน bin ว่างได้หุ้น = `x·ราคา + y·2¹²⁸`
-  ฝากครั้งต่อไปได้หุ้นตามสัดส่วน และ bin จะรับเหรียญตามสัดส่วน X:Y ที่มีอยู่เท่านั้น ส่วนเกินคืนให้ผู้ฝาก
-  ถอนได้ส่วนแบ่งของ bin ตามสัดส่วนหุ้น ฝาก/ถอน/โอนได้สูงสุด 100 bin ต่อครั้ง
-- **ค่าธรรมเนียม** = ค่าพื้นฐาน (base fee ตาม preset ของ bin step) + **ค่าตามความผันผวน** (volatility fee: ยิ่งราคาเพิ่งวิ่งผ่านหลาย bin
-  ยิ่งสูง ค่อย ๆ ลดลงตามเวลา มีเพดาน) รวมไม่เกิน 10% ค่าธรรมเนียมอยู่ใน bin ที่เกิดการซื้อขาย (เป็นของ LP ของ bin นั้น)
-  ยกเว้น **protocol share** (ค่าเริ่มต้น 0, สูงสุด 50% ของค่าธรรมเนียม) ซึ่งใครก็สั่ง `collectProtocolFees()` ให้ส่งไปที่ `feeTo` ได้
-- **บัญชีภายใน:** พูลจำยอดของตัวเอง เหรียญที่โอนเข้ามาตรง ๆ (donation) ไม่เปลี่ยน bin หรือราคา `skim(to)` ดึงส่วนเกินออก
-- **ไม่มี flash swap และไม่มี callback** ทุกฟังก์ชันที่เปลี่ยนสถานะมี reentrancy lock
+- **Bin price:** bin number `id` has price `(1 + binStep/10000)^id` (unit: tokenY per tokenX in smallest units, ignoring decimals).
+  `binStep` is in bps, for example 10 = 0.1% apart per bin. Computed in 128.128 fixed point. Prices range from 2⁻⁹⁶ to 2⁹⁶
+  (bins outside this range cannot be used). tokenX is the token with the lower address
+- The **active bin** is the current price: bins above the price hold only X (X is sold when the price rises to them), bins below hold only Y,
+  and the active bin can hold both. Deposits must follow this rule
+- A **swap** starts at the active bin and moves one bin with liquidity at a time (empty bins are skipped instantly using the bitmap). Within each bin the price does not move.
+  At most 100 bins can be crossed per swap (if more are needed, split it into several swaps). If liquidity is not enough, the whole transaction reverts (no partial fill)
+- **Rounding always favours the pool:** amounts the user pays and fees round up; amounts received and shares received round down
+- **Shares are per bin** (internal ERC-1155-style accounting with no callback): the first deposit into an empty bin gets shares = `x·price + y·2¹²⁸`.
+  Later deposits get shares proportionally, and a bin only accepts tokens in its existing X:Y ratio; the excess is returned to the depositor.
+  Withdrawals get the bin's share in proportion to shares held. Deposit/withdraw/transfer at most 100 bins at a time
+- **Fee** = base fee (per the bin step preset) + **volatility fee** (the more bins the price has just crossed,
+  the higher it is; it decays over time and has a cap). The total is at most 10%. Fees stay in the bin where the trade happened (they belong to that bin's LPs),
+  except the **protocol share** (default 0, max 50% of the fee), which anyone can trigger with `collectProtocolFees()` to send it to `feeTo`
+- **Internal accounting:** the pool remembers its own balances. Tokens transferred in directly (donations) do not change bins or price. `skim(to)` takes out the excess
+- **No flash swaps and no callbacks.** Every state-changing function has a reentrancy lock
 
-**Router** (`ZetaphyDlmmRouter`) ทุกฟังก์ชันมี `deadline` และขอบเขต slippage ของผู้ใช้:
+**Router** (`ZetaphyDlmmRouter`): every function has a `deadline` and user slippage bounds:
 
-- `addLiquidity(params)` / `addLiquidityNATIVE(params)`: ระบุ bin แบบ **สัมพัทธ์กับ active bin** (`deltaIds`) พร้อมจำนวน X และ Y ของแต่ละ bin
-  (รูปแบบการกระจาย เช่น spot / curve / bid-ask เป็นเรื่องของหน้าเว็บ), `activeIdDesired` + `idSlippage` (ราคาเลื่อนได้กี่ bin),
-  `amountXMin` / `amountYMin` (ยอดที่ถูกใช้จริงขั้นต่ำ) ส่วนที่ bin ไม่รับคืนให้ทันที (เหรียญหลักคืนเป็นเหรียญหลัก)
-  ถ้าพูลยังว่างทั้งพูล router จะตั้ง active bin เป็น `activeIdDesired` ก่อนฝากในธุรกรรมเดียวกัน (**ผู้ฝากรายแรกเป็นผู้กำหนดราคา**)
-- `removeLiquidity` / `removeLiquidityNATIVE`: ต้องเรียก `pair.setApprovalForAll(router, true)` ก่อน (อนุญาตให้ router เผาหุ้นของเรา;
-  ยกเลิกได้ด้วย `false`) พร้อม `amountXMin` / `amountYMin`
+- `addLiquidity(params)` / `addLiquidityNATIVE(params)`: specify bins **relative to the active bin** (`deltaIds`) with X and Y amounts for each bin
+  (distribution shapes such as spot / curve / bid-ask are up to the web page), `activeIdDesired` + `idSlippage` (how many bins the price may move),
+  `amountXMin` / `amountYMin` (minimum amounts actually used). Any part a bin does not accept is returned immediately (native coin returned as native coin).
+  If the whole pool is still empty, the router sets the active bin to `activeIdDesired` before depositing in the same transaction (**the first depositor sets the price**)
+- `removeLiquidity` / `removeLiquidityNATIVE`: you must first call `pair.setApprovalForAll(router, true)` (allows the router to burn your shares;
+  revoke with `false`), along with `amountXMin` / `amountYMin`
 - `swapExactTokensForTokens`, `swapTokensForExactTokens`, `swapExactNATIVEForTokens`, `swapNATIVEForExactTokens`,
-  `swapExactTokensForNATIVE`, `swapTokensForExactNATIVE`: เส้นทาง `path = (binSteps[], tokens[])` หลายทอดได้
-  ใบเสนอราคา: `getAmountsOut` / `getAmountsIn` (หรือ `pair.getSwapOut` / `pair.getSwapIn`)
-- เหรียญหลัก (NATIVE) ใช้ `WNATIVE` แบบเดียวกับ router เดิม: บน ZETAPHY คือ precompile `0xEeee…EEeE` (ทดสอบบน devnet จริงแล้ว)
-- **ไม่รองรับเหรียญหักค่าธรรมเนียมเมื่อโอน** (router ปฏิเสธด้วย `FeeOnTransferNotSupported`) และ **ไม่รองรับเหรียญ rebase**
-  (ถ้ายอดของพูลลดลงเอง พูลจะไม่ยอมจ่ายเกินที่ถืออยู่: `BalanceBelowReserves`)
+  `swapExactTokensForNATIVE`, `swapTokensForExactNATIVE`: path `path = (binSteps[], tokens[])`, multi-hop is supported.
+  Quotes: `getAmountsOut` / `getAmountsIn` (or `pair.getSwapOut` / `pair.getSwapIn`)
+- The native coin (NATIVE) uses `WNATIVE` the same way as the existing router: on ZETAPHY it is the precompile `0xEeee…EEeE` (tested on a real devnet)
+- **Fee-on-transfer tokens are not supported** (the router refuses with `FeeOnTransferNotSupported`) and **rebase tokens are not supported**
+  (if the pool's balance drops on its own, the pool will not pay out more than it holds: `BalanceBelowReserves`)
 
-**Neuro:** กฎเดียวกับ router เดิม เมื่อ governance ตั้ง `dlmmFactory.setThreatRegistry(<ThreatRegistry>)` router ปฏิเสธการซื้อ (swap เข้า)
-และการเพิ่มสภาพคล่องของเหรียญที่ธง "มีผลบังคับ" แล้ว (`TokenEnforced(token, reason)`) และ fail closed (`RegistryUnavailable`)
-ถ้า registry ไม่ตอบ การขายเป็นเหรียญหลักและการถอนสภาพคล่องทำได้เสมอ ผลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา
+**Neuro:** same rules as the existing router. When governance sets `dlmmFactory.setThreatRegistry(<ThreatRegistry>)`, the router refuses buys (swap in)
+and liquidity adds for tokens whose flag is already "enforced" (`TokenEnforced(token, reason)`), and fails closed (`RegistryUnavailable`)
+if the registry does not respond. Selling to the native coin and removing liquidity always work. Automated code analysis, not an accusation.
 
-**governance (บอกตามจริง):** ฟังก์ชันผู้ดูแลทั้งหมดอยู่ใต้ **บทบาทเดียว `governance`** จึงส่งมอบทั้งหมดให้ TimelockController
-(หรือ multisig) ได้ในสองขั้น: `setGovernance(<timelock>)` แล้วให้ timelock execute `acceptGovernance()`
+**Governance (stated plainly):** all admin functions are under **a single `governance` role**, so everything can be handed over to a TimelockController
+(or a multisig) in two steps: `setGovernance(<timelock>)`, then have the timelock execute `acceptGovernance()`
 
-- *ทำได้:* เปิด/แก้/ปิด preset (bin step + ค่าธรรมเนียม) สำหรับ **พูลใหม่**, ตั้ง `feeTo`, ตั้ง protocol share (≤ 50% ของค่าธรรมเนียม)
-  ของพูลใหม่และพูลที่มีอยู่, ตั้ง/ปิด `threatRegistry` (ซึ่งหยุดการซื้อผ่าน router ได้ถ้า registry หยุดตอบ เหมือน router เดิม),
-  `router.sweep(to)` (เหรียญหลักที่หลงเข้า router)
-- *ทำไม่ได้:* ย้ายเงินของใคร หยุดพูล เปลี่ยนค่าธรรมเนียมหรือ bin step ของพูลที่สร้างแล้ว หรืออัปเกรดสัญญา (ไม่มี proxy)
+- *Can:* enable/edit/disable presets (bin step + fee) for **new pools**, set `feeTo`, set the protocol share (≤ 50% of the fee)
+  for new and existing pools, set/disable `threatRegistry` (which can stop buys through the router if the registry stops responding, same as the existing router),
+  `router.sweep(to)` (native coins that strayed into the router)
+- *Cannot:* move anyone's funds, stop a pool, change the fee or bin step of an existing pool, or upgrade the contracts (no proxy)
 
-**Deploy และหน้าเว็บ**
+**Deploy and web page**
 
 ```bash
 cd zetaphy-dex
-# deploy factory + router (WNATIVE = precompile บน ZETAPHY) + preset 1/10/25/100 bps
-# แล้วเพิ่ม contracts.dlmmFactory / dlmmRouter ลงไฟล์ deployments ของ cli.js และ (ถ้าใส่ --web) web/deployments.json
+# deploy factory + router (WNATIVE = precompile on ZETAPHY) + presets 1/10/25/100 bps
+# then add contracts.dlmmFactory / dlmmRouter to the cli.js deployments file and (with --web) web/deployments.json
 node dlmm-cli.js deploy --rpc <url> --key-file <file> [--web] [--governance <timelock>] [--fee-to <addr>]
 node dlmm-cli.js status --rpc <url>
 node dlmm-cli.js set-registry <ThreatRegistry|0x0> --rpc <url> --key-file <file>
 ```
 
-กฎของไฟล์กุญแจเหมือน `cli.js` (ไฟล์เท่านั้น chmod 600, ไม่รับกุญแจทาง command line) และ deploy ได้เฉพาะเชน 77390 ยกเว้นใส่ `--any-chain`
-preset เริ่มต้น: bin step 1 / 10 / 25 / 100 bps, ค่าธรรมเนียมพื้นฐานเท่ากับ bin step, ค่าตามความผันผวนสูงสุด +50 / +100 / +150 / +300 bps
+Key file rules are the same as `cli.js` (file only, chmod 600, no keys on the command line), and deploy only works on chain 77390 unless you pass `--any-chain`.
+Default presets: bin step 1 / 10 / 25 / 100 bps, base fee equal to the bin step, max volatility fee +50 / +100 / +150 / +300 bps.
 
-แท็บ **DLMM** ในหน้าเว็บอ่าน `contracts.dlmmFactory` / `contracts.dlmmRouter` จาก `web/deployments.json` (ไม่มี = แสดงว่ายังไม่ได้ deploy)
-ใช้กระเป๋า, RPC, การตรวจ Neuro (ปฏิเสธเหรียญที่ธงมีผลบังคับ เตือนและให้ติ๊กยืนยันเมื่อมีธง) และค่า slippage/deadline เดียวกับหน้าเดิม
-อนุญาตเหรียญเท่าที่จะใช้พอดี และขอ `setApprovalForAll` เฉพาะตอนถอน (มีปุ่มยกเลิกสิทธิ์)
+The **DLMM** tab on the web page reads `contracts.dlmmFactory` / `contracts.dlmmRouter` from `web/deployments.json` (missing = shows that it is not deployed yet).
+It uses the same wallet, RPC, Neuro check (refuses tokens with an enforced flag, warns and asks for a tick to confirm when there is a flag) and slippage/deadline values as the existing page.
+It approves exactly the tokens that will be used, and only asks for `setApprovalForAll` when removing liquidity (with a button to revoke the permission).
 
-**ทดสอบ**
+**Tests**
 
 ```bash
 cd zetaphy-dex
-npm run build && npm test     # รวมเทสต์ DLMM: dlmm.math / dlmm / dlmm.security / dlmm.neuro / dlmm.fuzz / dlmm.web-lib / dlmm.cli
-PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:web                          # รวมแท็บ DLMM (web.dlmm.e2e.js)
-ZDLMM_FUZZ_SEED=1,2,3,4 ZDLMM_FUZZ_STEPS=200 node --test test/dlmm.fuzz.test.js     # fuzz เพิ่ม (seed หลายค่าได้)
-ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet:dlmm  # บน devnet จริง (พอร์ต ZDLMM_DEVNET_PORT, ค่าเริ่มต้น 24745)
+npm run build && npm test     # includes DLMM tests: dlmm.math / dlmm / dlmm.security / dlmm.neuro / dlmm.fuzz / dlmm.web-lib / dlmm.cli
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:web                          # includes the DLMM tab (web.dlmm.e2e.js)
+ZDLMM_FUZZ_SEED=1,2,3,4 ZDLMM_FUZZ_STEPS=200 node --test test/dlmm.fuzz.test.js     # extra fuzzing (multiple seeds allowed)
+ZETAPHYD=/path/to/zetaphyd flock /tmp/ci-test/devnet.lock npm run test:devnet:dlmm  # on a real devnet (port ZDLMM_DEVNET_PORT, default 24745)
 ```
 
-ครอบคลุม: ราคาเทียบค่าที่คำนวณแบบแม่นยำ ขอบช่วงราคา mulDiv 512 บิต bitmap, swap ตรงกับโมเดล BigInt ทุก wei, exact-out ที่น้อยที่สุด,
-ค่าธรรมเนียมตามความผันผวน, protocol fee, หลายทอด, เหรียญหลัก, slippage/deadline, การฝากครั้งแรก, reentrancy, donation,
-เหรียญหักค่าธรรมเนียม/rebase, bin สุดขอบ, ขีดจำกัดการข้าม bin, Neuro และ fuzz ที่ตรวจ invariant ทุกขั้น
-(ยอดรวมของ bin = reserve, พูลถือเหรียญครบ, หุ้นรวม = totalSupply, มูลค่าต่อหุ้นของ bin ไม่ลดลง)
+Coverage: prices against exactly computed values, price range edges, 512-bit mulDiv, bitmap, swaps matching a BigInt model to every wei, minimal exact-out,
+volatility fee, protocol fee, multi-hop, native coin, slippage/deadline, first deposit, reentrancy, donations,
+fee-on-transfer/rebase tokens, edge bins, bin-crossing limit, Neuro, and fuzzing that checks invariants at every step
+(sum of bins = reserve, pool holds all tokens, total shares = totalSupply, value per share of a bin never decreases).
 
-**แก๊ส (โดยประมาณ)**
+**Gas (approximate)**
 
-| การทำงาน | EVM ในหน่วยความจำ (execution gas ไม่รวม 21,000 + calldata) | devnet จริง (gasUsed ของธุรกรรม, ผ่าน precompile เหรียญหลัก) |
+| Operation | In-memory EVM (execution gas, excluding 21,000 + calldata) | Real devnet (transaction gasUsed, via the native coin precompile) |
 |---|---|---|
-| swap ภายใน 1 bin | ~60,700 | 143,594 (ZTPHY → tUSD), 139,044 (tUSD → ZTPHY) |
-| swap exact-out (1 bin, คืนเงินทอน) | — | 160,986 |
-| swap ข้าม 6 / 21 / 50 bin | ~106,800 / ~243,300 / ~508,900 | 179,551 (25 ZTPHY ข้ามหลาย bin) |
-| swap ข้ามสูงสุด (100 ครั้ง) | ~1,000,700 | — |
-| swap 2 ทอด | — | 198,427 |
-| เพิ่มสภาพคล่องใน bin ใหม่ | ~77,000–80,000 ต่อ bin | 5,458,820 (21 bin รวมสร้างพูลใหม่ ~3.6M) |
-| ถอนสภาพคล่อง 21 bin | — | 455,540 |
+| swap within 1 bin | ~60,700 | 143,594 (ZTPHY → tUSD), 139,044 (tUSD → ZTPHY) |
+| swap exact-out (1 bin, with change refund) | — | 160,986 |
+| swap across 6 / 21 / 50 bins | ~106,800 / ~243,300 / ~508,900 | 179,551 (25 ZTPHY across several bins) |
+| swap at max crossing (100 times) | ~1,000,700 | — |
+| 2-hop swap | — | 198,427 |
+| add liquidity in a new bin | ~77,000–80,000 per bin | 5,458,820 (21 bins including creating a new pool ~3.6M) |
+| remove liquidity from 21 bins | — | 455,540 |
 
-(คอลัมน์ devnet ใช้ preset เริ่มต้นของ `dlmm-cli.js` ซึ่งมีค่าธรรมเนียมตามความผันผวน; คอลัมน์ในหน่วยความจำใช้ preset ไม่มีค่าตามความผันผวน)
+(The devnet column uses the default `dlmm-cli.js` presets, which include the volatility fee; the in-memory column uses a preset with no volatility fee.)
 
-**ยังไม่ได้ทำ:** TWAP/oracle ของ DLMM (ห้ามใช้ราคา active bin เป็น oracle), เส้นทาง swap อัตโนมัติข้ามหลายพูลในหน้าเว็บ (แท็บ DLMM swap ภายในพูลที่เลือก; router รองรับหลายทอดแล้ว)
-และยังไม่ได้ deploy บน testnet
+**Not done yet:** DLMM TWAP/oracle (do not use the active bin price as an oracle), automatic swap routing across multiple pools in the web page (the DLMM tab swaps within the selected pool; the router already supports multi-hop),
+and not yet deployed on testnet.
 
-**ความเสี่ยง (สำหรับผู้ใช้):** ยังไม่ผ่าน audit; ผู้ให้สภาพคล่องรายแรกของพูลเป็นผู้กำหนดราคาเริ่มต้น ตรวจ active bin ก่อนฝากเสมอ
-(ตั้ง `idSlippage` ให้แคบ); สภาพคล่องที่อยู่ในช่วงราคาแคบจะกลายเป็นเหรียญอีกฝั่งทั้งหมดเมื่อราคาวิ่งผ่าน (impermanent loss
-สูงกว่าพูล x·y = k ได้); swap ใหญ่ที่ต้องข้ามมากกว่า 100 bin ต้องแบ่งทำหลายครั้ง; ตั้ง slippage ให้แคบเพราะถูก front-run / sandwich ได้;
-`setApprovalForAll(router)` ให้สิทธิ์ router เผาหุ้นทุก bin ของพูลนั้นในนามเรา (router ใช้กับผู้เรียกเองเท่านั้น) ยกเลิกได้เมื่อเลิกใช้
-รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+**Risks (for users):** not yet audited; the first liquidity provider of a pool sets the initial price, so always check the active bin before depositing
+(set a tight `idSlippage`); liquidity in a narrow price range turns entirely into the other token when the price moves through it (impermanent loss
+can be higher than in an x·y = k pool); a large swap that needs to cross more than 100 bins must be split into several swaps; set a tight slippage because you can be front-run / sandwiched;
+`setApprovalForAll(router)` lets the router burn your shares in every bin of that pool on your behalf (the router only uses it for the caller themselves); revoke it when you stop using it.
+Security details are kept separately for the team.

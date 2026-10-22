@@ -1,155 +1,157 @@
-# ZETAPHY: ความปลอดภัยในแกนกลางของเชน (security core)
+**English** | [ภาษาไทย](SECURITY-CORE.th.md)
 
-เอกสารนี้อธิบายกติกาความปลอดภัย 3 อย่างที่อยู่ในตัวเชนเอง (ไม่ใช่แค่ในกระเป๋าหรือสัญญา) ว่าเปลี่ยนอะไรสำหรับผู้ใช้
-และ validator และมีอะไรป้องกันไม่ให้กติกาเหล่านี้กลายเป็นเครื่องมือเซ็นเซอร์
+# ZETAPHY: security in the chain's core (security core)
 
-| | ทำอะไร | ใครเปิด | ค่าเริ่มต้น |
+This document explains the 3 security rules that live in the chain itself (not only in wallets or contracts): what they change for users
+and validators, and what stops these rules from becoming a tool for censorship
+
+| | What it does | Who turns it on | Default |
 |---|---|---|---|
-| **Q-day** | ตั้งแต่ความสูงที่โหวตไว้ เชนไม่รับธุรกรรมที่เซ็นด้วย ECDSA (กุญแจแบบ MetaMask) | การโหวต governance | ปิด (ยังไม่กำหนดวัน) |
-| **Threat gate** | ธุรกรรมที่เรียกสัญญาที่ Neuro ติดธง "บังคับใช้" ต้องได้ความยินยอมจากเจ้าของบัญชีก่อน | การโหวต governance | ปิด |
-| **IBC hold** | การโอนเข้าผ่าน IBC ที่ใหญ่เกินเกณฑ์ ถูกพักไว้ช่วงหนึ่งก่อนเข้าบัญชี | การโหวต governance | ปิด (ไม่มีเกณฑ์) |
+| **Q-day** | From the voted height, the chain refuses transactions signed with ECDSA (MetaMask-style keys) | governance vote | Off (no date set yet) |
+| **Threat gate** | A transaction that calls a contract with an "enforced" Neuro flag needs the account owner's consent first | governance vote | Off |
+| **IBC hold** | Inbound IBC transfers above a threshold are held for a period before reaching the account | governance vote | Off (no threshold) |
 
-ทั้งสามอย่าง **ปิดอยู่จนกว่าจะมีการโหวต** ทุกการตั้งค่าเป็น proposal สาธารณะ (`gov.sh`) และดูค่าที่ใช้อยู่ได้ตลอด:
-`gov.sh security` หรือ JSON-RPC `zetaphy_securityStatus` หรือ `zetaphy security status`
+All three are **off until there is a vote**. Every setting is a public proposal (`gov.sh`), and the values in use can be viewed at any time:
+`gov.sh security` or JSON-RPC `zetaphy_securityStatus` or `zetaphy security status`
 
 ---
 
-## 1. Q-day: เตรียมย้ายบัญชีไปลายเซ็นต้านควอนตัม
+## 1. Q-day: preparing to move accounts to quantum-resistant signatures
 
-**Q-day คืออะไร** — วันที่เครือข่ายเลิกเชื่อลายเซ็น ECDSA (secp256k1) เพราะคอมพิวเตอร์ควอนตัมที่ใหญ่พอจะปลอม
-ลายเซ็นของกุญแจที่เคยเปิดเผย public key ได้ governance เป็นผู้กำหนดความสูงบล็อก (`gov.sh qday <ความสูง>`)
-ล่วงหน้า ก่อนถึงวันนั้นทุกอย่างทำงานเหมือนเดิม
+**What Q-day is** — the date when the network stops trusting ECDSA (secp256k1) signatures, because a large enough quantum computer could forge
+signatures for keys whose public key has been revealed. governance sets the block height (`gov.sh qday <height>`)
+in advance. Until that date everything works as before
 
-**ตั้งแต่ Q-day:**
-- ธุรกรรม Ethereum ทุกแบบ (MetaMask, Rabby ฯลฯ ซึ่งเซ็นด้วย ECDSA เสมอ) ถูกปฏิเสธตั้งแต่ตอนส่ง
-- ธุรกรรม Cosmos ผ่านได้เฉพาะเมื่อผู้เซ็นทุกคนเป็นกุญแจ ML-DSA-44 (หรือ multisig ที่มีแต่ ML-DSA-44)
-- ลายเซ็น ECDSA ที่สัญญาตรวจเอง (`ecrecover`: permit, meta-transaction และ P-256 ผ่าน precompile `0x…0100`: passkey) ไม่มีผลอีก
-- บัญชี ECDSA ที่ **ยังไม่ย้าย** ถูกแช่แข็ง: เงินยังอยู่ที่เดิม ไม่มีใครย้ายได้ (รวมถึงผู้ที่ปลอมลายเซ็นได้) governance
-  อาจเพิ่มวิธีกู้คืนภายหลังได้ด้วยการโหวต
-- สิทธิ์ที่ให้ไว้ก่อน Q-day (allowance ของ ERC-20, authz, fee grant) ยังใช้ได้ เพราะให้ไว้ตอนลายเซ็นยังเชื่อถือได้
-  ควรยกเลิก allowance ที่ไม่ใช้แล้วก่อน Q-day
+**From Q-day:**
+- Every kind of Ethereum transaction (MetaMask, Rabby, etc., which always sign with ECDSA) is refused at submission
+- Cosmos transactions pass only when every signer is an ML-DSA-44 key (or a multisig made only of ML-DSA-44 keys)
+- ECDSA signatures that contracts verify themselves (`ecrecover`: permit, meta-transactions, and P-256 through precompile `0x…0100`: passkeys) no longer have any effect
+- ECDSA accounts that **have not migrated** are frozen: the funds stay where they are and nobody can move them (including someone who can forge signatures). governance
+  may add a recovery method later by vote
+- Permissions given before Q-day (ERC-20 allowances, authz, fee grants) still work, because they were given while signatures were still trustworthy.
+  You should revoke unused allowances before Q-day
 
-### สิ่งที่ผู้ใช้ควรทำ (ก่อน Q-day)
-1. สร้างบัญชี ML-DSA-44 ในกระเป๋า ZETAPHY (หน้าเว็บ `zetaphy-wallet` หรือ ZETAPHY Snap ใน MetaMask) แล้วส่ง
-   ธุรกรรมสักครั้ง (ให้เชนรู้ public key)
-2. ในการ์ด **"ล็อกบัญชี MetaMask ให้กระเป๋านี้"** ล็อกบัญชี MetaMask เดิมให้บัญชี ML-DSA-44 นั้น (ล็อกควอนตัม,
-   ถาวร) — ที่อยู่ 0x ยอดเงิน โทเคน stake และสิทธิ์ในสัญญาอยู่ที่เดิม แต่จากนี้สั่งผ่านบัญชี ML-DSA-44 เท่านั้น
-   ซึ่งยังใช้งานได้หลัง Q-day
-3. กดปุ่ม **"เตรียมพร้อมสำหรับ Q-day → ตรวจบัญชี MetaMask ของฉัน"** เพื่อดูสถานะ: ย้ายแล้ว / กำลังย้าย /
-   ยังไม่ย้าย (และกุญแจเคยถูกใช้บนเชนหรือไม่)
+### What users should do (before Q-day)
+1. Create an ML-DSA-44 account in the ZETAPHY wallet (the `zetaphy-wallet` web page or the ZETAPHY Snap in MetaMask), then send
+   at least one transaction (so the chain learns the public key)
+2. In the **"Lock MetaMask account to this wallet"** card, lock your existing MetaMask account to that ML-DSA-44 account (quantum lock,
+   permanent) — the 0x address, balance, tokens, stake and contract rights stay where they are, but from then on they can be controlled only through the ML-DSA-44 account,
+   which keeps working after Q-day
+3. Press the **"Get ready for Q-day → Check my MetaMask account"** button to see the status: migrated / migrating /
+   not migrated (and whether the key has ever been used on chain)
 
-บน CLI: `zetaphy security migration <ที่อยู่>` และ `zetaphy pq native lock-ecdsa --yes`
+On the CLI: `zetaphy security migration <address>` and `zetaphy pq native lock-ecdsa --yes`
 
-### ถ้าไม่ทันก่อน Q-day: ย้ายแบบ commit–reveal (เฉพาะกุญแจที่ไม่เคยใช้บนเชน)
-บัญชีที่ **ไม่เคยส่งธุรกรรมและไม่เคยมีลายเซ็นถูกตรวจบนเชน** (เช่น กระเป๋าที่รับเงินอย่างเดียว) ยังย้ายได้หลัง Q-day:
-1. กระเป๋า MetaMask เซ็นข้อความย้ายบัญชี **ในเครื่องเท่านั้น** (ไม่ส่งธุรกรรม)
-2. บัญชี ML-DSA-44 ใหม่บันทึก **commitment** (ค่า hash ที่ไม่เปิดเผยอะไรเกี่ยวกับกุญแจเดิม) — ทำได้ตั้งแต่ก่อน Q-day
-3. รออย่างน้อย `reveal_delay` บล็อก (governance ตั้ง ค่าเริ่มต้น 720 บล็อก) แล้ว **reveal** หลัง Q-day
-4. รออีก `reveal_delay` บล็อก บัญชีเดิมจึงเป็นของบัญชี ML-DSA-44 (เหมือนล็อกควอนตัม)
+### If you miss Q-day: commit–reveal migration (only for keys never used on chain)
+Accounts that **have never sent a transaction and never had a signature verified on chain** (e.g. wallets that have only received funds) can still migrate after Q-day:
+1. The MetaMask wallet signs an account-migration message **locally only** (no transaction is sent)
+2. The new ML-DSA-44 account records a **commitment** (a hash value that reveals nothing about the old key) — this can be done before Q-day
+3. Wait at least `reveal_delay` blocks (set by governance, default 720 blocks), then **reveal** after Q-day
+4. Wait another `reveal_delay` blocks; the old account then belongs to the ML-DSA-44 account (like a quantum lock)
 
-การรอสองช่วงนี้ทำให้คนที่เห็นข้อมูลตอน reveal แล้วพยายามแซงหน้า ทำไม่ได้: commitment ที่สร้างหลังเห็นข้อมูลยังใหม่เกิน
-ไป และระหว่างช่วงรอ commitment ที่เก่ากว่าเป็นผู้ชนะ **ทำ commit ทันทีที่ประกาศ Q-day จะปลอดภัยที่สุด**
-บัญชีที่กุญแจเคยถูกใช้บนเชนแล้ว ใช้ทางนี้ไม่ได้ — ต้องล็อกก่อน Q-day
+These two waiting periods stop anyone who sees the data at reveal time from getting ahead: a commitment created after seeing the data is too new,
+and during the waiting period the older commitment wins. **Committing as soon as Q-day is announced is the safest**
+Accounts whose key has already been used on chain cannot use this route — they must lock before Q-day
 
-ในกระเป๋า: การ์ด "เตรียมพร้อมสำหรับ Q-day" มีปุ่ม "ขั้นที่ 1" และ "ขั้นที่ 2" (MetaMask จะขอเซ็นข้อความ ไม่ใช่ธุรกรรม)
-CLI: `zetaphy security qday-commit` แล้ว `zetaphy security qday-reveal`
+In the wallet: the "Get ready for Q-day" card has "Step 1" and "Step 2" buttons (MetaMask will ask to sign a message, not a transaction)
+CLI: `zetaphy security qday-commit`, then `zetaphy security qday-reveal`
 
 ### validator
-- คะแนนโหวตบล็อกมีลายเซ็น ML-DSA อยู่แล้ว (ขั้น 5) แต่ **บัญชี operator** ที่เป็น ECDSA จะส่งธุรกรรมไม่ได้หลัง Q-day
-  — ล็อกควอนตัมบัญชี operator ก่อน แล้วจัดการ validator ผ่าน `MsgEVMCall as_owner` (precompile staking,
-  distribution, slashing, gov) และ `MsgPQVoteKey` ช่อง `validator_owner`
-- relayer IBC (Hermes) และ faucet ของ testnet เซ็นด้วย ECDSA จึงส่งธุรกรรมไม่ได้หลัง Q-day เช่นกัน
-  — IBC จะหยุดจนกว่าจะมี relayer ที่เซ็นด้วย ML-DSA-44 (ยังไม่มี) จึงยังไม่ควรตั้ง Q-day บนเชนที่ใช้ IBC จริง
-- governance ควรกำหนด Q-day เมื่อ validator ส่วนใหญ่ล็อกบัญชีแล้วเท่านั้น ไม่อย่างนั้นการโหวตหลัง Q-day จะทำไม่ได้
-  (`gov.sh qday` ไม่ยอมตั้งความสูงที่ใกล้เกินไป)
+- Block votes already carry ML-DSA signatures (stage 5), but an **operator account** that is ECDSA cannot send transactions after Q-day
+  — quantum-lock the operator account first, then manage the validator through `MsgEVMCall as_owner` (staking,
+  distribution, slashing, gov precompiles) and the `validator_owner` field of `MsgPQVoteKey`
+- The IBC relayer (Hermes) and the testnet faucet sign with ECDSA, so they also cannot send transactions after Q-day
+  — IBC will stop until there is a relayer that signs with ML-DSA-44 (there is none yet), so Q-day should not yet be set on a chain that uses IBC for real
+- governance should set Q-day only once most validators have locked their accounts; otherwise voting after Q-day will not be possible
+  (`gov.sh qday` refuses to set a height that is too close)
 
 ---
 
-## 2. Threat gate: ความยินยอม ไม่ใช่การเซ็นเซอร์
+## 2. Threat gate: consent, not censorship
 
-Neuro runners ติดธงสัญญาจาก **ข้อเท็จจริงของโค้ด** ที่ทดสอบซ้ำได้ (เช่น ซื้อได้แต่ขายไม่ได้ในการจำลอง) ลงใน
-`ThreatRegistry` เมื่อ governance เปิด threat gate (`gov.sh threat-gate <ThreatRegistry> on`) เชนจะ:
-- ปฏิเสธธุรกรรม EVM (และ `MsgEVMCall`) ที่ปลายทาง (`to`) มีธง **บังคับใช้แล้ว** พร้อมข้อความบอกเหตุผล
-- **เว้นแต่** เจ้าของบัญชีให้ความยินยอมก่อน: ธุรกรรมเดียว `consent(ปลายทาง, วินาที)` ไปที่ precompile
-  `0x0000000000000000000000000000000000000901` (ส่งจาก MetaMask ได้ตรง ๆ) ใช้ได้นานสุด 1 วัน ยกเลิกได้ด้วย 0 วินาที
+Neuro runners flag contracts based on **facts about the code** that can be re-tested (e.g. can be bought but not sold in a simulation) in
+`ThreatRegistry`. When governance turns on the threat gate (`gov.sh threat-gate <ThreatRegistry> on`), the chain will:
+- Refuse EVM transactions (and `MsgEVMCall`) whose destination (`to`) has an **enforced** flag, with a message giving the reason
+- **Unless** the account owner gives consent first: a single transaction `consent(destination, seconds)` to the precompile
+  `0x0000000000000000000000000000000000000901` (can be sent directly from MetaMask), valid for at most 1 day, revocable with 0 seconds
 
-ในกระเป๋า: การ์ด **"ยินยอมเรียกสัญญาที่ติดธง"** (ส่งจากกระเป๋า ML-DSA-44 หรือจาก MetaMask) และ ZETAPHY Snap
-แสดงคำเตือนระดับวิกฤตพร้อมเหตุผล หลักฐาน คำชี้แจงของเจ้าของสัญญา และวิธียินยอม CLI: `zetaphy security consent <0x…> <วินาที>`
+In the wallet: the **"Consent to call a flagged contract"** card (sent from the ML-DSA-44 wallet or from MetaMask), and the ZETAPHY Snap
+shows a critical-level warning with the reason, evidence, the contract owner's reply, and how to consent. CLI: `zetaphy security consent <0x…> <seconds>`
 
-**สิ่งที่ป้องกันการใช้ในทางที่ผิด**
-- นับเฉพาะธง **บังคับใช้** (ผ่าน enforceDelay หรือ fast lane) ธงเตือนและธงที่พักไว้ไม่ทำให้ถูกปฏิเสธ
-- key ที่ governance ป้องกันไว้ (สัญญาของโปรโตคอลเอง เช่น bridge) ติดธงไม่ได้ จึงไม่มีทางทำให้การถอนเงินจากสัญญา
-  ของโปรโตคอลค้าง และธงที่ถูกล้าง (โหวตล้าง หรืออุทธรณ์ชนะ) หยุดการปฏิเสธทันที
-- ทุกคนไปต่อได้เสมอด้วยความยินยอมของตัวเอง ไม่มีใครปิดกั้นบัญชีใดได้ถาวร
-- ที่อยู่ระบบ (precompile) และตัว registry เอง (การอุทธรณ์ คำชี้แจง) ไม่ถูกตรวจ การเรียกของ governance ไม่ถูกตรวจ
-- ถ้า registry ใช้งานไม่ได้ เชนถือว่า "ไม่มีธง": เชนและธุรกรรมของผู้ใช้ไม่ค้างเพราะ registry
-- ค่าใช้จ่ายจำกัด: เรียก view ของ registry ครั้งเดียวต่อธุรกรรม เพดานแก๊สคงที่ ผลเหมือนกันทุกโหนด
-- ธุรกรรมที่ถูกปฏิเสธไม่เข้า mempool (ตรวจตอนส่ง) ถ้าถูกปฏิเสธเมื่ออยู่ในบล็อกแล้ว (เช่น ความยินยอมหมดอายุหรือถูกยกเลิกระหว่างรอ)
-  ธุรกรรมยังอยู่ในบล็อกและ **จ่ายค่าธรรมเนียม** (nonce ถูกใช้) แต่สิ่งที่ธุรกรรมจะทำถูกย้อนกลับทั้งหมด (ธุรกรรม EVM: receipt สถานะล้มเหลว)
+**What prevents misuse**
+- Only **enforced** flags count (past enforceDelay or the fast lane). Warning flags and held flags do not cause refusals
+- Keys protected by governance (the protocol's own contracts, e.g. the bridge) cannot be flagged, so there is no way to make withdrawals from the protocol's
+  contracts get stuck, and a cleared flag (cleared by vote, or by a successful appeal) stops refusals immediately
+- Everyone can always proceed with their own consent; nobody can block any account permanently
+- System addresses (precompiles) and the registry itself (appeals, replies) are not checked; governance calls are not checked
+- If the registry is unusable, the chain treats it as "no flag": the chain and users' transactions do not get stuck because of the registry
+- Bounded cost: one view call to the registry per transaction, a fixed gas cap, the same result on every node
+- Refused transactions do not enter the mempool (checked at submission). If one is refused when already in a block (e.g. the consent expired or was revoked while waiting),
+  the transaction stays in the block and **pays the fee** (the nonce is used), but everything the transaction would do is reverted (EVM transaction: a receipt with failed status)
 
-**ข้อจำกัด** — ด่านนี้เป็นการขอความยินยอม ไม่ได้รับประกันว่าจะกันความเสียหายได้ทุกกรณี กระเป๋า ZETAPHY และ Snap
-ตรวจเพิ่มเติมก่อนเซ็นอยู่แล้ว ใช้วิจารณญาณเสมอ
-
----
-
-## 3. IBC hold: พักการโอนเข้าก้อนใหญ่
-
-governance ตั้งเกณฑ์ต่อเหรียญ (`gov.sh ibc-hold-rule <denom|*> <จำนวนขั้นต่ำ> <bps ของ supply>`) และช่วงพัก
-กับ guardian (`gov.sh ibc-hold <วินาที> [guardian]` ค่าเริ่มต้น 6 ชั่วโมง) การโอนเข้าที่ถึงเกณฑ์:
-- ถูกรับไว้ (ไม่หมดเวลาฝั่งต้นทาง) แต่ **ยังไม่เข้าบัญชีผู้รับ** ระหว่างพัก ดูรายการได้ที่ `gov.sh ibc-holds`,
-  JSON-RPC `zetaphy_ibcHolds`, `zetaphy security ibc-holds` และ event `zetaphy_ibc_hold`
-- ครบเวลา เชนส่งต่อให้ผู้รับเอง (ผ่าน rate limit และกติกาอื่นตามปกติ ณ ตอนนั้น)
-- ระหว่างพัก guardian (เช่น multisig) หรือ governance **คืนเงินให้ผู้ส่ง** ได้ (`gov.sh ibc-hold-cancel <id>`
-  หรือ `cancelIBCHold(id)` ที่ precompile 0x…0901 สำหรับ multisig แบบสัญญา) เชนต้นทางคืนเงินผ่านกลไก IBC ปกติ
-  — guardian เปลี่ยนผู้รับหรือยึดเงินไม่ได้
-- การโอนผ่าน IBC v2 ที่ถึงเกณฑ์ถูกปฏิเสธทันที (เงินคืนต้นทาง) ให้ใช้ channel IBC แบบปกติ (v1)
-- x/ratelimit (เพดานต่อช่วงเวลา) ยังทำงานเหมือนเดิม ใช้คู่กัน
-- เกณฑ์ของเหรียญที่ระบุชื่อ: ถึงจำนวนขั้นต่ำ **หรือ** ถึงสัดส่วนของ supply บนเชนนี้ · เกณฑ์ `*` (เหรียญที่ไม่มีเกณฑ์ของตัวเอง): สัดส่วนของ supply
-  นับเฉพาะการโอนที่ถึงจำนวนขั้นต่ำของ `*` (เหรียญที่ยังไม่เคยเข้ามามี supply เป็น 0 ถ้าไม่มีขั้นต่ำ ทุกการโอนของเหรียญนั้นจะถูกพัก)
-  ขั้นต่ำนับเป็นหน่วยย่อยที่สุดของแต่ละเหรียญ (ทศนิยมต่างกันในแต่ละเหรียญ) จึงเป็นแค่เกณฑ์กันการโอนเล็ก ๆ
-- รายการพักมีเพดาน: พร้อมกันไม่เกิน 2,000 รายการทั้งเชน และไม่เกิน 100 รายการต่อเหรียญ การโอนที่ถึงเกณฑ์เมื่อรายการเต็มถูก **ปฏิเสธทันที**
-  (เงินคืนผู้ส่งที่เชนต้นทาง ส่งใหม่ได้ภายหลัง) ไม่ใช่ถูกส่งต่อโดยไม่พัก ลำดับการปล่อยยังเป็นตามเวลาที่ครบกำหนด
-
-การโอนออก และการโอนที่ต่ำกว่าเกณฑ์ ไม่เปลี่ยน
-
-**EVM bridge (BridgeGuard / BridgeAirlock):** กติกา "เฉพาะ minter ที่ลงทะเบียน" ยังอยู่ที่ระดับสัญญา ไม่ได้ย้ายมาอยู่ในเชน
-เพราะเชนบังคับแบบสะอาดไม่ได้ (การ mint เกิดภายในโค้ดของสัญญา) เหรียญ IBC ที่เป็น ERC-20 ถูกสร้างโดยโมดูล IBC เท่านั้นอยู่แล้ว
+**Limitations** — this gate asks for consent; it does not guarantee to prevent damage in every case. The ZETAPHY wallet and Snap
+already do further checks before signing. Always use your own judgement
 
 ---
 
-## สัญญา CosmWasm (ขั้น 7) กับกติกาทั้งสาม
+## 3. IBC hold: holding large inbound transfers
 
-ธุรกรรมที่เรียกสัญญา CosmWasm (Rust) เป็นธุรกรรม Cosmos ธรรมดา จึงอยู่ใต้กติกาเดียวกัน
-(รายละเอียดการตั้งค่า: [`zetaphy-chain/README.md`](../zetaphy-chain/README.md) หัวข้อ "ขั้น 7")
-- **Q-day:** หลัง Q-day ธุรกรรม wasm ต้องเซ็นด้วย ML-DSA-44 เท่านั้น เหมือนธุรกรรมอื่น; บัญชีที่ล็อกควอนตัม
-  ใช้กุญแจเดิมส่งธุรกรรม wasm ไม่ได้ และสัญญาก็ใช้สิทธิ์ authz ที่บัญชีนั้นเคยให้ไว้ไม่ได้
-  - ผู้ควบคุม ML-DSA-44 ทำแทนบัญชีที่ล็อกได้เฉพาะฝั่ง EVM: **ย้ายโทเคน cw20 / สิทธิ์ admin ของสัญญา CosmWasm
-    ไปบัญชี ML-DSA-44 ก่อนล็อก**
-- **Threat gate:** ใช้กับสัญญา EVM เท่านั้น (ThreatRegistry เก็บที่อยู่ 20 ไบต์ ส่วนสัญญา CosmWasm มีที่อยู่ 32 ไบต์)
-  สัญญา CosmWasm เรียกสัญญา EVM ในนามตัวเองไม่ได้ และ `MsgEVMCall` ที่สัญญาสั่งผ่าน authz ถูกตรวจด่านตอนรัน
-- **IBC hold:** IBC ของสัญญาปิดอยู่ (เปิดช่องหรือส่ง packet เองไม่ได้) สัญญาโอนเหรียญแบบ ICS-20 ได้ ซึ่งผ่าน
-  เพดาน IBC ขาออก และเหรียญที่โอนเข้ามาหาสัญญาผ่าน IBC hold ตามปกติ
-- **อัปโหลดโค้ด:** governance เท่านั้น (`gov.sh wasm-store`), error codespace `zetaphy` 30 = ข้อความที่สัญญาส่งไม่ได้
+governance sets a threshold per token (`gov.sh ibc-hold-rule <denom|*> <minimum amount> <bps of supply>`) and a hold period
+and guardian (`gov.sh ibc-hold <seconds> [guardian]`, default 6 hours). An inbound transfer that reaches the threshold:
+- Is accepted (it does not time out on the source side) but **does not reach the recipient's account yet** while held. The list can be viewed with `gov.sh ibc-holds`,
+  JSON-RPC `zetaphy_ibcHolds`, `zetaphy security ibc-holds`, and the event `zetaphy_ibc_hold`
+- When the time is up, the chain forwards it to the recipient by itself (through the rate limit and the other rules as normal at that time)
+- While held, the guardian (e.g. a multisig) or governance can **return the funds to the sender** (`gov.sh ibc-hold-cancel <id>`
+  or `cancelIBCHold(id)` at the precompile 0x…0901 for a contract-based multisig); the source chain refunds through the normal IBC mechanism
+  — the guardian cannot change the recipient or seize the funds
+- IBC v2 transfers that reach the threshold are refused immediately (the funds return to the source); use a normal (v1) IBC channel
+- x/ratelimit (cap per time window) keeps working as before; they are used together
+- The threshold for a named token: reaching the minimum amount **or** reaching the share of supply on this chain · the `*` threshold (tokens without their own threshold): the share of supply
+  counts only transfers that reach the `*` minimum amount (a token that has never come in has a supply of 0; without a minimum, every transfer of that token would be held)
+  The minimum is counted in each token's smallest unit (decimals differ from token to token), so it is only a threshold to filter out small transfers
+- The hold list has a cap: no more than 2,000 entries at once across the whole chain, and no more than 100 entries per token. A transfer that reaches the threshold when the list is full is **refused immediately**
+  (the funds return to the sender on the source chain and can be sent again later), not forwarded without a hold. The release order is still by due time
+
+Outbound transfers, and transfers below the threshold, are unchanged
+
+**EVM bridge (BridgeGuard / BridgeAirlock):** the "registered minters only" rule stays at the contract level and has not moved into the chain,
+because the chain cannot enforce it cleanly (minting happens inside the contract's code). IBC tokens that are ERC-20s are already created only by the IBC module
 
 ---
 
-## การอัปเกรด
+## CosmWasm contracts (stage 7) and the three rules
 
-- เชนใหม่ (genesis ใหม่): เปิดใช้ตั้งแต่บล็อก 1 (`app_state.zetaphypq` key `0f` = 1, `setup-node.sh` ใส่ให้) แต่ทุกกติกาปิดจนโหวต
-- เชนที่รันอยู่แล้ว: `gov.sh propose-upgrade zetaphy-v3 <ความสูง H> "<สรุป>"` แล้วโหวต ทุก validator เปลี่ยน binary ที่ H
-  ตั้งแต่ H+1 precompile 0x…0901 และกติกาใหม่จึงมีผล (handler ตั้ง v2 ให้ด้วยถ้ายังไม่เปิด) บล็อกก่อนหน้ารันเหมือนเดิม
-- ค่าทั้งหมดอยู่ใน `app_state.zetaphypq` และติดไปกับ genesis export
+Transactions that call CosmWasm (Rust) contracts are ordinary Cosmos transactions, so they fall under the same rules
+(setup details: [`zetaphy-chain/README.md`](../zetaphy-chain/README.md), section "Stage 7")
+- **Q-day:** after Q-day, wasm transactions must be signed with ML-DSA-44 only, like other transactions; a quantum-locked account
+  cannot send wasm transactions with its old key, and contracts cannot use authz permissions that account has given
+  - The ML-DSA-44 controller can act on behalf of a locked account only on the EVM side: **move cw20 tokens / CosmWasm contract admin rights
+    to the ML-DSA-44 account before locking**
+- **Threat gate:** applies to EVM contracts only (ThreatRegistry stores 20-byte addresses, while CosmWasm contracts have 32-byte addresses)
+  CosmWasm contracts cannot call EVM contracts in their own name, and a `MsgEVMCall` that a contract issues through authz is checked by the gate when it runs
+- **IBC hold:** IBC for contracts is disabled (they cannot open channels or send packets themselves). Contracts can transfer tokens via ICS-20, which goes through
+  the outbound IBC cap, and tokens transferred in to a contract go through the IBC hold as normal
+- **Code upload:** governance only (`gov.sh wasm-store`); error codespace `zetaphy` 30 = a message that contracts cannot send
 
-## สำหรับนักพัฒนา
+---
+
+## Upgrades
+
+- A new chain (new genesis): enabled from block 1 (`app_state.zetaphypq` key `0f` = 1, set by `setup-node.sh`), but every rule is off until voted
+- A chain that is already running: `gov.sh propose-upgrade zetaphy-v3 <height H> "<summary>"`, then vote; every validator switches binary at H.
+  From H+1 the precompile 0x…0901 and the new rules take effect (the handler also enables v2 if it is not yet on); earlier blocks run as before
+- All values are in `app_state.zetaphypq` and carry over with a genesis export
+
+## For developers
 
 | | |
 |---|---|
-| ข้อความ | `/zetaphy.pq.v1.MsgSetQDay`, `MsgQDayCommit`, `MsgQDayReveal`, `MsgSetThreatGate`, `MsgSetIBCHold`, `MsgSetIBCHoldRule`, `MsgIBCHoldCancel` |
+| Messages | `/zetaphy.pq.v1.MsgSetQDay`, `MsgQDayCommit`, `MsgQDayReveal`, `MsgSetThreatGate`, `MsgSetIBCHold`, `MsgSetIBCHoldRule`, `MsgIBCHoldCancel` |
 | precompile 0x…0901 | `consent(address,uint64)`, `consentUntil(address,address)`, `threatGate()`, `qday()`, `migration(address)`, `cancelIBCHold(uint64)`, event `Consent` |
 | JSON-RPC | `zetaphy_securityStatus`, `zetaphy_migration`, `zetaphy_qdayCommitment`, `zetaphy_consent`, `zetaphy_ibcHolds` |
 | event | `zetaphy_qday`, `zetaphy_qday_commit`, `zetaphy_qday_reveal`, `zetaphy_qday_migrated`, `zetaphy_threat_gate`, `zetaphy_consent`, `zetaphy_ibc_hold`, `zetaphy_ibc_hold_released`, `zetaphy_ibc_hold_cancelled`, `zetaphy_ibc_hold_stuck` |
-| error | codespace `zetaphy`: 20 = Q-day, 21 = threat gate, 30 = ข้อความที่สัญญา CosmWasm ส่งไม่ได้ |
+| error | codespace `zetaphy`: 20 = Q-day, 21 = threat gate, 30 = a message that CosmWasm contracts cannot send |
 | JS | `zetaphy-network/src/pqtx.js` (`qdayRevealText`, `qdayCommitment`, `consentCall`, `msgQDay*`, `pqClient().securityStatus/migration/qdayCommit/qdayReveal/consent/ibcHolds`) |
-| ทดสอบ | `zetaphy-chain/fork-tests/evmd/zetaphy_security_test.go`, `fork-tests/evmd/tests/ibc/zetaphy_ibchold_test.go`, `zetaphy-network/test/devnet.security.integration.js`, `zetaphy-chain/ibc/test-ibc.sh` |
+| Tests | `zetaphy-chain/fork-tests/evmd/zetaphy_security_test.go`, `fork-tests/evmd/tests/ibc/zetaphy_ibchold_test.go`, `zetaphy-network/test/devnet.security.integration.js`, `zetaphy-chain/ibc/test-ibc.sh` |
 
-รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+Security details are kept separately for the team.

@@ -1,287 +1,289 @@
-# Neuro ZETAPHY — ชั้น 1 (อ่านและอธิบายสัญญา)
+**English** | [ภาษาไทย](README.th.md)
 
-งานแรกตาม "แผน ZETAPHY Chain": ตัวอ่านสัญญาที่บอกเป็นภาษาคนว่าสัญญาเหรียญบน
-**Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos, TON, NEAR, Starknet, Osmosis, Neutron และเหรียญ Runes บน Bitcoin** ให้สิทธิ์อะไรกับเจ้าของบ้าง (สร้างเหรียญเพิ่ม,
-บล็อกกระเป๋า, หยุดการโอน, เปลี่ยนภาษี, อัปเกรดโค้ด ฯลฯ) อธิบายได้ 7 ภาษา: ไทย อังกฤษ จีน ญี่ปุ่น เกาหลี
-เวียดนาม อินโดนีเซีย ต้นทุน $0
+# Neuro ZETAPHY — Tier 1 (read and explain contracts)
 
-- **อ่านอย่างเดียว**: ใช้แค่ `eth_getCode`, `eth_getStorageAt`, `eth_call` (EVM รวมถึง `eth_call` แบบ
-  state override หนึ่งครั้งสำหรับจำลองซื้อขาย ดูด้านล่าง), `eth_gasPrice` และ
-  `getGenesisHash`, `getAccountInfo` (Solana), GraphQL แบบ query อย่างเดียว (Sui), GET กับฟังก์ชัน
-  `#[view]` (Aptos) และ GET จาก tonapi.io (TON) ผ่าน endpoint สาธารณะฟรี ไม่ขอเชื่อมกระเป๋า
-  ไม่มีโค้ดส่งธุรกรรม (`src/rpc.js` ปฏิเสธคำสั่งอื่นทั้งหมด และตรวจว่า endpoint เป็น mainnet จริง)
-- **กฎตายตัว ไม่ใช้ AI**: ผลเหมือนเดิมทุกครั้ง มี `reportHash` ให้เครื่องอื่นตรวจซ้ำได้
-  (ตามจุดอ่อนข้อ 1 ในแผน: งานต้องตรวจซ้ำได้)
-- **ไม่เชื่อข้อความจากสัญญา**: ชื่อ/สัญลักษณ์เหรียญถูกกรองอักขระควบคุมและแสดงเป็นข้อความเท่านั้น
-  ชื่อที่มีลิงก์จะได้คำเตือนว่าชื่อนั้นมีลิงก์ ชื่อทุกชื่อแสดง "ตามที่เขียนไว้ในสัญญา" ไม่ใช่คำยืนยันของ Neuro
-- **บอกข้อเท็จจริงของโค้ด ไม่ตัดสินคน**: ทุกข้อความบอกว่าโค้ดทำอะไรได้หรือการจำลองให้ผลอะไร
-  ไม่ใช้คำอย่าง "หลอกลวง" หรือ "scam" ทุกรายงานมีคำปฏิเสธความรับผิด 7 ภาษา, รหัสรายงาน, รหัสผลตัดสิน
-  และคำสั่ง CLI สำหรับตรวจซ้ำ พร้อมลิงก์วิธีชี้แจง/ขอแก้ไข (`web/legal.html`, นโยบายเต็มที่ [`docs/LEGAL.md`](../docs/LEGAL.md))
+The first job in the "ZETAPHY Chain plan": a contract reader that tells you, in plain language, what powers a token contract on
+**Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos, TON, NEAR, Starknet, Osmosis, Neutron, and Runes tokens on Bitcoin** gives its owner (mint more tokens,
+block wallets, pause transfers, change taxes, upgrade the code, etc.). It explains in 7 languages: Thai, English, Chinese, Japanese, Korean,
+Vietnamese, and Indonesian. Cost: $0.
 
-## ใช้งาน
+- **Read-only**: it uses only `eth_getCode`, `eth_getStorageAt`, `eth_call` (EVM, including one `eth_call` with a
+  state override for the buy/sell simulation, see below), `eth_gasPrice`, and
+  `getGenesisHash`, `getAccountInfo` (Solana), query-only GraphQL (Sui), GET to
+  `#[view]` functions (Aptos), and GET from tonapi.io (TON), through free public endpoints. It never asks to connect a wallet.
+  There is no code that sends transactions (`src/rpc.js` rejects every other method and checks that the endpoint really is mainnet).
+- **Fixed rules, no AI**: the result is the same every time. A `reportHash` lets other machines re-check it
+  (per weakness no. 1 in the plan: work must be re-checkable).
+- **Does not trust text from the contract**: token names/symbols are stripped of control characters and shown as text only.
+  A name that contains a link gets a warning that the name contains a link. Every name is shown "as written in the contract", not as something Neuro confirms.
+- **States code facts, does not judge people**: every message says what the code can do or what the simulation produced.
+  It does not use words like "fraud" or "scam". Every report has a 7-language disclaimer, a report ID, a verdict ID,
+  and the CLI command to re-check it, plus a link to how to respond / request a correction (`web/legal.html`, full policy in [`docs/LEGAL.md`](../docs/LEGAL.md))
+
+## Usage
 
 ```bash
 npm install
-node cli.js bsc 0x...            # อธิบายเป็นภาษาไทย
-node cli.js base 0x... --lang en  # English (หรือ zh ja ko vi id)
-node cli.js sui 0x...::coin::COIN # เหรียญบน Sui
-node cli.js aptos 0x...           # Fungible Asset บน Aptos (หรือ 0x...::module::Name)
-node cli.js ton EQ...             # jetton บน TON
-node cli.js near token.near        # สัญญา/เหรียญบน NEAR
-node cli.js starknet 0x...        # สัญญา Cairo บน Starknet
-node cli.js bitcoin DOG•GO•TO•THE•MOON  # เหรียญ Rune บน Bitcoin (หรือรหัส 840000:3)
-node cli.js osmosis osmo1...      # สัญญา CosmWasm (Rust) หรือ factory/osmo1.../ชื่อ
-node cli.js zetaphy-wasm zetaphy1... --rest https://<โหนด ZETAPHY>/rest   # สัญญา CosmWasm บน ZETAPHY (ระบุโหนดเอง)
-node cli.js arbitrum 0x... --json # รายงานเต็ม
-npm run web                       # เปิดหน้าเว็บที่ http://localhost:8080/
+node cli.js bsc 0x...            # explain in Thai
+node cli.js base 0x... --lang en  # English (or zh ja ko vi id)
+node cli.js sui 0x...::coin::COIN # token on Sui
+node cli.js aptos 0x...           # Fungible Asset on Aptos (or 0x...::module::Name)
+node cli.js ton EQ...             # jetton on TON
+node cli.js near token.near        # contract/token on NEAR
+node cli.js starknet 0x...        # Cairo contract on Starknet
+node cli.js bitcoin DOG•GO•TO•THE•MOON  # Rune token on Bitcoin (or ID 840000:3)
+node cli.js osmosis osmo1...      # CosmWasm (Rust) contract or factory/osmo1.../name
+node cli.js zetaphy-wasm zetaphy1... --rest https://<ZETAPHY node>/rest   # CosmWasm contract on ZETAPHY (you specify the node)
+node cli.js arbitrum 0x... --json # full report
+npm run web                       # open the web page at http://localhost:8080/
 ```
 
-หน้าเว็บ (`web/`) เป็นไฟล์ static ล้วน เบราว์เซอร์ของผู้ใช้เรียก RPC สาธารณะเอง
-ลิงก์แชร์ได้: `/web/?chain=bsc&address=0x...` · หน้าสถิติ: `/web/stats.html`
+The web page (`web/`) is pure static files. The user's browser calls the public RPC itself.
+Shareable link: `/web/?chain=bsc&address=0x...` · Stats page: `/web/stats.html`
 
-## วางบนเว็บฟรี (Vercel)
+## Host on the web for free (Vercel)
 
-1. เข้า vercel.com → **Add New → Project** → เลือก repo นี้
-2. **Root Directory** ตั้งเป็น `zetaphy-neuro` (ไม่ต้องตั้ง build ใดๆ มี `vercel.json` แล้ว) → **Deploy**
-3. เปิดตัวนับผู้ใช้ (ไม่บังคับ แต่ต้องใช้วัดประตู 1,000 รายต่อเดือน):
-   - แท็บ **Storage → Create → Upstash for Redis** (แพ็กเกจฟรี) แล้ว Connect กับโปรเจกต์นี้
-     ระบบจะตั้ง `KV_REST_API_URL` และ `KV_REST_API_TOKEN` ให้เอง
-   - **Settings → Environment Variables** เพิ่ม `USAGE_SALT` เป็นข้อความสุ่มยาว 16 ตัวขึ้นไป
-     (เช่นผลของ `openssl rand -hex 32`) ห้ามใส่ใน repo หรือวางในแชต
-   - **Redeploy** แล้วเปิด `/web/stats.html` จะเห็นตัวเลขเดือนนี้เทียบเป้า 1,000
+1. Go to vercel.com → **Add New → Project** → choose this repo
+2. Set **Root Directory** to `zetaphy-neuro` (no build settings needed, `vercel.json` is already there) → **Deploy**
+3. Turn on the user counter (optional, but needed to measure gate 1,000 users per month):
+   - Tab **Storage → Create → Upstash for Redis** (free plan), then Connect it to this project.
+     The system sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` for you
+   - **Settings → Environment Variables**: add `USAGE_SALT` as a random string of 16 or more characters
+     (for example the output of `openssl rand -hex 32`). Never put it in the repo or paste it in chat
+   - **Redeploy**, then open `/web/stats.html` to see this month's number against the 1,000 target
 
-ถ้าไม่ตั้งข้อ 3 หน้าเว็บยังใช้ได้ปกติ แค่ไม่นับผู้ใช้
+If you skip step 3, the web page still works normally. It just does not count users.
 
-## ตัวนับผู้ใช้ (`api/usage.js`, `server/usage.js`)
+## User counter (`api/usage.js`, `server/usage.js`)
 
-- ไม่เก็บ IP, เบราว์เซอร์ หรือที่อยู่สัญญาที่ตรวจ ผู้ใช้แต่ละคนถูกแปลงเป็นค่า HMAC
-  ของ (เดือน, IP, เบราว์เซอร์) ด้วยรหัสลับ แล้วใส่ใน HyperLogLog ซึ่งเก็บแค่จำนวน
-  ขึ้นเดือนใหม่ค่าจะเปลี่ยนทั้งหมด จึงโยงข้ามเดือนไม่ได้
-- ไม่นับถ้าเบราว์เซอร์ตั้ง Do Not Track หรือ Global Privacy Control
-- นับครั้งตรวจได้สูงสุด 200 ครั้งต่อคนต่อวัน ตัวเลขเป็นค่าประมาณ (คลาด ~1%)
-  และคนที่เปลี่ยน IP ไปเรื่อยๆ ยังปั่นตัวเลขได้ ให้ใช้เป็นสัญญาณ ไม่ใช่ตัวเลขที่ตรวจสอบแล้ว
+- It does not store IPs, browsers, or the contract addresses checked. Each user is turned into an HMAC value
+  of (month, IP, browser) with a secret key, then added to a HyperLogLog, which stores only a count.
+  When a new month starts, all values change, so users cannot be linked across months
+- It does not count if the browser sets Do Not Track or Global Privacy Control
+- It counts at most 200 checks per person per day. The numbers are estimates (~1% error),
+  and someone who keeps changing IP can still inflate them. Use them as a signal, not as verified numbers
 
-## จำเหรียญที่สร้างจาก ZETAPHY launcher
+## Recognising tokens created by the ZETAPHY launcher
 
-Neuro จำ "แม่แบบโค้ด" ได้ด้วยลายนิ้วมือโค้ด (`src/fingerprint.js`): ปิดค่าที่ต่างกัน
-ในแต่ละเหรียญ (ที่อยู่, ค่า immutable) แล้วเข้ารหัสส่วนที่เหลือ เหรียญทุกตัวจากแม่แบบเดียวกัน
-จึงได้ค่าเดียวกัน วิธีลงทะเบียน:
+Neuro recognises "code templates" by a code fingerprint (`src/fingerprint.js`): it masks the values that differ
+between tokens (addresses, immutable values) and hashes the rest. Every token from the same template
+therefore gets the same value. To register one:
 
 ```bash
-node cli.js fingerprint bsc 0x<เหรียญหนึ่งตัวที่สร้างจาก ZETAPHY บน BNB Chain>
+node cli.js fingerprint bsc 0x<one token created by ZETAPHY on BNB Chain>
 ```
 
-คำสั่งจะพิมพ์รายการพร้อมวาง ให้ใส่ใน `src/templates.js` ทำซ้ำสำหรับ Base และ Arbitrum
+The command prints a ready-to-paste entry. Put it in `src/templates.js`. Repeat for Base and Arbitrum.
 
-ไม่ต้องรันคำสั่งก็ได้: ตรวจเหรียญนั้นบนหน้าเว็บ แล้วเปิด "รายละเอียด" จะเห็น
-**ลายนิ้วมือโค้ด** (`fp1:...`) ส่งค่านั้นพร้อมเชนและที่อยู่เหรียญมาเพื่อลงทะเบียนได้เลย
-เมื่อจำได้แล้ว Neuro จะขึ้นว่า "ตรงกับแม่แบบเหรียญ ZETAPHY" และแสดงกฎภาษีเป็น "ลดได้อย่างเดียว"
-(เมื่อใส่ `tax-decrease-only` หลังอ่านโค้ดตั้งภาษีแล้ว) ถ้าโค้ดมีสิทธิ์ที่แม่แบบบอกว่าไม่มี
-จะเตือนระดับสูงทันที แทนที่จะเชื่อข้อมูลแม่แบบ
+You don't have to run the command: check that token on the web page and open "Details" to see the
+**code fingerprint** (`fp1:...`). Send that value with the chain and token address to register it.
+Once recognised, Neuro shows "matches a ZETAPHY token template" and shows the tax rule as "can only decrease"
+(once `tax-decrease-only` is added after reading the tax-setting code). If the code has a power that the template says it does not have,
+it warns at high level immediately instead of trusting the template data.
 
-## โค้ดคล้ายโค้ดที่ติดธง และรูปแบบที่ยังไม่รู้จัก
+## Code similar to flagged code, and unknown patterns
 
-กฎตายตัวจับได้แค่สิ่งที่รู้จักชื่อ โค้ดที่ลอกจากโค้ดที่ติดธงแล้วเปลี่ยนชื่อฟังก์ชัน เพิ่ม getter
-หรือย้ายเงื่อนไขนิดหน่อย จะได้ลายนิ้วมือใหม่ Neuro จึงวัดว่าโค้ด **ใกล้** โค้ดในชุดข้อมูลแค่ไหน (`src/similarity.js`)
-ยังเป็นกฎตายตัว: ใช้แค่ hash จำนวนเต็ม ไม่ใช้ AI ไม่สุ่ม ทุกเครื่องได้ตัวเลขเดียวกัน
+Fixed rules only catch what they know by name. Code copied from flagged code with renamed functions, an added getter,
+or slightly moved conditions gets a new fingerprint. So Neuro measures how **close** the code is to code in the dataset (`src/similarity.js`).
+It is still fixed rules: integer hashes only, no AI, no randomness. Every machine gets the same number.
 
-- ตัดข้อมูลของ PUSH ทุกตัว (ที่อยู่ ค่าคงที่ ตำแหน่ง jump) และ metadata ของคอมไพเลอร์ออก เหลือแต่ลำดับ opcode
-- ตัดส่วนที่เหรียญสุจริตมีเหมือนกันออก (baseline ใน `scripts/baseline-tokens.sol`: ERC-20 แบบสั้น, ERC-20 + Ownable + mint
-  และแบบ OpenZeppelin v5: ERC20, + Pausable, + Permit, + Burnable, + Capped, Ownable2Step, AccessControl และ blacklist ธรรมดา
-  คอมไพล์ด้วย solc 0.8.26 ทั้งเปิดและปิด optimizer) ไม่อย่างนั้นโค้ดไลบรารีที่ไม่อยู่ใน baseline จะดันเหรียญสุจริตให้ดูคล้ายเกิน 60% ได้
-- เทียบส่วนที่เหลือ: MinHash (128 ค่า) ของชุด opcode 4 ตัวติดกัน และ Jaccard ของ selector ที่เหลือ
-  คะแนน = max(opcode, (opcode + selector) / 2) เปลี่ยนชื่อฟังก์ชันจึงหนีไม่พ้น
-- คะแนนตั้งแต่ 60% เตือนระดับต่ำ, 75% ระดับกลาง (โค้ดเดียวกันเป๊ะ = 100%) ส่วนที่เหลือของโค้ดต้องมีอย่างน้อย 8 ชุด ไม่งั้นไม่เทียบ
-- **เป็นข้อมูลประกอบ ไม่ใช่หลักฐาน:** ระดับสูงสุดคือกลาง ยกเว้นลายนิ้วมือตรงเป๊ะกับรายการที่มีการอ้างอิงธงบนเชน จึงเป็นระดับสูง
-- **ถ้อยคำตามที่มา:** ขึ้นว่า "คล้ายโค้ดที่ผู้รัน Neuro ติดธงไว้" (`similar-flagged`) เฉพาะรายการที่อ้างอิงธงบนเชน
-  (`flag: { key, reportHash }` คือคีย์ใน ThreatRegistry และ reportHash ของหลักฐานการติดธง) รายการที่ไม่มีการอ้างอิง
-  ขึ้นว่า "คล้ายตัวอย่างอ้างอิงในชุดข้อมูลของ Neuro" (`similar-reference`) และบอกชัดว่าไม่ใช่โค้ดที่ติดธง
-- ตรวจไม่พบไม่ได้แปลว่าปลอดภัย กฎตายตัวและการจำลองซื้อขายยังทำงานตามปกติ
-- อยู่ใน verdict ที่คนรันร่างต้องตรงกัน เพราะขึ้นกับโค้ดและชุดข้อมูลเท่านั้น (`verdict` และ `reportHash` คงที่)
-- ครอบคลุมเฉพาะ EVM bytecode: เชนอื่นอ่านจากค่าตั้งบนเชน ไม่ใช่โค้ด และยังไม่ได้ทำกับ WASM ของ Stylus
+- Strip the data of every PUSH (addresses, constants, jump positions) and the compiler metadata, leaving only the opcode sequence
+- Strip the parts that honest tokens share (baseline in `scripts/baseline-tokens.sol`: minimal ERC-20, ERC-20 + Ownable + mint,
+  and OpenZeppelin v5 style: ERC20, + Pausable, + Permit, + Burnable, + Capped, Ownable2Step, AccessControl, and a plain blacklist,
+  compiled with solc 0.8.26 with the optimizer both on and off). Otherwise, library code not in the baseline could push an honest token above 60% similarity
+- Compare what is left: MinHash (128 values) of the set of 4 consecutive opcodes, and Jaccard of the remaining selectors.
+  Score = max(opcode, (opcode + selector) / 2), so renaming functions does not escape it
+- A score from 60% gives a low warning, 75% medium (exactly the same code = 100%). The remaining code must have at least 8 sets, otherwise it is not compared
+- **Supporting information, not evidence:** the highest level is medium, except when the fingerprint exactly matches an entry with an on-chain flag reference, which is high
+- **Wording depends on the source:** it shows "similar to code flagged by Neuro runners" (`similar-flagged`) only for entries that reference an on-chain flag
+  (`flag: { key, reportHash }` is the key in ThreatRegistry and the reportHash of the flagging evidence). Entries without a reference
+  show "similar to a reference sample in Neuro's dataset" (`similar-reference`) and say clearly that it is not flagged code
+- Not detected does not mean safe. The fixed rules and the buy/sell simulation still run as normal
+- It is part of the verdict that runners must agree on, because it depends only on the code and the dataset (`verdict` and `reportHash` are stable)
+- Covers EVM bytecode only: other chains are read from on-chain settings, not code, and it is not yet done for Stylus WASM
 
-ชุดข้อมูลอยู่ในโค้ดเอง (`src/threat-signatures.js`) เพราะ ThreatRegistry เก็บแค่คีย์ ไม่เก็บโค้ด
-แต่ละรายการคือลายนิ้วมือ + ลายเซ็นย่อ (selector ที่เหลือ + MinHash) ราว 1 KB + ที่มา (`flag`)
-- **ชุดข้อมูลจริงเริ่มต้นว่างเปล่า** ยังไม่มีสัญญาไหนที่ผู้รันร่างติดธง และสัญญาทดสอบไม่ใช่โค้ดที่ติดธง
-- ตัวอย่างอ้างอิงสำหรับชุดทดสอบ (ScamToken, QuietHoneypot, NotLaunched, HiddenPowers, Killable ทั้งเปิดและปิด optimizer)
-  อยู่ที่ `test/fixtures/reference-samples.generated.js` ใช้ในเทสต์เท่านั้น ไม่อยู่ใน `src/` จึงไม่อยู่ในทักษะ
-  สร้างใหม่ทั้ง baseline และตัวอย่างด้วย `npm run threat-signatures` ไม่ดึงอะไรจากเน็ต
-- เพิ่มสัญญาที่ติดธงจริงใน ThreatRegistry: ตรวจ `evidenceOf(key)` ก่อน แล้ว
-  `node cli.js signature bsc 0x... --reason cannot-sell-in-simulation --flag-key 0x<คีย์> --report-hash 0x<reportHash>` แล้ววางรายการใน `ADDED`
-  (`--reason` รับรหัสข้อเท็จจริงของโค้ดใน ThreatRegistry ตาม `src/threat-reasons.js` รายงานแสดงเป็นคำบรรยายที่เป็นกลาง ดู `REASON` ใน `src/lang/*.js`
-  ถ้าไม่ใส่ `--flag-key` / `--report-hash` รายการนั้นจะแสดงเป็น "ตัวอย่างอ้างอิง" เท่านั้น)
-  ทักษะ (skill id) คือ hash ของ `src/` ทั้งหมด ชุดข้อมูลใหม่ (หรือ baseline ใหม่) จึงเป็นทักษะใหม่ ต้องผ่านโหวตก่อนคนรันร่างจะใช้
+The dataset lives in the code itself (`src/threat-signatures.js`), because ThreatRegistry stores only keys, not code.
+Each entry is a fingerprint + a short signature (remaining selectors + MinHash) of about 1 KB + the source (`flag`)
+- **The real dataset starts empty.** No contract has been flagged by runners yet, and test contracts are not flagged code
+- Reference samples for the test suite (ScamToken, QuietHoneypot, NotLaunched, HiddenPowers, Killable, with the optimizer both on and off)
+  are in `test/fixtures/reference-samples.generated.js`. They are used in tests only, are not in `src/`, and so are not in the skill.
+  Regenerate both the baseline and the samples with `npm run threat-signatures`. Nothing is fetched from the internet
+- To add a contract that is really flagged in ThreatRegistry: check `evidenceOf(key)` first, then
+  `node cli.js signature bsc 0x... --reason cannot-sell-in-simulation --flag-key 0x<key> --report-hash 0x<reportHash>`, then paste the entry into `ADDED`
+  (`--reason` takes a code-fact code from ThreatRegistry per `src/threat-reasons.js`. The report shows it as neutral wording, see `REASON` in `src/lang/*.js`.
+  Without `--flag-key` / `--report-hash`, the entry is shown only as a "reference sample")
+  The skill (skill id) is a hash of all of `src/`. A new dataset (or a new baseline) is therefore a new skill and must pass a governance vote before runners can use it
 
-สัญญาณ **"Neuro ยังไม่รู้จักรูปแบบนี้ ระวัง"** (ระดับต่ำ): ฟังก์ชันที่ไม่รู้จักชื่อ 2 ตัวขึ้นไป
-และเป็นครึ่งหนึ่งขึ้นไปของทั้งหมด (หรือไม่มีฟังก์ชันที่รู้จักเลย) และโค้ดย้ายเงินได้ (CALL, CREATE, SELFDESTRUCT ฯลฯ)
-ไม่ได้แปลว่าโค้ดมีปัญหา แต่จะไม่บอกว่า "ไม่พบความเสี่ยง" ทั้งที่ Neuro แค่ไม่รู้จัก
+The signal **"Neuro doesn't recognise this pattern yet, be careful"** (low level): 2 or more functions with unknown names
+that make up half or more of all functions (or no known functions at all), and the code can move value (CALL, CREATE, SELFDESTRUCT, etc.).
+It does not mean the code has a problem, but Neuro will not say "no risk found" when it simply does not recognise the code.
 
-## สิ่งที่ตรวจ
+## What is checked
 
-**Solana** (`src/solana.js`) อ่านบัญชีเหรียญ (mint) โดยตรง: สิทธิ์สร้างเหรียญเพิ่ม, สิทธิ์อายัดบัญชี,
-ส่วนเสริม Token-2022 (permanent delegate ที่ย้ายเหรียญจากทุกกระเป๋าได้, ภาษีการโอน, transfer hook,
-บัญชีใหม่ถูกอายัดตั้งแต่ต้น, หยุดการโอน, ปิด mint ได้), ชื่อเหรียญจาก Metaplex และแก้ชื่อได้หรือไม่,
-และสิทธิ์อัปเกรดของโปรแกรม
+**Solana** (`src/solana.js`) reads the token account (mint) directly: mint authority, freeze authority,
+Token-2022 extensions (permanent delegate that can move tokens from any wallet, transfer fee, transfer hook,
+new accounts frozen by default, paused transfers, closable mint), the token name from Metaplex and whether the name can be changed,
+and the program's upgrade authority
 
-**Sui** (`src/sui.js`) เหรียญคือชนิด Move `0xแพ็กเกจ::โมดูล::ชื่อ` อำนาจอยู่ในอ็อบเจ็กต์:
-ใครถือ `TreasuryCap` (สร้างเหรียญเพิ่มไม่จำกัด), เหรียญแบบควบคุมที่มี `DenyCap` (บล็อกกระเป๋า
-และหยุดทั้งระบบได้), ใครถือ `UpgradeCap` (เปลี่ยนโค้ด) และนโยบายอัปเกรด หาได้จากธุรกรรมที่
-เผยแพร่แพ็กเกจ แล้วอ่านชื่อฟังก์ชัน public/entry ในโมดูลของเหรียญ (mint, blacklist, pause,
-set_fee, burn_from ฯลฯ)
+**Sui** (`src/sui.js`) A token is a Move type `0xpackage::module::Name`. Power lives in objects:
+who holds `TreasuryCap` (unlimited minting), regulated tokens with `DenyCap` (block wallets
+and pause the whole system), who holds `UpgradeCap` (change the code), and the upgrade policy. These are found from the transaction that
+published the package. It then reads the public/entry function names in the token's module (mint, blacklist, pause,
+set_fee, burn_from, etc.)
 
-**Aptos** (`src/aptos.js`) รองรับทั้ง Coin แบบเดิมและ Fungible Asset: อ่าน ABI ของโค้ดผู้สร้าง
-หาว่าโครงสร้างไหนเก็บ `MintRef`/`MintCapability` (สร้างเพิ่ม), `TransferRef`/`FreezeCapability`
-(อายัดและย้ายเหรียญของคนอื่น), `BurnRef`/`BurnCapability` (เผาเหรียญของคนอื่น), `managed_coin`,
-โค้ดเสริมตอนฝาก/ถอน (dispatch hook), นโยบายอัปเกรดแพ็กเกจ และชื่อฟังก์ชันเหมือน Sui
+**Aptos** (`src/aptos.js`) supports both legacy Coin and Fungible Asset: it reads the ABI of the creator's code
+to find which structures hold `MintRef`/`MintCapability` (mint more), `TransferRef`/`FreezeCapability`
+(freeze and move other people's tokens), `BurnRef`/`BurnCapability` (burn other people's tokens), `managed_coin`,
+extra code on deposit/withdraw (dispatch hook), the package upgrade policy, and function names as for Sui
 
-**TON** (`src/ton.js`) อ่าน jetton master ผ่าน tonapi.io: สร้างเหรียญเพิ่มได้ไหม, ผู้ดูแลยังอยู่หรือสละแล้ว,
-ป้ายเตือน/รายชื่อที่ตรวจแล้วของ tonapi (แสดงว่าเป็นป้ายของ tonapi ไม่ใช่ผลตรวจของ Neuro) และสัญญาที่ถูกแช่แข็ง ตรวจ checksum ของที่อยู่ก่อนเรียกเน็ต
-และไม่รับที่อยู่ testnet และตรวจกระเป๋าเหรียญ (jetton wallet) ของผู้ถือรายใหญ่สุด: ถ้า tonapi ไม่รู้จักว่าเป็น
-กระเป๋ามาตรฐาน จะเตือนระดับสูง เพราะโค้ดกระเป๋าแบบกำหนดเองปฏิเสธการส่งได้ ทำให้ซื้อได้แต่อาจขายไม่ได้
+**TON** (`src/ton.js`) reads the jetton master through tonapi.io: whether more tokens can be minted, whether the admin is still present or has renounced,
+tonapi warning labels / verified lists (shown as tonapi's labels, not Neuro's findings), and frozen contracts. It checks the address checksum before any network call
+and rejects testnet addresses. It also checks the jetton wallet of the largest holder: if tonapi does not recognise it as
+a standard wallet, it warns at high level, because custom wallet code can refuse transfers, so you can buy but may not be able to sell
 
-ข้อจำกัดของ Sui/Aptos: ตรวจจากชื่อฟังก์ชันและข้อมูลบนเชน ยังไม่ได้อ่านเนื้อในทุกฟังก์ชัน
+Limits for Sui/Aptos: checks are based on function names and on-chain data. It does not yet read the body of every function.
 
-**ภาษาที่ใช้เขียนสัญญา** Neuro อ่านโค้ดที่รันจริงบนเชน ไม่ใช่ซอร์ส จึงขึ้นกับว่าภาษานั้นคอมไพล์เป็นอะไร:
+**Contract languages** Neuro reads the code that actually runs on-chain, not the source, so it depends on what the language compiles to:
 
-| ภาษา | อ่านอย่างไร |
+| Language | How it is read |
 |---|---|
-| Solidity, Yul, Vyper, Huff | EVM bytecode (ไม่สนภาษาต้นทาง) + ซอร์สที่ verify แล้วจาก Sourcify (`src/sourcify.js`) ใช้ตั้งชื่อฟังก์ชันที่ไม่รู้จัก + จำลองซื้อแล้วขายคืนจริงผ่าน DEX หลักของเชน (`src/honeypot.js`) จับเหรียญ "ซื้อได้ ขายไม่ได้" และภาษีแอบแฝงได้ไม่ว่าฟังก์ชันจะชื่ออะไร |
-| Rust/C++ บน Arbitrum (Stylus) | แกะโค้ด WASM (brotli) ออกมาอ่าน หา selector ของฟังก์ชันที่รู้จัก (mint, pause, blacklist ฯลฯ) และการเรียก delegate_call/create2 แล้วใช้กฎชุดเดียวกับ EVM (`src/stylus.js`) ถ้าแกะไม่ได้จะบอกว่ายังตรวจไม่ได้ |
-| Rust บน Solana (Anchor) | อ่านรายการคำสั่งจาก IDL บนเชน (`src/anchor.js`) หาคำสั่งที่ต้องให้ผู้ดูแลเซ็น และคำสั่งอันตราย |
-| Rust บน NEAR | อ่านชื่อฟังก์ชันจาก export ของโค้ด WASM โดยตรง (mint, pause, upgrade ฯลฯ), ดูว่าบัญชีสัญญายังมีกุญแจเต็มสิทธิ์ (ลงโค้ดใหม่ได้) หรือไม่ และข้อมูลเหรียญ NEP-141 (`src/near.js`) |
-| Cairo (Starknet) | อ่าน ABI ที่สัญญาเผยแพร่ไว้บนเชน: ชื่อฟังก์ชันและว่าแก้สถานะได้หรือไม่ (mint, pause, upgrade ฯลฯ), เจ้าของ, proxy แบบ Cairo 0 และข้อมูลเหรียญ (`src/starknet.js`) |
-| Rust บน CosmWasm (Osmosis, Neutron, ZETAPHY ผ่าน `--rest`) | ผู้ดูแลที่เปลี่ยนโค้ดได้ (migrate), ประวัติการเปลี่ยนโค้ด, ผู้สร้างเหรียญ CW20, ผู้ดูแลเหรียญ Token Factory และ before-send hook (`src/cosmwasm.js`) |
-| Bitcoin (Runes) | ไม่มีโค้ดสัญญา อ่านกติกาเหรียญจาก ord (ordinals.com ฟรี ไม่ต้องใช้คีย์): ยังเปิด mint อยู่ไหม, premine ของผู้สร้าง, turbo (`src/bitcoin.js`) · BRC-20 ยังไม่รองรับ เพราะ API ฟรีของ Hiro ปิดไปเมื่อ มี.ค. 2026 และที่เหลือต้องใช้คีย์ |
-| Move (Sui, Aptos) | ชื่อฟังก์ชันและสิทธิ์ในโค้ด |
-| FunC/Tact (TON) | ข้อมูล jetton ที่ tonapi ถอดให้ |
+| Solidity, Yul, Vyper, Huff | EVM bytecode (source language does not matter) + verified source from Sourcify (`src/sourcify.js`) used to name unknown functions + a real buy-then-sell-back simulation through the chain's main DEX (`src/honeypot.js`) that catches "can buy, can't sell" tokens and hidden taxes whatever the functions are named |
+| Rust/C++ on Arbitrum (Stylus) | Unpacks the WASM code (brotli) to read it, finds selectors of known functions (mint, pause, blacklist, etc.) and delegate_call/create2 calls, then applies the same rules as EVM (`src/stylus.js`). If it cannot unpack it, it says it cannot check yet |
+| Rust on Solana (Anchor) | Reads the instruction list from the on-chain IDL (`src/anchor.js`), finds instructions that need an admin signature, and dangerous instructions |
+| Rust on NEAR | Reads function names directly from the WASM code's exports (mint, pause, upgrade, etc.), whether the contract account still has a full-access key (can deploy new code), and NEP-141 token data (`src/near.js`) |
+| Cairo (Starknet) | Reads the ABI the contract published on-chain: function names and whether they can change state (mint, pause, upgrade, etc.), the owner, Cairo 0 proxies, and token data (`src/starknet.js`) |
+| Rust on CosmWasm (Osmosis, Neutron, ZETAPHY via `--rest`) | Admin who can change the code (migrate), code change history, CW20 minter, Token Factory admin, and before-send hook (`src/cosmwasm.js`) |
+| Bitcoin (Runes) | No contract code. Reads the token rules from ord (ordinals.com, free, no key needed): whether minting is still open, the creator's premine, turbo (`src/bitcoin.js`) · BRC-20 is not supported yet, because Hiro's free API shut down in Mar 2026 and the rest need a key |
+| Move (Sui, Aptos) | Function names and powers in the code |
+| FunC/Tact (TON) | Jetton data decoded by tonapi |
 
-กระเป๋าแบบ EIP-7702 (กระเป๋าธรรมดาที่ตั้งให้รันโค้ดของสัญญาอื่น) จะบอกว่ารันโค้ดของสัญญาไหน
-ผู้รันในเครือข่าย Neuro ปิด Sourcify (`sourcify: false`) เพื่อให้คำตัดสินขึ้นกับข้อมูลบนเชนอย่างเดียว
+For EIP-7702 wallets (plain wallets set to run another contract's code), it says which contract's code runs.
+Runners in the Neuro network turn Sourcify off (`sourcify: false`) so the verdict depends on on-chain data only.
 
 **EVM** (Ethereum, BNB Chain, Base, Arbitrum):
 
-| ผลตรวจ | ระดับ |
+| Finding | Level |
 |---|---|
-| ชื่อเหรียญ (ตามที่เขียนในสัญญา) มีลิงก์/ชื่อเว็บ | สูง |
-| อัปเกรดโค้ดได้ (EIP-1967 / beacon / `upgradeTo`) | สูง |
-| สร้างเหรียญเพิ่ม, บล็อกกระเป๋า, หยุดการโอน | สูง (ต่ำ ถ้าเจ้าของสละสิทธิ์แล้ว) |
-| เปลี่ยนภาษี, สวิตช์เปิดปิดเทรด, เพดานต่อรายการ | ปานกลาง (ต่ำ ถ้าสละสิทธิ์แล้ว) |
-| คำสั่ง `SELFDESTRUCT` | สูง |
-| `DELEGATECALL` นอก proxy, ระบบสิทธิ์แบบ roles | ปานกลาง |
-| สำเนา EIP-1167, เจ้าของปัจจุบัน, ยกเว้นภาษีบางกระเป๋า | ข้อมูล |
-| ตรงกับแม่แบบ ZETAPHY ที่ลงทะเบียน | ดี (ภาษีลดได้อย่างเดียว = ต่ำ) |
-| สัญญาทางการของ USDT, USDC, WETH ฯลฯ (`src/known-tokens.js`) | ดี และลดสิทธิ์ของผู้ออกเหรียญเหลือ "ต่ำ" พร้อมบอกชื่อผู้ออก |
-| ใช้สัญลักษณ์เหมือนเหรียญทางการ แต่ไม่ใช่ที่อยู่ที่ลงทะเบียนไว้ | สูง |
-| ตรงแม่แบบแต่มีสิทธิ์ที่แม่แบบบอกว่าไม่มี | สูง |
-| จำลองซื้อขาย: ซื้อได้แต่ขายไม่ได้ หรือขายแล้วแทบไม่ได้เงินคืน | สูง |
-| จำลองซื้อขาย: ภาษีซื้อหรือขายเกิน 50% | สูง (10% ขึ้นไป = ปานกลาง) |
-| จำลองซื้อแล้วขายคืนได้ ภาษีต่ำกว่า 10% ทั้งสองทาง | ดี (พร้อมเตือนว่าเป็นผล ณ บล็อกนี้ เจ้าของอาจเปลี่ยนภายหลัง) |
-| ไม่พบ pool บน DEX หลัก / RPC ไม่ยอมให้ override / ซื้อไม่สำเร็จ | ข้อมูล (บอกว่าข้ามการจำลอง ไม่เคยบอกว่า "ปลอดภัย") |
+| Token name (as written in the contract) contains a link/website name | High |
+| Code can be upgraded (EIP-1967 / beacon / `upgradeTo`) | High |
+| Mint more tokens, block wallets, pause transfers | High (low if the owner has renounced) |
+| Change tax, trading on/off switch, per-transaction cap | Medium (low if renounced) |
+| `SELFDESTRUCT` instruction | High |
+| `DELEGATECALL` outside a proxy, role-based permission system | Medium |
+| EIP-1167 clone, current owner, tax exemption for some wallets | Info |
+| Matches a registered ZETAPHY template | Good (tax can only decrease = low) |
+| Official contracts of USDT, USDC, WETH, etc. (`src/known-tokens.js`) | Good, and lowers the issuer's powers to "low", naming the issuer |
+| Uses the same symbol as an official token, but is not the registered address | High |
+| Matches a template but has a power the template says it does not have | High |
+| Buy/sell simulation: can buy but cannot sell, or selling returns almost nothing | High |
+| Buy/sell simulation: buy or sell tax above 50% | High (10% or more = medium) |
+| Simulated buy then sell back works, tax below 10% both ways | Good (with a warning that this is the result at this block, and the owner may change it later) |
+| No pool on the main DEX / RPC does not allow override / buy failed | Info (says the simulation was skipped, never says "safe") |
 
-**จำลองซื้อขาย (ทดสอบซื้อแล้วขายคืน, `src/honeypot.js`)** วิธีเดียวกับ honeypot.is แต่ใช้แค่ `eth_call`:
-1. หา pool แบบ Uniswap V2 ของเหรียญคู่กับเหรียญหลักของเชนที่ห่อแล้ว (`factory.getPair(token, WETH)`)
-   บน DEX หลัก: Uniswap V2 (Ethereum, Base, Arbitrum) และ PancakeSwap V2 (BNB Chain) ตั้งค่าไว้ที่ `dex` ใน `src/chains.js`
-2. ถ้ามี pool เรียก `eth_call` ครั้งเดียวพร้อม state override (พารามิเตอร์ตัวที่สาม) วางสัญญาช่วย
-   `contracts/TradeSim.sol` ไว้ที่ที่อยู่ทิ้งได้ พร้อมเหรียญหลักเล็กน้อย (ราว 0.01 ETH / 0.05 BNB ±25%) สัญญาช่วยจะ
-   ตรวจว่า router ชี้ไปที่ factory และ WETH ที่ถูกต้อง ซื้อผ่าน `swapExactETHForTokensSupportingFeeOnTransferTokens`
-   เทียบจำนวนที่ได้กับ `getAmountsOut` (= ภาษีซื้อ) แล้วขายคืน 90–99.9% (สุ่ม) ผ่าน
-   `swapExactTokensForETHSupportingFeeOnTransferTokens` เทียบเงินที่ได้กับราคาที่ router บอก (= ภาษีขาย)
-   การขายที่ revert ถูกจับด้วย try/catch แล้วรายงานเป็นผล ไม่ใช่ error
-3. state override มีอยู่แค่ในการเรียกครั้งนั้น ไม่มีการเซ็นหรือส่งธุรกรรม สถานะบนเชนไม่เปลี่ยน
-   ถ้า RPC ไม่รองรับ override หรือไม่มี pool จะบอกว่าข้ามการจำลอง
+**Buy/sell simulation (buy-then-sell-back test, `src/honeypot.js`)** The same method as honeypot.is, but using only `eth_call`:
+1. Find the Uniswap V2 style pool of the token paired with the chain's wrapped native token (`factory.getPair(token, WETH)`)
+   on the main DEX: Uniswap V2 (Ethereum, Base, Arbitrum) and PancakeSwap V2 (BNB Chain). Configured at `dex` in `src/chains.js`
+2. If there is a pool, call `eth_call` once with a state override (the third parameter) that places the helper contract
+   `contracts/TradeSim.sol` at a throwaway address with a small amount of the native token (about 0.01 ETH / 0.05 BNB ±25%). The helper contract
+   checks that the router points to the correct factory and WETH, buys through `swapExactETHForTokensSupportingFeeOnTransferTokens`,
+   compares the amount received with `getAmountsOut` (= buy tax), then sells back 90–99.9% (random) through
+   `swapExactTokensForETHSupportingFeeOnTransferTokens` and compares the money received with the price the router quotes (= sell tax).
+   A sell that reverts is caught with try/catch and reported as a result, not an error
+3. The state override exists only for that one call. Nothing is signed or sent, and on-chain state does not change.
+   If the RPC does not support override or there is no pool, it says the simulation was skipped
 
-**ไม่ให้เหรียญจำการทดสอบได้** โค้ดนี้เปิดเผย เหรียญจึงเขียนให้ "ทำตัวดีเฉพาะตอนเห็นการทดสอบของ Neuro" ได้
-ตอนนี้ค่าที่เหรียญมองเห็นได้ถูกเลือกใหม่ทุกครั้ง (`simPlan` ใน `src/honeypot.js`) งานของเครือข่ายใช้ค่าจาก `jobSimSeed(job id, ลอตเตอรีของรอบ)`
-ผู้รันทุกคนของรอบเดียวกันจึงทดสอบแบบเดียวกัน และใครก็รันซ้ำได้: `node cli.js bsc 0x… --sim-seed 0x<seed>`
-รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+**Tokens cannot recognise the test** This code is public, so a token could be written to "behave well only when it sees Neuro's test".
+Now the values a token can see are chosen fresh every time (`simPlan` in `src/honeypot.js`). Network jobs use values from `jobSimSeed(job id, round lottery)`,
+so every runner in the same round runs the same test, and anyone can re-run it: `node cli.js bsc 0x… --sim-seed 0x<seed>`
+Security details are kept separately for the team.
 
 
-ไบต์โค้ดของสัญญาช่วยเก็บไว้ใน `src/tradesim.generated.js` (คอมไพล์ด้วย solc 0.8.26 แบบ Paris ไม่มี PUSH0
-จึงรันได้ทุกเชน) แก้ `contracts/TradeSim.sol` แล้วรัน `npm run tradesim` (`test/honeypot.test.js` ตรวจว่าตรงกัน)
-เหรียญทางการใน `src/known-tokens.js` ไม่ถูกจำลอง ผลจำลองไม่นับในคำตัดสินของเครือข่าย Neuro
-(`src/verdict.js`) เพราะขึ้นกับบล็อกและ RPC ของผู้รันแต่ละคน
-ข้อจำกัด: จำลองจากสัญญา ไม่ใช่กระเป๋าธรรมดา เหรียญที่กันการซื้อจากสัญญาจะขึ้นว่า "ซื้อไม่สำเร็จ"
-และเหรียญที่ห้ามขายเฉพาะในบล็อกเดียวกับที่ซื้อจะขึ้นว่า "ขายไม่ได้" เหมือนกัน (ข้อความบอกข้อจำกัดนี้ไว้) ยังไม่รองรับ pool แบบ V3 หรือ DEX อื่น (เช่น Aerodrome บน Base)
+The helper contract's bytecode is stored in `src/tradesim.generated.js` (compiled with solc 0.8.26 for Paris, no PUSH0,
+so it runs on every chain). Edit `contracts/TradeSim.sol`, then run `npm run tradesim` (`test/honeypot.test.js` checks they match).
+Official tokens in `src/known-tokens.js` are not simulated. Simulation results do not count in the Neuro network's verdict
+(`src/verdict.js`), because they depend on each runner's block and RPC.
+Limits: the simulation runs from a contract, not a plain wallet. A token that blocks buys from contracts shows "buy failed",
+and a token that blocks selling only in the same block as the buy also shows "cannot sell" (the message states this limit). Pools of V3 type and other DEXes (such as Aerodrome on Base) are not supported yet
 
-## สองชั้นของกฎ: สาธารณะ (consensus) และเตือนล่วงหน้า (ส่วนตัว)
+## Two tiers of rules: public (consensus) and early warning (private)
 
-| | กฎสาธารณะ (`src/`) | เตือนล่วงหน้า (`server/earlywarning.js`) |
+| | Public rules (`src/`) | Early warning (`server/earlywarning.js`) |
 |---|---|---|
-| ใครรัน | ผู้รันเครือข่ายทุกคน + หน้าเว็บ + CLI | เซิร์ฟเวอร์ของโครงการเท่านั้น (`api/early-warning.js`) |
-| กฎอยู่ที่ | repo นี้ (skill id = hash ของ `src/`) | repo ส่วนตัว `pospos191-alt/zetaphy-private` → `rules/pack.json` |
-| อยู่ในคำตัดสินบนเชน | ใช่ | **ไม่** เป็นคำแนะนำเท่านั้น |
-| ผู้ใช้เห็น | ข้อเท็จจริงของโค้ดเต็ม ๆ | หมวด (reason) ระดับ และรหัสอ้างอิงทึบ `ew-…` ไม่เห็นตัวกฎ |
+| Who runs it | Every network runner + the web page + CLI | The project's server only (`api/early-warning.js`) |
+| Where the rules live | This repo (skill id = hash of `src/`) | Private repo `pospos191-alt/zetaphy-private` → `rules/pack.json` |
+| Part of the on-chain verdict | Yes | **No**, advisory only |
+| What users see | The full code facts | Category (reason), level, and an opaque reference ID `ew-…`; not the rule itself |
 
-ทำไม: กฎใหม่ที่เปิดเผยทันทีบอกคนทำเหรียญว่าต้องแก้อะไร แต่กฎ consensus ต้องเป็นโค้ดสาธารณะชุดเดียวกัน
-จึงพักกฎใหม่ไว้ในชุดส่วนตัวราว 30 วัน (หรือจนระลอกนั้นซา) แล้วเปิดเผย: กฎแบบ signature ย้ายเข้า `ADDED`
-ใน `src/threat-signatures.js` ซึ่งเป็นทักษะใหม่ ต้องโหวต `NeuroControl.approveSkill` นโยบายและรูปแบบกฎอยู่ใน
-`zetaphy-private/rules/README.md` (workflow ที่นั่นเปิด issue ทุกสัปดาห์เมื่อมีกฎครบกำหนด)
+Why: a new rule published right away tells token makers what to change, but consensus rules must be the same public code for everyone.
+So new rules are held in the private pack for about 30 days (or until that wave dies down) and then published: signature rules move into `ADDED`
+in `src/threat-signatures.js`, which is a new skill and needs a `NeuroControl.approveSkill` vote. The policy and rule formats are in
+`zetaphy-private/rules/README.md` (a workflow there opens an issue every week when rules are due).
 
-- ชนิดกฎ: `signature` (ลายนิ้วมือ + MinHash แบบเดียวกับ `threat-signatures.js`, ใช้ `closestFlagged`), `selectors`
-  (ชุด selector / ชื่อฟังก์ชันที่มาด้วยกัน), `bytecode` (ไบต์ที่ต้องเจอ หรือลำดับ opcode เช่น `ORIGIN * EQ`) ดูโค้ดหลัง proxy ด้วย
-- หน้าเว็บส่งแค่ `{chain, address}` ไป `POST /api/early-warning` หลังตรวจเสร็จ (เฉพาะ EVM) ถ้ามีผลจะขึ้นกล่อง
-  "เตือนล่วงหน้า" แยกจากผลตรวจ 7 ภาษา ระดับความเสี่ยงด้านบนไม่เปลี่ยน
-- เซิร์ฟเวอร์ไม่เก็บอะไร: จำคำตอบต่อ (เชน, ที่อยู่) ในหน่วยความจำ 5 นาที นับอัตราด้วย HMAC ของ IP ไม่ log ชุดกฎหรือ token
+- Rule types: `signature` (fingerprint + MinHash, same as `threat-signatures.js`, uses `closestFlagged`), `selectors`
+  (a set of selectors / function names that appear together), `bytecode` (bytes that must be present, or an opcode sequence such as `ORIGIN * EQ`). Code behind a proxy is checked too
+- The web page sends only `{chain, address}` to `POST /api/early-warning` after the check finishes (EVM only). If there is a result, an
+  "Early warning" box appears, separate from the 7-language results. The risk level at the top does not change
+- The server stores nothing: it caches answers per (chain, address) in memory for 5 minutes, counts rate with an HMAC of the IP, and does not log the rule pack or token
 
-**ตั้งค่าบน Vercel** (Settings → Environment Variables แล้ว Redeploy) เลือกอย่างใดอย่างหนึ่ง:
-- `NEURO_RULES_TOKEN` = fine-grained token ของ GitHub ที่เข้าได้เฉพาะ `zetaphy-private` สิทธิ์ **Contents: Read-only**
-  (ไม่บังคับ: `NEURO_RULES_REPO` ค่าเริ่มต้น `pospos191-alt/zetaphy-private`, `NEURO_RULES_PATH` ค่าเริ่มต้น `rules/pack.json`)
-  เซิร์ฟเวอร์อ่านใหม่ทุก ~10 นาที แก้กฎแล้วไม่ต้อง deploy ใหม่ ถ้าดึงไม่ได้จะใช้ชุดล่าสุดที่ดึงได้ต่อ
-- หรือ `NEURO_PRIVATE_RULES` = ตัวชุดกฎเป็น JSON (หรือ base64 ของ JSON) ต้อง Redeploy ทุกครั้งที่แก้
-- ไม่ตั้งเลย: ตอบ `{ "warnings": [], "configured": false }` หน้าเว็บทำงานเหมือนเดิม
-- การจำกัดอัตรา (12 ครั้ง/นาที, 300 ครั้ง/วัน ต่อ IP) ใช้ Redis ของตัวนับผู้ใช้ถ้าตั้ง `KV_REST_API_*` และ `USAGE_SALT` แล้ว
-  (ใช้ร่วมทุก instance) ไม่งั้นนับในหน่วยความจำของแต่ละ instance
-- ทดลองบนเครื่อง: `NEURO_PRIVATE_RULES="$(cat ../../zetaphy-private/rules/pack.json)" npm run web`
+**Setup on Vercel** (Settings → Environment Variables, then Redeploy). Choose one:
+- `NEURO_RULES_TOKEN` = a GitHub fine-grained token that can access only `zetaphy-private`, with **Contents: Read-only** permission
+  (optional: `NEURO_RULES_REPO` defaults to `pospos191-alt/zetaphy-private`, `NEURO_RULES_PATH` defaults to `rules/pack.json`).
+  The server re-reads it every ~10 minutes, so editing rules does not need a new deploy. If it cannot fetch, it keeps using the last pack it fetched
+- Or `NEURO_PRIVATE_RULES` = the rule pack itself as JSON (or base64 of JSON). You must Redeploy every time you edit it
+- Not set at all: it returns `{ "warnings": [], "configured": false }` and the web page works as before
+- Rate limits (12 per minute, 300 per day per IP) use the user counter's Redis if `KV_REST_API_*` and `USAGE_SALT` are set
+  (shared across all instances). Otherwise they are counted in each instance's memory
+- Try it locally: `NEURO_PRIVATE_RULES="$(cat ../../zetaphy-private/rules/pack.json)" npm run web`
 
-**ข้อจำกัด (บอกตรง ๆ)**
-- เตือนล่วงหน้าเป็นคำแนะนำ อาจผิดได้ ไม่อยู่ในคำตัดสินบนเชน และไม่มีใครตรวจซ้ำได้จนกว่ากฎจะเปิดเผย
-  (ต่างจากกฎสาธารณะ) ถ้อยคำจึงบอกแค่ว่า "ตรงกับรูปแบบที่เฝ้าดู" และหมวดที่เป็นกลาง ไม่ตัดสินเหรียญ
-- ผู้ใช้ต้องเชื่อเซิร์ฟเวอร์ของโครงการสำหรับชั้นนี้ และเซิร์ฟเวอร์เห็นที่อยู่สัญญาที่ถูกตรวจ (ไม่เก็บ)
+**Limits (stated plainly)**
+- Early warning is advisory and can be wrong. It is not part of the on-chain verdict, and nobody can re-check it until the rules are published
+  (unlike the public rules). So the wording only says "matches a watched pattern" plus a neutral category, and does not judge the token
+- For this tier, users must trust the project's server, and the server sees the contract address being checked (it does not store it)
 
-ข้อจำกัดของกฎชื่อฟังก์ชัน: ตรวจจากชื่อฟังก์ชันที่รู้จัก (`src/signatures.js`) ในโค้ดบนเชน
-ตรวจไม่พบไม่ได้แปลว่าปลอดภัย
-เพิ่มชื่อใหม่ใน `src/signatures.js` แล้วรัน `npm run selectors`
+Limits of the function-name rules: checks are based on known function names (`src/signatures.js`) in the on-chain code.
+Not detected does not mean safe.
+Add new names in `src/signatures.js`, then run `npm run selectors`
 
-## ทดสอบ
+## Tests
 
 ```bash
-npm test          # คอมไพล์สัญญาตัวอย่างจริง (test/helpers/contracts.sol) รันบน EVM ในเครื่อง
-                  # ทั้งเปิดและปิด optimizer + ลายนิ้วมือ/แม่แบบ + ตัวนับผู้ใช้
-                  # + จำลองซื้อขายด้วย DEX จำลอง (Uniswap V2) ที่ที่อยู่ของ PancakeSwap จริง
-                  # + โค้ดคล้ายโค้ดที่ติดธง (สำเนาที่แก้นิดหน่อยต้องโดนเตือน เหรียญทั่วไปต้องไม่โดน)
-                  # + เหรียญที่ยอมให้ขายเฉพาะตอนเห็นการทดสอบ (SimAware) + ชั้นเตือนล่วงหน้า (test/earlywarning.test.js)
-npm run test:web  # เปิดหน้าเว็บใน Chromium ตอบ RPC จากเชนทดสอบ ไม่ใช้เน็ต
+npm test          # compile real sample contracts (test/helpers/contracts.sol) and run them on a local EVM
+                  # with the optimizer both on and off + fingerprints/templates + user counter
+                  # + buy/sell simulation with a mock DEX (Uniswap V2) at the real PancakeSwap addresses
+                  # + code similar to flagged code (lightly edited copies must be warned, ordinary tokens must not)
+                  # + a token that allows selling only when it sees the test (SimAware) + early warning tier (test/earlywarning.test.js)
+npm run test:web  # open the web page in Chromium, answering RPC from a test chain, no internet
 ```
 
-## สถานะ
+## Status
 
-- [x] ตัวอ่านและอธิบายสัญญา (CLI + หน้าเว็บ) 7 ภาษา (`src/lang/`, `test/i18n.test.js` ตรวจว่าทุกภาษาครบทุกข้อความ)
-- [x] พร้อมวางบน Vercel ฟรี (`vercel.json`)
-- [x] ตัวนับผู้ใช้ต่อเดือนแบบไม่เก็บข้อมูลส่วนตัว + หน้าสถิติเทียบเป้า 1,000
-- [x] ระบบจำแม่แบบเหรียญ ZETAPHY (รอที่อยู่เหรียญตัวอย่างหนึ่งตัวต่อเชนเพื่อลงทะเบียน)
-- [x] ลองกับสัญญาจริงบน mainnet แล้ว (USDT บน BNB Chain, 19 ต.ค. 2026)
-- [x] รู้จักเหรียญทางการรายใหญ่ และเตือนเหรียญที่ใช้สัญลักษณ์เดียวกันแต่คนละที่อยู่
-- [x] รองรับ Ethereum และ Solana
-- [x] รองรับ Sui, Aptos (ภาษา Move) และ TON (ทดสอบกับข้อมูลตามรูปแบบจริงของแต่ละเชน ยังไม่ได้ลองกับ mainnet จากเครื่องนี้)
-- [ ] ให้เจ้าของภาษาตรวจคำแปล จีน ญี่ปุ่น เกาหลี เวียดนาม อินโดนีเซีย
-- [x] Rust: Solana (Anchor IDL), Arbitrum Stylus, CosmWasm (Osmosis, Neutron) · ซอร์ส Solidity/Vyper จาก Sourcify
-- [x] NEAR (Rust/WASM) · TON ตรวจโค้ดกระเป๋าเหรียญของผู้ถือ
+- [x] Contract reader and explainer (CLI + web page) in 7 languages (`src/lang/`, `test/i18n.test.js` checks every language has every message)
+- [x] Ready to host on Vercel for free (`vercel.json`)
+- [x] Monthly user counter that stores no personal data + stats page against the 1,000 target
+- [x] ZETAPHY token template recognition (waiting for one sample token address per chain to register)
+- [x] Tried on real mainnet contracts (USDT on BNB Chain, 19 Oct 2026)
+- [x] Recognises major official tokens, and warns about tokens using the same symbol at a different address
+- [x] Supports Ethereum and Solana
+- [x] Supports Sui, Aptos (Move language), and TON (tested with data in each chain's real format; not yet tried against mainnet from this machine)
+- [ ] Native speakers to review the Chinese, Japanese, Korean, Vietnamese, and Indonesian translations
+- [x] Rust: Solana (Anchor IDL), Arbitrum Stylus, CosmWasm (Osmosis, Neutron) · Solidity/Vyper source from Sourcify
+- [x] NEAR (Rust/WASM) · TON checks holders' jetton wallet code
 - [x] Starknet (Cairo) · Bitcoin Runes
-- [ ] BRC-20 (ต้องหา API ฟรีที่ไม่ต้องใช้คีย์)
-- [x] อ่านเนื้อใน WASM ของ Stylus
-- [x] จำลองซื้อขาย (ทดสอบซื้อแล้วขายคืน) บน EVM ผ่าน Uniswap V2 / PancakeSwap V2 ทดสอบบน EVM ในเครื่องแล้ว
-      รอผล live check บน mainnet (ที่อยู่ DEX และ RPC ที่รองรับ state override) จาก CI
-- [ ] จำลองซื้อขายผ่าน pool แบบ V3 และ DEX อื่น (Aerodrome บน Base, Camelot บน Arbitrum)
-- [x] การจำลองไม่มีค่าตายตัวให้เหรียญจำได้ (ที่อยู่สุ่ม / จากงานเครือข่าย, ราคา gas จริง, จำนวนไม่กลม)
-- [ ] จำลองจากกระเป๋าธรรมดาหลายธุรกรรม (`eth_simulateV1`) ปิดช่อง "ให้เฉพาะสัญญาขายได้"
-- [x] ชั้นเตือนล่วงหน้า (กฎส่วนตัวช่วงพัก) + workflow เปิดเผยกฎที่ครบกำหนด
-- [x] เตือนโค้ดคล้ายโค้ดที่ติดธง (EVM) + สัญญาณ "ยังไม่รู้จักรูปแบบนี้"
-- [x] baseline จากรูปแบบ OpenZeppelin ที่พบบ่อย (solc 0.8.26 เปิด/ปิด optimizer) และชุดข้อมูลจริงเริ่มว่าง
-- [ ] ใส่สัญญาที่ติดธงจริงบน mainnet ในชุดข้อมูล (พร้อมคีย์และ reportHash ของธง) และขยาย baseline ด้วยเหรียญ OpenZeppelin จริงที่คอมไพล์หลายเวอร์ชัน solc
-      (ตอนนี้ baseline และรายการตั้งต้นมาจาก solc 0.8.26 เท่านั้น สำเนาที่คอมไพล์ด้วยเวอร์ชันอื่นอาจหลุด)
-- [x] ถ้อยคำเป็นกลาง (ข้อเท็จจริงของโค้ด ไม่ตัดสินคน) + คำปฏิเสธความรับผิด 7 ภาษา + หลักฐานตรวจซ้ำในทุกรายงาน (`docs/LEGAL.md`)
-- [ ] ช่องทางชี้แจง/อุทธรณ์บนเชนใน ThreatRegistry
-- [ ] ชั้นอธิบายด้วย AI (ทางเลือก): ส่งเฉพาะผลตรวจ ไม่ให้สิทธิ์เรียกเครื่องมือ (จุดอ่อนข้อ 12)
+- [ ] BRC-20 (need a free API that does not require a key)
+- [x] Read the body of Stylus WASM
+- [x] Buy/sell simulation (buy-then-sell-back test) on EVM through Uniswap V2 / PancakeSwap V2, tested on a local EVM.
+      Waiting for the live mainnet check (DEX addresses and RPCs that support state override) from CI
+- [ ] Buy/sell simulation through V3 pools and other DEXes (Aerodrome on Base, Camelot on Arbitrum)
+- [x] The simulation has no fixed values a token could recognise (random addresses / from network jobs, real gas price, non-round amounts)
+- [ ] Simulate from a plain wallet over multiple transactions (`eth_simulateV1`) to close the "only contracts can sell" gap
+- [x] Early warning tier (private rules during the hold period) + workflow to publish rules that are due
+- [x] Warn about code similar to flagged code (EVM) + the "doesn't recognise this pattern yet" signal
+- [x] Baseline from common OpenZeppelin patterns (solc 0.8.26, optimizer on/off), and the real dataset starts empty
+- [ ] Add contracts really flagged on mainnet to the dataset (with the flag's key and reportHash), and extend the baseline with real OpenZeppelin tokens compiled with several solc versions
+      (right now the baseline and seed entries come from solc 0.8.26 only, so copies compiled with other versions may slip through)
+- [x] Neutral wording (code facts, not judging people) + 7-language disclaimer + re-check evidence in every report (`docs/LEGAL.md`)
+- [ ] On-chain response/appeal channel in ThreatRegistry
+- [ ] AI explanation tier (optional): send only the check results, give it no permission to call tools (weakness no. 12)
 
 ---
 
