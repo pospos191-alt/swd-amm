@@ -22,7 +22,7 @@ const dayOf = (d) => d.toISOString().slice(0, 10);
 
 /**
  * Framework-free handler.
- * @param {{method:string, query?:object, body?:any, ip?:string, ua?:string, origin?:string, host?:string, now?:Date}} req
+ * @param {{method:string, query?:object, body?:any, ip?:string, ua?:string, origin?:string, host?:string, allowedHosts?:string[], now?:Date}} req
  * @param {{pipeline:(cmds:Array<Array<string|number>>)=>Promise<Array<any>>}|null} store
  * @param {string|undefined} secret
  * @returns {Promise<{status:number, json?:object, headers?:object}>}
@@ -44,8 +44,9 @@ export async function handleUsage(req, store, secret) {
   }
 
   if (req.method === 'POST') {
-    // Browsers send Origin on cross-site POSTs; refuse other sites' pages.
-    if (req.origin && req.host && hostOf(req.origin) !== req.host) return { status: 403, json: { error: 'origin' } };
+    // Browsers send Origin on cross-site POSTs; refuse other sites' pages (but the
+  // ZETAPHY hub's, which proxies /api/* here: req.allowedHosts).
+    if (req.origin && req.host && hostOf(req.origin) !== req.host && !(req.allowedHosts ?? []).includes(hostOf(req.origin))) return { status: 403, json: { error: 'origin' } };
     if (!req.body || req.body.event !== 'check') return { status: 400, json: { error: 'event' } };
     if (!enabled) return { status: 202, json: { counted: false } };
 

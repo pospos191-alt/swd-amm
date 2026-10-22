@@ -509,15 +509,16 @@ export const defaultRpcFor = (chainKey) => createRpc(CHAINS[chainKey].rpcs, CHAI
 
 /**
  * Framework-free handler for POST /api/early-warning with {chain, address}.
- * @param {{method:string, body?:any, ip?:string, origin?:string, host?:string}} req
+ * @param {{method:string, body?:any, ip?:string, origin?:string, host?:string, allowedHosts?:string[]}} req
  * @param {{loader:object, limiter:{check:Function}, cache?:object, rpcFor?:Function}} deps
  * @returns {Promise<{status:number, json:object, headers?:object}>}
  */
 export async function handleEarlyWarning(req, { loader, limiter, cache = answerCache(), rpcFor = defaultRpcFor }) {
   const headers = { 'cache-control': 'no-store' };
   if (req.method !== 'POST') return { status: 405, json: { error: 'method' }, headers: { ...headers, allow: 'POST' } };
-  // Browsers send Origin on cross-site POSTs; refuse other sites' pages.
-  if (req.origin && req.host && hostOf(req.origin) !== req.host) return { status: 403, json: { error: 'origin' }, headers };
+  // Browsers send Origin on cross-site POSTs; refuse other sites' pages (but the
+  // ZETAPHY hub's, which proxies /api/* here: req.allowedHosts).
+  if (req.origin && req.host && hostOf(req.origin) !== req.host && !(req.allowedHosts ?? []).includes(hostOf(req.origin))) return { status: 403, json: { error: 'origin' }, headers };
   const b = req.body;
   const ok = b && typeof b === 'object' && !Array.isArray(b)
     && typeof b.chain === 'string' && b.chain.length <= 32 && Object.hasOwn(CHAINS, b.chain)

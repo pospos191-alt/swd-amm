@@ -112,6 +112,7 @@ jobs:
       explorer: ${{ steps.f.outputs.explorer }}
       dex: ${{ steps.f.outputs.dex }}
       nft: ${{ steps.f.outputs.nft }}
+      hub: ${{ steps.f.outputs.hub }}
       launch: ${{ steps.f.outputs.launch }}
       dlmm: ${{ steps.f.outputs.dlmm }}
     steps:
@@ -154,6 +155,7 @@ jobs:
           out explorer '^(zetaphy-explorer/|zetaphy-network/src/(pqcert|pqtx|vaccine)\.js$)'
           out dex '^(zetaphy-dex/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
+          out hub '^(zetaphy-hub/|zetaphy-wallet/|zetaphy-dex/web/|zetaphy-nft/web/|zetaphy-explorer/|zetaphy-neuro/(web|src)/)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
           out launch '^(zetaphy-launch/|zetaphy-(dex|nft)/web/deployments\.json$|zetaphy-explorer/config\.json$|zetaphy-wallet/index\.html$|zetaphy-snap/snap\.config\.js$)'
           # the DLMM devnet test (in the zetaphy-chain job, which builds zetaphyd): when the DLMM contracts, their CLI or test change
@@ -431,6 +433,36 @@ jobs:
         run: npx playwright-core install --with-deps chromium
 
       - name: Browser test (marketplace)
+        run: npm run test:e2e
+
+  zetaphy-hub:
+    name: zetaphy-hub (one-page app shell + browser test)
+    needs: changes
+    if: needs.changes.outputs.hub == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: zetaphy-hub
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build and unit tests (calldata, bech32, amounts, dist/)
+        run: npm test
+
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+
+      - name: Browser test (every tab, mocked node)
         run: npm run test:e2e
 
   zetaphy-snap:

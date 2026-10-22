@@ -1,0 +1,72 @@
+/* Loaded by hub.js into each app inside the hub (html.hub-embed[data-app=…]).
+   One palette for every app, no second brand bar, footers and long hints
+   folded into "i" icons that explain on hover. The apps work unchanged when
+   opened on their own sites (this file is only added inside the hub). */
+html.hub-embed {
+  --hub-bg: #05070a; --hub-card: #10151f; --hub-field: #0b0f16; --hub-line: rgba(255, 255, 255, .08);
+  --hub-text: #e8ecf2; --hub-dim: #8b93a3; --hub-accent: #7c6cff; --hub-link: #3fc8ff;
+  color-scheme: dark;
+}
+/* each app's own variable names, pointed at the hub's */
+html.hub-embed[data-app] {
+  --bg: var(--hub-bg) !important; --text: var(--hub-text) !important; --accent: var(--hub-accent) !important;
+  --line: var(--hub-line) !important; --muted: var(--hub-dim) !important; --card: var(--hub-card) !important;
+  --panel: var(--hub-card) !important; --panel-border: var(--hub-line) !important; --text-dim: var(--hub-dim) !important;
+  --field-bg: var(--hub-field) !important; --link: var(--hub-link) !important; --bg-glow: none !important;
+  --accent-text: #fff !important; --on-accent: #fff !important;
+  --warn-bg: #1d1808 !important; --warn-line: rgba(240, 185, 11, .45) !important;
+}
+html.hub-embed body { background: var(--hub-bg) !important; color: var(--hub-text); }
+
+/* the hub has the brand, language and the Explorer tab */
+html.hub-embed[data-app] .site-links,
+html.hub-embed[data-app] footer,
+html.hub-embed[data-app] .footer,
+html.hub-embed[data-app="wallet"] header h1,
+html.hub-embed[data-app="wallet"] header .sub,
+html.hub-embed[data-app="wallet"] #lang,
+html.hub-embed[data-app="swap"] .app-header .brand,
+html.hub-embed[data-app="swap"] .app-header .badge,
+html.hub-embed[data-app="swap"] .explorer-link,
+html.hub-embed[data-app="swap"] #lang-btn,
+html.hub-embed[data-app="swap"] #theme-btn,
+html.hub-embed[data-app="nft"] .top .brand,
+html.hub-embed[data-app="nft"] .testnet,
+html.hub-embed[data-app="nft"] #explorer-link,
+html.hub-embed[data-app="nft"] #lang,
+html.hub-embed[data-app="nft"] #theme,
+html.hub-embed[data-app="explorer"] .hdr-brand,
+html.hub-embed[data-app="explorer"] #lang-toggle,
+html.hub-embed[data-app="explorer"] #theme-toggle,
+html.hub-embed[data-app="neuro"] header h1,
+html.hub-embed[data-app="neuro"] header .sub,
+html.hub-embed[data-app="neuro"] #lang { display: none !important; }
+
+/* compact headers that keep only what the app needs (tabs, connect, search) */
+html.hub-embed[data-app="swap"] .app-header,
+html.hub-embed[data-app="nft"] .top,
+html.hub-embed[data-app="explorer"] .app-header { background: transparent !important; border-bottom: 1px solid var(--hub-line) !important; box-shadow: none !important; backdrop-filter: none !important; }
+html.hub-embed[data-app="wallet"] header,
+html.hub-embed[data-app="neuro"] header { margin: 0 0 8px !important; min-height: 0; }
+html.hub-embed[data-app="wallet"] main,
+html.hub-embed[data-app="neuro"] main { padding-top: 14px !important; }
+
+/* cards and fields in the hub's colours */
+html.hub-embed[data-app] .card { background: var(--hub-card) !important; border-color: var(--hub-line) !important; box-shadow: none !important; }
+html.hub-embed[data-app] input,
+html.hub-embed[data-app] select,
+html.hub-embed[data-app] textarea { background: var(--hub-field) !important; border-color: rgba(255, 255, 255, .14) !important; color: var(--hub-text) !important; }
+html.hub-embed[data-app] a { color: var(--hub-link); }
+
+/* a hint folded into an "i" icon (the original element stays, hidden, so the app can still update it) */
+html.hub-embed .hub-folded { display: none !important; }
+html.hub-embed .hub-i {
+  display: inline-grid; place-items: center; width: 17px; height: 17px; margin: 0 4px; vertical-align: middle; border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .2); color: var(--hub-dim); font: italic 600 11px/1 Georgia, serif; cursor: help; user-select: none;
+}
+html.hub-embed .hub-i:hover, html.hub-embed .hub-i:focus { color: var(--hub-text); border-color: var(--hub-accent); outline: none; }
+html.hub-embed .hub-tip {
+  position: fixed; z-index: 2147483647; max-width: 320px; padding: 9px 12px; border-radius: 10px; pointer-events: none;
+  background: #1a2130; border: 1px solid rgba(255, 255, 255, .14); color: var(--hub-text); font: 12.5px/1.55 "Inter", system-ui, "Noto Sans Thai", sans-serif;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .45); white-space: pre-line;
+}

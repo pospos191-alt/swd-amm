@@ -18,7 +18,7 @@ import { parseSettings, serializeSettings, parseImported, cleanWalletId, rpcIsCu
 import { createDlmmTab } from './dlmm.js';
 
 const $ = (id) => document.getElementById(id);
-const BASE = '/';
+const BASE = './';
 const KEYS = { lang: 'zetaphy-dex:lang', theme: 'zetaphy-dex:theme', settings: 'zetaphy-dex:settings', imported: `zetaphy-dex:imported:${EVM_CHAIN_ID}`, wallet: 'zetaphy-dex:wallet' };
 const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },

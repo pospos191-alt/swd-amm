@@ -1,0 +1,47 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { Interface, id } from 'ethers';
+import * as L from '../chainlib.js';
+
+const A = '0x6af57fC3633dD0F7907f7900dbd4A2822F43a245';
+const VAL = 'zetaphyvaloper1dt6hlsmr8nwlmepl0yqdhfp22qhn6gj9x3j6zk';
+
+test('selectors are keccak256 of the signatures', () => {
+  assert.equal(L.SELECTORS.delegate, id('delegate(address,string,uint256)').slice(0, 10));
+  assert.equal(L.SELECTORS.undelegate, id('undelegate(address,string,uint256)').slice(0, 10));
+  assert.equal(L.SELECTORS.claimRewards, id('claimRewards(address,uint32)').slice(0, 10));
+  assert.equal(L.SELECTORS.vote, id('vote(address,uint64,uint8,string)').slice(0, 10));
+});
+
+test('calldata matches ethers', () => {
+  const st = new Interface(['function delegate(address,string,uint256)', 'function undelegate(address,string,uint256)']);
+  const d = new Interface(['function claimRewards(address,uint32)']);
+  const g = new Interface(['function vote(address,uint64,uint8,string)']);
+  assert.equal(L.encodeDelegate(A, VAL, 10n ** 18n), st.encodeFunctionData('delegate', [A, VAL, 10n ** 18n]));
+  assert.equal(L.encodeUndelegate(A, VAL, 5n), st.encodeFunctionData('undelegate', [A, VAL, 5n]));
+  assert.equal(L.encodeClaimRewards(A, 50), d.encodeFunctionData('claimRewards', [A, 50]));
+  assert.equal(L.encodeVote(A, 7, 1, ''), g.encodeFunctionData('vote', [A, 7, 1, '']));
+  assert.equal(L.encodeVote(A, 7, 3, 'ไทย '.repeat(20)), g.encodeFunctionData('vote', [A, 7, 3, 'ไทย '.repeat(20)]));
+  assert.throws(() => L.encodeVote(A, 1, 5), /1-4/);
+  assert.throws(() => L.encodeDelegate('0x12', VAL, 1n), /0x address/);
+});
+
+test('bech32 round trip and checksum', () => {
+  const b = L.toBech32(A);
+  assert.match(b, /^zetaphy1[02-9ac-hj-np-z]{38}$/);
+  assert.equal(L.toEvm(b), A.toLowerCase());
+  assert.throws(() => L.toEvm(b.slice(0, -1) + (b.endsWith('q') ? 'p' : 'q')), /checksum/);
+  // a known vector (BIP-173)
+  assert.equal(L.bech32Decode('A12UEL5L').hrp, 'a');
+});
+
+test('amounts', () => {
+  assert.equal(L.parseZeta('1'), 10n ** 18n);
+  assert.equal(L.parseZeta('0.000000000000000001'), 1n);
+  assert.throws(() => L.parseZeta('1e3'), /amount/);
+  assert.throws(() => L.parseZeta('-1'), /amount/);
+  assert.equal(L.formatZeta('1234567890000000000000'), '1,234.5678');
+  assert.equal(L.formatZeta(10n ** 18n), '1');
+  assert.equal(L.formatZeta('junk'), '–');
+  assert.equal(L.short('zetaphy1abcdefghijklmnop'), 'zetaphy1…klmnop');
+});

@@ -98,7 +98,7 @@ function applyStatic() {
   for (const el of document.querySelectorAll('[data-i18n-placeholder]')) el.setAttribute('placeholder', t(el.dataset.i18nPlaceholder));
   for (const el of document.querySelectorAll('[data-i18n-title]')) { el.setAttribute('title', t(el.dataset.i18nTitle)); el.setAttribute('aria-label', t(el.dataset.i18nTitle)); }
   $('lang-toggle').textContent = lang === 'th' ? 'EN' : 'ไทย';
-  document.title = `${t('title')} · SAWASDEE COIN`;
+  document.title = t('title');
 }
 
 function applyTheme(theme) {

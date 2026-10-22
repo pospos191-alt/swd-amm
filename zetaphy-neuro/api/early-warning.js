@@ -34,6 +34,11 @@ function clientIp(req) {
   return req.socket?.remoteAddress ?? '';
 }
 
+// The ZETAPHY hub (zetaphy-hub) shows this page in its own site and proxies /api/*
+// here, so its POSTs carry the hub's Origin.
+const HUB_HOSTS = String(process.env.NEURO_ALLOWED_ORIGIN_HOSTS ?? 'app.sawasdeecoin.com,zetaphy-hub.vercel.app')
+  .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+
 export default async function handler(req, res) {
   try {
     const out = await handleEarlyWarning({
@@ -42,6 +47,7 @@ export default async function handler(req, res) {
       ip: clientIp(req),
       origin: req.headers.origin,
       host: req.headers.host,
+      allowedHosts: HUB_HOSTS,
     }, { loader, limiter, cache });
     for (const [k, v] of Object.entries(out.headers ?? {})) res.setHeader(k, v);
     res.status(out.status).json(out.json ?? {});

@@ -145,7 +145,7 @@ test('Neuro in the page: fp1 matches zetaphy-network/src/vaccine.js, EIP-1967 sl
 test('the page loads nothing from other sites: no inline or external scripts, no remote imports, no innerHTML', () => {
   const html = readFileSync(join(PAGE, 'index.html'), 'utf8');
   for (const m of html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)) {
-    assert.match(m[1], /src="\/[a-z]+\.js"/, 'only same-origin script files');
+    assert.match(m[1], /src="\.\/[a-z]+\.js"/, 'only same-origin script files (relative, so the page also works under the hub\'s /swap/)');
     assert.equal(m[2].trim(), '', 'no inline script');
   }
   assert.doesNotMatch(html, /<link[^>]+href="https?:/, 'no remote stylesheets or fonts');
@@ -159,7 +159,7 @@ test('the page loads nothing from other sites: no inline or external scripts, no
   }
 });
 
-test('own origin: web/vercel.json sends the strict CSP and security headers on every path; the page uses root paths', () => {
+test('own origin: web/vercel.json sends the strict CSP and security headers on every path; the page uses relative paths', () => {
   const cfg = JSON.parse(readFileSync(join(PAGE, 'vercel.json'), 'utf8'));
   assert.equal(cfg.headers.length, 1);
   assert.equal(cfg.headers[0].source, '/(.*)');

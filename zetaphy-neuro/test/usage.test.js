@@ -53,6 +53,8 @@ test('rejects other sites, bad bodies, bad months and other methods', async () =
   assert.equal((await post(s, { origin: 'https://evil.example', host: 'neuro.example' })).status, 403);
   assert.equal((await post(s, { origin: 'null', host: 'neuro.example' })).status, 403);
   assert.equal((await post(s, { origin: 'https://neuro.example', host: 'neuro.example' })).status, 202);
+  assert.equal((await post(s, { origin: 'https://app.example', host: 'neuro.example', allowedHosts: ['app.example'] })).status, 202);
+  assert.equal((await post(s, { origin: 'https://evil.example', host: 'neuro.example', allowedHosts: ['app.example'] })).status, 403);
   assert.equal((await handleUsage({ method: 'POST', body: { event: 'x' } }, s, SECRET)).status, 400);
   assert.equal((await get(s, { query: { month: '2026-13' } })).json.month, '2026-10');
   assert.equal((await handleUsage({ method: 'DELETE' }, s, SECRET)).status, 405);
