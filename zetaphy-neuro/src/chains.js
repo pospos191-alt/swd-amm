@@ -128,6 +128,17 @@ export const CHAINS = {
   },
 };
 
+/**
+ * ZETAPHY's own CosmWasm contracts (x/wasm next to its EVM, stage 7): a
+ * chain config for readContract's opts.chainConfig. ZETAPHY has no fixed
+ * public REST address (each node serves its own, e.g. https://<node>/rest),
+ * so the caller passes the node(s); the reader checks their chain id.
+ * EVM contracts on ZETAPHY are read with {kind: 'evm', ...} as before.
+ */
+export function zetaphyCosmwasmChain(rpcs, chainId = 'zetaphy_77390-1') {
+  return { kind: 'cosmwasm', chainId, prefix: 'zetaphy', name: 'ZETAPHY (CosmWasm)', rpcs, explorer: null };
+}
+
 const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 // Base58, 32 bytes: 32 to 44 characters, no 0, O, I or l.
 const SOLANA_ADDRESS = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;

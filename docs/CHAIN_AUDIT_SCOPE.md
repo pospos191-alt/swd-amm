@@ -116,3 +116,34 @@ acknowledgements written in BeginBlock; bounded work per block and per tx; that 
 withdrawals from the protocol's own contracts. Tests: `fork-tests/evmd/zetaphy_security_test.go`,
 `fork-tests/evmd/tests/ibc/zetaphy_ibchold_test.go`, `zetaphy-network/test/devnet.security.integration.js`,
 `zetaphy-chain/ibc/test-ibc.sh` part 4. Known limits and the developers' own findings are kept separately for the team.
+
+## CosmWasm (x/wasm next to the EVM) — new scope
+
+> สรุป (ไทย): ขอบเขตใหม่คือการต่อโมดูล x/wasm (wasmd v0.70.5, wasmvm v3.0.9) เข้ากับ evmd: อัปโหลดโค้ดเฉพาะ governance,
+> ธุรกรรม wasm อยู่ใต้ Q-day/ล็อกควอนตัม/การเผาค่าธรรมเนียม, สัญญาส่งต่อข้อความได้เฉพาะที่ปลอดภัย, IBC ของสัญญาปิด,
+> อัปเกรด `zetaphy-v4` คำถามหลัก: มีทางใดที่สัญญาทำแทนบัญชีที่ล็อกควอนตัม/ข้าม IBC hold/ข้าม Q-day ได้หรือไม่
+
+Upstream code (not ZETAPHY's, pinned by `evmd/go.sum`): `github.com/CosmWasm/wasmd v0.70.5` (x/wasm for SDK
+v0.54) and `github.com/CosmWasm/wasmvm/v3 v3.0.9` (CosmWasm VM 3.0.11; `libwasmvm.{x86_64,aarch64}.so` from the
+Go module, sha256 also pinned in `setup-node.sh`). ibc-go is kept at v11.0.0 with a `replace` (wasmd v0.70.5
+declares v11.2.0; v0.70.5 differs from v0.70.2, which was built on v11.0.0, only by nil-response checks and a
+vesting-burn fix). ZETAPHY's part is ~300 lines in the same `ZETAPHY_PQ_PATCH`:
+
+| File | What to look at |
+|---|---|
+| `evmd/zetaphy_cosmwasm.go` | keeper wiring (`setupWasm`; VM directory per process, mock engine for the home-less CLI app); parameters (`ZetaphyWasmParams`: upload Nobody, instantiate Everybody; 800 KiB for `MaxWasmSize` and `MaxProposalWasmSize`); `wasmGenesisBasic` (what `init` writes); the dispatch guard (`wasmGuardRouter` / `wasmGuard`: no `MsgEthereumTx` or `/zetaphy.*` from contracts, no message, also inside authz `MsgExec` up to depth 4, whose signer is quantum-locked; `wasmGuardMessenger`: no `IbcMsg` other than `Transfer`, no `Ibc2Msg`); ante decorators (`wasmAnteDecorators`: simulation gas cap, tx counter only for wasm txs, gas register, tx contracts); `zetaphy-v4` handler and `zetaphyWasmMigrations` (parameters set after the module's genesis runs in an upgrade); store upgrades |
+| `evmd/app.go` | store key, module order (wasm last in begin/end/genesis), no IBC route for `wasm.*` / `wasm2*`, snapshot extension, pinned codes at start, `ExtraCosmosDecorators` |
+| `ante/ante.go`, `ante/cosmos.go` | `HandlerOptions.ExtraCosmosDecorators`, inserted right after `SetUpContextDecorator` in the Cosmos tx chain (EVM txs unaffected); the ZETAPHY `pqLockAnte` (quantum lock, Q-day) still wraps the whole handler |
+| `evmd/config/permissions.go` | `wasm` module account: Burner (blocked from receiving bank sends like every module account) |
+| `evmd/zetaphy_upgrade.go` | `zetaphy-v2`/`v3`/`v4` store loader adds the wasm store; v2/v3 handlers also set the wasm parameters when x/wasm is new |
+| `evmd/cmd/evmd/cmd/root.go` | `--wasm.*` start flags and the libwasmvm version check |
+
+Questions for the auditor: can a contract act for a quantum-locked account (authz, fee grants, nested
+dispatch); does any dispatch path reach the EVM as a 20-byte sender other than the contract's own signer
+checks; are wasm txs fully covered by Q-day (every signer ML-DSA-44); can wasm IBC traffic bypass the
+transfer stack (rate limits, large-transfer hold); determinism of wasm under the block-STM runner (the tx
+counter key is written only by wasm txs); gas for proposal-stored code vs the 30M block gas limit.
+Tests: `fork-tests/evmd/zetaphy_cosmwasm_test.go` (hackatom and reflect from wasmd's testdata, sha256 pinned),
+`zetaphy-network/test/devnet.wasm.integration.js` (cw20-base v2.0.0 stored by a gov vote, sha256 pinned).
+The threat gate stays EVM-only (ThreatRegistry keys are 20-byte EVM contracts; contract addresses are 32
+bytes). Known limits are kept separately for the team.

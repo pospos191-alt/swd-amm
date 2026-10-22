@@ -20,7 +20,8 @@
     "test:devnet:preinstalls": "node --test test/devnet.preinstalls.integration.js",
     "test:devnet:ibc": "node --test test/devnet.ibc.integration.js",
     "test:devnet:timelock": "node --test test/devnet.timelock.integration.js",
-    "test:devnet:security": "node --test test/devnet.security.integration.js"
+    "test:devnet:security": "node --test test/devnet.security.integration.js",
+    "test:devnet:wasm": "node --test test/devnet.wasm.integration.js"
   },
   "engines": {
     "node": ">=20"

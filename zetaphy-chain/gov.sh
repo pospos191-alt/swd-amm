@@ -37,6 +37,11 @@
 #   gov.sh ibc-usdc-ratelimit <channel> [send%] [recv%] [hours]   cap USDC on it, or change the cap (default 1 1 24)
 #   gov.sh ibc-usdc-erc20 <channel>                      USDC as an ERC-20 (MetaMask, explorer, DEX token lists)
 #   gov.sh ibc-usdc-metadata <channel>                   its bank metadata (USDC, 6 decimals) for a genesis / upgrade
+#   ---- CosmWasm (README.md, stage 7) ----
+#   gov.sh wasm-store <file.wasm> "<title>" [everybody|nobody|zetaphy1…,zetaphy1…]
+#                                                        propose storing contract code (who may instantiate it; default everybody)
+#   gov.sh wasm-upload-access nobody|everybody|zetaphy1…,zetaphy1…   propose who may store code without a vote (default: nobody)
+#   gov.sh wasm-codes                                    stored contract codes and the upload rule in force
 #
 # Env (defaults match setup-node.sh): NODE_HOME, KEYS_DIR, FROM (key name),
 # ZETAPHYD, NODE (CometBFT RPC), CHAIN_ID, DEPOSIT (azetaphy).
@@ -328,6 +333,54 @@ case "${1:-}" in
         jq -n --arg a "$addr" --arg dn "$denom" --argjson c "${EVM_CHAIN_ID:-77390}" \
           '{chainId:$c,address:$a,name:"USD Coin (Noble)",symbol:"USDC",decimals:6,extensions:{cosmosDenom:$dn,origin:"noble uusdc"}}' ;;
     esac ;;
+  # ---- CosmWasm ----------------------------------------------------------
+  wasm-store)
+    # Code upload is governance only on ZETAPHY: the code goes in a proposal
+    # (MsgStoreCode from the gov module), gzipped (wasmd unpacks it; at most
+    # 800 KiB unpacked). Its sha256 is in the title so voters can compare it
+    # with the published build.
+    file=${2:?contract .wasm file}; title=${3:?title}; who=${4:-everybody}
+    [ -f "$file" ] || { echo "no such file: $file"; exit 1; }
+    head -c4 "$file" | od -An -tx1 | tr -d ' \n' | grep -q '^0061736d' || gzip -t "$file" 2>/dev/null || { echo "not a wasm file: $file"; exit 1; }
+    case "$who" in
+      everybody) perm='{permission:"Everybody",addresses:[]}' ;;
+      nobody)    perm='{permission:"Nobody",addresses:[]}' ;;
+      *) [[ "$who" =~ ^zetaphy1[0-9a-z]{38,58}(,zetaphy1[0-9a-z]{38,58})*$ ]] || { echo "instantiate: everybody, nobody or zetaphy1…,zetaphy1…"; exit 1; }
+         perm="{permission:\"AnyOfAddresses\",addresses:$(echo "$who" | jq -R -c 'split(",")')}" ;;
+    esac
+    sum=$( (gzip -dc "$file" 2>/dev/null || cat "$file") | sha256sum | cut -d' ' -f1)
+    gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
+    z=$(mktemp); f=$(mktemp)
+    (gzip -t "$file" 2>/dev/null && cat "$file" || gzip -9nc "$file") | base64 -w0 > "$z"
+    jq -n --arg gov "$gov" --rawfile code "$z" --arg d "$DEPOSIT" --arg t "$title" --arg sum "$sum" --arg who "$who" \
+      "{messages:[{\"@type\":\"/cosmwasm.wasm.v1.MsgStoreCode\",sender:\$gov,wasm_byte_code:\$code,instantiate_permission:$perm}],
+        metadata:\"\",deposit:\$d,title:(\$t + \" (wasm sha256 \" + \$sum[0:16] + \"…)\"),
+        summary:(\"Store CosmWasm code, sha256 \" + \$sum + \". Who may instantiate it: \" + \$who + \".\"),expedited:false}" > "$f"
+    echo "code sha256 $sum"
+    # Storing the proposal costs gas per byte of code; a tight margin keeps a
+    # large contract under the 30,000,000 block gas limit.
+    TXF=${TXF/--gas-adjustment 1.5/--gas-adjustment 1.1}
+    submit tx gov submit-proposal "$f"; rm -f "$f" "$z" ;;
+  wasm-upload-access)
+    who=${2:?nobody, everybody or zetaphy1…,zetaphy1…}
+    case "$who" in
+      everybody) up='{permission:"Everybody",addresses:[]}' ;;
+      nobody)    up='{permission:"Nobody",addresses:[]}' ;;
+      *) [[ "$who" =~ ^zetaphy1[0-9a-z]{38,58}(,zetaphy1[0-9a-z]{38,58})*$ ]] || { echo "nobody, everybody or zetaphy1…,zetaphy1…"; exit 1; }
+         up="{permission:\"AnyOfAddresses\",addresses:$(echo "$who" | jq -R -c 'split(",")')}" ;;
+    esac
+    gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
+    inst=$($ZETAPHYD q wasm params $QF | jq -r '(.params // .).instantiate_default_permission // "Everybody"')
+    f=$(mktemp)
+    jq -n --arg gov "$gov" --arg inst "$inst" --arg d "$DEPOSIT" --arg who "$who" \
+      "{messages:[{\"@type\":\"/cosmwasm.wasm.v1.MsgUpdateParams\",authority:\$gov,params:{code_upload_access:$up,instantiate_default_permission:\$inst}}],
+        metadata:\"\",deposit:\$d,title:(\"CosmWasm code upload: \" + \$who),
+        summary:(\"Who may store contract code without a vote: \" + \$who + \". Governance can always store code by proposal.\"),expedited:false}" > "$f"
+    submit tx gov submit-proposal "$f"; rm -f "$f" ;;
+  wasm-codes)
+    $ZETAPHYD q wasm params $QF | jq -c '.params // .'
+    $ZETAPHYD q wasm list-code $QF | jq -c '.code_infos[]? | {code_id, creator, data_hash, instantiate_permission}' ;;
+
   *)
-    sed -n '8,39p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,44p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

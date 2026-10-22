@@ -8,7 +8,7 @@ import { randomBytes } from 'node:crypto';
 import { bech32Decode, bech32Encode } from '../src/bech32.js';
 import { readContract } from '../src/reader.js';
 import { createCosmosRest } from '../src/rpc.js';
-import { isChainAddress } from '../src/chains.js';
+import { isChainAddress, zetaphyCosmwasmChain } from '../src/chains.js';
 import { explain } from '../src/explain.js';
 
 const ids = (r) => r.analysis.findings.map((f) => f.id);
@@ -129,4 +129,24 @@ test('REST client: GET only and only the expected chain id', async () => {
   assert.deepEqual(await api.get('/a'), { x: 1 });
   assert.ok(seen.every(([m]) => m === 'GET'));
   assert.ok(!seen.some(([, u]) => u === 'https://wrong.example/a'));
+});
+
+test('ZETAPHY CosmWasm (stage 7): a cw20 read through a node\'s REST, chain id checked', async () => {
+  const token = bech32Encode('zetaphy', randomBytes(32));
+  const chain = zetaphyCosmwasmChain(['https://node.example/rest']);
+  assert.deepEqual([chain.kind, chain.prefix, chain.chainId], ['cosmwasm', 'zetaphy', 'zetaphy_77390-1']);
+  const api = fakeLcd({
+    [`/cosmwasm/wasm/v1/contract/${token}`]: info({ admin: '', creator: bech32Encode('zetaphy', randomBytes(20)) }),
+    [smart(token, { token_info: {} })]: { data: { name: 'Zeta Wasm Test', symbol: 'ZWT', decimals: 6, total_supply: '1000000' } },
+    [smart(token, { minter: {} })]: { data: null },
+  });
+  const r = await readContract('zetaphy-wasm', token, { chainConfig: chain, api });
+  assert.deepEqual(ids(r), ['cw20-token', 'cw-no-admin', 'cw20-no-minter', 'cw-caveat']);
+  assert.equal(r.token.symbol, 'ZWT');
+  await assert.rejects(readContract('zetaphy-wasm', CONTRACT, { chainConfig: chain, api }), /invalid address/, 'an osmo1 address');
+  await assert.rejects(readContract('zetaphy-wasm', '0x' + '11'.repeat(20), { chainConfig: chain, api }), /invalid address/);
+  // The REST client refuses a node of another chain.
+  const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ default_node_info: { network: 'osmosis-1' } }), text: async () => '' });
+  const rest = createCosmosRest(chain.rpcs, chain.chainId, { fetchImpl });
+  await assert.rejects(rest.get(`/cosmwasm/wasm/v1/contract/${token}`), /wrong chain|osmosis/);
 });
