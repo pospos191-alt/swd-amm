@@ -1,157 +1,161 @@
-# Neuro ZETAPHY: ถ้อยคำ การชี้แจง/ขอแก้ไข และคำถามที่ควรถามทนาย
+**English** | [ภาษาไทย](LEGAL.th.md)
 
-> **เอกสารนี้ไม่ใช่คำแนะนำทางกฎหมาย** ผู้เขียนไม่ใช่ทนายความ เอกสารนี้อธิบายว่าระบบถูกออกแบบให้ลดความเสี่ยงอย่างไร
-> และเตรียมคำถามไว้ให้ปรึกษาทนายได้เร็วและถูกลง ก่อนเปิดให้คนทั่วไปใช้ ควรให้ทนายความที่มีใบอนุญาตในประเทศไทยตรวจเอกสารนี้
-> ข้อความบนหน้าเว็บ และถ้อยคำทั้ง 7 ภาษา
+This is a translation. If it differs from the Thai version, the Thai version prevails.
+
+# Neuro ZETAPHY: wording, replies/correction requests, and questions to ask a lawyer
+
+> **This document is not legal advice.** The author is not a lawyer. This document explains how the system is designed to reduce risk
+> and prepares questions so that a lawyer can be consulted faster and more cheaply. Before opening it to general use, a lawyer licensed in Thailand should review this document,
+> the text on the web pages, and the wording in all 7 languages
 >
 > English summary at the end.
 
-ช่องที่เจ้าของโครงการต้องกรอกเองมีเครื่องหมาย `[ ... ]` ห้ามเผยแพร่ทั้งที่ยังเป็นช่องว่าง
+Fields that the project owner must fill in themselves are marked `[ ... ]`. Do not publish while they are still blank
 
 ---
 
-## 1. ทำไมต้องมีเอกสารนี้
+## 1. Why this document is needed
 
-Neuro อ่านสัญญาเหรียญแล้วบอกว่าเจ้าของสัญญามีสิทธิ์อะไร ผลตรวจแสดงบนหน้าเว็บ ใน CLI และคนรันร่าง (runner)
-โหวตติดธงโค้ดใน `ThreatRegistry` ได้ ถ้าถ้อยคำไปตัดสินว่าโครงการใด "หลอกลวง" หรือ "scam" เจ้าของโครงการนั้นอาจฟ้องหมิ่นประมาทได้
-เช่น ตามประมวลกฎหมายอาญา มาตรา 326 และ 328 (หมิ่นประมาทโดยการโฆษณา) และพระราชบัญญัติว่าด้วยการกระทำความผิดเกี่ยวกับคอมพิวเตอร์ มาตรา 14
-(ข้อยกเว้นความผิดและข้อต่อสู้หลัก เช่น การแสดงความคิดเห็นโดยสุจริต (มาตรา 329) และการพิสูจน์ว่าเป็นความจริงที่เป็นประโยชน์ต่อสาธารณะ (มาตรา 330)
-ต้องให้ทนายอธิบายว่าใช้กับกรณีนี้ได้แค่ไหน)
+Neuro reads token contracts and states what rights the contract owner has. The results are shown on the web page, in the CLI, and runners
+can vote to flag code in `ThreatRegistry`. If the wording were to judge that a project is "deceptive" or a "scam", that project's owner might sue for defamation,
+for example under the Criminal Code, sections 326 and 328 (defamation by publication), and the Computer Crimes Act, section 14
+(the exceptions to the offence and the main defences, such as expressing an opinion in good faith (section 329) and proving that a statement is true and in the public interest (section 330),
+need a lawyer to explain how far they apply in this case)
 
-แนวทางของ Neuro จึงเป็น: **บอกเฉพาะข้อเท็จจริงของโค้ดที่ใครก็ตรวจซ้ำได้ ไม่ตัดสินเจตนาหรือความผิดของใคร**
+Neuro's approach is therefore: **state only facts about code that anyone can re-check, and do not judge anyone's intent or wrongdoing**
 
-## 2. Neuro บอกอะไร และไม่บอกอะไร
+## 2. What Neuro states, and what it does not
 
-**Neuro บอก (ข้อเท็จจริงของโค้ด ตรวจซ้ำได้):**
-- โค้ดหรือค่าตั้งบนเชนให้สิทธิ์อะไร เช่น "เจ้าของสร้างเหรียญเพิ่มได้ไม่จำกัด" "บล็อกกระเป๋าบางใบได้" "อัปเกรดโค้ดได้"
-- ผลการจำลองซื้อขาย เช่น "จำลองซื้อขายแล้ว ซื้อได้แต่ขายไม่ได้" พร้อมข้อจำกัดของการทดสอบ
-- ความคล้ายของโค้ด เช่น "โค้ดนี้คล้ายโค้ดที่ผู้รัน Neuro ติดธงไว้ 85% (ลายนิ้วมือ fp1:…)"
-- ว่าที่อยู่นี้ใช่ที่อยู่ที่ลงทะเบียนไว้ของเหรียญทางการหรือไม่
-- ป้ายของบุคคลภายนอก (เช่น tonapi.io) โดยบอกชัดว่าเป็นป้ายของเขา ไม่ใช่ผลตรวจของ Neuro
-- ระดับความเสี่ยง (สูง/ปานกลาง/ต่ำ) ซึ่งหมายถึง **ความเสี่ยงต่อผู้ใช้** ที่ถือหรือจะซื้อเหรียญ ไม่ใช่ระดับความผิดของใคร
+**Neuro states (facts about code, re-checkable):**
+- What rights the code or the on-chain settings give, e.g. "the owner can mint unlimited new tokens", "can block certain wallets", "can upgrade the code"
+- Results of simulated trading, e.g. "in a simulated buy/sell, the token could be bought but not sold", together with the limitations of the test
+- Code similarity, e.g. "this code is 85% similar to code that Neuro runners have flagged (fingerprint fp1:…)"
+- Whether this address is the registered address of an official token
+- Third-party labels (e.g. tonapi.io), stating clearly that they are that party's labels and not Neuro's findings
+- A risk level (high/medium/low), which means the **risk to users** who hold or will buy the token, not the degree of anyone's wrongdoing
 
-**Neuro ไม่บอก:**
-- เจตนา ความสุจริต หรือความผิดของบุคคล ทีม หรือโครงการใด
-- ว่าใครเป็นเจ้าของตัวจริงของที่อยู่บนเชน
-- ว่าควรซื้อหรือขาย (ไม่ใช่คำแนะนำการลงทุน)
-- ชื่อและสัญลักษณ์เหรียญเป็นข้อความที่ผู้สร้างสัญญาเขียนเอง Neuro แสดง "ตามที่เขียนไว้ในสัญญา" และไม่รับรอง
-  (ชื่อถูกกรองอักขระควบคุมและแสดงเป็นข้อความล้วน ไม่ใช่ HTML)
+**Neuro does not state:**
+- The intent, good faith, or wrongdoing of any person, team, or project
+- Who the real owner of an on-chain address is
+- Whether to buy or sell (it is not investment advice)
+- Token names and symbols are text written by the contract's creator; Neuro shows them "as written in the contract" and does not endorse them
+  (names are filtered of control characters and shown as plain text, not HTML)
 
-**ในทางปฏิบัติ (ทำแล้วในโค้ด):**
-- ข้อความทั้ง 7 ภาษา (`zetaphy-neuro/src/lang/*.js`) ไม่ใช้คำว่า scam, หลอกลวง, fraud, rug, drainer, phishing, honeypot
-  เป็นป้ายของโครงการ `test/i18n.test.js` ตรวจทุกข้อความทุกภาษา
-- หมวดของ `ThreatRegistry` (Drainer, Honeypot, HiddenMint, FakeToken, Phishing, Other) แสดงเป็นคำบรรยายพฤติกรรมโค้ด
-  เช่น "ซื้อได้แต่ขายไม่ได้" "ย้ายเงินออกจากกระเป๋าได้" (`REASON` ในแต่ละไฟล์ภาษา)
-- ทุกรายงาน (เว็บและ CLI) มีคำปฏิเสธความรับผิด 7 ภาษา:
-  "ข้อมูลนี้เป็นผลวิเคราะห์โค้ดอัตโนมัติที่ตรวจซ้ำได้ ไม่ใช่คำกล่าวหาบุคคลหรือโครงการ และไม่ใช่คำแนะนำการลงทุน เจ้าของสัญญาชี้แจงหรือขอแก้ไขได้"
-  พร้อมลิงก์มาที่ขั้นตอนชี้แจง (`zetaphy-neuro/web/legal.html`)
-- ทุกรายงานมีหลักฐานให้ตรวจซ้ำ: รหัสรายงาน (`reportHash`), รหัสผลตัดสิน (verdict, เฉพาะสิ่งที่กฎตัดสิน) และคำสั่ง
-  `node cli.js <เชน> <ที่อยู่> --lang <ภาษา>` ใครก็รันแล้วเทียบรหัสได้
+**In practice (already done in the code):**
+- The text in all 7 languages (`zetaphy-neuro/src/lang/*.js`) does not use the words scam, deceptive, fraud, rug, drainer, phishing, honeypot
+  as labels for projects. `test/i18n.test.js` checks every message in every language
+- `ThreatRegistry` categories (Drainer, Honeypot, HiddenMint, FakeToken, Phishing, Other) are shown as descriptions of code behaviour,
+  e.g. "can be bought but not sold", "can move funds out of a wallet" (`REASON` in each language file)
+- Every report (web and CLI) has a disclaimer in 7 languages:
+  "This information is the result of automated, re-checkable code analysis. It is not an accusation against any person or project, and it is not investment advice. The contract owner may reply or request a correction."
+  with a link to the reply procedure (`zetaphy-neuro/web/legal.html`)
+- Every report has evidence for re-checking: a report ID (`reportHash`), a verdict ID (verdict; only what the rules decide), and the command
+  `node cli.js <chain> <address> --lang <language>`, which anyone can run and compare the IDs
 
-## 3. นโยบายชี้แจงและขอแก้ไข (right of reply)
+## 3. Reply and correction policy (right of reply)
 
-### ใครขอได้
-เจ้าของหรือผู้ดูแลสัญญา (พิสูจน์ได้ด้วยการเซ็นข้อความจากที่อยู่เจ้าของ/ผู้ดูแลบนเชน) หรือใครก็ได้ที่เห็นว่าผลตรวจผิดข้อเท็จจริง
+### Who may request
+The owner or administrator of the contract (provable by signing a message from the owner/administrator address on chain), or anyone who believes that a finding is factually wrong
 
-### ช่องทาง
-1. **นอกเชน (ใช้ได้ตอนนี้):** อีเมล `[ใส่อีเมลติดต่อของเจ้าของโครงการ]` หรือเปิด issue ในที่เก็บโค้ดของโครงการ
-2. **บนเชน (กำลังจะเพิ่ม):** ช่องทางชี้แจงและอุทธรณ์ใน `ThreatRegistry` ให้เจ้าของสัญญาบันทึกคำชี้แจงคู่กับธง
-   และขอให้คนรันร่างตรวจใหม่ ยังไม่มีในสัญญาปัจจุบัน จะประกาศเมื่อพร้อม
-   (ตอนนี้การปลดธงทำได้ด้วยเสียงโหวตของคนรันร่างตามกติกาของ `ThreatRegistry` ดู `zetaphy-network/README.md`)
+### Channels
+1. **Off-chain (available now):** email `[insert the project owner's contact email]` or open an issue in the project's code repository
+2. **On-chain (coming):** a reply and appeal channel in `ThreatRegistry` that lets contract owners record a reply alongside a flag
+   and ask runners to re-check. It is not in the current contract yet; it will be announced when ready
+   (for now, a flag can be cleared by a vote of runners under the rules of `ThreatRegistry`; see `zetaphy-network/README.md`)
 
-### สิ่งที่ควรส่งมา
-- เชน ที่อยู่สัญญา และรหัสรายงานหรือรหัสผลตัดสินที่เห็น
-- ข้อที่เห็นว่าไม่ถูกต้อง และเหตุผล
-- หลักฐาน เช่น ซอร์สโค้ดที่ verify แล้ว ธุรกรรมที่สละสิทธิ์เจ้าของ ค่าตั้งที่เปลี่ยนแล้ว
-- ช่องทางติดต่อกลับ
+### What to send
+- The chain, the contract address, and the report ID or verdict ID you saw
+- The point you believe is incorrect, and why
+- Evidence, e.g. verified source code, a transaction renouncing ownership, settings that have been changed
+- Contact details for the reply
 
-### ระยะเวลา (ค่าเริ่มต้นที่แนะนำ เจ้าของโครงการปรับได้ ให้ทนายตรวจก่อนประกาศ)
+### Timeframes (recommended defaults; the project owner may adjust them; have a lawyer review them before announcing)
 
-| ขั้น | ภายใน | สิ่งที่ทำ |
+| Stage | Within | What is done |
 |---|---|---|
-| ตอบรับ | 3 วันทำการ | ยืนยันว่าได้รับ และบอกเลขเรื่อง |
-| ตรวจซ้ำ | 14 วัน | รันการตรวจซ้ำด้วยคำสั่งเดียวกัน อ่านหลักฐาน และแจ้งผลเป็นลายลักษณ์อักษร |
-| แก้ไข | ทันทีที่ยืนยันว่าผิด | กฎผิด: แก้กฎ (เป็นทักษะใหม่ที่คนรันร่างต้องโหวตรับ) / โค้ดเปลี่ยน: รายงานใหม่สะท้อนเองเมื่อตรวจซ้ำ / ธงผิด: เสนอให้คนรันร่างโหวตปลดธง |
-| แจ้งผล | เมื่อแก้แล้ว | แจ้งผู้ขอ และบันทึกไว้ในประวัติการเปลี่ยนแปลงของโครงการ |
+| Acknowledge | 3 business days | Confirm receipt and give a case number |
+| Re-check | 14 days | Re-run the check with the same command, read the evidence, and give the result in writing |
+| Correct | As soon as an error is confirmed | Wrong rule: fix the rule (as a new skill that runners must vote in) / code changed: a new report reflects it by itself when re-checked / wrong flag: propose that runners vote to clear the flag |
+| Notify | Once corrected | Notify the requester and record it in the project's change history |
 
-ถ้ามีหนังสือจากทนายหรือหน่วยงานรัฐ ให้ส่งต่อทนายของโครงการทันที อย่าตอบเองโดยไม่ได้ปรึกษา
+If a letter arrives from a lawyer or a government agency, forward it to the project's lawyer immediately. Do not reply yourself without consulting them
 
-### เก็บบันทึก
-เก็บคำขอ หลักฐาน ผลตรวจซ้ำ และสิ่งที่แก้ ไว้อย่างน้อยตามระยะที่ทนายแนะนำ บันทึกนี้ช่วยแสดงว่าทำโดยสุจริตและมีกระบวนการแก้ไข
+### Keeping records
+Keep the requests, evidence, re-check results, and what was corrected, for at least the period the lawyer recommends. These records help show that things were done in good faith and that there is a correction process
 
-## 4. การจัดการข้อมูล
+## 4. Data handling
 
-- **Neuro (เว็บและ CLI):** อ่านเฉพาะข้อมูลสาธารณะบนบล็อกเชนผ่าน RPC สาธารณะ เบราว์เซอร์ของผู้ใช้เรียก RPC เอง
-  ที่อยู่สัญญาที่ตรวจไม่ถูกส่งไปที่เซิร์ฟเวอร์ของโครงการ ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม
-- **ตัวนับผู้ใช้ (`zetaphy-neuro/api/usage.js`):** ไม่เก็บ IP เบราว์เซอร์ หรือที่อยู่สัญญา เก็บค่า HMAC ของ (เดือน, IP, เบราว์เซอร์)
-  ใน HyperLogLog ซึ่งเก็บแค่จำนวนโดยประมาณ ไม่นับเมื่อเบราว์เซอร์ตั้ง Do Not Track หรือ Global Privacy Control
-- **บนเชน ZETAPHY (`ThreatRegistry`, `ThreatReports`):** ลายนิ้วมือโค้ด code hash ที่อยู่ที่ติดธง ที่อยู่ของคนโหวต และ `note`
-  ของรายงาน (ไม่เกิน 280 ไบต์) เป็นข้อมูลสาธารณะและ **ลบไม่ได้** ห้ามใส่ชื่อคน อีเมล เบอร์โทร หรือข้อมูลส่วนบุคคลใน `note`
-  การปลดธงเปลี่ยนสถานะได้ แต่ประวัติบนเชนยังอยู่
-- ที่อยู่กระเป๋าอาจถือเป็นข้อมูลส่วนบุคคลตาม PDPA ได้ถ้าโยงถึงตัวคนได้ (ดูคำถามข้อ 5 ด้านล่าง)
-- คำขอชี้แจง/แก้ไขทางอีเมล: ใช้เฉพาะเพื่อดำเนินเรื่อง เก็บเท่าที่จำเป็น
+- **Neuro (web and CLI):** reads only public blockchain data through public RPCs. The user's browser calls the RPC itself.
+  The contract addresses checked are not sent to the project's servers. It does not ask to connect a wallet and does not send transactions
+- **Usage counter (`zetaphy-neuro/api/usage.js`):** does not store IPs, browsers, or contract addresses. It stores an HMAC of (month, IP, browser)
+  in a HyperLogLog, which stores only an approximate count. It does not count when the browser sets Do Not Track or Global Privacy Control
+- **On the ZETAPHY chain (`ThreatRegistry`, `ThreatReports`):** code fingerprints, code hashes, flagged addresses, voters' addresses, and the `note`
+  of reports (no more than 280 bytes) are public data and **cannot be deleted**. Do not put people's names, emails, phone numbers, or personal data in a `note`.
+  Clearing a flag can change its status, but the on-chain history remains
+- Wallet addresses may count as personal data under the PDPA if they can be linked to a person (see question 5 below)
+- Reply/correction requests by email: used only to handle the matter, and kept only as much as necessary
 
-## 5. คำถามที่ควรถามทนาย (เฉพาะโครงการนี้)
+## 5. Questions to ask a lawyer (specific to this project)
 
-เตรียมเอกสารนี้ ตัวอย่างรายงาน 2–3 ฉบับ (หน้าเว็บและ CLI) และรายการถ้อยคำใน `zetaphy-neuro/src/lang/th.js` ไปด้วย
-จะใช้เวลาปรึกษาน้อยลง
+Bring this document, 2–3 sample reports (web page and CLI), and the list of wording in `zetaphy-neuro/src/lang/th.js`;
+the consultation will take less time
 
-**หมิ่นประมาทและถ้อยคำ**
-1. ผลตรวจอัตโนมัติที่บอกข้อเท็จจริงของโค้ด (เช่น "จำลองซื้อขายแล้ว ซื้อได้แต่ขายไม่ได้") เสี่ยงหมิ่นประมาทตาม ป.อ. ม.326/328 หรือไม่
-   ถ้าผลจำลองผิดเพราะข้อจำกัดของการทดสอบ จะเป็นอย่างไร
-2. ข้อต่อสู้ตาม ม.329 และ ม.330 ใช้ได้แค่ไหนกับผลตรวจอัตโนมัติที่ตรวจซ้ำได้ และเราควรเก็บหลักฐานอะไรเพื่อแสดงความสุจริต
-3. คำปฏิเสธความรับผิด 7 ภาษาและขั้นตอนชี้แจงที่มีอยู่ พอหรือไม่ ควรแก้ถ้อยคำใด (ให้ทนายอ่าน `th.js` ทั้งไฟล์)
-4. การแสดงป้ายของบุคคลภายนอก (tonapi.io) และการบอกว่า "ไม่ใช่ที่อยู่ที่ลงทะเบียนไว้ของเหรียญ USDT/USDC" (ระบุชื่อผู้ออกเหรียญ)
-   มีความเสี่ยงด้านหมิ่นประมาทหรือเครื่องหมายการค้าหรือไม่
+**Defamation and wording**
+1. Do automated findings that state facts about code (e.g. "in a simulated buy/sell, the token could be bought but not sold") risk defamation under Criminal Code ss.326/328?
+   What happens if a simulation result is wrong because of the limitations of the test?
+2. How far do the defences under s.329 and s.330 apply to automated, re-checkable findings, and what evidence should we keep to show good faith?
+3. Are the 7-language disclaimer and the existing reply procedure sufficient? Which wording should be changed? (have the lawyer read the whole of `th.js`)
+4. Does showing third-party labels (tonapi.io) and stating "this is not the registered address of the USDT/USDC token" (naming the issuer)
+   carry defamation or trademark risk?
 
-**พ.ร.บ.คอมพิวเตอร์ และความรับผิดของแพลตฟอร์ม**
+**Computer Crimes Act and platform liability**
 
-5. ผลตรวจที่ Neuro แสดงหรือธงที่คนรันร่างเผยแพร่ เข้าข่าย ม.14 หรือไม่ และโครงการในฐานะผู้ให้บริการต้องรับผิดตาม ม.15 หรือไม่
-   ต้องมีขั้นตอนแจ้งเตือนและนำออก (notice-and-takedown) แบบใด ทั้งที่ข้อมูลบนเชนลบไม่ได้
-6. ธงที่คนรันร่าง/DAO โหวตใน `ThreatRegistry` ถือเป็นการกระทำของเจ้าของโครงการหรือไม่ ใครรับผิดถ้าธงผิด
-7. ตัวเฝ้าสะพาน (key ที่เป็น marker) ทำเครื่องหมายบนเชนให้ที่อยู่ที่เรียกสัญญาที่ตัวเฝ้าเฝ้าไว้ (รายชื่อเก็บเป็นความลับ) ทำให้การโอนผ่านสะพานของที่อยู่นั้นค้างจนกว่า governance จะปลด
-   และ `ThreatReports` ให้ใครก็รายงานได้พร้อม `note` สาธารณะ
-   มีความเสี่ยงอะไร (ทั้งหมิ่นประมาทและข้อมูลส่วนบุคคล)
+5. Do findings shown by Neuro, or flags published by runners, fall under s.14? Is the project, as a service provider, liable under s.15?
+   What kind of notice-and-takedown procedure is required, given that on-chain data cannot be deleted?
+6. Are flags voted by runners/the DAO in `ThreatRegistry` considered acts of the project owner? Who is liable if a flag is wrong?
+7. The bridge monitor (the marker key) places on-chain marks on addresses that call contracts the monitor watches (the list is kept secret), causing that address's bridge transfers to be held until governance clears them,
+   and `ThreatReports` lets anyone report with a public `note`.
+   What risks does this carry (both defamation and personal data)?
 
-**ข้อตกลงการใช้งานและเขตอำนาจศาล**
+**Terms of use and jurisdiction**
 
-8. ต้องมีข้อตกลงการใช้งาน (terms of use) และนโยบายความเป็นส่วนตัวบนหน้าเว็บหรือไม่ ควรมีเนื้อหาอะไร
-9. ผู้ใช้อยู่หลายประเทศ (ข้อความ 7 ภาษา) กฎหมายประเทศไหนใช้บังคับ ควรระบุเขตอำนาจศาลอย่างไร
-10. ใบอนุญาตโอเพนซอร์สและข้อความ "ไม่มีการรับประกัน" ช่วยได้แค่ไหน ควรดำเนินงานในนามบุคคล บริษัท หรือมูลนิธิ
+8. Are terms of use and a privacy policy required on the web pages? What should they contain?
+9. Users are in many countries (text in 7 languages). Which country's law applies? How should jurisdiction be specified?
+10. How far do an open-source licence and a "no warranty" statement help? Should it operate as an individual, a company, or a foundation?
 
-**ข้อมูลส่วนบุคคล (PDPA)**
+**Personal data (PDPA)**
 
-11. ที่อยู่กระเป๋าเป็นข้อมูลส่วนบุคคลตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 หรือไม่ เมื่อเก็บถาวรบนเชนที่ลบไม่ได้
-    ต้องทำอะไรบ้าง (ฐานทางกฎหมาย การแจ้ง สิทธิขอลบ)
-12. ตัวนับผู้ใช้ที่ใช้ HMAC ของ IP ถือว่าเก็บข้อมูลส่วนบุคคลหรือไม่
+11. Are wallet addresses personal data under the Personal Data Protection Act B.E. 2562 (2019)? When they are stored permanently on a chain where they cannot be deleted,
+    what must be done (legal basis, notice, right to erasure)?
+12. Does a usage counter that uses an HMAC of the IP count as collecting personal data?
 
-**เหรียญ ZETAPHY รางวัล และ ก.ล.ต.**
+**The ZETAPHY token, rewards, and the SEC**
 
-13. เหรียญ ZETAPHY รางวัลของคนรันร่าง ค่าบริการงาน (NeuroJobs) และเงินค้ำ เข้าข่ายสินทรัพย์ดิจิทัลหรือโทเคนดิจิทัลตาม
-    พ.ร.ก.การประกอบธุรกิจสินทรัพย์ดิจิทัล พ.ศ. 2561 หรือไม่ ต้องขออนุญาตหรือยื่นอะไรกับสำนักงาน ก.ล.ต. หรือไม่
-14. การแจกหรือขายเหรียญ และการแบ่งค่ารายงานให้คนโหวต (`ThreatReports`) มีประเด็นอะไร รวมถึงภาษี
+13. Do the ZETAPHY token, runner rewards, job fees (NeuroJobs), and deposits count as digital assets or digital tokens under
+    the Emergency Decree on Digital Asset Businesses B.E. 2561 (2018)? Is a licence or any filing with the Office of the SEC required?
+14. What issues arise from distributing or selling the token, and from sharing report fees with voters (`ThreatReports`), including tax?
 
-**การรันโหนด validator และสะพาน**
+**Running validator nodes and the bridge**
 
-15. การรัน validator/โหนด และให้คนอื่นรันร่าง Neuro มีหน้าที่หรือความรับผิดอะไร
-16. ฟีเจอร์สะพานที่ **กัก (hold)** การโอนของผู้ส่งหรือสัญญาที่ติดธง (`BridgeAirlock`, `ThreatHeld`): ถ้ากักเงินของคนที่ไม่ได้ทำผิด
-    ใครรับผิด ต้องมีขั้นตอนปล่อยเงินและระยะเวลาอย่างไร
-17. ถ้าหน่วยงานรัฐขอข้อมูลหรือขอให้กัก/ปล่อยเงิน ต้องทำอย่างไร
+15. What duties or liabilities come with running validators/nodes and letting others run Neuro as runners?
+16. The bridge feature that **holds** transfers from flagged senders or contracts (`BridgeAirlock`, `ThreatHeld`): if it holds the funds of someone who has done nothing wrong,
+    who is liable? What procedure and timeframe for releasing funds are needed?
+17. If a government agency requests data or asks for funds to be held/released, what must be done?
 
-## 6. ช่องทางขอความช่วยเหลือทางกฎหมายฟรีหรือราคาถูกในไทย
+## 6. Free or low-cost legal help in Thailand
 
-ด้านล่างเป็นหน่วยงานที่มีอยู่จริงและเป็นที่รู้จัก **ไม่ได้ใส่เบอร์โทรหรือเว็บไซต์ไว้ ให้ค้นช่องทางติดต่อปัจจุบันจากแหล่งทางการเอง**
-และตรวจเงื่อนไขการรับเรื่อง (บางแห่งรับเฉพาะผู้มีรายได้น้อย หรือให้คำปรึกษาเบื้องต้นเท่านั้น)
+Below are real, well-known organisations. **No phone numbers or websites are included; look up the current contact details from official sources yourself**
+and check their intake conditions (some accept only people on low incomes, or give only initial advice)
 
-- **สำนักงานช่วยเหลือทางกฎหมายประชาชน สภาทนายความ ในพระบรมราชูปถัมภ์** ให้คำปรึกษากฎหมายและช่วยเหลือทางคดี
-  มีสำนักงานส่วนกลางและในต่างจังหวัด
-- **คลินิกกฎหมายหรือศูนย์ให้คำปรึกษากฎหมายของคณะนิติศาสตร์ในมหาวิทยาลัย** หลายมหาวิทยาลัยมีบริการให้คำปรึกษาแก่ประชาชน
-  สอบถามคณะนิติศาสตร์ที่อยู่ใกล้ว่าปัจจุบันเปิดให้บริการหรือไม่
-- **กรมคุ้มครองสิทธิและเสรีภาพ กระทรวงยุติธรรม** ให้คำปรึกษาและความช่วยเหลือทางกฎหมายแก่ประชาชน
-  (กระทรวงยุติธรรมมีสำนักงานยุติธรรมจังหวัดในหลายจังหวัดด้วย)
+- **The Legal Aid Office for the People, Lawyers Council of Thailand under the Royal Patronage** gives legal advice and assistance with cases.
+  It has a central office and offices in the provinces
+- **Legal clinics or legal advice centres of university law faculties**: many universities offer advice to the public.
+  Ask a nearby law faculty whether it currently offers the service
+- **The Rights and Liberties Protection Department, Ministry of Justice** gives legal advice and assistance to the public
+  (the Ministry of Justice also has provincial justice offices in many provinces)
 
-เคล็ดลับให้ปรึกษาได้คุ้ม: ส่งเอกสารนี้ล่วงหน้า เลือก 3–5 คำถามที่สำคัญที่สุดจากข้อ 5 ถามทีละประเด็น
-และขอให้ทนายบอกว่าประเด็นไหนต้องใช้ทนายเฉพาะทาง (เช่น หลักทรัพย์/สินทรัพย์ดิจิทัล หรือ PDPA)
+Tips to get the most out of a consultation: send this document in advance, pick the 3–5 most important questions from section 5, ask about one issue at a time,
+and ask the lawyer to say which issues need a specialist lawyer (e.g. securities/digital assets, or PDPA)
 
 ---
 

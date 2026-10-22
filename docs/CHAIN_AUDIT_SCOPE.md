@@ -90,12 +90,12 @@ real-chain test `zetaphy-dex/test/devnet.dlmm.integration.js`
 
 ## Security core (Q-day, threat gate, IBC large-transfer hold) — new scope
 
-> สรุป (ไทย): ขอบเขตใหม่สำหรับผู้ตรวจ คือกติกาความปลอดภัยในแกนกลางของเชน 3 อย่าง (Q-day + การย้ายแบบ commit–reveal,
-> threat gate + ความยินยอมผ่าน precompile 0x…0901, การพักการโอนเข้า IBC ก้อนใหญ่) ทั้งหมดปิดจนกว่าจะโหวต
-> คำถามหลัก: ไม่มีเส้นทางให้ ECDSA ผ่านหลัง Q-day, ผลเหมือนกันทุกโหนด, งานต่อบล็อก/ต่อธุรกรรมมีเพดาน,
-> และไม่มีกติกาใดทำให้การถอนเงินจากสัญญาของโปรโตคอลค้าง
+> Summary: the new scope for auditors is the 3 security rules in the chain's core (Q-day + commit–reveal migration,
+> threat gate + consent through precompile 0x…0901, holding large inbound IBC transfers), all off until a vote.
+> Main questions: no path lets ECDSA through after Q-day, the same result on every node, work per block/per transaction is capped,
+> and no rule makes withdrawals from the protocol's contracts get stuck
 
-Part of the same `ZETAPHY_PQ_PATCH` in `zetaphy-chain/setup-node.sh` (~1,400 lines of Go; user guide in Thai:
+Part of the same `ZETAPHY_PQ_PATCH` in `zetaphy-chain/setup-node.sh` (~1,400 lines of Go; user guide:
 [`docs/SECURITY-CORE.md`](SECURITY-CORE.md)). Every rule is off until a governance vote sets it.
 
 | File | What to look at |
@@ -119,9 +119,9 @@ withdrawals from the protocol's own contracts. Tests: `fork-tests/evmd/zetaphy_s
 
 ## CosmWasm (x/wasm next to the EVM) — new scope
 
-> สรุป (ไทย): ขอบเขตใหม่คือการต่อโมดูล x/wasm (wasmd v0.70.5, wasmvm v3.0.9) เข้ากับ evmd: อัปโหลดโค้ดเฉพาะ governance,
-> ธุรกรรม wasm อยู่ใต้ Q-day/ล็อกควอนตัม/การเผาค่าธรรมเนียม, สัญญาส่งต่อข้อความได้เฉพาะที่ปลอดภัย, IBC ของสัญญาปิด,
-> อัปเกรด `zetaphy-v4` คำถามหลัก: มีทางใดที่สัญญาทำแทนบัญชีที่ล็อกควอนตัม/ข้าม IBC hold/ข้าม Q-day ได้หรือไม่
+> Summary: the new scope is wiring the x/wasm module (wasmd v0.70.5, wasmvm v3.0.9) into evmd: code upload by governance only,
+> wasm transactions are under Q-day/quantum lock/fee burning, contracts can pass on only safe messages, IBC for contracts is disabled,
+> the `zetaphy-v4` upgrade. Main question: is there any way for a contract to act on behalf of a quantum-locked account / bypass the IBC hold / bypass Q-day
 
 Upstream code (not ZETAPHY's, pinned by `evmd/go.sum`): `github.com/CosmWasm/wasmd v0.70.5` (x/wasm for SDK
 v0.54) and `github.com/CosmWasm/wasmvm/v3 v3.0.9` (CosmWasm VM 3.0.11; `libwasmvm.{x86_64,aarch64}.so` from the

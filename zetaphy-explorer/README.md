@@ -1,146 +1,148 @@
+**English** | [ภาษาไทย](README.th.md)
+
 # ZETAPHY Explorer (explorer.sawasdeecoin.com)
 
-Block explorer ของเชน ZETAPHY (Cosmos SDK v0.54 + Cosmos EVM v0.7.3, chain id `zetaphy_77390-1`, EVM chain id 77390)
-เป็น**เว็บนิ่งล้วน (static site)**: ไม่มีเซิร์ฟเวอร์ ไม่มีฐานข้อมูล ไม่มี indexer เบราว์เซอร์ของผู้ใช้อ่านข้อมูลจาก RPC/REST สาธารณะของโหนดโดยตรง
-จึงวางบน Vercel ได้ฟรี
+Block explorer for the ZETAPHY chain (Cosmos SDK v0.54 + Cosmos EVM v0.7.3, chain id `zetaphy_77390-1`, EVM chain id 77390)
+It is a **fully static site**: no server, no database, no indexer. The user's browser reads data directly from the node's public RPC/REST,
+so it can be hosted on Vercel for free
 
-## มีอะไรบ้าง
+## What it has
 
-| หน้า | แสดง |
+| Page | Shows |
 |---|---|
-| หน้าแรก `#/` | chain id, ความสูงบล็อก, อุปทานทั้งหมด (ลดลงเมื่อเผาค่าธรรมเนียมและเผาเหรียญที่ส่งไป `0x…dEaD` พร้อมยอดที่เผาไปใน ~1 ชม.), ยอด stake และสัดส่วน, จำนวน validator และ % พลังโหวตที่มีกุญแจโหวต PQ, บล็อกล่าสุด, ธุรกรรมล่าสุด |
-| บล็อก `#/block/<เลข>` | header, ผู้เสนอบล็อก (ชื่อ validator), ธุรกรรมพร้อมสถานะ, **ใบรับรองต้านควอนตัม ML-DSA-44** ของบล็อกนี้ (อยู่ใน tx[0] ของบล็อกถัดไป): ผู้เซ็น, พลังที่เซ็นเทียบกับที่ต้องการ และ**ตรวจลายเซ็นจริงในเบราว์เซอร์** ด้วย `zetaphy-network/src/pqcert.js` |
-| ธุรกรรม `#/tx/<hash>` | EVM: from/to/value/gas/fee/status/logs ถอดการโอน ERC-20 / ERC-721 / ERC-1155 (Transfer, TransferSingle, TransferBatch) · Cosmos: ถอดทุกข้อความ รวมข้อความของ ZETAPHY (`MsgEVMCall`, `MsgQuantumLock`, `MsgPQVoteKey`, `MsgPQCertificate`, `MsgSetPQEvidence`), ชนิดกุญแจผู้เซ็น (ML-DSA-44), memo, ค่าธรรมเนียม, events |
-| ที่อยู่ `#/address/<0x… หรือ zetaphy1…>` | ทั้งสองรูปแบบ (20 ไบต์เดียวกัน), ยอด, nonce / sequence, เป็นสัญญาหรือไม่, บัญชี ML-DSA-44, **ล็อกควอนตัม** (ช่อง `quantumLockedTo` ของ `zetaphy_pqAccount`), เหรียญอื่น, ยอด stake, ยอดโทเคน, ธุรกรรมล่าสุด, สถานะใน **ThreatRegistry** |
-| โทเคน `#/token/<0x…>` | ERC-20 / ERC-721 / ERC-1155: ชื่อ, สัญลักษณ์, ทศนิยม, อุปทาน, ลิงก์รายงาน Neuro (ตั้ง URL ได้), ThreatRegistry, การโอนล่าสุด |
-| Validator `#/validators` | พลังโหวต, สถานะ, ค่าคอมมิชชัน, **ลงทะเบียนกุญแจโหวต PQ แล้วหรือยัง** (อ่านสโตร์ `zetaphypq` ด้วย `abci_query`) |
-| ตั้งค่า `#/settings` | URL ของโหนด (เก็บในเบราว์เซอร์นี้), ThreatRegistry, URL รายงาน Neuro, จำนวนบล็อกที่สแกน |
+| Home `#/` | chain id, block height, total supply (decreases when fees are burned and when coins sent to `0x…dEaD` are burned, with the amount burned in ~1 hr), staked amount and ratio, number of validators and % of voting power with a PQ vote key, latest blocks, latest transactions |
+| Block `#/block/<number>` | header, block proposer (validator name), transactions with status, this block's **quantum-resistant ML-DSA-44 certificate** (in tx[0] of the next block): signers, signed power versus required, and **real signature verification in the browser** with `zetaphy-network/src/pqcert.js` |
+| Transaction `#/tx/<hash>` | EVM: from/to/value/gas/fee/status/logs, decodes ERC-20 / ERC-721 / ERC-1155 transfers (Transfer, TransferSingle, TransferBatch) · Cosmos: decodes every message, including ZETAPHY messages (`MsgEVMCall`, `MsgQuantumLock`, `MsgPQVoteKey`, `MsgPQCertificate`, `MsgSetPQEvidence`), signer key type (ML-DSA-44), memo, fee, events |
+| Address `#/address/<0x… or zetaphy1…>` | both formats (same 20 bytes), balance, nonce / sequence, whether it is a contract, ML-DSA-44 account, **quantum lock** (the `quantumLockedTo` field of `zetaphy_pqAccount`), other coins, staked amount, token balances, latest transactions, status in **ThreatRegistry** |
+| Token `#/token/<0x…>` | ERC-20 / ERC-721 / ERC-1155: name, symbol, decimals, supply, Neuro report link (URL is configurable), ThreatRegistry, latest transfers |
+| Validator `#/validators` | voting power, status, commission, **whether a PQ vote key is registered** (reads the `zetaphypq` store with `abci_query`) |
+| Settings `#/settings` | node URL (stored in this browser), ThreatRegistry, Neuro report URL, number of blocks to scan |
 
-ช่องค้นหารับ: เลขบล็อก, hash ธุรกรรม (EVM `0x…` หรือ Cosmos hex), hash บล็อก, ที่อยู่ `0x…` / `zetaphy1…`, `zetaphyvaloper1…`
+The search box accepts: block number, transaction hash (EVM `0x…` or Cosmos hex), block hash, address `0x…` / `zetaphy1…`, `zetaphyvaloper1…`
 
-ภาษาไทย/อังกฤษ (ปุ่ม EN/ไทย), ธีมสว่าง/มืด, ใช้บนมือถือได้ (ตารางกลายเป็นการ์ด)
+Thai/English (EN/Thai button), light/dark theme, works on mobile (tables become cards)
 
-### ไม่มี indexer
+### No indexer
 
-ประวัติล่าสุดได้จากการ**สแกน N บล็อกล่าสุดในเบราว์เซอร์** (ค่าเริ่มต้น 100 บล็อก ≈ 8 นาทีที่บล็อกละ ~5 วินาที, ตั้งได้ 1–1000)
-หน้าเว็บบอกช่วงที่สแกนทุกครั้ง ธุรกรรมที่เก่ากว่านั้นเปิดได้ด้วย hash หรือเลขบล็อก แต่จะไม่ขึ้นในรายการ "ธุรกรรมล่าสุด" ของที่อยู่
+Recent history comes from **scanning the latest N blocks in the browser** (default 100 blocks ≈ 8 minutes at ~5 seconds per block, configurable 1–1000)
+The page always states the scanned range. Older transactions can be opened by hash or block number, but they will not appear in an address's "Latest transactions" list
 
-- อ่านธุรกรรมเป็นช่วงละ 50 บล็อก (`tx_search` ของ CometBFT ตามช่วงความสูง) ช่วงที่จบแล้วเก็บแคชไว้ จึงถามเฉพาะช่วงบนสุดซ้ำ
-  ถ้าโหนดปิด tx index ไว้ จะอ่านทีละบล็อกแทน (จำกัดไม่เกิน 40 บล็อกต่อรอบ)
-- ยอดโทเคนของที่อยู่ หาจากอีเวนต์ Transfer ในช่วงเดียวกัน (`eth_getLogs`) แล้วอ่าน `balanceOf` สด
-  (log ของ `MsgEVMCall` ไม่อยู่ใน `eth_getLogs` ตาม README ของ zetaphy-chain จึงอาจไม่ครบ)
-- ทุกคำขอผ่านคิวเดียว: พร้อมกันไม่เกิน 4 คำขอ, ไม่เกิน 8 คำขอ/วินาที, แคชในหน่วยความจำ (บล็อกและธุรกรรมที่ยืนยันแล้วเก็บนาน ข้อมูล "ล่าสุด" หมดอายุใน 4 วินาที), คำขอซ้ำที่กำลังรอใช้คำตอบเดียวกัน
-- หน้าแรกรีเฟรชทุก 6 วินาทีเฉพาะตอนแท็บเปิดอยู่
+- Transactions are read in ranges of 50 blocks (CometBFT `tx_search` by height range). Completed ranges are cached, so only the top range is queried again
+  If the node has tx indexing turned off, it reads block by block instead (limited to at most 40 blocks per round)
+- An address's token balances are found from Transfer events in the same range (`eth_getLogs`), then `balanceOf` is read live
+  (`MsgEVMCall` logs are not in `eth_getLogs`, per the zetaphy-chain README, so this may be incomplete)
+- All requests go through one queue: at most 4 concurrent requests, at most 8 requests/second, in-memory cache (confirmed blocks and transactions are kept long; "latest" data expires in 4 seconds), duplicate pending requests share the same response
+- The home page refreshes every 6 seconds, only while the tab is open
 
-### ใบรับรองต้านควอนตัม (ML-DSA-44)
+### Quantum-resistant certificate (ML-DSA-44)
 
-บล็อก H+1 มี tx[0] = `MsgPQCertificate` ที่รวมลายเซ็น ML-DSA-44 ของ validator สำหรับบล็อก H หน้าบล็อกเรียก `verifyBlock` ของ
-`zetaphy-network/src/pqcert.js` (bundle มาใน `vendor/zetaphy-lib.js`) ซึ่ง:
-ตรวจ header และ data hash ของบล็อกกับ hash ที่เซ็น, อ่านชุด validator และกุญแจโหวตที่ความสูง H, ตรวจลายเซ็นทุกอันด้วย `@noble/post-quantum`
-แล้วใช้กติกาเดียวกับโหนด: `3 × พลังที่เซ็น > 2 × พลังทั้งหมด − 3 × พลังที่ไม่มีกุญแจ`
+Block H+1 has tx[0] = `MsgPQCertificate`, which aggregates the validators' ML-DSA-44 signatures for block H. The block page calls `verifyBlock` from
+`zetaphy-network/src/pqcert.js` (bundled in `vendor/zetaphy-lib.js`), which:
+checks the block's header and data hash against the signed hash, reads the validator set and vote keys at height H, verifies every signature with `@noble/post-quantum`,
+and then applies the same rule as the node: `3 × signed power > 2 × total power − 3 × power without a key`
 
-ข้อจำกัด: พลังโหวตและกุญแจโหวตอ่านจากโหนดเดียวกัน (ไม่ได้ปักหมุด) โหนดที่ไม่ซื่อจึงส่งกุญแจปลอมมาคู่กับลายเซ็นปลอมได้
-ป้ายผลจึงเขียนว่า "ใบรับรองถูกต้องตามกุญแจ validator ของโหนดนี้" (ไม่ใช่ "ใบรับรองถูกต้อง" เฉย ๆ) และแสดงหมายเหตุความน่าเชื่อถือ (`pqTrust`)
-ไว้ติดกับป้ายผลเสมอ ถ้าต้องการตรวจโดยไม่เชื่อโหนดใด ใช้ `zetaphy pq verify-block --pin` ใน zetaphy-network
+Limitation: voting power and vote keys are read from the same node (not pinned), so a dishonest node could send fake keys together with fake signatures.
+So the result label says "Certificate is valid according to this node's validator keys" (not just "Certificate is valid"), and a trust note (`pqTrust`)
+is always shown next to the result label. To verify without trusting any node, use `zetaphy pq verify-block --pin` in zetaphy-network
 
 ### ThreatRegistry (Neuro)
 
-ใช้ตรรกะเดียวกับกระเป๋าและ snap (`zetaphy-network/src/vaccine.js`): ตรวจตัวที่อยู่ (`isAddressFlagged/Enforced`),
-โค้ดทั้งไบต์ (`isCodeFlagged/Enforced`), ลายนิ้วมือ Neuro fp1 (`isFlagged/Enforced`) และโค้ดหลัง proxy (EIP-1167, EIP-1967, beacon)
-ถ้าติดธง แสดงแบบข้อเท็จจริงเท่านั้นตาม `docs/LEGAL.md`: "ติดธงโดยผู้รัน Neuro", หมวด (ข้อความกลางของ `REASON_TEXT`),
-หลักฐาน (reportHash, URI, ผู้ให้, เวลา), คำชี้แจงของเจ้าของ (`responseAt`), วิธีตรวจซ้ำ และข้อความ
-**"ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา"** ทุกครั้ง ถ้าอ่าน registry ไม่ได้ จะไม่แสดงผลใด ๆ (ไม่เดา)
-ถ้ายังไม่ได้ตั้งที่อยู่ ThreatRegistry หน้าเว็บบอกว่า "ไม่ได้ตรวจ"
+Uses the same logic as the wallet and snap (`zetaphy-network/src/vaccine.js`): checks the address itself (`isAddressFlagged/Enforced`),
+the full code bytes (`isCodeFlagged/Enforced`), the Neuro fp1 fingerprint (`isFlagged/Enforced`) and the code behind proxies (EIP-1167, EIP-1967, beacon)
+If flagged, it shows facts only, per `docs/LEGAL.md`: "Flagged by a Neuro runner", category (the neutral text from `REASON_TEXT`),
+evidence (reportHash, URI, submitter, time), the owner's statement (`responseAt`), how to re-check, and the message
+**"Automated code analysis data, not an accusation"** every time. If the registry cannot be read, nothing is shown (no guessing)
+If no ThreatRegistry address is set yet, the page says "Not checked"
 
-### ความปลอดภัย
+### Security
 
-- ไม่ใช้ `innerHTML` (หรือ sink อื่น) กับข้อมูลใด ๆ: สร้าง DOM ด้วย `textContent` ผ่าน `src/dom.js` (ลิงก์ได้เฉพาะ `#/…` หรือ `https:`)
-- ข้อความจากเชน (ชื่อ/สัญลักษณ์โทเคน, moniker, memo, events, คำชี้แจง) ตัดอักขระควบคุม, อักขระกลับทิศ (bidi เช่น U+202E), zero-width ออก และจำกัดความยาว (`safeText` ใน `src/format.js`)
-- CSP ใน `vercel.json`: `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` และ header อื่น (HSTS, nosniff, no-referrer, X-Frame-Options)
-- ไม่มีสคริปต์หรือฟอนต์จากภายนอก ทุกไลบรารีอยู่ใน `vendor/zetaphy-lib.js` ที่ build จาก repo นี้
-- คำขอไปโหนดไม่ส่ง cookie (`credentials: 'omit'`) และรับเฉพาะ URL แบบ `https://` (เว้น `http://localhost` ตอนทดสอบในเครื่อง)
+- No `innerHTML` (or other sinks) with any data: DOM is built with `textContent` through `src/dom.js` (links only to `#/…` or `https:`)
+- Text from the chain (token names/symbols, moniker, memo, events, statements) has control characters, direction-override characters (bidi, for example U+202E) and zero-width characters stripped, and length limited (`safeText` in `src/format.js`)
+- CSP in `vercel.json`: `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` and other headers (HSTS, nosniff, no-referrer, X-Frame-Options)
+- No external scripts or fonts. All libraries are in `vendor/zetaphy-lib.js`, built from this repo
+- Requests to the node send no cookies (`credentials: 'omit'`) and only accept `https://` URLs (except `http://localhost` for local testing)
 
-**ทำไม `connect-src` เป็น `https:`:** ผู้ใช้เปลี่ยนโหนดเองได้ในหน้าตั้งค่า CSP จึงต้องอนุญาต host แบบ https ใดก็ได้
-ถ้าต้องการล็อกให้ใช้ได้เฉพาะโหนดของเรา แก้ใน `vercel.json` เป็น เช่น `connect-src 'self' https://1-2-3-4.sslip.io`
-(ผลคือโหนดที่ผู้ใช้ตั้งเองจะถูกเบราว์เซอร์บล็อก)
+**Why `connect-src` is `https:`:** users can change the node on the settings page, so the CSP must allow any https host.
+If you want to lock it to our node only, edit `vercel.json` to, for example, `connect-src 'self' https://1-2-3-4.sslip.io`
+(as a result, nodes users set themselves will be blocked by the browser)
 
-## ตั้ง URL ของโหนด (RPC)
+## Setting the node URL (RPC)
 
-ตอนนี้ยังไม่มีโหนดจริง `config.json` จึงเป็นค่าตัวอย่าง `https://<node-host>` และหน้าเว็บจะขึ้นแถบเตือนจนกว่าจะตั้ง
+There is no real node yet, so `config.json` has the placeholder value `https://<node-host>`, and the page shows a warning bar until it is set
 
-โหนดที่ติดตั้งด้วย `zetaphy-chain/setup-node.sh` มี Caddy เปิด https ให้ที่ `https://<ip แบบขีด>.sslip.io` (ดู `NODE-INFO.txt` บนเซิร์ฟเวอร์) โดย
+A node installed with `zetaphy-chain/setup-node.sh` has Caddy serving https at `https://<dashed-ip>.sslip.io` (see `NODE-INFO.txt` on the server), where
 - `https://<host>/` = EVM JSON-RPC
-- `https://<host>/rpc/` = CometBFT RPC (เส้นทางหนักถูกบล็อก)
+- `https://<host>/rpc/` = CometBFT RPC (heavy routes are blocked)
 - `https://<host>/rest/` = Cosmos REST
-- Caddy ใส่ CORS (`Access-Control-Allow-Origin *`) ให้แล้ว เว็บนี้จึงเรียกได้โดยตรง
+- Caddy already adds CORS (`Access-Control-Allow-Origin *`), so this site can call it directly
 
-**ให้ทุกคน:** แก้ `config.json` แล้ว commit/deploy
+**For everyone:** edit `config.json`, then commit/deploy
 
 ```json
 {
   "node": "https://1-2-3-4.sslip.io",
-  "threatRegistry": "0x…ที่อยู่ ThreatRegistry บน ZETAPHY (เว้นว่าง = ไม่ตรวจ)",
-  "neuroReportUrl": "https://<เว็บ Neuro>/web/?chain=zetaphy&address={address}",
+  "threatRegistry": "0x…ThreatRegistry address on ZETAPHY (empty = no check)",
+  "neuroReportUrl": "https://<Neuro site>/web/?chain=zetaphy&address={address}",
   "scanBlocks": 100
 }
 ```
 
-- `node`: host ของโหนด (explorer ต่อ `/`, `/rpc/`, `/rest/` ให้เอง)
-- ถ้า API แยกโฮสต์ ใส่ `evmRpc`, `cometRpc`, `rest` แยกได้ (`cometRpc` และ `rest` ต้องลงท้าย `/` เพราะ Caddy ใช้ `handle_path /rpc/*`)
-- `neuroReportUrl`: `{address}` และ `{chainId}` ถูกแทนให้ เว้นว่าง = ไม่แสดงลิงก์
-  (หมายเหตุ: เว็บ Neuro ตอนนี้ยังไม่มีเชน `zetaphy` ในรายการ ตั้งค่าเมื่อเว็บรองรับ)
+- `node`: the node host (the explorer appends `/`, `/rpc/`, `/rest/` itself)
+- If the APIs are on separate hosts, set `evmRpc`, `cometRpc`, `rest` separately (`cometRpc` and `rest` must end with `/` because Caddy uses `handle_path /rpc/*`)
+- `neuroReportUrl`: `{address}` and `{chainId}` are substituted. Empty = no link shown
+  (Note: the Neuro site does not list the `zetaphy` chain yet. Set this when the site supports it)
 
-**เฉพาะเบราว์เซอร์ตัวเอง:** เปิดหน้า **ตั้งค่า** (`#/settings`) ใส่ URL แล้วกด "ทดสอบการเชื่อมต่อ" ค่าเก็บใน localStorage ของเบราว์เซอร์นั้น
-กด "ใช้ค่าเริ่มต้นของเว็บ" เพื่อกลับไปใช้ `config.json`
+**For your own browser only:** open the **Settings** page (`#/settings`), enter the URL and press "Test connection". The value is stored in that browser's localStorage
+Press "Use site defaults" to go back to `config.json`
 
-## วางบน Vercel (ฟรี)
+## Hosting on Vercel (free)
 
-1. vercel.com → **Add New → Project** → เลือก repo นี้
-2. **Root Directory** ตั้งเป็น `zetaphy-explorer` (Framework Preset: Other) ไม่ต้องตั้ง build: `vercel.json` สั่งไว้แล้วว่าไม่ต้อง install/build และให้เสิร์ฟทั้งโฟลเดอร์
-   (`vendor/zetaphy-lib.js` commit ไว้แล้ว)
-3. **Deploy** แล้วเปิด `https://<project>.vercel.app` ตรวจว่าขึ้นหน้าเว็บและ CSP ทำงาน (DevTools → Network → Response headers)
+1. vercel.com → **Add New → Project** → choose this repo
+2. Set **Root Directory** to `zetaphy-explorer` (Framework Preset: Other). No build settings needed: `vercel.json` already says no install/build and serves the whole folder
+   (`vendor/zetaphy-lib.js` is already committed)
+3. **Deploy**, then open `https://<project>.vercel.app` and check that the page loads and the CSP works (DevTools → Network → Response headers)
 
-### ผูกโดเมนย่อย `explorer.sawasdeecoin.com`
+### Connecting the subdomain `explorer.sawasdeecoin.com`
 
-1. ที่ผู้ให้บริการ DNS ของ `sawasdeecoin.com` เพิ่มระเบียน
-   - Type: `CNAME` · Name/Host: `explorer` · Value/Target: `cname.vercel-dns.com` · TTL: ค่าเริ่มต้น (หรือ 300)
-   - ถ้าใช้ Cloudflare ตั้ง Proxy status เป็น **DNS only** (เมฆสีเทา) เพื่อให้ Vercel ออกใบรับรอง SSL ได้
-2. ใน Vercel: Project → **Settings → Domains** → **Add** → พิมพ์ `explorer.sawasdeecoin.com` → Add
-3. รอจน Vercel ขึ้น "Valid Configuration" (ปกติไม่กี่นาที) ใบรับรอง HTTPS ออกให้อัตโนมัติ
+1. At the DNS provider for `sawasdeecoin.com`, add the record
+   - Type: `CNAME` · Name/Host: `explorer` · Value/Target: `cname.vercel-dns.com` · TTL: default (or 300)
+   - If you use Cloudflare, set Proxy status to **DNS only** (grey cloud) so Vercel can issue the SSL certificate
+2. In Vercel: Project → **Settings → Domains** → **Add** → type `explorer.sawasdeecoin.com` → Add
+3. Wait until Vercel shows "Valid Configuration" (usually a few minutes). The HTTPS certificate is issued automatically
 
-## พัฒนาและทดสอบ
+## Development and testing
 
 ```bash
 cd zetaphy-explorer
-npm install                # devDependencies: esbuild, @noble/*, playwright-core, ethers (เฉพาะทดสอบ)
-npm run build              # สร้าง vendor/zetaphy-lib.js ใหม่ (เมื่อ pqcert.js / pqtx.js / vaccine.js เปลี่ยน) แล้ว commit
-npm run serve              # http://localhost:8095 พร้อม CSP เดียวกับ vercel.json
-npm test                   # unit + เบราว์เซอร์ (mock node)
-npm run test:devnet        # กับเชนจริง (ดูด้านล่าง)
+npm install                # devDependencies: esbuild, @noble/*, playwright-core, ethers (tests only)
+npm run build              # rebuild vendor/zetaphy-lib.js (when pqcert.js / pqtx.js / vaccine.js change), then commit
+npm run serve              # http://localhost:8095 with the same CSP as vercel.json
+npm test                   # unit + browser (mock node)
+npm run test:devnet        # against a real chain (see below)
 ```
 
-- `npm test` = `test/unit.test.js` (ตัวถอดรหัสธุรกรรม Cosmos/EVM, การโอนโทเคน, ตัวจัดรูปแบบ, config, คิว/แคช, ThreatRegistry, การสแกน, i18n, ตรวจ CSP/sink) และ
-  `test/explorer.e2e.js` (Chromium ผ่าน Playwright; ใช้ `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` หรือ `CHROMIUM_PATH`)
-  โหนดจำลองใน `test/mock-chain.js` สร้างบล็อกที่ hash ถูกต้องจริงและลายเซ็น ML-DSA-44 จริง (มีบล็อกหนึ่งลายเซ็นเสียเพื่อทดสอบว่าถูกปฏิเสธ)
-- `npm run test:devnet` เปิดเชน devnet ด้วย `zetaphy-network/scripts/devnet.sh` (binary `/tmp/ci-test/zetaphyd-v4` หรือ `ZETAPHYD=…`) ที่พอร์ต 23545–23648
-  รันใต้ `flock /tmp/ci-test/devnet.lock` เสมอ แล้ว: เปิด vote extension, ลงทะเบียนกุญแจโหวต, ส่งธุรกรรม EVM, สร้าง ERC-20, สร้าง ThreatRegistry ให้ runner 2 คนติดธงโทเคน
-  และตรวจทุกหน้าในเบราว์เซอร์
+- `npm test` = `test/unit.test.js` (Cosmos/EVM transaction decoders, token transfers, formatters, config, queue/cache, ThreatRegistry, scanning, i18n, CSP/sink checks) and
+  `test/explorer.e2e.js` (Chromium via Playwright; uses `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers` or `CHROMIUM_PATH`)
+  The mock node in `test/mock-chain.js` creates blocks with genuinely correct hashes and real ML-DSA-44 signatures (one block has a bad signature to test that it is rejected)
+- `npm run test:devnet` starts a devnet chain with `zetaphy-network/scripts/devnet.sh` (binary `/tmp/ci-test/zetaphyd-v4` or `ZETAPHYD=…`) on ports 23545–23648,
+  always run under `flock /tmp/ci-test/devnet.lock`, and then: enables vote extensions, registers vote keys, sends EVM transactions, creates an ERC-20, creates a ThreatRegistry with 2 runners flagging the token,
+  and checks every page in the browser
 
-## โครงสร้าง
+## Structure
 
 ```
 index.html  style.css  favicon.svg  config.json  vercel.json  .vercelignore
-src/app.js       หน้าและการนำทาง (hash routes)
-src/chain.js     สิ่งที่ถามโหนด + การสแกนบล็อกล่าสุด
-src/rpc.js       คิว (จำกัดอัตรา/จำนวนพร้อมกัน) + แคช
-src/cosmos.js    ถอด TxRaw/TxBody/AuthInfo และข้อความ (รวมของ ZETAPHY)
-src/evm.js       ถอดการโอน ERC-20/721/1155, ABI string, raw EVM tx (RLP), อ่านข้อมูลโทเคน
+src/app.js       pages and navigation (hash routes)
+src/chain.js     node queries + scanning of the latest blocks
+src/rpc.js       queue (rate/concurrency limited) + cache
+src/cosmos.js    decodes TxRaw/TxBody/AuthInfo and messages (including ZETAPHY's)
+src/evm.js       decodes ERC-20/721/1155 transfers, ABI strings, raw EVM tx (RLP), reads token info
 src/threat.js    ThreatRegistry (vaccine.js)
-src/format.js    จัดรูปแบบตัวเลข/ที่อยู่/เวลา, safeText
-src/dom.js       สร้าง DOM แบบไม่ใช้ HTML
-src/i18n.js      ข้อความไทย/อังกฤษ
-src/config.js    ค่าเริ่มต้น, config.json, ค่าในเบราว์เซอร์
-vendor/zetaphy-lib.js  bundle ของ pqcert.js, pqtx.js, vaccine.js และ @noble (สร้างด้วย npm run build)
+src/format.js    formats numbers/addresses/time, safeText
+src/dom.js       builds DOM without HTML
+src/i18n.js      Thai/English strings
+src/config.js    defaults, config.json, browser settings
+vendor/zetaphy-lib.js  bundle of pqcert.js, pqtx.js, vaccine.js and @noble (built with npm run build)
 ```
 
 ---

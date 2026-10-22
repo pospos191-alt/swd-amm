@@ -5,7 +5,7 @@
 #
 # Small machines (1 GB RAM) need hours to compile, or never finish linking.
 # They can install this binary instead: setup-node.sh takes it through
-# ZETAPHYD_BIN=<file> (see zetaphy-chain/README.md, "ไฟล์เชนสำเร็จรูป").
+# ZETAPHYD_BIN=<file> (see zetaphy-chain/README.md, "Prebuilt chain binary").
 # Anyone can rebuild from the same sources and compare the hash.
 name: release-zetaphyd
 

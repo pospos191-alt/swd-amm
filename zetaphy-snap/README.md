@@ -1,58 +1,60 @@
-# ZETAPHY Snap สำหรับ MetaMask (`@zetaphy/snap`)
+**English** | [ภาษาไทย](README.th.md)
 
-MetaMask เซ็นได้แค่ ECDSA snap นี้เพิ่ม **บัญชี PQ แท้ (ML-DSA-44, FIPS 204)** บนเชน ZETAPHY ให้ผู้ใช้ MetaMask
-- กุญแจสร้างใน MetaMask จาก Secret Recovery Phrase (SRP) ของผู้ใช้ สำรอง MetaMask ไว้ก็กู้บัญชีนี้คืนได้
-- เว็บที่ขอให้เซ็นส่งได้แค่ "ข้อความแบบมีโครงสร้าง" (โอน, stake, เรียกสัญญา, deploy, ส่งต่อบัญชีที่ล็อก) snap สร้างธุรกรรมเอง
-  แสดงเป็นคำอ่านง่ายในหน้าต่างของ MetaMask และเซ็นเฉพาะเมื่อผู้ใช้กดยืนยัน
-- snap ไม่เซ็นไบต์ที่ผู้ใช้อ่านไม่ได้ ไม่ส่ง seed หรือกุญแจลับออกไปไหน และการเซ็นไม่ใช้เน็ต (เว็บเป็นคนส่งธุรกรรมเข้าโหนด)
-- **วัคซีนใน MetaMask ธรรมดา** (transaction insight): ทุกธุรกรรม EVM บนทุกเชนที่ผู้ใช้กำลังจะยืนยันใน MetaMask
-  snap ตรวจปลายทางกับ `ThreatRegistry` ของ ZETAPHY ให้ ไม่ต้องใช้เว็บกระเป๋าของ ZETAPHY (ดู [วัคซีน](#วัคซีน-ตรวจทุกธุรกรรมใน-metamask))
+# ZETAPHY Snap for MetaMask (`@zetaphy/snap`)
 
-> **ใช้กับ testnet เท่านั้น ไม่ใช่เงินจริง**
-> snap นี้ยังไม่ผ่านการ audit และยังไม่อยู่ใน allowlist ของ MetaMask (ดู [การเผยแพร่](#การเผยแพร่-ตามจริง))
+MetaMask can only sign ECDSA. This snap adds a **native PQ account (ML-DSA-44, FIPS 204)** on the ZETAPHY chain for MetaMask users
+- The key is created inside MetaMask from the user's Secret Recovery Phrase (SRP). If you have backed up MetaMask, you can recover this account
+- A site asking for a signature can only send a "structured message" (send, stake, contract call, deploy, quantum lock handover). The snap builds the transaction itself,
+  shows it in plain words in a MetaMask window, and signs only when the user confirms
+- The snap does not sign bytes the user cannot read, does not send the seed or secret key anywhere, and signing uses no network (the site sends the transaction to the node)
+- **Vaccine in plain MetaMask** (transaction insight): for every EVM transaction on every chain that the user is about to confirm in MetaMask,
+  the snap checks the destination against ZETAPHY's `ThreatRegistry`. No ZETAPHY wallet site is needed (see [Vaccine](#vaccine-check-every-transaction-in-metamask))
 
-## บัญชีมาจากไหน
+> **For testnet only, not real money**
+> This snap has not been audited yet and is not yet on MetaMask's allowlist (see [Publishing](#publishing-the-real-situation))
+
+## Where the account comes from
 
 ```
-entropy = snap_getEntropy({ version: 1, salt: "zetaphy-mldsa44-v1" })   // 32 ไบต์
+entropy = snap_getEntropy({ version: 1, salt: "zetaphy-mldsa44-v1" })   // 32 bytes
 (publicKey, secretKey) = ml_dsa44.keygen(entropy)                        // @noble/post-quantum
-address = sha256("zetaphy/mldsa44\0" || publicKey)[0:20]                 // pqAddress ใน pqtx.js
+address = sha256("zetaphy/mldsa44\0" || publicKey)[0:20]                 // pqAddress in pqtx.js
 ```
 
-- `snap_getEntropy` คือ SIP-6 ของ MetaMask: BIP-32 (secp256k1) จาก SRP ใต้ `m/1399742832'/…`
-  โดย path ที่เหลือมาจาก keccak256 ของ **snap ID** และ salt snap อื่นขอ entropy ตัวนี้ไม่ได้
-- **บัญชีขึ้นกับ snap ID**
-  - `npm:@zetaphy/snap` ให้บัญชีเดิมเสมอสำหรับ SRP เดิม (ติดตั้งใหม่ หรือย้ายเครื่องก็ได้บัญชีเดิม)
-  - snap ตอนพัฒนา (`local:http://localhost:8080`) ได้ **บัญชีอื่น** อย่าใช้ snap แบบ local กับเงินที่จะเก็บไว้
-  - ถ้าเปลี่ยนชื่อแพ็กเกจ npm บัญชีของทุกคนจะเปลี่ยน
-- ห้ามเปลี่ยน salt `zetaphy-mldsa44-v1` (บัญชีของทุกคนจะเปลี่ยน) ถ้าต้องการรูปแบบใหม่ให้เพิ่มเป็น v2 คู่กัน
-- ถ้า MetaMask มีหลาย SRP snap ใช้ SRP หลัก (ไม่ได้ส่ง `source`)
-- กู้คืนนอก MetaMask ได้ด้วย SRP + snap ID + salt (SIP-6) ไฟล์ทดสอบคำนวณแบบนี้เองแล้วเทียบกับ snap
-  แปลว่าใครได้ SRP ไปก็ได้บัญชีนี้ด้วย เหมือนบัญชี ECDSA ใน MetaMask
-- seed ที่เป็นสูตรเดียวกัน (seed 32 ไบต์ → keygen → address) ใช้กับ CLI และเว็บกระเป๋า:
+- `snap_getEntropy` is MetaMask's SIP-6: BIP-32 (secp256k1) from the SRP under `m/1399742832'/…`,
+  where the rest of the path comes from keccak256 of the **snap ID** and the salt. Other snaps cannot request this entropy
+- **The account depends on the snap ID**
+  - `npm:@zetaphy/snap` always gives the same account for the same SRP (reinstalling or moving to another device gives the same account)
+  - The development snap (`local:http://localhost:8080`) gets a **different account**. Do not use a local snap for funds you want to keep
+  - If the npm package name changes, everyone's account changes
+- Never change the salt `zetaphy-mldsa44-v1` (everyone's account would change). If a new scheme is needed, add a v2 alongside it
+- If MetaMask has several SRPs, the snap uses the primary SRP (it does not pass `source`)
+- The account can be recovered outside MetaMask with SRP + snap ID + salt (SIP-6). The test file computes it this way itself and compares with the snap.
+  This means anyone who gets the SRP also gets this account, just like the ECDSA accounts in MetaMask
+- The same seed formula (32-byte seed → keygen → address) is used by the CLI and the wallet site:
   seed `0x00..1f` → `0x6DA134EbFcb035273E87954f0641bD920ED073Ba` / `zetaphy1dksnf6lukq6jw058j48svsdajg8dqua6n67l9r`
 
-## สิทธิ์ (permissions)
+## Permissions
 
-| สิทธิ์ | ใช้ทำอะไร |
+| Permission | What it is used for |
 |---|---|
-| `snap_getEntropy` | สร้างกุญแจ ML-DSA-44 จาก SRP |
-| `snap_dialog` | หน้าต่างยืนยันก่อนเซ็นทุกครั้ง |
-| `endowment:rpc` (`dapps: true`, `snaps: false`) | ให้เว็บเรียก `zetaphy_getAccount`, `zetaphy_signTx` และ `zetaphy_get/setThreatSource` |
-| `endowment:transaction-insight` (`allowTransactionOrigin: false`) | วัคซีน: ตรวจปลายทางของทุกธุรกรรม EVM ก่อนผู้ใช้ยืนยัน ไม่ขอเว็บต้นทางของธุรกรรม เพราะไม่ได้ใช้ (ส่งข้อมูลออกน้อยที่สุด) |
-| `endowment:signature-insight` (`allowSignatureOrigin: false`) | วัคซีนของลายเซ็น EIP-712: ตรวจสัญญาที่ลายเซ็นใช้กับ และ spender / operator / zone / ผู้รับ ของ Permit, Permit2 และคำสั่งแบบ Seaport |
-| `endowment:ethereum-provider` | อ่านโค้ดปลายทาง (`eth_getCode`) และช่อง proxy (`eth_getStorageAt`, `eth_call` ของ `implementation()`) ผ่าน MetaMask เอง เฉพาะเมื่อ MetaMask อยู่บนเชนนั้นอยู่แล้ว **ไม่สลับเครือข่ายของผู้ใช้เด็ดขาด** (ไม่เรียก `wallet_switchEthereumChain`) อยู่คนละเชน = บอกว่า "ตรวจเชนนี้ไม่ได้" |
-| `endowment:network-access` | ถาม `ThreatRegistry` ผ่าน RPC สาธารณะของ ZETAPHY ด้วย `eth_call` แบบอ่านอย่างเดียว (POST แบบ batch ครั้งเดียวต่อธุรกรรม และอีกครั้งเพื่ออ่านหลักฐานกับคำชี้แจงเมื่อมีธง) ไม่ติดต่อที่อื่น |
-| `snap_manageState` | จำแหล่งตรวจภัย (RPC + ที่อยู่ registry) ที่เว็บกระเป๋า ZETAPHY ตั้งให้ (ไม่เข้ารหัส เพราะไม่มีอะไรลับ) |
+| `snap_getEntropy` | Create the ML-DSA-44 key from the SRP |
+| `snap_dialog` | Confirmation window before every signature |
+| `endowment:rpc` (`dapps: true`, `snaps: false`) | Lets sites call `zetaphy_getAccount`, `zetaphy_signTx`, and `zetaphy_get/setThreatSource` |
+| `endowment:transaction-insight` (`allowTransactionOrigin: false`) | Vaccine: checks the destination of every EVM transaction before the user confirms. It does not request the transaction's origin site, because it is not used (sends out as little data as possible) |
+| `endowment:signature-insight` (`allowSignatureOrigin: false`) | Vaccine for EIP-712 signatures: checks the contract the signature is for, and the spender / operator / zone / recipient of Permit, Permit2, and Seaport-style orders |
+| `endowment:ethereum-provider` | Reads the destination code (`eth_getCode`) and proxy slots (`eth_getStorageAt`, `eth_call` of `implementation()`) through MetaMask itself, only when MetaMask is already on that chain. **Never switches the user's network** (does not call `wallet_switchEthereumChain`). On a different chain = says "couldn't check this chain" |
+| `endowment:network-access` | Queries `ThreatRegistry` through ZETAPHY's public RPC with read-only `eth_call` (one batch POST per transaction, and one more to read evidence and responses when there is a flag). Contacts nothing else |
+| `snap_manageState` | Remembers the threat source (RPC + registry address) set by the ZETAPHY wallet site (not encrypted, because nothing in it is secret) |
 
-- กุญแจไม่เกี่ยวกับเน็ตเลย: `snap_getEntropy` ใช้แค่ตอนเซ็น ส่วนที่ใช้เน็ตมีแค่ transaction insight
-- `snap_manageState` เก็บแค่แหล่งตรวจภัย ไม่เก็บ seed กุญแจ หรือประวัติธุรกรรม
-- `dapps: true` แปลว่าทุกเว็บ **ขอ** เชื่อมได้ แต่ MetaMask ให้ผู้ใช้อนุมัติการเชื่อมทีละเว็บ (`wallet_requestSnaps`)
-  และหน้าต่างยืนยันทุกครั้งบอกว่าเว็บไหนขอ
-- ยังไม่จำกัดโดเมน เพราะโดเมนจริงของเว็บกระเป๋ายังไม่แน่นอน เมื่อแน่นอนแล้ว ให้เปลี่ยนเป็น
-  `"endowment:rpc": { "allowedOrigins": ["https://<โดเมนกระเป๋า>"] }` ก่อนเผยแพร่ (เปลี่ยนแล้วต้อง build ใหม่)
+- The key has nothing to do with the network: `snap_getEntropy` is used only when signing. The only part that uses the network is transaction insight
+- `snap_manageState` stores only the threat source. It does not store the seed, keys, or transaction history
+- `dapps: true` means any site can **request** to connect, but MetaMask asks the user to approve each site (`wallet_requestSnaps`),
+  and every confirmation window says which site is asking
+- Domains are not restricted yet, because the wallet site's real domain is not final. Once it is final, change it to
+  `"endowment:rpc": { "allowedOrigins": ["https://<wallet domain>"] }` before publishing (you must rebuild after changing it)
 
-## API สำหรับเว็บ
+## API for sites
 
 ```js
 const snapId = 'npm:@zetaphy/snap';
@@ -60,214 +62,214 @@ await ethereum.request({ method: 'wallet_requestSnaps', params: { [snapId]: {} }
 const invoke = (method, params) => ethereum.request({ method: 'wallet_invokeSnap', params: { snapId, request: { method, params } } });
 
 const acct = await invoke('zetaphy_getAccount');
-// { publicKey: '0x…' (1312 ไบต์), address: 'zetaphy1…', hex: '0x…' }  ไม่มีอะไรลับ
+// { publicKey: '0x…' (1312 bytes), address: 'zetaphy1…', hex: '0x…' }  nothing secret
 ```
 
 ### `zetaphy_signTx`
 
 ```js
 const signed = await invoke('zetaphy_signTx', {
-  chainId: 'zetaphy_77390-1',   // ต้องขึ้นต้น zetaphy- (เชนอื่นที่ไม่ใช่ testnet จะมีคำเตือนในหน้าต่าง)
-  accountNumber: '12', sequence: '4',          // จาก zetaphy_pqAccount
-  gasLimit: '400000', gasPrice: '1200000000',  // ค่าธรรมเนียม = gasLimit × gasPrice (azetaphy)
-  memo: '',                                    // ไม่บังคับ ไม่เกิน 256 ตัว ห้ามอักขระควบคุม
-  lang: 'th',                                  // 'th' หรือ 'en' (ภาษาของหน้าต่าง)
+  chainId: 'zetaphy_77390-1',   // must start with zetaphy- (chains other than testnet show a warning in the window)
+  accountNumber: '12', sequence: '4',          // from zetaphy_pqAccount
+  gasLimit: '400000', gasPrice: '1200000000',  // fee = gasLimit × gasPrice (azetaphy)
+  memo: '',                                    // optional, at most 256 characters, no control characters
+  lang: 'th',                                  // 'th' or 'en' (window language)
   messages: [{ type: 'send', to: 'zetaphy1…', amount: '1250000000000000000' }],
 });
-// ถ้าผู้ใช้กดยืนยัน: { signature, txHex, txHash, bodyBytes, authInfoBytes } (hex)
-// ถ้ากดยกเลิก: error code 4001 ไม่มีลายเซ็น
-// แล้วเว็บส่งเอง: zetaphy_sendCosmosTx(signed.txHex)
+// if the user confirms: { signature, txHex, txHash, bodyBytes, authInfoBytes } (hex)
+// if the user cancels: error code 4001, no signature
+// then the site sends it itself: zetaphy_sendCosmosTx(signed.txHex)
 ```
 
-ตัวเลขทุกตัวเป็นสตริงเลขฐานสิบ (หรือ number ที่ไม่เกิน 2^53) ไบต์เป็น hex `0x…` ผู้ส่งคือบัญชีของ snap เสมอ เว็บกำหนดไม่ได้
-ฟิลด์ที่ไม่รู้จักถูกปฏิเสธ (`-32602`) ก่อนมีหน้าต่างใด ๆ
+Every number is a decimal string (or a number no larger than 2^53). Bytes are hex `0x…`. The sender is always the snap's account; the site cannot set it.
+Unknown fields are rejected (`-32602`) before any window appears.
 
-| `type` | ฟิลด์ | หน้าต่างแสดง |
+| `type` | Fields | Window shows |
 |---|---|---|
-| `send` | `to`, `amount`, `denom?` | ผู้รับ (zetaphy1… และ 0x…), จำนวนและ denom |
-| `delegate`, `undelegate` | `validator`, `amount`, `denom?` | validator, จำนวน (undelegate มีหมายเหตุช่วง unbonding) |
-| `withdrawRewards` | `validator` | validator |
-| `evmCall` | `to`, `data?`, `value?`, `gasLimit?`, `asOwner?` | สัญญา, ฟังก์ชัน (อ่านออกสำหรับ ERC-20 `transfer`/`approve`/`transferFrom` และ precompile stake/รางวัล), ไม่รู้จักก็แสดง selector + call data พร้อมคำเตือน, ZETAPHY ที่ส่งไป, EVM gas, `as_owner` |
-| `evmDeploy` | `initCode`, `value?`, `gasLimit?`, `asOwner?` | "สร้างสัญญา", ขนาดโค้ดและ keccak-256 ของโค้ด |
-| `quantumLock` | `owner`, `controller` | บัญชีที่ล็อกไว้, ผู้ควบคุมคนใหม่, คำเตือนว่าสละการควบคุม |
+| `send` | `to`, `amount`, `denom?` | Recipient (zetaphy1… and 0x…), amount and denom |
+| `delegate`, `undelegate` | `validator`, `amount`, `denom?` | Validator, amount (undelegate has a note about the unbonding period) |
+| `withdrawRewards` | `validator` | Validator |
+| `evmCall` | `to`, `data?`, `value?`, `gasLimit?`, `asOwner?` | Contract, function (decoded for ERC-20 `transfer`/`approve`/`transferFrom` and the stake/rewards precompiles; if unknown, shows selector + call data with a warning), ZETAPHY sent, EVM gas, `as_owner` |
+| `evmDeploy` | `initCode`, `value?`, `gasLimit?`, `asOwner?` | "Create contract", code size and keccak-256 of the code |
+| `quantumLock` | `owner`, `controller` | The locked account, the new controller, a warning that control is given up |
 
-ท้ายหน้าต่าง: ค่าธรรมเนียมสูงสุด, gas × ราคา, ยอดที่บัญชีคุณจ่าย (จำนวน ZETAPHY ในข้อความ + ค่าธรรมเนียม ส่วน as_owner ออกจากบัญชีที่ล็อก), memo, chain id, account number / sequence, บัญชีที่เซ็น และเว็บที่ขอ
+At the bottom of the window: maximum fee, gas × price, total your account pays (ZETAPHY amount in the messages + fee; for as_owner it comes out of the locked account), memo, chain id, account number / sequence, the signing account, and the requesting site
 
-- snap สร้างข้อความด้วย `messageFromIntent` ของ `zetaphy-network/src/pqtx.js` (โค้ดเดียวกับ CLI และเว็บกระเป๋า) ก่อนแสดงหน้าต่าง
-  หน้าต่างอ่านค่าจากข้อความที่สร้างแล้ว และเซ็นข้อความชุดนั้น
-- ใน `pqtx.js` ทุกข้อความมี `intent` (ข้อความเดียวกันเป็น JSON) และ `pqClient` รับ `signTx` แทน `sign` ได้:
+- The snap builds the messages with `messageFromIntent` from `zetaphy-network/src/pqtx.js` (the same code as the CLI and the wallet site) before showing the window.
+  The window reads values from the built messages and signs that same set of messages
+- In `pqtx.js` every message has an `intent` (the same message as JSON), and `pqClient` accepts `signTx` instead of `sign`:
   `client.send({ publicKey, signTx: (req) => invoke('zetaphy_signTx', req), to, amount })`
-  `pqClient` ตรวจก่อนเหมือนเดิม แล้วสร้าง tx เองรอบลายเซ็นที่ได้ ถ้า `txHex` ของ snap ไม่ตรงกับที่ขอ จะไม่ส่ง
+  `pqClient` checks first as before, then builds the tx itself around the returned signature. If the snap's `txHex` does not match what was requested, it does not send
 
-## ใช้กับเว็บกระเป๋า (`zetaphy-wallet`)
+## Use with the wallet site (`zetaphy-wallet`)
 
-การ์ด "ใช้ MetaMask (ZETAPHY Snap)" ในหน้าเริ่มต้น
-- snap ID มาจาก `<meta name="zetaphy-snap-id">` ใน `index.html` (ค่าเริ่มต้น `npm:@zetaphy/snap`) เปลี่ยนได้ใน "ตั้งค่าเพิ่มเติม" ตอนพัฒนา
-- หน้าเว็บคำนวณที่อยู่จาก public key เอง ไม่เชื่อที่อยู่ที่ snap บอก
-- โอน, โอนโทเคน, stake และ deploy เซ็นผ่าน `zetaphy_signTx` ส่วนโหมดกุญแจในเบราว์เซอร์ (seed เข้ารหัสด้วยรหัสผ่าน) ยังใช้ได้เหมือนเดิม
+The "Use MetaMask (ZETAPHY Snap)" card on the start page
+- The snap ID comes from `<meta name="zetaphy-snap-id">` in `index.html` (default `npm:@zetaphy/snap`). It can be changed in "Advanced settings" during development
+- The web page computes the address from the public key itself. It does not trust the address the snap reports
+- Send, token send, stake, and deploy are signed through `zetaphy_signTx`. The in-browser key mode (seed encrypted with a password) still works as before
 
-## วัคซีน: ตรวจทุกธุรกรรมใน MetaMask
+## Vaccine: check every transaction in MetaMask
 
-ก่อนผู้ใช้ยืนยันธุรกรรม EVM ใด ๆ ใน MetaMask (ทุกเชน ทุกเว็บ) snap แสดงผลตรวจของ ZETAPHY Neuro ในแท็บของ snap
-1. **ที่อยู่ที่ตรวจ (เท่านี้):**
-   - ธุรกรรม: `to` และที่อยู่ที่คำสั่งระบุ: อาร์กิวเมนต์แรกของ `approve` / `increaseAllowance` (ผู้ได้สิทธิ์), `setApprovalForAll` (ผู้ได้สิทธิ์ทั้งหมด), `transfer` (ผู้รับ)
-     และอาร์กิวเมนต์ที่สองของ `transferFrom` / `safeTransferFrom` (ERC-20, 721, 1155: ผู้รับ) และ Permit2 `approve(token, spender, …)` (ผู้ได้สิทธิ์)
-   - batch: ถอด `multicall(bytes[])`, `multicall(deadline, bytes[])` และ Multicall3 `aggregate` / `aggregate3` (รวมปลายทางของคำสั่งย่อย) แล้วอ่านคำสั่งย่อยแบบเดียวกัน
-     รูปแบบอื่น (Safe `execTransaction`, Universal Router `execute`, …) ไม่ได้ถอด insight บอก "ไม่ได้ตรวจคำสั่งย่อยข้างใน / inner calls not checked"
-   - ที่อยู่อื่นใน call data ไม่ได้ตรวจ ผล "ไม่พบธง" จึงบอกรายการที่ตรวจทุกครั้ง ไม่ใช่ "ปลอดภัย"
-   - ลายเซ็น EIP-712 (`eth_signTypedData_v3/v4`): `domain.verifyingContract` และ `spender` (EIP-2612 / DAI Permit, Permit2), `operator`, `zone` และผู้รับใน `consideration`
-     (คำสั่งแบบ Seaport) บน `domain.chainId` ไม่ส่งที่อยู่ของผู้เซ็น (และ offerer) ออกไป `personal_sign` ไม่มี insight
-2. **บนเชนของธุรกรรม** (ผ่าน `ethereum.request` ของ snap เฉพาะเมื่อ MetaMask อยู่บนเชนนั้น ไม่สลับเครือข่าย): อ่านโค้ดของแต่ละปลายทาง แล้วตามไปที่โค้ดจริงหลัง proxy แบบ EIP-1167 (และรูปแบบ PUSH0), EIP-1967 implementation และ beacon สูงสุด 3 ชั้น
-   - MetaMask อยู่คนละเชน: อ่านโค้ดไม่ได้ ยังถามธงของที่อยู่ ไม่พบธงก็ขึ้น "ตรวจเชนนี้ไม่ได้ / couldn't check this chain" (ไม่บอกว่าไม่ติดธง)
-   - ใช้โค้ดชุดเดียวกับเว็บกระเป๋า: `zetaphy-network/src/vaccine.js` (`proxyTargets`, `threatQueries`)
-3. **ถาม ZETAPHY** ด้วย JSON-RPC batch เดียว: `eth_chainId` (ต้องเป็น 77390) แล้ว `eth_call` ไปที่ `ThreatRegistry` ของแต่ละปลายทาง ทั้งระดับเตือนและบังคับใช้
-   - `isAddressFlagged` / `isAddressEnforced(chainId ของธุรกรรม, ที่อยู่)`
-   - `isCodeFlagged` / `isCodeEnforced(keccak256(โค้ด))`
-   - `isFlagged` / `isEnforced(fp1)`: ลายนิ้วมือ Neuro (`fp1`) คำนวณใน snap เอง (สำเนาสูตรของ `zetaphy-neuro/src/fingerprint.js` ใน `vaccine.js` ไม่ดึง bytecode reader ทั้งชุดเข้ามา การทดสอบเทียบกับของ Neuro ทุกไบต์)
+Before the user confirms any EVM transaction in MetaMask (every chain, every site), the snap shows the ZETAPHY Neuro check result in the snap's tab
+1. **Addresses checked (only these):**
+   - Transaction: `to` and the addresses the call names: the first argument of `approve` / `increaseAllowance` (the approved spender), `setApprovalForAll` (the operator approved for everything), `transfer` (the recipient),
+     the second argument of `transferFrom` / `safeTransferFrom` (ERC-20, 721, 1155: the recipient), and Permit2 `approve(token, spender, …)` (the approved spender)
+   - Batch: decodes `multicall(bytes[])`, `multicall(deadline, bytes[])`, and Multicall3 `aggregate` / `aggregate3` (including the targets of the inner calls), then reads the inner calls the same way.
+     Other formats (Safe `execTransaction`, Universal Router `execute`, …) are not decoded. The insight says "inner calls not checked" (in Thai and English)
+   - Other addresses in the call data are not checked. So a "no flag found" result always lists what was checked, and never says "safe"
+   - EIP-712 signatures (`eth_signTypedData_v3/v4`): `domain.verifyingContract` and `spender` (EIP-2612 / DAI Permit, Permit2), `operator`, `zone`, and the recipients in `consideration`
+     (Seaport-style orders) on `domain.chainId`. The signer's address (and offerer) is not sent out. `personal_sign` has no insight
+2. **On the transaction's chain** (through the snap's `ethereum.request`, only when MetaMask is on that chain; it does not switch networks): reads the code of each destination, then follows to the real code behind proxies of type EIP-1167 (and the PUSH0 form), EIP-1967 implementation, and beacon, up to 3 levels
+   - MetaMask on a different chain: the code cannot be read. It still asks about flags on the address. If no flag is found, it shows "couldn't check this chain" (in Thai and English) (it does not say there is no flag)
+   - Uses the same code as the wallet site: `zetaphy-network/src/vaccine.js` (`proxyTargets`, `threatQueries`)
+3. **Ask ZETAPHY** with a single JSON-RPC batch: `eth_chainId` (must be 77390), then `eth_call` to `ThreatRegistry` for each destination, at both the warning and enforced levels
+   - `isAddressFlagged` / `isAddressEnforced(chainId of the transaction, address)`
+   - `isCodeFlagged` / `isCodeEnforced(keccak256(code))`
+   - `isFlagged` / `isEnforced(fp1)`: the Neuro fingerprint (`fp1`) is computed inside the snap (a copy of the formula from `zetaphy-neuro/src/fingerprint.js` in `vaccine.js`, without pulling in the whole bytecode reader; tests compare it with Neuro's byte for byte)
 
-4. **เฉพาะเมื่อมีธง** ถามอีก batch: `evidenceOf(key)` ของแต่ละธง (reportHash และ URI) และ `responseAt(key, 0..2)` ของทุกคีย์ของปลายทางนั้น
-   (คำชี้แจงแยกตามผู้เขียน แสดงพร้อมที่อยู่ผู้เขียน ของผู้ชี้แจงที่ governance แต่งตั้งก่อน แล้วใหม่สุดก่อน ไม่เกิน 3 ข้อ)
-   ถามไม่ได้ก็ยังเตือนเหมือนเดิม และบอกว่าอ่านหลักฐานไม่ได้
+4. **Only when there is a flag**, ask another batch: `evidenceOf(key)` for each flag (reportHash and URI) and `responseAt(key, 0..2)` for every key of that destination
+   (responses are kept per author and shown with the author's address; responders appointed by governance first, then newest first, at most 3)
+   If this query fails, it still warns as before and says the evidence could not be read
 
-ทุกธงแสดงหมวดเป็นข้อเท็จจริงของโค้ด (ไม่ใช่ป้ายกล่าวหา) หลักฐานและวิธีตรวจซ้ำ คำชี้แจง (ถ้ามี พร้อมที่อยู่ผู้เขียน) และบรรทัด
-"ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา / Automated code analysis, not an accusation" เจ้าของสัญญาชี้แจงหรืออุทธรณ์ได้บนเชน
-(zetaphy-network/README.md ขั้น 4) ดู [`docs/LEGAL.md`](../docs/LEGAL.md)
+Every flag shows its category as a code fact (not an accusing label), the evidence and how to re-check it, responses (if any, with the author's address), and the line
+"Automated code analysis, not an accusation" (in Thai and English). Contract owners can respond or appeal on-chain
+(zetaphy-network/README.md Step 4). See [`docs/LEGAL.md`](../docs/LEGAL.md)
 
-ผลที่ MetaMask แสดง (ไทยและอังกฤษพร้อมกัน เพราะ insight ไม่รู้ภาษาผู้ใช้):
+Results shown in MetaMask (Thai and English together, because the insight does not know the user's language):
 
-| ผล | แสดง |
+| Result | Shown |
 |---|---|
-| ธงบังคับใช้แล้ว (เลย `enforceDelay` หรือผ่านช่องทางด่วน) | ระดับ `critical`: MetaMask ให้ยืนยันอีกชั้น พร้อมคำเตือน ที่อยู่ เหตุผล และติดธงเพราะอะไร (ที่อยู่ / โค้ด / fp1 / โค้ดหลัง proxy) |
-| ติดธงแต่ยังไม่บังคับใช้ | กล่องคำเตือน ไม่ใช่ critical |
-| ไม่ติดธง | "ไม่พบธงในสิ่งที่ตรวจ / no flag on what was checked" พร้อมรายการที่อยู่ที่ตรวจ บอกว่าตรวจเฉพาะปลายทางและผู้ได้สิทธิ์/ผู้รับที่คำสั่งระบุ และ "inner calls not checked" ถ้ามี |
-| ตรวจไม่ได้ (RPC ล่ม, RPC ไม่ใช่ ZETAPHY, ยังไม่ตั้ง registry, อ่านโค้ดบนเชนนั้นไม่ได้, MetaMask อยู่คนละเชน) | "ZETAPHY Neuro ตรวจธุรกรรมนี้ไม่ได้" และเหตุผล (ไม่บอกว่าปลอดภัย) |
-| สร้างสัญญา (ไม่มี `to`) | บอกว่าไม่มีปลายทางให้ตรวจ |
+| Flag already enforced (past `enforceDelay` or through the fast track) | Level `critical`: MetaMask asks for an extra confirmation, with a warning, the address, the reason, and what was flagged (address / code / fp1 / code behind proxy) |
+| Flagged but not yet enforced | A warning box, not critical |
+| Not flagged | "no flag on what was checked" (in Thai and English) with the list of addresses checked, saying that only the destination and the spender/recipient named by the call were checked, and "inner calls not checked" if any |
+| Could not check (RPC down, RPC is not ZETAPHY, registry not set yet, could not read code on that chain, MetaMask on a different chain) | "ZETAPHY Neuro couldn't check this transaction" and the reason (does not say safe) |
+| Contract creation (no `to`) | Says there is no destination to check |
 
-- ถ้าอ่านโค้ดไม่ได้แต่ที่อยู่ติดธง ยังแสดงธงนั้น
-- ใช้แหล่งตรวจที่เว็บกระเป๋าตั้งไว้ (`zetaphy_setThreatSource`) อยู่: **ทุก insight บอกไว้** พร้อม RPC และที่อยู่ registry
-- snap ไม่ปฏิเสธธุรกรรมเอง (insight ทำไม่ได้) การตัดสินใจสุดท้ายเป็นของผู้ใช้ ต่างจากเว็บกระเป๋า ZETAPHY ที่ไม่เซ็นเลยเมื่อธงบังคับใช้
+- If the code cannot be read but the address is flagged, that flag is still shown
+- When using a threat source set by the wallet site (`zetaphy_setThreatSource`): **every insight says so**, with the RPC and registry address
+- The snap does not reject transactions itself (insight cannot). The final decision is the user's. This differs from the ZETAPHY wallet site, which does not sign at all when a flag is enforced
 
-### ความเป็นส่วนตัว (ข้อมูลที่ส่งออกไป)
+### Privacy (data sent out)
 
-- **ก่อนผู้ใช้ยืนยัน** snap ส่ง **ที่อยู่ที่ตรวจ (ปลายทาง ผู้ได้สิทธิ์ ผู้รับ), chain id, code hash (keccak-256) และ fp1** ไปที่ RPC ของ ZETAPHY
-  ผู้ให้บริการ RPC นั้นจึงเห็น **ที่อยู่ปลายทาง chain id เวลา และ IP ของผู้ใช้** ก่อนการยืนยัน
-- **ไม่ส่ง** ที่อยู่ของผู้ใช้ จำนวนเงิน call data ทั้งก้อน หรือเว็บต้นทาง (`allowTransactionOrigin: false`, `allowSignatureOrigin: false`)
-  **แต่เชื่อมโยงกลับได้:** เมื่อธุรกรรมลงเชน ปลายทาง เชน และเวลาที่ RPC เห็นจับคู่กับธุรกรรมนั้นได้ จึงโยงไปถึงบัญชีของผู้ใช้ (และ IP กับบัญชีนั้น) ได้
-  ลายเซ็นก็เช่นกันถ้าถูกใช้บนเชน ผู้ที่ไม่ต้องการให้เกิดสิ่งนี้ควรใช้ RPC ของ ZETAPHY ที่ไว้ใจได้ (หรือของตัวเอง) หรือปิด snap
-- การอ่านโค้ดบนเชนของธุรกรรมไปผ่าน RPC ที่ MetaMask ใช้อยู่แล้ว
-- ไม่อยากส่ง: ปิดสิทธิ์ของ snap ใน MetaMask หรือไม่ติดตั้ง snap (การเซ็นของเว็บกระเป๋าไม่เกี่ยวกับส่วนนี้)
+- **Before the user confirms**, the snap sends **the addresses checked (destination, spender, recipient), chain id, code hash (keccak-256), and fp1** to the ZETAPHY RPC.
+  That RPC provider therefore sees **the destination address, chain id, time, and the user's IP** before confirmation
+- It **does not send** the user's address, amounts, the full call data, or the origin site (`allowTransactionOrigin: false`, `allowSignatureOrigin: false`)
+  **But it can be linked back:** once the transaction lands on-chain, the destination, chain, and time the RPC saw can be matched to that transaction, and so to the user's account (and the IP to that account).
+  The same applies to signatures if they are used on-chain. Users who do not want this should use a ZETAPHY RPC they trust (or their own), or turn the snap off
+- Reading code on the transaction's chain goes through the RPC that MetaMask already uses
+- If you don't want to send this: turn off the snap's permission in MetaMask or do not install the snap (the wallet site's signing is not affected)
 
-### แหล่งตรวจภัย (RPC และ ThreatRegistry)
+### Threat source (RPC and ThreatRegistry)
 
-- ค่าตอน build อยู่ใน `snap.config.js` (`environment`) **ตอนนี้เป็นค่าตั้งต้นที่ยังใช้ไม่ได้**: RPC `https://rpc.zetaphy.invalid`, registry `0x000…0`
-  ทุกธุรกรรมจึงขึ้น "ตรวจไม่ได้: no ThreatRegistry configured" จนกว่าเจ้าของจะใส่ค่าจริงแล้ว build ใหม่ (shasum เปลี่ยน ต้อง commit manifest)
-- เว็บกระเป๋า ZETAPHY เปลี่ยนแหล่งได้ด้วย `zetaphy_setThreatSource` เฉพาะจาก origin ใน `ZETAPHY_WALLET_ORIGINS` (ค่าตั้งต้น `https://wallet.zetaphy.invalid` ใส่โดเมนจริงตอนรู้แล้ว)
-  และผู้ใช้ต้องกดยืนยันในหน้าต่างของ MetaMask ทุกครั้ง เว็บอื่นได้ error 4100
+- Build-time values are in `snap.config.js` (`environment`). **They are currently placeholder values that do not work yet**: RPC `https://rpc.zetaphy.invalid`, registry `0x000…0`.
+  So every transaction shows "could not check: no ThreatRegistry configured" until the owner puts in real values and rebuilds (the shasum changes, so the manifest must be committed)
+- The ZETAPHY wallet site can change the source with `zetaphy_setThreatSource`, only from an origin in `ZETAPHY_WALLET_ORIGINS` (default `https://wallet.zetaphy.invalid`; put in the real domain once known),
+  and the user must confirm in a MetaMask window every time. Other sites get error 4100
 
 ```js
-await invoke('zetaphy_setThreatSource', { rpc: 'https://<RPC ของ ZETAPHY>', registry: '0x<ThreatRegistry>' }); // หรือ { reset: true }
-await invoke('zetaphy_getThreatSource'); // { rpc, registry, overridden } เฉพาะ origin ของเว็บกระเป๋า เว็บอื่นได้ error 4100
+await invoke('zetaphy_setThreatSource', { rpc: 'https://<ZETAPHY RPC>', registry: '0x<ThreatRegistry>' }); // or { reset: true }
+await invoke('zetaphy_getThreatSource'); // { rpc, registry, overridden } wallet site origin only; other sites get error 4100
 ```
 
-- `zetaphy_getThreatSource` อ่านได้เฉพาะเว็บกระเป๋า: ค่านี้ไม่ลับ แต่การที่ผู้ใช้ตั้งแหล่งเองเป็นข้อมูลที่ใช้ระบุตัว (fingerprint) ผู้ใช้ได้ จึงไม่ให้เว็บอื่นอ่าน
-- RPC ต้องเป็น `https://` (ยกเว้น `http://localhost` / `127.0.0.1` ตอนพัฒนา) ไม่เกิน 256 ตัว ไม่มี user:password ในลิงก์
-- เว็บกระเป๋ายังไม่ได้เรียก `zetaphy_setThreatSource` ให้อัตโนมัติ (ตอนนี้ต้องเรียกเองหรือใส่ค่าตอน build)
+- `zetaphy_getThreatSource` can be read only by the wallet site: the value is not secret, but the fact that a user set their own source is data that can identify (fingerprint) the user, so other sites are not allowed to read it
+- The RPC must be `https://` (except `http://localhost` / `127.0.0.1` during development), at most 256 characters, with no user:password in the link
+- The wallet site does not yet call `zetaphy_setThreatSource` automatically (for now, call it yourself or set the values at build time)
 
-## คำสั่ง
+## Commands
 
 ```
 npm ci
-npm run build     # mm-snap build: dist/bundle.js และ shasum ใน snap.manifest.json (commit manifest)
-npm test          # Jest + @metamask/snaps-jest: รัน dist/bundle.js ใน MetaMask จำลอง (ต้อง build ก่อน)
-npm run serve     # เสิร์ฟ snap ที่ http://localhost:8080 สำหรับ MetaMask Flask (snap ID local:http://localhost:8080)
+npm run build     # mm-snap build: dist/bundle.js and the shasum in snap.manifest.json (commit the manifest)
+npm test          # Jest + @metamask/snaps-jest: runs dist/bundle.js in a simulated MetaMask (build first)
+npm run serve     # serves the snap at http://localhost:8080 for MetaMask Flask (snap ID local:http://localhost:8080)
 ```
 
-- `dist/` ไม่ได้ commit ส่วน `snap.manifest.json` commit ไว้ CI build ใหม่แล้วตรวจว่า shasum ใน manifest ตรง
-  ถ้าแก้ `src/`, `snap.config.js`, `zetaphy-network/src/pqtx.js` หรือ `zetaphy-network/src/vaccine.js` ต้อง `npm run build` แล้ว commit manifest ด้วย
-- `@noble/*` ที่ `pqtx.js` import ถูก resolve จาก `node_modules` ของแพ็กเกจนี้ (`snap.config.js`, `test/resolver.js`)
-  bundle จึงขึ้นกับ `package-lock.json` นี้เท่านั้น
-- `package.json` มี `overrides` ตรึง `@metamask/snaps-utils` 12.6.0, `snaps-controllers` 21.1.1, `snaps-execution-environments` 11.3.1
-  เพราะรุ่นถัดไป (ต.ค. 2026) ใช้ `@metamask/utils` 12 ที่เป็น ESM อย่างเดียว ทำให้ Jest (CommonJS) โหลด snaps-jest ไม่ได้
+- `dist/` is not committed, but `snap.manifest.json` is. CI rebuilds and checks that the shasum in the manifest matches.
+  If you edit `src/`, `snap.config.js`, `zetaphy-network/src/pqtx.js`, or `zetaphy-network/src/vaccine.js`, you must `npm run build` and commit the manifest too
+- The `@noble/*` packages that `pqtx.js` imports are resolved from this package's `node_modules` (`snap.config.js`, `test/resolver.js`),
+  so the bundle depends only on this `package-lock.json`
+- `package.json` has `overrides` pinning `@metamask/snaps-utils` 12.6.0, `snaps-controllers` 21.1.1, `snaps-execution-environments` 11.3.1,
+  because the next releases (Oct 2026) use `@metamask/utils` 12, which is ESM-only, so Jest (CommonJS) cannot load snaps-jest
 
-### ทดสอบอะไรบ้าง (`test/snap.test.js`)
+### What is tested (`test/snap.test.js`)
 
-- สูตรที่อยู่: seed `0x00..1f` ได้ค่าที่รู้อยู่แล้ว ผ่านฟังก์ชัน `accountFromSeed` ที่ snap ใช้จริง
-- `zetaphy_getAccount` เท่ากับ ML-DSA-44 ของ SIP-6 entropy ที่คำนวณเองจาก SRP + snap ID + salt, SRP เดิมได้บัญชีเดิม, SRP อื่นได้บัญชีอื่น, ไม่มีส่วนของกุญแจลับในคำตอบ
-- ข้อความในหน้าต่างของทุกชนิด: send (และ denom อื่น, เชนอื่น), delegate/undelegate/rewards, evmCall (ERC-20, ฟังก์ชันที่ไม่รู้จัก, approve ไม่จำกัด, โอนเปล่า), as_owner + precompile stake, deploy, handover, หลายข้อความ, ภาษาไทย
-- กดยกเลิก: error 4001 ไม่มีลายเซ็น
-- ลายเซ็นตรวจผ่านด้วย `ml_dsa44.verify` บน SignDoc ที่สร้างใหม่ด้วย `cosmjs-types` และข้อความถอดรหัสได้ตรง
-- input ผิดรูป 31 แบบถูกปฏิเสธด้วย `-32602` ก่อนมีหน้าต่าง, method ที่ไม่มีได้ `-32601`
+- Address formula: seed `0x00..1f` gives the known value, through the `accountFromSeed` function the snap actually uses
+- `zetaphy_getAccount` equals ML-DSA-44 of the SIP-6 entropy computed independently from SRP + snap ID + salt; the same SRP gives the same account, a different SRP gives a different account; no part of the secret key is in the response
+- Window text for every type: send (and other denoms, other chains), delegate/undelegate/rewards, evmCall (ERC-20, unknown function, unlimited approve, plain transfer), as_owner + stake precompile, deploy, handover, multiple messages, Thai language
+- Cancel: error 4001, no signature
+- The signature verifies with `ml_dsa44.verify` on a SignDoc rebuilt with `cosmjs-types`, and the messages decode correctly
+- 31 kinds of malformed input are rejected with `-32602` before any window; an unknown method gets `-32601`
 
-`test/insight.test.js` (วัคซีน: เชนของธุรกรรมจำลองด้วย `snap.mockJsonRpc` ส่วน RPC ของ ZETAPHY เป็นเซิร์ฟเวอร์ JSON-RPC เล็ก ๆ บน 127.0.0.1)
-- `fp1` ใน snap เท่ากับ `codeFingerprint` ของ zetaphy-neuro ทุกไบต์
-- ค่าตั้งต้น (ยังไม่มี registry): "ตรวจไม่ได้"
-- `zetaphy_setThreatSource`: origin อื่นได้ 4100, input ผิดรูปได้ -32602, กดยกเลิกได้ 4001, ตั้งแล้ว `getThreatSource` เห็น (เฉพาะเว็บกระเป๋า เว็บอื่น 4100), `reset` กลับค่าตั้งต้น
-- ไม่ติดธง: "ไม่พบธงในสิ่งที่ตรวจ" พร้อมรายการที่ตรวจ ส่ง batch เดียว และสิ่งที่ส่งมีแค่ที่อยู่ปลายทาง chain id code hash และ fp1 (ไม่มีที่อยู่ผู้ใช้)
-- call data: ผู้รับของ `transferFrom` / `safeTransferFrom` (อาร์กิวเมนต์ที่สอง), spender ของ Permit2 `approve`, operator ของ `setApprovalForAll`, ถอด `multicall` / `aggregate3`, `execute` บอก "inner calls not checked", call data ผิดรูปบอกเช่นกัน
-- ไม่สลับเครือข่าย: MetaMask อยู่คนละเชน = "couldn't check this chain" และไม่มีการเรียก `wallet_switchEthereumChain` (ธงของที่อยู่ยังขึ้น critical)
-- แหล่งตรวจที่ตั้งเองแสดงในทุก insight (ไม่ติดธง เตือน บังคับใช้ ตรวจไม่ได้) ส่วนค่าตอน build ไม่แสดง
-- คำชี้แจงหลายข้อ: แสดงพร้อมที่อยู่ผู้เขียน ของผู้ชี้แจงที่ governance แต่งตั้งขึ้นก่อน
-- signature insight: spender ของ Permit ที่ติดธง = critical, Permit2 (v3) = คำเตือน, คำสั่งแบบ Seaport ตรวจ zone และผู้รับ ไม่ส่งที่อยู่ผู้เซ็น, ไม่มี chain id หรืออยู่คนละเชน = ตรวจไม่ได้ (ไม่สลับเชน), `personal_sign` ไม่มี insight
-- ธงบังคับใช้ (ที่อยู่, code hash, fp1): `critical` พร้อมเหตุผลไทย/อังกฤษ; ธงที่ยังไม่บังคับใช้: คำเตือน ไม่ใช่ critical
-- ผู้ได้สิทธิ์ใน `approve` ที่ติดธง: critical; การอ่านปลายทางจาก call data (approve, setApprovalForAll, transfer, increaseAllowance)
-- proxy: EIP-1167, EIP-1967 implementation, beacon ที่ชี้ไปโค้ดติดธง = critical; proxy ตัวเดิมหน้าโค้ดสะอาด = ไม่ติดธง
-- ตรวจไม่ได้: RPC ตอบ 500, RPC ไม่ใช่ ZETAPHY, อ่านโค้ดบนเชนไม่ได้ (แต่ที่อยู่ติดธงยังขึ้น critical)
-- Jest รันไฟล์ทดสอบทีละไฟล์ (`maxWorkers: 1`) เพราะ snaps-jest ใช้พอร์ต 18096 ตายตัว
+`test/insight.test.js` (vaccine: the transaction's chain is mocked with `snap.mockJsonRpc`; the ZETAPHY RPC is a small JSON-RPC server on 127.0.0.1)
+- `fp1` in the snap equals zetaphy-neuro's `codeFingerprint` byte for byte
+- Defaults (no registry yet): "could not check"
+- `zetaphy_setThreatSource`: other origins get 4100, malformed input gets -32602, cancel gets 4001; once set, `getThreatSource` sees it (wallet site only, other sites 4100); `reset` returns to defaults
+- Not flagged: "no flag on what was checked" with the list checked, sends one batch, and what is sent is only the destination address, chain id, code hash, and fp1 (no user address)
+- Call data: recipient of `transferFrom` / `safeTransferFrom` (second argument), spender of Permit2 `approve`, operator of `setApprovalForAll`, decoding `multicall` / `aggregate3`, `execute` says "inner calls not checked", malformed call data says so too
+- No network switching: MetaMask on a different chain = "couldn't check this chain", and `wallet_switchEthereumChain` is never called (an address flag still shows critical)
+- A custom threat source is shown in every insight (not flagged, warning, enforced, could not check); build-time values are not shown
+- Multiple responses: shown with the author's address, responders appointed by governance first
+- Signature insight: a flagged Permit spender = critical, Permit2 (v3) = warning, Seaport-style orders check zone and recipients and do not send the signer's address, no chain id or a different chain = could not check (no chain switching), `personal_sign` has no insight
+- Enforced flags (address, code hash, fp1): `critical` with Thai/English reasons; flags not yet enforced: warning, not critical
+- A flagged spender in `approve`: critical; reading destinations from call data (approve, setApprovalForAll, transfer, increaseAllowance)
+- Proxies: EIP-1167, EIP-1967 implementation, beacon pointing to flagged code = critical; the same proxy in front of clean code = not flagged
+- Could not check: RPC returns 500, RPC is not ZETAPHY, could not read code on-chain (but a flagged address still shows critical)
+- Jest runs test files one at a time (`maxWorkers: 1`) because snaps-jest uses fixed port 18096
 
-ที่ทดสอบในเครื่องนี้ไม่ได้: หน้าต่างจริงใน MetaMask Flask (snaps-jest ตรวจโครงสร้าง UI ไม่ได้วาดจริง) และการส่งธุรกรรมที่ snap เซ็นเข้าเชนจริง
-(สูตรธุรกรรมเดียวกันทดสอบกับเชนจริงแล้วใน `zetaphy-network/test/devnet.pq.integration.js`)
+Not testable on this machine: the real window in MetaMask Flask (snaps-jest checks the UI structure but does not actually render it), and sending a snap-signed transaction to a real chain
+(the same transaction formula has been tested against a real chain in `zetaphy-network/test/devnet.pq.integration.js`)
 
-## การเผยแพร่ (ตามจริง)
+## Publishing (the real situation)
 
-- **ตอนนี้ติดตั้งได้เฉพาะใน MetaMask Flask** (รุ่นสำหรับนักพัฒนา) จาก `npm run serve` (snap ID `local:http://localhost:8080`)
-  หรือจาก npm หลังเผยแพร่แล้ว
-- MetaMask ปกติ (ไม่ใช่ Flask) ติดตั้งได้เมื่อ snap **เผยแพร่บน npm แล้ว และอยู่ใน allowlist ของ MetaMask** เท่านั้น
-  เพราะ `snap_getEntropy` และ `endowment:rpc` เป็นสิทธิ์ที่ต้องผ่านการตรวจ (protected permissions)
-- การเผยแพร่บน npm ต้องใช้บัญชี npm ของเจ้าของโปรเจกต์ **เจ้าของต้องทำเอง** (โค้ดนี้ไม่มีและไม่ควรมี token ของ npm)
-- allowlist ต้องผ่านการรีวิวของทีม MetaMask (อย่างน้อยสองคน) และเพราะ snap ใช้ `snap_getEntropy` (จัดการกุญแจ)
-  **ต้องมีรายงาน audit จากบริษัทภายนอกที่ MetaMask รับรอง** (รายชื่ออยู่ที่ https://github.com/MetaMask/snaps/wiki/Audits) ซึ่งมีค่าใช้จ่าย
-  รายงาน audit จะถูกเปิดเผยต่อสาธารณะ และทุกเวอร์ชันใหม่ต้องยื่นขอ allowlist ใหม่
+- **Right now it can be installed only in MetaMask Flask** (the developer build), from `npm run serve` (snap ID `local:http://localhost:8080`),
+  or from npm after it is published
+- Regular MetaMask (not Flask) can install it only once the snap is **published on npm and on MetaMask's allowlist**,
+  because `snap_getEntropy` and `endowment:rpc` are protected permissions that require review
+- Publishing on npm requires the project owner's npm account. **The owner must do this themselves** (this code does not have, and should not have, an npm token)
+- The allowlist requires review by the MetaMask team (at least two people), and because the snap uses `snap_getEntropy` (key management),
+  **it needs an audit report from an external firm approved by MetaMask** (the list is at https://github.com/MetaMask/snaps/wiki/Audits), which costs money.
+  The audit report will be made public, and every new version must apply to the allowlist again
 
-### ขั้นตอนของเจ้าของโปรเจกต์
+### Steps for the project owner
 
-1. **บัญชี npm**: สมัคร https://www.npmjs.com เปิด 2FA แล้วสร้าง organization ชื่อ `zetaphy` (ฟรีสำหรับแพ็กเกจสาธารณะ)
-   - ถ้าชื่อ `zetaphy` ถูกใช้แล้ว ให้ใช้ scope ของตัวเอง แล้วแก้ชื่อให้ตรงกันทุกที่: `name` ใน `package.json`,
-     `source.location.npm.packageName` ใน `snap.manifest.json`, `<meta name="zetaphy-snap-id">` ใน `zetaphy-wallet/index.html`
-     และ `DEFAULT_SNAP_ID` ใน `zetaphy-wallet/app.js` (ชื่อแพ็กเกจเป็นส่วนหนึ่งของ snap ID: เปลี่ยนหลังมีผู้ใช้แล้วบัญชีจะเปลี่ยน)
-2. **โดเมน** (แนะนำ): เมื่อรู้โดเมนจริงของเว็บกระเป๋า เปลี่ยน `endowment:rpc` เป็น `allowedOrigins` (ดูหัวข้อสิทธิ์)
-3. **เวอร์ชัน**: ตั้ง `version` ใน `package.json` และ `snap.manifest.json` ให้ตรงกัน แล้ว
+1. **npm account**: sign up at https://www.npmjs.com, turn on 2FA, then create an organization named `zetaphy` (free for public packages)
+   - If the name `zetaphy` is taken, use your own scope and update the name to match everywhere: `name` in `package.json`,
+     `source.location.npm.packageName` in `snap.manifest.json`, `<meta name="zetaphy-snap-id">` in `zetaphy-wallet/index.html`,
+     and `DEFAULT_SNAP_ID` in `zetaphy-wallet/app.js` (the package name is part of the snap ID: changing it after there are users changes their accounts)
+2. **Domain** (recommended): once the wallet site's real domain is known, change `endowment:rpc` to `allowedOrigins` (see the Permissions section)
+3. **Version**: set `version` in `package.json` and `snap.manifest.json` to match, then
    ```
    cd zetaphy-snap
    npm ci
    npm run build && npm test
-   git add snap.manifest.json && git commit    # shasum ใหม่ (CI ตรวจ)
+   git add snap.manifest.json && git commit    # new shasum (CI checks it)
    ```
-4. **ตรวจไฟล์ที่จะเผยแพร่**: `npm pack --dry-run` ต้องมีแค่ `dist/bundle.js`, `images/icon.svg`, `snap.manifest.json`, `package.json`, `README.md`
-5. **เผยแพร่**: `npm login` แล้ว `npm publish --access public` (`prepublishOnly` build และตรวจ manifest ให้อีกรอบ)
-   - หลังเผยแพร่ ชื่อ+เวอร์ชันนั้นแก้ไม่ได้ จะแก้ต้องออกเวอร์ชันใหม่
-6. **ทดสอบใน Flask**: เปิดเว็บกระเป๋าใน MetaMask Flask กด "ใช้ MetaMask (ZETAPHY Snap)" (snap ID `npm:@zetaphy/snap`)
-   ลองโอน, stake, deploy บน testnet และตรวจข้อความในหน้าต่าง
-7. **ขอ allowlist** (ถ้าต้องการให้ใช้ MetaMask ปกติได้):
-   - ใส่ค่าจริงของวัคซีนใน `snap.config.js` (RPC ของ ZETAPHY, ThreatRegistry, โดเมนเว็บกระเป๋า) แล้ว build ใหม่
-   - ลบ log และสิทธิ์ที่ไม่ใช้ (ตอนนี้ไม่มี) และสแกนด้วย [Snapper](https://github.com/sayfer-io/Snapper)
-   - `endowment:network-access`, `endowment:ethereum-provider`, `endowment:transaction-insight` และ `endowment:signature-insight` ต้องอธิบายในคำขอ allowlist (ดูตารางสิทธิ์และหัวข้อความเป็นส่วนตัว)
-   - จ้าง auditor จากรายชื่อของ MetaMask ให้ audit `src/` ของ snap และ `zetaphy-network/src/pqtx.js` กับ `@noble/post-quantum` (โมดูลจัดการกุญแจ)
-     แก้ทุกข้อที่ระดับ medium ขึ้นไป แล้วเก็บ commit ที่ audit และ commit ที่แก้
-   - กรอกฟอร์ม https://go.metamask.io/snaps-directory-request (ชื่อต้องตรงกับ `proposedName` คือ "ZETAPHY Post-Quantum"
-     ห้ามมีคำว่า MetaMask, Snap, Meta, Mask) แนบรายงาน audit, ลิงก์ GitHub และ npm, ข้อมูลติดต่อฝ่ายช่วยเหลือ, รูปและวิดีโอสาธิต
-   - เวอร์ชันใหม่ทุกครั้งต้องยื่นผ่าน https://go.metamask.io/snaps-directory-update-request
-8. หลังอยู่ใน allowlist แล้ว แก้ข้อความ "ติดตั้งได้เฉพาะใน MetaMask Flask" ในเว็บกระเป๋า (`snapFlask` ใน `app.js`)
+4. **Check the files to be published**: `npm pack --dry-run` must contain only `dist/bundle.js`, `images/icon.svg`, `snap.manifest.json`, `package.json`, `README.md`
+5. **Publish**: `npm login`, then `npm publish --access public` (`prepublishOnly` builds and checks the manifest once more)
+   - After publishing, that name+version cannot be changed. To change it, release a new version
+6. **Test in Flask**: open the wallet site in MetaMask Flask and click "Use MetaMask (ZETAPHY Snap)" (snap ID `npm:@zetaphy/snap`).
+   Try send, stake, and deploy on testnet, and check the text in the window
+7. **Request the allowlist** (if you want it usable in regular MetaMask):
+   - Put the real vaccine values in `snap.config.js` (ZETAPHY RPC, ThreatRegistry, wallet site domain), then rebuild
+   - Remove logs and unused permissions (none right now), and scan with [Snapper](https://github.com/sayfer-io/Snapper)
+   - `endowment:network-access`, `endowment:ethereum-provider`, `endowment:transaction-insight`, and `endowment:signature-insight` must be explained in the allowlist request (see the permissions table and the Privacy section)
+   - Hire an auditor from MetaMask's list to audit the snap's `src/` and `zetaphy-network/src/pqtx.js` with `@noble/post-quantum` (the key management modules).
+     Fix every finding of medium or higher, and keep the audited commit and the fix commits
+   - Fill in the form at https://go.metamask.io/snaps-directory-request (the name must match `proposedName`, which is "ZETAPHY Post-Quantum",
+     and must not contain the words MetaMask, Snap, Meta, Mask). Attach the audit report, GitHub and npm links, support contact details, and demo images and video
+   - Every new version must be submitted through https://go.metamask.io/snaps-directory-update-request
+8. Once on the allowlist, update the "can be installed only in MetaMask Flask" text in the wallet site (`snapFlask` in `app.js`)
 
-## ไฟล์
+## Files
 
-| ไฟล์ | คืออะไร |
+| File | What it is |
 |---|---|
-| `src/index.jsx` | `onRpcRequest`: `zetaphy_getAccount`, `zetaphy_signTx`, `zetaphy_get/setThreatSource`; `onTransaction` (วัคซีน) |
-| `src/threats.js`, `src/insight.jsx` | วัคซีน: ปลายทาง, อ่านโค้ด/proxy บนเชนนั้น, ถาม ThreatRegistry และหน้าที่แสดงใน MetaMask |
-| `../zetaphy-network/src/vaccine.js` | ใช้ร่วมกับเว็บกระเป๋า: view ของ registry, การตาม proxy, fp1 |
-| `src/account.js` | seed → ML-DSA-44 → ที่อยู่ (สูตรเดียวกับ CLI และเว็บกระเป๋า) |
-| `src/request.js` | ตรวจพารามิเตอร์ของ `zetaphy_signTx` อย่างเข้ม |
-| `src/describe.js`, `src/dialog.jsx` | ข้อความในหน้าต่างยืนยัน (ไทย/อังกฤษ) และการวาด |
-| `src/pqtx.js` | re-export `zetaphy-network/src/pqtx.js` |
-| `snap.manifest.json`, `snap.config.js`, `images/icon.svg` | manifest (shasum), การ build, ไอคอน |
-| `test/snap.test.js`, `test/insight.test.js`, `jest.config.js`, `test/resolver.js` | การทดสอบด้วย snaps-jest |
+| `src/index.jsx` | `onRpcRequest`: `zetaphy_getAccount`, `zetaphy_signTx`, `zetaphy_get/setThreatSource`; `onTransaction` (vaccine) |
+| `src/threats.js`, `src/insight.jsx` | Vaccine: destinations, reading code/proxies on that chain, querying ThreatRegistry, and the view shown in MetaMask |
+| `../zetaphy-network/src/vaccine.js` | Shared with the wallet site: registry views, proxy following, fp1 |
+| `src/account.js` | seed → ML-DSA-44 → address (same formula as the CLI and the wallet site) |
+| `src/request.js` | Strict validation of `zetaphy_signTx` parameters |
+| `src/describe.js`, `src/dialog.jsx` | Confirmation window text (Thai/English) and rendering |
+| `src/pqtx.js` | re-export of `zetaphy-network/src/pqtx.js` |
+| `snap.manifest.json`, `snap.config.js`, `images/icon.svg` | manifest (shasum), build, icon |
+| `test/snap.test.js`, `test/insight.test.js`, `jest.config.js`, `test/resolver.js` | Tests with snaps-jest |

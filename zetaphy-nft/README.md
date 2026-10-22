@@ -1,221 +1,223 @@
-# ZETAPHY NFT: สร้างและซื้อขาย NFT บนเชน ZETAPHY
+**English** | [ภาษาไทย](README.th.md)
 
-ระบบสร้างคอลเลกชัน NFT และตลาดซื้อขาย NFT สำหรับเชน ZETAPHY (Cosmos EVM, EVM chain id `77390`, chain id `zetaphy_77390-1`, เหรียญ ZETAPHY ใช้ ticker `ZTPHY` ในกระเป๋า EVM, 18 ตำแหน่ง)
-เว็บเป็นแบบ static ไม่มีเซิร์ฟเวอร์ โฮสต์ฟรีบน Vercel ที่ `nft.sawasdeecoin.com`
+# ZETAPHY NFT: create and trade NFTs on the ZETAPHY chain
 
-> **คำเตือน: ใช้บนเครือข่ายทดสอบ (testnet) เท่านั้น** สัญญาทั้งหมดยังไม่ผ่านการตรวจสอบความปลอดภัย (audit) จากบุคคลภายนอก
-> อย่าใช้กับเงินหรือสินทรัพย์ที่มีมูลค่าจริง ดูหัวข้อ [ความเสี่ยง](#ความเสี่ยง)
+A system for creating NFT collections and an NFT marketplace for the ZETAPHY chain (Cosmos EVM, EVM chain id `77390`, chain id `zetaphy_77390-1`, ZETAPHY coin uses ticker `ZTPHY` in EVM wallets, 18 decimals)
+The web app is static with no server, hosted for free on Vercel at `nft.sawasdeecoin.com`
 
-## สิ่งที่มีในโฟลเดอร์นี้
+> **Warning: use on testnet only.** None of the contracts have passed an external security audit.
+> Do not use with money or assets of real value. See the [Risks](#risks) section.
 
-| ส่วน | ไฟล์ |
+## What is in this folder
+
+| Part | Files |
 |---|---|
-| สัญญา (Solidity 0.8.26) | `contracts/CollectionBase.sol`, `ZetaphyERC721.sol`, `ZetaphyERC1155.sol`, `NFTFactory.sol` (มี `ERC721Deployer` / `ERC1155Deployer`), `NFTMarketplace.sol`, `interfaces/Interfaces.sol` |
-| ไฟล์คอมไพล์แล้ว (commit ไว้) | `artifacts/*.json` (abi, bytecode, standard-JSON input สำหรับ verify บน explorer) |
-| สคริปต์ | `scripts/build.js` (คอมไพล์, `--check` ตรวจว่า artifacts ตรงกับซอร์ส), `scripts/build-web.js` (bundle `web/vendor/zetaphy-lib.js`), `scripts/serve.js` (เปิดเว็บในเครื่องพร้อม CSP จริง) |
-| CLI | `cli.js` (สร้างกุญแจ, deploy, ดูข้อมูล, คำสั่ง governance), `src/keys.js` |
-| เว็บ | `web/index.html`, `web/app.js`, `web/style.css`, `web/lib/*.js`, `web/vendor/zetaphy-lib.js`, `web/deployments.json`, `web/vercel.json`, `web/logo.svg` |
-| ทดสอบ | `test/*.test.js` (หน่วย), `test/web.e2e.js` (เบราว์เซอร์), `test/devnet.integration.js` (เชนจริง), `test/helpers/` |
+| Contracts (Solidity 0.8.26) | `contracts/CollectionBase.sol`, `ZetaphyERC721.sol`, `ZetaphyERC1155.sol`, `NFTFactory.sol` (includes `ERC721Deployer` / `ERC1155Deployer`), `NFTMarketplace.sol`, `interfaces/Interfaces.sol` |
+| Compiled files (committed) | `artifacts/*.json` (abi, bytecode, standard-JSON input for verifying on the explorer) |
+| Scripts | `scripts/build.js` (compile, `--check` checks that artifacts match the source), `scripts/build-web.js` (bundles `web/vendor/zetaphy-lib.js`), `scripts/serve.js` (serves the web app locally with the real CSP) |
+| CLI | `cli.js` (create keys, deploy, view info, governance commands), `src/keys.js` |
+| Web | `web/index.html`, `web/app.js`, `web/style.css`, `web/lib/*.js`, `web/vendor/zetaphy-lib.js`, `web/deployments.json`, `web/vercel.json`, `web/logo.svg` |
+| Tests | `test/*.test.js` (unit), `test/web.e2e.js` (browser), `test/devnet.integration.js` (real chain), `test/helpers/` |
 
-## การออกแบบ
+## Design
 
-### สัญญา
+### Contracts
 
-**NFTFactory** ใครก็สร้างคอลเลกชันได้ ผู้เรียกเป็นเจ้าของคอลเลกชัน โรงงานไม่มีเจ้าของ ไม่เก็บค่าธรรมเนียม และควบคุมคอลเลกชันไม่ได้
-- `createERC721(config)` / `createERC1155(config)` โดย `config` คือ ชื่อ, สัญลักษณ์, base URI (เว้นว่าง = ใส่ URI รายโทเคนตอน mint),
-  contract URI, ผู้รับและอัตราค่าลิขสิทธิ์ EIP-2981 (**สูงสุด 10%**), จำนวนสูงสุด (0 = ไม่จำกัด; ERC-1155 นับต่อรหัสโทเคน),
-  เปิด mint สาธารณะหรือไม่ และราคา mint
-- `isCollection(address)` บอกว่าคอลเลกชันสร้างจากโรงงานนี้หรือไม่ (เว็บแสดง "สร้างจากโรงงาน ZETAPHY" หรือ "สัญญาภายนอก")
-- ตัวโรงงานแยกตัว deploy ออกเป็น `ERC721Deployer` / `ERC1155Deployer` เพื่อให้แต่ละสัญญาเล็กกว่าขีดจำกัด 24 KB มาก
+**NFTFactory** Anyone can create a collection. The caller owns the collection. The factory has no owner, charges no fee, and cannot control collections.
+- `createERC721(config)` / `createERC1155(config)`, where `config` is name, symbol, base URI (empty = set a per-token URI at mint),
+  contract URI, EIP-2981 royalty receiver and rate (**max 10%**), max supply (0 = unlimited; ERC-1155 counts per token id),
+  whether public mint is open, and the mint price
+- `isCollection(address)` tells whether a collection was created by this factory (the web app shows "Created by the ZETAPHY factory" or "External contract")
+- The factory's deployers are split out into `ERC721Deployer` / `ERC1155Deployer` so that each contract stays well below the 24 KB limit
 
-**ZetaphyERC721 / ZetaphyERC1155** เขียนเองแบบเรียบง่าย (ไม่มี OpenZeppelin ในเครื่อง และไม่ดึงของเสียเงิน)
-- ERC-165 ตอบเฉพาะ interface ที่ทำจริง: 721 = `0x01ffc9a7, 0x80ac58cd, 0x5b5e139f, 0x2a55205a`, 1155 = `0x01ffc9a7, 0xd9b67a26, 0x0e89341c, 0x2a55205a` และตอบ `false` กับ `0xffffffff`
-- safe transfer และ safe mint ตรวจผู้รับที่เป็นสัญญา (`onERC721Received` / `onERC1155Received` / `onERC1155BatchReceived` ต้องคืนค่า magic ที่ถูกต้อง; revert แบบมีข้อความจะส่งต่อข้อความ; revert เปล่าหรือไม่มีฟังก์ชัน = `InvalidReceiver`)
-- เจ้าของ mint ได้เสมอ; mint สาธารณะต้องจ่าย `ราคา × จำนวน` พอดี เงินอยู่ในสัญญาจนเจ้าของกด `withdraw` (ไม่ส่งเงินระหว่าง mint)
-- จำนวนสูงสุด: ลดได้หรือตั้งจากไม่จำกัดได้ แต่เพิ่มไม่ได้ และไม่ต่ำกว่าที่ mint ไปแล้ว; การ mint ERC-721 จองรหัสก่อนเรียก callback ของผู้รับ จึงเกินจำนวนสูงสุดไม่ได้แม้มีการเรียกซ้อน
-- URI รายโทเคนแก้ไม่ได้; base URI / contract URI แก้ได้จนกว่าเจ้าของจะ `freezeMetadata()`
-- **ตัวนับการย้าย (`transferCount`)** ให้ตลาดใช้ปิดรายการขายเก่า:
-  ERC-721 `transferCount(tokenId)` เพิ่มทุกครั้งที่โทเคนนั้นถูก mint, โอน (รวมโอนให้ตัวเอง) หรือ burn (ค่ายังอยู่หลัง burn);
-  ERC-1155 `transferCount(holder, id)` เพิ่มทุกครั้งที่ชิ้นของ `id` **ออกจาก** `holder` (โอนเดี่ยว, ทุกรายการใน batch, burn, และการขายผ่านตลาด) ส่วนการ **รับเข้า** (โอนเข้า, mint) และการโอน 0 ชิ้นหรือโอนให้ตัวเองไม่นับ —
-  การรับเข้าไม่มีทางทำให้รายการเก่ากลับมาซื้อได้ และถ้านับด้วย ใครก็ฆ่ารายการขายของผู้ขายคนใดก็ได้แค่ส่ง (หรือ mint สาธารณะ) ให้ 1 ชิ้น
-  ค่าแก๊ส: ไม่มีการเขียน storage เพิ่ม — 721 เก็บตัวนับ (uint96) ในช่องเดียวกับเจ้าของ (address), 1155 เก็บตัวนับ (64 บิตบน) ในคำเดียวกับยอดคงเหลือ (192 บิตล่าง)
-  จึงเพิ่มแค่ราว 100-160 แก๊สต่อการโอน (วัดในชุดทดสอบ: โอน 721 33,509 → 33,617; โอน 1155 10,308 → 10,463) ส่วน burn ของ 721 เขียนค่าที่ไม่ใช่ศูนย์ลงช่องเดิมแทนการลบ (ไม่ได้ gas refund จากการลบช่อง)
-  ข้อจำกัดของการอัดรวม: ERC-1155 mint ได้ไม่เกิน 2^192 − 1 ชิ้นต่อรหัส (`MaxSupplyReached`)
-- ทุกค่าตั้งเก็บใน storage (ไม่ใช้ immutable) คอลเลกชันชนิดเดียวกันทุกอันจากโรงงานจึงมีโค้ด (code hash) เดียวกัน ตรวจครั้งเดียวได้ทั้งหมด
-- `renounceOwnership` ส่งเงินทั้งหมดที่อยู่ในสัญญา (เงิน mint สาธารณะ หรือเงินที่ใครก็บังคับส่งเข้ามา เช่นด้วย `selfdestruct`) ให้เจ้าของที่สละสิทธิ์ในธุรกรรมเดียวกัน (ล้างเจ้าของก่อนแล้วค่อยส่งเงิน: checks-effects-interactions) คนอื่นจึงส่ง 1 wei มาขวางการสละสิทธิ์ไม่ได้ และไม่มีเงินค้างโดยไม่มีใครถอนได้
+**ZetaphyERC721 / ZetaphyERC1155** Written in-house and kept simple (no local OpenZeppelin, and no paid dependencies)
+- ERC-165 only reports interfaces that are actually implemented: 721 = `0x01ffc9a7, 0x80ac58cd, 0x5b5e139f, 0x2a55205a`, 1155 = `0x01ffc9a7, 0xd9b67a26, 0x0e89341c, 0x2a55205a`, and answers `false` for `0xffffffff`
+- Safe transfer and safe mint check contract receivers (`onERC721Received` / `onERC1155Received` / `onERC1155BatchReceived` must return the correct magic value; a revert with a message passes the message through; an empty revert or a missing function = `InvalidReceiver`)
+- The owner can always mint; public mint must pay exactly `price × quantity`. The funds stay in the contract until the owner calls `withdraw` (no funds are sent during mint)
+- Max supply: can be lowered, or set from unlimited, but cannot be raised, and cannot go below what has already been minted; ERC-721 mint reserves the id before calling the receiver callback, so it cannot exceed max supply even with nested calls
+- Per-token URIs cannot be changed; base URI / contract URI can be changed until the owner calls `freezeMetadata()`
+- **Move counter (`transferCount`)** used by the marketplace to close old listings:
+  ERC-721 `transferCount(tokenId)` increases every time that token is minted, transferred (including transfers to self) or burned (the value remains after burn);
+  ERC-1155 `transferCount(holder, id)` increases every time units of `id` **leave** `holder` (single transfer, every entry in a batch, burn, and sales through the marketplace). **Incoming** units (transfers in, mint) and transfers of 0 units or to self are not counted —
+  receiving can never make an old listing buyable again, and if it were counted, anyone could kill any seller's listing just by sending (or public-minting) them 1 unit
+  Gas cost: no extra storage writes — 721 stores the counter (uint96) in the same slot as the owner (address), 1155 stores the counter (upper 64 bits) in the same word as the balance (lower 192 bits)
+  so it adds only about 100-160 gas per transfer (measured in the test suite: 721 transfer 33,509 → 33,617; 1155 transfer 10,308 → 10,463). A 721 burn writes a non-zero value into the existing slot instead of clearing it (no gas refund from clearing the slot)
+  Limit of the packing: ERC-1155 can mint at most 2^192 − 1 units per id (`MaxSupplyReached`)
+- All settings are stored in storage (no immutables), so every collection of the same type from the factory has the same code (code hash) and can be checked once for all
+- `renounceOwnership` sends all funds held in the contract (public mint funds, or funds anyone forced in, for example with `selfdestruct`) to the renouncing owner in the same transaction (clears the owner first, then sends the funds: checks-effects-interactions). So nobody else can send 1 wei to block the renouncement, and no funds are left stuck with nobody able to withdraw them
 
 **NFTMarketplace**
-- ลงขายราคาคงที่ด้วย ZETAPHY แบบ **ไม่ฝาก NFT ไว้กับตลาด**: NFT อยู่ในกระเป๋าผู้ขายจนขาย ผู้ขาย `setApprovalForAll` (หรือ `approve` ทีละโทเคนสำหรับ 721)
-- ERC-721 (จำนวน 1) และ ERC-1155 (ราคาต่อชิ้น ซื้อบางส่วนได้ จำนวนที่เหลือลดลงตามที่ขาย)
-- ทุกการขายแบ่งเงิน: ค่าธรรมเนียมโปรโตคอล `feeBps` (ค่าเริ่มต้น 1%, governance ตั้งได้ **ไม่เกิน 5%**) ให้ `feeRecipient`;
-  ค่าลิขสิทธิ์ตาม EIP-2981 ที่คอลเลกชันรายงาน **ตัดที่ 10% ของราคา** (ถ้า `royaltyInfo` revert, ใช้แก๊สเกิน 50,000, ตอบผิดรูปแบบ หรือผู้รับเป็นศูนย์ = ไม่มีค่าลิขสิทธิ์); ที่เหลือให้ผู้ขาย ปัดเศษลงทั้งหมด เศษ wei ตกเป็นของผู้ขาย
-- **Pull payment**: เงินทุกส่วนบันทึกใน `owed[address]` แล้วเจ้าของกด `withdraw()` หรือ `withdrawTo(address)` เอง ผู้รับที่ปฏิเสธเงินจึงขวางการขายไม่ได้
-  ผู้รับค่าลิขสิทธิ์ที่เป็นสัญญาซึ่งรับเงินได้แต่เรียก `withdraw` เองไม่ได้: ใครก็เรียก `withdrawFor(receiver)` ได้ เงินส่งไปที่ `receiver` เท่านั้น (ผู้เรียกไม่ได้อะไร)
-- **Reentrancy guard** ที่ `buy`, `makeOffer`, `cancelOffer`, `acceptOffer`, `withdrawTo`, `withdrawFor`; อ่านสถานะด้วย view (staticcall) และส่ง NFT หลังบันทึกสถานะเสร็จ
-- ยกเลิก (`cancel`), ยกเลิกทุกรายการของตัวเองในธุรกรรมเดียว (`cancelAll` ด้วย nonce), หมดอายุ (`expiry`, สูงสุด 365 วัน)
-- **รายการที่ใช้ไม่ได้แล้ว**: ถ้าผู้ขายโอน NFT ออกไปหรือถอนการอนุญาต การซื้อจะ revert (`SellerLacksToken` / `NotApproved`; คอลเลกชันจากโรงงานที่โทเคนย้ายออก: `TokenMoved`) และ `listingStatus(id, qty)` บอกเหตุผล เว็บซ่อนรายการเหล่านี้
-- **หนึ่งรายการที่ใช้ได้ต่อ (ผู้ขาย, คอลเลกชัน, tokenId)**: ทุกรายการบันทึก nonce `tokenNonceOf[ผู้ขาย][คอลเลกชัน][tokenId]` ตอนลงขาย และ nonce นี้ถูกเพิ่ม (รายการเก่าทั้งหมดของโทเคนนั้นซื้อไม่ได้อีกตลอดไป สถานะ `Replaced`) เมื่อ
-  ลงขายโทเคนเดิมซ้ำ, `buy` ที่ขายรายการหมด, `acceptOffer` (ของผู้รับข้อเสนอ) และทุกครั้งที่ตลาดส่งโทเคนให้ผู้รับ (ผู้ซื้อ) — ผู้ขายที่ได้โทเคนคืนภายหลังจึงไม่ถูกซื้อที่ราคาเก่าอีก
-  ERC-1155: การซื้อบางส่วนไม่ทำให้รายการเดิมหมดอายุ แต่การรับข้อเสนอ หรือการได้รับชิ้นเพิ่มผ่านตลาด จะยกเลิกรายการเดิมของรหัสนั้น (ลงขายใหม่ได้ทันที)
-- **การโอนนอกตลาด (เฉพาะคอลเลกชันจากโรงงาน `factory.isCollection(c)`)**: ตอนลงขาย ตลาดบันทึก `transferCount` ของคอลเลกชัน (721: ของโทเคน; 1155: ของผู้ขาย) ไว้ในรายการ (`moves`, `tracked`)
-  `buy` ซื้อได้เฉพาะเมื่อค่ายังเท่าเดิม ถ้าไม่เท่า revert `TokenMoved` และ `listingStatus` เป็น `Moved` ถาวร — โทเคนที่ออกจากผู้ขายนอกตลาดแล้วกลับมาภายหลังจึงไม่ทำให้รายการเก่ากลับมาซื้อได้อีก
-  การซื้อบางส่วนของ ERC-1155 ผ่านตลาดก็ทำให้ชิ้นออกจากผู้ขาย (ตัวนับ +1) `buy` จึงเพิ่มค่าที่รายการคาดไว้อีก 1 ในธุรกรรมเดียวกัน (ไม่เพิ่มเมื่อผู้ขายซื้อของตัวเอง เพราะไม่มีชิ้นย้าย)
-  แก๊สที่เพิ่มในตลาด (วัดในชุดทดสอบ): `list` ราว +1,800–2,000, `buy` 721 ราว +1,500, `buy` 1155 บางส่วน ราว +5,300 ต่อครั้ง
-  คอลเลกชันภายนอกบังคับให้มีตัวนับไม่ได้: ยังใช้ nonce แบบเดิม (`tracked = false`) ดู "ความเสี่ยง"
-- **ป้องกันผู้ขาย**: `acceptOffer(id, minProceeds)` revert (`ProceedsTooLow`) ถ้าส่วนที่ผู้ขายได้รับน้อยกว่า `minProceeds` (เว็บคำนวณจากยอดข้อเสนอ ค่าธรรมเนียม และค่าลิขสิทธิ์ที่แสดงบนหน้าจอ) จึงปลอดภัยจากค่าธรรมเนียม/ค่าลิขสิทธิ์ที่ขึ้นก่อนธุรกรรมเข้าบล็อก และจาก RPC ที่แสดงยอดข้อเสนอปลอม
-  รายการขายบันทึกส่วนที่ผู้ขายได้ต่อชิ้นตอนลงขาย (`minUnitProceeds`) ถ้าค่าธรรมเนียมหรือค่าลิขสิทธิ์ขึ้นหลังจากนั้น การซื้อจะ revert และ `listingStatus` เป็น `TermsChanged` จนกว่าผู้ขายลงขายใหม่; ผู้ซื้อจ่ายเท่ากับ `msg.value` = ราคา × จำนวนพอดีเสมอ (ไม่มีอะไรบวกเพิ่ม)
-- ข้อเสนอซื้อ (offer): ผู้ซื้อฝาก ZETAPHY ไว้ที่ตลาด ผู้ถือ NFT รับข้อเสนอได้ ผู้ซื้อยกเลิกได้ทุกเมื่อ (รวมหลังหมดอายุ) เงินคืนเข้าที่ `owed`
-- หลังโอนตลาดตรวจว่าผู้ซื้อได้รับ NFT จริง (ป้องกันโทเคนที่แกล้งทำว่าโอน); ตรวจชนิดสัญญาด้วย ERC-165 ตามวิธีของ EIP-165
-- EIP-712 signed listing: **ไม่ได้ทำ** (มีเฉพาะการลงขายบนเชน)
+- Fixed-price listings in ZETAPHY **without depositing the NFT with the marketplace**: the NFT stays in the seller's wallet until sold. The seller calls `setApprovalForAll` (or `approve` per token for 721)
+- ERC-721 (quantity 1) and ERC-1155 (price per unit, partial buys allowed, remaining quantity decreases as units sell)
+- Every sale splits the funds: protocol fee `feeBps` (default 1%, governance can set it, **max 5%**) to `feeRecipient`;
+  the EIP-2981 royalty reported by the collection, **capped at 10% of the price** (if `royaltyInfo` reverts, uses more than 50,000 gas, answers in the wrong format, or the receiver is zero = no royalty); the rest goes to the seller. Everything rounds down; leftover wei goes to the seller
+- **Pull payment**: every share is recorded in `owed[address]`, and the owner calls `withdraw()` or `withdrawTo(address)` themselves. A receiver that rejects funds therefore cannot block a sale
+  For a royalty receiver that is a contract which can receive funds but cannot call `withdraw` itself: anyone can call `withdrawFor(receiver)`. The funds go only to `receiver` (the caller gets nothing)
+- **Reentrancy guard** on `buy`, `makeOffer`, `cancelOffer`, `acceptOffer`, `withdrawTo`, `withdrawFor`; state is read with view (staticcall) and the NFT is sent after state is recorded
+- Cancel (`cancel`), cancel all of your own listings in one transaction (`cancelAll` with a nonce), expiry (`expiry`, max 365 days)
+- **Listings that are no longer valid**: if the seller transfers the NFT away or revokes the approval, buying reverts (`SellerLacksToken` / `NotApproved`; factory collections whose token moved away: `TokenMoved`), and `listingStatus(id, qty)` gives the reason. The web app hides these listings
+- **One valid listing per (seller, collection, tokenId)**: every listing records the nonce `tokenNonceOf[seller][collection][tokenId]` when listed, and this nonce is increased (all old listings for that token can never be bought again, status `Replaced`) when
+  the same token is listed again, on a `buy` that sells out the listing, on `acceptOffer` (for the offer's acceptor), and every time the marketplace sends a token to a receiver (buyer) — so a seller who gets a token back later cannot be bought from at the old price again
+  ERC-1155: a partial buy does not expire the existing listing, but accepting an offer, or receiving more units through the marketplace, cancels the existing listing for that id (you can list again right away)
+- **Transfers outside the marketplace (factory collections only, `factory.isCollection(c)`)**: at listing time, the marketplace records the collection's `transferCount` (721: of the token; 1155: of the seller) in the listing (`moves`, `tracked`)
+  `buy` only succeeds while the value is unchanged. If it differs, it reverts with `TokenMoved` and `listingStatus` is permanently `Moved` — so a token that left the seller outside the marketplace and later came back does not make the old listing buyable again
+  A partial ERC-1155 buy through the marketplace also moves units out of the seller (counter +1), so `buy` raises the listing's expected value by 1 in the same transaction (not when the seller buys from themselves, because no units move)
+  Extra gas in the marketplace (measured in the test suite): `list` about +1,800–2,000, `buy` 721 about +1,500, partial `buy` 1155 about +5,300 each
+  External collections cannot be forced to have a counter: they still use the old nonce approach (`tracked = false`). See "Risks"
+- **Seller protection**: `acceptOffer(id, minProceeds)` reverts (`ProceedsTooLow`) if the seller's proceeds are less than `minProceeds` (the web app computes it from the offer amount, fee and royalty shown on screen). So it is safe from fees/royalties that rise before the transaction is included in a block, and from an RPC that shows a fake offer amount
+  A listing records the seller's proceeds per unit at listing time (`minUnitProceeds`). If the fee or royalty rises after that, buying reverts and `listingStatus` is `TermsChanged` until the seller lists again; the buyer always pays `msg.value` = price × quantity exactly (nothing is added)
+- Offers: the buyer deposits ZETAPHY with the marketplace, the NFT holder can accept the offer, and the buyer can cancel at any time (including after expiry). Funds are returned to `owed`
+- After the transfer, the marketplace checks that the buyer really received the NFT (protects against tokens that pretend to transfer); the contract type is checked with ERC-165 following EIP-165
+- EIP-712 signed listing: **not implemented** (only on-chain listings)
 
-### Neuro (จุดเด่นของ ZETAPHY)
+### Neuro (a key ZETAPHY feature)
 
-- governance ตั้งที่อยู่ `ThreatRegistry` (`zetaphy-network/contracts/ThreatRegistry.sol`) ให้ตลาดได้ด้วย `setThreatRegistry` (ศูนย์ = ปิด)
-- ตลาด **ปฏิเสธ** การลงขาย การซื้อ การยื่นข้อเสนอ และการรับข้อเสนอ ของคอลเลกชันที่มีธง "บังคับใช้แล้ว" (พ้น `enforceDelay` หรือผ่านช่องทางเร่งด่วน) ด้วย error `CollectionRefused(reason)`:
-  คอลเลกชันจากโรงงาน (`factory.isCollection(c)`, ที่อยู่โรงงานกำหนดตอน deploy ตลาดและเปลี่ยนไม่ได้) ดูเฉพาะธงที่ที่อยู่ของตัวเอง (`isAddressEnforced(chainid, c)`); สัญญาภายนอกดูทั้งที่อยู่และโค้ด (`isContractEnforced(c)`)
-  การยกเลิกและการถอนเงินทำได้เสมอ ถ้า registry ตอบไม่ได้ ตลาดจะปฏิเสธ (fail closed) จน governance แก้หรือตั้งเป็นศูนย์
-- เว็บถาม registry เพิ่มอีก 3 แบบเหมือนกระเป๋า ZETAPHY (`zetaphy-network/src/vaccine.js`): ที่อยู่, code hash และลายนิ้วมือ fp1 ทั้งมุมมองเตือน (`is*Flagged`) และบังคับใช้ (`is*Enforced`)
-  - ธงใหม่ที่ยังไม่บังคับใช้: แสดงกล่องเตือนสีเหลือง พร้อมเหตุผลแบบข้อเท็จจริงของโค้ด และยังซื้อขายได้
-  - ธงที่บังคับใช้แล้ว: กล่องสีแดง ปิดปุ่มลงขาย/ซื้อ/ข้อเสนอ (คอลเลกชันจากโรงงานที่ติดธงที่โค้ดร่วมหรือลายนิ้วมือ: แสดงเป็นคำเตือนว่าเป็นธงของโค้ดที่ทุกคอลเลกชันใช้ร่วมกัน ไม่ปิดการซื้อขาย ตรงกับตลาด)
-  - ทุกกล่องมีข้อความ **"ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา"** และวิธีตรวจซ้ำ ถ้อยคำเป็นกลางตาม `docs/LEGAL.md` (การทดสอบตรวจว่าไม่มีคำอย่าง scam / หลอกลวง)
-- เว็บแสดงว่าคอลเลกชันสร้างจากโรงงานที่เชื่อถือได้ หรือเป็น **สัญญาภายนอก** (มีคำเตือนว่าโค้ดไม่เป็นที่รู้จัก)
-- **สำคัญสำหรับ governance**: คอลเลกชันจากโรงงานชนิดเดียวกันใช้โค้ดเดียวกัน ถ้ามีคนติดธงที่ code hash นั้น (เช่นเหตุผล "สร้างเพิ่มได้ไม่จำกัด" เพราะเจ้าของ mint ได้เมื่อไม่ตั้งจำนวนสูงสุด) ทุกคอลเลกชันจะถูกทำเครื่องหมายพร้อมกันในกระเป๋าและ explorer
-  ตลาดไม่ใช้ธงโค้ดกับคอลเลกชันจากโรงงานแล้ว (ดูด้านบน) แต่ governance ของ ThreatRegistry ยังควรเรียก `ThreatRegistry.setProtected([codeKey(hash721), codeKey(hash1155)], true)`:
-  `deploy` เขียน `collectionCodeHashes` และ `collectionCodeKeys` ลง deployments JSON; ถ้ากุญแจผู้ deploy เป็น governance ของ registry ที่ส่งมาด้วย `--registry` CLI จะ protect ให้เอง (`codeKeysProtected: true`)
-  มิฉะนั้นจะพิมพ์ขั้นตอน "NEXT STEP" พร้อม key ทั้งสอง และ governance รัน `node cli.js gov protect-code --key-file <กุญแจ governance ของ registry>` (`gov set-registry` ก็พิมพ์ขั้นตอนนี้เช่นกัน) ส่วนธงรายที่อยู่ (`addressKey`) ยังใช้ได้ตามปกติ
-  (`test/neuro.test.js` ทดสอบกับ ThreatRegistry ตัวจริง: ธงโค้ดไม่หยุดคอลเลกชันจากโรงงาน แต่หยุดสำเนาโค้ดเดียวกันที่ deploy นอกโรงงาน และธงที่อยู่ยังหยุดได้)
+- Governance sets the `ThreatRegistry` address (`zetaphy-network/contracts/ThreatRegistry.sol`) for the marketplace with `setThreatRegistry` (zero = off)
+- The marketplace **refuses** listing, buying, making offers and accepting offers for collections with an "enforced" flag (past `enforceDelay` or through the urgent path) with the error `CollectionRefused(reason)`:
+  factory collections (`factory.isCollection(c)`; the factory address is set when the marketplace is deployed and cannot be changed) only check flags on their own address (`isAddressEnforced(chainid, c)`); external contracts check both address and code (`isContractEnforced(c)`)
+  Cancelling and withdrawing funds always work. If the registry cannot answer, the marketplace refuses (fail closed) until governance fixes it or sets it to zero
+- The web app queries the registry in 3 more ways, like the ZETAPHY wallet (`zetaphy-network/src/vaccine.js`): address, code hash and fp1 fingerprint, in both the warning view (`is*Flagged`) and the enforced view (`is*Enforced`)
+  - A new flag that is not yet enforced: shows a yellow warning box with a factual reason about the code, and trading is still allowed
+  - An enforced flag: red box, disables the list/buy/offer buttons (factory collections flagged on the shared code or fingerprint: shown as a warning that this is a flag on code shared by all collections, trading is not disabled, matching the marketplace)
+  - Every box has the message **"Automated code analysis data, not an accusation"** and how to re-check. Wording is neutral per `docs/LEGAL.md` (tests check that words like scam / fraud are not used)
+- The web app shows whether a collection was created by the trusted factory or is an **external contract** (with a warning that the code is unknown)
+- **Important for governance**: factory collections of the same type share the same code. If someone flags that code hash (for example with the reason "unlimited minting possible", because the owner can mint when no max supply is set), every collection is marked at once in wallets and the explorer
+  The marketplace no longer applies code flags to factory collections (see above), but ThreatRegistry governance should still call `ThreatRegistry.setProtected([codeKey(hash721), codeKey(hash1155)], true)`:
+  `deploy` writes `collectionCodeHashes` and `collectionCodeKeys` into the deployments JSON; if the deployer key is the governance of the registry passed with `--registry`, the CLI protects them automatically (`codeKeysProtected: true`)
+  Otherwise it prints a "NEXT STEP" with both keys, and governance runs `node cli.js gov protect-code --key-file <ThreatRegistry governance key>` (`gov set-registry` prints this step as well). Per-address flags (`addressKey`) still work as usual
+  (`test/neuro.test.js` tests against the real ThreatRegistry: code flags do not stop factory collections, but do stop copies of the same code deployed outside the factory, and address flags still stop them)
 
-### รูปและเมทาดาตา (ฟรี $0)
+### Images and metadata (free, $0)
 
-- token URI รองรับ `ipfs://` (เปิดผ่านเกตเวย์สาธารณะแบบ https ที่เปลี่ยนได้ในหน้าตั้งค่า), `https://` และ `data:` ส่วน `http:`, `javascript:` และอื่น ๆ ไม่เปิด
-- อ่านเมทาดาตาได้ไม่เกิน 256 KB, timeout 10 วินาที, ไม่ส่ง cookie/referrer; data URI ของรูปไม่เกิน 2 MB
-- รูปแสดงใน `<img>` เท่านั้น SVG แสดงเป็น `img src` (สคริปต์ใน SVG ไม่ทำงาน) ไม่เคยแทรก SVG ลงหน้าเว็บตรง ๆ ไม่โหลด `animation_url`
-- ชื่อ คำอธิบาย และ trait ใส่ด้วย `textContent` เท่านั้น ตัดอักขระควบคุม bidi และอักขระที่มองไม่เห็นออก จำกัดความยาว
-- CSP ใน `web/vercel.json`: `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; frame-ancestors 'none'` …
+- token URI supports `ipfs://` (opened through a public https gateway, changeable on the settings page), `https://` and `data:`. `http:`, `javascript:` and others are not opened
+- Metadata is read up to 256 KB, 10 second timeout, no cookie/referrer sent; image data URIs up to 2 MB
+- Images are shown only in `<img>`. SVG is shown as `img src` (scripts in SVG do not run). SVG is never inserted directly into the page. `animation_url` is not loaded
+- Names, descriptions and traits are inserted only with `textContent`, with control, bidi and invisible characters stripped and length limited
+- CSP in `web/vercel.json`: `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https:; connect-src 'self' https: http://localhost:* http://127.0.0.1:*; object-src 'none'; frame-ancestors 'none'` …
 
-### เว็บ (`web/`)
+### Web app (`web/`)
 
-- static ล้วน ไม่มีเซิร์ฟเวอร์ ไม่มีสคริปต์จากที่อื่น ไลบรารีเดียวที่ใช้ (`@noble/hashes` + ส่วนอ่านของ vaccine) bundle ไว้ที่ `web/vendor/zetaphy-lib.js`
-  และ `test/bundle.test.js` build ใหม่ในหน่วยความจำแล้วเทียบกับไฟล์ที่ commit (ทำซ้ำได้ด้วย `package-lock.json`) เหมือน zetaphy-wallet
-- ABI encode/decode เขียนเอง (`web/lib/abi.js`) ทดสอบเทียบกับ ethers
-- หน้า: สำรวจ (รายการขายล่าสุดจากอีเวนต์ `Listed` + คอลเลกชันล่าสุด), คอลเลกชัน, ชิ้นงาน (ซื้อ/ลงขาย/ข้อเสนอ/ยกเลิก), สร้างคอลเลกชัน, Mint, NFT ของฉัน (จากอีเวนต์ Transfer/TransferSingle/TransferBatch ถึงที่อยู่ของคุณ แล้วตรวจว่ายังถืออยู่), ตั้งค่า
-- ค้นอีเวนต์ฝั่งเบราว์เซอร์: ครั้งละไม่เกิน 2,000 บล็อก (ตามขีดจำกัดของโหนด ถ้าโหนดปฏิเสธจะแบ่งครึ่ง) ไม่เกินจำนวนบล็อกที่ตั้งไว้ (ค่าเริ่มต้น 50,000 กด "ค้นบล็อกเก่ากว่านี้" เพื่อขยาย) และเก็บแคชใน localStorage
-- กระเป๋าผ่าน EIP-6963 (รูปแบบเดียวกับ `zetaphy-wallet/wallets.js`) เพิ่ม/สลับเครือข่าย ZETAPHY (ticker ZTPHY) ให้อัตโนมัติ แล้วอ่าน `eth_chainId` ซ้ำหลังสลับ; จำลองธุรกรรมด้วย `eth_call` ก่อนส่งและแปล error เป็นข้อความอ่านง่าย
-- ก่อน `eth_sendTransaction` ทุกครั้ง เว็บถาม `eth_chainId` จากกระเป๋าอีกครั้งและไม่ส่งถ้าไม่ใช่ 77390 และใส่ `chainId: 0x12e4e` ในธุรกรรมด้วย
-- ที่อยู่ factory/marketplace มาจาก `deployments.json` ของเว็บเท่านั้น ช่องแก้ในหน้าตั้งค่ามีเฉพาะโหมดนักพัฒนา (`?dev=1` ใน URL) พร้อมคำเตือนสีแดง และก่อนอนุญาต (`setApprovalForAll`) ให้ตลาดที่ไม่ใช่ตัวใน `deployments.json` ต้องพิมพ์ 6 ตัวท้ายของที่อยู่เพื่อยืนยัน
-- คอลเลกชันภายนอก: หน้าชิ้นงานเตือนว่า "รายการขายเก่าอาจกลับมาซื้อได้อีกถ้าคุณได้ชิ้นงานคืน ควรยกเลิกรายการที่ไม่ต้องการแล้ว";
-  การลงขาย/รับข้อเสนอของ ERC-721 ภายนอกใช้ `approve(ตลาด, tokenId)` เฉพาะโทเคนนั้น (การโอนครั้งต่อไปล้างค่านี้ โทเคนที่ได้คืนจึงไม่ได้รับอนุญาตอีกเอง) แทน `setApprovalForAll`;
-  ERC-1155 มีแต่ `setApprovalForAll` (มาตรฐานไม่มีการอนุญาตรายโทเคน) เว็บแสดงข้อความนี้ในฟอร์มลงขาย; คอลเลกชันจากโรงงานยังใช้ `setApprovalForAll` เพราะตัวนับปิดรายการเก่าให้แล้ว
-- หน้าชิ้นงาน: ผู้ขายเห็นรายการเก่าของตัวเองที่ซื้อไม่ได้แล้ว (ขายแล้ว ถูกแทนที่ โทเคนย้ายไป) พร้อมปุ่ม "ยกเลิกรายการเก่าของฉัน" และหลังรับข้อเสนอเว็บเสนอให้ยกเลิกรายการอื่นของโทเคนนั้น; ปุ่มรับข้อเสนอแสดงยอดที่จะได้รับ (ใช้เป็น `minProceeds`)
-- "ค้นบล็อกเก่ากว่านี้" (`?older=N`) จำกัดที่ 20 เท่าของช่วงค้น และไม่เกิน 4,000,000 บล็อกต่อการค้น
-- **ความเป็นส่วนตัว**: รูปและเมทาดาตาโหลดตรงจากลิงก์ที่ผู้สร้างคอลเลกชันเลือก (เว็บ https ใดก็ได้ หรือเกตเวย์ IPFS) เซิร์ฟเวอร์เหล่านั้นเห็นที่อยู่ IP ของผู้ชมและเวลาที่เปิดดู (ไม่ส่ง cookie/referrer) ตัวเว็บไม่เก็บข้อมูลใด ๆ — ข้อความนี้แสดงในหน้าตั้งค่าและในกล่องช่วยเหลือ IPFS
-- ภาษาไทย/อังกฤษ, โหมดสว่าง/มืด, ใช้งานบนมือถือได้ (ทดสอบที่ความกว้าง 360px), แบรนด์ SAWASDEE COIN
+- Fully static, no server, no scripts from elsewhere. The only libraries used (`@noble/hashes` + the read parts of vaccine) are bundled at `web/vendor/zetaphy-lib.js`,
+  and `test/bundle.test.js` rebuilds it in memory and compares it with the committed file (reproducible with `package-lock.json`), like zetaphy-wallet
+- Hand-written ABI encode/decode (`web/lib/abi.js`), tested against ethers
+- Pages: Explore (latest listings from `Listed` events + latest collections), Collection, Item (buy/list/offer/cancel), Create collection, Mint, My NFTs (from Transfer/TransferSingle/TransferBatch events to your address, then checks you still hold them), Settings
+- Browser-side event search: at most 2,000 blocks per query (per the node's limit; if the node refuses, the range is halved), up to the configured number of blocks (default 50,000; press "Search older blocks" to extend), cached in localStorage
+- Wallets via EIP-6963 (same pattern as `zetaphy-wallet/wallets.js`). Adds/switches to the ZETAPHY network (ticker ZTPHY) automatically, then reads `eth_chainId` again after switching; simulates transactions with `eth_call` before sending and turns errors into readable messages
+- Before every `eth_sendTransaction`, the web app asks the wallet for `eth_chainId` again and does not send if it is not 77390, and also puts `chainId: 0x12e4e` in the transaction
+- Factory/marketplace addresses come only from the web app's `deployments.json`. The fields to edit them on the settings page exist only in developer mode (`?dev=1` in the URL), with a red warning. Before approving (`setApprovalForAll`) a marketplace that is not the one in `deployments.json`, you must type the last 6 characters of the address to confirm
+- External collections: the item page warns "Old listings may become buyable again if you get the item back. Cancel listings you no longer want";
+  listing/accepting offers for external ERC-721 uses `approve(marketplace, tokenId)` for that token only (the next transfer clears it, so a token you get back is not approved again automatically) instead of `setApprovalForAll`;
+  ERC-1155 only has `setApprovalForAll` (the standard has no per-token approval). The web app shows this message in the listing form; factory collections still use `setApprovalForAll` because the counter already closes old listings
+- Item page: the seller sees their own old listings that can no longer be bought (sold, replaced, token moved) with a "Cancel my old listings" button, and after accepting an offer the web app offers to cancel the token's other listings; the accept-offer button shows the amount you will receive (used as `minProceeds`)
+- "Search older blocks" (`?older=N`) is limited to 20 times the search range and at most 4,000,000 blocks per search
+- **Privacy**: images and metadata load directly from the links chosen by the collection creator (any https site or an IPFS gateway). Those servers see the viewer's IP address and the time of viewing (no cookie/referrer sent). The web app itself stores no data — this message is shown on the settings page and in the IPFS help box
+- Thai/English, light/dark mode, works on mobile (tested at 360px width), SAWASDEE COIN branding
 
-## ติดตั้งและทดสอบ
+## Install and test
 
 ```bash
 cd zetaphy-nft
 npm ci
-npm run build -- --check      # artifacts ตรงกับ contracts/ (npm run build เพื่อคอมไพล์ใหม่)
-npm test                      # ทดสอบหน่วยทั้งหมด (สัญญาใน @ethereumjs/evm, ไลบรารีเว็บ, bundle, กุญแจ)
-PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:e2e        # เบราว์เซอร์ headless + node จำลองบน EVM จริง + กระเป๋าจำลอง
+npm run build -- --check      # artifacts match contracts/ (npm run build to recompile)
+npm test                      # all unit tests (contracts in @ethereumjs/evm, web libraries, bundle, keys)
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:e2e        # headless browser + mock node on a real EVM + mock wallet
 flock /tmp/ci-test/devnet.lock env ZETAPHYD=/path/to/zetaphyd PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:devnet
-npm run serve                 # เปิดเว็บที่ http://localhost:8091 พร้อม CSP เหมือน Vercel
+npm run serve                 # serves the web app at http://localhost:8091 with the same CSP as Vercel
 ```
 
-`test:devnet` ใช้ `zetaphy-network/scripts/devnet.sh` เปิดเชนจริงชั่วคราว (พอร์ต `DEVNET_PORT`, ค่าเริ่มต้น 25545) deploy ด้วย CLI, สร้างคอลเลกชัน, mint, ลงขาย, ซื้อ (ERC-721 และ ERC-1155),
-ถอนเงิน, ทดสอบรายการที่ใช้ไม่ได้และการปฏิเสธของ registry แล้วเปิดเว็บให้ค้นรายการจาก `eth_getLogs` ของโหนดจริงและซื้อผ่านกระเป๋าที่เซ็นธุรกรรมจริง
+`test:devnet` uses `zetaphy-network/scripts/devnet.sh` to start a temporary real chain (port `DEVNET_PORT`, default 25545), deploys with the CLI, creates collections, mints, lists, buys (ERC-721 and ERC-1155),
+withdraws funds, tests invalid listings and registry refusals, then opens the web app to find listings from the real node's `eth_getLogs` and buy through a wallet that signs real transactions
 
-## Deploy สัญญา
+## Deploying the contracts
 
-1. สร้างกุญแจผู้ deploy (เก็บในเครื่องเท่านั้น ไม่พิมพ์กุญแจออกมา):
+1. Create a deployer key (stored locally only; the key is never printed):
    ```bash
-   node cli.js key new                          # ~/.zetaphy/deployer.key (สิทธิ์ 0600, สร้างแบบ O_EXCL และไม่เขียนผ่าน symlink) แสดงเฉพาะที่อยู่
-   ZETAPHY_PASSPHRASE='…' node cli.js key new   # หรือเก็บแบบเข้ารหัส (keystore) deployer.key.json
+   node cli.js key new                          # ~/.zetaphy/deployer.key (mode 0600, created with O_EXCL and never written through a symlink); shows only the address
+   ZETAPHY_PASSPHRASE='…' node cli.js key new   # or store it encrypted (keystore) as deployer.key.json
    ```
-   ใช้ไฟล์อื่นได้ด้วย `--key-file` หรือ `ZETAPHY_KEY_FILE`; หรือส่งกุญแจผ่าน env `ZETAPHY_PRIVATE_KEY` (testnet เท่านั้น)
-2. เติม ZETAPHY ของ testnet ให้ที่อยู่นั้น (faucet ของ testnet)
-3. Deploy แล้วเขียนไฟล์ให้เว็บ:
+   Use another file with `--key-file` or `ZETAPHY_KEY_FILE`; or pass the key via the env `ZETAPHY_PRIVATE_KEY` (testnet only)
+2. Fund that address with testnet ZETAPHY (testnet faucet)
+3. Deploy and write the file for the web app:
    ```bash
-   node cli.js deploy --rpc https://<rpc ของ testnet> \
+   node cli.js deploy --rpc https://<testnet rpc> \
      [--governance 0x…] [--fee-bps 100] [--fee-recipient 0x…] \
-     [--registry 0x<ThreatRegistry>] [--public-rpc https://<rpc ที่เว็บใช้>] \
+     [--registry 0x<ThreatRegistry>] [--public-rpc https://<rpc used by the web app>] \
      --out web/deployments.json
-   node cli.js info                             # ตรวจค่าที่ใช้อยู่บนเชน
+   node cli.js info                             # check the values in use on-chain
    ```
-   CLI ตรวจว่า EVM chain id เป็น 77390 (ใช้ `--any-chain` เพื่อข้าม) แล้ว commit `web/deployments.json`
-   ตลาดถูก deploy พร้อมที่อยู่โรงงาน (constructor ตัวที่ 5, เปลี่ยนไม่ได้) และ CLI protect code key ให้เองหรือพิมพ์ขั้นตอน governance ตามหัวข้อ Neuro
-4. คำสั่ง governance (ใช้กุญแจของ governance):
+   The CLI checks that the EVM chain id is 77390 (use `--any-chain` to skip), then commit `web/deployments.json`
+   The marketplace is deployed with the factory address (5th constructor argument, cannot be changed), and the CLI protects the code keys itself or prints the governance steps as described in the Neuro section
+4. Governance commands (use the governance key):
    ```bash
-   node cli.js gov set-fee 100 0x<ผู้รับ>         # ไม่เกิน 500 (5%)
-   node cli.js gov set-registry 0x<ThreatRegistry>  # 0 = ปิดการตรวจ
+   node cli.js gov set-fee 100 0x<recipient>         # max 500 (5%)
+   node cli.js gov set-registry 0x<ThreatRegistry>  # 0 = disable the check
    node cli.js gov set-governance 0x<multisig>
-   node cli.js gov protect-code [--registry 0x…]   # ใช้กุญแจ governance ของ ThreatRegistry: protect code key ของคอลเลกชันจากโรงงาน
+   node cli.js gov protect-code [--registry 0x…]   # use the ThreatRegistry governance key: protect the code keys of factory collections
    ```
-   แนะนำให้โอน governance ไปที่ multisig (เช่น `SimpleMultisig` ของ zetaphy-network) หรือ gov module ของเชน และ protect code hash ของคอลเลกชันใน ThreatRegistry ตามหัวข้อ Neuro
+   It is recommended to transfer governance to a multisig (for example zetaphy-network's `SimpleMultisig`) or the chain's gov module, and to protect the collection code hashes in ThreatRegistry as described in the Neuro section
 
-## Deploy เว็บบน Vercel (ฟรี)
+## Deploying the web app on Vercel (free)
 
-1. เข้า vercel.com ด้วยบัญชี Hobby (ฟรี) → **Add New… → Project** → Import ที่เก็บโค้ดนี้จาก GitHub
-2. ตั้งค่าโปรเจกต์:
+1. Go to vercel.com with a Hobby (free) account → **Add New… → Project** → import this repository from GitHub
+2. Project settings:
    - **Root Directory**: `zetaphy-nft/web`
    - **Framework Preset**: Other
-   - Build/Install/Output: ไม่ต้องตั้ง `web/vercel.json` กำหนดไว้แล้ว (ไม่มีขั้น build; `vendor/zetaphy-lib.js` commit ไว้แล้ว)
-3. กด Deploy ทุกครั้งที่ push ไป branch หลัก Vercel จะ deploy ใหม่เอง
-4. หรือใช้ CLI: `npx vercel --cwd zetaphy-nft/web` (และ `--prod` เมื่อพร้อม)
+   - Build/Install/Output: no need to set; `web/vercel.json` already defines them (no build step; `vendor/zetaphy-lib.js` is already committed)
+3. Press Deploy. Every push to the main branch makes Vercel redeploy automatically
+4. Or use the CLI: `npx vercel --cwd zetaphy-nft/web` (and `--prod` when ready)
 
-`web/vercel.json` ใส่ header ความปลอดภัย (CSP, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, HSTS …) ให้ทุกไฟล์
+`web/vercel.json` adds security headers (CSP, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, HSTS …) to every file
 
-## โดเมนย่อย `nft.sawasdeecoin.com`
+## Subdomain `nft.sawasdeecoin.com`
 
-1. ที่ผู้ให้บริการ DNS ของ `sawasdeecoin.com` เพิ่มระเบียน:
+1. At the DNS provider for `sawasdeecoin.com`, add the record:
    | Type | Name | Value |
    |---|---|---|
    | CNAME | `nft` | `cname.vercel-dns.com` |
 
-   ถ้าใช้ Cloudflare ให้ตั้งเป็น **DNS only** (เมฆสีเทา) เพื่อให้ Vercel ออกใบรับรอง SSL ได้
-2. ใน Vercel: Project → **Settings → Domains** → Add `nft.sawasdeecoin.com`
-3. รอ Vercel ตรวจ DNS และออก HTTPS ให้เอง (ปกติไม่กี่นาที) ถ้าขึ้น "Invalid Configuration" ให้ตรวจว่า CNAME ถูกต้องและไม่ได้เปิด proxy
-4. ไม่มีค่าใช้จ่าย (Vercel Hobby + ระเบียน DNS ที่มีอยู่แล้ว)
+   If you use Cloudflare, set it to **DNS only** (grey cloud) so Vercel can issue the SSL certificate
+2. In Vercel: Project → **Settings → Domains** → Add `nft.sawasdeecoin.com`
+3. Wait for Vercel to check DNS and issue HTTPS automatically (usually a few minutes). If it shows "Invalid Configuration", check that the CNAME is correct and the proxy is not on
+4. No cost (Vercel Hobby + an existing DNS record)
 
-RPC ที่เว็บใช้ต้องเป็น https และส่ง header CORS (`Access-Control-Allow-Origin`) ซึ่ง Caddy ใน `zetaphy-chain/setup-node.sh` ทำให้แล้ว
+The RPC the web app uses must be https and send CORS headers (`Access-Control-Allow-Origin`), which Caddy in `zetaphy-chain/setup-node.sh` already does
 
-## เก็บรูปและเมทาดาตาฟรี (IPFS)
+## Free image and metadata storage (IPFS)
 
-รูปและไฟล์ JSON ใหญ่เกินจะเก็บบนเชน ให้อัปโหลดขึ้น IPFS แล้ววาง CID หรือ `ipfs://CID/1.json` ในหน้า Mint (CID เปล่าจะแปลงเป็น `ipfs://` ให้)
-โครงการนี้ไม่มีบัญชีหรือคีย์ของบริการใด ๆ ผู้สร้างเลือกเองได้ตามสะดวก:
+Images and JSON files are too large to store on-chain. Upload them to IPFS, then paste the CID or `ipfs://CID/1.json` on the Mint page (a bare CID is converted to `ipfs://` for you)
+This project has no accounts or keys for any service. Creators can choose whatever suits them:
 
-1. **โหนด IPFS ของตัวเอง** — IPFS Desktop หรือ Kubo (ฟรี โอเพนซอร์ส) เพิ่มโฟลเดอร์ คัดลอก CID แล้วเปิดเครื่องไว้ หรือให้คนอื่น pin ซ้ำ
-2. **แพ็กเกจฟรีของบริการ pinning** — เช่น Pinata หรือ Filebase แบบฟรี (ผู้สร้างสมัครเอง ตรวจขีดจำกัดล่าสุดของบริการ)
-3. **บริการแบบ NFT.Storage / Storacha** เมื่อมีแบบฟรี — อัปโหลดในเบราว์เซอร์แล้วคัดลอก CID
-4. **data: URI** — รูปเล็ก (SVG/PNG เล็ก ๆ) หรือ JSON ฝังลงใน token URI ได้เลย ไม่ต้องฝากไฟล์ แต่เก็บบนเชนจึงเสียแก๊สมากกว่า (จำกัด 8 KB ต่อ URI)
+1. **Your own IPFS node** — IPFS Desktop or Kubo (free, open source). Add a folder, copy the CID, and keep the machine running, or have others pin it too
+2. **Free tier of a pinning service** — for example Pinata or Filebase free tier (creators sign up themselves; check the service's latest limits)
+3. **Services like NFT.Storage / Storacha** when a free tier is available — upload in the browser and copy the CID
+4. **data: URI** — small images (small SVG/PNG) or JSON can be embedded directly in the token URI with no file hosting, but it is stored on-chain so it costs more gas (limit 8 KB per URI)
 
-ไฟล์บน IPFS เปิดได้เฉพาะเมื่อยังมีคน pin ไว้ เกตเวย์ที่เว็บใช้เปลี่ยนได้ในหน้าตั้งค่า (ค่าเริ่มต้น `https://ipfs.io/ipfs/`)
-ตัวอย่างเมทาดาตา:
+Files on IPFS are only available while someone still pins them. The gateway the web app uses can be changed on the settings page (default `https://ipfs.io/ipfs/`)
+Example metadata:
 ```json
 { "name": "Siam Cat #1", "description": "…", "image": "ipfs://bafy…/1.png", "attributes": [{ "trait_type": "Color", "value": "Gold" }] }
 ```
 
-## ความเสี่ยง
+## Risks
 
-- **ยังไม่ audit และใช้บน testnet เท่านั้น** สัญญาเขียนเองโดยไม่ได้ใช้ไลบรารีที่ผ่าน audit (ไม่มีให้ใช้แบบออฟไลน์) มีชุดทดสอบ แต่ไม่ใช่สิ่งทดแทน audit
-- รายการขายแบบไม่ฝาก NFT: การขายผ่านตลาด (ซื้อ/รับข้อเสนอ) การลงขายซ้ำ และการได้โทเคนคืนผ่านตลาด ทำให้รายการเก่าหมดอายุถาวร
-  **คอลเลกชันจากโรงงาน**: การโอนนอกตลาดก็ปิดรายการเก่าถาวรเช่นกัน (ตัวนับ `transferCount`, สถานะ `Moved`) แม้โทเคนจะกลับมาหาผู้ขายภายหลัง
-  ERC-1155: ชิ้นใดก็ตามที่ออกจากผู้ขายนอกตลาด (แม้ยังเหลือพอขาย) ทำให้รายการของรหัสนั้นใช้ไม่ได้ ต้องลงขายใหม่
-  **คอลเลกชันภายนอก**: ตลาดมองไม่เห็นการโอนนอกตลาด ถ้าผู้ขาย **โอนเองนอกตลาด** แล้วได้กลับคืนมานอกตลาดเช่นกัน รายการเดิมที่ยังไม่หมดอายุจะกลับมาซื้อได้อีก **ที่ราคาเก่า โดยใครก็ได้** ถ้าการอนุญาตยังอยู่
-  (`setApprovalForAll` ครอบคลุมโทเคนที่ได้คืนด้วย) ควร `cancel` หรือ `cancelAll` ก่อนโอนออก — เว็บเตือนในหน้าชิ้นงาน แสดงรายการเก่าที่ใช้ไม่ได้พร้อมปุ่มยกเลิก
-  และใช้ `approve` รายโทเคนสำหรับ ERC-721 ภายนอก (การโอนล้างการอนุญาตนั้น); ERC-1155 ภายนอกมีแต่ `setApprovalForAll` จึงยังเสี่ยงอยู่ ถ้าเคยอนุญาตทั้งคอลเลกชันไว้แล้ว (เช่นจากเว็บอื่น) การ approve รายโทเคนก็ไม่ช่วย
-- governance เปลี่ยนค่าธรรมเนียม (ไม่เกิน 5%) และ registry ได้ทุกเมื่อ รวมถึงระหว่างที่มีรายการขายอยู่ (รายการที่ผู้ขายจะได้น้อยลงจะซื้อไม่ได้ `TermsChanged` จนลงขายใหม่); registry ที่ตอบไม่ได้ทำให้ซื้อขายหยุด (fail closed)
-- รายการขายบันทึก `minUnitProceeds` จากเงื่อนไข ณ ตอนที่ธุรกรรม `list` เข้าบล็อก (ไม่ได้รับค่าจากหน้าจอ) ถ้าค่าธรรมเนียมขึ้นระหว่างกดลงขายกับธุรกรรมเข้าบล็อก ให้ยกเลิกแล้วลงขายใหม่
-- เมทาดาตาและรูปโหลดจากเซิร์ฟเวอร์ใดก็ได้ที่ผู้สร้างเลือก จึงเปิดเผย IP ของผู้ชมให้เซิร์ฟเวอร์นั้น
-- ค่าลิขสิทธิ์ EIP-2981 ขึ้นกับสิ่งที่คอลเลกชันรายงาน (ตัดที่ 10%); คอลเลกชันภายนอกอาจทำงานต่างจากมาตรฐาน — เว็บเตือน และตลาดตรวจว่าผู้ซื้อได้ NFT จริง แต่ไม่รับประกันพฤติกรรมอื่นของสัญญาภายนอก
-- เจ้าของคอลเลกชันแก้ base URI ได้จนกว่าจะ freeze; ไฟล์บน IPFS/https อาจหายถ้าไม่มีใคร pin
-- ธงของ Neuro เป็นข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา และไม่ใช่คำแนะนำการลงทุน; การตรวจบนเชนครอบคลุมที่อยู่และโค้ด (ลายนิ้วมือ fp1 คำนวณนอกเชน เว็บจึงตรวจเพิ่มให้; สัญญาแบบ proxy ยังไม่ได้ตรวจเป้าหมายที่ proxy ชี้ไป)
-- การค้นอีเวนต์จำกัดช่วงบล็อก รายการที่เก่ามากอาจไม่แสดงจนกว่าจะกด "ค้นบล็อกเก่ากว่านี้"
+- **Not audited and for testnet use only.** The contracts are written in-house without audited libraries (none available offline). There is a test suite, but it is not a substitute for an audit
+- Listings without depositing the NFT: sales through the marketplace (buy/accept offer), listing again, and getting a token back through the marketplace permanently expire old listings
+  **Factory collections**: transfers outside the marketplace also permanently close old listings (counter `transferCount`, status `Moved`), even if the token later comes back to the seller
+  ERC-1155: any unit that leaves the seller outside the marketplace (even if enough remain to sell) makes the listing for that id invalid; you must list again
+  **External collections**: the marketplace cannot see transfers outside the marketplace. If the seller **transfers it away themselves outside the marketplace** and gets it back outside the marketplace too, an old unexpired listing becomes buyable again **at the old price, by anyone**, if the approval is still in place
+  (`setApprovalForAll` also covers tokens you get back). You should `cancel` or `cancelAll` before transferring out — the web app warns on the item page, shows invalid old listings with a cancel button,
+  and uses per-token `approve` for external ERC-721 (a transfer clears that approval); external ERC-1155 only has `setApprovalForAll`, so the risk remains. If you already approved the whole collection before (for example from another site), per-token approve does not help
+- Governance can change the fee (max 5%) and the registry at any time, including while listings are active (listings where the seller would get less cannot be bought, `TermsChanged`, until listed again); a registry that cannot answer halts trading (fail closed)
+- A listing records `minUnitProceeds` from the terms at the time the `list` transaction is included in a block (not a value from the screen). If the fee rises between pressing list and the transaction being included, cancel and list again
+- Metadata and images load from any server the creator chooses, which reveals the viewer's IP to that server
+- EIP-2981 royalties depend on what the collection reports (capped at 10%); external collections may behave differently from the standard — the web app warns, and the marketplace checks that the buyer really got the NFT, but other behaviour of external contracts is not guaranteed
+- Collection owners can change the base URI until they freeze it; files on IPFS/https may disappear if nobody pins them
+- Neuro flags are automated code analysis data, not an accusation, and not investment advice; the on-chain check covers address and code (the fp1 fingerprint is computed off-chain, so the web app checks it additionally; for proxy contracts the target the proxy points to is not checked yet)
+- Event search is limited by block range. Very old listings may not show until you press "Search older blocks"
 
-## สิ่งที่ยังไม่ได้ทำ
+## Not done yet
 
-- EIP-712 signed listings (ลงขายนอกเชนแบบเซ็น) — มีเฉพาะการลงขายบนเชน
-- การประมูล, ข้อเสนอระดับคอลเลกชัน, การชำระด้วยโทเคน ERC-20
-- การตรวจ proxy (EIP-1967/1167) ของคอลเลกชันภายนอกในเว็บ (กระเป๋า ZETAPHY ทำอยู่) และการแสดงหลักฐาน/คำชี้แจงของธงแบบละเอียด
-- ยังไม่ได้ deploy บน testnet จริงและยังไม่ได้ตั้งค่า Vercel/DNS (ทำตามขั้นตอนด้านบน)
+- EIP-712 signed listings (signed off-chain listings) — only on-chain listings
+- Auctions, collection-level offers, payment with ERC-20 tokens
+- Proxy checks (EIP-1967/1167) for external collections in the web app (the ZETAPHY wallet does this) and detailed display of flag evidence/statements
+- Not yet deployed on a real testnet, and Vercel/DNS are not set up yet (follow the steps above)

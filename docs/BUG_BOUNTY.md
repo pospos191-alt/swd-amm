@@ -1,94 +1,96 @@
-# โครงการล่าบั๊ก (Bug Bounty) ของ ZETAPHY
+**English** | [ภาษาไทย](BUG_BOUNTY.th.md)
 
-> **ตอนนี้ยังไม่มีเงินรางวัลจริง** ZETAPHY อยู่ใน testnet เหรียญไม่มีมูลค่า และยังไม่มีกองเงินรางวัล
-> - **ช่วง testnet:** รางวัลเป็นการ **ให้เครดิต** เท่านั้น (ชื่อใน Hall of Fame ด้านล่าง, ขอบคุณในบันทึกการแก้ไขและรายงาน) ไม่มีเงิน ไม่มีโทเคน
-> - **ก่อน mainnet:** ต้องโอนเงินรางวัลจริงเข้ากองแยก (กองทุนชุมชน ถือโดย multisig) ด้วยการโหวตของ governance **ก่อน** เปิดรับเงินจริง และประกาศยอดในไฟล์นี้
->   จนกว่าจะประกาศ ตัวเลขในตารางเป็นเพียง "เป้าหมาย" ไม่ใช่คำสัญญา
-> - สะพาน lock/mint (`BridgeAirlock`) **ปิดอยู่** และจะเปิดหลังมีโครงการนี้แบบมีเงินจริงแล้วเท่านั้น (ดู `zetaphy-network/README.md` ขั้น 3)
+# ZETAPHY Bug Bounty program
+
+> **There is no real reward money yet.** ZETAPHY is on a testnet, its coins have no value, and there is no reward pool yet
+> - **During the testnet:** rewards are **credit** only (a name in the Hall of Fame below, thanks in fix notes and reports); no money, no tokens
+> - **Before mainnet:** real reward money must be transferred into a separate pool (the community fund, held by a multisig) by a governance vote **before** real money is accepted, and the amount announced in this file
+>   Until it is announced, the figures in the table are only "targets", not promises
+> - The lock/mint bridge (`BridgeAirlock`) is **closed** and will open only after this program has real money (see `zetaphy-network/README.md` stage 3)
 
 English summary at the end.
 
-## ขอบเขต (in scope)
+## Scope (in scope)
 
-| ส่วน | อยู่ที่ |
+| Component | Located in |
 |---|---|
-| patch ของเชน (Cosmos EVM: ML-DSA, `MsgEVMCall`, ล็อกควอนตัม, เผาค่าธรรมเนียม, เลขสุ่ม, `x/ratelimit`, preinstalls) | `zetaphy-chain/` |
-| สะพาน: `BridgeGuard`, `BridgedToken`, `BridgeAirlock` (รวม marker), `NeuroLane`, `HyperlaneLane`, `HyperlaneLockBox`, `LockBox`, `zetaphy bridge watch` / `open` / `monitor` | `zetaphy-network/contracts/`, `zetaphy-network/src/` |
-| สัญญา Neuro: `NeuroJobs`, `NeuroJobsChallenges`, `NeuroControl`, `ThreatRegistry`, `ThreatReports`, `NeuroIdentity`, `NeuroValidation`, `ComputeMarket`, `RewardVault`, `StableGateway`, `QuantumWallet`, `SimpleMultisig` | `zetaphy-network/contracts/` |
-| การปกครองและราคา: `ZetaphyTimelock` (OpenZeppelin `TimelockController` 5.4.0 ที่ pin ไว้ใน `vendor/`, รวมการส่งต่อสิทธิ์ของ launch tool), `ZetaphyOracle`, `TwapRecorder`, `ZetaphyPythRelay`, ปุ่มฉุกเฉินของ guardian, `zetaphy timelock` / `oracle` | `zetaphy-network/contracts/`, `zetaphy-network/vendor/`, `zetaphy-network/src/`, `zetaphy-launch/` |
+| The chain patch (Cosmos EVM: ML-DSA, `MsgEVMCall`, quantum lock, fee burning, randomness, `x/ratelimit`, preinstalls) | `zetaphy-chain/` |
+| Bridge: `BridgeGuard`, `BridgedToken`, `BridgeAirlock` (including markers), `NeuroLane`, `HyperlaneLane`, `HyperlaneLockBox`, `LockBox`, `zetaphy bridge watch` / `open` / `monitor` | `zetaphy-network/contracts/`, `zetaphy-network/src/` |
+| Neuro contracts: `NeuroJobs`, `NeuroJobsChallenges`, `NeuroControl`, `ThreatRegistry`, `ThreatReports`, `NeuroIdentity`, `NeuroValidation`, `ComputeMarket`, `RewardVault`, `StableGateway`, `QuantumWallet`, `SimpleMultisig` | `zetaphy-network/contracts/` |
+| Governance and prices: `ZetaphyTimelock` (OpenZeppelin `TimelockController` 5.4.0 pinned in `vendor/`, including the launch tool's handover of rights), `ZetaphyOracle`, `TwapRecorder`, `ZetaphyPythRelay`, the guardian's emergency switches, `zetaphy timelock` / `oracle` | `zetaphy-network/contracts/`, `zetaphy-network/vendor/`, `zetaphy-network/src/`, `zetaphy-launch/` |
 | DEX (factory, router, pair) | `zetaphy-dex/` |
 | NFT (factory, marketplace) | `zetaphy-nft/` |
-| กระเป๋าเว็บ (รวมบัญชี PQ) | `zetaphy-wallet/` |
+| Web wallet (including PQ accounts) | `zetaphy-wallet/` |
 | MetaMask Snap | `zetaphy-snap/` |
 
-**นอกขอบเขต:** บริการของบุคคลที่สาม (Oracle Cloud, Vercel, GitHub, MetaMask, Hyperlane, Noble) เว้นแต่ปัญหาอยู่ที่วิธีที่เราใช้มัน ·
-DoS ด้วยการยิงคำขอจำนวนมาก (spam/flood) · social engineering หรือ phishing ต่อทีมและผู้ใช้ · ช่องโหว่ที่ต้องได้ private key หรืออุปกรณ์ของเหยื่อก่อน ·
-รายงานจากเครื่องมือสแกนอัตโนมัติที่ไม่มีวิธีทำซ้ำ · ปัญหาที่บันทึกไว้แล้วว่า "ยอมรับความเสี่ยง" ใน `SECURITY.md` หรือ README ของแต่ละแพ็กเกจ ·
-การติดธงของ Neuro ที่ผิด (เป็นเรื่องอุทธรณ์ `zetaphy threat appeal` ไม่ใช่ช่องโหว่) เว้นแต่มีวิธีบังคับให้ติดหรือปลดธงเกินสิทธิ์
+**Out of scope:** third-party services (Oracle Cloud, Vercel, GitHub, MetaMask, Hyperlane, Noble) unless the problem is in how we use them ·
+DoS by sending large numbers of requests (spam/flood) · social engineering or phishing against the team and users · vulnerabilities that require the victim's private key or device first ·
+reports from automated scanning tools without a way to reproduce · issues already recorded as "accepted risk" in `SECURITY.md` or a package's README ·
+a wrong Neuro flag (that is a matter for an appeal, `zetaphy threat appeal`, not a vulnerability) unless there is a way to force a flag to be set or cleared beyond one's rights
 
-## ระดับความรุนแรงและรางวัล
+## Severity levels and rewards
 
-ใช้แนวทาง Immunefi Vulnerability Severity Classification System v2.3 เป็นหลัก ตัดสินโดยผลกระทบจริงที่ทำซ้ำได้
+The Immunefi Vulnerability Severity Classification System v2.3 is used as the main guideline, judged by real, reproducible impact
 
-| ระดับ | ตัวอย่าง | เป้าหมายรางวัลหลัง mainnet (เทียบ USD) | ช่วง testnet |
+| Level | Examples | Target reward after mainnet (USD equivalent) | During the testnet |
 |---|---|---|---|
-| วิกฤต (Critical) | ผลิตเหรียญบนสะพานโดยไม่มีการล็อกจริง · ขโมยหรือแช่แข็งเงินผู้ใช้ถาวร · ปลอมลายเซ็น ML-DSA / ยึดบัญชีที่ล็อกควอนตัม · ทำให้เชนแยกหรือหยุดถาวร | 10% ของเงินที่เสี่ยง สูงสุด 50,000 (ขั้นต่ำ 10,000) | เครดิต + Hall of Fame |
-| สูง (High) | ข้ามเพดานต่อวันหรือ pause ของ `BridgeGuard` · คนรันร่างส่วนน้อยยึดผลตรวจ Neuro · แช่แข็งเงินชั่วคราว · ข้ามสิทธิ์ governance | 5,000 – 10,000 | เครดิต |
-| กลาง (Medium) | ทำให้สัญญาใช้งานไม่ได้ (griefing) โดยไม่เสียเงิน · ขโมยค่าธรรมเนียม/รางวัลเล็กน้อย · ข้ามการตรวจ ThreatRegistry ของ DEX/NFT | 1,000 – 5,000 | เครดิต |
-| ต่ำ (Low) | ฟังก์ชันไม่ทำตามที่บอกโดยไม่เสียเงิน · กระเป๋า/Snap แสดงข้อมูลผิดที่ทำให้ผู้ใช้เข้าใจผิดได้ | 100 – 1,000 | เครดิต |
+| Critical | Minting tokens on the bridge without a real lock · stealing or permanently freezing user funds · forging ML-DSA signatures / taking over a quantum-locked account · permanently splitting or halting the chain | 10% of the funds at risk, up to 50,000 (minimum 10,000) | Credit + Hall of Fame |
+| High | Bypassing `BridgeGuard`'s daily cap or pause · a minority of Neuro runners taking over Neuro's results · temporarily freezing funds · bypassing governance rights | 5,000 – 10,000 | Credit |
+| Medium | Making a contract unusable (griefing) without losing money · stealing small amounts of fees/rewards · bypassing the DEX/NFT ThreatRegistry check | 1,000 – 5,000 | Credit |
+| Low | A function not doing what it says without loss of money · the wallet/Snap showing wrong information that could mislead users | 100 – 1,000 | Credit |
 
-- จ่ายจาก **กองทุนชุมชน** เมื่อ governance โหวตอนุมัติ (proposal ต่อรายงาน) ทีมเสนอระดับและยอด ชุมชนโหวต
-- จ่ายเป็น USDC หรือ ZETAPHY ตามที่โหวต ไม่เกินยอดที่ประกาศว่ามีในกอง
-- รายงานซ้ำ: รางวัลให้คนแรกที่ส่งรายงานครบถ้วน
-- ปัญหาเดียวที่ต้นเหตุเดียวกันนับเป็นรายงานเดียว
-- ผู้ที่ทำงานให้โครงการ (ได้ค่าจ้าง) หรือเป็นผู้ตรวจ audit ที่จ้างอยู่ ไม่รับเงินรางวัล (ได้เครดิต)
-- ต้องทำตามกฎหมายของประเทศผู้รายงาน (รวมถึงภาษีและการคว่ำบาตร) ทีมอาจขอยืนยันตัวตน (KYC) ก่อนจ่ายเงินจริง
+- Paid from the **community fund** when governance votes to approve it (a proposal per report); the team proposes the level and amount, the community votes
+- Paid in USDC or ZETAPHY as voted, not exceeding the amount announced as available in the pool
+- Duplicate reports: the reward goes to the first person to send a complete report
+- A single problem with the same root cause counts as one report
+- People working for the project (paid) or auditors currently engaged do not receive reward money (they get credit)
+- Must comply with the laws of the reporter's country (including tax and sanctions); the team may ask for identity verification (KYC) before paying real money
 
-## กติกา
+## Rules
 
-1. ทดสอบบน **devnet ของคุณเอง** (`zetaphy-network/scripts/devnet.sh`, `npm run test:devnet*`) หรือ testnet สาธารณะเท่านั้น ห้ามแตะ mainnet ของเชนอื่นหรือเงินของคนอื่น
-2. บน testnet สาธารณะ: ใช้บัญชีของคุณเอง ห้ามขโมย/แช่แข็งเหรียญทดลองของผู้อื่นเกินที่จำเป็นเพื่อพิสูจน์ ห้ามทำให้เชนหยุด (แจ้งเราก่อน เราช่วยตั้งเชนทดสอบให้)
-3. ห้ามเปิดเผยต่อสาธารณะก่อนแก้เสร็จ (ดูกำหนดเวลาด้านล่าง)
-4. ห้าม DoS, spam, social engineering, เข้าถึงข้อมูลส่วนบุคคล
-5. แนบวิธีทำซ้ำ: commit ที่ทดสอบ, ขั้นตอน, สคริปต์หรือเทสต์ (ดีที่สุดคือเทสต์ `node --test` ที่ล้มก่อนแก้) และผลกระทบที่คาดไว้
-6. หนึ่งรายงานต่อหนึ่งปัญหา
+1. Test only on **your own devnet** (`zetaphy-network/scripts/devnet.sh`, `npm run test:devnet*`) or the public testnet. Do not touch other chains' mainnets or other people's funds
+2. On the public testnet: use your own accounts; do not steal/freeze other people's test coins beyond what is needed for proof; do not halt the chain (tell us first; we will help set up a test chain for you)
+3. Do not disclose publicly before the fix is finished (see the timeline below)
+4. No DoS, spam, social engineering, or accessing personal data
+5. Include how to reproduce: the commit tested, the steps, a script or test (best is a `node --test` test that fails before the fix), and the expected impact
+6. One report per problem
 
 ### Safe harbor
 
-ถ้าคุณทำตามกติกาข้างบนโดยสุจริต:
-- เราถือว่าการวิจัยของคุณได้รับอนุญาต จะไม่ดำเนินคดีหรือร้องเรียนต่อเจ้าหน้าที่ และจะไม่ขอให้ผู้ให้บริการระงับบัญชีของคุณ
-- ถ้าบุคคลที่สามดำเนินการกับคุณเพราะการวิจัยที่ทำตามกติกานี้ เราจะแจ้งให้เขารู้ว่าเราอนุญาต
-- ถ้าไม่แน่ใจว่าการทดสอบใดอยู่ในกติกาหรือไม่ ถามเราก่อน (ช่องทางส่วนตัวด้านล่าง)
+If you follow the rules above in good faith:
+- We consider your research authorized, will not take legal action or complain to the authorities, and will not ask service providers to suspend your accounts
+- If a third party takes action against you because of research done under these rules, we will let them know that we authorized it
+- If you are not sure whether a test is within the rules, ask us first (private channels below)
 
-safe harbor นี้ใช้กับการกระทำของ **ผู้ดูแลโครงการ** เท่านั้น ไม่ผูกมัดบุคคลที่สาม และไม่ใช่คำแนะนำทางกฎหมาย (ดู `docs/LEGAL.md`)
+This safe harbor applies only to the actions of the **project maintainers**; it does not bind third parties and is not legal advice (see `docs/LEGAL.md`)
 
-## รายงานแบบส่วนตัว
+## Reporting privately
 
-**อย่าเปิด issue สาธารณะสำหรับช่องโหว่**
+**Do not open a public issue for a vulnerability**
 
-1. **GitHub Private vulnerability reporting (ทางหลัก):** หน้า repo → แท็บ **Security** → **Report a vulnerability**
-   - เจ้าของ repo ต้องเปิดก่อน: **Settings → Code security** (หรือ **Security**) → **Private vulnerability reporting** → **Enable**
-   - รายงานเห็นเฉพาะผู้ดูแล repo; คุยต่อและออก advisory / CVE ได้ในที่เดียว
-2. **อีเมล (สำรอง):** `security@<โดเมนของโครงการ>` — *ยังไม่มี เจ้าของโครงการต้องสร้างและใส่แทนข้อความนี้ (เช่นเดียวกับข้อ 11 ใน `docs/LAUNCH.md`)*
-   ถ้าส่งไฟล์สำคัญ ขอ PGP key ก่อน
+1. **GitHub Private vulnerability reporting (main channel):** repo page → **Security** tab → **Report a vulnerability**
+   - The repo owner must enable it first: **Settings → Code security** (or **Security**) → **Private vulnerability reporting** → **Enable**
+   - Reports are visible only to the repo maintainers; follow-up discussion and issuing an advisory / CVE happen in one place
+2. **Email (fallback):** `security@<project domain>` — *does not exist yet; the project owner must create it and put it in place of this text (like step 11 in `docs/LAUNCH.md`)*
+   If you send sensitive files, ask for a PGP key first
 
-ใส่ในรายงาน: ส่วนที่ได้รับผลกระทบ, commit, ระดับที่คุณประเมิน, วิธีทำซ้ำ, ผลกระทบ, ข้อเสนอการแก้ (ถ้ามี), ชื่อที่ต้องการให้ใส่ใน Hall of Fame (หรือไม่ระบุชื่อ)
+Include in the report: the affected component, the commit, the level you assess, how to reproduce, the impact, a proposed fix (if any), the name you want in the Hall of Fame (or anonymous)
 
-## กำหนดเวลา
+## Timeline
 
-| เมื่อ | อะไร |
+| When | What |
 |---|---|
-| ภายใน 3 วันทำการ | ตอบรับว่าได้รับรายงาน |
-| ภายใน 10 วันทำการ | ยืนยันว่าทำซ้ำได้ และประเมินระดับเบื้องต้น |
-| ระหว่างแก้ | ถ้าเป็นสะพานหรือเงินผู้ใช้: guardian กด pause (`zetaphy bridge pause`) / ปิด route ก่อน แล้วค่อยแก้ |
-| แก้เสร็จ | วิกฤต/สูง: เป้าหมาย 30 วัน · กลาง/ต่ำ: 90 วัน |
-| เปิดเผย | หลังแก้และ deploy แล้ว หรือ 90 วันหลังรายงาน (อย่างใดถึงก่อน) ตกลงวันกับผู้รายงาน ออก GitHub Security Advisory ให้เครดิตผู้รายงาน |
+| Within 3 business days | Acknowledge receipt of the report |
+| Within 10 business days | Confirm it can be reproduced, and give an initial assessment of the level |
+| During the fix | If it involves the bridge or user funds: the guardian presses pause (`zetaphy bridge pause`) / closes the route first, then fixes |
+| Fix finished | Critical/High: target 30 days · Medium/Low: 90 days |
+| Disclosure | After the fix is deployed, or 90 days after the report (whichever comes first); the date is agreed with the reporter; a GitHub Security Advisory is issued crediting the reporter |
 
-ถ้าเราไม่ตอบตามเวลา ผู้รายงานมีสิทธิ์เปิดเผยหลัง 90 วัน โดยแจ้งเราก่อน 7 วัน
+If we do not respond on time, the reporter has the right to disclose after 90 days, giving us 7 days' notice
 
 ## Hall of Fame
 
-(ยังไม่มี)
+(none yet)
 
 ---
 

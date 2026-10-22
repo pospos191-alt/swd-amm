@@ -1,348 +1,350 @@
-# วันเปิด ZETAPHY testnet: เช็กลิสต์ของเจ้าของ
+**English** | [ภาษาไทย](LAUNCH.th.md)
 
-ไล่ทำจากบนลงล่าง จากศูนย์จนถึง testnet ที่ใช้งานได้จริง
-- **ทุกขั้นทำบนหน้าเว็บ** (Oracle, GitHub, Vercel, MetaMask, ผู้ให้บริการ DNS) ไม่ต้องรันอะไรบนคอมพิวเตอร์ของคุณ
-- **ฟรีทั้งหมด** (Oracle Always Free, GitHub Actions, Vercel Hobby, npm สาธารณะ, Reown ฟรี)
-- **testnet เท่านั้น** เหรียญไม่มีมูลค่า สัญญายังไม่ผ่าน audit (ข้อ 14)
-- **ห้ามส่ง private key, seed หรือรหัสผ่านใด ๆ ในแชต** รวมถึงในแชตกับ Claude: Claude ไม่ขอและไม่ต้องใช้
+# ZETAPHY testnet launch day: the owner's checklist
 
-สัญลักษณ์: 🤖 = Claude ทำต่อให้ได้ เมื่อคุณให้สิทธิ์ที่บอกไว้ หรือเมื่อเชนเปิดแล้ว
+Work from top to bottom, from zero to a testnet that actually works.
+- **Every step is done in a web page** (Oracle, GitHub, Vercel, MetaMask, your DNS provider); you do not need to run anything on your computer
+- **Everything is free** (Oracle Always Free, GitHub Actions, Vercel Hobby, public npm, free Reown)
+- **testnet only**: the coins have no value, and the contracts have not passed an audit yet (step 14)
+- **Never send a private key, seed or any password in a chat**, including in a chat with Claude: Claude does not ask for them and does not need them
 
-| ข้อ | ทำอะไร | ใครทำ |
+Symbol: 🤖 = Claude can carry this on for you once you grant the access mentioned, or once the chain is up
+
+| Step | What to do | Who does it |
 |---|---|---|
-| 1 | สร้างเครื่อง Oracle + วาง `cloud-init.sh` + เปิดพอร์ต | คุณ |
-| 2 | รอแล้วตรวจว่าเชนทำงาน | คุณ (🤖 ตรวจ RPC ให้ได้เมื่อรู้ชื่อโฮสต์) |
-| 3 | สร้างกระเป๋า deployer ใหม่แล้วโอน ZETAPHY ให้ | คุณ |
-| 4 | ใส่ key ใน GitHub secret `ZETAPHY_DEPLOYER_KEY` | คุณ |
-| 5 | รัน workflow **launch-testnet** แล้ว merge PR | คุณ หรือ 🤖 (ถ้าให้สิทธิ์ GitHub Actions) |
-| 6 | โปรเจกต์ Vercel: wallet, explorer, DEX, NFT | คุณ หรือ 🤖 (ถ้าให้สิทธิ์ Vercel ของทีม) |
-| 7 | DNS: CNAME `explorer`, `swap`, `nft`, `wallet` | คุณ (🤖 ถ้า DNS อยู่ที่ Vercel) |
-| 8 | ส่งต่อสิทธิ์ผู้ดูแลให้การโหวต (gov) | คุณ (🤖 รัน workflow ได้; โหวตต้องทำบนเครื่อง) |
-| 9 | MetaMask Snap: npm + allowlist | คุณ + 🤖 |
-| 10 | WalletConnect projectId | คุณสมัคร, 🤖 ใส่ค่า |
-| 11 | อีเมลติดต่อใน `docs/LEGAL.md` และ `legal.html` | คุณให้อีเมล, 🤖 แก้ไฟล์ |
-| 12 | ปรึกษาทนาย | คุณ |
-| 13 | PR ขึ้นรายชื่อ chainlist / Keplr | 🤖 เตรียมไฟล์, คุณเปิด PR จากบัญชีคุณ |
-| 14 | audit ก่อนมีเงินจริง | คุณ |
-| 15 | IBC + USDC จาก Noble testnet (relayer บนเครื่องโหนด) | คุณ (🤖 ตรวจผลให้ได้) |
-| 16 | สะพาน: ปิดไว้ก่อน เปิดเมื่อผ่านทุกประตู + ตัวเฝ้าดู | คุณ (🤖 ตรวจประตูให้ได้) |
+| 1 | Create the Oracle machine + paste `cloud-init.sh` + open ports | You |
+| 2 | Wait, then check that the chain is running | You (🤖 can check the RPC once it knows the host name) |
+| 3 | Create a new deployer wallet and send it ZETAPHY | You |
+| 4 | Put the key in the GitHub secret `ZETAPHY_DEPLOYER_KEY` | You |
+| 5 | Run the **launch-testnet** workflow, then merge the PR | You or 🤖 (if given GitHub Actions access) |
+| 6 | Vercel projects: wallet, explorer, DEX, NFT | You or 🤖 (if given access to the team's Vercel) |
+| 7 | DNS: CNAME `explorer`, `swap`, `nft`, `wallet` | You (🤖 if the DNS is on Vercel) |
+| 8 | Hand admin rights over to the governance vote (gov) | You (🤖 can run the workflow; voting must be done on the machine) |
+| 9 | MetaMask Snap: npm + allowlist | You + 🤖 |
+| 10 | WalletConnect projectId | You sign up, 🤖 fills in the value |
+| 11 | Contact email in `docs/LEGAL.md` and `legal.html` | You provide the email, 🤖 edits the files |
+| 12 | Consult a lawyer | You |
+| 13 | PRs for the chainlist / Keplr listings | 🤖 prepares the files, you open the PRs from your account |
+| 14 | audit before there is real money | You |
+| 15 | IBC + USDC from the Noble testnet (relayer on the node machine) | You (🤖 can check the results) |
+| 16 | Bridge: keep it closed; open it once every gate passes + the monitor | You (🤖 can check the gates) |
 
 ---
 
-## 1. สร้างเครื่อง Oracle และวาง `cloud-init.sh`
+## 1. Create the Oracle machine and paste `cloud-init.sh`
 
-> ใช้ **Google Cloud e2-micro** แทนได้: ทำตามหัวข้อ "Google Cloud e2-micro (ฟรีถาวร)" ใน [`zetaphy-chain/README.md`](../zetaphy-chain/README.md) (วาง `setup-node.sh` ทั้งไฟล์, เปิดพอร์ต 26656, ตั้ง Budget alert $1) แล้วข้ามไปข้อ 2
+> You can use **Google Cloud e2-micro** instead: follow the section "Google Cloud e2-micro (free forever)" in [`zetaphy-chain/README.md`](../zetaphy-chain/README.md) (paste the whole of `setup-node.sh`, open port 26656, set a $1 Budget alert), then skip to step 2
 
-ทำตาม [`zetaphy-chain/README.md`](../zetaphy-chain/README.md) หัวข้อ "ตั้งเครื่องบน Oracle Cloud" สรุป:
-1. **cloud.oracle.com** → สมัคร Free Tier → Home Region **Singapore**
-2. เมนู ☰ → **Compute → Instances → Create instance**
+Follow [`zetaphy-chain/README.md`](../zetaphy-chain/README.md), section "Set up the machine on Oracle Cloud". In short:
+1. **cloud.oracle.com** → sign up for the Free Tier → Home Region **Singapore**
+2. Menu ☰ → **Compute → Instances → Create instance**
    - Name `zetaphy-node-0`, Image **Canonical Ubuntu 24.04**, Shape **Ampere VM.Standard.A1.Flex** (2 OCPU / 12 GB)
-   - Networking: ค่าเริ่มต้น มี **public IPv4**
-   - SSH keys: **Generate a key pair for me** → **Save private key** (เก็บไว้ ใช้ในข้อ 8)
-   - **Show advanced options → Management → Paste cloud-init script**: เปิด [`zetaphy-chain/cloud-init.sh`](../zetaphy-chain/cloud-init.sh) บน GitHub → **Raw** → คัดลอกทั้งหมด → วาง
-   - **แนะนำ:** แก้บรรทัด `OWNER_EVM_ADDRESS=""` เป็นที่อยู่ MetaMask **หลัก** ของคุณ (ที่อยู่ 0x… เท่านั้น ห้ามใส่ key) เพื่อรับ 1,000,000 ZETAPHY ทดลอง ใช้โอนให้ deployer ในข้อ 3
-3. **Create** แล้วรอ (A1 ประมาณ 15–25 นาที)
-4. **เปิดพอร์ต:** หน้าเครื่อง → **Primary VNIC → Subnet** → **Security Lists** → *Default Security List* → **Add Ingress Rules**
-   (Source CIDR `0.0.0.0/0`, IP Protocol **TCP**) ทีละพอร์ต: **80**, **443**, **8545**, **26656**
-   - 80/443: https ฟรีจาก Let's Encrypt ที่ `https://<IP เปลี่ยนจุดเป็นขีด>.sslip.io` (เว็บทุกตัวต้องใช้ https)
-   - 8545: MetaMask แบบ http, 26656: เครื่องอื่นมาต่อเชน
+   - Networking: the defaults, with a **public IPv4**
+   - SSH keys: **Generate a key pair for me** → **Save private key** (keep it; it is used in step 8)
+   - **Show advanced options → Management → Paste cloud-init script**: open [`zetaphy-chain/cloud-init.sh`](../zetaphy-chain/cloud-init.sh) on GitHub → **Raw** → copy everything → paste
+   - **Recommended:** change the line `OWNER_EVM_ADDRESS=""` to your **main** MetaMask address (a 0x… address only; never put a key there) to receive 1,000,000 test ZETAPHY, used to fund the deployer in step 3
+3. **Create**, then wait (A1 takes about 15–25 minutes)
+4. **Open the ports:** machine page → **Primary VNIC → Subnet** → **Security Lists** → *Default Security List* → **Add Ingress Rules**
+   (Source CIDR `0.0.0.0/0`, IP Protocol **TCP**) one port at a time: **80**, **443**, **8545**, **26656**
+   - 80/443: free https from Let's Encrypt at `https://<IP with dots changed to dashes>.sslip.io` (every web app needs https)
+   - 8545: MetaMask over http, 26656: other machines connecting to the chain
 
-## 2. รอแล้วตรวจว่าเชนทำงาน
+## 2. Wait, then check that the chain is running
 
-1. หน้าเครื่องใน Oracle: จด **Public IP address** เช่น `1.2.3.4` → ชื่อโฮสต์คือ `1-2-3-4.sslip.io`
-2. เปิดในเบราว์เซอร์ (มือถือก็ได้): `https://1-2-3-4.sslip.io/zetaphy/evm-chain.json`
-   - ขึ้น JSON ที่มี `"chainId": "0x12e4e"` และ `"rpcUrls": ["https://1-2-3-4.sslip.io"]` = เชนและ https พร้อมแล้ว
-   - ค่าเดียวกับใน `NODE-INFO.txt` บนเครื่อง (บรรทัด **HTTPS RPC (wallet)**) ดูไฟล์นั้นได้ที่หน้าเครื่อง → **Resources → Console connection** หรือ Cloud Shell (ข้อ 8)
-   - ถ้ายังไม่ขึ้น: รอต่อ หรือดู log ตาม `zetaphy-chain/README.md` ข้อ 4
-3. เพิ่มเครือข่ายใน MetaMask: RPC `https://1-2-3-4.sslip.io`, Chain ID `77390`, สัญลักษณ์ `ZTPHY`
-   ถ้าใส่ `OWNER_EVM_ADDRESS` ไว้ จะเห็น 1,000,000 ZTPHY
+1. On the machine page in Oracle: note the **Public IP address**, e.g. `1.2.3.4` → the host name is `1-2-3-4.sslip.io`
+2. Open in a browser (a phone works too): `https://1-2-3-4.sslip.io/zetaphy/evm-chain.json`
+   - If JSON appears with `"chainId": "0x12e4e"` and `"rpcUrls": ["https://1-2-3-4.sslip.io"]` = the chain and https are ready
+   - The same value as in `NODE-INFO.txt` on the machine (the **HTTPS RPC (wallet)** line); you can view that file from the machine page → **Resources → Console connection** or Cloud Shell (step 8)
+   - If nothing appears yet: keep waiting, or look at the logs as in `zetaphy-chain/README.md` step 4
+3. Add the network in MetaMask: RPC `https://1-2-3-4.sslip.io`, Chain ID `77390`, symbol `ZTPHY`
+   If you set `OWNER_EVM_ADDRESS`, you will see 1,000,000 ZTPHY
 
-**URL ที่ใช้ทุกข้อต่อจากนี้** = `https://1-2-3-4.sslip.io` (แทนด้วยของจริง) เรียกว่า **RPC**
+**The URL used in every step from here on** = `https://1-2-3-4.sslip.io` (replace with the real one), called the **RPC**
 
-🤖 บอกชื่อโฮสต์ให้ Claude แล้ว Claude ตรวจ `eth_chainId`, ความสูงบล็อก และ https ให้ได้
+🤖 Tell Claude the host name and Claude can check `eth_chainId`, the block height and https for you
 
-## 3. สร้างกระเป๋า deployer ใหม่ แล้วโอน ZETAPHY ให้
+## 3. Create a new deployer wallet, then send it ZETAPHY
 
-deployer คือบัญชีที่ workflow ใช้ deploy สัญญา ใช้ **บัญชีใหม่แยกต่างหาก** ไม่ใช่บัญชีหลัก
+The deployer is the account the workflow uses to deploy the contracts. Use a **new, separate account**, not your main account
 
-**สร้าง (วิธีที่ง่ายและปลอดภัยที่สุดแบบฟรี: MetaMask):**
-1. MetaMask → แตะชื่อบัญชีด้านบน → **Add account or hardware wallet → Add a new account** → ตั้งชื่อ `ZETAPHY deployer`
-2. คัดลอก **ที่อยู่** (0x…) ของบัญชีนี้ไว้ (ที่อยู่เปิดเผยได้ ส่งให้ Claude ได้)
+**Create it (the simplest and safest free way: MetaMask):**
+1. MetaMask → tap the account name at the top → **Add account or hardware wallet → Add a new account** → name it `ZETAPHY deployer`
+2. Copy this account's **address** (0x…) (an address can be made public; you can send it to Claude)
 
-**โอนเงินให้:** ใน MetaMask สลับไปบัญชีหลัก (ที่ได้ 1,000,000 ZTPHY) บนเครือข่าย ZETAPHY Testnet → **Send** → วางที่อยู่ deployer → **1,000 ZTPHY** → Confirm
-- ใช้จริงประมาณ 300 ZETAPHY: 100 เป็นทุนสำรองของ StableGateway, 200 เป็นสภาพคล่องเริ่มต้นของ 2 พูลทดลองใน DEX ค่าแก๊สทั้งหมดไม่ถึง 1 ZETAPHY
-  (ข้อ 5 รันแบบ dry run ก่อน จะบอกยอดที่ต้องใช้และยอดที่มีจริง)
-- faucet ของเชน (`zetaphy_faucet`) ให้แค่ 10 ZETAPHY ต่อวัน ไม่พอสำหรับ deploy
+**Send it funds:** in MetaMask switch to your main account (the one that received 1,000,000 ZTPHY) on the ZETAPHY Testnet network → **Send** → paste the deployer address → **1,000 ZTPHY** → Confirm
+- About 300 ZETAPHY are actually used: 100 as the StableGateway reserve, 200 as starting liquidity for the 2 test pools in the DEX. All gas fees together come to less than 1 ZETAPHY
+  (step 5 does a dry run first and reports the amount needed and the amount actually held)
+- The chain's faucet (`zetaphy_faucet`) gives only 10 ZETAPHY per day, which is not enough to deploy
 
-**ถ้าไม่ได้ใส่ `OWNER_EVM_ADDRESS`:** เหรียญอยู่ในบัญชี genesis `liquidity` บนเครื่อง เข้าเครื่องตามข้อ 8 ("เข้าเครื่อง") แล้วพิมพ์ในหน้าต่างนั้น:
+**If you did not set `OWNER_EVM_ADDRESS`:** the coins are in the genesis account `liquidity` on the machine. Get into the machine as in step 8 ("getting into the machine"), then type in that window:
 ```bash
 sudo -iu zetaphy
-zetaphyd debug addr 0xที่อยู่deployer          # ได้ "Bech32 Acc: zetaphy1…"
+zetaphyd debug addr 0x<deployer address>          # gives "Bech32 Acc: zetaphy1…"
 zetaphyd tx bank send liquidity zetaphy1… 1000000000000000000000azetaphy --keyring-backend test \
   --keyring-dir ~/.zetaphy-genesis-keys --chain-id zetaphy_77390-1 --gas auto --gas-adjustment 1.5 --gas-prices 1000000000azetaphy -y
 ```
-(1,000 ZETAPHY = `1000` ตามด้วยเลขศูนย์ 18 ตัว หน่วย `azetaphy`) ไม่มี key ออกจากเครื่อง
+(1,000 ZETAPHY = `1000` followed by 18 zeros, in units of `azetaphy`) No key leaves the machine
 
-## 4. ใส่ key ใน GitHub secret `ZETAPHY_DEPLOYER_KEY`
+## 4. Put the key in the GitHub secret `ZETAPHY_DEPLOYER_KEY`
 
-1. MetaMask → บัญชี `ZETAPHY deployer` → ⋮ → **Account details → Show private key** → ใส่รหัสผ่าน MetaMask → กดค้างเพื่อแสดง → **Copy**
+1. MetaMask → the `ZETAPHY deployer` account → ⋮ → **Account details → Show private key** → enter your MetaMask password → press and hold to reveal → **Copy**
 2. GitHub → repo `swd-amm` → **Settings → Secrets and variables → Actions → New repository secret**
    - Name: `ZETAPHY_DEPLOYER_KEY`
-   - Secret: วาง key (มีหรือไม่มี `0x` ก็ได้) → **Add secret**
-3. ล้างคลิปบอร์ด (คัดลอกข้อความอื่นทับ)
+   - Secret: paste the key (with or without `0x`) → **Add secret**
+3. Clear the clipboard (copy some other text over it)
 
-**ทำไมใช้วิธีนี้ และข้อแลกเปลี่ยนตามจริง**
-- **ดี:** ฟรี ไม่ต้องติดตั้งอะไร key ไม่ผ่านแชตหรือ log; GitHub เก็บ secret แบบเข้ารหัส อ่านย้อนไม่ได้ (เขียนทับได้อย่างเดียว) และปิดบังค่าใน log อัตโนมัติ
-- **ข้อเสีย:** key ปรากฏบนจอคุณหนึ่งครั้งและผ่านคลิปบอร์ด; MetaMask ของคุณยังถือ key นี้อยู่ด้วย
-  (รับได้สำหรับ testnet: บัญชีนี้มีแค่เหรียญทดลอง และหลังข้อ 8 ไม่มีสิทธิ์ผู้ดูแลอะไรเหลือ)
-- **ทางเลือกที่ไม่แนะนำ:**
-  - ให้ workflow สร้าง key แล้วเขียนเป็น secret เอง: `GITHUB_TOKEN` เขียน secret ไม่ได้ ต้องสร้าง Personal Access Token สิทธิ์ "Secrets: write"
-    แล้วเก็บเป็น secret อีกตัว ซึ่งเป็นความลับที่มีอำนาจมากกว่า key ทดลองนี้เสียอีก
-  - ให้ workflow สร้าง key แล้วเก็บเป็น artifact เข้ารหัส: คุณต้องดาวน์โหลดและถอดรหัสบนเครื่องตัวเองก่อนใส่ secret ซึ่งผิดเงื่อนไข "ไม่รันอะไรบนเครื่อง"
-    และ artifact ใน repo สาธารณะใครก็ดาวน์โหลดได้
-- เปลี่ยน key ภายหลัง: สร้างบัญชีใหม่ตามข้อ 3 แล้ว **Update** secret เดิม (แต่ state ของ launch ผูกกับ deployer เดิม ดูข้อ 5 "รันซ้ำ")
+**Why this method, and the honest trade-offs**
+- **Good:** free, nothing to install, the key does not pass through a chat or a log; GitHub stores secrets encrypted, they cannot be read back (only overwritten), and their values are masked in logs automatically
+- **Downsides:** the key appears on your screen once and passes through the clipboard; your MetaMask also still holds this key
+  (acceptable for a testnet: this account holds only test coins, and after step 8 it has no admin rights left)
+- **Alternatives that are not recommended:**
+  - Have the workflow create the key and write it as a secret itself: `GITHUB_TOKEN` cannot write secrets, so you would need to create a Personal Access Token with "Secrets: write"
+    and store it as another secret, which is a secret with more power than this test key
+  - Have the workflow create the key and store it as an encrypted artifact: you would have to download and decrypt it on your own machine before putting it in a secret, which breaks the "run nothing on your machine" condition,
+    and artifacts in a public repo can be downloaded by anyone
+- Changing the key later: create a new account as in step 3, then **Update** the existing secret (but the launch state is tied to the old deployer; see step 5 "running again")
 
-## 5. รัน workflow **launch-testnet** แล้ว merge PR
+## 5. Run the **launch-testnet** workflow, then merge the PR
 
-ครั้งแรกเปิดสิทธิ์ให้ workflow เปิด PR ได้: **Settings → Actions → General → Workflow permissions** → ติ๊ก
-**Allow GitHub Actions to create and approve pull requests** → Save (ถ้าไม่เปิด workflow ยัง push branch ได้ และบอกลิงก์ให้เปิด PR เอง)
+The first time, allow workflows to open PRs: **Settings → Actions → General → Workflow permissions** → tick
+**Allow GitHub Actions to create and approve pull requests** → Save (if you do not enable it, the workflow can still push a branch and gives you a link to open the PR yourself)
 
-**รอบที่ 1 (dry run: ตรวจอย่างเดียว ไม่ส่งธุรกรรม)**
+**Run 1 (dry run: checks only, sends no transactions)**
 1. **Actions → launch-testnet → Run workflow**
-2. `rpc` = RPC จากข้อ 2 (เช่น `https://1-2-3-4.sslip.io`), `dry_run` = **yes**, ที่เหลือค่าเริ่มต้น → **Run workflow**
-3. เปิด run → job **Launch** → ขั้น **Launch** ต้องเห็น:
-   - `ZETAPHY testnet (EVM chain 77390)` และ `deployer 0x…` ตรงกับที่อยู่ในข้อ 3
-   - `balance … need about …` ยอดมีพอ, และรายการ `would run:` ของทุกขั้น
+2. `rpc` = the RPC from step 2 (e.g. `https://1-2-3-4.sslip.io`), `dry_run` = **yes**, the rest at their defaults → **Run workflow**
+3. Open the run → job **Launch** → step **Launch** must show:
+   - `ZETAPHY testnet (EVM chain 77390)` and `deployer 0x…` matching the address from step 3
+   - `balance … need about …` with enough balance, and the `would run:` list for every step
 
-**รอบที่ 2 (ของจริง)**
-1. Run workflow อีกครั้ง: `rpc` เดิม, `dry_run` = **no**, `governance` = `deployer`, `handover` = `no`
-   - `neuro_url` = หน้าเว็บ Neuro บน Vercel ลงท้าย `/web/` (ค่าเริ่มต้น `https://swd-amm-zetaphy-neuro.vercel.app/web/` ถ้าใช้โดเมนอื่นให้แก้)
-   - `wallet_origin` = `https://wallet.sawasdeecoin.com` (โดเมนกระเป๋าในข้อ 7) ถ้ายังไม่มีเว้นว่าง
-2. ใช้เวลาไม่กี่นาที workflow:
-   - deploy: NeuroJobs + NeuroControl (โหวต skill ปัจจุบันเข้าแล้ว), ThreatRegistry, ThreatReports, NeuroIdentity + NeuroValidation,
-     RewardVault, QuantumWalletFactory, test USDC/USDT + StableGateway, ComputeMarket, DEX (factory, router, 2 เหรียญทดลองพร้อมพูล), DLMM (factory, router, preset ค่าเริ่มต้น bin step 1/10/25/100 bps; ยังไม่ผ่าน audit), NFT (factory, marketplace)
-   - ต่อสาย: DEX, DLMM และ NFT ตรวจ ThreatRegistry, ป้องกันโค้ดร่วมของคอลเลกชัน NFT ใน ThreatRegistry (ธงเดียวจะได้ไม่โดนทุกคอลเลกชัน)
-   - เขียน config: `zetaphy-dex/web/deployments.json` (DEX + ที่อยู่ DLMM สำหรับแท็บ DLMM), `zetaphy-nft/web/deployments.json`, `zetaphy-explorer/config.json`,
-     `zetaphy-wallet/index.html` (RPC และ ThreatRegistry), `zetaphy-snap/snap.config.js` แล้ว build snap ใหม่ (shasum ใน `snap.manifest.json`)
-   - บันทึกที่อยู่ทั้งหมดใน `zetaphy-launch/state/77390.json` (ที่อยู่เท่านั้น ไม่มี key) และแนบเป็น artifact ของ run
-3. **Pull requests** → เปิด PR "Testnet launch: contract addresses and web configs" → ดู diff (มีแต่ที่อยู่และ RPC) → **Merge**
-   Vercel deploy เว็บใหม่เองหลัง merge
+**Run 2 (for real)**
+1. Run the workflow again: the same `rpc`, `dry_run` = **no**, `governance` = `deployer`, `handover` = `no`
+   - `neuro_url` = the Neuro web page on Vercel, ending in `/web/` (default `https://swd-amm-zetaphy-neuro.vercel.app/web/`; change it if you use another domain)
+   - `wallet_origin` = `https://wallet.sawasdeecoin.com` (the wallet domain from step 7); leave it empty if you do not have it yet
+2. It takes a few minutes. The workflow:
+   - deploys: NeuroJobs + NeuroControl (current skill already voted in), ThreatRegistry, ThreatReports, NeuroIdentity + NeuroValidation,
+     RewardVault, QuantumWalletFactory, test USDC/USDT + StableGateway, ComputeMarket, DEX (factory, router, 2 test coins with pools), DLMM (factory, router, default presets bin step 1/10/25/100 bps; not yet audited), NFT (factory, marketplace)
+   - wires things up: DEX, DLMM and NFT check the ThreatRegistry; protects the NFT collections' shared code in the ThreatRegistry (so a single flag does not hit every collection)
+   - writes config: `zetaphy-dex/web/deployments.json` (DEX + DLMM addresses for the DLMM tab), `zetaphy-nft/web/deployments.json`, `zetaphy-explorer/config.json`,
+     `zetaphy-wallet/index.html` (RPC and ThreatRegistry), `zetaphy-snap/snap.config.js`, then rebuilds the snap (shasum in `snap.manifest.json`)
+   - records every address in `zetaphy-launch/state/77390.json` (addresses only, no keys) and attaches it as an artifact of the run
+3. **Pull requests** → open the PR "Testnet launch: contract addresses and web configs" → look at the diff (only addresses and the RPC) → **Merge**
+   Vercel deploys the new web apps by itself after the merge
 
-**ถ้าพังกลางทาง:** แค่กด Run workflow ซ้ำด้วยค่าเดิม ขั้นที่เสร็จแล้วถูกข้าม (state อยู่ใน branch `launch/testnet`) ไม่ deploy ซ้ำ
-PR ที่ขึ้นว่า **Partial** อย่าเพิ่ง merge
-**เชนถูกล้าง/เริ่มใหม่:** workflow จะปฏิเสธ (บล็อก 1 ไม่ตรงกับ state) ลบไฟล์ `zetaphy-launch/state/77390.json` ใน branch `launch/testnet` (หรือลบ branch นั้น) แล้วรันใหม่
-**ไม่ทำโดยค่าเริ่มต้น:** สะพาน Neuro (`zetaphy deploy-bridge`) ต้องมี LockBox บนเชนต้นทางก่อน; เมื่อมีแล้ว 🤖 รันให้ได้ด้วย `--bridge-lockbox <chainId>:0x…`
-**สะพาน lock/mint ติดตั้งแบบปิด (CLOSED) เสมอ:** ขั้น bridge ของ workflow ติดตั้งสัญญาแต่ไม่เปิด route (เพดานแข็ง 1,000 โทเคน) และจะล้มถ้าพบว่า route เปิดอยู่
-workflow นี้ **เปิดสะพานไม่ได้** ดูข้อ 16
-ส่วนการย้ายกองรางวัล 500 ล้านเข้า RewardVault ใช้ key `rewards` บนเครื่อง (`zetaphy deploy-vault --fund` ใน `zetaphy-network/README.md`)
+**If it breaks partway:** just press Run workflow again with the same values. Finished steps are skipped (the state is in the `launch/testnet` branch); nothing is deployed twice
+Do not merge a PR that says **Partial** yet
+**Chain wiped/restarted:** the workflow will refuse (block 1 does not match the state). Delete the file `zetaphy-launch/state/77390.json` in the `launch/testnet` branch (or delete that branch), then run again
+**Not done by default:** the Neuro bridge (`zetaphy deploy-bridge`) needs a LockBox on the source chain first; once there is one, 🤖 can run it for you with `--bridge-lockbox <chainId>:0x…`
+**The lock/mint bridge is always installed CLOSED:** the workflow's bridge step installs the contracts but does not open a route (hard cap of 1,000 tokens), and it fails if it finds a route open
+This workflow **cannot open the bridge**; see step 16
+Moving the 500 million reward pool into the RewardVault uses the `rewards` key on the machine (`zetaphy deploy-vault --fund` in `zetaphy-network/README.md`)
 
-🤖 ถ้าให้ Claude ใช้ GitHub Actions ของ repo นี้ได้ Claude กด Run workflow, อ่านผล และรีวิว PR ให้ได้ (secret ยังเป็นของคุณ Claude ไม่เห็นค่า)
+🤖 If you let Claude use this repo's GitHub Actions, Claude can press Run workflow, read the results and review the PR for you (the secret stays yours; Claude does not see its value)
 
-## 6. โปรเจกต์ Vercel
+## 6. Vercel projects
 
-vercel.com (Hobby ฟรี) → **Add New… → Project** → Import repo `swd-amm` → ตั้ง **Root Directory** ตามตาราง,
-Framework Preset **Other**, ไม่ต้องตั้ง Build/Output (มี `vercel.json` ในแต่ละโฟลเดอร์แล้ว) → **Deploy**
+vercel.com (Hobby, free) → **Add New… → Project** → Import repo `swd-amm` → set the **Root Directory** as in the table,
+Framework Preset **Other**, no need to set Build/Output (each folder already has a `vercel.json`) → **Deploy**
 
-| เว็บ | Root Directory | โดเมน (ข้อ 7) |
+| Web app | Root Directory | Domain (step 7) |
 |---|---|---|
-| Neuro | `zetaphy-neuro` (มีอยู่แล้ว: `swd-amm-zetaphy-neuro`) | เดิม |
-| กระเป๋า PQ | `zetaphy-wallet` | `wallet.sawasdeecoin.com` |
+| Neuro | `zetaphy-neuro` (already exists: `swd-amm-zetaphy-neuro`) | unchanged |
+| PQ wallet | `zetaphy-wallet` | `wallet.sawasdeecoin.com` |
 | Explorer | `zetaphy-explorer` | `explorer.sawasdeecoin.com` |
 | DEX | `zetaphy-dex/web` | `swap.sawasdeecoin.com` |
 | NFT | `zetaphy-nft/web` | `nft.sawasdeecoin.com` |
 
-แต่ละโปรเจกต์: **Settings → Domains → Add** → พิมพ์โดเมนตามตาราง
+For each project: **Settings → Domains → Add** → type the domain from the table
 
-🤖 ถ้าให้สิทธิ์ Vercel MCP กับทีม Vercel ของคุณ (Vercel → Integrations/consent ให้ทีม `swd-e92d`) Claude สร้างโปรเจกต์และเพิ่มโดเมนให้ได้
+🤖 If you give the Vercel MCP access to your Vercel team (Vercel → Integrations/consent for the team `swd-e92d`), Claude can create the projects and add the domains for you
 
 ## 7. DNS: CNAME
 
-ที่ผู้ให้บริการ DNS ของ `sawasdeecoin.com` เพิ่มระเบียน (ถ้าใช้ Cloudflare ตั้ง **DNS only** เมฆสีเทา):
+At the DNS provider for `sawasdeecoin.com`, add these records (if you use Cloudflare, set **DNS only**, grey cloud):
 
 | Type | Name | Value |
 |---|---|---|
 | CNAME | `explorer` | `cname.vercel-dns.com` |
 | CNAME | `swap` | `cname.vercel-dns.com` |
 | CNAME | `nft` | `cname.vercel-dns.com` |
-| CNAME | `wallet` | `cname.vercel-dns.com` (ถ้าต้องการโดเมนกระเป๋า) |
+| CNAME | `wallet` | `cname.vercel-dns.com` (if you want the wallet domain) |
 
-รอใน Vercel จนขึ้น **Valid Configuration** (Vercel ออกใบรับรอง https ให้เอง)
-ถ้าใส่ `wallet_origin` ในข้อ 5 ไม่ตรงกับโดเมนจริง รัน workflow ซ้ำด้วยค่าที่ถูก (snap จะ build ใหม่)
+Wait in Vercel until it shows **Valid Configuration** (Vercel issues the https certificate itself)
+If the `wallet_origin` you entered in step 5 does not match the real domain, run the workflow again with the correct value (the snap will be rebuilt)
 
-🤖 ถ้า DNS ของโดเมนอยู่ที่ Vercel และให้สิทธิ์แล้ว Claude เพิ่มระเบียนให้ได้
+🤖 If the domain's DNS is on Vercel and you have granted access, Claude can add the records for you
 
-## 8. ส่งต่อสิทธิ์ผู้ดูแลให้ timelock (โหวต gov หรือ multisig ตั้งเวลา แล้วรอ 48 ชั่วโมง)
+## 8. Hand admin rights over to the timelock (gov vote or multisig schedules, then a 48-hour wait)
 
-ระหว่างเปิด testnet deployer เป็นผู้ดูแลทุกสัญญาไว้ก่อน ตั้งค่าเพิ่มได้ทันทีโดยไม่ต้องรอ
-**ส่งต่อเมื่อทุกอย่างใช้งานได้แล้วเท่านั้น** เพราะหลังจากนั้นการเปลี่ยนแปลงทุกอย่างต้อง **ตั้งเวลาใน ZetaphyTimelock แล้วรอ 48 ชั่วโมง**
+While the testnet is being set up, the deployer is the admin of every contract for now, so further settings can be changed immediately without waiting
+**Hand over only once everything works**, because after that every change must be **scheduled in ZetaphyTimelock and then wait 48 hours**
 
-สิ่งที่ handover ทำ (ทั้งหมดในรอบเดียว แล้วตรวจบนเชน):
-- สร้าง **ZetaphyTimelock** (OpenZeppelin TimelockController 5.4.0) ระยะรอ 48 ชั่วโมง
-  - **proposer/canceller** = `governance` ที่เลือก: `gov` (gov module ตั้งเวลาด้วยโหวต) หรือ `0x<multisig>`
-  - **executor = ใครก็ได้** เมื่อครบเวลาแล้ว (สิ่งที่จะเรียกถูกล็อกไว้และทุกคนเห็นมา 48 ชั่วโมง) · **admin = timelock เอง** ไม่มี key ผู้ดูแลเหลือ
-- ยกสิทธิ์ผู้ดูแลทุกตัวให้ timelock: NeuroControl, ThreatRegistry (คุม ThreatReports ด้วย), RewardVault, StableGateway, NeuroIdentity, ZetaphyOracle, ZetaphyPythRelay,
-  BridgeGuard/BridgeAirlock (ถ้ามี), NFT marketplace, DEX factory และ DLMM factory (สองขั้น: timelock ตอบรับเองในรอบเดียวกัน ไม่ต้องโหวตแยกแล้ว)
-- ตั้ง **guardian** (multisig ฉุกเฉิน) บนทุกสัญญาที่มีปุ่มฉุกเฉิน: กดหยุด (Neuro, สะพาน, gateway, ราคา), ลดเพดาน, กักธง, เอา lane/marker ออก ได้ **ทันที** แต่ทำได้แค่ลดความเสี่ยง เปิดคืนต้องผ่าน timelock
-- ตรวจบนเชน: ทุกสิทธิ์เป็นของ timelock (DEX/DLMM factory: ไม่มีใครค้างรอตอบรับ `pendingGovernance`), deployer ไม่เหลือ role ใดใน timelock และไม่ใช่ guardian, ไม่มี EOA (key เดี่ยว) ถือ role ใดเลย ไม่ผ่าน = ขั้นนี้ล้ม (รันซ้ำได้)
-- ช่วงตั้งค่า timelock (ระยะรอ 0, deployer เป็น proposer) launch ตั้งเวลา operation เดียวคือชุด handover (เลขเก็บใน state: `handoverOperation`)
-  ก่อนยกสิทธิ์และก่อน deployer สละ role ตัวตรวจอ่าน log `CallScheduled` ตั้งแต่บล็อกที่สร้าง timelock: operation อื่นที่ยังรออยู่ถูก **ยกเลิก** (บันทึกใน `cancelledOperations`
-  พร้อมคำเตือนว่า key ของ deployer อาจหลุด) operation อื่นที่รันไปแล้ว = ไม่ส่งต่อให้ timelock นี้
-  ธุรกรรม Cosmos (เช่น `MsgEVMCall`) ไม่ทิ้ง log ที่โหนดค้นให้ได้ แต่ใช้ nonce ของ deployer: launch ส่งแต่ธุรกรรม EVM จึงนับ nonce ทุกตัวตั้งแต่สร้าง timelock
-  ถ้ามี nonce ที่ไม่ใช่ธุรกรรม EVM = ไม่ส่งต่อ ให้สร้าง timelock ใหม่ด้วย key ใหม่ (`--only timelock,handover --redo` หรือ `--fresh`)
-  ตรวจได้ไม่เกิน 20,000 บล็อกนับจากสร้าง timelock จึงควรรันขั้น timelock และ handover ในรอบเดียวกัน (ปกติ workflow ทำแบบนั้น)
-  - สิ่งที่ตัวตรวจมองไม่เห็น: สิทธิ์ authz ที่ deployer เคยให้บัญชีอื่น **ก่อน** สร้าง timelock (ผู้รับสิทธิ์ส่ง `MsgEVMCall` แทน deployer ได้โดยไม่ใช้ nonce ของ deployer)
-    ก่อน handover ตรวจว่าไม่มี: `zetaphyd q authz grants-by-granter <ที่อยู่ zetaphy1… ของ deployer>` ต้องว่าง; ใช้ key ของ deployer เฉพาะกับ launch เท่านั้น และหลัง handover ถือว่า key นี้เลิกใช้แล้ว
+What the handover does (all in one run, then checked on chain):
+- Creates **ZetaphyTimelock** (OpenZeppelin TimelockController 5.4.0) with a 48-hour delay
+  - **proposer/canceller** = the chosen `governance`: `gov` (the gov module schedules by vote) or `0x<multisig>`
+  - **executor = anyone** once the time is up (what will be called is locked in and visible to everyone for 48 hours) · **admin = the timelock itself**; no admin key remains
+- Transfers every admin right to the timelock: NeuroControl, ThreatRegistry (which also controls ThreatReports), RewardVault, StableGateway, NeuroIdentity, ZetaphyOracle, ZetaphyPythRelay,
+  BridgeGuard/BridgeAirlock (if present), the NFT marketplace, the DEX factory and the DLMM factory (two steps: the timelock accepts by itself in the same run, so no separate vote is needed any more)
+- Sets the **guardian** (emergency multisig) on every contract with an emergency switch: pause (Neuro, bridge, gateway, prices), lower caps, hold flags, remove a lane/marker, **immediately**, but it can only reduce risk; re-opening must go through the timelock
+- Checks on chain: every right belongs to the timelock (DEX/DLMM factory: nobody left waiting to accept `pendingGovernance`), the deployer has no role left in the timelock and is not a guardian, no EOA (single key) holds any role. Failing = this step fails (it can be run again)
+- While the timelock is being set up (delay 0, deployer as proposer), launch schedules exactly one operation, the handover batch (its id is stored in the state: `handoverOperation`)
+  Before transferring rights and before the deployer renounces its role, the checker reads the `CallScheduled` logs from the block where the timelock was created: any other operation still pending is **cancelled** (recorded in `cancelledOperations`
+  with a warning that the deployer's key may have leaked); any other operation that has already executed = no handover to this timelock
+  Cosmos transactions (e.g. `MsgEVMCall`) leave no logs the node can search, but they use the deployer's nonce: launch only sends EVM transactions, so it counts every nonce since the timelock was created
+  If there is a nonce that is not an EVM transaction = no handover; create a new timelock with a new key (`--only timelock,handover --redo` or `--fresh`)
+  It can only check up to 20,000 blocks from the timelock's creation, so the timelock and handover steps should run in the same run (the workflow normally does this)
+  - What the checker cannot see: authz grants the deployer gave to other accounts **before** the timelock was created (the grantee can send `MsgEVMCall` on behalf of the deployer without using the deployer's nonce)
+    Before the handover, check there are none: `zetaphyd q authz grants-by-granter <deployer's zetaphy1… address>` must be empty; use the deployer key only for launch, and treat the key as retired after the handover
 
-1. เตรียม multisig ฉุกเฉิน (guardian): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` หรือ Safe (ดู "multisig + hardware wallet" ใน `zetaphy-network/README.md`) แต่ละ owner ใช้ hardware wallet ของตัวเอง
-2. **Actions → launch-testnet → Run workflow**: `rpc` เดิม, `dry_run` = **no**, `governance` = **gov** (หรือ `0x<multisig>`), `guardian` = **0x<multisig ฉุกเฉิน>**, `handover` = **yes**
-   - deployer ส่งธุรกรรมเองทั้งหมด (ไม่ต้องโหวต) แล้ว merge PR (state มีที่อยู่ `timelock`)
-3. **เปลี่ยนค่าหลังจากนี้ (ทุกอย่างทำในเบราว์เซอร์):** **Actions → timelock → Run workflow**
-   - `action` = **schedule**, `rpc`, `to` = สัญญา (ที่อยู่อยู่ใน `zetaphy-launch/state/77390.json`), `sig` = ฟังก์ชัน เช่น `setMaxBodies(uint256)`, `args` = `32`
-   - ผลใน run summary: เลข operation (`0x…`), เวลาที่ทำได้ และ calldata
-     - governance เป็น **multisig**: owner เสนอ `to` = timelock และ data ที่พิมพ์ (SimpleMultisig: propose → confirm → execute, Safe: Transaction Builder) เซ็นบน hardware wallet
-     - governance เป็น **gov**: ดาวน์โหลด artifact `timelock-proposal` แล้วเสนอโหวตบนเครื่อง (ข้อ 4)
-   - ครบ 48 ชั่วโมงแล้ว: `action` = **execute**, `id` = เลข operation (ใครก็ทำได้ workflow ใช้ key ของ deployer แค่จ่ายค่าแก๊ส)
-     ถ้าตั้งเวลาด้วยโหวต gov ให้ใส่ `to`, `sig`, `args`, `salt` เหมือนตอน schedule ด้วย (การเรียกผ่านโหวตไม่ทิ้ง log ที่โหนดค้นให้ได้)
-   - `action` = **status** ดูระยะรอ ใครถือ role และสถานะของ operation (Waiting / Ready / Done) · **cancel** พิมพ์สิ่งที่ canceller ต้องส่ง
-   - ตัวเฝ้า (`bridge monitor`, workflow **bridge-monitor**) แจ้งเตือนทุกการตั้งเวลา (สัญญา ฟังก์ชัน และเวลาที่ทำได้) การเรียกจริง และการยกเลิก
-     แม้ยังไม่มีสะพาน หลัง handover ให้เปิดบรรทัด `schedule` ใน `.github/workflows/bridge-monitor.yml` (เช่นทุก 6 ชั่วโมง `'7 */6 * * *'` ฟรีเมื่อ repo เป็น public) ระยะรอ 48 ชั่วโมงจึงมีเวลาเห็นและยกเลิก
-4. **เสนอโหวต (governance = gov) บนเครื่อง:** หน้า Oracle → ไอคอน **Cloud Shell** `>_` มุมขวาบน →
-   เมนูเฟือง ⚙ ของ Cloud Shell → **Upload** → เลือกไฟล์ private key ที่ Save ไว้ในข้อ 1 แล้วพิมพ์:
+1. Prepare the emergency multisig (guardian): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` or a Safe (see "multisig + hardware wallet" in `zetaphy-network/README.md`); each owner uses their own hardware wallet
+2. **Actions → launch-testnet → Run workflow**: the same `rpc`, `dry_run` = **no**, `governance` = **gov** (or `0x<multisig>`), `guardian` = **0x<emergency multisig>**, `handover` = **yes**
+   - the deployer sends every transaction itself (no vote needed), then merge the PR (the state contains the `timelock` address)
+3. **Changing values after this (all done in the browser):** **Actions → timelock → Run workflow**
+   - `action` = **schedule**, `rpc`, `to` = the contract (addresses are in `zetaphy-launch/state/77390.json`), `sig` = the function, e.g. `setMaxBodies(uint256)`, `args` = `32`
+   - Output in the run summary: the operation id (`0x…`), the time it becomes executable, and the calldata
+     - governance is a **multisig**: an owner proposes `to` = the timelock and the printed data (SimpleMultisig: propose → confirm → execute, Safe: Transaction Builder), signing on a hardware wallet
+     - governance is **gov**: download the `timelock-proposal` artifact, then submit a governance vote proposal on the machine (step 4)
+   - Once 48 hours have passed: `action` = **execute**, `id` = the operation id (anyone can do this; the workflow uses the deployer's key only to pay gas)
+     If it was scheduled by a gov vote, also enter `to`, `sig`, `args`, `salt` as when scheduling (calls made through a vote leave no logs the node can search)
+   - `action` = **status** shows the delay, who holds each role, and the operation's status (Waiting / Ready / Done) · **cancel** prints what the canceller must send
+   - The monitor (`bridge monitor`, the **bridge-monitor** workflow) alerts on every scheduling (contract, function and the time it becomes executable), every actual execution and every cancellation,
+     even before there is a bridge. After the handover, enable the `schedule` line in `.github/workflows/bridge-monitor.yml` (e.g. every 6 hours `'7 */6 * * *'`, free when the repo is public) so the 48-hour delay leaves time to see and cancel
+4. **Submitting a vote proposal (governance = gov) on the machine:** Oracle page → the **Cloud Shell** icon `>_` at the top right →
+   Cloud Shell's gear menu ⚙ → **Upload** → choose the private key file you saved in step 1, then type:
    ```bash
    chmod 600 ssh-key-*.key && ssh -i ssh-key-*.key ubuntu@<Public IP>
    sudo -iu zetaphy
    ```
-   เปิดไฟล์ `timelock-proposal.json` ที่ดาวน์โหลด → คัดลอกทั้งหมด แล้วในหน้าต่างเครื่อง:
+   Open the downloaded `timelock-proposal.json` file → copy everything, then in the machine window:
    ```bash
-   cat > p.json        # วาง แล้วกด Ctrl-D
+   cat > p.json        # paste, then press Ctrl-D
    F="--from validator --keyring-backend test --keyring-dir ~/.zetaphy-genesis-keys --chain-id zetaphy_77390-1 --gas auto --gas-adjustment 1.5 --gas-prices 1000000000azetaphy -y"
    zetaphyd tx gov submit-proposal p.json $F
-   zetaphyd q gov proposals -o json | jq -r '.proposals[-1].id'     # เลข proposal
-   zetaphyd tx gov vote <เลข> yes $F
+   zetaphyd q gov proposals -o json | jq -r '.proposals[-1].id'     # proposal number
+   zetaphyd tx gov vote <number> yes $F
    ```
-   รอ 10 นาที `zetaphyd q gov proposal <เลข>` ต้องเป็น `PROPOSAL_STATUS_PASSED` แล้วรออีก 48 ชั่วโมงจึง execute (ข้อ 3)
-   - `gov.sh neuro …` เรียก NeuroControl ตรง ๆ ใช้ได้เฉพาะตอนที่ gov module เป็น governance ของ NeuroControl เอง หลัง handover ให้ใช้ timelock แทน
-   - gov module เป็น canceller ทางเดียว = ยกเลิกต้องโหวตเช่นกัน แนะนำให้เพิ่ม multisig เป็น proposer/canceller อีกตัว (`--timelock-proposers 0x<multisig>` ของ launch.js)
-5. **ฉุกเฉิน:** owner ของ guardian เรียกจาก multisig ได้ทันที เช่น `pause()` ของ NeuroControl / BridgeGuard / StableGateway, `pauseFeed(<asset>)` ของ ZetaphyOracle
-   เปิดคืนต้องตั้งเวลาผ่าน timelock (ข้อ 3)
+   Wait 10 minutes: `zetaphyd q gov proposal <number>` must be `PROPOSAL_STATUS_PASSED`, then wait another 48 hours before you execute (step 3)
+   - `gov.sh neuro …` calls NeuroControl directly and works only while the gov module is NeuroControl's own governance; after the handover, use the timelock instead
+   - With the gov module as the only canceller, cancelling also needs a vote. It is recommended to add a multisig as another proposer/canceller (`--timelock-proposers 0x<multisig>` in launch.js)
+5. **Emergency:** the guardian's owners can call from the multisig immediately, e.g. `pause()` on NeuroControl / BridgeGuard / StableGateway, `pauseFeed(<asset>)` on ZetaphyOracle
+   Re-opening must be scheduled through the timelock (step 3)
 
-🤖 Claude รัน workflow launch-testnet และ timelock ให้ได้ (ถ้าให้สิทธิ์ GitHub Actions) แต่การโหวตและการเซ็นของ multisig ต้องเป็นคุณและ owner คนอื่นบน hardware wallet ของตัวเอง
+🤖 Claude can run the launch-testnet and timelock workflows for you (if given GitHub Actions access), but voting and multisig signing must be done by you and the other owners on their own hardware wallets
 
-## 9. MetaMask Snap (npm และ allowlist)
+## 9. MetaMask Snap (npm and allowlist)
 
-ตอนนี้ snap ติดตั้งได้เฉพาะใน **MetaMask Flask** จาก npm; MetaMask ปกติต้องอยู่ใน allowlist (ต้อง audit ก่อน)
-1. สมัคร **npmjs.com** (ฟรี) → เปิด **2FA** → **Add Organization** ชื่อ `zetaphy` (ฟรีสำหรับแพ็กเกจสาธารณะ)
-   ถ้าชื่อถูกใช้แล้ว บอก Claude ชื่อ scope ใหม่ (🤖 แก้ชื่อทุกจุดตาม `zetaphy-snap/README.md`)
-2. ไม่ต้อง publish จากเครื่องตัวเอง: npmjs.com → รูปโปรไฟล์ → **Access Tokens → Generate New Token → Granular Access Token**
-   (Packages: Read and write เฉพาะ `@zetaphy`, หมดอายุสั้น ๆ) → คัดลอก → GitHub **Settings → Secrets and variables → Actions → New repository secret** ชื่อ `NPM_TOKEN`
-3. 🤖 Claude เพิ่ม workflow publish (กดปุ่มเดียวแบบเดียวกับข้อ 5: build, ตรวจ shasum, `npm publish --access public` ด้วย `NPM_TOKEN`) ให้ได้เมื่อคุณพร้อม
-   หลัง publish ชื่อ+เวอร์ชันนั้นแก้ไม่ได้ ควรรอให้ `snap.config.js` มีค่าจริงจากข้อ 5 และโดเมนกระเป๋าจากข้อ 7 ก่อน
-4. ทดสอบใน MetaMask Flask: เปิดเว็บกระเป๋า → "ใช้ MetaMask (ZETAPHY Snap)"
-5. **allowlist** (ทีหลัง): audit ของ snap (ข้อ 14) แล้วกรอกฟอร์ม https://go.metamask.io/snaps-directory-request ตาม `zetaphy-snap/README.md` ข้อ 7
+For now the snap can only be installed in **MetaMask Flask** from npm; regular MetaMask requires it to be on the allowlist (an audit is needed first)
+1. Sign up at **npmjs.com** (free) → turn on **2FA** → **Add Organization** named `zetaphy` (free for public packages)
+   If the name is already taken, tell Claude a new scope name (🤖 renames every occurrence as described in `zetaphy-snap/README.md`)
+2. No need to publish from your own machine: npmjs.com → profile picture → **Access Tokens → Generate New Token → Granular Access Token**
+   (Packages: Read and write for `@zetaphy` only, short expiry) → copy → GitHub **Settings → Secrets and variables → Actions → New repository secret** named `NPM_TOKEN`
+3. 🤖 Claude can add a publish workflow (one button, like step 5: build, check the shasum, `npm publish --access public` with `NPM_TOKEN`) when you are ready
+   After publishing, that name+version cannot be changed, so it is best to wait until `snap.config.js` has the real values from step 5 and the wallet domain from step 7
+4. Test in MetaMask Flask: open the wallet web app → "Use MetaMask (ZETAPHY Snap)"
+5. **allowlist** (later): an audit of the snap (step 14), then fill in the form https://go.metamask.io/snaps-directory-request as described in `zetaphy-snap/README.md` step 7
 
 ## 10. WalletConnect projectId
 
-1. **cloud.reown.com** (ฟรี) → สมัคร → **Create project** (ประเภท WalletKit/AppKit) → ใส่โดเมน `wallet.sawasdeecoin.com` ใน **Allowlist / Domain**
-2. คัดลอก **Project ID** (ไม่ใช่ความลับ: อยู่ในหน้าเว็บสาธารณะอยู่แล้ว ส่งให้ Claude ได้)
-3. 🤖 Claude ใส่ใน `<meta name="zetaphy-walletconnect-project-id">` ของ `zetaphy-wallet/index.html` (ปุ่มจะกดได้; การต่อ SDK จริงเป็นงานขั้นต่อไปตาม `zetaphy-wallet/README.md`)
+1. **cloud.reown.com** (free) → sign up → **Create project** (type WalletKit/AppKit) → enter the domain `wallet.sawasdeecoin.com` under **Allowlist / Domain**
+2. Copy the **Project ID** (not a secret: it is already in the public web page; you can send it to Claude)
+3. 🤖 Claude puts it in the `<meta name="zetaphy-walletconnect-project-id">` of `zetaphy-wallet/index.html` (the button becomes clickable; wiring up the actual SDK is the next piece of work, per `zetaphy-wallet/README.md`)
 
-## 11. อีเมลติดต่อ
+## 11. Contact email
 
-ต้องมีช่องทางให้เจ้าของสัญญาที่ถูกติดธงขอชี้แจง/แก้ไข ตอนนี้เป็นข้อความเว้นว่างไว้:
-- `docs/LEGAL.md` (`[ใส่อีเมลติดต่อของเจ้าของโครงการ]` และ `[project owner's contact email]`)
-- `zetaphy-neuro/web/legal.html` (ไทยและอังกฤษ)
+There must be a channel for owners of flagged contracts to reply/request a correction. For now these are placeholder text:
+- `docs/LEGAL.md` (`[insert the project owner's contact email]` and `[project owner's contact email]`)
+- `zetaphy-neuro/web/legal.html` (Thai and English)
 
-สร้างอีเมลสำหรับโครงการโดยเฉพาะ (เช่น Gmail ฟรี หรือ alias ของโดเมน) แล้ว 🤖 บอก Claude เพื่อแก้ทั้งสองไฟล์ หรือแก้เองบนหน้า GitHub (ไอคอนดินสอ → Commit changes)
+Create an email address just for the project (e.g. a free Gmail, or an alias on your domain), then 🤖 tell Claude so it can edit both files, or edit them yourself on the GitHub page (pencil icon → Commit changes)
 
-## 12. ปรึกษาทนาย
+## 12. Consult a lawyer
 
-ก่อนประกาศให้คนทั่วไปใช้ โดยเฉพาะ: การติดธงสัญญาของคนอื่น (หมิ่นประมาท/ความรับผิด), การแจก SWD airdrop, เหรียญและ stablecoin ทดลอง,
-การเก็บข้อมูล (PDPA) ใช้ `docs/LEGAL.md` เป็นเอกสารตั้งต้นในการคุย (มีรายชื่อแหล่งช่วยเหลือทางกฎหมายฟรีในไทยที่ต้องตรวจสอบเอง)
-Claude ไม่ใช่ทนาย และ testnet ไม่ทำให้ข้อนี้หมดไป
+Before announcing it for general use, especially about: flagging other people's contracts (defamation/liability), the SWD airdrop, the test coins and stablecoins,
+and data collection (PDPA). Use `docs/LEGAL.md` as the starting document for the conversation (it has a list of free legal-aid sources in Thailand that you must verify yourself)
+Claude is not a lawyer, and being a testnet does not make this step go away
 
-## 13. ขึ้นรายชื่อ chainlist และ Keplr
+## 13. Listing on chainlist and Keplr
 
-ทำหลังเชนเปิดนิ่งแล้ว และควรมีโดเมนถาวรแทน `sslip.io` (IP เปลี่ยน = รายชื่อพัง) ดู [`zetaphy-chain/wallets/README.md`](../zetaphy-chain/wallets/README.md) ข้อ 9
-- chainlist: PR ไปที่ `ethereum-lists/chains` ด้วยไฟล์ `zetaphy-chain/wallets/ethereum-lists/eip155-77390.json`
-- Keplr: PR ไปที่ `chainapsis/keplr-chain-registry` และ `cosmos/chain-registry` (`zetaphy-chain/wallets/chain-registry/zetaphytestnet/`)
-- PR ต้องมาจากบัญชี GitHub ของคุณ: บนหน้าเว็บ GitHub กด **Fork** → **Add file → Create new file** → วางเนื้อไฟล์ → **Propose changes / Create pull request**
+Do this after the chain is up and stable, and you should have a permanent domain instead of `sslip.io` (IP changes = broken listings). See [`zetaphy-chain/wallets/README.md`](../zetaphy-chain/wallets/README.md) step 9
+- chainlist: a PR to `ethereum-lists/chains` with the file `zetaphy-chain/wallets/ethereum-lists/eip155-77390.json`
+- Keplr: PRs to `chainapsis/keplr-chain-registry` and `cosmos/chain-registry` (`zetaphy-chain/wallets/chain-registry/zetaphytestnet/`)
+- The PRs must come from your GitHub account: on the GitHub web page press **Fork** → **Add file → Create new file** → paste the file contents → **Propose changes / Create pull request**
 
-🤖 Claude เติม HOST/NODE_ID ในไฟล์ให้พร้อมวาง และตรวจ RPC/REST/websocket ที่ registry จะตรวจ
+🤖 Claude fills in HOST/NODE_ID in the files ready to paste, and checks the RPC/REST/websocket that the registries will check
 
-## 14. Audit ก่อนมีเงินจริง
+## 14. Audit before there is real money
 
-ทุกอย่างในเช็กลิสต์นี้เป็น testnet สัญญาและเชนยังไม่ผ่าน audit (ขอบเขตอยู่ใน `docs/AUDIT_SCOPE.md` และ `docs/CHAIN_AUDIT_SCOPE.md`)
-**ห้ามใช้กับเงินจริง** จนกว่าจะ audit โดยผู้ตรวจอิสระ แก้ทุกข้อระดับ medium ขึ้นไป และเปิดเผยรายงาน; mainnet ใช้ขั้นตอนใน `docs/MAINNET_RUNBOOK.md` ไม่ใช่ workflow นี้
+Everything in this checklist is a testnet. The contracts and the chain have not passed an audit yet (the scope is in `docs/AUDIT_SCOPE.md` and `docs/CHAIN_AUDIT_SCOPE.md`)
+**Do not use with real money** until it has been audited by an independent auditor, every finding of medium severity or above has been fixed, and the report has been published; mainnet uses the procedure in `docs/MAINNET_RUNBOOK.md`, not this workflow
 
-## 15. IBC + USDC จาก Noble testnet
+## 15. IBC + USDC from the Noble testnet
 
-ต่อ ZETAPHY กับ Noble (เชนที่ Circle ออก USDC) ผ่าน IBC ฟรี ทำในเบราว์เซอร์ทั้งหมด รายละเอียดใน [`zetaphy-chain/ibc/README.md`](../zetaphy-chain/ibc/README.md)
-ทำหลังข้อ 2 (เชนทำงาน) และใช้ Noble **testnet** (`grand-1`) เท่านั้น; mainnet (`noble-1`) รอข้อ 14
-1. เข้าเครื่องทาง Cloud Shell แบบข้อ 8.2 (เป็น `ubuntu` ยังไม่ต้อง `sudo -iu zetaphy`) แล้วเอา `zetaphy-chain/ibc/setup-relayer.sh` ขึ้นเครื่อง (GitHub → **Raw** → `cat > setup-relayer.sh` วาง Ctrl-D)
-2. `sudo bash setup-relayer.sh` → ได้ที่อยู่ relayer 2 ที่ (ไม่มี key ให้ถือ)
-3. เติมแก๊ส: MetaMask ส่ง 10 ZTPHY ไปที่ `0x…` ของ relayer; **faucet.circle.com** → Noble Testnet → ที่อยู่ `noble1…`
-4. `sudo bash setup-relayer.sh create-channel` → จด `ZETAPHY_CHANNEL` (เช่น `channel-0`) แล้ว `sudo bash setup-relayer.sh start`
-5. `sudo bash setup-relayer.sh send-usdc <ที่อยู่ MetaMask> 1000000` (1 USDC เข้าเชน)
-6. `sudo -iu zetaphy` แล้ว `gov.sh ibc-usdc-erc20 channel-0` (ที่อยู่ ERC-20 ไปใส่ MetaMask / token list) และ
-   `gov.sh ibc-usdc-ratelimit channel-0` → `gov.sh vote <เลข> yes` (เพดาน 1% ต่อ 24 ชม.)
-7. ดูแล: `sudo bash setup-relayer.sh status` สัปดาห์ละครั้ง เติม USDC จาก faucet เมื่อยอดฝั่ง Noble ต่ำ ห้ามหยุด relayer เกิน 14 วัน
+Connect ZETAPHY to Noble (the chain where Circle issues USDC) over IBC for free, all in the browser. Details in [`zetaphy-chain/ibc/README.md`](../zetaphy-chain/ibc/README.md)
+Do this after step 2 (the chain is running) and use the Noble **testnet** (`grand-1`) only; mainnet (`noble-1`) waits for step 14
+1. Get into the machine through Cloud Shell as in step 8.2 (as `ubuntu`; no need for `sudo -iu zetaphy` yet), then put `zetaphy-chain/ibc/setup-relayer.sh` on the machine (GitHub → **Raw** → `cat > setup-relayer.sh`, paste, Ctrl-D)
+2. `sudo bash setup-relayer.sh` → gives 2 relayer addresses (there is no key for you to hold)
+3. Top up gas: send 10 ZTPHY from MetaMask to the relayer's `0x…`; **faucet.circle.com** → Noble Testnet → the `noble1…` address
+4. `sudo bash setup-relayer.sh create-channel` → note `ZETAPHY_CHANNEL` (e.g. `channel-0`), then `sudo bash setup-relayer.sh start`
+5. `sudo bash setup-relayer.sh send-usdc <MetaMask address> 1000000` (1 USDC into the chain)
+6. `sudo -iu zetaphy`, then `gov.sh ibc-usdc-erc20 channel-0` (the ERC-20 address goes into MetaMask / the token list) and
+   `gov.sh ibc-usdc-ratelimit channel-0` → `gov.sh vote <number> yes` (cap of 1% per 24 hours)
+7. Upkeep: `sudo bash setup-relayer.sh status` once a week; top up USDC from the faucet when the Noble-side balance is low; do not stop the relayer for more than 14 days
 
-🤖 บอกผลของ `status` (ไม่มีความลับในนั้น) แล้ว Claude ช่วยอ่านและแก้ปัญหาให้ได้
+🤖 Share the output of `status` (there are no secrets in it) and Claude can help read it and fix problems
 
-## 16. สะพาน: ปิดไว้จนกว่าจะผ่านทุกประตู
+## 16. Bridge: keep it closed until every gate passes
 
-สะพาน lock/mint (`BridgeAirlock` → `BridgeGuard`) **ปิดอยู่** หลัง launch และต้องปิดต่อไปจนกว่าจะมี **ครบทุกข้อ** (การตัดสินใจของเจ้าของโครงการ):
-1. **lane ที่สองที่อิสระจริง:** Hyperlane (`HyperlaneLane` + `HyperlaneLockBox`) ที่ผู้ควบคุม (Mailbox/ISM/validator ของ Hyperlane) ไม่ใช่กลุ่มเดียวกับคนรันร่าง Neuro
-   ZETAPHY ยังไม่มี Hyperlane: ต้องติดตั้ง Mailbox, ISM, relayer และ validator ของ Hyperlane เองก่อน
-2. **audit** สะพานโดยผู้ตรวจอิสระ (ข้อ 14) แล้วบันทึกลิงก์ https + sha256 ของรายงานบนเชน (`BridgeGuard.setAudit`)
-3. **คนรันร่าง Neuro อิสระ ≥ 10** ราย (`NeuroJobs.activeWorkers`; ต้องตรวจว่าคนละคนจริงด้วยคน)
-4. **guardian และ governance เป็น multisig คนละตัว** owner ≥ 3, ต้องเซ็น ≥ 2, แต่ละ owner ใช้ **hardware wallet (Ledger/Trezor ผ่าน MetaMask)** ของตัวเอง ไม่มีใครถือหลาย key
-   ไม่มี owner คนเดียวกันในทั้งสองตัว และไม่ใช่ key ของ deployer (governance เป็น gov module ได้) ดูหัวข้อ "multisig + hardware wallet" ใน `zetaphy-network/README.md`
-5. **bug bounty ที่มีเงินจริงแล้ว** (`docs/BUG_BOUNTY.md`: ตอนนี้เป็นเครดิตอย่างเดียว ต้องโหวตโอนเงินเข้ากองก่อน)
-6. **ตัวเฝ้าดูทำงานแล้ว:** ใส่ `rpc` ใน `zetaphy-network/bridge-monitor.json` (หรือ variable `ZETAPHY_RPC`) เปิดบรรทัด `schedule` ใน `.github/workflows/bridge-monitor.yml`
-   - **ช่องทางแจ้งเตือนส่วนตัวอย่างน้อยหนึ่งช่อง** (secret): `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `DISCORD_WEBHOOK_URL` หรือ `PRIVATE_ALERTS_TOKEN` (issue ใน repo ส่วนตัว `pospos191-alt/zetaphy-private`)
-     log ของ repo สาธารณะมีแค่จำนวนแจ้งเตือน รายละเอียดไปช่องทางส่วนตัวเท่านั้น ไม่มีช่องทาง = run ล้ม (issue ใน repo นี้เฉพาะเมื่อตั้ง variable `BRIDGE_ALERT_ISSUES` = `on`)
-   - เกณฑ์แจ้งเตือนจริงตั้งเป็น secret `BRIDGE_MONITOR_THRESHOLDS` ได้ (ค่าในไฟล์ที่ commit เป็นแค่ค่าเริ่มต้น)
-   - ถ้าใช้สัญญาที่เฝ้าไว้: secret `BRIDGE_WATCHLIST` (รายชื่อเก็บเป็นความลับ ไม่ commit) และ `BRIDGE_MARKER_KEY` (key ใหม่ที่ไม่มีสิทธิ์อื่น มี ZETAPHY แค่ค่าแก๊ส)
-     แล้วให้ governance ตั้งเป็น marker: `zetaphy bridge marker 0x<ที่อยู่ของ key นั้น>` (marker ทำได้แค่ทำเครื่องหมายที่อยู่ ไม่แตะเงิน governance ปลดได้ด้วย `zetaphy bridge untrip`)
-   - ทำเครื่องหมายอัตโนมัติเกิดในรอบถัดไปของตัวเฝ้า **`quarantine` ต้องนานกว่าช่วงห่างของรอบ** (ค่าเริ่มต้น 3600 วินาที = รายชั่วโมงไม่พอ)
-     แนะนำเมื่อ repo เป็น public: ทุก 15 นาที (`*/15`, ฟรี) กับ quarantine อย่างน้อย 2 ชม. (`BridgeAirlock.setQuarantine(7200)` ผ่าน governance)
-7. **เพดานเริ่มต่ำมาก:** 1,000 โทเคนต่อวัน ขึ้นได้ครั้งละไม่เกิน 2 เท่า และแต่ละครั้งรอ 7 วัน (`zetaphy bridge cap propose`) ตามตารางใน README
+The lock/mint bridge (`BridgeAirlock` → `BridgeGuard`) is **closed** after launch and must stay closed until **every one** of these holds (a decision of the project owner):
+1. **A second, truly independent lane:** Hyperlane (`HyperlaneLane` + `HyperlaneLockBox`) whose controllers (Hyperlane's Mailbox/ISM/validators) are not the same group as the Neuro runners
+   ZETAPHY does not have Hyperlane yet: Hyperlane's Mailbox, ISM, relayer and validators must be installed first
+2. An **audit** of the bridge by an independent auditor (step 14), with the https link + sha256 of the report recorded on chain (`BridgeGuard.setAudit`)
+3. **≥ 10 independent Neuro runners** (`NeuroJobs.activeWorkers`; a human must also check that they really are different people)
+4. **The guardian and governance are separate multisigs**, owners ≥ 3, signatures required ≥ 2, each owner using their own **hardware wallet (Ledger/Trezor through MetaMask)**; nobody holds several keys
+   No owner is in both, and none is the deployer's key (governance can be the gov module). See the section "multisig + hardware wallet" in `zetaphy-network/README.md`
+5. **A bug bounty that has real money** (`docs/BUG_BOUNTY.md`: currently credit only; a vote must transfer money into the pool first)
+6. **The monitor is running:** put `rpc` in `zetaphy-network/bridge-monitor.json` (or the variable `ZETAPHY_RPC`) and enable the `schedule` line in `.github/workflows/bridge-monitor.yml`
+   - **At least one private alert channel** (secret): `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `DISCORD_WEBHOOK_URL` or `PRIVATE_ALERTS_TOKEN` (issues in the private repo `pospos191-alt/zetaphy-private`)
+     The public repo's logs show only the number of alerts; details go to private channels only. No channel = the run fails (issues in this repo only when the variable `BRIDGE_ALERT_ISSUES` = `on`)
+   - The real alert thresholds can be set as the secret `BRIDGE_MONITOR_THRESHOLDS` (the values in the committed file are only defaults)
+   - If you use watched contracts: the secrets `BRIDGE_WATCHLIST` (the list is kept secret, not committed) and `BRIDGE_MARKER_KEY` (a new key with no other rights, holding ZETAPHY for gas only)
+     then have governance set it as a marker: `zetaphy bridge marker 0x<address of that key>` (a marker can only mark addresses and does not touch funds; governance can clear marks with `zetaphy bridge untrip`)
+   - Automatic marking happens in the monitor's next run. **`quarantine` must be longer than the interval between runs** (default 3600 seconds = hourly is not enough)
+     Recommended when the repo is public: every 15 minutes (`*/15`, free) with a quarantine of at least 2 hours (`BridgeAirlock.setQuarantine(7200)` through governance)
+7. **Very low starting caps:** 1,000 tokens per day, raised by no more than 2× at a time, with a 7-day wait each time (`zetaphy bridge cap propose`), following the table in the README
 
-เมื่อครบแล้ว (บนเครื่องที่มี `zetaphy-network`; key นี้ไม่ต้องมีสิทธิ์อะไร คำสั่งพิมพ์ธุรกรรมให้ multisig เซ็น):
+Once everything holds (on a machine that has `zetaphy-network`; this key needs no rights, the commands print transactions for the multisig to sign):
 ```bash
-zetaphy bridge gates --audit-report https://<ผู้ตรวจ>/report.pdf --audit-sha256 <sha256sum ของไฟล์> --i-understand-real-funds   # ตรวจอย่างเดียว
-zetaphy bridge open  --audit-report https://<ผู้ตรวจ>/report.pdf --audit-sha256 <sha256sum ของไฟล์> --i-understand-real-funds   # ผ่านทุกข้อ: พิมพ์ setAudit แล้ว setRoute ให้ governance
+zetaphy bridge gates --audit-report https://<auditor>/report.pdf --audit-sha256 <sha256sum of the file> --i-understand-real-funds   # check only
+zetaphy bridge open  --audit-report https://<auditor>/report.pdf --audit-sha256 <sha256sum of the file> --i-understand-real-funds   # all pass: prints setAudit then setRoute for governance
 ```
-- ข้อใดไม่ผ่าน คำสั่งพิมพ์ทุกข้อที่ขาดและไม่ส่งอะไร · `BridgeGuard` เองก็ไม่ยอมเปิดถ้าไม่มี audit บนเชนหรือ lane อิสระไม่ถึง 2
-- คำสั่งพิมพ์ตาราง lane / controller / admin / owner ของ multisig ให้คุณ **ตรวจด้วยตา** ก่อนให้ owner เซ็น
-- ฉุกเฉิน: guardian `zetaphy bridge pause` (หยุดทันที) · เปิดคืนต้องเป็น governance (`unpause`) ซึ่งหลัง handover คือ timelock (ข้อ 8)
-- หลัง handover ทุกคำสั่งข้างบนที่ governance ต้องส่ง (`setAudit`, `setRoute`, `setMarker` …) ต้องตั้งเวลาผ่าน timelock คำสั่งพิมพ์ `zetaphy timelock schedule …` ให้
+- If any item fails, the command prints every missing item and sends nothing · `BridgeGuard` itself also refuses to open without an on-chain audit or with fewer than 2 independent lanes
+- The command prints a table of lanes / controllers / admins / multisig owners for you to **check by eye** before the owners sign
+- Emergency: guardian `zetaphy bridge pause` (stops immediately) · re-opening must be done by governance (`unpause`), which after the handover is the timelock (step 8)
+- After the handover, every command above that governance must send (`setAudit`, `setRoute`, `setMarker` …) must be scheduled through the timelock; the command prints `zetaphy timelock schedule …` for you
 
-🤖 Claude รัน `bridge gates` และอ่านผลตัวเฝ้าดูให้ได้ แต่การเซ็นของ multisig ต้องเป็นคุณและ owner คนอื่นบน hardware wallet ของตัวเอง
+🤖 Claude can run `bridge gates` and read the monitor's results for you, but multisig signing must be done by you and the other owners on their own hardware wallets
 
 ---
 
-### อ้างอิง: launch.js
+### Reference: launch.js
 
-workflow เรียก `node zetaphy-launch/launch.js` (โค้ดอ่านได้ใน repo; `--help` บอกตัวเลือกทั้งหมด) สิ่งที่ควรรู้:
-- ใช้โค้ด deploy ของแต่ละแพ็กเกจเอง (`zetaphy-network/cli.js`, `zetaphy-dex` `deploy()`, `zetaphy-dex/dlmm-cli.js` `deploy()`, `zetaphy-nft/cli.js deploy`) ไม่ได้เขียนซ้ำ
-- ตรวจก่อนทุกครั้ง: chain id ต้องเป็น 77390 (testnet เท่านั้น), ยอดเงิน deployer พอกับค่าประมาณ, state ตรงกับเชนและ deployer เดิม
-- ทุกขั้นบันทึกใน `zetaphy-launch/state/77390.json` ทันทีที่เสร็จ (`--resume` ข้ามที่เสร็จแล้ว); ขั้นตรวจ (skill, wire, protect, configs, snap, handover) รันทุกครั้งและไม่ส่งธุรกรรมถ้าทุกอย่างถูกแล้ว
-- key: รับจากไฟล์ (`--key-file`, chmod 600) หรือ env เท่านั้น ไม่รับบนบรรทัดคำสั่ง ไม่พิมพ์ ไม่เขียนลง state; workflow เขียน secret ลงไฟล์ 0600 ใน `$RUNNER_TEMP` แล้วลบทิ้งท้าย run
-- ขั้น `oracle`: TwapRecorder + ZetaphyPythRelay + ZetaphyOracle (ZETAPHY/USD จากพูล WZETAPHY/tUSD ของ DEX, เติม Pyth ด้วย `--pyth-zeta-feed`) แล้วให้ StableGateway คิดราคาผ่าน oracle
-  ราคามีหลังหน้าต่าง TWAP เต็ม (ต้องมีคน poke เช่น `zetaphy relay start --poke-oracle 60`) · `--stable-testnet-price 0.01` = ทางสำรอง testnet ราคาคงที่ (ติดป้าย ปิดได้ผ่าน timelock)
-- ขั้น `timelock` + `handover` (เฉพาะ `--handover`): ดูข้อ 8 · `--guardian` บังคับ · `--timelock-delay` ค่าเริ่ม 172800 (ต่ำกว่า 86400 ได้เฉพาะ `--devnet` กับ RPC 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
-- ทดสอบ: `cd zetaphy-launch && npm test` (ตัวรันขั้น, state, ตัวเขียน config, ตัวเลือก timelock) และ `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (เชนจริงบนเครื่อง CI: deploy ทั้งหมดรวม DLMM, oracle, smoke DEX/NFT/Neuro, handover ให้ timelock + ตรวจบนเชน, guardian หยุดทันที, โหวตตั้งเวลาแล้วใครก็ execute หลังครบเวลา, ตัวเฝ้ารายงาน)
+The workflow calls `node zetaphy-launch/launch.js` (the code is readable in the repo; `--help` lists every option). Things worth knowing:
+- It uses each package's own deploy code (`zetaphy-network/cli.js`, `zetaphy-dex` `deploy()`, `zetaphy-dex/dlmm-cli.js` `deploy()`, `zetaphy-nft/cli.js deploy`) rather than rewriting it
+- It always checks first: the chain id must be 77390 (testnet only), the deployer's balance covers the estimate, the state matches the chain and the same deployer
+- Every step is recorded in `zetaphy-launch/state/77390.json` as soon as it finishes (`--resume` skips finished ones); the check steps (skill, wire, protect, configs, snap, handover) run every time and send no transactions if everything is already correct
+- key: taken only from a file (`--key-file`, chmod 600) or env, never on the command line; never printed, never written to the state; the workflow writes the secret to a 0600 file in `$RUNNER_TEMP` and deletes it at the end of the run
+- The `oracle` step: TwapRecorder + ZetaphyPythRelay + ZetaphyOracle (ZETAPHY/USD from the DEX's WZETAPHY/tUSD pool, plus Pyth with `--pyth-zeta-feed`), then makes the StableGateway price through the oracle
+  A price is available once the TWAP window is full (someone must poke it, e.g. `zetaphy relay start --poke-oracle 60`) · `--stable-testnet-price 0.01` = a testnet fallback with a fixed price (labelled; can be turned off through the timelock)
+- The `timelock` + `handover` steps (only with `--handover`): see step 8 · `--guardian` is required · `--timelock-delay` defaults to 172800 (below 86400 only with `--devnet` and an RPC of 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
+- Tests: `cd zetaphy-launch && npm test` (step runner, state, config writers, timelock options) and `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (a real chain on the CI machine: deploys everything including DLMM, oracle, DEX/NFT/Neuro smoke tests, handover to the timelock + on-chain checks, guardian stops immediately, a vote schedules and then anyone executes after the time is up, monitor reports)
 
-## 17. ความปลอดภัยในแกนกลางของเชน (หลัง reset genesis)
+## 17. Security in the chain's core (after a genesis reset)
 
-เชนใหม่จาก `setup-node.sh` ปัจจุบันมี security core ตั้งแต่บล็อก 1 แต่ทุกกติกาปิด (คู่มือ: `docs/SECURITY-CORE.md`)
-เปิดทีละอย่างด้วยการโหวตบนเครื่อง node (ไม่ต้องรันอะไรในเครื่องตัวเอง):
-1. **Threat gate:** เมื่อ ThreatRegistry ของ Neuro deploy แล้ว `gov.sh threat-gate <ThreatRegistry 0x…> on` แล้วโหวต
-   (ก่อนนั้นตั้ง protected key ของสัญญาโปรโตคอลทั้งหมดใน registry)
-2. **IBC hold:** หลังเปิด channel กับ Noble `gov.sh ibc-hold 21600 <guardian>` (guardian = multisig) และ
-   `gov.sh ibc-hold-rule <ibc/… ของ USDC> <ขั้นต่ำ> <bps>` คู่กับ rate limit (ข้อ 15)
-3. **Q-day:** ยังไม่ต้องตั้ง ทดสอบได้บน testnet เท่านั้น และตั้งเมื่อ validator ทุกรายล็อกควอนตัมบัญชี operator แล้ว
-   (`gov.sh qday <ความสูง>` ห่างจากปัจจุบันมากพอให้ทุกคนย้ายทัน)
-ดูค่าที่ใช้อยู่: `gov.sh security`
+A new chain from the current `setup-node.sh` has the security core from block 1, but every rule is off (guide: `docs/SECURITY-CORE.md`)
+Turn them on one at a time with a governance vote on the node machine (nothing to run on your own machine):
+1. **Threat gate:** once Neuro's ThreatRegistry has been deployed, `gov.sh threat-gate <ThreatRegistry 0x…> on`, then vote
+   (before that, set the protected keys of all protocol contracts in the registry)
+2. **IBC hold:** after opening the channel with Noble, `gov.sh ibc-hold 21600 <guardian>` (guardian = multisig) and
+   `gov.sh ibc-hold-rule <ibc/… of USDC> <minimum> <bps>` together with the rate limit (step 15)
+3. **Q-day:** do not set it yet. It can be tested on the testnet only, and is set once every validator has quantum-locked its operator account
+   (`gov.sh qday <height>` far enough from now for everyone to migrate in time)
+See the values in use: `gov.sh security`

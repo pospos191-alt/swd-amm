@@ -1,0 +1,1040 @@
+[English](README.md) | **ภาษาไทย**
+
+# zetaphy-network: ขั้น 1–5 ของ ZETAPHY (testnet)
+
+| ขั้นในแผน | สิ่งที่มีให้แล้ว |
+|---|---|
+| 1 · ทุกคนรันร่างได้ | `zetaphy node start` ตรวจเครื่องเองแล้วรับงานจากตลาดงาน NeuroJobs ตรวจคำตอบแบบ 2 ใน 3 และจ่ายรางวัลเป็น ZETAPHY |
+| 2 · ZETAPHY จ่ายค่า AI | ผู้ใช้จ่ายค่าตรวจสัญญาเป็น ZETAPHY ให้คนรันร่าง |
+| 2 · จ่ายค่าธรรมเนียมเป็น USDC/USDT | StableGateway + relay: คนที่ไม่มี ZETAPHY เลยก็ใช้งานได้ โดยจ่ายเป็น test USDC/USDT |
+| 2 · โหวตอัปเกรดในตัว | `zetaphy-chain/gov.sh` เสนอและโหวตอัปเกรดบนเชน |
+| 2 · เตรียมแจกให้คนถือ SWD | `airdrop/`: snapshot ผู้ถือ SWD, แบ่งสัดส่วน และทำ Merkle root |
+| 2 · ปล่อยรางวัลปีละ 10% | `RewardVault`: กองรางวัล 500 ล้านอยู่ในสัญญา ปล่อยรายวันรวมปีละ 10% ของที่เหลือ ไม่มีฟังก์ชันถอน |
+| ประตู 1 | `zetaphy gate` รายงานความคืบหน้าจากข้อมูลบนเชน |
+| 3 · สะพาน: จำกัดยอดต่อวัน + ปุ่มหยุดเฉพาะสะพาน | `BridgeGuard` + `BridgedToken` |
+| 3 · หลายสะพาน + Neuro เป็นสะพาน + ทำเครื่องหมายผู้โจมตี | `BridgeAirlock` (marker) + `NeuroLane` + `HyperlaneLane` + `zetaphy bridge watch` / `bridge monitor` |
+| 3 · ประตูเปิดสะพาน + เฝ้าดู (สะพาน **ปิด** เป็นค่าเริ่มต้น) | `zetaphy bridge open` / `bridge monitor` + `.github/workflows/bridge-monitor.yml` |
+| 2 · ค่า AI 90% คนรันร่าง · 5% เผา · 5% กองทุนชุมชน | `NeuroJobs` แบ่งค่างานทุกงาน (งานที่ล้มเหลวคืนผู้ใช้ 100%) |
+| 4 · ร่างงอก/หด + ร่างป้องกัน 4 ร่าง + กักตัว/งอกใหม่ | `NeuroJobs` + `NeuroControl` + `zetaphy neuro regrow` |
+| 4 · ปุ่มหยุด AI (ไม่หยุดเหรียญ) + ทักษะใหม่ต้องผ่านโหวต | `NeuroControl` (เจ้าของคือ gov module ของเชน หรือ multisig) + `gov.sh neuro ...` |
+| 4 · ระบบภูมิคุ้มกัน | `ThreatRegistry`: คนรันร่างที่มีผลงานโหวตบันทึกโค้ดที่มีพฤติกรรมเสี่ยงต่อผู้ใช้ (ตรวจซ้ำได้) Neuro จะเตือนโค้ดนั้นทุกที่ และ **ฉีดวัคซีน**: สะพานไม่รับ กระเป๋าไม่เซ็น |
+| 4 · ตลาดพลัง AI จ่ายเป็น ZETAPHY | `ComputeMarket`: วางเงินมัดจำงาน AI ไว้กับสัญญาจนกว่าจะส่งงานและยอมรับ |
+| 1 สัญญา = 1 ตัวตน (ERC-8004) + ข้อความข้ามเชนที่มีลายเซ็น | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: ข้อความจาก Neuro ตัวอื่นเป็นข้อมูล ไม่ใช่คำสั่ง |
+| 5 · ต้านควอนตัม | precompile ML-DSA (FIPS 204) ในเชน + `QuantumWallet` + `zetaphy pq` + บัญชี PQ แท้ (`zetaphy pq native`) |
+
+**ยังไม่มีเงินจริงในขั้นไหนเลย:** ขั้น 3 ขึ้นไปบน mainnet ต้องผ่านประตูในหัวข้อ "ก่อนเงินจริง" ท้ายไฟล์ก่อน
+
+ทั้งหมดนี้ผ่านการทดสอบบนเชน ZETAPHY จริงแล้ว (`npm run test:devnet`)
+
+ใครก็รัน Neuro ได้ด้วยคำสั่งเดียว แล้วรับรางวัลเป็น ZETAPHY บน testnet
+
+## ทำงานอย่างไร
+
+1. ผู้ใช้ส่งงาน "ช่วยตรวจสัญญานี้" พร้อมจ่ายค่าบริการเป็น ZETAPHY
+2. ร่างป้องกัน 4 ร่างมีสิทธิ์รับงานเสมอ (แต่นั่งได้งานละ 1 ร่าง) ร่างที่เหลือ (ร่างที่งอกตามการใช้งาน) มาจากการจับฉลากถ่วงน้ำหนักตามเงินค้ำ ผู้มีสิทธิ์ 3 คนแรกได้ที่นั่ง แต่ละคนรัน Neuro บนเครื่องตัวเอง
+   - ฉลากผูกกับแฮชของบล็อกถัดจากบล็อกที่ส่งงาน (`blockhash`) ซึ่งไม่มีใครเลือกได้ ผู้ส่งงานจึงรู้ล่วงหน้าไม่ได้ว่าใครจะได้ที่นั่ง และส่งซ้ำเพื่อสุ่มใหม่ไม่ได้ (ดู "จับฉลากที่เดาไม่ได้")
+3. แต่ละคนส่ง **commit** คือรหัสลับของคำตอบ จึงมองเห็นคำตอบของคนอื่นไม่ได้ และลอกกันไม่ได้
+4. เมื่อที่นั่งเต็ม หรือหมดเวลา commit ทุกคนก็ **reveal** เปิดคำตอบ
+5. คำตอบใดที่ **ตรงกัน 2 ใน 3** ถือเป็นผลตรวจ
+   - ค่าบริการแบ่ง: **90%** ให้คนที่ตอบตรง (หารเท่ากัน) · **5%** เผา (ส่งไป `0x…dEaD` ซึ่งไม่มีใครมีกุญแจ ล็อกถาวร แต่ยังนับใน supply ของ bank) · **5%** กองทุนชุมชน (เศษหารไม่ลงตัวไปที่กองทุนชุมชน ไม่มีเศษหาย)
+   - คนที่ตอบตรงได้รางวัลจากกองกลางด้วย (ไม่เกิน 1 ZETAPHY และไม่เกิน 1/4 ของค่างาน ภายใต้เพดานต่อวัน)
+   - คนที่ตอบไม่ตรง หรือ commit แล้วไม่ reveal จะถูกหักเงินค้ำ 10% และได้ 1 strike · 2 strike ภายใน 5 งานล่าสุดที่ถูกตัดสินถูกกักตัว
+   - ครบ 2 ใน 3 แล้ว ที่นั่งที่ยังไม่ reveal มีเวลาผ่อนผันเท่าเวลา commit (reveal ได้ ตัดสินเหมือนคนอื่น แต่ไม่ได้ส่วนแบ่ง) พ้นแล้วใครก็เรียก `zetaphy job settle <id>` ได้ ที่นั่งที่ยังเงียบจะถูกหัก 10% และได้ strike (โปรแกรมคนรันร่างเรียกให้เอง)
+   - งานบันทึกทักษะ (skill) ที่ผ่านโหวตตอนส่งงาน คนรันร่างรับเฉพาะงานที่ตรงกับทักษะของเครื่องตัวเอง
+6. ถ้าไม่มี 2 คำตอบไหนตรงกัน หรือหมดเวลา ผู้ใช้ได้ค่าบริการคืน 95% อีก 5% เผา (คนส่งคำขอปลอมหรือคำขอที่ตอบไม่ได้ต้องจ่ายเอง)
+7. หลังได้ผลตรวจ ใครก็ **ท้าทาย** (challenge) ได้ภายในเวลาที่กำหนด ถ้าคิดว่า 2 คนนั้นตอบผิด โดยระบุคำตอบที่ตัวเองเชื่อว่าถูก: เปิดรอบท้าทายด้วยคนรันร่างชุดใหม่ 3 คน (ดู "รอบท้าทาย")
+
+คำตอบที่ใช้เทียบเรียกว่า "verdict" สร้างโดย `zetaphy-neuro/src/verdict.js`
+ซึ่งเก็บเฉพาะสิ่งที่กฎของ Neuro ตัดสิน และไม่เก็บค่าที่เปลี่ยนได้ระหว่างการอ่านสองครั้ง เช่น supply
+คนรันร่างที่ซื่อสัตย์ทุกคนจึงได้ verdict เดียวกัน
+
+## คนรันร่าง (node runner)
+
+```
+npm i -g ./zetaphy-network          # หรือ: node zetaphy-network/cli.js ...
+zetaphy node start --rpc http://<โหนด ZETAPHY>:8545 --jobs 0x<NeuroJobs>
+```
+
+- ครั้งแรกระบบจะสร้างกุญแจของคนรันร่างไว้ที่ `~/.zetaphy/worker.key` (สิทธิ์ 0600)
+  - ใช้กับ testnet เท่านั้น ห้ามเอากุญแจที่มีเงินจริงมาใช้
+  - กุญแจไม่ถูกส่งออกจากเครื่อง
+- ระบบตรวจเครื่องให้เอง: เครื่อง CPU ธรรมดาจะรันโหมด light ส่วนเครื่องที่มี GPU NVIDIA 8 GB ขึ้นไปจะรันโหมด heavy
+  - ตอนนี้งานทุกงานยังเป็น Neuro ชั้น 1 ซึ่งใช้แค่ CPU
+- ขั้นตอน:
+  1. โอน ZETAPHY testnet เข้าที่อยู่ของคนรันร่าง แล้ว `zetaphy node register` เพื่อวางเงินค้ำ (ค่าเริ่มต้น 100 ZETAPHY)
+  2. `zetaphy node start` เพื่อเริ่มรับงาน
+  3. `zetaphy node status` ดูรายได้และสถิติ แล้ว `zetaphy node withdraw` เพื่อถอนรายได้
+  4. จะเลิกรัน: `zetaphy node unbond` แล้วรอ 1 ชั่วโมง จากนั้น `zetaphy node withdraw-bond` และ `zetaphy node withdraw`
+- ไฟล์ `~/.zetaphy/jobs-*.json` เก็บคำตอบที่ commit ไว้แล้ว ห้ามลบระหว่างที่มีงานค้าง เพราะถ้า reveal ไม่ได้จะถูกหักเงินค้ำ
+- `zetaphy node start` ทำให้เองทั้งหมด:
+  - จับฉลาก (`draw`) งานที่ยังไม่มีใครจับ แล้วค่อยดูว่าตัวเองได้สิทธิ์ไหม
+  - รับที่นั่งรอบ 2 ของงานที่ถูกท้าทายด้วย (ถ้าไม่ได้นั่งรอบ 1)
+  - ถ้าเป็นร่างป้องกัน (หรืออยู่ในรายชื่อ) ส่ง `heartbeat` ราวทุก 1/4 ของ `defenderTimeout` (เสียแค่ค่าแก๊ส)
+- `zetaphy node start --watch-verdicts --max-challenge-spend 10`: โหมดเฝ้าผลตรวจ (เลือกเปิดเอง)
+  - รัน Neuro ซ้ำกับงานที่ได้ผลแล้วและยังอยู่ในเวลาท้าทาย ถ้าคำตอบของเครื่องตัวเองไม่ตรงก็ท้าทายให้เอง
+  - ใช้เงินวางท้าทายไม่เกินวันละ `--max-challenge-spend` ZETAPHY (ค่าเริ่มต้น 10)
+  - ท้าทายโดยระบุ verdict ของเครื่องตัวเองเป็นคำตอบที่ถูก
+  - ถ้ารอบท้าทายหมดเวลาโดยไม่ได้ข้อสรุป จะเรียก `challengeExpire` ได้เงินวางคืน 80%
+  - การท้าทายที่จบแบบ "disputed" (ไม่ได้ข้อสรุป) และยังอยู่ในเวลาท้าทายใหม่: ถ้าเครื่องตัวเองยังไม่เห็นด้วยกับผล จะท้าทายซ้ำให้ (ไม่เกินเพดานรอบของสัญญา)
+  - ประมาณแก๊สจากบล็อกล่าสุดแต่ธุรกรรมลงบล็อกถัดไป ทุกธุรกรรมจึงเผื่อแก๊ส 50% และถ้าประมาณแก๊สแล้วได้ `TooEarly` (บล็อกฉลากยังไม่มา) จะรอบล็อกถัดไปแล้วลองใหม่
+
+## ผู้ใช้: ส่งงานตรวจสัญญา
+
+```
+zetaphy job request bsc 0xc1ed4b78071e7c9a84958d8be0215a10984fc28f --fee 0.1
+zetaphy job get 0          # ผลตรวจ + "confirmedBy" (ยืนยันแล้วโดย N คน) + สถานะการท้าทาย
+zetaphy job challenge 0 --verdict 0x<คำตอบที่ถูก>   # ไม่เชื่อผลนี้: วางเงิน ระบุคำตอบที่เชื่อว่าถูก แล้วเปิดรอบท้าทาย
+```
+
+เชนที่รองรับ: `zetaphy` (ตัว ZETAPHY testnet เอง) และทุกเชนใน `zetaphy-neuro/src/chains.js` (`eth`, `bsc`, `base`, `arbitrum`, `sol`, `sui`, `aptos`, `osmosis`, `neutron`, `near`, `starknet`, `bitcoin`, `ton`)
+- รับเฉพาะเชนที่อยู่ในรายชื่อของ NeuroControl (`zetaphy deploy` ใส่ชุดนี้ให้) เชนอื่น `request` จะ revert (`UnknownChain`) เพิ่ม/ถอดด้วยโหวต `approve-chain` / `remove-chain`
+
+## ผู้ใช้ที่ไม่มี ZETAPHY: จ่ายเป็น test USDC/USDT (ขั้น 2)
+
+```
+zetaphy faucet usdc --relay http://<relay>:8080                       # รับ 1,000 tUSDC ต่อวัน (relay จ่ายค่า gas ให้)
+zetaphy job request-stable bsc 0x... --relay http://<relay>:8080      # ส่งงาน จ่ายเป็น tUSDC
+```
+
+1. กระเป๋าของผู้ใช้เซ็น 2 อย่าง ได้แก่ คำขอส่งงาน (EIP-712) และ permit อนุญาตให้หักเหรียญ (EIP-2612)
+2. relay ส่งธุรกรรมขึ้นเชนให้และจ่ายค่า gas เอง แล้วได้ทิปเป็น tUSDC ตามจำนวนที่ผู้ใช้ตกลงไว้
+3. StableGateway หัก tUSDC ตามราคาจาก **ZetaphyOracle** (ราคา ZETAPHY เป็น USD ที่ผ่านการตรวจหลายชั้น ดู "ราคา: ZetaphyOracle" ข้างล่าง) นับ tUSDC/tUSDT เป็น $1
+   - oracle ไม่มีราคาที่เชื่อได้ (เก่าไป แหล่งราคาไม่ตรงกัน ตัดวงจร หรือถูกหยุด) = คำขอ revert `PriceUnavailable` พร้อมเหตุผล ไม่มีการเดาราคา
+   - **ทางสำรองสำหรับ testnet เท่านั้น:** ราคาคงที่ (เช่น 1 ZETAPHY = 0.01 tUSDC) ใช้ได้เฉพาะเมื่อ governance เปิด `setTestnetFixedPrices(true)` เอง (ปิดอยู่ตั้งแต่ต้น) `priceSource()` และ `/info` ของ relay บอกชัดว่า "TESTNET FIXED PRICE" ไม่ใช่ราคาตลาด
+4. Gateway จ่ายค่างานเป็น ZETAPHY จากเงินสำรองของตัวเอง ถ้างานไม่สำเร็จ ZETAPHY จะคืนให้ผู้ใช้
+
+ข้อควรรู้:
+- ผู้ใช้กำหนดยอดสูงสุดที่ยอมจ่ายไว้ใน `maxCost` ได้
+- relay ใช้คำขอซ้ำ แก้คำขอ หรือใช้คำขอที่หมดเวลาแล้วไม่ได้
+- คนรันร่างคนไหนก็เปิด relay ได้: `zetaphy relay start --port 8080` (เติม `--poke-oracle 60` ให้ relay เป็นคน poke oracle ทุก 60 วินาทีด้วย)
+- guardian (multisig) กดหยุดรับคำขอได้ทันที (`pause`) เปิดคืนต้องผ่าน timelock
+- USDC/USDT ตัวจริงจะมาผ่านสะพานในขั้น 3
+
+## โหวตอัปเกรดเชน (ขั้น 2)
+
+บนโหนด: `zetaphy-chain/gov.sh`
+
+```
+gov.sh propose-upgrade v2 <ความสูงบล็อก> "สรุป"   # มัดจำ 1,000 ZETAPHY
+gov.sh vote 1 yes
+gov.sh status 1
+gov.sh plan
+```
+
+## กองรางวัลปล่อยปีละ 10% (ขั้น 2)
+
+```
+zetaphy deploy-vault --validators 0x<สัญญาหรือบัญชีรางวัล validator> --validators-share 30 \
+  --fund 500000000 --governance 0x<multisig>
+zetaphy vault status        # กองเหลือเท่าไร ปล่อยได้เท่าไรตอนนี้
+zetaphy vault release       # ใครก็กดได้ และ `node start --vault 0x...` กดให้เองราวชั่วโมงละครั้ง
+```
+
+- แต่ละวันปล่อย 1 − 0.9^(1/365) ของที่เหลือ (ราว 0.0289%) รวมหนึ่งปีได้ 10% พอดี กองจึงอยู่ได้หลายสิบปี
+- **ไม่มีฟังก์ชันถอน** ผู้ดูแล (multisig) ทำได้แค่เลือกผู้รับ และการเปลี่ยนผู้รับมีผลหลังประกาศ 7 วัน
+  ส่วนที่ครบกำหนดก่อนเปลี่ยนจ่ายให้ผู้รับเดิม
+- ผู้รับที่ปฏิเสธเงินไม่ทำให้คนอื่นไม่ได้รับ ส่วนของมันค้างอยู่ในกองต่อ
+- ส่วนของ NeuroJobs จ่ายผ่าน `fund()` เข้ากองรางวัลคนรันร่างโดยตรง
+
+## เตรียมแจก ZETAPHY ให้คนถือ SWD (ขั้น 2: เตรียม ยังไม่แจกจริง)
+
+```
+node airdrop/cli.js snapshot --mint <SWD mint> --exclude <ที่อยู่ vault ของ pool,...> > snapshot.json
+node airdrop/cli.js allocate snapshot.json --min 1000000 --cap-bps 100 > allocations.json
+node airdrop/cli.js merkle allocations.json > merkle.json
+```
+
+- **snapshot** รวมยอด SWD ของทุกบัญชี (SPL และ Token-2022) ต่อเจ้าของกระเป๋า อ่านจาก Solana อย่างเดียว
+  - ใส่ที่อยู่ vault ของ pool ใน `--exclude` ด้วย เพราะเหรียญใน pool เป็นของผู้ให้สภาพคล่อง ไม่ใช่ของ PDA
+- **allocate** แบ่ง 200,000,000 ZETAPHY ตามสัดส่วน
+  - กรองยอดเล็กมากทิ้งด้วย `--min`
+  - จำกัดส่วนแบ่งต่อคนได้ด้วย `--cap-bps` (100 = 1%) ส่วนที่เกินเพดานจะแบ่งให้คนที่เหลือ
+  - เศษจากการปัดจะแสดงใน `dust` ไม่หายไป
+- **merkle** สร้าง root ขนาด 32 ไบต์ พร้อม proof ของแต่ละคน
+  - root นี้ใช้กับสัญญาแจกเหรียญในขั้น 3
+  - สัญญานั้นต้องตรวจลายเซ็น Solana ของเจ้าของกระเป๋า และต้องผ่าน audit ก่อน
+
+## ประตู 1
+
+```
+zetaphy gate
+```
+
+รายงาน:
+- เชนรันมาแล้วกี่วัน
+- บล็อกเคยค้างไหม
+- คนรันร่างที่เปิดคำตอบในรอบ 30 วันมีกี่ที่อยู่
+
+ข้อมูลบนเชนบอกไม่ได้ว่า "คนละคนกันจริง" ตัวเลขนี้จึงเป็นเพดานบน ต้องให้คนตรวจยืนยันอีกที
+
+## ขั้น 3: สะพานที่เสียหายได้ไม่เกินเพดานต่อวัน
+
+> **สะพาน lock/mint ปิดอยู่ (CLOSED) เป็นค่าเริ่มต้น** `deploy-bridge` (และขั้น bridge ของ `zetaphy-launch`) ติดตั้งแบบปิด: route ใน `BridgeGuard` ยังไม่เปิด
+> เปิดได้ด้วย `zetaphy bridge open` เมื่อผ่าน **ทุกประตู** ในหัวข้อ "เปิดสะพาน" ข้างล่างเท่านั้น และ `BridgeGuard` เองก็ปฏิเสธการเปิดถ้าไม่มี audit หรือมี lane อิสระไม่ถึง 2 สาย
+
+`BridgeGuard` คั่นระหว่างสะพานกับเหรียญที่ข้ามมา เช่น USDC บน ZETAPHY
+
+- **adapter ของแต่ละ route** เป็นผู้เดียวที่สั่งผลิต (ขาเข้า) หรือเผา (ขาออก) เหรียญของ route นั้นได้
+  - adapter ที่เปิดได้ต้องเป็น `BridgeAirlock` ที่มี lane อิสระ ≥ 2 สาย (`independentLanes()`) สะพานสายเดียว (Hyperlane หรือ key ใดตรง ๆ) เป็น adapter ไม่ได้
+  - แต่ละทิศมีเพดานต่อวันแยกกัน ถ้าสะพานถูกแฮ็ก จะเสียได้ไม่เกินเพดานของวันนั้น
+  - เพดานทุก route ไม่เกิน `maxDailyLimit` (เพดานแข็ง เริ่ม 1,000 โทเคน ดู "เพดานโตทีละขั้น")
+- **guardian** กดหยุดสะพานได้ทันที แต่เปิดคืนไม่ได้และโยกเงินไม่ได้
+  - คนที่เปิดคืนได้คือ governance เท่านั้น (gov module หรือ multisig)
+  - การหยุดสะพานไม่ทำให้เชนหยุด
+- ฝั่ง IBC (USDC ของแท้ผ่าน Noble) มีเพดานระดับเชนด้วย (`x/ratelimit`) ตั้งโดย governance ด้วย `zetaphy-chain/gov.sh propose-ratelimit` (ดู zetaphy-chain/README.md ขั้น 3)
+
+### ด่านก่อนเข้า ZETAPHY: หลายสะพาน, Neuro เป็นสะพาน, ทำเครื่องหมายผู้โจมตี
+
+```
+เชนต้นทาง (HyperlaneLockBox: ล็อก + ส่งข้อความ Hyperlane)
+   │  ล็อกเหรียญ
+   ├──► สะพาน 1: Hyperlane (HyperlaneLane) ─┐
+   ├──► สะพาน 2: Neuro (คนรันร่าง 2/3) ─┤──► BridgeAirlock (ห้องกักกัน) ──► BridgeGuard (เพดานต่อวัน) ──► ZETAPHY
+   └──► (สะพานอื่นในอนาคต) ─────────┘          ▲ Neuro / guardian กดยับยั้งได้ระหว่างกักกัน
+                                                 ▲ ที่อยู่ที่ถูกทำเครื่องหมาย = ไม่ปล่อยจนกว่า governance ปลด
+ผู้โจมตี ──► สัญญาที่ตัวเฝ้าเฝ้าไว้ (รายชื่อลับ) ──► bridge monitor + marker key ──► BridgeAirlock.trip(ผู้เรียก)
+```
+
+1. **ต้องมีหลายสะพานยืนยันตรงกัน:** การโอนหนึ่งรายการต้องได้รับการยืนยันจากสะพานอิสระอย่างน้อย `threshold` สาย (ค่าเริ่มต้น 2) และรายละเอียดต้องตรงกันทุกตัว
+   - ถ้าสะพานสายเดียวถูกแฮ็ก ก็ปลอมเงินไม่ได้ แม้รอนานแค่ไหน
+2. **Neuro เป็นสะพานหนึ่งสาย:** คนรันร่างใช้ `zetaphy bridge watch` เฝ้า LockBox บนเชนต้นทาง
+   - รอให้บล็อกถูกยืนยันพอก่อน (`--confirmations`) แล้วจึงยืนยันการโอน
+   - คนรันร่างที่มีผลงานครบ quorum (ค่าเริ่มต้น 2) ยืนยันตรงกัน `NeuroLane` จึงยืนยันต่อให้ห้องกักกัน
+3. **ห้องกักกัน:** เมื่อได้รับการยืนยันครบแล้ว ต้องรอ `quarantine` วินาทีก่อน
+   - ระหว่างนั้นคนรันร่างโหวตยับยั้งได้ (quorum) และ guardian ก็ยับยั้งได้
+4. **ทำเครื่องหมาย (marker):** governance ตั้ง key ที่ทำเครื่องหมายได้ (`setMarker`: `deploy-bridge --marker 0x…` หรือ `zetaphy bridge marker 0x…`) ปกติคือ key ของตัวเฝ้า (bridge monitor) เอง ซึ่งไม่มีสิทธิ์อื่นเลย
+   - marker ทำได้อย่างเดียวคือ `trip(ที่อยู่)`: การโอนจากหรือถึงที่อยู่นั้นจะไม่ถูกปล่อย (`Blocked`) จนกว่า governance จะปลด (`untrip`, `zetaphy bridge untrip 0x…`) เงินไม่หาย ค้างอยู่ใน airlock
+     (หลังปลดแล้ว `bridge watch` ไม่ลองปล่อยรายการที่เคยได้ `Blocked` ซ้ำ ใครก็เรียก `release` เองได้)
+   - marker ยืนยัน ยับยั้ง ปล่อย mint หรือหยุดสะพาน **ไม่ได้** และโยกเงินไม่ได้ ถ้า key หลุด ที่เสียคือการโอนของบางที่อยู่ช้าลง จนกว่า governance จะถอด marker (`zetaphy bridge marker 0x… --off`) และปลดเครื่องหมาย
+   - airlock **ไม่เก็บรายชื่อสัญญาล่อ** บนเชน: รายชื่อสัญญาที่ตัวเฝ้าเฝ้าไว้ (watch list) เป็น secret ของ repo (`BRIDGE_WATCHLIST`) ไม่อยู่ในไฟล์ใดที่ commit และไม่ปรากฏในผลของตัวเฝ้า ใครเรียกสัญญาเหล่านั้น ตัวเฝ้าแจ้งเตือนแล้วทำเครื่องหมายผู้เรียก (ดู "เฝ้าดู")
+   - ทำเครื่องหมายเฉพาะผู้เรียกโดยตรง (`msg.sender` ที่สัญญาที่เฝ้าไว้ส่งออกใน event) ไม่ใช่ `tx.origin` คนที่ถูกหลอกให้เรียกสัญญาตัวกลางที่ไปแตะสัญญาที่เฝ้าไว้จึงไม่โดน (สัญญาตัวกลางโดนแทน)
+   - การทำเครื่องหมาย **ไม่สั่งหยุดสะพานจริง** และ **ไม่ทันที**: ตัวเฝ้าทำในรอบถัดไป จึงต้องตั้ง `quarantine` ให้นานกว่าช่วงห่างของรอบตัวเฝ้า (ดู "เฝ้าดู")
+5. เงินที่ผ่านทุกด่านแล้วยังต้องผ่านเพดานต่อวันของ `BridgeGuard` อีกชั้น
+6. **วัคซีน** (เมื่อตั้ง `--threats`): ผู้ส่งหรือสัญญาต้นทางที่ติดธงใน `ThreatRegistry` หรือผู้รับบน ZETAPHY ที่ที่อยู่หรือโค้ดติดธง
+   - **กักเมื่อธงอายุครบ `holdDelay`** (ค่าเริ่มต้น 10 นาที ต้องน้อยกว่า `enforceDelay`; governance ปรับด้วย `setHoldDelay` / `zetaphy threat hold-delay`):
+     `BridgeAirlock` ไม่ปล่อย (`ThreatHeld`) ธงที่เพิ่งติดยังไม่กักอะไร คนรันร่าง 2 คนจึงแช่แข็งการโอนของใครทันทีไม่ได้ governance และ guardian มีเวลาดู
+     - **กักทันที** ได้สองทาง: ธงผ่านช่องทางด่วน (`fastQuorum`) หรือ governance / guardian เรียก `holdNow(key)` (`zetaphy threat hold-now <target>`)
+     - **อะไรปลดการกัก:** ปลดธง (quorum เดิม หรืออุทธรณ์สำเร็จ) หรือ governance ปกป้องคีย์ เท่านั้น ปลดเมื่อไรก็ปล่อยได้ทันที
+     - **ฝั่ง LockBox ไม่มีทางคืนเงิน:** ระหว่างที่กัก (หรือถูก veto) เหรียญยังล็อกอยู่ใน LockBox บนเชนต้นทาง ไม่มีฟังก์ชันคืนเงิน จึงรอจนปลดการกักเท่านั้น
+     - `zetaphy bridge watch` ถาม `BridgeAirlock.heldParty` (ใช้ `is*Held` ของ registry) ก่อนปล่อย ถูกกัก = ไม่ปล่อย ถามไม่ได้ = ไม่ปล่อย (ยังยืนยันได้ เพราะ airlock กักอยู่แล้ว)
+   - **เมื่อธงบังคับใช้แล้ว** (ติดธงมานานกว่า `enforceDelay` หรือผ่านช่องทางด่วน ดูขั้น 4): `NeuroLane` ไม่ยืนยันให้ และ `BridgeAirlock` ปฏิเสธ (`ThreatFlagged`) แต่การโอน **ยังค้างอยู่ ไม่หาย** ปลดธงเมื่อไรก็ปล่อยได้
+   - `BridgeGuard` ใช้การกักชุดเดียวกัน (`isContractHeld`: หลัง `holdDelay`, ช่องทางด่วน หรือ `holdNow`) ไม่รอ `enforceDelay`
+     - **ขาเข้า: เข้าคิว ไม่ revert** (`InboundHeld`, รหัสใน `held`) ข้อความของ adapter ถือว่าส่งแล้ว จึงไม่ต้องพึ่ง adapter ให้ลองใหม่
+       (Hyperlane ไม่ส่งข้อความเดิมซ้ำ และ adapter ภายนอกอาจไม่ลองซ้ำ) ใครก็เรียก `releaseHeld(id)` ได้เมื่อปลดการกักแล้ว
+       ตอนปล่อยยังต้องผ่าน pause เส้นทางที่ยังเปิด และเพดานต่อวันของเส้นทาง (นับตอนปล่อย ไม่นับตอนเข้าคิว) governance ทิ้งรายการในคิวได้ (`dropHeld`, เช่น จาก adapter ที่ถูกแฮ็ก)
+     - **ขาออก: revert** (`FlaggedContract`) ก็แค่ยังไม่เผา เหรียญยังอยู่กับผู้ถือ (เงินที่ขโมยมาพาออกทางสะพานไม่ได้)
+     - ทาง `BridgeAirlock`: การโอนที่กักค้างอยู่ใน airlock เอง (`release` ทีหลัง) และ airlock ตรวจผู้รับก่อนเรียก `inbound` อยู่แล้ว
+   - `BridgeGuard` **ไม่ตรวจ adapter**: governance เลือก adapter เอง ปิดเส้นทางได้เอง ธงจากคนรันร่าง (code hash หรือที่อยู่) จึงหยุดทั้งเส้นทางไม่ได้
+   - กักให้นานกว่าธง (แม้ปลดธงแล้ว): ใช้การยับยั้ง (veto) ของ Neuro lane หรือ guardian
+   - ดูรายละเอียดที่ "ฉีดวัคซีน" ในขั้น 4
+7. ระหว่างที่ Neuro ถูกหยุด (`NeuroControl.paused`) `NeuroLane` ไม่ยืนยันอะไรเลย แต่ยังโหวตยับยั้งได้ (กันเงินไว้ปลอดภัยเสมอ)
+   - `deploy-bridge` ใช้ `control()` ของ NeuroJobs เป็นสวิตช์โดยอัตโนมัติ (`--control` ใช้แทนได้)
+   - `bridge watch` อ่านสวิตช์ไม่ได้ (RPC ล่ม) = ลองซ้ำ แล้ว **ไม่ยืนยัน** จนกว่าจะอ่านได้ (ปิดไว้ก่อน)
+
+8. **Hyperlane เป็นสะพานสายที่สอง (`HyperlaneLane`):** อิสระจาก NeuroLane จริง เพราะสิ่งที่ยืนยันมาจาก Mailbox ของ Hyperlane และ ISM (ชุด validator ของ Hyperlane) ไม่ใช่คนรันร่าง
+   - ฝั่งต้นทาง `HyperlaneLockBox.lock(to, amount)` (จ่าย amount + ค่าส่ง `quoteLock`) ล็อกเหรียญ ส่ง event `Locked` แบบเดียวกับ `LockBox` (คนรันร่าง `bridge watch` ได้เหมือนเดิม)
+     และส่งข้อความ `dispatch(destinationDomain, recipient, body)` ผ่าน Mailbox
+   - ฝั่ง ZETAPHY `HyperlaneLane.handle(origin, sender, body)` รับเฉพาะ: ผู้เรียกคือ Mailbox ที่ตั้งไว้, origin domain ที่ตั้งไว้, sender = LockBox (หรือ router) ที่ตั้งไว้,
+     และ body บอกเชนต้นทาง + สัญญาต้นทางตรงกับที่ตั้งไว้ แต่ละรายการรับครั้งเดียว (`Replay`)
+   - body = `abi.encode(srcChainId, srcContract, nonce, sender, to, amount)` ฟิลด์เดียวกับที่ NeuroLane ยืนยัน จึงได้ transfer id เดียวกัน (`BridgeAirlock.transferId`)
+   - governance (multisig) ตั้งค่า (`setConfig`) และ ISM ของตัวเอง (`setInterchainSecurityModule`; 0 = ISM ค่าเริ่มต้นของ Mailbox) ได้ ทุกการเปลี่ยนเป็น event ที่ monitor แจ้งเตือน
+   - interface ของ Hyperlane v3 เขียนเองแบบสั้น (ไม่มีแพ็กเกจ offline) ตรวจกับ `hyperlane-xyz/hyperlane-monorepo` commit `bc8cfcec461930ec005590bc838871f903a297a1` (ดูหัวไฟล์ `contracts/HyperlaneLane.sol`)
+   - ZETAPHY ยังไม่มี Hyperlane: ต้องติดตั้ง Mailbox + ISM + relayer + validator ของ Hyperlane เอง (permissionless) ก่อน และ validator ของ Hyperlane ต้องไม่ใช่กลุ่มเดียวกับคนรันร่าง Neuro
+   - `independentLanes()` นับ lane ตาม "ผู้ควบคุม" (`laneController()`: NeuroLane = NeuroJobs, HyperlaneLane = Mailbox, key ตรง ๆ = ตัวมันเอง) NeuroLane สองตัวบน NeuroJobs เดียวกันนับเป็น 1
+
+```
+zetaphy deploy-threats --quorum 3 --min-agreed 5 --enforce-delay 3600
+zetaphy deploy-bridge --lockbox 97:0x<HyperlaneLockBox> --quarantine 3600 --threats 0x<ThreatRegistry> \
+  --hyperlane-mailbox 0x<Mailbox บน ZETAPHY> --hyperlane-origin <domain ต้นทาง> [--hyperlane-ism 0x<ISM>] \
+  --guardian 0x<guardian multisig> --governance 0x<governance multisig> --marker 0x<ที่อยู่ของ key ตัวเฝ้า>
+#   ติดตั้งแบบปิด (route ยังไม่เปิด) เพดานต่อวันเริ่ม 1,000 โทเคน
+#   --guardian / --governance ต้องเป็น multisig (ไม่งั้นไม่ deploy) ใช้ key เดี่ยวได้เฉพาะ --devnet (RPC 127.0.0.1) หรือ --allow-eoa-for-testing
+#   มี ThreatRegistry แล้วต้องมี --lockbox (ไม่งั้นไม่ deploy) เพื่อปกป้อง LockBox ต้นทางเสมอ หรือใส่ --no-lockbox-protect อย่างจงใจ แล้ว threat protect ทีหลัง
+zetaphy threat set-governance gov        # หรือ 0x<multisig> หลัง deploy-bridge ปกป้องคีย์ของสะพานแล้ว
+zetaphy bridge watch --source-rpc https://<เชนต้นทาง> --lockbox 0x... --confirmations 12 --release
+```
+
+### เปิดสะพาน: ประตูทุกข้อต้องผ่าน
+
+`zetaphy bridge gates ...` ตรวจอย่างเดียว · `zetaphy bridge open ...` ตรวจแล้วเปิด (ถ้าไม่ผ่านแม้ข้อเดียว พิมพ์ทุกข้อที่ขาดแล้วจบด้วย exit 1 ไม่ส่งธุรกรรม)
+
+| # | ประตู | ตรวจที่ |
+|---|---|---|
+| 1 | lane ≥ 2 สายที่ **ผู้ควบคุมต่างกัน** (เช่น NeuroLane + HyperlaneLane) ไม่มี lane ใดที่ผู้ควบคุมหรือ admin เป็น key ของคน deploy ไม่มี admin ของ lane หนึ่งคุมอีก lane ไม่มี lane ที่เป็น key เดี่ยว | `BridgeGuard.setRoute(enabled)` ต้องได้ `independentLanes() ≥ 2` (บนเชน) + CLI ตรวจที่เหลือ และพิมพ์ตาราง lane / controller / admin / ISM ให้คนดูยืนยัน |
+| 2 | audit: `--audit-report <https url> --audit-sha256 <sha256 ของไฟล์รายงาน>` | บนเชน: `BridgeGuard.setAudit` (event `AuditSet`) และ `setRoute(enabled)` revert `AuditMissing` ถ้ายังไม่มี |
+| 3 | คนรันร่าง Neuro อิสระ ≥ 10 (`--min-runners`, ลดได้เฉพาะ devnet) | `NeuroJobs.activeWorkers()` (ข้อมูลบนเชนบอกไม่ได้ว่าคนละคนจริง: ต้องมีคนตรวจเหมือนประตู 1) |
+| 4 | guardian และ governance เป็น multisig คนละตัว (Safe หรือ SimpleMultisig: threshold ≥ 2, owner ≥ 3, ไม่ซ้ำ, ไม่มี key ของคน deploy) ไม่มี owner คนเดียวกันในทั้งสองตัว · governance เป็น gov module ได้ | CLI อ่าน `getOwners/getThreshold` (Safe) หรือ `owners/threshold` (SimpleMultisig) ของ governance ของ BridgeGuard, BridgeAirlock, HyperlaneLane และ `BridgeGuard.guardians()` |
+| 5 | เพดานต่อวันไม่เกิน 1,000 โทเคน (เกินต้อง `--raise-cap`) และไม่เกิน `maxDailyLimit` บนเชน | CLI + บนเชน (`OverCap`) |
+| 6 | เชนที่ไม่ใช่ devnet ต้องใส่ `--i-understand-real-funds` | CLI (devnet = `--devnet` + RPC 127.0.0.1/localhost: devnet กับ testnet ใช้ EVM chain id 77390 เหมือนกัน จึงแยกด้วย chain id ไม่ได้) |
+| 7 | (นอก CLI) bug bounty ที่มีเงินจริงแล้ว (`docs/BUG_BOUNTY.md`) และตัวเฝ้าดูทำงานแล้ว | เจ้าของโครงการ |
+
+```
+zetaphy bridge open --audit-report https://<ผู้ตรวจ>/zetaphy-bridge.pdf --audit-sha256 <sha256sum ของไฟล์> \
+  --daily-limit 1000 --i-understand-real-funds
+#   key นี้ไม่ใช่ governance: พิมพ์ to/data ให้ multisig (setAudit ก่อน แล้ว setRoute) หรือเป็น MsgEVMCall ถ้า governance เป็น gov module
+zetaphy bridge pause        # guardian: หยุดทุกอย่างทันที (เปิดคืนได้เฉพาะ governance: unpause)
+zetaphy bridge close        # governance: ปิด route
+```
+
+### เพดานโตทีละขั้น
+
+- `maxDailyLimit` เริ่มที่ **1,000 โทเคน** (ตามทศนิยมของโทเคน) ตอน `createToken` เป็นเพดานแข็งของทุก route (route ที่ตั้งไว้สูงกว่าก็ใช้เพดานนี้)
+- **ลด:** governance ลดได้ทันที (`proposeMaxDailyLimit` ค่าที่ต่ำกว่า) และยกเลิกการขึ้นที่รออยู่ด้วย
+- **ขึ้น:** governance เสนอได้ไม่เกิน **2 เท่า** ของเพดานปัจจุบัน แล้วรอ **7 วัน** ใครก็เรียก `applyMaxDailyLimit` ได้หลังครบ (ยกเลิกได้ด้วย `cancelMaxDailyLimit`) ทุกขั้นเป็น event ที่ monitor แจ้ง
+- CLI: `zetaphy bridge cap` / `bridge cap propose <โทเคน>` / `bridge cap apply` / `bridge cap cancel`
+- แผนที่แนะนำ (ขึ้นเมื่อ 2 สัปดาห์ก่อนหน้าไม่มีการแจ้งเตือนร้ายแรง และวงเงินสะพานยังน้อยกว่า 1/3 ของ stake ตามประตู 3):
+
+| สัปดาห์ | เพดานต่อวัน |
+|---|---|
+| 0 (เปิด) | 1,000 |
+| 2 | 2,000 |
+| 4 | 4,000 |
+| 6 | 8,000 |
+| 8 | 16,000 |
+| ทุก 2 สัปดาห์ต่อจากนั้น | ×2 จนถึงเป้าที่ governance โหวต |
+
+### multisig + hardware wallet
+
+- **คนละ multisig:** guardian (กด pause) กับ governance (ตั้งค่า เปิด route เปิดคืน) เป็น multisig คนละตัว **คนหนึ่งถือ key เดียว** ไม่มี owner ซ้ำกันระหว่างสองตัว ไม่มี key ของคน deploy
+- **owner แต่ละคนใช้ hardware wallet** (Ledger หรือ Trezor) ผ่าน MetaMask: MetaMask → รูปบัญชี → **Add account or hardware wallet → Add hardware wallet** → เลือก Ledger/Trezor → เลือกบัญชี
+  - เพิ่มเครือข่าย ZETAPHY ใน MetaMask (chain id 77390, RPC สาธารณะ) แล้วใช้ที่อยู่ของบัญชี hardware นั้นเป็น owner
+  - ยืนยันทุกธุรกรรมบนหน้าจอของอุปกรณ์ (ตรวจ `to` และ data) อย่าเก็บ seed ของอุปกรณ์ไว้ในคอมพิวเตอร์หรือคลาวด์
+- **SimpleMultisig** (ในโฟลเดอร์นี้): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` แต่ละ owner `propose` / `confirm` / `execute` จาก MetaMask (เช่นหน้า "Write contract" ของ explorer)
+- **Safe:** เชนมี Safe singleton factory (`0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7`) ติดตั้งตั้งแต่ genesis จึง deploy Safe (singleton, proxy factory) ที่อยู่เดียวกับเชนอื่นได้ด้วย
+  safe-deployments แล้วใช้ Safe{Wallet} แบบ self-host หรือ Safe CLI กับ RPC ของ ZETAPHY · `bridge open` อ่าน `getOwners()` / `getThreshold()` ของ Safe ได้
+- governance เป็น gov module ได้ (`0x7b5F…3dF2`, เปลี่ยนค่าด้วยโหวต) แต่ guardian ควรเป็น multisig ที่กดได้เร็ว
+
+### เฝ้าดู (monitor) และแจ้งเตือน
+
+`zetaphy bridge monitor` อ่าน event ของ BridgeGuard, BridgeAirlock, NeuroLane, HyperlaneLane, ThreatRegistry, ZetaphyTimelock, ZetaphyOracle (อ่านที่อยู่จาก launch state หรือ `--timelock` / `--oracle`; ไม่มีสะพานก็เฝ้าสองตัวนี้ได้), (ถ้าให้ `--source-rpc --lockbox`) LockBox ต้นทาง และสัญญาใน watch list (ถ้ามี) แล้วแจ้งเตือนเมื่อ (ใช้ key เฉพาะเมื่อตั้ง `BRIDGE_MARKER_KEY` เพื่อทำเครื่องหมาย):
+
+| กฎ | เมื่อไร |
+|---|---|
+| `volume` | ยอดเข้าหรือออกวันนี้ ≥ 80% ของเพดาน (`--volume-pct`) · ถึงเพดาน = ร้ายแรง |
+| `lanes-disagree` | การฝากเดียวกัน (เชน สัญญา nonce เดียวกัน) ถูกยืนยันด้วยรายละเอียดต่างกัน (ร้ายแรง) |
+| `lane-missing` | lane หนึ่งยืนยัน อีก lane ไม่ยืนยันภายใน 30 นาที (`--disagree-minutes`) |
+| `lane-silent` | มีการฝากบนเชนต้นทางแต่ไม่มี lane ยืนยันภายใน 30 นาที (`--silent-minutes`, ต้องมี `--source-rpc`) |
+| `release-stalled` | ครบ lane + กักกันแล้วแต่ไม่ถูกปล่อยภายใน 30 นาที (relayer เงียบ หรือถูกกัก) |
+| `veto` / `pause` | มี veto, guardian กด pause (ร้ายแรง) |
+| `watch-hit` | สัญญาใน watch list ส่ง event (ร้ายแรง) บอกเฉพาะผู้เรียก ไม่บอกว่าสัญญาไหน |
+| `marked` | มีการทำเครื่องหมายที่อยู่ (`Tripped`) ที่ตัวเฝ้านี้ทำเอง = เตือน · marker อื่นทำ = ร้ายแรง (ตรวจว่าใครถือ key นั้น) |
+| `mark-failed` | ทำเครื่องหมายไม่สำเร็จ (key ไม่ได้เป็น marker, แก๊สไม่พอ) ลองใหม่ทุกรอบ (ร้ายแรง) |
+| `mark-skipped` | ผู้เรียกเป็นสัญญา (เช่น Multicall, router ที่หลายคนใช้ร่วมกัน) จึงไม่ทำเครื่องหมายอัตโนมัติ ให้คนตัดสินใจ (เตือน) |
+| `hold` | `InboundHeld` ของ BridgeGuard, `HeldNow` / `FastEnforced` ของ ThreatRegistry |
+| `governance-change` | เปลี่ยน route เพดาน `maxDailyLimit` lane vetoer marker guardian governance audit registry config/ISM ของ HyperlaneLane, unpause, untrip |
+| `large-transfer` | รายการเดียว ≥ 25% ของเพดานต่อวัน (`--large-pct`) |
+| `timelock-scheduled` | มีการตั้งเวลาเรียกใน ZetaphyTimelock: สัญญาปลายทาง ชื่อฟังก์ชัน (ถ้ารู้จัก) และเวลาที่ทำได้ (ETA) · เปลี่ยน governance/role/delay/lane/ราคา = ร้ายแรง · นี่คือช่วงที่ยังยกเลิกได้ |
+| `timelock-proposal` | ข้อเสนอโหวต gov ที่จะตั้งเวลา (หรือยกเลิก) ใน timelock อ่านจาก Cosmos REST ของโหนด (`--rest`, ค่าเริ่ม `<RPC https>/rest`) และรายละเอียดของ MsgEVMCall จาก CometBFT (`--comet-rpc`, ค่าเริ่ม `<RPC https>/rpc`) เห็นตั้งแต่ช่วงโหวต |
+| `timelock-executed` / `timelock-cancelled` | การเรียกที่รอครบแล้วถูกเรียกจริง / ถูกยกเลิก |
+| `timelock-delay` | เปลี่ยนระยะรอของ timelock (`MinDelayChange`, ร้ายแรง) · เพิ่ม/ถอด role ของ timelock = `governance-change` |
+| `oracle-deviation` | TWAP ของ DEX กับ Pyth ต่างกันเกิน `maxDeviationBps` (`DeviationTripped`, ไม่มีราคา, ร้ายแรง) |
+| `oracle-stale` | แหล่งราคาเก่าเกินไป (`StaleFeed` หรือ `price()` ปฏิเสธด้วย `TwapStale`/`PythStale`) |
+| `oracle-breaker` | ตัดวงจร: ราคากระโดดเกินเพดานต่อรอบ/ต่อช่วง ไม่มีราคาจนกว่า governance จะรีเซ็ตผ่าน timelock (ร้ายแรง) |
+| `oracle-paused` / `oracle-problem` / `oracle-unavailable` | guardian หยุดราคา (ร้ายแรง) / ปัญหาอื่นของแหล่งราคา (สภาพคล่องต่ำ, ข้อมูลไม่พอ, spike) / ตอนนี้ `price()` ไม่คืนราคา |
+
+ผลเป็น JSON (`--out`) สรุปภาษาไทย + อังกฤษ (`--summary` และหน้าจอ) และเนื้อหา issue (`--issue`) แจ้งเตือนเดิมไม่ซ้ำ (เก็บใน `--state` พร้อมบล็อกล่าสุดที่อ่านแล้ว) · `--quiet` พิมพ์แค่จำนวน (สำหรับ log สาธารณะ)
+
+**ค่าลับอ่านจาก environment (secret ของ repo) เท่านั้น ไม่อยู่ในไฟล์ที่ commit:**
+- `BRIDGE_MONITOR_THRESHOLDS`: JSON ทับค่าเกณฑ์ใน `bridge-monitor.json` เช่น `{"volumePct": 60, "largePct": 10}` (คีย์ `volumePct`, `largePct`, `silentMinutes`, `disagreeMinutes`)
+  **ค่าใน `bridge-monitor.json` เป็นแค่ค่าเริ่มต้นที่เปิดเผย** ค่าที่ใช้จริงตั้งเป็น secret ได้ (ลำดับ: ตัวเลือกบรรทัดคำสั่ง > secret > ไฟล์ > ค่าในโค้ด)
+- `BRIDGE_WATCHLIST`: JSON `[{"address": "0x…", "callerTopic": 1}]` สัญญาที่ทุก event = แจ้งเตือน ผู้เรียกอ่านจาก topic ที่ `callerTopic` (ค่าเริ่มต้น 1 = พารามิเตอร์ indexed ตัวแรก)
+  - สัญญาที่เฝ้าต้องส่ง `msg.sender` ของตัวเองลง topic นั้น ถ้าผู้เรียกเลือกค่าที่ลงไปได้ ก็สั่งให้ทำเครื่องหมายใครก็ได้
+  - ผู้เรียก = ผู้เรียกโดยตรง คนที่ถูกล่อผ่านสัญญาตัวกลางจึงไม่โดน (สัญญาตัวกลางโดนแทน)
+  - ไม่มีผลลัพธ์ใดของตัวเฝ้าเอ่ยที่อยู่สัญญาที่เฝ้าไว้ (แจ้งเตือน, JSON, สรุป, issue, state) ใช้คำว่า "a watched contract" แทน มีชุดทดสอบตรวจทุกตัวพิมพ์
+- `BRIDGE_MARKER_KEY`: private key ของ marker (governance ตั้งด้วย `zetaphy bridge marker 0x<ที่อยู่ของ key นี้>`) ตัวเฝ้าเรียก `trip(ผู้เรียก)` ให้ผู้เรียกรายใหม่ที่ยังไม่ถูกทำเครื่องหมาย (จำไว้ใน state ไม่ทำซ้ำ)
+  - key นี้ไม่ถูกพิมพ์หรือบันทึกที่ใด ใส่ ZETAPHY ไว้แค่พอค่าแก๊ส และอย่าให้สิทธิ์อื่น
+  - ที่อยู่ที่ governance เคยปลด (`untrip`) ตัวเฝ้าไม่ทำเครื่องหมายซ้ำเอง (แจ้งเตือนให้คนตัดสิน)
+- ตั้งค่าใดค่าหนึ่งข้างบนแล้ว ไฟล์ `--state` จะถูกเข้ารหัส (AES-256-GCM ด้วย key ที่ได้จากค่าลับเหล่านั้น) เหลือแค่เลขบล็อกล่าสุดที่อ่านแล้วที่ไม่เข้ารหัส
+  เปลี่ยนค่าลับเมื่อไร (เช่น หมุน watch list หรือ marker key) ความจำเดิมอ่านไม่ได้ ตัวเฝ้าอ่านต่อจากบล็อกเดิมด้วยความจำใหม่ (แจ้งเตือนเดิมอาจซ้ำหนึ่งครั้ง ไม่อ่านย้อนหลังใหม่)
+
+**GitHub Actions (`.github/workflows/bridge-monitor.yml`):** ตอนนี้ปิดตารางเวลาไว้ (repo เป็น private ได้นาทีฟรีแค่ 2,000/เดือน) กดรันเองได้ (ใส่ `from_block` เพื่ออ่านใหม่); เมื่อเปิดสะพานแล้วให้เปิดบรรทัด `schedule` ในไฟล์
+1. ใส่ที่อยู่สะพานใน `zetaphy-network/bridge-monitor.json` (`bridgeGuard`, `bridgeAirlock`, `startBlock`, `rpc`) หรือปล่อยว่างให้อ่านจาก `zetaphy-launch/state/77390.json`
+   RPC ใส่ในไฟล์นั้นหรือเป็น repository variable `ZETAPHY_RPC` (Settings → Secrets and variables → Actions → **Variables**)
+2. ยังไม่มีสะพาน = workflow ไม่ทำอะไร (notice แล้วจบ exit 0)
+3. **log ของ Actions, step summary, artifact และ issue ของ repo สาธารณะ ทุกคนเห็น** workflow จึงพิมพ์แค่จำนวนแจ้งเตือน (`--quiet`) ไม่พิมพ์รายละเอียด
+   และเก็บ artifact รายงาน (`bridge-monitor-report`) เฉพาะตอน repo เป็น private · artifact `bridge-monitor-state` เข้ารหัสด้วยค่าลับ (ข้างบน)
+4. รายละเอียดแจ้งเตือนส่งไปช่องทางส่วนตัวเท่านั้น (secret ทั้งหมด ไม่พิมพ์ค่าลง log):
+   - `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` และ/หรือ `DISCORD_WEBHOOK_URL`
+   - `PRIVATE_ALERTS_TOKEN`: fine-grained token ที่มีสิทธิ์ Issues: read and write เฉพาะ repo ส่วนตัว (variable `PRIVATE_ALERTS_REPO`, ค่าเริ่มต้น `pospos191-alt/zetaphy-private`) แจ้งเตือนเป็น issue `bridge-alert` ที่นั่น
+   - issue ใน repo นี้ **เฉพาะ** เมื่อตั้ง variable `BRIDGE_ALERT_ISSUES` = `on` (ถ้า repo เป็น public แจ้งเตือนจะเป็นสาธารณะ)
+5. มีแจ้งเตือนแต่ไม่มีช่องทางไหนรับ = run **ล้ม** พร้อมข้อความสั้น (มีแค่จำนวน) และไม่บันทึก state รอบหน้าอ่านบล็อกเดิมแล้วส่งใหม่
+6. บล็อกล่าสุดที่อ่านแล้วเก็บใน artifact `bridge-monitor-state` ของ run ที่สำเร็จล่าสุด run ต่อไปอ่านต่อจากนั้น ไม่อ่านซ้ำ
+7. **ทำเครื่องหมายอัตโนมัติไม่ทันที:** ตัวเฝ้าทำเครื่องหมายในรอบถัดไป `quarantine` ของ airlock (ค่าเริ่มต้น 3600 วินาที) ต้องนานกว่าช่วงห่างของรอบ บวกความล่าช้าของตัวตั้งเวลา (มัก 5–15 นาที)
+   ไม่งั้นการโอนของผู้เรียกอาจถูกปล่อยก่อน รายชั่วโมงต้องใช้ quarantine เกิน 1 ชม. พอสมควร · แนะนำเมื่อ repo เป็น public: ทุก 15 นาที (`*/15`) กับ quarantine อย่างน้อย 2 ชม. (`setQuarantine(7200)`)
+8. ค่าใช้จ่าย: repo สาธารณะฟรี · repo ส่วนตัว รายชั่วโมง ~720 นาที/เดือน ทุก 15 นาที ~2,900 นาที/เดือน (เกินโควตาฟรี 2,000)
+
+## Timelock: ทุกการเปลี่ยนกติการอ 48 ชั่วโมง ยกเว้นปุ่มฉุกเฉินที่ลดความเสี่ยงเท่านั้น
+
+สิทธิ์ผู้ดูแลทุกตัวของสัญญาสำคัญเป็นของ **ZetaphyTimelock** (= OpenZeppelin `TimelockController` 5.4.0 ไม่แก้ไข + `AccessControlEnumerable` ของ OpenZeppelin เพื่อให้นับได้บนเชนว่าใครถือ role อะไร)
+- **ระยะรอ (min delay):** 48 ชั่วโมงเป็นค่าเริ่มต้น ต่ำกว่า 24 ชั่วโมงทำได้เฉพาะบน devnet (`--devnet` + RPC 127.0.0.1) ทั้ง `deploy-timelock` และ launch tool ปฏิเสธ
+- **proposer / canceller:** multisig ของ governance (หรือ gov module `0x7b5F…3dF2` ที่เสนอด้วยโหวต) เท่านั้น
+- **executor: ใครก็ได้** (`address(0)`) เพราะสิ่งที่จะเรียกถูกล็อกไว้ตั้งแต่ตอนตั้งเวลา และทุกคนเห็นมา 48 ชั่วโมงแล้ว ให้ใครก็กดเรียกได้จึงไม่เพิ่มความเสี่ยง แต่กัน "ตัวประกัน": proposer ที่หายไปหรือ gov module ที่ต้องโหวตรอบสอง ไม่ทำให้การเปลี่ยนที่ผ่านแล้วค้าง ระหว่างรอ canceller ยังยกเลิกได้เสมอ (เลือก `--timelock-executor governance` ได้ถ้าต้องการ)
+- **admin: ตัว timelock เอง** ไม่มี key ผู้ดูแล การเพิ่ม proposer หรือเปลี่ยนระยะรอก็ต้องรอ 48 ชั่วโมงเหมือนกัน (`MinDelayChange`, `RoleGranted` ตัวเฝ้าแจ้งเตือน)
+- ไฟล์ OpenZeppelin ที่ใช้ copy มาไว้ใน `vendor/@openzeppelin/contracts/` เฉพาะที่จำเป็น (22 ไฟล์) ไม่แก้ไข `vendor/openzeppelin-contracts.json` บันทึกเวอร์ชัน 5.4.0, integrity ของ tarball บน npm (`sha512-eCYg…6A==`) และ sha256 ของทุกไฟล์ `scripts/build.js` ไม่ยอม build ถ้าไฟล์ใดไม่ตรง หรือ import จากที่อื่น (ไม่ใช้ node_modules ไม่ใช้เน็ต)
+
+| สัญญา | ไปที่ timelock (รอ 48 ชม.) | ทำได้ทันที (guardian: ลดความเสี่ยงเท่านั้น) |
+|---|---|---|
+| BridgeGuard | `setGovernance`, `setGuardian`, `setAudit`, `setRoute` (เปิด/ตั้ง), `proposeMaxDailyLimit` (ขึ้นเพดาน ยังรออีก 7 วันของตัวเอง), `setThreats`, `unpause`, `dropHeld` | `pause`, `lowerMaxDailyLimit` (ลดเท่านั้น), `cancelMaxDailyLimit`, `disableRoute` |
+| BridgeAirlock | `setLane`, `setMarker` (เพิ่ม), `setVetoer`, `setThreshold`, `setQuarantine`, `setThreats`, `untrip`, `setGovernance` | guardian ของ BridgeGuard: `emergencyRemoveLane`, `emergencyRemoveMarker`, `emergencyRaiseThreshold`, `emergencyRaiseQuarantine` (ขึ้นเท่านั้น สูงสุด 30 วัน) · vetoer: `veto` · marker: `trip` |
+| HyperlaneLane (ถ้ามี) | `setConfig`, `setInterchainSecurityModule`, `setGovernance` | – |
+| ThreatRegistry (+ ThreatReports ที่ตามมัน) | `setGovernance`, `setEnforceDelay`, `setHoldDelay`, `setFastQuorum`, `setGuardian`, `setIdentity`, `setResponder`, `setAppeals`, `setProtected` · ThreatReports: `setFee`, `setTtl`, `setCommunityFund` | `holdNow`, `enforceNow` (เฉพาะธงที่ quorum ตั้งแล้ว) |
+| NeuroControl (ปุ่มปรับของ NeuroJobs) | ทักษะ, defender, เชน, เพดานร่าง, เงินวางท้าทาย, กองทุนชุมชน, `setGuardian`, `setGovernance`, `unpause` | `pause` |
+| NeuroJobs | – (ค่าทั้งหมดอยู่ใน NeuroControl; `setControl` ครั้งเดียวโดยผู้ deploy ซึ่งใช้ไปแล้ว launch ตรวจ) | – |
+| RewardVault | `proposeShares`, `cancelShares`, `setGovernance` (`applyShares` ใครก็ได้หลัง 30 วันของตัวเอง) | – |
+| StableGateway | `setOracle`, `setToken`, `setTestnetFixedPrices`, `setTestnetFixedPrice`, `sweep`, `withdrawReserve`, `setGuardian`, `setOwner`, `unpause` | `pause` |
+| ZetaphyOracle | `setTwap`, `setPythFeed`, `setGuards`, `setPyth`, `setGuardian`, `setGovernance`, `unpauseFeed`, `resetCircuitBreaker` | `pauseFeed` |
+| ZetaphyPythRelay | `setRelayer`, `setThreshold`, `setGovernance` | (หยุดการใช้ราคา: `pauseFeed` ของ oracle) |
+| NeuroIdentity | `addChain`, `setWeb`, `setAdmin` | – |
+| DEX factory (+ `sweep` ของ router) | `setFeeTo`, `setThreatRegistry`, `setGovernance` (สองขั้น: timelock เรียก `acceptGovernance`) | – |
+| NFT marketplace | `setFee`, `setThreatRegistry`, `setGovernance` | – |
+| ไม่มีผู้ดูแล | ComputeMarket, NeuroValidation, NFT factory, QuantumWalletFactory, NeuroLane, LockBox, TwapRecorder | – |
+
+**แยก role ตรงไหนบ้าง (ให้น้อยที่สุด):** BridgeGuard มี guardian อยู่แล้ว เพิ่มแค่ 3 ฟังก์ชันที่ลดความเสี่ยง · BridgeAirlock ไม่สร้าง role ใหม่ ใช้ guardian ของ BridgeGuard ตัวเดียวกัน · StableGateway และ ZetaphyOracle มี guardian กดหยุดได้อย่างเดียว ที่เหลือใช้ guardian/vetoer/marker เดิม
+- เอา marker ออกจะปลดเครื่องหมายทั้งหมดที่ marker นั้นทำ (เหมือน `setMarker(false)`)
+- `dropHeld` (ทิ้ง mint ที่ถูกกัก) ทำแล้วย้อนไม่ได้ จึงไปที่ timelock ระหว่างรอ guardian กด `pause` ได้ทันที
+- รายละเอียดด้านความปลอดภัยของ timelock และ guardian เก็บแยกไว้สำหรับทีม
+
+```
+zetaphy deploy-timelock --proposer 0x<multisig>[,0x…] | gov [--delay 172800 --executor open]
+zetaphy timelock schedule --to 0x<สัญญา> --sig "setFee(uint16,address)" --args 100,0x… [--salt ข้อความ --proposal-out p.json]
+#   key นี้เป็น proposer: ส่งเลย · ไม่ใช่: พิมพ์ to/data ให้ multisig (SimpleMultisig: propose/confirm/execute, Safe: Transaction Builder)
+#   ถ้า gov module เป็น proposer: เขียนไฟล์ proposal (MsgEVMCall ถึง timelock) ให้ zetaphyd tx gov submit-proposal p.json แล้ว gov.sh vote <id> yes
+zetaphy timelock status [<operation id>]   # ระยะรอ, ใครถือ role, สถานะ (Waiting/Ready/Done) และ ETA, ฟังก์ชันที่จะถูกเรียก
+zetaphy timelock execute <operation id>    # ใครก็ได้ หลังครบระยะรอ (อ่านรายละเอียดจาก event CallScheduled เอง)
+zetaphy timelock execute <id> --to 0x… --sig "…" --args … [--salt …]   # การเรียกที่โหวต gov ตั้งเวลา: ใส่ครบตามที่ schedule พิมพ์ (MsgEVMCall ไม่ทิ้ง log ใน eth_getLogs)
+zetaphy timelock cancel <operation id>     # canceller (multisig) ระหว่างรอ
+```
+- คำสั่ง governance เดิม (`bridge …`, `threat …`, `oracle feed`) รู้ว่า governance เป็น timelock แล้วพิมพ์คำสั่ง `zetaphy timelock schedule …` ที่ใช้แทนให้
+- เรียกซ้ำการเรียกเดิมต้องใช้ `--salt` ใหม่ (id ของ operation = hash ของ to, value, data, predecessor, salt)
+
+## ราคา: ZetaphyOracle (TWAP ของ DEX + Pyth พร้อมตัวกันราคาผิด)
+
+`price(asset)` คืน `(value, updatedAt)`: ราคาเป็น USD ทศนิยม 18 ตำแหน่ง หรือ **revert พร้อมชื่อเหตุผล** เสมอ ไม่มีการคืนราคาที่เก่า เอียง หรือกระโดด
+- **(ก) TWAP ของคู่เทรดบน DEX ของเรา** (ZetaphyPair เก็บ `price0/1CumulativeLast`) กับ stablecoin ที่นับเป็น $1
+  - `TwapRecorder` เก็บ observation: ใครก็ `record(pair)` ได้ (keeper, relay, ผู้ใช้) ไม่เกินครั้งเดียวต่อ `minSpacing` และต่อบล็อก ไม่มีผู้ดูแล
+  - ใช้ได้เมื่อหน้าต่างยาวพอ มี observation พอ pool ลึกพอทุก observation และไม่มีช่วงย่อยที่ราคาผิดปกติ (ค่าตั้งด้วย `oracle feed`)
+- **(ข) ราคาจาก Pyth** ผ่าน interface `IPyth` ของ Pyth เอง (`getPriceUnsafe`, struct `Price` ชุดเดียวกัน): ตรวจอายุ, เวลาในอนาคต, ราคาบวก, ช่วงความเชื่อมั่น (`conf`) และปรับเลขยกกำลัง (`expo`) เป็น 18 ทศนิยม
+  - ZETAPHY ยังไม่มี Pyth: `ZetaphyPythRelay` รับ update **รูปแบบเดียวกับ Pyth** (`abi.encode(PythStructs.PriceFeed, uint64 prevPublishTime)` แบบ `MockPyth.createPriceFeedUpdateData`) จาก relayer ที่ governance ตั้ง ต้องครบ `threshold` คนส่ง update เดียวกันจึงรับ
+  - relayer ส่งต่อราคาจาก Hermes (บริการสาธารณะฟรีของ Pyth): `zetaphy oracle relay-pyth --feed 0x<feed id> --every 30`
+  - **ต่อกับของจริงทีหลัง:** (1) Pyth มาที่ ZETAPHY: timelock เรียก `oracle.setPyth(<Pyth>)` ไม่ต้องแก้สัญญา (Pyth ตรวจลายเซ็น Wormhole เอง) หรือ (2) Hyperlane: receiver ที่ `handle()` รับ update ของ Pyth จากเชนที่ Pyth ตรวจแล้ว เป็น relayer คนเดียว (threshold 1) ของ ZetaphyPythRelay
+- **สองแหล่งต้องตรงกัน** ภายใน `maxDeviationBps` (ไม่งั้น `SourcesDeviate`) ค่าที่คืนเป็นของ Pyth โดยมี TWAP เป็นหลักยึด เปิดแหล่งเดียวก็ได้ (testnet ตอนนี้ใช้ TWAP อย่างเดียวจนกว่าจะมี feed)
+- **ตัดวงจร (circuit breaker):** `poke(asset)` (ใครก็ได้) บันทึก observation และถ้าทุกด่านผ่าน ตั้งราคานั้นเป็นราคาอ้างอิง ราคาที่กระโดดเกินเพดานต่อรอบหรือต่อช่วงเวลาถูกปฏิเสธ (`PriceJump`) และ poke ที่เจอจะตัดวงจร (`CircuitBreakerTripped`) ไม่มีราคาจนกว่า governance จะ `resetCircuitBreaker` ผ่าน timelock
+- ค่าทุกตัวเป็นของ timelock ยกเว้น `pauseFeed` ที่ guardian กดได้ทันที
+- ส่ง `poke` ด้วย gas คงที่ (เครื่องมือในนี้ใช้ 800,000) ไม่ใช้ค่าประมาณ
+- รายละเอียดด้านความปลอดภัย (เหตุผลของค่ากันและข้อจำกัด) เก็บแยกไว้สำหรับทีม
+
+```
+zetaphy deploy-oracle --relayers 0x<relayer> [--min-spacing 60 --guardian 0x<multisig>]
+zetaphy oracle feed 0x<WZETAPHY> --pair 0x<pool> --window 1800 --min-observations 10 --min-liquidity 10000 \
+  [--pyth-id 0x<feed id> --max-age 120 --max-conf 100] --max-deviation 200 --max-change 1500 --max-window-change 3000 --change-window 3600
+zetaphy oracle poke 0x<WZETAPHY>        # keeper (หรือ relay start --poke-oracle 60)
+zetaphy oracle status [0x<asset>]       # แหล่งราคา ค่ากัน ราคาสด และเหตุผลถ้าไม่มีราคา
+zetaphy oracle pause 0x<asset>          # guardian: หยุดทันที (เปิดคืนผ่าน timelock)
+```
+
+## ภูมิคุ้มกันและร่างงอก/หด
+
+**ร่าง** คือคนรันร่างที่มีสิทธิ์รับงานหนึ่งงาน
+
+- จำนวนร่าง = 4 + ceil(คำขอต่อนาที ÷ 6) ไม่เกิน `maxBodies` ของ NeuroControl (ค่าเริ่มต้น 64; เกินเพดานต้องโหวต)
+  - คำขอต่อนาที = นาทีที่คำขอมากที่สุดล่าสุด ซึ่งจางลงเป็นเส้นตรงจนเป็น 0 ใน 30 นาที
+  - เช่น นาทีหนึ่งมี 33 คำขอ ได้ 10 ร่าง · ว่าง 15 นาที เหลือ 7 · ว่าง 29 นาที เหลือ 5 · ครบ 30 นาที กลับเป็น 4
+  - งานแต่ละงานจำจำนวนร่างตอนส่งงาน (`jobInfo`) คนอื่นมาเปลี่ยนทีหลังไม่ได้
+  - นับเฉพาะคำขอที่ผ่านทุกการตรวจ และรับเฉพาะเชนในรายชื่อที่ผ่านโหวต คำขอเชนปลอมจึง revert และไม่ทำให้ร่างงอก
+  - คำขอที่ตอบไม่ได้แล้วหมดเวลาก็ยังเสีย 5% (เผา) ยิ่งโจมตียิ่งเสียเงิน
+- **ร่างป้องกัน 4 ที่นั่ง**: มีสิทธิ์รับงานเสมอ และนับรวมในจำนวนร่าง
+  - เติมจากรายชื่อที่ผ่านโหวต (`approve-defender`) ด้วย `zetaphy neuro regrow` (ใครเรียกก็ได้)
+  - เติมได้ไม่เกิน `maxRegrowPerHour` ที่นั่งต่อชั่วโมง (ค่าเริ่มต้น 4)
+  - ถ้าร่างป้องกันไม่รับงานจนเลย 1/3 ของเวลา commit การจับฉลากจะเปิดให้คนอื่นอย่างน้อย 3 ร่าง แล้วขยายเท่าตัว และใน 1/3 สุดท้ายคนรันร่างทุกคนมีสิทธิ์ ที่นั่งจึงเต็มเสมอถ้ามีคนออนไลน์ ไม่ว่าฉลากจะออกอย่างไร
+  - **รอบละ 1 ร่างป้องกัน ทุกช่วงเวลา**: ร่างป้องกันคนที่สองนั่งรอบเดียวกันไม่ได้เลย (ทั้ง 3 ช่วงของเวลา commit และในรอบท้าทาย) ยกเว้นคนรันร่างที่ active ทั้งหมดเป็นร่างป้องกันที่นั่งอยู่ (ไม่มีคนอื่นเลย งานจะได้ไม่ค้าง) ร่างป้องกัน 2–3 ร่างจึงยึดที่นั่งทั้งหมดไม่ได้ ตราบที่ยังมีคนรันร่างอื่น
+  - ร่างป้องกันไม่ได้ใช้สิทธิ์จากการจับฉลาก (เข้าได้ทางที่นั่งร่างป้องกันทางเดียว)
+- **heartbeat**: ร่างป้องกันที่ออฟไลน์เสียที่นั่ง
+  - คนรันร่างเรียก `heartbeat()` (commit หรือ reveal ก็นับ) โปรแกรมคนรันร่างส่งให้เองราวทุก 1/4 ของ `defenderTimeout`
+  - เงียบนานเกิน `defenderTimeout` (ค่าเริ่มต้น 6 ชั่วโมง เปลี่ยนด้วยโหวต `set-defender-timeout`) หมดสิทธิ์ร่างป้องกันทันที และ `regrow` ครั้งถัดไปเอาออกจากที่นั่ง
+  - กลับมาแล้วต้อง `heartbeat` ก่อน `regrow` จึงจะให้นั่งใหม่ได้
+- **กักตัว**: 2 strike (ตอบไม่ตรงเสียงส่วนใหญ่ หรือ commit แล้วไม่ reveal) ภายใน 5 งานล่าสุดที่ถูกตัดสิน (K = 2) ไม่จำเป็นต้องติดกัน
+  - ออกทันที: `workers().active` เป็น false ไม่นับในจำนวนคนรันร่างและเงินค้ำรวม ThreatRegistry, NeuroLane และ NeuroValidation จึงไม่นับเสียงด้วย ถ้าเป็นร่างป้องกันจะเสียที่นั่งทันที
+  - เงินค้ำเริ่มถอนอัตโนมัติ: `zetaphy node withdraw-bond` ได้หลังรอ 1 ชั่วโมง (หักค่าปรับแล้ว) ที่นั่งที่รับไว้ก่อนยัง reveal ได้
+  - ที่อยู่เดิมลงทะเบียนใหม่ไม่ได้จนกว่าจะผ่านโหวต (`release`) จากนั้น `register` ใหม่ได้ (เงินค้ำที่ยังไม่ถอนนับรวม และยกเลิกการถอน)
+- วงจร: ตรวจพบ (ตอบผิดซ้ำ) → กักตัว → `regrow` งอกร่างใหม่จากรายชื่อที่ผ่านโหวต → แจ้งทั้งเครือข่ายผ่าน `ThreatRegistry`
+- ดูสถานะ: `zetaphy neuro status`
+
+## รอบท้าทาย (challenge) และระดับความมั่นใจ
+
+ตอนคนรันร่างยังน้อย 2 คนที่ฮั้วกันอาจได้ที่นั่งพร้อมกันแล้วตัดสินผลเอง แต่ verdict ของ Neuro คำนวณซ้ำได้เสมอ (ข้อมูลเดียวกัน โค้ดเดียวกัน คำตอบเดียวกัน) ใครก็รัน Neuro ซ้ำแล้วพิสูจน์ว่าคู่นั้นผิดได้
+
+- **ท้าทาย**: `zetaphy job challenge <id> --verdict 0x<คำตอบที่ถูก>` (หรือ `challenge(id, claim)` บนสัญญา) ภายในเวลาท้าทายหลังได้ผล
+  - ต้องระบุคำตอบที่ตัวเองเชื่อว่าถูก (`claim`, ห้ามเป็น 0 และห้ามตรงกับผลปัจจุบัน)
+  - เวลาท้าทาย = `challengeWindow` ของ NeuroControl (ค่าเริ่มต้น 0 = เท่ากับเวลาหมดงาน `jobTimeout`)
+  - เงินวาง = อย่างน้อย max(2 × ค่างาน, `challengeBond`) (ค่าเริ่มต้น 1 ZETAPHY)
+  - เปิดได้ทีละรอบ ท้าทายไม่ได้ระหว่างกดปุ่มหยุด
+  - รอบที่จบแบบ **disputed** ท้าทายใหม่ได้ภายในเวลาท้าทายใหม่ (นับจากตอนจบรอบนั้น) รวมไม่เกิน `MAX_CHALLENGES` = 2 ครั้งต่องาน (รวมรอบ 1 เป็น 3 รอบ) ผลที่ confirmed หรือ overturned แล้วถือเป็นที่สุด
+- **รอบท้าทาย**: ที่นั่งใหม่ 3 ที่ จับฉลากแบบเดียวกับรอบ 1 (จากแฮชของบล็อกถัดจากบล็อกที่ท้าทาย) ไม่ให้คนที่เคยนั่งรอบก่อน ๆ ทุกรอบ และคนท้าทายทุกคนนั่ง ใช้ commit-reveal และ 2 ใน 3 เหมือนเดิม
+- **ผล**:
+
+| รอบท้าทาย | คนรอบ 1 ที่ตอบผิดด้วยกัน | คนท้าทาย | ใครได้เงิน |
+|---|---|---|---|
+| **กลับผล เป็นคำตอบที่คนท้าทายระบุ** | เสียเงินค้ำ **50%** + 1 strike (อาจถูกกักตัว) | ได้เงินวางคืน + ครึ่งหนึ่งของเงินค้ำที่ถูกริบ | อีกครึ่งแบ่งเท่ากันให้คนรอบท้าทายที่ตอบตรง และคนรอบ 1 ที่ตอบถูกแต่เคยแพ้เสียง · ผลตรวจของงานเปลี่ยนเป็นของรอบท้าทาย |
+| **กลับผล เป็นคำตอบอื่น** (ไม่ตรงทั้งผลเดิมและที่คนท้าทายระบุ) | เสียเงินค้ำ 50% + 1 strike | **เสียเงินวางทั้งหมด** (ระบุผิดเหมือนกัน) | เงินที่ริบ + เงินวาง แบ่งเท่ากันให้คนที่ตอบตรงกับผลใหม่ |
+| **ยืนยันผล** (ตอบตรงรอบ 1) | ไม่เสียอะไร | เสียเงินวาง | ครึ่งหนึ่งให้คนรอบท้าทายที่ตอบตรง อีกครึ่งให้คนรอบ 1 ที่ตอบตรง (ท้าทายมั่ว ๆ จึงมีราคา) |
+| **ไม่ได้ข้อสรุป** (ไม่มี 2 ใน 3 หรือหมดเวลา: `challengeExpire`) | ไม่เสียอะไร | ได้คืน **80%** | อีก **20%** แบ่งให้ที่นั่งรอบนั้นที่ reveal (ไม่มีใคร reveal: เข้ากองทุนชุมชน) · ผลเดิมยังอยู่ ติดป้าย "disputed" และท้าทายใหม่ได้ · ที่นั่งที่ commit แล้วไม่ reveal ถูกหัก 10% + strike |
+
+- **ท้าทายตัวเองเพื่อปิดทาง**ไม่ได้ผลแล้ว: เดิมรอบที่ไม่ได้ข้อสรุปคืนเงินวางเต็มและปิดการท้าทายถาวร ตอนนี้เสีย 20% และคนอื่นท้าทายต่อได้
+- ทุกกรณีเงินครบทุก wei: เศษหารไม่ลงตัวไปที่กองทุนชุมชน
+- **เงินค้ำถูกกันไว้** (`heldUntil`) จนไม่มีอะไรมาริบได้อีก ถอนก่อนไม่ได้ คู่ที่โกหกจึงหนีก่อนถูกริบไม่ได้
+  - ทุกที่นั่ง: ถึงเวลาเริ่มรอบ + 2 × `jobTimeout`
+  - คนรอบ 1: ถึงเวลาท้าทายสิ้นสุด + 2 × `jobTimeout` และขยายต่อเมื่อมีการท้าทายเปิด หรือจบแบบ disputed (เวลาท้าทายใหม่)
+  - ทุกรอบมี **เส้นตายการ reveal** = เวลาเริ่มรอบ + `jobTimeout` (เลยแล้ว reveal ไม่ได้ ต้อง `expire`/`challengeExpire`) การริบทุกครั้งจึงเกิดก่อนเงินค้ำหลุดจากการกัน และ `expire`/`settle` มีเวลาอีก 1 `jobTimeout` ให้คนเรียก
+- ส่วนแบ่งค่างานรอบ 1 จ่ายไปแล้วไม่เรียกคืน ตัวที่ทำให้ไม่คุ้มคือการริบเงินค้ำ 50% (เงินค้ำ 100 ZETAPHY เทียบค่างาน 0.1 ZETAPHY)
+- คนที่ถูกหักจนเงินค้ำต่ำกว่าขั้นต่ำ: หยุดรับงาน และเริ่มนับเวลาถอนเงินค้ำทันที (`withdraw-bond` ได้หลัง `unbondDelay` และพ้นการกัน) หรือ `register` เติมเงินเพื่อกลับมา (ยกเลิกการถอน) เงินที่เหลือจึงไม่ค้างในสัญญา
+- ที่นั่งรอบท้าทายมีเวลาผ่อนผัน reveal และ `settle` เหมือนรอบ 1
+- **ระดับความมั่นใจ** (`assurance(id)` บนสัญญา, `zetaphy job get`): หน้าเว็บของ Neuro แสดงได้ว่า "ยืนยันแล้วโดย N คน"
+  - `agreedBy`: จำนวนคนรันร่าง (ไม่ซ้ำกัน) ที่ตอบตรงกับผลสุดท้าย: 2 หรือ 3 หลังรอบ 1, 4 ขึ้นไปหลังการท้าทายยืนยัน
+  - สถานะการท้าทายล่าสุด (none / กำลังรันรอบท้าทาย / confirmed / overturned / disputed), เวลาท้าทายสิ้นสุด และ `settled` (ไม่มีใครท้าทายได้อีกแล้ว) · `challengeRound(id)` บอกว่าท้าทายไปกี่ครั้งและคนท้าทายล่าสุดระบุคำตอบอะไร
+
+## จับฉลากที่เดาไม่ได้
+
+- ตอนส่งงาน สัญญาไม่บันทึกค่าสุ่มใด ๆ แต่จำบล็อกที่ส่งงาน (B) และเงินค้ำรวมขณะนั้น
+- ฉลากของรอบ: `rand = keccak256(seed, blockhash(B + 1), รอบ)` ใช้ได้ตั้งแต่บล็อก B + 2
+  - ค่านี้ตายตัวทันทีที่บล็อก B + 1 เกิด ไม่ขึ้นกับว่าใครคำนวณหรือคำนวณเมื่อไร: **สุ่มใหม่ไม่ได้**
+    - เดิม (ใช้ `PREVRANDAO` ของบล็อกที่ commit) commit ที่ revert `NotChosen` ทำให้การจับถูกยกเลิก ส่ง commit ใหม่ทุกบล็อกจนได้ค่าที่ชอบได้ และสัญญาช่วยเรียก `draw()` เฉพาะตอนผลถูกใจได้ ตอนนี้ทำแบบนั้นแล้วได้ค่าเดิมทุกครั้ง
+  - `eligible()` คำนวณจาก view ได้เลย ไม่ต้องรอใครเรียก `draw` · commit แรก หรือ `draw(id)` (ใครก็เรียกได้) บันทึกค่าไว้
+  - ส่งงานกับจับฉลากในบล็อกเดียวกันหรือบล็อกถัดไปทันทีไม่ได้ (`TooEarly`)
+  - รอบท้าทายจับฉลากของตัวเองแบบเดียวกัน (จากแฮชของบล็อกถัดจากบล็อกที่ท้าทาย)
+- **เงินค้ำรวมถูกถ่ายภาพไว้ตอนเปิดรอบ**: คนลงเงินค้ำก้อนใหญ่หลังส่งงาน (หรือคนถอนออก) เปลี่ยนว่าใครได้สิทธิ์ไม่ได้ เดิมผู้โจมตีลงเงินค้ำก้อนใหญ่หลังจับฉลากเพื่อดันคนที่ได้สิทธิ์ออกจนถึง 1/3 สุดท้ายได้
+- **ข้อจำกัด**
+  - `blockhash` ย้อนได้แค่ 256 บล็อก ถ้าไม่มีใครบันทึกฉลากภายในนั้น `draw(id)` จะย้ายรอบไปบล็อกปัจจุบัน (`Redrawn`) แล้วใช้แฮชบล็อกใหม่ ใครไม่ชอบผลก็บังคับให้เกิดแบบนี้ไม่ได้ ตราบที่มีคนรันร่างสักคนเฝ้าอยู่ (commit หรือ `draw` ครั้งเดียวก็บันทึกแล้ว)
+  - ผู้เสนอบล็อก B + 1 (validator) ยังปรับเนื้อหาบล็อกนั้นเพื่อลองแฮชหลาย ๆ ค่าได้ นี่คือความเอนเอียงที่เหลืออยู่ และเป็นของ validator เท่านั้น
+  - เชนที่ `BLOCKHASH` คืน 0 (zetaphyd รุ่นเก่า): ใช้ค่าสำรองตายตัว `keccak256(seed, 1, รอบ)` ยังทำงานได้ แต่เดาได้เท่ากับจับจากข้อมูลคำขออย่างเดียว · zetaphyd v3 ขึ้นไปและ EVM ในชุดทดสอบให้ `blockhash` แล้ว
+
+## ปุ่มหยุด Neuro และโหวตทักษะ
+
+`NeuroControl` คือปุ่มควบคุม Neuro ที่แยกจากเหรียญ เจ้าของ (governance) คือ gov module ของเชน
+
+- ที่อยู่ EVM ของ gov module: `0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2` (20 ไบต์แรกของ sha256("gov") = `zetaphy10d07y265gmmuvt4z0w9aw880jnsr700jvr86lj`)
+- **ปุ่มหยุด** (`paused`)
+  - หยุดการส่งงานใหม่และการ commit
+  - คนรันร่างหยุดรับงาน แต่ยัง reveal ที่นั่งที่มีอยู่ได้
+  - ไม่หยุดการโอนเหรียญ, stake, การถอนรายได้ หรือการคืนเงิน
+  - guardian กดหยุดได้ทันที แต่เปิดใหม่ได้ด้วยโหวตเท่านั้น
+- **ทักษะ** (skill id)
+  - คือ sha256 ของโค้ด Neuro (`zetaphy-neuro/src/**/*.js` และ `src/lang/*`) ดูด้วย `zetaphy neuro skill-id`
+  - คำนวณเองได้: `cd zetaphy-neuro && find src -type f \( -name '*.js' -o -path 'src/lang/*' \) | LC_ALL=C sort | xargs sha256sum | sha256sum`
+  - ทักษะใหม่ (แก้โค้ด Neuro) ต้องผ่านโหวต `approve-skill` แล้ว `set-active-skill`
+  - งานจำทักษะตอนส่ง คนรันร่างรับเฉพาะงานที่ทักษะตรงกับโค้ดในเครื่อง
+
+```
+zetaphy deploy --governance gov --community-fund 0x<กองทุนชุมชน>   # NeuroJobs + NeuroControl ใส่ทักษะและเชนของเครื่องนี้ แล้วยกให้ gov module
+zetaphy neuro skill-id
+
+# บนโหนด: เสนอโหวต (MsgEVMCall ที่ gov module เป็นผู้เรียก NeuroControl)
+gov.sh neuro pause 0x<NeuroControl>
+gov.sh neuro unpause 0x<NeuroControl>
+gov.sh neuro approve-skill 0x<skill id> 0x<NeuroControl>
+gov.sh neuro set-active-skill 0x<skill id> 0x<NeuroControl>
+gov.sh neuro approve-defender 0x<คนรันร่าง> 0x<NeuroControl>
+gov.sh neuro release 0x<คนรันร่าง> 0x<NeuroControl>
+gov.sh neuro set-max-bodies 100 0x<NeuroControl>
+gov.sh neuro approve-chain bsc 0x<NeuroControl>    # เชนที่ NeuroJobs รับงาน (remove-chain ถอดออก)
+gov.sh neuro set-challenge-bond 2.5 0x<NeuroControl>       # เงินวางท้าทายขั้นต่ำ (ZETAPHY, ทศนิยมได้)
+gov.sh neuro set-challenge-window 3600 0x<NeuroControl>    # วินาทีหลังได้ผลที่ยังท้าทายได้ (60 ถึง 7 วัน)
+gov.sh neuro set-defender-timeout 21600 0x<NeuroControl>   # ร่างป้องกันเงียบเกินนี้เสียที่นั่ง (60 ถึง 7 วัน)
+gov.sh vote <id> yes
+```
+
+ข้อความในข้อเสนอ:
+
+```
+{"@type": "/zetaphy.pq.v1.MsgEVMCall", "Sender": "<gov module zetaphy1…>", "To": "0x<NeuroControl>",
+ "Value": "0", "Data": "<calldata เป็น base64>", "GasLimit": "300000"}
+```
+
+- ถ้า governance เป็น `SimpleMultisig` แทน:
+  - `zetaphy neuro propose pause --multisig 0x<multisig>` แล้วเจ้าของคนอื่น confirm และ execute
+  - `zetaphy neuro calldata <action> [value]` พิมพ์ calldata ให้ส่งเองได้
+- guardian กดหยุด: `zetaphy neuro send pause`
+
+## ขั้น 4: ระบบภูมิคุ้มกันและตลาดพลัง AI
+
+**ThreatRegistry**
+- คนรันร่างที่ยัง active และมีคำตอบที่ถูกยอมรับแล้ว โหวตบันทึกว่า "โค้ดลายนิ้วมือนี้มีพฤติกรรมเสี่ยงต่อผู้ใช้ในหมวด X"
+  (เป็นบันทึกข้อเท็จจริงของโค้ด ไม่ใช่คำตัดสินเจตนาของบุคคลหรือโครงการ)
+- ครบ 3 เสียงจากคนละที่อยู่ก็ติดธง
+- Neuro อ่านธงนี้ผ่าน `threatLookup` แล้วเตือนระดับ **สูง** ให้ทุกสัญญาที่ใช้โค้ดเดียวกันในทุกเชน
+- ปลดธงต้องใช้ 3 เสียงเช่นกัน (อุทธรณ์ต่อเครือข่าย ไม่ใช่ต่อคนคนเดียว)
+- หมวด (`Reason`) คือข้อเท็จจริงของโค้ดที่ตรวจซ้ำได้ ไม่ใช่เจตนา (เลขตามลำดับในสัญญา รหัสใน CLI และ `src/vaccine.js`):
+  1 `cannot-sell-in-simulation` จำลองซื้อขายแล้วขายไม่ได้ · 2 `unlimited-mint` สร้างเหรียญเพิ่มได้ไม่จำกัด ·
+  3 `owner-can-block-transfers` เจ้าของระงับการโอนได้ · 4 `owner-can-move-holder-funds` เจ้าของย้ายเงินของผู้ถือได้ ·
+  5 `same-name-as-known-token` ชื่อ/สัญลักษณ์เดียวกับเหรียญที่รู้จักแต่คนละที่อยู่ · 6 `sweeps-approved-tokens` ทดสอบแล้วย้ายเหรียญที่ approve ไว้ไปที่อยู่ที่ผู้ถือไม่ได้เลือก · 7 `other`
+- **หลักฐานทุกธง:** โหวตติดธงต้องมี `reportHash` (reportHash ของรายงาน Neuro หรือ hash ของรายงานที่ทำซ้ำได้) และ URI สั้น ๆ (ไม่เกิน 200 ไบต์)
+  หลักฐานของทุกเสียงอยู่ใน event `Voted` ส่วน `evidenceOf(key)` เก็บของเสียงแรก (เสียงที่หมวดของธงมาจาก) ใครก็ตรวจซ้ำได้: รัน Neuro กับโค้ดเดียวกันแล้วเทียบ reportHash
+  `voteBatch` ใช้หลักฐานเดียวทั้งชุด โหวตปลดธงไม่ต้องมีหลักฐาน
+- **สิทธิ์ชี้แจง:** `respond(key, chainId, account, text)` (ไม่เกิน 500 ไบต์) การชี้แจงไม่เปลี่ยนธง
+  - **เก็บแยกตามผู้เขียน** (key, ผู้เขียน): แก้หรือลบ (ข้อความว่าง) ได้เฉพาะของตัวเอง ไม่มีใครแทนที่หรือลบของคนอื่นได้ ผู้เขียนลบของตัวเองได้เสมอ แม้หมดสิทธิ์ชี้แจงแล้ว
+  - ไม่เกิน `MAX_RESPONSES` (8) ต่อคีย์ ผู้เขียนใหม่เกินนั้นแทนที่ข้อที่แก้ไขนานที่สุด (ไม่ใช่ของผู้ชี้แจงที่ governance แต่งตั้ง)
+  - อ่าน: `responseAt(key, i)` ของผู้ชี้แจงที่ governance แต่งตั้งก่อน แล้วใหม่สุดก่อน, `responseCount(key)`, `responseBy(key, ผู้เขียน)`, `responseOf(key)` = `responseAt(key, 0)`
+  - กระเป๋าและ snap แสดงไม่เกิน 3 ข้อข้างคำเตือนทุกครั้ง **พร้อมที่อยู่ผู้เขียน** (ผู้ชี้แจงที่ governance แต่งตั้งขึ้นก่อน)
+  - ใครชี้แจงได้ (`mayAnswer`):
+    - `addressKey` ของที่อยู่บน ZETAPHY: ที่อยู่นั้นเอง หรือ `owner()` ปัจจุบันถ้าเป็นสัญญา
+    - `addressKey` บนเชนใดก็ได้: เจ้าของตัวตน ERC-8004 ที่ claim แล้วของ `eip155:<id>:<ที่อยู่>` ใน NeuroIdentity (`setIdentity`, ศูนย์ = ปิด)
+    - **`codeKey` และ `fp1`: เฉพาะผู้ชี้แจงที่ governance แต่งตั้ง (`setResponder`)** เพราะใครก็ deploy สัญญาโค้ดเดียวกันโดยตั้ง `owner()` เป็นตัวเองได้ คีย์ของโค้ดจึงไม่มีเจ้าของบนเชนให้ถาม
+    - คีย์ใดที่ governance แต่งตั้งผู้ชี้แจงแล้ว: ผู้นั้นคนเดียวชี้แจงหรืออุทธรณ์ได้ (คำชี้แจงเดิมของคนอื่นยังอยู่จนผู้เขียนลบเอง)
+- **อุทธรณ์:** ผู้ที่ชี้แจงได้ (`mayAnswer` ข้างบน: `codeKey` / `fp1` จึงเฉพาะผู้ชี้แจงที่แต่งตั้ง) เรียก `appeal(key, chainId, account)` (เปิดได้ทีละหนึ่งเรื่องต่อคีย์) พร้อมเงินประกัน `appealBond` (governance ตั้งผ่าน `setAppeals` สูงสุด 1000 ZETAPHY
+  ต้องมีกองทุนชุมชนก่อนจึงเปิด) เปิดรอบโหวตใหม่ `voteAppeal(key, clear, reportHash, uri)` เฉพาะคนรันร่าง "ตาใหม่": ไม่ได้โหวตหรือยืนยันธงรอบนั้น และไม่ใช่ผู้อุทธรณ์
+  - ครบ quorum ให้ปลด: ปลดธง คืนเงินประกันเต็ม คนที่ติดธงได้ `strikes` +1 (บันทึกสาธารณะเท่านั้น ไม่ริบเงิน: เงินค้ำอยู่ใน NeuroJobs และการลงโทษอัตโนมัติจะให้กลุ่มที่ฮั้วกันใช้กลั่นแกล้งคนรันร่างที่สุจริตได้)
+  - ครบ quorum ให้คงธง: เงินประกันเข้ากองทุนชุมชน (ไม่ให้ผู้โหวต จึงไม่มีแรงจูงใจให้คงธง)
+  - ไม่มีข้อสรุปใน `appealWindow` (1–90 วัน ค่าเริ่มต้น 14 วัน) หรือธงถูกปลด/ปกป้องทางอื่นก่อน: คืนเงินประกัน
+  - เงินไม่ถูกส่งออกระหว่างโหวต: เงินคืนเก็บใน `owed` ผู้อุทธรณ์ถอนด้วย `withdraw()` ส่วนของกองทุนส่งด้วย `payFund()` เงินจึงไม่ค้าง
+  - `payFund()` ส่งไปกองทุนชุมชนที่ไม่ใช่ศูนย์ล่าสุดที่ governance ตั้ง (`fundPayee`) แม้ปิดอุทธรณ์แล้ว (กองทุน = 0) จึงไม่มีวันส่งไป address(0)
+- รายละเอียดด้านกฎหมาย (ข้อเท็จจริงที่ตรวจซ้ำได้ สุจริต ประโยชน์สาธารณะ): [`docs/LEGAL.md`](../docs/LEGAL.th.md)
+
+### ฉีดวัคซีน: ทั้งเครือข่ายไม่แตะโค้ดที่ติดธง
+
+ลายนิ้วมือ `fp1:` คำนวณบนเชนไม่ได้ (โค้ดอยู่คนละเชน) จึงให้โหวตแบบเดียวกันติดธง "ตัวตนที่สัญญาตรวจได้" ได้ด้วย
+- `codeKey(h)`: โค้ด EVM บน ZETAPHY ที่มี `extcodehash` = h (โค้ดว่างไม่มีวันติดธง บัญชีธรรมดาจึงไม่โดนลูกหลง)
+- `addressKey(chainId, ที่อยู่)`: ที่อยู่บนเชนนั้น เช่น ผู้ส่งหรือโทเคนต้นทางของสะพาน
+- ทุกคีย์อยู่ในตารางเดียวกัน ใช้ quorum เดียวกัน และปลดธงทางเดียวกัน `isFlagged(fp)` ยังใช้ได้เหมือนเดิม
+- `voteBatch`: คนรันร่างโหวตลายนิ้วมือพร้อม code hash และที่อยู่ของสำเนาที่เจอในธุรกรรมเดียว แต่ละคีย์ยังต้องครบ quorum เอง
+
+คนรันร่างไม่กี่คนต้องหยุดสะพานหรือกระเป๋าไม่ได้ จึงมี governance (gov module ผ่าน MsgEVMCall หรือ multisig) คุมอีกชั้น:
+- **เตือน vs บังคับใช้:** `isFlagged` / `is*Flagged` ตอบทันที (Neuro เตือน) ส่วน `isEnforced` / `isCodeEnforced` / `isAddressEnforced` / `isContractEnforced` ตอบ true เมื่อติดธงมานาน `enforceDelay` แล้ว (ค่าเริ่มต้น 1 ชั่วโมง สูงสุด 30 วัน) ทุกอย่างที่ **ปฏิเสธ** ใช้ชุดนี้ ปลดธงมีผลทันที
+  - สิ่งที่แค่ **กัก** (ย้อนกลับได้: การปล่อยของ `BridgeAirlock`, คิวขาเข้าและขาออกของ `BridgeGuard`, ดูข้อ 6 ในขั้น 3) ใช้ `isHeld` / `isCodeHeld` / `isAddressHeld` / `isContractHeld`:
+    true เมื่อธงอายุครบ `holdDelay` (ค่าเริ่มต้น 10 นาที หรือครึ่งหนึ่งของ `enforceDelay` ถ้าสั้นกว่า 20 นาที; ต้องน้อยกว่า `enforceDelay` หรือเป็น 0 = กักทันที)
+    หรือทันทีเมื่อธงผ่านช่องทางด่วน หรือ governance / guardian เรียก `holdNow(key)` (`heldFrom(key)` บอกเวลาเริ่มกัก) คนรันร่างแค่ quorum จึงแช่แข็งการโอนของใครทันทีไม่ได้
+- **ช่องทางด่วน (fast lane):** ธงบังคับใช้ทันที ไม่ต้องรอ `enforceDelay` เมื่อ
+  - คนรันร่างครบ `fastQuorum` คนยืนยันธงนั้น (เสียงข้างมากพิเศษ ค่าเริ่มต้น 2 เท่าของ quorum governance ปรับได้ หรือตั้ง 0 ปิด) คนรันร่างโหวต `flag` ซ้ำบนคีย์ที่ติดธงอยู่แล้วได้ นับเป็นเสียงยืนยัน คนละหนึ่งครั้ง
+  - governance หรือ guardian (governance แต่งตั้ง) เรียก `enforceNow(key)` ได้เฉพาะคีย์ที่ quorum ติดธงไว้แล้ว guardian ติดธงเอง ปลดธง หรือปกป้องคีย์ไม่ได้
+  - ปลดธงหรือปกป้องคีย์ ยกเลิกช่องทางด่วนด้วย ติดธงใหม่ก็เริ่มนับ `enforceDelay` ใหม่ คีย์ที่ปกป้องไว้ติดธงไม่ได้ จึงไม่มีวันถูกบังคับใช้
+- **คีย์ที่ปกป้อง:** `setProtected(keys, true)` ติดธงคีย์นั้นไม่ได้เลย ถ้าติดธงอยู่ก็ปลดทันที `deploy-bridge` ปกป้องที่อยู่และ code hash ของ BridgeGuard, โทเคน, BridgeAirlock, NeuroLane และ LockBox (`--lockbox`) ให้เอง
+- governance ตั้ง `setEnforceDelay`, `setHoldDelay`, `setFastQuorum`, `setGuardian` และ `setGovernance` ได้ คนรันร่างทำไม่ได้ guardian เรียกได้แค่ `enforceNow` / `holdNow` กับธงที่ quorum ติดไว้แล้ว
+
+ใครปฏิเสธอะไร:
+- **สะพาน:** ไม่ปล่อยการโอนจากผู้ส่ง/สัญญาต้นทางที่ติดธง หรือไปหาสัญญาที่ติดธง (ดูข้อ 6 ในขั้น 3) การโอนค้างไว้จนปลดธง
+- **คนรันร่าง:** `zetaphy bridge watch` ถาม `BridgeAirlock.flaggedParty` (บังคับใช้แล้ว) ก่อนยืนยัน และ `heldParty` (ถูกกัก: หลัง `holdDelay`, ช่องทางด่วน หรือ `holdNow`) ก่อนปล่อย ทุกครั้ง ถ้าถามไม่ได้ก็ไม่ยืนยันหรือไม่ปล่อย (ปิดไว้ก่อน)
+- **กระเป๋า ZETAPHY** (`zetaphy-wallet`): ก่อนเซ็นทุกการโอนหรือการเรียกสัญญา อ่านโค้ดปลายทาง (และโค้ดจริงหลัง proxy) คำนวณ `fp1` และ keccak-256 แล้วถาม `ThreatRegistry` ธงบังคับใช้แล้ว (รวมธงที่ผ่านช่องทางด่วน) = ไม่เซ็น ไม่มีปุ่มข้าม ธงที่ยังไม่บังคับใช้ = เตือน
+- ทุกคำเตือนหรือการปฏิเสธ (กระเป๋าและ snap) แสดงหมวดเป็นข้อเท็จจริงของโค้ด หลักฐาน (reportHash, URI, วิธีตรวจซ้ำ) คำชี้แจง (ถ้ามี พร้อมที่อยู่ผู้เขียน) และบรรทัด "ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา"
+- **MetaMask ธรรมดา** (`zetaphy-snap`, transaction insight): ทุกธุรกรรม EVM บนทุกเชนที่ผู้ใช้กำลังจะยืนยัน snap ถาม `ThreatRegistry` ด้วย `eth_call` ผ่าน RPC สาธารณะของ ZETAPHY
+  - ธงบังคับใช้แล้ว = ระดับ `critical` (MetaMask ให้ยืนยันอีกชั้น) ธงที่ยังไม่บังคับใช้ = คำเตือน ไม่ติดธง = "ไม่พบธงในสิ่งที่ตรวจ" พร้อมรายการที่ตรวจ ตรวจไม่ได้ = "ตรวจไม่ได้"
+  - ลายเซ็น EIP-712 (Permit, Permit2, คำสั่งแบบ Seaport) ตรวจ spender / operator / zone ด้วย (signature insight)
+  - ดู [`zetaphy-snap/README.md`](../zetaphy-snap/README.th.md) (สิทธิ์ ข้อมูลที่ส่งออกไป และค่าที่ต้องตั้งก่อนเผยแพร่)
+- **กระเป๋าหรือส่วนขยายอื่น:** `zetaphy threat export` เขียนคีย์ที่ติดธงอยู่ทั้งหมดเป็น JSON (อ่านจาก `flaggedList` และ view ของ registry ที่บล็อกเดียวกัน)
+  - `format: zetaphy-threats/2`, `keys[]`: `key`, `reason` (รหัสข้อเท็จจริงของโค้ด), `enforced`, `enforcedFrom`, `fast`, `flaggedAt`, `evidence`, `response`, `appealOpen` เฉพาะธงที่ยังติดอยู่ (ที่ปลดหรือปกป้องแล้วไม่อยู่ในรายการ)
+  - คีย์เป็น hash: กระเป๋าคำนวณ `codeKey` จาก keccak-256 ของโค้ด และ `addressKey` จาก chain id + ที่อยู่ เอง (สูตรอยู่ใน `keyOf` ของไฟล์) แล้วเทียบ
+  - นโยบายที่แนะนำ (`policy`): `enforced` = ปฏิเสธ ติดธงแต่ยังไม่บังคับใช้ = เตือน ไฟล์เป็นภาพ ณ บล็อกหนึ่ง (`block`) ควรดึงใหม่เป็นระยะ
+
+**รายงานจากผู้ใช้ (`ThreatReports`)**: ช่วยให้เจอโค้ดที่เสี่ยงต่อผู้ใช้แบบใหม่ ๆ เร็วขึ้น
+- ใครเจอสัญญาที่ควรตรวจ จ่ายค่ารายงานเล็กน้อย (`fee` ค่าเริ่มต้น 0.1 ZETAPHY สูงสุด 100) แล้ว `report(key, chainKey, target, note)`
+  - `note` ไม่เกิน 280 ไบต์ หนึ่งรายงานหนึ่งคีย์ คีย์ที่ติดธงอยู่แล้วรายงานไม่ได้ (ไม่มีงานใหม่ให้จ่าย)
+  - เหตุการณ์ `Reported` ให้เครื่องมือของคนรันร่างเฝ้าดู รายงานไม่ติดธงเอง คนรันร่างต้องตรวจแล้วโหวตตาม quorum ปกติ
+- ค่ารายงาน: ถ้าคีย์ถูกติดธง **หลัง** รายงาน คนรันร่างที่ติดธงรอบนั้น (quorum คนพอดี) แบ่งกันคนละเท่า ๆ กัน (`claim`) เสียงยืนยันช่องทางด่วนไม่นับ
+  ถ้าไม่ถูกติดธงภายใน `ttl` (ค่าเริ่มต้น 30 วัน) ค่ารายงานเข้ากองทุนชุมชน `settle(id)` ใครเรียกก็ได้
+- governance ของ `ThreatReports` คือ governance ของ `ThreatRegistry` (ตั้ง fee, ttl, กองทุนชุมชน)
+
+```
+zetaphy threat flag fp1:<hex> code:0x<codehash> 97:0x<ผู้ส่งบนเชน 97> --reason sweeps-approved-tokens --evidence 0x<reportHash> --uri <ที่อ่านรายงาน>   # หลายคีย์ หลักฐานเดียว
+zetaphy threat flag 0x<สัญญาบน ZETAPHY> --reason owner-can-block-transfers --evidence neuro:bsc:0x<สัญญา>   # รัน Neuro แล้วใช้ reportHash ของมัน
+zetaphy threat clear <คีย์เดิม>...                            # โหวตปลดธง
+zetaphy threat check <คีย์>...                                # ติดธงอยู่ไหม บังคับใช้แล้วหรือยัง ปกป้องไหม
+zetaphy threat protect|unprotect <คีย์>...                     # governance: ส่งเองถ้าคีย์นี้เป็น governance ไม่งั้นพิมพ์ calldata ให้ multisig / MsgEVMCall
+zetaphy threat enforce-delay 3600 | threat set-governance gov  # governance
+zetaphy threat fast-quorum 6 | threat guardian 0x<guardian>:on  # governance: ช่องทางด่วน
+zetaphy threat enforce-now <คีย์>...                           # governance หรือ guardian: บังคับใช้ธงที่ติดอยู่ทันที
+zetaphy threat hold-now <คีย์>... | threat hold-delay 600       # governance หรือ guardian: กักการโอนผ่านสะพานทันที / governance: ตั้ง holdDelay
+zetaphy threat export --out threats.json                      # ข้อมูลให้กระเป๋าหรือส่วนขยายอื่น
+zetaphy deploy-reports --fee 0.1 --ttl 2592000                # ThreatReports (กองทุนชุมชน: ของ NeuroControl หรือ --community-fund)
+zetaphy threat report 56:0x<สัญญาบน BSC> --note "เว็บแจก airdrop ขอ approve สัญญานี้"   # ผู้ใช้: รายงาน (จ่าย fee)
+zetaphy threat reports [--all]                                # คนรันร่าง: รายงานที่ยังเปิดอยู่
+zetaphy threat settle <id> | threat claim <id>                # ตัดสินรายงาน / คนที่โหวตติดธงรับส่วนแบ่ง
+zetaphy threat respond 0x<สัญญา> --text "คำชี้แจง"              # เจ้าของ: ชี้แจงที่อยู่ (ตัวสัญญา owner() หรือเจ้าของตัวตน ERC-8004 สำหรับ <chainId>:0x…; code: / fp1: เฉพาะผู้ชี้แจงที่ governance แต่งตั้ง) --text "" ลบของตัวเอง
+zetaphy threat appeal 0x<สัญญา>                                 # เจ้าของ: อุทธรณ์ (จ่ายเงินประกัน)
+zetaphy threat appeal-vote 0x<สัญญา> --clear|--keep --evidence 0x<reportHash>   # คนรันร่างที่ไม่ได้ติดธงนี้
+zetaphy threat appeal-expire <คีย์> | threat withdraw | threat pay-fund
+zetaphy threat appeals-set --bond 1 --window 1209600 --community-fund 0x... | threat identity 0x<NeuroIdentity> | threat responder <คีย์> 0x...   # governance
+```
+
+**ComputeMarket**
+- คำตอบจาก AI ไม่ได้ออกมาเหมือนกันทุกครั้ง จึงใช้วิธี 2 ใน 3 แบบ Neuro ชั้น 1 ไม่ได้
+- ใช้การวางเงินมัดจำกับสัญญาแทน:
+  1. ผู้ใช้จ่ายเงินล่วงหน้า
+  2. คนรันร่างที่มีผลงานรับงานไปทำ แล้วส่งผล (hash + URI)
+  3. ผู้ใช้ยอมรับ หรือปฏิเสธภายใน 1 วัน ถ้าเงียบ คนรันร่างได้เงิน
+- จำนวนครั้งที่ถูกปฏิเสธเปิดให้เห็นทั้งสองฝั่ง
+
+## ตัวตน ERC-8004 และข้อความข้ามเชน
+
+ทุกสัญญาที่ Neuro อ่าน (ใน 13 เชน และบน ZETAPHY เอง) มีตัวตนบนเชนได้ 1 ตัว คือ "Neuro ของสัญญานั้น"
+เป็นบัตรตัวตนตามมาตรฐาน [ERC-8004 Trustless Agents](https://github.com/ethereum/ERCs/blob/master/ERCS/erc-8004.md) ซึ่ง AI ระบบอื่นอ่านได้
+
+**NeuroIdentity** (Identity Registry ของ ERC-8004: ERC-721 ที่ tokenId = agentId)
+- ใครก็ลงทะเบียนสัญญาได้ (`zetaphy identity register bsc 0x...`) แต่ 1 สัญญาได้ตัวตนเดียว
+  - คีย์คือที่อยู่แบบ CAIP-10 เช่น `eip155:56:0x...` ที่อยู่ EVM ต้องเป็นตัวพิมพ์เล็ก จึงสะกดซ้ำเป็นอีกตัวไม่ได้
+  - สัญญาบังคับรูปเดียวด้วย: Sui/Aptos ต้องเป็น `0x` + hex 64 ตัวพิมพ์เล็ก (ตามด้วย `::module::Name` ได้), Solana ต้องเป็น base58
+  - TON: สัญญาแปลงรูป friendly (EQ…/UQ…, base64 หรือ base64url, ธง testnet) เป็นรูป raw `0:hex` / `-1:hex` เอง หลังตรวจ CRC16 รูปไหนก็ได้ตัวตนเดียวกัน
+  - Bitcoin rune: สัญญาตัดจุดคั่น (`•`, `%E2%80%A2` หรือ `.`) ออก แล้วต้องเหลือ A–Z เท่านั้น (1–28 ตัว) เลข rune id (`840000:3`) ไม่รับ ให้ใช้ชื่อ
+  - `agentIdOf` รับได้ทุกรูปที่สะกดถูก และ `canonicalAccount` บอกรูปที่สัญญาเก็บ
+  - บันทึกว่าใครเป็นคนลงทะเบียน
+- ตัวตนที่เพิ่งสร้างอยู่ในมือของสัญญา registry เอง ไม่มีใครแก้หรือพูดแทนได้ ทั้งคนลงทะเบียนและผู้ดูแล
+  - บัตรตัวตน (agentURI) สร้างบนเชน และชี้ไปที่รายงานของ Neuro เท่านั้น: `/web/?chain=bsc&address=0x...`
+  - คนแย่งลงทะเบียนก่อนจึงไม่ได้อะไร นอกจากทำให้คนอื่นหารายงาน Neuro เจอง่ายขึ้น
+- เจ้าของจริงรับตัวตนไปดูแลได้ด้วยหลักฐาน (`zetaphy identity claim <agentId>`)
+  - สำหรับสัญญาบน ZETAPHY: ต้องเรียกจากตัวสัญญาเอง หรือจากที่อยู่ที่ `owner()` ของสัญญาคืนค่ามา
+  - สิทธิ์ตามตัวสัญญาไป: ถ้าสัญญาเปลี่ยนเจ้าของ เจ้าของใหม่ก็รับคืนได้
+  - สัญญาบนเชนอื่น: `claimRemote` (ดูด้านล่าง)
+- รับแล้วก็เป็น agent ERC-8004 ปกติ: ตั้ง agentURI, metadata, agentWallet และโอนได้
+  - `neuroURI` / `getTarget` ยังบอกเสมอว่าตัวตนนี้เป็นของสัญญาไหน ไม่ว่าเจ้าของจะเขียนอะไรไว้
+  - โอนกลับเข้า registry ไม่ได้ (`RegistryCustody`): ตัวตนที่ registry ถืออยู่จึงแปลว่า "ยังไม่มีใครรับ และ agentURI เป็นของ Neuro" เสมอ
+- ผู้ดูแลทำได้แค่เพิ่มเชนและย้ายลิงก์เว็บ Neuro แตะตัวตนไม่ได้
+
+**รับตัวตนของสัญญาบนเชนอื่น** (`claimRemote`)
+- เจ้าของสัญญาบนเชนนั้นเซ็นยินยอมนอกเชน ระบุ agentId, ผู้รับตัวตนใหม่บน ZETAPHY, ตัวสัญญา, คีย์เจ้าของ, nonce และเส้นตาย (ไม่เกิน 1 วัน) บน domain ของ registry (chain 77390 + ที่อยู่ registry)
+- คนรันร่างอ่านเจ้าของจากเชนนั้นด้วยตัวอ่านของ Neuro แล้วเซ็นรับรองแบบ EIP-712 ต้องครบ `claimQuorum` คน (ตั้งตอนติดตั้ง ค่าเริ่ม 3)
+  - EVM: `owner()` / `getOwner()` หรือ admin ของ EIP-1967
+  - Solana: mint authority, freeze authority หรือ upgrade authority (ed25519)
+  - คนรันร่างที่นับ: `workers()` ของ NeuroJobs ต้อง active, agreed ไม่น้อยกว่า `claimMinAgreed` (ตั้งตอนติดตั้ง ค่าเริ่ม 5) และ rejected ไม่เกิน agreed เกณฑ์เดียวกับ ThreatRegistry ที่อยู่ NeuroJobs ตั้งตอนติดตั้งและเปลี่ยนไม่ได้ (ใครเปลี่ยนได้ก็เลือกคนรับรองเองได้)
+- เจ้าของบน EVM: สัญญาตรวจลายเซ็นยินยอมเองด้วย ecrecover คนรันร่างจึงย้ายตัวตนของเจ้าของจริงที่ไม่ได้ขอไม่ได้
+- **`claimRemote` แค่เสนอ ยังไม่ย้ายตัวตน:** ต้องรอ `claimDelay` (ตั้งตอนติดตั้ง ค่าเริ่ม 3 วัน ได้ 1 ชั่วโมงถึง 30 วัน) แล้วใครก็เรียก `finalizeClaim` ให้ย้ายได้
+  - ระหว่างรอ ผู้ถือตัวตนตอนนี้ (ถ้ามีคนรับไปแล้ว รวม operator ที่เขาอนุมัติ) หรือคนรันร่างที่ผ่านเกณฑ์ข้างบน **เพียงคนเดียว** เรียก `contestClaim` เพื่อยกเลิกได้ ผู้ขอต้องเริ่มใหม่ด้วยลายเซ็นชุดใหม่
+  - เลือกแบบนี้เพราะง่ายและปลอดภัยกว่าให้คัดค้านแบบ quorum: คนซื่อสัตย์คนเดียวก็หยุด quorum ที่ร่วมกันโกงได้ ข้อเสียคือคนรันร่างที่ไม่หวังดีคนเดียวก็ถ่วงการรับที่ถูกต้องได้ แต่ผลคือตัวตนอยู่ที่เดิม ไม่มีใครถูกยึด
+  - มีคำขอค้างได้ทีละรายการต่อตัวตน (`ClaimPending`) ดูได้ที่ `pendingClaim(agentId)` และ event `RemoteClaimProposed` / `RemoteClaimContested` / `RemoteClaimFinalized`
+- **ความเชื่อใจที่ต้องมี:** quorum ต้องอ่านเจ้าของถูก ถ้าคนรันร่างครบ quorum ร่วมกันโกหกว่าคีย์ของตัวเองเป็นเจ้าของ (บน EVM ก็เซ็นยินยอมด้วยคีย์นั้นเองได้ ecrecover จึงไม่ช่วย) และ**ไม่มีใครคัดค้านภายใน `claimDelay`** ก็ยึดตัวตนได้ ผู้ถือตัวตนและคนรันร่างจึงควรเฝ้า event `RemoteClaimProposed` สำหรับเจ้าของที่ไม่ใช่ EVM (ed25519 ฯลฯ) quorum ยังเป็นคนตรวจลายเซ็นยินยอมด้วย สัญญาตรวจเองไม่ได้
+- กันใช้ซ้ำ: ทุกการรับตัวตน (`claim`, การเสนอ `claimRemote` และ `finalizeClaim`) เพิ่ม `claimNonce` ลายเซ็นชุดเก่าจึงใช้ไม่ได้อีก แม้คำขอจะถูกคัดค้าน
+- ยังไม่รองรับ: เจ้าของที่เป็นสัญญา (เช่น Safe บนเชนอื่น ซึ่งเซ็น ECDSA ไม่ได้) และเจ้าของบน TON, Cosmos, Sui/Aptos ที่ Neuro อ่านได้แต่ยังตรวจลายเซ็นยินยอมไม่ได้ (เครื่องมือของคนรันร่างปฏิเสธ)
+- ถ้าติดตั้งโดยไม่มี `--jobs` การรับข้ามเชนปิดอยู่ (`RemoteClaimsOff`)
+- `NeuroTargets`: สัญญาช่วยที่ NeuroIdentity สร้างเองตอนติดตั้ง เก็บกฎการสะกด (แยกออกมาเพื่อให้ NeuroIdentity ไม่เกิน 24,576 ไบต์)
+
+**NeuroValidation** (Validation Registry ของ ERC-8004)
+- คนรันร่างที่ยัง active และมีผลงาน ส่งผลตรวจของ Neuro ให้ตัวตนไหนก็ได้: verdict hash + คะแนน 0–100 (`zetaphy identity verdict`)
+- เจ้าของสัญญาปิดไม่ให้ผลตรวจขึ้นไม่ได้
+- คนรันร่าง 1 คนมีช่องผลตรวจเดียวต่อ 1 ตัวตน (`verdictRequestHash(agentId, runner)`) ส่งใหม่ก็ทับของเดิม
+  - hash ของช่องนี้ขึ้นต้นด้วย `NVD1` และ `validationRequest` ปฏิเสธ hash แบบนี้ (`ReservedHash`) จึงไม่มีใครจองช่องไว้ใต้ agent อื่นเพื่อขโมยผลตรวจได้
+- `getSummary` คืนจำนวนผลตรวจและคะแนนเฉลี่ย นับผู้ตรวจแต่ละคนครั้งเดียวต่อตัวตน (คำตอบล่าสุด) คนเดียวจึงถ่วงผลไม่ได้
+- `requestHash` ของคำขอตามสเปกใครส่งก่อนได้ก่อน (สเปกอ่านด้วย hash ตรง ๆ จึงผูกกับผู้ขอไม่ได้): ถ้าโดนแย่งจะได้ `Exists` ให้เปลี่ยน hash ใหม่ ผู้ตรวจควรเช็ก `agentId` ใน `getValidationStatus` ก่อนตอบ
+
+**ข้อความข้ามสัญญาและข้ามเชน** (`src/neuromsg.js`)
+- เซ็นแบบ EIP-712 ระบุ:
+  - agent ผู้ส่ง และผู้รับ (0 = ส่งถึงทุกคน)
+  - เชนต้นทาง (CAIP-2) และชนิดข้อความ: `hello`, `verdict`, `threat-report`, `ack`
+  - hash ของข้อมูล (แนบข้อมูลไปด้วยหรือไม่ก็ได้), nonce และเวลาหมดอายุ (ไม่เกิน 7 วัน)
+- ผู้รับตรวจว่า:
+  - ลายเซ็นถูกต้อง และยังไม่หมดอายุ
+  - nonce ไม่เคยเห็นมาก่อน (กันส่งซ้ำ)
+  - ข้อความเซ็นให้ registry ที่ผู้รับเชื่อ (ต้องระบุ `expect` เสมอ)
+  - ผู้เซ็นเป็นเจ้าของ / operator / agentWallet ของ agent ผู้ส่ง
+  - หรือเป็นคนรันร่างที่มีเงินค้ำ ได้เฉพาะเมื่อ agent ผู้ส่งยังอยู่ในมือ registry (ยังไม่มีใครรับ) คนรันร่างจึงพูดแทน agent ที่มีเจ้าของแล้วไม่ได้
+- **ข้อความจาก Neuro ตัวอื่นเป็นข้อมูล ไม่ใช่คำสั่ง:**
+  - รับเฉพาะชนิดและช่องที่รู้จัก ชนิดข้อมูลต้องตรง และขนาดไม่เกินกำหนด อย่างอื่นปฏิเสธทั้งหมด
+  - ตัดอักขระควบคุมและอักขระกลับทิศ (bidi) ออกจากข้อความ ลิงก์ถูกทำให้กดไม่ได้
+  - ไม่มีอะไรในข้อความที่สั่งให้ทำอะไรได้ด้วยตัวเอง
+
+```bash
+zetaphy deploy-identity --web https://<เว็บ Neuro>/web/ --claim-quorum 3 --claim-min-agreed 5 --claim-delay 259200 --governance 0x<multisig>   # ต้องมี --jobs จึงเปิดการรับข้ามเชน
+zetaphy identity register bsc 0x...          # ได้ agentId
+zetaphy identity get bsc 0x...               # ใครดูแล ลิงก์รายงาน Neuro และผลตรวจจากคนรันร่าง
+# รับตัวตนของสัญญาบนเชนอื่น
+zetaphy identity claim-request 12 --new-owner 0x<ผู้รับ> --owner-key 0x<เจ้าของบน bsc> --out claim.json   # พิมพ์ข้อความให้เจ้าของเซ็น
+zetaphy identity attest-claim claim.json --owner-sig 0x...   # คนรันร่างแต่ละคน: อ่านเจ้าของจากเชนนั้น ตรวจลายเซ็น แล้วเซ็นรับรอง
+zetaphy identity claim-remote claim.json                     # ใครก็ส่งได้เมื่อครบ quorum (แค่เสนอ รอ claimDelay)
+zetaphy identity contest-claim 12                            # ผู้ถือตัวตน หรือคนรันร่างที่ผ่านเกณฑ์: ยกเลิกคำขอที่ค้างอยู่
+zetaphy identity finalize-claim 12                           # ใครก็เรียกได้เมื่อพ้นช่วงคัดค้าน
+zetaphy msg sign threat-report --from 12 --payload '{"chain":"bsc","address":"0x...","fingerprint":"0x...","reason":"cannot-sell-in-simulation"}' --out m.json
+zetaphy msg verify m.json                    # ตรวจลายเซ็น วันหมดอายุ nonce และสิทธิ์ผู้เซ็น
+```
+
+## ขั้น 5: ต้านควอนตัม
+
+เชน ZETAPHY มี precompile ตรวจลายเซ็น **ML-DSA** (FIPS 204 มาตรฐาน NIST ที่ต้านคอมพิวเตอร์ควอนตัม) อยู่ที่ `0x…0900`
+- ใช้ Cloudflare CIRCL v1.6.3 และติดตั้งผ่าน patch ใน `zetaphy-chain/setup-node.sh`
+- ชุดทดสอบของ precompile รันใน CI ทุกครั้งที่แก้ส่วนเชน
+- **สำหรับผู้เขียนสัญญา:** ถ้าลายเซ็นไม่ถูกต้อง precompile คืนค่าว่าง (ไม่ revert) เหมือน P256 (RIP-7212) ต้องตรวจว่าค่าที่คืนเป็น 1 ไม่ใช่ดูแค่ว่าเรียกสำเร็จ (`QuantumWallet` ตรวจแบบนี้อยู่แล้ว)
+
+```
+zetaphy deploy-pq                 # ผู้ดูแล: ติดตั้ง QuantumWalletFactory
+zetaphy pq new                    # กระเป๋าที่ใช้ ML-DSA อย่างเดียว ไม่มีกุญแจ ECDSA เลย
+zetaphy pq new --hybrid           # ต้องเซ็นทั้ง ML-DSA และ ECDSA
+zetaphy pq address
+zetaphy pq send 0x... 1.5
+```
+
+- รู้ที่อยู่กระเป๋าได้ก่อนสร้าง จึงรับเงินได้ตั้งแต่ก่อนมีตัวกระเป๋า
+- seed 32 ไบต์เก็บที่ `~/.zetaphy/pq.seed` (0600) หรือแบบเข้ารหัสที่ `pq.seed.json` เมื่อตั้ง `ZETAPHY_PASSPHRASE`
+  - ถ้าหาย ย้ายเงินออกไม่ได้ ต้องสำรองไว้
+- ทดสอบแล้วว่าลายเซ็นจาก JavaScript (@noble/post-quantum) ผ่านการตรวจของ Go (CIRCL) บนเชนจริง
+
+### บัญชี PQ แท้ (native): ไม่มีกุญแจ ECDSA และไม่ต้องมีคนจ่ายค่าแก๊สแทน
+
+`zetaphy pq new|address|send` ข้างบนเป็นสัญญาบน EVM จึงยังต้องมีบัญชี ECDSA จ่ายค่าแก๊ส
+บัญชีแบบ native ต่างออกไป: เป็นบัญชี Cosmos ธรรมดาที่เชนตรวจลายเซ็น ML-DSA-44 เอง
+
+```
+zetaphy pq native                              # ที่อยู่ zetaphy1… และ 0x… (บัญชีเดียวกัน) + ยอดเงิน
+zetaphy pq native send zetaphy1... 1.5         # หรือ 0x... ก็ได้
+zetaphy pq native send 0x... 1.5 --gas 500000  # ค่าเริ่มต้น 400000
+
+# เรียกสัญญาบน EVM ด้วยบัญชีนี้ (msg.sender = ที่อยู่ 0x… ของบัญชีนี้)
+zetaphy pq native call 0x<สัญญา> 0x<calldata> [--value 0.5] [--gas 200000]   # --gas คือ gas ฝั่ง EVM
+zetaphy pq native token-balance 0x<token>                  # ยอด ERC-20 (อ่านอย่างเดียว)
+zetaphy pq native token-send 0x<token> 0x... 12.5          # โอน ERC-20 (ผู้รับเป็น zetaphy1… ก็ได้)
+
+# stake กับ validator
+zetaphy pq native stake zetaphyvaloper1... 100             # --gas ค่าเริ่มต้น 500000
+zetaphy pq native unstake zetaphyvaloper1... 40            # ได้คืนหลังพ้นช่วง unbonding
+zetaphy pq native rewards zetaphyvaloper1...               # ถอนรางวัล stake
+
+# สร้างสัญญาใหม่ (deploy) ด้วยบัญชีนี้ พิมพ์ที่อยู่สัญญาที่ได้
+zetaphy pq native deploy 0x<init code> [--value 0.5] [--gas 3000000]
+```
+
+**ใช้สัญญา EVM และ stake ได้โดยไม่มีกุญแจ ECDSA เลย**
+- `call` และ `token-send` ส่งข้อความ `/zetaphy.pq.v1.MsgEVMCall` (ธุรกรรม Cosmos ที่เซ็นด้วย ML-DSA-44)
+  - เชนรันคำสั่งนั้นบน EVM โดยให้ `msg.sender` เป็นที่อยู่ 0x… ของบัญชีนี้ (20 ไบต์เดียวกัน)
+  - จึงใช้ token, DeFi และสัญญาอื่น ๆ ได้เหมือนบัญชี ECDSA
+- `stake`, `unstake`, `rewards` เป็นข้อความมาตรฐานของ Cosmos SDK (`MsgDelegate`, `MsgUndelegate`, `MsgWithdrawDelegatorReward`)
+  - ที่อยู่ validator ต้องขึ้นต้นด้วย `zetaphyvaloper1` และตรวจ checksum ทุกครั้ง
+- `token-send` อ่าน `decimals()` และ `symbol()` ของ token ด้วย `eth_call` แล้วแสดงก่อนส่ง
+- ก่อนเซ็น คำสั่งจะลองรันการเรียกด้วย `eth_call` จากบัญชีนี้ก่อน
+  - ถ้าจะ revert (เช่น token ไม่พอ) จะไม่ส่งอะไรเลย
+  - ถ้าส่งไปแล้ว revert บนเชน ธุรกรรมล้มทั้งก้อน เงินและ token ไม่ขยับ เสียแค่ค่าธรรมเนียม
+- ค่าแก๊ส: เชนคิดแก๊ส EVM รวมในมิเตอร์แก๊สของธุรกรรม Cosmos
+  - gas ของธุรกรรม = gas EVM (`--gas`, ค่าเริ่มต้น 200000) + 400000 (ตรวจลายเซ็นและขนาดธุรกรรม)
+  - gas EVM ต้องอยู่ระหว่าง 21000 ถึง 10,000,000
+  - อย่าตั้ง `--gas` สูงเกินจำเป็น: เชนคิดอย่างน้อยสัดส่วนหนึ่งของ gas ที่ตั้งไว้
+- ข้อจำกัด
+  - log ของ EVM จากคำสั่งเหล่านี้ **ไม่ขึ้นใน `eth_getLogs`** เพราะเป็นธุรกรรม Cosmos ไม่ใช่ธุรกรรม EVM
+    - ยอดเงินและยอด token ถูกต้องเสมอ แต่หน้าเว็บหรือ indexer ที่ดูจาก event `Transfer` จะไม่เห็นรายการนี้
+- `deploy` คือ `MsgEVMCall` ที่ไม่มี `to` (data = init code) ธุรกรรมละหนึ่งสัญญา
+  - ที่อยู่สัญญา = `CREATE(บัญชีนี้, nonce)` โดย nonce = sequence ที่เซ็น + 1 (ante handler เพิ่มให้ก่อน) CLI คำนวณและพิมพ์ให้
+  - การสร้างใช้ nonce นั้นไปด้วย sequence ของบัญชีจึงจบที่ sequence ที่เซ็น + 2 (CLI อ่าน sequence จาก `zetaphy_pqAccount` ทุกครั้งก่อนเซ็น)
+  - กับ `--as` ที่อยู่ = `CREATE(บัญชีที่ล็อก, sequence ปัจจุบันของบัญชีนั้น)`
+  - event `zetaphy_evm_call` ของธุรกรรมมี attribute `created` เป็นที่อยู่เดียวกัน
+
+### ล็อกควอนตัม: ยกบัญชี ECDSA (MetaMask) ให้บัญชี ML-DSA-44 ดูแล แบบถาวร
+
+บัญชี ECDSA เดิม (ที่อยู่, ยอดเงิน, token, stake, สิทธิ์ในสัญญา) อยู่ที่เดิม แต่จากนี้ไปมีแต่บัญชี ML-DSA-44 ที่เป็นผู้ควบคุม (controller) ที่สั่งได้
+
+```
+# ล็อกกุญแจ ECDSA ของเครื่องนี้ (~/.zetaphy/worker.key) ให้บัญชี pq native ของเครื่องนี้ (หรือบัญชีที่ระบุ)
+zetaphy pq native lock-ecdsa [zetaphy1<controller>] --yes      # ถาวร! ไม่มี --yes จะแสดงคำเตือนแล้วไม่ส่งอะไร
+
+# ผู้ควบคุมทำรายการแทนบัญชีที่ล็อก: เติม --as <ที่อยู่บัญชีนั้น>
+zetaphy pq native --as 0x<owner>                               # ยอดเงิน และล็อกให้ใคร (quantumLockedTo)
+zetaphy pq native send 0x... 1.5 --as 0x<owner>                # โอน ZETAPHY ออกจากบัญชีนั้น
+zetaphy pq native token-send 0x<token> 0x... 12.5 --as 0x<owner>
+zetaphy pq native stake zetaphyvaloper1... 100 --as 0x<owner>  # ผ่าน staking precompile 0x…0800
+zetaphy pq native rewards zetaphyvaloper1... --as 0x<owner>    # ผ่าน distribution precompile 0x…0801
+zetaphy pq native call|deploy|unstake|token-balance ... --as 0x<owner>
+
+# ยกการควบคุมต่อให้บัญชี ML-DSA-44 อีกบัญชี (ผู้ควบคุมปัจจุบันเป็นคนเซ็น)
+zetaphy pq native handover 0x<owner> zetaphy1<controller ใหม่>
+```
+
+- ล็อกจาก MetaMask: ส่งธุรกรรม EVM ไปที่ `0x0000000000000000000000000000000000005051` value 0 และ data = ที่อยู่ 20 ไบต์ของผู้ควบคุม (ไม่มี selector)
+  - กระเป๋าเว็บ (`zetaphy-wallet`) ทำให้ได้ผ่าน `window.ethereum`
+  - ล้มเหลวถ้า data/value ผิด, ผู้ควบคุมไม่ใช่บัญชี ML-DSA-44 ที่เคยส่งธุรกรรมแล้ว, เป็นบัญชีตัวเอง หรือถูกล็อกอยู่
+  - ล็อกบัญชี ML-DSA-44 ไม่ได้ (ต้านควอนตัมอยู่แล้ว)
+- หลังล็อก เชนปฏิเสธทุกธุรกรรมที่กุญแจ ECDSA นั้นเซ็น (EVM, Cosmos, authorization ของ EIP-7702) ตั้งแต่ตอนส่ง (`eth_sendRawTransaction` ตอบ error ที่มีคำว่า quantum-locked) และ `ecrecover` คืน `address(0)` สำหรับลายเซ็นของกุญแจนั้น (permit, meta-transaction ใช้ไม่ได้)
+- ผู้ควบคุมทำรายการแทนด้วย `MsgEVMCall` ที่มี `as_owner` = บัญชีที่ล็อก (`msg.sender` = บัญชีนั้น) ค่าธรรมเนียมจ่ายจากผู้ควบคุม
+  - กับ `--as`, `--gas` คือ gas ฝั่ง EVM เสมอ; stake/unstake/rewards ค่าเริ่มต้น 300,000 (ราว 1.5 เท่าของ `eth_estimateGas` ที่วัดบน devnet: undelegate ~190k, delegate ~114–154k, rewards ~98k)
+- ดูสถานะ: `zetaphy_pqAccount(ที่อยู่).quantumLockedTo` (ที่อยู่ `zetaphy1…` ของผู้ควบคุม หรือ null)
+  - เชนเก็บสำเนาไว้ใน storage ของ `0x…5051` ด้วย: slot = ที่อยู่บัญชี (เติม 0 ข้างหน้าเป็น 32 ไบต์), ค่า = ผู้ควบคุม
+- ถ้า seed ของผู้ควบคุมหาย บัญชีที่ล็อกก็หายด้วย
+
+- ใช้ seed เดียวกับ `zetaphy pq` (`~/.zetaphy/pq.seed` หรือ `pq.seed.json`)
+- ที่อยู่ = `sha256("zetaphy/mldsa44\0" + public key)[0:20]` (มีคำนำหน้าเพื่อไม่ให้ซ้ำกับที่อยู่แบบอื่นของ Cosmos SDK)
+  - เขียนได้ทั้ง `zetaphy1…` และ `0x…` เพราะเป็น 20 ไบต์เดียวกัน
+- บัญชีจะมีบนเชนหลังได้รับเงินครั้งแรกเท่านั้น
+  - ถ้ายังไม่มี คำสั่งจะบอกให้โอน ZETAPHY เข้าที่อยู่นี้ก่อน
+- `send` เป็น `MsgSend` ของ Cosmos SDK; ทุกคำสั่งเซ็นแบบ SIGN_MODE_DIRECT ด้วย ML-DSA-44 (pubkey `/zetaphy.crypto.mldsa44.PubKey`)
+  - ส่งผ่าน JSON-RPC พอร์ต 8545 เดิม (`zetaphy_pqAccount`, `zetaphy_sendCosmosTx`)
+- ค่าธรรมเนียม = gas limit × (`eth_gasPrice` × 1.2) หน่วย `azetaphy`
+- โค้ดอยู่ที่ `src/pqtx.js` (ใช้ได้ทั้ง Node และเบราว์เซอร์)
+  - ทดสอบโดยถอดรหัสด้วย protobuf ทางการของ Cosmos SDK (`cosmjs-types`) และตรวจลายเซ็นทุกครั้ง
+- กระเป๋าบนเว็บสำหรับบัญชีแบบนี้อยู่ที่ `zetaphy-wallet/` (แยกจาก zetaphy-neuro ซึ่งสัญญาว่าไม่แตะกุญแจ)
+- กุญแจใน MetaMask: `zetaphy-snap/` (MetaMask Snap) สร้างบัญชีจาก Secret Recovery Phrase และเซ็นธุรกรรมเอง
+  - ทุกข้อความที่ `msg*` สร้างมี `intent` (ข้อความเดียวกันเป็น JSON ไม่มีผู้ส่ง) และ `messageFromIntent(intent, sender)` สร้างกลับได้ไบต์เดิม
+  - ทุกคำสั่งของ `pqClient` รับ `signTx(request)` แทน `sign(bytes)` ได้ (`buildTxWith`): ผู้เซ็นภายนอกได้แค่ intent ไม่เคยได้ไบต์
+    แล้ว `pqClient` สร้าง tx เองรอบลายเซ็นที่ได้ ถ้า `txHex` ที่ผู้เซ็นส่งกลับไม่ตรงจะไม่ส่ง
+- ทดสอบบนเชนจริงแล้ว (`npm run test:devnet:pq`, รันใน CI ด้วย): ส่งได้ และเชนปฏิเสธธุรกรรมที่ใช้กุญแจอื่นสวมบัญชี ลายเซ็นที่ถูกแก้ และธุรกรรมเก่าที่ส่งซ้ำ
+  - ชุดเดียวกันมีทดสอบ `token-send`, `call --value`, `stake`, `rewards`, `unstake` และการเรียกที่ revert ต้องไม่ขยับเงิน (ต้องใช้ `zetaphyd` ที่มี `MsgEVMCall`)
+- เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy_77390-1`): ตั้ง `ZETAPHY_CHAIN_ID`
+- validator เซ็นโหวตด้วย ML-DSA-44 เพิ่มจาก ed25519 และทุกบล็อกมีใบรับรอง ML-DSA ของบล็อกก่อนหน้า (ตรวจด้วย `zetaphy pq verify-block`)
+
+### ความปลอดภัยในแกนกลางของเชน: `zetaphy security` (Q-day, ความยินยอม, IBC hold)
+
+คู่มือเต็ม: [`docs/SECURITY-CORE.md`](../docs/SECURITY-CORE.th.md) ทุกกติกาปิดจนกว่าจะโหวต (`zetaphy-chain/gov.sh`)
+
+```bash
+zetaphy security status                    # Q-day, threat gate, IBC hold ที่ใช้อยู่
+zetaphy security migration [0x…]           # บัญชีนี้ (ค่าเริ่ม: กุญแจ ECDSA ของเครื่องนี้) ย้ายแล้วหรือยัง
+# หลัง Q-day: ย้ายกุญแจ ECDSA ที่ไม่เคยใช้บนเชน ไปให้บัญชี pq native ของเครื่องนี้
+# (กุญแจเดิมเซ็นข้อความในเครื่องเท่านั้น ไม่ส่งธุรกรรม)
+zetaphy security qday-commit               # ขั้นที่ 1 ทำได้ตั้งแต่ก่อน Q-day
+zetaphy security qday-reveal               # ขั้นที่ 2 หลัง Q-day และหลังรอ reveal_delay บล็อก
+zetaphy security consent 0x<สัญญา> 3600     # ยินยอมเรียกสัญญาที่ติดธงบังคับใช้ นาน 1 ชม. (0 = ถอน) [--as <owner>]
+zetaphy security ibc-holds                 # การโอนเข้า IBC ที่ถูกพัก
+zetaphy security ibc-hold-cancel <id>      # guardian คืนเงินให้ผู้ส่ง
+```
+ก่อน Q-day ทางที่ดีที่สุดคือ `zetaphy pq native lock-ecdsa --yes` (ล็อกควอนตัม) ไลบรารีสำหรับกระเป๋าอื่นอยู่ใน
+`src/pqtx.js` (`qdayRevealText`, `qdayCommitment`, `consentCall`, `msgQDayCommit`, `msgQDayReveal`, `pqClient().securityStatus/migration/...`)
+ทดสอบบนเชนจริง: `ZETAPHYD=… npm run test:devnet:security`
+
+### ตรวจบล็อกแบบต้านควอนตัม: `zetaphy pq verify-block`
+
+validator ที่ลงทะเบียนกุญแจโหวต ML-DSA-44 แล้ว เซ็นทุกบล็อกด้วย ML-DSA-44 คู่กับ ed25519 และผู้เสนอบล็อก H+1 รวมลายเซ็นของบล็อก H ไว้เป็นธุรกรรมแรก (`MsgPQCertificate`)
+คำสั่งนี้ตรวจใบรับรองนั้นเองด้วย `@noble/post-quantum` โดยใช้แค่ CometBFT RPC
+
+```
+zetaphy pq verify-block 12345                        # --rpc ค่าเริ่มต้น http://127.0.0.1:26657 (หรือ ZETAPHY_COMET_RPC) ไม่ใช่พอร์ต 8545
+zetaphy pq export-vote-keys > pinned.json            # ทำบนโหนดที่เชื่อถือ (--height h ได้)
+zetaphy pq verify-block 12345 --rpc http://<โหนดใดก็ได้>:26657 --keys pinned.json
+zetaphy pq verify-block 12345 --json                 # ผลแบบ JSON; --chain-id ใช้กำหนด chain id เอง
+```
+
+- **สิ่งที่พิสูจน์:** validator ที่ถือ voting power มากพอเซ็น ML-DSA-44 รับรอง (chain id, ความสูง H, hash ของบล็อก H) ตามกติกาเดียวกับที่ทุกโหนดบังคับ
+  - กติกา: 3 × power ที่เซ็นถูกต้อง > 2 × power ทั้งหมด − 3 × power ของ validator ที่ยังไม่มีกุญแจ (ถ้าฝั่งขวาติดลบ ไม่ต้องมีลายเซ็น)
+  - นับ validator ละครั้งเดียว ข้ามที่อยู่ที่ไม่ใช่ validator และลายเซ็นที่ไม่ถูก
+  - header และธุรกรรมของบล็อก H ที่โหนดส่งมาต้อง hash ได้ตรงกับ hash ที่เซ็น จึงเชื่อข้อมูลบล็อกได้ด้วย
+  - ใบรับรองอยู่ในบล็อก H+1: บล็อกล่าสุดยังตรวจไม่ได้ ต้องรอบล็อกถัดไป
+- **ผล:**
+  - `VERIFIED post-quantum`: ผู้เซ็น ML-DSA ถือเกิน 2/3 ของ power ทั้งหมด
+  - ผ่านกติกาแต่ต้านควอนตัมได้บางส่วน: มี validator ที่ยังไม่ลงทะเบียนกุญแจ
+  - `NOT post-quantum`: validator ที่มีกุญแจถือไม่ถึง 1/3 เชนจึงยังไม่บังคับลายเซ็น (exit 0 เพราะผ่านกติกา)
+  - `NOT VERIFIED`: ไม่ผ่าน พร้อมเหตุผล และ exit code 1
+- **ความเชื่อถือ (trust model):**
+  - ไม่ต้องเชื่อโหนดเรื่อง hash, header, ธุรกรรม และตัวใบรับรอง: ถ้าโหนดปลอม ลายเซ็นจะตรวจไม่ผ่าน
+  - ที่ต้องเชื่อคือรายชื่อ validator, voting power และกุญแจโหวตของบล็อก H
+    - ไม่ใส่ `--keys`: อ่านจากโหนดเดียวกัน (`/validators` และ `abci_query` ที่ `/store/zetaphypq/key`) โหนดที่โกหกสร้าง validator และกุญแจปลอมเองได้ จึงเหมาะกับโหนดของตัวเอง
+    - ใส่ `--keys pinned.json`: ใช้ power และกุญแจจากไฟล์ที่ export ไว้จากโหนดที่เชื่อถือ ไม่ต้องเชื่อโหนดที่ถามเลย
+  - pinned.json เป็นภาพ ณ ความสูงหนึ่ง ต้อง export ใหม่เมื่อ validator เข้า/ออก power เปลี่ยน หรือเปลี่ยนกุญแจ
+    - ไฟล์เก่าทำให้ได้ "ไม่ผ่าน" ไม่ใช่ "ผ่านผิด ๆ" และคำสั่งเตือนเมื่อชุด validator ของโหนดต่างจากไฟล์
+  - chain id ที่ตรวจ: `--chain-id` ถ้าไม่มีใช้ค่าในไฟล์ pin ถ้าไม่มีอีกใช้ค่าจาก header
+  - ไม่ได้พิสูจน์ว่าธุรกรรมในบล็อกถูกกติกา: ต้องเชื่อว่า validator ส่วนใหญ่สุจริต เหมือน light client ทั่วไป
+- บนเครื่องที่ติดตั้งด้วย `setup-node.sh` พอร์ต 26657 ฟังเฉพาะในเครื่อง: รันบนเครื่องนั้น หรือใช้ `ssh -L 26657:127.0.0.1:26657`
+- ใช้ในโค้ด: `verifyBlock(rpc, height, { chainId, pinnedKeys })` และ `exportVoteKeys(rpc, { height })` ใน `src/pqcert.js` (เข้ารหัสด้วย `@noble` อย่างเดียว)
+- ทดสอบ: `npm test` (RPC จำลอง และบล็อกจริงจาก devnet ที่บันทึกไว้) และ `npm run test:devnet:pqcert` (เชน 2 validator จริง)
+
+## กระเป๋า Cosmos: Keplr, Leap, Cosmostation
+
+บัญชีบน ZETAPHY เป็นแบบ eth_secp256k1 (เชนแบบ Evmos)
+- กุญแจ: BIP39 → `m/44'/60'/0'/0/0` (coin type 60)
+- ที่อยู่ `zetaphy1…` คือ 20 ไบต์เดียวกับ `0x…`
+- pubkey: `/cosmos.evm.crypto.v1.ethsecp256k1.PubKey`
+
+ทดสอบบนเชนจริงแล้ว (`npm run test:devnet:cosmoswallet`, รันใน CI ด้วย)
+- ชุดทดสอบทำทีละขั้นแบบที่ Keplr ทำ (อ่านจากซอร์ส `@keplr-wallet` 0.13.41) โดยไม่ใช้ไลบรารีกระเป๋า
+- ผลแต่ละวิธีเซ็น:
+
+| วิธีเซ็น | ผล |
+|---|---|
+| `SIGN_MODE_DIRECT` เซ็น secp256k1 บน keccak256 (วิธีปกติของกระเป๋า) | ใช้ได้ ทั้ง `MsgSend` และ `MsgDelegate` |
+| `SIGN_MODE_LEGACY_AMINO_JSON` เซ็นบน keccak256 ของ JSON (Keplr `signAmino`) | ใช้ได้ |
+| `LEGACY_AMINO_JSON` เซ็นเป็น EIP-712 (Keplr + Ledger) | ใช้ได้ (domain chainId 77390; domain chainId อื่นถูกปฏิเสธ) |
+| เซ็นบน sha256 (แบบเชน Cosmos ทั่วไป) | เชนปฏิเสธ: code 4 `signature verification failed` |
+
+- ส่งได้ทั้งผ่าน REST `POST /cosmos/tx/v1beta1/txs` และผ่าน CometBFT RPC `broadcast_tx_sync`
+- อ่านบัญชีและยอดเงินผ่าน REST ได้ และ `eth_getBalance` ตรงกับยอดใน bank, nonce ตรงกับ sequence
+- REST เปิดเฉพาะเมื่อสั่ง `REST=1 scripts/devnet.sh …` (บน testnet `setup-node.sh` เปิดไว้แล้ว)
+
+แก้แล้วจากการทดสอบนี้:
+- `keplr.json` ที่ `setup-node.sh` สร้างมี feature `"eth-secp256k1-cosmos"`
+  - ถ้าไม่มี Keplr จะใส่ pubkey `/ethermint.crypto.v1.ethsecp256k1.PubKey` ซึ่งเชนถอดรหัสไม่ได้
+- ธุรกรรมที่เชนถอดรหัสไม่ได้ได้คำตอบเป็น error ทันที (เดิมค้างไม่มีคำตอบ เพราะ cosmos/evm v0.7.3 คืน error ผิดแบบให้ CometBFT)
+  - แพตช์ใน `mempool/mempool_handlers.go`
+- Keplr + Ledger: chain id เปลี่ยนเป็น `zetaphy_77390-1` (แบบ Ethermint) และ `keplr.json` มี feature `force-enable-evm-ledger`
+- genesis ตั้ง `sig_verify_cost_secp256k1 = 21000` ให้ simulate คิดค่าตรวจลายเซ็นเท่ากับของจริง
+
+ยังเหลือ:
+- Cosmos SDK v0.54 ให้เลขบัญชี (account number) เป็นค่า hash 64 บิต ซึ่งเกิน 2^53
+  - Keplr รองรับ แต่ `@cosmjs/stargate` รุ่น 0.38 ลงไปจะ error ต้องใช้ 0.39 ขึ้นไป
+
+## จุดอ่อนที่แก้แล้ว (ตรวจเอง 19 ต.ค. 2026)
+
+| # | จุดอ่อนเดิม | แก้แล้วด้วย |
+|---|---|---|
+| 1 | คนเดียวสวมหลายที่อยู่ ยึดที่นั่งแบบมาก่อนได้ก่อน แล้วดูดกองรางวัล | **จับฉลากที่นั่งตามน้ำหนักเงินค้ำ**<br>• ใช้ seed จากคำขอ ซึ่งคนอื่นเปลี่ยนไม่ได้<br>• ต้องลงทะเบียนก่อนที่งานจะถูกส่ง<br>• รางวัลไม่เกิน 1/4 ของค่างาน และมีเพดานต่อวัน<br>• ส่งงานเองตอบเองจะขาดทุน ยกเว้นถือเงินค้ำเกิน 2/3 ของทั้งระบบ |
+| 2 | สถานะ "คนรันร่างที่มีผลงาน" ปั๊มเองได้ | ผลงานต้องได้จากการถูกจับฉลาก (ข้อ 1) และสะพาน Neuro ต้องการผลงานอย่างน้อย 5 งาน (`--min-agreed`) |
+| 3 | ทำเครื่องหมาย `tx.origin` ทำให้ล่อคนบริสุทธิ์ให้โดนได้ | ทำเครื่องหมายเฉพาะผู้เรียกโดยตรง (`msg.sender` ที่สัญญาที่เฝ้าไว้ส่งออก) มีชุดทดสอบด้วยสัญญาล่อเหยื่อ (`test/helpers/Lure.sol`) |
+| 4 | กุญแจผู้ดูแลมีดอกเดียว | `SimpleMultisig` (k-of-n) + `--governance` ส่งสิทธิ์ผู้ดูแลต่อหลังติดตั้ง |
+| 5 | JSON-RPC สาธารณะถูกยิงจนล่มได้ | ตั้งเพดานใน `setup-node.sh`: gas/เวลา eth_call, ขนาด log, batch, ขนาดคำขอ, จำนวนการเชื่อมต่อ และปิด unlock |
+| 6 | patch ML-DSA ยังไม่มีใครตรวจ | fuzz test (ข้อมูลเสียทุกแบบต้องไม่ทำให้เชนล่ม) และ benchmark: ML-DSA-44 ใช้ 80 µs, ML-DSA-65 ใช้ 142 µs จึงตั้งค่า gas ไว้สูงกว่างานจริงราว 3–5 เท่า |
+| 7 | กุญแจและ seed เป็นไฟล์ธรรมดา | ตั้ง `ZETAPHY_PASSPHRASE` แล้วจะเข้ารหัสอัตโนมัติ (keystore scrypt / AES-256-GCM) และใช้ `zetaphy keys encrypt` แปลงไฟล์เดิมได้ |
+| 8 | ส่งงานแทรกก่อน `setControl` ทำให้ต่อ NeuroControl ไม่ได้ตลอดไป | `setControl` ไม่สนว่ามีงานแล้ว (คนติดตั้งเท่านั้น ครั้งเดียว) และ `zetaphy deploy` เรียกทันทีหลังติดตั้ง งานที่แทรกมาได้ทักษะ 0 คนรันร่างข้าม จึงหมดเวลาและคืนเงิน 95% |
+| 9 | ร่างที่ถูกกักตัวยังนับเป็น active ยังโหวตและรับรองได้ | กักตัว = ออกทันที (`active` false, ออกจากเงินค้ำรวม, เริ่มถอนเงินค้ำ) |
+| 10 | เลี่ยงกักตัวได้ด้วยการไม่ reveal หรือโกหกสลับงาน | ไม่ reveal = หัก 10% + strike (หลังเวลาผ่อนผัน / `settle`) และนับ strike แบบหน้าต่าง 2 ใน 5 |
+| 11 | คำขอเชนปลอมทำให้ร่างงอกเต็มเพดานโดยได้เงินคืนครบ | รับเฉพาะเชนที่ผ่านโหวต และงานที่ล้มคืน 95% (เผา 5%) |
+| 12 | คนรันร่างยังน้อย 2 คน (หรือร่างป้องกัน 2 ร่างที่มีสิทธิ์เสมอ) ฮั้วกันตัดสินผลได้ | **รอบท้าทาย**: ใครก็รัน Neuro ซ้ำแล้วเปิดรอบ 2 ได้ คู่ที่ผิดเสียเงินค้ำ 50% + strike · ร่างป้องกันนั่งได้งานละ 1 ร่าง · `assurance` บอกว่ายืนยันแล้วโดยกี่คน |
+| 13 | ผู้ส่งงานคำนวณได้ล่วงหน้าว่าใครจะได้ที่นั่ง (seed มาจากคำขออย่างเดียว) | ฉลากผูกกับ `blockhash` ของบล็อกถัดจากบล็อกที่ส่งงาน ซึ่งไม่มีใครเลือกได้ (ดู "จับฉลากที่เดาไม่ได้") |
+| 14 | ร่างป้องกันที่ออฟไลน์ครองที่นั่งตลอดไป | `heartbeat` + `defenderTimeout` (โหวตได้): เงียบเกินกำหนด `regrow` เอาออก กลับมาต้อง heartbeat ก่อน |
+| 15 | สุ่มฉลากใหม่ได้: commit ที่ revert `NotChosen` ยกเลิกการจับ (`PREVRANDAO` ของบล็อกนั้น) จึงส่งซ้ำทุกบล็อกจนได้ผลที่ชอบ หรือให้สัญญาเรียก `draw` เฉพาะตอนผลถูกใจ | ฉลาก = `keccak256(seed, blockhash(B + 1), รอบ)` ตายตัวตั้งแต่บล็อก B + 1 ส่งซ้ำหรือเลือกเวลาก็ได้ค่าเดิม · เกิน 256 บล็อกย้ายรอบไปบล็อกใหม่ · เหลือแค่ผู้เสนอบล็อก B + 1 ที่ปรับแฮชได้ |
+| 16 | ลงเงินค้ำก้อนใหญ่หลังจับฉลาก ทำให้คนที่ได้สิทธิ์หมดสิทธิ์จนถึง 1/3 สุดท้าย | ถ่ายภาพเงินค้ำรวมไว้ในรอบตอนเปิดรอบ |
+| 17 | ท้าทายตัวเองฟรี: ท้าทายได้ครั้งเดียว และรอบที่ไม่ได้ข้อสรุปคืนเงินเต็ม แล้วปิดการท้าทายถาวร | ท้าทายใหม่ได้หลัง disputed (รวม 3 รอบ คนใหม่ทุกรอบ) · ไม่ได้ข้อสรุปเสีย 20% ให้ที่นั่งที่ reveal (หรือกองทุนชุมชน) · คนท้าทายต้องระบุคำตอบ ถ้าผลใหม่ไม่ตรงทั้งสองฝั่งเสียเงินวางทั้งหมด |
+| 18 | คนที่ถูกริบจนเงินค้ำต่ำกว่าขั้นต่ำ ถอนเงินที่เหลือไม่ได้ (ไม่ active และไม่ได้เริ่มถอน) | ถูกหักจนหลุดขั้นต่ำ = เริ่มนับเวลาถอนทันที (ยังเคารพการกันเงิน) หรือ `register` เติมเงินกลับมา |
+| 19 | reveal ไม่มีเส้นตาย การริบจึงมาถึงหลังเงินค้ำถูกถอนไปแล้วได้ | reveal ทุกรอบมีเส้นตาย (เริ่มรอบ + `jobTimeout`) · กันเงินค้ำทุกที่นั่งถึงเริ่มรอบ + 2 × `jobTimeout` และกันคนรอบ 1 ต่อระหว่างการท้าทาย |
+| 20 | ประมาณแก๊สจากบล็อกล่าสุด แต่ธุรกรรมลงบล็อกถัดไป (เช่น `job request` ข้ามนาทีของมิเตอร์โหลด ใช้แก๊สต่างกันราว 1,700) จึงแก๊สหมดเป็นครั้งคราว | ทุกธุรกรรมของ CLI และโปรแกรมคนรันร่างเผื่อแก๊ส 50% · ประมาณแล้วได้ `TooEarly` รอบล็อกถัดไปแล้วลองใหม่ |
+| 21 | หลัง 1/3 แรก ร่างป้องกัน 2–3 ร่างยึดที่นั่งทั้งหมดได้ถ้ายังไม่มีคนจากฉลากมา | รอบละ 1 ร่างป้องกันทุกช่วงเวลา ยกเว้นไม่มีคนรันร่างอื่น active เลย |
+
+ยังเหลือที่ต้องใช้คนจริง: validator หลายราย (ประตู 1) และ audit (ประตู 2–3)
+
+## ก่อนเงินจริง (ห้ามข้าม)
+
+ทุกอย่างในโฟลเดอร์นี้ใช้กับ **testnet เท่านั้น** ก่อน mainnet หรือก่อนรับเงินจริงต้องผ่านเงื่อนไขเหล่านี้ (ตามแผน)
+
+| ประตู | เงื่อนไข | ใครทำ |
+|---|---|---|
+| 1 | เชน testnet รัน 30 วันไม่ค้าง และมีคนรันร่างที่เป็นคนละคนจริงอย่างน้อย 10 คน | ชุมชน + เครื่อง Oracle |
+| 2 | audit ตัวเชน (รวม patch ML-DSA) และสัญญาทุกตัวในโฟลเดอร์นี้ · มีผู้ใช้ Neuro ≥ 1,000 รายต่อเดือน | บริษัท audit (มีค่าใช้จ่าย) |
+| 3 | audit สะพาน · ความเห็นด้านกฎหมาย · validator อิสระ ≥ 20 ราย · stake ต่อรายไม่เกิน 33% · วงเงินสะพานน้อยกว่า 1/3 ของ stake | บริษัท audit + ที่ปรึกษากฎหมาย + validator |
+
+## ผู้ดูแล: ติดตั้งสัญญา
+
+```
+zetaphy deploy --fund 100000 --governance gov --community-fund 0x<กองทุนชุมชน>
+                                  # ใช้กุญแจของบัญชี rewards และเติมกองรางวัลให้ด้วย; NeuroControl ใหม่เป็นของ gov module
+zetaphy deploy-stable --reserve 1000 --oracle 0x<ZetaphyOracle> --zeta-asset 0x<WZETAPHY>   # tUSDC, tUSDT และ StableGateway ที่คิดราคาผ่าน oracle
+                                  # (--testnet-fixed-price 0.01 = ทางสำรอง testnet ราคาคงที่ ติดป้ายชัด ปิดได้ด้วย timelock)
+```
+launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แล้วตอน handover ยกสิทธิ์ผู้ดูแลทุกตัวให้ ZetaphyTimelock (ดู docs/LAUNCH.md)
+
+ค่าเริ่มต้น:
+
+| ค่า | ค่าเริ่มต้น |
+|---|---|
+| เงินค้ำ | 100 ZETAPHY |
+| รางวัลต่องาน | 1 ZETAPHY |
+| ค่าบริการขั้นต่ำ | 0.1 ZETAPHY |
+| เวลา commit | 120 วินาที |
+| หมดเวลางาน | 600 วินาที |
+| รอถอนเงินค้ำ | 3600 วินาที |
+| เพดานร่าง (`--max-bodies`) | 64 |
+| เติมร่างป้องกันต่อชั่วโมง (`--max-regrow`) | 4 |
+| กองทุนชุมชน (`--community-fund`) | ที่อยู่ของคนติดตั้ง (ควรตั้งเอง) |
+| เงินวางท้าทาย (โหวต `set-challenge-bond`) | max(2 × ค่างาน, 1 ZETAPHY) |
+| เวลาท้าทาย (โหวต `set-challenge-window`) | เท่าเวลาหมดงาน (600 วินาที) |
+| ร่างป้องกันเงียบได้ไม่เกิน (โหวต `set-defender-timeout`) | 6 ชั่วโมง |
+
+## ทดสอบ
+
+- `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)
+- `ZETAPHYD=<zetaphyd ที่มี patch ML-DSA> npm run test:devnet:pq`: ทดสอบขั้น 5 บนเชนจริง
+- `ZETAPHYD=<zetaphyd ที่มีกุญแจโหวต ML-DSA> npm run test:devnet:pqcert`: เชน 2 validator ลงทะเบียนกุญแจโหวต แล้วตรวจบล็อกด้วย `zetaphy pq verify-block`
+- `ZETAPHYD=<zetaphyd> npm run test:devnet:cosmoswallet`: กระเป๋า Cosmos (Keplr, Leap, Cosmostation) เซ็นและส่งธุรกรรมบนเชนจริง
+- `ZETAPHYD=<zetaphyd> npm run test:devnet:neurogov`: โหวตบนเชนจริงหยุด Neuro (gov module เรียก NeuroControl ผ่าน MsgEVMCall) แล้วเปิดใหม่ การโอนเหรียญยังทำงานระหว่างหยุด โหวตถอดเชนออกจากรายชื่อแล้วคำขอเชนนั้นถูกปฏิเสธ และโหวตตั้งเงินวางท้าทาย (2.5 ZETAPHY) กับ `defenderTimeout`
+- `npm run test:devnet:bridge`: สะพาน Neuro ข้ามเชนจริง 2 เชน (ต้นทาง และ ZETAPHY) รวมถึงผู้ส่งที่ติดธงแล้ว guardian บังคับใช้ทันที (`enforce-now`) ถูกปฏิเสธ ผู้ส่งที่ติดธงระดับเตือนไม่ถูกกักจนครบ `holdDelay` แต่ guardian กักทันทีด้วย `hold-now` ทั้งคู่ออกได้หลังปลดธง, `deploy-bridge` ไม่ยอม deploy ถ้าไม่มี `--lockbox` หรือ guardian เป็น key เดี่ยวนอก devnet และติดตั้งแบบปิด, `bridge open` ไม่เปิดจนผ่านทุกประตู, `bridge monitor` (watch list + marker key) ทำเครื่องหมายผู้ที่เรียกสัญญาที่เฝ้าไว้ก่อนพ้นการกักกันจนการโอนของเขาถูกปฏิเสธ โดยไม่มีผลลัพธ์ใดเอ่ยที่อยู่สัญญานั้น และแจ้งการเปลี่ยนค่า ยอดถึงเพดาน (เกณฑ์จาก secret) และ pause, `threat export`, รายงานจากผู้ใช้ (`report`, `reports`, `settle`, `claim`)
+  - รันบนเครื่องที่ใช้ devnet ร่วมกัน: `flock /tmp/ci-test/devnet.lock env ZETAPHYD=<zetaphyd> npm run test:devnet:bridge`
+- `npm test` รวม `test/hyperlane.test.js` (HyperlaneLane กับ Mailbox จำลอง, ประตูบนเชน, เพดานแข็ง), `test/bridgegate.test.js` (ประตูของ CLI) และ `test/monitor.test.js` (กฎแจ้งเตือน, watch list, การทำเครื่องหมาย, ไม่มีที่อยู่สัญญาที่เฝ้าไว้ในผลลัพธ์ใด, state เข้ารหัส, แจ้งเตือน timelock/oracle)
+- `test/timelock.test.js`: role ของ timelock (proposer = canceller, executor ใครก็ได้, admin = ตัวเอง), เรียกก่อนครบเวลา/ไม่ได้ตั้งเวลา/คนที่ไม่ใช่ proposer ถูกปฏิเสธ, ยกเลิก, เปลี่ยนระยะรอต้องรอด้วย, ทุกสัญญาที่ส่งให้ timelock แล้วผู้ดูแลเดิมถูกปฏิเสธ และปุ่มฉุกเฉินของ guardian ใช้ได้ทันทีแต่เปิดคืนไม่ได้
+- `test/oracle.test.js`: ราคาจาก DEX pair จริง (artifact ของ zetaphy-dex) กับ Pyth จำลอง, ทศนิยม, ทุกเหตุผลที่ไม่มีราคา (สภาพคล่อง, observation, อายุ, conf, สองแหล่งไม่ตรงกัน), ตัดวงจร, role, ZetaphyPythRelay (threshold, update เก่า, รูปแบบของ Pyth/Hermes) และชุดทดสอบถดถอย (regression) ของด่านกันราคา
+- `npm run test:devnet:timelock` (ต้องมี `zetaphyd`, ใช้ lock เดียวกัน): oracle บนเชนจริง (TWAP + Pyth ผ่าน relay), StableGateway คิดราคาผ่าน oracle และ relay ที่ poke oracle, timelock ที่ multisig 2-of-3 เป็น proposer (execute ก่อนเวลาถูกปฏิเสธ, execute โดยคนที่ไม่มี role, cancel), guardian หยุดราคาทันที, ราคาผิดปกติไม่ได้ราคา และ `bridge monitor` รายงานครบ
+  สัญญาสำหรับทดสอบ (`test/helpers/OracleMocks.sol`) คอมไพล์ในชุดทดสอบ ไม่อยู่ใน `contracts/`
+  สัญญาสำหรับทดสอบอย่างเดียว (`test/helpers/WatchedEmitter.sol`, `test/helpers/Lure.sol`) คอมไพล์ในชุดทดสอบ ไม่อยู่ใน `contracts/` และ `artifacts/`
+- `npm run test:devnet`: ทดสอบบนเชน ZETAPHY จริง ต้องมี `zetaphyd`
+  - สคริปต์ตั้งเชน 1 โหนด (บล็อกละ 1 วินาที)
+  - คนรันร่าง 3 คนรับงานจริงจนได้ผลตรวจ 2 ใน 3 และได้รับเงิน
+  - ท้าทายผลตรวจ (ระบุ `--verdict`) แล้วคนรันร่างใหม่ 2 คนรับที่นั่งรอบท้าทาย (จับฉลากจาก `blockhash`) จนยืนยันผล ("confirmedBy" 4 ขึ้นไป)
+  - ผู้ใช้ที่มี 0 ZETAPHY จ่ายค่างานเป็น tUSDC ผ่าน relay ได้
+  - โหวตอัปเกรดผ่าน และเชนตั้งเวลาอัปเกรดไว้
+  - `zetaphy gate` อ่านข้อมูลจากเชนได้
+
+## สถานะ
+
+สัญญาเหล่านี้ยังไม่ผ่าน audit ใช้กับ ZETAPHY testnet เท่านั้น รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+

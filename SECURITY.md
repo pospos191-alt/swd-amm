@@ -2,7 +2,7 @@
 
 ## Status: UNAUDITED DRAFT. Do not deploy to mainnet as-is.
 
-## Reporting a vulnerability / แจ้งช่องโหว่
+## Reporting a vulnerability
 
 **Do not open a public issue.** Report privately through GitHub: **Security → Report a vulnerability**
 (the owner enables it under **Settings → Code security → Private vulnerability reporting**). Scope, severity
@@ -10,11 +10,11 @@ levels, rewards, rules, safe harbor and the disclosure timeline are in [`docs/BU
 There is no real-money reward yet: on the testnet, rewards are recognition only, and real amounts must be
 funded by a governance vote before mainnet.
 
-**อย่าเปิด issue สาธารณะ** แจ้งแบบส่วนตัวทาง GitHub: แท็บ **Security → Report a vulnerability** รายละเอียด (ขอบเขต ระดับ รางวัล
-กติกา safe harbor กำหนดเวลาเปิดเผย) อยู่ใน [`docs/BUG_BOUNTY.md`](docs/BUG_BOUNTY.md) ตอนนี้ยังไม่มีเงินรางวัลจริง
+**Do not open a public issue.** Report privately through GitHub: the **Security → Report a vulnerability** tab. Details (scope, levels, rewards,
+rules, safe harbor, disclosure timeline) are in [`docs/BUG_BOUNTY.md`](docs/BUG_BOUNTY.md). There is no real reward money yet.
 
 **ZETAPHY lock/mint bridge:** deployed CLOSED. It opens only when every gate in `zetaphy-network/README.md`
-(stage 3, "เปิดสะพาน") holds: a second independent lane (Hyperlane), an audit recorded on-chain, 10+ independent
+(stage 3, "Opening the bridge") holds: a second independent lane (Hyperlane), an audit recorded on-chain, 10+ independent
 Neuro runners, multisig guardian and governance on hardware wallets, a funded bug bounty, small caps that grow
 behind a 7-day timelock, and the bridge monitor running.
 
@@ -27,8 +27,8 @@ pause a price feed). The launch tool checks on-chain that no EOA keeps an admin 
 come from `ZetaphyOracle` (DEX TWAP + Pyth with staleness, deviation, confidence and circuit-breaker guards), never a
 silently wrong value. Scope: [`docs/BUG_BOUNTY.md`](docs/BUG_BOUNTY.md); details in `zetaphy-network/README.md`.
 
-**การปกครองของ ZETAPHY:** หลัง handover สิทธิ์ผู้ดูแลทุกตัวเป็นของ `ZetaphyTimelock` (รอ 48 ชั่วโมง) guardian กดได้ทันทีเฉพาะสิ่งที่ลดความเสี่ยง
-ราคาของ StableGateway มาจาก `ZetaphyOracle` ที่ไม่มีราคาก็ revert ไม่เดา รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+**ZETAPHY governance:** after the handover every admin right belongs to `ZetaphyTimelock` (48-hour wait); the guardian can act immediately only on things that reduce risk.
+StableGateway prices come from `ZetaphyOracle`, which reverts when it has no price instead of guessing. Security details are kept separately for the team.
 
 **Update (2026-09-08, latest): the first-depositor/donation attack found by
 the test suite (see the finding below) has been FIXED, not just
@@ -204,7 +204,7 @@ have personally confirmed it — do not take "it looks right" as sufficient.**
 
 Unaudited draft, never deployed to mainnet. Its security history, attack-suite results and open risk
 decisions are kept privately by the team; report anything you find through the private channel above.
-รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+Security details are kept separately for the team.
 
 ## ZETAPHY chain security core (Q-day, threat gate, IBC hold) — added 2026-10-21
 
@@ -212,6 +212,6 @@ Protocol-level rules in the ZETAPHY chain patch (`zetaphy-chain/setup-node.sh`),
 vote: Q-day (ECDSA-signed transactions refused from a voted height; migration by quantum lock, or commit–reveal
 for keys never used on chain), the threat gate (a call to a contract with an enforced Neuro flag needs the
 sender's own consent, precompile `0x…0901`), and the IBC large-transfer hold (big inbound transfers wait; the
-guardian can only return them to the sender). User guide (Thai): [`docs/SECURITY-CORE.md`](docs/SECURITY-CORE.md);
+guardian can only return them to the sender). User guide: [`docs/SECURITY-CORE.md`](docs/SECURITY-CORE.md) (Thai: [`SECURITY-CORE.th.md`](docs/SECURITY-CORE.th.md));
 audit scope: [`docs/CHAIN_AUDIT_SCOPE.md`](docs/CHAIN_AUDIT_SCOPE.md). **Unaudited; testnet only.**
 Known limits and internal review notes are kept separately for the team.

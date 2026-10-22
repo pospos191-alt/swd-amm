@@ -1,149 +1,151 @@
+**English** | [ภาษาไทย](README.th.md)
+
 # ZETAPHY PQ Wallet
 
-กระเป๋าบนเว็บสำหรับ **บัญชี PQ แท้ (native)** บน ZETAPHY testnet
-- บัญชีคุมด้วยกุญแจ ML-DSA-44 (FIPS 204) อย่างเดียว ไม่มีกุญแจ ECDSA เลย
-- ธุรกรรมเป็นข้อความ Cosmos SDK (`MsgSend`, `MsgDelegate`, `MsgEVMCall` ฯลฯ) ที่เชนตรวจลายเซ็น ML-DSA เอง
-- เป็นเว็บนิ่ง (static) ไม่มีโค้ดฝั่งเซิร์ฟเวอร์
+A web wallet for **native PQ accounts** on ZETAPHY testnet
+- The account is controlled by an ML-DSA-44 key (FIPS 204) only. There is no ECDSA key at all
+- Transactions are Cosmos SDK messages (`MsgSend`, `MsgDelegate`, `MsgEVMCall`, etc.) whose ML-DSA signatures the chain verifies itself
+- It is a static site with no server-side code
 
-> **ใช้กับ testnet เท่านั้น ไม่ใช่เงินจริง**
-> seed คือกุญแจเดียวของกระเป๋า ถ้าหายหรือลืมรหัสผ่าน เงินหายถาวร
+> **For testnet only, not real money**
+> The seed is the wallet's only key. If you lose it or forget the password, the funds are lost forever
 
-## ทำไมแยกจาก zetaphy-neuro
+## Why it is separate from zetaphy-neuro
 
-zetaphy-neuro สัญญากับผู้ใช้ว่า "ไม่แตะกุญแจเลย" กระเป๋านี้ต้องถือกุญแจ จึงแยกเป็นโปรเจกต์ Vercel ของตัวเอง โดเมนของตัวเอง
+zetaphy-neuro promises users that it "never touches keys". This wallet has to hold keys, so it is a separate Vercel project with its own domain
 
-## ทำอะไรได้
+## What it can do
 
-- สร้างกุญแจใหม่ (seed 32 ไบต์จาก `crypto.getRandomValues`) หรือนำเข้า seed (hex)
-- หรือ **ใช้ MetaMask (ZETAPHY Snap)**: กุญแจ ML-DSA-44 อยู่ใน MetaMask ไม่ใช่ในหน้านี้ (ดู `zetaphy-snap/README.md`)
-  - กด "เชื่อม MetaMask": `wallet_requestSnaps` แล้ว `zetaphy_getAccount` หน้าเว็บคำนวณที่อยู่จาก public key เอง ไม่เชื่อที่อยู่ที่ snap บอก
-  - snap ID มาจาก `<meta name="zetaphy-snap-id">` ใน `index.html` (ค่าเริ่มต้น `npm:@zetaphy/snap`)
-    ตอนพัฒนาใส่ `local:http://localhost:8080` ใน "ตั้งค่าเพิ่มเติม" (บัญชีจะต่างจากของ npm)
-  - โอน, โอนโทเคน, stake และ deploy ส่งให้ snap เป็นข้อความ (`zetaphy_signTx`) snap แสดงรายละเอียดและเซ็นเมื่อผู้ใช้ยืนยัน
-    หน้าเว็บสร้าง tx รอบลายเซ็นเองแล้วเทียบกับที่ snap ส่งกลับ ถ้าไม่ตรงจะไม่ส่ง
-  - ไม่มีไฟล์สำรอง seed: Secret Recovery Phrase ของ MetaMask คือที่สำรอง
-  - ระหว่างที่ snap ยังไม่อยู่ใน allowlist ของ MetaMask ต้องใช้ MetaMask Flask
-- แสดงที่อยู่ `zetaphy1…` และ `0x…` (บัญชีเดียวกัน) และยอดเงิน
-- โอนไปที่อยู่ `0x…` หรือ `zetaphy1…` โดยแสดงจำนวนและค่าธรรมเนียมให้ยืนยันก่อนเซ็น
-- โทเคน ERC-20 (เหมือน `zetaphy pq native token-balance` / `token-send`)
-  - ใส่ที่อยู่สัญญา แสดง symbol, decimals และยอดของบัญชี อ่านด้วย `eth_call` ผ่าน RPC เดิม เบราว์เซอร์จำที่อยู่โทเคนล่าสุดไว้
-  - โอนเป็น `/zetaphy.pq.v1.MsgEVMCall` ที่เรียก `transfer(address,uint256)` (calldata เข้ารหัสในหน้าเว็บเอง ไม่ใช้ ethers)
-  - ถ้าสัญญา revert ธุรกรรมทั้งหมดล้มเหลวแต่ยังเสียค่าธรรมเนียม หน้าเว็บจึงจำลองด้วย `eth_call` ก่อนแสดงหน้ายืนยัน และ `callEVM` จำลองซ้ำก่อนเซ็น ถ้าจะ revert หรือ `transfer` คืน `false` จะไม่เซ็นและไม่ส่ง
-  - ค่าธรรมเนียม = (EVM gas, ค่าเริ่มต้น 200000 + 400000) × gas price จ่ายเป็น ZETAPHY
-- Stake (เหมือน `zetaphy pq native stake` / `unstake` / `rewards`)
-  - ใส่ validator `zetaphyvaloper1…` (ตรวจ checksum) แล้วกด Stake, ถอน stake หรือรับรางวัล ทุกปุ่มมีหน้ายืนยันก่อนเซ็น
-  - ยังไม่แสดงยอดที่ stake อยู่
-- สร้างสัญญา (deploy เหมือน `zetaphy pq native deploy`)
-  - วาง creation bytecode (hex รวม constructor arguments) หน้ายืนยันแสดงขนาดและ keccak-256 ของโค้ด
-  - จำลองด้วย `eth_call` ก่อนแสดงหน้ายืนยัน และ `deploy` จำลองซ้ำก่อนเซ็น ส่งเป็น `MsgEVMCall` ที่ไม่มี `to` แล้วแสดงที่อยู่สัญญาใหม่
-- ล็อกบัญชี MetaMask ให้กระเป๋านี้ (ล็อกควอนตัม แบบถาวร)
-  - ต้องติ๊กยอมรับคำเตือนก่อน แล้วกดยืนยันอีกครั้งที่หน้าต่างที่แสดงทั้งสองบัญชี
-  - ใช้ `window.ethereum`: `eth_requestAccounts` แล้ว `eth_sendTransaction` `{to: 0x…5051, value: 0x0, data: ที่อยู่ 0x ของกระเป๋านี้}`
-  - ตรวจก่อนว่ากระเป๋านี้เคยส่งธุรกรรมแล้ว (เชนรู้กุญแจสาธารณะ), MetaMask อยู่บน chain 77390 และบัญชีนั้นยังไม่ถูกล็อก
-  - หลังล็อก กุญแจ MetaMask ของบัญชีนั้นใช้กับ ZETAPHY ไม่ได้อีก ถ้า seed ของกระเป๋านี้หาย บัญชีนั้นหายด้วย
-- บัญชีที่กระเป๋านี้ควบคุม
-  - ใส่ที่อยู่บัญชีที่ล็อกไว้ หน้าเว็บถาม `zetaphy_pqAccount` ว่า `quantumLockedTo` เป็นกระเป๋านี้จริงก่อนใช้
-  - ระหว่าง "ทำรายการในนามบัญชีนี้" การโอน ZETAPHY, โอนโทเคน และ stake/ถอน/รับรางวัล ส่งเป็น `MsgEVMCall` ที่มี `as_owner`
-    - เงินและโทเคนออกจากบัญชีที่ล็อก ค่าธรรมเนียมหักจากกระเป๋านี้ stake ผ่าน precompile `0x…0800` / `0x…0801`
-  - เบราว์เซอร์จำรายการที่อยู่ไว้ (แยกตามกระเป๋า) สถานะจริงอ่านจากเชนทุกครั้ง
-- ดาวน์โหลดไฟล์สำรอง seed
-  - เป็น hex แบบไม่เข้ารหัส ใช้เป็น `~/.zetaphy/pq.seed` ของ `zetaphy pq native` ได้เลย
-- **ใช้ ZETAPHY กับกระเป๋าอื่น** (`wallets.js`, รายละเอียดและตารางว่ากระเป๋าไหนใช้ได้อยู่ใน `zetaphy-chain/wallets/README.md`)
-  - แสดงกระเป๋า EVM ทุกตัวในเบราว์เซอร์ด้วย EIP-6963 (ชื่อและไอคอน: MetaMask, Rabby, Coinbase, OKX, Trust, Brave, Phantom ฯลฯ)
-    - กระเป๋ารุ่นเก่าและเบราว์เซอร์ในแอปมือถือ: `window.ethereum`, `window.binancew3w.ethereum` (Binance Wallet), `window.phantom.ethereum`
-    - ไอคอนแสดงเฉพาะ `data:image/…` (CSP `img-src 'self' data:`) ชื่อแสดงเป็นข้อความล้วน ตัดอักขระควบคุมและ bidi ออก
-  - ผู้ใช้เลือกกระเป๋าเอง (จำไว้) กระเป๋าที่เลือกใช้กับ "เพิ่ม ZETAPHY", "เชื่อมกระเป๋า", ล็อกควอนตัม และโหมด Snap
-    - Snap ถาม `wallet_getSnaps` ก่อน ถ้ากระเป๋าไม่ใช่ MetaMask จะบอกให้เลือก MetaMask
-  - "เพิ่ม ZETAPHY ในกระเป๋านี้": `wallet_addEthereumChain` (EIP-3085) แล้ว `wallet_switchEthereumChain`
-    - RPC มาจากช่อง RPC ด้านบน ต้องเป็น https หรือ localhost
-    - ถ้ากระเป๋าปฏิเสธ (เช่น 4200 ใน Binance Wallet หรือ Phantom) บอกเหตุผลและเปิดค่าสำหรับเพิ่มเอง
-    - สัญลักษณ์ฝั่ง EVM คือ `ZTPHY` เพราะ MetaMask และ chainlist รับได้ไม่เกิน 6 ตัว
-  - แสดงค่าสำหรับเพิ่มเองในกระเป๋าใดก็ได้: ชื่อเครือข่าย, RPC, chain ID, สัญลักษณ์, ทศนิยม
-  - "เพิ่มใน Keplr / Leap / Cosmostation": `experimentalSuggestChain(chainInfo)` แล้ว `enable` และแสดงที่อยู่ `zetaphy1…` ที่กระเป๋าตอบ
-    - rpc = `<host>/rpc`, rest = `<host>/rest` จาก host เดียวกับช่อง RPC
-  - มือถือ: ในเบราว์เซอร์ของแอปกระเป๋า กระเป๋าจะอยู่ในรายการเอง ถ้าเปิดจากเบราว์เซอร์ธรรมดาจะมีลิงก์ "เปิดในแอป"
-  - WalletConnect: ปุ่มปิดอยู่จนกว่าจะมี projectId (ดูหัวข้อด้านล่าง)
-- ภาษาไทย (ค่าเริ่มต้น) และอังกฤษ
+- Create a new key (32-byte seed from `crypto.getRandomValues`) or import a seed (hex)
+- Or **use MetaMask (ZETAPHY Snap)**: the ML-DSA-44 key lives in MetaMask, not in this page (see `zetaphy-snap/README.md`)
+  - Click "Connect MetaMask": `wallet_requestSnaps`, then `zetaphy_getAccount`. The web page computes the address from the public key itself. It does not trust the address the snap reports
+  - The snap ID comes from `<meta name="zetaphy-snap-id">` in `index.html` (default `npm:@zetaphy/snap`).
+    During development, enter `local:http://localhost:8080` in "Advanced settings" (the account will differ from the npm one)
+  - Send, token send, stake, and deploy are passed to the snap as messages (`zetaphy_signTx`). The snap shows the details and signs when the user confirms.
+    The web page builds the tx around the signature itself and compares it with what the snap returns. If they do not match, it does not send
+  - There is no seed backup file: MetaMask's Secret Recovery Phrase is the backup
+  - While the snap is not yet on MetaMask's allowlist, you must use MetaMask Flask
+- Shows the `zetaphy1…` and `0x…` addresses (the same account) and the balance
+- Send to a `0x…` or `zetaphy1…` address, showing the amount and fee to confirm before signing
+- ERC-20 tokens (like `zetaphy pq native token-balance` / `token-send`)
+  - Enter the contract address to show the symbol, decimals, and the account's balance. Read with `eth_call` through the same RPC. The browser remembers the last token address
+  - Sending is a `/zetaphy.pq.v1.MsgEVMCall` that calls `transfer(address,uint256)` (the calldata is encoded in the page itself, without ethers)
+  - If the contract reverts, the whole transaction fails but the fee is still paid. So the page simulates with `eth_call` before showing the confirm screen, and `callEVM` simulates again before signing. If it would revert or `transfer` returns `false`, it does not sign or send
+  - Fee = (EVM gas, default 200000 + 400000) × gas price, paid in ZETAPHY
+- Stake (like `zetaphy pq native stake` / `unstake` / `rewards`)
+  - Enter a validator `zetaphyvaloper1…` (checksum is checked), then click Stake, Unstake, or Claim rewards. Every button has a confirm screen before signing
+  - The staked amount is not shown yet
+- Create a contract (deploy, like `zetaphy pq native deploy`)
+  - Paste the creation bytecode (hex including constructor arguments). The confirm screen shows the code size and keccak-256 of the code
+  - Simulates with `eth_call` before showing the confirm screen, and `deploy` simulates again before signing. Sent as a `MsgEVMCall` with no `to`, then shows the new contract address
+- Lock a MetaMask account to this wallet (quantum lock, permanent)
+  - You must tick to accept the warning first, then confirm again in the window that shows both accounts
+  - Uses `window.ethereum`: `eth_requestAccounts`, then `eth_sendTransaction` `{to: 0x…5051, value: 0x0, data: this wallet's 0x address}`
+  - Checks first that this wallet has sent a transaction before (the chain knows its public key), that MetaMask is on chain 77390, and that the account is not already locked
+  - After locking, that account's MetaMask key can no longer be used on ZETAPHY. If this wallet's seed is lost, that account is lost too
+- Accounts this wallet controls
+  - Enter the address of a locked account. The page asks `zetaphy_pqAccount` to confirm that `quantumLockedTo` really is this wallet before using it
+  - While "acting on behalf of this account", ZETAPHY sends, token sends, and stake/unstake/claim rewards are sent as `MsgEVMCall` with `as_owner`
+    - Funds and tokens come out of the locked account, the fee is paid by this wallet, and staking goes through the precompiles `0x…0800` / `0x…0801`
+  - The browser remembers the list of addresses (per wallet). The real state is read from the chain every time
+- Download a seed backup file
+  - It is unencrypted hex and can be used directly as `~/.zetaphy/pq.seed` for `zetaphy pq native`
+- **Use ZETAPHY with other wallets** (`wallets.js`; details and a table of which wallets work are in `zetaphy-chain/wallets/README.md`)
+  - Shows every EVM wallet in the browser via EIP-6963 (name and icon: MetaMask, Rabby, Coinbase, OKX, Trust, Brave, Phantom, etc.)
+    - Older wallets and in-app mobile browsers: `window.ethereum`, `window.binancew3w.ethereum` (Binance Wallet), `window.phantom.ethereum`
+    - Icons are shown only as `data:image/…` (CSP `img-src 'self' data:`). Names are shown as plain text with control and bidi characters removed
+  - The user picks the wallet (remembered). The chosen wallet is used for "Add ZETAPHY", "Connect wallet", quantum lock, and Snap mode
+    - Snap mode asks `wallet_getSnaps` first. If the wallet is not MetaMask, it tells the user to choose MetaMask
+  - "Add ZETAPHY to this wallet": `wallet_addEthereumChain` (EIP-3085), then `wallet_switchEthereumChain`
+    - The RPC comes from the RPC field above and must be https or localhost
+    - If the wallet refuses (for example 4200 in Binance Wallet or Phantom), it explains why and shows the values for adding it manually
+    - The EVM-side symbol is `ZTPHY` because MetaMask and chainlist accept at most 6 characters
+  - Shows the values for adding it manually in any wallet: network name, RPC, chain ID, symbol, decimals
+  - "Add to Keplr / Leap / Cosmostation": `experimentalSuggestChain(chainInfo)`, then `enable`, and shows the `zetaphy1…` address the wallet returns
+    - rpc = `<host>/rpc`, rest = `<host>/rest`, from the same host as the RPC field
+  - Mobile: in a wallet app's browser, the wallet appears in the list by itself. If opened from a regular browser, there is an "Open in app" link
+  - WalletConnect: the button is disabled until there is a projectId (see the section below)
+- Thai (default) and English
 
-## ฉีดวัคซีน: ไม่เซ็นธุรกรรมไปหาโค้ดที่ติดธง
+## Vaccine: never sign transactions to flagged code
 
-ก่อนเซ็นการโอน ZETAPHY, การโอนโทเคน (ตรวจทั้งสัญญาโทเคนและผู้รับ) และธุรกรรม EVM ที่หน้านี้สร้างให้กระเป๋าอื่น (ล็อกควอนตัม) หน้าเว็บตรวจปลายทางกับ `ThreatRegistry` (ดู zetaphy-network/README.md ขั้น 4)
-- อ่านโค้ดด้วย `eth_getCode` คำนวณลายนิ้วมือ Neuro (`fp1`, โค้ดเดียวกับ `zetaphy-neuro/src/fingerprint.js` อยู่ใน bundle) และ keccak-256 ของโค้ด
-- ถาม `isFlagged(fp1)`, `isCodeFlagged(codehash)` และ `isAddressFlagged(77390, ปลายทาง)` (เตือน) คู่กับ `isEnforced` / `isCodeEnforced` / `isAddressEnforced` (บังคับใช้: ติดธงมานานกว่า `enforceDelay` หรือผ่านช่องทางด่วน)
-- proxy (ตรวจแบบดีที่สุดเท่าที่ทำได้): ตรวจโค้ดจริงหลัง proxy แบบเดียวกัน คือ slot implementation ของ EIP-1967, beacon ของ EIP-1967 (และ `implementation()` ของมัน) และเป้าหมายของ minimal proxy EIP-1167 ลึกได้ 3 ชั้น proxy แบบอื่น (slot เอง, เลือกเป้าหมายตอนเรียก) ตรวจไม่เห็น
-  - view ที่ถามและการตาม proxy มาจาก `zetaphy-network/src/vaccine.js` (อยู่ใน bundle) โค้ดชุดเดียวกับที่ ZETAPHY Snap ใช้ตรวจทุกธุรกรรมใน MetaMask ธรรมดา
-- ตรวจตอนกด "ตรวจก่อนโอน" และตรวจซ้ำตอนกดยืนยันก่อนเซ็น ทั้งกุญแจในหน้านี้และโหมด MetaMask Snap (snap จึงไม่ถูกขอให้เซ็นเลย)
-- **ธงบังคับใช้แล้ว: ไม่เซ็น** แจ้งที่อยู่ ติดธงเพราะอะไร (ลายนิ้วมือ / โค้ดตรงทุกไบต์ / ที่อยู่) และเหตุผล ไม่มีปุ่มข้าม
-  - รวม **ธงที่เพิ่งติดแต่ผ่านช่องทางด่วน** (คนรันร่างครบ `fastQuorum` หรือ governance / guardian เรียก `enforceNow`): registry ตอบว่าบังคับใช้ทันที กระเป๋าจึงปฏิเสธทันที ไม่ใช่แค่เตือน
-- **ติดธงแต่ยังไม่บังคับใช้: เตือน** ในกรอบยืนยัน ส่งหรือไม่เป็นการตัดสินใจของผู้ใช้ (คนรันร่างไม่กี่คนจึงหยุดกระเป๋าทันทีไม่ได้ governance มีเวลาตรวจ) ถ้าธงใหม่โผล่หลังกดตรวจ ตอนยืนยันจะไม่เซ็นและให้ตรวจใหม่ ล็อกควอนตัมไม่มีกรอบยืนยัน จึงติดธงแบบไหนก็ไม่เซ็น
-- **ทุกคำเตือนและการปฏิเสธแสดง:** หมวดเป็นข้อเท็จจริงของโค้ด (เช่น "ในการจำลองซื้อขาย ซื้อได้ แต่ขายไม่ได้หรือได้เงินคืนน้อยมาก" ไม่ใช่ป้ายกล่าวหา),
-  หลักฐาน (`evidenceOf`: reportHash, URI และวิธีตรวจซ้ำด้วย Neuro), คำชี้แจง (`responseAt(key, 0..2)`: เก็บแยกตามผู้เขียน แสดงพร้อมที่อยู่ผู้เขียนทุกข้อ ของผู้ชี้แจงที่ governance แต่งตั้งขึ้นก่อน แล้วใหม่สุดก่อน ไม่เกิน 3 ข้อ จากคีย์ที่ติดธงและคีย์อื่นของปลายทางเดียวกัน; ตัดอักขระควบคุม/bidi ออก)
-  และบรรทัด "ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา" อ่านหลักฐานไม่ได้ก็บอกไว้ แต่ไม่ทำให้ธุรกรรมที่ถูกปฏิเสธส่งได้
-  เจ้าของสัญญาชี้แจงหรืออุทธรณ์ได้บนเชน (zetaphy-network/README.md ขั้น 4) ดู [`docs/LEGAL.md`](../docs/LEGAL.md)
-- ที่อยู่ registry มาจาก `<meta name="zetaphy-threat-registry">` ใน `index.html` หรือ "ตั้งค่าเพิ่มเติม" ใต้ช่อง RPC (จำไว้ในเบราว์เซอร์นี้)
-- **ตั้ง registry แล้วแต่ตรวจไม่ได้** (โหนดไม่ตอบ, ที่อยู่นั้นไม่ใช่ registry): ไม่เซ็น (ปิดไว้ก่อน)
-- **ยังไม่ได้ตั้ง registry**: ส่งได้ แต่หน้ายืนยันขึ้นกรอบเตือน "ยังไม่ได้ตรวจโค้ดปลายทาง" ให้เห็นชัด เพื่อให้กระเป๋าใช้ได้ก่อนมี registry บน testnet
-- ไม่ตรวจ: deploy (ยังไม่มีปลายทาง หน้ายืนยันบอกไว้) และ stake (ไปที่ precompile ไม่มีโค้ด)
+Before signing a ZETAPHY send, a token send (checking both the token contract and the recipient), and EVM transactions this page builds for other wallets (quantum lock), the page checks the destination against `ThreatRegistry` (see zetaphy-network/README.md Step 4)
+- Reads the code with `eth_getCode` and computes the Neuro fingerprint (`fp1`, the same code as `zetaphy-neuro/src/fingerprint.js`, included in the bundle) and the keccak-256 of the code
+- Queries `isFlagged(fp1)`, `isCodeFlagged(codehash)`, and `isAddressFlagged(77390, destination)` (warning), together with `isEnforced` / `isCodeEnforced` / `isAddressEnforced` (enforced: flagged for longer than `enforceDelay`, or through the fast track)
+- Proxies (best effort): checks the real code behind a proxy the same way, namely the EIP-1967 implementation slot, the EIP-1967 beacon (and its `implementation()`), and the target of an EIP-1167 minimal proxy, up to 3 levels deep. Other proxy types (custom slots, target chosen at call time) cannot be seen
+  - The views queried and the proxy following come from `zetaphy-network/src/vaccine.js` (included in the bundle), the same code ZETAPHY Snap uses to check every transaction in plain MetaMask
+- Checks when you click "Check before sending" and checks again when you confirm before signing, both with the key in this page and in MetaMask Snap mode (so the snap is never even asked to sign)
+- **Flag enforced: does not sign.** Shows the address, what was flagged (fingerprint / byte-for-byte code / address), and the reason. There is no skip button
+  - This includes **newly raised flags that went through the fast track** (runners reached `fastQuorum`, or governance / guardian called `enforceNow`): the registry says they are enforced immediately, so the wallet refuses immediately, not just warns
+- **Flagged but not yet enforced: warns** in the confirm box. Sending or not is the user's decision (so a few runners cannot stop the wallet right away, and governance has time to review). If a new flag appears after the check, confirming will not sign and asks you to check again. Quantum lock has no confirm box, so it does not sign for any kind of flag
+- **Every warning and refusal shows:** the category as a code fact (for example "in a simulated buy/sell, it could be bought, but could not be sold or returned very little", not an accusing label),
+  the evidence (`evidenceOf`: reportHash, URI, and how to re-check with Neuro), responses (`responseAt(key, 0..2)`: kept per author, each shown with the author's address; responders appointed by governance first, then newest first, at most 3, from the flagged key and other keys of the same destination; control/bidi characters removed),
+  and the line "Automated code analysis, not an accusation". If the evidence cannot be read, it says so, but that does not let a refused transaction be sent.
+  Contract owners can respond or appeal on-chain (zetaphy-network/README.md Step 4). See [`docs/LEGAL.md`](../docs/LEGAL.md)
+- The registry address comes from `<meta name="zetaphy-threat-registry">` in `index.html` or from "Advanced settings" under the RPC field (remembered in this browser)
+- **Registry set but the check fails** (node does not respond, the address is not a registry): does not sign (fails closed)
+- **Registry not set yet**: sending is allowed, but the confirm screen shows a clear warning box "destination code has not been checked yet", so the wallet is usable before there is a registry on testnet
+- Not checked: deploy (there is no destination yet; the confirm screen says so) and stake (goes to a precompile, which has no code)
 
-## WalletConnect: ขั้นต่อไป
+## WalletConnect: next step
 
-ยังไม่มี WalletConnect SDK ใน bundle ปุ่ม WalletConnect ในหน้าเว็บจึงยังเชื่อมไม่ได้
-- เจ้าของต้องสมัคร **projectId ของ Reown ฟรี** ที่ cloud.reown.com และใส่โดเมนของกระเป๋าใน allowlist ของโปรเจกต์
-- ใส่ projectId ใน `<meta name="zetaphy-walletconnect-project-id" content="…">` ของ `index.html` (หรือช่อง "ตั้งค่าเพิ่มเติม" ในหน้าเว็บ)
-  - พอมี projectId ปุ่มจะกดได้ แต่ยังบอกว่าเป็นขั้นต่อไป
-- **ขั้นต่อไป:** ใส่ SDK ใน `src/entry.js` แล้ว `npm run build` (และ commit `vendor/pqwallet.js`) แล้วต่อเข้ากับปุ่ม
-- ต้องใช้กับกระเป๋าบนมือถือเมื่อเปิดหน้านี้จากเบราว์เซอร์อื่น เช่น Binance Web3 Wallet นอกแอป Binance
+There is no WalletConnect SDK in the bundle yet, so the WalletConnect button on the web page cannot connect yet
+- The owner must sign up for a **free Reown projectId** at cloud.reown.com and add the wallet's domain to the project's allowlist
+- Put the projectId in `<meta name="zetaphy-walletconnect-project-id" content="…">` in `index.html` (or in the "Advanced settings" field on the web page)
+  - Once there is a projectId, the button can be clicked, but it still says this is the next step
+- **Next step:** add the SDK in `src/entry.js`, then `npm run build` (and commit `vendor/pqwallet.js`), then wire it to the button
+- Needed for mobile wallets when this page is opened from another browser, such as Binance Web3 Wallet outside the Binance app
 
-## เก็บกุญแจอย่างไร
+## How keys are stored
 
-- seed เก็บใน localStorage **แบบเข้ารหัสเท่านั้น**
-  - PBKDF2-SHA256 600,000 รอบ จากรหัสผ่านที่ผู้ใช้พิมพ์ แล้วเข้ารหัสด้วย AES-256-GCM (WebCrypto)
-- seed และกุญแจลับอยู่ในหน่วยความจำเฉพาะตอนปลดล็อก กด "ล็อกกระเป๋า" แล้วล้างทิ้ง
-- สิ่งเดียวที่ส่งออกไปคือ JSON-RPC ไปยังโหนดที่ผู้ใช้ใส่เอง: ที่อยู่ ยอดเงิน และธุรกรรมที่เซ็นแล้ว ไม่มี seed
-- โหมด MetaMask Snap: หน้าเว็บไม่มี seed เลย ส่งให้ MetaMask (ผ่าน `window.ethereum` ในเครื่อง) แค่ข้อความธุรกรรมที่จะให้เซ็น
-- ไม่โหลดสคริปต์จาก CDN หรือที่อื่น โค้ดทั้งหมดอยู่ใน `app.js` และ `vendor/pqwallet.js`
-- `vercel.json` ตั้ง CSP เข้ม (`script-src 'self'`, `frame-ancestors 'none'`) และ `X-Content-Type-Options: nosniff`
-  - `connect-src *` เพราะผู้ใช้ใส่ RPC ของโหนดตัวเอง
+- The seed is stored in localStorage **encrypted only**
+  - PBKDF2-SHA256 with 600,000 rounds from the password the user types, then encrypted with AES-256-GCM (WebCrypto)
+- The seed and secret key are in memory only while unlocked. Clicking "Lock wallet" clears them
+- The only thing sent out is JSON-RPC to the node the user enters: addresses, balances, and signed transactions. No seed
+- MetaMask Snap mode: the web page has no seed at all. It sends MetaMask (through the local `window.ethereum`) only the transaction messages to sign
+- No scripts are loaded from a CDN or anywhere else. All code is in `app.js` and `vendor/pqwallet.js`
+- `vercel.json` sets a strict CSP (`script-src 'self'`, `frame-ancestors 'none'`) and `X-Content-Type-Options: nosniff`
+  - `connect-src *` because users enter their own node's RPC
 
-## ใช้กับโหนด
+## Using it with a node
 
-ใส่ที่อยู่ JSON-RPC ของโหนด ZETAPHY (พอร์ต 8545) ในช่อง RPC ไม่มีค่าเริ่มต้น เบราว์เซอร์จำไว้ให้
-- หน้าเว็บบน Vercel เป็น https จึงต้องใช้ RPC แบบ https ด้วย (เบราว์เซอร์บล็อก http)
-  - โหนดที่ติดตั้งด้วย `zetaphy-chain/setup-node.sh` (หรือ `cloud-init.sh`) มี https ให้แล้ว:
-    `https://<IP ที่เปลี่ยนจุดเป็นขีด>.sslip.io` เช่น `https://1-2-3-4.sslip.io` (ต้องเปิดพอร์ต 80 และ 443)
-- โหนดต้องตอบ CORS (preflight `OPTIONS`) ให้โดเมนของกระเป๋า
-- หน้าเว็บตรวจ `eth_chainId` ว่าเป็น ZETAPHY testnet (77390) ก่อนใช้งานทุกครั้ง
-- บัญชีจะมีบนเชนหลังได้รับเงินครั้งแรก ก่อนหน้านั้นโอนออกไม่ได้ หน้าเว็บจะบอกให้โอนเข้าก่อน
+Enter the JSON-RPC address of a ZETAPHY node (port 8545) in the RPC field. There is no default. The browser remembers it
+- The web page on Vercel is https, so the RPC must be https too (browsers block http)
+  - Nodes installed with `zetaphy-chain/setup-node.sh` (or `cloud-init.sh`) already have https:
+    `https://<IP with dots changed to dashes>.sslip.io`, for example `https://1-2-3-4.sslip.io` (ports 80 and 443 must be open)
+- The node must answer CORS (preflight `OPTIONS`) for the wallet's domain
+- The web page checks `eth_chainId` to confirm it is ZETAPHY testnet (77390) every time before use
+- The account exists on-chain only after it first receives funds. Before that it cannot send. The web page will tell you to fund it first
 
-## ไฟล์
+## Files
 
-| ไฟล์ | คืออะไร |
+| File | What it is |
 |---|---|
-| `index.html`, `app.js`, `style.css` | หน้าเว็บ |
-| `wallets.js` | ค่าเครือข่ายสำหรับกระเป๋าอื่น (EIP-3085, Keplr chain info) และการหากระเป๋า EVM (EIP-6963) ตรงกับ `zetaphy-chain/wallets/*.template.json` |
-| `vendor/pqwallet.js` | bundle ของ `zetaphy-network/src/pqtx.js` + `zetaphy-neuro/src/fingerprint.js` + ML-DSA-44 จาก `@noble/post-quantum` + `@noble/hashes` (commit ไว้ Vercel จึงไม่ต้อง build) |
-| `src/entry.js`, `scripts/build.js` | สร้าง bundle ด้วย esbuild |
-| `scripts/serve.js` | เซิร์ฟเวอร์สำหรับรันบนเครื่อง ใช้ header ชุดเดียวกับ `vercel.json` |
-| `test/wallet.e2e.js` | ทดสอบในเบราว์เซอร์จริง (Playwright) |
+| `index.html`, `app.js`, `style.css` | The web page |
+| `wallets.js` | Network settings for other wallets (EIP-3085, Keplr chain info) and EVM wallet discovery (EIP-6963), matching `zetaphy-chain/wallets/*.template.json` |
+| `vendor/pqwallet.js` | Bundle of `zetaphy-network/src/pqtx.js` + `zetaphy-neuro/src/fingerprint.js` + ML-DSA-44 from `@noble/post-quantum` + `@noble/hashes` (committed, so Vercel does not need to build) |
+| `src/entry.js`, `scripts/build.js` | Builds the bundle with esbuild |
+| `scripts/serve.js` | Local server, using the same headers as `vercel.json` |
+| `test/wallet.e2e.js` | Tests in a real browser (Playwright) |
 
-## คำสั่ง
+## Commands
 
 ```
 npm install
-npm run build     # สร้าง vendor/pqwallet.js ใหม่ แล้ว commit
-npm run serve     # http://localhost:8090/ (สำหรับนักพัฒนา)
-npm test          # Chromium headless: สร้างกุญแจ, เข้ารหัส/ปลดล็อก, โอน, โอนโทเคน (และที่ถูกปฏิเสธ), stake, deploy,
-                  # ล็อกบัญชี MetaMask (window.ethereum จำลอง), ทำรายการแทนบัญชีที่ล็อก
-                  # และโหมด MetaMask Snap (snap ปลอมหลัง window.ethereum: wallet_requestSnaps / wallet_invokeSnap) กับ RPC จำลอง
-                  # กระเป๋าอื่น: กระเป๋าปลอมที่ประกาศตัวด้วย EIP-6963, Binance Wallet (4200), Phantom, Keplr/Leap/Cosmostation,
-                  # WalletConnect ที่ปิดอยู่ และตรวจว่าค่าในหน้าเว็บตรงกับ zetaphy-chain/wallets/
-                  # วัคซีน: ThreatRegistry จำลอง ปลายทางที่ติดธงถูกปฏิเสธก่อนเซ็น (รวมโหมด Snap) ที่ไม่ติดธงส่งได้ ธงช่องทางด่วนปฏิเสธทันที
+npm run build     # rebuild vendor/pqwallet.js, then commit it
+npm run serve     # http://localhost:8090/ (for developers)
+npm test          # headless Chromium: create key, encrypt/unlock, send, token send (and refused ones), stake, deploy,
+                  # lock a MetaMask account (mock window.ethereum), act on behalf of a locked account,
+                  # and MetaMask Snap mode (fake snap behind window.ethereum: wallet_requestSnaps / wallet_invokeSnap) with a mock RPC
+                  # other wallets: fake wallets announcing via EIP-6963, Binance Wallet (4200), Phantom, Keplr/Leap/Cosmostation,
+                  # disabled WalletConnect, and checks that the page's values match zetaphy-chain/wallets/
+                  # vaccine: mock ThreatRegistry; flagged destinations refused before signing (incl. Snap mode), unflagged ones sent, fast-track flags refused immediately
 ```
 
-ถ้าแก้ `zetaphy-network/src/pqtx.js` หรือ `zetaphy-neuro/src/fingerprint.js` ต้อง `npm run build` แล้ว commit `vendor/pqwallet.js` ด้วย CI ตรวจว่าไฟล์ที่ commit ตรงกับที่ build ใหม่
+If you edit `zetaphy-network/src/pqtx.js` or `zetaphy-neuro/src/fingerprint.js`, you must `npm run build` and commit `vendor/pqwallet.js` too. CI checks that the committed file matches a fresh build
 
-## ติดตั้งบน Vercel (ฟรี)
+## Deploy on Vercel (free)
 
-1. สร้างโปรเจกต์ใหม่ใน Vercel จาก repo นี้
-2. ตั้ง Root Directory เป็น `zetaphy-wallet`
-3. ไม่ต้องตั้งอะไรเพิ่ม: `vercel.json` ปิดขั้น install และ build ไว้แล้ว
+1. Create a new Vercel project from this repo
+2. Set Root Directory to `zetaphy-wallet`
+3. Nothing else to set: `vercel.json` already turns off the install and build steps
