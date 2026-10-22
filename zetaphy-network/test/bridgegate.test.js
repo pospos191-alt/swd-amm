@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Interface, getAddress } from 'ethers';
-import { isLoopback, devnetOf, auditArgs, capProblems, multisigInfo, roleChecks, laneChecks, runnerProblems, GOV_MODULE } from '../src/bridgegate.js';
+import { isLoopback, devnetOf, auditArgs, capProblems, multisigInfo, roleChecks, laneChecks, runnerProblems, GOV_MODULE,
+  testnetOf, testnetAuditProblems, testnetNoticeSha, testnetWrite, TESTNET_GENESIS, TESTNET_NOTICE_URL } from '../src/bridgegate.js';
 
 const A = (n) => getAddress('0x' + n.toString(16).padStart(40, '0'));
 const DEPLOYER = A(0xd0);
@@ -12,7 +13,7 @@ const IFACE = new Interface([
   'function ownerCount() view returns (uint256)', 'function owners(uint256) view returns (address)', 'function threshold() view returns (uint8)',
   'function governance() view returns (address)', 'function owner() view returns (address)', 'function admin() view returns (address)',
   'function runners() view returns (address)', 'function mailbox() view returns (address)', 'function interchainSecurityModule() view returns (address)',
-  'function getMinDelay() view returns (uint256)', 'function getRoleMemberCount(bytes32) view returns (uint256)', 'function getRoleMember(bytes32, uint256) view returns (address)',
+  'function decimals() view returns (uint8)', 'function getMinDelay() view returns (uint256)', 'function getRoleMemberCount(bytes32) view returns (uint256)', 'function getRoleMember(bytes32, uint256) view returns (address)',
 ]);
 
 /** contracts: { address: { fn: value | (args) => value } } — addresses not listed are EOAs. */
@@ -165,4 +166,75 @@ test('governance behind a ZetaphyTimelock: its delay, its own admin role and its
   assert.match(p, /proposer of timelock .* is a single key/);
   const shared = fakeProvider({ [TL]: timelock(172800n, [MS], [TL]), [MS]: ms, [GUARD]: simple([A(1), A(5), A(6)], 2) });
   assert.match((await roleChecks(shared, { governance: [TL], guardians: [GUARD] }, { deployer: DEPLOYER })).problems.join('\n'), /hold keys in both/);
+});
+
+// ---- --testnet: only on the public ZETAPHY testnet (chain id 77390 + its block 1 hash) ----
+const chainOf = (chainId, block1, contracts = {}) => ({ ...fakeProvider(contracts), getNetwork: async () => ({ chainId: BigInt(chainId) }),
+  getBlock: async (n) => (n === 1 && block1 ? { hash: block1 } : null) });
+const TESTNET = chainOf(77390, TESTNET_GENESIS);
+
+test('--testnet: accepted only on chain 77390 with the testnet genesis; never with --devnet or --i-understand-real-funds', async () => {
+  assert.equal(await testnetOf(TESTNET, {}), false);
+  assert.equal(await testnetOf(TESTNET, { testnet: true }), true);
+  await assert.rejects(testnetOf(chainOf(77390, '0x' + '11'.repeat(32)), { testnet: true }), /block 1 is 0x1111.*not the ZETAPHY testnet/);
+  await assert.rejects(testnetOf(chainOf(77390, null), { testnet: true }), /block 1 is missing/);
+  await assert.rejects(testnetOf(chainOf(1, TESTNET_GENESIS), { testnet: true }), /chain 1, not the ZETAPHY testnet/);
+  await assert.rejects(testnetOf(TESTNET, { testnet: true, devnet: true }), /exclusive/);
+  await assert.rejects(testnetOf(TESTNET, { testnet: true, 'i-understand-real-funds': true }), /test coins only/);
+});
+
+test('--testnet: the audit is the testnet notice (exact url, sha256 of docs/BRIDGE-TESTNET.md); banner on every line', () => {
+  const sha = testnetNoticeSha();
+  assert.match(sha, /^0x[0-9a-f]{64}$/);
+  assert.deepEqual(testnetAuditProblems(auditArgs(TESTNET_NOTICE_URL, sha)), []);
+  assert.match(testnetAuditProblems(auditArgs('https://audits.example/r.pdf', sha)).join(), /must be the testnet notice/);
+  assert.match(testnetAuditProblems(auditArgs(TESTNET_NOTICE_URL, 'ab'.repeat(32))).join(), /must be 0x[0-9a-f]{64}/);
+  const lines = [];
+  testnetWrite((t) => lines.push(t))('one\ntwo');
+  assert.deepEqual(lines, ['[TESTNET (not audited)] one\n[TESTNET (not audited)] two']);
+});
+
+test('--testnet: 2-owner multisigs pass (threshold still 2+, no deployer, no key); daily limit at most 100 tokens, even with --raise-cap', async () => {
+  const p = fakeProvider({ [A(0x81)]: simple([A(1), A(2)], 2), [A(0x82)]: safe([A(3), A(4)], 2), [A(0x83)]: simple([A(5), A(6)], 1), [A(0x84)]: simple([A(7), DEPLOYER], 2) });
+  const roles = { governance: [A(0x81)], guardians: [A(0x82)] };
+  assert.match((await roleChecks(p, roles, { deployer: DEPLOYER })).problems.join(), /2 owner\(s\), needs at least 3/);
+  assert.deepEqual((await roleChecks(p, roles, { deployer: DEPLOYER, testnet: true })).problems, []);
+  assert.match((await roleChecks(p, { governance: [A(0x83)], guardians: [A(0x82)] }, { deployer: DEPLOYER, testnet: true })).problems.join(), /threshold 1, needs at least 2/);
+  assert.match((await roleChecks(p, { governance: [A(0x84)], guardians: [A(0x82)] }, { deployer: DEPLOYER, testnet: true })).problems.join(), /deployer key/);
+  assert.match((await roleChecks(p, { governance: [A(0x81)], guardians: [A(0x85)] }, { deployer: DEPLOYER, testnet: true })).problems.join(), /single key/);
+  const u = (n) => BigInt(n) * 10n ** 6n;
+  assert.deepEqual(capProblems({ limitUnits: u(100), decimals: 6, testnet: true }), []);
+  assert.match(capProblems({ limitUnits: u(101), decimals: 6, testnet: true }).join(), /at most 100 tokens/);
+  assert.match(capProblems({ limitUnits: u(500), decimals: 6, raiseCap: true, testnet: true }).join(), /at most 100 tokens/);
+  assert.deepEqual(capProblems({ limitUnits: u(500), decimals: 6 }), [], 'unchanged without --testnet');
+});
+
+test('openGates --testnet: 1 runner, 2-owner multisigs and the notice pass, banner on every line; the same chain without it keeps every gate', async () => {
+  const { openGates } = await import('../src/bridgecli.js');
+  const neuro = A(0x71), hyp = A(0x72), jobsC = A(0x73), mailbox = A(0x74), gov = A(0x81), guardian = A(0x82), token = A(0x90);
+  const contracts = { [neuro]: { runners: jobsC }, [hyp]: { mailbox, governance: gov, interchainSecurityModule: A(0) },
+    [gov]: simple([A(1), A(2)], 2), [guardian]: safe([A(3), A(4)], 2), [token]: { decimals: 6 } };
+  const guard = { target: A(0xa1), governance: async () => gov, guardians: async () => [guardian], token: async () => token,
+    maxDailyLimit: async () => 1000n * 10n ** 6n, paused: async () => false, auditSha256: async () => '0x' + '0'.repeat(64), auditUrl: async () => '' };
+  const airlock = { target: A(0xa2), governance: async () => gov, lanes: async () => [neuro, hyp], independentLanes: async () => 2n,
+    laneControllerOf: async (l) => (l === neuro ? jobsC : mailbox), threshold: async () => 2n, quarantine: async () => 3600n, markerCount: async () => 0n };
+  const jobs = { activeWorkers: async () => 1n };
+  const run = async (provider, opt) => {
+    const out = [];
+    const g = await openGates({ provider, guard, airlock, jobs, deployer: DEPLOYER, rpc: 'https://rpc.sawasdeecoin.com', opt, write: (t) => out.push(t) });
+    return { g, out };
+  };
+  const chain = chainOf(77390, TESTNET_GENESIS, contracts);
+  const base = { 'audit-report': TESTNET_NOTICE_URL, 'audit-sha256': testnetNoticeSha(), 'daily-limit': '100' };
+  const ok = await run(chain, { ...base, testnet: true });
+  assert.deepEqual(ok.g.problems, []);
+  assert.equal(ok.g.testnet, true);
+  assert.ok(ok.out.length > 3 && ok.out.every((l) => l.split('\n').every((x) => x.startsWith('[TESTNET (not audited)] '))), 'banner on every line');
+  const strict = (await run(chain, base)).g.problems.join('\n');
+  assert.match(strict, /1 active Neuro runner\(s\).*at least 10/);
+  assert.match(strict, /2 owner\(s\), needs at least 3/);
+  assert.match(strict, /--i-understand-real-funds/);
+  assert.match((await run(chain, { ...base, testnet: true, 'daily-limit': '1000' })).g.problems.join(), /at most 100 tokens/);
+  assert.match((await run(chain, { ...base, testnet: true, 'audit-report': 'https://audits.example/r.pdf' })).g.problems.join(), /testnet notice/);
+  await assert.rejects(run(chainOf(77390, '0x' + '22'.repeat(32), contracts), { ...base, testnet: true }), /not the ZETAPHY testnet/);
 });

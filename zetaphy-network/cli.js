@@ -63,7 +63,10 @@
 //                                      the lockbox) are protected in the ThreatRegistry. --marker: a key that may mark
 //                                      addresses (airlock.trip; e.g. the bridge monitor's own key, BRIDGE_MARKER_KEY)
 //   zetaphy bridge gates|open --audit-report <https url> --audit-sha256 <hex> [--daily-limit 1000 --min-runners 10
-//                          --raise-cap --i-understand-real-funds --devnet --allow-eoa-for-testing]
+//                          --raise-cap --i-understand-real-funds --devnet --testnet --allow-eoa-for-testing]
+//                                      --testnet: the public ZETAPHY testnet only (chain id 77390 + its block 1 hash),
+//                                      test coins: the audit is docs/BRIDGE-TESTNET.md, 1+ runners, 2-owner multisigs,
+//                                      daily limit <= 100 tokens; every line is marked TESTNET (not audited)
 //                                      open the bridge only when every gate holds: 2+ lanes with distinct controllers
 //                                      (none the deployer), the audit recorded on-chain, NeuroJobs activeWorkers >= 10,
 //                                      multisig guardian and governance (no shared owner), the cap; gates only checks
@@ -191,7 +194,7 @@ import { identityCommand } from './src/identitycli.js';
 import { bridgeCommand } from './src/bridgecli.js';
 import { timelockCommand, timelockHint } from './src/timelockcli.js';
 import { oracleCommand } from './src/oraclecli.js';
-import { devnetOf, roleChecks, capProblems, STARTER_UNITS } from './src/bridgegate.js';
+import { devnetOf, testnetOf, testnetWrite, roleChecks, capProblems, STARTER_UNITS } from './src/bridgegate.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
 const ART = art('NeuroJobs');
@@ -1025,12 +1028,19 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const capP = capProblems({ limitUnits, decimals, raiseCap: !!opt['raise-cap'], maxDailyLimit: STARTER_UNITS * 10n ** BigInt(decimals) });
     if (capP.length) throw new Error(`--daily-limit: ${capP.join('; ')}`);
     const c = await connect(s);
+    // --testnet: only on the public ZETAPHY testnet; 2-owner multisigs and a 100-token daily limit
+    const testnet = await testnetOf(c.provider, opt);
+    if (testnet) {
+      write = testnetWrite(write);
+      const capT = capProblems({ limitUnits, decimals, testnet: true });
+      if (capT.length) throw new Error(`--daily-limit: ${capT.join('; ')}`);
+    }
     // Roles named here must be multisigs (or the gov module), checked before anything is deployed.
     const gov = governanceOf(opt, write);
     const guardians = [].concat(opt.guardian ?? []).map(String);
     if (guardians.some((g) => !ADDR_RE.test(g))) throw new Error('--guardian must be a 0x address (a multisig)');
     if (gov || guardians.length) {
-      const r = await roleChecks(c.provider, { governance: gov ? [gov] : [], guardians }, { deployer: c.me, devnet, allowEoa: !!opt['allow-eoa-for-testing'] });
+      const r = await roleChecks(c.provider, { governance: gov ? [gov] : [], guardians }, { deployer: c.me, devnet, allowEoa: !!opt['allow-eoa-for-testing'], testnet });
       const problems = r.problems.filter((p) => guardians.length || !/^no guardian/.test(p));
       for (const w of r.warnings) write(`warning: ${w}`);
       if (problems.length) throw new Error(`deploy-bridge refused (nothing deployed):\n  - ${problems.join('\n  - ')}`);

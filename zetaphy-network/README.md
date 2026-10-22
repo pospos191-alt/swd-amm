@@ -276,6 +276,20 @@ zetaphy bridge pause        # guardian: stop everything immediately (only govern
 zetaphy bridge close        # governance: close the route
 ```
 
+**Testnet mode (test coins only, NOT audited):** `--testnet` works only on the public ZETAPHY testnet. The CLI checks that the chain id is 77390 and that block 1 is `0xbfda796f…754295a`. Any other chain is refused, and so is `--testnet` together with `--devnet` or `--i-understand-real-funds`.
+- What it relaxes, and only these:
+  - The audit is the testnet notice [docs/BRIDGE-TESTNET.md](../docs/BRIDGE-TESTNET.md): its exact URL and the sha256 of the file.
+  - 1 Neuro runner is enough.
+  - Guardian and governance multisigs need only 2 owners (threshold still 2+, still no deployer key).
+  - It stands in for `--i-understand-real-funds`.
+- What it tightens: the daily limit is at most **100 tokens**, even with `--raise-cap`.
+- Everything else holds: 2+ independent lanes, the on-chain hard cap.
+- Every output line starts with `[TESTNET (not audited)]`. Mainnet needs a real audit and every gate.
+```
+zetaphy bridge open --testnet --audit-report https://github.com/pospos191-alt/swd-amm/blob/main/docs/BRIDGE-TESTNET.md \
+  --audit-sha256 $(sha256sum docs/BRIDGE-TESTNET.md | cut -d' ' -f1) --daily-limit 100
+```
+
 ### Caps grow step by step
 
 - `maxDailyLimit` starts at **1,000 tokens** (in the token's decimals) at `createToken`. It is the hard cap for every route (a route set higher still uses this cap)
