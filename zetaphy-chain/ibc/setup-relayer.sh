@@ -16,6 +16,8 @@
 #                                              send USDC from the relayer's Noble address to an
 #                                              address on ZETAPHY (1 USDC = 1000000 uusdc)
 #   sudo bash setup-relayer.sh config          rewrite the Hermes config (after changing a setting)
+#   sudo ROUTE=osmosis bash setup-relayer.sh   the same with Osmosis testnet as the other chain
+#                                              (default ROUTE=noble; send-usdc then sends uosmo)
 #
 # Safe to re-run: every step checks what is already there. The keys are made
 # on this machine from fresh system entropy, imported into Hermes' key store
@@ -41,6 +43,25 @@ HERMES_HOME="${HERMES_HOME:-/home/$RELAYER_USER/.hermes}"
 # Settings given once as env vars (e.g. sudo NOBLE_RPC=https://… bash setup-relayer.sh config)
 # are kept here, so later runs (create-channel, start) keep them. Env wins.
 SETTINGS="$HERMES_HOME/settings.env"
+# ROUTE picks the other chain (ZETAPHY Saphan's first route). Given on the
+# command line it wins over the saved settings, so a route can be switched:
+#   noble   (default) Noble testnet grand-1: USDC from Circle (faucet.circle.com)
+#   osmosis Osmosis testnet osmo-test-5: OSMO (faucet.testnet.osmosis.zone).
+#           Values: cosmos/chain-registry testnets/osmosistestnet/chain.json
+#           (commit 05d3261); unbonding 5 days (testnet params) -> trusting 3 days;
+#           the fee market changes the gas price, so Hermes reads it (dynamic_gas_price).
+# (The NOBLE_* names below hold whichever chain the route is.)
+case "${ROUTE:-}" in
+  "") ;;
+  noble) NOBLE_CHAIN_ID=grand-1 NOBLE_RPC=https://noble-testnet-rpc.polkachu.com:443 NOBLE_WS= \
+    NOBLE_GRPC=http://noble-testnet-grpc.polkachu.com:21590 NOBLE_PREFIX=noble NOBLE_FEE_DENOM=uusdc NOBLE_GAS_PRICE=0.1 \
+    NOBLE_TRUSTING=14days NOBLE_SEND_DENOM=uusdc NOBLE_EXTRA=none ;;
+  osmosis) NOBLE_CHAIN_ID=osmo-test-5 NOBLE_RPC=https://rpc.osmotest5.osmosis.zone:443 NOBLE_WS= \
+    NOBLE_GRPC=https://grpc.osmotest5.osmosis.zone:443 NOBLE_PREFIX=osmo NOBLE_FEE_DENOM=uosmo NOBLE_GAS_PRICE=0.025 \
+    NOBLE_TRUSTING=3days NOBLE_SEND_DENOM=uosmo \
+    NOBLE_EXTRA="dynamic_gas_price = { enabled = true, multiplier = 1.1, max = 0.6 }" ;;
+  *) echo "ROUTE: noble or osmosis"; exit 1 ;;
+esac
 if [ -r "$SETTINGS" ]; then
   while IFS='=' read -r k v; do
     [[ "$k" =~ ^(ZETAPHY|NOBLE)_[A-Z_]+$ ]] && [ -z "${!k:-}" ] && printf -v "$k" '%s' "$v"
@@ -73,7 +94,9 @@ NOBLE_HD_PATH="${NOBLE_HD_PATH:-}"                       # default: coin type 11
 [ -n "$NOBLE_HD_PATH" ] || NOBLE_HD_PATH="m/44'/118'/0'/0/0"
 # Test hook: a second ZETAPHY devnet stands in for Noble (ethermint keys).
 NOBLE_KEY_TYPE="${NOBLE_KEY_TYPE:-cosmos}"
-USDC_DENOM="${USDC_DENOM:-uusdc}"
+NOBLE_SEND_DENOM="${NOBLE_SEND_DENOM:-uusdc}"             # what send-usdc sends in (uusdc on Noble, uosmo on Osmosis)
+NOBLE_EXTRA="${NOBLE_EXTRA:-none}"                      # extra Hermes lines for the chain ("none")
+USDC_DENOM="${USDC_DENOM:-$NOBLE_SEND_DENOM}"
 
 HERMES_BIN="${HERMES_BIN:-/usr/local/bin/hermes}"
 MEMO="${MEMO:-ZETAPHY relayer}"
@@ -215,12 +238,13 @@ TOML
       zetaphy "$eth" "$ZETAPHY_GAS_PRICE" "$ZETAPHY_DENOM" "$ZETAPHY_TRUSTING" "$zc" push \
       "compat_mode = '0.37'"   # CometBFT v0.39: Hermes 1.13 cannot infer it; its 0.37 mode works
     chain_toml "$NOBLE_CHAIN_ID" "$NOBLE_RPC" "$ws" "$NOBLE_GRPC" \
-      "$NOBLE_PREFIX" "$noble_type" "$NOBLE_GAS_PRICE" "$NOBLE_FEE_DENOM" "$NOBLE_TRUSTING" "$nc" "$NOBLE_EVENTS" ""
+      "$NOBLE_PREFIX" "$noble_type" "$NOBLE_GAS_PRICE" "$NOBLE_FEE_DENOM" "$NOBLE_TRUSTING" "$nc" "$NOBLE_EVENTS" \
+      "$([ "$NOBLE_EXTRA" = none ] || echo "$NOBLE_EXTRA")"
   } > "$tmp"
   as_relayer "cat > '$CFG.tmp'" < "$tmp" && rm -f "$tmp"
   as_relayer "chmod 600 '$CFG.tmp' && mv '$CFG.tmp' '$CFG'"
   for k in ZETAPHY_CHAIN_ID ZETAPHY_RPC ZETAPHY_GRPC ZETAPHY_GAS_PRICE ZETAPHY_TRUSTING NOBLE_CHAIN_ID NOBLE_RPC NOBLE_WS \
-           NOBLE_GRPC NOBLE_PREFIX NOBLE_FEE_DENOM NOBLE_GAS_PRICE NOBLE_TRUSTING NOBLE_EVENTS NOBLE_HD_PATH NOBLE_KEY_TYPE; do
+           NOBLE_GRPC NOBLE_PREFIX NOBLE_FEE_DENOM NOBLE_GAS_PRICE NOBLE_TRUSTING NOBLE_EVENTS NOBLE_HD_PATH NOBLE_KEY_TYPE NOBLE_SEND_DENOM NOBLE_EXTRA; do
     printf '%s=%s\n' "$k" "${!k}"
   done | as_relayer "umask 077 && cat > '$SETTINGS'"
   hermes config validate >/dev/null 2>&1 || { hermes config validate || true; echo "Hermes rejected $CFG"; exit 1; }

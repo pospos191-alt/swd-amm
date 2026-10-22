@@ -16,6 +16,19 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-
 ```
 The relayer is capped at 300 MB of memory (`MemoryMax`): if it ever grows, the system restarts the relayer, not the node.
 
+### Osmosis testnet route (instead of Noble, e.g. while Circle's faucet is down)
+Give `ROUTE=osmosis` once; the script remembers it, later commands stay the same:
+```bash
+sudo ROUTE=osmosis bash setup-relayer.sh          # prints 0x… (ZETAPHY) and osmo1…
+```
+1. Send 10 ZETAPHY from MetaMask to the relayer's `0x…`
+2. Open **faucet.testnet.osmosis.zone**, paste the `osmo1…` address, ask for OSMO (gas on Osmosis)
+3. `sudo bash setup-relayer.sh balances` → `create-channel` → `start`
+4. First transfer in: `sudo bash setup-relayer.sh send-usdc <your 0x…> 1000000` (on this route: 1 OSMO)
+
+Values from chain-registry (`testnets/osmosistestnet`): chain `osmo-test-5`, RPC `rpc.osmotest5.osmosis.zone`,
+gas in `uosmo` priced by the fee market (`dynamic_gas_price`). `ROUTE=noble` switches back.
+
 **Noble** is a Cosmos chain where Circle issues USDC itself directly (native USDC, not a bridge's wrapped coin)
 We connect ZETAPHY to Noble with **IBC**: the two chains verify each other with light clients
 A **relayer** (the Hermes program) carries messages between the two chains. The relayer runs on the same Oracle machine as the node
