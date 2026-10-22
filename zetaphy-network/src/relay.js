@@ -5,7 +5,7 @@
 //
 //   POST /request  {"request": {...JobRequest}, "signature": "0x…", "permit": {value,deadline,v,r,s}?}
 //   POST /faucet   {"token": "usdc"|"usdt", "address": "0x…"}   test stablecoins (testnet only)
-//   GET  /info     gateway address, accepted tokens, minimum tip
+//   GET  /info     gateway address, accepted tokens, minimum tip, where the price comes from (oracle or the labeled testnet fallback)
 
 import http from 'node:http';
 import { getAddress, isHexString } from 'ethers';
@@ -74,7 +74,11 @@ export function createRelay({ gateway, tokens = {}, minTip, perMinute = 6, log =
     const reply = (code, obj) => { res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*' }); res.end(JSON.stringify(obj)); };
     if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'POST, GET', 'access-control-allow-headers': 'content-type' }); return res.end(); }
     if (req.method === 'GET' && req.url === '/info') {
-      return reply(200, { gateway: gateway.target, minTip: minTip.toString(), tokens: Object.fromEntries(Object.entries(tokens).map(([k, c]) => [k, c.target])) });
+      // priceSource: "ZetaphyOracle", or the labeled testnet fallback (a fixed price, not a market)
+      Promise.resolve().then(() => gateway.priceSource?.()).catch(() => null).then((priceSource) => reply(200, {
+        gateway: gateway.target, minTip: minTip.toString(), tokens: Object.fromEntries(Object.entries(tokens).map(([k, c]) => [k, c.target])), priceSource: priceSource ?? null,
+      }));
+      return undefined;
     }
     if (req.method !== 'POST' || (req.url !== '/request' && req.url !== '/faucet')) return reply(404, { error: 'not found' });
     if (limited(req.socket.remoteAddress)) return reply(429, { error: 'too many requests' });

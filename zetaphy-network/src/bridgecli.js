@@ -5,9 +5,10 @@
 import { Contract, Wallet, NonceManager, getAddress, parseUnits, formatUnits } from 'ethers';
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { timelockHint } from './timelockcli.js';
 import { devnetOf, auditArgs, roleChecks, laneChecks, capProblems, runnerProblems, STARTER_UNITS, MIN_RUNNERS, GOV_MODULE } from './bridgegate.js';
 import { evaluate, newState, report, snapshotOf, readEvents, readLocks, loadMonitorConfig, DEFAULTS, parseThresholds, parseWatchlist, markerKeyOf,
-  stateKeyOf, sealState, openState, applyMarks, countsLine, issueText } from './monitor.js';
+  stateKeyOf, sealState, openState, applyMarks, countsLine, issueText, oracleFeedsOf, govTimelockEvents, readGovProposals, fillEvmCalls } from './monitor.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
 const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
@@ -24,6 +25,8 @@ export async function govCall(k, c, write, fn, args, what) {
     return true;
   }
   const data = k.interface.encodeFunctionData(fn, args);
+  const hint = await timelockHint(k.runner?.provider ?? c.provider, gov, k.target, data);
+  if (hint) { write(`${what}: ${hint.join('\n')}`); return false; }
   write(`${what}: governance is ${gov}, not this key. Have it call:\n  to ${k.target}\n  data ${data}`);
   if (same(gov, GOV_MODULE)) write('  (the gov module: submit this as a MsgEVMCall proposal, zetaphy-chain/gov.sh)');
   else write('  (SimpleMultisig: an owner calls propose(to, 0, data), others confirm, then execute; Safe: Transaction Builder, each owner signs on a hardware wallet)');
@@ -184,26 +187,34 @@ export async function monitorCommand({ opt, env, write, s, connectRpc }) {
   const cfg = loadMonitorConfig({ configFile: opt['monitor-config'], launchStateFile: opt['launch-state'] });
   const guardAddr = opt.bridgeGuard ?? cfg.bridgeGuard ?? s.bridgeGuard;
   const airlockAddr = opt.airlock ?? cfg.bridgeAirlock ?? s.airlock;
+  const timelockAddr = opt.timelock ?? cfg.timelock ?? s.timelock;
+  const oracleAddr = opt.oracle ?? cfg.oracle ?? s.oracle;
   const out = opt.out ? String(opt.out) : null;
-  if (!ADDR_RE.test(String(guardAddr ?? '')) || !ADDR_RE.test(String(airlockAddr ?? ''))) {
-    write('notice: no bridge deployed (no BridgeGuard / BridgeAirlock address in the monitor config or the launch state): nothing to watch');
+  let hasBridge = ADDR_RE.test(String(guardAddr ?? '')) && ADDR_RE.test(String(airlockAddr ?? ''));
+  const hasTimelock = ADDR_RE.test(String(timelockAddr ?? ''));
+  const hasOracle = ADDR_RE.test(String(oracleAddr ?? ''));
+  if (!hasBridge && !hasTimelock && !hasOracle) {
+    write('notice: no bridge deployed (and no timelock or oracle: no BridgeGuard / BridgeAirlock, timelock or oracle address in the monitor config or the launch state): nothing to watch');
     if (out) saveJson(out, { format: 'zetaphy-bridge-monitor/1', deployed: false, alerts: [], summary: { en: 'No bridge deployed.', th: 'ยังไม่มีสะพาน' } });
     return 0;
   }
   const rpc = s.rpc ?? opt.rpc ?? env.ZETAPHY_RPC ?? cfg.rpc;
   const provider = await connectRpc({ rpc });
-  if ((await provider.getCode(guardAddr)) === '0x') {
-    write(`notice: no contract at BridgeGuard ${guardAddr} on this chain: nothing to watch`);
-    if (out) saveJson(out, { format: 'zetaphy-bridge-monitor/1', deployed: false, alerts: [], summary: { en: 'No bridge contract at the configured address.', th: 'ไม่พบสัญญาสะพานที่ที่อยู่ที่ตั้งไว้' } });
-    return 0;
+  if (hasBridge && (await provider.getCode(guardAddr)) === '0x') {
+    write(`notice: no contract at BridgeGuard ${guardAddr} on this chain: the bridge is not watched`);
+    hasBridge = false;
+    if (!hasTimelock && !hasOracle) {
+      if (out) saveJson(out, { format: 'zetaphy-bridge-monitor/1', deployed: false, alerts: [], summary: { en: 'No bridge contract at the configured address.', th: 'ไม่พบสัญญาสะพานที่ที่อยู่ที่ตั้งไว้' } });
+      return 0;
+    }
   }
   // Thresholds: a flag, else the secret, else the committed config, else the defaults.
   const num = (flag, k) => (opt[flag] != null ? Number(opt[flag]) : secretRules[k] ?? cfg[k] ?? DEFAULTS[k]);
   const rules = { volumePct: num('volume-pct', 'volumePct'), largePct: num('large-pct', 'largePct'),
     silentMinutes: num('silent-minutes', 'silentMinutes'), disagreeMinutes: num('disagree-minutes', 'disagreeMinutes') };
-  const guard = new Contract(guardAddr, art('BridgeGuard').abi, provider);
-  const airlock = new Contract(airlockAddr, art('BridgeAirlock').abi, provider);
-  const marker = markerKey ? new NonceManager(new Wallet(markerKey, provider)) : null;
+  const guard = hasBridge ? new Contract(guardAddr, art('BridgeGuard').abi, provider) : null;
+  const airlock = hasBridge ? new Contract(airlockAddr, art('BridgeAirlock').abi, provider) : null;
+  const marker = markerKey && hasBridge ? new NonceManager(new Wallet(markerKey, provider)) : null;
   const markerAddr = marker ? await marker.getAddress() : null;
   if (markerKey && !watch.length) write('notice: BRIDGE_MARKER_KEY is set but BRIDGE_WATCHLIST is empty: nothing will be marked');
   const stateFile = opt.state ? String(opt.state) : null;
@@ -215,17 +226,26 @@ export async function monitorCommand({ opt, env, write, s, connectRpc }) {
   const from = opt['from-block'] != null ? Number(opt['from-block']) : state.lastBlock != null ? state.lastBlock + 1
     : cfg.startBlock != null ? Number(cfg.startBlock) : Math.max(0, head - DEFAULTS.lookback);
   const to = Math.min(head, from + maxBlocks - 1);
-  const tokenAddr = await guard.token();
-  const snapshot = await snapshotOf({ guard, airlock, token: tokenAddr === '0x' + '0'.repeat(40) ? null : new Contract(tokenAddr, TOKEN, provider), routeIds: state.routes ?? [] });
-  const sources = [{ source: 'guard', address: guardAddr }, { source: 'airlock', address: airlockAddr }];
-  for (const l of snapshot.lanes) {
-    if ((await provider.getCode(l)) === '0x') continue;
-    let kind = 'neuroLane';
-    try { await new Contract(l, ['function mailbox() view returns (address)'], provider).mailbox(); kind = 'hyperlaneLane'; } catch { /* NeuroLane */ }
-    sources.push({ source: kind, address: l });
+  const sources = [];
+  let snapshot = { lanes: [], routes: [], threshold: 2, quarantine: 0, decimals: 18 };
+  if (hasBridge) {
+    const tokenAddr = await guard.token();
+    snapshot = await snapshotOf({ guard, airlock, token: tokenAddr === '0x' + '0'.repeat(40) ? null : new Contract(tokenAddr, TOKEN, provider), routeIds: state.routes ?? [] });
+    sources.push({ source: 'guard', address: guardAddr }, { source: 'airlock', address: airlockAddr });
+    for (const l of snapshot.lanes) {
+      if ((await provider.getCode(l)) === '0x') continue;
+      let kind = 'neuroLane';
+      try { await new Contract(l, ['function mailbox() view returns (address)'], provider).mailbox(); kind = 'hyperlaneLane'; } catch { /* NeuroLane */ }
+      sources.push({ source: kind, address: l });
+    }
+    const regs = new Set([String(snapshot.threats), String(await guard.threats())].filter((x) => !/^0x0{40}$/i.test(x)).map((x) => x.toLowerCase()));
+    for (const r of regs) sources.push({ source: 'threats', address: r });
   }
-  const regs = new Set([String(snapshot.threats), String(await guard.threats())].filter((x) => !/^0x0{40}$/i.test(x)).map((x) => x.toLowerCase()));
-  for (const r of regs) sources.push({ source: 'threats', address: r });
+  if (hasTimelock) sources.push({ source: 'timelock', address: timelockAddr });
+  if (hasOracle) {
+    sources.push({ source: 'oracle', address: oracleAddr });
+    try { snapshot.oracleFeeds = await oracleFeedsOf(new Contract(oracleAddr, art('ZetaphyOracle').abi, provider)); } catch { snapshot.oracleFeeds = []; }
+  }
   const events = to >= from ? await readEvents(provider, sources, from, to, { watch }) : [];
   // Optional: the source chain's lockbox, so a deposit no lane attested is seen.
   const srcRpc = opt['source-rpc'] ?? cfg.sourceRpc;
@@ -243,7 +263,20 @@ export async function monitorCommand({ opt, env, write, s, connectRpc }) {
   }
   events.sort((a, b) => (a.source === 'lockbox') - (b.source === 'lockbox') || a.block - b.block);
   const now = Number((await provider.getBlock('latest')).timestamp);
-  const { alerts, state: next } = evaluate({ events, snapshot, state, now, cfg: { ...rules, marker: markerAddr } });
+  // A call the gov module schedules (MsgEVMCall) leaves no log eth_getLogs returns: read the gov proposals
+  // that target the timelock from the node's REST API (--rest, the config's "rest", or <https rpc>/rest).
+  const rest = opt.rest ?? cfg.rest ?? (/^https:\/\/[^/]+\/?$/.test(String(rpc ?? '')) ? `${String(rpc).replace(/\/+$/, '')}/rest` : null);
+  const comet = opt['comet-rpc'] ?? cfg.cometRpc ?? (/^https:\/\/[^/]+\/?$/.test(String(rpc ?? '')) ? `${String(rpc).replace(/\/+$/, '')}/rpc` : null);
+  if (hasTimelock && rest) {
+    try {
+      const props = await readGovProposals(rest);
+      if (comet) await fillEvmCalls(props, comet); // the REST answer lacks MsgEVMCall's fields
+      events.push(...govTimelockEvents(props, timelockAddr, now));
+    } catch (e) {
+      write(`notice: gov proposals not read from ${rest} (${String(e?.message ?? e).slice(0, 80)}): calls a vote schedules in the timelock are not checked this run`);
+    }
+  }
+  const { alerts, state: next } = evaluate({ events, snapshot, state, now, cfg: { ...rules, marker: markerAddr, labels: cfg.labels ?? {} } });
   next.lastBlock = Math.max(to, state.lastBlock ?? -1);
   // Marks: the callers evaluate() queued (and earlier failures), with the marker key.
   let marking = null;
@@ -253,7 +286,8 @@ export async function monitorCommand({ opt, env, write, s, connectRpc }) {
     marking = { marked: m.marked, pending: m.pending };
   }
   const chainId = Number((await provider.getNetwork()).chainId);
-  const rep = report({ alerts, chainId, fromBlock: from, toBlock: to, addresses: { bridgeGuard: guardAddr, bridgeAirlock: airlockAddr }, snapshot, now, marking });
+  const rep = report({ alerts, chainId, fromBlock: from, toBlock: to, addresses: { ...(hasBridge ? { bridgeGuard: guardAddr, bridgeAirlock: airlockAddr } : {}),
+    ...(hasTimelock ? { timelock: timelockAddr } : {}), ...(hasOracle ? { oracle: oracleAddr } : {}) }, snapshot, now, marking });
   rep.deployed = true;
   rep.caughtUp = to >= head;
   if (stateFile) saveJson(stateFile, sealState(next, stateKey));

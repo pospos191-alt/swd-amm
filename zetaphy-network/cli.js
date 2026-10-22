@@ -18,7 +18,7 @@
 //   zetaphy job request-stable <chain> <address> --relay URL [--token usdc --fee 0.1 --tip 0.01]
 //                                      pay in test USDC/USDT through a relay: no ZETAPHY needed
 //   zetaphy faucet <usdc|usdt> --relay URL   test stablecoins for this wallet (the relay pays gas)
-//   zetaphy relay start [--port 8080 --min-tip 0.01]   serve users who pay in stablecoins
+//   zetaphy relay start [--port 8080 --min-tip 0.01 --poke-oracle 60]   serve users who pay in stablecoins (and keep the oracle poked)
 //   zetaphy keys encrypt               encrypt ~/.zetaphy keys with ZETAPHY_PASSPHRASE (removes the plain files)
 //   zetaphy gate                       progress toward gate 1 (30 days, no stalls, 10+ runners)
 //   zetaphy pq new [--hybrid]          quantum-safe wallet (ML-DSA); --hybrid also needs this machine's ECDSA key
@@ -45,6 +45,10 @@
 //                                      Without --keys the node is trusted for validator powers and vote keys
 //   zetaphy pq export-vote-keys [--height h] [--rpc <CometBFT RPC>] > pinned.json   validator powers and vote keys, to pin
 //   zetaphy deploy-pq                  deploy the QuantumWalletFactory
+//   zetaphy security status | migration [<address>] | qday-commit | qday-reveal | consent <target 0x…> <seconds> [--as <owner>]
+//                    | ibc-holds | ibc-hold-cancel <id>   the chain's security core (docs/SECURITY-CORE.md): Q-day migration
+//                                      (commit–reveal for this machine's ECDSA key -> the pq native account), threat-gate consent,
+//                                      held IBC transfers (src/securitycli.js)
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
 //                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
@@ -127,7 +131,21 @@
 //   zetaphy neuro send <action> [value]       send it from this key (a guardian's pause, or a key that is governance)
 //   zetaphy neuro propose <action> [value] --multisig 0x...   propose it to a SimpleMultisig that is governance
 //                                      (with the gov module as governance: zetaphy-chain/gov.sh neuro ...)
-//   zetaphy deploy-stable [--price 0.01 --reserve 1000 --governance 0x<multisig>]  test USDC/USDT + StableGateway
+//   zetaphy deploy-stable [--oracle 0x<ZetaphyOracle> --zeta-asset 0x<WZETAPHY> | --testnet-fixed-price 0.01] [--reserve 1000 --guardian 0x…
+//                         --governance 0x<timelock>]  test USDC/USDT + StableGateway, priced by ZetaphyOracle; --testnet-fixed-price
+//                                      switches on the labeled testnet fallback (a fixed price, not a market)
+//   zetaphy deploy-timelock --proposer 0x<multisig>[,…]|gov [--delay 172800 --executor open|proposers --devnet]
+//                                      ZetaphyTimelock (OpenZeppelin TimelockController 5.4.0): the admin of the contracts below
+//   zetaphy timelock status [<id>] | schedule --to 0x… (--data 0x… | --sig "fn(types)" --args a,b) [--salt s --delay s --proposal-out f.json]
+//   zetaphy timelock execute <id> | cancel <id>   schedule/cancel: sent if this key is a proposer/canceller, else printed as
+//                                      calldata for the multisig (and, with the gov module a proposer, a MsgEVMCall proposal);
+//                                      execute: anyone, once the delay has passed
+//   zetaphy deploy-oracle [--relayers 0x…,… --relay-threshold 1 | --pyth 0x<Pyth>] [--min-spacing 60 --guardian 0x…]
+//                                      TwapRecorder + ZetaphyPythRelay + ZetaphyOracle (TWAP of the DEX + Pyth, with guards)
+//   zetaphy oracle feed <asset> [--pair 0x… --window 1800 --min-observations 10 --min-liquidity 10000] [--pyth-id 0x… --max-age 120
+//                          --max-conf 100] [--max-deviation 200 --max-change 1500 --max-window-change 3000 --change-window 3600]
+//   zetaphy oracle status [asset] | poke <asset>… | pause <asset> (a guardian) | push --feed 0x… --price N --expo -8
+//   zetaphy oracle relay-pyth --feed 0x<id>[,…] [--every 30 --hermes https://hermes.pyth.network]   a relayer forwards Pyth's prices
 //   zetaphy deploy-vault [--validators 0x... --validators-share 30 --fund N --governance 0x<multisig>]
 //                                      RewardVault: releases the reward pool at 10% a year (no withdraw)
 //   zetaphy vault status | release     what has vested; pay it out (anyone may; node start does it daily)
@@ -168,8 +186,11 @@ import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, for
   DEFAULT_STAKING_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, DEFAULT_PRECOMPILE_GAS_LIMIT, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT } from './src/pqtx.js';
 import { createLaneWatcher, laneControl } from './src/lane.js';
 import { verifyBlock, exportVoteKeys } from './src/pqcert.js';
+import { securityCommand } from './src/securitycli.js';
 import { identityCommand } from './src/identitycli.js';
 import { bridgeCommand } from './src/bridgecli.js';
+import { timelockCommand, timelockHint } from './src/timelockcli.js';
+import { oracleCommand } from './src/oraclecli.js';
 import { devnetOf, roleChecks, capProblems, STARTER_UNITS } from './src/bridgegate.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -251,7 +272,8 @@ function settings(opt, env) {
   const file = join(HOME, 'config.json');
   const saved = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const s = { ...saved, rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
-  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'hyperlaneLane', 'bridgeGuard', 'vault', 'threats', 'reports']) if (opt[k]) s[k] = opt[k];
+  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'hyperlaneLane', 'bridgeGuard', 'vault', 'threats', 'reports',
+    'timelock', 'timelockBlock', 'oracle', 'twapRecorder', 'pythRelay', 'zetaAsset']) if (opt[k]) s[k] = opt[k];
   if (!s.vault && env.ZETAPHY_VAULT) s.vault = env.ZETAPHY_VAULT;
   if (opt.hybrid) s.pqHybrid = true;
   if (JSON.stringify(s) !== JSON.stringify(saved)) {
@@ -263,9 +285,11 @@ function settings(opt, env) {
 
 async function connectRpc(s) {
   if (!s.rpc) throw new Error('set the ZETAPHY testnet RPC: --rpc http://<node>:8545 (or ZETAPHY_RPC)');
-  const provider = new JsonRpcProvider(s.rpc, undefined, { staticNetwork: false, polling: true, pollingInterval: 1000 });
-  const net = await provider.getNetwork();
-  if (net.chainId !== EVM_CHAIN_ID) throw new Error(`that RPC is chain ${net.chainId}, not ZETAPHY testnet (${EVM_CHAIN_ID})`);
+  // The network is fixed to 77390, so every tx this key signs carries chain id 77390 whatever the RPC says later;
+  // an RPC that answers another chain id is refused before anything is signed.
+  const provider = new JsonRpcProvider(s.rpc, EVM_CHAIN_ID, { staticNetwork: true, polling: true, pollingInterval: 1000 });
+  const id = BigInt(await provider.send('eth_chainId', []));
+  if (id !== EVM_CHAIN_ID) { provider.destroy(); throw new Error(`that RPC is chain ${id}, not ZETAPHY testnet (${EVM_CHAIN_ID})`); }
   return provider;
 }
 
@@ -622,6 +646,10 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     return 0;
   }
 
+  if (group === 'security') {
+    return securityCommand({ cmd, rest, opt, env, write, s, connectRpc, loadOrCreatePq, loadOrCreateKey });
+  }
+
   if (group === 'pq' && cmd === 'native') {
     // Native PQ account: the chain checks the ML-DSA-44 signature itself, so
     // no ECDSA key, contract or gas payer is involved. Same seed as "pq new".
@@ -971,6 +999,8 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       return true;
     }
     const data = reg.interface.encodeFunctionData(fn, args);
+    const hint = await timelockHint(c.provider, gov, reg.target, data);
+    if (hint) { write(`ThreatRegistry: to ${what}, ${hint.join('\n')}`); return false; }
     write(`ThreatRegistry governance is ${gov}, not this key. To ${what}, have it call:\n  to ${reg.target}\n  data ${data}`);
     if (gov.toLowerCase() === GOV_MODULE.toLowerCase()) write('  (the gov module: submit this as a MsgEVMCall proposal)');
     return false;
@@ -1055,6 +1085,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     write(`bridge CLOSED (route disabled, daily limit ${tokenAmount(limitUnits, decimals)}, hard cap ${tokenAmount(await guard.maxDailyLimit(), decimals)}).`);
     write('To open: a second independent lane, an audit, 10+ Neuro runners, multisig guardian + governance, then zetaphy bridge open --audit-report <url> --audit-sha256 <hex>');
     return 0;
+  }
+
+  if (group === 'deploy-timelock' || group === 'timelock') {
+    return timelockCommand({ group, cmd, rest, opt, write, s, connect, saveSettings: (o) => settings({ ...opt, ...o }, {}) });
+  }
+
+  if (group === 'deploy-oracle' || group === 'oracle') {
+    return oracleCommand({ group, cmd, rest, opt, env, write, s, connect, saveSettings: (o) => settings({ ...opt, ...o }, {}) });
   }
 
   if (group === 'bridge' && ['open', 'gates', 'close', 'pause', 'cap', 'marker', 'untrip', 'monitor'].includes(cmd)) {
@@ -1442,20 +1480,32 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   }
 
   if (group === 'deploy-stable') {
+    if (opt.price != null) throw new Error('--price is gone: the gateway prices through ZetaphyOracle (--oracle, --zeta-asset); a fixed price only as --testnet-fixed-price, clearly labeled');
     const c = await connect(s);
     const deploy = async (a, args) => { const k = await new ContractFactory(a.abi, a.bytecode, c.signer).deploy(...args); await k.waitForDeployment(); return k.getAddress(); };
     const usdc = await deploy(STABLE, ['Test USDC (ZETAPHY testnet)', 'tUSDC']);
     const usdt = await deploy(STABLE, ['Test USDT (ZETAPHY testnet)', 'tUSDT']);
     const gwAddr = await deploy(GATEWAY, [s.jobs]);
     const gw = new Contract(gwAddr, GATEWAY.abi, c.signer);
-    const price = parseUnits(String(opt.price ?? '0.01'), 6); // stablecoin per 1 ZETAPHY
-    await (await gw.setPrice(usdc, price)).wait();
-    await (await gw.setPrice(usdt, price)).wait();
+    for (const t of [usdc, usdt]) await (await gw.setToken(t, true, false, 6)).wait(); // USD stablecoins, counted at $1
+    let source;
+    if (opt.oracle) {
+      if (!ADDR_RE.test(String(opt.oracle)) || !ADDR_RE.test(String(opt['zeta-asset'] ?? ''))) throw new Error('--oracle 0x<ZetaphyOracle> needs --zeta-asset 0x<its id for ZETAPHY, the DEX\'s WZETAPHY>');
+      await (await gw.setOracle(String(opt.oracle), String(opt['zeta-asset']))).wait();
+      source = `ZetaphyOracle ${opt.oracle}`;
+    }
+    if (opt['testnet-fixed-price'] != null) {
+      const price = parseUnits(String(opt['testnet-fixed-price']), 6); // stablecoin per 1 ZETAPHY
+      for (const t of [usdc, usdt]) await (await gw.setTestnetFixedPrice(t, price)).wait();
+      await (await gw.setTestnetFixedPrices(true)).wait();
+      source = `TESTNET FIXED PRICE ${formatUnits(price, 6)} per ZETAPHY (not a market price; replaces the oracle until governance switches it off)`;
+    }
     await (await c.signer.sendTransaction({ to: gwAddr, value: parseEther(String(opt.reserve ?? 1000)) })).wait();
+    for (const g of [].concat(opt.guardian ?? [])) { if (!ADDR_RE.test(String(g))) throw new Error('--guardian 0x…'); await (await gw.setGuardian(String(g), true)).wait(); }
     const gov = governanceOf(opt, write);
     if (gov) { await (await gw.setOwner(gov)).wait(); write(`StableGateway owner handed to ${gov}`); }
     settings({ ...opt, gateway: gwAddr, usdc, usdt }, {});
-    write(`tUSDC ${usdc}\ntUSDT ${usdt}\nStableGateway ${gwAddr} (price ${formatUnits(price, 6)} per ZETAPHY, reserve ${opt.reserve ?? 1000} ZETAPHY)`);
+    write(`tUSDC ${usdc}\ntUSDT ${usdt}\nStableGateway ${gwAddr} (price: ${source ?? 'none yet: setOracle(ZetaphyOracle, WZETAPHY) before it takes requests'}; reserve ${opt.reserve ?? 1000} ZETAPHY)`);
     return 0;
   }
 
@@ -1465,11 +1515,23 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const gateway = new Contract(s.gateway, GATEWAY.abi, c.signer);
     const tokens = {};
     for (const k of ['usdc', 'usdt']) if (s[k]) tokens[k] = new Contract(s[k], STABLE.abi, c.signer);
+    // --poke-oracle <seconds>: also be the oracle's keeper (anyone may poke: a TWAP observation, the reference price)
+    const every = opt['poke-oracle'] != null ? Number(opt['poke-oracle']) : 0;
+    let keeper = null;
+    if (every > 0) {
+      const oracleAddr = await gateway.oracle();
+      const asset = await gateway.zetaAsset();
+      if (/^0x0{40}$/i.test(oracleAddr)) throw new Error('--poke-oracle: this gateway has no oracle');
+      const oracle = new Contract(oracleAddr, art('ZetaphyOracle').abi, c.signer);
+      const poke = async () => { try { await (await oracle.poke(asset, { gasLimit: 800_000n })).wait(); } catch (e) { write(`${new Date().toISOString()} oracle poke failed: ${e.shortMessage ?? e.message}`); } };
+      await poke();
+      keeper = setInterval(poke, every * 1000);
+    }
     const server = createRelay({ gateway, tokens, minTip: parseUnits(String(opt['min-tip'] ?? '0.01'), 6), log: (l) => write(`${new Date().toISOString()} ${l}`) });
     const port = Number(opt.port ?? 8080);
     await new Promise((r) => server.listen(port, opt.host ?? '0.0.0.0', r));
-    write(`relay for ${s.gateway} on port ${port}; relay wallet ${c.me} pays the gas`);
-    if (opt.once) { server.close(); return 0; }
+    write(`relay for ${s.gateway} on port ${port}; relay wallet ${c.me} pays the gas; price: ${await gateway.priceSource()}${every > 0 ? `; pokes the oracle every ${every} s` : ''}`);
+    if (opt.once) { clearInterval(keeper); server.close(); return 0; }
     return new Promise(() => {}); // runs until stopped
   }
 

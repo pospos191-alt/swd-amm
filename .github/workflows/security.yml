@@ -19,8 +19,13 @@
 #                 setup-node.sh's patches to the pinned Cosmos EVM source
 #                 the same way the server does, runs their Go tests (ML-DSA,
 #                 IBC transfers + rate limits), builds zetaphyd and runs the
-#                 native/contract PQ tests on a real devnet; also checks
-#                 cloud-init.sh is setup-node.sh packed. ~15-25 min.
+#                 native/contract PQ tests on a real devnet, and the
+#                 timelock + price-oracle devnet test (+~4 min; it runs when
+#                 its test, those contracts or the pinned OpenZeppelin files
+#                 change), and the DEX DLMM devnet test (the job also runs
+#                 when only the DLMM contracts, dlmm-cli.js or its test
+#                 change); also checks cloud-init.sh is setup-node.sh packed.
+#                 ~15-25 min.
 #
 # Free-tier budget: GitHub Free gives private repos 2,000 Actions minutes a
 # month. The `changes` job runs each test job ONLY when its own files changed
@@ -31,8 +36,7 @@
 #                 test of test-ui/index.html (catches a page that freezes on
 #                 load, like build 2026-09-25o). ~2 min.
 #   program       every push / PR — cargo test (unit/property tests), the
-#                 attack suite (security/attack-tests, natively and against
-#                 the built SBF program) and the full `anchor test` localnet
+#                 full `anchor test` localnet
 #                 suite (the same `yarn test` you run in WSL). First run ~20-30 min (compiling), later runs
 #                 are faster thanks to the caches.
 #   audit         every push / PR — cargo audit against the RustSec database.
@@ -105,6 +109,7 @@ jobs:
       dex: ${{ steps.f.outputs.dex }}
       nft: ${{ steps.f.outputs.nft }}
       launch: ${{ steps.f.outputs.launch }}
+      dlmm: ${{ steps.f.outputs.dlmm }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -147,7 +152,10 @@ jobs:
           out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
           out launch '^(zetaphy-launch/|zetaphy-(dex|nft)/web/deployments\.json$|zetaphy-explorer/config\.json$|zetaphy-wallet/index\.html$|zetaphy-snap/snap\.config\.js$)'
-          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|cli\.js|contracts/(NeuroJobs|NeuroControl)\.sol|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc)\.integration\.js)$)'
+          # the DLMM devnet test (in the zetaphy-chain job, which builds zetaphyd): when the DLMM contracts, their CLI or test change
+          out dlmm '^(zetaphy-dex/(contracts/dlmm/|artifacts/(ZetaphyDlmm|DlmmMath)[A-Za-z]*\.json$|dlmm-cli\.js$|cli\.js$|test/devnet\.dlmm\.integration\.js$|package(-lock)?\.json$)|zetaphy-network/(scripts/devnet\.sh|artifacts/ThreatRegistry\.json)$)'
+          # the timelock/oracle devnet test: when its test, those contracts or the pinned OpenZeppelin files change (rarely)
+          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|src/securitycli\.js|cli\.js|contracts/(NeuroJobs|NeuroControl|ZetaphyTimelock|ZetaphyOracle|TwapRecorder|ZetaphyPythRelay)\.sol|vendor/.*|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc|timelock|security)\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -460,7 +468,7 @@ jobs:
   zetaphy-chain:
     name: zetaphy-chain (patched node + PQ devnet)
     needs: changes
-    if: needs.changes.outputs.chain == 'true'
+    if: needs.changes.outputs.chain == 'true' || needs.changes.outputs.dlmm == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -496,13 +504,14 @@ jobs:
           bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
           cp -r zetaphy-chain/fork-tests/. "$SRC/"
 
-      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys, MsgEVMCall) + fuzzing
+      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys, MsgEVMCall, security core) + fuzzing
         working-directory: ${{ env.SRC }}
         run: |
           go test ./precompiles/mldsa/ ./crypto/mldsa44/
           go test ./crypto/mldsa44/ -run '^$' -fuzz FuzzUnmarshalVerify -fuzztime 30s
           cd evmd
-          go test -tags=test -run 'EVMCall|PQ' .
+          # QDay|Threat|Security: the security core (Q-day, threat gate, precompile 0x…0901)
+          go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security' .
           go test -run '^$' -fuzz FuzzEVMCallUnmarshal -fuzztime 20s .
 
       # Static security checks on the code ZETAPHY added. G115 (int
@@ -524,7 +533,7 @@ jobs:
 
       # ibc-go's test app expects "cosmos1" addresses, so these run with the
       # stock prefix (after the build above, which keeps "zetaphy1").
-      - name: IBC tests (transfers through the stack, rate limits enforced)
+      - name: IBC tests (transfers through the stack, rate limits enforced, large-transfer hold)
         working-directory: ${{ env.SRC }}/evmd
         run: |
           sed -i 's/Bech32Prefix = "zetaphy"/Bech32Prefix = "cosmos"/' config/bech32.go
@@ -546,6 +555,14 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:chainrand
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:preinstalls
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:ibc
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:timelock
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:security
+
+      - name: DEX DLMM on a real devnet (deploy CLI, native liquidity, swaps, Neuro check)
+        working-directory: zetaphy-dex
+        run: |
+          npm ci --no-audit --no-fund
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:dlmm
 
   program:
     name: program (cargo test + anchor test)
@@ -576,7 +593,6 @@ jobs:
         with:
           workspaces: |
             . -> target
-            security/attack-tests -> target
 
       - name: Cache Solana CLI
         id: solana-cache
@@ -659,17 +675,10 @@ jobs:
       - name: mainnet build flags compile (24h-48h timelock)
         run: cargo check -p swd_amm --features mainnet
 
-      - name: Attack suite, native build (security/attack-tests)
-        run: cargo test --locked --manifest-path security/attack-tests/Cargo.toml
-
       - name: anchor build (SBF program + IDL)
         run: anchor build
 
-      # Same attacks against the real SBF program anchor just built — this
-      # also runs the DLMM attacks, which can't run natively (see
-      # security/attack-tests/tests/dlmm_attacks.rs).
-      - name: Attack suite, real SBF program (incl. DLMM)
-        run: BPF_OUT_DIR="$PWD/target/deploy" cargo test --locked --manifest-path security/attack-tests/Cargo.toml -- --include-ignored
+      # The attack suite for this program lives in the private repo (zetaphy-private, weekly).
 
       - name: anchor test (full localnet suite, same as `yarn test`)
         run: |

@@ -296,3 +296,35 @@ gov.sh ibc-usdc-ratelimit channel-0         # เพดานต่ำ 1% / 1% �
 
 เครื่องที่ติดตั้งก่อนหน้านี้ต้อง build ใหม่: `FORCE_BUILD=1 bash setup-node.sh`
 - ถ้าเชนรันอยู่แล้ว การเปิด precompile ใหม่ต้องผ่านการโหวตอัปเกรดด้วย `gov.sh`
+
+## ขั้น 6: ความปลอดภัยในแกนกลางของเชน (Q-day, threat gate, IBC hold)
+
+คู่มือผู้ใช้: [`docs/SECURITY-CORE.md`](../docs/SECURITY-CORE.md) — patch ส่วนนี้อยู่ใน `setup-node.sh` เดียวกัน
+(`evmd/zetaphy_security.go`, `zetaphy_qday.go`, `zetaphy_threatgate.go`, `zetaphy_secprecompile.go`, `zetaphy_ibchold.go`)
+ทั้งสามกติกา **ปิดอยู่จนกว่าจะโหวต** ด้วย `gov.sh` แล้วดูค่าที่ใช้อยู่ด้วย `gov.sh security`
+1. **Q-day** (`gov.sh qday <ความสูง> [reveal_delay]`): ตั้งแต่ความสูงนั้น เชนไม่รับธุรกรรมที่เซ็นด้วย ECDSA
+   (ทั้ง EVM และ Cosmos) และ `ecrecover` ไม่คืนที่อยู่อีก บัญชีที่ล็อกควอนตัมแล้วใช้ต่อผ่านผู้ควบคุม ML-DSA-44
+   บัญชีที่ยังไม่ย้ายถูกแช่แข็ง (เงินอยู่ที่เดิม) ยกเว้นกุญแจที่ไม่เคยใช้บนเชน ซึ่งย้ายได้ด้วย commit–reveal
+   (`MsgQDayCommit` แล้ว `MsgQDayReveal` ห่างกันอย่างน้อย reveal_delay บล็อก แล้วรออีกเท่ากันจึงเป็นล็อกควอนตัม)
+   - **validator:** ล็อกควอนตัมบัญชี operator ก่อน Q-day (`gov.sh quantum-lock`) เพราะหลัง Q-day บัญชี ECDSA
+     ส่งธุรกรรม (รวมการโหวต) ไม่ได้ จัดการ validator ผ่าน `MsgEVMCall as_owner` ไปที่ precompile staking /
+     distribution / slashing / gov
+   - `gov.sh qday` ไม่ยอมตั้งความสูงที่ใกล้เกินไป (ค่าเริ่ม: ต้องห่างอย่างน้อย 100 บล็อก, `QDAY_MIN_NOTICE`)
+     mainnet ควรประกาศล่วงหน้าเป็นเดือน
+2. **Threat gate** (`gov.sh threat-gate <ThreatRegistry 0x…> on|off`): ธุรกรรมที่ปลายทางมีธงบังคับใช้ใน ThreatRegistry
+   ถูกปฏิเสธ เว้นแต่ผู้ส่งยินยอมก่อน (`consent(ปลายทาง, วินาที)` ที่ precompile `0x…0901` นานสุด 1 วัน)
+   ธงเตือน/ธงพัก key ที่ป้องกัน และธงที่ถูกล้าง ไม่ทำให้ถูกปฏิเสธ registry ที่ใช้งานไม่ได้ = ด่านปิด (เชนไม่ค้าง)
+3. **IBC hold** (`gov.sh ibc-hold <วินาที> [guardian]`, `gov.sh ibc-hold-rule <denom|*> <ขั้นต่ำ> <bps>`):
+   การโอนเข้าที่ถึงเกณฑ์ถูกพัก (acknowledgement แบบ async) ครบเวลาเชนส่งต่อเอง ระหว่างนั้น guardian
+   (`gov.sh ibc-hold-cancel <id>`) หรือ governance คืนเงินให้ผู้ส่งได้ ดูรายการด้วย `gov.sh ibc-holds`
+   ทำงานอยู่บนสุดของ IBC stack เหนือ x/ratelimit (ซึ่งยังทำงานเหมือนเดิม)
+
+**อัปเกรด:** เชนใหม่เปิดใช้ตั้งแต่บล็อก 1 (`{"key":"0f","value":"0000000000000001"}` ใน `app_state.zetaphypq`,
+`setup-node.sh` ใส่ให้) เชนที่รันอยู่: `gov.sh propose-upgrade zetaphy-v3 <ความสูง H> "<สรุป>"` แล้วโหวต
+ทุก validator เปลี่ยน binary ที่ H; ตั้งแต่ H+1 precompile `0x…0901` และกติกาใหม่จึงมีผล (ใช้ binary เดิมรันบล็อกก่อน H)
+
+ทดสอบ: `fork-tests/evmd/zetaphy_security_test.go` (Q-day, การแซงหน้า commit–reveal, กุญแจที่เคยใช้ vs ไม่เคยใช้,
+บัญชี MetaMask ที่ล็อกแล้วยังใช้ได้ผ่านผู้ควบคุม, threat gate: ไม่ยินยอม/ยินยอม/หมดอายุ/ล้างธง/ปิด/registry เสีย/
+ค่าใช้จ่าย, precompile, genesis, handler `zetaphy-v3`), `fork-tests/evmd/tests/ibc/zetaphy_ibchold_test.go`
+(พัก ปล่อย คืนเงิน เกณฑ์ supply) และบนเชนจริง `npm run test:devnet:security` กับ `ibc/test-ibc.sh` (ข้อ 4)
+รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม

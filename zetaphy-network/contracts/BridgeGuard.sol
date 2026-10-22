@@ -82,9 +82,12 @@ contract BridgedToken {
 ///             whose controllers differ (independentLanes() >= 2);
 ///           - a hard cap, maxDailyLimit, over every route's daily limit and over all routes together per day. It
 ///             starts at 1,000 whole tokens (createToken), is lowered at once,
-///             and is raised only by governance, at most x2 per step, each step
-///             7 days after it was proposed: caps grow gradually and in public.
-///         Governance should be the chain's gov module or a multisig.
+///             and is raised only by governance, at most x2 per step (or back up
+///             to the cap before a lowerMaxDailyLimit cut), each step 7 days after
+///             it was proposed: caps grow gradually and in public.
+///         Governance should be the ZetaphyTimelock (proposers: the chain's gov
+///         module or a multisig). Guardians act at once, but only to reduce risk:
+///         pause, lowerMaxDailyLimit, cancelMaxDailyLimit, disableRoute.
 contract BridgeGuard {
     struct Route {
         address adapter;      // the only caller allowed for this route
@@ -111,6 +114,10 @@ contract BridgeGuard {
     uint128 public pendingMaxDailyLimit;
     uint64 public pendingMaxAt;      // when the pending raise may be applied (0: none)
     uint64 public constant CAP_DELAY = 7 days;
+    /// The highest cap before lowerMaxDailyLimit cut it (0: none). Governance may
+    /// propose a raise back up to it in one step (still CAP_DELAY), so a guardian's
+    /// emergency cut (even to 0) is never undone only by x2 steps of 7 days each.
+    uint128 public restoreMaxDailyLimit;
     uint128 public constant STARTER_UNITS = 1000; // whole tokens: the cap at createToken
     /// Every route together, per direction and day: the hard cap binds the
     /// guard, so more routes cannot multiply it.
@@ -205,7 +212,8 @@ contract BridgeGuard {
     }
 
     /// Lowering the cap applies at once (and cancels a pending raise); a raise
-    /// (at most x2 of the cap) waits CAP_DELAY, then anyone applies it.
+    /// (at most x2 of the cap, or up to restoreMaxDailyLimit) waits CAP_DELAY,
+    /// then anyone applies it.
     function proposeMaxDailyLimit(uint128 v) external onlyGov {
         if (v <= maxDailyLimit) {
             maxDailyLimit = v;
@@ -215,6 +223,7 @@ contract BridgeGuard {
             return;
         }
         uint256 most = uint256(maxDailyLimit) * 2;
+        if (restoreMaxDailyLimit > most) most = restoreMaxDailyLimit;
         if (v > most) revert CapStep(uint128(most));
         pendingMaxDailyLimit = v;
         pendingMaxAt = uint64(block.timestamp) + CAP_DELAY;
@@ -228,13 +237,45 @@ contract BridgeGuard {
         maxDailyLimit = pendingMaxDailyLimit;
         pendingMaxAt = 0;
         pendingMaxDailyLimit = 0;
+        if (maxDailyLimit >= restoreMaxDailyLimit) restoreMaxDailyLimit = 0;
         emit MaxDailyLimitSet(maxDailyLimit);
     }
 
-    function cancelMaxDailyLimit() external onlyGov {
+    /// Governance or a guardian: drop a pending raise (reducing risk never waits).
+    function cancelMaxDailyLimit() external {
+        _govOrGuardian();
         pendingMaxAt = 0;
         pendingMaxDailyLimit = 0;
         emit MaxDailyLimitCancelled();
+    }
+
+    // ---- emergency: guardians act at once, but only to reduce risk ----
+    // With governance behind a timelock (ZetaphyTimelock, 48 h), everything that
+    // raises risk or changes rules (enable a route, raise a cap, unpause, new
+    // guardians, audit, registry, governance) waits the delay. These calls only
+    // shrink what can cross, so a guardian (a multisig) makes them at once.
+
+    /// Lower the hard cap (never raise it) and drop a pending raise.
+    function lowerMaxDailyLimit(uint128 v) external {
+        _govOrGuardian();
+        if (v >= maxDailyLimit) revert CapStep(maxDailyLimit);
+        if (maxDailyLimit > restoreMaxDailyLimit) restoreMaxDailyLimit = maxDailyLimit;
+        maxDailyLimit = v;
+        pendingMaxAt = 0;
+        pendingMaxDailyLimit = 0;
+        emit MaxDailyLimitSet(v);
+    }
+
+    /// Close a route (its adapter and limit are kept; enabling it again is governance's).
+    function disableRoute(bytes32 id) external {
+        _govOrGuardian();
+        Route storage r = routes[id];
+        r.enabled = false;
+        emit RouteSet(id, r.adapter, r.dailyLimit, false);
+    }
+
+    function _govOrGuardian() private view {
+        if (!guardian[msg.sender] && msg.sender != governance) revert NotGuardian();
     }
     /// The ThreatRegistry whose flags refuse coins (zero turns the check off).
     function setThreats(IContractThreats r) external onlyGov { threats = r; emit ThreatsSet(address(r)); }

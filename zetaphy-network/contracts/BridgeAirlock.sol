@@ -7,6 +7,7 @@ interface IRunnerRecords {
 
 interface IGuardInbound {
     function inbound(bytes32 route, address to, uint256 amount) external;
+    function guardian(address who) external view returns (bool);
 }
 
 /// ThreatRegistry's views (Reason as its uint8 value). is*Held: once the flag is
@@ -89,10 +90,15 @@ contract BridgeAirlock {
     /// Keys that may mark addresses (trip). See trip(): a marker can only mark.
     mapping(address => bool) public isMarker;
     uint256 public markerCount;         // markers now on
-    /// Who marked an address (zero: not marked). A mark counts only while its
-    /// marker is still a marker, so removing a stolen marker key lifts all of
-    /// its marks at once (see tripped()).
+    /// Who marked an address (zero: not marked). A mark counts while its
+    /// marker is a marker, or was removed by a guardian (markerRevoked);
+    /// governance removing a marker (setMarker) lifts all of its marks at once
+    /// (see tripped()).
     mapping(address => address) public trippedBy;
+    /// Markers a guardian removed (emergencyRemoveMarker): they mark no more,
+    /// but the marks they made still count until governance decides
+    /// (setMarker, untrip).
+    mapping(address => bool) public markerRevoked;
     mapping(bytes32 => Transfer) public transfers;
     mapping(bytes32 => mapping(address => bool)) public attestedBy;
     /// By controller (laneControllerOf at attest time): two lanes with one
@@ -120,6 +126,7 @@ contract BridgeAirlock {
     error NotLane();
     error NotVetoer();
     error NotMarker();
+    error NotGuardian();
     error Twice();
     error NotReady();
     error Blocked();
@@ -154,12 +161,14 @@ contract BridgeAirlock {
     function setVetoer(address who, bool on) external onlyGov { isVetoer[who] = on; emit VetoerSet(who, on); }
     /// Names (or removes) a marker: typically the bridge monitor's own key, which
     /// holds no other role. Governance removes a lost or misused marker key here.
+    /// Removing one lifts its marks, also after a guardian's emergencyRemoveMarker.
     function setMarker(address marker, bool on) external onlyGov {
         if (on != isMarker[marker]) {
             if (on) markerCount += 1;
             else markerCount -= 1;
         }
         isMarker[marker] = on;
+        markerRevoked[marker] = false;
         emit MarkerSet(marker, on);
     }
     /// Raising the threshold later does not hold back transfers that already reached the old one.
@@ -171,11 +180,64 @@ contract BridgeAirlock {
     /// Governance can lift a mark set by mistake.
     function untrip(address who) external onlyGov { delete trippedBy[who]; emit Untripped(who); }
 
-    /// Marked by a marker that is still on. setMarker(m, false) lifts every
-    /// mark m made (setting m on again would bring them back).
+    // ---- emergency: BridgeGuard's guardians act at once, but only to reduce risk ----
+    // Governance is meant to be the ZetaphyTimelock (48 h). Adding a lane or a
+    // marker, lowering the threshold or the quarantine, lifting a mark, a new
+    // registry or governance all wait that delay. These four only make release
+    // harder, so a guardian of the guard (a multisig, BridgeGuard.setGuardian)
+    // makes them at once. (A guardian removing a marker stops it from marking
+    // but keeps the marks it made: only governance, through setMarker or
+    // untrip, lifts marks.)
+    uint64 public constant MAX_QUARANTINE = 30 days;
+
+    function emergencyRemoveLane(address lane) external {
+        _guardian();
+        if (!isLane[lane]) revert NotLane();
+        for (uint256 i = 0; i < laneList.length; i++) {
+            if (laneList[i] == lane) { laneList[i] = laneList[laneList.length - 1]; laneList.pop(); break; }
+        }
+        isLane[lane] = false;
+        emit LaneSet(lane, false);
+    }
+
+    function emergencyRemoveMarker(address marker) external {
+        _guardian();
+        if (!isMarker[marker]) revert NotMarker();
+        isMarker[marker] = false;
+        markerRevoked[marker] = true;
+        markerCount -= 1;
+        emit MarkerSet(marker, false);
+    }
+
+    /// More independent lanes must agree (at most MAX_LANES; above the lane count nothing is released).
+    function emergencyRaiseThreshold(uint8 t) external {
+        _guardian();
+        require(t > threshold && t <= MAX_LANES, "raise only");
+        threshold = t;
+        emit ThresholdSet(t);
+    }
+
+    /// A longer quarantine (at most MAX_QUARANTINE), more time to veto.
+    function emergencyRaiseQuarantine(uint64 q) external {
+        _guardian();
+        require(q > quarantine && q <= MAX_QUARANTINE, "raise only");
+        quarantine = q;
+        emit QuarantineSet(q);
+    }
+
+    /// Governance, or a guardian of the guard (a guard without guardian() has none).
+    function _guardian() private view {
+        if (msg.sender == governance) return;
+        (bool ok, bytes memory ret) = address(guard).staticcall(abi.encodeCall(IGuardInbound.guardian, (msg.sender)));
+        if (!ok || ret.length < 32 || !abi.decode(ret, (bool))) revert NotGuardian();
+    }
+
+    /// Marked by a marker that is still on, or that a guardian removed.
+    /// setMarker(m, false) lifts every mark m made (setting m on again would
+    /// bring them back).
     function tripped(address who) public view returns (bool) {
         address m = trippedBy[who];
-        return m != address(0) && isMarker[m];
+        return m != address(0) && (isMarker[m] || markerRevoked[m]);
     }
 
     /// The lanes now on.
@@ -242,8 +304,11 @@ contract BridgeAirlock {
     /// transfer stays and comes out once the mark is lifted). So a stolen or
     /// misused marker key can at worst delay some addresses' transfers until
     /// governance removes the marker (setMarker), which lifts all its marks.
+    /// A mark that counts is kept by its first marker (another marker's
+    /// mark does not replace it).
     function trip(address who) external {
         if (!isMarker[msg.sender]) revert NotMarker();
+        if (tripped(who)) return;
         trippedBy[who] = msg.sender;
         emit Tripped(who, msg.sender);
     }

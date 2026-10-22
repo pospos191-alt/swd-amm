@@ -1,7 +1,7 @@
 // Config writers: each takes the file's current text and the launch outputs and
 // returns the new text (pure, so the unit tests check them without a chain).
 //
-//   zetaphy-dex/web/deployments.json   the DEX deploy's own output + neuroRegistry
+//   zetaphy-dex/web/deployments.json   the DEX deploy's own output + the DLMM factory/router + neuroRegistry
 //   zetaphy-nft/web/deployments.json   the NFT deploy's own output
 //   zetaphy-explorer/config.json       node (the https RPC host), threatRegistry, neuroReportUrl
 //   zetaphy-wallet/index.html          <meta name="zetaphy-rpc"> and <meta name="zetaphy-threat-registry">
@@ -33,7 +33,11 @@ export function dexWeb(_current, out) {
   const dex = out.dex;
   if (!dex?.contracts) throw new Error('dex: not deployed yet');
   need(dex.contracts.factory, 'DEX factory'); need(dex.contracts.router, 'DEX router');
-  return json({ ...dex, rpc: publicBase(out.publicRpc), neuroRegistry: out.threatRegistry ? need(out.threatRegistry, 'ThreatRegistry') : null });
+  // the DLMM (dlmm step): its factory and router next to the V2 contracts, as dlmm-cli.js deploy --web adds them (the DLMM tab reads them)
+  const dlmm = out.dlmm?.contracts;
+  if (dlmm) { need(dlmm.dlmmFactory, 'DLMM factory'); need(dlmm.dlmmRouter, 'DLMM router'); }
+  const contracts = dlmm ? { ...dex.contracts, dlmmFactory: dlmm.dlmmFactory, dlmmRouter: dlmm.dlmmRouter, dlmmPairCodeHash: dlmm.dlmmPairCodeHash } : dex.contracts;
+  return json({ ...dex, contracts, rpc: publicBase(out.publicRpc), neuroRegistry: out.threatRegistry ? need(out.threatRegistry, 'ThreatRegistry') : null });
 }
 
 export function nftWeb(_current, out) {

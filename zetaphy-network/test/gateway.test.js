@@ -2,21 +2,26 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet, Signature, encodeBytes32String } from 'ethers';
 import { createChain, ZETA } from './helpers/evm.js';
+import { mockArtifacts } from './helpers/mocks.js';
 
 const USDC = 10n ** 6n;
 const BOND = 100n * ZETA, MIN_FEE = ZETA / 10n;
-const PRICE = USDC / 100n; // 1 ZETAPHY = 0.01 tUSDC on testnet
+const PRICE = USDC / 100n; // 1 ZETAPHY = $0.01: 0.01 tUSDC
+const ZETA_ASSET = '0x00000000000000000000000000000000000e7a00'; // the oracle's id for ZETAPHY (the DEX's WZETAPHY on a chain)
 const CHAIN = encodeBytes32String('bsc');
 const TARGET = '0xc1ed4b78071e7c9a84958d8be0215a10984fc28f';
 const alice = Wallet.createRandom();
 
-let c, jobs, usdc, gw;
+let c, jobs, usdc, gw, oracle;
 beforeEach(async () => {
-  c = await createChain(['owner', 'relayer', 'w1'], { alice: alice.address });
+  c = await createChain(['owner', 'relayer', 'w1', 'guardian'], { alice: alice.address });
   jobs = await c.deploy('NeuroJobs', [BOND, ZETA, MIN_FEE, 120, 600, 3600, 1000n * ZETA], 'owner');
   usdc = await c.deploy('TestStable', ['Test USDC', 'tUSDC'], 'owner');
   gw = await c.deploy('StableGateway', [jobs.address], 'owner');
-  await gw.send('owner', 'setPrice', [usdc.address, PRICE]);
+  oracle = await c.deployRaw(mockArtifacts().MockPriceOracle, [], 'owner');
+  await oracle.send('owner', 'set', [ZETA_ASSET, 10n ** 16n]); // $0.01 per ZETAPHY
+  await gw.send('owner', 'setOracle', [oracle.address, ZETA_ASSET]);
+  await gw.send('owner', 'setToken', [usdc.address, true, false, 6]); // a USD stablecoin, counted at $1
   await gw.sendValue('owner', 100n * ZETA); // ZETAPHY reserve
   await usdc.send('alice', 'faucet');
 });
@@ -79,14 +84,64 @@ test('replays, expired, tampered and over-budget requests are refused', async ()
   await assert.rejects(gw.send('relayer', 'request', [asTuple(s4.q), s4.sig]), /TooExpensive/);
 });
 
-test('unknown tokens and an empty reserve are refused; only the owner sets prices', async () => {
+test('unknown tokens and an empty reserve are refused; only the owner sets the price source', async () => {
   await usdc.send('alice', 'approve', [gw.address, 10n ** 30n]);
   const other = await c.deploy('TestStable', ['Other', 'OTH'], 'owner');
   const s1 = await signed({ token: other.address });
   await assert.rejects(gw.send('relayer', 'request', [asTuple(s1.q), s1.sig]), /NotAccepted/);
   const s2 = await signed({ fee: 101n * ZETA, maxCost: 10n * USDC });
   await assert.rejects(gw.send('relayer', 'request', [asTuple(s2.q), s2.sig]), /ReserveLow/);
-  await assert.rejects(gw.send('relayer', 'setPrice', [usdc.address, 1]), /NotOwner/);
+  for (const [fn, args] of [['setOracle', [usdc.address, ZETA_ASSET]], ['setToken', [usdc.address, true, false, 6]], ['setTestnetFixedPrices', [true]],
+    ['setTestnetFixedPrice', [usdc.address, 1]], ['setGuardian', [c.acct.relayer.toString(), true]], ['unpause', []], ['sweep', [usdc.address, alice.address, 1]],
+    ['withdrawReserve', [alice.address, 1]], ['setOwner', [alice.address]]]) {
+    await assert.rejects(gw.send('relayer', fn, args), /NotOwner/, fn);
+  }
+});
+
+test('the price comes from the oracle; no price there: the request reverts (PriceUnavailable), never a guess', async () => {
+  await usdc.send('alice', 'approve', [gw.address, 10n ** 30n]);
+  assert.equal(await gw.call('priceSource'), 'ZetaphyOracle');
+  await oracle.send('owner', 'set', [ZETA_ASSET, 2n * 10n ** 16n]); // ZETAPHY doubles: $0.02
+  assert.equal(await gw.call('quote', [usdc.address, ZETA]), 2n * PRICE);
+  await oracle.send('owner', 'setDown', [ZETA_ASSET, true]);
+  await assert.rejects(gw.call('quote', [usdc.address, ZETA]), /PriceUnavailable/);
+  const { q, sig } = await signed();
+  await assert.rejects(gw.send('relayer', 'request', [asTuple(q), sig]), /PriceUnavailable/);
+  // a stablecoin priced by the oracle too (a depeg is seen): $0.50 per token doubles its cost
+  await oracle.send('owner', 'setDown', [ZETA_ASSET, false]);
+  await oracle.send('owner', 'set', [usdc.address, 5n * 10n ** 17n]);
+  await gw.send('owner', 'setToken', [usdc.address, true, true, 6]);
+  assert.equal(await gw.call('quote', [usdc.address, ZETA]), 4n * PRICE);
+  await oracle.send('owner', 'setDown', [usdc.address, true]);
+  await assert.rejects(gw.call('quote', [usdc.address, ZETA]), /PriceUnavailable/);
+  // no oracle at all: no price
+  await gw.send('owner', 'setOracle', ['0x' + '00'.repeat(20), ZETA_ASSET]);
+  await assert.rejects(gw.call('quote', [usdc.address, ZETA]), /NoPriceSource/);
+  assert.equal(await gw.call('priceSource'), 'none');
+});
+
+test('testnet fallback: a fixed price only while explicitly switched on, and labeled so', async () => {
+  await gw.send('owner', 'setTestnetFixedPrice', [usdc.address, 3n * PRICE]);
+  assert.equal(await gw.call('quote', [usdc.address, ZETA]), PRICE, 'off by default: the oracle prices');
+  const ev = await gw.send('owner', 'setTestnetFixedPrices', [true]);
+  assert.ok(ev.some((e) => e?.name === 'TestnetFixedPricesSet' && e.args.on === true));
+  assert.match(await gw.call('priceSource'), /TESTNET FIXED PRICE/);
+  await oracle.send('owner', 'setDown', [ZETA_ASSET, true]);
+  assert.equal(await gw.call('quote', [usdc.address, ZETA]), 3n * PRICE, 'the fixed price, not the oracle');
+  await gw.send('owner', 'setTestnetFixedPrices', [false]);
+  await assert.rejects(gw.call('quote', [usdc.address, ZETA]), /PriceUnavailable/);
+});
+
+test('a guardian pauses requests at once; only the owner (the timelock) restarts them', async () => {
+  await usdc.send('alice', 'approve', [gw.address, 10n ** 30n]);
+  await assert.rejects(gw.send('guardian', 'pause'), /NotGuardian/);
+  await gw.send('owner', 'setGuardian', [c.acct.guardian.toString(), true]);
+  await gw.send('guardian', 'pause');
+  const { q, sig } = await signed();
+  await assert.rejects(gw.send('relayer', 'request', [asTuple(q), sig]), /GatewayPaused/);
+  await assert.rejects(gw.send('guardian', 'unpause'), /NotOwner/);
+  await gw.send('owner', 'unpause');
+  await gw.send('relayer', 'request', [asTuple(q), sig]);
 });
 
 test('quote rounds up so the gateway never sells ZETAPHY below its price', async () => {

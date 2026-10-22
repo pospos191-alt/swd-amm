@@ -13,6 +13,16 @@
 //   large-transfer    one transfer of largePct % of the route's limit or more
 //   lane-silent       a source deposit (with --source-rpc) no lane attested within silentMinutes
 //   release-stalled   a transfer ready (lanes + quarantine) but not released within silentMinutes
+//   timelock-scheduled  a call scheduled in the ZetaphyTimelock (target, function, when it can run):
+//                     the window in which a bad change can still be cancelled
+//   timelock-executed | timelock-cancelled | timelock-delay (MinDelayChange) | governance-change (its roles)
+//   timelock-proposal a gov proposal whose MsgEVMCall schedules (or cancels) a call in the timelock, read from
+//                     the node's Cosmos REST API (/cosmos/gov/v1/proposals): logs of a MsgEVMCall are not in
+//                     eth_getLogs, so a call the gov module schedules is seen here, while the vote is open
+//   oracle-deviation  ZetaphyOracle: the DEX TWAP and Pyth disagree (DeviationTripped, no price)
+//   oracle-stale      a feed's source is stale (StaleFeed, or price() reverts TwapStale / PythStale)
+//   oracle-breaker    the circuit breaker tripped (a jump): no price until governance resets it
+//   oracle-paused | oracle-problem | oracle-unavailable   a paused feed, another source problem, no price
 // evaluate() is pure (unit-tested); scan() does the reading. State (the last
 // scanned block, open transfers, alerts already sent, marks) is kept by the caller.
 //
@@ -33,6 +43,8 @@
 import { Interface, formatUnits, getAddress } from 'ethers';
 import { readFileSync, existsSync } from 'node:fs';
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { callName, TIMELOCK } from './timelock.js';
+import { PROBLEMS, usd } from './oracle.js';
 
 export const DEFAULTS = { volumePct: 80, largePct: 25, disagreeMinutes: 30, silentMinutes: 30, chunk: 1000, maxBlocks: 50_000, lookback: 20_000 };
 
@@ -45,6 +57,8 @@ export const IFACES = {
   threats: new Interface(['event HeldNow(bytes32 indexed key, address indexed by)', 'event FastEnforced(bytes32 indexed key, address indexed by)',
     'event GovernanceSet(address governance)', 'event Protected(bytes32 indexed key, bool on)']),
   lockbox: new Interface(['event Locked(uint256 indexed nonce, address indexed sender, address indexed to, uint256 amount)']),
+  timelock: new Interface(art('ZetaphyTimelock')),
+  oracle: new Interface(art('ZetaphyOracle')),
 };
 
 const GOVERNANCE_EVENTS = {
@@ -52,7 +66,14 @@ const GOVERNANCE_EVENTS = {
   airlock: ['LaneSet', 'VetoerSet', 'MarkerSet', 'ThreatsSet', 'GovernanceSet', 'ThresholdSet', 'QuarantineSet', 'Untripped'],
   hyperlaneLane: ['ConfigSet', 'IsmSet', 'GovernanceSet'],
   threats: ['GovernanceSet'],
+  timelock: ['RoleGranted', 'RoleRevoked'],
+  oracle: ['GovernanceSet', 'GuardianSet', 'PythSet', 'TwapConfigured', 'PythConfigured', 'GuardsSet', 'FeedUnpaused', 'CircuitBreakerReset'],
 };
+/** Timelocked calls that change who governs, the delay, roles or the riskiest rules: critical when scheduled. */
+const CRITICAL_CALLS = new Set(['setGovernance', 'setOwner', 'setAdmin', 'grantRole', 'revokeRole', 'renounceRole', 'updateDelay', 'acceptGovernance',
+  'setLane', 'setMarker', 'setThreshold', 'setQuarantine', 'untrip', 'setThreats', 'setRoute', 'proposeMaxDailyLimit', 'unpause', 'setGuardian',
+  'setConfig', 'setInterchainSecurityModule', 'setPyth', 'setRelayer', 'setTwap', 'setPythFeed', 'setGuards', 'resetCircuitBreaker', 'unpauseFeed',
+  'setOracle', 'setTestnetFixedPrices', 'withdrawReserve', 'sweep', 'setProtected', 'setThreatRegistry', 'setFee', 'setFeeTo', 'proposeShares']);
 
 export function newState() {
   return { version: 1, lastBlock: null, routes: [], transfers: {}, locks: {}, sourceBlocks: {}, alerted: {}, marks: {} };
@@ -134,6 +155,49 @@ export function evaluate({ events = [], snapshot, state = newState(), now, cfg =
       `การ mint ${amt(a.amount)} ให้ ${a.to} ถูกกัก (ติดธงใน ThreatRegistry) id ${a.id}`, { ...at, to: a.to, amount: a.amount, id: a.id });
     if (e.source === 'threats' && (e.name === 'HeldNow' || e.name === 'FastEnforced')) add('hold', 'warning', `ThreatRegistry ${e.name}: key ${a.key} by ${a.by} (bridge transfers of that party are held)`,
       `ThreatRegistry ${e.name}: key ${a.key} โดย ${a.by} (รายการโอนผ่านสะพานของฝ่ายนั้นถูกกัก)`, { ...at, key: a.key, by: a.by });
+    // the timelock: what is scheduled, when it can run, and what ran
+    if (e.source === 'timelock') {
+      const label = (x) => { const n = c.labels?.[lower(x)]; return n ? `${n} ${x}` : String(x); };
+      if (e.name === 'CallScheduled') {
+        const fn = callName(a.data);
+        const eta = Number(e.time) + Number(a.delay);
+        add('timelock-scheduled', CRITICAL_CALLS.has(fn.split('(')[0]) ? 'critical' : 'warning',
+          `timelock: call scheduled ${String(a.id).slice(0, 10)}… #${str(a.index)}: ${label(a.target)} ${fn}${BigInt(a.value ?? 0) ? ` value ${str(a.value)}` : ''}, executable after ${new Date(eta * 1000).toISOString()} (cancellable until then)`,
+          `timelock: มีการตั้งเวลาเรียก ${String(a.id).slice(0, 10)}… #${str(a.index)}: ${label(a.target)} ${fn}${BigInt(a.value ?? 0) ? ` value ${str(a.value)}` : ''} ทำได้หลัง ${new Date(eta * 1000).toISOString()} (ยกเลิกได้ก่อนเวลานั้น)`,
+          { ...at, id: a.id, index: a.index, target: a.target, function: fn, eta, data: a.data });
+      }
+      if (e.name === 'CallExecuted') add('timelock-executed', 'warning', `timelock: executed ${String(a.id).slice(0, 10)}… #${str(a.index)}: ${label(a.target)} ${callName(a.data)}`,
+        `timelock: เรียกแล้ว ${String(a.id).slice(0, 10)}… #${str(a.index)}: ${label(a.target)} ${callName(a.data)}`, { ...at, id: a.id, target: a.target, function: callName(a.data) });
+      if (e.name === 'Cancelled') add('timelock-cancelled', 'warning', `timelock: cancelled ${a.id}`, `timelock: ยกเลิก ${a.id}`, { ...at, id: a.id });
+      if (e.name === 'MinDelayChange') add('timelock-delay', 'critical', `timelock: delay changed from ${str(a.oldDuration)} s to ${str(a.newDuration)} s`,
+        `timelock: เปลี่ยนระยะรอจาก ${str(a.oldDuration)} วินาทีเป็น ${str(a.newDuration)} วินาที`, { ...at, old: a.oldDuration, new: a.newDuration });
+    }
+    // a gov vote that schedules (or cancels) through the timelock (from the REST API, see govTimelockEvents)
+    if (e.source === 'gov' && e.name === 'TimelockProposal') {
+      const open = /VOTING|DEPOSIT/.test(a.status);
+      const list = a.calls.map((k) => `${k.action} ${k.target ? `${(c.labels?.[lower(k.target)] ? `${c.labels[lower(k.target)]} ` : '')}${k.target} ` : ''}${k.function}${k.delay ? ` (delay ${k.delay} s)` : ''}`).join('; ');
+      const critical = a.calls.some((k) => k.action !== 'schedule' || CRITICAL_CALLS.has(String(k.function).split('(')[0]));
+      add('timelock-proposal', critical ? 'critical' : 'warning',
+        `gov proposal ${a.id} (${a.status}${a.votingEnd ? `, voting ends ${a.votingEnd}` : ''}) ${open ? 'would' : 'did'} call the timelock: ${list}`,
+        `ข้อเสนอโหวต ${a.id} (${a.status}${a.votingEnd ? ` ปิดโหวต ${a.votingEnd}` : ''}) ${open ? 'จะ' : 'ได้'}เรียก timelock: ${list}`,
+        { proposal: a.id, status: a.status, calls: a.calls }, `govprop:${a.id}:${open ? 'open' : a.status}`);
+    }
+    // the price oracle
+    if (e.source === 'oracle') {
+      if (e.name === 'DeviationTripped') add('oracle-deviation', 'critical', `oracle: ${a.asset} has no price: DEX TWAP ${usd(a.twapPrice)} and Pyth ${usd(a.pythPrice)} differ by ${str(a.bps)} bps`,
+        `oracle: ${a.asset} ไม่มีราคา: TWAP ของ DEX ${usd(a.twapPrice)} กับ Pyth ${usd(a.pythPrice)} ต่างกัน ${str(a.bps)} bps`, { ...at, asset: a.asset, twap: a.twapPrice, pyth: a.pythPrice, bps: a.bps },
+        `oracle-dev:${lower(a.asset)}:${Math.floor(e.time / 3600)}`);
+      if (e.name === 'StaleFeed') add('oracle-stale', 'warning', `oracle: ${a.asset}: the ${Number(a.source) === 1 ? 'DEX TWAP' : 'Pyth'} source is stale (last ${new Date(Number(a.updatedAt) * 1000).toISOString()})`,
+        `oracle: ${a.asset}: แหล่งราคา ${Number(a.source) === 1 ? 'TWAP ของ DEX' : 'Pyth'} เก่าเกินไป (ล่าสุด ${new Date(Number(a.updatedAt) * 1000).toISOString()})`, { ...at, asset: a.asset, source: a.source },
+        `oracle-stale:${lower(a.asset)}:${str(a.source)}:${Math.floor(e.time / 86400)}`);
+      if (e.name === 'CircuitBreakerTripped') add('oracle-breaker', 'critical', `oracle: ${a.asset} circuit breaker TRIPPED: ${usd(a.price)} vs ${usd(a.ref)} (${str(a.bps)} bps); no price until governance resets it (timelock)`,
+        `oracle: ${a.asset} ตัดวงจรราคาแล้ว: ${usd(a.price)} เทียบกับ ${usd(a.ref)} (${str(a.bps)} bps) ไม่มีราคาจนกว่า governance จะรีเซ็ต (ผ่าน timelock)`, { ...at, asset: a.asset, price: a.price, ref: a.ref, bps: a.bps });
+      if (e.name === 'FeedPaused') add('oracle-paused', 'critical', `oracle: feed ${a.asset} PAUSED by ${a.by} (only governance unpauses, through the timelock)`,
+        `oracle: ราคา ${a.asset} ถูกหยุดโดย ${a.by} (ต้องให้ governance เปิดคืนผ่าน timelock)`, { ...at, asset: a.asset, by: a.by });
+      if (e.name === 'SourceProblem') add('oracle-problem', 'warning', `oracle: ${a.asset}: ${PROBLEMS[Number(a.problem)] ?? a.problem} (${str(a.a)}, ${str(a.b)})`,
+        `oracle: ${a.asset}: ${PROBLEMS[Number(a.problem)] ?? a.problem} (${str(a.a)}, ${str(a.b)})`, { ...at, asset: a.asset, problem: PROBLEMS[Number(a.problem)] ?? a.problem },
+        `oracle-problem:${lower(a.asset)}:${str(a.problem)}:${Math.floor(e.time / 3600)}`);
+    }
     // large single transfer
     if (e.source === 'guard' && (e.name === 'Inbound' || e.name === 'Outbound')) {
       const r = routeById[lower(a.route)];
@@ -180,6 +244,15 @@ export function evaluate({ events = [], snapshot, state = newState(), now, cfg =
       : m?.done != null ? ['marked', 'already marked', 'ถูกทำเครื่องหมายไว้แล้ว']
       : ['queued', 'queued: the monitor marks it now (BridgeAirlock.trip)', 'เข้าคิว: ตัวเฝ้าทำเครื่องหมายตอนนี้ (BridgeAirlock.trip)'];
     add('watch-hit', 'critical', `a watched contract was called by ${who}${logs}: ${en}`, `มีการเรียกสัญญาที่เฝ้าไว้โดย ${who}${logs}: ${th}`, { caller: who, logs: n, status });
+  }
+
+  // oracle feeds that give no price right now (price() reverted), once a day per feed and reason
+  for (const f of snapshot.oracleFeeds ?? []) {
+    if (f.ok) continue;
+    const why = String(f.error ?? 'error');
+    const rule = /Stale/.test(why) ? 'oracle-stale' : /BreakerTripped/.test(why) ? 'oracle-breaker' : /FeedIsPaused/.test(why) ? 'oracle-paused' : 'oracle-unavailable';
+    add(rule, rule === 'oracle-unavailable' || rule === 'oracle-stale' ? 'warning' : 'critical', `oracle: ${f.asset} has no price now (price() reverts ${why})`,
+      `oracle: ${f.asset} ไม่มีราคาตอนนี้ (price() ปฏิเสธ: ${why})`, { asset: f.asset, error: why }, `oracle-now:${lower(f.asset)}:${why}:${Math.floor(now / 86400)}`);
   }
 
   // volume over X% of the daily limit (on-chain counters of today)
@@ -243,7 +316,8 @@ export function report({ alerts, chainId, fromBlock, toBlock, addresses, snapsho
   const th = alerts.length === 0 ? `ตัวเฝ้าสะพาน ZETAPHY: ไม่มีสัญญาณเตือน (บล็อก ${fromBlock}–${toBlock})${mTh}`
     : [`ตัวเฝ้าสะพาน ZETAPHY: มีสัญญาณเตือน ${alerts.length} รายการ ร้ายแรง ${crit} รายการ (บล็อก ${fromBlock}–${toBlock})${mTh}`, ...alerts.map((x) => `- [${x.severity}] ${x.rule}: ${x.th}`)].join('\n');
   return plain({ format: 'zetaphy-bridge-monitor/1', generatedAt: new Date(now * 1000).toISOString(), chainId, fromBlock, toBlock, addresses,
-    snapshot: snapshot && { paused: snapshot.paused, maxDailyLimit: snapshot.maxDailyLimit, threshold: snapshot.threshold, lanes: snapshot.lanes, routes: snapshot.routes },
+    snapshot: snapshot && { paused: snapshot.paused, maxDailyLimit: snapshot.maxDailyLimit, threshold: snapshot.threshold, lanes: snapshot.lanes, routes: snapshot.routes,
+      ...(snapshot.oracleFeeds ? { oracleFeeds: snapshot.oracleFeeds } : {}) },
     ...(marking ? { marking } : {}), alerts, summary: { en, th } });
 }
 
@@ -429,8 +503,124 @@ export function loadMonitorConfig({ configFile, launchStateFile } = {}) {
     const out = Object.assign({}, ...Object.values(st.steps ?? {}).map((s) => s.out ?? {}));
     cfg.bridgeGuard ??= out.bridgeGuard ?? null;
     cfg.bridgeAirlock ??= out.bridgeAirlock ?? null;
+    cfg.timelock ??= out.timelock ?? null;
+    cfg.oracle ??= out.oracle ?? null;
+    cfg.timelockBlock ??= out.timelockBlock ?? null;
+    // names for addresses in alerts (timelock targets)
+    cfg.labels ??= {};
+    for (const [k, v] of Object.entries(out)) if (typeof v === 'string' && /^0x[0-9a-fA-F]{40}$/.test(v)) cfg.labels[v.toLowerCase()] ??= k;
+    if (out.dex?.contracts?.factory) cfg.labels[out.dex.contracts.factory.toLowerCase()] ??= 'dexFactory';
+    if (out.dlmm?.contracts?.dlmmFactory) cfg.labels[out.dlmm.contracts.dlmmFactory.toLowerCase()] ??= 'dlmmFactory';
+    if (out.nft?.marketplace) cfg.labels[out.nft.marketplace.toLowerCase()] ??= 'nftMarketplace';
   }
   return cfg;
+}
+
+/**
+ * Gov proposals (the JSON of GET /cosmos/gov/v1/proposals) whose MsgEVMCall goes to the timelock, as monitor
+ * events (source 'gov'). Pure. Field names: the node prints MsgEVMCall with its Go names (To, Data) or
+ * protobuf ones (to, data); Data is base64.
+ */
+export function govTimelockEvents(json, timelock, now) {
+  const out = [];
+  for (const p of json?.proposals ?? []) {
+    const calls = [];
+    for (const m of p.messages ?? []) {
+      if (!/MsgEVMCall$/.test(String(m['@type'] ?? ''))) continue;
+      const to = m.To ?? m.to;
+      if (to == null) { calls.push({ action: 'evm-call', function: '(its fields could not be read: zetaphyd q gov proposal ' + p.id + ')' }); continue; }
+      if (lower(to) !== lower(timelock)) continue;
+      let data;
+      try { data = `0x${Buffer.from(String(m.Data ?? m.data ?? ''), 'base64').toString('hex')}`; } catch { continue; }
+      let tx = null;
+      try { tx = TIMELOCK.parseTransaction({ data }); } catch { /* not a timelock call */ }
+      if (!tx) { calls.push({ action: 'call', function: callName(data) }); continue; }
+      if (tx.name === 'schedule') calls.push({ action: 'schedule', target: getAddress(tx.args[0]), function: callName(tx.args[2]), delay: Number(tx.args[5]) });
+      else if (tx.name === 'scheduleBatch') tx.args[0].forEach((t, i) => calls.push({ action: 'schedule', target: getAddress(t), function: callName(tx.args[2][i]), delay: Number(tx.args[5]) }));
+      else calls.push({ action: tx.name, function: tx.fragment.format('sighash') });
+    }
+    if (!calls.length) continue;
+    const status = String(p.status ?? '').replace(/^PROPOSAL_STATUS_/, '');
+    out.push({ source: 'gov', address: getAddress(timelock), name: 'TimelockProposal', block: 0, time: now,
+      args: { id: String(p.id), status, votingEnd: p.voting_end_time ?? null, calls } });
+  }
+  return out;
+}
+
+// ---- MsgEVMCall's fields: the REST API prints the message without them (its JSON marshaller does not know the
+// hand-written type), so they are read as protobuf through CometBFT's abci_query (/cosmos.gov.v1.Query/Proposal).
+
+/** A minimal protobuf reader: [{ field, wire, value }] (varint as BigInt, length-delimited as bytes). */
+export function protoFields(buf) {
+  const out = [];
+  let i = 0;
+  const varint = () => { let r = 0n, sh = 0n; for (;;) { if (i >= buf.length) throw new Error('protobuf: truncated'); const b = buf[i++]; r |= BigInt(b & 0x7f) << sh; if (!(b & 0x80)) return r; sh += 7n; if (sh > 63n) throw new Error('protobuf: varint too long'); } };
+  while (i < buf.length) {
+    const k = Number(varint());
+    const field = k >>> 3, wire = k & 7;
+    if (wire === 0) out.push({ field, wire, value: varint() });
+    else if (wire === 2) { const n = Number(varint()); if (i + n > buf.length) throw new Error('protobuf: truncated'); out.push({ field, wire, value: buf.subarray(i, i + n) }); i += n; }
+    else if (wire === 1) { i += 8; } else if (wire === 5) { i += 4; } else throw new Error(`protobuf: wire type ${wire}`);
+  }
+  return out;
+}
+
+/** QueryProposalResponse bytes → the proposal's messages [{ typeUrl, to?, data? }] (to/data for a MsgEVMCall). */
+export function proposalMessages(bytes) {
+  const text = (b) => Buffer.from(b).toString('utf8');
+  const proposal = protoFields(bytes).find((f) => f.field === 1 && f.wire === 2);
+  if (!proposal) return [];
+  return protoFields(proposal.value).filter((f) => f.field === 2 && f.wire === 2).map((any) => {
+    const a = protoFields(any.value);
+    const typeUrl = text(a.find((f) => f.field === 1)?.value ?? []);
+    const value = a.find((f) => f.field === 2)?.value;
+    if (!/MsgEVMCall$/.test(typeUrl) || !value) return { typeUrl };
+    const m = protoFields(value);
+    const to = m.find((f) => f.field === 2 && f.wire === 2);
+    const data = m.find((f) => f.field === 4 && f.wire === 2);
+    return { typeUrl, to: to ? text(to.value) : '', data: `0x${Buffer.from(data?.value ?? []).toString('hex')}` };
+  });
+}
+
+/** Fills in MsgEVMCall's To/Data of REST proposals from CometBFT (abci_query); proposals without such messages are left alone. */
+export async function fillEvmCalls(json, cometRpc, { fetchFn = fetch } = {}) {
+  for (const p of json?.proposals ?? []) {
+    if (!(p.messages ?? []).some((m) => /MsgEVMCall$/.test(String(m['@type'] ?? '')) && (m.To ?? m.to) == null)) continue;
+    let id = BigInt(p.id), req = [];
+    req.push(0x08); // field 1 (proposal_id), varint
+    do { let b = Number(id & 0x7fn); id >>= 7n; if (id) b |= 0x80; req.push(b); } while (id);
+    const u = new URL(`${String(cometRpc).replace(/\/+$/, '')}/abci_query`);
+    u.searchParams.set('path', '"/cosmos.gov.v1.Query/Proposal"');
+    u.searchParams.set('data', `0x${Buffer.from(req).toString('hex')}`);
+    const r = await fetchFn(u.href);
+    if (!r.ok) throw new Error(`abci_query: HTTP ${r.status}`);
+    const v = (await r.json())?.result?.response?.value;
+    if (!v) continue;
+    const msgs = proposalMessages(Buffer.from(v, 'base64'));
+    p.messages = p.messages.map((m, i) => (msgs[i]?.to != null ? { ...m, To: msgs[i].to, Data: Buffer.from(msgs[i].data.slice(2), 'hex').toString('base64') } : m));
+  }
+  return json;
+}
+
+/** The node's open and recent gov proposals (Cosmos REST; on the testnet https://<host>/rest). */
+export async function readGovProposals(restBase, { fetchFn = fetch } = {}) {
+  const u = new URL(`${String(restBase).replace(/\/+$/, '')}/cosmos/gov/v1/proposals`);
+  u.searchParams.set('pagination.limit', '50');
+  u.searchParams.set('pagination.reverse', 'true');
+  const r = await fetchFn(u.href);
+  if (!r.ok) throw new Error(`gov proposals: HTTP ${r.status}`);
+  return r.json();
+}
+
+/** Each oracle asset: does price() answer now? [{ asset, ok, value?, error? }] */
+export async function oracleFeedsOf(oracle) {
+  const out = [];
+  for (const asset of await oracle.assets()) {
+    try { const [value] = await oracle.price(asset); out.push({ asset: getAddress(asset), ok: true, value }); } catch (e) {
+      out.push({ asset: getAddress(asset), ok: false, error: e?.revert?.name ?? String(e?.code ?? 'error').replace(/[^\w-]/g, '') });
+    }
+  }
+  return out;
 }
 
 /** Reads a snapshot of the bridge's state. */

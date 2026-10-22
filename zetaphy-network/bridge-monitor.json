@@ -1,8 +1,12 @@
 {
-  "_comment": "Bridge monitor (.github/workflows/bridge-monitor.yml, zetaphy bridge monitor --monitor-config). Public values only: this file is committed. Empty bridgeGuard/bridgeAirlock fall back to zetaphy-launch/state/77390.json; with neither, the monitor does nothing. rpc: the public https RPC (or the repository variable ZETAPHY_RPC). startBlock: the block deploy-bridge ran at (first scan). sourceRpc + lockbox: optional, to see deposits no lane attested. volumePct, largePct, silentMinutes, disagreeMinutes are DEFAULTS only: the repository secret BRIDGE_MONITOR_THRESHOLDS (JSON, e.g. {\"volumePct\": 60}) overrides them. Never put the watch list or the marker key here: they are the secrets BRIDGE_WATCHLIST and BRIDGE_MARKER_KEY.",
+  "_comment": "Bridge monitor (.github/workflows/bridge-monitor.yml, zetaphy bridge monitor --monitor-config). Public values only: this file is committed. Empty bridgeGuard/bridgeAirlock/timelock/oracle fall back to zetaphy-launch/state/77390.json; with none of them, the monitor does nothing. The timelock (scheduled calls, executions, cancels, delay and role changes) and the oracle (deviation, stale feeds, circuit breaker, pauses) are watched even without a bridge. rest / cometRpc: the node's Cosmos REST and CometBFT RPC (default <https rpc>/rest and /rpc), where gov proposals that schedule in the timelock are read (a MsgEVMCall's logs are not in eth_getLogs). rpc: the public https RPC (or the repository variable ZETAPHY_RPC). startBlock: the block deploy-bridge ran at (first scan). sourceRpc + lockbox: optional, to see deposits no lane attested. volumePct, largePct, silentMinutes, disagreeMinutes are DEFAULTS only: the repository secret BRIDGE_MONITOR_THRESHOLDS (JSON, e.g. {\"volumePct\": 60}) overrides them. Never put the watch list or the marker key here: they are the secrets BRIDGE_WATCHLIST and BRIDGE_MARKER_KEY.",
   "rpc": null,
   "bridgeGuard": null,
   "bridgeAirlock": null,
+  "timelock": null,
+  "oracle": null,
+  "rest": null,
+  "cometRpc": null,
   "startBlock": null,
   "volumePct": 80,
   "largePct": 25,

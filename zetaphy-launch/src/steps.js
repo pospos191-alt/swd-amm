@@ -1,14 +1,16 @@
 // The launch steps, in order. Each reuses the package's own deploy code:
 //   zetaphy-network/cli.js (run as a child, ZETAPHY_HOME = a private temp folder holding the key),
 //   zetaphy-dex/cli.js deploy() (imported), zetaphy-nft/cli.js deploy (run as a child).
-// Configure everything first, hand over last: once NeuroControl or the ThreatRegistry belongs to
-// the gov module, every later change needs a vote.
+// Configure everything first, hand over last: the handover gives every admin role to a new
+// ZetaphyTimelock (proposers: the gov module or a multisig; 48 h by default), so every later
+// change is scheduled in public and waits the delay; a guardian multisig keeps the emergency
+// switches that only reduce risk.
 
 import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { Contract, ContractFactory, NonceManager, formatEther, parseEther, getAddress } from 'ethers';
+import { Contract, ContractFactory, Interface, NonceManager, formatEther, parseEther, parseUnits, getAddress, id as hashText, toQuantity, zeroPadValue, ZeroAddress, ZeroHash } from 'ethers';
 import { outputs } from './runner.js';
 import { CONFIG_FILES } from './configs.js';
 
@@ -17,6 +19,10 @@ export const GOV_MODULE = '0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2';
 /** The gov module's bech32 address (zetaphy-network/cli.js; zetaphy10d07y… = sha256("gov")[:20]). */
 export const GOV_MODULE_BECH32 = 'zetaphy10d07y265gmmuvt4z0w9aw880jnsr700jvr86lj';
 export const EVM_CHAIN_ID = 77390n;
+/** The timelock's delay: 48 h by default, never below 24 h outside a devnet. */
+export const DEFAULT_DELAY = 48 * 3600;
+export const MIN_DELAY = 24 * 3600;
+export const TIMELOCK_ROLES = { admin: ZeroHash, proposer: hashText('PROPOSER_ROLE'), executor: hashText('EXECUTOR_ROLE'), canceller: hashText('CANCELLER_ROLE') };
 
 const art = (pkg, n) => JSON.parse(readFileSync(join(ROOT, pkg, 'artifacts', `${n}.json`), 'utf8'));
 const NET = (n) => art('zetaphy-network', n);
@@ -230,6 +236,28 @@ export function launchSteps() {
       },
     },
     {
+      name: 'dlmm',
+      describe: 'DLMM factory + router (zetaphy-dex dlmm-cli deploy, UNAUDITED): the default presets (bin steps 1, 10, 25, 100 bps), the router checking the ThreatRegistry; the deployer stays governance until the handover',
+      artifacts: [['zetaphy-dex', 'ZetaphyDlmmFactory'], ['zetaphy-dex', 'ZetaphyDlmmPairDeployer'], ['zetaphy-dex', 'ZetaphyDlmmRouter']], txs: 5,
+      async run(ctx, state) {
+        const o = outputs(state);
+        const { deploy, DEFAULT_PRESETS } = await import(pathToFileURL(join(ROOT, 'zetaphy-dex/dlmm-cli.js')).href);
+        // a deployments file of its own (no file yet: a new one), so the V2 DEX record in the state stays as it was
+        const file = join(ctx.tmp, 'dlmm.json');
+        const opt = { rpc: ctx.rpc, 'key-file': ctx.keyFile, deployments: file };
+        if (o.threatRegistry) opt.registry = o.threatRegistry;
+        if (o.dex?.contracts?.wnative) opt.wnative = o.dex.contracts.wnative; // the same wrapped native as the V2 DEX
+        const d = await deploy(opt, (l) => ctx.log(`    ${l}`));
+        const contracts = { dlmmFactory: getAddress(d.contracts.dlmmFactory), dlmmRouter: getAddress(d.contracts.dlmmRouter), dlmmPairCodeHash: d.contracts.dlmmPairCodeHash };
+        await haveCode(ctx, { dlmmFactory: contracts.dlmmFactory, dlmmRouter: contracts.dlmmRouter });
+        const f = new Contract(contracts.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, ctx.provider);
+        const steps = (await f.presetSteps()).map(Number).sort((a, b) => a - b);
+        const want = Object.keys(DEFAULT_PRESETS).map(Number).sort((a, b) => a - b);
+        if (steps.join() !== want.join()) throw new Error(`DLMM presets ${steps.join(', ')}, expected ${want.join(', ')}`);
+        return { dlmm: { unaudited: true, contracts, wnative: getAddress(d.contracts.wnative), presets: steps } };
+      },
+    },
+    {
       name: 'nft',
       describe: 'NFT factory + marketplace (zetaphy-nft deploy), the marketplace checking the ThreatRegistry; protects the collections\' shared code keys',
       artifacts: [['zetaphy-nft', 'NFTFactory'], ['zetaphy-nft', 'NFTMarketplace']], txs: 1,
@@ -243,14 +271,55 @@ export function launchSteps() {
       },
     },
     {
+      name: 'oracle',
+      describe: 'TwapRecorder + ZetaphyPythRelay + ZetaphyOracle (ZETAPHY/USD: TWAP of the DEX pool WZETAPHY/tUSD, Pyth when a feed is given), the StableGateway priced by it',
+      artifacts: [['zetaphy-network', 'TwapRecorder'], ['zetaphy-network', 'ZetaphyPythRelay'], ['zetaphy-network', 'ZetaphyOracle']], txs: 8,
+      async run(ctx, state) {
+        const o = outputs(state);
+        const s = signer(ctx);
+        const deploy = async (n, args) => { const a = NET(n); const k = await new ContractFactory(a.abi, a.bytecode, s).deploy(...args); await k.waitForDeployment(); return k.getAddress(); };
+        const twapRecorder = await deploy('TwapRecorder', [60]);
+        const pythRelay = await deploy('ZetaphyPythRelay', [ctx.address, ctx.oracleRelayers ?? [], 1]);
+        const oracle = await deploy('ZetaphyOracle', [ctx.address, twapRecorder, pythRelay]);
+        const k = new Contract(oracle, NET('ZetaphyOracle').abi, s);
+        const out = { twapRecorder, pythRelay, oracle };
+        const usdToken = o.dex?.tokens?.find((t) => t.symbol === 'tUSD');
+        if (o.dex && usdToken) {
+          const zetaAsset = getAddress(o.dex.contracts.wnative);
+          const factory = new Contract(o.dex.contracts.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, ctx.provider);
+          const zetaPair = getAddress(await factory.getPair(zetaAsset, usdToken.address));
+          await wait(k.setTwap(zetaAsset, zetaPair, 1800, 10, 2000, BigInt(ctx.oracleMinLiquidity ?? 10000) * 10n ** 18n));
+          if (ctx.pythZetaFeed) await wait(k.setPythFeed(zetaAsset, ctx.pythZetaFeed, 120, 100));
+          await wait(k.setGuards(zetaAsset, 200, 1500, 3000, 3600));
+          await wait(k.poke(zetaAsset, { gasLimit: 800_000n })); // the first TWAP observation (a fixed limit: an estimate may skip the recording)
+          Object.assign(out, { zetaAsset, zetaPair });
+          ctx.log(`  ZetaphyOracle ${oracle}: ZETAPHY/USD from the DEX pool ${zetaPair} (30 min TWAP, 10+ observations)${ctx.pythZetaFeed ? ` and Pyth ${ctx.pythZetaFeed}` : ''}; priced once the window has filled (keeper: zetaphy relay start --poke-oracle 60, or zetaphy oracle poke)`);
+          if (o.stableGateway) {
+            const gw = new Contract(o.stableGateway, NET('StableGateway').abi, s);
+            if (same(await gw.owner(), ctx.address)) {
+              if (!same(await gw.oracle(), oracle)) await wait(gw.setOracle(oracle, zetaAsset));
+              if (ctx.stableTestnetPrice) {
+                const price = parseUnits(ctx.stableTestnetPrice, 6);
+                for (const t of [o.tUSDC, o.tUSDT].filter(Boolean)) await wait(gw.setTestnetFixedPrice(t, price));
+                await wait(gw.setTestnetFixedPrices(true));
+                ctx.log(`  StableGateway: TESTNET FIXED PRICE ${ctx.stableTestnetPrice} tUSDC per ZETAPHY (labeled; the oracle takes over when governance switches it off)`);
+              } else ctx.log('  StableGateway: priced by ZetaphyOracle');
+            }
+          }
+        } else ctx.log('  no DEX pool to price ZETAPHY from: configure a feed later (zetaphy oracle feed)');
+        return haveCode(ctx, out);
+      },
+    },
+    {
       name: 'wire',
       always: true,
-      describe: 'check the DEX factory and the NFT marketplace point at the ThreatRegistry (set-registry while the deployer is governance)',
+      describe: 'check the DEX factory, the DLMM factory and the NFT marketplace point at the ThreatRegistry (set-registry while the deployer is governance)',
       async run(ctx, state) {
         const o = outputs(state);
         const s = signer(ctx);
         const checks = [];
         if (o.dex) checks.push(['DEX factory', new Contract(o.dex.contracts.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, s)]);
+        if (o.dlmm) checks.push(['DLMM factory', new Contract(o.dlmm.contracts.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, s)]);
         if (o.nft) checks.push(['NFT marketplace', new Contract(o.nft.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, s)]);
         for (const [what, k] of checks) {
           const cur = await k.threatRegistry();
@@ -319,10 +388,23 @@ export function launchSteps() {
       },
     },
     {
+      name: 'timelock',
+      describe: 'ZetaphyTimelock (OpenZeppelin TimelockController 5.4.0): deployed with the deployer as its only proposer and a zero delay; the handover gives it every admin role, its real proposers and the delay, then the deployer renounces',
+      artifacts: [['zetaphy-network', 'ZetaphyTimelock']],
+      when: (ctx) => (ctx.handover ? true : 'only with --handover'),
+      async run(ctx) {
+        const a = NET('ZetaphyTimelock');
+        const k = await new ContractFactory(a.abi, a.bytecode, signer(ctx)).deploy(0, [ctx.address], [ctx.address], ZeroAddress);
+        const rc = await k.deploymentTransaction().wait();
+        // timelockNonce: the deployer's nonce of this deployment, where the handover's audit of its later txs starts
+        return { ...(await haveCode(ctx, { timelock: await k.getAddress(), timelockBlock: rc.blockNumber })), timelockNonce: k.deploymentTransaction().nonce };
+      },
+    },
+    {
       name: 'handover',
       always: true,
-      describe: 'hand every admin role to --governance (last, after everything is configured)',
-      txs: 9,
+      describe: 'hand every admin role to the ZetaphyTimelock, the emergency switches to --guardian, and check on-chain that no EOA keeps an admin role (last)',
+      txs: 32,
       when: (ctx) => (ctx.handover ? true : 'no --handover: the deployer stays admin for the testnet bring-up (the plan is printed below)'),
       async run(ctx, state) {
         return handover(ctx, state);
@@ -333,19 +415,35 @@ export function launchSteps() {
 
 // ---------- governance ----------
 
-/** The admin roles a handover moves: [label, address, abi, read, write, two-step?]. */
+/** The admin roles a handover moves to the timelock: { label, address, abi, read, write, twoStep? }. */
 export function adminRoles(o) {
   const R = [];
   const add = (label, address, abi, read, write, extra = {}) => { if (address) R.push({ label, address, abi, read, write, ...extra }); };
-  add('NeuroControl (Neuro: pause, skills, defenders)', o.neuroControl, NET('NeuroControl').abi, 'governance', 'setGovernance');
+  add('NeuroControl (Neuro: skills, defenders, chains, knobs of NeuroJobs)', o.neuroControl, NET('NeuroControl').abi, 'governance', 'setGovernance');
   add('ThreatRegistry (also governs ThreatReports)', o.threatRegistry, NET('ThreatRegistry').abi, 'governance', 'setGovernance');
   add('RewardVault', o.rewardVault, NET('RewardVault').abi, 'governance', 'setGovernance');
   add('StableGateway', o.stableGateway, NET('StableGateway').abi, 'owner', 'setOwner');
   add('NeuroIdentity (chains, web link)', o.neuroIdentity, NET('NeuroIdentity').abi, 'admin', 'setAdmin');
   add('BridgeGuard', o.bridgeGuard, NET('BridgeGuard').abi, 'governance', 'setGovernance');
-  add('BridgeAirlock', o.bridgeAirlock, NET('BridgeAirlock').abi, 'governance', 'setGovernance');
-  add('NFT marketplace', o.nft?.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, 'governance', 'setGovernance');
-  add('DEX factory (two-step: the new governance calls acceptGovernance)', o.dex?.contracts?.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, 'governance', 'setGovernance', { twoStep: true });
+  add('BridgeAirlock (lanes, threshold, quarantine, markers, threats)', o.bridgeAirlock, NET('BridgeAirlock').abi, 'governance', 'setGovernance');
+  add('HyperlaneLane', o.hyperlaneLane, NET('HyperlaneLane').abi, 'governance', 'setGovernance');
+  add('ZetaphyOracle (feeds, guards)', o.oracle, NET('ZetaphyOracle').abi, 'governance', 'setGovernance');
+  add('ZetaphyPythRelay (relayers, threshold)', o.pythRelay, NET('ZetaphyPythRelay').abi, 'governance', 'setGovernance');
+  add('NFT marketplace (fees, registry)', o.nft?.marketplace, art('zetaphy-nft', 'NFTMarketplace').abi, 'governance', 'setGovernance');
+  add('DEX factory (feeTo, registry; the router\'s sweep; two-step: the timelock accepts)', o.dex?.contracts?.factory, art('zetaphy-dex', 'ZetaphyFactory').abi, 'governance', 'setGovernance', { twoStep: true });
+  add('DLMM factory (presets, protocol share, feeTo, registry; the router\'s sweep; two-step: the timelock accepts)', o.dlmm?.contracts?.dlmmFactory, art('zetaphy-dex', 'ZetaphyDlmmFactory').abi, 'governance', 'setGovernance', { twoStep: true });
+  return R;
+}
+
+/** The emergency switches the guardian gets: { label, address, abi, set, read }. They can only reduce risk. */
+export function guardianRoles(o) {
+  const R = [];
+  const add = (label, address, abi, set = 'setGuardian', read = 'guardian') => { if (address) R.push({ label, address, abi, set, read }); };
+  add('BridgeGuard (pause, lower the cap, close a route; BridgeAirlock: remove a lane or marker, raise threshold / quarantine)', o.bridgeGuard, NET('BridgeGuard').abi);
+  add('NeuroControl (pause Neuro)', o.neuroControl, NET('NeuroControl').abi);
+  add('ThreatRegistry (holdNow, enforceNow on standing flags)', o.threatRegistry, NET('ThreatRegistry').abi);
+  add('ZetaphyOracle (pause a feed)', o.oracle, NET('ZetaphyOracle').abi);
+  add('StableGateway (pause requests)', o.stableGateway, NET('StableGateway').abi);
   return R;
 }
 
@@ -357,32 +455,265 @@ export function evmCallProposal({ to, data, title, summary, gasLimit = 300000 })
   };
 }
 
+// ---------- the bootstrap audit ----------
+// Between the timelock step and the deployer renouncing, the deployer is the timelock's only proposer at a zero
+// delay. The launch schedules exactly one operation then (the handover batch). Anything else scheduled in that
+// window would stay executable after the handover, so the handover finds and cancels it, and refuses when it
+// cannot be sure: an EVM tx that schedules leaves a CallScheduled log; a Cosmos tx (e.g. MsgEVMCall) leaves no log
+// the node returns, but it uses one of the deployer's nonces, and the launch itself sends EVM txs only.
+
+/** At most this many blocks between the timelock's deployment and the end of the handover are audited. */
+export const MAX_AUDIT_BLOCKS = 20_000;
+const TIMELOCKCLI = () => import(pathToFileURL(join(ROOT, 'zetaphy-network/src/timelockcli.js')).href);
+const ROLE_REVOKED = hashText('RoleRevoked(bytes32,address,address)');
+
+/** The handover batch's salt (fixed per chain and timelock). */
+export const handoverSalt = (chainId, timelock) => hashText(`zetaphy-launch handover ${chainId} ${timelock}`);
+
+/** Nonces in [first, end) that no EVM tx of the deployer carries (seen: the nonces of its EVM txs). */
+export function missingNonces(seen, first, end) {
+  const out = [];
+  for (let n = Number(first); n < Number(end); n++) if (!seen.has(n)) out.push(n);
+  return out;
+}
+
+/** Does this operation (its calls) look like the launch's handover batch: only the timelock granting
+ *  proposer/canceller/executor and setting its delay, and two-step admin roles accepting? */
+export function isHandoverShape(calls, timelock, twoStep) {
+  const tli = new Interface(['function grantRole(bytes32,address)', 'function updateDelay(uint256)']);
+  const acc = new Interface(['function acceptGovernance()']).getFunction('acceptGovernance').selector;
+  const roles = new Set([TIMELOCK_ROLES.proposer, TIMELOCK_ROLES.canceller, TIMELOCK_ROLES.executor]);
+  return calls.length > 0 && calls.every((c) => {
+    if (BigInt(c.value ?? 0) !== 0n) return false;
+    if (same(c.target, timelock)) {
+      let p;
+      try { p = tli.parseTransaction({ data: c.data }); } catch { return false; }
+      return p?.name === 'updateDelay' || (p?.name === 'grantRole' && roles.has(p.args[0]));
+    }
+    return String(c.data).toLowerCase() === acc && twoStep.some((a) => same(a, c.target));
+  });
+}
+
+/**
+ * Sorts the operations found in the timelock's CallScheduled logs. calls: scheduledCalls() entries (one per call of
+ * an operation); states: id -> 0 Unset (never or cancelled), 1 Waiting, 2 Ready, 3 Done; own: the launch's own ids.
+ * Only operations scheduled below realDelay count (after the handover every new one waits at least that).
+ * Returns { pending: foreign ids still executable, ran: foreign ids already executed, ownPending: own ids not Done }.
+ */
+export function sortOperations(calls, states, { own, realDelay }) {
+  const byId = new Map();
+  for (const c of calls) if (!byId.has(c.id)) byId.set(c.id, BigInt(c.delay));
+  const pending = [], ran = [], ownPending = [];
+  for (const [id, delay] of byId) {
+    if (delay >= BigInt(realDelay)) continue;
+    const st = states.get(id) ?? 0;
+    if (own.has(id)) { if (st !== 3) ownPending.push(id); continue; }
+    if (st === 3) ran.push(id); else if (st === 1 || st === 2) pending.push(id);
+  }
+  return { pending, ran, ownPending };
+}
+
+/** The deployer's nonces since the timelock's deployment that are not EVM txs (up to block toBlock). */
+async function nonEvmNonces(ctx, o, toBlock) {
+  const from = Number(o.timelockBlock);
+  if (toBlock - from > MAX_AUDIT_BLOCKS) return { tooLong: toBlock - from };
+  const seen = new Set();
+  let first = o.timelockNonce;
+  for (let b = from; b <= toBlock; b += 16) {
+    const blocks = await Promise.all(Array.from({ length: Math.min(16, toBlock - b + 1) }, (_, i) => ctx.provider.send('eth_getBlockByNumber', [toQuantity(b + i), true])));
+    for (const blk of blocks) {
+      for (const t of blk?.transactions ?? []) {
+        if (!same(t.from, ctx.address)) continue;
+        seen.add(Number(t.nonce));
+        if (first == null && t.to == null && Number(blk.number) === from) {
+          const rc = await ctx.provider.getTransactionReceipt(t.hash);
+          if (rc && same(rc.contractAddress, o.timelock)) first = Number(t.nonce);
+        }
+      }
+    }
+  }
+  if (first == null) throw new Error(`could not find the timelock's deployment by ${ctx.address} in block ${from}`);
+  return { missing: missingNonces(seen, first, await ctx.provider.getTransactionCount(ctx.address, toBlock)) };
+}
+
+/** The block where the deployer's last timelock role was revoked (renounced), or null. */
+async function renouncedAt(ctx, o) {
+  const head = await ctx.provider.getBlockNumber();
+  let last = null;
+  for (let a = Number(o.timelockBlock); a <= head; a += 2000) {
+    const logs = await ctx.provider.getLogs({ address: o.timelock, fromBlock: a, toBlock: Math.min(head, a + 1999), topics: [ROLE_REVOKED, null, zeroPadValue(ctx.address, 32)] });
+    for (const l of logs) last = Math.max(last ?? 0, l.blockNumber);
+  }
+  return last;
+}
+
+/** The audit: the operations scheduled during the bootstrap, and the deployer's non-EVM txs, up to toBlock. */
+async function bootstrapAudit(ctx, state, o, tl, { own, realDelay, toBlock, withNonces = true }) {
+  const { scheduledCalls } = await TIMELOCKCLI();
+  const calls = await scheduledCalls(ctx.provider, tl, { fromBlock: Number(o.timelockBlock), toBlock });
+  const states = new Map();
+  for (const id of new Set(calls.map((c) => c.id))) states.set(id, Number(await tl.getOperationState(id)));
+  // the handover batch of an earlier run (also from a state written before its id was kept)
+  const salt = handoverSalt(state.chainId, o.timelock);
+  const twoStep = adminRoles(o).filter((r) => r.twoStep).map((r) => r.address);
+  for (const id of states.keys()) {
+    const mine = calls.filter((c) => c.id === id);
+    if (mine.every((c) => c.salt === salt) && isHandoverShape(mine, o.timelock, twoStep)) own.add(id);
+  }
+  return { ...sortOperations(calls, states, { own, realDelay }), nonces: withNonces ? await nonEvmNonces(ctx, o, toBlock) : null };
+}
+
+/** Refuses a bootstrap that is not clean, and cancels what was planted (the deployer is still a canceller). */
+async function cleanBootstrap(ctx, state, o, tl, own, realDelay, when) {
+  const a = await bootstrapAudit(ctx, state, o, tl, { own, realDelay, toBlock: await ctx.provider.getBlockNumber() });
+  const redo = 'do not hand over to this timelock: deploy a new one with a new deployer key (--fresh, or --only timelock,handover --redo)';
+  if (a.nonces.tooLong) throw new Error(`${when}: ${a.nonces.tooLong} blocks since the timelock was deployed: too many to check that the deployer sent nothing else (at most ${MAX_AUDIT_BLOCKS}); ${redo}`);
+  if (a.nonces.missing.length) {
+    throw new Error(`${when}: the deployer ${ctx.address} signed ${a.nonces.missing.length} transaction(s) that are not EVM transactions since the timelock was deployed `
+      + `(nonce ${a.nonces.missing.join(', ')}): a Cosmos tx such as MsgEVMCall can schedule a timelock operation that no log shows; ${redo}`);
+  }
+  if (a.ran.length) throw new Error(`${when}: operation(s) the launch did not schedule already ran on the timelock: ${a.ran.join(', ')}; ${redo}`);
+  const cancelled = [];
+  for (const id of a.pending) {
+    if (!(await tl.hasRole(TIMELOCK_ROLES.canceller, ctx.address))) throw new Error(`${when}: operation ${id} (not the launch's) is pending and the deployer can no longer cancel it; ${redo}`);
+    await wait(tl.cancel(id));
+    cancelled.push(id);
+    ctx.log(`  WARNING: operation ${id} was scheduled on the timelock by someone with the deployer key, not by the launch: cancelled. Treat the deployer key as compromised.`);
+  }
+  return cancelled;
+}
+
 async function handover(ctx, state) {
   const target = ctx.governance;
   if (!target || same(target, ctx.address)) throw new Error('--handover needs --governance gov or --governance 0x<multisig>');
+  if (!ctx.guardian) throw new Error('--handover needs --guardian 0x<emergency multisig>');
   const o = outputs(state);
+  if (!o.timelock) throw new Error('no timelock yet: the timelock step runs before the handover');
   const s = signer(ctx);
-  const done = [], pending = [], stuck = [];
+  const tl = new Contract(o.timelock, NET('ZetaphyTimelock').abi, s);
+  const proposers = [...new Set([target, ...(ctx.extraProposers ?? [])].map((a) => getAddress(a)))];
+  const executors = ctx.executorMode === 'governance' ? proposers : [ZeroAddress];
+  const delay = BigInt(ctx.timelockDelay ?? DEFAULT_DELAY);
+  // single keys hold nothing outside a devnet: proposers and the guardian are multisigs (or the gov module)
+  for (const [what, a] of [...proposers.map((p) => ['proposer', p]), ['guardian', ctx.guardian]]) {
+    if (same(a, ctx.address)) throw new Error(`--${what === 'proposer' ? 'governance' : 'guardian'} ${a}: not the deployer key`);
+    if (!same(a, GOV_MODULE) && (await ctx.provider.getCode(a)) === '0x' && !ctx.devnet) throw new Error(`${what} ${a} is a single key (EOA): a multisig (or, for governance, the gov module); an EOA only with --devnet`);
+  }
+  // 0. the bootstrap so far: nothing but the launch's own operation on the timelock (refused before any role moves)
+  let handoverId = state.steps.handover?.out?.handoverOperation ?? null;
+  const own = new Set([handoverId].filter(Boolean));
+  const bootstrap = (await Promise.all(['proposer', 'canceller', 'executor', 'admin'].map((r) => tl.hasRole(TIMELOCK_ROLES[r], ctx.address)))).some(Boolean);
+  const cancelled = [];
+  if (bootstrap) cancelled.push(...await cleanBootstrap(ctx, state, o, tl, own, delay, 'before the handover'));
+  const done = [], stuck = [];
+  const guardianSet = [];
+  // 1. the emergency switches (while the deployer is still governance of each)
+  for (const r of guardianRoles(o)) {
+    const k = new Contract(r.address, r.abi, s);
+    if (await k[r.read](ctx.guardian)) { guardianSet.push(r.address); continue; }
+    const gov = await k[r.address === o.stableGateway ? 'owner' : 'governance']();
+    if (!same(gov, ctx.address)) { ctx.log(`  ${r.label}: ${ctx.guardian} is not a guardian and governance is ${gov}: schedule setGuardian through the timelock`); continue; }
+    await wait(k[r.set](ctx.guardian, true));
+    guardianSet.push(r.address);
+    ctx.log(`  guardian ${ctx.guardian}: ${r.label}`);
+  }
+  if (o.bridgeAirlock) {
+    const a = new Contract(o.bridgeAirlock, NET('BridgeAirlock').abi, s);
+    if (!(await a.isVetoer(ctx.guardian)) && same(await a.governance(), ctx.address)) { await wait(a.setVetoer(ctx.guardian, true)); ctx.log(`  guardian ${ctx.guardian}: BridgeAirlock vetoer`); }
+  }
+  // 2. every admin role to the timelock (two-step ones: proposed now, accepted by the timelock below)
+  const accept = [];
   for (const r of adminRoles(o)) {
     const k = new Contract(r.address, r.abi, s);
     const cur = await k[r.read]();
-    if (same(cur, target)) { ctx.log(`  ${r.label}: already ${target}`); done.push(r.address); continue; }
-    if (!same(cur, ctx.address)) { ctx.log(`  ${r.label}: admin is ${cur}, neither the deployer nor ${target}: left alone`); stuck.push(r.address); continue; }
-    if (r.twoStep && same(await k.pendingGovernance(), target)) ctx.log(`  ${r.label}: already proposed to ${target}`);
-    else await wait(k[r.write](target));
+    if (same(cur, o.timelock)) { ctx.log(`  ${r.label}: already ${o.timelock}`); done.push(r.address); continue; }
+    if (!same(cur, ctx.address)) { ctx.log(`  ${r.label}: admin is ${cur}, neither the deployer nor the timelock: left alone`); stuck.push(r.address); continue; }
     if (r.twoStep) {
-      const data = k.interface.encodeFunctionData('acceptGovernance', []);
-      pending.push(r.address);
-      if (same(target, GOV_MODULE)) {
-        const file = join(ctx.stateDir, 'proposals', `${state.chainId}-dex-accept-governance.json`);
-        mkdirSync(dirname(file), { recursive: true });
-        writeFileSync(file, JSON.stringify(evmCallProposal({ to: r.address, data, title: 'DEX: accept governance',
-          summary: `The gov module accepts governance of the ZETAPHY DEX factory ${r.address} (acceptGovernance()).` }), null, 2) + '\n');
-        ctx.log(`  ${r.label}: proposed to the gov module; it accepts by a vote: submit ${file} (see docs/LAUNCH.md)`);
-      } else ctx.log(`  ${r.label}: proposed to ${target}; it must call ${r.address} acceptGovernance() (data ${data})`);
-    } else { ctx.log(`  ${r.label}: handed to ${target}`); done.push(r.address); }
+      if (!same(await k.pendingGovernance(), o.timelock)) await wait(k[r.write](o.timelock));
+      accept.push(r);
+    } else {
+      await wait(k[r.write](o.timelock));
+      ctx.log(`  ${r.label}: handed to the timelock ${o.timelock}`);
+      done.push(r.address);
+    }
   }
-  return { governance: target, handedOver: done, pendingAccept: pending, ...(stuck.length ? { notHandedOver: stuck } : {}) };
+  // 3. the timelock's own set-up, in one operation it schedules and runs at its starting zero delay:
+  //    the real proposers/cancellers and executor, the two-step acceptances, and last the real delay.
+  //    Then the deployer renounces every timelock role.
+  if (await tl.hasRole(TIMELOCK_ROLES.proposer, ctx.address)) {
+    const calls = [];
+    const self = (fn, args) => calls.push([o.timelock, tl.interface.encodeFunctionData(fn, args)]);
+    for (const p of proposers) { self('grantRole', [TIMELOCK_ROLES.proposer, p]); self('grantRole', [TIMELOCK_ROLES.canceller, p]); }
+    for (const e of executors) self('grantRole', [TIMELOCK_ROLES.executor, e]);
+    for (const r of accept) calls.push([r.address, new Contract(r.address, r.abi).interface.encodeFunctionData('acceptGovernance', [])]);
+    self('updateDelay', [delay]);
+    const targets = calls.map((c) => c[0]), values = calls.map(() => 0n), datas = calls.map((c) => c[1]);
+    const salt = handoverSalt(state.chainId, o.timelock);
+    const id = await tl.hashOperationBatch(targets, values, datas, ZeroHash, salt);
+    own.add(id);
+    handoverId = id;
+    if (Number(await tl.getOperationState(id)) === 0) await wait(tl.scheduleBatch(targets, values, datas, ZeroHash, salt, 0));
+    if (Number(await tl.getOperationState(id)) !== 3) await wait(tl.executeBatch(targets, values, datas, ZeroHash, salt));
+    for (const r of accept) { ctx.log(`  ${r.label}: accepted by the timelock`); done.push(r.address); }
+    ctx.log(`  timelock ${o.timelock}: proposers/cancellers ${proposers.join(', ')}; executor ${ctx.executorMode === 'governance' ? proposers.join(', ') : 'anyone'}; delay ${delay} s`);
+  } else if (accept.length) {
+    for (const r of accept) { ctx.log(`  ${r.label}: pending; a proposer schedules ${r.address} acceptGovernance() through the timelock`); stuck.push(r.address); }
+  }
+  // the last chance to cancel (the deployer is still a canceller): the launch's batch is the only operation left
+  if (bootstrap) cancelled.push(...await cleanBootstrap(ctx, state, o, tl, own, delay, 'before the deployer renounces'));
+  for (const role of ['proposer', 'canceller', 'executor', 'admin']) {
+    if (await tl.hasRole(TIMELOCK_ROLES[role], ctx.address)) await wait(tl.renounceRole(TIMELOCK_ROLES[role], ctx.address));
+  }
+  // 4. check, on-chain: every admin role is the timelock's, the timelock is set up as asked, no EOA or deployer is left
+  const { checkTimelock } = await import(pathToFileURL(join(ROOT, 'zetaphy-network/src/timelock.js')).href);
+  const problems = [];
+  const tlRead = new Contract(o.timelock, NET('ZetaphyTimelock').abi, ctx.provider);
+  const chk = await checkTimelock(ctx.provider, tlRead, { minDelay: delay, proposers, executors: ctx.executorMode === 'governance' ? proposers : null,
+    forbidden: [ctx.address], devnet: !!ctx.devnet, govModule: GOV_MODULE });
+  problems.push(...chk.problems);
+  // no operation from the bootstrap (scheduled below the real delay) is left that could still run, none but the
+  // launch's ran, and the deployer signed nothing but EVM txs until it renounced
+  const end = await renouncedAt(ctx, o);
+  if (end == null) problems.push('the deployer never renounced its timelock roles');
+  else {
+    const a = await bootstrapAudit(ctx, state, o, tlRead, { own, realDelay: delay, toBlock: end });
+    const late = await bootstrapAudit(ctx, state, o, tlRead, { own, realDelay: delay, toBlock: await ctx.provider.getBlockNumber(), withNonces: false });
+    for (const id of new Set([...a.pending, ...late.pending])) problems.push(`operation ${id} from the bootstrap (below the ${delay} s delay) is still pending: it could run after the handover`);
+    for (const id of new Set([...a.ran, ...late.ran])) problems.push(`operation ${id} from the bootstrap ran, and the launch did not schedule it`);
+    for (const id of a.ownPending) problems.push(`the handover operation ${id} is not done`);
+    if (a.nonces.tooLong) problems.push(`the bootstrap lasted ${a.nonces.tooLong} blocks: too many to check the deployer's transactions (at most ${MAX_AUDIT_BLOCKS})`);
+    else if (a.nonces.missing.length) problems.push(`the deployer signed non-EVM transaction(s) during the bootstrap (nonce ${a.nonces.missing.join(', ')}): an operation could be scheduled that no log shows`);
+  }
+  for (const r of adminRoles(o)) {
+    const k = new Contract(r.address, r.abi, ctx.provider);
+    const cur = await k[r.read]();
+    if (!same(cur, o.timelock)) problems.push(`${r.label} ${r.address}: admin is ${cur}, not the timelock`);
+    if (!r.twoStep) continue;
+    // a two-step role: nobody else may be waiting to accept it
+    const pending = await k.pendingGovernance();
+    if (!same(pending, ZeroAddress)) problems.push(`${r.label} ${r.address}: ${pending} is still pending as governance`);
+  }
+  if (o.threatReports) {
+    const reg = await new Contract(o.threatReports, ['function registry() view returns (address)'], ctx.provider).registry();
+    if (!same(reg, o.threatRegistry)) problems.push(`ThreatReports ${o.threatReports} follows ${reg}, not the ThreatRegistry`);
+  }
+  if (o.neuroJobs) {
+    const control = await new Contract(o.neuroJobs, NET('NeuroJobs').abi, ctx.provider).control();
+    if (same(control, ZeroAddress)) problems.push(`NeuroJobs ${o.neuroJobs} has no NeuroControl yet: its deployer could still set one`);
+  }
+  for (const r of guardianRoles(o)) {
+    const k = new Contract(r.address, r.abi, ctx.provider);
+    if (!(await k[r.read](ctx.guardian))) problems.push(`${r.label}: ${ctx.guardian} is not a guardian`);
+    if (await k[r.read](ctx.address)) problems.push(`${r.label}: the deployer is still a guardian`);
+  }
+  if (problems.length) throw new Error(`the handover check failed:\n  - ${problems.join('\n  - ')}`);
+  ctx.log(`  checked on-chain: ${adminRoles(o).length} admin role(s) belong to the timelock; no EOA and not the deployer holds a timelock role; guardian ${ctx.guardian} on ${guardianRoles(o).length} contract(s); `
+    + `no operation from the bootstrap is left but the handover's, and the deployer sent only EVM transactions until it renounced (block ${end})`);
+  const prevCancelled = state.steps.handover?.out?.cancelledOperations ?? [];
+  return { governance: o.timelock, timelock: o.timelock, proposers, executor: ctx.executorMode === 'governance' ? 'governance' : 'anyone', minDelay: Number(delay),
+    guardian: ctx.guardian, handedOver: done, ...(stuck.length ? { notHandedOver: stuck } : {}), handoverOperation: handoverId,
+    ...(prevCancelled.length || cancelled.length ? { cancelledOperations: [...new Set([...prevCancelled, ...cancelled])] } : {}),
+    bootstrapAuditedTo: end, verifiedAt: new Date().toISOString() };
 }
 
 /** What the handover will do and the commands that follow it (printed when --handover is not given). */
@@ -390,19 +721,24 @@ export function handoverPlan(ctx, state) {
   const o = outputs(state);
   const lines = [];
   const target = ctx.governance && !same(ctx.governance, ctx.address) ? ctx.governance : null;
+  const gov = target === GOV_MODULE || !target ? 'gov' : target;
   lines.push('Governance: the deployer is the admin of every contract for the testnet bring-up.');
-  lines.push('Hand over once everything works (after that, each change needs a vote):');
-  lines.push(`  GitHub → Actions → launch-testnet → Run workflow, governance = ${target === GOV_MODULE || !target ? 'gov' : target}, handover = yes`);
-  lines.push(`  (or: node zetaphy-launch/launch.js --rpc ${ctx.publicRpc} --resume --governance ${target === GOV_MODULE || !target ? 'gov' : target} --handover)`);
-  lines.push('It moves:');
+  lines.push('Hand over once everything works: every admin role goes to a new ZetaphyTimelock (48 h delay); --governance');
+  lines.push('becomes its proposer and canceller, anyone executes a call once its delay passed, and --guardian (a multisig)');
+  lines.push('keeps the emergency switches that only reduce risk (pause, lower a cap, hold, remove a lane or marker, pause a feed):');
+  lines.push(`  GitHub → Actions → launch-testnet → Run workflow, governance = ${gov}, guardian = 0x<multisig>, handover = yes`);
+  lines.push(`  (or: node zetaphy-launch/launch.js --rpc ${ctx.publicRpc} --resume --governance ${gov} --guardian 0x<multisig> --handover)`);
+  lines.push('It moves to the timelock:');
   for (const r of adminRoles(o)) lines.push(`  - ${r.label} ${r.address}`);
+  lines.push('Then every change is scheduled, waits the delay in public (the bridge monitor alerts on it), and runs:');
+  lines.push('  zetaphy timelock schedule --to <contract> --sig "fn(types)" --args …   (prints the multisig calldata, or a gov proposal file)');
+  lines.push('  zetaphy timelock execute <id>   (anyone, after the delay)        zetaphy timelock cancel <id>   (a canceller)');
   if (o.neuroControl) {
-    lines.push('With the gov module as governance, Neuro is then steered by votes, on the node:');
-    lines.push(`  gov.sh neuro pause ${o.neuroControl}`);
-    lines.push(`  gov.sh neuro approve-skill <new skill id> ${o.neuroControl} && gov.sh neuro set-active-skill <new skill id> ${o.neuroControl}`);
-    lines.push('  gov.sh vote <id> yes');
+    lines.push('With the gov module as proposer, a vote schedules the call, e.g. Neuro\'s skill:');
+    lines.push(`  zetaphy neuro calldata set-active-skill <id>   then   zetaphy timelock schedule --to ${o.neuroControl} --data <that> --proposal-out p.json`);
+    lines.push('  zetaphyd tx gov submit-proposal p.json …; gov.sh vote <id> yes; after the delay: zetaphy timelock execute <operation id>');
+    lines.push(`Pausing Neuro stays immediate for the guardian: zetaphy neuro send pause (from the guardian multisig: ${o.neuroControl} pause())`);
   }
-  if (o.dex) lines.push(`The DEX factory is two-step: the handover writes zetaphy-launch/state/proposals/${state.chainId}-dex-accept-governance.json (a MsgEVMCall vote).`);
   return lines.join('\n');
 }
 
@@ -425,7 +761,7 @@ export async function estimate(ctx, state, steps) {
     gas += 150000n * BigInt(st.txs ?? 0);
     if (st.value) value += st.value(ctx);
   }
-  if (ctx.handover) gas += 60000n * 9n;
+  if (ctx.handover) gas += 150000n * 32n; // guardians, roles, the timelock's set-up batch, renouncing
   const fee = await ctx.provider.getFeeData();
   const price = fee.maxFeePerGas ?? fee.gasPrice ?? 10n ** 9n;
   const need = ((gas * price) * 3n) / 2n + value; // 1.5 x the gas, plus the coins the steps put in contracts

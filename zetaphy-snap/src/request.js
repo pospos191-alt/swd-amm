@@ -25,6 +25,11 @@ const MESSAGES = {
   evmCall: [['to'], ['data', 'value', 'gasLimit', 'asOwner']],
   evmDeploy: [['initCode'], ['value', 'gasLimit', 'asOwner']],
   quantumLock: [['owner', 'controller'], []],
+  // security core (zetaphy-chain zetaphy_security.go)
+  consent: [['target', 'seconds'], ['asOwner']],
+  qdayCommit: [['commitment'], []],
+  qdayReveal: [['owner', 'controller', 'salt', 'signature'], []],
+  ibcHoldCancel: [['id'], []],
 };
 export const MESSAGE_TYPES = Object.keys(MESSAGES);
 
@@ -109,6 +114,25 @@ function intent(m, i) {
     case 'quantumLock':
       out.owner = address(m.owner, `${what}.owner`);
       out.controller = address(m.controller, `${what}.controller`);
+      break;
+    case 'consent':
+      out.target = address(m.target, `${what}.target`);
+      out.seconds = uint(m.seconds, `${what}.seconds`, { max: 86400n }).toString();
+      if (has('asOwner') && m.asOwner !== '') out.asOwner = address(m.asOwner, `${what}.asOwner`);
+      break;
+    case 'qdayCommit':
+      out.commitment = hexData(m.commitment, `${what}.commitment`);
+      if (out.commitment.length !== 66) throw new Error(`${what}.commitment must be 32 bytes`);
+      break;
+    case 'qdayReveal':
+      out.owner = address(m.owner, `${what}.owner`);
+      out.controller = address(m.controller, `${what}.controller`);
+      out.salt = hexData(m.salt, `${what}.salt`);
+      out.signature = hexData(m.signature, `${what}.signature`);
+      if (out.salt.length !== 66 || out.signature.length !== 132) throw new Error(`${what}: salt 32 bytes, signature 65 bytes`);
+      break;
+    case 'ibcHoldCancel':
+      out.id = uint(m.id, `${what}.id`, { max: MAX_UINT64 }).toString();
       break;
     default:
       throw new Error(`${what}: unknown type`);

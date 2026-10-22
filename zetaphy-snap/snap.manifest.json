@@ -8,7 +8,7 @@
     "directory": "zetaphy-snap"
   },
   "source": {
-    "shasum": "Sh+PAEKtNXJElxNi1Tt9tILEJ/rNfwoxsvf8MsICXSk=",
+    "shasum": "LEiH1W3pdgaSdLNfXS+r/fqz38ASe/x2hOBvxe90aEo=",
     "location": {
       "npm": {
         "filePath": "dist/bundle.js",

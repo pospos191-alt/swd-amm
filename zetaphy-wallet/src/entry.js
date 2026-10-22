@@ -4,6 +4,9 @@
 export * from '../../zetaphy-network/src/pqtx.js';
 export { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
 export { keccak_256 } from '@noble/hashes/sha3.js';
+// secp256k1 public-key recovery, for the Q-day commit–reveal migration (the MetaMask
+// key signs the migration text locally; the commitment needs its public key).
+export { secp256k1 } from '@noble/curves/secp256k1.js';
 // Neuro's code fingerprint (fp1:), so the page can ask ThreatRegistry about a
 // contract before it signs a call or transfer to it (the vaccine).
 export { codeFingerprint } from '../../zetaphy-neuro/src/fingerprint.js';

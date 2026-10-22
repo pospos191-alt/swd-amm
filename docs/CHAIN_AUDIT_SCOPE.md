@@ -42,7 +42,11 @@ mode (genesis and peer fetched over https from another node) and
 
 Upstream Cosmos SDK / CometBFT / Cosmos EVM / ibc-go code that ZETAPHY does
 not modify, and the EVM contracts in `zetaphy-network/contracts` (separate
-scope, see that folder's README).
+scope, see that folder's README and `docs/BUG_BOUNTY.md`: they include the
+governance `ZetaphyTimelock`, built from OpenZeppelin Contracts 5.4.0 files
+pinned by sha256 in `zetaphy-network/vendor/openzeppelin-contracts.json`, and
+the `ZetaphyOracle` price feed). The chain-side touch point is `MsgEVMCall`
+from the gov module, which is how a vote schedules a call in that timelock.
 
 ## Already done (free)
 
@@ -61,3 +65,54 @@ scope, see that folder's README).
   malformed txs were found and fixed, with regression tests in
   `fork-tests/evmd/zetaphy_pqguard_test.go`. Not a substitute for an
   independent audit.
+
+## ZETAPHY DEX — DLMM contracts (UNAUDITED, separate EVM scope)
+
+Not part of the chain audit above, listed here so the scope is complete.
+The DLMM (discrete liquidity bins) is a Solidity port of our own Solana
+design (`programs/swd_amm/src/dlmm.rs`, volatility fee from `swdmm_math.rs`),
+written from scratch (MIT, no third-party code). **Unaudited; testnet only.**
+Solidity 0.8.26, optimizer 200, evm `cancun`; build and tests:
+`cd zetaphy-dex && npm run build && npm test`.
+
+| Area | Files | What to check |
+|---|---|---|
+| Fixed-point math | `zetaphy-dex/contracts/dlmm/DlmmMath.sol` (`DlmmMath`, `DlmmBinTree`) | bin price (1 + binStep/10⁴)^id as 128.128 via the inverted base (every product < 2²⁵⁶), its range [2⁻⁹⁶, 2⁹⁶] and monotonicity; 512-bit `mulDiv` / `mulDivUp`; rounding direction of each conversion; the three-level bitmap (`below` / `above` at word and level boundaries) |
+| Pair | `zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol` (`ZetaphyDlmmPair`, `ZetaphyDlmmPairDeployer`) | swap loop (bins crossed, `MAX_BINS_CROSSED`, exact drains, rounding always for the pool), consistency of `getSwapOut` / `getSwapIn` with `swap`; share minting (first deposit = x·price + y·2¹²⁸, later deposits in the bin's own ratio) and burning; single-sided rule around the active bin; internal accounting vs. token balances (donations, `skim`, `BalanceBelowReserves`); volatility fee (reference, decay, cap); protocol fee accrual and `collectProtocolFees`; reentrancy lock and the order of state writes vs. transfers; `setActiveIdWhileEmpty` |
+| Factory | `zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol` | one `governance` role for every admin function (two-step handover, e.g. to a TimelockController); preset validation; protocol-share cap; CREATE2 addressing through the pair deployer; registry check on `setThreatRegistry` |
+| Router | `zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol` | slippage (`amountOutMin` / `amountInMax`, `amountXMin` / `amountYMin`, `activeIdDesired` + `idSlippage`), deadlines, multi-hop, native wrapping with WZETAPHY and with the native ERC-20 precompile, refunds, fee-on-transfer refusal, Neuro `TokenEnforced` / fail-closed `RegistryUnavailable` (same rules as `ZetaphyRouter`) |
+
+Already done (free): unit, property (randomized, seeded) and regression tests
+in `zetaphy-dex/test/dlmm*.test.js` (including every case of the Solana
+DLMM's regression suite, ported to the EVM), and a
+real-chain test `zetaphy-dex/test/devnet.dlmm.integration.js`
+(`npm run test:devnet:dlmm`). Not a substitute for an independent audit.
+
+## Security core (Q-day, threat gate, IBC large-transfer hold) — new scope
+
+> สรุป (ไทย): ขอบเขตใหม่สำหรับผู้ตรวจ คือกติกาความปลอดภัยในแกนกลางของเชน 3 อย่าง (Q-day + การย้ายแบบ commit–reveal,
+> threat gate + ความยินยอมผ่าน precompile 0x…0901, การพักการโอนเข้า IBC ก้อนใหญ่) ทั้งหมดปิดจนกว่าจะโหวต
+> คำถามหลัก: ไม่มีเส้นทางให้ ECDSA ผ่านหลัง Q-day, ผลเหมือนกันทุกโหนด, งานต่อบล็อก/ต่อธุรกรรมมีเพดาน,
+> และไม่มีกติกาใดทำให้การถอนเงินจากสัญญาของโปรโตคอลค้าง
+
+Part of the same `ZETAPHY_PQ_PATCH` in `zetaphy-chain/setup-node.sh` (~1,400 lines of Go; user guide in Thai:
+[`docs/SECURITY-CORE.md`](SECURITY-CORE.md)). Every rule is off until a governance vote sets it.
+
+| File | What to look at |
+|---|---|
+| `evmd/zetaphy_security.go` | store layout (zetaphypq keys 0x0F–0x1D), activation height 0x0F, EVM-storage mirrors at `0x…5051`, BeginBlock work |
+| `evmd/zetaphy_qday.go` | `MsgSetQDay` (gov only), the Q-day ante rule (every signer ML-DSA-44; no `MsgEthereumTx`; authz inner messages), commit–reveal migration (`QDayCommitment`, EIP-191 reveal text, low-s check, commitment age, "oldest commitment wins" while pending, finalize queue bounded per block), exposure test |
+| `x/vm/keeper/zetaphy_ecrecover.go` | ecrecover (and P256VERIFY at 0x…0100) return nothing from Q-day; exposure marks written from inside the precompile (also under STATICCALL) |
+| `mempool/zetaphy_lock.go` | submission-time refusal (Q-day, quantum lock) and the app hook (threat gate on a query context) |
+| `evmd/zetaphy_threatgate.go` | registry static call (gas cap, fail-open, throw-away cache context), consent records, exemptions (system addresses, the registry, governance), ante coverage of `MsgEthereumTx` and `MsgEVMCall` (also in authz); in a block a refused tx keeps its fee and nonce and is reverted where it runs (EVM hook, `evmCall`) |
+| `evmd/zetaphy_secprecompile.go` | precompile `0x…0901`: consent only from `msg.sender == tx.origin`, no value, write protection under STATICCALL/DELEGATECALL, guardian-only `cancelIBCHold`, activation by height |
+| `evmd/zetaphy_ibchold.go` | v1 middleware on top of the transfer stack (async acknowledgement; release in BeginBlock through the rest of the stack in a cache context with panic recovery and a gas cap per delivery (out of gas or a panic = error acknowledgement) and per block; error-ack cancel; local-denom computation for both directions; the `"*"` rule's supply share counted from its minimum amount; open holds capped in total and per denom, over the cap an error acknowledgement), v2 refusal, parameter bounds |
+| `evmd/zetaphy_rpc.go` | read-only JSON-RPC (`zetaphy_securityStatus`, `zetaphy_migration`, `zetaphy_qdayCommitment`, `zetaphy_consent`, `zetaphy_ibcHolds`) |
+| `evmd/zetaphy_upgrade.go` | genesis allow-list, export, the `zetaphy-v3` upgrade handler |
+
+Questions for the auditor: determinism of the registry call inside the ante handler and the mempool hook;
+whether any path lets an ECDSA-authorized action through after Q-day; consensus safety of async
+acknowledgements written in BeginBlock; bounded work per block and per tx; that no rule can stop
+withdrawals from the protocol's own contracts. Tests: `fork-tests/evmd/zetaphy_security_test.go`,
+`fork-tests/evmd/tests/ibc/zetaphy_ibchold_test.go`, `zetaphy-network/test/devnet.security.integration.js`,
+`zetaphy-chain/ibc/test-ibc.sh` part 4. Known limits and the developers' own findings are kept separately for the team.

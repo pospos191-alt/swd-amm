@@ -23,6 +23,7 @@
     <button type="button" class="tab" role="tab" data-tab="swap" data-i18n="tabSwap" aria-selected="true">Swap</button>
     <button type="button" class="tab" role="tab" data-tab="pool" data-i18n="tabPool" aria-selected="false">Pool</button>
     <button type="button" class="tab" role="tab" data-tab="tokens" data-i18n="tabTokens" aria-selected="false">Tokens</button>
+    <button type="button" class="tab" role="tab" data-tab="dlmm" aria-selected="false">DLMM</button>
   </nav>
   <div class="hdr-actions">
     <button type="button" class="ghost" id="lang-btn" data-i18n="langBtn">EN</button>
@@ -102,6 +103,11 @@
       <label class="ack" id="pos-ack-slip-row" hidden><input type="checkbox" id="pos-ack-slip" autocomplete="off"> <span id="pos-ack-slip-text"></span></label>
       <p class="status" id="pos-status" role="status"></p>
     </div>
+  </section>
+
+  <!-- DLMM (UNAUDITED contracts): built by dlmm.js -->
+  <section id="tab-dlmm" class="panel" role="tabpanel" hidden>
+    <div id="dlmm-root"></div>
   </section>
 
   <section id="tab-tokens" class="panel" role="tabpanel" hidden>

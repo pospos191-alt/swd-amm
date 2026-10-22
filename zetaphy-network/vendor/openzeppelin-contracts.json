@@ -1,0 +1,33 @@
+{
+  "package": "@openzeppelin/contracts",
+  "version": "5.4.0",
+  "license": "MIT",
+  "tarball": "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-5.4.0.tgz",
+  "integrity": "sha512-eCYgWnLg6WO+X52I16TZt8uEjbtdkgLC0SUX/xnAksjjrQI4Xfn4iBRoI5j55dmlOhDv1Y7BoR3cU7e3WWhC6A==",
+  "audits": "https://github.com/OpenZeppelin/openzeppelin-contracts/tree/v5.4.0/audits",
+  "note": "Exactly these files of the npm tarball above, unmodified (only the ones ZetaphyTimelock.sol needs). scripts/build.js refuses a file whose sha256 differs. To check by hand: npm pack @openzeppelin/contracts@5.4.0, compare the integrity, untar, sha256sum package/<file>.",
+  "files": {
+    "access/AccessControl.sol": "93c8ebfe7b36ef4d180f1660a5a741125691957726209720af476fdd5c7bac43",
+    "access/IAccessControl.sol": "140304b7e99d517c57a13f391dfd3b550ca633a507f7b2af130f391b6cd89cc5",
+    "access/extensions/AccessControlEnumerable.sol": "774f3a571556b120e3a26d0bdf5e970c5a65f0a7ed18bc14e3be69aac86974e3",
+    "access/extensions/IAccessControlEnumerable.sol": "e0f69ae5acc588f27b8eba7f5a625f01409be5bb4a08e825774ccee32efc0ff9",
+    "governance/TimelockController.sol": "4a5946a9ea4abbaef29225dc42da6c50c66bb13cae1b592607222599b0526f64",
+    "token/ERC1155/IERC1155Receiver.sol": "3df310870e0187a59020ea48e910ed2693778b1f758b57b97a47365d74b92af5",
+    "token/ERC1155/utils/ERC1155Holder.sol": "08dbc044feab0e187a81a52142f907be598ecca0d35311766a346343af7b18af",
+    "token/ERC721/IERC721Receiver.sol": "eafee3ffdc7cb2fba4bf6bd16fb28f8e5b4679742e81c2ad42a1b1df5c179feb",
+    "token/ERC721/utils/ERC721Holder.sol": "fa1e231eedfd128232d8f34e9599165fb302c9dee5e58ef009f3b99f7e5d930d",
+    "utils/Address.sol": "f1a9255dbc40cf9ae7c786abed3b022691a9d24bca0c7f05dc60e63421d405ab",
+    "utils/Arrays.sol": "8320f75b46c18204dd6f2b3654058129625b849a95c3a55a44ae531f77f0eca9",
+    "utils/Comparators.sol": "52fb1c8f57967d42a3214bde4a8a414ab25c2e3a844d00e171ca56487024e009",
+    "utils/Context.sol": "847fda5460fee70f56f4200f59b82ae622bb03c79c77e67af010e31b7e2cc5b6",
+    "utils/Errors.sol": "0704b9d6c032cca8512a3bc3f30f49f86f1f03102d2896a3d23e794b82efea66",
+    "utils/Panic.sol": "270fc8401c1a13fae6a7a4a2dd6e381b95d658896701e51f0d3e2688acab3dec",
+    "utils/SlotDerivation.sol": "daddbbeb265c87b7172548d58baede96b167cd89c6c7884ff2705676fab69438",
+    "utils/StorageSlot.sol": "75704538dcb223239280c6726d9a31cf769a7816718517c997fc7d63bdb70778",
+    "utils/introspection/ERC165.sol": "61a2b12c96857aaa35f48aeda67a4281637a42494c0b3795be0ae976aa7b3793",
+    "utils/introspection/IERC165.sol": "9055c2994b37dea1a41b7b7926dcb510f05dbe2540b0aafc5fbee9558fffd0ca",
+    "utils/math/Math.sol": "92fee281fd46a1b058b190cf21d6b1a528f0433a907850ae1c9bcf36c5c0cd98",
+    "utils/math/SafeCast.sol": "9769274bf53f26a7c7896c526ea1980dc9bea5bf5c2a5fd04870008c4afc1de9",
+    "utils/structs/EnumerableSet.sol": "53507e71995d0e76d29d6dd897d0bcc3f069fd81f03cb431d7342bdfcc0d5345"
+  }
+}

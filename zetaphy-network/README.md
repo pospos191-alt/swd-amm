@@ -96,13 +96,16 @@ zetaphy job request-stable bsc 0x... --relay http://<relay>:8080      # ส่�
 
 1. กระเป๋าของผู้ใช้เซ็น 2 อย่าง ได้แก่ คำขอส่งงาน (EIP-712) และ permit อนุญาตให้หักเหรียญ (EIP-2612)
 2. relay ส่งธุรกรรมขึ้นเชนให้และจ่ายค่า gas เอง แล้วได้ทิปเป็น tUSDC ตามจำนวนที่ผู้ใช้ตกลงไว้
-3. StableGateway หัก tUSDC ตามราคาที่ตั้งไว้ (testnet: 1 ZETAPHY = 0.01 tUSDC)
+3. StableGateway หัก tUSDC ตามราคาจาก **ZetaphyOracle** (ราคา ZETAPHY เป็น USD ที่ผ่านการตรวจหลายชั้น ดู "ราคา: ZetaphyOracle" ข้างล่าง) นับ tUSDC/tUSDT เป็น $1
+   - oracle ไม่มีราคาที่เชื่อได้ (เก่าไป แหล่งราคาไม่ตรงกัน ตัดวงจร หรือถูกหยุด) = คำขอ revert `PriceUnavailable` พร้อมเหตุผล ไม่มีการเดาราคา
+   - **ทางสำรองสำหรับ testnet เท่านั้น:** ราคาคงที่ (เช่น 1 ZETAPHY = 0.01 tUSDC) ใช้ได้เฉพาะเมื่อ governance เปิด `setTestnetFixedPrices(true)` เอง (ปิดอยู่ตั้งแต่ต้น) `priceSource()` และ `/info` ของ relay บอกชัดว่า "TESTNET FIXED PRICE" ไม่ใช่ราคาตลาด
 4. Gateway จ่ายค่างานเป็น ZETAPHY จากเงินสำรองของตัวเอง ถ้างานไม่สำเร็จ ZETAPHY จะคืนให้ผู้ใช้
 
 ข้อควรรู้:
 - ผู้ใช้กำหนดยอดสูงสุดที่ยอมจ่ายไว้ใน `maxCost` ได้
 - relay ใช้คำขอซ้ำ แก้คำขอ หรือใช้คำขอที่หมดเวลาแล้วไม่ได้
-- คนรันร่างคนไหนก็เปิด relay ได้: `zetaphy relay start --port 8080`
+- คนรันร่างคนไหนก็เปิด relay ได้: `zetaphy relay start --port 8080` (เติม `--poke-oracle 60` ให้ relay เป็นคน poke oracle ทุก 60 วินาทีด้วย)
+- guardian (multisig) กดหยุดรับคำขอได้ทันที (`pause`) เปิดคืนต้องผ่าน timelock
 - USDC/USDT ตัวจริงจะมาผ่านสะพานในขั้น 3
 
 ## โหวตอัปเกรดเชน (ขั้น 2)
@@ -301,7 +304,7 @@ zetaphy bridge close        # governance: ปิด route
 
 ### เฝ้าดู (monitor) และแจ้งเตือน
 
-`zetaphy bridge monitor` อ่าน event ของ BridgeGuard, BridgeAirlock, NeuroLane, HyperlaneLane, ThreatRegistry, (ถ้าให้ `--source-rpc --lockbox`) LockBox ต้นทาง และสัญญาใน watch list (ถ้ามี) แล้วแจ้งเตือนเมื่อ (ใช้ key เฉพาะเมื่อตั้ง `BRIDGE_MARKER_KEY` เพื่อทำเครื่องหมาย):
+`zetaphy bridge monitor` อ่าน event ของ BridgeGuard, BridgeAirlock, NeuroLane, HyperlaneLane, ThreatRegistry, ZetaphyTimelock, ZetaphyOracle (อ่านที่อยู่จาก launch state หรือ `--timelock` / `--oracle`; ไม่มีสะพานก็เฝ้าสองตัวนี้ได้), (ถ้าให้ `--source-rpc --lockbox`) LockBox ต้นทาง และสัญญาใน watch list (ถ้ามี) แล้วแจ้งเตือนเมื่อ (ใช้ key เฉพาะเมื่อตั้ง `BRIDGE_MARKER_KEY` เพื่อทำเครื่องหมาย):
 
 | กฎ | เมื่อไร |
 |---|---|
@@ -318,6 +321,14 @@ zetaphy bridge close        # governance: ปิด route
 | `hold` | `InboundHeld` ของ BridgeGuard, `HeldNow` / `FastEnforced` ของ ThreatRegistry |
 | `governance-change` | เปลี่ยน route เพดาน `maxDailyLimit` lane vetoer marker guardian governance audit registry config/ISM ของ HyperlaneLane, unpause, untrip |
 | `large-transfer` | รายการเดียว ≥ 25% ของเพดานต่อวัน (`--large-pct`) |
+| `timelock-scheduled` | มีการตั้งเวลาเรียกใน ZetaphyTimelock: สัญญาปลายทาง ชื่อฟังก์ชัน (ถ้ารู้จัก) และเวลาที่ทำได้ (ETA) · เปลี่ยน governance/role/delay/lane/ราคา = ร้ายแรง · นี่คือช่วงที่ยังยกเลิกได้ |
+| `timelock-proposal` | ข้อเสนอโหวต gov ที่จะตั้งเวลา (หรือยกเลิก) ใน timelock อ่านจาก Cosmos REST ของโหนด (`--rest`, ค่าเริ่ม `<RPC https>/rest`) และรายละเอียดของ MsgEVMCall จาก CometBFT (`--comet-rpc`, ค่าเริ่ม `<RPC https>/rpc`) เห็นตั้งแต่ช่วงโหวต |
+| `timelock-executed` / `timelock-cancelled` | การเรียกที่รอครบแล้วถูกเรียกจริง / ถูกยกเลิก |
+| `timelock-delay` | เปลี่ยนระยะรอของ timelock (`MinDelayChange`, ร้ายแรง) · เพิ่ม/ถอด role ของ timelock = `governance-change` |
+| `oracle-deviation` | TWAP ของ DEX กับ Pyth ต่างกันเกิน `maxDeviationBps` (`DeviationTripped`, ไม่มีราคา, ร้ายแรง) |
+| `oracle-stale` | แหล่งราคาเก่าเกินไป (`StaleFeed` หรือ `price()` ปฏิเสธด้วย `TwapStale`/`PythStale`) |
+| `oracle-breaker` | ตัดวงจร: ราคากระโดดเกินเพดานต่อรอบ/ต่อช่วง ไม่มีราคาจนกว่า governance จะรีเซ็ตผ่าน timelock (ร้ายแรง) |
+| `oracle-paused` / `oracle-problem` / `oracle-unavailable` | guardian หยุดราคา (ร้ายแรง) / ปัญหาอื่นของแหล่งราคา (สภาพคล่องต่ำ, ข้อมูลไม่พอ, spike) / ตอนนี้ `price()` ไม่คืนราคา |
 
 ผลเป็น JSON (`--out`) สรุปภาษาไทย + อังกฤษ (`--summary` และหน้าจอ) และเนื้อหา issue (`--issue`) แจ้งเตือนเดิมไม่ซ้ำ (เก็บใน `--state` พร้อมบล็อกล่าสุดที่อ่านแล้ว) · `--quiet` พิมพ์แค่จำนวน (สำหรับ log สาธารณะ)
 
@@ -349,6 +360,75 @@ zetaphy bridge close        # governance: ปิด route
 7. **ทำเครื่องหมายอัตโนมัติไม่ทันที:** ตัวเฝ้าทำเครื่องหมายในรอบถัดไป `quarantine` ของ airlock (ค่าเริ่มต้น 3600 วินาที) ต้องนานกว่าช่วงห่างของรอบ บวกความล่าช้าของตัวตั้งเวลา (มัก 5–15 นาที)
    ไม่งั้นการโอนของผู้เรียกอาจถูกปล่อยก่อน รายชั่วโมงต้องใช้ quarantine เกิน 1 ชม. พอสมควร · แนะนำเมื่อ repo เป็น public: ทุก 15 นาที (`*/15`) กับ quarantine อย่างน้อย 2 ชม. (`setQuarantine(7200)`)
 8. ค่าใช้จ่าย: repo สาธารณะฟรี · repo ส่วนตัว รายชั่วโมง ~720 นาที/เดือน ทุก 15 นาที ~2,900 นาที/เดือน (เกินโควตาฟรี 2,000)
+
+## Timelock: ทุกการเปลี่ยนกติการอ 48 ชั่วโมง ยกเว้นปุ่มฉุกเฉินที่ลดความเสี่ยงเท่านั้น
+
+สิทธิ์ผู้ดูแลทุกตัวของสัญญาสำคัญเป็นของ **ZetaphyTimelock** (= OpenZeppelin `TimelockController` 5.4.0 ไม่แก้ไข + `AccessControlEnumerable` ของ OpenZeppelin เพื่อให้นับได้บนเชนว่าใครถือ role อะไร)
+- **ระยะรอ (min delay):** 48 ชั่วโมงเป็นค่าเริ่มต้น ต่ำกว่า 24 ชั่วโมงทำได้เฉพาะบน devnet (`--devnet` + RPC 127.0.0.1) ทั้ง `deploy-timelock` และ launch tool ปฏิเสธ
+- **proposer / canceller:** multisig ของ governance (หรือ gov module `0x7b5F…3dF2` ที่เสนอด้วยโหวต) เท่านั้น
+- **executor: ใครก็ได้** (`address(0)`) เพราะสิ่งที่จะเรียกถูกล็อกไว้ตั้งแต่ตอนตั้งเวลา และทุกคนเห็นมา 48 ชั่วโมงแล้ว ให้ใครก็กดเรียกได้จึงไม่เพิ่มความเสี่ยง แต่กัน "ตัวประกัน": proposer ที่หายไปหรือ gov module ที่ต้องโหวตรอบสอง ไม่ทำให้การเปลี่ยนที่ผ่านแล้วค้าง ระหว่างรอ canceller ยังยกเลิกได้เสมอ (เลือก `--timelock-executor governance` ได้ถ้าต้องการ)
+- **admin: ตัว timelock เอง** ไม่มี key ผู้ดูแล การเพิ่ม proposer หรือเปลี่ยนระยะรอก็ต้องรอ 48 ชั่วโมงเหมือนกัน (`MinDelayChange`, `RoleGranted` ตัวเฝ้าแจ้งเตือน)
+- ไฟล์ OpenZeppelin ที่ใช้ copy มาไว้ใน `vendor/@openzeppelin/contracts/` เฉพาะที่จำเป็น (22 ไฟล์) ไม่แก้ไข `vendor/openzeppelin-contracts.json` บันทึกเวอร์ชัน 5.4.0, integrity ของ tarball บน npm (`sha512-eCYg…6A==`) และ sha256 ของทุกไฟล์ `scripts/build.js` ไม่ยอม build ถ้าไฟล์ใดไม่ตรง หรือ import จากที่อื่น (ไม่ใช้ node_modules ไม่ใช้เน็ต)
+
+| สัญญา | ไปที่ timelock (รอ 48 ชม.) | ทำได้ทันที (guardian: ลดความเสี่ยงเท่านั้น) |
+|---|---|---|
+| BridgeGuard | `setGovernance`, `setGuardian`, `setAudit`, `setRoute` (เปิด/ตั้ง), `proposeMaxDailyLimit` (ขึ้นเพดาน ยังรออีก 7 วันของตัวเอง), `setThreats`, `unpause`, `dropHeld` | `pause`, `lowerMaxDailyLimit` (ลดเท่านั้น), `cancelMaxDailyLimit`, `disableRoute` |
+| BridgeAirlock | `setLane`, `setMarker` (เพิ่ม), `setVetoer`, `setThreshold`, `setQuarantine`, `setThreats`, `untrip`, `setGovernance` | guardian ของ BridgeGuard: `emergencyRemoveLane`, `emergencyRemoveMarker`, `emergencyRaiseThreshold`, `emergencyRaiseQuarantine` (ขึ้นเท่านั้น สูงสุด 30 วัน) · vetoer: `veto` · marker: `trip` |
+| HyperlaneLane (ถ้ามี) | `setConfig`, `setInterchainSecurityModule`, `setGovernance` | – |
+| ThreatRegistry (+ ThreatReports ที่ตามมัน) | `setGovernance`, `setEnforceDelay`, `setHoldDelay`, `setFastQuorum`, `setGuardian`, `setIdentity`, `setResponder`, `setAppeals`, `setProtected` · ThreatReports: `setFee`, `setTtl`, `setCommunityFund` | `holdNow`, `enforceNow` (เฉพาะธงที่ quorum ตั้งแล้ว) |
+| NeuroControl (ปุ่มปรับของ NeuroJobs) | ทักษะ, defender, เชน, เพดานร่าง, เงินวางท้าทาย, กองทุนชุมชน, `setGuardian`, `setGovernance`, `unpause` | `pause` |
+| NeuroJobs | – (ค่าทั้งหมดอยู่ใน NeuroControl; `setControl` ครั้งเดียวโดยผู้ deploy ซึ่งใช้ไปแล้ว launch ตรวจ) | – |
+| RewardVault | `proposeShares`, `cancelShares`, `setGovernance` (`applyShares` ใครก็ได้หลัง 30 วันของตัวเอง) | – |
+| StableGateway | `setOracle`, `setToken`, `setTestnetFixedPrices`, `setTestnetFixedPrice`, `sweep`, `withdrawReserve`, `setGuardian`, `setOwner`, `unpause` | `pause` |
+| ZetaphyOracle | `setTwap`, `setPythFeed`, `setGuards`, `setPyth`, `setGuardian`, `setGovernance`, `unpauseFeed`, `resetCircuitBreaker` | `pauseFeed` |
+| ZetaphyPythRelay | `setRelayer`, `setThreshold`, `setGovernance` | (หยุดการใช้ราคา: `pauseFeed` ของ oracle) |
+| NeuroIdentity | `addChain`, `setWeb`, `setAdmin` | – |
+| DEX factory (+ `sweep` ของ router) | `setFeeTo`, `setThreatRegistry`, `setGovernance` (สองขั้น: timelock เรียก `acceptGovernance`) | – |
+| NFT marketplace | `setFee`, `setThreatRegistry`, `setGovernance` | – |
+| ไม่มีผู้ดูแล | ComputeMarket, NeuroValidation, NFT factory, QuantumWalletFactory, NeuroLane, LockBox, TwapRecorder | – |
+
+**แยก role ตรงไหนบ้าง (ให้น้อยที่สุด):** BridgeGuard มี guardian อยู่แล้ว เพิ่มแค่ 3 ฟังก์ชันที่ลดความเสี่ยง · BridgeAirlock ไม่สร้าง role ใหม่ ใช้ guardian ของ BridgeGuard ตัวเดียวกัน · StableGateway และ ZetaphyOracle มี guardian กดหยุดได้อย่างเดียว ที่เหลือใช้ guardian/vetoer/marker เดิม
+- เอา marker ออกจะปลดเครื่องหมายทั้งหมดที่ marker นั้นทำ (เหมือน `setMarker(false)`)
+- `dropHeld` (ทิ้ง mint ที่ถูกกัก) ทำแล้วย้อนไม่ได้ จึงไปที่ timelock ระหว่างรอ guardian กด `pause` ได้ทันที
+- รายละเอียดด้านความปลอดภัยของ timelock และ guardian เก็บแยกไว้สำหรับทีม
+
+```
+zetaphy deploy-timelock --proposer 0x<multisig>[,0x…] | gov [--delay 172800 --executor open]
+zetaphy timelock schedule --to 0x<สัญญา> --sig "setFee(uint16,address)" --args 100,0x… [--salt ข้อความ --proposal-out p.json]
+#   key นี้เป็น proposer: ส่งเลย · ไม่ใช่: พิมพ์ to/data ให้ multisig (SimpleMultisig: propose/confirm/execute, Safe: Transaction Builder)
+#   ถ้า gov module เป็น proposer: เขียนไฟล์ proposal (MsgEVMCall ถึง timelock) ให้ zetaphyd tx gov submit-proposal p.json แล้ว gov.sh vote <id> yes
+zetaphy timelock status [<operation id>]   # ระยะรอ, ใครถือ role, สถานะ (Waiting/Ready/Done) และ ETA, ฟังก์ชันที่จะถูกเรียก
+zetaphy timelock execute <operation id>    # ใครก็ได้ หลังครบระยะรอ (อ่านรายละเอียดจาก event CallScheduled เอง)
+zetaphy timelock execute <id> --to 0x… --sig "…" --args … [--salt …]   # การเรียกที่โหวต gov ตั้งเวลา: ใส่ครบตามที่ schedule พิมพ์ (MsgEVMCall ไม่ทิ้ง log ใน eth_getLogs)
+zetaphy timelock cancel <operation id>     # canceller (multisig) ระหว่างรอ
+```
+- คำสั่ง governance เดิม (`bridge …`, `threat …`, `oracle feed`) รู้ว่า governance เป็น timelock แล้วพิมพ์คำสั่ง `zetaphy timelock schedule …` ที่ใช้แทนให้
+- เรียกซ้ำการเรียกเดิมต้องใช้ `--salt` ใหม่ (id ของ operation = hash ของ to, value, data, predecessor, salt)
+
+## ราคา: ZetaphyOracle (TWAP ของ DEX + Pyth พร้อมตัวกันราคาผิด)
+
+`price(asset)` คืน `(value, updatedAt)`: ราคาเป็น USD ทศนิยม 18 ตำแหน่ง หรือ **revert พร้อมชื่อเหตุผล** เสมอ ไม่มีการคืนราคาที่เก่า เอียง หรือกระโดด
+- **(ก) TWAP ของคู่เทรดบน DEX ของเรา** (ZetaphyPair เก็บ `price0/1CumulativeLast`) กับ stablecoin ที่นับเป็น $1
+  - `TwapRecorder` เก็บ observation: ใครก็ `record(pair)` ได้ (keeper, relay, ผู้ใช้) ไม่เกินครั้งเดียวต่อ `minSpacing` และต่อบล็อก ไม่มีผู้ดูแล
+  - ใช้ได้เมื่อหน้าต่างยาวพอ มี observation พอ pool ลึกพอทุก observation และไม่มีช่วงย่อยที่ราคาผิดปกติ (ค่าตั้งด้วย `oracle feed`)
+- **(ข) ราคาจาก Pyth** ผ่าน interface `IPyth` ของ Pyth เอง (`getPriceUnsafe`, struct `Price` ชุดเดียวกัน): ตรวจอายุ, เวลาในอนาคต, ราคาบวก, ช่วงความเชื่อมั่น (`conf`) และปรับเลขยกกำลัง (`expo`) เป็น 18 ทศนิยม
+  - ZETAPHY ยังไม่มี Pyth: `ZetaphyPythRelay` รับ update **รูปแบบเดียวกับ Pyth** (`abi.encode(PythStructs.PriceFeed, uint64 prevPublishTime)` แบบ `MockPyth.createPriceFeedUpdateData`) จาก relayer ที่ governance ตั้ง ต้องครบ `threshold` คนส่ง update เดียวกันจึงรับ
+  - relayer ส่งต่อราคาจาก Hermes (บริการสาธารณะฟรีของ Pyth): `zetaphy oracle relay-pyth --feed 0x<feed id> --every 30`
+  - **ต่อกับของจริงทีหลัง:** (1) Pyth มาที่ ZETAPHY: timelock เรียก `oracle.setPyth(<Pyth>)` ไม่ต้องแก้สัญญา (Pyth ตรวจลายเซ็น Wormhole เอง) หรือ (2) Hyperlane: receiver ที่ `handle()` รับ update ของ Pyth จากเชนที่ Pyth ตรวจแล้ว เป็น relayer คนเดียว (threshold 1) ของ ZetaphyPythRelay
+- **สองแหล่งต้องตรงกัน** ภายใน `maxDeviationBps` (ไม่งั้น `SourcesDeviate`) ค่าที่คืนเป็นของ Pyth โดยมี TWAP เป็นหลักยึด เปิดแหล่งเดียวก็ได้ (testnet ตอนนี้ใช้ TWAP อย่างเดียวจนกว่าจะมี feed)
+- **ตัดวงจร (circuit breaker):** `poke(asset)` (ใครก็ได้) บันทึก observation และถ้าทุกด่านผ่าน ตั้งราคานั้นเป็นราคาอ้างอิง ราคาที่กระโดดเกินเพดานต่อรอบหรือต่อช่วงเวลาถูกปฏิเสธ (`PriceJump`) และ poke ที่เจอจะตัดวงจร (`CircuitBreakerTripped`) ไม่มีราคาจนกว่า governance จะ `resetCircuitBreaker` ผ่าน timelock
+- ค่าทุกตัวเป็นของ timelock ยกเว้น `pauseFeed` ที่ guardian กดได้ทันที
+- ส่ง `poke` ด้วย gas คงที่ (เครื่องมือในนี้ใช้ 800,000) ไม่ใช้ค่าประมาณ
+- รายละเอียดด้านความปลอดภัย (เหตุผลของค่ากันและข้อจำกัด) เก็บแยกไว้สำหรับทีม
+
+```
+zetaphy deploy-oracle --relayers 0x<relayer> [--min-spacing 60 --guardian 0x<multisig>]
+zetaphy oracle feed 0x<WZETAPHY> --pair 0x<pool> --window 1800 --min-observations 10 --min-liquidity 10000 \
+  [--pyth-id 0x<feed id> --max-age 120 --max-conf 100] --max-deviation 200 --max-change 1500 --max-window-change 3000 --change-window 3600
+zetaphy oracle poke 0x<WZETAPHY>        # keeper (หรือ relay start --poke-oracle 60)
+zetaphy oracle status [0x<asset>]       # แหล่งราคา ค่ากัน ราคาสด และเหตุผลถ้าไม่มีราคา
+zetaphy oracle pause 0x<asset>          # guardian: หยุดทันที (เปิดคืนผ่าน timelock)
+```
 
 ## ภูมิคุ้มกันและร่างงอก/หด
 
@@ -776,6 +856,25 @@ zetaphy pq native handover 0x<owner> zetaphy1<controller ใหม่>
 - เชนทดลองในเครื่อง (chain id ไม่ใช่ `zetaphy_77390-1`): ตั้ง `ZETAPHY_CHAIN_ID`
 - validator เซ็นโหวตด้วย ML-DSA-44 เพิ่มจาก ed25519 และทุกบล็อกมีใบรับรอง ML-DSA ของบล็อกก่อนหน้า (ตรวจด้วย `zetaphy pq verify-block`)
 
+### ความปลอดภัยในแกนกลางของเชน: `zetaphy security` (Q-day, ความยินยอม, IBC hold)
+
+คู่มือเต็ม: [`docs/SECURITY-CORE.md`](../docs/SECURITY-CORE.md) ทุกกติกาปิดจนกว่าจะโหวต (`zetaphy-chain/gov.sh`)
+
+```bash
+zetaphy security status                    # Q-day, threat gate, IBC hold ที่ใช้อยู่
+zetaphy security migration [0x…]           # บัญชีนี้ (ค่าเริ่ม: กุญแจ ECDSA ของเครื่องนี้) ย้ายแล้วหรือยัง
+# หลัง Q-day: ย้ายกุญแจ ECDSA ที่ไม่เคยใช้บนเชน ไปให้บัญชี pq native ของเครื่องนี้
+# (กุญแจเดิมเซ็นข้อความในเครื่องเท่านั้น ไม่ส่งธุรกรรม)
+zetaphy security qday-commit               # ขั้นที่ 1 ทำได้ตั้งแต่ก่อน Q-day
+zetaphy security qday-reveal               # ขั้นที่ 2 หลัง Q-day และหลังรอ reveal_delay บล็อก
+zetaphy security consent 0x<สัญญา> 3600     # ยินยอมเรียกสัญญาที่ติดธงบังคับใช้ นาน 1 ชม. (0 = ถอน) [--as <owner>]
+zetaphy security ibc-holds                 # การโอนเข้า IBC ที่ถูกพัก
+zetaphy security ibc-hold-cancel <id>      # guardian คืนเงินให้ผู้ส่ง
+```
+ก่อน Q-day ทางที่ดีที่สุดคือ `zetaphy pq native lock-ecdsa --yes` (ล็อกควอนตัม) ไลบรารีสำหรับกระเป๋าอื่นอยู่ใน
+`src/pqtx.js` (`qdayRevealText`, `qdayCommitment`, `consentCall`, `msgQDayCommit`, `msgQDayReveal`, `pqClient().securityStatus/migration/...`)
+ทดสอบบนเชนจริง: `ZETAPHYD=… npm run test:devnet:security`
+
 ### ตรวจบล็อกแบบต้านควอนตัม: `zetaphy pq verify-block`
 
 validator ที่ลงทะเบียนกุญแจโหวต ML-DSA-44 แล้ว เซ็นทุกบล็อกด้วย ML-DSA-44 คู่กับ ed25519 และผู้เสนอบล็อก H+1 รวมลายเซ็นของบล็อก H ไว้เป็นธุรกรรมแรก (`MsgPQCertificate`)
@@ -888,8 +987,10 @@ zetaphy pq verify-block 12345 --json                 # ผลแบบ JSON; --c
 ```
 zetaphy deploy --fund 100000 --governance gov --community-fund 0x<กองทุนชุมชน>
                                   # ใช้กุญแจของบัญชี rewards และเติมกองรางวัลให้ด้วย; NeuroControl ใหม่เป็นของ gov module
-zetaphy deploy-stable --reserve 1000   # tUSDC, tUSDT และ StableGateway (เงินสำรอง 1,000 ZETAPHY)
+zetaphy deploy-stable --reserve 1000 --oracle 0x<ZetaphyOracle> --zeta-asset 0x<WZETAPHY>   # tUSDC, tUSDT และ StableGateway ที่คิดราคาผ่าน oracle
+                                  # (--testnet-fixed-price 0.01 = ทางสำรอง testnet ราคาคงที่ ติดป้ายชัด ปิดได้ด้วย timelock)
 ```
+launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แล้วตอน handover ยกสิทธิ์ผู้ดูแลทุกตัวให้ ZetaphyTimelock (ดู docs/LAUNCH.md)
 
 ค่าเริ่มต้น:
 
@@ -917,7 +1018,11 @@ zetaphy deploy-stable --reserve 1000   # tUSDC, tUSDT และ StableGateway (�
 - `ZETAPHYD=<zetaphyd> npm run test:devnet:neurogov`: โหวตบนเชนจริงหยุด Neuro (gov module เรียก NeuroControl ผ่าน MsgEVMCall) แล้วเปิดใหม่ การโอนเหรียญยังทำงานระหว่างหยุด โหวตถอดเชนออกจากรายชื่อแล้วคำขอเชนนั้นถูกปฏิเสธ และโหวตตั้งเงินวางท้าทาย (2.5 ZETAPHY) กับ `defenderTimeout`
 - `npm run test:devnet:bridge`: สะพาน Neuro ข้ามเชนจริง 2 เชน (ต้นทาง และ ZETAPHY) รวมถึงผู้ส่งที่ติดธงแล้ว guardian บังคับใช้ทันที (`enforce-now`) ถูกปฏิเสธ ผู้ส่งที่ติดธงระดับเตือนไม่ถูกกักจนครบ `holdDelay` แต่ guardian กักทันทีด้วย `hold-now` ทั้งคู่ออกได้หลังปลดธง, `deploy-bridge` ไม่ยอม deploy ถ้าไม่มี `--lockbox` หรือ guardian เป็น key เดี่ยวนอก devnet และติดตั้งแบบปิด, `bridge open` ไม่เปิดจนผ่านทุกประตู, `bridge monitor` (watch list + marker key) ทำเครื่องหมายผู้ที่เรียกสัญญาที่เฝ้าไว้ก่อนพ้นการกักกันจนการโอนของเขาถูกปฏิเสธ โดยไม่มีผลลัพธ์ใดเอ่ยที่อยู่สัญญานั้น และแจ้งการเปลี่ยนค่า ยอดถึงเพดาน (เกณฑ์จาก secret) และ pause, `threat export`, รายงานจากผู้ใช้ (`report`, `reports`, `settle`, `claim`)
   - รันบนเครื่องที่ใช้ devnet ร่วมกัน: `flock /tmp/ci-test/devnet.lock env ZETAPHYD=<zetaphyd> npm run test:devnet:bridge`
-- `npm test` รวม `test/hyperlane.test.js` (HyperlaneLane กับ Mailbox จำลอง, ประตูบนเชน, เพดานแข็ง), `test/bridgegate.test.js` (ประตูของ CLI) และ `test/monitor.test.js` (กฎแจ้งเตือน, watch list, การทำเครื่องหมาย, ไม่มีที่อยู่สัญญาที่เฝ้าไว้ในผลลัพธ์ใด, state เข้ารหัส)
+- `npm test` รวม `test/hyperlane.test.js` (HyperlaneLane กับ Mailbox จำลอง, ประตูบนเชน, เพดานแข็ง), `test/bridgegate.test.js` (ประตูของ CLI) และ `test/monitor.test.js` (กฎแจ้งเตือน, watch list, การทำเครื่องหมาย, ไม่มีที่อยู่สัญญาที่เฝ้าไว้ในผลลัพธ์ใด, state เข้ารหัส, แจ้งเตือน timelock/oracle)
+- `test/timelock.test.js`: role ของ timelock (proposer = canceller, executor ใครก็ได้, admin = ตัวเอง), เรียกก่อนครบเวลา/ไม่ได้ตั้งเวลา/คนที่ไม่ใช่ proposer ถูกปฏิเสธ, ยกเลิก, เปลี่ยนระยะรอต้องรอด้วย, ทุกสัญญาที่ส่งให้ timelock แล้วผู้ดูแลเดิมถูกปฏิเสธ และปุ่มฉุกเฉินของ guardian ใช้ได้ทันทีแต่เปิดคืนไม่ได้
+- `test/oracle.test.js`: ราคาจาก DEX pair จริง (artifact ของ zetaphy-dex) กับ Pyth จำลอง, ทศนิยม, ทุกเหตุผลที่ไม่มีราคา (สภาพคล่อง, observation, อายุ, conf, สองแหล่งไม่ตรงกัน), ตัดวงจร, role, ZetaphyPythRelay (threshold, update เก่า, รูปแบบของ Pyth/Hermes) และชุดทดสอบถดถอย (regression) ของด่านกันราคา
+- `npm run test:devnet:timelock` (ต้องมี `zetaphyd`, ใช้ lock เดียวกัน): oracle บนเชนจริง (TWAP + Pyth ผ่าน relay), StableGateway คิดราคาผ่าน oracle และ relay ที่ poke oracle, timelock ที่ multisig 2-of-3 เป็น proposer (execute ก่อนเวลาถูกปฏิเสธ, execute โดยคนที่ไม่มี role, cancel), guardian หยุดราคาทันที, ราคาผิดปกติไม่ได้ราคา และ `bridge monitor` รายงานครบ
+  สัญญาสำหรับทดสอบ (`test/helpers/OracleMocks.sol`) คอมไพล์ในชุดทดสอบ ไม่อยู่ใน `contracts/`
   สัญญาสำหรับทดสอบอย่างเดียว (`test/helpers/WatchedEmitter.sol`, `test/helpers/Lure.sol`) คอมไพล์ในชุดทดสอบ ไม่อยู่ใน `contracts/` และ `artifacts/`
 - `npm run test:devnet`: ทดสอบบนเชน ZETAPHY จริง ต้องมี `zetaphyd`
   - สคริปต์ตั้งเชน 1 โหนด (บล็อกละ 1 วินาที)
@@ -927,12 +1032,7 @@ zetaphy deploy-stable --reserve 1000   # tUSDC, tUSDT และ StableGateway (�
   - โหวตอัปเกรดผ่าน และเชนตั้งเวลาอัปเกรดไว้
   - `zetaphy gate` อ่านข้อมูลจากเชนได้
 
-## ข้อจำกัดที่รู้แล้ว (testnet)
+## สถานะ
 
-- ฉลากมาจาก `blockhash` ของบล็อกถัดจากบล็อกที่ส่งงาน: ผู้เสนอบล็อกนั้น (validator) ยังลองปรับแฮชได้ · ไม่มีใครบันทึกภายใน 256 บล็อก รอบย้ายไปบล็อกใหม่ · เชนที่ `BLOCKHASH` คืน 0 (zetaphyd รุ่นเก่า) เดาได้เท่าการจับจากข้อมูลคำขอ
-- ผู้โจมตีที่ลงเงินค้ำก่อนส่งงาน (ไม่ใช่หลัง) ยังนับในเงินค้ำรวมของงานนั้น แต่ก็นั่งได้เองตามน้ำหนักเงินค้ำ และเงินถูกล็อกตาม `unbondDelay`
-- `expire`/`settle` ต้องมีคนเรียกภายใน 1 `jobTimeout` หลังเส้นตาย (โปรแกรมคนรันร่างเรียกให้) ถ้าไม่มีใครเรียกเลย ที่นั่งที่เงียบอาจถอนเงินค้ำได้ก่อนถูกหัก
-- NeuroJobs ขนาด 21,830 ไบต์ (เพดาน 24,576) เพราะย้ายรอบท้าทายไปไว้ใน `NeuroJobsChallenges` (สร้างโดย constructor ของ NeuroJobs เรียกผ่าน delegatecall ที่อยู่และ ABI เดิม)
-  - คนที่ถือเงินค้ำส่วนใหญ่ของระบบจะได้ที่นั่งส่วนใหญ่ ซึ่งเป็นไปตามที่ออกแบบไว้
-  - "ประตู 1" จึงนับคนรันร่างที่เป็น **คนละคนกันจริง** อย่างน้อย 10 ราย ไม่ได้นับจำนวนที่อยู่
-- สัญญานี้ยังไม่ผ่าน audit ใช้กับ ZETAPHY testnet เท่านั้น
+สัญญาเหล่านี้ยังไม่ผ่าน audit ใช้กับ ZETAPHY testnet เท่านั้น รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+

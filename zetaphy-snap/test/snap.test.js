@@ -277,6 +277,28 @@ describe('zetaphy_signTx', () => {
     expect(msg.value).toEqual(encodeMsgQuantumLock({ signer: me.address, owner: OWNER, controller: NEW_CTRL }));
   });
 
+  it('security core: consent past the threat gate (danger note), the Q-day commit and reveal, a held IBC transfer returned', async () => {
+    const snap = await install();
+    const target = '0x00000000000000000000000000000000005Ca400';
+    const c = await sign(snap, { ...BASE, messages: [{ type: 'consent', target, seconds: '3600' }] });
+    expect(c.text).toContain('Consent to call a flagged contract');
+    expect(c.text).toContain(`Flagged contract\n${target}`);
+    expect(c.text).toContain('3600 seconds');
+    expect(c.text).toContain('You go past a safety check');
+    expect(decodeSigned(c.response.response.result).msg.typeUrl).toBe('/zetaphy.pq.v1.MsgEVMCall');
+    const commitment = '0x' + '5a'.repeat(32);
+    const k = await sign(snap, { ...BASE, messages: [{ type: 'qdayCommit', commitment }] });
+    expect(k.text).toContain('Q-day migration, step 1');
+    expect(k.text).toContain(commitment);
+    expect(decodeSigned(k.response.response.result).msg.typeUrl).toBe('/zetaphy.pq.v1.MsgQDayCommit');
+    const r = await sign(snap, { ...BASE, messages: [{ type: 'qdayReveal', owner: OWNER_HEX, controller: NEW_CTRL, salt: '0x' + '01'.repeat(32), signature: '0x' + '02'.repeat(64) + '1b' }] });
+    expect(r.text).toContain('Control moves for good');
+    expect(decodeSigned(r.response.response.result).msg.typeUrl).toBe('/zetaphy.pq.v1.MsgQDayReveal');
+    const h = await sign(snap, { ...BASE, messages: [{ type: 'ibcHoldCancel', id: '7' }] });
+    expect(h.text).toContain('Return a held IBC transfer');
+    expect(h.text).toContain('#7');
+  });
+
   it('several messages are numbered, and the dialog follows lang: "th"', async () => {
     const snap = await install();
     const { text, response } = await sign(snap, { ...BASE, lang: 'th', gasLimit: '900000', messages: [

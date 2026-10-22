@@ -11,19 +11,49 @@ interface INeuroJobs {
     function requestFor(address refundTo, bytes32 chain, string calldata target) external payable returns (uint256);
 }
 
+/// ZetaphyOracle's consumer surface: a USD price (18 decimals) or a revert.
+interface IPriceOracle {
+    function price(address asset) external view returns (uint256 value, uint256 updatedAt);
+}
+
 /// @title StableGateway: use the Neuro network paying only in a stablecoin
 /// @notice A user who holds a stablecoin but no ZETAPHY signs a job request.
 ///         Anyone (a "relayer") submits it and pays the gas; in the same
 ///         transaction the gateway takes the user's stablecoin (the cost of
-///         the ZETAPHY fee at a fixed testnet price, plus the relayer's tip)
-///         and pays the job fee in ZETAPHY from its own reserve.
-///         Testnet: the price is set by the operator, not a market.
+///         the ZETAPHY fee, plus the relayer's tip) and pays the job fee in
+///         ZETAPHY from its own reserve.
+///         Price: ZetaphyOracle.price(zetaAsset) (ZETAPHY in USD, guarded: TWAP of
+///         the DEX, Pyth, deviation, staleness, circuit breaker), and for each
+///         accepted stablecoin either its own oracle price or a $1 peg. When the
+///         oracle has no valid price the request reverts (PriceUnavailable, with
+///         the oracle's reason): never a silently wrong price.
+///         TESTNET FALLBACK: a fixed price per token (stablecoin units per 1
+///         ZETAPHY), used ONLY while governance switched testnetFixedPrices on
+///         (TestnetFixedPricesSet event; priceSource() says so). It is not a
+///         market price; it exists for testnet bring-up before the oracle has a
+///         TWAP window, and is off by default.
+///         Roles: the owner (the ZetaphyTimelock) sets everything and moves funds;
+///         guardians (named by the owner) may pause requests at once.
 contract StableGateway {
     INeuroJobs public immutable jobs;
     address public owner;
+    mapping(address => bool) public guardian;
+    bool public paused;
 
-    /// stablecoin base units charged per 1 ZETAPHY (1e18 wei); 0 = not accepted
-    mapping(address => uint256) public pricePerZeta;
+    IPriceOracle public oracle;
+    /// The asset id of ZETAPHY in the oracle (the DEX's wrapped ZETAPHY).
+    address public zetaAsset;
+
+    struct TokenConfig {
+        bool accepted;
+        bool oraclePriced;   // false: counted as $1 (a USD stablecoin)
+        uint8 decimals;
+    }
+    mapping(address => TokenConfig) public tokens;
+
+    /// TESTNET ONLY: stablecoin base units per 1 ZETAPHY (1e18 wei), used only while testnetFixedPrices is on.
+    bool public testnetFixedPrices;
+    mapping(address => uint256) public testnetFixedPrice;
     mapping(address => uint256) public nonces;
 
     bytes32 public constant REQUEST_TYPEHASH = keccak256(
@@ -45,17 +75,27 @@ contract StableGateway {
 
     struct Permit { uint256 value; uint256 deadline; uint8 v; bytes32 r; bytes32 s; }
 
-    event PriceSet(address indexed token, uint256 pricePerZeta);
+    event OracleSet(address oracle, address zetaAsset);
+    event TokenSet(address indexed token, bool accepted, bool oraclePriced, uint8 decimals);
+    event TestnetFixedPricesSet(bool on);
+    event TestnetFixedPriceSet(address indexed token, uint256 pricePerZeta);
     event Paid(uint256 indexed jobId, address indexed user, address indexed token, uint256 cost, uint256 tip, address relayer);
     event OwnerChanged(address owner);
+    event GuardianSet(address indexed who, bool on);
+    event Paused(address indexed by);
+    event Unpaused();
 
     error NotOwner();
+    error NotGuardian();
+    error GatewayPaused();
     error Expired();
     error BadNonce();
     error BadSignature();
     error NotAccepted();
     error TooExpensive();
     error ReserveLow();
+    error NoPriceSource();
+    error PriceUnavailable(bytes reason);
 
     constructor(INeuroJobs jobs_) {
         jobs = jobs_;
@@ -76,9 +116,46 @@ contract StableGateway {
         emit OwnerChanged(o);
     }
 
-    function setPrice(address token, uint256 price) external onlyOwner {
-        pricePerZeta[token] = price;
-        emit PriceSet(token, price);
+    function setGuardian(address who, bool on) external onlyOwner {
+        guardian[who] = on;
+        emit GuardianSet(who, on);
+    }
+
+    /// A guardian (or the owner) stops new requests at once; only the owner restarts them.
+    function pause() external {
+        if (!guardian[msg.sender] && msg.sender != owner) revert NotGuardian();
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function unpause() external onlyOwner {
+        paused = false;
+        emit Unpaused();
+    }
+
+    function setOracle(IPriceOracle o, address zetaAsset_) external onlyOwner {
+        oracle = o;
+        zetaAsset = zetaAsset_;
+        emit OracleSet(address(o), zetaAsset_);
+    }
+
+    /// Accept (or stop accepting) a stablecoin; oraclePriced: its own oracle price, else $1.
+    function setToken(address token, bool accepted, bool oraclePriced, uint8 decimals) external onlyOwner {
+        require(decimals <= 30, "decimals");
+        tokens[token] = TokenConfig(accepted, oraclePriced, decimals);
+        emit TokenSet(token, accepted, oraclePriced, decimals);
+    }
+
+    /// TESTNET ONLY: switch the fixed prices on (they replace the oracle) or off.
+    function setTestnetFixedPrices(bool on) external onlyOwner {
+        testnetFixedPrices = on;
+        emit TestnetFixedPricesSet(on);
+    }
+
+    /// TESTNET ONLY: stablecoin units per 1 ZETAPHY, used only while testnetFixedPrices is on.
+    function setTestnetFixedPrice(address token, uint256 price) external onlyOwner {
+        testnetFixedPrice[token] = price;
+        emit TestnetFixedPriceSet(token, price);
     }
 
     /// Stablecoin proceeds go to the treasury the operator names.
@@ -91,11 +168,34 @@ contract StableGateway {
         require(ok, "transfer failed");
     }
 
+    /// Where quote() takes its price from.
+    function priceSource() external view returns (string memory) {
+        if (testnetFixedPrices) return "TESTNET FIXED PRICE (set by governance, not a market price)";
+        if (address(oracle) == address(0)) return "none";
+        return "ZetaphyOracle";
+    }
+
     /// Stablecoin cost of a job fee, rounded up.
     function quote(address token, uint256 fee) public view returns (uint256) {
-        uint256 p = pricePerZeta[token];
-        if (p == 0) revert NotAccepted();
-        return (fee * p + 1e18 - 1) / 1e18;
+        TokenConfig memory t = tokens[token];
+        if (!t.accepted) revert NotAccepted();
+        if (testnetFixedPrices) {
+            uint256 p = testnetFixedPrice[token];
+            if (p == 0) revert NotAccepted();
+            return (fee * p + 1e18 - 1) / 1e18;
+        }
+        if (address(oracle) == address(0)) revert NoPriceSource();
+        uint256 zetaUsd = _price(zetaAsset);
+        uint256 tokenUsd = t.oraclePriced ? _price(token) : 1e18;
+        // fee (18 decimals) x ZETAPHY's USD price / the token's USD price, in the token's units, rounded up
+        uint256 usd = fee * zetaUsd;                       // USD x 1e36
+        uint256 den = tokenUsd * 1e18;
+        return (usd * (10 ** uint256(t.decimals)) + den - 1) / den;
+    }
+
+    function _price(address asset) private view returns (uint256 v) {
+        try oracle.price(asset) returns (uint256 value, uint256) { v = value; } catch (bytes memory reason) { revert PriceUnavailable(reason); }
+        if (v == 0) revert PriceUnavailable("");
     }
 
     function DOMAIN_SEPARATOR() public view returns (bytes32) {
@@ -120,6 +220,7 @@ contract StableGateway {
     }
 
     function _request(JobRequest calldata q, bytes calldata sig) private returns (uint256 jobId) {
+        if (paused) revert GatewayPaused();
         if (block.timestamp > q.deadline) revert Expired();
         if (q.nonce != nonces[q.user]) revert BadNonce();
         if (_recover(hashRequest(q), sig) != q.user) revert BadSignature();

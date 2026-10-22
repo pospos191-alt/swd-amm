@@ -15,6 +15,7 @@ import { checkToken, reasonText, DISCLAIMER } from './lib/neuro.js';
 import { cleanName, cleanSymbol, validEntry, lookalikes } from './lib/tokens.js';
 import { EVM_CHAIN_ID, EVM_CHAIN_ID_HEX, EVM_SYMBOL, nodeEndpoints, evmChainParams, discoverWallets, openInAppLinks } from './lib/wallets.js';
 import { parseSettings, serializeSettings, parseImported, cleanWalletId, rpcIsCustom, SLIPPAGE_MAX_BPS, SLIPPAGE_CONFIRM_BPS } from './lib/storage.js';
+import { createDlmmTab } from './dlmm.js';
 
 const $ = (id) => document.getElementById(id);
 const BASE = '/';
@@ -916,9 +917,13 @@ function saveSettings() {
 
 // ---------------------------------------------------------------- tabs / startup
 
+const TABS = ['swap', 'pool', 'tokens', 'dlmm'];
+let dlmmTab = null; // the DLMM tab (dlmm.js, UNAUDITED contracts)
+
 function showTab(name) {
   for (const b of document.querySelectorAll('.tab')) b.setAttribute('aria-selected', String(b.dataset.tab === name));
-  for (const s of ['swap', 'pool', 'tokens']) $(`tab-${s}`).hidden = s !== name;
+  for (const s of TABS) $(`tab-${s}`).hidden = s !== name;
+  if (name === 'dlmm') dlmmTab?.show().catch(() => {});
   if (name === 'pool') { updateAdd(); loadPositions(); }
   if (name === 'tokens') renderTokenList();
   if (location.hash !== `#${name}`) history.replaceState(null, '', `#${name}`);
@@ -934,6 +939,7 @@ function refreshAll() {
   renderConnect();
   updateSwap();
   if (!$('tab-pool').hidden) { updateAdd(); loadPositions(); }
+  if (!$('tab-dlmm').hidden) dlmmTab?.show().catch(() => {});
 }
 
 function debounce(fn, ms) {
@@ -973,6 +979,9 @@ async function init() {
   if (deployed()) {
     $('footer-contracts').textContent = `Router ${state.cfg.contracts.router} · Factory ${state.cfg.contracts.factory}`;
   }
+
+  dlmmTab = createDlmmTab({ state, $, el, setStatus, rpc, sendTx, errorText, revertData, neuroCheck, recheckNeuro, renderNeuro, needsAck,
+    allowance, isNative, keyOf, tokenByKey, tokenByAddress, deadline, openWallets });
 
   // events
   for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => showTab(b.dataset.tab));
@@ -1024,7 +1033,7 @@ async function init() {
   }, 400);
 
   const tab = location.hash.slice(1);
-  showTab(['swap', 'pool', 'tokens'].includes(tab) ? tab : 'swap');
+  showTab(TABS.includes(tab) ? tab : 'swap');
   renderBanner();
   await updateSwap();
   document.documentElement.dataset.appReady = '1';
