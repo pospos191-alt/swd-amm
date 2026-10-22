@@ -12,7 +12,7 @@
       }
     },
     "skill": {
-      "doneAt": "2026-10-22T09:15:36.400Z",
+      "doneAt": "2026-10-22T13:45:43.263Z",
       "out": {
         "skillId": "0xb5f017ff17712aa3a023dc42fd7dd8274e2ee81a1af151dcf3223c35ea73884b"
       }
@@ -159,10 +159,10 @@
       }
     },
     "wire": {
-      "doneAt": "2026-10-22T09:18:51.676Z"
+      "doneAt": "2026-10-22T13:45:43.586Z"
     },
     "protect": {
-      "doneAt": "2026-10-22T09:18:51.739Z",
+      "doneAt": "2026-10-22T13:45:43.830Z",
       "out": {
         "protectedKeys": [
           "0x585799f8200bf7a24713eb7830314099514478eb8de1fd8d18f44f1f6db6e697",
@@ -171,7 +171,7 @@
       }
     },
     "configs": {
-      "doneAt": "2026-10-22T09:18:51.747Z",
+      "doneAt": "2026-10-22T13:45:43.838Z",
       "out": {
         "configs": [
           "zetaphy-dex/web/deployments.json",
@@ -183,11 +183,58 @@
       }
     },
     "snap": {
-      "doneAt": "2026-10-22T09:18:56.235Z",
+      "doneAt": "2026-10-22T13:45:48.451Z",
       "out": {
         "snapShasum": "j87TisHspSpFdBopZ4JEgL43Q7GIIYFUAtJs+aJDbJY="
       }
+    },
+    "guardian": {
+      "doneAt": "2026-10-22T13:45:50.233Z",
+      "out": {
+        "guardianMultisig": "0x5bcC8290fff6f1410d7a04c5f6839b6AfD917Eb5",
+        "guardianOwners": [
+          "0xeBc7EAcfFE5Fdd6261f40E4aE0bDFa62F1299d1b",
+          "0x6138233a3DF6f2714E598346Fda7566Fd3f3b5ec"
+        ],
+        "guardianThreshold": 2
+      }
+    },
+    "timelock": {
+      "doneAt": "2026-10-22T13:45:57.317Z",
+      "out": {
+        "timelock": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+        "timelockBlock": 6679,
+        "timelockNonce": 46
+      }
+    },
+    "handover": {
+      "doneAt": "2026-10-22T13:47:34.365Z",
+      "out": {
+        "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+        "timelock": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+        "proposers": [
+          "0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2"
+        ],
+        "executor": "anyone",
+        "minDelay": 172800,
+        "guardian": "0x5bcC8290fff6f1410d7a04c5f6839b6AfD917Eb5",
+        "handedOver": [
+          "0xc0081832ABf11BF68Df37cbA1A3E6805e10b23c6",
+          "0xaB5745b61f83975E68F6546be9F83651df12417f",
+          "0x6a26055803556ff891CAB11CF47aB363aC1D0Ed8",
+          "0x20Eaf743cD495258aD9F36F97206e59fC6ef2AE4",
+          "0x58ad8D3B083B91eD4e91e363A8C147142436098E",
+          "0x4364966aE86ffE475011f9A8E2853006233Ae30c",
+          "0xEF8F222d866C177058DCf2989ad76A935dCc31Ef",
+          "0x8fB5B0ea6bC0840060c148028d74a846b80fbEc3",
+          "0x8a19cE6E8DE30515F0434F8dC07a8Dc9bae64134",
+          "0x69292d823d3E7ac66B7a84342aB3d46F968042Ae"
+        ],
+        "handoverOperation": "0x244b60178d94e7775ee3027552f4d54d60a8a479302f237e17a70ddff8d018ac",
+        "bootstrapAuditedTo": 6698,
+        "verifiedAt": "2026-10-22T13:47:34.365Z"
+      }
     }
   },
-  "updatedAt": "2026-10-22T09:18:56.236Z"
+  "updatedAt": "2026-10-22T13:47:34.365Z"
 }
