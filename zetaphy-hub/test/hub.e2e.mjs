@@ -59,6 +59,37 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     assert.equal(await page.locator('#props li:first-child .votes button').count(), 4, 'a proposal in voting has 4 vote buttons');
     await shot('stake');
 
+    // the data pages, like a chain explorer's
+    await page.click('.tab[data-tab="earn"]');
+    await page.waitForFunction(() => document.getElementById('e-bond')?.textContent === '100');
+    assert.match(await page.textContent('.earn-detail'), /node cli\.js node start/);
+    assert.match(await page.textContent('.earn-detail'), /0x698dC17df6a34b02263b295d101BE39F3F3B433B/, 'the real NeuroJobs address in the commands');
+    assert.match(await page.textContent('.earn-detail'), /100 ZETAPHY/, 'the live bond in the steps');
+    await page.click('.earn-item[data-id="validator"]');
+    assert.match(await page.textContent('.earn-detail'), /JOIN=rpc\.sawasdeecoin\.com/);
+    assert.doesNotMatch(await page.textContent('.earn-detail'), /null|undefined/);
+    await shot('earn');
+    await page.click('.tab[data-tab="analytics"]');
+    await page.waitForFunction(() => document.querySelectorAll('#a-c1 .bar').length === 60 && document.querySelectorAll('#a-c2 .bar').length === 59);
+    await page.waitForFunction(() => document.getElementById('a-supply').textContent !== '–');
+    await page.waitForFunction(() => document.querySelectorAll('#a-power .hbar').length === 2);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, 'analytics: one screen');
+    await shot('analytics');
+    await page.click('.tab[data-tab="defi"]');
+    await page.waitForFunction(() => document.querySelectorAll('#d-rows tr').length === 1 && /ZTPHY \/ tUSD/.test(document.getElementById('d-rows').textContent));
+    assert.match(await page.textContent('#d-rows'), /1 ZTPHY = 0\.01 tUSD/);
+    assert.equal(await page.textContent('#d-jobs'), '42');
+    await shot('defi');
+    await page.click('.tab[data-tab="leaderboard"]');
+    await page.waitForFunction(() => document.querySelectorAll('#l-holders tr').length === 3);
+    assert.match(await page.textContent('#l-holders tr:first-child'), /500,000,000/, 'largest holder first');
+    assert.match(await page.textContent('#l-holders'), /bonded_tokens_pool/, 'module accounts are named');
+    await shot('leaderboard');
+    await page.click('.tab[data-tab="dev"]');
+    assert.match(await page.textContent('.page-dev'), /eth_blockNumber/);
+    assert.match(await page.textContent('.page-dev'), /0x8fB5…bEc3|0x8fB5B0ea/);
+    await shot('dev');
+
     // each app in the hub look, inside the same screen, with its long hints folded into "i"
     for (const [tab, ready] of [['wallet', '#rpc, input'], ['swap', '#connect-btn'], ['nft', '#connect'], ['explorer', '#search'], ['neuro', '#address']]) {
       await page.click(`.tab[data-tab="${tab}"]`);

@@ -8,8 +8,13 @@ Every ZETAPHY app on one page and one screen, at **https://app.sawasdeecoin.com*
 | Wallet | The post-quantum wallet (`zetaphy-wallet`) |
 | Swap | The AMM + DLMM DEX (`zetaphy-dex/web`) |
 | Stake & vote | **New.** Validators, your stake and rewards, proposals. Stake / unstake / claim / vote are sent from MetaMask to the chain's precompiles (staking `0x…0800`, distribution `0x…0801`, gov `0x…0805`) |
+| Earn | **New.** Every way to get ZETAPHY, easiest first, with copy-ready terminal commands: faucet, running a Neuro runner (ZETAPHY's "mining": no proof-of-work, the reward is for useful contract checks), becoming a validator, staking, liquidity. The live runner bond, runner count and job reward pool come from NeuroJobs |
 | NFT | The NFT marketplace (`zetaphy-nft/web`) |
 | Explorer | The block explorer (`zetaphy-explorer`) |
+| Analytics | **New.** Supply, block time, transactions per minute, staked share; charts of transactions per block and time between blocks (last 60), the genesis split and validator voting power |
+| DeFi | **New.** Every DEX pool with its reserves and price (read from the contracts), DLMM pools, Neuro job count |
+| Leaderboard | **New.** Top ZETAPHY holders (module accounts named) and validators by stake |
+| Developers | **New.** API endpoints with curl examples (EVM JSON-RPC, CometBFT, REST, faucet), chain registry files, the CLI, every contract address |
 | Neuro | Neuro contract checks (`zetaphy-neuro/web`); its `/api/*` is proxied to neuro.sawasdeecoin.com |
 
 ## How it works

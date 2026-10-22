@@ -24,14 +24,32 @@ export const APPS = {
 const SKIP_IN = { wallet: new Set(['src']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
-const HUB_FILES = ['index.html', 'hub.css', 'hub.js', 'chainlib.js', 'embed.css', 'logo.svg', 'favicon.svg'];
+const HUB_FILES = ['index.html', 'hub.css', 'hub.js', 'chainlib.js', 'pages.js', 'embed.css', 'logo.svg', 'favicon.svg'];
+
+/** The node and the contract addresses (public data only) the hub's pages read. */
+export function hubConfig(cfg) {
+  const read = (f) => { try { return JSON.parse(readFileSync(join(ROOT, f), 'utf8')); } catch { return null; } };
+  const out = {};
+  for (const st of Object.values(read('zetaphy-launch/state/77390.json')?.steps ?? {})) Object.assign(out, st.out ?? {});
+  const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
+  const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity']
+    .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
+  const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};
+  const nft = read('zetaphy-nft/web/deployments.json') ?? {};
+  return {
+    node: cfg.node || '',
+    contracts,
+    dex: Object.fromEntries(['factory', 'router', 'dlmmFactory', 'dlmmRouter'].filter((k) => isAddr(dex[k])).map((k) => [k, dex[k]])),
+    nft: Object.fromEntries(['factory', 'marketplace'].filter((k) => isAddr(nft[k] ?? nft.contracts?.[k])).map((k) => [k, nft[k] ?? nft.contracts[k]])),
+  };
+}
 
 export function build() {
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
   for (const f of HUB_FILES) cpSync(join(HERE, f), join(OUT, f));
   const cfg = JSON.parse(readFileSync(join(ROOT, 'zetaphy-explorer/config.json'), 'utf8'));
-  writeFileSync(join(OUT, 'hub-config.json'), `${JSON.stringify({ node: cfg.node || '' }, null, 2)}\n`);
+  writeFileSync(join(OUT, 'hub-config.json'), `${JSON.stringify(hubConfig(cfg), null, 2)}\n`);
   for (const [path, src] of Object.entries(APPS)) {
     const from = join(ROOT, src);
     const top = (p) => p.slice(from.length + 1).split(/[\\/]/)[0];

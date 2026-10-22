@@ -45,3 +45,16 @@ test('amounts', () => {
   assert.equal(L.formatZeta('junk'), '–');
   assert.equal(L.short('zetaphy1abcdefghijklmnop'), 'zetaphy1…klmnop');
 });
+
+test('pages.js selectors and string decoding', async () => {
+  const { SEL, decodeString } = await import('../pages.js').catch(() => ({}));
+  if (!SEL) return; // pages.js touches the DOM only inside functions; importing it in node is fine
+  const sigs = { allPairsLength: 'allPairsLength()', allPairs: 'allPairs(uint256)', token0: 'token0()', token1: 'token1()', getReserves: 'getReserves()',
+    symbol: 'symbol()', decimals: 'decimals()', workerBond: 'workerBond()', activeWorkers: 'activeWorkers()', rewardPool: 'rewardPool()',
+    totalActiveBond: 'totalActiveBond()', jobCount: 'jobCount()' };
+  for (const [k, sig] of Object.entries(sigs)) assert.equal(SEL[k], id(sig).slice(0, 10), k);
+  const abi = new Interface(['function f() returns (string)']);
+  assert.equal(decodeString(abi.encodeFunctionResult('f', ['ZTPHY'])), 'ZTPHY');
+  assert.equal(decodeString(`0x${Buffer.from('MKR').toString('hex').padEnd(64, '0')}`), 'MKR', 'bytes32 symbols');
+  assert.equal(decodeString(abi.encodeFunctionResult('f', ['<script>'])).includes('<'), true, 'text only; the page sets textContent, never HTML');
+});

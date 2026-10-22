@@ -25,7 +25,7 @@ test('every tab the hub opens exists in dist/', () => {
 });
 
 test('one name: ZETAPHY (no other brand in the hub)', () => {
-  for (const f of ['index.html', 'hub.js', 'hub.css']) assert.doesNotMatch(readFileSync(join(HERE, f), 'utf8'), /SAWASDEE COIN/);
+  for (const f of ['index.html', 'hub.js', 'hub.css', 'pages.js']) assert.doesNotMatch(readFileSync(join(HERE, f), 'utf8'), /SAWASDEE COIN/);
 });
 
 test('headers: frames only from this site; scripts only from this site; Neuro API proxied', () => {

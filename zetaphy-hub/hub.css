@@ -192,3 +192,62 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
   .vals .scroll, .props .scroll { max-height: 50vh; }
 }
 @media (prefers-reduced-motion: reduce) { .net.up .dot { animation: none; } }
+
+/* ---------- rail groups ---------- */
+.group { display: block; margin: 12px 11px 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+
+/* ---------- data pages (pages.js): each fills the stage, inner parts scroll ---------- */
+.page { display: flex; flex-direction: column; gap: 14px; }
+.page > .stats { margin-bottom: 0; flex: none; }
+.stats.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid2 { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1; min-height: 0; grid-auto-rows: minmax(0, 1fr); }
+.grid2.tall { grid-auto-rows: minmax(0, 1fr); }
+.grid3 { display: grid; gap: 14px; grid-template-columns: repeat(3, minmax(0, 1fr)); flex: none; }
+.card.grow { flex: 1; min-height: 0; }
+.scroll-y { overflow: auto; }
+.card h3 { margin: 12px 0 6px; font-size: 13px; font-weight: 600; color: var(--dim); }
+.app-card { text-align: left; cursor: pointer; color: var(--text); gap: 2px; font: inherit; }
+.app-card:hover { border-color: var(--accent); }
+
+.code { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin: 6px 0 4px; }
+.code pre { margin: 0; padding: 10px 64px 10px 12px; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; color: #cfd6e4; }
+.code .copy { position: absolute; top: 6px; right: 6px; }
+
+.earn-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, .9fr) minmax(0, 1.3fr); flex: 1; min-height: 0; }
+.earn-list .list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 10px; }
+.earn-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); cursor: pointer; text-align: left; font: inherit; }
+.earn-item:hover { border-color: var(--line-2); }
+.earn-item[aria-selected="true"] { border-color: var(--accent); background: rgba(124, 108, 255, .1); }
+.earn-item svg { width: 22px; height: 22px; flex: none; stroke: var(--accent-2); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.earn-item > span:nth-of-type(1) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.earn-item small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note { margin: auto 0 6px; color: var(--accent-2); font-size: 13px; cursor: help; }
+.warnline { margin: 0; color: var(--warn); }
+.kv3 { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0 0 8px; font-size: 13px; }
+.kv3 dt { color: var(--dim); }
+.kv3 dd { margin: 0; }
+.howto { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.howto li::marker { color: var(--accent-2); font-weight: 700; }
+.howto p { margin: 0; }
+
+.chart-box { flex: 1; min-height: 0; display: flex; align-items: flex-end; }
+.chart { width: 100%; height: 100%; max-height: 220px; }
+.chart .bar { fill: var(--accent); }
+.chart .hit { fill: transparent; }
+.chart .hit:hover + .bar { fill: var(--accent-2); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--faint); font: 10px var(--mono); }
+.hbars { display: flex; flex-direction: column; gap: 8px; overflow: auto; }
+.hbar { display: grid; grid-template-columns: minmax(90px, 38%) minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 13px; }
+.hb-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb-track { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, .05); overflow: hidden; }
+.hb-fill { display: block; height: 100%; width: 0; border-radius: 4px; background: var(--accent); transition: width .4s; }
+.hb-val { color: var(--dim); }
+.tbl .pill { margin-right: 6px; }
+
+@media (max-width: 860px) {
+  .group { display: none; }
+  .grid2, .grid3, .earn-grid, .stats.three { grid-template-columns: minmax(0, 1fr); }
+  .grid2 { grid-auto-rows: auto; }
+  .chart-box { height: 180px; }
+}
