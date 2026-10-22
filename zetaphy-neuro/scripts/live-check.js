@@ -12,6 +12,7 @@
 // false alarms). A "soft" sample is one whose address is not from an
 // official list, or that needs something a public RPC may refuse (the trade
 // simulation's state override); if it fails, it is a warning, not a failure.
+// So is any sample whose data source refuses the request (HTTP 403 / 429).
 //
 // Before the samples, each EVM chain's DEX for the trade simulation
 // (src/chains.js `dex`) is checked on chain: code at the factory, router and
@@ -126,6 +127,9 @@ const jobs = [...dexChains.map((chain) => ({ chain, dex: true })), ...samples];
 for (const s of jobs) {
   if (!CHAINS[s.chain]) throw new Error(`unknown chain ${s.chain}`);
   const r = s.dex ? await checkDex(s.chain) : await checkOne(s);
+  // A public indexer refusing this machine (HTTP 403/429, common for cloud
+  // CI addresses) says nothing about our checks: a warning, not a failure.
+  if (!r.ok && /\bHTTP (403|429)\b/.test(r.error ?? '')) { r.soft = true; r.error += ' (refused by the source, not checked)'; }
   results.push(r);
   const mark = r.ok ? 'PASS' : r.soft ? 'WARN' : 'FAIL';
   console.log(`\n[${mark}] ${r.chain} ${r.label}  ${r.error ? `error: ${r.error}` : `${r.level}  (${r.ms} ms)`}`);
