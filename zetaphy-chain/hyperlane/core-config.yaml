@@ -1,0 +1,24 @@
+# Hyperlane core on ZETAPHY testnet (hyperlane core deploy --chain zetaphy --config ...).
+# Every owner is the ZETAPHY timelock (48 h, the gov module proposes): no single key keeps a role.
+# Incoming from Sepolia: Hyperlane's own Sepolia validator (Abacus Works, threshold 1), from
+# hyperlane-monorepo typescript/sdk/src/consts/multisigIsm.ts (commit 8160041).
+owner: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+proxyAdmin:
+  owner: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+defaultIsm:
+  type: domainRoutingIsm
+  owner: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+  domains:
+    sepolia:
+      type: messageIdMultisigIsm
+      validators:
+        - "0x3c659e0fe8d01b80d7828b421630085777346e7c"
+      threshold: 1
+defaultHook:
+  type: merkleTreeHook
+requiredHook:
+  type: protocolFee
+  owner: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+  beneficiary: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+  protocolFee: "0"
+  maxProtocolFee: "1000000000"
