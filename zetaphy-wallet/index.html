@@ -16,6 +16,7 @@
      Empty: no default (the user types it). zetaphy-launch/launch.js fills it. -->
 <meta name="zetaphy-rpc" content="">
 <title>ZETAPHY PQ Wallet</title>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./style.css">
 <script type="module" src="./app.js"></script>
 </head>
@@ -23,8 +24,9 @@
 <main>
   <header>
     <div>
-      <h1>ZETAPHY PQ Wallet</h1>
+      <h1><img class="logo" src="./logo.svg" alt="" width="32" height="32"> ZETAPHY PQ Wallet</h1>
       <p class="sub" data-i18n="subtitle">กระเป๋าต้านควอนตัม (ML-DSA-44) · ไม่มีกุญแจ ECDSA</p>
+      <p class="sub site-links"><a href="https://explorer.sawasdeecoin.com/" target="_blank" rel="noopener noreferrer">ZETAPHY Explorer ↗</a></p>
     </div>
     <button id="lang" type="button" class="ghost" lang="en">English</button>
   </header>
@@ -361,7 +363,7 @@
         <dt data-i18n="mChainId">Chain ID</dt><dd><code id="m-chain"></code></dd>
         <dt data-i18n="mSymbol">สัญลักษณ์เหรียญ</dt><dd><code id="m-symbol"></code></dd>
         <dt data-i18n="mDecimals">ทศนิยม</dt><dd><code id="m-decimals"></code></dd>
-        <dt data-i18n="mExplorer">Block explorer</dt><dd data-i18n="mNone">ไม่มี (เว้นว่าง)</dd>
+        <dt data-i18n="mExplorer">Block explorer</dt><dd><code>https://explorer.sawasdeecoin.com</code></dd>
       </dl>
       <p class="hint" id="m-symbol-note"></p>
     </details>

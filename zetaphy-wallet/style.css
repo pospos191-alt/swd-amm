@@ -114,3 +114,5 @@ textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-siz
 .support li { margin: 4px 0; }
 #wallets-card h3 { margin-top: 16px; }
 .vaccine-note.unchecked { color: var(--text); background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 6px; padding: 6px 10px; }
+.site-links { margin-top: 4px; }
+.logo { vertical-align: middle; border-radius: 7px; margin-right: 4px; }
