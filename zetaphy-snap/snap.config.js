@@ -28,9 +28,9 @@ export default {
   // and the web wallet origin(s) allowed to override both (zetaphy_setThreatSource).
   // Change them here, then npm run build and commit snap.manifest.json (shasum).
   environment: {
-    ZETAPHY_THREAT_RPC: 'https://rpc.zetaphy.invalid',
-    ZETAPHY_THREAT_REGISTRY: '0x0000000000000000000000000000000000000000',
-    ZETAPHY_WALLET_ORIGINS: 'https://wallet.zetaphy.invalid',
+    ZETAPHY_THREAT_RPC: 'https://rpc.sawasdeecoin.com',
+    ZETAPHY_THREAT_REGISTRY: '0xaB5745b61f83975E68F6546be9F83651df12417f',
+    ZETAPHY_WALLET_ORIGINS: 'https://wallet.sawasdeecoin.com',
   },
   customizeWebpackConfig: (config) => ({ ...config, plugins: [...config.plugins, ownNoble] }),
 };

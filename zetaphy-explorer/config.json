@@ -1,9 +1,9 @@
 {
-  "node": "https://<node-host>",
+  "node": "https://rpc.sawasdeecoin.com",
   "evmRpc": "",
   "cometRpc": "",
   "rest": "",
-  "threatRegistry": "",
+  "threatRegistry": "0xaB5745b61f83975E68F6546be9F83651df12417f",
   "neuroReportUrl": "",
   "scanBlocks": 100
 }
