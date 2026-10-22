@@ -20,8 +20,8 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     page.on('pageerror', (e) => errors.push(e.message));
     await page.route('**/*', async (route) => {
       const u = route.request().url();
-      if (u.startsWith(site.url)) return route.continue();
-      const a = u.startsWith('https://rpc.sawasdeecoin.com') ? answer(u, route.request().postData()) : null;
+      if (new URL(u).origin === new URL(site.url).origin) return route.continue();
+      const a = new URL(u).origin === 'https://rpc.sawasdeecoin.com' ? answer(u, route.request().postData()) : null;
       if (a) return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(a) });
       return route.fulfill({ status: 404, headers: { 'access-control-allow-origin': '*' }, body: '' });
     });
