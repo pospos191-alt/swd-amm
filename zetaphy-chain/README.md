@@ -179,6 +179,14 @@ sudo tail -f /var/log/zetaphy-setup.log     # Ctrl+C stops watching, not the set
 Only one copy of the script runs at a time; a second one says so and exits. Anyone can rebuild the
 binary from the same sources (`.github/workflows/release-zetaphyd.yml`) and compare the hash.
 
+### Your own domain for the RPC
+
+Instead of `<ip>.sslip.io`, wallets can use your own name (it keeps working if the machine's IP changes; chainlist and
+Keplr listings need it). At your DNS provider add an **A record**, e.g. `rpc` → the machine's IP (DNS only, no proxy),
+then run the same setup command again with `PUBLIC_HOST=rpc.<your domain>` added after `sudo`. Caddy serves both names
+and gets the certificate; `keplr.json` and `evm-chain.json` use the new name. Running the script again keeps the chain,
+keys and genesis.
+
 ## Security (testnet only)
 
 - Coins on this chain have no value. Do not advertise or sell them
