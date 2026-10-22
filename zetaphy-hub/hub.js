@@ -125,6 +125,7 @@ const ICONS = {
   defi: '<circle cx="8" cy="8" r="5"/><circle cx="16" cy="16" r="5"/>',
   leaderboard: '<path d="M8 21V11H3v10zM14.5 21V4h-5v17zM21 21v-7h-5v7z"/>',
   dev: '<path d="M8 8l-5 4 5 4M16 8l5 4-5 4M13.5 5l-3 14"/>',
+  saphan: '<path d="M2 18h20"/><path d="M4 18v-3a8 8 0 0 1 16 0v3"/><path d="M8 18v-6M12 18v-7M16 18v-6"/>',
   neuro: '<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-6 0"/>',
 };
 const TABS = [
@@ -139,6 +140,8 @@ const TABS = [
     tipTh: 'stake ZETAPHY กับ validator รับรางวัล และโหวตข้อเสนอของเชน จาก MetaMask', tipEn: 'Stake ZETAPHY with validators, earn rewards and vote on proposals from MetaMask' },
   { id: 'earn', page: true, th: 'รับเหรียญ', en: 'Earn', titleTh: 'วิธีได้ ZETAPHY', titleEn: 'How to earn ZETAPHY', fresh: true,
     tipTh: 'ทุกวิธีที่ได้เหรียญ พร้อมคำสั่งเทอร์มินัล: faucet, รันร่าง Neuro, validator, stake, สภาพคล่อง', tipEn: 'Every way to get coins, with terminal commands: faucet, Neuro runner, validator, staking, liquidity' },
+  { id: 'saphan', page: true, th: 'Saphan', en: 'Saphan', titleTh: 'ZETAPHY Saphan · ข้ามเชน', titleEn: 'ZETAPHY Saphan · cross-chain', fresh: true,
+    tipTh: 'ส่งเหรียญข้ามเชนด้วย IBC (เช่น USDC จาก Noble) จาก MetaMask\nสองเชนตรวจกันเองด้วย light client ไม่มีคนกลางถือเงิน', tipEn: 'Move coins between chains over IBC (e.g. USDC from Noble) from MetaMask\nEach chain checks the other with a light client; no custodian' },
   { id: 'nft', src: 'nft/', th: 'NFT', en: 'NFT', titleTh: 'ตลาด NFT', titleEn: 'NFT marketplace',
     tipTh: 'สร้างคอลเลกชัน มินต์ ซื้อขาย NFT บน ZETAPHY', tipEn: 'Create collections, mint, buy and sell NFTs on ZETAPHY' },
   { id: 'explorer', src: 'explorer/', group: 'data', th: 'Explorer', en: 'Explorer', titleTh: 'สำรวจบล็อกและธุรกรรม', titleEn: 'Blocks and transactions',
@@ -283,7 +286,7 @@ function show(id, { hash, push = true } = {}) {
 
 // The data pages (pages.js): drawn once per language, refreshed while shown.
 const pageCtx = () => ({
-  T, lang, ep, cfg: HUB, getJson, evmCall, el, short, formatZeta, show,
+  T, lang, ep, cfg: HUB, getJson, evmCall, el, short, formatZeta, show, account: () => account, connect, send,
   copyBtn: (text) => el('button', { type: 'button', class: 'copy', text: T('copy'), onclick: async (ev) => {
     try { await navigator.clipboard.writeText(text); ev.target.textContent = T('copied'); setTimeout(() => { ev.target.textContent = T('copy'); }, 1200); } catch { /* blocked */ }
   } }),

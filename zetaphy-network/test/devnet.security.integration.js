@@ -75,6 +75,7 @@ const deploy = async (name, w) => {
   const { abi, bytecode } = compile(name);
   const c = await new ContractFactory(abi, bytecode, w.connect(provider)).deploy();
   await c.waitForDeployment();
+  await nextBlock(1); // the node's pending nonce follows the next block (two deploys in a row reused a nonce)
   return c;
 };
 /** A tx that must be refused, by the node at submission or in its block. */

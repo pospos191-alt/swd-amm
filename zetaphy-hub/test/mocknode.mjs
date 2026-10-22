@@ -11,6 +11,7 @@ const ad = (a) => a.slice(2).toLowerCase().padStart(64, '0');
 const str = (t) => w(32) + w(t.length) + Buffer.from(t).toString('hex').padEnd(64, '0');
 const PAIR = '0x7c39825a9a7b9decb641b4ef707fb521882fb67c', ZT = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', TUSD = '0x9d44ea6837938d4fef98367a7b5867cdca8de596';
 const E18 = 10n ** 18n;
+export const USDC = `ibc/${'5A'.repeat(32)}`;
 // eth_call answers by selector (and the address for token metadata)
 function ethCall({ to, data }) {
   const sel = data.slice(0, 10), t = to.toLowerCase();
@@ -37,6 +38,8 @@ export function answer(url, body) {
   if (p === '/' || p === '') {
     const { method, id, params } = JSON.parse(body || '{}');
     if (method === 'eth_call') return { jsonrpc: '2.0', id, result: ethCall(params[0]) };
+    if (method === 'eth_getTransactionReceipt') return { jsonrpc: '2.0', id, result: { status: '0x1', transactionHash: params[0],
+      logs: [{ address: '0x0000000000000000000000000000000000000802', topics: ['0xc01eca5e742fe6641c4be501c2bebf224472f69176a0552e87e30147a6411303'] }] } };
     const r = { eth_chainId: '0x12e4e', eth_blockNumber: `0x${H.toString(16)}`, eth_getBalance: '0x3635c9adc5dea00000', zetaphy_faucet: { txHash: `0x${'ab'.repeat(32)}`, amount: '0x8ac7230489e80000' } }[method];
     return r === undefined ? { jsonrpc: '2.0', id, error: { code: -32601, message: 'not mocked' } } : { jsonrpc: '2.0', id, result: r };
   }
@@ -64,5 +67,13 @@ export function answer(url, body) {
     { id: '2', title: 'Register the Neuro skill "honeypot-sim"', status: 'PROPOSAL_STATUS_PASSED' },
     { id: '1', title: 'zetaphy-v2 upgrade', status: 'PROPOSAL_STATUS_PASSED' },
   ] };
+  // ZETAPHY Saphan: one open transfer channel to Noble testnet, a USDC voucher in the user's balance
+  if (p === '/rest/ibc/core/channel/v1/channels') return { channels: [
+    { state: 'STATE_OPEN', port_id: 'transfer', channel_id: 'channel-0', counterparty: { port_id: 'transfer', channel_id: 'channel-123' } },
+    { state: 'STATE_INIT', port_id: 'transfer', channel_id: 'channel-1', counterparty: { port_id: 'transfer', channel_id: '' } },
+  ] };
+  if (p === '/rest/ibc/core/channel/v1/channels/channel-0/ports/transfer/client_state') return { identified_client_state: { client_id: '07-tendermint-0', client_state: { chain_id: 'grand-1' } } };
+  if (p.startsWith('/rest/cosmos/bank/v1beta1/balances/')) return { balances: [{ denom: 'azetaphy', amount: '1000000000000000000000' }, { denom: USDC, amount: '2500000' }] };
+  if (p === `/rest/ibc/apps/transfer/v1/denoms/${USDC.slice(4)}`) return { denom: { base: 'uusdc', trace: [{ port_id: 'transfer', channel_id: 'channel-0' }] } };
   return null;
 }

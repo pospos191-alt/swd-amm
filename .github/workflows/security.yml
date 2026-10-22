@@ -161,7 +161,7 @@ jobs:
           # the DLMM devnet test (in the zetaphy-chain job, which builds zetaphyd): when the DLMM contracts, their CLI or test change
           out dlmm '^(zetaphy-dex/(contracts/dlmm/|artifacts/(ZetaphyDlmm|DlmmMath)[A-Za-z]*\.json$|dlmm-cli\.js$|cli\.js$|test/devnet\.dlmm\.integration\.js$|package(-lock)?\.json$)|zetaphy-network/(scripts/devnet\.sh|artifacts/ThreatRegistry\.json)$)'
           # the timelock/oracle devnet test: when its test, those contracts or the pinned OpenZeppelin files change (rarely)
-          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|src/securitycli\.js|cli\.js|contracts/(NeuroJobs|NeuroControl|ZetaphyTimelock|ZetaphyOracle|TwapRecorder|ZetaphyPythRelay)\.sol|vendor/.*|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc|timelock|security|wasm)\.integration\.js)$)'
+          out chain '^(zetaphy-chain/|zetaphy-hub/chainlib\.js$|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|src/securitycli\.js|cli\.js|contracts/(NeuroJobs|NeuroControl|ZetaphyTimelock|ZetaphyOracle|TwapRecorder|ZetaphyPythRelay)\.sol|vendor/.*|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc|timelock|security|wasm)\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
