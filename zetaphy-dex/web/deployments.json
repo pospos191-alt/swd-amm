@@ -2,9 +2,37 @@
   "name": "ZETAPHY DEX",
   "chainId": 77390,
   "cosmosChainId": "zetaphy_77390-1",
-  "rpc": "",
-  "contracts": null,
-  "neuroRegistry": null,
-  "tokens": [],
-  "note": "Not deployed yet. `cd zetaphy-dex && node cli.js deploy --rpc <url> --key-file <file> --web` fills this file (see zetaphy-dex/README.md)."
+  "rpc": "https://rpc.sawasdeecoin.com",
+  "contracts": {
+    "factory": "0x8a19cE6E8DE30515F0434F8dC07a8Dc9bae64134",
+    "router": "0x2d822D2D44424fBe6465Faa776822ED464A6D2a8",
+    "wnative": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "wnativeKind": "native-precompile",
+    "pairCodeHash": "0x55475a0d9e87f99a6947f0d2d1ffcbec672ec52f40597976d6210765456c762c",
+    "threatRegistry": "0xaB5745b61f83975E68F6546be9F83651df12417f",
+    "dlmmFactory": "0x69292d823d3E7ac66B7a84342aB3d46F968042Ae",
+    "dlmmRouter": "0xfb12b1e8B516a6F7c15B85D1aFc7d30D85Cb84CF",
+    "dlmmPairCodeHash": "0x04cb1c0298c4cc6f596e598baec977e976a7549524048f72dd4b40013938146d"
+  },
+  "governance": "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245",
+  "feeTo": "0x0000000000000000000000000000000000000000",
+  "tokens": [
+    {
+      "address": "0x9D44EA6837938d4FEF98367A7b5867cdCa8DE596",
+      "name": "Test USD (testnet, no value)",
+      "symbol": "tUSD",
+      "decimals": 18,
+      "test": true
+    },
+    {
+      "address": "0x13f46517a41B0d8FC5A75B6d9df534CC61e7157d",
+      "name": "Test SWD (testnet, no value)",
+      "symbol": "tSWD",
+      "decimals": 18,
+      "test": true
+    }
+  ],
+  "deployedAt": "2026-10-22T09:17:27.046Z",
+  "artifactsHash": "0xf5b181a3cf284822a9b849cb918eca3ccdf90c670d0d405e88299989cf53e184",
+  "neuroRegistry": "0xaB5745b61f83975E68F6546be9F83651df12417f"
 }
