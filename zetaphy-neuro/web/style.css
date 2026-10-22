@@ -62,3 +62,4 @@ footer p { margin: 4px 0; }
 .meter > span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 999px; }
 .row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: .92rem; }
 .row b { color: var(--text); font-variant-numeric: tabular-nums; }
+.site-links { margin-top: 4px; }

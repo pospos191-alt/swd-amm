@@ -848,7 +848,11 @@ function applyChrome() {
   walletLabel();
 }
 
+// The block explorer (its own site): set here so index.html links nowhere else.
+const EXPLORER_URL = 'https://explorer.sawasdeecoin.com/';
+
 async function start() {
+  document.getElementById('explorer-link')?.setAttribute('href', EXPLORER_URL);
   try {
     const r = await fetch('./deployments.json', { cache: 'no-cache' });
     if (r.ok) S.dep = await r.json();
