@@ -163,7 +163,7 @@ let lang = store.get('zetaphy-hub:lang') === 'en' ? 'en' : 'th';
 const T = (k) => TEXT[lang][k] ?? TEXT.en[k] ?? k;
 let NODE = DEFAULT_NODE;
 let HUB = { contracts: {}, dex: {}, nft: {} }; // hub-config.json (written by build.mjs from the launch state)
-const ep = () => ({ evm: NODE, comet: `${NODE}/rpc`, rest: `${NODE}/rest`, files: `${NODE}/zetaphy` });
+const ep = () => ({ evm: NODE, ws: `${NODE.replace(/^https:/, 'wss:')}/ws`, comet: `${NODE}/rpc`, rest: `${NODE}/rest`, files: `${NODE}/zetaphy` });
 let current = null;
 const frames = new Map();
 
@@ -369,7 +369,7 @@ function syncApps() {
 // ------------------------------------------------------------------ overview
 function renderEndpoints() {
   const e = ep();
-  const rows = [[T('endpointChain'), `${EVM_CHAIN_ID} · zetaphy_77390-1`], [T('endpointEvm'), e.evm], [T('endpointComet'), e.comet], [T('endpointRest'), e.rest]];
+  const rows = [[T('endpointChain'), `${EVM_CHAIN_ID} · zetaphy_77390-1`], [T('endpointEvm'), e.evm], ['WebSocket', e.ws], [T('endpointComet'), e.comet], [T('endpointRest'), e.rest]];
   $('endpoints').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', { text: k }), el('dd', { text: v, title: v }),
     el('button', { type: 'button', class: 'copy', text: T('copy'), onclick: async (ev) => {
       try { await navigator.clipboard.writeText(v.split(' · ')[0]); ev.target.textContent = T('copied'); setTimeout(() => { ev.target.textContent = T('copy'); }, 1200); } catch { /* blocked */ }

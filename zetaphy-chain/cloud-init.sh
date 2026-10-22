@@ -11,7 +11,7 @@ OWNER_EVM_ADDRESS=""
 
 set -euo pipefail
 f=/root/zetaphy-setup-node.sh
-for i in 1 2 3 4 5 6; do curl -fsSL "https://raw.githubusercontent.com/pospos191-alt/zetaphy-chain/main/v/21fa4e125cd5ab9bce30b0309430f2419b1365b103d32c6d4520e5d89e2864d1.sh" -o "$f" && break; sleep 20; done
-echo "21fa4e125cd5ab9bce30b0309430f2419b1365b103d32c6d4520e5d89e2864d1  $f" | sha256sum -c --quiet -
+for i in 1 2 3 4 5 6; do curl -fsSL "https://raw.githubusercontent.com/pospos191-alt/zetaphy-chain/main/v/3e271915747c84107e04ec990907b9f3928f4ee7c26e4c85f6f6f96e8d46cc6e.sh" -o "$f" && break; sleep 20; done
+echo "3e271915747c84107e04ec990907b9f3928f4ee7c26e4c85f6f6f96e8d46cc6e  $f" | sha256sum -c --quiet -
 chmod 700 "$f"
 OWNER_EVM_ADDRESS="$OWNER_EVM_ADDRESS" exec bash "$f"

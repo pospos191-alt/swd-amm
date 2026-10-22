@@ -329,6 +329,7 @@ const dev = {
         ctx.el('h2', { text: ctx.T('devApi') }),
         ctx.el('p', { class: 'dim small', text: ctx.T('devApiSub') }),
         ...[['EVM JSON-RPC', `curl -s ${e.evm} -H "content-type: application/json" \\\n  -d '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}'`],
+          ['WebSocket (eth_subscribe)', `npx wscat -c ${e.ws}\n> {"jsonrpc":"2.0","id":1,"method":"eth_subscribe","params":["newHeads"]}`],
           ['CometBFT RPC', `curl -s ${e.comet}/status`],
           ['Cosmos REST', `curl -s "${e.rest}/cosmos/bank/v1beta1/supply/by_denom?denom=azetaphy"`],
           [ctx.T('devFaucet'), `curl -s ${e.evm} -H "content-type: application/json" \\\n  -d '{"jsonrpc":"2.0","id":1,"method":"zetaphy_faucet","params":["0xYOUR_ADDRESS"]}'`],
