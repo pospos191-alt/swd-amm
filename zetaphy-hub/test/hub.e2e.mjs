@@ -6,7 +6,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import { serve } from './serve.mjs';
-import { answer } from './mocknode.mjs';
+import { answer, USDC } from './mocknode.mjs';
+import { Interface } from 'ethers';
 
 const DIST = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
 const exe = process.env.CHROMIUM_PATH || undefined;
@@ -24,6 +25,16 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
       const a = new URL(u).origin === 'https://rpc.sawasdeecoin.com' ? answer(u, route.request().postData()) : null;
       if (a) return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(a) });
       return route.fulfill({ status: 404, headers: { 'access-control-allow-origin': '*' }, body: '' });
+    });
+    // a stand-in MetaMask: records what the page asks it to send
+    await page.addInitScript(() => {
+      window.__sent = [];
+      window.ethereum = { request: async ({ method, params }) => {
+        if (method === 'eth_requestAccounts') return ['0x6af57fC3633dD0F7907f7900dbd4A2822F43a245'];
+        if (method === 'wallet_switchEthereumChain') return null;
+        if (method === 'eth_sendTransaction') { window.__sent.push(params[0]); return `0x${'cd'.repeat(32)}`; }
+        throw new Error(`not mocked: ${method}`);
+      } };
     });
     const shot = async (n) => { if (process.env.SHOTS) await page.screenshot({ path: join(process.env.SHOTS, `${n}.png`) }); };
 
@@ -69,6 +80,32 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     assert.match(await page.textContent('.earn-detail'), /JOIN=rpc\.sawasdeecoin\.com/);
     assert.doesNotMatch(await page.textContent('.earn-detail'), /null|undefined/);
     await shot('earn');
+    // ZETAPHY Saphan: routes from the chain, send out through the ICS-20 precompile from MetaMask
+    await page.click('.tab[data-tab="saphan"]');
+    await page.waitForFunction(() => document.querySelectorAll('#sp-routes tr').length === 1 && /Noble testnet/.test(document.getElementById('sp-routes').textContent));
+    assert.match(await page.textContent('#sp-routes'), /channel-0 → channel-123/);
+    await page.click('#sp-go'); // connect first
+    await page.waitForFunction(() => /USDC · 2\.5/.test(document.getElementById('sp-asset')?.textContent ?? ''));
+    assert.match(await page.textContent('#sp-recv'), /zetaphy1dt6hlsmr8/, 'own zetaphy1… address to receive');
+    assert.match(await page.textContent('#sp-recv'), /channel-123/, 'which channel to use on the other side');
+    await page.fill('#sp-to', 'osmo1dt6hlsmr8hg00yrl0yqdh49zsgh58gj9vdens7');
+    await page.fill('#sp-amount', '1');
+    await page.click('#sp-go');
+    await page.waitForFunction(() => document.getElementById('sp-msg').classList.contains('bad'));
+    assert.match(await page.textContent('#sp-msg'), /noble1/, 'a receiver of the wrong chain is refused before signing');
+    await page.selectOption('#sp-asset', USDC);
+    await page.fill('#sp-to', 'noble1dt6hlsmr8hg00yrl0yqdh49zsgh58gj9v4lt7z');
+    await page.fill('#sp-amount', '1.5');
+    await page.click('#sp-go');
+    await page.waitForFunction(() => document.getElementById('sp-msg').classList.contains('ok'));
+    const [tx] = await page.evaluate(() => window.__sent);
+    assert.equal(tx.to, '0x0000000000000000000000000000000000000802');
+    const ics20 = new Interface(['function transfer(string,string,string,uint256,address,string,(uint64,uint64),uint64,string)']);
+    const args = ics20.decodeFunctionData('transfer', tx.data);
+    assert.deepEqual([args[0], args[1], args[2], args[3], args[5]], ['transfer', 'channel-0', USDC, 1500000n, 'noble1dt6hlsmr8hg00yrl0yqdh49zsgh58gj9v4lt7z']);
+    assert.ok(args[7] > BigInt(Date.now()) * 1_000_000n, 'a timeout in the future (ns)');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, 'saphan: one screen');
+    await shot('saphan');
     await page.click('.tab[data-tab="analytics"]');
     await page.waitForFunction(() => document.querySelectorAll('#a-c1 .bar').length === 60 && document.querySelectorAll('#a-c2 .bar').length === 59);
     await page.waitForFunction(() => document.getElementById('a-supply').textContent !== '–');

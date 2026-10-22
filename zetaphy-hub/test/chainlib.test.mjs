@@ -11,6 +11,32 @@ test('selectors are keccak256 of the signatures', () => {
   assert.equal(L.SELECTORS.undelegate, id('undelegate(address,string,uint256)').slice(0, 10));
   assert.equal(L.SELECTORS.claimRewards, id('claimRewards(address,uint32)').slice(0, 10));
   assert.equal(L.SELECTORS.vote, id('vote(address,uint64,uint8,string)').slice(0, 10));
+  assert.equal(L.SELECTORS.ibcTransfer, id('transfer(string,string,string,uint256,address,string,(uint64,uint64),uint64,string)').slice(0, 10));
+});
+
+test('ICS-20 transfer calldata (ZETAPHY Saphan) matches ethers', () => {
+  const i = new Interface(['function transfer(string sourcePort, string sourceChannel, string denom, uint256 amount, address sender, string receiver, (uint64 revisionNumber, uint64 revisionHeight) timeoutHeight, uint64 timeoutTimestamp, string memo) returns (uint64)']);
+  const noble = 'noble1dt6hlsmr8hg00yrl0yqdh49zsgh58gj9v4lt7z';
+  const hash = `ibc/${'AB'.repeat(32)}`;
+  const t = 1792680000000000000n;
+  for (const [denom, amount, memo] of [['azetaphy', 10n ** 18n, ''], [hash, 1500000n, 'ZETAPHY Saphan ไทย']]) {
+    assert.equal(L.encodeIbcTransfer({ channel: 'channel-0', denom, amount, sender: A, receiver: noble, timeoutNs: t, memo }),
+      i.encodeFunctionData('transfer', ['transfer', 'channel-0', denom, amount, A, noble, [0, 0], t, memo]));
+  }
+  const ok = { channel: 'channel-0', denom: 'azetaphy', amount: 1n, sender: A, receiver: noble, timeoutNs: t };
+  assert.throws(() => L.encodeIbcTransfer({ ...ok, channel: 'chan0' }), /channel/);
+  assert.throws(() => L.encodeIbcTransfer({ ...ok, amount: 0n }), /amount/);
+  assert.throws(() => L.encodeIbcTransfer({ ...ok, receiver: 'noble1xyz' }), /bech32|checksum/);
+  assert.throws(() => L.encodeIbcTransfer({ ...ok, denom: 'IBC/bad' }), /denom/);
+});
+
+test('amounts with any number of decimals', () => {
+  assert.equal(L.parseUnits('1.5', 6), 1500000n);
+  assert.equal(L.parseUnits('7', 0), 7n);
+  assert.throws(() => L.parseUnits('1.1234567', 6), /amount/);
+  assert.throws(() => L.parseUnits('1.5', 0), /amount/);
+  assert.equal(L.formatUnits(1234567890n, 6), '1,234.56789');
+  assert.equal(L.formatUnits('5', 0), '5');
 });
 
 test('calldata matches ethers', () => {

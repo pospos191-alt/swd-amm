@@ -1,6 +1,20 @@
 **English** | [ภาษาไทย](README.th.md)
 
-# Real USDC from Noble into the ZETAPHY chain via IBC (testnet first)
+# ZETAPHY Saphan: real USDC from Noble into the ZETAPHY chain via IBC (testnet first)
+
+**ZETAPHY Saphan** ("bridge" in Thai) is ZETAPHY's cross-chain system; its first route is Noble over IBC.
+People use it from the **Saphan** tab at app.sawasdeecoin.com:
+- **Out:** from MetaMask through the ICS-20 precompile (`0x…0802`), no Keplr needed
+- **In:** from a wallet on the other chain (e.g. Keplr on Noble) to the `zetaphy1…` address
+- The tab reads the open channels from the chain itself: a new channel shows up there with no site change
+
+**Google Cloud (e2-micro):** for steps 1–2 below use the VM's **SSH** button instead of Oracle's Cloud Shell,
+and fetch the scripts straight from the repo:
+```bash
+curl -fsSLO https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/ibc/setup-relayer.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh | sudo install -m 755 /dev/stdin /usr/local/bin/gov.sh
+```
+The relayer is capped at 300 MB of memory (`MemoryMax`): if it ever grows, the system restarts the relayer, not the node.
 
 **Noble** is a Cosmos chain where Circle issues USDC itself directly (native USDC, not a bridge's wrapped coin)
 We connect ZETAPHY to Noble with **IBC**: the two chains verify each other with light clients

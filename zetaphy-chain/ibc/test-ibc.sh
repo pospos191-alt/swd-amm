@@ -17,6 +17,8 @@
 #      the cap is refused in both directions (inbound: refunded on B;
 #      outbound: the tx fails) and one under the cap goes through; re-running
 #      it with 50% changes the limit by vote (MsgUpdateRateLimit);
+#   2b. ZETAPHY Saphan: native ZETAPHY sent A -> B through the ICS-20 precompile
+#      from an EVM account, with the hub's calldata (zetaphy-hub/chainlib.js);
 #   4. the large-transfer hold (security core): gov.sh ibc-hold / ibc-hold-rule
 #      pass votes; an inbound transfer over the threshold waits (nothing
 #      delivered, zetaphy_ibcHolds lists it) and arrives after the delay; another
@@ -187,6 +189,25 @@ out=$(ZETAPHYD="$BIN" NODE_HOME="$W/b" KEYS_DIR="$W/b" FROM=validator NODE=$NB C
   bash "$REPO/zetaphy-chain/gov.sh" ibc-usdc-erc20 channel-0) || { echo "$out"; fail "ibc-usdc-erc20 on B"; }
 echo "$out" | grep -q WARNING && { echo "$out"; fail "warning despite metadata"; }
 pass "with gov.sh ibc-usdc-metadata in genesis: same ERC-20 address reads symbol USDC, decimals 6, balanceOf 5000000"
+
+# ---- ZETAPHY Saphan: out through the ICS-20 precompile (0x…0802) from an EVM account ----
+# The same calldata the hub's Saphan tab asks MetaMask to send (zetaphy-hub/chainlib.js).
+key=$("$BIN" keys unsafe-export-eth-key user --keyring-backend test --keyring-dir "$W/user" --home "$W/user" 2>/dev/null)
+zd="ibc/$(printf 'transfer/channel-0/azetaphy' | sha256sum | cut -c1-64 | tr a-f A-F)"
+zb=$(bal "$NB" "$user" "$zd")
+hash=$(cd "$REPO/zetaphy-network" && KEY="0x${key#0x}" RPC="http://127.0.0.1:$PA" TO="$user" HUB="$REPO/zetaphy-hub/chainlib.js" node --input-type=module -e '
+import { JsonRpcProvider, Wallet } from "ethers";
+const { encodeIbcTransfer, PRECOMPILES } = await import(process.env.HUB);
+const w = new Wallet(process.env.KEY, new JsonRpcProvider(process.env.RPC));
+const data = encodeIbcTransfer({ channel: "channel-0", denom: "azetaphy", amount: 3n * 10n ** 18n, sender: w.address,
+  receiver: process.env.TO, timeoutNs: BigInt(Date.now() + 600000) * 1000000n, memo: "ZETAPHY Saphan" });
+const tx = await w.sendTransaction({ to: PRECOMPILES.ics20, data, gasLimit: 600000n });
+const r = await tx.wait();
+if (r.status !== 1) throw new Error(`reverted: ${tx.hash}`);
+console.log(tx.hash);') || fail "ICS-20 precompile transfer"
+unset key
+waitfor 90 bal "$NB" "$user" "$zd" "$(python3 -c "print($zb + 3 * 10**18)")" || fail "3 ZETAPHY sent through the precompile did not reach B"
+pass "ZETAPHY Saphan: 3 ZETAPHY A -> B through the ICS-20 precompile from an EVM account (tx $hash), arrived as $zd"
 
 # Pause it by vote (MsgToggleConversion), then ibc-usdc-erc20 proposes the resume.
 gov=$(q "$NA" auth module-account gov | jq -r .account.value.address)

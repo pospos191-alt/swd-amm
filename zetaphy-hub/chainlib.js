@@ -7,6 +7,7 @@ export const PRECOMPILES = {
   staking: '0x0000000000000000000000000000000000000800',
   distribution: '0x0000000000000000000000000000000000000801',
   gov: '0x0000000000000000000000000000000000000805',
+  ics20: '0x0000000000000000000000000000000000000802', // IBC transfer (ZETAPHY Saphan)
 };
 
 // keccak256 selectors (computed with ethers' id(), checked in the test)
@@ -15,6 +16,7 @@ export const SELECTORS = {
   undelegate: '0x3edab33c', // undelegate(address,string,uint256)
   claimRewards: '0x2efe8a5f', // claimRewards(address,uint32)
   vote: '0x9ec4d363', // vote(address,uint64,uint8,string)
+  ibcTransfer: '0x632535b9', // transfer(string,string,string,uint256,address,string,(uint64,uint64),uint64,string)
 };
 
 // ---------------------------------------------------------------- bech32
@@ -108,6 +110,32 @@ export const encodeVote = (voter, proposalId, option, metadata = '') => {
   return encode(SELECTORS.vote, [{ enc: addr, value: voter }, { enc: uint, value: proposalId }, { enc: uint, value: option }, { value: metadata }], 3);
 };
 
+/**
+ * ICS-20 transfer through the precompile (ZETAPHY Saphan): `amount` of `denom`
+ * (azetaphy or ibc/…) from `sender` (0x…, the MetaMask account) to `receiver`
+ * (a bech32 address on the other chain) over transfer/`channel`. It times out
+ * at `timeoutNs` (unix time in nanoseconds); no height timeout.
+ */
+export function encodeIbcTransfer({ channel, denom, amount, sender, receiver, timeoutNs, memo = '' }) {
+  if (!/^channel-\d{1,6}$/.test(String(channel))) throw new Error('channel');
+  if (!/^(azetaphy|ibc\/[0-9A-F]{64}|[a-z][a-z0-9/:._-]{1,127})$/.test(String(denom))) throw new Error('denom');
+  if (BigInt(amount) <= 0n) throw new Error('amount');
+  bech32Decode(receiver);
+  const t = BigInt(timeoutNs);
+  if (t <= 0n || t >= 2n ** 64n) throw new Error('timeout');
+  // head: 9 arguments, the Height tuple (static) takes two words
+  const parts = [
+    { s: 'transfer' }, { s: channel }, { s: denom }, { w: uint(amount) }, { w: addr(sender) }, { s: receiver },
+    { w: uint(0) + uint(0) }, { w: uint(t) }, { s: memo },
+  ];
+  let off = 32 * 10, tail = '';
+  const head = parts.map((p) => {
+    if (p.w) return p.w;
+    const enc = str(p.s); const o = uint(off); off += enc.length / 2; tail += enc; return o;
+  });
+  return SELECTORS.ibcTransfer + head.join('') + tail;
+}
+
 // ---------------------------------------------------------------- amounts
 const ONE = 10n ** 18n;
 
@@ -117,6 +145,24 @@ export function parseZeta(text) {
   if (!/^\d{1,12}(\.\d{1,18})?$/.test(t)) throw new Error('amount');
   const [w, f = ''] = t.split('.');
   return BigInt(w) * ONE + BigInt(f.padEnd(18, '0'));
+}
+
+/** "1.5" with `dec` decimals -> base units (bigint); refuses more decimals than the coin has. */
+export function parseUnits(text, dec) {
+  const t = String(text).trim();
+  if (!Number.isInteger(dec) || dec < 0 || dec > 18) throw new Error('decimals');
+  const re = dec ? new RegExp(`^\\d{1,15}(\\.\\d{1,${dec}})?$`) : /^\d{1,24}$/;
+  if (!re.test(t)) throw new Error('amount');
+  const [w, f = ''] = t.split('.');
+  return BigInt(w) * 10n ** BigInt(dec) + BigInt(f.padEnd(dec, '0') || '0');
+}
+/** base units -> "1,234.5" with `dec` decimals (at most `dp` shown, rounded down). */
+export function formatUnits(a, dec, dp = 6) {
+  let v;
+  try { v = BigInt(String(a).split('.')[0]); } catch { return '–'; }
+  const one = 10n ** BigInt(dec);
+  const f = dec ? (v % one).toString().padStart(dec, '0').slice(0, dp).replace(/0+$/, '') : '';
+  return `${(v / one).toLocaleString('en-US')}${f ? `.${f}` : ''}`;
 }
 
 /** azetaphy (string|bigint) -> "1,234.5678" (at most `dp` decimals, rounded down). */

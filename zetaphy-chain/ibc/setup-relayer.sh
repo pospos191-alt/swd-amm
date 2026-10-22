@@ -283,6 +283,8 @@ ExecStart=$HERMES_BIN --config $CFG start
 Restart=always
 RestartSec=10
 LimitNOFILE=65535
+# A 1 GB machine also runs the node: if Hermes ever grows, it is the one restarted, not zetaphyd
+MemoryMax=300M
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=$HERMES_HOME

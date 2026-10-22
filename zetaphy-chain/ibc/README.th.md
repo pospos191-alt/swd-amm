@@ -1,6 +1,20 @@
 [English](README.md) | **ภาษาไทย**
 
-# USDC จริงจาก Noble เข้าเชน ZETAPHY ผ่าน IBC (testnet ก่อน)
+# ZETAPHY Saphan: USDC จริงจาก Noble เข้าเชน ZETAPHY ผ่าน IBC (testnet ก่อน)
+
+**ZETAPHY Saphan** (สะพาน) คือระบบข้ามเชนของ ZETAPHY เส้นทางแรกคือ Noble ผ่าน IBC
+ผู้ใช้ส่งเหรียญได้จากแท็บ **Saphan** ที่ app.sawasdeecoin.com:
+- **ส่งออก:** จาก MetaMask ผ่าน precompile ICS-20 (`0x…0802`) ไม่ต้องใช้ Keplr
+- **รับเข้า:** ส่งจากกระเป๋าบนเชนต้นทาง (เช่น Keplr บน Noble) มาที่ที่อยู่ `zetaphy1…`
+- แท็บอ่านช่องที่เปิดอยู่จากเชนเอง เปิดช่องใหม่เมื่อไรก็ขึ้นในแท็บทันที ไม่ต้องแก้ค่าเว็บ
+
+**เครื่อง Google Cloud (e2-micro):** ข้อ 1–2 ข้างล่างใช้ปุ่ม **SSH** ในหน้า VM instances แทน Cloud Shell ของ Oracle
+และดาวน์โหลดสคริปต์ตรงจาก repo:
+```bash
+curl -fsSLO https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/ibc/setup-relayer.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh | sudo install -m 755 /dev/stdin /usr/local/bin/gov.sh
+```
+relayer จำกัดหน่วยความจำไว้ 300 MB (`MemoryMax`) ถ้าใช้เกิน ระบบจะรีสตาร์ต relayer ไม่ใช่โหนด
 
 **Noble** เป็นเชน Cosmos ที่ Circle ออก USDC เองโดยตรง (native USDC ไม่ใช่เหรียญห่อของสะพาน)
 เราต่อ ZETAPHY กับ Noble ด้วย **IBC**: ทั้งสองเชนตรวจกันเองด้วย light client

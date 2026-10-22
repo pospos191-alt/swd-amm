@@ -1,7 +1,7 @@
 // The hub's data pages (like a chain explorer's): Earn, Analytics, DeFi, Leaderboard, Developers.
 // Each page: render(root, ctx) draws it once; refresh(ctx) (optional) updates live numbers.
-// ctx = { T, lang, ep(), cfg, getJson, evmCall, el, short, formatZeta, show, copyBtn, tipKey }
-import { formatZeta, toEvm } from './chainlib.js';
+// ctx = { T, lang, ep(), cfg, getJson, evmCall, el, short, formatZeta, show, copyBtn, account(), connect(), send(to, data) }
+import { formatZeta, toEvm, toBech32, bech32Decode, parseUnits, formatUnits, encodeIbcTransfer, PRECOMPILES } from './chainlib.js';
 
 // ------------------------------------------------------------------ eth_call helpers (selectors = keccak256, checked in tests)
 export const SEL = {
@@ -345,4 +345,151 @@ const dev = {
   },
 };
 
-export const PAGES = { earn, analytics, defi, leaderboard, dev };
+
+// ------------------------------------------------------------------ ZETAPHY Saphan (IBC, chain to chain)
+// Routes are the open ICS-20 channels the chain reports (no config to keep in
+// sync); a transfer goes out through the ICS-20 precompile (0x…0802) from
+// MetaMask. Coming in, the other chain's wallet sends to this account's zetaphy1….
+export const KNOWN_CHAINS = {
+  'grand-1': { name: 'Noble testnet', prefix: 'noble', note: 'USDC (Circle)' },
+  'noble-1': { name: 'Noble', prefix: 'noble', note: 'USDC (Circle)' },
+  'osmo-test-5': { name: 'Osmosis testnet', prefix: 'osmo', note: 'DEX' },
+  'osmosis-1': { name: 'Osmosis', prefix: 'osmo', note: 'DEX' },
+  'cosmoshub-4': { name: 'Cosmos Hub', prefix: 'cosmos', note: 'ATOM' },
+  'theta-testnet-001': { name: 'Cosmos Hub testnet', prefix: 'cosmos', note: 'ATOM' },
+};
+const SAPHAN = {
+  th: {
+    intro: 'ZETAPHY Saphan (สะพาน) ส่งเหรียญข้ามเชนด้วย IBC: ทั้งสองเชนตรวจกันเองด้วย light client ไม่มีคนกลางถือเงิน',
+    routes: 'เส้นทาง', tipRoutes: 'ช่อง IBC (transfer) ที่เปิดอยู่บนเชน ZETAPHY ตอนนี้ อ่านจากเชนโดยตรง\nช่องฝั่งเรา → ช่องฝั่งเขา',
+    none: 'ยังไม่มีเส้นทางเปิด: ผู้ดูแลโหนดต้องติดตั้ง relayer และเปิดช่อง IBC ก่อน (zetaphy-chain/ibc/README.th.md)',
+    send: 'ส่งออกจาก ZETAPHY', tipSend: 'ส่งจาก MetaMask ผ่าน precompile ICS-20 (0x…0802)\nเหรียญถึงปลายทางในราว 1 นาที (relayer ส่งต่อ)\nถ้าไม่ถึงภายใน 10 นาที ธุรกรรมหมดเวลาและเหรียญคืนเข้ากระเป๋าคุณเอง',
+    route: 'ไปเชน', asset: 'เหรียญ', amount: 'จำนวน', to: 'ที่อยู่ปลายทาง', go: 'ส่งข้ามเชน', connect: 'เชื่อมต่อ MetaMask',
+    recv: 'รับเข้า ZETAPHY', tipRecv: 'จากกระเป๋าบนเชนต้นทาง (เช่น Keplr) เลือก IBC transfer ใส่ช่องฝั่งเขา และที่อยู่ zetaphy1… ของคุณ',
+    recvHow: (ch, name) => `บน ${name} ส่งแบบ IBC transfer ผ่านช่อง ${ch} มาที่ที่อยู่นี้:`,
+    myAddr: 'ที่อยู่ของคุณบน ZETAPHY', bal: 'ยอดคงเหลือ', limits: 'กันความเสียหาย: เชนมีเพดานโอนต่อวัน (rate limit) และพักรายการใหญ่ไว้ตรวจก่อน (IBC hold) รายการที่เกินจะถูกปฏิเสธหรือคืนเงิน',
+    sent: 'ส่งแล้ว รอ relayer ส่งต่อ (ราว 1 นาที)', badTo: (p) => `ที่อยู่ปลายทางต้องขึ้นต้นด้วย ${p}1…`, noRoute: 'ยังไม่มีเส้นทาง',
+  },
+  en: {
+    intro: 'ZETAPHY Saphan ("bridge" in Thai) moves coins chain to chain over IBC: each chain checks the other with a light client, no custodian holds the funds',
+    routes: 'Routes', tipRoutes: 'The open IBC transfer channels on ZETAPHY right now, read from the chain\nour channel → their channel',
+    none: 'No route is open yet: the node operator installs the relayer and opens an IBC channel first (zetaphy-chain/ibc/README.md)',
+    send: 'Send out of ZETAPHY', tipSend: 'Sent from MetaMask through the ICS-20 precompile (0x…0802)\nArrives in about a minute (the relayer carries it)\nIf it does not arrive within 10 minutes it times out and the coins return to you',
+    route: 'To chain', asset: 'Coin', amount: 'Amount', to: 'Receiver address', go: 'Send across', connect: 'Connect MetaMask',
+    recv: 'Receive into ZETAPHY', tipRecv: 'From a wallet on the other chain (e.g. Keplr), choose IBC transfer, their channel, and your zetaphy1… address',
+    recvHow: (ch, name) => `On ${name}, send an IBC transfer over ${ch} to this address:`,
+    myAddr: 'Your ZETAPHY address', bal: 'Balance', limits: 'Damage limits: the chain caps daily flow (rate limit) and holds large transfers for review (IBC hold); a transfer over them is refused or refunded',
+    sent: 'Sent; the relayer carries it (about a minute)', badTo: (p) => `The receiver must start with ${p}1…`, noRoute: 'No route yet',
+  },
+};
+let routes = [], assets = [];
+/** azetaphy, or an ibc/… voucher with its base denom: decimals from the base (u = 6, a = 18). */
+export function assetOf(denom, base) {
+  if (denom === 'azetaphy') return { denom, symbol: 'ZETAPHY', dec: 18 };
+  const b = String(base || denom);
+  const dec = /^u[a-z]/.test(b) ? 6 : /^a[a-z]/.test(b) ? 18 : 0;
+  const symbol = (dec ? b.slice(1) : b).split('/').pop().toUpperCase().slice(0, 12) || denom.slice(0, 12);
+  return { denom, symbol, dec };
+}
+async function loadRoutes(ctx) {
+  const r = await ctx.getJson(`${ctx.ep().rest}/ibc/core/channel/v1/channels?pagination.limit=100`);
+  const open = (r.channels ?? []).filter((c) => c.port_id === 'transfer' && c.state === 'STATE_OPEN');
+  return Promise.all(open.map(async (c) => {
+    let chainId = '';
+    try {
+      const cs = await ctx.getJson(`${ctx.ep().rest}/ibc/core/channel/v1/channels/${c.channel_id}/ports/transfer/client_state`);
+      chainId = cs.identified_client_state?.client_state?.chain_id ?? '';
+    } catch { /* unknown chain */ }
+    const k = KNOWN_CHAINS[chainId] ?? {};
+    return { channel: c.channel_id, their: c.counterparty?.channel_id ?? '?', chainId, name: k.name ?? (chainId || '?'), prefix: k.prefix ?? null, note: k.note ?? '' };
+  }));
+}
+async function loadAssets(ctx, bech) {
+  const out = [assetOf('azetaphy')];
+  if (!bech) return out.map((a) => ({ ...a, amount: null }));
+  const r = await ctx.getJson(`${ctx.ep().rest}/cosmos/bank/v1beta1/balances/${bech}?pagination.limit=100`);
+  const bal = new Map((r.balances ?? []).map((b) => [b.denom, b.amount]));
+  for (const d of bal.keys()) {
+    if (!/^ibc\/[0-9A-F]{64}$/.test(d)) continue;
+    let base = '';
+    try { base = (await ctx.getJson(`${ctx.ep().rest}/ibc/apps/transfer/v1/denoms/${d.slice(4)}`)).denom?.base ?? ''; } catch { /* unknown */ }
+    out.push(assetOf(d, base));
+  }
+  return out.map((a) => ({ ...a, amount: bal.get(a.denom) ?? '0' }));
+}
+function saphanForm(ctx, root) {
+  const L = SAPHAN[ctx.lang];
+  const acct = ctx.account();
+  const sel = (id, opts) => ctx.el('select', { id, class: 'mono' }, opts.map(([v, t]) => ctx.el('option', { value: v, text: t })));
+  const box = root.querySelector('#sp-send');
+  if (!routes.length) { box.replaceChildren(ctx.el('p', { class: 'dim', text: L.none })); return; }
+  const form = ctx.el('form', { class: 'sp-form', autocomplete: 'off' },
+    ctx.el('label', { text: L.route }), sel('sp-route', routes.map((r) => [r.channel, `${r.name} · ${r.channel}`])),
+    ctx.el('label', { text: L.asset }), sel('sp-asset', assets.map((a) => [a.denom, `${a.symbol}${a.amount != null ? ` · ${formatUnits(a.amount, a.dec, 4)}` : ''}`])),
+    ctx.el('label', { text: L.amount }), ctx.el('input', { id: 'sp-amount', class: 'mono', inputmode: 'decimal', placeholder: '0.0' }),
+    ctx.el('label', { text: L.to }), ctx.el('input', { id: 'sp-to', class: 'mono', spellcheck: 'false', placeholder: `${routes[0].prefix ?? 'addr'}1…` }),
+    ctx.el('div', { class: 'row end' }, ctx.el('button', { type: 'submit', class: 'btn', id: 'sp-go', text: acct ? L.go : L.connect })),
+    ctx.el('p', { class: 'msg', id: 'sp-msg', role: 'status' }));
+  form.querySelector('#sp-route').addEventListener('change', (e) => {
+    const r = routes.find((x) => x.channel === e.target.value);
+    form.querySelector('#sp-to').placeholder = `${r?.prefix ?? 'addr'}1…`;
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const out = form.querySelector('#sp-msg');
+    const say = (t, cls = '') => { out.textContent = t; out.className = `msg ${cls}`; };
+    try {
+      if (!ctx.account()) { await ctx.connect(); saphan.refresh(root, ctx); return; }
+      const r = routes.find((x) => x.channel === form.querySelector('#sp-route').value);
+      const a = assets.find((x) => x.denom === form.querySelector('#sp-asset').value);
+      const to = form.querySelector('#sp-to').value.trim();
+      const { hrp } = bech32Decode(to);
+      if (r.prefix && hrp !== r.prefix) throw new Error(L.badTo(r.prefix));
+      const amount = parseUnits(form.querySelector('#sp-amount').value, a.dec);
+      if (a.amount != null && amount > BigInt(a.amount)) throw new Error(ctx.lang === 'th' ? 'ยอดไม่พอ' : 'Not enough balance');
+      const data = encodeIbcTransfer({ channel: r.channel, denom: a.denom, amount, sender: ctx.account(), receiver: to,
+        timeoutNs: BigInt(Date.now() + 10 * 60_000) * 1_000_000n, memo: 'ZETAPHY Saphan' });
+      say('…');
+      const hash = await ctx.send(PRECOMPILES.ics20, data);
+      say(`${L.sent} · ${ctx.short(hash, 10, 6)}`, 'ok');
+      saphan.refresh(root, ctx);
+    } catch (err) { say(err?.message ?? String(err), 'bad'); }
+  });
+  box.replaceChildren(form);
+}
+const saphan = {
+  render(root, ctx) {
+    const L = SAPHAN[ctx.lang];
+    const head = (t, tip) => ctx.el('div', { class: 'card-head' }, ctx.el('h2', { text: t }), ctx.el('span', { class: 'info', 'data-tip': tip, tabindex: 0, text: 'i' }));
+    root.replaceChildren(
+      ctx.el('p', { class: 'dim small sp-intro', text: L.intro }),
+      ctx.el('div', { class: 'grid3 sp-grid' },
+        ctx.el('div', { class: 'card' }, head(L.routes, L.tipRoutes), ctx.el('div', { class: 'scroll' }, ctx.el('table', { class: 'tbl' }, ctx.el('tbody', { id: 'sp-routes' }, ctx.el('tr', {}, ctx.el('td', { class: 'dim', text: '…' })))))),
+        ctx.el('div', { class: 'card' }, head(L.send, L.tipSend), ctx.el('div', { id: 'sp-send' }, ctx.el('p', { class: 'dim', text: '…' }))),
+        ctx.el('div', { class: 'card' }, head(L.recv, L.tipRecv), ctx.el('div', { id: 'sp-recv', class: 'small' }))),
+      ctx.el('p', { class: 'warnline small', text: L.limits }));
+  },
+  async refresh(root, ctx) {
+    const L = SAPHAN[ctx.lang];
+    const acct = ctx.account();
+    const bech = acct ? toBech32(acct) : null;
+    try { routes = await loadRoutes(ctx); } catch { routes = []; }
+    try { assets = await loadAssets(ctx, bech); } catch { assets = [{ ...assetOf('azetaphy'), amount: null }]; }
+    root.querySelector('#sp-routes')?.replaceChildren(...(routes.length ? routes.map((r) => ctx.el('tr', {},
+      ctx.el('td', { 'data-tip': `${r.chainId}${r.note ? ` · ${r.note}` : ''}` }, ctx.el('b', { text: r.name }),
+        ctx.el('div', { class: 'dim small mono', text: `${r.channel} → ${r.their}` })),
+      ctx.el('td', { class: 'num' }, ctx.el('span', { class: 'pill passed', text: 'open' }))))
+      : [ctx.el('tr', {}, ctx.el('td', { class: 'dim', text: L.noRoute }))]));
+    if (!root.querySelector('#sp-amount')?.value) saphanForm(ctx, root);
+    const recv = root.querySelector('#sp-recv');
+    if (recv) {
+      recv.replaceChildren(
+        ...(bech ? [ctx.el('p', { class: 'dim', text: L.myAddr }), ctx.el('div', { class: 'code' }, ctx.el('pre', { class: 'mono', text: bech }), ctx.copyBtn(bech))]
+          : [ctx.el('p', { class: 'dim', text: L.connect })]),
+        ...routes.map((r) => ctx.el('p', { text: L.recvHow(r.their, r.name) })),
+        ...(acct ? [ctx.el('h3', { text: L.bal }), ctx.el('dl', { class: 'kv3' }, assets.flatMap((a) => [ctx.el('dt', { text: a.symbol, 'data-tip': a.denom }), ctx.el('dd', { class: 'mono', text: formatUnits(a.amount ?? '0', a.dec, 6) })]))] : []));
+    }
+  },
+};
+
+export const PAGES = { earn, saphan, analytics, defi, leaderboard, dev };
