@@ -1,0 +1,135 @@
+{
+  "chains": {
+    "sepolia": {
+      "blockExplorers": [
+        {
+          "apiKey": "GP69JEAP2W7YFJT9ZJTEPGQT6Y6KMW44ZN",
+          "apiUrl": "https://api-sepolia.etherscan.io/api",
+          "family": "etherscan",
+          "name": "Etherscan",
+          "url": "https://sepolia.etherscan.io"
+        }
+      ],
+      "blocks": {
+        "confirmations": 1,
+        "estimateBlockTime": 13,
+        "reorgPeriod": 2
+      },
+      "chainId": 11155111,
+      "deployer": {
+        "name": "Abacus Works",
+        "url": "https://www.hyperlane.xyz"
+      },
+      "displayName": "Sepolia",
+      "domainId": 11155111,
+      "gasCurrencyCoinGeckoId": "ethereum",
+      "gnosisSafeTransactionServiceUrl": "https://api.safe.global/tx-service/sep",
+      "isTestnet": true,
+      "name": "sepolia",
+      "nativeToken": {
+        "decimals": 18,
+        "name": "Ether",
+        "symbol": "ETH"
+      },
+      "protocol": "ethereum",
+      "rpcUrls": [
+        {
+          "http": "https://ethereum-sepolia.publicnode.com"
+        },
+        {
+          "http": "https://gateway.tenderly.co/public/sepolia"
+        },
+        {
+          "http": "https://sepolia.drpc.org"
+        },
+        {
+          "http": "https://1rpc.io/sepolia"
+        }
+      ],
+      "aggregationHook": "0x6DcFd66b0e47917af13Fc5c82fd47Be42b12F821",
+      "domainRoutingIsm": "0xfa9a26cCc5417d1C1D03C949b5013Bb5898dA905",
+      "domainRoutingIsmFactory": "0x3F100cBBE5FD5466BdB4B3a15Ac226957e7965Ad",
+      "fallbackRoutingHook": "0x17Dc724B7a2F09141C13b8AC33B396073785c2BC",
+      "incrementalDomainRoutingIsmFactory": "0x99B3bf141D5C968D50067E66A77Fd2059d7E4b2B",
+      "interchainAccountRouterV3": "0x17f00da3De4398418aB701131Fd19627A322D729",
+      "interchainGasPaymaster": "0x6f2756380FD49228ae25Aa7F2817993cB74Ecc56",
+      "interchainSecurityModule": "0x238B629cAF5c6Ae8F9A0541aDD0829E782b528A1",
+      "mailbox": "0xfFAEF09B3cd11D9b20d1a19bECca54EEC2884766",
+      "merkleTreeHook": "0x4917a9746A7B6E0A57159cCb7F5a6744247f2d0d",
+      "pausableHook": "0xa68022e53Fd28119D07C8336a8eC84A298Fd38Fd",
+      "pausableIsm": "0x21bdaB116d9DA77E312910fB53aD35dD82C8a76c",
+      "protocolFee": "0x13AC3349Cb159fE86A22cf42DdA803D9f7309DB5",
+      "proxyAdmin": "0x97Bbc6bBaFa5Ce3b2FA966c121Af63bD09e940f8",
+      "quotedCalls": "0x33ef1F15c64bb0CfC48F889FD4af028BC358A4fE",
+      "quotedCallsV3": "0xd36199b239e43Fe4F4346D3c5e6B28B6fc1B4f74",
+      "staticAggregationHookFactory": "0xaEDCF9C2BB12D9bb681CC55DbFE9FF30b2De8d77",
+      "staticAggregationIsm": "0x7856078C4881e236660Be82fdb12473B4a33cCFf",
+      "staticAggregationIsmFactory": "0xC83e12EF2627ACE445C298e6eC418684918a6002",
+      "staticMerkleRootMultisigIsmFactory": "0x0a71AcC99967829eE305a285750017C4916Ca269",
+      "staticMerkleRootWeightedMultisigIsmFactory": "0x4afB48e864d308409d0D80E98fB7d5d6aA5b245f",
+      "staticMessageIdMultisigIsmFactory": "0xFEb9585b2f948c1eD74034205a7439261a9d27DD",
+      "staticMessageIdWeightedMultisigIsmFactory": "0x196Ce28ED1Afdf015849ddEE82F03a903Bee9E94",
+      "storageGasOracle": "0x71775B071F77F1ce52Ece810ce084451a3045FFe",
+      "testRecipient": "0xeDc1A3EDf87187085A3ABb7A9a65E1e7aE370C07",
+      "testTokenRecipient": "0x031AD9c560D37baC7d6Bd2d27A2443bAfd10101A",
+      "timelockController": "0x0000000000000000000000000000000000000000",
+      "validatorAnnounce": "0xE6105C59480a1B7DD3E4f28153aFdbE12F4CfCD9",
+      "index": {
+        "from": 4517401
+      }
+    },
+    "zetaphy": {
+      "name": "zetaphy",
+      "displayName": "ZETAPHY Testnet",
+      "chainId": 77390,
+      "domainId": 77390,
+      "protocol": "ethereum",
+      "isTestnet": true,
+      "rpcUrls": [
+        {
+          "http": "https://rpc.sawasdeecoin.com",
+          "pagination": {
+            "maxBlockRange": 500
+          }
+        }
+      ],
+      "nativeToken": {
+        "name": "ZETAPHY",
+        "symbol": "ZTPHY",
+        "decimals": 18
+      },
+      "blocks": {
+        "confirmations": 1,
+        "reorgPeriod": 1,
+        "estimateBlockTime": 5
+      },
+      "blockExplorers": [
+        {
+          "name": "ZETAPHY Explorer",
+          "url": "https://explorer.sawasdeecoin.com",
+          "apiUrl": "https://explorer.sawasdeecoin.com/api",
+          "family": "other"
+        }
+      ],
+      "domainRoutingIsmFactory": "0x84f6B3d4CD518B2b5b8DbfFe660B7E2A0137Cf83",
+      "incrementalDomainRoutingIsmFactory": "0xbDdbe2f3a65D68E9847FBc7441F8b35965341736",
+      "interchainAccountRouter": "0x5252ad92177EbcD8bCBF06fbe13B5EFBF73959Db",
+      "interchainGasPaymaster": "0x0000000000000000000000000000000000000000",
+      "mailbox": "0x0f1C59C6e98c88E1ddc2Ff98Bee11dadA07fEaCe",
+      "merkleTreeHook": "0x58a95FcFddfB4f4df2288c563Ce0AE669FE5d4fc",
+      "proxyAdmin": "0x4A10D8Cf048873aEEF61A3631E325B1BFCafF246",
+      "quotedCalls": "0xb86a67e44E058F146680f16fB947B303fF397BBF",
+      "staticAggregationHookFactory": "0xE8FF166d0433D482986BAa053173FE5c53bA70f3",
+      "staticAggregationIsmFactory": "0x5ba5f8C829999204eC4314dFCBD9A5Ef7F7B1Fee",
+      "staticMerkleRootMultisigIsmFactory": "0x4E5fdCa0a786564226B2a1b2d853ff3E68141f01",
+      "staticMerkleRootWeightedMultisigIsmFactory": "0xC52da6a37395047740a1A6437d8c86CabD09b999",
+      "staticMessageIdMultisigIsmFactory": "0x35Ef33EFA25F0CDDC083076f401e7823E6b9B02B",
+      "staticMessageIdWeightedMultisigIsmFactory": "0x806e9BB43411470bDbE254Bc696D00086082579c",
+      "testRecipient": "0x8ADfDD22b3554D44107f6A7a66AcF9d4130b3f4D",
+      "validatorAnnounce": "0x7a5226c7cb683B87Afd3E0c72b564756b82D3841",
+      "index": {
+        "from": 10410
+      }
+    }
+  }
+}
