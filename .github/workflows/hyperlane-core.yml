@@ -8,6 +8,9 @@
 # zetaphy-chain/hyperlane/registry/chains/zetaphy/metadata.yaml.
 # dry_run = yes deploys the same config on a throwaway local chain (chain id 77390)
 # in the runner: nothing is sent to the testnet and no key is used.
+# Once registry/chains/zetaphy/addresses.yaml is in the repo the core is never deployed
+# again: a run then only finishes the setup (owner checks, the interchain account
+# router handed to the timelock, the agent config).
 #
 # The deployer key is the repository secret ZETAPHY_DEPLOYER_KEY (the launch key: it
 # only pays gas here, gas is 0 on the testnet, and it keeps no role). It is passed to
@@ -20,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "yes = deploy on a local throwaway chain only (check the config); no = deploy on the ZETAPHY testnet"
+        description: "yes = check on a local throwaway chain only; no = act on the ZETAPHY testnet"
         required: true
         default: 'yes'
         type: choice
@@ -28,6 +31,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   deploy:
@@ -42,6 +46,7 @@ jobs:
       DIR: zetaphy-chain/hyperlane
       BRANCH: hyperlane/testnet
       RPC: https://rpc.sawasdeecoin.com
+      TIMELOCK: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -53,12 +58,12 @@ jobs:
       - name: Install the pinned Hyperlane CLI
         run: npm i -g --no-audit --no-fund "$HYP_CLI" && hyperlane --version
 
-      - name: Refuse a second deploy
+      - name: Deployed already?
+        id: state
         run: |
-          if git fetch -q origin "$BRANCH" 2>/dev/null && git cat-file -e "FETCH_HEAD:$DIR/registry/chains/zetaphy/addresses.yaml" 2>/dev/null; then
-            echo "::error::Hyperlane core is already deployed (addresses on $BRANCH): nothing to do"; exit 1
-          fi
-          [ ! -f "$DIR/registry/chains/zetaphy/addresses.yaml" ] || { echo "::error::$DIR/registry/chains/zetaphy/addresses.yaml exists: already deployed"; exit 1; }
+          if [ -f "$DIR/registry/chains/zetaphy/addresses.yaml" ]; then
+            echo "deployed=yes" >> "$GITHUB_OUTPUT"; echo "core already deployed: finishing the setup only"
+          else echo "deployed=no" >> "$GITHUB_OUTPUT"; fi
 
       - name: Dry run on a local chain (chain id 77390)
         if: inputs.dry_run == 'yes'
@@ -76,7 +81,10 @@ jobs:
           HYP_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
             hyperlane core deploy --chain zetaphy --config "$GITHUB_WORKSPACE/$DIR/core-config.yaml" \
             -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$W/reg" --yes
-          cat reg/chains/zetaphy/addresses.yaml
+          printf 'interchainGasPaymaster: "0x0000000000000000000000000000000000000000"\n' >> reg/chains/zetaphy/addresses.yaml
+          hyperlane registry agent-config --chains sepolia zetaphy --out "$W/agent-config.json" \
+            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$W/reg" --yes
+          jq '.chains.zetaphy.mailbox' "$W/agent-config.json"
           echo "dry run OK: nothing was sent to the testnet"
 
       - name: Check the RPC is ZETAPHY (eth_chainId 0x12e4e) before the key is used
@@ -86,21 +94,65 @@ jobs:
             --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$RPC" | jq -r '.result // empty')
           [ "$got" = "0x12e4e" ] || { echo "::error::the RPC answers eth_chainId '$got', not 0x12e4e: nothing is signed"; exit 1; }
 
-      - name: Deploy on the ZETAPHY testnet
+      - name: Write the deployer key to a private file
         if: inputs.dry_run == 'no'
         env:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
-          GH_AUTH_TOKEN: ${{ github.token }}
         run: |
           [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
           k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}
           echo "::add-mask::$k"; echo "::add-mask::0x$k"
-          HYP_KEY="0x$k" hyperlane core deploy --chain zetaphy --config "$DIR/core-config.yaml" \
+          umask 077; printf '0x%s' "$k" > "$RUNNER_TEMP/deployer.key"
+
+      - name: Deploy core on the ZETAPHY testnet
+        if: inputs.dry_run == 'no' && steps.state.outputs.deployed == 'no'
+        env:
+          GH_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          HYP_KEY="$(cat "$RUNNER_TEMP/deployer.key")" hyperlane core deploy --chain zetaphy --config "$DIR/core-config.yaml" \
             -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$DIR/registry" --yes
-          unset k KEY
+          # ZETAPHY has no interchain gas paymaster (gas is 0): the agent config needs the field
+          printf 'interchainGasPaymaster: "0x0000000000000000000000000000000000000000"\n' >> "$DIR/registry/chains/zetaphy/addresses.yaml"
+
+      - name: Owners on chain; hand the interchain account router to the timelock
+        if: inputs.dry_run == 'no'
+        run: |
+          W=$(mktemp -d); (cd "$W" && npm i --silent --no-audit --no-fund ethers@6.16.0 yaml@2.8.1)
+          NODE_PATH="$W/node_modules" KEYFILE="$RUNNER_TEMP/deployer.key" ADDR="$DIR/registry/chains/zetaphy/addresses.yaml" node -e '
+          const { JsonRpcProvider, Wallet, Contract } = require("ethers"); const YAML = require("yaml"); const fs = require("fs");
+          (async () => {
+            const a = YAML.parse(fs.readFileSync(process.env.ADDR, "utf8"));
+            const p = new JsonRpcProvider(process.env.RPC); const tl = process.env.TIMELOCK.toLowerCase();
+            const own = (x) => new Contract(x, ["function owner() view returns (address)", "function transferOwnership(address)"], p);
+            const mb = new Contract(a.mailbox, ["function defaultIsm() view returns (address)", "function requiredHook() view returns (address)"], p);
+            const items = { mailbox: a.mailbox, proxyAdmin: a.proxyAdmin, defaultIsm: await mb.defaultIsm(), requiredHook: await mb.requiredHook(), interchainAccountRouter: a.interchainAccountRouter };
+            const w = new Wallet(fs.readFileSync(process.env.KEYFILE, "utf8").trim(), p);
+            let bad = 0;
+            for (const [name, addr] of Object.entries(items)) {
+              let o = (await own(addr).owner()).toLowerCase();
+              if (o === w.address.toLowerCase()) {
+                console.log(`${name} ${addr}: owned by the deployer, handing it to the timelock`);
+                await (await own(addr).connect(w).transferOwnership(process.env.TIMELOCK)).wait();
+                o = (await own(addr).owner()).toLowerCase();
+              }
+              console.log(`${name} ${addr} owner ${o}${o === tl ? " (timelock)" : ""}`);
+              if (o !== tl) bad++;
+            }
+            if (bad) { console.error(`::error::${bad} contract(s) not owned by the timelock`); process.exit(1); }
+          })().catch((e) => { console.error(e.shortMessage || e.message); process.exit(1); });'
+
+      - name: Agent config (relayer, validator)
+        if: inputs.dry_run == 'no'
+        env:
+          GH_AUTH_TOKEN: ${{ github.token }}
+        run: |
           hyperlane registry agent-config --chains sepolia zetaphy --out "$DIR/agent-config.json" \
-            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$DIR/registry"
-          cat "$DIR/registry/chains/zetaphy/addresses.yaml"
+            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$DIR/registry" --yes
+          jq '.chains.zetaphy | {mailbox, index}' "$DIR/agent-config.json"
+
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deployer.key"
 
       - name: Push the addresses to hyperlane/testnet
         if: inputs.dry_run == 'no'
@@ -112,8 +164,9 @@ jobs:
           git checkout -q -B "$BRANCH"
           git add -- "$DIR/registry/chains/zetaphy/addresses.yaml" "$DIR/agent-config.json"
           if git diff --cached --name-only | grep -Eiq '(\.key|keystore|secret)'; then echo "::error::refusing to commit a key-like file"; exit 1; fi
-          git commit -q -m "zetaphy-chain/hyperlane: core deployed on the ZETAPHY testnet" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          if git diff --cached --quiet; then echo "nothing changed"; exit 0; fi
+          git commit -q -m "zetaphy-chain/hyperlane: core on the ZETAPHY testnet (addresses, agent config)" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
           git push -q --force origin "$BRANCH"
-          gh pr create --base main --head "$BRANCH" --title "Hyperlane core on the ZETAPHY testnet: addresses" \
-            --body "Written by the hyperlane-core workflow ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})): Mailbox and the rest of Hyperlane core on ZETAPHY, and the agent config." \
+          gh pr create --base main --head "$BRANCH" --title "Hyperlane core on the ZETAPHY testnet: addresses and agent config" \
+            --body "Written by the hyperlane-core workflow ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))." \
             || echo "::warning::open the pull request by hand: ${{ github.server_url }}/${{ github.repository }}/compare/main...$BRANCH"

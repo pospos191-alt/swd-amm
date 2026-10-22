@@ -1,0 +1,18 @@
+# Hyperlane core on the ZETAPHY testnet: hyperlane-core workflow run 39835974651
+# (2026-10-22, @hyperlane-xyz/cli 45.0.1). No interchain gas paymaster on ZETAPHY (gas is 0).
+domainRoutingIsmFactory: "0x84f6B3d4CD518B2b5b8DbfFe660B7E2A0137Cf83"
+incrementalDomainRoutingIsmFactory: "0xbDdbe2f3a65D68E9847FBc7441F8b35965341736"
+interchainAccountRouter: "0x5252ad92177EbcD8bCBF06fbe13B5EFBF73959Db"
+interchainGasPaymaster: "0x0000000000000000000000000000000000000000"
+mailbox: "0x0f1C59C6e98c88E1ddc2Ff98Bee11dadA07fEaCe"
+merkleTreeHook: "0x58a95FcFddfB4f4df2288c563Ce0AE669FE5d4fc"
+proxyAdmin: "0x4A10D8Cf048873aEEF61A3631E325B1BFCafF246"
+quotedCalls: "0xb86a67e44E058F146680f16fB947B303fF397BBF"
+staticAggregationHookFactory: "0xE8FF166d0433D482986BAa053173FE5c53bA70f3"
+staticAggregationIsmFactory: "0x5ba5f8C829999204eC4314dFCBD9A5Ef7F7B1Fee"
+staticMerkleRootMultisigIsmFactory: "0x4E5fdCa0a786564226B2a1b2d853ff3E68141f01"
+staticMerkleRootWeightedMultisigIsmFactory: "0xC52da6a37395047740a1A6437d8c86CabD09b999"
+staticMessageIdMultisigIsmFactory: "0x35Ef33EFA25F0CDDC083076f401e7823E6b9B02B"
+staticMessageIdWeightedMultisigIsmFactory: "0x806e9BB43411470bDbE254Bc696D00086082579c"
+testRecipient: "0x8ADfDD22b3554D44107f6A7a66AcF9d4130b3f4D"
+validatorAnnounce: "0x7a5226c7cb683B87Afd3E0c72b564756b82D3841"
