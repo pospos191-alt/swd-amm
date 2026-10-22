@@ -196,6 +196,8 @@ What the handover does (all in one run, then checked on chain):
     Before the handover, check there are none: `zetaphyd q authz grants-by-granter <deployer's zetaphy1… address>` must be empty; use the deployer key only for launch, and treat the key as retired after the handover
 
 1. Prepare the emergency multisig (guardian): `zetaphy deploy-multisig --owners 0xA,0xB,0xC --threshold 2` or a Safe (see "multisig + hardware wallet" in `zetaphy-network/README.md`); each owner uses their own hardware wallet
+   - Or let the workflow create it: leave `guardian` empty and fill `guardian_owners` = `0xA,0xB` (a new SimpleMultisig, 2 signatures needed, deployed by the deployer, which owns nothing in it; its address is stored in the state as `guardianMultisig`)
+   - Testnet only: two accounts of the same MetaMask are accepted; before mainnet the guardian must be 3+ different people on hardware wallets (point 4 below)
 2. **Actions → launch-testnet → Run workflow**: the same `rpc`, `dry_run` = **no**, `governance` = **gov** (or `0x<multisig>`), `guardian` = **0x<emergency multisig>**, `handover` = **yes**
    - the deployer sends every transaction itself (no vote needed), then merge the PR (the state contains the `timelock` address)
 3. **Changing values after this (all done in the browser):** **Actions → timelock → Run workflow**
@@ -334,7 +336,7 @@ The workflow calls `node zetaphy-launch/launch.js` (the code is readable in the 
 - key: taken only from a file (`--key-file`, chmod 600) or env, never on the command line; never printed, never written to the state; the workflow writes the secret to a 0600 file in `$RUNNER_TEMP` and deletes it at the end of the run
 - The `oracle` step: TwapRecorder + ZetaphyPythRelay + ZetaphyOracle (ZETAPHY/USD from the DEX's WZETAPHY/tUSD pool, plus Pyth with `--pyth-zeta-feed`), then makes the StableGateway price through the oracle
   A price is available once the TWAP window is full (someone must poke it, e.g. `zetaphy relay start --poke-oracle 60`) · `--stable-testnet-price 0.01` = a testnet fallback with a fixed price (labelled; can be turned off through the timelock)
-- The `timelock` + `handover` steps (only with `--handover`): see step 8 · `--guardian` is required · `--timelock-delay` defaults to 172800 (below 86400 only with `--devnet` and an RPC of 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
+- The `timelock` + `handover` steps (only with `--handover`): see step 8 · `--guardian` (an existing multisig) or `--guardian-owners 0xA,0xB [--guardian-threshold 2]` (the `guardian` step deploys a new SimpleMultisig) is required · `--timelock-delay` defaults to 172800 (below 86400 only with `--devnet` and an RPC of 127.0.0.1) · `--timelock-proposers`, `--timelock-executor open|governance`
 - Tests: `cd zetaphy-launch && npm test` (step runner, state, config writers, timelock options) and `ZETAPHYD=… flock /tmp/ci-test/devnet.lock npm run test:devnet` (a real chain on the CI machine: deploys everything including DLMM, oracle, DEX/NFT/Neuro smoke tests, handover to the timelock + on-chain checks, guardian stops immediately, a vote schedules and then anyone executes after the time is up, monitor reports)
 
 ## 17. Security in the chain's core (after a genesis reset)

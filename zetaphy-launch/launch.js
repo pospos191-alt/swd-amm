@@ -22,6 +22,8 @@
 //                           emergency switches, then check on-chain that no EOA keeps an admin role
 //   --guardian 0x…          the emergency multisig (pause, lower caps, holds, remove a lane or marker, pause a price feed):
 //                           required with --handover; it acts at once, but can only reduce risk
+//   --guardian-owners 0x…,0x…   instead of --guardian: deploy a new SimpleMultisig with these owners as the guardian
+//   --guardian-threshold N  confirmations the new guardian multisig needs (default 2; at least 2)
 //   --timelock-delay S      the timelock's delay in seconds (default 172800 = 48 h; below 86400 only with --devnet)
 //   --timelock-proposers 0x…,0x…   more proposers/cancellers besides --governance (e.g. a multisig next to the gov module)
 //   --timelock-executor open|governance   who runs a call once its delay passed (default open: anyone)
@@ -39,7 +41,7 @@
 //   --bridge-lockbox <chainId>:0x…  also deploy the Neuro bridge CLOSED (needs a LockBox on the source chain; open later with `zetaphy bridge open` once gates pass)
 //   --skip-snap-build       write snap.config.js but do not run npm run build in zetaphy-snap
 //
-// Steps: neuro skill threats reports identity vault pq stable compute bridge dex dlmm nft oracle wire protect configs snap timelock handover
+// Steps: neuro skill threats reports identity vault pq stable compute bridge dex dlmm nft oracle wire protect configs snap guardian timelock handover
 // Testnet only: refuses any chain but ZETAPHY (EVM chain id 77390).
 
 import { readFileSync, renameSync, mkdtempSync, rmSync } from 'node:fs';
@@ -119,7 +121,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, log 
   const devnet = !!opt.devnet;
   const delay = timelockDelay(opt['timelock-delay'], devnet);
   const guardian = opt.guardian != null ? addressList(opt.guardian, '--guardian')[0] ?? null : null;
-  if (opt.handover && !guardian) throw new Error('--handover needs --guardian 0x<emergency multisig>: with every admin role behind the timelock, it is who can pause at once');
+  const guardianOwners = addressList(opt['guardian-owners'], '--guardian-owners');
+  const guardianThreshold = Number(opt['guardian-threshold'] ?? 2);
+  if (guardian && guardianOwners.length) throw new Error('--guardian and --guardian-owners: pass one (an existing multisig, or the owners of a new one)');
+  if (new Set(guardianOwners).size !== guardianOwners.length) throw new Error('--guardian-owners: an owner is listed twice');
+  if (guardianOwners.length && (!Number.isInteger(guardianThreshold) || guardianThreshold < 2 || guardianThreshold > guardianOwners.length || guardianOwners.length > 20)) {
+    throw new Error('--guardian-owners / --guardian-threshold: 2 to 20 owners, a threshold of at least 2 and at most the number of owners');
+  }
+  if (opt.handover && !guardian && !guardianOwners.length) throw new Error('--handover needs --guardian 0x<emergency multisig> or --guardian-owners 0x…,0x…: with every admin role behind the timelock, it is who can pause at once');
   const extraProposers = addressList(opt['timelock-proposers'], '--timelock-proposers');
   const executorMode = String(opt['timelock-executor'] ?? 'open');
   if (!['open', 'governance'].includes(executorMode)) throw new Error('--timelock-executor: open (anyone) or governance');
@@ -182,7 +191,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, log 
       neuroUrl: opt['neuro-url'] ? String(opt['neuro-url']) : null, walletOrigin: opt['wallet-origin'] ?? null,
       communityFund: opt['community-fund'] ?? null, stableReserve, computeMinAgreed, bridgeLockbox: opt['bridge-lockbox'] ?? null,
       skipSnapBuild: !!opt['skip-snap-build'],
-      devnet, timelockDelay: delay, guardian, extraProposers, executorMode, oracleRelayers, pythZetaFeed: opt['pyth-zeta-feed'] ?? null,
+      devnet, timelockDelay: delay, guardian, guardianOwners, guardianThreshold, extraProposers, executorMode, oracleRelayers, pythZetaFeed: opt['pyth-zeta-feed'] ?? null,
       oracleMinLiquidity, stableTestnetPrice,
     };
     try {
