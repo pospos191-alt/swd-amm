@@ -119,7 +119,10 @@ test('both validators register vote keys; recent blocks are certified by both', 
     assert.deepEqual(r.signers.map((s) => s.address).sort(), [A(), B()].sort());
     assert.deepEqual(r.problems, []);
   }
-  // Node B serves the same chain: the same verdict through it.
+  // Node B serves the same chain: the same verdict through it (once B has
+  // block `tip` too, which carries block tip-1's certificate; B can lag A).
+  const cometB = cometClient(RPC_B);
+  for (const end = Date.now() + 30_000; await height(cometB) < tip && Date.now() < end;) await sleep(500);
   const viaB = await verifyBlock(RPC_B, tip - 1);
   assert.equal(viaB.ok, true, viaB.problems.join('\n'));
   // Signatures bind the chain id.
