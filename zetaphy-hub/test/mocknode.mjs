@@ -38,7 +38,8 @@ export function answer(url, body) {
   if (p === '/' || p === '') {
     const { method, id, params } = JSON.parse(body || '{}');
     if (method === 'eth_call') return { jsonrpc: '2.0', id, result: ethCall(params[0]) };
-    if (method === 'eth_getTransactionReceipt') return { jsonrpc: '2.0', id, result: { status: '0x1', transactionHash: params[0] } };
+    if (method === 'eth_getTransactionReceipt') return { jsonrpc: '2.0', id, result: { status: '0x1', transactionHash: params[0],
+      logs: [{ address: '0x0000000000000000000000000000000000000802', topics: ['0xc01eca5e742fe6641c4be501c2bebf224472f69176a0552e87e30147a6411303'] }] } };
     const r = { eth_chainId: '0x12e4e', eth_blockNumber: `0x${H.toString(16)}`, eth_getBalance: '0x3635c9adc5dea00000', zetaphy_faucet: { txHash: `0x${'ab'.repeat(32)}`, amount: '0x8ac7230489e80000' } }[method];
     return r === undefined ? { jsonrpc: '2.0', id, error: { code: -32601, message: 'not mocked' } } : { jsonrpc: '2.0', id, result: r };
   }

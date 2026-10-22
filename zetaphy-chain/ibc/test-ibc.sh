@@ -70,7 +70,9 @@ UK="--keyring-backend test --keyring-dir $W/user"
 user=$("$BIN" keys show user -a $UK --home "$W/user")
 userhex=$("$BIN" debug addr "$user" --home "$W/user" | awk '/Address hex/ {print $3}')
 meta=$(bash "$REPO/zetaphy-chain/gov.sh" ibc-usdc-metadata channel-0 | jq -c .)
+# A has the ICS-20 precompile (0x…0802) on, as setup-node.sh's genesis does (ZETAPHY Saphan sends through it)
 COSMOS_CHAIN_ID=$CA EVM_CHAIN_ID=77390 ZETAPHYD="$BIN" EXTRA_COINS=1000000000000uusdc \
+  GENESIS_JQ='.app_state.evm.params.active_static_precompiles = ((.app_state.evm.params.active_static_precompiles // []) + ["0x0000000000000000000000000000000000000802"] | unique)' \
   bash "$REPO/zetaphy-network/scripts/devnet.sh" "$W/a" "$PA" "$userhex"
 COSMOS_CHAIN_ID=$CB EVM_CHAIN_ID=77391 ZETAPHYD="$BIN" EXTRA_COINS=1000000000000uusdc \
   GENESIS_JQ=".app_state.bank.denom_metadata += [$meta]" bash "$REPO/zetaphy-network/scripts/devnet.sh" "$W/b" "$PB" "$userhex"
@@ -204,6 +206,8 @@ const data = encodeIbcTransfer({ channel: "channel-0", denom: "azetaphy", amount
 const tx = await w.sendTransaction({ to: PRECOMPILES.ics20, data, gasLimit: 600000n });
 const r = await tx.wait();
 if (r.status !== 1) throw new Error(`reverted: ${tx.hash}`);
+const { sentIbcTransfer } = await import(process.env.HUB);
+if (!sentIbcTransfer({ logs: r.logs.map((l) => ({ address: l.address, topics: l.topics })) })) throw new Error(`no IBCTransfer event: ${tx.hash}`);
 console.log(tx.hash);') || fail "ICS-20 precompile transfer"
 unset key
 waitfor 90 bal "$NB" "$user" "$zd" "$(python3 -c "print($zb + 3 * 10**18)")" || fail "3 ZETAPHY sent through the precompile did not reach B"

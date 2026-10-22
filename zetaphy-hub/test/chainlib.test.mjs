@@ -11,6 +11,9 @@ test('selectors are keccak256 of the signatures', () => {
   assert.equal(L.SELECTORS.undelegate, id('undelegate(address,string,uint256)').slice(0, 10));
   assert.equal(L.SELECTORS.claimRewards, id('claimRewards(address,uint32)').slice(0, 10));
   assert.equal(L.SELECTORS.vote, id('vote(address,uint64,uint8,string)').slice(0, 10));
+  assert.equal(L.IBC_TRANSFER_TOPIC, id('IBCTransfer(address,string,string,string,string,uint256,string)'));
+  assert.equal(L.sentIbcTransfer({ logs: [{ address: L.PRECOMPILES.ics20, topics: [L.IBC_TRANSFER_TOPIC] }] }), true);
+  assert.equal(L.sentIbcTransfer({ logs: [] }), false, 'no event: nothing was sent');
   assert.equal(L.SELECTORS.ibcTransfer, id('transfer(string,string,string,uint256,address,string,(uint64,uint64),uint64,string)').slice(0, 10));
 });
 

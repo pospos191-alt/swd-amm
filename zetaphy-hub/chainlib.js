@@ -18,6 +18,11 @@ export const SELECTORS = {
   vote: '0x9ec4d363', // vote(address,uint64,uint8,string)
   ibcTransfer: '0x632535b9', // transfer(string,string,string,uint256,address,string,(uint64,uint64),uint64,string)
 };
+/** The ICS-20 precompile's IBCTransfer(address,string,string,string,string,uint256,string) event: proof a packet left. */
+export const IBC_TRANSFER_TOPIC = '0xc01eca5e742fe6641c4be501c2bebf224472f69176a0552e87e30147a6411303';
+/** True when a receipt carries the precompile's IBCTransfer event (a call to an inactive precompile succeeds and does nothing). */
+export const sentIbcTransfer = (receipt) => Boolean(receipt?.logs?.some((l) =>
+  String(l.address).toLowerCase() === PRECOMPILES.ics20 && String(l.topics?.[0]).toLowerCase() === IBC_TRANSFER_TOPIC));
 
 // ---------------------------------------------------------------- bech32
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';

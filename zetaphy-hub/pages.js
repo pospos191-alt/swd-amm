@@ -1,7 +1,7 @@
 // The hub's data pages (like a chain explorer's): Earn, Analytics, DeFi, Leaderboard, Developers.
 // Each page: render(root, ctx) draws it once; refresh(ctx) (optional) updates live numbers.
 // ctx = { T, lang, ep(), cfg, getJson, evmCall, el, short, formatZeta, show, copyBtn, account(), connect(), send(to, data) }
-import { formatZeta, toEvm, toBech32, bech32Decode, parseUnits, formatUnits, encodeIbcTransfer, PRECOMPILES } from './chainlib.js';
+import { formatZeta, toEvm, toBech32, bech32Decode, parseUnits, formatUnits, encodeIbcTransfer, sentIbcTransfer, PRECOMPILES } from './chainlib.js';
 
 // ------------------------------------------------------------------ eth_call helpers (selectors = keccak256, checked in tests)
 export const SEL = {
@@ -368,7 +368,7 @@ const SAPHAN = {
     recv: 'รับเข้า ZETAPHY', tipRecv: 'จากกระเป๋าบนเชนต้นทาง (เช่น Keplr) เลือก IBC transfer ใส่ช่องฝั่งเขา และที่อยู่ zetaphy1… ของคุณ',
     recvHow: (ch, name) => `บน ${name} ส่งแบบ IBC transfer ผ่านช่อง ${ch} มาที่ที่อยู่นี้:`,
     myAddr: 'ที่อยู่ของคุณบน ZETAPHY', bal: 'ยอดคงเหลือ', limits: 'กันความเสียหาย: เชนมีเพดานโอนต่อวัน (rate limit) และพักรายการใหญ่ไว้ตรวจก่อน (IBC hold) รายการที่เกินจะถูกปฏิเสธหรือคืนเงิน',
-    sent: 'ส่งแล้ว รอ relayer ส่งต่อ (ราว 1 นาที)', badTo: (p) => `ที่อยู่ปลายทางต้องขึ้นต้นด้วย ${p}1…`, noRoute: 'ยังไม่มีเส้นทาง',
+    sent: 'ส่งแล้ว รอ relayer ส่งต่อ (ราว 1 นาที)', noEvent: 'ธุรกรรมผ่านแต่ไม่มีการส่งข้ามเชน (precompile IBC ไม่ได้เปิดบนเชนนี้) เหรียญยังอยู่ในกระเป๋า', badTo: (p) => `ที่อยู่ปลายทางต้องขึ้นต้นด้วย ${p}1…`, noRoute: 'ยังไม่มีเส้นทาง',
   },
   en: {
     intro: 'ZETAPHY Saphan ("bridge" in Thai) moves coins chain to chain over IBC: each chain checks the other with a light client, no custodian holds the funds',
@@ -379,7 +379,7 @@ const SAPHAN = {
     recv: 'Receive into ZETAPHY', tipRecv: 'From a wallet on the other chain (e.g. Keplr), choose IBC transfer, their channel, and your zetaphy1… address',
     recvHow: (ch, name) => `On ${name}, send an IBC transfer over ${ch} to this address:`,
     myAddr: 'Your ZETAPHY address', bal: 'Balance', limits: 'Damage limits: the chain caps daily flow (rate limit) and holds large transfers for review (IBC hold); a transfer over them is refused or refunded',
-    sent: 'Sent; the relayer carries it (about a minute)', badTo: (p) => `The receiver must start with ${p}1…`, noRoute: 'No route yet',
+    sent: 'Sent; the relayer carries it (about a minute)', noEvent: 'The transaction went through but nothing was sent across (the IBC precompile is off on this chain); the coins are still yours', badTo: (p) => `The receiver must start with ${p}1…`, noRoute: 'No route yet',
   },
 };
 let routes = [], assets = [];
@@ -451,6 +451,8 @@ function saphanForm(ctx, root) {
         timeoutNs: BigInt(Date.now() + 10 * 60_000) * 1_000_000n, memo: 'ZETAPHY Saphan' });
       say('…');
       const hash = await ctx.send(PRECOMPILES.ics20, data);
+      const rc = await ctx.evmCall('eth_getTransactionReceipt', [hash]).catch(() => null);
+      if (rc && !sentIbcTransfer(rc)) throw new Error(`${L.noEvent} · ${ctx.short(hash, 10, 6)}`);
       say(`${L.sent} · ${ctx.short(hash, 10, 6)}`, 'ok');
       saphan.refresh(root, ctx);
     } catch (err) { say(err?.message ?? String(err), 'bad'); }
