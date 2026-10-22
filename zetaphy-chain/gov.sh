@@ -37,7 +37,7 @@
 #   gov.sh ibc-usdc-ratelimit <channel> [send%] [recv%] [hours]   cap USDC on it, or change the cap (default 1 1 24)
 #   gov.sh ibc-usdc-erc20 <channel>                      USDC as an ERC-20 (MetaMask, explorer, DEX token lists)
 #   gov.sh ibc-usdc-metadata <channel>                   its bank metadata (USDC, 6 decimals) for a genesis / upgrade
-#   ---- CosmWasm (README.md, stage 6) ----
+#   ---- CosmWasm (README.md, stage 7) ----
 #   gov.sh wasm-store <file.wasm> "<title>" [everybody|nobody|zetaphy1…,zetaphy1…]
 #                                                        propose storing contract code (who may instantiate it; default everybody)
 #   gov.sh wasm-upload-access nobody|everybody|zetaphy1…,zetaphy1…   propose who may store code without a vote (default: nobody)
@@ -343,10 +343,10 @@ case "${1:-}" in
     [ -f "$file" ] || { echo "no such file: $file"; exit 1; }
     head -c4 "$file" | od -An -tx1 | tr -d ' \n' | grep -q '^0061736d' || gzip -t "$file" 2>/dev/null || { echo "not a wasm file: $file"; exit 1; }
     case "$who" in
-      everybody) perm='{permission:"ACCESS_TYPE_EVERYBODY",addresses:[]}' ;;
-      nobody)    perm='{permission:"ACCESS_TYPE_NOBODY",addresses:[]}' ;;
+      everybody) perm='{permission:"Everybody",addresses:[]}' ;;
+      nobody)    perm='{permission:"Nobody",addresses:[]}' ;;
       *) [[ "$who" =~ ^zetaphy1[0-9a-z]{38,58}(,zetaphy1[0-9a-z]{38,58})*$ ]] || { echo "instantiate: everybody, nobody or zetaphy1…,zetaphy1…"; exit 1; }
-         perm="{permission:\"ACCESS_TYPE_ANY_OF_ADDRESSES\",addresses:$(echo "$who" | jq -R -c 'split(",")')}" ;;
+         perm="{permission:\"AnyOfAddresses\",addresses:$(echo "$who" | jq -R -c 'split(",")')}" ;;
     esac
     sum=$( (gzip -dc "$file" 2>/dev/null || cat "$file") | sha256sum | cut -d' ' -f1)
     gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
@@ -357,17 +357,20 @@ case "${1:-}" in
         metadata:\"\",deposit:\$d,title:(\$t + \" (wasm sha256 \" + \$sum[0:16] + \"…)\"),
         summary:(\"Store CosmWasm code, sha256 \" + \$sum + \". Who may instantiate it: \" + \$who + \".\"),expedited:false}" > "$f"
     echo "code sha256 $sum"
+    # Storing the proposal costs gas per byte of code; a tight margin keeps a
+    # large contract under the 30,000,000 block gas limit.
+    TXF=${TXF/--gas-adjustment 1.5/--gas-adjustment 1.1}
     submit tx gov submit-proposal "$f"; rm -f "$f" "$z" ;;
   wasm-upload-access)
     who=${2:?nobody, everybody or zetaphy1…,zetaphy1…}
     case "$who" in
-      everybody) up='{permission:"ACCESS_TYPE_EVERYBODY",addresses:[]}' ;;
-      nobody)    up='{permission:"ACCESS_TYPE_NOBODY",addresses:[]}' ;;
+      everybody) up='{permission:"Everybody",addresses:[]}' ;;
+      nobody)    up='{permission:"Nobody",addresses:[]}' ;;
       *) [[ "$who" =~ ^zetaphy1[0-9a-z]{38,58}(,zetaphy1[0-9a-z]{38,58})*$ ]] || { echo "nobody, everybody or zetaphy1…,zetaphy1…"; exit 1; }
-         up="{permission:\"ACCESS_TYPE_ANY_OF_ADDRESSES\",addresses:$(echo "$who" | jq -R -c 'split(",")')}" ;;
+         up="{permission:\"AnyOfAddresses\",addresses:$(echo "$who" | jq -R -c 'split(",")')}" ;;
     esac
     gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
-    inst=$($ZETAPHYD q wasm params $QF | jq -r '.params.instantiate_default_permission // "ACCESS_TYPE_EVERYBODY"')
+    inst=$($ZETAPHYD q wasm params $QF | jq -r '(.params // .).instantiate_default_permission // "Everybody"')
     f=$(mktemp)
     jq -n --arg gov "$gov" --arg inst "$inst" --arg d "$DEPOSIT" --arg who "$who" \
       "{messages:[{\"@type\":\"/cosmwasm.wasm.v1.MsgUpdateParams\",authority:\$gov,params:{code_upload_access:$up,instantiate_default_permission:\$inst}}],
@@ -375,9 +378,9 @@ case "${1:-}" in
         summary:(\"Who may store contract code without a vote: \" + \$who + \". Governance can always store code by proposal.\"),expedited:false}" > "$f"
     submit tx gov submit-proposal "$f"; rm -f "$f" ;;
   wasm-codes)
-    $ZETAPHYD q wasm params $QF | jq -c '.params'
+    $ZETAPHYD q wasm params $QF | jq -c '.params // .'
     $ZETAPHYD q wasm list-code $QF | jq -c '.code_infos[]? | {code_id, creator, data_hash, instantiate_permission}' ;;
 
   *)
-    sed -n '8,45p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,44p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

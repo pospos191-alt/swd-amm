@@ -58,6 +58,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/out"
           cp "$(go env GOPATH)/bin/evmd" "$RUNNER_TEMP/out/zetaphyd-linux-${{ matrix.arch }}"
           "$RUNNER_TEMP/out/zetaphyd-linux-${{ matrix.arch }}" version
+          # CosmWasm: the binary links libwasmvm.<arch>.so (not bundled);
+          # setup-node.sh installs wasmvm's release file, sha256-pinned.
+          "$RUNNER_TEMP/out/zetaphyd-linux-${{ matrix.arch }}" q wasm libwasmvm-version
+          ldd "$RUNNER_TEMP/out/zetaphyd-linux-${{ matrix.arch }}" | grep libwasmvm
 
       - uses: actions/upload-artifact@v4
         with:
@@ -91,6 +95,7 @@ jobs:
             echo "zetaphyd built by GitHub Actions from \`zetaphy-chain/setup-node.sh\` $short (commit ${GITHUB_SHA})."
             echo
             echo "Ubuntu 24.04, x86_64 (amd64) and ARM64. Install on a node with ZETAPHYD_BIN=<file> (see zetaphy-chain/README.md)."
+            echo "It links libwasmvm (CosmWasm) $(sed -n 's/^WASMVM_VERSION="\(.*\)"/\1/p' ../zetaphy-chain/setup-node.sh), which setup-node.sh installs (sha256 pinned)."
             echo
             echo '```'
             cat SHA256SUMS

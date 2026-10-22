@@ -328,3 +328,61 @@ gov.sh ibc-usdc-ratelimit channel-0         # เพดานต่ำ 1% / 1% �
 ค่าใช้จ่าย, precompile, genesis, handler `zetaphy-v3`), `fork-tests/evmd/tests/ibc/zetaphy_ibchold_test.go`
 (พัก ปล่อย คืนเงิน เกณฑ์ supply) และบนเชนจริง `npm run test:devnet:security` กับ `ibc/test-ibc.sh` (ข้อ 4)
 รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
+
+## ขั้น 7: สัญญาอัจฉริยะภาษา Rust (CosmWasm) คู่กับ EVM
+
+เชนเดียวกัน บัญชีเดียวกัน เหรียญเดียวกัน: นอกจากสัญญา Solidity (EVM) แล้ว ZETAPHY รันสัญญา CosmWasm
+(เขียนด้วย Rust, compile เป็น WASM) ได้ด้วย ผ่านโมดูล `x/wasm` ของ wasmd (patch อยู่ใน `setup-node.sh` เดียวกัน:
+`evmd/zetaphy_cosmwasm.go`)
+
+**รุ่นที่ใช้ (pin ไว้พร้อม hash):** wasmd `v0.70.5` (รุ่นสำหรับ Cosmos SDK v0.54) + wasmvm `v3.0.9`
+(CosmWasm VM 3.0.11) ทั้งคู่ถูกตรวจ hash ผ่าน `evmd/go.sum` (Go checksum database)
+ส่วน ibc-go คงไว้ที่ `v11.0.0` ตัวเดิม (wasmd v0.70.5 ขอ v11.2.0 แต่รุ่นนั้นพ่วงโมดูล rate-limiting ของ ibc-go
+ที่ชนกับ x/ratelimit ของเรา; wasmd v0.70.0–v0.70.2 ก็ build บน v11.0.0)
+
+**ไลบรารี VM (libwasmvm):** เป็นไลบรารี Rust ที่ binary ลิงก์แบบ shared (`libwasmvm.x86_64.so` / `libwasmvm.aarch64.so`)
+`setup-node.sh` ติดตั้งไว้ที่ `/usr/local/lib` หลังตรวจ SHA-256 กับค่าที่ pin ไว้ (`WASMVM_SO_SHA256_*`, ตรงกับ
+`checksums.txt` ของ wasmvm) ใช้ได้ทั้ง x86_64 และ ARM (Oracle ARM) บน Ubuntu 24.04
+(ต้องการ glibc ≥ 2.30) ถ้าใช้ไฟล์เชนสำเร็จรูป (`ZETAPHYD_BIN=`) สคริปต์ดาวน์โหลด libwasmvm จาก release ของ
+CosmWasm แล้วตรวจ hash เดียวกัน
+- ทำไมไม่ลิงก์แบบ static (musl): ชุดเครื่องมือ musl บน Ubuntu 24.04 ลิงก์ libwasmvm แบบ static ไม่ผ่าน
+  (`libgcc_eh` ของ Ubuntu ต้องการ `_dl_find_object` ของ glibc) ทางเลี่ยงที่มีทำให้ Rust panic กลายเป็นโปรแกรมล้ม
+  จึงใช้ไฟล์ .so ที่ตรวจ hash แทน
+- เวลา build และขนาด: เวลา compile แทบไม่เปลี่ยน (~4 นาทีบนเครื่อง 4 core ทั้งก่อนและหลัง), `zetaphyd` ใหญ่ขึ้น
+  ~3 MB (152 → 156 MB หลัง strip) บวกไฟล์ libwasmvm 19.5 MB (x86_64) / 17.5 MB (ARM) ดิสก์ของเชนมีโฟลเดอร์
+  `wasm/` เพิ่ม (โค้ดสัญญาที่ compile แล้ว)
+
+**ค่าความปลอดภัยเริ่มต้น**
+- **อัปโหลดโค้ดสัญญา: governance เท่านั้น** (`code_upload_access = Nobody`) ส่งโค้ดเป็น proposal แล้วโหวต:
+  ```bash
+  bash gov.sh wasm-store cw20_base.wasm "cw20-base v2.0.0"      # พิมพ์ sha256 ของโค้ดให้เทียบกับ build ที่เผยแพร่
+  bash gov.sh vote <id> yes
+  bash gov.sh wasm-codes                                         # โค้ดที่เก็บแล้ว + กติกาอัปโหลดตอนนี้
+  bash gov.sh wasm-upload-access zetaphy1…,zetaphy1…             # (ถ้าต้องการ) ให้บางที่อยู่อัปโหลดได้โดยไม่ต้องโหวต
+  ```
+  สัญญาขนาด ~380 KB (gzip ~150 KB) ใช้ gas ราว 25 ล้านตอนยื่น proposal เพดานบล็อกคือ 30 ล้าน
+  สัญญาใหญ่กว่านั้นต้องให้ governance เปิดสิทธิ์อัปโหลดให้ที่อยู่หนึ่ง (`wasm-upload-access`) แทน
+- **สร้าง (instantiate) และเรียกใช้: ทุกคน** (`zetaphyd tx wasm instantiate / execute`)
+- ขนาดโค้ดสูงสุด 800 KiB (หลังแตก gzip) ทั้งแบบอัปโหลดตรงและผ่าน proposal; query สัญญาใช้ gas ได้ไม่เกิน 3 ล้าน
+  (`[wasm]` ใน app.toml; cache ของ VM 100 MiB หรือ 32 MiB บนเครื่อง RAM < 3 GB)
+- **ธุรกรรม wasm คือธุรกรรม Cosmos ธรรมดา** จึงอยู่ใต้กติกาเดิมทั้งหมด: ค่าธรรมเนียมเป็น azetaphy และเผาครึ่งหนึ่ง,
+  Q-day (หลัง Q-day ต้องเซ็นด้วย ML-DSA-44), บัญชีที่ล็อกควอนตัมใช้กุญแจเดิมส่งไม่ได้
+- **สิ่งที่สัญญาส่งต่อก็ถูกตรวจ:** สัญญาใช้สิทธิ์ authz ของบัญชีที่ล็อกควอนตัมไม่ได้, ส่งธุรกรรม EVM หรือข้อความ
+  `zetaphy.pq.*` ไม่ได้, เปิดช่อง IBC/ส่ง packet IBC เองไม่ได้ (โอนเหรียญแบบ ICS-20 ได้ และผ่านเพดาน IBC ตามปกติ)
+- **IBC สำหรับสัญญา: ปิด** (ไม่มี route ให้พอร์ต `wasm.*` / `wasm2*`) การเปิดภายหลังต้องเป็นการอัปเกรดที่ตรวจแยก
+- **Threat gate ยังใช้กับ EVM เท่านั้น:** ThreatRegistry เก็บธงของสัญญา EVM (ที่อยู่ 20 ไบต์) ส่วนที่อยู่สัญญา
+  CosmWasm ยาว 32 ไบต์ และสัญญา CosmWasm เรียกสัญญา EVM ในนามตัวเองไม่ได้ จึงไม่มีทางอ้อมด่าน
+  (Neuro อ่านสัญญา CosmWasm ของ ZETAPHY ได้: `node cli.js zetaphy-wasm <zetaphy1…> --rest https://<โหนด>/rest`)
+
+**ข้อควรรู้ก่อนล็อกควอนตัม:** ผู้ควบคุม ML-DSA-44 ใช้งานแทนบัญชีที่ล็อกได้เฉพาะฝั่ง EVM (`MsgEVMCall as_owner`)
+ยังสั่งสัญญา CosmWasm แทนไม่ได้ ถ้ามีโทเคน cw20 หรือเป็น admin ของสัญญา CosmWasm ให้ย้ายไปบัญชี ML-DSA-44
+ก่อนล็อก
+
+**อัปเกรด:** เชนใหม่มี CosmWasm ตั้งแต่ genesis (`zetaphyd init` และ `setup-node.sh` ตั้งค่าข้างบนให้)
+เชนที่รันอยู่: `gov.sh propose-upgrade zetaphy-v4 <ความสูง H> "<สรุป>"` แล้วโหวต ทุก validator เปลี่ยน binary ที่ H
+(handler เพิ่ม store ของ wasm, ตั้งค่า "อัปโหลดโดย governance เท่านั้น" และเปิด v2/v3 ให้ด้วยถ้ายังไม่เปิด)
+
+ทดสอบ: `fork-tests/evmd/zetaphy_cosmwasm_test.go` (สัญญาอ้างอิง hackatom/reflect จาก wasmd testdata ตรวจ sha256,
+อัปโหลดเฉพาะ governance, instantiate/execute, Q-day และล็อกควอนตัมกับธุรกรรม wasm, สิ่งที่สัญญาส่งต่อ, พอร์ต IBC ปิด,
+handler `zetaphy-v4`) และบนเชนจริง `npm run test:devnet:wasm` (zetaphy-network: โหวตเก็บ cw20-base v2.0.0
+ที่ตรวจ sha256 แล้ว instantiate โอน และดูการเผาค่าธรรมเนียม) CI รันทั้งบน x86_64 และ ARM64

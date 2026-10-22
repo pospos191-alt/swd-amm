@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -62,9 +63,9 @@ test('gov.sh usage lists every command, and only the header', () => {
   assert.equal(code, 2);
   const lines = out.trimEnd().split('\n');
   assert.match(lines[0], /^ {2}gov\.sh propose-upgrade/);
-  assert.match(lines.at(-1), /^ {2}gov\.sh ibc-usdc-metadata/);
+  assert.match(lines.at(-1), /^ {2}gov\.sh wasm-codes/);
   assert.ok(!lines.some((l) => l.startsWith('#') || l.startsWith('set ')), out);
-  for (const c of ['ibc-usdc-denom', 'ibc-usdc-ratelimit', 'ibc-usdc-erc20', 'propose-ratelimit', 'vote-key']) {
+  for (const c of ['ibc-usdc-denom', 'ibc-usdc-ratelimit', 'ibc-usdc-erc20', 'propose-ratelimit', 'vote-key', 'wasm-store', 'wasm-upload-access']) {
     assert.ok(out.includes(`gov.sh ${c}`), c);
   }
 });
@@ -91,14 +92,15 @@ case "$1 $2 $3" in
     [ "${meta}" = none ] && exit 1
     # ibc-go v11's default (transfer keeper SetDenomMetadata)
     echo "{\\"metadata\\":{\\"base\\":\\"$4\\",\\"display\\":\\"transfer/channel-0/uusdc\\",\\"symbol\\":\\"UUSDC\\",\\"denom_units\\":[{\\"denom\\":\\"uusdc\\"}]}}" ;;
-  "tx gov submit-proposal") cp "$4" $D/proposal.json; echo '{"code":0,"txhash":"AB"}' ;;
+  "q wasm params") echo '{"code_upload_access":{"permission":"Nobody","addresses":[]},"instantiate_default_permission":"Everybody"}' ;;
+  "tx gov submit-proposal") cp "$4" $D/proposal.json; echo "$*" > $D/args; echo '{"code":0,"txhash":"AB"}' ;;
   *) echo "unexpected: $*" >&2; exit 1 ;;
 esac
 `);
   chmodSync(bin, 0o755);
   const env = { ZETAPHYD: bin, NODE_HOME: dir, KEYS_DIR: dir };
   const proposal = () => (existsSync(join(dir, 'proposal.json')) ? JSON.parse(readFileSync(join(dir, 'proposal.json'), 'utf8')) : null);
-  return { env, proposal };
+  return { env, proposal, dir };
 }
 
 test('ibc-usdc-ratelimit: MsgAddRateLimit on the USDC voucher, 1% / 1% / 24 h by default', () => {
@@ -271,4 +273,47 @@ test('setup-relayer.sh send-usdc checks its arguments before anything else', () 
   for (const args of [['zetaphy1abc', '5'], ['0x' + '11'.repeat(20), '0'], ['0x' + '11'.repeat(20), '1.5'], ['cosmos1xyz', '5']]) {
     assert.notEqual(run(RELAYER, ['send-usdc', ...args], env).code, 0, args.join(' '));
   }
+});
+
+// CosmWasm (zetaphy-chain README, stage 7): code is stored by a vote only.
+test('wasm-store: MsgStoreCode from the gov module, gzipped code, sha256 in the title; wasm-upload-access', () => {
+  const c = fakeChain();
+  const code = Buffer.concat([Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]), Buffer.alloc(64, 7)]);
+  const f = join(c.dir, 'c.wasm');
+  writeFileSync(f, code);
+  const sum = createHash('sha256').update(code).digest('hex');
+  const r = run(GOV, ['wasm-store', f, 'test code'], c.env);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, new RegExp(`code sha256 ${sum}`));
+  const p = c.proposal();
+  assert.equal(p.messages.length, 1);
+  const m = p.messages[0];
+  assert.equal(m['@type'], '/cosmwasm.wasm.v1.MsgStoreCode');
+  assert.equal(m.sender, GOV_ADDR);
+  assert.deepEqual(gunzipSync(Buffer.from(m.wasm_byte_code, 'base64')), code);
+  assert.deepEqual(m.instantiate_permission, { permission: 'Everybody', addresses: [] });
+  assert.match(p.title, new RegExp(`^test code \\(wasm sha256 ${sum.slice(0, 16)}`));
+  assert.match(p.summary, new RegExp(sum));
+  assert.match(readFileSync(join(c.dir, 'args'), 'utf8'), /--gas-adjustment 1\.1/, 'a tight gas margin (30M block gas)');
+
+  const who = 'zetaphy1' + 'q'.repeat(38);
+  const c2 = fakeChain();
+  assert.equal(run(GOV, ['wasm-store', f, 'only one', who], c2.env).code, 0);
+  assert.deepEqual(c2.proposal().messages[0].instantiate_permission, { permission: 'AnyOfAddresses', addresses: [who] });
+
+  const c3 = fakeChain();
+  const txt = join(c3.dir, 'x.txt');
+  writeFileSync(txt, 'not wasm');
+  assert.notEqual(run(GOV, ['wasm-store', txt, 'bad'], c3.env).code, 0);
+  assert.notEqual(run(GOV, ['wasm-store', f, 'bad', 'cosmos1abc'], c3.env).code, 0);
+  assert.equal(c3.proposal(), null);
+
+  const c4 = fakeChain();
+  assert.equal(run(GOV, ['wasm-upload-access', who], c4.env).code, 0);
+  assert.deepEqual(c4.proposal().messages, [{ '@type': '/cosmwasm.wasm.v1.MsgUpdateParams', authority: GOV_ADDR,
+    params: { code_upload_access: { permission: 'AnyOfAddresses', addresses: [who] }, instantiate_default_permission: 'Everybody' } }]);
+  const c5 = fakeChain();
+  assert.equal(run(GOV, ['wasm-upload-access', 'nobody'], c5.env).code, 0);
+  assert.equal(c5.proposal().messages[0].params.code_upload_access.permission, 'Nobody');
+  assert.notEqual(run(GOV, ['wasm-upload-access', 'anyone'], fakeChain().env).code, 0);
 });

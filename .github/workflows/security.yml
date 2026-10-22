@@ -24,8 +24,12 @@
 #                 its test, those contracts or the pinned OpenZeppelin files
 #                 change), and the DEX DLMM devnet test (the job also runs
 #                 when only the DLMM contracts, dlmm-cli.js or its test
-#                 change); also checks cloud-init.sh is setup-node.sh packed.
+#                 change); also checks cloud-init.sh is setup-node.sh packed,
+#                 and CosmWasm (fork tests + a cw20 devnet voted in by gov).
 #                 ~15-25 min.
+#   zetaphy-chain-arm64 same trigger — the server build (make install +
+#                 libwasmvm check) on an aarch64 runner (Oracle ARM VMs),
+#                 and the CosmWasm/PQ fork tests there. ~15 min.
 #
 # Free-tier budget: GitHub Free gives private repos 2,000 Actions minutes a
 # month. The `changes` job runs each test job ONLY when its own files changed
@@ -155,7 +159,7 @@ jobs:
           # the DLMM devnet test (in the zetaphy-chain job, which builds zetaphyd): when the DLMM contracts, their CLI or test change
           out dlmm '^(zetaphy-dex/(contracts/dlmm/|artifacts/(ZetaphyDlmm|DlmmMath)[A-Za-z]*\.json$|dlmm-cli\.js$|cli\.js$|test/devnet\.dlmm\.integration\.js$|package(-lock)?\.json$)|zetaphy-network/(scripts/devnet\.sh|artifacts/ThreatRegistry\.json)$)'
           # the timelock/oracle devnet test: when its test, those contracts or the pinned OpenZeppelin files change (rarely)
-          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|src/securitycli\.js|cli\.js|contracts/(NeuroJobs|NeuroControl|ZetaphyTimelock|ZetaphyOracle|TwapRecorder|ZetaphyPythRelay)\.sol|vendor/.*|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc|timelock|security)\.integration\.js)$)'
+          out chain '^(zetaphy-chain/|zetaphy-network/(src/pqtx\.js|src/pq\.js|src/skill\.js|src/securitycli\.js|cli\.js|contracts/(NeuroJobs|NeuroControl|ZetaphyTimelock|ZetaphyOracle|TwapRecorder|ZetaphyPythRelay)\.sol|vendor/.*|scripts/devnet\.sh|test/devnet\.(pq|pqcert|cosmoswallet|neurogov|chainrand|preinstalls|ibc|timelock|security|wasm)\.integration\.js)$)'
 
   test-ui:
     name: test-ui (syntax + page smoke test)
@@ -504,14 +508,15 @@ jobs:
           bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
           cp -r zetaphy-chain/fork-tests/. "$SRC/"
 
-      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys, MsgEVMCall, security core) + fuzzing
+      - name: Go tests (ML-DSA precompile, ML-DSA-44 account keys, MsgEVMCall, security core, CosmWasm) + fuzzing
         working-directory: ${{ env.SRC }}
         run: |
           go test ./precompiles/mldsa/ ./crypto/mldsa44/
           go test ./crypto/mldsa44/ -run '^$' -fuzz FuzzUnmarshalVerify -fuzztime 30s
           cd evmd
           # QDay|Threat|Security: the security core (Q-day, threat gate, precompile 0x…0901)
-          go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security' .
+          # Wasm: CosmWasm (gov-only upload, Q-day / quantum lock on wasm txs, dispatch guard, zetaphy-v4)
+          go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security|Wasm' .
           go test -run '^$' -fuzz FuzzEVMCallUnmarshal -fuzztime 20s .
 
       # Static security checks on the code ZETAPHY added. G115 (int
@@ -557,12 +562,60 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:ibc
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:timelock
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:security
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:wasm
 
       - name: DEX DLMM on a real devnet (deploy CLI, native liquidity, swaps, Neuro check)
         working-directory: zetaphy-dex
         run: |
           npm ci --no-audit --no-fund
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:dlmm
+
+  # The server's own build (setup-node.sh step 4: make install, then the
+  # libwasmvm hash check and install) on aarch64, as on Oracle's free ARM
+  # VMs; the x86_64 job above builds with go build.
+  zetaphy-chain-arm64:
+    name: zetaphy-chain-arm64 (server build + fork tests on aarch64)
+    needs: changes
+    if: needs.changes.outputs.chain == 'true'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      SRC: ${{ github.workspace }}/../cosmos-evm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go (the version setup-node.sh pins)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.9'
+          cache: false
+
+      - name: Pinned Cosmos EVM source + the ZETAPHY patches
+        run: |
+          tag=$(sed -n 's/^COSMOS_EVM_TAG="\(.*\)"/\1/p' zetaphy-chain/setup-node.sh)
+          commit=$(sed -n 's/^COSMOS_EVM_COMMIT="\(.*\)"/\1/p' zetaphy-chain/setup-node.sh)
+          git clone -q --depth 1 --branch "$tag" https://github.com/cosmos/evm.git "$SRC"
+          [ "$(git -C "$SRC" rev-parse HEAD)" = "$commit" ]
+          bash zetaphy-chain/setup-node.sh --patch-source "$SRC"
+          cp -r zetaphy-chain/fork-tests/. "$SRC/"
+
+      - name: make install + libwasmvm (as setup-node.sh step 4)
+        working-directory: ${{ env.SRC }}
+        run: |
+          make install
+          [ "$(uname -m)" = aarch64 ]
+          eval "$(grep -E '^WASMVM_(VERSION|SO_SHA256_aarch64)=' "$GITHUB_WORKSPACE/zetaphy-chain/setup-node.sh")"
+          [ "$(cd evmd && go list -m -f '{{.Version}}' github.com/CosmWasm/wasmvm/v3)" = "$WASMVM_VERSION" ]
+          so="$(cd evmd && go list -m -f '{{.Dir}}' github.com/CosmWasm/wasmvm/v3)/internal/api/libwasmvm.aarch64.so"
+          echo "$WASMVM_SO_SHA256_aarch64  $so" | sha256sum -c -
+          sudo install -m 644 "$so" /usr/local/lib/libwasmvm.aarch64.so && sudo ldconfig
+          "$(go env GOPATH)/bin/evmd" q wasm libwasmvm-version
+          ls -l "$(go env GOPATH)/bin/evmd"
+
+      - name: Fork tests on aarch64 (PQ, security core, CosmWasm)
+        working-directory: ${{ env.SRC }}/evmd
+        run: go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security|Wasm' .
 
   program:
     name: program (cargo test + anchor test)

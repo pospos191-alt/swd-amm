@@ -117,6 +117,22 @@ governance ตั้งเกณฑ์ต่อเหรียญ (`gov.sh ibc-h
 
 ---
 
+## สัญญา CosmWasm (ขั้น 7) กับกติกาทั้งสาม
+
+ธุรกรรมที่เรียกสัญญา CosmWasm (Rust) เป็นธุรกรรม Cosmos ธรรมดา จึงอยู่ใต้กติกาเดียวกัน
+(รายละเอียดการตั้งค่า: [`zetaphy-chain/README.md`](../zetaphy-chain/README.md) หัวข้อ "ขั้น 7")
+- **Q-day:** หลัง Q-day ธุรกรรม wasm ต้องเซ็นด้วย ML-DSA-44 เท่านั้น เหมือนธุรกรรมอื่น; บัญชีที่ล็อกควอนตัม
+  ใช้กุญแจเดิมส่งธุรกรรม wasm ไม่ได้ และสัญญาก็ใช้สิทธิ์ authz ที่บัญชีนั้นเคยให้ไว้ไม่ได้
+  - ผู้ควบคุม ML-DSA-44 ทำแทนบัญชีที่ล็อกได้เฉพาะฝั่ง EVM: **ย้ายโทเคน cw20 / สิทธิ์ admin ของสัญญา CosmWasm
+    ไปบัญชี ML-DSA-44 ก่อนล็อก**
+- **Threat gate:** ใช้กับสัญญา EVM เท่านั้น (ThreatRegistry เก็บที่อยู่ 20 ไบต์ ส่วนสัญญา CosmWasm มีที่อยู่ 32 ไบต์)
+  สัญญา CosmWasm เรียกสัญญา EVM ในนามตัวเองไม่ได้ และ `MsgEVMCall` ที่สัญญาสั่งผ่าน authz ถูกตรวจด่านตอนรัน
+- **IBC hold:** IBC ของสัญญาปิดอยู่ (เปิดช่องหรือส่ง packet เองไม่ได้) สัญญาโอนเหรียญแบบ ICS-20 ได้ ซึ่งผ่าน
+  เพดาน IBC ขาออก และเหรียญที่โอนเข้ามาหาสัญญาผ่าน IBC hold ตามปกติ
+- **อัปโหลดโค้ด:** governance เท่านั้น (`gov.sh wasm-store`), error codespace `zetaphy` 30 = ข้อความที่สัญญาส่งไม่ได้
+
+---
+
 ## การอัปเกรด
 
 - เชนใหม่ (genesis ใหม่): เปิดใช้ตั้งแต่บล็อก 1 (`app_state.zetaphypq` key `0f` = 1, `setup-node.sh` ใส่ให้) แต่ทุกกติกาปิดจนโหวต
@@ -132,7 +148,7 @@ governance ตั้งเกณฑ์ต่อเหรียญ (`gov.sh ibc-h
 | precompile 0x…0901 | `consent(address,uint64)`, `consentUntil(address,address)`, `threatGate()`, `qday()`, `migration(address)`, `cancelIBCHold(uint64)`, event `Consent` |
 | JSON-RPC | `zetaphy_securityStatus`, `zetaphy_migration`, `zetaphy_qdayCommitment`, `zetaphy_consent`, `zetaphy_ibcHolds` |
 | event | `zetaphy_qday`, `zetaphy_qday_commit`, `zetaphy_qday_reveal`, `zetaphy_qday_migrated`, `zetaphy_threat_gate`, `zetaphy_consent`, `zetaphy_ibc_hold`, `zetaphy_ibc_hold_released`, `zetaphy_ibc_hold_cancelled`, `zetaphy_ibc_hold_stuck` |
-| error | codespace `zetaphy`: 20 = Q-day, 21 = threat gate |
+| error | codespace `zetaphy`: 20 = Q-day, 21 = threat gate, 30 = ข้อความที่สัญญา CosmWasm ส่งไม่ได้ |
 | JS | `zetaphy-network/src/pqtx.js` (`qdayRevealText`, `qdayCommitment`, `consentCall`, `msgQDay*`, `pqClient().securityStatus/migration/qdayCommit/qdayReveal/consent/ibcHolds`) |
 | ทดสอบ | `zetaphy-chain/fork-tests/evmd/zetaphy_security_test.go`, `fork-tests/evmd/tests/ibc/zetaphy_ibchold_test.go`, `zetaphy-network/test/devnet.security.integration.js`, `zetaphy-chain/ibc/test-ibc.sh` |
 

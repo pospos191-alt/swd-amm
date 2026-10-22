@@ -5,7 +5,7 @@
 
 import { CHAINS, isChainAddress } from './chains.js';
 import { createRpc, createSolanaRpc, createSuiGraphql, createAptosRest, createTonApi, createCosmosRest, createNearRpc, createStarknetRpc, createOrdApi } from './rpc.js';
-import { readCosmwasmAccount, analyzeCosmwasm } from './cosmwasm.js';
+import { readCosmwasmAccount, analyzeCosmwasm, isCosmwasmInput } from './cosmwasm.js';
 import { readNearAccount, analyzeNear } from './near.js';
 import { readRune, analyzeRune } from './bitcoin.js';
 import { stylusWasm, scanWasm } from './stylus.js';
@@ -66,7 +66,9 @@ function canonical(v) {
  * @param {string} address
  * @param {{rpc?: {call: Function}, fetchImpl?: Function, templates?: Array, chainConfig?: object}} [opts]
  *   rpc/fetchImpl: inject for tests; templates: defaults to src/templates.js;
- *   chainConfig: {kind:'evm', id, name, rpcs} for a chain not in CHAINS;
+ *   chainConfig: {kind:'evm', id, name, rpcs} for a chain not in CHAINS, or
+ *     {kind:'cosmwasm', chainId, prefix, name, rpcs} (zetaphyCosmwasmChain:
+ *     ZETAPHY's CosmWasm contracts);
  *   threatLookup: async (fingerprint) => ({flagged, reason}) from the ZETAPHY ThreatRegistry
  *   simulate: run the trade simulation (honeypot check); default on unless
  *     the caller injects an RPC (tests opt in)
@@ -83,7 +85,7 @@ export async function readContract(chainKey, address, opts = {}) {
   const chain = opts.chainConfig ?? CHAINS[chainKey];
   if (!chain) throw new Error(`unknown chain: ${chainKey}`);
   const validAddress = opts.chainConfig
-    ? (chain.kind === 'evm' && isAddress(address))
+    ? (chain.kind === 'evm' ? isAddress(address) : chain.kind === 'cosmwasm' && isCosmwasmInput(address, chain.prefix))
     : isChainAddress(chainKey, address);
   if (!validAddress) throw new Error('invalid address');
   if (chain.kind === 'solana') return readSolana(chainKey, chain, address, opts);

@@ -31,6 +31,7 @@ node cli.js near token.near        # สัญญา/เหรียญบน NE
 node cli.js starknet 0x...        # สัญญา Cairo บน Starknet
 node cli.js bitcoin DOG•GO•TO•THE•MOON  # เหรียญ Rune บน Bitcoin (หรือรหัส 840000:3)
 node cli.js osmosis osmo1...      # สัญญา CosmWasm (Rust) หรือ factory/osmo1.../ชื่อ
+node cli.js zetaphy-wasm zetaphy1... --rest https://<โหนด ZETAPHY>/rest   # สัญญา CosmWasm บน ZETAPHY (ระบุโหนดเอง)
 node cli.js arbitrum 0x... --json # รายงานเต็ม
 npm run web                       # เปิดหน้าเว็บที่ http://localhost:8080/
 ```
@@ -149,7 +150,7 @@ set_fee, burn_from ฯลฯ)
 | Rust บน Solana (Anchor) | อ่านรายการคำสั่งจาก IDL บนเชน (`src/anchor.js`) หาคำสั่งที่ต้องให้ผู้ดูแลเซ็น และคำสั่งอันตราย |
 | Rust บน NEAR | อ่านชื่อฟังก์ชันจาก export ของโค้ด WASM โดยตรง (mint, pause, upgrade ฯลฯ), ดูว่าบัญชีสัญญายังมีกุญแจเต็มสิทธิ์ (ลงโค้ดใหม่ได้) หรือไม่ และข้อมูลเหรียญ NEP-141 (`src/near.js`) |
 | Cairo (Starknet) | อ่าน ABI ที่สัญญาเผยแพร่ไว้บนเชน: ชื่อฟังก์ชันและว่าแก้สถานะได้หรือไม่ (mint, pause, upgrade ฯลฯ), เจ้าของ, proxy แบบ Cairo 0 และข้อมูลเหรียญ (`src/starknet.js`) |
-| Rust บน CosmWasm (Osmosis, Neutron) | ผู้ดูแลที่เปลี่ยนโค้ดได้ (migrate), ประวัติการเปลี่ยนโค้ด, ผู้สร้างเหรียญ CW20, ผู้ดูแลเหรียญ Token Factory และ before-send hook (`src/cosmwasm.js`) |
+| Rust บน CosmWasm (Osmosis, Neutron, ZETAPHY ผ่าน `--rest`) | ผู้ดูแลที่เปลี่ยนโค้ดได้ (migrate), ประวัติการเปลี่ยนโค้ด, ผู้สร้างเหรียญ CW20, ผู้ดูแลเหรียญ Token Factory และ before-send hook (`src/cosmwasm.js`) |
 | Bitcoin (Runes) | ไม่มีโค้ดสัญญา อ่านกติกาเหรียญจาก ord (ordinals.com ฟรี ไม่ต้องใช้คีย์): ยังเปิด mint อยู่ไหม, premine ของผู้สร้าง, turbo (`src/bitcoin.js`) · BRC-20 ยังไม่รองรับ เพราะ API ฟรีของ Hiro ปิดไปเมื่อ มี.ค. 2026 และที่เหลือต้องใช้คีย์ |
 | Move (Sui, Aptos) | ชื่อฟังก์ชันและสิทธิ์ในโค้ด |
 | FunC/Tact (TON) | ข้อมูล jetton ที่ tonapi ถอดให้ |

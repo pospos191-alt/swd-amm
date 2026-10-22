@@ -3,6 +3,8 @@
 //   node cli.js <chain> <address> [--lang th|en|zh|ja|ko|vi|id] [--json] [--sim-seed 0x<32 bytes>]
 //       --sim-seed: re-run a NeuroJobs job's trade simulation with the same
 //       addresses and amounts (jobSimSeed(job id, lottery) in src/honeypot.js)
+//   node cli.js zetaphy-wasm <zetaphy1… contract> --rest https://<node>/rest [--lang ..] [--json]
+//       a CosmWasm contract on ZETAPHY (no fixed public REST: name a node's)
 //   node cli.js fingerprint <evm chain> <address>
 //       prints a template entry to paste into src/templates.js
 //   node cli.js signature <evm chain> <address> [--reason <ThreatRegistry code fact, src/threat-reasons.js>]
@@ -22,12 +24,12 @@ import { THREAT_SIGNATURES } from './src/threat-signatures.js';
 import { THREAT_REASONS } from './src/threat-reasons.js';
 import { explain, LANGS, uiText } from './src/explain.js';
 import { verdictOf } from './src/verdict.js';
-import { CHAINS, explorerUrl } from './src/chains.js';
+import { CHAINS, explorerUrl, zetaphyCosmwasmChain } from './src/chains.js';
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const opt = (name, dflt) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : dflt; };
-const VALUED = ['--lang', '--reason', '--flag-key', '--report-hash', '--sim-seed'];
+const VALUED = ['--lang', '--reason', '--flag-key', '--report-hash', '--sim-seed', '--rest', '--chain-id'];
 const positional = args.filter((a, i) => !a.startsWith('--') && !VALUED.includes(args[i - 1]));
 const chains = Object.keys(CHAINS).join('|');
 
@@ -98,7 +100,13 @@ try {
     if (!chain || !address) usage();
     const simSeed = opt('--sim-seed');
     if (simSeed !== undefined && !/^0x[0-9a-fA-F]{64}$/.test(simSeed)) usage();
-    const report = await readContract(chain, address, simSeed ? { simSeed } : {});
+    const opts = simSeed ? { simSeed } : {};
+    if (chain === 'zetaphy-wasm') {
+      const rest = opt('--rest');
+      if (!rest || !/^https?:\/\/[^\s]+$/.test(rest)) usage();
+      opts.chainConfig = zetaphyCosmwasmChain([rest.replace(/\/+$/, '')], opt('--chain-id', 'zetaphy_77390-1'));
+    }
+    const report = await readContract(chain, address, opts);
     if (flag('--json')) {
       console.log(JSON.stringify(report, null, 2));
     } else {
@@ -106,14 +114,14 @@ try {
       const out = explain(report, lang);
       const ui = uiText(lang);
       const mark = { high: '!!', medium: '! ', low: '- ', info: '  ', good: '+ ' };
-      console.log(`${CHAINS[chain].name} ${report.address}`);
+      console.log(`${(CHAINS[chain] ?? opts.chainConfig).name} ${report.address}`);
       console.log(`== ${out.title} ==`);
       for (const l of out.lines) console.log(`${mark[l.severity]} ${l.text}`);
       // Evidence: anyone can run the same command and compare the IDs.
       console.log(`\n${ui.m.report}: ${report.reportHash}`);
       console.log(`${ui.m.verdict}: ${await verdictOf(report)}`);
-      console.log(`${ui.m.command}: node cli.js ${chain} ${report.address} --lang ${lang}`);
-      console.log(explorerUrl(chain, report.address));
+      console.log(`${ui.m.command}: node cli.js ${chain} ${report.address}${opts.chainConfig ? ` --rest ${opt('--rest')}` : ''} --lang ${lang}`);
+      if (CHAINS[chain]) console.log(explorerUrl(chain, report.address));
       console.log(`\n${ui.disclaimer}\n${ui.correction}: ${LEGAL}`);
     }
   }
