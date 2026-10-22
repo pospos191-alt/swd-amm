@@ -41,7 +41,10 @@ async function launch() {
 before(async () => {
   const cfg = join(dir, 'config.json');
   writeFileSync(cfg, JSON.stringify({ node: NODE, threatRegistry: REGISTRY, neuroReportUrl: NEURO, scanBlocks: 100 }));
-  await Promise.all([serve(PORT, cfg), serve(PORT_DEFAULT, null)]);
+  // The placeholder a fresh checkout ships (the launch replaces config.json with the live node).
+  const placeholder = join(dir, 'placeholder.json');
+  writeFileSync(placeholder, JSON.stringify({ node: 'https://<node-host>', evmRpc: '', cometRpc: '', rest: '', threatRegistry: '', neuroReportUrl: '', scanBlocks: 100 }));
+  await Promise.all([serve(PORT, cfg), serve(PORT_DEFAULT, placeholder)]);
   browser = await launch();
 });
 after(async () => { await browser?.close(); for (const s of servers) s.kill(); rmSync(dir, { recursive: true, force: true }); });

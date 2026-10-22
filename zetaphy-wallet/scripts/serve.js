@@ -18,7 +18,12 @@ createServer(async (req, res) => {
   const rel = path === '/' ? '/index.html' : path;
   if (!PUBLIC.has(rel)) { res.writeHead(404, headers).end('not found'); return; }
   try {
-    const body = await readFile(normalize(join(ROOT, rel)));
+    let body = await readFile(normalize(join(ROOT, rel)));
+    // WALLET_PLACEHOLDER_CONFIG=1 (the browser test): serve index.html as a fresh
+    // checkout ships it, without the node RPC and ThreatRegistry the launch writes.
+    if (rel === '/index.html' && process.env.WALLET_PLACEHOLDER_CONFIG === '1') {
+      body = Buffer.from(String(body).replace(/(<meta name="zetaphy-(?:rpc|threat-registry)" content=")[^"]*"/g, '$1"'));
+    }
     res.writeHead(200, { ...headers, 'content-type': TYPES[extname(rel)] ?? 'application/octet-stream' }).end(body);
   } catch {
     res.writeHead(404, headers).end('not found');
