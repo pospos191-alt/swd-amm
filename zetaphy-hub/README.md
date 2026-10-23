@@ -22,7 +22,7 @@ Every ZETAPHY app on one page and one screen, at **https://app.sawasdeecoin.com*
 - `node build.mjs` copies the hub and every app into `dist/` (`/wallet/`, `/swap/`, `/nft/`, `/explorer/`, `/neuro/web/`). The apps are shown in **same-origin frames**, so they share one wallet storage and the hub can restyle them.
 - `embed.css` gives every app the hub's colours and hides its own brand bar, language button and footer. `hub.js` folds long hints into an "i" icon whose text shows on hover or focus. Links to another app's site open that app's tab instead.
 - The apps are unchanged: opened on their own sites (wallet.sawasdeecoin.com and the others) they look as before.
-- Language: one button. The hub writes each app's own language setting and reloads the frames.
+- Language: one menu of 8 (English, 中文, Español, 한국어, 日本語, Русский, Tiếng Việt, ไทย; English by default). The words live in `i18n.js` (hub and tabs) and `pages-i18n.js` (data pages); a missing one shows in English. The hub writes each app's own language setting and reloads the frames.
 - Explanations: every number, button and step has hover text (`data-tip` / `data-tip-key`). The page text itself stays short.
 - The node comes from `zetaphy-explorer/config.json` (written by the launch), saved as `dist/hub-config.json`.
 
