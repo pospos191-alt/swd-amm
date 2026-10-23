@@ -48,7 +48,7 @@ beforeEach(async () => {
   otherMailbox = await c.deploy('MockMailbox', [ORIGIN], 'attacker');
   // The lane first (unconfigured source), then the source lockbox pointing at it, then the lane's config.
   hyp = await c.deploy('HyperlaneLane', [airlock.address, a('gov'), mailbox.address, ORIGIN, '0x' + '00'.repeat(32), 0, ZERO, ZERO], 'gov');
-  lockbox = await c.deploy('HyperlaneLockBox', [mailbox.address, 77390, b32(hyp.address)], 'gov');
+  lockbox = await c.deploy('HyperlaneLockBox', [mailbox.address, 77390, b32(hyp.address), ZERO], 'gov');
   await hyp.send('gov', 'setConfig', [mailbox.address, ORIGIN, b32(lockbox.address), 1n, lockbox.address]); // the test EVM's chain id is 1
 });
 
@@ -184,6 +184,18 @@ test('HyperlaneLockBox: locks amount + Mailbox fee, emits the Neuro lane\'s Lock
   assert.equal(await lockbox.call('body', [0n, a('alice'), a('alice'), 100n]),
     abi.encode(['uint256', 'address', 'uint256', 'address', 'address', 'uint256'], [1n, lockbox.address, 0n, a('alice'), a('alice'), 100n]));
   await assert.rejects(lockbox.send('alice', 'lock', [a('alice'), 0n], 7n));
+  assert.equal(await mailbox.call('lastHook'), ZERO); // the Mailbox default hook
+});
+
+test('HyperlaneLockBox with a custom hook: every dispatch and quote names it; the message is the same', async () => {
+  const hookAddr = a('relayer'); // any address stands for the source chain's MerkleTreeHook here
+  const hb = await c.deploy('HyperlaneLockBox', [mailbox.address, 77390, b32(hyp.address), hookAddr], 'gov');
+  assert.equal((await hb.call('hook')).toLowerCase(), hookAddr.toLowerCase());
+  await mailbox.send('gov', 'setFee', [3n]);
+  assert.equal(await hb.call('quoteLock', [a('alice'), 1n]), 3n);
+  const ev = await hb.send('alice', 'lock', [a('alice'), 100n], 103n);
+  assert.equal(ev.find((e) => e?.name === 'Locked').args.amount, 100n);
+  assert.equal((await mailbox.call('lastHook')).toLowerCase(), hookAddr.toLowerCase());
 });
 
 test('BridgeGuard hard cap: starts at 1,000 tokens; raises x2 at most, 7 days after the proposal; cuts at once and bind every route', async () => {

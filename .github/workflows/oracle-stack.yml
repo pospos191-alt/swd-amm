@@ -1,0 +1,68 @@
+name: oracle-stack
+
+# Validates the Oracle Resource Manager stack and publishes it as a zip at a
+# stable URL used by the "Deploy to Oracle Cloud" button:
+# https://github.com/pospos191-alt/swd-amm/releases/download/oracle-stack/zetaphy-oracle-stack.zip
+
+on:
+  pull_request:
+    paths:
+      - "deploy/oracle/**"
+      - ".github/workflows/oracle-stack.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/oracle/**"
+      - ".github/workflows/oracle-stack.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-stack-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/oracle
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+      - run: terraform fmt -check -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  release:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      TAG: oracle-stack
+      ASSET: zetaphy-oracle-stack.zip
+    steps:
+      - uses: actions/checkout@v5
+      # Resource Manager needs the .tf files at the ROOT of the zip.
+      - name: Build zip
+        run: |
+          cd deploy/oracle
+          zip -r -X "$GITHUB_WORKSPACE/$ASSET" . -x '.terraform/*' '.terraform.lock.hcl' '*.tfstate*'
+          unzip -l "$GITHUB_WORKSPACE/$ASSET"
+      - name: Create or update release
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target "$GITHUB_SHA" \
+              --title "Oracle Cloud stack" \
+              --notes "Resource Manager stack for the Deploy to Oracle Cloud button. Updated automatically from deploy/oracle."
+          fi
+          gh release upload "$TAG" "$ASSET" --clobber

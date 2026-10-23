@@ -33,3 +33,12 @@ makes the validator and relayer keys on the VM and starts the validator. It prin
 addresses. The relayer starts later with `RELAYER_SENDERS=<bridge lanes>`: it relays only
 their messages. CI (`hyperlane-agents` workflow) runs the script on a local chain: announce,
 a signed checkpoint, the relayer whitelist, and no key in the logs. Thai steps: `README.th.md`.
+
+## The bridge on top (`bridge-testnet` workflow)
+
+Sepolia ETH -> ZETAPHY, testnets only. The Sepolia `HyperlaneLockBox` locks ETH and dispatches to
+the `HyperlaneLane` on ZETAPHY; `zetaphy deploy-bridge --testnet` deploys the ZETAPHY side CLOSED
+(admin = the timelock, guardian = the 2-of-2 multisig, daily limit 1 sETH). If Hyperlane's Sepolia
+gas paymaster does not quote ZETAPHY, the lockbox uses Sepolia's MerkleTreeHook alone and our own
+relayer delivers (`setup-agents.sh start-relayer` with `RELAYER_SENDERS=<the lockbox>`).
+Run: Actions -> **bridge-testnet** -> `check`, then `dry_run` (local copies of both chains), then `deploy`.

@@ -50,6 +50,20 @@
 
 ## คนรันร่าง (node runner)
 
+### วิธีง่ายที่สุด: คำสั่งเดียว (เซิร์ฟเวอร์ Ubuntu)
+
+```
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- runner
+```
+
+- ติดตั้งให้ครบ: Node.js (ตรวจ SHA-256), โค้ด ZETAPHY, กุญแจของร่าง (สร้างในเครื่อง ไม่แสดง) และบริการที่รันเองตลอด รวมถึงหลังรีสตาร์ต
+- จบแล้วแสดงที่อยู่ของร่าง: โอน ZETAPHY testnet ไป **100.1** (หรือมากกว่า) แล้วร่างจะวางเงินค้ำเองภายในราว 1 นาที และเริ่มรับงาน
+- คำสั่งหลังติดตั้ง: `sudo zetaphy-runner status` · `address` · `withdraw` · `logs` · `update` · `stop` · `start` · `uninstall`
+- รันซ้ำได้ปลอดภัย (อัปเดตโค้ด กุญแจเดิมอยู่ครบ) · `uninstall` ไม่ลบกุญแจ
+- ไม่มีเครื่อง: ใช้ปุ่ม "Deploy to Oracle Cloud" ใน `deploy/oracle/README.th.md` สร้างเครื่องฟรีพร้อมติดตั้งให้เอง
+
+### ติดตั้งเอง (ทีละขั้น)
+
 ```
 npm i -g ./zetaphy-network          # หรือ: node zetaphy-network/cli.js ...
 zetaphy node start --rpc http://<โหนด ZETAPHY>:8545 --jobs 0x<NeuroJobs>

@@ -1,0 +1,58 @@
+# Runs the one-command installer (install.sh runner) on a clean Ubuntu runner against the live
+# ZETAPHY testnet, read only: the runner key is made, the service starts and waits for its bond
+# (nothing is funded or registered), the helper commands work, and uninstall leaves the key.
+# Cost: free (GitHub-hosted runner, public repository).
+
+name: runner-install
+
+on:
+  pull_request:
+    paths:
+      - 'install.sh'
+      - 'zetaphy-network/setup-runner.sh'
+      - 'zetaphy-network/cli.js'
+      - '.github/workflows/runner-install.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: One-command runner install
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      REF: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install with the one command (code pinned to this commit)
+        run: |
+          # the same pipe a user runs, with this commit's install.sh and code
+          cat install.sh | sudo REF="$REF" bash -s -- runner | tee /tmp/install.log
+          grep -Eq '^runner: +0x[0-9a-fA-F]{40}' /tmp/install.log
+      - name: The service runs and waits for its bond
+        run: |
+          for _ in $(seq 1 30); do s=$(sudo journalctl -u zetaphy-runner --no-pager); grep -q 'waiting for funds' <<<"$s" && break; sleep 3; done
+          systemctl is-active zetaphy-runner
+          sudo journalctl -u zetaphy-runner --no-pager | tail -8
+          grep -q 'waiting for funds' <<<"$(sudo journalctl -u zetaphy-runner --no-pager)"
+      - name: Helper commands; re-run keeps the key
+        run: |
+          a1=$(sudo zetaphy-runner address); echo "$a1"
+          sudo zetaphy-runner status
+          cat install.sh | sudo REF="$REF" bash -s -- runner > /dev/null
+          a2=$(sudo zetaphy-runner address)
+          [ "$a1" = "$a2" ] || { echo "::error::re-running the installer changed the runner key"; exit 1; }
+          sudo test "$(sudo stat -c %a /var/lib/zetaphy-runner)" = 700
+      - name: Uninstall keeps the key
+        run: |
+          sudo zetaphy-runner uninstall
+          ! systemctl is-active zetaphy-runner
+          sudo test -f /var/lib/zetaphy-runner/worker.key
+          key=$(sudo cat /var/lib/zetaphy-runner/worker.key); key=${key#0x}
+          sudo journalctl --no-pager > /tmp/journal.log
+          if grep -qi "$key" /tmp/install.log /tmp/journal.log; then echo "::error::the runner key is in a log"; exit 1; fi
