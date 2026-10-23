@@ -58,7 +58,13 @@ valoper() { asn "$ZETAPHYD keys show validator --bech val -a $K --home $NODE_HOM
 hexaddr() { asn "$ZETAPHYD debug addr $(acc) --home $NODE_HOME" | awk '/Address hex/ {print $3}'; }
 balance() { zq q bank balance "$(acc)" $DENOM | jq -r '.balance.amount // "0"'; }
 # whole and 2-decimal ZETAPHY from azetaphy (no float rounding on 18-digit numbers)
-zeta() { local a; a=$(printf '%019d' "${1:-0}"); echo "$((10#${a:0:${#a}-18})).${a:${#a}-18:2}"; }
+# (padded as text: printf %d overflows above 9.22 ZETAPHY, i.e. 2^63 azetaphy)
+zeta() {
+  local a="${1:-0}"; a="${a//[^0-9]/}"; a="${a#"${a%%[!0]*}"}"
+  while [ ${#a} -lt 19 ]; do a="0$a"; done
+  local w="${a:0:${#a}-18}"; w="${w#"${w%%[!0]*}"}"
+  echo "${w:-0}.${a:${#a}-18:2}"
+}
 
 is_wsl() { grep -qi microsoft "$PROC_VERSION" 2>/dev/null; }
 

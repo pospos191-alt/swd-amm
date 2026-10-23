@@ -30,8 +30,8 @@ esac`);
     ZETAPHYD: join(d, 'zetaphyd'), SYSTEMCTL: join(d, 'systemctl'), LIB: d, STATE: join(d, 'state'),
     NODE_HOME: d, KEYS_DIR: d, JOIN: 'join.example', NODE_USER: 'no-such-user-zetaphy-test', PATH: `${d}:${process.env.PATH}`,
   };
-  const check = () => {
-    const r = spawnSync('bash', [JOIN_SH, 'check'], { encoding: 'utf8', env: { ...process.env, ...env } });
+  const check = (extra = {}) => {
+    const r = spawnSync('bash', [JOIN_SH, 'check'], { encoding: 'utf8', env: { ...process.env, ...env, ...extra } });
     return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
   };
   const log = (f) => (existsSync(join(d, f)) ? readFileSync(join(d, f), 'utf8') : '');
@@ -160,4 +160,12 @@ test('import-key: refuses a wrong word count, a bad index, and a node that alrea
   const v = keyNode({ isValidator: true }).run(`${PHRASE}\n`);
   assert.equal(v.code, 1);
   assert.match(v.out, /already staked/);
+});
+
+test('balances above 9.22 ZETAPHY (2^63 azetaphy) show right, with no printf overflow', () => {
+  const r = node({ balance: '10000000000000000000' }).check({ STAKE: '11' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /waiting for funds: 10\.00 ZETAPHY, needs 11\.10/);
+  assert.doesNotMatch(r.out, /out of range|warning/i);
+  assert.match(node({ balance: '123456789000000000000000000' }).check({ STAKE: '200000000' }).out, /123456789\.00 ZETAPHY/);
 });
