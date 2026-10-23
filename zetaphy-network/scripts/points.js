@@ -16,7 +16,7 @@
 // POINTS_CONFIG (JSON overriding src/points.js DEFAULTS, amounts in BZTPHY).
 import { readFileSync, existsSync } from 'node:fs';
 import { JsonRpcProvider, Wallet, Contract, ContractFactory, Interface, getAddress, parseEther, formatEther, encodeBytes32String } from 'ethers';
-import { DEFAULTS, DAY, epochOf, validatorAwards, runnerAwards, mergeAwards, proRata, balancesFromTransfers } from '../src/points.js';
+import { DEFAULTS, DAY, epochOf, validatorAwards, runnerAwards, mergeAwards, fitCap, proRata, balancesFromTransfers } from '../src/points.js';
 
 const CHAIN_ID = 77390n;
 const STEP = 500; // the public node answers at most 500 blocks per eth_getLogs
@@ -110,10 +110,12 @@ async function main() {
     const epoch = Number(opt('epoch', epochOf(head.timestamp) - 1));
     const pl = await plan(p, c, epoch);
     const pts = new Contract(c.points, art.abi, flag('send') ? signer(p) : p);
-    const todo = [];
+    let todo = [];
     for (const a of pl.awards) if (!(await pts.awarded(epoch, a.to))) todo.push(a);
+    // more earned than the daily cap allows: everyone shrinks by the same share (the contract would refuse it)
+    todo = fitCap(todo, (await pts.epochCap()) - (await pts.awardedInEpoch(epoch)));
     console.error(`epoch ${epoch} (${new Date(epoch * DAY * 1000).toISOString().slice(0, 10)} UTC), blocks ${pl.blocks.join('-')}: ${pl.awards.length} earned, ${todo.length} not yet awarded`);
-    for (const a of pl.awards) console.error(`  ${a.to}  ${formatEther(a.amount)} BZTPHY  ${a.why}`);
+    for (const a of todo) console.error(`  ${a.to}  ${formatEther(a.amount)} BZTPHY  ${a.why}`);
     let txs = [];
     if (flag('send') && todo.length) {
       for (let i = 0; i < todo.length; i += 50) {

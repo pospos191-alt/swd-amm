@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { encodeBytes32String } from 'ethers';
 import { createChain, ZETA } from './helpers/evm.js';
-import { validatorAwards, runnerAwards, mergeAwards, proRata, balancesFromTransfers, operatorEvm, epochOf } from '../src/points.js';
+import { validatorAwards, runnerAwards, mergeAwards, fitCap, proRata, balancesFromTransfers, operatorEvm, epochOf } from '../src/points.js';
 import { toBech32 } from '../src/pqtx.js';
 
 let c, p;
@@ -108,4 +108,15 @@ test('mainnet conversion is pro rata of a fixed pool, from Transfer events', () 
   const out = proRata(b, 10_000_000n * ZETA);
   assert.deepEqual(out.map((x) => [x.to, x.zetaphy]), [['A', 7_500_000n * ZETA], ['B', 2_500_000n * ZETA]]);
   assert.equal(epochOf(86400 * 20000 + 5), 20000);
+});
+
+test('more earned than the daily cap: everyone shrinks by the same share, never above the cap', () => {
+  const v = (i, n) => ({ to: `0x${String(i).padStart(40, '0')}`, amount: n * ZETA, why: 'validator' });
+  const day = Array.from({ length: 60 }, (_, i) => v(i + 1, 100n)); // 60 validators at 100%: 6,000 > 5,000
+  const fit = fitCap(day, 5000n * ZETA);
+  assert.equal(fit.length, 60);
+  assert.ok(fit.reduce((s, a) => s + a.amount, 0n) <= 5000n * ZETA);
+  assert.equal(fit[0].amount, (100n * ZETA * 5000n) / 6000n); // 83.33 each
+  assert.deepEqual(fitCap(day.slice(0, 50), 5000n * ZETA), day.slice(0, 50)); // fits: unchanged
+  assert.deepEqual(fitCap(day, 0n), []);
 });

@@ -118,7 +118,7 @@ When you open it to the public, move to a bigger machine (e.g. Contabo / OVH) us
 
 ## Join the chain: run a node or validator (so the chain is not on one machine only)
 
-**One command (recommended):** on any Ubuntu 24.04 machine (free Oracle, free Google, a VPS), paste:
+**One command (recommended):** on any Linux machine with systemd (x86_64 or arm64), paste:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo MONIKER=your-name bash -s -- validator
 ```
@@ -127,6 +127,32 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
 - `sudo zetaphy-validator status` shows progress, `sudo zetaphy-validator backup` lists the files to keep offline,
   `sudo zetaphy-validator unjail` brings it back after downtime
 - Open port 26656 (and 80, 443) in your cloud provider's firewall, or use the Oracle button (`deploy/oracle`) with `validator`, which opens them
+- Where it runs:
+
+  | Machine | Notes |
+  |---|---|
+  | Any cloud, free or paid (Oracle, Google, AWS, Azure, Hetzner, DigitalOcean, Vultr, Linode, …) | Open TCP 26656 in the provider's firewall |
+  | Home PC, mini PC, old laptop, Raspberry Pi 4/5 (64-bit OS) | No port needed (forwarding 26656 on the router helps); keep it on 24/7 |
+  | Windows 10/11 | Ubuntu in WSL 2 (`wsl --install -d Ubuntu-24.04`), paste the command inside Ubuntu. If systemd is off, the script turns it on and asks for `wsl --shutdown`. Keep the PC awake and one Ubuntu window open |
+  | macOS | An Ubuntu VM: `multipass launch 24.04 -n zetaphy -c 2 -m 4G -d 40G && multipass shell zetaphy`, then the command |
+
+  Ubuntu, Debian, Fedora, RHEL/Rocky/Alma, Amazon Linux, openSUSE and Arch install what they need by themselves.
+  Containers without systemd and musl systems (Alpine) are refused with what to use instead.
+  `sudo zetaphy-validator preflight` checks a machine without installing anything.
+- Keys: the node makes three, on the machine itself, and never sends them anywhere:
+
+  | Key | What it does | Where |
+  |---|---|---|
+  | Staking account (eth_secp256k1, 24 words, coin type 60) | holds and stakes ZETAPHY; earns BZTPHY | `~/.zetaphy-genesis-keys/MNEMONICS-KEEP-SECRET.txt` |
+  | Validator signing key (ed25519) | signs blocks | `~/.zetaphy/config/priv_validator_key.json` |
+  | Vote key (ML-DSA-44, quantum-resistant) | signs votes alongside ed25519 | `~/.zetaphy/config/pq_vote_key.seed` |
+
+  The staking account uses the same derivation as MetaMask (m/44'/60'/0'/0/0), so its words also open it in MetaMask,
+  Rabby, Trust, OKX or Keplr (to see BZTPHY and ZETAPHY). To stake from your own wallet's phrase instead, run
+  `sudo zetaphy-validator import-key` before the node has staked (`ACCOUNT_INDEX=1` for the wallet's second account).
+  Use a new phrase: it is stored on the server, and this is a testnet. The two node keys are always made by the node;
+  to move a validator to a new machine, copy both files, and stop the old machine first (two machines with the same
+  key is double signing).
 - Validators earn BZTPHY reward points, converted to real ZETAPHY at mainnet: [`rewards/README.md`](./rewards/README.md)
 
 The manual way, step by step:

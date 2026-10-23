@@ -87,6 +87,18 @@ export function mergeAwards(...lists) {
   return [...m.values()].filter((a) => a.amount > 0n).sort((x, y) => x.to.toLowerCase().localeCompare(y.to.toLowerCase()));
 }
 
+/**
+ * Keeps one day's awards within what the contract still allows that day (its epochCap minus what it
+ * already awarded): when more people earned more than that, everyone's award shrinks by the same
+ * share (rounded down) instead of the contract refusing the whole day.
+ */
+export function fitCap(awards, room) {
+  const total = awards.reduce((s, a) => s + a.amount, 0n);
+  if (total <= room) return awards;
+  if (room <= 0n) return [];
+  return awards.map((a) => ({ ...a, amount: (a.amount * room) / total, why: `${a.why} (scaled to the daily cap)` })).filter((a) => a.amount > 0n);
+}
+
 /** Mainnet genesis amounts: pool x balance / total, rounded down; the dust stays in the pool. */
 export function proRata(balances, pool) {
   const total = [...balances.values()].reduce((s, b) => s + b, 0n);

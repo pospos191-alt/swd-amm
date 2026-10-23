@@ -30,8 +30,8 @@ esac`);
     ZETAPHYD: join(d, 'zetaphyd'), SYSTEMCTL: join(d, 'systemctl'), LIB: d, STATE: join(d, 'state'),
     NODE_HOME: d, KEYS_DIR: d, JOIN: 'join.example', NODE_USER: 'no-such-user-zetaphy-test', PATH: `${d}:${process.env.PATH}`,
   };
-  const check = () => {
-    const r = spawnSync('bash', [JOIN_SH, 'check'], { encoding: 'utf8', env: { ...process.env, ...env } });
+  const check = (extra = {}) => {
+    const r = spawnSync('bash', [JOIN_SH, 'check'], { encoding: 'utf8', env: { ...process.env, ...env, ...extra } });
     return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
   };
   const log = (f) => (existsSync(join(d, f)) ? readFileSync(join(d, f), 'utf8') : '');
@@ -77,4 +77,95 @@ test('a validator already: marks it done and stops the timer', () => {
   assert.ok(existsSync(join(n.dir, 'state', 'done')));
   assert.equal(n.log('setup.log'), '');
   assert.match(n.check().out, /already a validator/);
+});
+
+// "preflight": which machines can run a validator, and what it tells people on the others.
+function preflight({ os = 'Linux', wsl = false, systemd = true, conf = '' } = {}) {
+  const d = mkdtempSync(join(tmpdir(), 'zetaphy-pre-'));
+  writeFileSync(join(d, 'version'), wsl ? 'Linux version 5.15.153.1-microsoft-standard-WSL2' : 'Linux version 6.8.0-45-generic');
+  if (conf) writeFileSync(join(d, 'wsl.conf'), conf);
+  const env = { UNAME_S: os, PROC_VERSION: join(d, 'version'), SYSTEMD_DIR: systemd ? d : join(d, 'none'), WSL_CONF: join(d, 'wsl.conf') };
+  const r = spawnSync('bash', [JOIN_SH, 'preflight'], { encoding: 'utf8', env: { ...process.env, ...env } });
+  return { code: r.status, out: (r.stdout || '') + (r.stderr || ''), conf: existsSync(join(d, 'wsl.conf')) ? readFileSync(join(d, 'wsl.conf'), 'utf8') : '' };
+}
+
+test('preflight: any Linux with systemd (cloud or home) can run a validator', () => {
+  const r = preflight();
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /this machine can run a ZETAPHY validator/);
+  assert.doesNotMatch(r.out, /WSL/);
+});
+
+test('preflight: WSL without systemd switches it on and says to restart WSL; with systemd it works', () => {
+  const off = preflight({ wsl: true, systemd: false, conf: '[network]\nhostname=pc\n' });
+  assert.equal(off.code, 1);
+  assert.match(off.out, /wsl --shutdown/);
+  assert.match(off.conf, /\[network\]\nhostname=pc\n\n\[boot\]\nsystemd=true\n/);
+  const on = preflight({ wsl: true });
+  assert.equal(on.code, 0, on.out);
+  assert.match(on.out, /keep one Ubuntu window open/);
+});
+
+test('preflight: macOS, Windows shells and containers get told what to use instead', () => {
+  assert.match(preflight({ os: 'Darwin' }).out, /multipass launch 24\.04/);
+  assert.match(preflight({ os: 'MINGW64_NT-10.0' }).out, /wsl --install -d Ubuntu-24\.04/);
+  const c = preflight({ systemd: false });
+  assert.equal(c.code, 1);
+  assert.match(c.out, /systemd is not running here/);
+});
+
+// "import-key": the user's own recovery phrase becomes the staking account; the node's key is kept.
+function keyNode({ isValidator = false } = {}) {
+  const d = mkdtempSync(join(tmpdir(), 'zetaphy-key-'));
+  writeFileSync(join(d, 'zetaphyd'), `#!/bin/bash
+echo "$*" >> ${d}/calls.log
+case "$1 $2" in
+  "keys add") cat > ${d}/stdin.txt; echo ok ;;
+  "keys show") case "$*" in *"--bech val"*) echo zetaphyvaloper1new ;; *) echo zetaphy1new ;; esac ;;
+  "keys delete"|"keys rename") : ;;
+  "debug addr") echo "Address hex: 0x00000000000000000000000000000000000000CD" ;;
+  "q staking") ${isValidator ? `echo '{"validator":{}}'` : 'exit 1'} ;;
+  *) echo "unexpected: $*" >&2; exit 1 ;;
+esac
+`);
+  chmodSync(join(d, 'zetaphyd'), 0o755);
+  const env = { ZETAPHYD: join(d, 'zetaphyd'), LIB: d, STATE: join(d, 'state'), NODE_HOME: d, KEYS_DIR: d, NODE_USER: 'no-such-user-zetaphy-test', IMPORT_TEST: 1 };
+  const run = (input, extra = {}) => {
+    const r = spawnSync('bash', [JOIN_SH, 'import-key'], { input, encoding: 'utf8', env: { ...process.env, ...env, ...extra } });
+    return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  };
+  const log = (f) => (existsSync(join(d, f)) ? readFileSync(join(d, f), 'utf8') : '');
+  return { run, log };
+}
+const PHRASE = 'test test test test test test test test test test test junk';
+
+test('import-key: the phrase goes in on stdin (never as an argument); the node key is renamed, not deleted', () => {
+  const n = keyNode();
+  const r = n.run(`  ${PHRASE.toUpperCase()}  \n`, { ACCOUNT_INDEX: '2' });
+  assert.equal(r.code, 0, r.out);
+  assert.equal(n.log('stdin.txt'), `${PHRASE}\n`);
+  const calls = n.log('calls.log');
+  assert.doesNotMatch(calls, /junk/);
+  assert.match(calls, /keys add imported --recover --algo eth_secp256k1 --coin-type 60 --index 2/);
+  assert.match(calls, /keys rename validator validator-made-by-node -y/);
+  assert.match(calls, /keys rename imported validator -y/);
+  assert.doesNotMatch(calls, /keys delete validator -y/);
+  assert.doesNotMatch(r.out, /junk/);
+  assert.match(r.out, /staking account is now: zetaphy1new/);
+});
+
+test('import-key: refuses a wrong word count, a bad index, and a node that already staked', () => {
+  assert.match(keyNode().run('one two three\n').out, /expected 12 or 24 words, got 3/);
+  assert.match(keyNode().run(`${PHRASE}\n`, { ACCOUNT_INDEX: 'x' }).out, /ACCOUNT_INDEX must be a number/);
+  const v = keyNode({ isValidator: true }).run(`${PHRASE}\n`);
+  assert.equal(v.code, 1);
+  assert.match(v.out, /already staked/);
+});
+
+test('balances above 9.22 ZETAPHY (2^63 azetaphy) show right, with no printf overflow', () => {
+  const r = node({ balance: '10000000000000000000' }).check({ STAKE: '11' });
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /waiting for funds: 10\.00 ZETAPHY, needs 11\.10/);
+  assert.doesNotMatch(r.out, /out of range|warning/i);
+  assert.match(node({ balance: '123456789000000000000000000' }).check({ STAKE: '200000000' }).out, /123456789\.00 ZETAPHY/);
 });
