@@ -1,0 +1,80 @@
+title: "ZETAPHY node (Always Free)"
+description: "Creates one free Ubuntu VM and installs ZETAPHY services automatically. / สร้างเครื่องฟรี 1 เครื่องและติดตั้ง ZETAPHY ให้อัตโนมัติ"
+schemaVersion: 1.1.0
+version: "20190304"
+locale: "en"
+
+variableGroups:
+  - title: "Hidden"
+    visible: false
+    variables:
+      - tenancy_ocid
+      - region
+      - compartment_ocid
+  - title: "Machine / เครื่อง"
+    variables:
+      - shape
+      - roles
+  - title: "Advanced / ตั้งค่าเพิ่มเติม (optional)"
+    variables:
+      - ssh_public_key
+      - availability_domain
+      - runner_auto_register
+      - enable_run_command
+
+variables:
+  shape:
+    type: enum
+    title: "Machine size / ขนาดเครื่อง"
+    description: "Both are free. A1.Flex = 1 CPU / 6 GB (recommended). E2.1.Micro = small, try it if A1 says Out of host capacity. / ฟรีทั้งคู่ ถ้า A1 เต็มให้ลอง Micro"
+    enum:
+      - VM.Standard.A1.Flex
+      - VM.Standard.E2.1.Micro
+    default: VM.Standard.A1.Flex
+    required: true
+
+  roles:
+    type: enum
+    title: "What to install / ติดตั้งอะไร"
+    description: "runner = ZETAPHY runner, agents = helper agents. / เลือกบริการที่จะติดตั้ง"
+    enum:
+      - runner
+      - agents
+      - "runner,agents"
+    default: runner
+    required: true
+
+  ssh_public_key:
+    type: oci:core:ssh:publickey
+    title: "SSH public key / กุญแจ SSH (ไม่บังคับ)"
+    description: "Optional. Leave empty if unsure. / ปล่อยว่างได้"
+    required: false
+
+  availability_domain:
+    type: oci:identity:availabilitydomain:name
+    title: "Availability domain / โซนในภูมิภาค"
+    description: "Empty = first one. Try another if Out of host capacity. / ว่าง = โซนแรก"
+    dependsOn:
+      compartmentId: ${compartment_ocid}
+    required: false
+
+  runner_auto_register:
+    type: boolean
+    title: "Register runner automatically / ลงทะเบียน runner อัตโนมัติ"
+    default: true
+
+  enable_run_command:
+    type: boolean
+    title: "Allow console Run command / เปิดใช้ Run command ในหน้าเว็บ"
+    default: true
+
+outputs:
+  public_ip:
+    type: copyableString
+    title: "Public IP / ที่อยู่ IP"
+  instance_ocid:
+    type: ocid
+    title: "Instance OCID"
+  next_steps:
+    type: string
+    title: "Next steps / ขั้นต่อไป"
