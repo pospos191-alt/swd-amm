@@ -1,4 +1,4 @@
-# BZTPHY testnet reward points (zetaphy-chain/rewards/README.th.md).
+# BZTPHY testnet reward points (zetaphy-chain/rewards/README.md).
 #
 # mode = dry_run  on a local copy (anvil fork) of the ZETAPHY testnet with a throwaway key: deploy,
 #                 award yesterday from the real validator and runner data, re-run (must pay nothing

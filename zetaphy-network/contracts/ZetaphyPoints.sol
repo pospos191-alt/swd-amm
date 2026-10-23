@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 /// @title BZTPHY: ZETAPHY testnet reward points
 /// @notice People who run ZETAPHY validators and Neuro runners on the testnet earn BZTPHY.
 ///         When mainnet launches, BZTPHY balances at the freeze become ZETAPHY at mainnet genesis
-///         (a share of a fixed pool; see zetaphy-chain/rewards/README.th.md).
+///         (a share of a fixed pool; see zetaphy-chain/rewards/README.md).
 ///         BZTPHY cannot be transferred, approved or sold: it shows who did the work, not who bought it.
 ///         Wallets still show the balance (balanceOf, totalSupply, name, symbol, decimals, Transfer events).
 contract ZetaphyPoints {
