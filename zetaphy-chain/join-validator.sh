@@ -18,6 +18,9 @@
 #   sudo zetaphy-validator logs       setup and become-validator log lines
 #   sudo zetaphy-validator unjail     back to work after being jailed for downtime
 #   sudo zetaphy-validator backup     which files to copy somewhere safe (offline)
+#   sudo zetaphy-validator import-key use your own 12/24-word recovery phrase (MetaMask, Trust, Keplr, ...)
+#                                     for the staking account instead of the one this node made; only
+#                                     before it has staked. ACCOUNT_INDEX=n picks the wallet's account n+1.
 #   sudo zetaphy-validator preflight  can this machine run a validator? (changes nothing, except on WSL
 #                                     without systemd: it switches systemd on in /etc/wsl.conf)
 #
@@ -232,6 +235,36 @@ check() { # run by the timer: one step towards "validator", then the timer stops
   bash "$LIB/setup-node.sh" --become-validator "$STAKE"
 }
 
+# Replaces the staking account (key "validator") with one from the user's own recovery phrase.
+# The phrase is read from the terminal without echo and handed over on stdin (never as an argument,
+# so it is not in ps or a log). The node's key is kept as "validator-made-by-node", not deleted.
+import_key() {
+  [ "$(id -u)" = 0 ] || [ -n "${IMPORT_TEST:-}" ] || die "run with sudo"
+  if zq q staking validator "$(valoper)" >/dev/null 2>&1; then
+    die "this node already staked with its current account: keep it (moving a validator to another account is not supported)"
+  fi
+  local words n idx="${ACCOUNT_INDEX:-0}"
+  [[ "$idx" =~ ^[0-9]+$ ]] || die "ACCOUNT_INDEX must be a number (0 = the wallet's first account)"
+  echo "Testnet only: use a NEW phrase, never one that holds real money. The phrase is stored on this machine."
+  printf 'Paste the 12 or 24 recovery words, then press Enter (nothing is shown): '
+  IFS= read -rs words || true; echo
+  words=$(echo "$words" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//' | tr '[:upper:]' '[:lower:]')
+  n=$(wc -w <<<"$words")
+  [ "$n" = 12 ] || [ "$n" = 24 ] || die "expected 12 or 24 words, got $n"
+  asn "$ZETAPHYD keys delete imported -y $K --home $NODE_HOME" >/dev/null 2>&1 || true
+  printf '%s\n' "$words" | asn "$ZETAPHYD keys add imported --recover --algo eth_secp256k1 --coin-type 60 --index $idx $K --home $NODE_HOME" >/dev/null \
+    || die "the phrase was not accepted (check the words); nothing changed"
+  unset words
+  local old; old=$(acc)
+  asn "$ZETAPHYD keys delete validator-made-by-node -y $K --home $NODE_HOME" >/dev/null 2>&1 || true
+  asn "$ZETAPHYD keys rename validator validator-made-by-node -y $K --home $NODE_HOME" >/dev/null
+  asn "$ZETAPHYD keys rename imported validator -y $K --home $NODE_HOME" >/dev/null
+  rm -f "$STATE/faucet"   # the new account asks the faucet on the next check
+  echo "staking account is now: $(acc)  ($(hexaddr))"
+  echo "the node's own account $old is kept as validator-made-by-node (its words: $KEYS_DIR/MNEMONICS-KEEP-SECRET.txt)"
+  echo "the timer asks the faucet for the new account and stakes once it is funded"
+}
+
 status() {
   local st v
   st=$(asn "$ZETAPHYD status --home $NODE_HOME --node $NODE" 2>/dev/null) || { echo "node: not answering (journalctl -u zetaphyd -n 30)"; return 1; }
@@ -249,6 +282,7 @@ status() {
 case "${1:-install}" in
   install|validator) install_all ;;
   check) check ;;
+  import-key) import_key ;;
   preflight) platform && echo "this machine can run a ZETAPHY validator" ;;
   status) status ;;
   address) echo "$(acc)  $(hexaddr)" ;;
@@ -262,5 +296,5 @@ Copy these somewhere safe and offline (USB / paper), never into a chat or e-mail
 Never run two machines with the same priv_validator_key.json: that is double signing (slashed, jailed for good).
 EOF
   ;;
-  *) sed -n '2,24p' "$0"; exit 1 ;;
+  *) sed -n '2,27p' "$0"; exit 1 ;;
 esac

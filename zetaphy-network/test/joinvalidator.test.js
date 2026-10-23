@@ -113,3 +113,51 @@ test('preflight: macOS, Windows shells and containers get told what to use inste
   assert.equal(c.code, 1);
   assert.match(c.out, /systemd is not running here/);
 });
+
+// "import-key": the user's own recovery phrase becomes the staking account; the node's key is kept.
+function keyNode({ isValidator = false } = {}) {
+  const d = mkdtempSync(join(tmpdir(), 'zetaphy-key-'));
+  writeFileSync(join(d, 'zetaphyd'), `#!/bin/bash
+echo "$*" >> ${d}/calls.log
+case "$1 $2" in
+  "keys add") cat > ${d}/stdin.txt; echo ok ;;
+  "keys show") case "$*" in *"--bech val"*) echo zetaphyvaloper1new ;; *) echo zetaphy1new ;; esac ;;
+  "keys delete"|"keys rename") : ;;
+  "debug addr") echo "Address hex: 0x00000000000000000000000000000000000000CD" ;;
+  "q staking") ${isValidator ? `echo '{"validator":{}}'` : 'exit 1'} ;;
+  *) echo "unexpected: $*" >&2; exit 1 ;;
+esac
+`);
+  chmodSync(join(d, 'zetaphyd'), 0o755);
+  const env = { ZETAPHYD: join(d, 'zetaphyd'), LIB: d, STATE: join(d, 'state'), NODE_HOME: d, KEYS_DIR: d, NODE_USER: 'no-such-user-zetaphy-test', IMPORT_TEST: 1 };
+  const run = (input, extra = {}) => {
+    const r = spawnSync('bash', [JOIN_SH, 'import-key'], { input, encoding: 'utf8', env: { ...process.env, ...env, ...extra } });
+    return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  };
+  const log = (f) => (existsSync(join(d, f)) ? readFileSync(join(d, f), 'utf8') : '');
+  return { run, log };
+}
+const PHRASE = 'test test test test test test test test test test test junk';
+
+test('import-key: the phrase goes in on stdin (never as an argument); the node key is renamed, not deleted', () => {
+  const n = keyNode();
+  const r = n.run(`  ${PHRASE.toUpperCase()}  \n`, { ACCOUNT_INDEX: '2' });
+  assert.equal(r.code, 0, r.out);
+  assert.equal(n.log('stdin.txt'), `${PHRASE}\n`);
+  const calls = n.log('calls.log');
+  assert.doesNotMatch(calls, /junk/);
+  assert.match(calls, /keys add imported --recover --algo eth_secp256k1 --coin-type 60 --index 2/);
+  assert.match(calls, /keys rename validator validator-made-by-node -y/);
+  assert.match(calls, /keys rename imported validator -y/);
+  assert.doesNotMatch(calls, /keys delete validator -y/);
+  assert.doesNotMatch(r.out, /junk/);
+  assert.match(r.out, /staking account is now: zetaphy1new/);
+});
+
+test('import-key: refuses a wrong word count, a bad index, and a node that already staked', () => {
+  assert.match(keyNode().run('one two three\n').out, /expected 12 or 24 words, got 3/);
+  assert.match(keyNode().run(`${PHRASE}\n`, { ACCOUNT_INDEX: 'x' }).out, /ACCOUNT_INDEX must be a number/);
+  const v = keyNode({ isValidator: true }).run(`${PHRASE}\n`);
+  assert.equal(v.code, 1);
+  assert.match(v.out, /already staked/);
+});

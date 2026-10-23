@@ -139,6 +139,20 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
   Ubuntu, Debian, Fedora, RHEL/Rocky/Alma, Amazon Linux, openSUSE and Arch install what they need by themselves.
   Containers without systemd and musl systems (Alpine) are refused with what to use instead.
   `sudo zetaphy-validator preflight` checks a machine without installing anything.
+- Keys: the node makes three, on the machine itself, and never sends them anywhere:
+
+  | Key | What it does | Where |
+  |---|---|---|
+  | Staking account (eth_secp256k1, 24 words, coin type 60) | holds and stakes ZETAPHY; earns BZTPHY | `~/.zetaphy-genesis-keys/MNEMONICS-KEEP-SECRET.txt` |
+  | Validator signing key (ed25519) | signs blocks | `~/.zetaphy/config/priv_validator_key.json` |
+  | Vote key (ML-DSA-44, quantum-resistant) | signs votes alongside ed25519 | `~/.zetaphy/config/pq_vote_key.seed` |
+
+  The staking account uses the same derivation as MetaMask (m/44'/60'/0'/0/0), so its words also open it in MetaMask,
+  Rabby, Trust, OKX or Keplr (to see BZTPHY and ZETAPHY). To stake from your own wallet's phrase instead, run
+  `sudo zetaphy-validator import-key` before the node has staked (`ACCOUNT_INDEX=1` for the wallet's second account).
+  Use a new phrase: it is stored on the server, and this is a testnet. The two node keys are always made by the node;
+  to move a validator to a new machine, copy both files, and stop the old machine first (two machines with the same
+  key is double signing).
 - Validators earn BZTPHY reward points, converted to real ZETAPHY at mainnet: [`rewards/README.md`](./rewards/README.md)
 
 The manual way, step by step:
