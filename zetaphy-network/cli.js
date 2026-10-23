@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // zetaphy: one command for ZETAPHY testnet node runners and users.
 //
+//   zetaphy node start [--auto-register]   (--auto-register: wait for the bond to arrive, then register)
 //   zetaphy node start                 check the machine, then run Neuro jobs (round-2 seats of challenges too;
 //                                      a defender sends a heartbeat about every defenderTimeout/4)
 //   zetaphy node start --watch-verdicts [--max-challenge-spend 10]   also re-run finalized verdicts and challenge
@@ -312,6 +313,13 @@ async function connect(s, { needJobs = true } = {}) {
 
 const zeta = (wei) => `${formatEther(wei)} ZETAPHY`;
 
+/** --auto-register: ready once the wallet holds the bond plus a gas reserve (0.1 ZETAPHY); else what is missing. */
+export function autoRegisterPlan(balance, bond, reserve = 10n ** 17n) {
+  const need = BigInt(bond) + BigInt(reserve);
+  const have = BigInt(balance);
+  return have >= need ? { ready: true, missing: 0n } : { ready: false, missing: need - have };
+}
+
 const ERC20 = new Interface(['function transfer(address to, uint256 value) returns (bool)', 'function balanceOf(address) view returns (uint256)',
   'function decimals() view returns (uint8)', 'function symbol() view returns (string)']);
 
@@ -414,8 +422,22 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     const c = await connect(s);
     write(`runner address: ${c.me}${c.created ? ` (new key saved to ${c.file}; testnet only)` : ''}`);
     const w = await c.jobs.workers(c.me);
-    if (!w.active) {
-      write(`not registered yet: run "zetaphy node register" (bond ${zeta(await c.jobs.workerBond())})`);
+    if (!w.active && opt['auto-register']) {
+      // One-command installs: wait until the wallet holds the bond (+ a little for gas), then register.
+      if (await c.jobs.quarantined(c.me)) throw new Error('this runner address is quarantined: only a governance vote (release) lets it register again');
+      for (let shown = 0; ; shown++) {
+        const bond = await c.jobs.workerBond();
+        const plan = autoRegisterPlan(await c.provider.getBalance(c.me), bond);
+        if (plan.ready) {
+          await (await padded(c.jobs.register, { value: bond })).wait();
+          write(`registered ${c.me} with a bond of ${zeta(bond)}`);
+          break;
+        }
+        if (shown % 10 === 0) write(`${new Date().toISOString()} waiting for funds: send ${zeta(plan.missing)} (or more) to ${c.me}; the bond is ${zeta(bond)}`);
+        await new Promise((r) => setTimeout(r, Number(opt['fund-poll'] ?? 60) * 1000));
+      }
+    } else if (!w.active) {
+      write(`not registered yet: run "zetaphy node register" (bond ${zeta(await c.jobs.workerBond())}), or start with --auto-register`);
       return 1;
     }
     // Governance: work only on jobs of this machine's (voted) skill; stop while paused.
