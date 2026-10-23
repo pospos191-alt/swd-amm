@@ -11,6 +11,9 @@ import { Interface, parseEther, formatUnits } from 'ethers';
 import { chromium } from 'playwright-core';
 import { servePage, injectWallet, chromiumOptions, vercelHeaders } from './web.js';
 import { formatUnits as pageFormat } from '../../web/lib/abi.js';
+import { LANGS, TEXT as PAGE_TEXT } from '../../web/i18n.js';
+import { TEXT as DLMM_TEXT } from '../../web/dlmm.js';
+import { DISCLAIMER } from '../../web/lib/neuro.js';
 
 const A = (n) => JSON.parse(readFileSync(new URL(`../../artifacts/${n}.json`, import.meta.url), 'utf8'));
 export const ARTS = {
@@ -139,8 +142,9 @@ export async function runScenario(b, d, log = () => {}) {
     // English by default (nothing stored); the Thai checks below switch to Thai first.
     assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
     assert.equal(await page.textContent('.tab[data-tab="swap"]'), 'Swap');
-    assert.equal(await page.textContent('#lang-btn'), 'ไทย');
-    await page.click('#lang-btn');
+    assert.equal(await page.inputValue('#lang-btn'), 'en');
+    assert.deepEqual(await page.$$eval('#lang-btn option', (os) => os.map((o) => [o.value, o.textContent])), LANGS, 'the 8 languages by native name, in menu order');
+    await page.selectOption('#lang-btn', 'th');
     assert.equal(await page.evaluate(() => document.documentElement.lang), 'th');
     assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-dex:lang')), 'th');
 
@@ -317,23 +321,40 @@ export async function runScenario(b, d, log = () => {}) {
     assert.equal(I.pair.decodeFunctionResult('totalSupply', await b.call(unseeded, enc('pair', 'totalSupply', [])))[0], lpNew + 1000n, 'the user is the first LP');
     log('M3: reserves without LP -> warned, both amounts entered by the user, min = desired, exact amounts taken');
 
-    // ---- language (back to English), theme, phone width
-    await page.click('#lang-btn');
-    assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
-    assert.equal(await page.textContent('.tab[data-tab="swap"]'), 'Swap');
+    // ---- theme, phone width, then every language of the set (ending in English) at that width
     await page.click('.tab[data-tab="swap"]');
-    await page.waitForSelector('#swap-neuro.enforced');
-    await page.waitForFunction((d) => document.getElementById('swap-neuro').textContent.includes(d), DISCLAIMER_EN, { timeout: 30_000 });
     const before = await page.evaluate(() => document.documentElement.dataset.theme ?? 'auto');
     await page.click('#theme-btn');
     const after = await page.evaluate(() => document.documentElement.dataset.theme);
     assert.ok(after === 'light' || after === 'dark');
     assert.notEqual(after, before);
     await page.setViewportSize({ width: 360, height: 780 });
-    await page.waitForTimeout(200);
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-    assert.ok(overflow <= 0, `no horizontal scroll at 360 px (${overflow})`);
-    log('language toggle (EN), theme toggle, 360 px phone width OK');
+    const keys = [...new Set([...Object.keys(PAGE_TEXT.en), ...Object.keys(DLMM_TEXT.en)])];
+    for (const code of [...LANGS.map(([c]) => c).filter((c) => c !== 'en'), 'en']) {
+      await page.selectOption('#lang-btn', code);
+      assert.equal(await page.evaluate(() => document.documentElement.lang), code);
+      assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-dex:lang')), code);
+      assert.equal(await page.textContent('.tab[data-tab="swap"]'), PAGE_TEXT[code].tabSwap, code);
+      await page.waitForSelector('#swap-neuro.enforced');
+      await page.waitForFunction((d) => document.getElementById('swap-neuro').textContent.includes(d), DISCLAIMER[code], { timeout: 30_000 });
+      // No raw key anywhere on the page: every [data-i18n] element has its text, and no text is a bare key.
+      const raw = await page.evaluate((ks) => {
+        const set = new Set(ks);
+        const out = [...document.querySelectorAll('[data-i18n]')].filter((e) => !e.textContent.trim() || e.textContent === e.dataset.i18n).map((e) => e.dataset.i18n);
+        const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) if (set.has(n.textContent.trim())) out.push(n.textContent.trim());
+        for (const e of document.querySelectorAll('[title],[placeholder]')) for (const v of [e.title, e.placeholder]) if (set.has(v)) out.push(v);
+        return out;
+      }, keys);
+      assert.deepEqual(raw, [], `${code}: raw keys on the page`);
+      await page.waitForTimeout(100);
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      assert.ok(overflow <= 0, `${code}: no horizontal scroll at 360 px (${overflow})`);
+    }
+    assert.equal(await page.inputValue('#lang-btn'), 'en');
+    assert.equal(await page.textContent('.tab[data-tab="swap"]'), 'Swap');
+    await page.waitForFunction((d) => document.getElementById('swap-neuro').textContent.includes(d), DISCLAIMER_EN, { timeout: 30_000 });
+    log('theme toggle, all 8 languages (no raw keys, html lang, stored code) at 360 px phone width, back to English OK');
 
     // ---- M4: localStorage written by something else on this origin (stored values stay untrusted)
     await page.setViewportSize({ width: 1280, height: 900 });

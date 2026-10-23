@@ -174,7 +174,7 @@ node cli.js deploy ... --governance <0xMultisig>     # หรือเรีย�
   และ **อนุญาต (approve) เท่าที่ต้องใช้พอดี** ไม่ใช่ไม่จำกัด ไม่มีไลบรารีของบุคคลที่สาม (ABI encoder เขียนเอง, selector คำนวณไว้แล้วและมีเทสต์ตรวจ)
 - กระเป๋า: EIP-6963 (MetaMask, Rabby, OKX, Trust, Binance Wallet, Coinbase, Brave, Phantom ฯลฯ) และ provider แบบเก่า
   (`window.ethereum`, `window.binancew3w`) เพิ่มเครือข่ายด้วย `wallet_addEthereumChain` (ticker ZTPHY) บนมือถือที่ไม่มีกระเป๋ามีลิงก์เปิดในแอปกระเป๋า
-- ภาษาไทย/อังกฤษ, โหมดสว่าง/มืด, ใช้บนมือถือได้ (ทดสอบที่ความกว้าง 360 px)
+- 8 ภาษา (English, 中文, Español, 한국어, 日本語, Русский, Tiếng Việt, ไทย; ค่าเริ่มต้นเป็นภาษาอังกฤษ), โหมดสว่าง/มืด, ใช้บนมือถือได้ (ทดสอบที่ความกว้าง 360 px)
 
 **ค่าที่เก็บใน localStorage ไม่ถูกเชื่อ (M4):** เดิมหน้า DEX อยู่ที่ `/zetaphy/` บน origin เดียวกับ test-ui ซึ่ง CSP หลวมกว่า
 ถ้าเว็บนั้นมีช่องโหว่ XSS สคริปต์จะเขียน localStorage ของหน้า DEX ได้ ตอนนี้หน้า DEX ย้ายไปอยู่บน `swap.sawasdeecoin.com` ของตัวเองแล้ว

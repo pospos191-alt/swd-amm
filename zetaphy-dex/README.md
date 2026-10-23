@@ -174,7 +174,7 @@ First-time setup (the owner does this once):
   and **approves exactly the amount needed**, not unlimited. No third-party libraries (hand-written ABI encoder, selectors precomputed and checked by tests)
 - Wallets: EIP-6963 (MetaMask, Rabby, OKX, Trust, Binance Wallet, Coinbase, Brave, Phantom, etc.) and legacy providers
   (`window.ethereum`, `window.binancew3w`). Adds the network with `wallet_addEthereumChain` (ticker ZTPHY). On mobile without a wallet there are links to open in a wallet app
-- Thai/English, light/dark mode, works on mobile (tested at 360 px width)
+- 8 languages (English, 中文, Español, 한국어, 日本語, Русский, Tiếng Việt, ไทย; English by default), light/dark mode, works on mobile (tested at 360 px width)
 
 **Values stored in localStorage are not trusted (M4):** the DEX page used to live at `/zetaphy/` on the same origin as test-ui, which has a looser CSP.
 If that site had an XSS hole, a script could write the DEX page's localStorage. The DEX page has now moved to its own `swap.sawasdeecoin.com`
