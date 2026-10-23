@@ -246,8 +246,13 @@ case "${1:-install}" in
     [ -f "$ETC/relayer.key" ] || die "run 'sudo bash setup-agents.sh' first"
     [ -n "${RELAYER_SENDERS:-}" ] || die "RELAYER_SENDERS=0x…,0x… (the bridge lanes) is needed"
     save RELAYER_SENDERS "$RELAYER_SENDERS"; [ -n "${RELAY_CHAINS:-}" ] && save RELAY_CHAINS "$RELAY_CHAINS"
-    write_relayer; systemctl enable --now hyperlane-relayer >/dev/null; systemctl restart hyperlane-relayer
-    sleep 3; systemctl is-active --quiet hyperlane-relayer || { journalctl -u hyperlane-relayer -n 30 --no-pager; die "relayer did not start"; }
+    # one (re)start only: enable --now followed by restart races on the container name
+    write_relayer; systemctl enable hyperlane-relayer >/dev/null 2>&1; systemctl restart hyperlane-relayer
+    up=no; for _ in $(seq 1 15); do
+      sleep 2
+      systemctl is-active --quiet hyperlane-relayer && [ "$(docker inspect -f '{{.State.Running}}' hyp-relayer 2>/dev/null)" = true ] && { up=yes; break; }
+    done
+    [ "$up" = yes ] || { journalctl -u hyperlane-relayer -n 30 --no-pager; die "relayer did not start"; }
     echo "relayer started" ;;
   status) status ;;
   addresses) show_addresses ;;
