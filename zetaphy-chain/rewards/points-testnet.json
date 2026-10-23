@@ -1,0 +1,10 @@
+{
+  "chainId": 77390,
+  "points": "0x3cC2B1FFd3a7C7504a49426AE6BDEa501Bf1D59d",
+  "owner": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+  "minter": "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245",
+  "epochCap": "5000.0",
+  "fromBlock": 26144,
+  "deployTx": "0x005414cb8284710b0a45b7a612f83e424baf5faaa718aed5c94f76a37bd76386",
+  "workflowRun": "39991779477"
+}
