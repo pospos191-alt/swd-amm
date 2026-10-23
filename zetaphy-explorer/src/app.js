@@ -2,7 +2,7 @@
 // the node's public EVM JSON-RPC, CometBFT RPC and Cosmos REST directly; there
 // is no server, database or indexer. Chain data is shown with text nodes only.
 import { h, fill, $, append } from './dom.js';
-import { T, makeT } from './i18n.js';
+import { T, makeT, LANGS, pickLang } from './i18n.js';
 import { loadConfig, saveLocal, endpoints, isPlaceholder, checkUrl, neuroLink, DEFAULTS, sanitizeConfig } from './config.js';
 import { createApi, TTL } from './rpc.js';
 import { chainApi } from './chain.js';
@@ -20,7 +20,7 @@ import { DISCLAIMER, REPRODUCE, keccak_256, bytesToHex, hexToBytes, PQ_LOCK_ADDR
 const store = (() => { try { const s = window.localStorage; s.getItem('x'); return s; } catch { return null; } })();
 const pref = (k, v) => { try { if (v === undefined) return store?.getItem(`zetaphy-explorer:${k}`); store?.setItem(`zetaphy-explorer:${k}`, v); } catch { /* blocked */ } return null; };
 
-let lang = pref('lang') === 'th' ? 'th' : 'en'; // English first
+let lang = pickLang(pref('lang')); // English unless a known language was chosen
 let t = makeT(lang);
 let cfg = sanitizeConfig();
 let siteCfg = sanitizeConfig();
@@ -97,7 +97,7 @@ function applyStatic() {
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   for (const el of document.querySelectorAll('[data-i18n-placeholder]')) el.setAttribute('placeholder', t(el.dataset.i18nPlaceholder));
   for (const el of document.querySelectorAll('[data-i18n-title]')) { el.setAttribute('title', t(el.dataset.i18nTitle)); el.setAttribute('aria-label', t(el.dataset.i18nTitle)); }
-  $('lang-toggle').textContent = lang === 'th' ? 'EN' : 'ไทย';
+  $('lang').value = lang;
   document.title = t('title');
 }
 
@@ -520,8 +520,8 @@ function threatCard(a, code) {
           [t('threatEvidence'), f.evidence?.reportHash ? h('span', { class: 'mono small break' }, `reportHash ${f.evidence.reportHash}`, f.evidence.uri ? ` · ${safeText(f.evidence.uri, 200)}` : '', ` · ${t('by')} `, addrLink(f.evidence.by), f.evidence.at ? ` · ${utcTime(f.evidence.at)}` : '') : t('threatNoEvidence')],
           [t('threatResponse'), f.responses?.length ? h('ul', { class: 'plain' }, f.responses.map((x) => h('li', null, `“${safeText(x.text, 500)}” — `, addrLink(x.by), x.assigned ? ` (${t('threatAssigned')})` : ''))) : t('threatNoResponse')],
         ]))),
-      h('p', { class: 'disclaimer' }, lang === 'th' ? DISCLAIMER.th : DISCLAIMER.en),
-      note(lang === 'th' ? REPRODUCE.th : REPRODUCE.en),
+      h('p', { class: 'disclaimer' }, DISCLAIMER[lang] ?? DISCLAIMER.en),
+      note(REPRODUCE[lang] ?? REPRODUCE.en),
       registryLine(),
     );
   });
@@ -698,9 +698,10 @@ function setup(c) {
 }
 
 async function start() {
+  fill($('lang'), LANGS.map(([code, label]) => h('option', { value: code, lang: code }, label)));
   applyStatic();
   applyTheme(pref('theme'));
-  $('lang-toggle').addEventListener('click', () => { lang = lang === 'th' ? 'en' : 'th'; pref('lang', lang); t = makeT(lang); applyStatic(); banner(); route(); });
+  $('lang').addEventListener('change', (e) => { lang = pickLang(e.target.value); pref('lang', lang); t = makeT(lang); applyStatic(); banner(); route(); });
   $('theme-toggle').addEventListener('click', () => { const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; pref('theme', next); applyTheme(next); });
   $('search-form').addEventListener('submit', search);
   const loaded = await loadConfig({ storage: store });

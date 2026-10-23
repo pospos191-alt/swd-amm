@@ -140,7 +140,7 @@ src/evm.js       decodes ERC-20/721/1155 transfers, ABI strings, raw EVM tx (RLP
 src/threat.js    ThreatRegistry (vaccine.js)
 src/format.js    formats numbers/addresses/time, safeText
 src/dom.js       builds DOM without HTML
-src/i18n.js      Thai/English strings
+src/i18n.js      UI strings (en, zh, es, ko, ja, ru, vi, th)
 src/config.js    defaults, config.json, browser settings
 vendor/zetaphy-lib.js  bundle of pqcert.js, pqtx.js, vaccine.js and @noble (built with npm run build)
 ```

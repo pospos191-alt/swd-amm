@@ -140,7 +140,7 @@ src/evm.js       ถอดการโอน ERC-20/721/1155, ABI string, raw EV
 src/threat.js    ThreatRegistry (vaccine.js)
 src/format.js    จัดรูปแบบตัวเลข/ที่อยู่/เวลา, safeText
 src/dom.js       สร้าง DOM แบบไม่ใช้ HTML
-src/i18n.js      ข้อความไทย/อังกฤษ
+src/i18n.js      ข้อความหน้าเว็บ (en, zh, es, ko, ja, ru, vi, th)
 src/config.js    ค่าเริ่มต้น, config.json, ค่าในเบราว์เซอร์
 vendor/zetaphy-lib.js  bundle ของ pqcert.js, pqtx.js, vaccine.js และ @noble (สร้างด้วย npm run build)
 ```
