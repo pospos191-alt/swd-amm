@@ -1,0 +1,19 @@
+{
+  "zetaphy": {
+    "chainId": 77390,
+    "bridgeGuard": "0xE8850D63aacE38a306BCd0D132dA07AaD0B63eC3",
+    "bridgedToken": "0xb0e25f7ab80e55d6f06F401c8301B3d9B90Ab855",
+    "bridgeAirlock": "0xa381502c65a2b3F2a9CB9083D98Fa3C75355EE5B",
+    "neuroLane": "0xafdeb23316697BEF4420934100979c9F67BD6e96",
+    "hyperlaneLane": "0x8196058291DE1EDa290e22187f4CAa16b2Ca8CBE",
+    "fromBlock": 17117
+  },
+  "sepolia": {
+    "chainId": 11155111,
+    "hyperlaneLockBox": "0xc0081832ABf11BF68Df37cbA1A3E6805e10b23c6",
+    "hook": "0x4917a9746A7B6E0A57159cCb7F5a6744247f2d0d",
+    "deployTx": "0x31c0b5531919054ff32c4d8b0f9bd618a7e6a5d98de9cf14fb4cb0cb99d851aa"
+  },
+  "state": "CLOSED (route disabled)",
+  "workflowRun": "39899940513"
+}
