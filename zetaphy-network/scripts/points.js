@@ -4,19 +4,19 @@
 //   node scripts/points.js deploy --owner 0x… --cap <BZTPHY per day>
 //       deploys BZTPHY with the key in KEYFILE as its minter; prints JSON on the last line
 //   node scripts/points.js award [--epoch <UTC day>] [--send]
-//       works out one day's awards (default: yesterday, UTC) from the chain: validators' uptime
-//       (REST) and Neuro runners' revealed jobs (NeuroJobs Revealed events). Without --send it
+//       works out one day's awards (default: yesterday, UTC) from the chain: the minutes each
+//       validator signed (one block checked per minute, CometBFT RPC) and Neuro runners' revealed jobs (NeuroJobs Revealed events). Without --send it
 //       only prints them. With --send it awards whoever has not been awarded for that day yet,
 //       so a re-run never pays twice.
 //   node scripts/points.js snapshot --pool <ZETAPHY>
 //       balances from the Transfer events, and each holder's share of the mainnet pool
 //
-// env: ZETAPHY_RPC (EVM JSON-RPC), ZETAPHY_REST (Cosmos REST), KEYFILE (deploy/award --send),
+// env: ZETAPHY_RPC (EVM JSON-RPC), ZETAPHY_REST (Cosmos REST), ZETAPHY_COMET (CometBFT RPC), KEYFILE (deploy/award --send),
 // POINTS and FROM_BLOCK (else zetaphy-chain/rewards/points-testnet.json), NEURO_JOBS,
 // POINTS_CONFIG (JSON overriding src/points.js DEFAULTS, amounts in BZTPHY).
 import { readFileSync, existsSync } from 'node:fs';
 import { JsonRpcProvider, Wallet, Contract, ContractFactory, Interface, getAddress, parseEther, formatEther, encodeBytes32String } from 'ethers';
-import { DEFAULTS, DAY, epochOf, validatorAwards, runnerAwards, mergeAwards, fitCap, proRata, balancesFromTransfers } from '../src/points.js';
+import { DEFAULTS, DAY, epochOf, validatorAwards, commitSigners, minuteHeights, runnerAwards, mergeAwards, fitCap, proRata, balancesFromTransfers } from '../src/points.js';
 
 const CHAIN_ID = 77390n;
 const STEP = 500; // the public node answers at most 500 blocks per eth_getLogs
@@ -35,13 +35,14 @@ function config() {
   const o = process.env.POINTS_CONFIG ? JSON.parse(process.env.POINTS_CONFIG) : {};
   const cfg = { ...DEFAULTS };
   for (const k of ['validatorDaily', 'perJob', 'jobCapDaily']) if (o[k] !== undefined) cfg[k] = parseEther(String(o[k]));
-  for (const k of ['minUptime', 'excludeMonikers', 'excludeAddresses']) if (o[k] !== undefined) cfg[k] = o[k];
+  for (const k of ['minutesPerDay', 'excludeMonikers', 'excludeAddresses']) if (o[k] !== undefined) cfg[k] = o[k];
   return {
     cfg,
     points: process.env.POINTS || file.points,
     fromBlock: Number(process.env.FROM_BLOCK || file.fromBlock || 0),
     jobs: process.env.NEURO_JOBS || '0x698dC17df6a34b02263b295d101BE39F3F3B433B',
     rest: (process.env.ZETAPHY_REST || 'https://rpc.sawasdeecoin.com/rest').replace(/\/$/, ''),
+    comet: (process.env.ZETAPHY_COMET || 'https://rpc.sawasdeecoin.com/rpc').replace(/\/$/, ''),
   };
 }
 
@@ -78,12 +79,18 @@ async function plan(p, c, epoch) {
   if ((epoch + 1) * DAY > head.timestamp) die(`epoch ${epoch} has not ended yet`);
   const from = await blockAt(p, epoch * DAY, head.number);
   const to = (await blockAt(p, (epoch + 1) * DAY, head.number)) - 1;
-  const [vals, infos, params] = await Promise.all([
-    rest(c.rest, '/cosmos/staking/v1beta1/validators?status=BOND_STATUS_BONDED&pagination.limit=500'),
-    rest(c.rest, '/cosmos/slashing/v1beta1/signing_infos?pagination.limit=500'),
-    rest(c.rest, '/cosmos/slashing/v1beta1/params'),
-  ]);
-  const v = validatorAwards(vals.validators ?? [], infos.info ?? [], params.params.signed_blocks_window, c.cfg);
+  // every validator, whatever its status now (one that left during the day still earns its minutes)
+  const vals = await rest(c.rest, '/cosmos/staking/v1beta1/validators?pagination.limit=1000');
+  // one block per minute: who signed it (16 requests at a time; a failed one fails the run, re-run it)
+  const heights = minuteHeights(from, to, c.cfg.minutesPerDay);
+  const minutes = new Array(heights.length);
+  for (let i = 0; i < heights.length; i += 16) {
+    await Promise.all(heights.slice(i, i + 16).map(async (h, j) => {
+      const r = await rest(c.comet, `/commit?height=${h}`);
+      minutes[i + j] = commitSigners(r.result?.signed_header?.commit?.signatures);
+    }));
+  }
+  const v = validatorAwards(vals.validators ?? [], minutes, c.cfg);
   const reveals = (await logs(p, { address: c.jobs, topics: [JOBS_IFACE.getEvent('Revealed').topicHash] }, from, to))
     .map((l) => ({ worker: JOBS_IFACE.parseLog(l).args.worker }));
   return { epoch, blocks: [from, to], awards: mergeAwards(v, runnerAwards(reveals, c.cfg)) };

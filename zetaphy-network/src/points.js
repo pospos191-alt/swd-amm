@@ -1,8 +1,9 @@
 // BZTPHY testnet reward points: who earned how much in one epoch (one UTC day), and the
 // mainnet conversion. Pure functions; scripts/points.js does the network calls.
 //
-// Validators: a bonded, unjailed validator earns validatorDaily x its uptime (the share of the
-//   slashing window's blocks it signed), if the uptime is at least minUptime.
+// Validators: paid by the minute. Each minute of the UTC day one block is checked (1,440 a day);
+//   a validator earns validatorDaily x (minutes whose block it signed) / 1440. Joining at noon and
+//   staying online earns about half; so does stopping at noon. No minimum.
 // Runners: perJob for each Neuro job they revealed a verdict for that day, at most jobCapDaily.
 // Mainnet: each holder gets pool x balance / totalSupply ZETAPHY at the freeze (pro rata), so
 //   the promise never exceeds the pool however many points were awarded.
@@ -14,7 +15,7 @@ export const DAY = 86400;
 
 export const DEFAULTS = {
   validatorDaily: 100n * ZETA,
-  minUptime: 0.5,
+  minutesPerDay: 1440,
   perJob: 2n * ZETA,
   jobCapDaily: 50n * ZETA,
   excludeMonikers: ['zetaphy-validator-0'], // the founding node: the team has its own allocation
@@ -36,27 +37,40 @@ function consBytes(pk) {
 
 const hex = (b) => Buffer.from(b).toString('hex');
 
+/** Consensus address (hex, upper case, as CometBFT commits show it) of a validator. */
+export function consAddress(v) {
+  return hex(consBytes(v.consensus_pubkey)).toUpperCase();
+}
+
+/** Signers of one commit: GET <comet>/commit?height=h → result.signed_header.commit.signatures. */
+export function commitSigners(signatures) {
+  return new Set((signatures || []).filter((s) => Number(s.block_id_flag) === 2 && s.validator_address).map((s) => String(s.validator_address).toUpperCase()));
+}
+
+/** The block checked for each minute of a day whose blocks are from..to (spread evenly). */
+export function minuteHeights(from, to, minutes = DEFAULTS.minutesPerDay) {
+  const n = to - from + 1;
+  return Array.from({ length: minutes }, (_, i) => from + Math.floor((i * n) / minutes));
+}
+
 /**
- * @param validators   GET /cosmos/staking/v1beta1/validators?status=BOND_STATUS_BONDED → .validators
- * @param signingInfos GET /cosmos/slashing/v1beta1/signing_infos → .info
- * @param window       slashing params signed_blocks_window
+ * @param validators GET /cosmos/staking/v1beta1/validators (every status: one that left during the day
+ *                   still earns its minutes) → .validators
+ * @param minutes    one Set of signer addresses per checked minute (commitSigners), normally 1,440
  */
-export function validatorAwards(validators, signingInfos, window, cfg = DEFAULTS) {
+export function validatorAwards(validators, minutes, cfg = DEFAULTS) {
   const c = { ...DEFAULTS, ...cfg };
-  const missedBy = new Map(signingInfos.map((s) => [hex(fromBech32(s.address, 'zetaphyvalcons')), Number(s.missed_blocks_counter || 0)]));
   const excluded = new Set(c.excludeAddresses.map((a) => a.toLowerCase()));
+  const per = BigInt(c.minutesPerDay);
   const out = [];
   for (const v of validators) {
-    if (v.jailed || v.status !== 'BOND_STATUS_BONDED') continue;
     if (c.excludeMonikers.includes(v.description?.moniker)) continue;
     const to = operatorEvm(v.operator_address);
     if (excluded.has(to.toLowerCase())) continue;
-    const missed = missedBy.get(hex(consBytes(v.consensus_pubkey)));
-    if (missed === undefined) continue; // no signing record yet
-    const uptime = Math.max(0, 1 - missed / Number(window));
-    if (uptime < c.minUptime) continue;
-    const bps = BigInt(Math.floor(uptime * 10000));
-    out.push({ to, amount: (c.validatorDaily * bps) / 10000n, why: `validator ${v.description?.moniker ?? ''} uptime ${(uptime * 100).toFixed(2)}%` });
+    const addr = consAddress(v);
+    const signed = minutes.reduce((n, set) => n + (set.has(addr) ? 1 : 0), 0);
+    if (!signed) continue;
+    out.push({ to, amount: (c.validatorDaily * BigInt(signed)) / per, why: `validator ${v.description?.moniker ?? ''} ${signed}/${c.minutesPerDay} min` });
   }
   return out;
 }

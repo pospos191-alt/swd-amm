@@ -7,7 +7,7 @@ When mainnet launches, all points are converted to **real ZETAPHY**, placed in t
 
 | Work | Points |
 |---|---|
-| Validator (bonded, not jailed) | 100 BZTPHY × uptime (e.g. 95% online earns 95); at least 50% uptime required |
+| Validator | 100 BZTPHY a day, paid by the minute: 100 × (minutes it signed) ÷ 1,440. One block is checked each minute of the UTC day; joining at noon and staying online earns about 50, and so does stopping at noon. No minimum |
 | Neuro runner | 2 BZTPHY per job you revealed a verdict for, at most 50 a day |
 
 - Points go to the EVM address (0x…) of the validator or runner account itself. See them in MetaMask: Import token with the BZTPHY address.
@@ -27,7 +27,7 @@ When mainnet launches, all points are converted to **real ZETAPHY**, placed in t
 Nobody can say yet, and nobody should promise you. What you get depends on two things:
 
 1. **Your share of all points.** The pool is fixed (50,000,000 ZETAPHY), so the more people earn points, the smaller each share.
-   Examples for a validator online 100% of the time (100 BZTPHY a day):
+   Examples for a validator online every minute of the day (100 BZTPHY a day):
 
    | Validators earning (all at 100%) | Your share | Your ZETAPHY at mainnet |
    |---|---|---|
