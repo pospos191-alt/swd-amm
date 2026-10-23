@@ -124,7 +124,9 @@ jobs:
               const d = rz.logs.map((l) => { try { return lane.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === "Delivered");
               if (!d) throw new Error("the lane did not deliver");
               console.log("delivered on ZETAPHY copy: transfer", d.args.id);
-              await (lane.handle(11155111, zeroPadValue(process.env.LB, 32), body)).then(() => { throw new Error("replay accepted"); }, () => console.log("replay refused"));
+              await lane.handle.staticCall(11155111, zeroPadValue(process.env.LB, 32), body).then(() => { throw new Error("replay accepted"); }, (e) => { if (/replay accepted/.test(e.message)) throw e; console.log("replay refused"); });
+              const other = new Contract(process.env.LANE, art("HyperlaneLane").abi, await z.getSigner(mailbox));
+              await other.handle.staticCall(1, zeroPadValue(process.env.LB, 32), body).then(() => { throw new Error("wrong origin accepted"); }, (e) => { if (/accepted/.test(e.message)) throw e; console.log("wrong origin refused"); });
             })().catch((e) => { console.error(e.shortMessage || e.message); process.exit(1); });'
           echo "dry run OK: nothing was sent to Sepolia or the ZETAPHY testnet"
 

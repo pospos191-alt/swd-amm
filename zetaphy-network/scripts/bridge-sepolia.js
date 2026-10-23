@@ -79,19 +79,19 @@ export async function check(p, deployer) {
   if (!merkle) throw new Error('no merkle tree hook of the Sepolia Mailbox found (see the hooks above)');
   if (merkle.address !== registryHook.address) console.error(`note: the Mailbox's merkle tree hook ${merkle.address} is not the registry's ${registryHook.address}`);
   const to = zeroPadValue(deployer, 32), body = sampleBody(deployer);
-  // The default hook pays Hyperlane's gas paymaster, which may not quote ZETAPHY (a new domain): then the
-  // lockbox uses the MerkleTreeHook alone (the validators sign its root; our relayer delivers unpaid).
-  let hook = '0x0000000000000000000000000000000000000000', defaultQuote = null, why = '';
-  try { defaultQuote = await mb['quoteDispatch(uint32,bytes32,bytes)'](ZETAPHY_DOMAIN, to, body); } catch (e) { why = e.shortMessage ?? e.message; hook = merkle.address; }
-  const fee = hook === merkle.address
-    ? await step('Mailbox.quoteDispatch with the MerkleTreeHook', () => mb['quoteDispatch(uint32,bytes32,bytes,bytes,address)'](ZETAPHY_DOMAIN, to, body, '0x', hook))
-    : defaultQuote;
+  // The lockbox always names the merkle tree hook: that tree is what Hyperlane's Sepolia validators sign
+  // (the Mailbox's default hook routes per destination and need not include it for a new domain like
+  // ZETAPHY). Our own relayer delivers, so no gas payment is needed; the Mailbox's required hook still runs.
+  const hook = merkle.address;
+  let defaultQuote = null, why = '';
+  try { defaultQuote = await mb['quoteDispatch(uint32,bytes32,bytes)'](ZETAPHY_DOMAIN, to, body); } catch (e) { why = e.shortMessage ?? e.message; }
+  const fee = await step('Mailbox.quoteDispatch with the merkle tree hook', () => mb['quoteDispatch(uint32,bytes32,bytes,bytes,address)'](ZETAPHY_DOMAIN, to, body, '0x', hook));
   const nonce = await p.getTransactionCount(deployer, 'latest');
   const pending = await p.getTransactionCount(deployer, 'pending');
   const balance = await p.getBalance(deployer);
   return {
     deployer, balance: formatEther(balance), nonce, pendingTxs: pending - nonce, lockbox: getCreateAddress({ from: deployer, nonce }),
-    defaultHook: dh, merkleTreeHook: merkle.address, requiredHook: await step('Mailbox.requiredHook', () => mb.requiredHook()), defaultHookQuotesZetaphy: defaultQuote != null, defaultHookError: why.slice(0, 160),
+    defaultHook: dh, merkleTreeHook: merkle.address, requiredHook: await step('Mailbox.requiredHook', () => mb.requiredHook()), defaultHookQuote: defaultQuote == null ? null : formatEther(defaultQuote), defaultHookError: why.slice(0, 160),
     hook, feePerLock: formatEther(fee),
   };
 }
