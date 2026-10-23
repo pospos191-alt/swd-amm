@@ -42,25 +42,32 @@ async function provider() {
 /** A body the size the lockbox sends (192 bytes), for quotes. */
 const sampleBody = (who) => AbiCoder.defaultAbiCoder().encode(['uint256', 'address', 'uint256', 'address', 'address', 'uint256'], [SEPOLIA.chainId, who, 0, who, who, 1n]);
 
+/** Runs one read, naming it in the error (a bare revert says nothing about which call). */
+async function step(label, fn) {
+  try { return await fn(); } catch (e) { throw new Error(`${label}: ${e.shortMessage ?? e.message}`); }
+}
+
 export async function check(p, deployer) {
   const mb = new Contract(SEPOLIA.mailbox, MAILBOX, p);
-  const domain = Number(await mb.localDomain());
+  const domain = Number(await step('Mailbox.localDomain', () => mb.localDomain()));
   if (domain !== Number(SEPOLIA.chainId)) throw new Error(`Sepolia Mailbox localDomain ${domain}`);
   const mh = new Contract(SEPOLIA.merkleTreeHook, HOOK, p);
-  if (Number(await mh.hookType()) !== MERKLE_TREE_HOOK_TYPE) throw new Error('the Sepolia MerkleTreeHook is not a merkle tree hook');
-  if (getAddress(await mh.mailbox()) !== getAddress(SEPOLIA.mailbox)) throw new Error('the Sepolia MerkleTreeHook belongs to another Mailbox');
+  if (Number(await step('MerkleTreeHook.hookType', () => mh.hookType())) !== MERKLE_TREE_HOOK_TYPE) throw new Error('the Sepolia MerkleTreeHook is not a merkle tree hook');
+  if (getAddress(await step('MerkleTreeHook.mailbox', () => mh.mailbox())) !== getAddress(SEPOLIA.mailbox)) throw new Error('the Sepolia MerkleTreeHook belongs to another Mailbox');
   const to = zeroPadValue(deployer, 32), body = sampleBody(deployer);
   // The default hook pays Hyperlane's gas paymaster, which may not quote ZETAPHY (a new domain): then the
   // lockbox uses the MerkleTreeHook alone (the validators sign its root; our relayer delivers unpaid).
   let hook = '0x0000000000000000000000000000000000000000', defaultQuote = null, why = '';
   try { defaultQuote = await mb['quoteDispatch(uint32,bytes32,bytes)'](ZETAPHY_DOMAIN, to, body); } catch (e) { why = e.shortMessage ?? e.message; hook = SEPOLIA.merkleTreeHook; }
-  const fee = hook === SEPOLIA.merkleTreeHook ? await mb['quoteDispatch(uint32,bytes32,bytes,bytes,address)'](ZETAPHY_DOMAIN, to, body, '0x', hook) : defaultQuote;
+  const fee = hook === SEPOLIA.merkleTreeHook
+    ? await step('Mailbox.quoteDispatch with the MerkleTreeHook', () => mb['quoteDispatch(uint32,bytes32,bytes,bytes,address)'](ZETAPHY_DOMAIN, to, body, '0x', hook))
+    : defaultQuote;
   const nonce = await p.getTransactionCount(deployer, 'latest');
   const pending = await p.getTransactionCount(deployer, 'pending');
   const balance = await p.getBalance(deployer);
   return {
     deployer, balance: formatEther(balance), nonce, pendingTxs: pending - nonce, lockbox: getCreateAddress({ from: deployer, nonce }),
-    defaultHook: await mb.defaultHook(), requiredHook: await mb.requiredHook(), defaultHookQuotesZetaphy: defaultQuote != null, defaultHookError: why.slice(0, 160),
+    defaultHook: await step('Mailbox.defaultHook', () => mb.defaultHook()), requiredHook: await step('Mailbox.requiredHook', () => mb.requiredHook()), defaultHookQuotesZetaphy: defaultQuote != null, defaultHookError: why.slice(0, 160),
     hook, feePerLock: formatEther(fee),
   };
 }
