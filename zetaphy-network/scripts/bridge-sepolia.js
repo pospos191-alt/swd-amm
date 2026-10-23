@@ -26,7 +26,8 @@ const MAILBOX = [
   'function localDomain() view returns (uint32)', 'function defaultHook() view returns (address)', 'function requiredHook() view returns (address)',
   'function quoteDispatch(uint32,bytes32,bytes) view returns (uint256)', 'function quoteDispatch(uint32,bytes32,bytes,bytes,address) view returns (uint256)',
 ];
-const HOOK = ['function hookType() view returns (uint8)', 'function mailbox() view returns (address)', 'function hooks(bytes) view returns (address[])'];
+const HOOK = ['function hookType() view returns (uint8)', 'function mailbox() view returns (address)', 'function hooks(bytes) view returns (address[])',
+  'function count() view returns (uint32)', 'function latestCheckpoint() view returns (bytes32, uint32)'];
 const AGGREGATION_HOOK_TYPE = 2;
 const art = JSON.parse(readFileSync(new URL('../artifacts/HyperlaneLockBox.json', import.meta.url), 'utf8'));
 
@@ -58,7 +59,10 @@ export async function check(p, deployer) {
     const h = new Contract(addr, HOOK, p);
     const t = await h.hookType().then(Number, () => null);
     const m = await h.mailbox().then(getAddress, () => null);
-    return { address: getAddress(addr), code: ((await p.getCode(addr)).length - 2) / 2, hookType: t, mailbox: m };
+    // a merkle tree hook answers count() and latestCheckpoint() (older builds have no hookType())
+    const count = await h.count().then(Number, () => null);
+    const tree = count != null && (await h.latestCheckpoint().then(() => true, () => count === 0));
+    return { address: getAddress(addr), code: ((await p.getCode(addr)).length - 2) / 2, hookType: t, mailbox: m, treeCount: count, tree };
   };
   const registryHook = await info(SEPOLIA.merkleTreeHook);
   const dh = await step('Mailbox.defaultHook', () => mb.defaultHook());
@@ -68,8 +72,9 @@ export async function check(p, deployer) {
     const list = await new Contract(dh, HOOK, p).hooks('0x').catch(() => []);
     subHooks = await Promise.all(list.map(info));
   }
-  const isMerkle = (h) => h.hookType === MERKLE_TREE_HOOK_TYPE && h.mailbox === getAddress(SEPOLIA.mailbox);
-  const merkle = [defaultInfo, ...subHooks].find(isMerkle) ?? (isMerkle(registryHook) ? registryHook : null);
+  const isMerkle = (h) => h.mailbox === getAddress(SEPOLIA.mailbox) && h.tree && (h.hookType === MERKLE_TREE_HOOK_TYPE || h.hookType == null);
+  // the registry's hook first: it is the one Hyperlane's Sepolia validators sign
+  const merkle = isMerkle(registryHook) ? registryHook : [defaultInfo, ...subHooks].find(isMerkle) ?? null;
   console.error(JSON.stringify({ registryHook, defaultHook: defaultInfo, subHooks }));
   if (!merkle) throw new Error('no merkle tree hook of the Sepolia Mailbox found (see the hooks above)');
   if (merkle.address !== registryHook.address) console.error(`note: the Mailbox's merkle tree hook ${merkle.address} is not the registry's ${registryHook.address}`);
