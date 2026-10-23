@@ -149,6 +149,8 @@ jobs:
             || { rm -f "$H/worker.key"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
           trap 'rm -f "$H/worker.key"' EXIT
           echo "Sepolia lockbox will be $LB (hook $HOOK)"
+          # the ZETAPHY block before the deploy: where the relayer starts reading ZETAPHY
+          ZFROM=$(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "$ZETAPHY_RPC" | jq -r .result) ))
           ZETAPHY_HOME="$H" node cli.js deploy-bridge --testnet --rpc "$ZETAPHY_RPC" --jobs "$NEURO_JOBS" --threats "$THREATS" \
             --control "$NEURO_CONTROL" --lockbox "11155111:$LB" --hyperlane-mailbox "$ZETAPHY_MAILBOX" --hyperlane-origin 11155111 \
             --governance "$TIMELOCK" --guardian "$GUARDIAN" --decimals 18 --daily-limit 1 \
@@ -158,8 +160,9 @@ jobs:
           pick() { grep -Eo "$1 0x[0-9a-fA-F]{40}" "$H/zetaphy.log" | tail -1 | awk '{print $2}'; }
           jq -n --arg guard "$(pick BridgeGuard)" --arg token "$(pick BridgedToken)" --arg airlock "$(pick BridgeAirlock)" \
             --arg neuroLane "$(pick NeuroLane)" --arg lane "$LANE" --arg lockbox "$LB" --arg hook "$HOOK" --arg run "${{ github.run_id }}" \
-            '{zetaphy: {chainId: 77390, bridgeGuard: $guard, bridgedToken: $token, bridgeAirlock: $airlock, neuroLane: $neuroLane, hyperlaneLane: $lane},
-              sepolia: {chainId: 11155111, hyperlaneLockBox: $lockbox, hook: $hook}, state: "CLOSED (route disabled)", workflowRun: $run}' \
+            --arg stx "$(jq -r .tx "$H/sepolia.json")" --arg zfrom "$ZFROM" \
+            '{zetaphy: {chainId: 77390, bridgeGuard: $guard, bridgedToken: $token, bridgeAirlock: $airlock, neuroLane: $neuroLane, hyperlaneLane: $lane, fromBlock: ($zfrom|tonumber)},
+              sepolia: {chainId: 11155111, hyperlaneLockBox: $lockbox, hook: $hook, deployTx: $stx}, state: "CLOSED (route disabled)", workflowRun: $run}' \
             > ../zetaphy-chain/hyperlane/bridge-testnet.json
           cat ../zetaphy-chain/hyperlane/bridge-testnet.json
 
