@@ -78,3 +78,38 @@ test('a validator already: marks it done and stops the timer', () => {
   assert.equal(n.log('setup.log'), '');
   assert.match(n.check().out, /already a validator/);
 });
+
+// "preflight": which machines can run a validator, and what it tells people on the others.
+function preflight({ os = 'Linux', wsl = false, systemd = true, conf = '' } = {}) {
+  const d = mkdtempSync(join(tmpdir(), 'zetaphy-pre-'));
+  writeFileSync(join(d, 'version'), wsl ? 'Linux version 5.15.153.1-microsoft-standard-WSL2' : 'Linux version 6.8.0-45-generic');
+  if (conf) writeFileSync(join(d, 'wsl.conf'), conf);
+  const env = { UNAME_S: os, PROC_VERSION: join(d, 'version'), SYSTEMD_DIR: systemd ? d : join(d, 'none'), WSL_CONF: join(d, 'wsl.conf') };
+  const r = spawnSync('bash', [JOIN_SH, 'preflight'], { encoding: 'utf8', env: { ...process.env, ...env } });
+  return { code: r.status, out: (r.stdout || '') + (r.stderr || ''), conf: existsSync(join(d, 'wsl.conf')) ? readFileSync(join(d, 'wsl.conf'), 'utf8') : '' };
+}
+
+test('preflight: any Linux with systemd (cloud or home) can run a validator', () => {
+  const r = preflight();
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /this machine can run a ZETAPHY validator/);
+  assert.doesNotMatch(r.out, /WSL/);
+});
+
+test('preflight: WSL without systemd switches it on and says to restart WSL; with systemd it works', () => {
+  const off = preflight({ wsl: true, systemd: false, conf: '[network]\nhostname=pc\n' });
+  assert.equal(off.code, 1);
+  assert.match(off.out, /wsl --shutdown/);
+  assert.match(off.conf, /\[network\]\nhostname=pc\n\n\[boot\]\nsystemd=true\n/);
+  const on = preflight({ wsl: true });
+  assert.equal(on.code, 0, on.out);
+  assert.match(on.out, /keep one Ubuntu window open/);
+});
+
+test('preflight: macOS, Windows shells and containers get told what to use instead', () => {
+  assert.match(preflight({ os: 'Darwin' }).out, /multipass launch 24\.04/);
+  assert.match(preflight({ os: 'MINGW64_NT-10.0' }).out, /wsl --install -d Ubuntu-24\.04/);
+  const c = preflight({ systemd: false });
+  assert.equal(c.code, 1);
+  assert.match(c.out, /systemd is not running here/);
+});

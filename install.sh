@@ -1,5 +1,5 @@
 #!/bin/bash
-# ZETAPHY: one command to set up a server (Ubuntu/Debian, with sudo). Pick what to run:
+# ZETAPHY: one command to set up a server (Linux with sudo; the validator runs on any Linux with systemd). Pick:
 #
 #   curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- runner
 #

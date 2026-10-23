@@ -1,5 +1,8 @@
 #!/bin/bash
-# Join the ZETAPHY testnet as a validator in one command (Ubuntu 24.04 server, x86_64 or arm64, with sudo):
+# Join the ZETAPHY testnet as a validator in one command, on any Linux machine with systemd and sudo
+# (x86_64 or arm64): any cloud, free or paid (Oracle, Google, AWS, Azure, Hetzner, DigitalOcean, Vultr, ...),
+# a home PC or mini PC, a Raspberry Pi 4/5 (64-bit OS), Windows through WSL 2, or a Mac through an Ubuntu VM.
+# Ubuntu, Debian, Fedora, RHEL/Rocky/Alma, Amazon Linux, openSUSE and Arch install what they need themselves.
 #
 #   curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- validator
 #
@@ -10,11 +13,13 @@
 #  3. a timer checks every 10 minutes: once the node has caught up and holds the coins, it stakes
 #     9 ZETAPHY and becomes a validator by itself; then the timer stops
 #
-#   sudo zetaphy-validator status    height, sync, address, balance, validator state
-#   sudo zetaphy-validator address   the address (send ZETAPHY here to stake more later)
-#   sudo zetaphy-validator logs      setup and become-validator log lines
-#   sudo zetaphy-validator unjail    back to work after being jailed for downtime
-#   sudo zetaphy-validator backup    which files to copy somewhere safe (offline)
+#   sudo zetaphy-validator status     height, sync, address, balance, validator state
+#   sudo zetaphy-validator address    the address (send ZETAPHY here to stake more later)
+#   sudo zetaphy-validator logs       setup and become-validator log lines
+#   sudo zetaphy-validator unjail     back to work after being jailed for downtime
+#   sudo zetaphy-validator backup     which files to copy somewhere safe (offline)
+#   sudo zetaphy-validator preflight  can this machine run a validator? (changes nothing, except on WSL
+#                                     without systemd: it switches systemd on in /etc/wsl.conf)
 #
 # Testnet only. Keys are made on this machine and never printed or sent anywhere.
 set -euo pipefail
@@ -32,6 +37,11 @@ ZETAPHYD="${ZETAPHYD:-/usr/local/bin/zetaphyd}"
 NODE="${NODE:-tcp://127.0.0.1:26657}"
 STATE="${STATE:-/var/lib/zetaphy-validator}"          # done marker, faucet time
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+# where this runs (tests point these at stand-ins)
+UNAME_S="${UNAME_S:-$(uname -s)}"
+PROC_VERSION="${PROC_VERSION:-/proc/version}"
+SYSTEMD_DIR="${SYSTEMD_DIR:-/run/systemd/system}"
+WSL_CONF="${WSL_CONF:-/etc/wsl.conf}"
 DENOM=azetaphy
 
 say() { printf '\n== %s\n' "$*"; }
@@ -47,11 +57,82 @@ balance() { zq q bank balance "$(acc)" $DENOM | jq -r '.balance.amount // "0"'; 
 # whole and 2-decimal ZETAPHY from azetaphy (no float rounding on 18-digit numbers)
 zeta() { local a; a=$(printf '%019d' "${1:-0}"); echo "$((10#${a:0:${#a}-18})).${a:${#a}-18:2}"; }
 
+is_wsl() { grep -qi microsoft "$PROC_VERSION" 2>/dev/null; }
+
+# Can this machine run a validator? Stops with what to do when it cannot; prints hints otherwise.
+platform() {
+  case "$UNAME_S" in
+    Linux) ;;
+    Darwin) die "this is macOS: the node needs Linux. Make a free Ubuntu VM with Multipass (https://canonical.com/multipass):
+  multipass launch 24.04 -n zetaphy -c 2 -m 4G -d 40G && multipass shell zetaphy
+then paste the same command inside it." ;;
+    MINGW*|MSYS*|CYGWIN*) die "this is Windows: install Ubuntu in WSL (PowerShell as admin: wsl --install -d Ubuntu-24.04),
+open Ubuntu and paste the same command there." ;;
+    *) die "$UNAME_S is not supported: use Linux (x86_64 or arm64)" ;;
+  esac
+  if ldd --version 2>&1 | grep -qi musl; then die "musl Linux (e.g. Alpine): the prebuilt node needs glibc. Use Ubuntu, Debian or Fedora."; fi
+  if ! [ -d "$SYSTEMD_DIR" ]; then
+    if is_wsl; then
+      if ! grep -qs '^systemd *= *true' "$WSL_CONF"; then
+        { echo; echo '[boot]'; echo 'systemd=true'; } >> "$WSL_CONF" || die "could not write $WSL_CONF (run with sudo)"
+      fi
+      die "WSL: systemd was off; it is now switched on in $WSL_CONF.
+In Windows PowerShell run:  wsl --shutdown
+then open Ubuntu again and paste the same command."
+    fi
+    die "systemd is not running here (a container?). Use a VM or a whole machine: the node runs as a systemd service."
+  fi
+  local mem disk
+  mem=$(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+  [ "${mem:-0}" -ge 900000 ] || echo "note: under 1 GB of RAM; 2 GB or more is better (a swap file is added)"
+  disk=$(df -Pk /home 2>/dev/null | awk 'NR==2 {print $4}')
+  [ -z "$disk" ] || [ "$disk" -ge 20000000 ] || echo "note: under 20 GB of free disk; the chain grows over time"
+  if is_wsl; then
+    echo "WSL: works. Keep the PC on, stop Windows from sleeping, and keep one Ubuntu window open"
+    echo "  (WSL may stop the node when its last window closes). Offline time lowers your BZTPHY and can get you jailed."
+  fi
+  return 0
+}
+
+# curl, jq, python3 and flock with whatever package manager this Linux has (only the missing ones)
+packages() {
+  local miss=() c
+  for c in curl jq python3 flock; do command -v "$c" >/dev/null || miss+=("$c"); done
+  if command -v dpkg >/dev/null; then dpkg -s ca-certificates >/dev/null 2>&1 || miss+=(ca-certificates); fi
+  [ ${#miss[@]} -eq 0 ] && return 0
+  local pk=() m
+  for m in "${miss[@]}"; do
+    case "$m" in
+      flock) pk+=(util-linux) ;;
+      python3) if command -v pacman >/dev/null; then pk+=(python); else pk+=(python3); fi ;;
+      *) pk+=("$m") ;;
+    esac
+  done
+  echo "installing: ${pk[*]}"
+  if command -v apt-get >/dev/null; then
+    apt-get -o DPkg::Lock::Timeout=900 update -qq && DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=900 install -y -qq "${pk[@]}"
+  elif command -v dnf >/dev/null; then dnf install -y -q "${pk[@]}"
+  elif command -v yum >/dev/null; then yum install -y -q "${pk[@]}"
+  elif command -v zypper >/dev/null; then zypper -n -q install "${pk[@]}"
+  elif command -v pacman >/dev/null; then pacman -Sy --noconfirm --needed "${pk[@]}"
+  else die "install ${pk[*]} with this system's package manager, then run this again"
+  fi
+}
+
+# P2P port 26656 in this machine's own firewall, if one is on (a cloud's firewall is separate)
+open_p2p() {
+  if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q 'Status: active'; then
+    ufw allow 26656/tcp >/dev/null && echo "ufw: 26656/tcp opened"
+  elif command -v firewall-cmd >/dev/null && firewall-cmd --state >/dev/null 2>&1; then
+    firewall-cmd -q --permanent --add-port=26656/tcp && firewall-cmd -q --reload && echo "firewalld: 26656/tcp opened"
+  fi
+  return 0
+}
+
 install_all() {
   [ "$(id -u)" = 0 ] || die "run with sudo"
-  command -v apt-get >/dev/null || die "this installer needs Ubuntu or Debian (apt-get)"
-  need=(); for p in curl ca-certificates jq; do dpkg -s "$p" >/dev/null 2>&1 || need+=("$p"); done
-  [ ${#need[@]} -eq 0 ] || { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${need[@]}"; }
+  [ -n "${DOWNLOAD_ONLY:-}" ] || platform
+  packages
   local arch; case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die "unsupported CPU $(uname -m)" ;; esac
 
   say "setup-node.sh and the prebuilt zetaphyd ($REPO@$REF)"
@@ -80,6 +161,7 @@ install_all() {
       || die "setup-node.sh failed: sudo tail -50 /var/log/zetaphy-setup.log"
   fi
 
+  open_p2p
   say "becomes a validator by itself once synced and funded"
   install -m 755 "${BASH_SOURCE[0]}" "$SELF_BIN" 2>/dev/null \
     || curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/zetaphy-chain/join-validator.sh" -o "$SELF_BIN"
@@ -115,8 +197,10 @@ The node is syncing now. When it has caught up and holds $STAKE ZETAPHY or more 
 it stakes $STAKE ZETAPHY and becomes a validator by itself; nothing else to do.
   sudo zetaphy-validator status    progress
   sudo zetaphy-validator backup    the files to keep safe
-Ports to open in the cloud firewall: 26656 (P2P), and 80/443 if this node serves a public RPC.
+Ports: in a cloud, open TCP 26656 (P2P) in its firewall (and 80/443 if this node serves a public RPC).
+At home it works without opening any port; forwarding TCP 26656 on the router helps other nodes reach you.
 EOF
+  if is_wsl; then echo "WSL: keep the PC awake and one Ubuntu window open, or the node stops."; fi
 }
 
 check() { # run by the timer: one step towards "validator", then the timer stops
@@ -165,6 +249,7 @@ status() {
 case "${1:-install}" in
   install|validator) install_all ;;
   check) check ;;
+  preflight) platform && echo "this machine can run a ZETAPHY validator" ;;
   status) status ;;
   address) echo "$(acc)  $(hexaddr)" ;;
   logs) journalctl -u zetaphy-become-validator -n "${2:-30}" --no-pager; tail -n 5 /var/log/zetaphy-setup.log 2>/dev/null || true ;;
@@ -177,5 +262,5 @@ Copy these somewhere safe and offline (USB / paper), never into a chat or e-mail
 Never run two machines with the same priv_validator_key.json: that is double signing (slashed, jailed for good).
 EOF
   ;;
-  *) sed -n '2,20p' "$0"; exit 1 ;;
+  *) sed -n '2,24p' "$0"; exit 1 ;;
 esac

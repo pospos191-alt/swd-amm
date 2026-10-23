@@ -4,6 +4,8 @@
 # Also install.sh validator up to the node setup (DOWNLOAD_ONLY): the prebuilt zetaphyd for this
 # setup-node.sh is found and its SHA-256 checked; a tampered SHA256SUMS is refused. It never joins the
 # live chain from here (syncing would spend the main node's small monthly traffic allowance).
+# The same download step on other Linux systems (Debian, Fedora, Rocky, Amazon Linux, openSUSE, Arch)
+# installs what it needs with that system's package manager.
 # Cost: free (GitHub-hosted runner, public repository).
 
 name: runner-install
@@ -86,6 +88,31 @@ jobs:
           ! (cd $d && sha256sum -c --ignore-missing --quiet SHA256SUMS) 2>/dev/null
           # the script's own check: same command, so a tampered download stops the install
           grep -q 'sha256sum -c --ignore-missing --quiet SHA256SUMS) || die' zetaphy-chain/join-validator.sh
-      - name: The timer logic (fake chain)
+      - name: This machine passes the preflight (Linux with systemd)
+        run: sudo bash zetaphy-chain/join-validator.sh preflight
+      - name: The timer logic and the preflight (fake chain, fake machines)
         working-directory: zetaphy-network
         run: node --test test/joinvalidator.test.js
+
+  validator-distros:
+    name: Validator download on ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['debian:12', 'fedora:41', 'rockylinux:9', 'amazonlinux:2023', 'opensuse/leap:15.6', 'archlinux:latest']
+    env:
+      REF: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: install.sh validator (DOWNLOAD_ONLY) in a clean ${{ matrix.image }}
+        run: |
+          # curl first, as a user needs it to run the one-liner at all; the script installs the rest
+          docker run --rm -e REF="$REF" -e DOWNLOAD_ONLY=1 -v "$PWD:/repo:ro" "${{ matrix.image }}" bash -c '
+            set -e
+            command -v curl >/dev/null || { command -v apt-get >/dev/null && apt-get update -qq && apt-get install -y -qq curl >/dev/null; }
+            bash /repo/install.sh validator | tee /tmp/v.log
+            grep -q "SHA-256 ok" /tmp/v.log
+            for c in jq python3 flock; do command -v $c >/dev/null || { echo "::error::$c was not installed"; exit 1; }; done'
+

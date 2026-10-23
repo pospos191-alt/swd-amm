@@ -22,12 +22,35 @@ When mainnet launches, all points are converted to **real ZETAPHY**, placed in t
 - Pro rata means the promise can never exceed the pool. Those who work longer and more reliably get more.
 - Anyone can recompute it: `node zetaphy-network/scripts/points.js snapshot --pool 50000000`
 
+## How much ZETAPHY, and is it worth it?
+
+Nobody can say yet, and nobody should promise you. What you get depends on two things:
+
+1. **Your share of all points.** The pool is fixed (50,000,000 ZETAPHY), so the more people earn points, the smaller each share.
+   Examples for a validator online 100% of the time (100 BZTPHY a day):
+
+   | Validators earning (all at 100%) | Your share | Your ZETAPHY at mainnet |
+   |---|---|---|
+   | 10 | 10% | 5,000,000 |
+   | 25 | 4% | 2,000,000 |
+   | 50 | 2% | 1,000,000 |
+   | 200 (the daily cap then shrinks everyone equally) | 0.5% | 250,000 |
+
+   The program length does not change these shares when everyone runs the whole time; joining late or going offline lowers yours.
+   Neuro runners' points come out of the same pool.
+2. **What ZETAPHY will be worth.** Today it has no price and no market. It is worth something only if mainnet launches
+   (after an audit, no date yet) and people want to use it. It could be worth very little.
+
+So: on a free machine (Oracle, Google, a home PC you already own) the cost is your time and electricity, and the upside is a
+share of the pool. On a paid server (about US$5-12 a month) you pay real money for something with no known value:
+decide for yourself, and do not spend money you cannot lose.
+
 ## Rules
 
 - **BZTPHY cannot be transferred, sold or approved** (the contract refuses). It records who did the work; it is not something to trade.
   Anyone offering to sell BZTPHY or "early ZETAPHY" is a scammer.
 - One person, one validator. If someone runs many validators or fake runners to farm points, governance can take the points back (`revoke`).
-- At most 5,000 BZTPHY can be awarded per day in total. If the awarding key ever leaks, the damage is limited to one day and can be revoked.
+- At most 5,000 BZTPHY can be awarded per day in total. When more was earned than that, every award that day shrinks by the same share (e.g. 60 validators at 100% get 83.33 each). If the awarding key ever leaks, the damage is limited to one day and can be revoked.
 - The contract owner is the chain's governance (ZetaphyTimelock). Revoking, changing the cap or freezing all need a vote.
 - Point rates may be changed by a vote, announced in advance.
 
