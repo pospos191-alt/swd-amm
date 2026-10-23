@@ -20,7 +20,7 @@ import { DISCLAIMER, REPRODUCE, keccak_256, bytesToHex, hexToBytes, PQ_LOCK_ADDR
 const store = (() => { try { const s = window.localStorage; s.getItem('x'); return s; } catch { return null; } })();
 const pref = (k, v) => { try { if (v === undefined) return store?.getItem(`zetaphy-explorer:${k}`); store?.setItem(`zetaphy-explorer:${k}`, v); } catch { /* blocked */ } return null; };
 
-let lang = pref('lang') === 'en' ? 'en' : 'th'; // Thai first
+let lang = pref('lang') === 'th' ? 'th' : 'en'; // English first
 let t = makeT(lang);
 let cfg = sanitizeConfig();
 let siteCfg = sanitizeConfig();

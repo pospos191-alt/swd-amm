@@ -35,8 +35,8 @@ const ISSUER = new Set(['known-issuer', 'lookalike']);
 const SOFTER = new Set(['similar-flagged', 'similar-reference']);
 const rank = (f) => (IDENTITY.has(f.id) ? -2 : ISSUER.has(f.id) ? -1 : CAVEAT.has(f.id) ? 9 : (ORDER[f.severity] ?? 5) + (SOFTER.has(f.id) ? 0.5 : 0));
 
-/** Picks a supported language code ('th' if unknown). */
-export const pickLang = (lang) => (LANGS[lang] ? lang : 'th');
+/** Picks a supported language code ('en' if unknown). */
+export const pickLang = (lang) => (LANGS[lang] ? lang : 'en');
 
 /** UI strings for a language, with English filling any gap. */
 export function uiText(lang) {
@@ -46,7 +46,7 @@ export function uiText(lang) {
 
 /** Report -> { title, level, lines: [{id, severity, text}] } in the chosen language.
  * Wording only: the finding ids and severities (what verdict.js hashes) are untouched. */
-export function explain(report, lang = 'th') {
+export function explain(report, lang = 'en') {
   const L = LANGS[pickLang(lang)];
   const sorted = [...report.analysis.findings].sort((a, b) => rank(a) - rank(b));
   const ui = uiText(lang);

@@ -3,7 +3,7 @@
 // test/weblib.test.js checks), always with the disclaimer.
 import { keccak } from './abi.js';
 
-export const LANGS = ['th', 'en'];
+export const LANGS = ['en', 'th'];
 
 const TEXT = {
   en: {

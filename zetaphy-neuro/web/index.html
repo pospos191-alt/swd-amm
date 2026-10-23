@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,18 +14,18 @@
   <header>
     <div>
       <h1><img class="logo" src="./logo.svg" alt="" width="34" height="34"> Neuro ZETAPHY</h1>
-      <p class="sub" data-i18n="subtitle">อ่านและอธิบายสัญญา · ชั้น 1 อ่านอย่างเดียว</p>
+      <p class="sub" data-i18n="subtitle">Reads and explains contracts · tier 1, read-only</p>
       <p class="sub site-links"><a href="https://explorer.sawasdeecoin.com/" target="_blank" rel="noopener noreferrer">ZETAPHY Explorer ↗</a></p>
     </div>
-    <select id="lang" aria-label="ภาษา"></select>
+    <select id="lang" aria-label="Language"></select>
   </header>
 
   <form id="form" autocomplete="off">
-    <label for="chain" data-i18n="chain">เชน</label>
+    <label for="chain" data-i18n="chain">Chain</label>
     <select id="chain"></select>
-    <label for="address" data-i18n="address">ที่อยู่สัญญาหรือเหรียญ</label>
+    <label for="address" data-i18n="address">Contract or token address</label>
     <input id="address" spellcheck="false" placeholder="0x…" inputmode="text" maxlength="300" required>
-    <button id="go" type="submit" data-i18n="check">ตรวจสัญญา</button>
+    <button id="go" type="submit" data-i18n="check">Check contract</button>
   </form>
 
   <p id="status" role="status" aria-live="polite"></p>
@@ -34,26 +34,26 @@
     <div id="verdict" class="verdict"><span class="dot"></span><strong id="title"></strong></div>
     <ul id="findings"></ul>
     <section id="early" class="early" hidden>
-      <h2 data-i18n="early">เตือนล่วงหน้า: รูปแบบที่ยังไม่เปิดเผย</h2>
+      <h2 data-i18n="early">Early warning: patterns not yet published</h2>
       <ul id="early-list"></ul>
       <p data-i18n="earlyHow"></p>
     </section>
-    <p id="disclaimer" class="disclaimer"><span data-i18n="disclaimer">ข้อมูลนี้เป็นผลวิเคราะห์โค้ดอัตโนมัติที่ตรวจซ้ำได้ ไม่ใช่คำกล่าวหาบุคคลหรือโครงการ และไม่ใช่คำแนะนำการลงทุน เจ้าของสัญญาชี้แจงหรือขอแก้ไขได้</span>
-      <a id="correction" href="./legal.html" data-i18n="correction">วิธีชี้แจงหรือขอแก้ไข</a></p>
+    <p id="disclaimer" class="disclaimer"><span data-i18n="disclaimer">This is automated, reproducible code analysis, not an accusation against any person or project, and not investment advice. The contract owner can respond or request a correction.</span>
+      <a id="correction" href="./legal.html" data-i18n="correction">How to respond or request a correction</a></p>
     <section id="reproduce" class="reproduce">
-      <h2 data-i18n="reproduce">ตรวจซ้ำได้เอง</h2>
+      <h2 data-i18n="reproduce">Check it yourself</h2>
       <p data-i18n="reproduceHow"></p>
       <dl id="evidence"></dl>
     </section>
     <details>
-      <summary data-i18n="details">รายละเอียด</summary>
+      <summary data-i18n="details">Details</summary>
       <dl id="meta"></dl>
     </details>
   </section>
 
   <footer>
-    <p data-i18n="footer">ไม่ขอเชื่อมกระเป๋า ไม่ส่งธุรกรรม อ่านข้อมูลจากเชนผ่าน RPC สาธารณะเท่านั้น ผลตรวจไม่ใช่คำแนะนำการลงทุน</p>
-    <p><a href="./stats.html" data-i18n="stats">สถิติการใช้งาน</a></p>
+    <p data-i18n="footer">Never asks to connect a wallet and never sends a transaction. Reads public chain data; for an early-warning check it sends only the chain and contract address to the server of this site, which stores nothing. Not investment advice.</p>
+    <p><a href="./stats.html" data-i18n="stats">Usage stats</a></p>
   </footer>
 </main>
 <script type="module" src="./app.js"></script>

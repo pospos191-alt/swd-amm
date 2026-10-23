@@ -52,6 +52,7 @@ after(async () => { await browser?.close(); for (const s of servers) s.kill(); r
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Content-Type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
 
 /** A page with the mock node behind https://node.zetaphy.test (and other.zetaphy.test); records problems. */
+/** lang: the stored language preference ('th' unless set; null for none). */
 async function openPage({ viewport, lang = 'th', origin = ORIGIN } = {}) {
   const ctx = await browser.newContext({ viewport: viewport ?? { width: 1280, height: 900 } });
   const page = await ctx.newPage();
@@ -77,7 +78,8 @@ async function openPage({ viewport, lang = 'th', origin = ORIGIN } = {}) {
       return json(200, { jsonrpc: '2.0', id, error: { code: e.code ?? -32603, message: e.message, data: url.pathname.startsWith('/rpc/') ? e.message : undefined } });
     }
   });
-  await page.addInitScript((l) => { try { localStorage.setItem('zetaphy-explorer:lang', l); } catch { /* none */ } }, lang);
+  // lang: null leaves storage empty (a first visit: English by default).
+  if (lang) await page.addInitScript((l) => { try { localStorage.setItem('zetaphy-explorer:lang', l); } catch { /* none */ } }, lang);
   return { page, ctx, problems, counts: mine };
 }
 
@@ -317,6 +319,23 @@ test('search, language and theme toggles, settings (another node), phone width',
   }
   assert.deepEqual(phone.problems, []);
   await phone.ctx.close();
+});
+
+test('a first visit (no stored language) is in English; a Thai choice is remembered', async () => {
+  const { page, ctx, problems } = await openPage({ lang: null });
+  await go(page, '#/');
+  await waitText(page, 'Latest blocks');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
+  assert.equal(await page.locator('.nav a[href="#/settings"]').innerText(), 'Settings');
+  assert.equal(await page.locator('#lang-toggle').innerText(), 'ไทย');
+  await page.click('#lang-toggle');
+  await waitText(page, 'บล็อกล่าสุด');
+  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-explorer:lang')), 'th');
+  await page.reload();
+  await waitText(page, 'บล็อกล่าสุด');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'th');
+  assert.deepEqual(problems, []);
+  await ctx.close();
 });
 
 test('placeholder config: the site says how to set the node and sends nothing', async () => {

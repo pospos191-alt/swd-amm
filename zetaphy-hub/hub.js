@@ -162,7 +162,7 @@ const APP_HOSTS = { 'wallet.sawasdeecoin.com': 'wallet', 'swap.sawasdeecoin.com'
 const APP_LANG = [['zetaphy-wallet:lang', (l) => l], ['zetaphy-dex:lang', (l) => l], ['zn.lang', (l) => JSON.stringify(l)], ['zetaphy-explorer:lang', (l) => l], ['neuro-lang', (l) => l]];
 const APP_THEME = [['zetaphy-dex:theme', 'dark'], ['zn.theme', '"dark"'], ['zetaphy-explorer:theme', 'dark']];
 
-let lang = store.get('zetaphy-hub:lang') === 'en' ? 'en' : 'th';
+let lang = store.get('zetaphy-hub:lang') === 'th' ? 'th' : 'en';
 const T = (k) => TEXT[lang][k] ?? TEXT.en[k] ?? k;
 let NODE = DEFAULT_NODE;
 let HUB = { contracts: {}, dex: {}, nft: {} }; // hub-config.json (written by build.mjs from the launch state)

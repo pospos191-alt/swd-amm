@@ -110,7 +110,7 @@ try {
     if (flag('--json')) {
       console.log(JSON.stringify(report, null, 2));
     } else {
-      const lang = opt('--lang', 'th');
+      const lang = opt('--lang', 'en');
       const out = explain(report, lang);
       const ui = uiText(lang);
       const mark = { high: '!!', medium: '! ', low: '- ', info: '  ', good: '+ ' };

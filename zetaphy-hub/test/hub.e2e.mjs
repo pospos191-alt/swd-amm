@@ -54,7 +54,8 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     // hover text instead of paragraphs
     await page.hover('.stat >> nth=0');
     await page.waitForSelector('#tip:not([hidden])');
-    assert.match(await page.textContent('#tip'), /บล็อก/);
+    assert.equal(await page.getAttribute('html', 'lang'), 'en', 'English by default');
+    assert.match(await page.textContent('#tip'), /newest block/);
 
     // faucet
     await page.fill('#faucet-addr', '0x6af57fC3633dD0F7907f7900dbd4A2822F43a245');
@@ -147,10 +148,17 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await wf.click('#x');
     await page.waitForFunction(() => new URL(location.href).searchParams.get('tab') === 'explorer');
 
-    // English everywhere, on demand
+    // Thai everywhere, on demand
     await page.click('#lang');
-    await page.waitForFunction(() => document.getElementById('page-title').textContent.length > 0 && document.documentElement.lang === 'en');
-    assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-dex:lang')), 'en', 'the apps follow the hub language');
+    await page.waitForFunction(() => document.getElementById('page-title').textContent.length > 0 && document.documentElement.lang === 'th');
+    assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-dex:lang')), 'th', 'the apps follow the hub language');
+    assert.equal(await page.evaluate(() => localStorage.getItem('zn.lang')), '"th"');
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.lang === 'th');
+    await page.click('.tab[data-tab="home"]');
+    await page.hover('.stat >> nth=0');
+    await page.waitForSelector('#tip:not([hidden])');
+    assert.match(await page.textContent('#tip'), /บล็อก/, 'Thai remembered');
 
     // narrow screen: bottom bar, still no page scroll
     await page.setViewportSize({ width: 390, height: 780 });

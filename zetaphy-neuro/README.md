@@ -25,7 +25,7 @@ Vietnamese, and Indonesian. Cost: $0.
 ```bash
 npm install
 node cli.js bsc 0x...            # explain in Thai
-node cli.js base 0x... --lang en  # English (or zh ja ko vi id)
+node cli.js base 0x... --lang th  # Thai (default English; also zh ja ko vi id)
 node cli.js sui 0x...::coin::COIN # token on Sui
 node cli.js aptos 0x...           # Fungible Asset on Aptos (or 0x...::module::Name)
 node cli.js ton EQ...             # jetton on TON

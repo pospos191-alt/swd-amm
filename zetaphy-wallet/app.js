@@ -638,7 +638,7 @@ const store = {
 };
 
 // ---- language ----
-let lang = store.get(KEYS.lang) === 'en' ? 'en' : 'th';
+let lang = store.get(KEYS.lang) === 'th' ? 'th' : 'en';
 let lastStatus = null;
 const t = (k, vars = {}) => (T[lang][k] ?? k).replace(/\{(\w+)\}/g, (_, v) => String(vars[v] ?? ''));
 

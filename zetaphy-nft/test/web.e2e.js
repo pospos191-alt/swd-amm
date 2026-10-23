@@ -123,6 +123,19 @@ const clickAndWait = async (page, name, until) => {
 };
 const statusIs = (re) => ({ fn: (s) => new RegExp(s).test(document.querySelector('#status')?.textContent ?? '') && document.querySelector('.page[data-ready]'), arg: re.source });
 
+test('a first visit is in English, even from a Thai-language browser', async () => {
+  const ctx = await browser.newContext({ locale: 'th-TH' });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`${ORIGIN}/`);
+    await page.waitForSelector('#lang[aria-label]');
+    assert.equal(await page.getAttribute('html', 'lang'), 'en');
+    assert.equal(await page.getAttribute('#lang', 'aria-label'), 'Switch language');
+    assert.equal(await page.textContent('nav a[href="#/"]'), 'Explore');
+    assert.equal(await page.evaluate(() => localStorage.getItem('zn.lang')), null);
+  } finally { await ctx.close(); }
+});
+
 test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, i18n, mobile', { timeout: 240_000 }, async () => {
   const s = await contextFor(seller, 'seller');
   const b = await contextFor(buyer, 'buyer');
@@ -304,10 +317,15 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   await b.waitForFunction(() => document.querySelectorAll('.grid .nft-card').length === 3); // #1, #2 and the external token
 
   // ---- Thai, dark mode, phone width ----
+  assert.equal(await b.getAttribute('html', 'lang'), 'en', 'English by default');
+  assert.equal(await b.textContent('#lang'), 'ไทย');
   await b.click('#lang');
   await b.waitForSelector('.page[data-ready]');
   assert.equal(await b.textContent('nav a[href="#/"]'), 'สำรวจ');
   assert.equal(await b.getAttribute('html', 'lang'), 'th');
+  await go(b, '#/me');
+  assert.equal(await b.getAttribute('html', 'lang'), 'th', 'Thai remembered');
+  assert.equal(await b.textContent('nav a[href="#/"]'), 'สำรวจ');
   await b.click('#theme');
   assert.match(await b.getAttribute('html', 'data-theme'), /^(dark|light)$/);
   await b.setViewportSize({ width: 360, height: 780 });

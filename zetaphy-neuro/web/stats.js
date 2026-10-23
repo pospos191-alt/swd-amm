@@ -10,9 +10,9 @@ const UI = {
     back: 'Back to contract checker', off: 'Counter is off: add Redis (Upstash) and USAGE_SALT to the Vercel project',
     error: 'Could not load stats', month: 'Month', locale: 'en-US' },
 };
-let lang = 'th';
-// The stats page is Thai/English only: any language other than Thai shows English.
-try { const saved = localStorage.getItem('neuro-lang'); lang = saved && saved !== 'th' ? 'en' : 'th'; } catch { /* storage blocked */ }
+let lang = 'en';
+// The stats page is Thai/English only: Thai if chosen, otherwise English.
+try { lang = localStorage.getItem('neuro-lang') === 'th' ? 'th' : 'en'; } catch { /* storage blocked */ }
 let data = null;
 
 const prevMonth = (m) => {

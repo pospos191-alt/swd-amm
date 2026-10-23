@@ -29,7 +29,7 @@ const NATIVE = Object.freeze({ address: 'native', symbol: EVM_SYMBOL, name: 'ZET
 const MAX_POSITIONS_SCAN = 300;
 
 const state = {
-  lang: 'th',
+  lang: 'en',
   cfg: null,
   tokens: [NATIVE],
   wallet: null, // { id, name, provider }
@@ -965,7 +965,7 @@ function validConfig(c) {
 
 async function init() {
   const lang = store.get(KEYS.lang);
-  state.lang = lang === 'en' || lang === 'th' ? lang : (navigator.language?.toLowerCase().startsWith('th') ? 'th' : 'th');
+  state.lang = lang === 'en' || lang === 'th' ? lang : 'en'; // English unless Thai was chosen
   applyTheme(store.get(KEYS.theme));
   loadSettings();
   applyI18n();

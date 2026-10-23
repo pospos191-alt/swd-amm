@@ -77,8 +77,9 @@ test('explain works in every language and falls back sensibly', () => {
     assert.deepEqual(out.lines.map((l) => l.id), ['sui-coin', 'can-mint', 'future-finding', 'move-caveat']);
     assert.equal(out.lines[2].text, 'future-finding', 'unknown ids show their id, not a crash');
   }
-  assert.equal(pickLang('xx'), 'th');
-  assert.equal(explain(report, 'xx').title, LANGS.th.LEVEL.high);
+  assert.equal(pickLang('xx'), 'en');
+  assert.equal(explain(report, 'xx').title, LANGS.en.LEVEL.high);
+  assert.equal(explain(report).title, LANGS.en.LEVEL.high, 'English by default');
   assert.equal(uiText('ja').m.package, LANGS.ja.UI.m.package);
 });
 

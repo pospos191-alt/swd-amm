@@ -136,6 +136,13 @@ export async function runScenario(b, d, log = () => {}) {
     await page.waitForFunction(() => document.documentElement.dataset.appReady === '1', null, { timeout: 30_000 });
     assert.equal(await page.locator('#banner').isHidden(), true, await page.locator('#banner').textContent());
     log('page ready under the strict CSP');
+    // English by default (nothing stored); the Thai checks below switch to Thai first.
+    assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
+    assert.equal(await page.textContent('.tab[data-tab="swap"]'), 'Swap');
+    assert.equal(await page.textContent('#lang-btn'), 'ไทย');
+    await page.click('#lang-btn');
+    assert.equal(await page.evaluate(() => document.documentElement.lang), 'th');
+    assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-dex:lang')), 'th');
 
     const waitOk = (id, timeout = 90_000) => page.waitForFunction((i) => {
       const s = document.getElementById(i);
@@ -310,8 +317,9 @@ export async function runScenario(b, d, log = () => {}) {
     assert.equal(I.pair.decodeFunctionResult('totalSupply', await b.call(unseeded, enc('pair', 'totalSupply', [])))[0], lpNew + 1000n, 'the user is the first LP');
     log('M3: reserves without LP -> warned, both amounts entered by the user, min = desired, exact amounts taken');
 
-    // ---- language, theme, phone width
+    // ---- language (back to English), theme, phone width
     await page.click('#lang-btn');
+    assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
     assert.equal(await page.textContent('.tab[data-tab="swap"]'), 'Swap');
     await page.click('.tab[data-tab="swap"]');
     await page.waitForSelector('#swap-neuro.enforced');

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -25,388 +25,388 @@
   <header>
     <div>
       <h1><img class="logo" src="./logo.svg" alt="" width="32" height="32"> ZETAPHY PQ Wallet</h1>
-      <p class="sub" data-i18n="subtitle">กระเป๋าต้านควอนตัม (ML-DSA-44) · ไม่มีกุญแจ ECDSA</p>
+      <p class="sub" data-i18n="subtitle">Quantum-safe wallet (ML-DSA-44) · no ECDSA key</p>
       <p class="sub site-links"><a href="https://explorer.sawasdeecoin.com/" target="_blank" rel="noopener noreferrer">ZETAPHY Explorer ↗</a></p>
     </div>
-    <button id="lang" type="button" class="ghost" lang="en">English</button>
+    <button id="lang" type="button" class="ghost" lang="th">ไทย</button>
   </header>
 
   <section class="warn" id="warning">
-    <strong data-i18n="warnTitle">ใช้กับ testnet เท่านั้น</strong>
+    <strong data-i18n="warnTitle">Testnet only</strong>
     <ul>
-      <li data-i18n="warnTestnet">ZETAPHY testnet ไม่ใช่เงินจริง ห้ามใส่ของที่มีมูลค่า</li>
-      <li data-i18n="warnSeed">seed คือกุญแจเดียวของกระเป๋า ถ้าหายหรือลืมรหัสผ่าน เงินในกระเป๋าหายถาวร ไม่มีใครกู้คืนให้ได้</li>
-      <li data-i18n="warnLocal">seed อยู่ในเบราว์เซอร์นี้เท่านั้น เก็บแบบเข้ารหัสด้วยรหัสผ่านของคุณ และไม่ถูกส่งไปที่ไหน</li>
+      <li data-i18n="warnTestnet">ZETAPHY testnet is not real money. Do not put anything of value here.</li>
+      <li data-i18n="warnSeed">The seed is the only key to this wallet. Lose it or forget the passphrase and the funds are gone for good. Nobody can recover them.</li>
+      <li data-i18n="warnLocal">The seed stays in this browser only, encrypted with your passphrase, and is never sent anywhere.</li>
     </ul>
   </section>
 
   <section class="card">
-    <label for="rpc" data-i18n="rpcLabel">ที่อยู่ RPC ของโหนด ZETAPHY (JSON-RPC พอร์ต 8545)</label>
+    <label for="rpc" data-i18n="rpcLabel">Your ZETAPHY node RPC URL (JSON-RPC, port 8545)</label>
     <div class="row">
       <input id="rpc" type="url" spellcheck="false" autocomplete="off" placeholder="https://…:8545">
-      <button id="rpc-save" type="button" data-i18n="rpcSave">บันทึก</button>
+      <button id="rpc-save" type="button" data-i18n="rpcSave">Save</button>
     </div>
-    <p class="hint" data-i18n="rpcHint">หน้านี้เปิดผ่าน https จึงต้องใช้ RPC ที่เป็น https ด้วย</p>
+    <p class="hint" data-i18n="rpcHint">If this page is opened over https, the RPC must be https too (browsers block http).</p>
     <details>
-      <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
-      <label for="threat-registry" data-i18n="threatLabel">ThreatRegistry (ระบบภูมิคุ้มกัน: ไม่เซ็นธุรกรรมไปหาโค้ดที่ติดธง)</label>
+      <summary data-i18n="advanced">More settings</summary>
+      <label for="threat-registry" data-i18n="threatLabel">ThreatRegistry (immune system: never sign transactions to flagged code)</label>
       <div class="row">
         <input id="threat-registry" spellcheck="false" autocomplete="off">
-        <button id="threat-save" type="button" data-i18n="rpcSave">บันทึก</button>
+        <button id="threat-save" type="button" data-i18n="rpcSave">Save</button>
       </div>
-      <p class="hint" data-i18n="threatHint">ที่อยู่ 0x… ของ ThreatRegistry บน ZETAPHY</p>
+      <p class="hint" data-i18n="threatHint">Its 0x… address on ZETAPHY (remembered in this browser), or for everyone in index.html's zetaphy-threat-registry meta tag. Empty = the meta tag.</p>
     </details>
   </section>
 
   <section class="card" id="setup" hidden>
-    <h2 data-i18n="setupTitle">เริ่มใช้งาน</h2>
+    <h2 data-i18n="setupTitle">Get started</h2>
     <div class="row tabs" role="group">
-      <button id="mode-new" type="button" class="tab on" data-i18n="modeNew">สร้างกุญแจใหม่</button>
-      <button id="mode-import" type="button" class="tab" data-i18n="modeImport">นำเข้า seed</button>
+      <button id="mode-new" type="button" class="tab on" data-i18n="modeNew">Create a new key</button>
+      <button id="mode-import" type="button" class="tab" data-i18n="modeImport">Import a seed</button>
     </div>
     <form id="setup-form" autocomplete="off">
       <div id="seed-row" hidden>
-        <label for="seed-in" data-i18n="seedLabel">seed (hex 64 ตัว, ขึ้นต้น 0x หรือไม่ก็ได้)</label>
+        <label for="seed-in" data-i18n="seedLabel">Seed (64 hex digits, 0x optional)</label>
         <input id="seed-in" type="password" spellcheck="false" autocomplete="off">
       </div>
-      <label for="pass1" data-i18n="pass1">ตั้งรหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</label>
+      <label for="pass1" data-i18n="pass1">Choose a passphrase (at least 8 characters)</label>
       <input id="pass1" type="password" autocomplete="new-password">
-      <label for="pass2" data-i18n="pass2">พิมพ์รหัสผ่านอีกครั้ง</label>
+      <label for="pass2" data-i18n="pass2">Type the passphrase again</label>
       <input id="pass2" type="password" autocomplete="new-password">
-      <button id="save-key" type="submit" data-i18n="saveKey">สร้างกระเป๋า</button>
+      <button id="save-key" type="submit" data-i18n="saveKey">Create wallet</button>
     </form>
   </section>
 
   <section class="card" id="locked" hidden>
-    <h2 data-i18n="lockedTitle">กระเป๋าถูกล็อก</h2>
+    <h2 data-i18n="lockedTitle">Wallet locked</h2>
     <p class="addr" id="locked-addr"></p>
     <form id="unlock-form" autocomplete="off">
-      <label for="unlock-pass" data-i18n="unlockLabel">รหัสผ่าน</label>
+      <label for="unlock-pass" data-i18n="unlockLabel">Passphrase</label>
       <input id="unlock-pass" type="password" autocomplete="current-password">
-      <button id="unlock" type="submit" data-i18n="unlock">ปลดล็อก</button>
+      <button id="unlock" type="submit" data-i18n="unlock">Unlock</button>
     </form>
-    <button id="forget" type="button" class="ghost danger" data-i18n="forget">ลบกระเป๋าออกจากเบราว์เซอร์นี้</button>
+    <button id="forget" type="button" class="ghost danger" data-i18n="forget">Remove the wallet from this browser</button>
   </section>
 
   <section class="card" id="snap-card" hidden>
-    <h2 data-i18n="snapTitle">ใช้ MetaMask (ZETAPHY Snap)</h2>
-    <p data-i18n="snapIntro">กุญแจ ML-DSA-44 สร้างใน MetaMask จาก Secret Recovery Phrase ของคุณ หน้านี้ไม่เห็นกุญแจเลย และ MetaMask แสดงทุกธุรกรรมเป็นคำอ่านง่ายให้ยืนยันก่อนเซ็น</p>
-    <p class="hint" data-i18n="snapFlask">ระหว่างที่ snap ยังไม่ได้เผยแพร่และยังไม่ผ่านการตรวจของ MetaMask จะติดตั้งได้เฉพาะใน MetaMask Flask (รุ่นสำหรับนักพัฒนา)</p>
+    <h2 data-i18n="snapTitle">Use MetaMask (ZETAPHY Snap)</h2>
+    <p data-i18n="snapIntro">The ML-DSA-44 key is made inside MetaMask from your Secret Recovery Phrase; this page never sees it. MetaMask shows every transaction in plain words before it signs.</p>
+    <p class="hint" data-i18n="snapFlask">Until the snap is published and MetaMask has reviewed it, it installs only in MetaMask Flask (the developer build).</p>
     <details>
-      <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
-      <label for="snap-id" data-i18n="snapIdLabel">snap ID</label>
+      <summary data-i18n="advanced">More settings</summary>
+      <label for="snap-id" data-i18n="snapIdLabel">Snap ID (npm:@zetaphy/snap, or local:http://localhost:8080 in development)</label>
       <input id="snap-id" spellcheck="false" autocomplete="off">
-      <p class="hint" data-i18n="snapIdHint">บัญชีขึ้นกับ snap ID</p>
+      <p class="hint" data-i18n="snapIdHint">The account depends on the snap ID: the same snap always gives the same account (recoverable from the Secret Recovery Phrase), a local:… snap gives another one.</p>
     </details>
-    <p class="hint using"><span class="using-text"></span> <a href="#wallets-card" data-i18n="changeWallet">เปลี่ยนกระเป๋า</a></p>
-    <button id="snap-connect" type="button" data-i18n="snapConnect">เชื่อม MetaMask</button>
+    <p class="hint using"><span class="using-text"></span> <a href="#wallets-card" data-i18n="changeWallet">Pick another wallet</a></p>
+    <button id="snap-connect" type="button" data-i18n="snapConnect">Connect MetaMask</button>
   </section>
 
   <section id="wallet" hidden>
     <div class="card">
-      <h2 data-i18n="accountTitle">บัญชีของคุณ</h2>
-      <p class="hint" data-i18n="sameAccount">สองแบบนี้คือบัญชีเดียวกัน รับเงินได้ทั้งสองแบบ</p>
-      <div class="addr-row"><code id="addr-bech32" class="addr"></code><button type="button" class="ghost copy" data-copy="addr-bech32" data-i18n="copy">คัดลอก</button></div>
-      <div class="addr-row"><code id="addr-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="addr-hex" data-i18n="copy">คัดลอก</button></div>
+      <h2 data-i18n="accountTitle">Your account</h2>
+      <p class="hint" data-i18n="sameAccount">Both are the same account. It can receive funds at either.</p>
+      <div class="addr-row"><code id="addr-bech32" class="addr"></code><button type="button" class="ghost copy" data-copy="addr-bech32" data-i18n="copy">Copy</button></div>
+      <div class="addr-row"><code id="addr-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="addr-hex" data-i18n="copy">Copy</button></div>
       <div class="balance">
-        <span data-i18n="balance">ยอดเงิน</span>
+        <span data-i18n="balance">Balance</span>
         <strong id="balance">–</strong>
-        <button id="refresh" type="button" class="ghost" data-i18n="refresh">อัปเดต</button>
+        <button id="refresh" type="button" class="ghost" data-i18n="refresh">Refresh</button>
       </div>
       <p id="acct-status" class="hint"></p>
-      <p id="snap-mode" class="hint" data-i18n="snapMode" hidden>กุญแจอยู่ใน MetaMask (ZETAPHY Snap)</p>
-      <button id="snap-disconnect" type="button" class="ghost" data-i18n="snapDisconnect" hidden>เลิกใช้ MetaMask ในหน้านี้</button>
+      <p id="snap-mode" class="hint" data-i18n="snapMode" hidden>The key is in MetaMask (ZETAPHY Snap), not in this page. Your MetaMask Secret Recovery Phrase is its backup.</p>
+      <button id="snap-disconnect" type="button" class="ghost" data-i18n="snapDisconnect" hidden>Disconnect MetaMask from this page</button>
     </div>
 
     <div class="card" id="owned-card">
-      <h2 data-i18n="ownedTitle">บัญชีที่กระเป๋านี้ควบคุม</h2>
-      <p class="hint" data-i18n="ownedHint">บัญชี ECDSA (เช่น MetaMask) ที่ล็อกควอนตัมให้กระเป๋านี้แล้ว กุญแจเดิมของบัญชีนั้นใช้ไม่ได้อีก กระเป๋านี้โอน โอนโทเคน และ stake แทนได้ (เซ็นด้วย ML-DSA-44 และจ่ายค่าธรรมเนียมจากกระเป๋านี้)</p>
-      <label for="owner" data-i18n="ownerLabel">ที่อยู่บัญชีที่ล็อกไว้ (0x… หรือ zetaphy1…)</label>
+      <h2 data-i18n="ownedTitle">Accounts this wallet controls</h2>
+      <p class="hint" data-i18n="ownedHint">ECDSA accounts (e.g. MetaMask) quantum-locked to this wallet. Their own keys no longer work; this wallet sends, sends tokens and stakes for them (signed with ML-DSA-44, fees paid by this wallet).</p>
+      <label for="owner" data-i18n="ownerLabel">Locked account address (0x… or zetaphy1…)</label>
       <div class="row">
         <input id="owner" spellcheck="false" autocomplete="off" placeholder="0x…">
-        <button id="owner-use" type="button" data-i18n="ownerUse">ทำรายการในนามบัญชีนี้</button>
+        <button id="owner-use" type="button" data-i18n="ownerUse">Act as this account</button>
       </div>
       <ul id="owned-list" class="owned"></ul>
       <div id="acting" class="acting" hidden>
-        <p><span data-i18n="actingAs">กำลังทำรายการในนามของ</span> <code id="acting-addr"></code></p>
-        <div class="balance"><span data-i18n="ownerBalance">ยอดเงินของบัญชีนั้น</span> <strong id="acting-balance">–</strong></div>
-        <p class="hint" data-i18n="actingHint">โอน ZETAPHY โอนโทเคน และ stake ด้านล่างจะทำในนามบัญชีนี้ (as_owner) ค่าธรรมเนียมหักจากกระเป๋านี้</p>
-        <button id="owner-stop" type="button" class="ghost" data-i18n="ownerStop">กลับไปใช้บัญชีของฉัน</button>
+        <p><span data-i18n="actingAs">Acting as</span> <code id="acting-addr"></code></p>
+        <div class="balance"><span data-i18n="ownerBalance">Its balance</span> <strong id="acting-balance">–</strong></div>
+        <p class="hint" data-i18n="actingHint">Send, token transfers and staking below act for this account (as_owner). Fees come from this wallet.</p>
+        <button id="owner-stop" type="button" class="ghost" data-i18n="ownerStop">Back to my account</button>
       </div>
     </div>
 
     <div class="card">
-      <h2 data-i18n="sendTitle">โอน ZETAPHY</h2>
+      <h2 data-i18n="sendTitle">Send ZETAPHY</h2>
       <p class="as-tag" hidden></p>
       <form id="send-form" autocomplete="off">
-        <label for="to" data-i18n="toLabel">ถึง (0x… หรือ zetaphy1…)</label>
+        <label for="to" data-i18n="toLabel">To (0x… or zetaphy1…)</label>
         <input id="to" spellcheck="false" autocomplete="off">
-        <label for="amount" data-i18n="amountLabel">จำนวน (ZETAPHY)</label>
+        <label for="amount" data-i18n="amountLabel">Amount (ZETAPHY)</label>
         <input id="amount" inputmode="decimal" autocomplete="off" placeholder="0.0">
         <details>
-          <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
-          <label for="gas" data-i18n="gasLabel">gas limit</label>
+          <summary data-i18n="advanced">More settings</summary>
+          <label for="gas" data-i18n="gasLabel">Gas limit</label>
           <input id="gas" inputmode="numeric" value="400000">
         </details>
-        <button id="review" type="submit" data-i18n="review">ตรวจก่อนโอน</button>
+        <button id="review" type="submit" data-i18n="review">Review</button>
       </form>
       <div id="confirm" class="confirm" hidden>
-        <h3 data-i18n="confirmTitle">ยืนยันการโอน</h3>
+        <h3 data-i18n="confirmTitle">Confirm the transfer</h3>
         <dl>
-          <dt data-i18n="cTo">ถึง</dt><dd><code id="c-to"></code></dd>
-          <dt data-i18n="cAmount">จำนวน</dt><dd id="c-amount"></dd>
-          <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="c-fee"></dd>
-          <dt data-i18n="cTotal">รวม</dt><dd id="c-total"></dd>
+          <dt data-i18n="cTo">To</dt><dd><code id="c-to"></code></dd>
+          <dt data-i18n="cAmount">Amount</dt><dd id="c-amount"></dd>
+          <dt data-i18n="cFee">Max fee</dt><dd id="c-fee"></dd>
+          <dt data-i18n="cTotal">Total</dt><dd id="c-total"></dd>
         </dl>
         <p class="as-note hint" hidden></p>
         <p class="vaccine-note hint" hidden></p>
         <div class="row">
-          <button id="confirm-send" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
-          <button id="cancel-send" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
+          <button id="confirm-send" type="button" data-i18n="confirmSend">Confirm, sign with ML-DSA and send</button>
+          <button id="cancel-send" type="button" class="ghost" data-i18n="cancel">Cancel</button>
         </div>
       </div>
-      <p id="tx-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="tx-hash"></code></p>
+      <p id="tx-result" class="ok" hidden><span data-i18n="txSent">Sent. tx hash:</span> <code id="tx-hash"></code></p>
     </div>
 
     <div class="card" id="token-card">
-      <h2 data-i18n="tokenTitle">โทเคน ERC-20</h2>
+      <h2 data-i18n="tokenTitle">ERC-20 tokens</h2>
       <p class="as-tag" hidden></p>
-      <label for="token" data-i18n="tokenLabel">ที่อยู่สัญญาโทเคน (0x…)</label>
+      <label for="token" data-i18n="tokenLabel">Token contract address (0x…)</label>
       <div class="row">
         <input id="token" spellcheck="false" autocomplete="off" placeholder="0x…">
-        <button id="token-load" type="button" data-i18n="tokenLoad">ดูโทเคน</button>
+        <button id="token-load" type="button" data-i18n="tokenLoad">Look up</button>
       </div>
       <div id="token-info" hidden>
         <div class="balance">
-          <span data-i18n="tokenBalance">ยอดโทเคน</span>
+          <span data-i18n="tokenBalance">Token balance</span>
           <strong id="token-balance"></strong>
         </div>
         <p id="token-meta" class="hint"></p>
       </div>
       <form id="token-form" autocomplete="off">
-        <label for="token-to" data-i18n="toLabel">ถึง (0x… หรือ zetaphy1…)</label>
+        <label for="token-to" data-i18n="toLabel">To (0x… or zetaphy1…)</label>
         <input id="token-to" spellcheck="false" autocomplete="off">
-        <label for="token-amount" data-i18n="tokenAmountLabel">จำนวนโทเคน</label>
+        <label for="token-amount" data-i18n="tokenAmountLabel">Amount of the token</label>
         <input id="token-amount" inputmode="decimal" autocomplete="off" placeholder="0.0">
         <details>
-          <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
-          <label for="token-gas" data-i18n="evmGasLabel">EVM gas limit (ค่าธรรมเนียมคิดจาก gas นี้บวกส่วนของธุรกรรม)</label>
+          <summary data-i18n="advanced">More settings</summary>
+          <label for="token-gas" data-i18n="evmGasLabel">EVM gas limit (the fee is for this gas plus the tx itself)</label>
           <input id="token-gas" inputmode="numeric" value="200000">
         </details>
-        <button id="token-review" type="submit" data-i18n="review">ตรวจก่อนโอน</button>
+        <button id="token-review" type="submit" data-i18n="review">Review</button>
       </form>
       <div id="token-confirm" class="confirm" hidden>
-        <h3 data-i18n="tokenConfirmTitle">ยืนยันการโอนโทเคน</h3>
+        <h3 data-i18n="tokenConfirmTitle">Confirm the token transfer</h3>
         <dl>
-          <dt data-i18n="cToken">โทเคน</dt><dd><code id="t-token"></code></dd>
-          <dt data-i18n="cTo">ถึง</dt><dd><code id="t-to"></code></dd>
-          <dt data-i18n="cAmount">จำนวน</dt><dd id="t-amount"></dd>
-          <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="t-fee"></dd>
+          <dt data-i18n="cToken">Token</dt><dd><code id="t-token"></code></dd>
+          <dt data-i18n="cTo">To</dt><dd><code id="t-to"></code></dd>
+          <dt data-i18n="cAmount">Amount</dt><dd id="t-amount"></dd>
+          <dt data-i18n="cFee">Max fee</dt><dd id="t-fee"></dd>
         </dl>
         <p class="as-note hint" hidden></p>
         <p class="vaccine-note hint" hidden></p>
-        <p class="hint" data-i18n="tokenChecked">จำลองการโอนกับโหนดแล้ว ผ่าน (จะจำลองซ้ำอีกครั้งก่อนเซ็น)</p>
+        <p class="hint" data-i18n="tokenChecked">Simulated on the node: it succeeds (it is simulated again just before signing).</p>
         <div class="row">
-          <button id="confirm-token" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
-          <button id="cancel-token" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
+          <button id="confirm-token" type="button" data-i18n="confirmSend">Confirm, sign with ML-DSA and send</button>
+          <button id="cancel-token" type="button" class="ghost" data-i18n="cancel">Cancel</button>
         </div>
       </div>
-      <p id="token-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="token-hash"></code></p>
-      <p class="hint" data-i18n="tokenNote">ค่าธรรมเนียมจ่ายเป็น ZETAPHY ถ้าสัญญา revert ธุรกรรมทั้งหมดล้มเหลวแต่ยังเสียค่าธรรมเนียม หน้านี้จึงจำลองก่อนเซ็นทุกครั้ง</p>
+      <p id="token-result" class="ok" hidden><span data-i18n="txSent">Sent. tx hash:</span> <code id="token-hash"></code></p>
+      <p class="hint" data-i18n="tokenNote">The fee is paid in ZETAPHY. If the contract reverts, the whole tx fails and the fee is still paid, so this page simulates every transfer before signing.</p>
     </div>
 
     <div class="card" id="stake-card">
       <h2 data-i18n="stakeTitle">Stake ZETAPHY</h2>
       <p class="as-tag" hidden></p>
       <form id="stake-form" autocomplete="off">
-        <label for="validator" data-i18n="validatorLabel">validator (zetaphyvaloper1…)</label>
+        <label for="validator" data-i18n="validatorLabel">Validator (zetaphyvaloper1…)</label>
         <input id="validator" spellcheck="false" autocomplete="off" placeholder="zetaphyvaloper1…">
-        <label for="stake-amount" data-i18n="stakeAmountLabel">จำนวน (ZETAPHY) ไม่ต้องใส่ถ้ารับรางวัล</label>
+        <label for="stake-amount" data-i18n="stakeAmountLabel">Amount (ZETAPHY), not needed to claim rewards</label>
         <input id="stake-amount" inputmode="decimal" autocomplete="off" placeholder="0.0">
         <details>
-          <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
-          <label for="stake-gas" data-i18n="gasLabel">gas limit</label>
+          <summary data-i18n="advanced">More settings</summary>
+          <label for="stake-gas" data-i18n="gasLabel">Gas limit</label>
           <input id="stake-gas" inputmode="numeric" value="500000">
         </details>
         <div class="row actions">
           <button id="stake" type="button" data-i18n="stake">Stake</button>
-          <button id="unstake" type="button" data-i18n="unstake">ถอน stake</button>
-          <button id="claim" type="button" data-i18n="claim">รับรางวัล</button>
+          <button id="unstake" type="button" data-i18n="unstake">Unstake</button>
+          <button id="claim" type="button" data-i18n="claim">Claim rewards</button>
         </div>
       </form>
       <div id="stake-confirm" class="confirm" hidden>
-        <h3 id="stake-confirm-title" data-i18n="confirmStake">ยืนยันการ stake</h3>
+        <h3 id="stake-confirm-title" data-i18n="confirmStake">Confirm the stake</h3>
         <dl>
-          <dt data-i18n="cValidator">validator</dt><dd><code id="s-validator"></code></dd>
-          <dt id="s-amount-dt" data-i18n="cAmount">จำนวน</dt><dd id="s-amount"></dd>
-          <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="s-fee"></dd>
-          <dt data-i18n="cTotal">รวม</dt><dd id="s-total"></dd>
+          <dt data-i18n="cValidator">Validator</dt><dd><code id="s-validator"></code></dd>
+          <dt id="s-amount-dt" data-i18n="cAmount">Amount</dt><dd id="s-amount"></dd>
+          <dt data-i18n="cFee">Max fee</dt><dd id="s-fee"></dd>
+          <dt data-i18n="cTotal">Total</dt><dd id="s-total"></dd>
         </dl>
         <p class="as-note hint" hidden></p>
-        <p id="unbond-note" class="hint" data-i18n="unbondNote" hidden>เงินที่ถอน stake จะกลับเข้าบัญชีหลังพ้นช่วง unbonding ของเชน ระหว่างนั้นใช้ไม่ได้และไม่ได้รางวัล</p>
+        <p id="unbond-note" class="hint" data-i18n="unbondNote" hidden>Unstaked ZETAPHY comes back after the chain's unbonding period. Until then it cannot be used and earns no rewards.</p>
         <div class="row">
-          <button id="confirm-stake" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
-          <button id="cancel-stake" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
+          <button id="confirm-stake" type="button" data-i18n="confirmSend">Confirm, sign with ML-DSA and send</button>
+          <button id="cancel-stake" type="button" class="ghost" data-i18n="cancel">Cancel</button>
         </div>
       </div>
-      <p id="stake-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="stake-hash"></code></p>
+      <p id="stake-result" class="ok" hidden><span data-i18n="txSent">Sent. tx hash:</span> <code id="stake-hash"></code></p>
     </div>
 
     <div class="card" id="deploy-card">
-      <h2 data-i18n="deployTitle">สร้างสัญญา (deploy)</h2>
+      <h2 data-i18n="deployTitle">Deploy a contract</h2>
       <p class="as-tag" hidden></p>
       <form id="deploy-form" autocomplete="off">
-        <label for="init-code" data-i18n="initCodeLabel">bytecode สำหรับสร้างสัญญา</label>
+        <label for="init-code" data-i18n="initCodeLabel">Creation bytecode (hex, with any constructor arguments)</label>
         <textarea id="init-code" rows="4" spellcheck="false" autocomplete="off" placeholder="0x6080…"></textarea>
         <details>
-          <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
-          <label for="deploy-gas" data-i18n="evmGasLabel">EVM gas limit</label>
+          <summary data-i18n="advanced">More settings</summary>
+          <label for="deploy-gas" data-i18n="evmGasLabel">EVM gas limit (the fee is for this gas plus the tx itself)</label>
           <input id="deploy-gas" inputmode="numeric" value="3000000">
         </details>
-        <button id="deploy-review" type="submit" data-i18n="review">ตรวจก่อนโอน</button>
+        <button id="deploy-review" type="submit" data-i18n="review">Review</button>
       </form>
       <div id="deploy-confirm" class="confirm" hidden>
-        <h3 data-i18n="deployConfirmTitle">ยืนยันการสร้างสัญญา</h3>
+        <h3 data-i18n="deployConfirmTitle">Confirm the contract creation</h3>
         <dl>
-          <dt data-i18n="cCodeSize">ขนาดโค้ด</dt><dd id="d-size"></dd>
-          <dt data-i18n="cCodeHash">hash ของโค้ด (keccak-256)</dt><dd><code id="d-hash"></code></dd>
-          <dt data-i18n="cFee">ค่าธรรมเนียมสูงสุด</dt><dd id="d-fee"></dd>
+          <dt data-i18n="cCodeSize">Code size</dt><dd id="d-size"></dd>
+          <dt data-i18n="cCodeHash">Code hash (keccak-256)</dt><dd><code id="d-hash"></code></dd>
+          <dt data-i18n="cFee">Max fee</dt><dd id="d-fee"></dd>
         </dl>
         <p class="as-note hint" hidden></p>
-        <p class="hint" data-i18n="deployChecked">จำลองการสร้างกับโหนดแล้ว ผ่าน</p>
+        <p class="hint" data-i18n="deployChecked">Simulated on the node: it succeeds (it is simulated again just before signing). Compare the code hash with the one the contract's author published. A contract creation has no destination, so it is not checked against the ThreatRegistry.</p>
         <div class="row">
-          <button id="confirm-deploy" type="button" data-i18n="confirmSend">ยืนยัน เซ็นด้วย ML-DSA และส่ง</button>
-          <button id="cancel-deploy" type="button" class="ghost" data-i18n="cancel">ยกเลิก</button>
+          <button id="confirm-deploy" type="button" data-i18n="confirmSend">Confirm, sign with ML-DSA and send</button>
+          <button id="cancel-deploy" type="button" class="ghost" data-i18n="cancel">Cancel</button>
         </div>
       </div>
-      <p id="deploy-result" class="ok" hidden><span data-i18n="txSent">ส่งแล้ว tx hash:</span> <code id="deploy-hash"></code><br><span data-i18n="deployedAt">ที่อยู่สัญญาใหม่:</span> <code id="deploy-address"></code></p>
+      <p id="deploy-result" class="ok" hidden><span data-i18n="txSent">Sent. tx hash:</span> <code id="deploy-hash"></code><br><span data-i18n="deployedAt">New contract address:</span> <code id="deploy-address"></code></p>
     </div>
 
     <div class="card" id="mm-card">
-      <h2 data-i18n="mmTitle">ล็อกบัญชี MetaMask ให้กระเป๋านี้</h2>
-      <p data-i18n="mmIntro">ย้ายการควบคุมบัญชี ECDSA ใน MetaMask มาไว้ที่กระเป๋าต้านควอนตัมนี้ ที่อยู่ ยอดเงิน โทเคน และ stake ของบัญชีนั้นอยู่ที่เดิม แต่จากนี้ไปสั่งได้ผ่านกระเป๋านี้เท่านั้น</p>
+      <h2 data-i18n="mmTitle">Lock a MetaMask account to this wallet</h2>
+      <p data-i18n="mmIntro">Hand control of an ECDSA account in MetaMask to this quantum-safe wallet. Its address, balance, tokens and stake stay where they are, but from now on only this wallet can move them.</p>
       <ul class="warn-text">
-        <li data-i18n="mmWarnPermanent">ถาวร ยกเลิกไม่ได้: หลังล็อก เชนจะปฏิเสธทุกธุรกรรมที่กุญแจ MetaMask ของบัญชีนั้นเซ็น และลายเซ็นของกุญแจนั้นใช้กับสัญญา (เช่น permit) ไม่ได้อีก</li>
-        <li id="mm-warn-seed" data-i18n="mmWarnSeed">ถ้า seed ของกระเป๋านี้หาย บัญชีที่ล็อกไว้ก็หายไปด้วย ดาวน์โหลดไฟล์สำรอง seed ก่อน</li>
-        <li data-i18n="mmWarnTx">กระเป๋านี้ต้องเคยส่งธุรกรรมบนเชนแล้วอย่างน้อยหนึ่งครั้ง (ให้เชนรู้กุญแจสาธารณะ ML-DSA-44)</li>
+        <li data-i18n="mmWarnPermanent">Permanent, no undo: after the lock the chain refuses every transaction that account's MetaMask key signs, and contracts no longer accept its signatures (e.g. permits).</li>
+        <li id="mm-warn-seed" data-i18n="mmWarnSeed">If you lose this wallet's seed, the locked account is lost too. Download the seed backup first.</li>
+        <li data-i18n="mmWarnTx">This wallet must have sent at least one transaction on chain (so the chain knows its ML-DSA-44 public key).</li>
       </ul>
-      <p class="hint using"><span class="using-text"></span> <a href="#wallets-card" data-i18n="changeWallet">เปลี่ยนกระเป๋า</a></p>
-      <label class="check"><input id="mm-ok" type="checkbox"> <span data-i18n="mmOk">เข้าใจแล้วว่าการล็อกเป็นแบบถาวร</span></label>
-      <button id="mm-lock" type="button" disabled data-i18n="mmLock">เชื่อม MetaMask แล้วล็อก</button>
-      <p id="mm-result" class="ok" hidden><span data-i18n="mmSentLabel">MetaMask ส่งคำสั่งล็อกแล้ว tx hash:</span> <code id="mm-hash"></code></p>
+      <p class="hint using"><span class="using-text"></span> <a href="#wallets-card" data-i18n="changeWallet">Pick another wallet</a></p>
+      <label class="check"><input id="mm-ok" type="checkbox"> <span data-i18n="mmOk">I understand the lock is permanent</span></label>
+      <button id="mm-lock" type="button" disabled data-i18n="mmLock">Connect MetaMask and lock</button>
+      <p id="mm-result" class="ok" hidden><span data-i18n="mmSentLabel">MetaMask sent the lock. tx hash:</span> <code id="mm-hash"></code></p>
     </div>
 
     <div class="card" id="qday-card">
-      <h2 data-i18n="qdTitle">เตรียมพร้อมสำหรับ Q-day</h2>
-      <p data-i18n="qdIntro">Q-day คือวันที่เครือข่ายเลิกเชื่อลายเซ็น ECDSA</p>
+      <h2 data-i18n="qdTitle">Prepare for Q-day</h2>
+      <p data-i18n="qdIntro">Q-day is when the network stops trusting ECDSA signatures (MetaMask-style keys), because a quantum computer may forge them. From then on an ECDSA account that has not moved is frozen (its funds stay, but it cannot send). The safest way is to lock your MetaMask account to this wallet beforehand (the card above).</p>
       <p id="qd-status" class="hint"></p>
-      <button id="qd-check" type="button" data-i18n="qdCheck">ตรวจบัญชี MetaMask ของฉัน</button>
+      <button id="qd-check" type="button" data-i18n="qdCheck">Check my MetaMask account</button>
       <p id="qd-result" class="hint" hidden></p>
       <div id="qd-recover" hidden>
         <p id="qd-recover-intro" class="hint"></p>
         <p id="qd-recover-warn" class="warn-text"></p>
-        <button id="qd-commit" type="button" data-i18n="qdCommit">ขั้นที่ 1: บันทึก commitment</button>
-        <button id="qd-reveal" type="button" data-i18n="qdReveal">ขั้นที่ 2: reveal</button>
+        <button id="qd-commit" type="button" data-i18n="qdCommit">Step 1: record the commitment</button>
+        <button id="qd-reveal" type="button" data-i18n="qdReveal">Step 2: reveal</button>
       </div>
     </div>
 
     <div class="card" id="consent-card">
-      <h2 data-i18n="csTitle">ยินยอมเรียกสัญญาที่ติดธง</h2>
-      <p data-i18n="csIntro">ถ้าเปิด threat gate ไว้ เครือข่ายจะไม่ส่งธุรกรรมไปหาสัญญาที่ติดธงแบบบังคับใช้ เว้นแต่เจ้าของบัญชียินยอมเอง</p>
-      <label><span data-i18n="csTarget">สัญญา (0x…)</span> <input id="cs-target" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
-      <label><span data-i18n="csSeconds">นานเท่าไร</span>
+      <h2 data-i18n="csTitle">Consent to a flagged contract</h2>
+      <p data-i18n="csIntro">With the threat gate on, the network does not deliver a transaction to a contract with an enforced Neuro flag unless the account itself consents (one transaction, at most a day). This is consent, not censorship: you can still go ahead, but read the flag's reason first.</p>
+      <label><span data-i18n="csTarget">Contract (0x…)</span> <input id="cs-target" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
+      <label><span data-i18n="csSeconds">For how long</span>
         <select id="cs-seconds"><option value="600">10 min</option><option value="3600" selected>1 h</option><option value="86400">24 h</option></select></label>
-      <label class="check"><input id="cs-ok" type="checkbox"> <span data-i18n="csOk">ฉันอ่านเหตุผลของธงแล้วและยอมรับความเสี่ยงเอง</span></label>
-      <button id="cs-send" type="button" disabled data-i18n="csSend">ส่งความยินยอมจากกระเป๋านี้</button>
-      <button id="cs-send-mm" type="button" disabled data-i18n="csSendMM">ส่งความยินยอมจาก MetaMask</button>
-      <p id="cs-result" class="ok" hidden><span data-i18n="csSent">ส่งความยินยอมแล้ว tx hash:</span> <code id="cs-hash"></code></p>
+      <label class="check"><input id="cs-ok" type="checkbox"> <span data-i18n="csOk">I have read the flag's reason and take the risk myself</span></label>
+      <button id="cs-send" type="button" disabled data-i18n="csSend">Send consent from this wallet</button>
+      <button id="cs-send-mm" type="button" disabled data-i18n="csSendMM">Send consent from MetaMask</button>
+      <p id="cs-result" class="ok" hidden><span data-i18n="csSent">Consent sent. tx hash:</span> <code id="cs-hash"></code></p>
     </div>
 
     <div class="card" id="backup-card">
-      <h2 data-i18n="backupTitle">สำรอง seed</h2>
-      <p class="warn-text" data-i18n="backupWarn">ไฟล์สำรองเป็น seed แบบไม่เข้ารหัส ใครได้ไฟล์นี้ไปก็ย้ายเงินออกได้ เก็บไว้ในที่ปลอดภัยแบบออฟไลน์ ห้ามส่งให้ใคร</p>
-      <label class="check"><input id="backup-ok" type="checkbox"> <span data-i18n="backupOk">เข้าใจแล้ว</span></label>
-      <button id="backup" type="button" disabled data-i18n="backup">ดาวน์โหลดไฟล์สำรอง seed</button>
-      <p class="hint" data-i18n="backupCli">ไฟล์นี้ใช้เป็น ~/.zetaphy/pq.seed ของคำสั่ง zetaphy pq native ได้เลย</p>
-      <button id="lock" type="button" class="ghost" data-i18n="lock">ล็อกกระเป๋า</button>
+      <h2 data-i18n="backupTitle">Back up the seed</h2>
+      <p class="warn-text" data-i18n="backupWarn">The backup file is the seed in plain form. Anyone who gets it can move the funds. Keep it offline and safe, and never share it.</p>
+      <label class="check"><input id="backup-ok" type="checkbox"> <span data-i18n="backupOk">I understand</span></label>
+      <button id="backup" type="button" disabled data-i18n="backup">Download seed backup</button>
+      <p class="hint" data-i18n="backupCli">The file works as ~/.zetaphy/pq.seed for the zetaphy pq native command.</p>
+      <button id="lock" type="button" class="ghost" data-i18n="lock">Lock wallet</button>
     </div>
   </section>
 
   <section class="card" id="wallets-card">
-    <h2 data-i18n="walletsTitle">ใช้ ZETAPHY กับกระเป๋าอื่น</h2>
-    <p class="hint" data-i18n="walletsIntro">เพิ่มเครือข่าย ZETAPHY Testnet ในกระเป๋าที่คุณใช้อยู่</p>
+    <h2 data-i18n="walletsTitle">Use ZETAPHY in other wallets</h2>
+    <p class="hint" data-i18n="walletsIntro">Add the ZETAPHY Testnet network to the wallet you already use (MetaMask, Rabby, Trust, OKX, Coinbase, Keplr, Leap, …) with the buttons below, or type the values in yourself. Everything comes from the RPC URL above.</p>
     <p id="wallet-env" class="hint" hidden></p>
     <ul id="open-in-app" class="links" hidden></ul>
 
-    <h3 data-i18n="evmWalletsTitle">กระเป๋า EVM ในเบราว์เซอร์นี้</h3>
+    <h3 data-i18n="evmWalletsTitle">EVM wallets in this browser</h3>
     <ul id="evm-wallets" class="wallets"></ul>
-    <p id="evm-none" class="hint" data-i18n="evmNone" hidden>ไม่พบกระเป๋า EVM ในเบราว์เซอร์นี้</p>
+    <p id="evm-none" class="hint" data-i18n="evmNone" hidden>No EVM wallet found in this browser. Install an extension (MetaMask, Rabby, Trust, OKX, Coinbase Wallet, …), or on a phone open this page in your wallet app's browser.</p>
     <p id="evm-note" class="warn-text" hidden></p>
     <div class="row actions">
-      <button id="evm-add" type="button" data-i18n="evmAdd">เพิ่ม ZETAPHY ในกระเป๋านี้</button>
-      <button id="evm-connect" type="button" class="ghost" data-i18n="evmConnect">เชื่อมกระเป๋า</button>
+      <button id="evm-add" type="button" data-i18n="evmAdd">Add ZETAPHY to this wallet</button>
+      <button id="evm-connect" type="button" class="ghost" data-i18n="evmConnect">Connect this wallet</button>
       <button id="wc-connect" type="button" class="ghost" disabled data-i18n="wcConnect">WalletConnect</button>
     </div>
-    <p id="wc-hint" class="hint" data-i18n="wcOff">WalletConnect ยังไม่เปิด</p>
+    <p id="wc-hint" class="hint" data-i18n="wcOff">WalletConnect (phone wallets when this page is open in another browser, e.g. Binance Wallet) is off: it needs a Reown projectId first.</p>
     <div id="evm-account" class="acting" hidden>
       <p><strong id="evm-wallet-name"></strong></p>
-      <div class="addr-row"><code id="evm-addr-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="evm-addr-hex" data-i18n="copy">คัดลอก</button></div>
-      <div class="addr-row"><code id="evm-addr-bech32" class="addr"></code><button type="button" class="ghost copy" data-copy="evm-addr-bech32" data-i18n="copy">คัดลอก</button></div>
+      <div class="addr-row"><code id="evm-addr-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="evm-addr-hex" data-i18n="copy">Copy</button></div>
+      <div class="addr-row"><code id="evm-addr-bech32" class="addr"></code><button type="button" class="ghost copy" data-copy="evm-addr-bech32" data-i18n="copy">Copy</button></div>
       <p id="evm-chain" class="hint"></p>
     </div>
 
     <details id="manual">
-      <summary data-i18n="manualTitle">เพิ่มเครือข่ายเอง: ค่าที่ต้องใส่</summary>
+      <summary data-i18n="manualTitle">Add the network by hand: the values to type in</summary>
       <dl class="kv">
-        <dt data-i18n="mNetwork">ชื่อเครือข่าย</dt><dd><code id="m-name"></code></dd>
-        <dt data-i18n="mRpc">RPC URL</dt><dd><code id="m-rpc"></code> <button type="button" class="ghost copy" data-copy="m-rpc" data-i18n="copy">คัดลอก</button></dd>
+        <dt data-i18n="mNetwork">Network name</dt><dd><code id="m-name"></code></dd>
+        <dt data-i18n="mRpc">RPC URL</dt><dd><code id="m-rpc"></code> <button type="button" class="ghost copy" data-copy="m-rpc" data-i18n="copy">Copy</button></dd>
         <dt data-i18n="mChainId">Chain ID</dt><dd><code id="m-chain"></code></dd>
-        <dt data-i18n="mSymbol">สัญลักษณ์เหรียญ</dt><dd><code id="m-symbol"></code></dd>
-        <dt data-i18n="mDecimals">ทศนิยม</dt><dd><code id="m-decimals"></code></dd>
+        <dt data-i18n="mSymbol">Currency symbol</dt><dd><code id="m-symbol"></code></dd>
+        <dt data-i18n="mDecimals">Decimals</dt><dd><code id="m-decimals"></code></dd>
         <dt data-i18n="mExplorer">Block explorer</dt><dd><code>https://explorer.sawasdeecoin.com</code></dd>
       </dl>
       <p class="hint" id="m-symbol-note"></p>
     </details>
 
-    <h3 data-i18n="cosmosTitle">กระเป๋า Cosmos</h3>
-    <p class="hint" data-i18n="cosmosIntro">Keplr, Leap และ Cosmostation</p>
+    <h3 data-i18n="cosmosTitle">Cosmos wallets (Keplr, Leap, Cosmostation)</h3>
+    <p class="hint" data-i18n="cosmosIntro">They show the zetaphy1… address of the same account as in an EVM wallet (eth_secp256k1 key, coin type 60). They need the node's https address, which serves /rpc and /rest (nodes set up with setup-node.sh do).</p>
     <div class="row actions">
-      <button id="keplr-add" type="button" class="cosmos-add" data-cosmos="keplr" data-i18n="keplrAdd">เพิ่มใน Keplr</button>
-      <button id="leap-add" type="button" class="cosmos-add" data-cosmos="leap" data-i18n="leapAdd">เพิ่มใน Leap</button>
-      <button id="cosmostation-add" type="button" class="cosmos-add" data-cosmos="cosmostation" data-i18n="cosmostationAdd">เพิ่มใน Cosmostation</button>
+      <button id="keplr-add" type="button" class="cosmos-add" data-cosmos="keplr" data-i18n="keplrAdd">Add to Keplr</button>
+      <button id="leap-add" type="button" class="cosmos-add" data-cosmos="leap" data-i18n="leapAdd">Add to Leap</button>
+      <button id="cosmostation-add" type="button" class="cosmos-add" data-cosmos="cosmostation" data-i18n="cosmostationAdd">Add to Cosmostation</button>
     </div>
     <div id="cosmos-account" class="acting" hidden>
       <p><strong id="cosmos-wallet-name"></strong></p>
-      <div class="addr-row"><code id="cosmos-addr" class="addr"></code><button type="button" class="ghost copy" data-copy="cosmos-addr" data-i18n="copy">คัดลอก</button></div>
-      <div class="addr-row"><code id="cosmos-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="cosmos-hex" data-i18n="copy">คัดลอก</button></div>
+      <div class="addr-row"><code id="cosmos-addr" class="addr"></code><button type="button" class="ghost copy" data-copy="cosmos-addr" data-i18n="copy">Copy</button></div>
+      <div class="addr-row"><code id="cosmos-hex" class="addr"></code><button type="button" class="ghost copy" data-copy="cosmos-hex" data-i18n="copy">Copy</button></div>
     </div>
 
     <details>
-      <summary data-i18n="supportTitle">กระเป๋าไหนใช้ได้บ้าง</summary>
+      <summary data-i18n="supportTitle">Which wallets work</summary>
       <ul class="support">
-        <li data-i18n="supWorks">ใช้ได้</li>
-        <li data-i18n="supMaybe">อาจใช้ได้</li>
-        <li data-i18n="supNot">ยังใช้ไม่ได้</li>
-        <li data-i18n="supNever">ใช้ไม่ได้</li>
-        <li data-i18n="supPq">ต้านควอนตัม</li>
+        <li data-i18n="supWorks">Work now (custom networks): MetaMask, Rabby, Trust, OKX, Coinbase Wallet, Brave, Rainbow, Zerion, Frame, and Ledger/Trezor through them. Keplr, Leap and Cosmostation with the buttons above.</li>
+        <li data-i18n="supMaybe">May work (not confirmed): Binance Wallet, inside the Binance app, if it accepts the network; outside the app it needs WalletConnect.</li>
+        <li data-i18n="supNot">Not until the wallet adds ZETAPHY itself: Phantom, and wallets with a fixed list of chains.</li>
+        <li data-i18n="supNever">Never: Solana-only or Bitcoin-only wallets. They are not EVM or Cosmos wallets.</li>
+        <li data-i18n="supPq">Quantum-safe: only this page's own ML-DSA-44 key and the ZETAPHY Snap. Every other wallet signs with ECDSA (secp256k1), which a large enough quantum computer can break; lock such an account to this wallet to protect it.</li>
       </ul>
     </details>
 
     <details>
-      <summary data-i18n="advanced">ตั้งค่าเพิ่มเติม</summary>
-      <label for="wc-id" data-i18n="wcIdLabel">WalletConnect projectId</label>
+      <summary data-i18n="advanced">More settings</summary>
+      <label for="wc-id" data-i18n="wcIdLabel">WalletConnect projectId (from Reown, 32 hex digits)</label>
       <div class="row">
         <input id="wc-id" spellcheck="false" autocomplete="off" placeholder="0123456789abcdef0123456789abcdef">
-        <button id="wc-save" type="button" data-i18n="rpcSave">บันทึก</button>
+        <button id="wc-save" type="button" data-i18n="rpcSave">Save</button>
       </div>
-      <p class="hint" data-i18n="wcIdHint">projectId ฟรีจาก cloud.reown.com</p>
+      <p class="hint" data-i18n="wcIdHint">Free at cloud.reown.com. Set it here (remembered in this browser), or for everyone in index.html's zetaphy-walletconnect-project-id meta tag.</p>
     </details>
   </section>
 
   <p id="status" role="status" aria-live="polite"></p>
 
   <footer>
-    <p data-i18n="footer">โค้ดทั้งหมดอยู่ในหน้านี้ ไม่โหลดสคริปต์จากที่อื่น · ธุรกรรมเซ็นในเบราว์เซอร์ด้วย ML-DSA-44 (FIPS 204)</p>
+    <p data-i18n="footer">All code is in this page; no scripts from elsewhere · Transactions are signed with ML-DSA-44 (FIPS 204) in the browser, or in MetaMask with the ZETAPHY Snap</p>
   </footer>
 </main>
 </body>

@@ -19,7 +19,7 @@ const load = (k, d) => { try { return JSON.parse(store?.getItem(k)) ?? d; } catc
 const save = (k, v) => { try { store?.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 
 const S = {
-  lang: load('zn.lang', (navigator.language || '').toLowerCase().startsWith('en') ? 'en' : 'th'),
+  lang: load('zn.lang', 'en') === 'th' ? 'th' : 'en', // English unless Thai was chosen
   theme: load('zn.theme', null),
   settings: load('zn.settings', {}),
   dep: {},

@@ -51,7 +51,8 @@ after(async () => { await browser?.close(); server?.kill(); rpcServer?.close(); 
 
 const SOL_GENESIS = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 
-async function openPage(scheme, solanaAccounts = {}, tonapi = {}) {
+/** lang: pick that language in the menu after loading (the page opens in English). */
+async function openPage(scheme, solanaAccounts = {}, tonapi = {}, { lang } = {}) {
   const page = await browser.newPage({ colorScheme: scheme });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -79,12 +80,22 @@ async function openPage(scheme, solanaAccounts = {}, tonapi = {}) {
     await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) });
   });
   await page.goto(`http://localhost:${PORT}/`);
+  if (lang) {
+    await page.selectOption('#lang', lang);
+    assert.equal(await page.getAttribute('html', 'lang'), lang);
+  }
   return { page, errors };
 }
 
 test('token with many owner powers shows high risk in Thai, then English', async () => {
   const addr = await chain.deploy('ScamToken');
   const { page, errors } = await openPage('light');
+  // English on a first visit; Thai when chosen.
+  assert.equal(await page.getAttribute('html', 'lang'), 'en');
+  assert.equal(await page.inputValue('#lang'), 'en');
+  assert.equal(await page.textContent('#go'), 'Check contract');
+  await page.selectOption('#lang', 'th');
+  assert.equal(await page.getAttribute('html', 'lang'), 'th');
   await page.fill('#address', addr);
   await page.click('#go');
   await page.waitForSelector('#result:not([hidden])');
@@ -114,6 +125,10 @@ test('token with many owner powers shows high risk in Thai, then English', async
     assert.equal(await page.getAttribute('html', 'lang'), code);
   }
   await page.selectOption('#lang', 'th');
+  await page.reload();
+  assert.equal(await page.getAttribute('html', 'lang'), 'th', 'the choice is remembered');
+  assert.equal(await page.inputValue('#lang'), 'th');
+  assert.equal(await page.textContent('#go'), 'ตรวจสัญญา');
   assert.deepEqual(errors, []);
   await page.close();
 });
@@ -139,6 +154,8 @@ test('each successful check is counted, and the stats page shows it', async () =
   assert.equal((await counted).status(), 202);
   await page.click('a[href="./stats.html"]');
   await page.waitForFunction(() => document.getElementById('users').textContent !== '–');
+  assert.equal(await page.getAttribute('html', 'lang'), 'en', 'stats page in English by default');
+  assert.equal(await page.textContent('#lang'), 'ไทย');
   const users = Number((await page.textContent('#users')).replace(/,/g, ''));
   const checks = Number((await page.textContent('#checks')).replace(/,/g, ''));
   assert.equal(users, 1, 'one visitor (same IP and browser) across all tests');
@@ -158,7 +175,7 @@ test('Solana: a token with a permanent delegate is shown as high risk', async ()
         { extension: 'permanentDelegate', state: { delegate: mint } },
         { extension: 'tokenMetadata', state: { updateAuthority: null, mint, name: 'Sneaky', symbol: 'SNK', uri: '', additionalMetadata: [] } },
       ] } } } },
-  });
+  }, {}, { lang: 'th' });
   await page.selectOption('#chain', 'sol');
   assert.equal(await page.getAttribute('#address', 'placeholder'), 'EPjFWdd5…');
   await page.fill('#address', mint);
@@ -179,7 +196,7 @@ test('TON: a mintable jetton is read over tonapi.io and shown as high risk', asy
     [`/v2/accounts/${raw}`]: { address: raw, status: 'active', interfaces: ['jetton_master'], get_methods: ['get_jetton_data'], is_wallet: false, is_scam: false, balance: 1, last_activity: 1 },
     [`/v2/jettons/${raw}`]: { mintable: true, total_supply: '5000000000', holders_count: 7, verification: 'none', preview: '',
       admin: { address: `0:${'cd'.repeat(32)}`, is_scam: false, is_wallet: true }, metadata: { address: raw, name: 'Ton Rocket', symbol: 'RKT', decimals: '9' } },
-  });
+  }, { lang: 'th' });
   await page.selectOption('#chain', 'ton');
   assert.equal(await page.getAttribute('#address', 'placeholder'), 'EQ… / UQ…');
   await page.fill('#address', raw);
@@ -200,7 +217,7 @@ test('buy/sell test: the simulated trade catches a sell block behind a harmless 
   const addr = await chain.deploy('QuietHoneypot');
   const pair = await addPool(addr, 10n ** 24n, 10n ** 20n);
   await chain.send(addr, 'syncRewards(address)', [pair]);
-  const { page, errors } = await openPage('light');
+  const { page, errors } = await openPage('light', {}, {}, { lang: 'th' });
   await page.fill('#address', addr);
   await page.click('#go');
   await page.waitForSelector('#result:not([hidden])');
@@ -221,7 +238,7 @@ test('buy/sell test: the simulated trade catches a sell block behind a harmless 
 
 test('early warning: a match in the private rule pack shows an advisory notice, never the rule', async () => {
   const addr = await chain.deploy('ScamToken');
-  const { page, errors } = await openPage('light');
+  const { page, errors } = await openPage('light', {}, {}, { lang: 'th' });
   await page.fill('#address', addr);
   const answer = page.waitForResponse((r) => r.url().endsWith('/api/early-warning'));
   await page.click('#go');
@@ -254,7 +271,7 @@ test('early warning: a match in the private rule pack shows an advisory notice, 
 });
 
 test('bad address shows an error without any RPC call', async () => {
-  const { page } = await openPage('light');
+  const { page } = await openPage('light', {}, {}, { lang: 'th' });
   let calls = 0;
   page.on('request', (r) => { if (r.url().startsWith('https://')) calls++; });
   await page.fill('#address', '0x1234');
