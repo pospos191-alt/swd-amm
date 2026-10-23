@@ -65,7 +65,7 @@ test('gov.sh usage lists every command, and only the header', () => {
   assert.match(lines[0], /^ {2}gov\.sh propose-upgrade/);
   assert.match(lines.at(-1), /^ {2}gov\.sh wasm-codes/);
   assert.ok(!lines.some((l) => l.startsWith('#') || l.startsWith('set ')), out);
-  for (const c of ['ibc-usdc-denom', 'ibc-usdc-ratelimit', 'ibc-usdc-erc20', 'propose-ratelimit', 'vote-key', 'wasm-store', 'wasm-upload-access']) {
+  for (const c of ['ibc-usdc-denom', 'ibc-usdc-ratelimit', 'ibc-usdc-erc20', 'propose-ratelimit', 'vote-key', 'wasm-store', 'wasm-upload-access', 'propose-min-gas-price']) {
     assert.ok(out.includes(`gov.sh ${c}`), c);
   }
 });
@@ -92,6 +92,7 @@ case "$1 $2 $3" in
     [ "${meta}" = none ] && exit 1
     # ibc-go v11's default (transfer keeper SetDenomMetadata)
     echo "{\\"metadata\\":{\\"base\\":\\"$4\\",\\"display\\":\\"transfer/channel-0/uusdc\\",\\"symbol\\":\\"UUSDC\\",\\"denom_units\\":[{\\"denom\\":\\"uusdc\\"}]}}" ;;
+  "q feemarket params") echo '{"params":{"no_base_fee":false,"base_fee_change_denominator":8,"elasticity_multiplier":2,"enable_height":"0","base_fee":"0.000000000000000000","min_gas_price":"0.000000000000000000","min_gas_multiplier":"0.500000000000000000"}}' ;;
   "q wasm params") echo '{"code_upload_access":{"permission":"Nobody","addresses":[]},"instantiate_default_permission":"Everybody"}' ;;
   "tx gov submit-proposal") cp "$4" $D/proposal.json; echo "$*" > $D/args; echo '{"code":0,"txhash":"AB"}' ;;
   *) echo "unexpected: $*" >&2; exit 1 ;;
@@ -102,6 +103,32 @@ esac
   const proposal = () => (existsSync(join(dir, 'proposal.json')) ? JSON.parse(readFileSync(join(dir, 'proposal.json'), 'utf8')) : null);
   return { env, proposal, dir };
 }
+
+test('propose-min-gas-price: feemarket MsgUpdateParams that only changes min_gas_price', () => {
+  const c = fakeChain();
+  const { code, out } = run(GOV, ['propose-min-gas-price', '1'], c.env);
+  assert.equal(code, 0, out);
+  assert.match(out, /proposal 7 submitted/);
+  const p = c.proposal();
+  assert.deepEqual(p.messages, [{
+    '@type': '/cosmos.evm.feemarket.v1.MsgUpdateParams', authority: GOV_ADDR,
+    params: { no_base_fee: false, base_fee_change_denominator: 8, elasticity_multiplier: 2, enable_height: '0',
+      base_fee: '0.000000000000000000', min_gas_price: '1000000000.000000000000000000', min_gas_multiplier: '0.500000000000000000' },
+  }]);
+  assert.equal(p.title, 'Minimum gas price 1 gwei');
+  assert.match(p.summary, /0\.000021000 ZETAPHY/);
+
+  for (const [g, wei] of [['0.1', '100000000'], ['0.000000001', '1'], ['2.5', '2500000000'], ['0', '0']]) {
+    const c2 = fakeChain();
+    assert.equal(run(GOV, ['propose-min-gas-price', g], c2.env).code, 0, g);
+    assert.equal(c2.proposal().messages[0].params.min_gas_price, `${wei}.000000000000000000`, g);
+  }
+  for (const bad of ['-1', '1000', '0.0000000001', 'abc', '1e9']) {
+    const c3 = fakeChain();
+    assert.notEqual(run(GOV, ['propose-min-gas-price', bad], c3.env).code, 0, bad);
+    assert.equal(c3.proposal(), null, bad);
+  }
+});
 
 test('ibc-usdc-ratelimit: MsgAddRateLimit on the USDC voucher, 1% / 1% / 24 h by default', () => {
   const c = fakeChain();

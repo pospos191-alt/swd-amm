@@ -8,6 +8,7 @@
 #   gov.sh propose-upgrade <name> <height> "<summary>"   schedule a binary upgrade
 #   gov.sh propose-text "<title>" "<summary>"            a signalling vote, no code change
 #   gov.sh propose-file <proposal.json | https URL>      submit a prepared proposal (e.g. zetaphy-chain/proposals/*.json)
+#   gov.sh propose-min-gas-price <gwei>                 chain-wide lowest gas price, e.g. 1 (0.000021 ZETAPHY a transfer)
 #   gov.sh vote <id> yes|no|abstain|no_with_veto
 #   gov.sh status [id]                                   one proposal, or all of them
 #   gov.sh plan                                          the upgrade the chain is waiting for
@@ -88,6 +89,25 @@ case "${1:-}" in
     jq -e '.messages | type == "array"' "$f" >/dev/null || { echo "not a proposal file (no messages array)"; rm -f "$f"; exit 1; }
     echo "title: $(jq -r .title "$f")"
     jq -r '.messages[] | "  \(.["@type"]) -> \(.To // .authority // "")"' "$f"
+    submit tx gov submit-proposal "$f"; rm -f "$f" ;;
+  propose-min-gas-price)
+    # The feemarket base fee falls to this floor when blocks are empty, so
+    # wallets never quote 0 and spam still pays. Every validator enforces it
+    # (app.toml minimum-gas-prices is per node). 0 removes the floor.
+    g=${2:?gwei, e.g. 1}
+    [[ "$g" =~ ^([0-9]{1,3})(\.([0-9]{1,9}))?$ ]] || { echo "gwei: a number from 0 to 999, up to 9 decimals (e.g. 1 or 0.5)"; exit 1; }
+    f9=$(printf '%-9s' "${BASH_REMATCH[3]}" | tr ' ' 0)   # gwei decimals -> wei
+    wei=$((10#${BASH_REMATCH[1]} * 1000000000 + 10#$f9))
+    gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
+    params=$($ZETAPHYD q feemarket params $QF | jq -c '.params // .')
+    echo "$params" | jq -e 'has("base_fee_change_denominator")' >/dev/null || { echo "could not read the feemarket params"; exit 1; }
+    echo "now: min_gas_price $(echo "$params" | jq -r .min_gas_price) azetaphy, base_fee $(echo "$params" | jq -r .base_fee)"
+    transfer=$(awk -v w="$wei" 'BEGIN { printf "%.9f", w * 21000 / 1e18 }')
+    f=$(mktemp)
+    jq -n --arg gov "$gov" --argjson p "$params" --arg m "$wei.000000000000000000" --arg d "$DEPOSIT" --arg g "$g" --arg t "$transfer" \
+      '{messages:[{"@type":"/cosmos.evm.feemarket.v1.MsgUpdateParams",authority:$gov,params:($p + {min_gas_price:$m})}],
+        metadata:"",deposit:$d,title:("Minimum gas price " + $g + " gwei"),
+        summary:("The lowest gas price on ZETAPHY becomes " + $g + " gwei (a plain transfer costs " + $t + " ZETAPHY). Cheap for people, but spam still pays, and wallets never see a price of 0."),expedited:false}' > "$f"
     submit tx gov submit-proposal "$f"; rm -f "$f" ;;
   propose-upgrade)
     name=${2:?name}; height=${3:?height}; summary=${4:?summary}
@@ -390,5 +410,5 @@ case "${1:-}" in
     $ZETAPHYD q wasm list-code $QF | jq -c '.code_infos[]? | {code_id, creator, data_hash, instantiate_permission}' ;;
 
   *)
-    sed -n '8,45p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,46p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

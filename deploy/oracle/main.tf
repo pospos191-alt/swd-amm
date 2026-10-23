@@ -83,6 +83,19 @@ resource "oci_core_security_list" "zetaphy" {
       max = 22
     }
   }
+
+  # A validator: P2P (26656) and its public HTTPS RPC (80 for the certificate, 443).
+  dynamic "ingress_security_rules" {
+    for_each = contains(local.roles, "validator") ? [26656, 80, 443] : []
+    content {
+      source   = "0.0.0.0/0"
+      protocol = "6"
+      tcp_options {
+        min = ingress_security_rules.value
+        max = ingress_security_rules.value
+      }
+    }
+  }
 }
 
 resource "oci_core_subnet" "public" {

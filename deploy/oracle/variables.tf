@@ -38,15 +38,15 @@ variable "ssh_public_key" {
 }
 
 variable "roles" {
-  description = "Comma separated services to install: runner, agents."
+  description = "Comma separated services to install: runner, agents, validator."
   type        = string
   default     = "runner"
 
   validation {
     condition = length(compact([for r in split(",", var.roles) : trimspace(r)])) > 0 && alltrue([
-      for r in compact([for r in split(",", var.roles) : trimspace(r)]) : contains(["runner", "agents"], r)
+      for r in compact([for r in split(",", var.roles) : trimspace(r)]) : contains(["runner", "agents", "validator"], r)
     ])
-    error_message = "roles must be a comma list of: runner, agents."
+    error_message = "roles must be a comma list of: runner, agents, validator."
   }
 }
 

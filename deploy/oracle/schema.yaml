@@ -35,11 +35,13 @@ variables:
   roles:
     type: enum
     title: "What to install / ติดตั้งอะไร"
-    description: "runner = ZETAPHY runner, agents = helper agents. / เลือกบริการที่จะติดตั้ง"
+    description: "runner = ZETAPHY runner, agents = helper agents, validator = ZETAPHY chain validator (joins and stakes by itself). / เลือกบริการที่จะติดตั้ง"
     enum:
       - runner
       - agents
       - "runner,agents"
+      - validator
+      - "validator,runner"
     default: runner
     required: true
 

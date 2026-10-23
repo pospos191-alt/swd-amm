@@ -118,6 +118,18 @@ Google Cloud ให้เครื่อง **e2-micro** ฟรีถาวร�
 
 ## เข้าร่วมเชน: เป็น node หรือ validator (ให้เชนไม่อยู่ที่เครื่องเดียว)
 
+**คำสั่งเดียว (แนะนำ):** บนเครื่อง Ubuntu 24.04 ใดก็ได้ (Oracle ฟรี, Google ฟรี, VPS) วางคำสั่งนี้:
+```bash
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo MONIKER=ชื่อของคุณ bash -s -- validator
+```
+- ใช้ไฟล์เชนสำเร็จรูป (ตรวจ SHA-256) ไม่ต้อง build เอง ต่อเข้ากับ `rpc.sawasdeecoin.com` และขอ 10 ZETAPHY จาก faucet ให้เอง
+- ตัวจับเวลาเช็กทุก 10 นาที: ซิงก์ครบและมีเหรียญแล้ว จะ stake 9 ZETAPHY เป็น validator เอง แล้วหยุดเช็ก
+- `sudo zetaphy-validator status` ดูความคืบหน้า, `sudo zetaphy-validator backup` ไฟล์ที่ต้องเก็บไว้ออฟไลน์,
+  `sudo zetaphy-validator unjail` กลับมาทำงานหลังถูกพักเพราะเครื่องดับ
+- เปิดพอร์ต 26656 (และ 80, 443) ใน firewall ของผู้ให้บริการคลาวด์ หรือใช้ปุ่ม Oracle (`deploy/oracle`) เลือก `validator` ซึ่งเปิดให้เอง
+
+วิธีเดิมแบบทำเองทีละขั้น:
+
 ใครก็เข้าร่วมได้ด้วยเครื่องฟรีแบบเดียวกัน (Oracle / Google) โดยไม่ต้องมีไฟล์จาก repo นี้
 เครื่องแรกเผยแพร่สิ่งที่ต้องใช้ไว้ที่ `https://<ชื่อ>.sslip.io/zetaphy/` (genesis, ที่อยู่ peer, สคริปต์ติดตั้ง)
 
