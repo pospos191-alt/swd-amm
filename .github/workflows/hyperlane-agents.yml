@@ -83,7 +83,7 @@ jobs:
               await (await mb.dispatch(11155111, to, "0x01", { value: fee })).wait(); console.log("dispatched"); })();'
           for _ in $(seq 1 60); do sudo test -f /var/lib/hyperlane/checkpoints/0_with_id.json && break; sleep 5; done
           sudo cat /var/lib/hyperlane/checkpoints/0_with_id.json
-          s=$(sudo bash "$DIR/setup-agents.sh" status); echo "$s"; grep -q 'checkpoint 0_with_id.json' <<<"$s"
+          s=$(sudo bash "$GITHUB_WORKSPACE/$DIR/setup-agents.sh" status); echo "$s"; grep -q 'checkpoint 0_with_id.json' <<<"$s"
 
       - name: Relayer refuses without a whitelist, starts with one
         run: |
