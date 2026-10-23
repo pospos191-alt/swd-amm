@@ -50,12 +50,6 @@ variable "roles" {
   }
 }
 
-variable "runner_auto_register" {
-  description = "Let the runner register itself automatically after install."
-  type        = bool
-  default     = true
-}
-
 variable "enable_run_command" {
   description = "Create the IAM dynamic group + policy so the console's Run command works on this VM."
   type        = bool

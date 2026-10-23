@@ -19,7 +19,6 @@ variableGroups:
     variables:
       - ssh_public_key
       - availability_domain
-      - runner_auto_register
       - enable_run_command
 
 variables:
@@ -57,11 +56,6 @@ variables:
     dependsOn:
       compartmentId: ${compartment_ocid}
     required: false
-
-  runner_auto_register:
-    type: boolean
-    title: "Register runner automatically / ลงทะเบียน runner อัตโนมัติ"
-    default: true
 
   enable_run_command:
     type: boolean

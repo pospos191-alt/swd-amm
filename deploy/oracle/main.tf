@@ -19,7 +19,6 @@ locals {
     exec >>/var/log/zetaphy-install.log 2>&1
     echo "=== zetaphy install start $(date -u) ==="
     export HOME=/root DEBIAN_FRONTEND=noninteractive
-    export ZETAPHY_RUNNER_AUTO_REGISTER=${var.runner_auto_register}
     ${join("\n", [for r in local.roles : "curl -fsSL --retry 10 --retry-delay 15 --retry-all-errors ${local.installer_url} | bash -s -- ${r} || echo \"role ${r} failed\""])}
     echo "=== zetaphy install end $(date -u) ==="
   EOT
