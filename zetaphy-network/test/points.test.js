@@ -1,10 +1,9 @@
 // BZTPHY (contracts/ZetaphyPoints.sol) and the award math (src/points.js).
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { encodeBytes32String } from 'ethers';
 import { createChain, ZETA } from './helpers/evm.js';
-import { validatorAwards, runnerAwards, mergeAwards, fitCap, proRata, balancesFromTransfers, operatorEvm, epochOf } from '../src/points.js';
+import { validatorAwards, consAddress, commitSigners, minuteHeights, runnerAwards, mergeAwards, fitCap, proRata, balancesFromTransfers, operatorEvm, epochOf } from '../src/points.js';
 import { toBech32 } from '../src/pqtx.js';
 
 let c, p;
@@ -72,21 +71,35 @@ test('ownership moves in two steps', async () => {
 
 // ---- award math -------------------------------------------------------------------------
 const pk = (seed) => ({ '@type': '/cosmos.crypto.ed25519.PubKey', key: Buffer.alloc(32, seed).toString('base64') });
-const valcons = (seed) => toBech32(createHash('sha256').update(Buffer.alloc(32, seed)).digest().subarray(0, 20), 'zetaphyvalcons');
 const valoper = (n) => toBech32(Buffer.alloc(20, n), 'zetaphyvaloper');
 const val = (n, moniker, extra = {}) => ({ operator_address: valoper(n), consensus_pubkey: pk(n), jailed: false, status: 'BOND_STATUS_BONDED', description: { moniker }, ...extra });
 
-test('validators: 100 BZTPHY a day x uptime; jailed, low uptime and the founding node get nothing', () => {
-  const vals = [val(1, 'zetaphy-validator-0'), val(2, 'alice'), val(3, 'bob'), val(4, 'jailed', { jailed: true }), val(5, 'offline'), val(6, 'new')];
-  const infos = [1, 2, 3, 4, 5].map((n) => ({ address: valcons(n), missed_blocks_counter: { 1: '0', 2: '0', 3: '25', 4: '0', 5: '60' }[n] }));
-  const r = validatorAwards(vals, infos, '100');
+test('validators: paid by the minute they signed; joining or leaving mid-day earns that share; no minimum', () => {
+  const vals = [val(1, 'zetaphy-validator-0'), val(2, 'alice'), val(3, 'late'), val(4, 'left', { status: 'BOND_STATUS_UNBONDED' }), val(5, 'never')];
+  const A = (n) => consAddress(vals[n - 1]);
+  // 1,440 checked minutes: alice and the founding node all day, late from noon, left until 06:00
+  const minutes = Array.from({ length: 1440 }, (_, m) => new Set([A(1), A(2), ...(m >= 720 ? [A(3)] : []), ...(m < 360 ? [A(4)] : [])]));
+  const r = validatorAwards(vals, minutes);
   assert.deepEqual(r.map((x) => [x.to, x.amount]), [
     [operatorEvm(valoper(2)), 100n * ZETA],
-    [operatorEvm(valoper(3)), 75n * ZETA],
+    [operatorEvm(valoper(3)), 50n * ZETA],
+    [operatorEvm(valoper(4)), 25n * ZETA],
   ]);
-  assert.equal(operatorEvm(valoper(2)).toLowerCase(), '0x' + '02'.repeat(20));
-  assert.match(r[1].why, /bob uptime 75\.00%/);
-  assert.equal(validatorAwards(vals, infos, '100', { excludeAddresses: [operatorEvm(valoper(2))] }).length, 1);
+  assert.match(r[1].why, /late 720\/1440 min/);
+  // one minute is worth 100/1440 BZTPHY: no 50 % threshold any more
+  const one = validatorAwards([vals[1]], [new Set([A(2)]), ...Array(1439).fill(new Set())]);
+  assert.equal(one[0].amount, (100n * ZETA) / 1440n);
+  assert.equal(validatorAwards(vals, minutes, { excludeAddresses: [operatorEvm(valoper(2))] }).length, 2);
+});
+
+test('minute sampling: 1,440 heights spread over the day; only real commit signatures count', () => {
+  const h = minuteHeights(1000, 18279);
+  assert.equal(h.length, 1440);
+  assert.equal(h[0], 1000);
+  assert.ok(h[1439] <= 18279 && h[1439] > 18260);
+  assert.ok(h.every((x, i) => i === 0 || x > h[i - 1]));
+  const s = commitSigners([{ block_id_flag: 2, validator_address: 'ab01' }, { block_id_flag: 1, validator_address: '' }, { block_id_flag: 3, validator_address: 'CD02' }]);
+  assert.deepEqual([...s], ['AB01']);
 });
 
 test('runners: 2 per revealed job, at most 50 a day; awards merge to one per address', () => {
