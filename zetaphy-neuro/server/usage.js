@@ -12,6 +12,10 @@
 import { createHmac } from 'node:crypto';
 
 export const GOAL = 1000;
+// Totals add up the monthly counters from the first month the counter ran.
+export const FIRST_MONTH = '2026-10';
+// What a check found (src/analyze.js levels). Only this word is sent, never the contract.
+export const LEVELS = ['high', 'medium', 'low', 'info'];
 const MAX_CHECKS_PER_VISITOR_PER_DAY = 200;
 const KEEP_SECONDS = 400 * 24 * 3600; // a bit over a year of monthly history
 const P = 'neuro:';
@@ -19,6 +23,17 @@ const P = 'neuro:';
 const hostOf = (origin) => { try { return new URL(origin).host; } catch { return null; } };
 const monthOf = (d) => d.toISOString().slice(0, 7);
 const dayOf = (d) => d.toISOString().slice(0, 10);
+/** Every month from FIRST_MONTH to `month`, inclusive (YYYY-MM). */
+export function monthsUntil(month) {
+  const out = [];
+  let [y, m] = FIRST_MONTH.split('-').map(Number);
+  const [ey, em] = month.split('-').map(Number);
+  while ((y < ey || (y === ey && m <= em)) && out.length < 600) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    if (++m > 12) { m = 1; y++; }
+  }
+  return out;
+}
 
 /**
  * Framework-free handler.
@@ -35,11 +50,24 @@ export async function handleUsage(req, store, secret) {
     const month = typeof req.query?.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.month)
       ? req.query.month : monthOf(now);
     if (!enabled) return { status: 200, json: { enabled: false, month, goal: GOAL } };
-    const [users, checks] = await store.pipeline([['PFCOUNT', `${P}users:${month}`], ['GET', `${P}checks:${month}`]]);
+    const [users, checks, ...lv] = await store.pipeline([
+      ['PFCOUNT', `${P}users:${month}`], ['GET', `${P}checks:${month}`],
+      ...LEVELS.map((l) => ['GET', `${P}level:${l}:${month}`]),
+    ]);
+    // all-time: the sum of every month's counters since FIRST_MONTH
+    const months = monthsUntil(monthOf(now));
+    const keys = [`${P}checks:`, ...LEVELS.map((l) => `${P}level:${l}:`)];
+    const vals = await store.pipeline(keys.flatMap((k) => months.map((mo) => ['GET', k + mo])));
+    const sum = (i) => vals.slice(i * months.length, (i + 1) * months.length).reduce((a, v) => a + (Number(v) || 0), 0);
+    const total = { checks: sum(0), since: FIRST_MONTH };
+    LEVELS.forEach((l, i) => { total[l] = sum(i + 1); });
     return {
       status: 200,
       headers: { 'cache-control': 'public, max-age=60' },
-      json: { enabled: true, month, users: Number(users) || 0, checks: Number(checks) || 0, goal: GOAL },
+      json: {
+        enabled: true, month, users: Number(users) || 0, checks: Number(checks) || 0, goal: GOAL,
+        found: Object.fromEntries(LEVELS.map((l, i) => [l, Number(lv[i]) || 0])), total,
+      },
     };
   }
 
@@ -62,7 +90,12 @@ export async function handleUsage(req, store, secret) {
     ]);
     let counted = false;
     if (Number(seenToday) <= MAX_CHECKS_PER_VISITOR_PER_DAY) {
-      await store.pipeline([['INCR', `${P}checks:${month}`], ['EXPIRE', `${P}checks:${month}`, KEEP_SECONDS]]);
+      // counters are kept for good (they are small and make the all-time totals)
+      const level = LEVELS.includes(req.body.level) ? req.body.level : null;
+      await store.pipeline([
+        ['INCR', `${P}checks:${month}`], ['PERSIST', `${P}checks:${month}`],
+        ...(level ? [['INCR', `${P}level:${level}:${month}`]] : []),
+      ]);
       counted = true;
     }
     return { status: 202, json: { counted } };
@@ -107,6 +140,7 @@ export function memoryStore() {
       case 'INCR': { const v = Number(kv.get(key) ?? 0) + 1; kv.set(key, String(v)); return v; }
       case 'GET': return kv.get(key) ?? null;
       case 'EXPIRE': return kv.has(key) ? 1 : 0;
+      case 'PERSIST': return kv.has(key) ? 1 : 0;
       default: throw new Error(`unsupported ${cmd}`);
     }
   };

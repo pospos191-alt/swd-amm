@@ -38,6 +38,7 @@ function applyLang() {
   $('lang').value = lang;
   const ui = uiText(lang);
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = ui[el.dataset.i18n];
+  renderCounts();
   $('lang').setAttribute('aria-label', ui.language);
   if (last) render(last);
 }
@@ -201,15 +202,41 @@ function renderEvidence(report, m) {
   verdictOf(report).then((v) => { if (last === report) cells[1].textContent = v; }).catch(() => { cells[1].textContent = '?'; });
 }
 
-// Counts one "check" toward the monthly user goal. Sends nothing about the
-// contract or the visitor; skipped when the browser asks not to be tracked.
-function reportUsage() {
+// Site-wide numbers under the form: checks, risky results, high-risk results (all-time).
+let counts = null;
+function renderCounts() {
+  if (!counts) return;
+  const n = new Intl.NumberFormat(lang);
+  $('c-checks').textContent = n.format(counts.checks);
+  $('c-risky').textContent = n.format(counts.high + counts.medium);
+  $('c-high').textContent = n.format(counts.high);
+  $('counts').hidden = false;
+}
+async function loadCounts() {
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await (await fetch('/api/usage')).json();
+    if (!r.enabled || !r.total) return;
+    counts = { checks: Number(r.total.checks) || 0, high: Number(r.total.high) || 0, medium: Number(r.total.medium) || 0 };
+    renderCounts();
+  } catch { /* the numbers are optional */ }
+}
+
+// Counts one "check" toward the monthly user goal, with the result level only
+// (high / medium / low / info). Sends nothing about the contract or the visitor;
+// skipped when the browser asks not to be tracked.
+function reportUsage(level) {
   if (navigator.doNotTrack === '1' || navigator.globalPrivacyControl === true) return;
   if (!/^https?:$/.test(location.protocol)) return;
   fetch('/api/usage', {
     method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ event: 'check' }),
+    body: JSON.stringify({ event: 'check', level }),
   }).catch(() => { /* counter is optional */ });
+  if (counts) {
+    counts.checks += 1;
+    if (level === 'high' || level === 'medium') counts[level] += 1;
+    renderCounts();
+  }
 }
 
 async function run(chain, address) {
@@ -222,7 +249,7 @@ async function run(chain, address) {
     last = await readContract(chain, address);
     render(last);
     status('');
-    reportUsage();
+    reportUsage(last.analysis?.level);
     checkEarly(chain, address, last);
     const u = new URL(location.href);
     u.searchParams.set('chain', chain); u.searchParams.set('address', address);
@@ -245,6 +272,7 @@ $('lang').addEventListener('change', () => {
 });
 
 applyLang();
+loadCounts();
 // Shareable links: ?chain=bsc&address=0x…
 const q = new URLSearchParams(location.search);
 if (q.get('chain') in CHAINS) $('chain').value = q.get('chain');

@@ -8,7 +8,7 @@ export const LEVEL = { high: 'Rủi ro cao', medium: 'Rủi ro trung bình', low
 export const UI = {
   subtitle: 'Đọc và giải thích hợp đồng · cấp 1, chỉ đọc', chain: 'Chuỗi', address: 'Địa chỉ hợp đồng hoặc token', check: 'Kiểm tra hợp đồng',
   details: 'Chi tiết', reading: 'Đang đọc dữ liệu từ chuỗi…', badAddress: 'Địa chỉ không hợp lệ cho chuỗi này. Các định dạng được chấp nhận: ',
-  failed: 'Không đọc được: ', footer: 'Không bao giờ yêu cầu kết nối ví và không bao giờ gửi giao dịch. Đọc dữ liệu công khai trên chuỗi; để cảnh báo sớm, chỉ gửi tên chuỗi và địa chỉ hợp đồng đến máy chủ của trang này (không lưu lại). Không phải lời khuyên đầu tư.', stats: 'Thống kê sử dụng', language: 'Ngôn ngữ',
+  failed: 'Không đọc được: ', footer: 'Không bao giờ yêu cầu kết nối ví và không bao giờ gửi giao dịch. Đọc dữ liệu công khai trên chuỗi; để cảnh báo sớm, chỉ gửi tên chuỗi và địa chỉ hợp đồng đến máy chủ của trang này (không lưu lại). Không phải lời khuyên đầu tư.', stats: 'Thống kê sử dụng', statChecks: 'Hợp đồng đã kiểm tra', statRisky: 'Hợp đồng bị gắn cờ rủi ro', statHigh: 'Phát hiện rủi ro cao', statNote: 'Tổng của mọi người dùng, ước tính. Chỉ đếm mức kết quả, không bao giờ lưu hợp đồng.', language: 'Ngôn ngữ',
   disclaimer: 'Đây là phân tích mã tự động, có thể kiểm chứng lại, không phải lời buộc tội bất kỳ cá nhân hay dự án nào và không phải lời khuyên đầu tư. Chủ hợp đồng có thể phản hồi hoặc yêu cầu đính chính.',
   correction: 'Cách phản hồi hoặc yêu cầu đính chính',
   reproduce: 'Tự kiểm tra lại',

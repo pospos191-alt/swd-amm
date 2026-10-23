@@ -8,7 +8,7 @@ export const LEVEL = { high: 'Riesgo alto', medium: 'Riesgo medio', low: 'Riesgo
 export const UI = {
   subtitle: 'Lee y explica contratos · nivel 1, solo lectura', chain: 'Red', address: 'Dirección del contrato o token', check: 'Revisar contrato',
   details: 'Detalles', reading: 'Leyendo de la blockchain…', badAddress: 'Dirección no válida para esta red. Formatos aceptados: ',
-  failed: 'No se pudo leer: ', footer: 'Nunca pide conectar una wallet y nunca envía transacciones. Lee datos públicos de la blockchain; para la alerta temprana solo envía la red y la dirección del contrato al servidor de este sitio, que no guarda nada. No es asesoramiento de inversión.', stats: 'Estadísticas de uso', language: 'Idioma',
+  failed: 'No se pudo leer: ', footer: 'Nunca pide conectar una wallet y nunca envía transacciones. Lee datos públicos de la blockchain; para la alerta temprana solo envía la red y la dirección del contrato al servidor de este sitio, que no guarda nada. No es asesoramiento de inversión.', stats: 'Estadísticas de uso', statChecks: 'Contratos revisados', statRisky: 'Contratos marcados con riesgo', statHigh: 'Riesgo alto encontrado', statNote: 'Todos los usuarios juntos, aproximado. Solo se cuenta el nivel del resultado, nunca el contrato.', language: 'Idioma',
   disclaimer: 'Esto es un análisis de código automático y reproducible, no una acusación contra ninguna persona o proyecto, y no es asesoramiento de inversión. El dueño del contrato puede responder o pedir una corrección.',
   correction: 'Cómo responder o pedir una corrección',
   reproduce: 'Compruébalo tú mismo',

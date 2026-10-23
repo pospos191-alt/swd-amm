@@ -8,7 +8,7 @@ export const LEVEL = { high: 'High risk', medium: 'Medium risk', low: 'Low risk'
 export const UI = {
   subtitle: 'Reads and explains contracts · tier 1, read-only', chain: 'Chain', address: 'Contract or token address', check: 'Check contract',
   details: 'Details', reading: 'Reading from the chain…', badAddress: 'Invalid address for this chain. Accepted formats: ',
-  failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data; for an early-warning check it sends only the chain and contract address to the server of this site, which stores nothing. Not investment advice.', stats: 'Usage stats', language: 'Language',
+  failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data; for an early-warning check it sends only the chain and contract address to the server of this site, which stores nothing. Not investment advice.', stats: 'Usage stats', statChecks: 'Contracts checked', statRisky: 'Risky contracts flagged', statHigh: 'High risk found', statNote: 'All users together, approximate. Only the result level is counted, never the contract.', language: 'Language',
   disclaimer: 'This is automated, reproducible code analysis, not an accusation against any person or project, and not investment advice. The contract owner can respond or request a correction.',
   correction: 'How to respond or request a correction',
   reproduce: 'Check it yourself',

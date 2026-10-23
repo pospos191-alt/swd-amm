@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleUsage, memoryStore, upstashStore, GOAL } from '../server/usage.js';
+import { handleUsage, memoryStore, upstashStore, GOAL, monthsUntil } from '../server/usage.js';
 
 const SECRET = 'test-secret-0123456789';
 const oct = new Date('2026-10-19T10:00:00Z');
@@ -13,7 +13,7 @@ test('counts unique visitors and total checks', async () => {
   await post(s);
   await post(s, { ip: '5.6.7.8' });
   const r = await get(s);
-  assert.deepEqual(r.json, { enabled: true, month: '2026-10', users: 2, checks: 3, goal: GOAL });
+  assert.deepEqual({ ...r.json, found: undefined, total: undefined }, { enabled: true, month: '2026-10', users: 2, checks: 3, goal: GOAL, found: undefined, total: undefined });
 });
 
 test('a new month starts a fresh count', async () => {
@@ -70,4 +70,26 @@ test('upstash client sends a pipeline and unwraps results', async () => {
   assert.equal(sent.url, 'https://r.example/pipeline');
   assert.equal(sent.init.headers.authorization, 'Bearer tok');
   assert.equal(upstashStore(undefined, 'tok'), null);
+});
+
+test('counts what checks found (only the level word) and all-time totals across months', async () => {
+  const s = memoryStore();
+  const seen = [];
+  const spy = { pipeline: (cmds) => { seen.push(...cmds.flat().map(String)); return s.pipeline(cmds); } };
+  const p = (level, now = oct, ip = '1.2.3.4') => handleUsage({ method: 'POST', body: { event: 'check', level }, ip, ua: 'UA', now }, spy, SECRET);
+  await p('high'); await p('medium'); await p('info'); await p('bogus'); await p(undefined);
+  await p('high', new Date('2026-11-03T00:00:00Z'));
+  const oct2 = (await get(s)).json;
+  assert.equal(oct2.checks, 5);
+  assert.deepEqual(oct2.found, { high: 1, medium: 1, low: 0, info: 1 });
+  const nov = (await get(s, { now: new Date('2026-11-20T00:00:00Z') })).json;
+  assert.deepEqual(nov.total, { checks: 6, since: '2026-10', high: 2, medium: 1, low: 0, info: 1 });
+  assert.equal(nov.found.high, 1);
+  assert.ok(!seen.join(' ').includes('bogus'));
+});
+
+test('months for the totals', () => {
+  assert.deepEqual(monthsUntil('2026-10'), ['2026-10']);
+  assert.deepEqual(monthsUntil('2027-02'), ['2026-10', '2026-11', '2026-12', '2027-01', '2027-02']);
+  assert.deepEqual(monthsUntil('2026-09'), []);
 });
