@@ -123,6 +123,59 @@ const clickAndWait = async (page, name, until) => {
 };
 const statusIs = (re) => ({ fn: (s) => new RegExp(s).test(document.querySelector('#status')?.textContent ?? '') && document.querySelector('.page[data-ready]'), arg: re.source });
 
+test('a first visit is in English, even from a Thai-language browser', async () => {
+  const ctx = await browser.newContext({ locale: 'th-TH' });
+  try {
+    const page = await ctx.newPage();
+    await page.goto(`${ORIGIN}/`);
+    await page.waitForFunction(() => document.querySelectorAll('#lang option').length === 8);
+    assert.equal(await page.getAttribute('html', 'lang'), 'en');
+    assert.equal(await page.getAttribute('#lang', 'aria-label'), 'Switch language');
+    assert.equal(await page.inputValue('#lang'), 'en');
+    assert.deepEqual(await page.$$eval('#lang option', (os) => os.map((o) => [o.value, o.textContent])), LANG_MENU);
+    assert.equal(await page.textContent('nav a[href="#/"]'), 'Explore');
+    assert.equal(await page.evaluate(() => localStorage.getItem('zn.lang')), null);
+  } finally { await ctx.close(); }
+});
+
+// The menu every ZETAPHY app shows, in this order.
+const LANG_MENU = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['ko', '한국어'], ['ja', '日本語'], ['ru', 'Русский'], ['vi', 'Tiếng Việt'], ['th', 'ไทย']];
+
+test('a language stored by the hub is honoured; anything else is English; every language renders without raw keys', async () => {
+  const ctx = await browser.newContext({ locale: 'en-US' });
+  try {
+    const page = await ctx.newPage();
+    await page.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('zn.lang', JSON.stringify('ja')); } });
+    await page.goto(`${ORIGIN}/`);
+    await page.waitForFunction(() => document.documentElement.lang === 'ja');
+    assert.equal(await page.textContent('nav a[href="#/"]'), '探索');
+    assert.equal(await page.inputValue('#lang'), 'ja');
+    for (const bad of ['"fr"', '"TH"', 'not json', '42']) {
+      await page.evaluate((v) => localStorage.setItem('zn.lang', v), bad);
+      await page.reload();
+      await page.waitForFunction(() => document.querySelectorAll('#lang option').length === 8);
+      assert.equal(await page.getAttribute('html', 'lang'), 'en', bad);
+      assert.equal(await page.inputValue('#lang'), 'en', bad);
+    }
+    for (const [code] of LANG_MENU) {
+      await page.selectOption('#lang', code);
+      await page.waitForFunction((c) => document.documentElement.lang === c, code);
+      assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('zn.lang'))), code);
+      const texts = await page.$$eval('[data-i18n]', (ns) => ns.map((n) => [n.getAttribute('data-i18n'), n.textContent]));
+      for (const [k, v] of texts) assert.ok(v.trim() && v !== k, `${code}: [data-i18n=${k}] shows "${v}"`);
+      const label = await page.getAttribute('#lang', 'aria-label');
+      assert.ok(label && label !== 'switchLang', `${code} aria-label`);
+      const nav = await page.textContent('nav a[href="#/"]');
+      if (code !== 'en') assert.notEqual(nav, 'Explore', `${code} translated`);
+      await page.waitForSelector('.page[data-ready]');
+      const main = await page.textContent('main');
+      assert.doesNotMatch(main, /\b(setupTitle|setupRpc|exploreLead|recentListings|noListings|loadError)\b/, `${code}: no raw keys in the page`);
+    }
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.lang === 'th');
+  } finally { await ctx.close(); }
+});
+
 test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, i18n, mobile', { timeout: 240_000 }, async () => {
   const s = await contextFor(seller, 'seller');
   const b = await contextFor(buyer, 'buyer');
@@ -304,10 +357,15 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   await b.waitForFunction(() => document.querySelectorAll('.grid .nft-card').length === 3); // #1, #2 and the external token
 
   // ---- Thai, dark mode, phone width ----
-  await b.click('#lang');
+  assert.equal(await b.getAttribute('html', 'lang'), 'en', 'English by default');
+  assert.equal(await b.inputValue('#lang'), 'en');
+  await b.selectOption('#lang', 'th');
   await b.waitForSelector('.page[data-ready]');
   assert.equal(await b.textContent('nav a[href="#/"]'), 'สำรวจ');
   assert.equal(await b.getAttribute('html', 'lang'), 'th');
+  await go(b, '#/me');
+  assert.equal(await b.getAttribute('html', 'lang'), 'th', 'Thai remembered');
+  assert.equal(await b.textContent('nav a[href="#/"]'), 'สำรวจ');
   await b.click('#theme');
   assert.match(await b.getAttribute('html', 'data-theme'), /^(dark|light)$/);
   await b.setViewportSize({ width: 360, height: 780 });
@@ -316,6 +374,14 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
     const over = await b.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     assert.ok(over <= 0, `${hash}: no horizontal scroll at phone width (${over}px)`);
     await shot(b, `mobile-${hash.replace(/[^a-z]/g, '') || 'explore'}`);
+  }
+  // The longest language names and texts fit the phone-width header too.
+  for (const code of ['ru', 'vi', 'es']) {
+    await b.selectOption('#lang', code);
+    await b.waitForFunction((c) => document.documentElement.lang === c && document.querySelector('.page[data-ready]'), code);
+    const over = await b.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    assert.ok(over <= 0, `${code}: no horizontal scroll at phone width (${over}px)`);
+    await shot(b, `mobile-lang-${code}`);
   }
 
   for (const p of [s, b]) problems.push(...(await p.evaluate(() => window.__problems)));

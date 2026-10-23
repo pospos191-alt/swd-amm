@@ -60,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
 - จบแล้วแสดงที่อยู่ของร่าง: โอน ZETAPHY testnet ไป **100.1** (หรือมากกว่า) แล้วร่างจะวางเงินค้ำเองภายในราว 1 นาที และเริ่มรับงาน
 - คำสั่งหลังติดตั้ง: `sudo zetaphy-runner status` · `address` · `withdraw` · `logs` · `update` · `stop` · `start` · `uninstall`
 - รันซ้ำได้ปลอดภัย (อัปเดตโค้ด กุญแจเดิมอยู่ครบ) · `uninstall` ไม่ลบกุญแจ
-- ไม่มีเครื่อง: ใช้ปุ่ม "Deploy to Oracle Cloud" ใน `deploy/oracle/README.th.md` สร้างเครื่องฟรีพร้อมติดตั้งให้เอง
+- ไม่มีเครื่อง: ใช้ปุ่ม "Deploy to Oracle Cloud" ใน `deploy/oracle/README.md` สร้างเครื่องฟรีพร้อมติดตั้งให้เอง
 
 ### ติดตั้งเอง (ทีละขั้น)
 

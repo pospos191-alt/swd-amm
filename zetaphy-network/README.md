@@ -50,6 +50,21 @@ So every honest runner gets the same verdict
 
 ## Runners (node runner)
 
+### Easiest: one command (Ubuntu server)
+
+```
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- runner
+```
+
+- Installs everything: Node.js (SHA-256 checked), the ZETAPHY code, the runner key (made on the machine, never shown) and a service that keeps running, also after a reboot
+- At the end it prints the runner address: send **100.1** testnet ZETAPHY (or more) there and the runner posts its bond by itself within about a minute and starts taking jobs
+- After install: `sudo zetaphy-runner status` · `address` · `withdraw` · `logs` · `update` · `stop` · `start` · `uninstall`
+- Safe to run again (updates the code, keeps the key) · `uninstall` keeps the key
+- No machine: the "Deploy to Oracle Cloud" button in `deploy/oracle/README.md` creates a free one and installs everything
+- Runners earn BZTPHY reward points, converted to real ZETAPHY at mainnet: `zetaphy-chain/rewards/README.md`
+
+### Manual install (step by step)
+
 ```
 npm i -g ./zetaphy-network          # or: node zetaphy-network/cli.js ...
 zetaphy node start --rpc http://<ZETAPHY node>:8545 --jobs 0x<NeuroJobs>

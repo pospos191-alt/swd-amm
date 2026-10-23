@@ -91,6 +91,13 @@ input, select, output {
 }
 input { font-family: var(--mono); }
 select { max-width: 46%; }
+/* header language menu: compact, like the ghost buttons next to it */
+select.lang-select {
+  max-width: 9.5em; width: auto; padding: 7px 8px; font-weight: 600; font-size: 14px; cursor: pointer;
+  background: transparent; border-color: var(--panel-border); color: var(--text);
+}
+select.lang-select:hover { border-color: var(--accent); }
+select.lang-select option { background: var(--panel); color: var(--text); }
 
 /* layout */
 main { max-width: 520px; margin: 24px auto; padding: 0 16px; }
@@ -156,6 +163,8 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); }
   main { margin-top: 14px; }
   .field input, .field output { font-size: 19px; }
   select { max-width: 52%; }
+  select.lang-select { max-width: 7.5em; padding: 6px 4px; font-size: 13px; }
+  .hdr-actions { flex-wrap: wrap; justify-content: flex-end; }
 }
 
 /* DLMM tab (dlmm.js): bins around the price */

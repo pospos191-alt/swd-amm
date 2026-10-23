@@ -1,7 +1,7 @@
 // Browser test: serves the static site with its real CSP (scripts/serve.js reads
 // vercel.json), answers the node's EVM JSON-RPC, CometBFT RPC and Cosmos REST
 // from a mock chain (test/mock-chain.js, Playwright routes, no network), and
-// checks every page in Thai and English: home, block with the ML-DSA-44
+// checks every page in Thai and English (and the home page in all 8 UI languages): home, block with the ML-DSA-44
 // certificate verified in the browser (and a broken one refused), Cosmos and
 // EVM txs, addresses (0x and zetaphy1, quantum lock), tokens with hostile names,
 // ThreatRegistry flags with the disclaimer, validators with PQ vote keys,
@@ -14,6 +14,7 @@ import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import { T, LANGS } from '../src/i18n.js';
 import { buildChain, CHAIN_ID, LATEST, ME, ME_HEX, LOCKED, LOCKED_HEX, TOKEN, NFT, REGISTRY, REPORT, RESPONSE_TEXT } from './mock-chain.js';
 
 const PORT = 18195; const PORT_DEFAULT = 18196;
@@ -52,6 +53,7 @@ after(async () => { await browser?.close(); for (const s of servers) s.kill(); r
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Content-Type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
 
 /** A page with the mock node behind https://node.zetaphy.test (and other.zetaphy.test); records problems. */
+/** lang: the stored language preference ('th' unless set; null for none). */
 async function openPage({ viewport, lang = 'th', origin = ORIGIN } = {}) {
   const ctx = await browser.newContext({ viewport: viewport ?? { width: 1280, height: 900 } });
   const page = await ctx.newPage();
@@ -77,7 +79,8 @@ async function openPage({ viewport, lang = 'th', origin = ORIGIN } = {}) {
       return json(200, { jsonrpc: '2.0', id, error: { code: e.code ?? -32603, message: e.message, data: url.pathname.startsWith('/rpc/') ? e.message : undefined } });
     }
   });
-  await page.addInitScript((l) => { try { localStorage.setItem('zetaphy-explorer:lang', l); } catch { /* none */ } }, lang);
+  // lang: null leaves storage empty (a first visit: English by default).
+  if (lang) await page.addInitScript((l) => { try { localStorage.setItem('zetaphy-explorer:lang', l); } catch { /* none */ } }, lang);
   return { page, ctx, problems, counts: mine };
 }
 
@@ -274,11 +277,11 @@ test('search, language and theme toggles, settings (another node), phone width',
   await search(chain.blocks.get(9).hash); await page.waitForURL(/#\/block\/9$/); // a block hash
   await search('not a thing'); assert.match(page.url(), /#\/block\/9$/);
   // language
-  await page.click('#lang-toggle');
+  await page.selectOption('#lang', 'en');
   await waitText(page, 'Post-quantum certificate');
   assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
   assert.equal(await page.locator('.nav a[href="#/validators"]').innerText(), 'Validators');
-  await page.click('#lang-toggle');
+  await page.selectOption('#lang', 'th');
   await waitText(page, 'ใบรับรองต้านควอนตัม');
   // theme
   const theme = await page.evaluate(() => document.documentElement.dataset.theme);
@@ -317,6 +320,49 @@ test('search, language and theme toggles, settings (another node), phone width',
   }
   assert.deepEqual(phone.problems, []);
   await phone.ctx.close();
+});
+
+test('a first visit (no stored language) is in English; a Thai choice is remembered', async () => {
+  const { page, ctx, problems } = await openPage({ lang: null });
+  await go(page, '#/');
+  await waitText(page, 'Latest blocks');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
+  assert.equal(await page.locator('.nav a[href="#/settings"]').innerText(), 'Settings');
+  assert.equal(await page.locator('#lang').inputValue(), 'en');
+  assert.deepEqual(await page.locator('#lang option').evaluateAll((os) => os.map((o) => [o.value, o.textContent])), LANGS);
+  await page.selectOption('#lang', 'th');
+  await waitText(page, 'บล็อกล่าสุด');
+  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-explorer:lang')), 'th');
+  await page.reload();
+  await waitText(page, 'บล็อกล่าสุด');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'th');
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('every UI language renders the home page with its own texts and no raw keys', async () => {
+  const camelKeys = Object.keys(T.en).filter((k) => /[A-Z_]/.test(k));
+  for (const [code] of LANGS) {
+    const { page, ctx, problems } = await openPage({ lang: code });
+    await go(page, '#/');
+    await waitText(page, T[code].latestBlocks);
+    await waitText(page, 'MsgSend');
+    assert.equal(await page.evaluate(() => document.documentElement.lang), code, code);
+    assert.equal(await page.locator('#lang').inputValue(), code);
+    assert.equal(await page.locator('.nav a[href="#/settings"]').innerText(), T[code].navSettings, code);
+    assert.equal(await page.locator('#search').getAttribute('placeholder'), T[code].searchPlaceholder, code);
+    const body = await page.locator('body').innerText();
+    for (const k of camelKeys) assert.ok(!new RegExp(`\\b${k}\\b`).test(body), `${code}: raw key ${k} on the page`);
+    assert.ok(!/\{[a-zA-Z]+\}/.test(body), `${code}: unfilled placeholder`);
+    assert.deepEqual(problems, [], code);
+    await ctx.close();
+  }
+  // an unknown stored code falls back to English
+  const { page, ctx } = await openPage({ lang: 'xx' });
+  await go(page, '#/');
+  await waitText(page, 'Latest blocks');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'en');
+  await ctx.close();
 });
 
 test('placeholder config: the site says how to set the node and sends nothing', async () => {

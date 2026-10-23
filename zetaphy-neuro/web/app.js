@@ -20,12 +20,12 @@ const FORMAT = {
 };
 const kindOf = (chain) => CHAINS[chain]?.kind ?? 'evm';
 
-let lang = 'th';
+let lang = 'en';
 let last = null;
 // Early warning (/api/early-warning, server/earlywarning.js) for the report shown.
 let early = null;
 const EARLY_SEVERITY = new Set(['high', 'medium', 'low', 'info']);
-try { lang = pickLang(localStorage.getItem('neuro-lang') ?? 'th'); } catch { /* storage blocked */ }
+try { lang = pickLang(localStorage.getItem('neuro-lang') ?? 'en'); } catch { /* storage blocked */ }
 
 for (const [key, c] of Object.entries(CHAINS)) $('chain').add(new Option(c.name, key));
 $('chain').value = 'bsc';

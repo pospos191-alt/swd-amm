@@ -1,6 +1,6 @@
 // The web app's pure modules: the ABI codec (against ethers), metadata safety
 // (URIs, size limits, text cleaning), amounts, bounded log scanning with its
-// cache, wording rules for the Neuro texts, and both languages complete.
+// cache, wording rules for the Neuro texts, and every language complete.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AbiCoder, Interface, id as ethersId, getAddress } from 'ethers';
@@ -8,10 +8,11 @@ import { encode, decode, fn, event, checksum, topicOf } from '../web/lib/abi.js'
 import { resolveUri, normalizeTokenUri, imageSrc, readMetadata, fetchMetadataJson, cleanText, cleanMultiline, substituteId, normalizeGateway, MAX_METADATA } from '../web/lib/meta.js';
 import { parseZtphy, formatZtphy, F, E, STATUS, listingFrom } from '../web/lib/contracts.js';
 import { scanLogs } from '../web/lib/rpc.js';
-import { t, keysOf, errorText } from '../web/lib/i18n.js';
+import { t, keysOf, errorKeysOf, errorText, LANGS, LANG_NAMES, pickLang } from '../web/lib/i18n.js';
 import { artifacts } from './helpers/chain.js';
 
 const coder = AbiCoder.defaultAbiCoder();
+const TEXT_PLACEHOLDERS = (s) => s.match(/\{[a-z]+\}/g) ?? [];
 const A1 = '0x1111111111111111111111111111111111111111';
 
 test('ABI encoding matches ethers for every shape the site sends', () => {
@@ -56,7 +57,7 @@ test('function selectors and calls match the compiled ABIs', () => {
   assert.equal(STATUS.length, 10, 'NFTMarketplace.Status has 10 values');
   assert.match(errorText('en', { data: m.getError('TokenMoved').selector }), /left the seller outside the marketplace/);
   assert.equal(F.approve.encode(A1, 7n), new Interface(artifacts.ZetaphyERC721.abi).encodeFunctionData('approve', [A1, 7n]));
-  for (const st of STATUS) for (const lang of ['en', 'th']) assert.ok(keysOf(lang).includes(`status_${st}`), `${lang}.status_${st}`);
+  for (const st of STATUS) for (const lang of LANGS) assert.ok(keysOf(lang).includes(`status_${st}`), `${lang}.status_${st}`);
   // Events: topics equal ethers', decoding of indexed and data fields.
   for (const [k, ev] of Object.entries(E)) {
     const src = [...ifaces].find((i) => { try { return i.getEvent(ev.name); } catch { return false; } });
@@ -195,15 +196,36 @@ test('log scanning: bounded chunks, split on refusal, cache continues where it s
   assert.equal(r4.complete, true);
 });
 
-test('both languages have every text; Neuro wording stays neutral and carries the disclaimer', () => {
-  const en = keysOf('en'), th = keysOf('th');
-  assert.deepEqual([...th].sort(), [...en].sort());
-  const banned = /scam|fraud|rug|phish|drainer|honeypot|criminal|steal|thief|หลอกลวง|โกง|มิจฉาชีพ|ต้มตุ๋น|ขโมย/i;
-  for (const lang of ['en', 'th']) for (const k of keysOf(lang)) assert.doesNotMatch(t(lang, k), banned, `${lang}.${k}`);
+test('every language has every text; Neuro wording stays neutral and carries the disclaimer', () => {
+  // The shared set and menu order of all ZETAPHY apps; English is the default.
+  assert.deepEqual(LANGS, ['en', 'zh', 'es', 'ko', 'ja', 'ru', 'vi', 'th']);
+  assert.deepEqual(Object.values(LANG_NAMES), ['English', '中文', 'Español', '한국어', '日本語', 'Русский', 'Tiếng Việt', 'ไทย']);
+  for (const v of [undefined, null, '', 'fr', 'TH', 'zh-CN', 1, {}]) assert.equal(pickLang(v), 'en', String(v));
+  for (const c of LANGS) assert.equal(pickLang(c), c);
+  const en = keysOf('en'), enErr = errorKeysOf('en');
+  assert.ok(en.length > 150 && enErr.length > 20);
+  const sel = new Interface(artifacts.NFTMarketplace.abi);
+  for (const lang of LANGS) {
+    assert.deepEqual([...keysOf(lang)].sort(), [...en].sort(), `${lang}: exactly the English text keys`);
+    assert.deepEqual([...errorKeysOf(lang)].sort(), [...enErr].sort(), `${lang}: every contract error`);
+    for (const k of en) {
+      const s = t(lang, k, { n: 3, addr: '0xabc', code: 'ABCDEF', id: '{id}' });
+      assert.ok(s.trim() && (s !== k || lang === 'en'), `${lang}.${k} renders text, not the key`);
+      // Placeholders survive translation.
+      for (const ph of TEXT_PLACEHOLDERS(t('en', k))) assert.ok(t(lang, k).includes(ph), `${lang}.${k} keeps ${ph}`);
+    }
+    // Decoded contract errors are translated (never the raw name or selector).
+    const r = errorText(lang, { data: sel.getError('NothingOwed').selector });
+    assert.ok(r && !/NothingOwed|^0x/.test(r), `${lang} error: ${r}`);
+    if (lang !== 'en') assert.notEqual(r, errorText('en', { data: sel.getError('NothingOwed').selector }), `${lang} error translated`);
+  }
+  assert.equal(t('fr', 'explore'), 'Explore', 'unknown language: English');
+  const banned = /scam|fraud|rug|phish|drainer|honeypot|criminal|steal|thief|หลอกลวง|โกง|มิจฉาชีพ|ต้มตุ๋น|ขโมย|诈骗|骗局|欺诈|盗窃|estafa|fraude|robo|ladr[oó]n|사기|도둑|詐欺|泥棒|мошен|афер|кра[жд]|вор|lừa đảo|trộm/i;
+  for (const lang of LANGS) for (const k of keysOf(lang)) assert.doesNotMatch(t(lang, k), banned, `${lang}.${k}`);
   assert.match(t('th', 'footer'), /ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา/);
   assert.equal(t('en', 'hiddenListings', { n: 3 }).startsWith('3 '), true);
-  const sel = new Interface(artifacts.NFTMarketplace.abi).getError('CollectionRefused').selector;
-  assert.match(errorText('th', { data: sel + '0'.repeat(63) + '3' }), /ธง Neuro/);
+  const refused = sel.getError('CollectionRefused').selector;
+  assert.match(errorText('th', { data: refused + '0'.repeat(63) + '3' }), /ธง Neuro/);
   assert.equal(errorText('en', { message: 'execution reverted: registry down' }), 'registry down');
 });
 

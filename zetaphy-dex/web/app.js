@@ -8,7 +8,7 @@
 // (lib/storage.js). Right before every eth_sendTransaction the wallet's chain
 // is asked again (eth_chainId) and the transaction carries chainId 77390.
 
-import { TEXT } from './i18n.js';
+import { TEXT, pickLang } from './i18n.js';
 import { encodeCall, decode, decodeError, decodeBytes32String, parseUnits, formatUnits, isAddress, ZERO_ADDRESS } from './lib/abi.js';
 import { getAmountOut, minWithSlippage, priceImpactBps, impactLevel, quote, candidatePaths, poolKind, addLiquidityMins } from './lib/amm.js';
 import { checkToken, reasonText, DISCLAIMER } from './lib/neuro.js';
@@ -29,7 +29,7 @@ const NATIVE = Object.freeze({ address: 'native', symbol: EVM_SYMBOL, name: 'ZET
 const MAX_POSITIONS_SCAN = 300;
 
 const state = {
-  lang: 'th',
+  lang: 'en',
   cfg: null,
   tokens: [NATIVE],
   wallet: null, // { id, name, provider }
@@ -50,6 +50,9 @@ function t(key, vars = {}) {
 
 function applyI18n() {
   document.documentElement.lang = state.lang;
+  const sel = $('lang-btn');
+  sel.value = state.lang;
+  sel.setAttribute('aria-label', t('langLabel'));
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
   for (const el of document.querySelectorAll('[data-i18n-placeholder]')) el.placeholder = t(el.dataset.i18nPlaceholder);
   for (const el of document.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
@@ -121,7 +124,7 @@ function revertData(e) {
 function errorText(e) {
   if (e?.code === 4001 || /user (rejected|denied)/i.test(String(e?.message))) return t('rejected');
   const d = decodeError(revertData(e));
-  if (d?.name === 'TokenEnforced') return t('err_TokenEnforced', { reason: reasonText(d.args[1])[state.lang] });
+  if (d?.name === 'TokenEnforced') return t('err_TokenEnforced', { reason: reasonText(d.args[1])[state.lang] ?? reasonText(d.args[1]).en });
   if (d && TEXT.en[`err_${d.name}`]) return t(`err_${d.name}`);
   if (d?.name === 'Error') return String(d.args[0]).slice(0, 200);
   return String(e?.shortMessage ?? e?.message ?? e).replace(/[\r\n]+/g, ' ').slice(0, 240);
@@ -279,14 +282,15 @@ function renderNeuro(box, item) {
   const sym = token?.symbol ?? '?';
   box.className = `neuro ${result.status}`;
   const lines = [el('p', { class: 'neuro-head', text: `${t('neuroTitle')} · ${sym}` })];
-  const reason = reasonText(result.reason)[state.lang];
+  const rt = reasonText(result.reason);
+  const reason = rt[state.lang] ?? rt.en;
   if (result.status === 'clear') lines.push(el('p', { text: t('neuroClear') }));
   else if (result.status === 'flagged') lines.push(el('p', { text: t('neuroFlagged', { reason }) }));
   else if (result.status === 'enforced') lines.push(el('p', { text: t('neuroEnforced', { reason }) }));
   else if (result.status === 'unknown') lines.push(el('p', { text: t('neuroUnknown', { why: result.error === 'noRegistry' ? t('neuroNoRegistry') : String(result.error ?? '').slice(0, 80) }) }));
   else if (result.status === 'nocode') lines.push(el('p', { text: t('noCode') }));
   if (result.via && result.status !== 'clear') lines.push(el('p', { class: 'hint', text: t('neuroVia', { via: result.via }) }));
-  lines.push(el('p', { class: 'neuro-disclaimer', text: DISCLAIMER[state.lang] }));
+  lines.push(el('p', { class: 'neuro-disclaimer', text: DISCLAIMER[state.lang] ?? DISCLAIMER.en }));
   box.replaceChildren(...lines);
   box.hidden = false;
 }
@@ -964,8 +968,7 @@ function validConfig(c) {
 }
 
 async function init() {
-  const lang = store.get(KEYS.lang);
-  state.lang = lang === 'en' || lang === 'th' ? lang : (navigator.language?.toLowerCase().startsWith('th') ? 'th' : 'th');
+  state.lang = pickLang(store.get(KEYS.lang)); // English unless another language of the set was chosen
   applyTheme(store.get(KEYS.theme));
   loadSettings();
   applyI18n();
@@ -985,7 +988,7 @@ async function init() {
 
   // events
   for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => showTab(b.dataset.tab));
-  $('lang-btn').addEventListener('click', () => { state.lang = state.lang === 'th' ? 'en' : 'th'; store.set(KEYS.lang, state.lang); applyI18n(); fillAllSelects(); refreshAll(); renderTokenList(); });
+  $('lang-btn').addEventListener('change', (e) => { state.lang = pickLang(e.target.value); store.set(KEYS.lang, state.lang); applyI18n(); fillAllSelects(); refreshAll(); renderTokenList(); });
   $('theme-btn').addEventListener('click', () => { const next = currentTheme() === 'dark' ? 'light' : 'dark'; applyTheme(next); store.set(KEYS.theme, next); });
   $('settings-btn').addEventListener('click', openSettings);
   $('settings-close').addEventListener('click', () => $('settings-dialog').close());

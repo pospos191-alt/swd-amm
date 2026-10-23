@@ -297,10 +297,10 @@ export async function monitorCommand({ opt, env, write, s, connectRpc }) {
   rep.caughtUp = to >= head;
   if (stateFile) saveJson(stateFile, sealState(next, stateKey));
   if (out) saveJson(out, rep);
-  if (opt.summary) { mkdirSync(dirname(String(opt.summary)), { recursive: true }); writeFileSync(String(opt.summary), `${rep.summary.th}\n\n${rep.summary.en}\n`); }
+  if (opt.summary) { mkdirSync(dirname(String(opt.summary)), { recursive: true }); writeFileSync(String(opt.summary), `${rep.summary.en}\n`); }
   if (opt.issue) { mkdirSync(dirname(String(opt.issue)), { recursive: true }); writeFileSync(String(opt.issue), issueText(rep, { runUrl: opt['run-url'] ? String(opt['run-url']) : '' })); }
   if (quiet) write(countsLine(rep));
-  else { write(rep.summary.en); write(rep.summary.th); }
+  else write(rep.summary.en);
   if (!rep.caughtUp) write(`(scanned up to block ${to} of ${head}; the next run continues from there)`);
   return alerts.length && opt['fail-on-alert'] ? 3 : 0;
 }

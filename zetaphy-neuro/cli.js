@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Neuro ZETAPHY tier 1 from the command line.
-//   node cli.js <chain> <address> [--lang th|en|zh|ja|ko|vi|id] [--json] [--sim-seed 0x<32 bytes>]
+//   node cli.js <chain> <address> [--lang en|zh|es|ko|ja|ru|vi|th|id] [--json] [--sim-seed 0x<32 bytes>]
 //       --sim-seed: re-run a NeuroJobs job's trade simulation with the same
 //       addresses and amounts (jobSimSeed(job id, lottery) in src/honeypot.js)
 //   node cli.js zetaphy-wasm <zetaphy1… contract> --rest https://<node>/rest [--lang ..] [--json]
@@ -110,7 +110,7 @@ try {
     if (flag('--json')) {
       console.log(JSON.stringify(report, null, 2));
     } else {
-      const lang = opt('--lang', 'th');
+      const lang = opt('--lang', 'en');
       const out = explain(report, lang);
       const ui = uiText(lang);
       const mark = { high: '!!', medium: '! ', low: '- ', info: '  ', good: '+ ' };

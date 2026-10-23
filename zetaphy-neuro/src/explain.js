@@ -2,16 +2,18 @@
 // $0 and gives the same words every time. One file per language in
 // src/lang/; a key a language lacks falls back to English.
 
-import * as th from './lang/th.js';
 import * as en from './lang/en.js';
 import * as zh from './lang/zh.js';
-import * as ja from './lang/ja.js';
+import * as es from './lang/es.js';
 import * as ko from './lang/ko.js';
+import * as ja from './lang/ja.js';
+import * as ru from './lang/ru.js';
 import * as vi from './lang/vi.js';
+import * as th from './lang/th.js';
 import * as id from './lang/id.js';
 
 /** Languages in menu order: code -> { NAME, LEVEL, UI, T }. */
-export const LANGS = { th, en, zh, ja, ko, vi, id };
+export const LANGS = { en, zh, es, ko, ja, ru, vi, th, id };
 
 // What the token is comes first, then the most serious findings, the caveat last.
 const IDENTITY = new Set([
@@ -35,8 +37,8 @@ const ISSUER = new Set(['known-issuer', 'lookalike']);
 const SOFTER = new Set(['similar-flagged', 'similar-reference']);
 const rank = (f) => (IDENTITY.has(f.id) ? -2 : ISSUER.has(f.id) ? -1 : CAVEAT.has(f.id) ? 9 : (ORDER[f.severity] ?? 5) + (SOFTER.has(f.id) ? 0.5 : 0));
 
-/** Picks a supported language code ('th' if unknown). */
-export const pickLang = (lang) => (LANGS[lang] ? lang : 'th');
+/** Picks a supported language code ('en' if unknown). */
+export const pickLang = (lang) => (LANGS[lang] ? lang : 'en');
 
 /** UI strings for a language, with English filling any gap. */
 export function uiText(lang) {
@@ -46,7 +48,7 @@ export function uiText(lang) {
 
 /** Report -> { title, level, lines: [{id, severity, text}] } in the chosen language.
  * Wording only: the finding ids and severities (what verdict.js hashes) are untouched. */
-export function explain(report, lang = 'th') {
+export function explain(report, lang = 'en') {
   const L = LANGS[pickLang(lang)];
   const sorted = [...report.analysis.findings].sort((a, b) => rank(a) - rank(b));
   const ui = uiText(lang);

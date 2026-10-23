@@ -96,6 +96,9 @@ button:hover { background: var(--accent-hover); }
 button.secondary { background: var(--panel); color: var(--text); border: 1px solid var(--panel-border); }
 button.secondary:hover { background: var(--panel-alt); }
 .icon-btn { min-width: 40px; padding: 7px 10px; }
+.lang-select { width: auto; max-width: 132px; background: var(--panel); color: var(--text); border: 1px solid var(--panel-border); border-radius: 10px; padding: 7px 8px; font: inherit; font-weight: 600; cursor: pointer; }
+.lang-select:hover { background: var(--panel-alt); }
+.lang-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 button.copy { background: transparent; color: var(--text-dim); padding: 0 4px; font-size: 13px; border: 0; }
 button.copy:hover { color: var(--text); }
 
@@ -174,6 +177,7 @@ details summary { cursor: pointer; color: var(--link); }
   .hdr-brand-sub { display: none; }
   .nav { order: 3; flex-basis: 100%; overflow-x: auto; }
   .hdr-actions { margin-left: auto; }
+  .lang-select { max-width: 112px; padding: 6px; }
   main { padding: 12px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .stat-value { font-size: 16px; }

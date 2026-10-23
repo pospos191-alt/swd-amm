@@ -9,7 +9,7 @@ import { F, E, KIND, STATUS, listingFrom, offerFrom, parseZtphy, formatZtphy, sh
 import { makeRpc, read, waitReceipt, scanLogs, RpcError } from './lib/rpc.js';
 import { loadMetadata, normalizeTokenUri, normalizeGateway, substituteId, cleanText, cleanMultiline, imageSrc, safeLink, DEFAULT_GATEWAY, GATEWAYS, fetchMetadataJson, readMetadata } from './lib/meta.js';
 import { discoverWallets, ensureChain, assertChain, EVM_CHAIN_ID, EVM_CHAIN_ID_HEX, EVM_SYMBOL, openInAppLinks } from './lib/wallet.js';
-import { t, LANGS, errorText } from './lib/i18n.js';
+import { t, LANGS, LANG_NAMES, pickLang, errorText } from './lib/i18n.js';
 import { threatQueries, readThreat, reasonText, DISCLAIMER, REPRODUCE } from './vendor/zetaphy-lib.js';
 
 // ---------------------------------------------------------------- state
@@ -19,7 +19,7 @@ const load = (k, d) => { try { return JSON.parse(store?.getItem(k)) ?? d; } catc
 const save = (k, v) => { try { store?.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 
 const S = {
-  lang: load('zn.lang', (navigator.language || '').toLowerCase().startsWith('en') ? 'en' : 'th'),
+  lang: pickLang(load('zn.lang', 'en')), // English unless a known language was chosen (here or in the hub)
   theme: load('zn.theme', null),
   settings: load('zn.settings', {}),
   dep: {},
@@ -176,14 +176,14 @@ function threatBox(th, compact = false) {
   if (!th || th.off) return compact ? null : h('p', { class: 'muted small', text: T('neuroOff') });
   if (th.error) return h('div', { class: 'neuro warnbox' }, h('strong', { text: T('neuroUnavailable') }));
   if (!th.flagged) return compact ? null : h('p', { class: 'neuro okline small', text: T('neuroClear') });
-  const reason = reasonText(th.reason)[S.lang === 'th' ? 'th' : 'en'];
+  const rt = reasonText(th.reason), reason = rt[S.lang] ?? rt.en; // the shared Neuro texts exist in en and th
   if (compact) return h('span', { class: `badge ${th.enforced ? 'bad' : 'warn'}`, text: th.enforced ? T('neuroEnforcedShort') : T('neuroFlaggedShort'), title: reason });
   return h('div', { class: `neuro ${th.enforced ? 'badbox' : 'warnbox'}`, role: 'note' },
     h('strong', { text: th.enforced ? T('neuroEnforced') : T('neuroFlagged') }),
     th.shared ? h('p', { class: 'small', text: T('neuroShared') }) : null,
     h('p', { text: `${T('neuroReason')}: ${reason}` }),
     h('p', { class: 'small', text: `${DISCLAIMER.th} (${DISCLAIMER.en})` }),
-    h('p', { class: 'small muted', text: REPRODUCE[S.lang === 'th' ? 'th' : 'en'] }));
+    h('p', { class: 'small muted', text: REPRODUCE[S.lang] ?? REPRODUCE.en }));
 }
 
 // ---------------------------------------------------------------- wallet
@@ -440,7 +440,7 @@ async function pageItem(el, addr, idStr) {
     const qty = input({ type: 'number', min: '1', max: String(l.quantity), value: '1', class: 'qty', 'aria-label': T('quantity') });
     const row = h('div', { class: 'listing-row', 'data-listing': String(lid) },
       h('div', {}, h('strong', { class: 'price', text: `${formatZtphy(l.unitPrice)} ${EVM_SYMBOL}` }), isMulti ? h('span', { class: 'muted', text: ` ${T('each')} · ${T('available')} ${l.quantity}` }) : null,
-        h('div', { class: 'small muted', text: `${T('seller')} ${shortAddr(l.seller)} · ${T('until')} ${new Date(l.expiry * 1000).toLocaleString(S.lang === 'th' ? 'th-TH' : 'en-GB')}` }),
+        h('div', { class: 'small muted', text: `${T('seller')} ${shortAddr(l.seller)} · ${T('until')} ${new Date(l.expiry * 1000).toLocaleString(S.lang)}` }),
         st !== 0 ? h('div', { class: 'small warnbox', text: T(`status_${STATUS[st]}`) }) : null));
     if (mine) row.append(actionButton(T('cancel'), async () => { await sendTx(market(), F.cancel.encode(lid), 0n, T('cancel')); route(); }, ''));
     else if (st === 0 && !blocked) {
@@ -471,7 +471,7 @@ async function pageItem(el, addr, idStr) {
     const mineOffer = me && o.buyer.toLowerCase() === me.toLowerCase();
     const row = h('div', { class: 'listing-row', 'data-offer': String(oid) }, h('div', {},
       h('strong', { text: `${formatZtphy(o.amount)} ${EVM_SYMBOL}` }), isMulti ? h('span', { class: 'muted', text: ` ${T('for')} ${o.quantity}` }) : null,
-      h('div', { class: 'small muted', text: `${T('from')} ${shortAddr(o.buyer)} · ${o.expiry < now ? T('expired') : `${T('until')} ${new Date(o.expiry * 1000).toLocaleString(S.lang === 'th' ? 'th-TH' : 'en-GB')}`}` })));
+      h('div', { class: 'small muted', text: `${T('from')} ${shortAddr(o.buyer)} · ${o.expiry < now ? T('expired') : `${T('until')} ${new Date(o.expiry * 1000).toLocaleString(S.lang)}`}` })));
     if (mineOffer) row.append(actionButton(T('cancelOffer'), async () => { await sendTx(market(), F.cancelOffer.encode(oid), 0n, T('cancelOffer')); route(); }, ''));
     else if (me && myBal >= o.quantity && o.expiry > now && !blocked) {
       // What the holder would get, as shown; it becomes acceptOffer's minProceeds, so a
@@ -842,8 +842,11 @@ function applyChrome() {
   document.documentElement.lang = S.lang;
   if (S.theme) document.documentElement.setAttribute('data-theme', S.theme); else document.documentElement.removeAttribute('data-theme');
   for (const n of document.querySelectorAll('[data-i18n]')) n.textContent = T(n.getAttribute('data-i18n'));
-  $('#lang').textContent = S.lang === 'th' ? 'EN' : 'ไทย';
-  $('#lang').setAttribute('aria-label', T('switchLang'));
+  const sel = $('#lang');
+  if (sel.options.length !== LANGS.length) sel.replaceChildren(...LANGS.map((c) => h('option', { value: c, lang: c, text: LANG_NAMES[c] })));
+  sel.value = S.lang;
+  sel.setAttribute('aria-label', T('switchLang'));
+  sel.title = T('switchLang');
   $('#theme').setAttribute('aria-label', T('switchTheme'));
   walletLabel();
 }
@@ -859,7 +862,7 @@ async function start() {
   } catch { /* none yet */ }
   S.wallets = discoverWallets(window, () => {});
   applyChrome();
-  $('#lang').addEventListener('click', () => { S.lang = LANGS[(LANGS.indexOf(S.lang) + 1) % LANGS.length]; save('zn.lang', S.lang); applyChrome(); route(); });
+  $('#lang').addEventListener('change', (ev) => { S.lang = pickLang(ev.target.value); save('zn.lang', S.lang); applyChrome(); route(); });
   $('#theme').addEventListener('click', () => {
     const dark = S.theme ? S.theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
     S.theme = dark ? 'light' : 'dark';

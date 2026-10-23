@@ -16,6 +16,9 @@ import { parseSettings, serializeSettings, parseImported, cleanRpc, cleanWalletI
 import { cleanText, cleanSymbol, validEntry, lookalikes } from '../web/lib/tokens.js';
 import { fingerprint1, SLOT_IMPL, SLOT_BEACON, REASON_TEXT, DISCLAIMER } from '../web/lib/neuro.js';
 import { amountOut, amountIn } from './helpers/dex.js';
+import { LANGS, LANG_CODES, pickLang, TEXT } from '../web/i18n.js';
+import { TEXT as DLMM_TEXT } from '../web/dlmm.js';
+import { reasonText } from '../web/lib/neuro.js';
 
 const PAGE = fileURLToPath(new URL('../web/', import.meta.url));
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -138,8 +141,8 @@ test('Neuro in the page: fp1 matches zetaphy-network/src/vaccine.js, EIP-1967 sl
   const vaccine = readFileSync(new URL('../../zetaphy-network/src/vaccine.js', import.meta.url), 'utf8');
   for (const r of REASON_TEXT.slice(1)) { assert.ok(vaccine.includes(r.th), r.en); assert.ok(vaccine.includes(r.en.replace(/'/g, "\\'")) || vaccine.includes(r.en), r.en); }
   // Neutral wording everywhere in the page (docs/LEGAL.md).
-  const words = /\b(scam|fraud|rug ?pull|drainer|phishing|honeypot)\b|หลอกลวง|ฉ้อโกง|มิจฉาชีพ/i;
-  for (const f of ['i18n.js', 'lib/neuro.js', 'app.js', 'index.html']) assert.doesNotMatch(readFileSync(join(PAGE, f), 'utf8'), words, f);
+  const words = /\b(scam|fraud|rug ?pull|drainer|phishing|honeypot|estafa|fraude)\b|หลอกลวง|ฉ้อโกง|มิจฉาชีพ|诈骗|骗局|詐欺|사기|мошенн|lừa đảo/i;
+  for (const f of ['i18n.js', 'lib/neuro.js', 'app.js', 'dlmm.js', 'index.html']) assert.doesNotMatch(readFileSync(join(PAGE, f), 'utf8'), words, f);
 });
 
 test('the page loads nothing from other sites: no inline or external scripts, no remote imports, no innerHTML', () => {
@@ -247,4 +250,54 @@ test('M4: stored imported tokens: this chain only, clean entries, no duplicates,
   assert.deepEqual(parseImported('nope', 77390), []);
   const many = Array.from({ length: 80 }, (_, i) => ({ address: '0x' + i.toString(16).padStart(40, '0'), name: 'T', symbol: 'T', decimals: 18, chainId: 77390 }));
   assert.equal(parseImported(JSON.stringify(many), 77390).length, 50);
+});
+
+test('languages: the 8 codes in menu order; every language has exactly the English keys, placeholders and no empty text', () => {
+  assert.deepEqual(LANGS, [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['ko', '한국어'], ['ja', '日本語'], ['ru', 'Русский'], ['vi', 'Tiếng Việt'], ['th', 'ไทย']]);
+  const holes = (str) => [...str.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join();
+  for (const [name, table] of [['i18n.js', TEXT], ['dlmm.js', DLMM_TEXT]]) {
+    assert.deepEqual(Object.keys(table).sort(), [...LANG_CODES].sort(), `${name}: exactly the 8 languages`);
+    const en = Object.keys(table.en);
+    const allKeys = new Set(en);
+    for (const code of LANG_CODES) {
+      assert.deepEqual(Object.keys(table[code]).sort(), [...en].sort(), `${name} ${code}: exactly the en key set`);
+      for (const k of en) {
+        const v = table[code][k];
+        assert.ok(typeof v === 'string' && v.trim(), `${name} ${code}.${k}: text`);
+        assert.equal(holes(v), holes(table.en[k]), `${name} ${code}.${k}: same placeholders as en`);
+        assert.ok(!allKeys.has(v), `${name} ${code}.${k}: not a raw key`);
+      }
+    }
+  }
+  for (const r of [...REASON_TEXT, DISCLAIMER, reasonText(99)]) assert.deepEqual(Object.keys(r).sort(), [...LANG_CODES].sort(), 'neuro.js texts in all 8 languages');
+  assert.equal(reasonText(99).ko, '#99');
+});
+
+test('languages: a stored code from the set is honoured, anything else is English', () => {
+  for (const c of LANG_CODES) assert.equal(pickLang(c), c);
+  for (const v of [null, undefined, '', 'EN', 'th-TH', 'fr', 'zh-CN', '"th"', 'xx']) assert.equal(pickLang(v), 'en', String(v));
+});
+
+test('languages: each code renders the swap page (index.html) with no raw keys; the menu is the <select id="lang-btn"> of the 8 names', () => {
+  const html = readFileSync(join(PAGE, 'index.html'), 'utf8');
+  const sel = /<select id="lang-btn"[^>]*>([\s\S]*?)<\/select>/.exec(html);
+  assert.ok(sel, 'a language <select> in the header');
+  assert.deepEqual([...sel[1].matchAll(/<option value="(\w+)"[^>]*>([^<]+)<\/option>/g)].map((m) => [m[1], m[2]]), LANGS);
+  const used = [...html.matchAll(/data-i18n(?:-title|-placeholder)?="(\w+)"/g)].map((m) => m[1]);
+  assert.ok(used.length > 40);
+  // the same lookup as app.js t(): the language, then English, then the key
+  const t = (code, k) => TEXT[code]?.[k] ?? TEXT.en[k] ?? k;
+  for (const code of LANG_CODES) {
+    for (const k of used) {
+      const s = t(code, k);
+      assert.ok(Object.hasOwn(TEXT[code], k), `${code}: ${k} is in the table`);
+      assert.notEqual(s, k, `${code}: ${k} renders as a raw key`);
+      assert.ok(s.trim(), `${code}: ${k} empty`);
+    }
+  }
+  // The page code looks texts up through these tables only.
+  const app = readFileSync(join(PAGE, 'app.js'), 'utf8');
+  for (const m of app.matchAll(/\bt\('(\w+)'/g)) assert.ok(Object.hasOwn(TEXT.en, m[1]), `app.js t('${m[1]}')`);
+  const dl = readFileSync(join(PAGE, 'dlmm.js'), 'utf8');
+  for (const m of dl.matchAll(/\btt\('(\w+)'/g)) assert.ok(Object.hasOwn(DLMM_TEXT.en, m[1]), `dlmm.js tt('${m[1]}')`);
 });

@@ -9,6 +9,7 @@ import {
   parseZeta, formatZeta, short,
 } from './chainlib.js';
 import { PAGES } from './pages.js';
+import { LANGS, TEXT, TAB_TEXT, pickLang, locale } from './i18n.js';
 
 const EVM_CHAIN_ID = 77390;
 const DEFAULT_NODE = 'https://rpc.sawasdeecoin.com';
@@ -16,100 +17,6 @@ const $ = (id) => document.getElementById(id);
 const store = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
-};
-
-// ------------------------------------------------------------------ text
-const TEXT = {
-  th: {
-    addNet: 'เพิ่มเครือข่าย', height: 'บล็อกล่าสุด', blockTime: 'เวลาต่อบล็อก', validators: 'Validator', bonded: 'ZETAPHY ที่ stake',
-    startTitle: 'เริ่มใช้งาน', step1: 'เพิ่มเครือข่าย ZETAPHY ในกระเป๋า', step2: 'รับ ZETAPHY ทดลอง (ฟรี)', step3: 'ลองใช้งาน', faucetBtn: 'รับ',
-    latestBlocks: 'บล็อกล่าสุด', viewAll: 'ดูทั้งหมด', colHeight: 'บล็อก', colTxs: 'ธุรกรรม', colProposer: 'ผู้สร้าง', colAge: 'เมื่อ',
-    network: 'เครือข่าย', validatorsTitle: 'Validator', colName: 'ชื่อ', colPower: 'พลังโหวต', colCommission: 'ค่าธรรมเนียม',
-    myStake: 'การ stake ของฉัน', proposals: 'ข้อเสนอ (โหวต)', connect: 'เชื่อมต่อ MetaMask', cancel: 'ยกเลิก', confirm: 'ยืนยัน',
-    stake: 'Stake', unstake: 'ถอน', claim: 'รับรางวัล', balance: 'ยอดในกระเป๋า', staked: 'stake อยู่', rewards: 'รางวัลสะสม',
-    noDelegations: 'ยังไม่ได้ stake กับ validator ไหน', noProposals: 'ยังไม่มีข้อเสนอ', yes: 'เห็นด้วย', no: 'ไม่เห็นด้วย', abstain: 'งดออกเสียง', veto: 'คัดค้าน (veto)',
-    ends: 'ปิดโหวต', jailed: 'ถูกพัก', copy: 'คัดลอก', copied: 'คัดลอกแล้ว', ago: 'ที่แล้ว', s: 'วิ', m: 'นาที', h: 'ชม.',
-    netUp: 'ออนไลน์', netDown: 'ติดต่อโหนดไม่ได้', stakeTitle: 'Stake กับ', unstakeTitle: 'ถอน stake จาก', available: 'ใช้ได้',
-    sent: 'ส่งแล้ว รอยืนยัน…', done: 'สำเร็จ', failed: 'ไม่สำเร็จ', noWallet: 'ไม่พบ MetaMask (หรือกระเป๋า EVM) ในเบราว์เซอร์นี้',
-    badAddr: 'ใส่ที่อยู่ 0x… หรือ zetaphy1…', faucetOk: 'ส่ง ZETAPHY ทดลองแล้ว', addedNet: 'เพิ่มเครือข่ายแล้ว', noKeplr: 'ไม่พบ Keplr ในเบราว์เซอร์นี้',
-    badAmount: 'จำนวนไม่ถูกต้อง', tooMuch: 'มากกว่าที่มี', voted: 'ส่งโหวตแล้ว',
-    endpointEvm: 'EVM RPC', endpointComet: 'CometBFT RPC', endpointRest: 'REST', endpointChain: 'Chain ID',
-    tipNet: 'สถานะโหนดของเครือข่าย ZETAPHY testnet: จุดเขียว = ออนไลน์และกำลังสร้างบล็อก',
-    tipTestnet: 'Testnet: เหรียญไม่มีมูลค่า สัญญายังไม่ผ่านการตรวจสอบความปลอดภัย (audit) ห้ามใช้เงินจริง',
-    tipAddNet: 'เพิ่มเครือข่าย ZETAPHY (Chain ID 77390) ใน MetaMask ด้วยคลิกเดียว',
-    tipHeight: 'เลขบล็อกล่าสุดที่โหนดยืนยันแล้ว เพิ่มขึ้นทุก ~5 วินาที',
-    tipBlockTime: 'เวลาเฉลี่ยระหว่างบล็อก จาก 20 บล็อกล่าสุด',
-    tipValidators: 'จำนวน validator ที่กำลังยืนยันบล็อก (active set)',
-    tipBonded: 'ZETAPHY ทั้งหมดที่ถูก stake ค้ำประกันความปลอดภัยของเชน',
-    tipStep1: 'MetaMask: เพิ่ม Chain ID 77390 และ RPC ให้อัตโนมัติ\nKeplr: เพิ่มเชนแบบ Cosmos (ที่อยู่ zetaphy1…) ใช้ stake และโหวตได้',
-    tipFaucet: 'ฟรีสำหรับทดลอง: วันละครั้งต่อที่อยู่ จำนวนจำกัดต่อวัน\nเหรียญ testnet ไม่มีมูลค่า',
-    tipValList: 'Validator คือเครื่องที่ยืนยันบล็อก การ stake กับ validator ช่วยความปลอดภัยของเชนและได้รางวัล\nถ้า validator ทำผิด (เช่น เซ็นซ้ำ) stake บางส่วนอาจถูกหัก',
-    tipMyStake: 'stake / ถอน / รับรางวัล ส่งจาก MetaMask ผ่าน precompile ของเชน (0x…0800, 0x…0801)\nถอน stake ต้องรอช่วงปลดล็อก ก่อนเหรียญกลับเข้ากระเป๋า',
-    tipProposals: 'ข้อเสนอเปลี่ยนแปลงเชน โหวตได้ตามจำนวนที่ stake (ผ่าน precompile 0x…0805)\nต้อง stake ก่อนจึงจะโหวตได้',
-    unbondIn: 'ปลดล็อกใน', days: 'วัน',
-    groupData: 'ข้อมูลเชน', groupBuild: 'สำหรับนักพัฒนา',
-    earnBond: 'มัดจำคนรันร่าง', earnRunners: 'คนรันร่างตอนนี้', earnPool: 'กองรางวัลงาน (ZTPHY)',
-    tipEarnBond: 'ZETAPHY ที่ต้องวางค้ำประกันก่อนรับงาน Neuro (ได้คืนเมื่อเลิกรัน ถ้าไม่ทำผิดกติกา)', tipEarnRunners: 'จำนวนเครื่องที่รับงาน Neuro อยู่ตอนนี้', tipEarnPool: 'ZETAPHY ในสัญญา NeuroJobs ที่รอจ่ายเป็นรางวัลให้คนรันร่าง',
-    anSupply: 'ซัพพลายทั้งหมด', anAvgTime: 'เวลาต่อบล็อก (เฉลี่ย)', anTxs: 'ธุรกรรม/นาที', anBondedPct: 'สัดส่วนที่ stake',
-    tipAnSupply: 'ZETAPHY ทั้งหมดที่มีอยู่ (เริ่ม 1,000 ล้าน ลดลงเมื่อค่าธรรมเนียมถูกเผา)', tipAnTxs: 'ธุรกรรมเฉลี่ยต่อนาที จาก 60 บล็อกล่าสุด', tipAnBondedPct: 'ZETAPHY ที่ถูก stake เทียบกับซัพพลายทั้งหมด',
-    anTxsChart: 'ธุรกรรมต่อบล็อก (60 บล็อกล่าสุด)', anTimeChart: 'เวลาระหว่างบล็อก (วินาที)', tipAnTxsChart: 'แต่ละแท่งคือ 1 บล็อก ชี้ที่แท่งเพื่อดูเลขบล็อกและจำนวน', tipAnTimeChart: 'เป้าหมายประมาณ 5 วินาที แท่งที่สูงผิดปกติคือบล็อกที่ช้า',
-    anAlloc: 'การแบ่งเหรียญตอนเปิดเชน', tipAnAlloc: 'จากแผน ZETAPHY (1,000 ล้าน): รางวัลทยอยปล่อยปีละ 10% ของที่เหลือ ส่วนทีมล็อก 1 ปี',
-    alRewards: 'รางวัลคนรันร่าง + validator', alSwd: 'แจกคนถือ SWD', alCommunity: 'กองทุนชุมชน', alLiquidity: 'สภาพคล่องและพาร์ทเนอร์', alTeam: 'ทีมพัฒนา',
-    anPower: 'พลังโหวตของ validator', tipAnPower: 'ไม่ควรมีใครเกิน 33% (ถ้าเกิน 1/3 หยุดเชนได้)',
-    dfPools: 'พูล AMM', dfDlmm: 'พูล DLMM', dfJobs: 'งานตรวจ Neuro', tipDfPools: 'จำนวนคู่เหรียญบน DEX แบบ AMM (x·y=k)', tipDfDlmm: 'จำนวนพูลแบบ DLMM (สภาพคล่องเป็นช่วงราคา)', tipDfJobs: 'จำนวนงานตรวจสัญญาที่ส่งเข้า NeuroJobs ทั้งหมด',
-    dfPoolList: 'พูลบน ZETAPHY DEX', tipDfPoolList: 'สภาพคล่องและราคาอ่านจากสัญญาบนเชนโดยตรง (ไม่มีเซิร์ฟเวอร์กลาง)', dfPair: 'คู่เหรียญ', dfReserves: 'สภาพคล่อง', dfPrice: 'ราคา', dfTrade: 'แลก', dfNone: 'ยังไม่มีพูล',
-    app_swap: 'ZETAPHY Swap', app_nft: 'ZETAPHY NFT', app_neuro: 'Neuro', appSub_swap: 'AMM + DLMM', appSub_nft: 'สร้าง มินต์ ซื้อขาย', appSub_neuro: 'ตรวจสัญญาก่อนใช้',
-    tipApp_swap: 'แลกเหรียญและเพิ่มสภาพคล่อง', tipApp_nft: 'ตลาด NFT บน ZETAPHY', tipApp_neuro: 'AI อ่านสัญญาและจับเหรียญปลอม',
-    lbHolders: 'ผู้ถือ ZETAPHY สูงสุด', tipLbHolders: 'จากยอดคงเหลือบนเชน ป้ายสีคือบัญชีของโมดูลระบบ (เช่น กอง stake) กดแถวเพื่อเปิดใน Explorer', lbAccount: 'บัญชี', lbBalance: 'ยอด (ZTPHY)',
-    lbValidators: 'Validator ตาม stake', tipLbValidators: 'ทุก validator รวมที่ยังไม่ active หรือถูกพัก', lbStake: 'Stake (ZTPHY)',
-    devApi: 'API ของเครือข่าย', devApiSub: 'ใช้ได้ฟรี ไม่ต้องมี API key คัดลอกคำสั่งไปวางในเทอร์มินัลได้เลย', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'ไฟล์ตั้งค่าเชน (Keplr / EVM)', devCli: 'เครื่องมือบรรทัดคำสั่ง zetaphy',
-    devContracts: 'ที่อยู่สัญญา', tipDevContracts: 'สัญญาที่ deploy บน testnet และ precompile ของเชน กดที่อยู่เพื่อเปิดใน Explorer',
-  },
-  en: {
-    addNet: 'Add network', height: 'Latest block', blockTime: 'Block time', validators: 'Validators', bonded: 'ZETAPHY staked',
-    startTitle: 'Get started', step1: 'Add ZETAPHY to your wallet', step2: 'Get test ZETAPHY (free)', step3: 'Try the apps', faucetBtn: 'Get',
-    latestBlocks: 'Latest blocks', viewAll: 'View all', colHeight: 'Block', colTxs: 'Txs', colProposer: 'Proposer', colAge: 'Age',
-    network: 'Network', validatorsTitle: 'Validators', colName: 'Name', colPower: 'Voting power', colCommission: 'Commission',
-    myStake: 'My staking', proposals: 'Proposals (vote)', connect: 'Connect MetaMask', cancel: 'Cancel', confirm: 'Confirm',
-    stake: 'Stake', unstake: 'Unstake', claim: 'Claim rewards', balance: 'Wallet balance', staked: 'Staked', rewards: 'Rewards',
-    noDelegations: 'Not staking with any validator yet', noProposals: 'No proposals yet', yes: 'Yes', no: 'No', abstain: 'Abstain', veto: 'No with veto',
-    ends: 'Voting ends', jailed: 'jailed', copy: 'Copy', copied: 'Copied', ago: 'ago', s: 's', m: 'm', h: 'h',
-    netUp: 'online', netDown: 'node unreachable', stakeTitle: 'Stake with', unstakeTitle: 'Unstake from', available: 'Available',
-    sent: 'Sent, waiting for the block…', done: 'Done', failed: 'Failed', noWallet: 'No MetaMask (or other EVM wallet) in this browser',
-    badAddr: 'Enter a 0x… or zetaphy1… address', faucetOk: 'Test ZETAPHY sent', addedNet: 'Network added', noKeplr: 'No Keplr in this browser',
-    badAmount: 'Invalid amount', tooMuch: 'More than you have', voted: 'Vote sent',
-    endpointEvm: 'EVM RPC', endpointComet: 'CometBFT RPC', endpointRest: 'REST', endpointChain: 'Chain ID',
-    tipNet: 'The ZETAPHY testnet node: green = online and making blocks',
-    tipTestnet: 'Testnet: coins have no value and the contracts are not audited yet. Do not use real money.',
-    tipAddNet: 'Add the ZETAPHY network (chain ID 77390) to MetaMask in one click',
-    tipHeight: 'The newest block the node has committed; it grows every ~5 seconds',
-    tipBlockTime: 'Average time between the last 20 blocks',
-    tipValidators: 'Validators currently signing blocks (the active set)',
-    tipBonded: 'All ZETAPHY staked to secure the chain',
-    tipStep1: 'MetaMask: adds chain ID 77390 and the RPC for you\nKeplr: adds the Cosmos side (zetaphy1… addresses) for staking and voting',
-    tipFaucet: 'Free for testing: once a day per address, a limited number per day\nTestnet coins have no value',
-    tipValList: 'Validators sign the blocks. Staking with one helps secure the chain and earns rewards.\nIf a validator misbehaves (e.g. double-signs) part of the stake can be slashed.',
-    tipMyStake: 'Stake / unstake / claim are sent from MetaMask to the chain\'s precompiles (0x…0800, 0x…0801)\nUnstaked coins come back after the unbonding period',
-    tipProposals: 'Proposals to change the chain; your vote weighs as much as your stake (precompile 0x…0805)\nStake first to vote',
-    unbondIn: 'Unbonding', days: 'days',
-    groupData: 'Chain data', groupBuild: 'Build',
-    earnBond: 'Runner bond', earnRunners: 'Runners now', earnPool: 'Job reward pool (ZTPHY)',
-    tipEarnBond: 'ZETAPHY a runner posts before taking Neuro jobs (returned when it stops, unless it broke the rules)', tipEarnRunners: 'Machines taking Neuro jobs now', tipEarnPool: 'ZETAPHY in NeuroJobs waiting to be paid to runners',
-    anSupply: 'Total supply', anAvgTime: 'Block time (avg)', anTxs: 'Txs / minute', anBondedPct: 'Staked share',
-    tipAnSupply: 'All ZETAPHY in existence (1 billion at genesis, less as fees are burned)', tipAnTxs: 'Average transactions per minute over the last 60 blocks', tipAnBondedPct: 'ZETAPHY staked compared with the total supply',
-    anTxsChart: 'Transactions per block (last 60)', anTimeChart: 'Time between blocks (s)', tipAnTxsChart: 'One bar per block; hover a bar for its height and count', tipAnTimeChart: 'The target is about 5 s; a tall bar is a slow block',
-    anAlloc: 'Coin split at genesis', tipAnAlloc: 'From the ZETAPHY plan (1 billion): rewards release 10% of the rest per year; the team share is locked for a year',
-    alRewards: 'Runner + validator rewards', alSwd: 'SWD holder airdrop', alCommunity: 'Community fund', alLiquidity: 'Liquidity and partners', alTeam: 'Team',
-    anPower: 'Validator voting power', tipAnPower: 'No one should hold more than 33% (above 1/3 can halt the chain)',
-    dfPools: 'AMM pools', dfDlmm: 'DLMM pools', dfJobs: 'Neuro check jobs', tipDfPools: 'Token pairs on the AMM DEX (x·y=k)', tipDfDlmm: 'Pools on the DLMM (liquidity in price bins)', tipDfJobs: 'Contract-check jobs ever sent to NeuroJobs',
-    dfPoolList: 'Pools on ZETAPHY DEX', tipDfPoolList: 'Liquidity and prices are read straight from the contracts (no server in between)', dfPair: 'Pair', dfReserves: 'Liquidity', dfPrice: 'Price', dfTrade: 'Trade', dfNone: 'No pools yet',
-    app_swap: 'ZETAPHY Swap', app_nft: 'ZETAPHY NFT', app_neuro: 'Neuro', appSub_swap: 'AMM + DLMM', appSub_nft: 'create, mint, trade', appSub_neuro: 'check a contract first',
-    tipApp_swap: 'Swap tokens and add liquidity', tipApp_nft: 'The NFT marketplace on ZETAPHY', tipApp_neuro: 'AI that reads contracts and spots fakes',
-    lbHolders: 'Top ZETAPHY holders', tipLbHolders: 'From on-chain balances; a tag marks a system module account (e.g. the staking pool). Click a row to open it in the Explorer', lbAccount: 'Account', lbBalance: 'Balance (ZTPHY)',
-    lbValidators: 'Validators by stake', tipLbValidators: 'Every validator, including inactive or jailed ones', lbStake: 'Stake (ZTPHY)',
-    devApi: 'Network API', devApiSub: 'Free, no API key. Copy a command into a terminal.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'Chain registry files (Keplr / EVM)', devCli: 'The zetaphy command-line tool',
-    devContracts: 'Contract addresses', tipDevContracts: 'Contracts deployed on the testnet and the chain\'s precompiles; click an address to open it in the Explorer',
-  },
 };
 
 // The tabs: native panels and the apps (with their own explanations as hover text).
@@ -128,42 +35,32 @@ const ICONS = {
   saphan: '<path d="M2 18h20"/><path d="M4 18v-3a8 8 0 0 1 16 0v3"/><path d="M8 18v-6M12 18v-7M16 18v-6"/>',
   neuro: '<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-6 0"/>',
 };
+// Their words (label, title, hover text) are in i18n.js TAB_TEXT.
 const TABS = [
-  { id: 'home', th: 'ภาพรวม', en: 'Overview', titleTh: 'ภาพรวมเครือข่าย ZETAPHY', titleEn: 'ZETAPHY network overview',
-    tipTh: 'สถานะเชน บล็อกล่าสุด และขั้นตอนเริ่มต้น', tipEn: 'Chain status, latest blocks and how to start' },
-  { id: 'wallet', src: 'wallet/', th: 'กระเป๋า', en: 'Wallet', titleTh: 'กระเป๋าต้านควอนตัม', titleEn: 'Post-quantum wallet',
-    tipTh: 'กระเป๋า ML-DSA-44 (FIPS 204) ไม่มีกุญแจ ECDSA\nseed เก็บในเบราว์เซอร์นี้เท่านั้น เข้ารหัสด้วยรหัสผ่านของคุณ',
-    tipEn: 'An ML-DSA-44 (FIPS 204) wallet with no ECDSA key\nThe seed stays in this browser, encrypted with your password' },
-  { id: 'swap', src: 'swap/', th: 'แลกเปลี่ยน', en: 'Swap', titleTh: 'แลกเปลี่ยนและสภาพคล่อง', titleEn: 'Swap and liquidity',
-    tipTh: 'DEX แบบ AMM และ DLMM: แลกเหรียญ เพิ่ม/ถอนสภาพคล่อง\nNeuro ตรวจโค้ดเหรียญก่อนแลกทุกครั้ง', tipEn: 'AMM and DLMM DEX: swap, add or remove liquidity\nNeuro checks each token\'s code before you trade' },
-  { id: 'stake', th: 'Stake & โหวต', en: 'Stake & vote', titleTh: 'Stake และโหวต', titleEn: 'Stake and vote', fresh: true,
-    tipTh: 'stake ZETAPHY กับ validator รับรางวัล และโหวตข้อเสนอของเชน จาก MetaMask', tipEn: 'Stake ZETAPHY with validators, earn rewards and vote on proposals from MetaMask' },
-  { id: 'earn', page: true, th: 'รับเหรียญ', en: 'Earn', titleTh: 'วิธีได้ ZETAPHY', titleEn: 'How to earn ZETAPHY', fresh: true,
-    tipTh: 'ทุกวิธีที่ได้เหรียญ พร้อมคำสั่งเทอร์มินัล: faucet, รันร่าง Neuro, validator, stake, สภาพคล่อง', tipEn: 'Every way to get coins, with terminal commands: faucet, Neuro runner, validator, staking, liquidity' },
-  { id: 'saphan', page: true, th: 'Saphan', en: 'Saphan', titleTh: 'ZETAPHY Saphan · ข้ามเชน', titleEn: 'ZETAPHY Saphan · cross-chain', fresh: true,
-    tipTh: 'ส่งเหรียญข้ามเชนด้วย IBC (เช่น USDC จาก Noble) จาก MetaMask\nสองเชนตรวจกันเองด้วย light client ไม่มีคนกลางถือเงิน', tipEn: 'Move coins between chains over IBC (e.g. USDC from Noble) from MetaMask\nEach chain checks the other with a light client; no custodian' },
-  { id: 'nft', src: 'nft/', th: 'NFT', en: 'NFT', titleTh: 'ตลาด NFT', titleEn: 'NFT marketplace',
-    tipTh: 'สร้างคอลเลกชัน มินต์ ซื้อขาย NFT บน ZETAPHY', tipEn: 'Create collections, mint, buy and sell NFTs on ZETAPHY' },
-  { id: 'explorer', src: 'explorer/', group: 'data', th: 'Explorer', en: 'Explorer', titleTh: 'สำรวจบล็อกและธุรกรรม', titleEn: 'Blocks and transactions',
-    tipTh: 'ค้นหาบล็อก ธุรกรรม ที่อยู่ validator และใบรับรองบล็อกต้านควอนตัม', tipEn: 'Search blocks, transactions, addresses, validators and post-quantum block certificates' },
-  { id: 'neuro', src: 'neuro/web/', th: 'Neuro', en: 'Neuro', titleTh: 'Neuro ตรวจสัญญา', titleEn: 'Neuro contract check',
-    tipTh: 'AI อ่านและอธิบายสัญญาบนหลายเชน จับเหรียญปลอม/โค้ดอันตราย (อ่านอย่างเดียว)', tipEn: 'AI that reads and explains contracts on many chains and spots fakes (read-only)' },
-  { id: 'analytics', page: true, group: 'data', th: 'สถิติ', en: 'Analytics', titleTh: 'สถิติเครือข่าย', titleEn: 'Network analytics', fresh: true,
-    tipTh: 'กราฟธุรกรรมและเวลาต่อบล็อก ซัพพลาย สัดส่วน stake และการแบ่งเหรียญ', tipEn: 'Transactions and block times, supply, staking ratio and the coin split' },
-  { id: 'defi', page: true, group: 'data', th: 'DeFi', en: 'DeFi', titleTh: 'DeFi บน ZETAPHY', titleEn: 'DeFi on ZETAPHY', fresh: true,
-    tipTh: 'พูลทั้งหมดบน DEX พร้อมสภาพคล่องและราคา, DLMM และงาน Neuro', tipEn: 'Every DEX pool with liquidity and price, DLMM and Neuro jobs' },
-  { id: 'leaderboard', page: true, group: 'data', th: 'อันดับ', en: 'Leaderboard', titleTh: 'อันดับผู้ถือและ Validator', titleEn: 'Top holders and validators', fresh: true,
-    tipTh: 'บัญชีที่ถือ ZETAPHY มากที่สุด และ validator เรียงตาม stake', tipEn: 'The accounts holding the most ZETAPHY, and validators by stake' },
-  { id: 'dev', page: true, group: 'build', th: 'นักพัฒนา', en: 'Developers', titleTh: 'API และสัญญา', titleEn: 'API and contracts', fresh: true,
-    tipTh: 'endpoint, ตัวอย่างคำสั่ง curl, ไฟล์ตั้งค่าเชน และที่อยู่สัญญาทั้งหมด', tipEn: 'Endpoints, curl examples, chain registry files and every contract address' },
+  { id: 'home' },
+  { id: 'wallet', src: 'wallet/' },
+  { id: 'swap', src: 'swap/' },
+  { id: 'stake', fresh: true },
+  { id: 'earn', page: true, fresh: true },
+  { id: 'saphan', page: true, fresh: true },
+  { id: 'nft', src: 'nft/' },
+  { id: 'explorer', src: 'explorer/', group: 'data' },
+  { id: 'neuro', src: 'neuro/web/' },
+  { id: 'analytics', page: true, group: 'data', fresh: true },
+  { id: 'defi', page: true, group: 'data', fresh: true },
+  { id: 'leaderboard', page: true, group: 'data', fresh: true },
+  { id: 'dev', page: true, group: 'build', fresh: true },
 ];
 const APP_HOSTS = { 'wallet.sawasdeecoin.com': 'wallet', 'swap.sawasdeecoin.com': 'swap', 'nft.sawasdeecoin.com': 'nft', 'explorer.sawasdeecoin.com': 'explorer', 'neuro.sawasdeecoin.com': 'neuro' };
-// Each app's own language setting, so a language change here reaches them.
+// Each app's own language setting, so a language change here reaches them (every app takes all the codes in LANGS).
 const APP_LANG = [['zetaphy-wallet:lang', (l) => l], ['zetaphy-dex:lang', (l) => l], ['zn.lang', (l) => JSON.stringify(l)], ['zetaphy-explorer:lang', (l) => l], ['neuro-lang', (l) => l]];
 const APP_THEME = [['zetaphy-dex:theme', 'dark'], ['zn.theme', '"dark"'], ['zetaphy-explorer:theme', 'dark']];
 
-let lang = store.get('zetaphy-hub:lang') === 'en' ? 'en' : 'th';
-const T = (k) => TEXT[lang][k] ?? TEXT.en[k] ?? k;
+let lang = pickLang(store.get('zetaphy-hub:lang'));
+const T = (k) => TEXT[lang]?.[k] ?? TEXT.en[k] ?? k;
+/** A tab's label / title / hover text in the current language (English if missing). */
+const tabText = (t, i) => TAB_TEXT[lang]?.[t.id]?.[i] ?? TAB_TEXT.en[t.id][i];
+const LABEL = 0, TITLE = 1, TIP = 2;
 let NODE = DEFAULT_NODE;
 let HUB = { contracts: {}, dex: {}, nft: {} }; // hub-config.json (written by build.mjs from the launch state)
 const ep = () => ({ evm: NODE, ws: `${NODE.replace(/^https:/, 'wss:')}/ws`, comet: `${NODE}/rpc`, rest: `${NODE}/rest`, files: `${NODE}/zetaphy` });
@@ -244,11 +141,11 @@ function buildTabs() {
   nav.replaceChildren(...order.flatMap((t) => {
     const head = t.group && t.group !== last ? el('span', { class: 'group', text: GROUP[t.group] }) : null;
     last = t.group;
-    return [head, el('a', { class: 'tab', href: `?tab=${t.id}`, 'data-tab': t.id, 'data-tip': t[lang === 'th' ? 'tipTh' : 'tipEn'] },
-      svg(t.id), el('span', { text: t[lang] }), t.fresh ? el('span', { class: 'new', text: 'new' }) : null)];
+    return [head, el('a', { class: 'tab', href: `?tab=${t.id}`, 'data-tab': t.id, 'data-tip': tabText(t, TIP) },
+      svg(t.id), el('span', { text: tabText(t, LABEL) }), t.fresh ? el('span', { class: 'new', text: 'new' }) : null)];
   }).filter(Boolean));
   const quick = $('quick');
-  quick.replaceChildren(...TABS.filter((t) => t.id !== 'home' && !t.group).map((t) => el('a', { class: 'chip', href: `?tab=${t.id}`, 'data-tab': t.id, 'data-tip': t[lang === 'th' ? 'tipTh' : 'tipEn'] }, svg(t.id), el('span', { text: t[lang] }))));
+  quick.replaceChildren(...TABS.filter((t) => t.id !== 'home' && !t.group).map((t) => el('a', { class: 'chip', href: `?tab=${t.id}`, 'data-tab': t.id, 'data-tip': tabText(t, TIP) }, svg(t.id), el('span', { text: tabText(t, LABEL) }))));
 }
 
 function show(id, { hash, push = true } = {}) {
@@ -256,9 +153,9 @@ function show(id, { hash, push = true } = {}) {
   current = tab.id;
   $('tip').hidden = true;
   document.querySelectorAll('.tab').forEach((a) => { if (a.dataset.tab === tab.id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-  $('page-title').textContent = tab[lang === 'th' ? 'titleTh' : 'titleEn'];
-  $('page-info').dataset.tip = tab[lang === 'th' ? 'tipTh' : 'tipEn'];
-  document.title = `${tab[lang]} · ZETAPHY`;
+  $('page-title').textContent = tabText(tab, TITLE);
+  $('page-info').dataset.tip = tabText(tab, TIP);
+  document.title = `${tabText(tab, LABEL)} · ZETAPHY`;
   $('panel-home').hidden = tab.id !== 'home';
   $('panel-stake').hidden = tab.id !== 'stake';
   for (const p of document.querySelectorAll('.panel[data-page]')) p.hidden = p.dataset.page !== tab.id;
@@ -267,7 +164,7 @@ function show(id, { hash, push = true } = {}) {
   if (tab.src) {
     let f = frames.get(tab.id);
     if (!f) {
-      f = el('iframe', { title: tab.en, src: tab.src + (hash ?? ''), allow: 'clipboard-write' });
+      f = el('iframe', { title: TAB_TEXT.en[tab.id][LABEL], src: tab.src + (hash ?? ''), allow: 'clipboard-write' });
       f.style.visibility = 'hidden'; // shown once the hub look is in (no flash of the app's own colours)
       f.addEventListener('load', () => embed(f, tab.id));
       $('frames').append(f);
@@ -359,7 +256,7 @@ function embed(frame, app) {
 function applyLang() {
   document.documentElement.lang = lang;
   for (const n of document.querySelectorAll('[data-i18n]')) n.textContent = T(n.dataset.i18n);
-  $('lang').textContent = lang === 'th' ? 'EN' : 'ไทย';
+  $('lang').value = lang;
   buildTabs();
   renderEndpoints();
   show(current ?? 'home', { push: false });
@@ -552,7 +449,7 @@ async function loadProposals() {
         el('div', { class: 'p-top' }, el('span', { class: 'dim mono', text: `#${p.id}` }),
           el('span', { class: 'p-title', text: p.title || p.messages?.[0]?.['@type']?.split('.').pop() || '—', 'data-tip': p.summary || p.title || '' }),
           el('span', { class: `pill ${voting ? 'voting' : status}`, text: status.replace('_', ' ') })),
-        voting ? el('div', { class: 'dim small', text: `${T('ends')} ${new Date(p.voting_end_time).toLocaleString(lang === 'th' ? 'th-TH' : 'en-GB')}` }) : null,
+        voting ? el('div', { class: 'dim small', text: `${T('ends')} ${new Date(p.voting_end_time).toLocaleString(locale(lang))}` }) : null,
         voting ? el('div', { class: 'votes' },
           el('button', { type: 'button', class: 'btn sm', text: T('yes'), onclick: vote(1) }),
           el('button', { type: 'button', class: 'btn ghost sm', text: T('no'), onclick: vote(3) }),
@@ -595,6 +492,8 @@ function stakeDialog(v, kind) {
 
 // ------------------------------------------------------------------ start
 async function start() {
+  $('lang').replaceChildren(...LANGS.map(([code, name]) => el('option', { value: code, lang: code, text: name })));
+  $('lang').value = lang;
   try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {} }; } catch { /* default */ }
   syncApps();
   bindTips(document, $('tip'));
@@ -605,8 +504,8 @@ async function start() {
     show(a.dataset.tab);
   });
   window.addEventListener('popstate', () => show(new URL(location.href).searchParams.get('tab') ?? 'home', { push: false }));
-  $('lang').addEventListener('click', () => {
-    lang = lang === 'th' ? 'en' : 'th';
+  $('lang').addEventListener('change', (e) => {
+    lang = pickLang(e.target.value);
     store.set('zetaphy-hub:lang', lang);
     syncApps();
     for (const f of frames.values()) { f.remove(); }

@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
-<title>Neuro ZETAPHY: ชี้แจงและขอแก้ไข</title>
+<title>Neuro ZETAPHY: respond or request a correction</title>
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./style.css">
 </head>
@@ -14,12 +14,27 @@
   <header>
     <div>
       <h1><img class="logo" src="./logo.svg" alt="" width="34" height="34"> Neuro ZETAPHY</h1>
-      <p class="sub">ชี้แจงหรือขอแก้ไขผลตรวจ · Respond or request a correction</p>
+      <p class="sub">Respond or request a correction · <span lang="th">ชี้แจงหรือขอแก้ไขผลตรวจ</span></p>
       <p class="sub site-links"><a href="https://explorer.sawasdeecoin.com/" target="_blank" rel="noopener noreferrer">ZETAPHY Explorer ↗</a></p>
     </div>
   </header>
 
   <!-- Short version of docs/LEGAL.md. Keep the two in step. -->
+  <section lang="en">
+    <h2>What Neuro states, and what it does not</h2>
+    <p>Neuro reads public blockchain code and data with fixed rules and states what the code <strong>can do</strong>, for example that the owner can mint new tokens, or that a simulated buy worked but the sell did not. Anyone can reproduce a result with the command shown in the report.</p>
+    <p>Neuro does <strong>not</strong> state intent, does not accuse any person or project of wrongdoing, and is not investment advice. Token names and symbols are shown as written in the contract.</p>
+
+    <h2>How a contract owner responds or asks for a correction</h2>
+    <ol>
+      <li>Have ready: the chain, the contract address, the Report ID or Verdict ID, what you believe is wrong, and evidence (for example verified source code, or the transaction that renounced a power).</li>
+      <li>Send it to <strong>[project owner's contact email]</strong>, or open an issue in the project's code repository.</li>
+      <li>An on-chain response and appeal in the ThreatRegistry is <strong>coming</strong> (not available yet).</li>
+    </ol>
+    <p>Our target: acknowledge within 3 business days and re-check within 14 days. If a rule is wrong, we fix the rule and tell you. If the code changed (for example, ownership was renounced), a new report shows it as soon as anyone checks again.</p>
+    <p>Full policy: <code>docs/LEGAL.md</code> in the project repository. This page is not legal advice.</p>
+  </section>
+
   <section lang="th">
     <h2>Neuro บอกอะไร และไม่บอกอะไร</h2>
     <p>Neuro อ่านโค้ดและข้อมูลสาธารณะบนบล็อกเชนด้วยกฎตายตัว แล้วบอกว่าโค้ด<strong>ทำอะไรได้</strong> เช่น เจ้าของสร้างเหรียญเพิ่มได้ หรือการจำลองซื้อขายซื้อได้แต่ขายไม่ได้ ผลนี้ตรวจซ้ำได้ด้วยคำสั่งที่แสดงในรายงาน</p>
@@ -34,19 +49,32 @@
     <p>เป้าหมายของเรา: ตอบรับภายใน 3 วันทำการ และตรวจซ้ำภายใน 14 วัน ถ้ากฎผิด เราแก้กฎและแจ้งผล ถ้าโค้ดเปลี่ยน (เช่น สละสิทธิ์เจ้าของ) รายงานใหม่จะสะท้อนทันทีเมื่อมีคนตรวจซ้ำ</p>
   </section>
 
-  <section lang="en">
-    <h2>What Neuro states, and what it does not</h2>
-    <p>Neuro reads public blockchain code and data with fixed rules and states what the code <strong>can do</strong>, for example that the owner can mint new tokens, or that a simulated buy worked but the sell did not. Anyone can reproduce a result with the command shown in the report.</p>
-    <p>Neuro does <strong>not</strong> state intent, does not accuse any person or project of wrongdoing, and is not investment advice. Token names and symbols are shown as written in the contract.</p>
+  <section lang="es">
+    <h2>Qué dice Neuro y qué no dice</h2>
+    <p>Neuro lee código y datos públicos de la blockchain con reglas fijas y dice lo que el código <strong>puede hacer</strong>, por ejemplo que el owner puede crear (mint) tokens nuevos, o que una compra simulada funcionó pero la venta no. Cualquiera puede reproducir un resultado con el comando que aparece en el informe.</p>
+    <p>Neuro <strong>no</strong> afirma intenciones, no acusa a ninguna persona ni proyecto de actuar mal y no es asesoramiento de inversión. Los nombres y símbolos de los tokens se muestran tal como están escritos en el contrato.</p>
 
-    <h2>How a contract owner responds or asks for a correction</h2>
+    <h2>Cómo puede responder o pedir una corrección el dueño de un contrato</h2>
     <ol>
-      <li>Have ready: the chain, the contract address, the Report ID or Verdict ID, what you believe is wrong, and evidence (for example verified source code, or the transaction that renounced a power).</li>
-      <li>Send it to <strong>[project owner's contact email]</strong>, or open an issue in the project's code repository.</li>
-      <li>An on-chain response and appeal in the ThreatRegistry is <strong>coming</strong> (not available yet).</li>
+      <li>Ten a mano: la red, la dirección del contrato, el ID de informe (Report ID) o el ID de veredicto (Verdict ID), lo que crees que está mal y las pruebas (por ejemplo, código fuente verificado o la transacción que renunció a un poder).</li>
+      <li>Envíalo a <strong>[correo de contacto del dueño del proyecto]</strong>, o abre un issue en el repositorio de código del proyecto.</li>
+      <li>La respuesta y apelación en la cadena dentro del ThreatRegistry <strong>llegará pronto</strong> (aún no está disponible).</li>
     </ol>
-    <p>Our target: acknowledge within 3 business days and re-check within 14 days. If a rule is wrong, we fix the rule and tell you. If the code changed (for example, ownership was renounced), a new report shows it as soon as anyone checks again.</p>
-    <p>Full policy: <code>docs/LEGAL.md</code> in the project repository. This page is not legal advice.</p>
+    <p>Nuestro objetivo: confirmar la recepción en 3 días hábiles y volver a revisar en 14 días. Si una regla está mal, la corregimos y te lo decimos. Si el código cambió (por ejemplo, se renunció a la propiedad), un informe nuevo lo muestra en cuanto alguien vuelve a revisar.</p>
+  </section>
+
+  <section lang="ru">
+    <h2>Что Neuro утверждает, а что нет</h2>
+    <p>Neuro читает публичный код и данные блокчейна по фиксированным правилам и сообщает, что код <strong>может делать</strong>, например что владелец может выпускать (минтить) новые токены или что симулированная покупка прошла, а продажа — нет. Любой может воспроизвести результат командой, указанной в отчёте.</p>
+    <p>Neuro <strong>не</strong> делает выводов о намерениях, не обвиняет никаких людей или проекты в нарушениях и не является инвестиционной рекомендацией. Названия и символы токенов показаны так, как они записаны в контракте.</p>
+
+    <h2>Как владелец контракта может ответить или запросить исправление</h2>
+    <ol>
+      <li>Подготовьте: сеть, адрес контракта, ID отчёта (Report ID) или ID вердикта (Verdict ID), что, по-вашему, неверно, и доказательства (например, проверенный исходный код или транзакцию, которой было отозвано полномочие).</li>
+      <li>Отправьте это на <strong>[контактный email владельца проекта]</strong> или откройте issue в репозитории кода проекта.</li>
+      <li>Ответ и апелляция в блокчейне через ThreatRegistry <strong>появятся позже</strong> (пока недоступны).</li>
+    </ol>
+    <p>Наша цель: подтвердить получение в течение 3 рабочих дней и перепроверить в течение 14 дней. Если правило ошибочно, мы исправим его и сообщим вам. Если код изменился (например, владение отозвано), новый отчёт покажет это, как только кто-нибудь проверит снова.</p>
   </section>
 
   <footer>

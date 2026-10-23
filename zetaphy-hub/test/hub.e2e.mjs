@@ -54,7 +54,8 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     // hover text instead of paragraphs
     await page.hover('.stat >> nth=0');
     await page.waitForSelector('#tip:not([hidden])');
-    assert.match(await page.textContent('#tip'), /บล็อก/);
+    assert.equal(await page.getAttribute('html', 'lang'), 'en', 'English by default');
+    assert.match(await page.textContent('#tip'), /newest block/);
 
     // faucet
     await page.fill('#faucet-addr', '0x6af57fC3633dD0F7907f7900dbd4A2822F43a245');
@@ -147,15 +148,54 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await wf.click('#x');
     await page.waitForFunction(() => new URL(location.href).searchParams.get('tab') === 'explorer');
 
-    // English everywhere, on demand
-    await page.click('#lang');
-    await page.waitForFunction(() => document.getElementById('page-title').textContent.length > 0 && document.documentElement.lang === 'en');
-    assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-dex:lang')), 'en', 'the apps follow the hub language');
+    // the language menu: the 8 languages in order; a choice reaches every app's own setting
+    assert.deepEqual(await page.$$eval('#lang option', (os) => os.map((o) => [o.value, o.textContent])),
+      [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['ko', '한국어'], ['ja', '日本語'], ['ru', 'Русский'], ['vi', 'Tiếng Việt'], ['th', 'ไทย']]);
+    assert.equal(await page.inputValue('#lang'), 'en');
+    const appLang = () => page.evaluate(() => Object.fromEntries(['zetaphy-wallet:lang', 'zetaphy-dex:lang', 'zn.lang', 'zetaphy-explorer:lang', 'neuro-lang'].map((k) => [k, localStorage.getItem(k)])));
+    const everyApp = (l) => ({ 'zetaphy-wallet:lang': l, 'zetaphy-dex:lang': l, 'zn.lang': JSON.stringify(l), 'zetaphy-explorer:lang': l, 'neuro-lang': l });
+    assert.deepEqual(await appLang(), everyApp('en'));
+    await page.click('.tab[data-tab="stake"]');
+    for (const [l, title] of [['zh', '质押与投票'], ['es', 'Stake y votación'], ['ko', '스테이킹 및 투표'], ['ja', 'ステークと投票'], ['vi', 'Stake và bỏ phiếu'], ['ru', 'Стейкинг и голосование']]) {
+      await page.selectOption('#lang', l);
+      await page.waitForFunction((x) => document.documentElement.lang === x, l);
+      assert.equal(await page.textContent('#page-title'), title, `${l}: page title`);
+      assert.deepEqual(await appLang(), everyApp(l), `${l}: written to every app`);
+      assert.doesNotMatch(await page.textContent('.shell'), /\b(tip|col|an|df|lb|dev)[A-Z][A-Za-z]+\b|\b(app|appSub|tipApp)_[a-z]+\b/, `${l}: no raw keys`);
+    }
+    await page.waitForFunction(() => /Голосование до/.test(document.getElementById('props').textContent));
+    assert.match(await page.textContent('#props'), /Голосование до .*\d{4}/, 'dates and words in the chosen language');
+
+    // Thai everywhere, on demand
+    await page.selectOption('#lang', 'th');
+    await page.waitForFunction(() => document.getElementById('page-title').textContent.length > 0 && document.documentElement.lang === 'th');
+    assert.deepEqual(await appLang(), everyApp('th'), 'the apps follow the hub language');
+    assert.equal(await page.evaluate(() => localStorage.getItem('zn.lang')), '"th"');
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.lang === 'th');
+    assert.equal(await page.inputValue('#lang'), 'th', 'the menu shows the remembered language');
+    await page.click('.tab[data-tab="home"]');
+    await page.hover('.stat >> nth=0');
+    await page.waitForSelector('#tip:not([hidden])');
+    assert.match(await page.textContent('#tip'), /บล็อก/, 'Thai remembered');
+    await page.click('.tab[data-tab="earn"]');
+    assert.match(await page.textContent('.page-earn'), /ทำไมไม่มีการขุด PoW\?/);
+
+    // an unknown stored language is English
+    await page.evaluate(() => localStorage.setItem('zetaphy-hub:lang', 'fr'));
+    await page.reload();
+    await page.waitForFunction(() => document.getElementById('page-title').textContent === 'How to earn ZETAPHY');
+    assert.equal(await page.getAttribute('html', 'lang'), 'en');
+    assert.equal(await page.inputValue('#lang'), 'en');
 
     // narrow screen: bottom bar, still no page scroll
     await page.setViewportSize({ width: 390, height: 780 });
     await page.click('.tab[data-tab="home"]');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.side')).flexDirection), 'row');
+    await page.selectOption('#lang', 'vi');
+    await page.waitForFunction(() => document.documentElement.lang === 'vi');
+    const fitsTop = await page.evaluate(() => { const r = document.getElementById('lang').getBoundingClientRect(); return r.right <= innerWidth && r.width > 40 && document.documentElement.scrollWidth <= innerWidth; });
+    assert.ok(fitsTop, 'the language menu fits at phone width, no sideways scroll');
     await shot('mobile');
     assert.deepEqual(errors, [], 'no page errors');
   } finally {

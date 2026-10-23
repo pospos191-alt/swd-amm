@@ -21,7 +21,7 @@ import { checkUrl, endpoints, isPlaceholder, sanitizeConfig, neuroLink, DEFAULTS
 import { Limiter, LruCache, createApi, TTL } from '../src/rpc.js';
 import { checkThreats } from '../src/threat.js';
 import { chainApi } from '../src/chain.js';
-import { T, makeT } from '../src/i18n.js';
+import { T, makeT, LANGS, pickLang } from '../src/i18n.js';
 
 const ROOT = new URL('..', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
@@ -74,6 +74,8 @@ test('percent, short, ago, utcTime, hexPreview', () => {
   assert.equal(ago('2026-10-21T00:09:55Z', now), '5 s ago');
   assert.equal(ago('2026-10-21T00:00:00Z', now, 'th'), '10 นาที ที่แล้ว');
   assert.equal(ago('2026-10-19T00:00:00Z', now), '2 d ago');
+  assert.match(ago('2026-10-21T00:00:00Z', now, 'zh'), /10/); // Intl with the UI code as the locale
+  assert.notEqual(ago('2026-10-21T00:00:00Z', now, 'ja'), '10 min ago');
   assert.equal(utcTime('2026-10-21T08:15:02.123456789Z'), '2026-10-21 08:15:02 UTC');
   assert.equal(utcTime(0), '1970-01-01 00:00:00 UTC');
   assert.equal(hexPreview(new Uint8Array(70), 2), '0x0000… (70 bytes)');
@@ -462,8 +464,27 @@ test('recentTxs: aligned chunks via tx_search, certificates counted apart, cache
 
 // ---------------- i18n and static checks ----------------
 
-test('i18n: Thai and English have the same keys, and every key the app uses exists', () => {
-  assert.deepEqual(Object.keys(T.th).sort(), Object.keys(T.en).sort());
+test('i18n: the 8 languages, each with exactly the English keys and placeholders', () => {
+  assert.deepEqual(LANGS.map(([c]) => c), ['en', 'zh', 'es', 'ko', 'ja', 'ru', 'vi', 'th']);
+  assert.deepEqual(Object.keys(T).sort(), LANGS.map(([c]) => c).sort());
+  const enKeys = Object.keys(T.en).sort();
+  const vars = (x) => (x.match(/\{\w+\}/g) ?? []).sort().join();
+  for (const [code] of LANGS) {
+    assert.deepEqual(Object.keys(T[code]).sort(), enKeys, code);
+    for (const k of enKeys) {
+      assert.ok(typeof T[code][k] === 'string' && T[code][k].trim(), `${code}.${k} empty`);
+      assert.equal(vars(T[code][k]), vars(T.en[k]), `${code}.${k} placeholders`);
+    }
+  }
+  for (const [code] of LANGS) assert.equal(pickLang(code), code);
+  for (const x of [null, undefined, '', 'xx', 'EN', 'zh-CN', '__proto__']) assert.equal(pickLang(x), 'en');
+  // missing keys fall back to English
+  const saved = T.zh.pqRule; delete T.zh.pqRule;
+  try { assert.equal(makeT('zh')('pqRule'), 'Rule'); } finally { T.zh.pqRule = saved; }
+  assert.equal(makeT('xx')('save'), 'Save');
+});
+
+test('i18n: every key the app uses exists', () => {
   const src = read('src/app.js') + read('index.html');
   const used = new Set([...src.matchAll(/\bt\('([A-Za-z_]+)'/g), ...src.matchAll(/data-i18n(?:-placeholder|-title)?="([A-Za-z_]+)"/g)].map((m) => m[1]));
   for (const w of ['address', 'code', 'fingerprint']) used.add(`what_${w}`);

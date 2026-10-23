@@ -67,7 +67,16 @@ button, input { font: inherit; color: inherit; }
 .title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .title h1 { margin: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid rgba(240, 185, 11, .35); color: var(--warn); background: rgba(240, 185, 11, .08); cursor: help; white-space: nowrap; }
-.top-actions { display: flex; gap: 8px; }
+.top-actions { display: flex; gap: 8px; align-items: center; flex: none; }
+/* the language menu: a compact select dressed like the ghost buttons next to it */
+.lang-select {
+  appearance: none; -webkit-appearance: none; flex: none; max-width: 132px; padding: 8px 28px 8px 12px; border-radius: 10px;
+  border: 1px solid var(--line-2); color: var(--text); font-weight: 500; cursor: pointer; text-overflow: ellipsis;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b93a3' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+}
+.lang-select:hover { background-color: rgba(255, 255, 255, .05); }
+.lang-select:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124, 108, 255, .18); }
+.lang-select option { background: var(--card); color: var(--text); }
 
 .stage { grid-area: stage; position: relative; min-height: 0; overflow: hidden; }
 .panel { position: absolute; inset: 0; padding: 18px 20px; overflow: auto; }
@@ -186,6 +195,7 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
   .top { padding: 0 12px; }
   #add-net span { display: none; }
   #add-net::before { content: "+"; font-weight: 700; }
+  .lang-select { max-width: 116px; padding: 7px 24px 7px 10px; background-position: right 8px center; font-size: 13px; }
   .panel { padding: 12px; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-grid, .stake-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; height: auto; }

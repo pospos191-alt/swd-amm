@@ -2,8 +2,8 @@
 #
 # "Out of host capacity" = Oracle has no free machine left right now, nothing is broken.
 #   Just press Apply again later (or pick another availability domain / the Micro size).
-# "Out of host capacity" = ตอนนี้ Oracle ไม่มีเครื่องฟรีว่าง ไม่ได้เสียอะไร
-#   แค่กด Apply ใหม่อีกครั้งภายหลัง (หรือเลือก availability domain อื่น / ขนาด Micro)
+# "Out of host capacity" = Oracle has no free machine right now; nothing is broken.
+#   Click Apply again later (or pick another availability domain / the Micro size).
 
 locals {
   compartment_id = var.compartment_ocid != "" ? var.compartment_ocid : var.tenancy_ocid
@@ -81,6 +81,19 @@ resource "oci_core_security_list" "zetaphy" {
     tcp_options {
       min = 22
       max = 22
+    }
+  }
+
+  # A validator: P2P (26656) and its public HTTPS RPC (80 for the certificate, 443).
+  dynamic "ingress_security_rules" {
+    for_each = contains(local.roles, "validator") ? [26656, 80, 443] : []
+    content {
+      source   = "0.0.0.0/0"
+      protocol = "6"
+      tcp_options {
+        min = ingress_security_rules.value
+        max = ingress_security_rules.value
+      }
     }
   }
 }

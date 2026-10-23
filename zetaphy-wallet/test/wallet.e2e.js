@@ -24,7 +24,7 @@ import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1b
 import { BinaryReader } from 'cosmjs-types/binary';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 // The fake snap builds and signs with the same code the real one bundles.
-import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress, codeFingerprint, addressKey } from '../vendor/pqwallet.js';
+import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress, codeFingerprint, addressKey, REASON_TEXT, DISCLAIMER, REPRODUCE } from '../vendor/pqwallet.js';
 
 const PORT = 18090;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -265,7 +265,7 @@ async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
 async function importedPage(node, opts) {
   const p = await openPage(node, opts);
   const { page } = p;
-  await page.click('#lang');
+  await setLang(page, 'en');
   await page.click('#mode-import');
   await page.fill('#seed-in', SEED_HEX);
   await page.fill('#pass1', PASS);
@@ -310,28 +310,102 @@ function decodeMsgEVMCall(bytes) {
 }
 
 const visible = (page, sel) => page.waitForSelector(`${sel}:not([hidden])`, { timeout: 8000 }).catch(async (e) => { throw new Error(`${sel} not shown; status "${await page.textContent('#status')}"`); });
+/** Switches the page to `l` with the #lang menu (English is the default) and checks it took. */
+async function setLang(page, l) {
+  if (await page.getAttribute('html', 'lang') !== l) await page.selectOption('#lang', l);
+  assert.equal(await page.getAttribute('html', 'lang'), l);
+}
 
-test('page loads in Thai with warnings and its CSP, then switches to English', async () => {
+// The languages of every ZETAPHY app, in menu order, with their native names.
+const LANGS = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['ko', '한국어'], ['ja', '日本語'], ['ru', 'Русский'], ['vi', 'Tiếng Việt'], ['th', 'ไทย']];
+
+/** app.js's T dictionary, evaluated in Node from the source (with the real vaccine texts). */
+function appDictionary() {
+  const src = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const start = src.indexOf('const T = {');
+  const end = src.indexOf('\n};\n', start);
+  assert.ok(start >= 0 && end > start, 'T found in app.js');
+  return new Function('REASON_TEXT', 'DISCLAIMER', 'REPRODUCE', `return ${src.slice(start + 'const T = '.length, end + 2)};`)(REASON_TEXT, DISCLAIMER, REPRODUCE);
+}
+
+test('page loads in English with warnings and its CSP, then switches to Thai', async () => {
   const { page, context, errors, outside, res } = await openPage();
   assert.match(res.headers()['content-security-policy'], /script-src 'self'.*connect-src \*.*frame-ancestors 'none'/);
   assert.equal(res.headers()['x-content-type-options'], 'nosniff');
   await visible(page, '#setup');
-  assert.equal(await page.getAttribute('html', 'lang'), 'th');
-  assert.match(await page.textContent('#warning'), /testnet/);
-  assert.match(await page.textContent('#warning'), /หาย/);
-  assert.equal(await page.inputValue('#rpc'), '', 'no default RPC');
-  await page.click('#lang');
   assert.equal(await page.getAttribute('html', 'lang'), 'en');
+  assert.match(await page.textContent('#warning'), /testnet/);
   assert.match(await page.textContent('#warning'), /not real money/);
+  assert.equal(await page.inputValue('#lang'), 'en');
+  assert.deepEqual(await page.$$eval('#lang option', (os) => os.map((o) => [o.value, o.textContent])), LANGS, 'the 8 languages, in order, by native name');
+  assert.equal(await page.inputValue('#rpc'), '', 'no default RPC');
+  await page.selectOption('#lang', 'th');
+  assert.equal(await page.getAttribute('html', 'lang'), 'th');
+  assert.match(await page.textContent('#warning'), /หาย/);
+  assert.equal(await page.inputValue('#lang'), 'th');
   await page.reload();
-  assert.equal(await page.getAttribute('html', 'lang'), 'en', 'language remembered');
+  assert.equal(await page.getAttribute('html', 'lang'), 'th', 'language remembered');
+  assert.match(await page.textContent('#warning'), /หาย/);
   assert.deepEqual(outside, [], 'no requests to other sites');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('every language has exactly the English keys, with the same placeholders and no empty text', () => {
+  const T = appDictionary();
+  assert.deepEqual(Object.keys(T).sort(), LANGS.map(([c]) => c).sort());
+  const keys = Object.keys(T.en).sort();
+  const vars = (s) => (String(s).match(/\{\w+\}/g) ?? []).sort().join();
+  for (const [code] of LANGS) {
+    assert.deepEqual(Object.keys(T[code]).sort(), keys, `${code}: same key set as en`);
+    for (const k of keys) {
+      assert.equal(typeof T[code][k], 'string', `${code}.${k} is text`);
+      assert.ok(T[code][k].trim(), `${code}.${k} not empty`);
+      assert.equal(vars(T[code][k]), vars(T.en[k]), `${code}.${k} keeps the placeholders of en`);
+    }
+  }
+});
+
+test('each of the 8 languages renders the main screen translated, and a stored code is honoured (else English)', async () => {
+  const T = appDictionary();
+  const { page, context, errors } = await openPage();
+  await visible(page, '#setup');
+  const keys = await page.$$eval('[data-i18n]', (els) => els.map((el) => el.dataset.i18n));
+  // Text that is the same as English on purpose (brand names and loanwords the community uses as is).
+  const SAME = { th: ['stakeTitle', 'stake', 'wcConnect', 'mRpc', 'mChainId', 'mExplorer'], zh: ['wcConnect', 'mRpc'], es: ['cTotal', 'cToken', 'bytesN', 'wcConnect'],
+    ko: ['wcConnect', 'mRpc'], ja: ['wcConnect', 'mRpc'], ru: ['wcConnect', 'mRpc'],
+    vi: ['cToken', 'stakeTitle', 'validatorLabel', 'stake', 'unstake', 'cValidator', 'wcConnect', 'mChainId'] };
+  const sample = ['subtitle', 'warnTitle', 'setupTitle', 'saveKey', 'sendTitle', 'balance'];
+  for (const [code] of LANGS) {
+    await setLang(page, code);
+    assert.equal(await page.inputValue('#lang'), code);
+    const shown = await page.$$eval('[data-i18n]', (els) => els.map((el) => [el.dataset.i18n, el.textContent]));
+    for (const [k, text] of shown) {
+      assert.notEqual(text, k, `${code}: raw key ${k} shown`);
+      assert.equal(text, T[code][k], `${code}: ${k} shows its translation`);
+      if (code !== 'en' && !SAME[code].includes(k)) assert.notEqual(text, T.en[k], `${code}: ${k} is not the English text`);
+    }
+    for (const k of sample) {
+      assert.ok(keys.includes(k), `${k} is on the main screen`);
+      if (code !== 'en') assert.notEqual(await page.textContent(`[data-i18n="${k}"]`), T.en[k], `${code}: ${k} is not the English fallback`);
+    }
+  }
+  // The stored code (the hub writes it too) is honoured on load; anything else means English.
+  for (const [stored, want] of [['ko', 'ko'], ['vi', 'vi'], ['de', 'en'], ['TH', 'en'], ['', 'en']]) {
+    await page.evaluate((v) => localStorage.setItem('zetaphy-wallet:lang', v), stored);
+    await page.reload();
+    await visible(page, '#setup');
+    assert.equal(await page.getAttribute('html', 'lang'), want, `stored ${JSON.stringify(stored)}`);
+    assert.equal(await page.inputValue('#lang'), want);
+    assert.equal(await page.textContent('[data-i18n="setupTitle"]'), T[want].setupTitle);
+  }
   assert.deepEqual(errors, []);
   await context.close();
 });
 
 test('create a key, back it up, then lock and unlock (wrong passphrase refused)', async () => {
   const { page, context, errors } = await openPage();
+  await setLang(page, 'th');
   await page.fill('#pass1', PASS);
   await page.fill('#pass2', 'something else');
   await page.click('#save-key');
@@ -384,7 +458,7 @@ test('create a key, back it up, then lock and unlock (wrong passphrase refused)'
 test('import a seed, see "fund it first", then send a signed tx the node receives', async () => {
   const node = { exists: false };
   const { page, context, errors, outside, sent } = await openPage(node);
-  await page.click('#lang'); // English for this one
+  await setLang(page, 'en');
   await page.click('#mode-import');
   await page.fill('#seed-in', '0x' + SEED_HEX);
   await page.fill('#pass1', PASS);
@@ -628,7 +702,7 @@ test('staking: stake, unstake and claim rewards as signed Cosmos messages', asyn
   assert.deepEqual(MsgWithdrawDelegatorReward.decode(msg.value), { delegatorAddress: SEED_BECH32, validatorAddress: VALOPER });
 
   // Thai labels follow the language switch.
-  await page.click('#lang');
+  await setLang(page, 'th');
   assert.equal(await page.textContent('#claim'), 'รับรางวัล');
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
@@ -716,7 +790,7 @@ test('quantum lock: lock a MetaMask account to this wallet (window.ethereum), on
   await statusMatches(page, new RegExp(`already locked to ${ELSEWHERE}`));
 
   // Thai strings follow the language switch.
-  await page.click('#lang');
+  await setLang(page, 'th');
   assert.equal(await page.textContent('#mm-card h2'), 'ล็อกบัญชี MetaMask ให้กระเป๋านี้');
   assert.equal(sent.length, 0, 'no Cosmos tx from this wallet');
   assert.deepEqual(outside, []);
@@ -828,7 +902,7 @@ test('act for a locked account: send, token send and stake go out as MsgEVMCall 
   await page.waitForFunction(() => /locked to this wallet/.test(document.getElementById('owned-list').textContent));
   await page.click('#owned-list button');
   await visible(page, '#acting');
-  await page.click('#lang');
+  await setLang(page, 'th');
   assert.match(await page.textContent('#acting'), /กำลังทำรายการในนามของ/);
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
@@ -881,7 +955,7 @@ const snapCalls = (page) => page.evaluate(() => window.__eth.filter((c) => c.met
 async function snapPage(node, snap) {
   const p = await openPage(node, { ethereum: { snaps: true }, snap });
   const { page } = p;
-  await page.click('#lang');
+  await setLang(page, 'en');
   await visible(page, '#snap-card');
   await page.click('#snap-connect');
   await visible(page, '#wallet');
@@ -894,19 +968,19 @@ async function snapPage(node, snap) {
 test('snap: connect with wallet_requestSnaps; the address comes from the snap\'s public key; no seed in this page', async () => {
   // Without MetaMask, and with a MetaMask that has no snaps.
   const bare = await openPage({});
-  await bare.page.click('#lang');
+  await setLang(bare.page, 'en');
   await bare.page.click('#snap-connect');
   await statusMatches(bare.page, /MetaMask \(window\.ethereum\) was not found/);
   await bare.context.close();
   const old = await openPage({}, { ethereum: { snaps: false } });
-  await old.page.click('#lang');
+  await setLang(old.page, 'en');
   await old.page.click('#snap-connect');
   await statusMatches(old.page, /cannot run snaps/);
   await old.context.close();
 
   const snap = {};
   const { page, context, errors, outside } = await openPage({ exists: true }, { ethereum: { snaps: true }, snap });
-  await page.click('#lang');
+  await setLang(page, 'en');
   await visible(page, '#snap-card');
   assert.match(await page.textContent('#snap-card'), /MetaMask Flask/);
   assert.equal(await page.inputValue('#snap-id'), SNAP_ID, 'from <meta name="zetaphy-snap-id">');
@@ -1016,7 +1090,7 @@ test('snap: send, token send, stake and deploy are signed by the snap from the m
 
   // Only messages went to the snap, never bytes; Thai follows the page language.
   assert.ok(signRequests().every((r) => !JSON.stringify(r.params).match(/bodyBytes|authInfo|signDoc/)));
-  await page.click('#lang');
+  await setLang(page, 'th');
   await page.fill('#amount', '1');
   await page.click('#review');
   await visible(page, '#confirm');
@@ -1024,6 +1098,15 @@ test('snap: send, token send, stake and deploy are signed by the snap from the m
   await visible(page, '#tx-result');
   assert.equal(signRequests()[4].params.lang, 'th');
   assert.equal(sent.length, 5);
+  // The snap describes only English and Thai: other page languages ask it for English.
+  await setLang(page, 'ja');
+  await page.fill('#amount', '1');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  await page.click('#confirm-send');
+  await visible(page, '#tx-result');
+  assert.equal(signRequests()[5].params.lang, 'en');
+  assert.equal(sent.length, 6);
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
   await context.close();
@@ -1107,7 +1190,7 @@ test('wallet config files and the page build the same network settings', async (
 
 test('EIP-6963: two wallets announce themselves; the one picked is offered ZETAPHY (EIP-3085) and connected', async () => {
   const { page, context, errors, outside } = await openPage({}, { wallets: { eip6963: [RABBY, TRUST] } });
-  await page.click('#lang');
+  await setLang(page, 'en');
   await page.waitForFunction(() => document.querySelectorAll('#evm-wallets button').length === 2);
   assert.deepEqual(await walletNames(page), ['Fake Rabby', 'Fake Trust'], 'names as plain text, bidi override dropped');
   assert.deepEqual(await page.$$eval('#evm-wallets img', (i) => i.map((x) => x.getAttribute('src'))), [RABBY.icon], 'only the data:image icon is shown');
@@ -1172,7 +1255,7 @@ test('EIP-6963: two wallets announce themselves; the one picked is offered ZETAP
   await page.reload();
   await page.waitForFunction(() => document.querySelectorAll('#evm-wallets button').length === 2);
   assert.equal(await pickedName(page), 'Fake Trust');
-  await page.click('#lang');
+  await setLang(page, 'th');
   assert.equal(await page.textContent('#evm-add'), 'เพิ่ม ZETAPHY ในกระเป๋านี้');
   assert.equal(await page.textContent('#snap-card .using-text'), 'กระเป๋าที่ใช้: Fake Trust');
   assert.deepEqual(outside, [], 'the URL icon was never loaded');
@@ -1182,7 +1265,7 @@ test('EIP-6963: two wallets announce themselves; the one picked is offered ZETAP
 
 test('Binance Wallet (window.binancew3w.ethereum): add-chain works, and a 4200 refusal is explained with the manual values', async () => {
   const { page, context, errors, outside } = await openPage({}, { wallets: { binancew3w: true } });
-  await page.click('#lang');
+  await setLang(page, 'en');
   await page.fill('#rpc', RPC);
   await page.click('#rpc-save');
   assert.deepEqual(await walletNames(page), ['Binance Wallet']);
@@ -1201,7 +1284,7 @@ test('Binance Wallet (window.binancew3w.ethereum): add-chain works, and a 4200 r
   assert.equal(await page.$eval('#manual', (d) => d.open), true, 'the manual values are opened');
   assert.ok(await page.isVisible('#m-rpc'));
   assert.equal((await walletCalls(page, 'binancew3w')).filter((c) => c.method === 'wallet_switchEthereumChain').length, 1, 'no switch after the refusal');
-  await page.click('#lang');
+  await setLang(page, 'th');
   assert.match(await page.textContent('#status'), /Binance Wallet ไม่ได้เพิ่มเครือข่าย .*อาจยังไม่รับเครือข่ายใหม่/);
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
@@ -1210,7 +1293,7 @@ test('Binance Wallet (window.binancew3w.ethereum): add-chain works, and a 4200 r
 
 test('Phantom: listed, warned before anything is asked, and its refusal to add the network is explained', async () => {
   const { page, context, errors } = await openPage({}, { wallets: { eip6963: [PHANTOM], state: { phantom: { fail: { wallet_addEthereumChain: { code: 4200, message: 'Unsupported network' } } } } } });
-  await page.click('#lang');
+  await setLang(page, 'en');
   await page.fill('#rpc', RPC);
   await page.waitForFunction(() => document.querySelectorAll('#evm-wallets button').length === 1);
   assert.deepEqual(await walletNames(page), ['Phantom']);
@@ -1226,7 +1309,7 @@ test('Phantom: listed, warned before anything is asked, and its refusal to add t
 
 test('Keplr, Leap, Cosmostation: experimentalSuggestChain gets the chain info, then the zetaphy1 address is shown', async () => {
   const { page, context, errors, outside } = await openPage({}, { wallets: { keplrLike: ['keplr'], cosmostation: true } });
-  await page.click('#lang');
+  await setLang(page, 'en');
   await page.click('#keplr-add');
   await statusMatches(page, /Enter your node RPC URL first/);
   await page.fill('#rpc', RPC);
@@ -1269,7 +1352,7 @@ test('Keplr, Leap, Cosmostation: experimentalSuggestChain gets the chain info, t
 
 test('WalletConnect stays off without a Reown projectId', async () => {
   const { page, context, errors, outside } = await openPage();
-  await page.click('#lang');
+  await setLang(page, 'en');
   assert.equal(await page.getAttribute('meta[name="zetaphy-walletconnect-project-id"]', 'content'), '');
   assert.ok(await page.isDisabled('#wc-connect'));
   assert.match(await page.textContent('#wc-hint'), /is off: it needs a Reown projectId/);
@@ -1504,6 +1587,7 @@ test('vaccine: a fast-lane flag (enforced at once: fastQuorum or enforceNow, ins
 });
 
 async function setRegistryThai(page) {
+  await setLang(page, 'th');
   await page.locator('details:has(#threat-registry) > summary').click();
   await page.fill('#threat-registry', REGISTRY);
   await page.click('#threat-save');
@@ -1538,12 +1622,12 @@ test('vaccine: every refusal and warning shows the code fact, its evidence (repo
   await page.click('#token-review');
   await statusMatches(page, /Not signed: 0x3333.* is flagged .*reason: uses the same name.*Evidence: reportHash 0x(e7){32}.*Response from 0x(0a){20}: "pause\(\) is for emergencies only; audit.*Automated code analysis, not an accusation/);
   // In Thai, the same status re-rendered: neutral texts, the owner's words, the disclaimer.
-  await page.click('#lang');
+  await setLang(page, 'th');
   await statusMatches(page, /ไม่เซ็น: 0x3333.*เหตุผล: ใช้ชื่อหรือสัญลักษณ์เดียวกับเหรียญที่รู้จัก แต่อยู่คนละที่อยู่.*หลักฐาน: reportHash 0x(e7){32}.*ตรวจซ้ำ: รัน Neuro.*คำชี้แจงจาก 0x(0a){20}: "pause\(\) is for emergencies.*ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา/);
   for (const w of ['scam', 'drainer', 'phishing', 'honeypot', 'หลอกลวง', 'ดูดเงิน']) assert.ok(!(await page.textContent('#status')).toLowerCase().includes(w), w);
   // No evidence stored: still refused (never a send), and said so.
   node.evidence = undefined;
-  await page.click('#lang');
+  await setLang(page, 'en');
   await page.click('#token-review');
   await statusMatches(page, /Not signed: .*Evidence: none stored/);
   assert.equal(sent.length, 0);
@@ -1621,7 +1705,7 @@ test('Q-day card: status, the MetaMask account checked, commit then reveal with 
   assert.equal(tx.to, '0x0000000000000000000000000000000000000901');
   assert.equal(tx.data, '0x' + bytesToHex(consentCall(target, 3600).data));
 
-  await page.click('#lang');
+  await setLang(page, 'th');
   assert.equal(await page.textContent('#qday-card h2'), 'เตรียมพร้อมสำหรับ Q-day');
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);

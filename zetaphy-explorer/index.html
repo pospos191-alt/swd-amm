@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="th" data-theme="dark">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -21,18 +21,18 @@
       <span class="hdr-brand-sub">Explorer</span>
     </a>
     <nav class="nav" aria-label="main">
-      <a href="#/" data-i18n="navHome">หน้าแรก</a>
-      <a href="#/validators" data-i18n="navValidators">Validator</a>
-      <a href="#/settings" data-i18n="navSettings">ตั้งค่า</a>
+      <a href="#/" data-i18n="navHome">Home</a>
+      <a href="#/validators" data-i18n="navValidators">Validators</a>
+      <a href="#/settings" data-i18n="navSettings">Settings</a>
     </nav>
     <div class="hdr-actions">
-      <button type="button" id="lang-toggle" class="secondary icon-btn" data-i18n-title="langTitle">EN</button>
+      <select id="lang" class="lang-select" data-i18n-title="langTitle"><option value="en">English</option></select>
       <button type="button" id="theme-toggle" class="secondary icon-btn" data-i18n-title="themeTitle">☀</button>
     </div>
   </div>
   <form id="search-form" class="search" role="search">
     <input id="search" type="search" spellcheck="false" autocomplete="off" autocapitalize="off" data-i18n-placeholder="searchPlaceholder" aria-label="search">
-    <button type="submit" data-i18n="searchButton">ค้นหา</button>
+    <button type="submit" data-i18n="searchButton">Search</button>
   </form>
 </header>
 <div id="banner" class="banner" role="status" hidden></div>

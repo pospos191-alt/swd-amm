@@ -12,19 +12,94 @@
 
 import { encodeCall, decode } from './abi.js';
 
+// Reason texts in the 8 languages of the ZETAPHY apps (th and en are the same
+// as zetaphy-network/src/vaccine.js). Missing languages fall back to en.
 export const REASON_TEXT = [
-  { th: '-', en: '-' },
-  { th: 'ในการจำลองซื้อขาย ซื้อได้ แต่ขายไม่ได้หรือได้เงินคืนน้อยมาก', en: 'in a simulated trade, buying worked but selling failed or returned almost nothing' },
-  { th: 'มีที่อยู่ที่สร้างเหรียญเพิ่มได้ไม่จำกัด', en: 'an address can mint new tokens without a cap' },
-  { th: 'เจ้าของหรือผู้ดูแลระงับการโอนหรือการขายของผู้ถือได้', en: 'an owner or admin can stop holders from transferring or selling' },
-  { th: 'เจ้าของหรือผู้ดูแลย้ายหรือเผาเหรียญหรือเงินในบัญชีของผู้ถือคนอื่นได้', en: 'an owner or admin can move or burn tokens or funds held by others' },
-  { th: 'ใช้ชื่อหรือสัญลักษณ์เดียวกับเหรียญที่รู้จัก แต่อยู่คนละที่อยู่', en: 'uses the same name or symbol as a known token at a different address' },
-  { th: 'ในการทดสอบที่ทำซ้ำได้ ย้ายเหรียญที่ได้รับอนุญาต (approve) ไปยังที่อยู่ที่ผู้ถือไม่ได้เลือก', en: 'in a reproducible test, it moved tokens approved to it to an address the holder did not choose' },
-  { th: 'ข้อเท็จจริงอื่นของโค้ด (ดูหลักฐาน)', en: 'another code fact (see the evidence)' },
+  { en: '-', zh: '-', es: '-', ko: '-', ja: '-', ru: '-', vi: '-', th: '-' },
+  {
+    en: 'in a simulated trade, buying worked but selling failed or returned almost nothing',
+    zh: '在模拟交易中可以买入，但卖出失败或几乎拿不回任何东西',
+    es: 'en una operación simulada, la compra funcionó pero la venta falló o devolvió casi nada',
+    ko: '모의 거래에서 매수는 되었으나 매도가 실패하거나 거의 아무것도 돌려받지 못함',
+    ja: '模擬取引で、購入はできたが売却が失敗したか、ほとんど何も戻らなかった',
+    ru: 'в смоделированной сделке покупка прошла, но продажа не удалась или почти ничего не вернула',
+    vi: 'trong giao dịch mô phỏng, mua được nhưng bán thất bại hoặc gần như không nhận lại gì',
+    th: 'ในการจำลองซื้อขาย ซื้อได้ แต่ขายไม่ได้หรือได้เงินคืนน้อยมาก',
+  },
+  {
+    en: 'an address can mint new tokens without a cap',
+    zh: '有地址可以无上限地铸造新代币',
+    es: 'una dirección puede acuñar nuevos tokens sin límite',
+    ko: '특정 주소가 상한 없이 새 토큰을 발행할 수 있음',
+    ja: '特定のアドレスが上限なく新しいトークンを発行できる',
+    ru: 'некий адрес может выпускать новые токены без ограничения',
+    vi: 'một địa chỉ có thể đúc thêm token mới không giới hạn',
+    th: 'มีที่อยู่ที่สร้างเหรียญเพิ่มได้ไม่จำกัด',
+  },
+  {
+    en: 'an owner or admin can stop holders from transferring or selling',
+    zh: '所有者或管理员可以阻止持有者转账或卖出',
+    es: 'un propietario o administrador puede impedir que los titulares transfieran o vendan',
+    ko: '소유자 또는 관리자가 보유자의 전송이나 매도를 막을 수 있음',
+    ja: 'オーナーまたは管理者が保有者の送金や売却を止められる',
+    ru: 'владелец или администратор может запретить держателям переводить или продавать',
+    vi: 'chủ sở hữu hoặc quản trị viên có thể chặn người nắm giữ chuyển hoặc bán',
+    th: 'เจ้าของหรือผู้ดูแลระงับการโอนหรือการขายของผู้ถือได้',
+  },
+  {
+    en: 'an owner or admin can move or burn tokens or funds held by others',
+    zh: '所有者或管理员可以转移或销毁他人持有的代币或资金',
+    es: 'un propietario o administrador puede mover o quemar tokens o fondos de otros titulares',
+    ko: '소유자 또는 관리자가 다른 사람이 보유한 토큰이나 자금을 옮기거나 소각할 수 있음',
+    ja: 'オーナーまたは管理者が他人の保有するトークンや資金を移動・バーンできる',
+    ru: 'владелец или администратор может перемещать или сжигать токены или средства других держателей',
+    vi: 'chủ sở hữu hoặc quản trị viên có thể chuyển hoặc đốt token hay tiền do người khác nắm giữ',
+    th: 'เจ้าของหรือผู้ดูแลย้ายหรือเผาเหรียญหรือเงินในบัญชีของผู้ถือคนอื่นได้',
+  },
+  {
+    en: 'uses the same name or symbol as a known token at a different address',
+    zh: '使用与已知代币相同的名称或符号，但地址不同',
+    es: 'usa el mismo nombre o símbolo que un token conocido, en otra dirección',
+    ko: '알려진 토큰과 같은 이름 또는 심볼을 다른 주소에서 사용함',
+    ja: '既知のトークンと同じ名前またはシンボルを、異なるアドレスで使っている',
+    ru: 'использует то же название или тикер, что и известный токен, но по другому адресу',
+    vi: 'dùng cùng tên hoặc ký hiệu với một token đã biết nhưng ở địa chỉ khác',
+    th: 'ใช้ชื่อหรือสัญลักษณ์เดียวกับเหรียญที่รู้จัก แต่อยู่คนละที่อยู่',
+  },
+  {
+    en: 'in a reproducible test, it moved tokens approved to it to an address the holder did not choose',
+    zh: '在可复现的测试中，它把授权给它的代币转到了持有者未选择的地址',
+    es: 'en una prueba reproducible, movió tokens aprobados a su favor a una dirección que el titular no eligió',
+    ko: '재현 가능한 테스트에서 승인받은 토큰을 보유자가 선택하지 않은 주소로 옮김',
+    ja: '再現可能なテストで、承認されたトークンを保有者が選んでいないアドレスへ移動した',
+    ru: 'в воспроизводимом тесте он перевёл одобренные ему токены на адрес, который держатель не выбирал',
+    vi: 'trong một thử nghiệm có thể lặp lại, nó đã chuyển token được phê duyệt cho nó tới địa chỉ mà người nắm giữ không chọn',
+    th: 'ในการทดสอบที่ทำซ้ำได้ ย้ายเหรียญที่ได้รับอนุญาต (approve) ไปยังที่อยู่ที่ผู้ถือไม่ได้เลือก',
+  },
+  {
+    en: 'another code fact (see the evidence)',
+    zh: '其他代码事实（见证据）',
+    es: 'otro hecho del código (ver la evidencia)',
+    ko: '기타 코드상의 사실(증거 참조)',
+    ja: 'その他のコード上の事実（証拠を参照）',
+    ru: 'другой факт о коде (см. доказательства)',
+    vi: 'một dữ kiện khác về mã (xem bằng chứng)',
+    th: 'ข้อเท็จจริงอื่นของโค้ด (ดูหลักฐาน)',
+  },
 ];
-export const reasonText = (n) => (REASON_TEXT[n] && n > 0 ? REASON_TEXT[n] : { th: `#${n}`, en: `#${n}` });
+const LANG_CODES = Object.keys(REASON_TEXT[0]);
+export const reasonText = (n) => (REASON_TEXT[n] && n > 0 ? REASON_TEXT[n] : Object.fromEntries(LANG_CODES.map((l) => [l, `#${n}`])));
 /** Shown with every warning or refusal. */
-export const DISCLAIMER = { th: 'ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา', en: 'Automated code analysis, not an accusation' };
+export const DISCLAIMER = {
+  en: 'Automated code analysis, not an accusation',
+  zh: '自动代码分析，并非指控',
+  es: 'Análisis automático de código, no una acusación',
+  ko: '자동 코드 분석이며, 비난이 아닙니다',
+  ja: '自動コード分析であり、告発ではありません',
+  ru: 'Автоматический анализ кода, а не обвинение',
+  vi: 'Phân tích mã tự động, không phải lời buộc tội',
+  th: 'ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา',
+};
 
 // EIP-1967 slots (keccak256(name) - 1) and EIP-1167 / ERC-7511 minimal proxies.
 export const SLOT_IMPL = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc';

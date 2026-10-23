@@ -118,6 +118,19 @@ When you open it to the public, move to a bigger machine (e.g. Contabo / OVH) us
 
 ## Join the chain: run a node or validator (so the chain is not on one machine only)
 
+**One command (recommended):** on any Ubuntu 24.04 machine (free Oracle, free Google, a VPS), paste:
+```bash
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo MONIKER=your-name bash -s -- validator
+```
+- Uses the prebuilt chain binary (SHA-256 checked), no build. Joins `rpc.sawasdeecoin.com` and asks its faucet for 10 ZETAPHY
+- A timer checks every 10 minutes: once synced and funded, it stakes 9 ZETAPHY and becomes a validator by itself, then stops checking
+- `sudo zetaphy-validator status` shows progress, `sudo zetaphy-validator backup` lists the files to keep offline,
+  `sudo zetaphy-validator unjail` brings it back after downtime
+- Open port 26656 (and 80, 443) in your cloud provider's firewall, or use the Oracle button (`deploy/oracle`) with `validator`, which opens them
+- Validators earn BZTPHY reward points, converted to real ZETAPHY at mainnet: [`rewards/README.md`](./rewards/README.md)
+
+The manual way, step by step:
+
 Anyone can join with the same kind of free machine (Oracle / Google), without any files from this repo.
 The first machine publishes what is needed at `https://<name>.sslip.io/zetaphy/` (genesis, peer address, setup script).
 

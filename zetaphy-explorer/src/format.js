@@ -87,17 +87,24 @@ export function percent(part, total, digits = 1) {
   return `${s.slice(0, -digits) || '0'}${digits ? '.' + s.slice(-digits) : ''}%`;
 }
 
-/** Seconds between now and a date as "12 s" / "5 min" / "3 h" / "2 d" (lang th|en). */
+/**
+ * Seconds between now and a date as "12 s ago" / "5 min ago" / "3 h ago" / "2 d ago".
+ * lang: a UI language code; en and th have their own short forms, the others
+ * use Intl.RelativeTimeFormat with the code as the locale (English if missing).
+ */
 export function ago(date, now = Date.now(), lang = 'en') {
   const t = date instanceof Date ? date.getTime() : Date.parse(date);
   if (!Number.isFinite(t)) return '';
   const s = Math.max(0, Math.round((now - t) / 1000));
+  const [n, i] = s < 60 ? [s, 0] : s < 3600 ? [Math.floor(s / 60), 1] : s < 86400 ? [Math.floor(s / 3600), 2] : [Math.floor(s / 86400), 3];
+  if (lang !== 'en' && lang !== 'th') {
+    try {
+      return new Intl.RelativeTimeFormat(lang, { style: 'short', numeric: 'always' }).format(-n, ['second', 'minute', 'hour', 'day'][i]);
+    } catch { /* no Intl data for this locale: English below */ }
+  }
   const u = lang === 'th' ? ['วินาที', 'นาที', 'ชม.', 'วัน'] : ['s', 'min', 'h', 'd'];
   const suffix = lang === 'th' ? 'ที่แล้ว' : 'ago';
-  if (s < 60) return `${s} ${u[0]} ${suffix}`;
-  if (s < 3600) return `${Math.floor(s / 60)} ${u[1]} ${suffix}`;
-  if (s < 86400) return `${Math.floor(s / 3600)} ${u[2]} ${suffix}`;
-  return `${Math.floor(s / 86400)} ${u[3]} ${suffix}`;
+  return `${n} ${u[i]} ${suffix}`;
 }
 
 /** An RFC 3339 / epoch-seconds time as "2026-10-21 08:15:02 UTC". */

@@ -32,7 +32,7 @@ Testnet only: the bridge on top of this opens only with `zetaphy bridge open --t
 makes the validator and relayer keys on the VM and starts the validator. It prints only the two
 addresses. The relayer starts later with `RELAYER_SENDERS=<bridge lanes>`: it relays only
 their messages. CI (`hyperlane-agents` workflow) runs the script on a local chain: announce,
-a signed checkpoint, the relayer whitelist, and no key in the logs. Thai steps: `README.th.md`.
+a signed checkpoint, the relayer whitelist, and no key in the logs.
 
 ## The bridge on top (`bridge-testnet` workflow)
 
