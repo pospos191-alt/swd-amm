@@ -7,6 +7,7 @@
 #
 #   gov.sh propose-upgrade <name> <height> "<summary>"   schedule a binary upgrade
 #   gov.sh propose-text "<title>" "<summary>"            a signalling vote, no code change
+#   gov.sh propose-file <proposal.json | https URL>      submit a prepared proposal (e.g. zetaphy-chain/proposals/*.json)
 #   gov.sh vote <id> yes|no|abstain|no_with_veto
 #   gov.sh status [id]                                   one proposal, or all of them
 #   gov.sh plan                                          the upgrade the chain is waiting for
@@ -81,6 +82,13 @@ submit() { # the tx that submits the proposal, e.g.: tx gov submit-proposal <fil
 }
 
 case "${1:-}" in
+  propose-file)
+    src=${2:?a proposal .json file or an https URL}; f=$(mktemp)
+    if [[ "$src" =~ ^https:// ]]; then curl -fsSL "$src" -o "$f"; else cp "$src" "$f"; fi
+    jq -e '.messages | type == "array"' "$f" >/dev/null || { echo "not a proposal file (no messages array)"; rm -f "$f"; exit 1; }
+    echo "title: $(jq -r .title "$f")"
+    jq -r '.messages[] | "  \(.["@type"]) -> \(.To // .authority // "")"' "$f"
+    submit tx gov submit-proposal "$f"; rm -f "$f" ;;
   propose-upgrade)
     name=${2:?name}; height=${3:?height}; summary=${4:?summary}
     [[ "$name" =~ ^[a-z0-9.-]{1,40}$ ]] || { echo "name: lowercase letters, digits, . and - only"; exit 1; }
