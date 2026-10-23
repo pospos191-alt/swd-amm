@@ -30,7 +30,8 @@ const flag = (name) => args.includes(`--${name}`);
 const die = (m) => { console.error(m); process.exit(1); };
 
 function config() {
-  const file = existsSync(deployed) ? JSON.parse(readFileSync(deployed, 'utf8')) : {};
+  const raw = existsSync(deployed) ? readFileSync(deployed, 'utf8').trim() : '';
+  const file = raw ? JSON.parse(raw) : {};
   const o = process.env.POINTS_CONFIG ? JSON.parse(process.env.POINTS_CONFIG) : {};
   const cfg = { ...DEFAULTS };
   for (const k of ['validatorDaily', 'perJob', 'jobCapDaily']) if (o[k] !== undefined) cfg[k] = parseEther(String(o[k]));
