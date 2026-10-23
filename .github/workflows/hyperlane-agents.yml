@@ -67,9 +67,9 @@ jobs:
             const { JsonRpcProvider, Wallet, parseEther } = require("ethers");
             const w = new Wallet(process.env.DEV_KEY, new JsonRpcProvider(process.env.RPC));
             w.sendTransaction({ to: process.env.VAL, value: parseEther("1") }).then((t) => t.wait()).then(() => console.log("funded", process.env.VAL));'
-          for _ in $(seq 1 60); do sudo bash "$GITHUB_WORKSPACE/$DIR/setup-agents.sh" status | grep -q 'announced  yes' && break; sleep 5; done
-          sudo bash "$GITHUB_WORKSPACE/$DIR/setup-agents.sh" status
-          sudo bash "$GITHUB_WORKSPACE/$DIR/setup-agents.sh" status | grep -q 'announced  yes'
+          # read the whole status before grep: grep -q closing the pipe early fails under pipefail
+          for _ in $(seq 1 60); do s=$(sudo bash "$GITHUB_WORKSPACE/$DIR/setup-agents.sh" status); grep -q 'announced  yes' <<<"$s" && break; sleep 5; done
+          echo "$s"; grep -q 'announced  yes' <<<"$s"
 
       - name: A ZETAPHY -> Sepolia message gets a signed checkpoint
         run: |
@@ -83,7 +83,7 @@ jobs:
               await (await mb.dispatch(11155111, to, "0x01", { value: fee })).wait(); console.log("dispatched"); })();'
           for _ in $(seq 1 60); do sudo test -f /var/lib/hyperlane/checkpoints/0_with_id.json && break; sleep 5; done
           sudo cat /var/lib/hyperlane/checkpoints/0_with_id.json
-          sudo bash "$DIR/setup-agents.sh" status | grep -q 'checkpoint 0_with_id.json'
+          s=$(sudo bash "$DIR/setup-agents.sh" status); echo "$s"; grep -q 'checkpoint 0_with_id.json' <<<"$s"
 
       - name: Relayer refuses without a whitelist, starts with one
         run: |
@@ -96,9 +96,10 @@ jobs:
 
       - name: No key in the logs
         run: |
+          sudo journalctl --no-pager > "$W/journal.txt"   # to a file: a pipe into grep -q can hide a match under pipefail
           for k in validator relayer; do
             key=$(sudo cat /etc/hyperlane/$k.key); key=${key#0x}
-            if sudo journalctl --no-pager | grep -qi "$key" || grep -qi "$key" "$W/install.log"; then echo "::error::the $k key is in a log"; exit 1; fi
+            if grep -qi "$key" "$W/journal.txt" "$W/install.log"; then echo "::error::the $k key is in a log"; exit 1; fi
           done
           echo "no key found in the logs"
 
