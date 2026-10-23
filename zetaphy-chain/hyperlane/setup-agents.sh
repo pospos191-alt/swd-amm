@@ -185,7 +185,7 @@ write_units() {
 write_relayer() {
   local rk senders
   rk=$(tr -d '[:space:]' < "$ETC/relayer.key")
-  senders=$(printf '%s' "$RELAYER_SENDERS" | tr ',' '\n' | sed 's/ //g' | grep -E '^0x[0-9a-fA-F]{40}$' | jq -R . | jq -sc .)
+  senders=$(printf '%s' "$RELAYER_SENDERS" | tr ',' '\n' | sed 's/ //g' | grep -E '^0x[0-9a-fA-F]{40}$' | sed 's/^0x/0x000000000000000000000000/' | tr 'A-F' 'a-f' | jq -R . | jq -sc .)
   [ "$(echo "$senders" | jq length)" -gt 0 ] || die "RELAYER_SENDERS: give the bridge contracts as 0x…,0x…"
   env_file relayer CONFIG_FILES=/config/agent-config.json HYP_RELAYCHAINS="${RELAY_CHAINS:-zetaphy,sepolia}" HYP_DB=/data \
     HYP_DEFAULTSIGNER_TYPE=hexKey "HYP_DEFAULTSIGNER_KEY=$rk" HYP_ALLOWLOCALCHECKPOINTSYNCERS=true \
