@@ -26,7 +26,8 @@ const MAILBOX = [
   'function localDomain() view returns (uint32)', 'function defaultHook() view returns (address)', 'function requiredHook() view returns (address)',
   'function quoteDispatch(uint32,bytes32,bytes) view returns (uint256)', 'function quoteDispatch(uint32,bytes32,bytes,bytes,address) view returns (uint256)',
 ];
-const HOOK = ['function hookType() view returns (uint8)', 'function mailbox() view returns (address)'];
+const HOOK = ['function hookType() view returns (uint8)', 'function mailbox() view returns (address)', 'function hooks(bytes) view returns (address[])'];
+const AGGREGATION_HOOK_TYPE = 2;
 const art = JSON.parse(readFileSync(new URL('../artifacts/HyperlaneLockBox.json', import.meta.url), 'utf8'));
 
 async function provider() {
@@ -51,15 +52,33 @@ export async function check(p, deployer) {
   const mb = new Contract(SEPOLIA.mailbox, MAILBOX, p);
   const domain = Number(await step('Mailbox.localDomain', () => mb.localDomain()));
   if (domain !== Number(SEPOLIA.chainId)) throw new Error(`Sepolia Mailbox localDomain ${domain}`);
-  const mh = new Contract(SEPOLIA.merkleTreeHook, HOOK, p);
-  if (Number(await step('MerkleTreeHook.hookType', () => mh.hookType())) !== MERKLE_TREE_HOOK_TYPE) throw new Error('the Sepolia MerkleTreeHook is not a merkle tree hook');
-  if (getAddress(await step('MerkleTreeHook.mailbox', () => mh.mailbox())) !== getAddress(SEPOLIA.mailbox)) throw new Error('the Sepolia MerkleTreeHook belongs to another Mailbox');
+  // The merkle tree hook the validators sign: the registry's address, checked against the Mailbox's own
+  // default hook (an aggregation of the merkle tree hook and the gas paymaster, or the merkle hook itself).
+  const info = async (addr) => {
+    const h = new Contract(addr, HOOK, p);
+    const t = await h.hookType().then(Number, () => null);
+    const m = await h.mailbox().then(getAddress, () => null);
+    return { address: getAddress(addr), code: ((await p.getCode(addr)).length - 2) / 2, hookType: t, mailbox: m };
+  };
+  const registryHook = await info(SEPOLIA.merkleTreeHook);
+  const dh = await step('Mailbox.defaultHook', () => mb.defaultHook());
+  const defaultInfo = await info(dh);
+  let subHooks = [];
+  if (defaultInfo.hookType === AGGREGATION_HOOK_TYPE) {
+    const list = await new Contract(dh, HOOK, p).hooks('0x').catch(() => []);
+    subHooks = await Promise.all(list.map(info));
+  }
+  const isMerkle = (h) => h.hookType === MERKLE_TREE_HOOK_TYPE && h.mailbox === getAddress(SEPOLIA.mailbox);
+  const merkle = [defaultInfo, ...subHooks].find(isMerkle) ?? (isMerkle(registryHook) ? registryHook : null);
+  console.error(JSON.stringify({ registryHook, defaultHook: defaultInfo, subHooks }));
+  if (!merkle) throw new Error('no merkle tree hook of the Sepolia Mailbox found (see the hooks above)');
+  if (merkle.address !== registryHook.address) console.error(`note: the Mailbox's merkle tree hook ${merkle.address} is not the registry's ${registryHook.address}`);
   const to = zeroPadValue(deployer, 32), body = sampleBody(deployer);
   // The default hook pays Hyperlane's gas paymaster, which may not quote ZETAPHY (a new domain): then the
   // lockbox uses the MerkleTreeHook alone (the validators sign its root; our relayer delivers unpaid).
   let hook = '0x0000000000000000000000000000000000000000', defaultQuote = null, why = '';
-  try { defaultQuote = await mb['quoteDispatch(uint32,bytes32,bytes)'](ZETAPHY_DOMAIN, to, body); } catch (e) { why = e.shortMessage ?? e.message; hook = SEPOLIA.merkleTreeHook; }
-  const fee = hook === SEPOLIA.merkleTreeHook
+  try { defaultQuote = await mb['quoteDispatch(uint32,bytes32,bytes)'](ZETAPHY_DOMAIN, to, body); } catch (e) { why = e.shortMessage ?? e.message; hook = merkle.address; }
+  const fee = hook === merkle.address
     ? await step('Mailbox.quoteDispatch with the MerkleTreeHook', () => mb['quoteDispatch(uint32,bytes32,bytes,bytes,address)'](ZETAPHY_DOMAIN, to, body, '0x', hook))
     : defaultQuote;
   const nonce = await p.getTransactionCount(deployer, 'latest');
@@ -67,7 +86,7 @@ export async function check(p, deployer) {
   const balance = await p.getBalance(deployer);
   return {
     deployer, balance: formatEther(balance), nonce, pendingTxs: pending - nonce, lockbox: getCreateAddress({ from: deployer, nonce }),
-    defaultHook: await step('Mailbox.defaultHook', () => mb.defaultHook()), requiredHook: await step('Mailbox.requiredHook', () => mb.requiredHook()), defaultHookQuotesZetaphy: defaultQuote != null, defaultHookError: why.slice(0, 160),
+    defaultHook: dh, merkleTreeHook: merkle.address, requiredHook: await step('Mailbox.requiredHook', () => mb.requiredHook()), defaultHookQuotesZetaphy: defaultQuote != null, defaultHookError: why.slice(0, 160),
     hook, feePerLock: formatEther(fee),
   };
 }
