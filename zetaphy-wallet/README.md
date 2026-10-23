@@ -65,7 +65,7 @@ zetaphy-neuro promises users that it "never touches keys". This wallet has to ho
     - rpc = `<host>/rpc`, rest = `<host>/rest`, from the same host as the RPC field
   - Mobile: in a wallet app's browser, the wallet appears in the list by itself. If opened from a regular browser, there is an "Open in app" link
   - WalletConnect: the button is disabled until there is a projectId (see the section below)
-- Thai (default) and English
+- 8 languages (English by default): English, 中文, Español, 한국어, 日本語, Русский, Tiếng Việt, ไทย
 
 ## Vaccine: never sign transactions to flagged code
 

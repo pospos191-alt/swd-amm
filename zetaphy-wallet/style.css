@@ -32,7 +32,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Thai", sans-serif;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans Thai", "Noto Sans CJK SC", "Noto Sans JP", "Noto Sans KR", sans-serif;
 }
 main { max-width: 640px; margin: 0 auto; padding: 16px; }
 header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
@@ -68,6 +68,21 @@ button {
 }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button.ghost { background: transparent; color: var(--accent); }
+/* Language menu: styled like the ghost buttons, compact enough for a phone header. */
+select.lang {
+  flex: 0 0 auto;
+  max-width: 9.5em;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+select.lang option { background: var(--card); color: var(--text); }
 button.danger { border-color: var(--danger); color: var(--danger); }
 .row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
 .row input { flex: 1 1 220px; }

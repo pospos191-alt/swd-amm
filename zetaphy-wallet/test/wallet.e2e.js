@@ -24,7 +24,7 @@ import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1b
 import { BinaryReader } from 'cosmjs-types/binary';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 // The fake snap builds and signs with the same code the real one bundles.
-import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress, codeFingerprint, addressKey } from '../vendor/pqwallet.js';
+import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress, codeFingerprint, addressKey, REASON_TEXT, DISCLAIMER, REPRODUCE } from '../vendor/pqwallet.js';
 
 const PORT = 18090;
 const ORIGIN = `http://localhost:${PORT}`;
@@ -310,10 +310,22 @@ function decodeMsgEVMCall(bytes) {
 }
 
 const visible = (page, sel) => page.waitForSelector(`${sel}:not([hidden])`, { timeout: 8000 }).catch(async (e) => { throw new Error(`${sel} not shown; status "${await page.textContent('#status')}"`); });
-/** Switches the page to `l` with the #lang toggle (English is the default) and checks it took. */
+/** Switches the page to `l` with the #lang menu (English is the default) and checks it took. */
 async function setLang(page, l) {
-  if (await page.getAttribute('html', 'lang') !== l) await page.click('#lang');
+  if (await page.getAttribute('html', 'lang') !== l) await page.selectOption('#lang', l);
   assert.equal(await page.getAttribute('html', 'lang'), l);
+}
+
+// The languages of every ZETAPHY app, in menu order, with their native names.
+const LANGS = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['ko', '한국어'], ['ja', '日本語'], ['ru', 'Русский'], ['vi', 'Tiếng Việt'], ['th', 'ไทย']];
+
+/** app.js's T dictionary, evaluated in Node from the source (with the real vaccine texts). */
+function appDictionary() {
+  const src = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  const start = src.indexOf('const T = {');
+  const end = src.indexOf('\n};\n', start);
+  assert.ok(start >= 0 && end > start, 'T found in app.js');
+  return new Function('REASON_TEXT', 'DISCLAIMER', 'REPRODUCE', `return ${src.slice(start + 'const T = '.length, end + 2)};`)(REASON_TEXT, DISCLAIMER, REPRODUCE);
 }
 
 test('page loads in English with warnings and its CSP, then switches to Thai', async () => {
@@ -324,16 +336,69 @@ test('page loads in English with warnings and its CSP, then switches to Thai', a
   assert.equal(await page.getAttribute('html', 'lang'), 'en');
   assert.match(await page.textContent('#warning'), /testnet/);
   assert.match(await page.textContent('#warning'), /not real money/);
-  assert.equal(await page.textContent('#lang'), 'ไทย');
+  assert.equal(await page.inputValue('#lang'), 'en');
+  assert.deepEqual(await page.$$eval('#lang option', (os) => os.map((o) => [o.value, o.textContent])), LANGS, 'the 8 languages, in order, by native name');
   assert.equal(await page.inputValue('#rpc'), '', 'no default RPC');
-  await page.click('#lang');
+  await page.selectOption('#lang', 'th');
   assert.equal(await page.getAttribute('html', 'lang'), 'th');
   assert.match(await page.textContent('#warning'), /หาย/);
-  assert.equal(await page.textContent('#lang'), 'English');
+  assert.equal(await page.inputValue('#lang'), 'th');
   await page.reload();
   assert.equal(await page.getAttribute('html', 'lang'), 'th', 'language remembered');
   assert.match(await page.textContent('#warning'), /หาย/);
   assert.deepEqual(outside, [], 'no requests to other sites');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('every language has exactly the English keys, with the same placeholders and no empty text', () => {
+  const T = appDictionary();
+  assert.deepEqual(Object.keys(T).sort(), LANGS.map(([c]) => c).sort());
+  const keys = Object.keys(T.en).sort();
+  const vars = (s) => (String(s).match(/\{\w+\}/g) ?? []).sort().join();
+  for (const [code] of LANGS) {
+    assert.deepEqual(Object.keys(T[code]).sort(), keys, `${code}: same key set as en`);
+    for (const k of keys) {
+      assert.equal(typeof T[code][k], 'string', `${code}.${k} is text`);
+      assert.ok(T[code][k].trim(), `${code}.${k} not empty`);
+      assert.equal(vars(T[code][k]), vars(T.en[k]), `${code}.${k} keeps the placeholders of en`);
+    }
+  }
+});
+
+test('each of the 8 languages renders the main screen translated, and a stored code is honoured (else English)', async () => {
+  const T = appDictionary();
+  const { page, context, errors } = await openPage();
+  await visible(page, '#setup');
+  const keys = await page.$$eval('[data-i18n]', (els) => els.map((el) => el.dataset.i18n));
+  // Text that is the same as English on purpose (brand names and loanwords the community uses as is).
+  const SAME = { th: ['stakeTitle', 'stake', 'wcConnect', 'mRpc', 'mChainId', 'mExplorer'], zh: ['wcConnect', 'mRpc'], es: ['cTotal', 'cToken', 'bytesN', 'wcConnect'],
+    ko: ['wcConnect', 'mRpc'], ja: ['wcConnect', 'mRpc'], ru: ['wcConnect', 'mRpc'],
+    vi: ['cToken', 'stakeTitle', 'validatorLabel', 'stake', 'unstake', 'cValidator', 'wcConnect', 'mChainId'] };
+  const sample = ['subtitle', 'warnTitle', 'setupTitle', 'saveKey', 'sendTitle', 'balance'];
+  for (const [code] of LANGS) {
+    await setLang(page, code);
+    assert.equal(await page.inputValue('#lang'), code);
+    const shown = await page.$$eval('[data-i18n]', (els) => els.map((el) => [el.dataset.i18n, el.textContent]));
+    for (const [k, text] of shown) {
+      assert.notEqual(text, k, `${code}: raw key ${k} shown`);
+      assert.equal(text, T[code][k], `${code}: ${k} shows its translation`);
+      if (code !== 'en' && !SAME[code].includes(k)) assert.notEqual(text, T.en[k], `${code}: ${k} is not the English text`);
+    }
+    for (const k of sample) {
+      assert.ok(keys.includes(k), `${k} is on the main screen`);
+      if (code !== 'en') assert.notEqual(await page.textContent(`[data-i18n="${k}"]`), T.en[k], `${code}: ${k} is not the English fallback`);
+    }
+  }
+  // The stored code (the hub writes it too) is honoured on load; anything else means English.
+  for (const [stored, want] of [['ko', 'ko'], ['vi', 'vi'], ['de', 'en'], ['TH', 'en'], ['', 'en']]) {
+    await page.evaluate((v) => localStorage.setItem('zetaphy-wallet:lang', v), stored);
+    await page.reload();
+    await visible(page, '#setup');
+    assert.equal(await page.getAttribute('html', 'lang'), want, `stored ${JSON.stringify(stored)}`);
+    assert.equal(await page.inputValue('#lang'), want);
+    assert.equal(await page.textContent('[data-i18n="setupTitle"]'), T[want].setupTitle);
+  }
   assert.deepEqual(errors, []);
   await context.close();
 });
@@ -1033,6 +1098,15 @@ test('snap: send, token send, stake and deploy are signed by the snap from the m
   await visible(page, '#tx-result');
   assert.equal(signRequests()[4].params.lang, 'th');
   assert.equal(sent.length, 5);
+  // The snap describes only English and Thai: other page languages ask it for English.
+  await setLang(page, 'ja');
+  await page.fill('#amount', '1');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  await page.click('#confirm-send');
+  await visible(page, '#tx-result');
+  assert.equal(signRequests()[5].params.lang, 'en');
+  assert.equal(sent.length, 6);
   assert.deepEqual(outside, []);
   assert.deepEqual(errors, []);
   await context.close();
