@@ -95,7 +95,7 @@ jobs:
               await (await c.award(1, ["0x000000000000000000000000000000000000dEaD"], [parseEther("7")], encodeBytes32String("test"))).wait();
               try { await c.transfer.staticCall(w.address, 1n); throw new Error("transfer did not revert"); } catch (e) { if (/did not revert/.test(e.message)) throw e; }
             })().catch((e) => { console.error(e.message); process.exit(1); });'
-          node scripts/points.js snapshot --pool 10000000 | tail -1 | tee "$H/s.json" | jq -c '.holders[:5]'
+          node scripts/points.js snapshot --pool 50000000 | tail -1 | tee "$H/s.json" | jq -c '.holders[:5]'
           jq -e '[.holders[] | select(.to == "0x000000000000000000000000000000000000dEaD")] | length == 1' "$H/s.json" >/dev/null
           echo "dry run OK: nothing was sent to the ZETAPHY testnet"
 
