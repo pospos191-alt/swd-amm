@@ -62,6 +62,9 @@ If you skip step 3, the web page still works normally. It just does not count us
 - It does not count if the browser sets Do Not Track or Global Privacy Control
 - It counts at most 200 checks per person per day. The numbers are estimates (~1% error),
   and someone who keeps changing IP can still inflate them. Use them as a signal, not as verified numbers
+- Each check also sends its result level only (`high`, `medium`, `low` or `info`; never the contract). The checker page
+  shows the all-time totals under the form: contracts checked, risky contracts flagged (high + medium) and high risk found.
+  Totals add up the monthly counters since 2026-10; the result levels are counted from this release on
 
 ## Recognising tokens created by the ZETAPHY launcher
 

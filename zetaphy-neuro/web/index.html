@@ -28,6 +28,13 @@
     <button id="go" type="submit" data-i18n="check">Check contract</button>
   </form>
 
+  <section id="counts" class="counts" hidden>
+    <div><b id="c-checks">–</b><span data-i18n="statChecks">Contracts checked</span></div>
+    <div><b id="c-risky">–</b><span data-i18n="statRisky">Risky contracts flagged</span></div>
+    <div><b id="c-high">–</b><span data-i18n="statHigh">High risk found</span></div>
+    <p data-i18n="statNote">All users together, approximate. Only the result level is counted, never the contract.</p>
+  </section>
+
   <p id="status" role="status" aria-live="polite"></p>
 
   <section id="result" hidden>

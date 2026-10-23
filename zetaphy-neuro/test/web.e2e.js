@@ -188,6 +188,27 @@ test('each successful check is counted, and the stats page shows it', async () =
   await page.close();
 });
 
+test('site-wide numbers under the form: checks, risky and high-risk results go up after a check', async () => {
+  const addr = await chain.deploy('ScamToken');
+  const { page, errors } = await openPage('light');
+  await page.waitForSelector('#counts:not([hidden])');
+  const num = async (id) => Number((await page.textContent(id)).replace(/[^0-9]/g, ''));
+  const [c0, r0, h0] = [await num('#c-checks'), await num('#c-risky'), await num('#c-high')];
+  await page.fill('#address', addr);
+  const sent = page.waitForRequest((r) => r.url().endsWith('/api/usage') && r.method() === 'POST');
+  await page.click('#go');
+  assert.deepEqual(JSON.parse((await sent).postData()), { event: 'check', level: 'high' }, 'only the level, never the contract');
+  await page.waitForSelector('#result:not([hidden])');
+  assert.deepEqual([await num('#c-checks'), await num('#c-risky'), await num('#c-high')], [c0 + 1, r0 + 1, h0 + 1]);
+  const server = (await (await fetch(`http://localhost:${PORT}/api/usage`)).json()).total;
+  assert.equal(server.high, h0 + 1);
+  await page.selectOption('#lang', 'th');
+  assert.equal(await page.textContent('#counts span'), 'สัญญาที่ตรวจแล้ว');
+  if (shots) await page.screenshot({ path: `${shots}/neuro-counts.png` });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 test('Solana: a token with a permanent delegate is shown as high risk', async () => {
   const mint = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU';
   const { page, errors } = await openPage('light', {

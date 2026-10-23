@@ -8,7 +8,7 @@ export const LEVEL = { high: '高风险', medium: '中等风险', low: '低风�
 export const UI = {
   subtitle: '读取并解释合约 · 第 1 级，只读', chain: '链', address: '合约或代币地址', check: '检查合约',
   details: '详情', reading: '正在从链上读取…', badAddress: '该地址不适用于这条链。支持的格式：',
-  failed: '读取失败：', footer: '从不要求连接钱包，也从不发送交易。读取公开的链上数据；为提前预警，仅将链名和合约地址发送到本站服务器（不保存）。不构成投资建议。', stats: '使用统计', language: '语言',
+  failed: '读取失败：', footer: '从不要求连接钱包，也从不发送交易。读取公开的链上数据；为提前预警，仅将链名和合约地址发送到本站服务器（不保存）。不构成投资建议。', stats: '使用统计', statChecks: '已检查的合约', statRisky: '标记为有风险的合约', statHigh: '发现高风险', statNote: '所有用户合计，近似值。只统计结果等级，从不记录合约。', language: '语言',
   disclaimer: '这是可重复验证的自动代码分析，不是对任何个人或项目的指控，也不构成投资建议。合约所有者可以回应或要求更正。',
   correction: '如何回应或要求更正',
   reproduce: '自行复核',
