@@ -24,3 +24,12 @@ deploys, the Sepolia route lists that validator with threshold 1, and every owne
 
 Testnet only: the bridge on top of this opens only with `zetaphy bridge open --testnet`
 (docs/BRIDGE-TESTNET.md, not audited).
+
+## Agents on the Oracle VM (`setup-agents.sh`)
+
+`sudo bash setup-agents.sh` installs Docker and the pinned agent image
+(`agents-v2.3.0`, by digest), downloads `agent-config.json` pinned by commit and SHA-256,
+makes the validator and relayer keys on the VM and starts the validator. It prints only the two
+addresses. The relayer starts later with `RELAYER_SENDERS=<bridge lanes>`: it relays only
+their messages. CI (`hyperlane-agents` workflow) runs the script on a local chain: announce,
+a signed checkpoint, the relayer whitelist, and no key in the logs. Thai steps: `README.th.md`.
