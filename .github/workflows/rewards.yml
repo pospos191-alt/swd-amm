@@ -1,0 +1,144 @@
+# BZTPHY testnet reward points (zetaphy-chain/rewards/README.th.md).
+#
+# mode = dry_run  on a local copy (anvil fork) of the ZETAPHY testnet with a throwaway key: deploy,
+#                 award yesterday from the real validator and runner data, re-run (must pay nothing
+#                 twice), snapshot. Runs on every pull request that touches the points code.
+# mode = deploy   deploys BZTPHY on the testnet (key: the repository secret ZETAPHY_DEPLOYER_KEY,
+#                 the minter; owner: the ZETAPHY timelock = governance) and pushes the address to
+#                 the branch rewards/testnet
+# mode = award    awards one day (default yesterday, UTC); the daily schedule does this
+# Cost: free (GitHub-hosted runner, public repository); a few cents of testnet ZETAPHY gas a day.
+
+name: rewards
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/rewards.yml'
+      - 'zetaphy-network/scripts/points.js'
+      - 'zetaphy-network/src/points.js'
+      - 'zetaphy-network/contracts/ZetaphyPoints.sol'
+  schedule:
+    - cron: '23 0 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry_run = local copy; deploy = BZTPHY on the testnet; award = one day's points"
+        required: true
+        default: 'dry_run'
+        type: choice
+        options: ['dry_run', 'deploy', 'award']
+      epoch:
+        description: "award only: UTC day number (empty = yesterday)"
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rewards
+  cancel-in-progress: false
+
+jobs:
+  rewards:
+    name: BZTPHY rewards (testnet)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      MODE: ${{ github.event_name == 'pull_request' && 'dry_run' || github.event_name == 'schedule' && 'award' || inputs.mode }}
+      ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+      ZETAPHY_REST: https://rpc.sawasdeecoin.com/rest
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+      TIMELOCK: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+      NEURO_JOBS: "0x698dC17df6a34b02263b295d101BE39F3F3B433B"
+      EPOCH_CAP: "5000"
+      # anvil's well-known dev key #0 (public, dry run only)
+      DEV_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Install anvil (pinned)
+        if: env.MODE == 'dry_run'
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.2.3
+
+      - name: Dry run on a local copy of the testnet
+        if: env.MODE == 'dry_run'
+        run: |
+          set -o pipefail
+          anvil --fork-url "$ZETAPHY_RPC" --port 8602 --chain-id 77390 --silent &
+          for _ in $(seq 1 30); do curl -fsS -o /dev/null -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' http://127.0.0.1:8602 && break; sleep 1; done
+          H=$(mktemp -d); umask 077; printf '%s' "$DEV_KEY" > "$H/k"
+          export ZETAPHY_RPC=http://127.0.0.1:8602 KEYFILE="$H/k"
+          DEV=$(node -e 'console.log(new (require("ethers").Wallet)(process.argv[1]).address)' "$DEV_KEY")
+          node scripts/points.js deploy --owner "$DEV" --cap "$EPOCH_CAP" | tail -1 | tee "$H/d.json"
+          export POINTS=$(jq -r .points "$H/d.json") FROM_BLOCK=$(jq -r .fromBlock "$H/d.json")
+          node scripts/points.js award --send | tail -1 > "$H/a1.json"; jq -c '{epoch, blocks, n: (.awards|length), txs}' "$H/a1.json"
+          node scripts/points.js award --send | tail -1 > "$H/a2.json"
+          [ "$(jq '.txs|length' "$H/a2.json")" = 0 ] || { echo "::error::a second run of the same day sent awards again"; exit 1; }
+          # one hand-made award, then the snapshot must show it with the whole pool
+          node -e '
+            const { JsonRpcProvider, Wallet, Contract, parseEther, encodeBytes32String } = require("ethers");
+            const p = new JsonRpcProvider(process.env.ZETAPHY_RPC); const w = new Wallet(require("fs").readFileSync(process.env.KEYFILE, "utf8").trim(), p);
+            const c = new Contract(process.env.POINTS, ["function award(uint32,address[],uint256[],bytes32)", "function transfer(address,uint256) returns (bool)"], w);
+            (async () => {
+              await (await c.award(1, ["0x000000000000000000000000000000000000dEaD"], [parseEther("7")], encodeBytes32String("test"))).wait();
+              try { await c.transfer.staticCall(w.address, 1n); throw new Error("transfer did not revert"); } catch (e) { if (/did not revert/.test(e.message)) throw e; }
+            })().catch((e) => { console.error(e.message); process.exit(1); });'
+          node scripts/points.js snapshot --pool 10000000 | tail -1 | tee "$H/s.json" | jq -c '.holders[:5]'
+          jq -e '[.holders[] | select(.to == "0x000000000000000000000000000000000000dEaD")] | length == 1' "$H/s.json" >/dev/null
+          echo "dry run OK: nothing was sent to the ZETAPHY testnet"
+
+      - name: Load the deployer key
+        if: env.MODE != 'dry_run'
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/zh"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/k"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/k")" = "$DEPLOYER" ] \
+            || { rm -f "$H/k"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          echo "KEYFILE=$H/k" >> "$GITHUB_ENV"
+
+      - name: Deploy BZTPHY on the testnet
+        if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch'
+        run: |
+          set -o pipefail
+          [ ! -f ../zetaphy-chain/rewards/points-testnet.json ] || { echo "::error::BZTPHY is already deployed (zetaphy-chain/rewards/points-testnet.json)"; exit 1; }
+          node scripts/points.js deploy --owner "$TIMELOCK" --cap "$EPOCH_CAP" | tail -1 | jq --arg run "${{ github.run_id }}" '. + {workflowRun: $run}' \
+            > ../zetaphy-chain/rewards/points-testnet.json
+          cat ../zetaphy-chain/rewards/points-testnet.json
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B rewards/testnet
+          git add zetaphy-chain/rewards/points-testnet.json
+          git commit -q -m "BZTPHY reward points on the testnet: address" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin rewards/testnet
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...rewards/testnet"
+
+      - name: Award one day
+        if: env.MODE == 'award'
+        env:
+          EPOCH: ${{ inputs.epoch }}
+        run: |
+          set -o pipefail
+          if [ ! -f ../zetaphy-chain/rewards/points-testnet.json ]; then echo "BZTPHY is not deployed yet: nothing to award"; exit 0; fi
+          node scripts/points.js award --send ${EPOCH:+--epoch "$EPOCH"} 2> award.log | tail -1 > award.json
+          cat award.log
+          { echo "### BZTPHY awards"; echo '```'; cat award.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/zh/k"
