@@ -2,8 +2,8 @@
 #
 # "Out of host capacity" = Oracle has no free machine left right now, nothing is broken.
 #   Just press Apply again later (or pick another availability domain / the Micro size).
-# "Out of host capacity" = ตอนนี้ Oracle ไม่มีเครื่องฟรีว่าง ไม่ได้เสียอะไร
-#   แค่กด Apply ใหม่อีกครั้งภายหลัง (หรือเลือก availability domain อื่น / ขนาด Micro)
+# "Out of host capacity" = Oracle has no free machine right now; nothing is broken.
+#   Click Apply again later (or pick another availability domain / the Micro size).
 
 locals {
   compartment_id = var.compartment_ocid != "" ? var.compartment_ocid : var.tenancy_ocid
