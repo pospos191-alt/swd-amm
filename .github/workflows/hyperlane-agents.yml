@@ -1,0 +1,110 @@
+# Checks zetaphy-chain/hyperlane/setup-agents.sh end to end on a throwaway local chain
+# (chain id 77390, Hyperlane core deployed by the pinned CLI): the validator announces itself and
+# signs a checkpoint, the relayer starts with its sender whitelist, and no key reaches the logs.
+# Nothing is sent to the testnet. Cost: free (GitHub-hosted runner, public repository).
+
+name: hyperlane-agents
+
+on:
+  pull_request:
+    paths:
+      - 'zetaphy-chain/hyperlane/**'
+      - '.github/workflows/hyperlane-agents.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agents:
+    name: Hyperlane agents (setup-agents.sh)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      HYP_CLI: "@hyperlane-xyz/cli@45.0.1"
+      DIR: zetaphy-chain/hyperlane
+      RPC: http://172.17.0.1:18545   # the docker bridge: reachable from the runner and the containers
+      # hardhat's well-known test key #0 (public, holds only local test ETH)
+      DEV_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      W: /tmp/hyp
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Local chain 77390 and Hyperlane core
+        env:
+          GH_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          npm i -g --no-audit --no-fund "$HYP_CLI"
+          mkdir -p "$W/reg/chains/zetaphy"; cd "$W"
+          npm i --silent --no-audit --no-fund hardhat@2.22.17 ethers@6.16.0
+          printf 'module.exports={networks:{hardhat:{chainId:77390,mining:{auto:true,interval:1000}}}};\n' > hardhat.config.js
+          npx hardhat node --hostname 0.0.0.0 --port 18545 > node.log 2>&1 &
+          for _ in $(seq 1 30); do curl -fs -X POST -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$RPC" >/dev/null && break; sleep 1; done
+          sed "s#https://rpc.sawasdeecoin.com#$RPC#" "$GITHUB_WORKSPACE/$DIR/registry/chains/zetaphy/metadata.yaml" > reg/chains/zetaphy/metadata.yaml
+          HYP_KEY="$DEV_KEY" hyperlane core deploy --chain zetaphy --config "$GITHUB_WORKSPACE/$DIR/core-config.yaml" \
+            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$W/reg" --yes
+          printf 'interchainGasPaymaster: "0x0000000000000000000000000000000000000000"\n' >> reg/chains/zetaphy/addresses.yaml
+          hyperlane registry agent-config --chains sepolia zetaphy --out "$W/agent-config.json" \
+            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$W/reg" --yes
+          jq '.chains.zetaphy | {mailbox, validatorAnnounce, index}' agent-config.json
+
+      - name: Install (validator starts)
+        run: |
+          sudo AGENT_CONFIG="$W/agent-config.json" bash "$DIR/setup-agents.sh" | tee "$W/install.log"
+          sudo test "$(sudo stat -c %a /etc/hyperlane/validator.key)" = 600
+          sudo AGENT_CONFIG="$W/agent-config.json" bash "$DIR/setup-agents.sh" | tail -3   # re-run is safe and keeps the keys
+          echo "VAL=$(grep -Eo '^validator +0x[0-9a-fA-F]{40}' "$W/install.log" | awk '{print $2}')" >> "$GITHUB_ENV"
+
+      - name: Fund the validator; it announces itself
+        run: |
+          cd "$W" && node -e '
+            const { JsonRpcProvider, Wallet, parseEther } = require("ethers");
+            const w = new Wallet(process.env.DEV_KEY, new JsonRpcProvider(process.env.RPC));
+            w.sendTransaction({ to: process.env.VAL, value: parseEther("1") }).then((t) => t.wait()).then(() => console.log("funded", process.env.VAL));'
+          for _ in $(seq 1 60); do sudo bash "$GITHUB_WORKSPACE/$DIR/setup-agents.sh" status | grep -q 'announced  yes' && break; sleep 5; done
+          sudo bash "$GITHUB_WORKSPACE/$DIR/setup-agents.sh" status
+          sudo bash "$GITHUB_WORKSPACE/$DIR/setup-agents.sh" status | grep -q 'announced  yes'
+
+      - name: A ZETAPHY -> Sepolia message gets a signed checkpoint
+        run: |
+          cd "$W" && node -e '
+            const { JsonRpcProvider, Wallet, Contract, zeroPadValue } = require("ethers");
+            const a = require("./agent-config.json").chains.zetaphy;
+            const w = new Wallet(process.env.DEV_KEY, new JsonRpcProvider(process.env.RPC));
+            const mb = new Contract(a.mailbox, ["function dispatch(uint32,bytes32,bytes) payable returns (bytes32)", "function quoteDispatch(uint32,bytes32,bytes) view returns (uint256)"], w);
+            const to = zeroPadValue(w.address, 32);
+            (async () => { const fee = await mb.quoteDispatch(11155111, to, "0x01");
+              await (await mb.dispatch(11155111, to, "0x01", { value: fee })).wait(); console.log("dispatched"); })();'
+          for _ in $(seq 1 60); do sudo test -f /var/lib/hyperlane/checkpoints/0_with_id.json && break; sleep 5; done
+          sudo cat /var/lib/hyperlane/checkpoints/0_with_id.json
+          sudo bash "$DIR/setup-agents.sh" status | grep -q 'checkpoint 0_with_id.json'
+
+      - name: Relayer refuses without a whitelist, starts with one
+        run: |
+          if sudo bash "$DIR/setup-agents.sh" start-relayer; then echo "::error::started without RELAYER_SENDERS"; exit 1; fi
+          sudo RELAYER_SENDERS=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 bash "$DIR/setup-agents.sh" start-relayer
+          sleep 60
+          systemctl is-active hyperlane-relayer
+          curl -fsS 127.0.0.1:9091/metrics | grep -c '^hyperlane_'
+          sudo journalctl -u hyperlane-relayer -n 20 --no-pager
+
+      - name: No key in the logs
+        run: |
+          for k in validator relayer; do
+            key=$(sudo cat /etc/hyperlane/$k.key); key=${key#0x}
+            if sudo journalctl --no-pager | grep -qi "$key" || grep -qi "$key" "$W/install.log"; then echo "::error::the $k key is in a log"; exit 1; fi
+          done
+          echo "no key found in the logs"
+
+      - name: Logs on failure
+        if: failure()
+        run: |
+          sudo journalctl -u hyperlane-validator -n 80 --no-pager || true
+          sudo journalctl -u hyperlane-relayer -n 80 --no-pager || true
+          tail -20 "$W/node.log" || true
