@@ -2,16 +2,18 @@
 // $0 and gives the same words every time. One file per language in
 // src/lang/; a key a language lacks falls back to English.
 
-import * as th from './lang/th.js';
 import * as en from './lang/en.js';
 import * as zh from './lang/zh.js';
-import * as ja from './lang/ja.js';
+import * as es from './lang/es.js';
 import * as ko from './lang/ko.js';
+import * as ja from './lang/ja.js';
+import * as ru from './lang/ru.js';
 import * as vi from './lang/vi.js';
+import * as th from './lang/th.js';
 import * as id from './lang/id.js';
 
 /** Languages in menu order: code -> { NAME, LEVEL, UI, T }. */
-export const LANGS = { th, en, zh, ja, ko, vi, id };
+export const LANGS = { en, zh, es, ko, ja, ru, vi, th, id };
 
 // What the token is comes first, then the most serious findings, the caveat last.
 const IDENTITY = new Set([

@@ -4,8 +4,8 @@
 
 The first job in the "ZETAPHY Chain plan": a contract reader that tells you, in plain language, what powers a token contract on
 **Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos, TON, NEAR, Starknet, Osmosis, Neutron, and Runes tokens on Bitcoin** gives its owner (mint more tokens,
-block wallets, pause transfers, change taxes, upgrade the code, etc.). It explains in 7 languages: Thai, English, Chinese, Japanese, Korean,
-Vietnamese, and Indonesian. Cost: $0.
+block wallets, pause transfers, change taxes, upgrade the code, etc.). It explains in 9 languages: English, Chinese, Spanish, Korean, Japanese,
+Russian, Vietnamese, Thai, and Indonesian. Cost: $0.
 
 - **Read-only**: it uses only `eth_getCode`, `eth_getStorageAt`, `eth_call` (EVM, including one `eth_call` with a
   state override for the buy/sell simulation, see below), `eth_gasPrice`, and
@@ -17,7 +17,7 @@ Vietnamese, and Indonesian. Cost: $0.
 - **Does not trust text from the contract**: token names/symbols are stripped of control characters and shown as text only.
   A name that contains a link gets a warning that the name contains a link. Every name is shown "as written in the contract", not as something Neuro confirms.
 - **States code facts, does not judge people**: every message says what the code can do or what the simulation produced.
-  It does not use words like "fraud" or "scam". Every report has a 7-language disclaimer, a report ID, a verdict ID,
+  It does not use words like "fraud" or "scam". Every report has a 9-language disclaimer, a report ID, a verdict ID,
   and the CLI command to re-check it, plus a link to how to respond / request a correction (`web/legal.html`, full policy in [`docs/LEGAL.md`](../docs/LEGAL.md))
 
 ## Usage
@@ -25,7 +25,7 @@ Vietnamese, and Indonesian. Cost: $0.
 ```bash
 npm install
 node cli.js bsc 0x...            # explain in Thai
-node cli.js base 0x... --lang th  # Thai (default English; also zh ja ko vi id)
+node cli.js base 0x... --lang th  # Thai (default English; also zh es ko ja ru vi id)
 node cli.js sui 0x...::coin::COIN # token on Sui
 node cli.js aptos 0x...           # Fungible Asset on Aptos (or 0x...::module::Name)
 node cli.js ton EQ...             # jetton on TON
@@ -222,7 +222,7 @@ in `src/threat-signatures.js`, which is a new skill and needs a `NeuroControl.ap
 - Rule types: `signature` (fingerprint + MinHash, same as `threat-signatures.js`, uses `closestFlagged`), `selectors`
   (a set of selectors / function names that appear together), `bytecode` (bytes that must be present, or an opcode sequence such as `ORIGIN * EQ`). Code behind a proxy is checked too
 - The web page sends only `{chain, address}` to `POST /api/early-warning` after the check finishes (EVM only). If there is a result, an
-  "Early warning" box appears, separate from the 7-language results. The risk level at the top does not change
+  "Early warning" box appears, separate from the 9-language results. The risk level at the top does not change
 - The server stores nothing: it caches answers per (chain, address) in memory for 5 minutes, counts rate with an HMAC of the IP, and does not log the rule pack or token
 
 **Setup on Vercel** (Settings → Environment Variables, then Redeploy). Choose one:
@@ -257,7 +257,7 @@ npm run test:web  # open the web page in Chromium, answering RPC from a test cha
 
 ## Status
 
-- [x] Contract reader and explainer (CLI + web page) in 7 languages (`src/lang/`, `test/i18n.test.js` checks every language has every message)
+- [x] Contract reader and explainer (CLI + web page) in 9 languages (`src/lang/`, `test/i18n.test.js` checks every language has every message)
 - [x] Ready to host on Vercel for free (`vercel.json`)
 - [x] Monthly user counter that stores no personal data + stats page against the 1,000 target
 - [x] ZETAPHY token template recognition (waiting for one sample token address per chain to register)
@@ -265,7 +265,7 @@ npm run test:web  # open the web page in Chromium, answering RPC from a test cha
 - [x] Recognises major official tokens, and warns about tokens using the same symbol at a different address
 - [x] Supports Ethereum and Solana
 - [x] Supports Sui, Aptos (Move language), and TON (tested with data in each chain's real format; not yet tried against mainnet from this machine)
-- [ ] Native speakers to review the Chinese, Japanese, Korean, Vietnamese, and Indonesian translations
+- [ ] Native speakers to review the Chinese, Spanish, Korean, Japanese, Russian, Vietnamese, and Indonesian translations
 - [x] Rust: Solana (Anchor IDL), Arbitrum Stylus, CosmWasm (Osmosis, Neutron) · Solidity/Vyper source from Sourcify
 - [x] NEAR (Rust/WASM) · TON checks holders' jetton wallet code
 - [x] Starknet (Cairo) · Bitcoin Runes
@@ -281,7 +281,7 @@ npm run test:web  # open the web page in Chromium, answering RPC from a test cha
 - [x] Baseline from common OpenZeppelin patterns (solc 0.8.26, optimizer on/off), and the real dataset starts empty
 - [ ] Add contracts really flagged on mainnet to the dataset (with the flag's key and reportHash), and extend the baseline with real OpenZeppelin tokens compiled with several solc versions
       (right now the baseline and seed entries come from solc 0.8.26 only, so copies compiled with other versions may slip through)
-- [x] Neutral wording (code facts, not judging people) + 7-language disclaimer + re-check evidence in every report (`docs/LEGAL.md`)
+- [x] Neutral wording (code facts, not judging people) + 9-language disclaimer + re-check evidence in every report (`docs/LEGAL.md`)
 - [ ] On-chain response/appeal channel in ThreatRegistry
 - [ ] AI explanation tier (optional): send only the check results, give it no permission to call tools (weakness no. 12)
 
@@ -293,8 +293,8 @@ Read-only contract reader and explainer for Ethereum, BNB Chain, Base,
 Arbitrum, Solana (incl. Anchor IDLs), Sui, Aptos, TON, NEAR, Starknet, Osmosis, Neutron and Bitcoin Runes
 (CosmWasm), with Sourcify verified-source lookups and Stylus / EIP-7702
 detection. Fixed rules over on-chain code and data
-(no AI, no wallet, no transactions), output in Thai, English, Chinese,
-Japanese, Korean, Vietnamese and Indonesian, a reproducible `reportHash`, a CLI and a static web page.
+(no AI, no wallet, no transactions), output in English, Chinese, Spanish,
+Korean, Japanese, Russian, Vietnamese, Thai and Indonesian, a reproducible `reportHash`, a CLI and a static web page.
 Also: a privacy-preserving monthly user counter (`api/usage.js`, Vercel +
 Upstash Redis) with a stats page, and code-fingerprint templates to recognise
 ZETAPHY launcher tokens (`node cli.js fingerprint <chain> <address>`).
@@ -330,7 +330,7 @@ and code that is mostly unnamed functions and can move value gets a low
 "Neuro doesn't recognise this pattern yet" warning instead of "nothing found".
 Wording states verifiable code facts ("the owner can mint new tokens", "in a
 simulated buy/sell, the token could be bought but not sold"), never verdicts about
-people or projects. Every report (web and CLI) shows a 7-language disclaimer, the
+people or projects. Every report (web and CLI) shows a 9-language disclaimer, the
 report ID, the rules-only verdict ID and the CLI command that reproduces it, and
 links to the correction / right-of-reply process (`web/legal.html`,
 [`docs/LEGAL.md`](../docs/LEGAL.md)).

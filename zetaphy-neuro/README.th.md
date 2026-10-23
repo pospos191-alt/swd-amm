@@ -4,8 +4,8 @@
 
 งานแรกตาม "แผน ZETAPHY Chain": ตัวอ่านสัญญาที่บอกเป็นภาษาคนว่าสัญญาเหรียญบน
 **Ethereum, BNB Chain, Base, Arbitrum, Solana, Sui, Aptos, TON, NEAR, Starknet, Osmosis, Neutron และเหรียญ Runes บน Bitcoin** ให้สิทธิ์อะไรกับเจ้าของบ้าง (สร้างเหรียญเพิ่ม,
-บล็อกกระเป๋า, หยุดการโอน, เปลี่ยนภาษี, อัปเกรดโค้ด ฯลฯ) อธิบายได้ 7 ภาษา: ไทย อังกฤษ จีน ญี่ปุ่น เกาหลี
-เวียดนาม อินโดนีเซีย ต้นทุน $0
+บล็อกกระเป๋า, หยุดการโอน, เปลี่ยนภาษี, อัปเกรดโค้ด ฯลฯ) อธิบายได้ 9 ภาษา: อังกฤษ จีน สเปน เกาหลี ญี่ปุ่น รัสเซีย เวียดนาม ไทย อินโดนีเซีย
+ต้นทุน $0
 
 - **อ่านอย่างเดียว**: ใช้แค่ `eth_getCode`, `eth_getStorageAt`, `eth_call` (EVM รวมถึง `eth_call` แบบ
   state override หนึ่งครั้งสำหรับจำลองซื้อขาย ดูด้านล่าง), `eth_gasPrice` และ
@@ -17,7 +17,7 @@
 - **ไม่เชื่อข้อความจากสัญญา**: ชื่อ/สัญลักษณ์เหรียญถูกกรองอักขระควบคุมและแสดงเป็นข้อความเท่านั้น
   ชื่อที่มีลิงก์จะได้คำเตือนว่าชื่อนั้นมีลิงก์ ชื่อทุกชื่อแสดง "ตามที่เขียนไว้ในสัญญา" ไม่ใช่คำยืนยันของ Neuro
 - **บอกข้อเท็จจริงของโค้ด ไม่ตัดสินคน**: ทุกข้อความบอกว่าโค้ดทำอะไรได้หรือการจำลองให้ผลอะไร
-  ไม่ใช้คำอย่าง "หลอกลวง" หรือ "scam" ทุกรายงานมีคำปฏิเสธความรับผิด 7 ภาษา, รหัสรายงาน, รหัสผลตัดสิน
+  ไม่ใช้คำอย่าง "หลอกลวง" หรือ "scam" ทุกรายงานมีคำปฏิเสธความรับผิด 9 ภาษา, รหัสรายงาน, รหัสผลตัดสิน
   และคำสั่ง CLI สำหรับตรวจซ้ำ พร้อมลิงก์วิธีชี้แจง/ขอแก้ไข (`web/legal.html`, นโยบายเต็มที่ [`docs/LEGAL.md`](../docs/LEGAL.th.md))
 
 ## ใช้งาน
@@ -25,7 +25,7 @@
 ```bash
 npm install
 node cli.js bsc 0x...            # อธิบายเป็นภาษาไทย
-node cli.js base 0x... --lang en  # English (หรือ zh ja ko vi id)
+node cli.js base 0x... --lang en  # English (หรือ zh es ko ja ru vi id)
 node cli.js sui 0x...::coin::COIN # เหรียญบน Sui
 node cli.js aptos 0x...           # Fungible Asset บน Aptos (หรือ 0x...::module::Name)
 node cli.js ton EQ...             # jetton บน TON
@@ -222,7 +222,7 @@ set_fee, burn_from ฯลฯ)
 - ชนิดกฎ: `signature` (ลายนิ้วมือ + MinHash แบบเดียวกับ `threat-signatures.js`, ใช้ `closestFlagged`), `selectors`
   (ชุด selector / ชื่อฟังก์ชันที่มาด้วยกัน), `bytecode` (ไบต์ที่ต้องเจอ หรือลำดับ opcode เช่น `ORIGIN * EQ`) ดูโค้ดหลัง proxy ด้วย
 - หน้าเว็บส่งแค่ `{chain, address}` ไป `POST /api/early-warning` หลังตรวจเสร็จ (เฉพาะ EVM) ถ้ามีผลจะขึ้นกล่อง
-  "เตือนล่วงหน้า" แยกจากผลตรวจ 7 ภาษา ระดับความเสี่ยงด้านบนไม่เปลี่ยน
+  "เตือนล่วงหน้า" แยกจากผลตรวจ 9 ภาษา ระดับความเสี่ยงด้านบนไม่เปลี่ยน
 - เซิร์ฟเวอร์ไม่เก็บอะไร: จำคำตอบต่อ (เชน, ที่อยู่) ในหน่วยความจำ 5 นาที นับอัตราด้วย HMAC ของ IP ไม่ log ชุดกฎหรือ token
 
 **ตั้งค่าบน Vercel** (Settings → Environment Variables แล้ว Redeploy) เลือกอย่างใดอย่างหนึ่ง:
@@ -257,7 +257,7 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 
 ## สถานะ
 
-- [x] ตัวอ่านและอธิบายสัญญา (CLI + หน้าเว็บ) 7 ภาษา (`src/lang/`, `test/i18n.test.js` ตรวจว่าทุกภาษาครบทุกข้อความ)
+- [x] ตัวอ่านและอธิบายสัญญา (CLI + หน้าเว็บ) 9 ภาษา (`src/lang/`, `test/i18n.test.js` ตรวจว่าทุกภาษาครบทุกข้อความ)
 - [x] พร้อมวางบน Vercel ฟรี (`vercel.json`)
 - [x] ตัวนับผู้ใช้ต่อเดือนแบบไม่เก็บข้อมูลส่วนตัว + หน้าสถิติเทียบเป้า 1,000
 - [x] ระบบจำแม่แบบเหรียญ ZETAPHY (รอที่อยู่เหรียญตัวอย่างหนึ่งตัวต่อเชนเพื่อลงทะเบียน)
@@ -265,7 +265,7 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 - [x] รู้จักเหรียญทางการรายใหญ่ และเตือนเหรียญที่ใช้สัญลักษณ์เดียวกันแต่คนละที่อยู่
 - [x] รองรับ Ethereum และ Solana
 - [x] รองรับ Sui, Aptos (ภาษา Move) และ TON (ทดสอบกับข้อมูลตามรูปแบบจริงของแต่ละเชน ยังไม่ได้ลองกับ mainnet จากเครื่องนี้)
-- [ ] ให้เจ้าของภาษาตรวจคำแปล จีน ญี่ปุ่น เกาหลี เวียดนาม อินโดนีเซีย
+- [ ] ให้เจ้าของภาษาตรวจคำแปล จีน สเปน เกาหลี ญี่ปุ่น รัสเซีย เวียดนาม อินโดนีเซีย
 - [x] Rust: Solana (Anchor IDL), Arbitrum Stylus, CosmWasm (Osmosis, Neutron) · ซอร์ส Solidity/Vyper จาก Sourcify
 - [x] NEAR (Rust/WASM) · TON ตรวจโค้ดกระเป๋าเหรียญของผู้ถือ
 - [x] Starknet (Cairo) · Bitcoin Runes
@@ -281,7 +281,7 @@ npm run test:web  # เปิดหน้าเว็บใน Chromium ตอ�
 - [x] baseline จากรูปแบบ OpenZeppelin ที่พบบ่อย (solc 0.8.26 เปิด/ปิด optimizer) และชุดข้อมูลจริงเริ่มว่าง
 - [ ] ใส่สัญญาที่ติดธงจริงบน mainnet ในชุดข้อมูล (พร้อมคีย์และ reportHash ของธง) และขยาย baseline ด้วยเหรียญ OpenZeppelin จริงที่คอมไพล์หลายเวอร์ชัน solc
       (ตอนนี้ baseline และรายการตั้งต้นมาจาก solc 0.8.26 เท่านั้น สำเนาที่คอมไพล์ด้วยเวอร์ชันอื่นอาจหลุด)
-- [x] ถ้อยคำเป็นกลาง (ข้อเท็จจริงของโค้ด ไม่ตัดสินคน) + คำปฏิเสธความรับผิด 7 ภาษา + หลักฐานตรวจซ้ำในทุกรายงาน (`docs/LEGAL.md`)
+- [x] ถ้อยคำเป็นกลาง (ข้อเท็จจริงของโค้ด ไม่ตัดสินคน) + คำปฏิเสธความรับผิด 9 ภาษา + หลักฐานตรวจซ้ำในทุกรายงาน (`docs/LEGAL.md`)
 - [ ] ช่องทางชี้แจง/อุทธรณ์บนเชนใน ThreatRegistry
 - [ ] ชั้นอธิบายด้วย AI (ทางเลือก): ส่งเฉพาะผลตรวจ ไม่ให้สิทธิ์เรียกเครื่องมือ (จุดอ่อนข้อ 12)
 
@@ -330,7 +330,7 @@ and code that is mostly unnamed functions and can move value gets a low
 "Neuro doesn't recognise this pattern yet" warning instead of "nothing found".
 Wording states verifiable code facts ("the owner can mint new tokens", "in a
 simulated buy/sell, the token could be bought but not sold"), never verdicts about
-people or projects. Every report (web and CLI) shows a 7-language disclaimer, the
+people or projects. Every report (web and CLI) shows a 9-language disclaimer, the
 report ID, the rules-only verdict ID and the CLI command that reproduces it, and
 links to the correction / right-of-reply process (`web/legal.html`,
 [`docs/LEGAL.md`](../docs/LEGAL.th.md)).

@@ -118,11 +118,33 @@ test('token with many owner powers shows high risk in Thai, then English', async
   assert.equal(await page.textContent('#title'), 'High risk');
   assert.match(await page.textContent('#disclaimer'), /not an accusation against any person or project/);
   // Every language in the menu re-renders the same result.
-  const want = { zh: /[\u4E00-\u9FFF]/, ja: /[\u3040-\u30FF]/, ko: /[\uAC00-\uD7AF]/, vi: /rủi ro|Rủi ro/, id: /Risiko|risiko/ };
+  const want = { zh: /[\u4E00-\u9FFF]/, es: /Riesgo alto/, ko: /[\uAC00-\uD7AF]/, ja: /[\u3040-\u30FF]/, ru: /Высокий риск/, vi: /rủi ro|Rủi ro/, id: /Risiko|risiko/ };
   for (const [code, re] of Object.entries(want)) {
     await page.selectOption('#lang', code);
     assert.match(await page.textContent('#title'), re, code);
     assert.equal(await page.getAttribute('html', 'lang'), code);
+  }
+  // The menu lists every language in the agreed order, each by its own name.
+  assert.deepEqual(await page.$$eval('#lang option', (os) => os.map((o) => o.value)), ['en', 'zh', 'es', 'ko', 'ja', 'ru', 'vi', 'th', 'id']);
+  // Spanish and Russian: the whole scan result is translated, with no raw message keys or English left in it.
+  const enItems = await (async () => { await page.selectOption('#lang', 'en'); return page.$$eval('#findings li', (els) => els.map((e) => e.firstChild.textContent)); })();
+  for (const [code, script] of [['es', /[a-záéíóúñ]{3}/i], ['ru', /[А-Яа-яЁё]{3}/]]) {
+    await page.selectOption('#lang', code);
+    const L = LANGS[code];
+    assert.equal(await page.textContent('#title'), L.LEVEL.high, code);
+    assert.equal(await page.textContent('#go'), L.UI.check, code);
+    // The explanation is the first text node of each item (the evidence note follows it).
+    const lis = await page.$$eval('#findings li', (els) => els.map((e) => e.firstChild.textContent));
+    assert.equal(lis.length, enItems.length, `${code}: same findings`);
+    const visible = await page.innerText('main');
+    for (const t of lis) assert.ok(!Object.hasOwn(L.T, t) && !/^[a-z0-9-]+$/.test(t), `${code}: raw key shown: ${t}`);
+    assert.doesNotMatch(visible, /undefined|\[object|NaN/, code);
+    lis.forEach((t, i) => {
+      assert.match(t, script, `${code}: ${t}`);
+      assert.notEqual(t, enItems[i], `${code}: finding ${i} left in English`);
+    });
+    assert.match(await page.textContent('#disclaimer'), new RegExp(L.UI.disclaimer.slice(0, 20)), code);
+    assert.ok((await page.textContent('#evidence')).includes(`--lang ${code}`), `${code}: CLI command uses the language`);
   }
   await page.selectOption('#lang', 'th');
   await page.reload();

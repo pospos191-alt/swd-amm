@@ -44,7 +44,7 @@ test('every language has every message, menu name and UI label', () => {
     assert.deepEqual(Object.keys(L.UI.m).sort(), Object.keys(en.UI.m).sort(), `${code}: detail labels`);
     assert.ok(typeof L.NAME === 'string' && L.NAME.length > 1, `${code}: NAME`);
   }
-  assert.deepEqual(Object.keys(LANGS), ['th', 'en', 'zh', 'ja', 'ko', 'vi', 'id']);
+  assert.deepEqual(Object.keys(LANGS), ['en', 'zh', 'es', 'ko', 'ja', 'ru', 'vi', 'th', 'id']);
 });
 
 // Params a finding always carries (the analyzer sets them unconditionally).
@@ -91,12 +91,15 @@ test('each language is written in its own script', () => {
   assert.match(sample('ko'), /[가-힯]/);
   assert.match(sample('vi'), /[ạảấầẩẫậắằẳẵặẹẻẽếềểễệịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹđ]/);
   assert.match(sample('id'), /\b(dan|tidak|bisa)\b/);
+  assert.match(sample('es'), /[ñáéíóú]/);
+  assert.match(sample('es'), /\b(puede|tokens|suministro)\b/);
+  assert.match(sample('ru'), /[А-Яа-яЁё]/);
 });
 
 // Wording states verifiable code facts, never a verdict about a person or
 // project (docs/LEGAL.md). Finding ids (hashed into verdicts) may keep old
 // names such as 'ton-scam'; only what a user reads is checked here.
-const ACCUSATORY = /\bscam|fraud|\brug\b|rug ?pull|drainer|phishing|honeypot|หลอกลวง|กลโกง|กลลวง|โกง|ฉ้อโกง|เหรียญปลอม|骗|诈|欺诈|貔貅|詐欺|ハニーポット|フィッシング|偽物|사기|허니팟|피싱|가짜|lừa đảo|hàng giả|penipu|palsu/i;
+const ACCUSATORY = /\bscam|fraud|\brug\b|rug ?pull|drainer|phishing|honeypot|หลอกลวง|กลโกง|กลลวง|โกง|ฉ้อโกง|เหรียญปลอม|骗|诈|欺诈|貔貅|詐欺|ハニーポット|フィッシング|偽物|사기|허니팟|피싱|가짜|lừa đảo|hàng giả|penipu|palsu|estafa|fraude|\btimo\b|falsificad|мошенн|скам|ханипот|фишинг|обман|подделк|фальшив|развод/i;
 
 test('no message, reason or UI text uses an accusatory label', () => {
   for (const [code, L] of Object.entries(LANGS)) {
