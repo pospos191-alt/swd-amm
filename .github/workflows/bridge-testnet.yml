@@ -1,0 +1,174 @@
+# ZETAPHY Saphan, EVM route: the lock/mint bridge Sepolia ETH -> ZETAPHY on the testnets.
+#   ZETAPHY: zetaphy deploy-bridge --testnet (BridgeGuard + bridged token, BridgeAirlock, NeuroLane,
+#            HyperlaneLane), deployed CLOSED; admin = the timelock, guardian = the 2-of-2 multisig.
+#   Sepolia: HyperlaneLockBox (locks Sepolia ETH, dispatches to the HyperlaneLane on ZETAPHY).
+# Each side needs the other's address: the lockbox's address is fixed in advance (the deployer's
+# Sepolia nonce), so ZETAPHY goes first and the lockbox is then deployed exactly there.
+#
+# mode = check    read only: both chains, which Sepolia hook to use, the deployer's balance/nonce
+# mode = dry_run  the whole deploy on local copies (anvil forks) of both chains with a throwaway key,
+#                 then a lock on Sepolia delivered on ZETAPHY: nothing is sent to either testnet
+# mode = deploy   the real deploy (manual run only; key = the repository secret ZETAPHY_DEPLOYER_KEY,
+#                 the same deployer on both chains); pushes the addresses to the branch bridge/testnet
+# On pull requests it runs check + dry_run. Cost: free (GitHub-hosted runner, public repository).
+
+name: bridge-testnet
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/bridge-testnet.yml'
+      - 'zetaphy-network/scripts/bridge-sepolia.js'
+      - 'zetaphy-network/contracts/HyperlaneLane.sol'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = read only; dry_run = on local copies of both chains; deploy = the real testnets"
+        required: true
+        default: 'check'
+        type: choice
+        options: ['check', 'dry_run', 'deploy']
+
+permissions:
+  contents: write
+
+jobs:
+  bridge:
+    name: Bridge Sepolia -> ZETAPHY (testnet)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      MODE: ${{ github.event_name == 'pull_request' && 'dry_run' || inputs.mode }}
+      ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+      SEPOLIA_RPC: https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.drpc.org,https://1rpc.io/sepolia
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+      # ZETAPHY testnet (zetaphy-launch/state/77390.json, zetaphy-chain/hyperlane)
+      NEURO_JOBS: "0x698dC17df6a34b02263b295d101BE39F3F3B433B"
+      NEURO_CONTROL: "0xc0081832ABf11BF68Df37cbA1A3E6805e10b23c6"
+      THREATS: "0xaB5745b61f83975E68F6546be9F83651df12417f"
+      TIMELOCK: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+      GUARDIAN: "0x5bcC8290fff6f1410d7a04c5f6839b6AfD917Eb5"
+      ZETAPHY_MAILBOX: "0x0f1C59C6e98c88E1ddc2Ff98Bee11dadA07fEaCe"
+      # anvil's well-known dev key #0 (public, dry run only)
+      DEV_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Check both chains (read only)
+        id: check
+        run: |
+          zc=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$ZETAPHY_RPC" | jq -r .result)
+          [ "$zc" = "0x12e4e" ] || { echo "::error::ZETAPHY RPC answers chain $zc"; exit 1; }
+          for a in $NEURO_JOBS $NEURO_CONTROL $THREATS $TIMELOCK $GUARDIAN $ZETAPHY_MAILBOX; do
+            code=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getCode\",\"params\":[\"$a\",\"latest\"]}" "$ZETAPHY_RPC" | jq -r .result)
+            [ ${#code} -gt 4 ] || { echo "::error::no contract at $a on ZETAPHY"; exit 1; }
+          done
+          out=$(node scripts/bridge-sepolia.js check | tail -1); echo "$out" | jq .
+          echo "hook=$(jq -r .hook <<<"$out")" >> "$GITHUB_OUTPUT"
+          echo "lockbox=$(jq -r .lockbox <<<"$out")" >> "$GITHUB_OUTPUT"
+          echo "pending=$(jq -r .pendingTxs <<<"$out")" >> "$GITHUB_OUTPUT"
+          echo "balance=$(jq -r .balance <<<"$out")" >> "$GITHUB_OUTPUT"
+
+      - name: Install anvil (pinned)
+        if: env.MODE == 'dry_run'
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.2.3
+
+      - name: Dry run on local copies of both chains
+        if: env.MODE == 'dry_run'
+        run: |
+          set -o pipefail
+          anvil --fork-url "${SEPOLIA_RPC%%,*}" --port 8601 --silent &
+          anvil --fork-url "$ZETAPHY_RPC" --port 8602 --chain-id 77390 --silent &
+          for port in 8601 8602; do for _ in $(seq 1 60); do curl -fs -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' 127.0.0.1:$port >/dev/null && break; sleep 2; done; done
+          H=$(mktemp -d); umask 077; printf '%s' "$DEV_KEY" > "$H/worker.key"
+          DEV=$(node -e 'console.log(new (require("ethers").Wallet)(process.argv[1]).address)' "$DEV_KEY")
+          # the lockbox address on the Sepolia copy (dev key, its nonce there)
+          LB=$(SEPOLIA_RPC=http://127.0.0.1:8601 DEPLOYER=$DEV node scripts/bridge-sepolia.js check | tail -1 | jq -r .lockbox)
+          echo "lockbox will be $LB"
+          ZETAPHY_HOME="$H" node cli.js deploy-bridge --testnet --rpc http://127.0.0.1:8602 --jobs "$NEURO_JOBS" --threats "$THREATS" \
+            --control "$NEURO_CONTROL" --lockbox "11155111:$LB" --hyperlane-mailbox "$ZETAPHY_MAILBOX" --hyperlane-origin 11155111 \
+            --governance "$TIMELOCK" --guardian "$GUARDIAN" --decimals 18 --daily-limit 1 \
+            --token-name "Sepolia ETH (bridged, testnet)" --token-symbol sETH | tee "$H/zetaphy.log"
+          LANE=$(grep -Eo 'HyperlaneLane 0x[0-9a-fA-F]{40}' "$H/zetaphy.log" | tail -1 | awk '{print $2}')
+          AIRLOCK=$(grep -Eo 'BridgeAirlock 0x[0-9a-fA-F]{40}' "$H/zetaphy.log" | tail -1 | awk '{print $2}')
+          SEPOLIA_RPC=http://127.0.0.1:8601 KEYFILE="$H/worker.key" node scripts/bridge-sepolia.js deploy \
+            --recipient "$LANE" --expect "$LB" --hook "${{ steps.check.outputs.hook }}" | tail -1 | tee "$H/sepolia.json"
+          # A lock on the Sepolia copy, delivered on the ZETAPHY copy as the Mailbox would (after its ISM):
+          # the lane must accept it and attest the same transfer to the airlock.
+          LB="$LB" LANE="$LANE" AIRLOCK="$AIRLOCK" node -e '
+            const { JsonRpcProvider, Wallet, Contract, parseEther, zeroPadValue, AbiCoder } = require("ethers");
+            const fs = require("fs"); const art = (n) => JSON.parse(fs.readFileSync(`artifacts/${n}.json`, "utf8"));
+            (async () => {
+              const s = new JsonRpcProvider("http://127.0.0.1:8601"), z = new JsonRpcProvider("http://127.0.0.1:8602");
+              const w = new Wallet(process.env.DEV_KEY, s);
+              const lb = new Contract(process.env.LB, art("HyperlaneLockBox").abi, w);
+              const amount = parseEther("0.01"), fee = await lb.quoteLock(w.address, amount);
+              const r = await (await lb.lock(w.address, amount, { value: amount + fee })).wait();
+              const ev = r.logs.map((l) => { try { return lb.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === "Locked");
+              const body = await lb.body(ev.args.nonce, w.address, w.address, amount);
+              console.log("locked on Sepolia copy: nonce", ev.args.nonce, "fee", fee);
+              const mailbox = process.env.ZETAPHY_MAILBOX;
+              await z.send("anvil_impersonateAccount", [mailbox]); await z.send("anvil_setBalance", [mailbox, "0x56BC75E2D63100000"]);
+              const lane = new Contract(process.env.LANE, art("HyperlaneLane").abi, await z.getSigner(mailbox));
+              const rz = await (await lane.handle(11155111, zeroPadValue(process.env.LB, 32), body)).wait();
+              const d = rz.logs.map((l) => { try { return lane.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === "Delivered");
+              if (!d) throw new Error("the lane did not deliver");
+              console.log("delivered on ZETAPHY copy: transfer", d.args.id);
+              await (lane.handle(11155111, zeroPadValue(process.env.LB, 32), body)).then(() => { throw new Error("replay accepted"); }, () => console.log("replay refused"));
+            })().catch((e) => { console.error(e.shortMessage || e.message); process.exit(1); });'
+          echo "dry run OK: nothing was sent to Sepolia or the ZETAPHY testnet"
+
+      - name: Deploy on the testnets
+        if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch'
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+          LB: ${{ steps.check.outputs.lockbox }}
+          HOOK: ${{ steps.check.outputs.hook }}
+          PENDING: ${{ steps.check.outputs.pending }}
+          BALANCE: ${{ steps.check.outputs.balance }}
+        run: |
+          set -o pipefail
+          [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
+          [ "$PENDING" = 0 ] || { echo "::error::the deployer has pending Sepolia transactions: the lockbox address is not fixed; nothing deployed"; exit 1; }
+          awk -v b="$BALANCE" 'BEGIN{exit !(b>=0.01)}' || { echo "::error::the deployer has $BALANCE Sepolia ETH (0.01 needed)"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/zh"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/worker.key")" = "$DEPLOYER" ] \
+            || { rm -f "$H/worker.key"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          trap 'rm -f "$H/worker.key"' EXIT
+          echo "Sepolia lockbox will be $LB (hook $HOOK)"
+          ZETAPHY_HOME="$H" node cli.js deploy-bridge --testnet --rpc "$ZETAPHY_RPC" --jobs "$NEURO_JOBS" --threats "$THREATS" \
+            --control "$NEURO_CONTROL" --lockbox "11155111:$LB" --hyperlane-mailbox "$ZETAPHY_MAILBOX" --hyperlane-origin 11155111 \
+            --governance "$TIMELOCK" --guardian "$GUARDIAN" --decimals 18 --daily-limit 1 \
+            --token-name "Sepolia ETH (bridged, testnet)" --token-symbol sETH | tee "$H/zetaphy.log"
+          LANE=$(grep -Eo 'HyperlaneLane 0x[0-9a-fA-F]{40}' "$H/zetaphy.log" | tail -1 | awk '{print $2}')
+          KEYFILE="$H/worker.key" node scripts/bridge-sepolia.js deploy --recipient "$LANE" --expect "$LB" --hook "$HOOK" | tail -1 | tee "$H/sepolia.json"
+          pick() { grep -Eo "$1 0x[0-9a-fA-F]{40}" "$H/zetaphy.log" | tail -1 | awk '{print $2}'; }
+          jq -n --arg guard "$(pick BridgeGuard)" --arg token "$(pick BridgedToken)" --arg airlock "$(pick BridgeAirlock)" \
+            --arg neuroLane "$(pick NeuroLane)" --arg lane "$LANE" --arg lockbox "$LB" --arg hook "$HOOK" --arg run "${{ github.run_id }}" \
+            '{zetaphy: {chainId: 77390, bridgeGuard: $guard, bridgedToken: $token, bridgeAirlock: $airlock, neuroLane: $neuroLane, hyperlaneLane: $lane},
+              sepolia: {chainId: 11155111, hyperlaneLockBox: $lockbox, hook: $hook}, state: "CLOSED (route disabled)", workflowRun: $run}' \
+            > ../zetaphy-chain/hyperlane/bridge-testnet.json
+          cat ../zetaphy-chain/hyperlane/bridge-testnet.json
+
+      - name: Push the addresses to bridge/testnet
+        if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch'
+        run: |
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B bridge/testnet
+          git add zetaphy-chain/hyperlane/bridge-testnet.json
+          git commit -q -m "Bridge Sepolia -> ZETAPHY on the testnets: addresses" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin bridge/testnet
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...bridge/testnet"

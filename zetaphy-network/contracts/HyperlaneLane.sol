@@ -16,6 +16,9 @@ interface IHyperlaneMailbox {
     function localDomain() external view returns (uint32);
     function dispatch(uint32 destinationDomain, bytes32 recipientAddress, bytes calldata messageBody) external payable returns (bytes32 messageId);
     function quoteDispatch(uint32 destinationDomain, bytes32 recipientAddress, bytes calldata messageBody) external view returns (uint256 fee);
+    // With a custom post-dispatch hook (IPostDispatchHook, an address in the ABI) instead of the default hook.
+    function dispatch(uint32 destinationDomain, bytes32 recipientAddress, bytes calldata messageBody, bytes calldata customHookMetadata, address customHook) external payable returns (bytes32 messageId);
+    function quoteDispatch(uint32 destinationDomain, bytes32 recipientAddress, bytes calldata messageBody, bytes calldata customHookMetadata, address customHook) external view returns (uint256 fee);
 }
 
 interface IInterchainSecurityModule {
@@ -139,20 +142,26 @@ contract HyperlaneLane is IMessageRecipient {
 ///         HyperlaneLane on ZETAPHY. msg.value = amount + the Mailbox fee
 ///         (quoteLock). Like LockBox it has no refund path: a vetoed or held
 ///         transfer stays locked here.
+///         `hook`: zero = the Mailbox's default hook. Otherwise every dispatch uses
+///         this hook instead (e.g. the source chain's MerkleTreeHook alone, when the
+///         default hook's gas paymaster does not quote the destination; the
+///         Mailbox's required hook still runs). Set once, at deploy.
 contract HyperlaneLockBox {
     IHyperlaneMailbox public immutable mailbox;
     uint32 public immutable destinationDomain;
     bytes32 public immutable recipient;      // HyperlaneLane on ZETAPHY
+    address public immutable hook;           // zero = the Mailbox default hook
     uint256 public nonce;
 
     event Locked(uint256 indexed nonce, address indexed sender, address indexed to, uint256 amount);
     event Dispatched(uint256 indexed nonce, bytes32 messageId);
 
-    constructor(IHyperlaneMailbox mailbox_, uint32 destinationDomain_, bytes32 recipient_) {
+    constructor(IHyperlaneMailbox mailbox_, uint32 destinationDomain_, bytes32 recipient_, address hook_) {
         require(address(mailbox_) != address(0) && recipient_ != bytes32(0), "config");
         mailbox = mailbox_;
         destinationDomain = destinationDomain_;
         recipient = recipient_;
+        hook = hook_;
     }
 
     function body(uint256 n, address sender, address to, uint256 amount) public view returns (bytes memory) {
@@ -161,14 +170,19 @@ contract HyperlaneLockBox {
 
     /// The Mailbox fee for the next lock (pay amount + this).
     function quoteLock(address to, uint256 amount) external view returns (uint256) {
-        return mailbox.quoteDispatch(destinationDomain, recipient, body(nonce, msg.sender, to, amount));
+        bytes memory b = body(nonce, msg.sender, to, amount);
+        if (hook == address(0)) return mailbox.quoteDispatch(destinationDomain, recipient, b);
+        return mailbox.quoteDispatch(destinationDomain, recipient, b, "", hook);
     }
 
     function lock(address to, uint256 amount) external payable returns (bytes32 messageId) {
         require(amount > 0 && to != address(0) && msg.value >= amount, "lock");
         uint256 n = nonce++;
         emit Locked(n, msg.sender, to, amount);
-        messageId = mailbox.dispatch{value: msg.value - amount}(destinationDomain, recipient, body(n, msg.sender, to, amount));
+        bytes memory b = body(n, msg.sender, to, amount);
+        messageId = hook == address(0)
+            ? mailbox.dispatch{value: msg.value - amount}(destinationDomain, recipient, b)
+            : mailbox.dispatch{value: msg.value - amount}(destinationDomain, recipient, b, "", hook);
         emit Dispatched(n, messageId);
     }
 }

@@ -15,6 +15,8 @@ contract MockMailbox {
     uint256 public fee;
     uint32 public nonce;
 
+    address public lastHook;   // the custom hook of the last dispatch (zero = default)
+
     event Dispatch(address indexed sender, uint32 indexed destination, bytes32 indexed recipient, bytes message);
 
     constructor(uint32 localDomain_) { localDomain = localDomain_; }
@@ -23,7 +25,19 @@ contract MockMailbox {
 
     function quoteDispatch(uint32, bytes32, bytes calldata) external view returns (uint256) { return fee; }
 
+    function quoteDispatch(uint32, bytes32, bytes calldata, bytes calldata, address) external view returns (uint256) { return fee; }
+
+    function dispatch(uint32 destination, bytes32 recipient, bytes calldata body, bytes calldata, address hook) external payable returns (bytes32 id) {
+        lastHook = hook;
+        return _dispatch(destination, recipient, body);
+    }
+
     function dispatch(uint32 destination, bytes32 recipient, bytes calldata body) external payable returns (bytes32 id) {
+        lastHook = address(0);
+        return _dispatch(destination, recipient, body);
+    }
+
+    function _dispatch(uint32 destination, bytes32 recipient, bytes calldata body) private returns (bytes32 id) {
         require(msg.value >= fee, "fee");
         id = keccak256(abi.encode(localDomain, nonce++, msg.sender, destination, recipient, body));
         emit Dispatch(msg.sender, destination, recipient, body);
