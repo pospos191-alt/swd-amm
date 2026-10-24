@@ -69,10 +69,29 @@ export function explain(report, lang = 'en') {
 export function explainPath(report, lang = 'en') {
   if (!report.path?.length) return [];
   const L = LANGS[pickLang(lang)];
-  const KINDS = ['call', 'create', 'token', 'nft', 'approve', 'approveAll'];
-  const text = (id, p) => {
+  // Fixed message per path kind: the transaction data never chooses which function runs.
+  const msg = (id) => {
     const fn = Object.hasOwn(L.T, id) ? L.T[id] : en.T[id];
-    return typeof fn === 'function' ? fn(p) : id;
+    return typeof fn === 'function' ? fn : null;
   };
-  return [...report.path.filter((e) => KINDS.includes(e.kind)).map((e) => text(`path-${e.kind}`, e)), text('path-note', {})];
+  const MSG = {
+    call: msg('path-call'), create: msg('path-create'), token: msg('path-token'),
+    nft: msg('path-nft'), approve: msg('path-approve'), approveAll: msg('path-approveAll'),
+  };
+  const lines = [];
+  for (const e of report.path) {
+    let fn = null;
+    switch (e.kind) {
+      case 'call': fn = MSG.call; break;
+      case 'create': fn = MSG.create; break;
+      case 'token': fn = MSG.token; break;
+      case 'nft': fn = MSG.nft; break;
+      case 'approve': fn = MSG.approve; break;
+      case 'approveAll': fn = MSG.approveAll; break;
+      default: fn = null;
+    }
+    if (fn) lines.push(fn(e));
+  }
+  lines.push(msg('path-note')({}));
+  return lines;
 }
