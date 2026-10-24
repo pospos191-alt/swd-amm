@@ -1,6 +1,7 @@
 {
   "name": "swd-amm",
   "version": "0.1.0",
+  "license": "BUSL-1.1",
   "private": true,
   "scripts": {
     "test": "node scripts/gen-pyth-fixtures.js && anchor test",
