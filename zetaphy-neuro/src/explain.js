@@ -70,6 +70,9 @@ export function explainPath(report, lang = 'en') {
   if (!report.path?.length) return [];
   const L = LANGS[pickLang(lang)];
   const KINDS = ['call', 'create', 'token', 'nft', 'approve', 'approveAll'];
-  const text = (id, p) => (Object.hasOwn(L.T, id) ? L.T[id] : en.T[id])(p);
+  const text = (id, p) => {
+    const fn = Object.hasOwn(L.T, id) ? L.T[id] : en.T[id];
+    return typeof fn === 'function' ? fn(p) : id;
+  };
   return [...report.path.filter((e) => KINDS.includes(e.kind)).map((e) => text(`path-${e.kind}`, e)), text('path-note', {})];
 }

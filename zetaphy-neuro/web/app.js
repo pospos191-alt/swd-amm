@@ -153,7 +153,8 @@ function render(report) {
   const dd = document.createElement('dd');
   const a = document.createElement('a');
   const link = report.kind === 'tx' ? explorerTxUrl(report.chain, report.hash) : explorerUrl(report.chain, report.address); // validated input
-  a.href = link && link.startsWith('https://') ? link : '#';
+  // Escape HTML meta-characters (never present in a valid link, so real links are unchanged).
+  a.href = link && link.startsWith('https://') ? link.replace(/[<>"'`\s]/g, (c) => encodeURIComponent(c)) : '#';
   a.target = '_blank'; a.rel = 'noopener noreferrer';
   a.textContent = new URL(a.href).hostname;
   dd.append(a); dl.append(dt, dd);
