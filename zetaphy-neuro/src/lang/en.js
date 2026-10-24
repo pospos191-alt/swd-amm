@@ -1,4 +1,4 @@
-import { fmtSupply, list } from './fmt.js';
+import { fmtSupply, list, short, sym } from './fmt.js';
 
 // English: the reference language. Every other language file has the same keys.
 export const NAME = 'English';
@@ -6,9 +6,9 @@ export const NAME = 'English';
 export const LEVEL = { high: 'High risk', medium: 'Medium risk', low: 'Low risk', info: 'No risk found by these rules' };
 
 export const UI = {
-  subtitle: 'Reads and explains contracts · tier 1, read-only', chain: 'Chain', address: 'Contract or token address', check: 'Check contract',
+  subtitle: 'Reads and explains contracts · tier 1, read-only', chain: 'Chain', address: 'Contract, token address or transaction hash', check: 'Check contract',
   details: 'Details', reading: 'Reading from the chain…', badAddress: 'Invalid address for this chain. Accepted formats: ',
-  failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data; for an early-warning check it sends only the chain and contract address to the server of this site, which stores nothing. Not investment advice.', stats: 'Usage stats', statChecks: 'Contracts checked', statRisky: 'Risky contracts flagged', statHigh: 'High risk found', statNote: 'All users together, approximate. Only the result level is counted, never the contract.', language: 'Language',
+  failed: 'Could not read: ', footer: 'Never asks to connect a wallet and never sends a transaction. Reads public chain data; for an early-warning check it sends only the chain and contract address to the server of this site, which stores nothing. Not investment advice.', stats: 'Usage stats', badTx: 'Transaction checks need an EVM chain (Ethereum, BNB Chain, Base, Arbitrum or ZETAPHY) and a hash of 0x plus 64 hex characters.', path: 'What happened (path)', statTx: 'Transactions checked', statZetaphy: 'Checks on ZETAPHY', statChecks: 'Contracts checked', statRisky: 'Risky contracts flagged', statHigh: 'High risk found', statNote: 'All users together, approximate. Only the result level is counted, never the contract.', language: 'Language',
   disclaimer: 'This is automated, reproducible code analysis, not an accusation against any person or project, and not investment advice. The contract owner can respond or request a correction.',
   correction: 'How to respond or request a correction',
   reproduce: 'Check it yourself',
@@ -24,6 +24,7 @@ export const UI = {
     pool: 'Liquidity pool', simTax: 'Simulated tax (buy / sell)', simFailed: 'sell failed',
     verdict: 'Verdict ID (rules only)', command: 'Command', rule: 'rule',
     earlyMatch: 'Matches a watched pattern. Category:', earlyRef: 'reference',
+    hash: 'Transaction', status: 'Status', block: 'Block', succeeded: 'succeeded', reverted: 'failed (reverted)',
   },
 };
 
@@ -247,4 +248,29 @@ export const T = {
     'btc-premine': (p) => `${p.percent}% of the maximum supply went to the creator when the token was created (premine). They can sell it at any time.`,
     'btc-turbo': () => 'The creator opted in to future Runes protocol changes (turbo), so how this token works may change with new protocol versions.',
     'btc-caveat': () => 'Read from ord (ordinals.com), the reference Runes indexer, with fixed rules. Runes exist as indexer rules on top of Bitcoin. Holders and liquidity are not checked. Not investment advice.',
+    // Transaction checks (src/tx.js)
+    'tx-not-found': () => 'No transaction with this hash on the selected chain. Check the hash, or pick the chain it was sent on.',
+    'tx-summary': (p) => (p.created ? `${short(p.from)} created a new contract at ${short(p.to)}.`
+      : p.method ? `${short(p.from)} called ${p.method} on ${short(p.to)}${p.value !== '0' ? `, sending ${fmtSupply(p.value, 18)} ${p.native}` : ''}.`
+        : `${short(p.from)} sent ${fmtSupply(p.value, 18)} ${p.native} to ${short(p.to)}.`),
+    'tx-failed': () => 'The transaction failed (reverted): nothing it tried to do happened, but the fee was paid.',
+    'tx-created': (p) => `It created a contract at ${p.address}. Check that address on its own too.`,
+    'tx-approve-wallet': (p) => `The sender allowed a plain wallet (${p.spender}), not a contract, to spend their ${sym(p)}${p.unlimited ? ' with no limit' : ''}. Real apps use contracts; this is a common way tokens are taken from wallets. Revoke this approval now (for example with revoke.cash).`,
+    'tx-approve-risky': (p) => `The sender allowed ${p.spender} to spend their ${sym(p)}, and Neuro rates that contract high risk. Revoke this approval now (for example with revoke.cash).`,
+    'tx-approve-unlimited': (p) => `Unlimited approval: ${p.spender} can take all of the sender's ${sym(p)} at any time, now and later. Normal for apps you trust; revoke it when you no longer use the app.`,
+    'tx-approve-all-wallet': (p) => `The sender allowed a plain wallet (${p.operator}) to move ALL of their ${sym(p)} NFTs. This is a common way NFTs are taken from wallets. Revoke it now (for example with revoke.cash).`,
+    'tx-approve-all': (p) => `The sender allowed ${p.operator} to move all of their ${sym(p)} NFTs. Only do this for marketplaces you trust.`,
+    'tx-zero-transfer': (p) => `A transfer of 0 ${sym(p)} from ${short(p.from)} to ${short(p.to)}. This is address poisoning: a fake entry in your history so that you copy a look-alike address later. Never copy addresses from your transaction history.`,
+    'tx-lookalike': (p) => `${p.a} looks like ${p.b} (same start and end) but is a different address. It was made to be mistaken for it: check every character before sending anything.`,
+    'tx-bait-payable': (p) => `${fmtSupply(p.value, 18)} ${p.native} was sent to the contract function "${p.method}". Fake airdrop, claim and "verify wallet" sites use functions like this to take money; real airdrops never ask you to pay.`,
+    'tx-to-risky': (p) => `The contract this transaction called (${p.to}) is rated ${p.level === 'high' ? 'high' : 'medium'} risk by Neuro. Check that address on its own for the reasons.`,
+    'tx-nothing-found': () => 'Nothing risky found in this transaction by these rules. Only what the transaction and its logs show is checked.',
+    'path-call': (p) => (p.method ? `${short(p.from)} → ${short(p.to)}: ${p.method}${p.value !== '0' ? ` + ${fmtSupply(p.value, 18)} ${p.native}` : ''}`
+      : `${short(p.from)} → ${short(p.to)}: ${fmtSupply(p.value, 18)} ${p.native}`),
+    'path-create': (p) => `${short(p.from)} created the contract ${short(p.address)}`,
+    'path-token': (p) => `${fmtSupply(p.amount, p.decimals)} ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-nft': (p) => `NFT #${p.id} of ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-approve': (p) => `${short(p.owner)} allowed ${short(p.spender)} to spend ${p.unlimited ? 'unlimited' : fmtSupply(p.amount, p.decimals)} ${sym(p)}`,
+    'path-approveAll': (p) => `${short(p.owner)} ${p.approved ? 'allowed' : 'stopped'} ${short(p.operator)} ${p.approved ? 'to move' : 'from moving'} all ${sym(p)} NFTs`,
+    'path-note': () => 'Coins moved inside contracts are not listed (that needs a trace API).',
 };

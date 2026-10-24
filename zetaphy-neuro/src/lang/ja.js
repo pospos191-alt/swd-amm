@@ -1,14 +1,14 @@
 // Japanese. Same keys as en.js (test/i18n.test.js checks it).
-import { fmtSupply, list } from './fmt.js';
+import { fmtSupply, list, short, sym } from './fmt.js';
 
 export const NAME = '日本語';
 
 export const LEVEL = { high: '高リスク', medium: '中リスク', low: '低リスク', info: 'このルールではリスクは見つかりませんでした' };
 
 export const UI = {
-  subtitle: 'コントラクトを読み取り、わかりやすく説明します · ティア1・読み取り専用', chain: 'チェーン', address: 'コントラクトまたはトークンのアドレス', check: 'コントラクトを確認',
+  subtitle: 'コントラクトを読み取り、わかりやすく説明します · ティア1・読み取り専用', chain: 'チェーン', address: 'コントラクト・トークンのアドレス、または取引ハッシュ', check: 'コントラクトを確認',
   details: '詳細', reading: 'チェーンから読み取り中…', badAddress: 'このチェーンでは無効なアドレスです。使える形式: ',
-  failed: '読み取れませんでした: ', footer: 'ウォレットの接続を求めることも、取引を送ることもありません。公開されているチェーンのデータを読みます。早期警告のため、チェーン名とコントラクトアドレスだけをこのサイトのサーバーに送ります（保存はしません）。投資助言ではありません。', stats: '利用状況', statChecks: 'チェックしたコントラクト', statRisky: 'リスクありと判定', statHigh: '高リスクを検出', statNote: '全ユーザーの合計（概算）。数えるのは結果のレベルだけで、コントラクトは記録しません。', language: '言語',
+  failed: '読み取れませんでした: ', footer: 'ウォレットの接続を求めることも、取引を送ることもありません。公開されているチェーンのデータを読みます。早期警告のため、チェーン名とコントラクトアドレスだけをこのサイトのサーバーに送ります（保存はしません）。投資助言ではありません。', stats: '利用状況', badTx: '取引の確認には EVM チェーン（Ethereum、BNB Chain、Base、Arbitrum、ZETAPHY）と、0x に続く 64 文字の16進数のハッシュが必要です。', path: '何が起きたか（経路）', statTx: 'チェックした取引', statZetaphy: 'ZETAPHY でのチェック', statChecks: 'チェックしたコントラクト', statRisky: 'リスクありと判定', statHigh: '高リスクを検出', statNote: '全ユーザーの合計（概算）。数えるのは結果のレベルだけで、コントラクトは記録しません。', language: '言語',
   disclaimer: 'これは再現できる自動のコード分析であり、個人やプロジェクトへの告発でも投資助言でもありません。コントラクトの所有者は回答や訂正の申し出ができます。',
   correction: '回答・訂正の申し出方法',
   reproduce: '自分で再確認する',
@@ -24,6 +24,7 @@ export const UI = {
     pool: '流動性プール', simTax: 'シミュレーションでの税（購入 / 売却）', simFailed: '売却失敗',
     verdict: '判定 ID（ルールのみ）', command: 'コマンド', rule: 'ルール',
     earlyMatch: '観察中のパターンに一致。カテゴリー：', earlyRef: '参照番号',
+    hash: '取引', status: 'ステータス', block: 'ブロック', succeeded: '成功', reverted: '失敗（revert）',
   },
 };
 
@@ -247,4 +248,29 @@ export const T = {
     'btc-premine': (p) => `トークン作成時に、最大供給量の ${p.percent}% が作成者に渡されました（premine）。作成者はいつでも売却できます。`,
     'btc-turbo': () => '作成者は Runes プロトコルの今後の変更を受け入れる設定（turbo）を選んでいます。そのため、このトークンの仕組みはプロトコルの新バージョンで変わる可能性があります。',
     'btc-caveat': () => 'Runes の基準となるインデクサー ord（ordinals.com）のデータを決まったルールで確認した結果です。Rune は Bitcoin 上でインデクサーが読み取るルールとして存在します。保有者と流動性は確認していません。投資助言ではありません。',
+    // Transaction checks (src/tx.js)
+    'tx-not-found': () => '選んだチェーンに、このハッシュの取引は見つかりませんでした。ハッシュを確認するか、取引が送られたチェーンを選んでください。',
+    'tx-summary': (p) => (p.created ? `${short(p.from)} が ${short(p.to)} に新しいコントラクトを作成しました。`
+      : p.method ? `${short(p.from)} が ${short(p.to)} の ${p.method} を呼び出しました${p.value !== '0' ? `（${fmtSupply(p.value, 18)} ${p.native} を送金）` : ''}。`
+        : `${short(p.from)} が ${short(p.to)} に ${fmtSupply(p.value, 18)} ${p.native} を送金しました。`),
+    'tx-failed': () => 'この取引は失敗しました（revert）。取引で行おうとしたことは何も実行されていませんが、手数料は支払われています。',
+    'tx-created': (p) => `この取引で ${p.address} にコントラクトが作成されました。そのアドレスも個別に確認してください。`,
+    'tx-approve-wallet': (p) => `送信者は、コントラクトではない普通のウォレット（${p.spender}）に、自分の ${sym(p)} を${p.unlimited ? '上限なく' : ''}使うことを承認しました。本物のアプリはコントラクトを使います。これはウォレットからトークンが持ち出されるよくある方法です。今すぐこの承認を取り消してください（例: revoke.cash）。`,
+    'tx-approve-risky': (p) => `送信者は ${p.spender} に自分の ${sym(p)} を使うことを承認しましたが、Neuro はそのコントラクトを高リスクと判定しています。今すぐこの承認を取り消してください（例: revoke.cash）。`,
+    'tx-approve-unlimited': (p) => `上限なしの承認です。${p.spender} は、今も今後も、いつでも送信者の ${sym(p)} をすべて引き出せます。信頼できるアプリではよくあることですが、そのアプリを使わなくなったら取り消してください。`,
+    'tx-approve-all-wallet': (p) => `送信者は普通のウォレット（${p.operator}）に、自分の ${sym(p)} の NFT をすべて移動することを承認しました。これはウォレットから NFT が持ち出されるよくある方法です。今すぐ取り消してください（例: revoke.cash）。`,
+    'tx-approve-all': (p) => `送信者は ${p.operator} に、自分の ${sym(p)} の NFT をすべて移動することを承認しました。信頼できるマーケットプレイスに対してだけ行ってください。`,
+    'tx-zero-transfer': (p) => `${short(p.from)} から ${short(p.to)} への 0 ${sym(p)} の送金です。これはアドレスポイズニングです。あとでよく似たアドレスをコピーさせるために、取引履歴に偽の記録を残す手口です。取引履歴からアドレスをコピーしないでください。`,
+    'tx-lookalike': (p) => `${p.a} は ${p.b} に似ていますが（先頭と末尾が同じ）、別のアドレスです。見間違えさせるために作られたものです。何かを送る前に、すべての文字を確認してください。`,
+    'tx-bait-payable': (p) => `コントラクトの関数「${p.method}」に ${fmtSupply(p.value, 18)} ${p.native} が送られました。偽のエアドロップや請求（claim）、「ウォレット認証」サイトは、このような関数でお金を奪います。本物のエアドロップが支払いを求めることはありません。`,
+    'tx-to-risky': (p) => `この取引が呼び出したコントラクト（${p.to}）は、Neuro で${p.level === 'high' ? '高' : '中'}リスクと判定されています。理由はそのアドレスを個別に確認してください。`,
+    'tx-nothing-found': () => 'このルールでは、この取引にリスクは見つかりませんでした。確認するのは、取引とそのログに表れている内容だけです。',
+    'path-call': (p) => (p.method ? `${short(p.from)} → ${short(p.to)}: ${p.method}${p.value !== '0' ? ` + ${fmtSupply(p.value, 18)} ${p.native}` : ''}`
+      : `${short(p.from)} → ${short(p.to)}: ${fmtSupply(p.value, 18)} ${p.native}`),
+    'path-create': (p) => `${short(p.from)} がコントラクト ${short(p.address)} を作成`,
+    'path-token': (p) => `${fmtSupply(p.amount, p.decimals)} ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-nft': (p) => `${sym(p)} の NFT #${p.id}: ${short(p.from)} → ${short(p.to)}`,
+    'path-approve': (p) => `${short(p.owner)} が ${short(p.spender)} に ${p.unlimited ? `${sym(p)} を上限なしで` : `${fmtSupply(p.amount, p.decimals)} ${sym(p)} を`}使うことを承認`,
+    'path-approveAll': (p) => `${short(p.owner)} が ${short(p.operator)} による ${sym(p)} の NFT 全部の移動を${p.approved ? '承認' : '取り消し'}`,
+    'path-note': () => 'コントラクトの内部で移動したコインは表示されません（表示には trace API が必要です）。',
 };

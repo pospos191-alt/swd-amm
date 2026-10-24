@@ -1,4 +1,4 @@
-import { fmtSupply, list } from './fmt.js';
+import { fmtSupply, list, short, sym } from './fmt.js';
 
 // Korean. Same keys as en.js (test/i18n.test.js checks it).
 export const NAME = '한국어';
@@ -6,9 +6,9 @@ export const NAME = '한국어';
 export const LEVEL = { high: '높은 위험', medium: '중간 위험', low: '낮은 위험', info: '이 규칙으로 찾은 위험 없음' };
 
 export const UI = {
-  subtitle: '컨트랙트를 읽고 설명합니다 · 1단계, 읽기 전용', chain: '체인', address: '컨트랙트 또는 토큰 주소', check: '컨트랙트 검사',
+  subtitle: '컨트랙트를 읽고 설명합니다 · 1단계, 읽기 전용', chain: '체인', address: '컨트랙트, 토큰 주소 또는 거래 해시', check: '컨트랙트 검사',
   details: '세부 정보', reading: '체인에서 읽는 중…', badAddress: '이 체인에 맞지 않는 주소입니다. 사용 가능한 형식: ',
-  failed: '읽지 못했습니다: ', footer: '지갑 연결을 요청하지 않으며 거래를 보내지 않습니다. 공개된 체인 데이터를 읽으며, 조기 경고를 위해 체인과 컨트랙트 주소만 이 사이트의 서버로 보냅니다(저장하지 않음). 투자 조언이 아닙니다.', stats: '사용 통계', statChecks: '검사한 컨트랙트', statRisky: '위험 표시된 컨트랙트', statHigh: '고위험 발견', statNote: '전체 사용자 합계, 대략적인 값이에요. 결과 등급만 세고 컨트랙트는 기록하지 않아요.', language: '언어',
+  failed: '읽지 못했습니다: ', footer: '지갑 연결을 요청하지 않으며 거래를 보내지 않습니다. 공개된 체인 데이터를 읽으며, 조기 경고를 위해 체인과 컨트랙트 주소만 이 사이트의 서버로 보냅니다(저장하지 않음). 투자 조언이 아닙니다.', stats: '사용 통계', badTx: '거래를 검사하려면 EVM 체인(Ethereum, BNB Chain, Base, Arbitrum 또는 ZETAPHY)과 0x 뒤에 16진수 64자가 붙은 해시가 필요해요.', path: '무슨 일이 있었나요 (경로)', statTx: '검사한 거래', statZetaphy: 'ZETAPHY에서 한 검사', statChecks: '검사한 컨트랙트', statRisky: '위험 표시된 컨트랙트', statHigh: '고위험 발견', statNote: '전체 사용자 합계, 대략적인 값이에요. 결과 등급만 세고 컨트랙트는 기록하지 않아요.', language: '언어',
   disclaimer: '이 내용은 재현 가능한 자동 코드 분석이며, 어떤 개인이나 프로젝트에 대한 고발이 아니고 투자 조언도 아닙니다. 컨트랙트 소유자는 답변하거나 정정을 요청할 수 있습니다.',
   correction: '답변 또는 정정 요청 방법',
   reproduce: '직접 다시 확인하기',
@@ -24,6 +24,7 @@ export const UI = {
     pool: '유동성 풀', simTax: '시뮬레이션 세금 (구매 / 판매)', simFailed: '판매 실패',
     verdict: '판정 ID (규칙만)', command: '명령', rule: '규칙',
     earlyMatch: '관찰 중인 패턴과 일치. 분류:', earlyRef: '참조 번호',
+    hash: '거래', status: '상태', block: '블록', succeeded: '성공', reverted: '실패 (되돌려짐)',
   },
 };
 
@@ -247,4 +248,29 @@ export const T = {
     'btc-premine': (p) => `토큰을 만들 때 최대 공급량의 ${p.percent}%가 생성자에게 돌아갔습니다 (premine). 생성자는 언제든지 팔 수 있습니다.`,
     'btc-turbo': () => '생성자가 앞으로의 Runes 프로토콜 변경을 받아들이도록 선택했습니다 (turbo). 그래서 이 토큰의 작동 방식이 새 프로토콜 버전에 따라 바뀔 수 있습니다.',
     'btc-caveat': () => 'Runes의 기준 인덱서인 ord(ordinals.com)의 데이터를 정해진 규칙으로 검사했습니다. Rune은 Bitcoin 위에서 인덱서가 읽는 규칙으로 존재합니다. 보유자와 유동성은 검사하지 않았습니다. 투자 조언이 아닙니다.',
+    // Transaction checks (src/tx.js)
+    'tx-not-found': () => '선택한 체인에 이 해시의 거래가 없어요. 해시를 확인하거나, 거래를 보낸 체인을 선택하세요.',
+    'tx-summary': (p) => (p.created ? `${short(p.from)}이(가) ${short(p.to)}에 새 컨트랙트를 만들었어요.`
+      : p.method ? `${short(p.from)}이(가) ${short(p.to)}의 ${p.method}을(를) 호출했어요${p.value !== '0' ? ` (${fmtSupply(p.value, 18)} ${p.native} 보냄)` : ''}.`
+        : `${short(p.from)}이(가) ${short(p.to)}에 ${fmtSupply(p.value, 18)} ${p.native}을(를) 보냈어요.`),
+    'tx-failed': () => '거래가 실패했어요 (되돌려짐). 하려던 일은 하나도 일어나지 않았지만 수수료는 냈어요.',
+    'tx-created': (p) => `${p.address}에 컨트랙트를 만들었어요. 그 주소도 따로 검사해 보세요.`,
+    'tx-approve-wallet': (p) => `보낸 사람이 컨트랙트가 아닌 일반 지갑(${p.spender})에 자신의 ${sym(p)}을(를) ${p.unlimited ? '한도 없이 ' : ''}쓸 수 있도록 승인했어요. 실제 앱은 컨트랙트를 사용해요. 지갑에서 토큰이 빠져나가는 흔한 방식이에요. 지금 이 승인을 취소하세요 (예: revoke.cash).`,
+    'tx-approve-risky': (p) => `보낸 사람이 ${p.spender}에 자신의 ${sym(p)}을(를) 쓸 수 있도록 승인했는데, Neuro는 이 컨트랙트를 고위험으로 평가해요. 지금 이 승인을 취소하세요 (예: revoke.cash).`,
+    'tx-approve-unlimited': (p) => `무제한 승인: ${p.spender}은(는) 지금도, 나중에도 언제든 보낸 사람의 ${sym(p)}을(를) 전부 가져갈 수 있어요. 믿을 수 있는 앱이라면 흔한 일이에요. 그 앱을 더 이상 쓰지 않으면 승인을 취소하세요.`,
+    'tx-approve-all-wallet': (p) => `보낸 사람이 일반 지갑(${p.operator})에 자신의 ${sym(p)} NFT를 전부 옮길 수 있도록 승인했어요. 지갑에서 NFT가 빠져나가는 흔한 방식이에요. 지금 취소하세요 (예: revoke.cash).`,
+    'tx-approve-all': (p) => `보낸 사람이 ${p.operator}에 자신의 ${sym(p)} NFT를 전부 옮길 수 있도록 승인했어요. 믿을 수 있는 마켓플레이스에만 이렇게 하세요.`,
+    'tx-zero-transfer': (p) => `${short(p.from)}에서 ${short(p.to)}(으)로 0 ${sym(p)}을(를) 전송했어요. 주소 오염(address poisoning)이에요. 기록에 꾸며낸 항목을 남겨서 나중에 비슷하게 생긴 주소를 복사하게 만드는 수법이에요. 거래 기록에서 주소를 복사하지 마세요.`,
+    'tx-lookalike': (p) => `${p.a}은(는) ${p.b}와(과) 비슷해 보이지만 (앞부분과 끝부분이 같음) 다른 주소예요. 헷갈리도록 일부러 만든 주소예요. 무엇이든 보내기 전에 글자를 하나하나 확인하세요.`,
+    'tx-bait-payable': (p) => `컨트랙트 함수 "${p.method}"에 ${fmtSupply(p.value, 18)} ${p.native}을(를) 보냈어요. 에어드롭을 흉내 낸 사이트, 클레임, "지갑 인증" 사이트는 이런 함수로 돈을 가져가요. 진짜 에어드롭은 돈을 내라고 하지 않아요.`,
+    'tx-to-risky': (p) => `Neuro는 이 거래가 호출한 컨트랙트(${p.to})를 ${p.level === 'high' ? '고' : '중'}위험으로 평가해요. 이유를 보려면 그 주소를 따로 검사해 보세요.`,
+    'tx-nothing-found': () => '이 규칙으로는 이 거래에서 위험한 점을 찾지 못했어요. 거래와 그 로그(logs)에 나타난 내용만 검사해요.',
+    'path-call': (p) => (p.method ? `${short(p.from)} → ${short(p.to)}: ${p.method}${p.value !== '0' ? ` + ${fmtSupply(p.value, 18)} ${p.native}` : ''}`
+      : `${short(p.from)} → ${short(p.to)}: ${fmtSupply(p.value, 18)} ${p.native}`),
+    'path-create': (p) => `${short(p.from)}이(가) 컨트랙트 ${short(p.address)}을(를) 만듦`,
+    'path-token': (p) => `${fmtSupply(p.amount, p.decimals)} ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-nft': (p) => `${sym(p)}의 NFT #${p.id}: ${short(p.from)} → ${short(p.to)}`,
+    'path-approve': (p) => `${short(p.owner)}이(가) ${short(p.spender)}에 ${p.unlimited ? '무제한' : fmtSupply(p.amount, p.decimals)} ${sym(p)} 사용을 승인함`,
+    'path-approveAll': (p) => `${short(p.owner)}이(가) ${short(p.operator)}에 ${sym(p)} NFT 전부를 옮길 권한을 ${p.approved ? '줌' : '취소함'}`,
+    'path-note': () => '컨트랙트 안에서 옮겨진 코인은 표시되지 않아요 (trace API가 필요해요).',
 };

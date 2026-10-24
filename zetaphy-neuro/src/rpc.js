@@ -5,7 +5,8 @@
 // simulation in honeypot.js). It is still a call: the node runs it on a
 // scratch copy of the state and throws the copy away; nothing is signed or sent.
 // eth_gasPrice only reads the node's fee estimate (the simulation's gas price).
-const EVM_ALLOWED = new Set(['eth_chainId', 'eth_getCode', 'eth_getStorageAt', 'eth_call', 'eth_gasPrice']);
+// eth_getTransactionByHash / eth_getTransactionReceipt only read a past transaction (the tx check).
+const EVM_ALLOWED = new Set(['eth_chainId', 'eth_getCode', 'eth_getStorageAt', 'eth_call', 'eth_gasPrice', 'eth_getTransactionByHash', 'eth_getTransactionReceipt']);
 const SOLANA_ALLOWED = new Set(['getGenesisHash', 'getAccountInfo']);
 const NEAR_ALLOWED = new Set(['status', 'query']); // `query` only reads (view_* and view-function calls)
 const STARKNET_ALLOWED = new Set(['starknet_chainId', 'starknet_getClassAt', 'starknet_getClass', 'starknet_call']);

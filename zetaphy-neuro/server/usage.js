@@ -16,6 +16,8 @@ export const GOAL = 1000;
 export const FIRST_MONTH = '2026-10';
 // What a check found (src/analyze.js levels). Only this word is sent, never the contract.
 export const LEVELS = ['high', 'medium', 'low', 'info'];
+// Extra counters: transaction checks (src/tx.js) and checks on ZETAPHY's own chain.
+export const EXTRA = ['tx', 'zetaphy'];
 const MAX_CHECKS_PER_VISITOR_PER_DAY = 200;
 const KEEP_SECONDS = 400 * 24 * 3600; // a bit over a year of monthly history
 const P = 'neuro:';
@@ -53,20 +55,24 @@ export async function handleUsage(req, store, secret) {
     const [users, checks, ...lv] = await store.pipeline([
       ['PFCOUNT', `${P}users:${month}`], ['GET', `${P}checks:${month}`],
       ...LEVELS.map((l) => ['GET', `${P}level:${l}:${month}`]),
+      ...EXTRA.map((x) => ['GET', `${P}${x}:${month}`]),
     ]);
     // all-time: the sum of every month's counters since FIRST_MONTH
     const months = monthsUntil(monthOf(now));
-    const keys = [`${P}checks:`, ...LEVELS.map((l) => `${P}level:${l}:`)];
+    const keys = [`${P}checks:`, ...LEVELS.map((l) => `${P}level:${l}:`), ...EXTRA.map((x) => `${P}${x}:`)];
     const vals = await store.pipeline(keys.flatMap((k) => months.map((mo) => ['GET', k + mo])));
     const sum = (i) => vals.slice(i * months.length, (i + 1) * months.length).reduce((a, v) => a + (Number(v) || 0), 0);
     const total = { checks: sum(0), since: FIRST_MONTH };
     LEVELS.forEach((l, i) => { total[l] = sum(i + 1); });
+    EXTRA.forEach((x, i) => { total[x] = sum(LEVELS.length + 1 + i); });
     return {
       status: 200,
       headers: { 'cache-control': 'public, max-age=60' },
       json: {
         enabled: true, month, users: Number(users) || 0, checks: Number(checks) || 0, goal: GOAL,
-        found: Object.fromEntries(LEVELS.map((l, i) => [l, Number(lv[i]) || 0])), total,
+        found: Object.fromEntries(LEVELS.map((l, i) => [l, Number(lv[i]) || 0])),
+        ...Object.fromEntries(EXTRA.map((x, i) => [x, Number(lv[LEVELS.length + i]) || 0])),
+        total,
       },
     };
   }
@@ -95,6 +101,9 @@ export async function handleUsage(req, store, secret) {
       await store.pipeline([
         ['INCR', `${P}checks:${month}`], ['PERSIST', `${P}checks:${month}`],
         ...(level ? [['INCR', `${P}level:${level}:${month}`]] : []),
+        // only the check's kind and whether it was on ZETAPHY: still nothing about what was checked
+        ...(req.body.kind === 'tx' ? [['INCR', `${P}tx:${month}`]] : []),
+        ...(req.body.chain === 'zetaphy' ? [['INCR', `${P}zetaphy:${month}`]] : []),
       ]);
       counted = true;
     }

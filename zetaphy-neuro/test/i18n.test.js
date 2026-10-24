@@ -18,6 +18,9 @@ const FULL = {
   id: '840000:3', end: 900000, unlimited: false, share: 42.5, deployer: 'bc1pdeployer', size: 20480,
   dex: 'PancakeSwap V2', native: 'WBNB', buy: 4.5, sell: 12, why: 'no-pool',
   fingerprint: 'fp1:0123456789abcdef',
+  // transaction checks
+  spender: '0xspender', operator: '0xoperator', from: '0xfrom', to: '0xto', a: '0xa1', b: '0xb1',
+  value: '1000000000000000000', method: 'claim()', token: '0xtoken', approved: true, level: 'high', created: false,
 };
 // Branches: no issuer, no holder, other `where`, wallet / other interfaces.
 const VARIANTS = [
@@ -32,6 +35,8 @@ const VARIANTS = [
   { ...FULL, sell: null, why: 'no-override' },
   { ...FULL, buy: 100, sell: null, why: 'buy-failed' },
   { ...FULL, why: 'error' },
+  // Transaction: plain coin transfer (no method), a contract creation, no token symbol.
+  { ...FULL, method: null, value: '0', created: true, unlimited: true, approved: false, level: 'medium' },
 ];
 
 test('every language has every message, menu name and UI label', () => {
@@ -48,7 +53,7 @@ test('every language has every message, menu name and UI label', () => {
 });
 
 // Params a finding always carries (the analyzer sets them unconditionally).
-const REQUIRED = { 'known-issuer': ['issuer'], lookalike: ['issuer'], 'sim-ok': ['buy', 'sell'], 'sim-cannot-sell': ['buy'] };
+const REQUIRED = { 'known-issuer': ['issuer'], lookalike: ['issuer'], 'sim-ok': ['buy', 'sell'], 'sim-cannot-sell': ['buy'], 'tx-bait-payable': ['method'] };
 const keeps = (id, p) => (REQUIRED[id] ?? []).every((k) => p[k] != null);
 
 test('no message prints undefined, null or [object …] for any branch', () => {

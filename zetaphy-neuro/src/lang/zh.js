@@ -1,4 +1,4 @@
-import { fmtSupply, list } from './fmt.js';
+import { fmtSupply, list, short, sym } from './fmt.js';
 
 // Simplified Chinese. Same keys as en.js (test/i18n.test.js checks it).
 export const NAME = '中文';
@@ -6,9 +6,9 @@ export const NAME = '中文';
 export const LEVEL = { high: '高风险', medium: '中等风险', low: '低风险', info: '按这些规则未发现风险' };
 
 export const UI = {
-  subtitle: '读取并解释合约 · 第 1 级，只读', chain: '链', address: '合约或代币地址', check: '检查合约',
+  subtitle: '读取并解释合约 · 第 1 级，只读', chain: '链', address: '合约、代币地址或交易哈希', check: '检查合约',
   details: '详情', reading: '正在从链上读取…', badAddress: '该地址不适用于这条链。支持的格式：',
-  failed: '读取失败：', footer: '从不要求连接钱包，也从不发送交易。读取公开的链上数据；为提前预警，仅将链名和合约地址发送到本站服务器（不保存）。不构成投资建议。', stats: '使用统计', statChecks: '已检查的合约', statRisky: '标记为有风险的合约', statHigh: '发现高风险', statNote: '所有用户合计，近似值。只统计结果等级，从不记录合约。', language: '语言',
+  failed: '读取失败：', footer: '从不要求连接钱包，也从不发送交易。读取公开的链上数据；为提前预警，仅将链名和合约地址发送到本站服务器（不保存）。不构成投资建议。', stats: '使用统计', badTx: '检查交易需要 EVM 链（Ethereum、BNB Chain、Base、Arbitrum 或 ZETAPHY），以及由 0x 加 64 个十六进制字符组成的哈希。', path: '发生了什么（路径）', statTx: '已检查的交易', statZetaphy: '在 ZETAPHY 上的检查', statChecks: '已检查的合约', statRisky: '标记为有风险的合约', statHigh: '发现高风险', statNote: '所有用户合计，近似值。只统计结果等级，从不记录合约。', language: '语言',
   disclaimer: '这是可重复验证的自动代码分析，不是对任何个人或项目的指控，也不构成投资建议。合约所有者可以回应或要求更正。',
   correction: '如何回应或要求更正',
   reproduce: '自行复核',
@@ -24,6 +24,7 @@ export const UI = {
     pool: '流动性池', simTax: '模拟交易税（买入 / 卖出）', simFailed: '卖出失败',
     verdict: '裁定 ID（仅规则）', command: '命令', rule: '规则',
     earlyMatch: '与观察中的模式相符。类别：', earlyRef: '参考编号',
+    hash: '交易', status: '状态', block: '区块', succeeded: '成功', reverted: '失败（已回滚）',
   },
 };
 
@@ -247,4 +248,29 @@ export const T = {
     'btc-premine': (p) => `创建代币时，最大供应量的 ${p.percent}% 直接归创建者所有（premine）。创建者随时可以卖出。`,
     'btc-turbo': () => '创建者选择接受 Runes 协议未来的变更（turbo），因此这个代币的运作方式可能会随协议新版本而改变。',
     'btc-caveat': () => '基于 Runes 的参考索引器 ord（ordinals.com）的数据，按固定规则检查。Rune 是索引器在 Bitcoin 之上按规则认定的。未检查持有人和流动性。不构成投资建议。',
+    // Transaction checks (src/tx.js)
+    'tx-not-found': () => '所选链上没有这个哈希的交易。请检查哈希，或选择发送这笔交易的链。',
+    'tx-summary': (p) => (p.created ? `${short(p.from)} 在 ${short(p.to)} 创建了一个新合约。`
+      : p.method ? `${short(p.from)} 调用了 ${short(p.to)} 上的 ${p.method}${p.value !== '0' ? `，并发送了 ${fmtSupply(p.value, 18)} ${p.native}` : ''}。`
+        : `${short(p.from)} 向 ${short(p.to)} 发送了 ${fmtSupply(p.value, 18)} ${p.native}。`),
+    'tx-failed': () => '这笔交易失败了（已回滚）：它想做的事都没有发生，但手续费已经支付。',
+    'tx-created': (p) => `它在 ${p.address} 创建了一个合约。请也单独检查这个地址。`,
+    'tx-approve-wallet': (p) => `发送者授权一个普通钱包（${p.spender}）而不是合约来使用他们的 ${sym(p)}${p.unlimited ? '，且没有额度限制' : ''}。正规应用使用的是合约；这是代币被从钱包转走的常见方式。请立即撤销这项授权（例如使用 revoke.cash）。`,
+    'tx-approve-risky': (p) => `发送者授权 ${p.spender} 使用他们的 ${sym(p)}，而 Neuro 将这个合约评为高风险。请立即撤销这项授权（例如使用 revoke.cash）。`,
+    'tx-approve-unlimited': (p) => `无限额授权：${p.spender} 现在和以后随时都可以拿走发送者的全部 ${sym(p)}。对你信任的应用来说这很常见；不再使用该应用时请撤销授权。`,
+    'tx-approve-all-wallet': (p) => `发送者授权一个普通钱包（${p.operator}）转移他们的全部 ${sym(p)} NFT。NFT 盗取工具正是这样运作的。请立即撤销（例如使用 revoke.cash）。`,
+    'tx-approve-all': (p) => `发送者授权 ${p.operator} 转移他们的全部 ${sym(p)} NFT。只应对你信任的交易市场这样做。`,
+    'tx-zero-transfer': (p) => `从 ${short(p.from)} 向 ${short(p.to)} 转账 0 ${sym(p)}。这是地址投毒：在你的记录里留下一条假记录，让你以后复制一个长得很像的地址。永远不要从交易记录中复制地址。`,
+    'tx-lookalike': (p) => `${p.a} 看起来像 ${p.b}（开头和结尾相同），但它是另一个地址。它是故意做成让人认错的：发送任何东西前请逐个字符核对。`,
+    'tx-bait-payable': (p) => `向合约函数“${p.method}”发送了 ${fmtSupply(p.value, 18)} ${p.native}。虚假空投、领取和“验证钱包”网站会用这类函数拿走钱；真正的空投从不要求你付款。`,
+    'tx-to-risky': (p) => `Neuro 将这笔交易调用的合约（${p.to}）评为${p.level === 'high' ? '高' : '中'}风险。请单独检查这个地址以了解原因。`,
+    'tx-nothing-found': () => '按这些规则，在这笔交易中没有发现风险。只检查交易本身及其日志（logs）显示的内容。',
+    'path-call': (p) => (p.method ? `${short(p.from)} → ${short(p.to)}：${p.method}${p.value !== '0' ? ` + ${fmtSupply(p.value, 18)} ${p.native}` : ''}`
+      : `${short(p.from)} → ${short(p.to)}：${fmtSupply(p.value, 18)} ${p.native}`),
+    'path-create': (p) => `${short(p.from)} 创建了合约 ${short(p.address)}`,
+    'path-token': (p) => `${fmtSupply(p.amount, p.decimals)} ${sym(p)}：${short(p.from)} → ${short(p.to)}`,
+    'path-nft': (p) => `${sym(p)} 的 NFT #${p.id}：${short(p.from)} → ${short(p.to)}`,
+    'path-approve': (p) => `${short(p.owner)} 授权 ${short(p.spender)} 使用${p.unlimited ? '无限额' : ` ${fmtSupply(p.amount, p.decimals)}`} ${sym(p)}`,
+    'path-approveAll': (p) => `${short(p.owner)} ${p.approved ? '授权' : '取消了'} ${short(p.operator)} 转移全部 ${sym(p)} NFT${p.approved ? '' : '的权限'}`,
+    'path-note': () => '合约内部转移的币不会列出（这需要 trace API）。',
 };

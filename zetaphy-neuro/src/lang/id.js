@@ -1,4 +1,4 @@
-import { fmtSupply, list } from './fmt.js';
+import { fmtSupply, list, short, sym } from './fmt.js';
 
 // Indonesian. Same keys as en.js (test/i18n.test.js checks it).
 export const NAME = 'Bahasa Indonesia';
@@ -6,9 +6,9 @@ export const NAME = 'Bahasa Indonesia';
 export const LEVEL = { high: 'Risiko tinggi', medium: 'Risiko sedang', low: 'Risiko rendah', info: 'Tidak ada risiko yang ditemukan oleh aturan ini' };
 
 export const UI = {
-  subtitle: 'Membaca dan menjelaskan kontrak · tingkat 1, hanya baca', chain: 'Jaringan', address: 'Alamat kontrak atau token', check: 'Periksa kontrak',
+  subtitle: 'Membaca dan menjelaskan kontrak · tingkat 1, hanya baca', chain: 'Jaringan', address: 'Alamat kontrak, token, atau hash transaksi', check: 'Periksa kontrak',
   details: 'Detail', reading: 'Membaca data dari jaringan…', badAddress: 'Alamat tidak valid untuk jaringan ini. Format yang diterima: ',
-  failed: 'Gagal membaca: ', footer: 'Tidak pernah meminta Anda menghubungkan dompet dan tidak pernah mengirim transaksi. Membaca data publik dari jaringan; untuk peringatan dini hanya jaringan dan alamat kontrak yang dikirim ke server situs ini, yang tidak menyimpan apa pun. Bukan saran investasi.', stats: 'Statistik penggunaan', statChecks: 'Kontrak diperiksa', statRisky: 'Kontrak ditandai berisiko', statHigh: 'Risiko tinggi ditemukan', statNote: 'Semua pengguna digabung, perkiraan. Hanya tingkat hasil yang dihitung, tidak pernah kontraknya.', language: 'Bahasa',
+  failed: 'Gagal membaca: ', footer: 'Tidak pernah meminta Anda menghubungkan dompet dan tidak pernah mengirim transaksi. Membaca data publik dari jaringan; untuk peringatan dini hanya jaringan dan alamat kontrak yang dikirim ke server situs ini, yang tidak menyimpan apa pun. Bukan saran investasi.', stats: 'Statistik penggunaan', badTx: 'Pemeriksaan transaksi memerlukan jaringan EVM (Ethereum, BNB Chain, Base, Arbitrum, atau ZETAPHY) dan hash berupa 0x diikuti 64 karakter hex.', path: 'Apa yang terjadi (alur)', statTx: 'Transaksi diperiksa', statZetaphy: 'Pemeriksaan di ZETAPHY', statChecks: 'Kontrak diperiksa', statRisky: 'Kontrak ditandai berisiko', statHigh: 'Risiko tinggi ditemukan', statNote: 'Semua pengguna digabung, perkiraan. Hanya tingkat hasil yang dihitung, tidak pernah kontraknya.', language: 'Bahasa',
   disclaimer: 'Ini adalah analisis kode otomatis yang dapat diulang, bukan tuduhan terhadap orang atau proyek mana pun, dan bukan saran investasi. Pemilik kontrak dapat menanggapi atau meminta koreksi.',
   correction: 'Cara menanggapi atau meminta koreksi',
   reproduce: 'Periksa sendiri',
@@ -24,6 +24,7 @@ export const UI = {
     pool: 'Pool likuiditas', simTax: 'Pajak simulasi (beli / jual)', simFailed: 'gagal menjual',
     verdict: 'ID putusan (hanya aturan)', command: 'Perintah', rule: 'aturan',
     earlyMatch: 'Cocok dengan pola yang diamati. Kategori:', earlyRef: 'referensi',
+    hash: 'Transaksi', status: 'Status', block: 'Blok', succeeded: 'berhasil', reverted: 'gagal (reverted)',
   },
 };
 
@@ -247,4 +248,29 @@ export const T = {
     'btc-premine': (p) => `${p.percent}% dari pasokan maksimum diberikan ke pembuat saat token dibuat (premine). Pembuat bisa menjualnya kapan saja.`,
     'btc-turbo': () => 'Pembuat memilih ikut perubahan protokol Runes di masa depan (turbo), jadi cara kerja token ini bisa berubah mengikuti versi protokol yang baru.',
     'btc-caveat': () => 'Diperiksa dari ord (ordinals.com), indexer acuan Runes, dengan aturan tetap. Rune ada sebagai aturan indexer di atas Bitcoin. Pemegang dan likuiditas tidak diperiksa. Bukan saran investasi.',
+    // Transaction checks (src/tx.js)
+    'tx-not-found': () => 'Tidak ada transaksi dengan hash ini di jaringan yang dipilih. Periksa hash-nya, atau pilih jaringan tempat transaksi itu dikirim.',
+    'tx-summary': (p) => (p.created ? `${short(p.from)} membuat kontrak baru di ${short(p.to)}.`
+      : p.method ? `${short(p.from)} memanggil ${p.method} di ${short(p.to)}${p.value !== '0' ? `, sambil mengirim ${fmtSupply(p.value, 18)} ${p.native}` : ''}.`
+        : `${short(p.from)} mengirim ${fmtSupply(p.value, 18)} ${p.native} ke ${short(p.to)}.`),
+    'tx-failed': () => 'Transaksi gagal (reverted): semua yang ingin dilakukannya dibatalkan, tetapi biayanya tetap terbayar.',
+    'tx-created': (p) => `Transaksi ini membuat kontrak di ${p.address}. Periksa juga alamat itu secara terpisah.`,
+    'tx-approve-wallet': (p) => `Pengirim mengizinkan dompet biasa (${p.spender}), bukan kontrak, untuk membelanjakan ${sym(p)} miliknya${p.unlimited ? ' tanpa batas' : ''}. Aplikasi asli memakai kontrak; beginilah cara penguras dompet mengambil token. Cabut izin ini sekarang (misalnya dengan revoke.cash).`,
+    'tx-approve-risky': (p) => `Pengirim mengizinkan ${p.spender} untuk membelanjakan ${sym(p)} miliknya, dan Neuro menilai kontrak itu berisiko tinggi. Cabut izin ini sekarang (misalnya dengan revoke.cash).`,
+    'tx-approve-unlimited': (p) => `Izin tanpa batas: ${p.spender} dapat mengambil semua ${sym(p)} milik pengirim kapan saja, sekarang maupun nanti. Wajar untuk aplikasi yang Anda percayai; cabut izinnya saat Anda tidak lagi memakai aplikasi itu.`,
+    'tx-approve-all-wallet': (p) => `Pengirim mengizinkan dompet biasa (${p.operator}) untuk memindahkan SEMUA NFT ${sym(p)} miliknya. Beginilah cara kerja penguras NFT. Cabut izin ini sekarang (misalnya dengan revoke.cash).`,
+    'tx-approve-all': (p) => `Pengirim mengizinkan ${p.operator} untuk memindahkan semua NFT ${sym(p)} miliknya. Lakukan ini hanya untuk marketplace yang Anda percayai.`,
+    'tx-zero-transfer': (p) => `Transfer 0 ${sym(p)} dari ${short(p.from)} ke ${short(p.to)}. Ini adalah peracunan alamat (address poisoning): catatan buatan di riwayat Anda agar nanti Anda menyalin alamat yang mirip. Jangan pernah menyalin alamat dari riwayat transaksi.`,
+    'tx-lookalike': (p) => `${p.a} terlihat mirip ${p.b} (awal dan akhirnya sama) tetapi alamatnya berbeda. Alamat ini dibuat agar tertukar: periksa setiap karakter sebelum mengirim apa pun.`,
+    'tx-bait-payable': (p) => `${fmtSupply(p.value, 18)} ${p.native} dikirim ke fungsi kontrak "${p.method}". Situs yang meniru airdrop, situs klaim, dan situs "verifikasi dompet" memakai fungsi seperti ini untuk mengambil uang; airdrop asli tidak pernah meminta Anda membayar.`,
+    'tx-to-risky': (p) => `Kontrak yang dipanggil transaksi ini (${p.to}) dinilai berisiko ${p.level === 'high' ? 'tinggi' : 'sedang'} oleh Neuro. Periksa alamat itu secara terpisah untuk melihat alasannya.`,
+    'tx-nothing-found': () => 'Tidak ada yang berisiko dalam transaksi ini menurut aturan ini. Hanya yang terlihat dari transaksi dan log-nya yang diperiksa.',
+    'path-call': (p) => (p.method ? `${short(p.from)} → ${short(p.to)}: ${p.method}${p.value !== '0' ? ` + ${fmtSupply(p.value, 18)} ${p.native}` : ''}`
+      : `${short(p.from)} → ${short(p.to)}: ${fmtSupply(p.value, 18)} ${p.native}`),
+    'path-create': (p) => `${short(p.from)} membuat kontrak ${short(p.address)}`,
+    'path-token': (p) => `${fmtSupply(p.amount, p.decimals)} ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-nft': (p) => `NFT #${p.id} dari ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-approve': (p) => `${short(p.owner)} mengizinkan ${short(p.spender)} membelanjakan ${p.unlimited ? `${sym(p)} tanpa batas` : `${fmtSupply(p.amount, p.decimals)} ${sym(p)}`}`,
+    'path-approveAll': (p) => `${short(p.owner)} ${p.approved ? 'mengizinkan' : 'mencabut izin'} ${short(p.operator)} ${p.approved ? 'memindahkan' : 'untuk memindahkan'} semua NFT ${sym(p)}`,
+    'path-note': () => 'Koin yang berpindah di dalam kontrak tidak dicantumkan (perlu trace API).',
 };

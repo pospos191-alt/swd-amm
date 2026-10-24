@@ -64,3 +64,11 @@ export function explain(report, lang = 'en') {
   const level = report.analysis.level;
   return { title: L.LEVEL[level] ?? en.LEVEL[level], level, lines };
 }
+
+/** A transaction report's path (src/tx.js) as lines in the chosen language. */
+export function explainPath(report, lang = 'en') {
+  if (!report.path?.length) return [];
+  const L = LANGS[pickLang(lang)];
+  const text = (id, p) => (L.T[id] ?? en.T[id] ?? (() => id))(p);
+  return [...report.path.map((e) => text(`path-${e.kind}`, e)), text('path-note', {})];
+}

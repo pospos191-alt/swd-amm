@@ -1,14 +1,15 @@
 // Web page for Neuro ZETAPHY tier 1. Everything shown from the chain goes
 // through textContent, never innerHTML: token names are written by strangers.
 import { readContract } from '../src/reader.js';
-import { explain, LANGS, uiText, pickLang } from '../src/explain.js';
-import { CHAINS, isChainAddress, explorerUrl } from '../src/chains.js';
+import { explain, explainPath, LANGS, uiText, pickLang } from '../src/explain.js';
+import { readTransaction, isTxHash } from '../src/tx.js';
+import { CHAINS, isChainAddress, explorerUrl, explorerTxUrl } from '../src/chains.js';
 import { verdictOf } from '../src/verdict.js';
 
 const $ = (id) => document.getElementById(id);
 // What an address looks like on each kind of chain (placeholder and error hint).
 const FORMAT = {
-  evm: { placeholder: '0x…', hint: '0x + 40 hex' },
+  evm: { placeholder: '0x… (address or tx hash)', hint: '0x + 40 hex (address) / 0x + 64 hex (transaction)' },
   solana: { placeholder: 'EPjFWdd5…', hint: 'base58, 32–44' },
   sui: { placeholder: '0x…::coin::COIN', hint: '0x…::module::NAME / 0x… (package)' },
   aptos: { placeholder: '0x… / 0x…::coin::COIN', hint: '0x… (Fungible Asset) / 0x…::module::Name' },
@@ -69,7 +70,14 @@ function render(report) {
     return li;
   }));
   renderEvidence(report, m);
-  const rows = [[m.chain, CHAINS[report.chain].name], [m.address, report.address]];
+  // A transaction: its path (what moved where), in order.
+  const path = explainPath(report, lang);
+  $('path').hidden = !path.length;
+  $('path-list').replaceChildren(...path.map((t) => { const li = document.createElement('li'); li.textContent = t; return li; }));
+  const rows = report.kind === 'tx'
+    ? [[m.chain, CHAINS[report.chain].name], [m.hash, report.hash],
+      ...(report.status == null ? [] : [[m.status, report.status ? m.succeeded : m.reverted]]), ...(report.block ? [[m.block, String(report.block)]] : [])]
+    : [[m.chain, CHAINS[report.chain].name], [m.address, report.address]];
   if (report.proxy?.kind) rows.push([m.proxy, report.proxy.kind]);
   if (report.proxy?.implementation) rows.push([m.implementation, report.proxy.implementation]);
   if (report.owner) rows.push([m.owner, report.owner]);
@@ -144,7 +152,7 @@ function render(report) {
   const dt = document.createElement('dt'); dt.textContent = m.explorer;
   const dd = document.createElement('dd');
   const a = document.createElement('a');
-  a.href = explorerUrl(report.chain, report.address); // address already validated
+  a.href = (report.kind === 'tx' ? explorerTxUrl(report.chain, report.hash) : explorerUrl(report.chain, report.address)) ?? '#'; // validated input
   a.target = '_blank'; a.rel = 'noopener noreferrer';
   a.textContent = new URL(a.href).hostname;
   dd.append(a); dl.append(dt, dd);
@@ -210,6 +218,8 @@ function renderCounts() {
   $('c-checks').textContent = n.format(counts.checks);
   $('c-risky').textContent = n.format(counts.high + counts.medium);
   $('c-high').textContent = n.format(counts.high);
+  $('c-tx').textContent = n.format(counts.tx);
+  $('c-zetaphy').textContent = n.format(counts.zetaphy);
   $('counts').hidden = false;
 }
 async function loadCounts() {
@@ -217,40 +227,46 @@ async function loadCounts() {
   try {
     const r = await (await fetch('/api/usage')).json();
     if (!r.enabled || !r.total) return;
-    counts = { checks: Number(r.total.checks) || 0, high: Number(r.total.high) || 0, medium: Number(r.total.medium) || 0 };
+    const n = (k) => Number(r.total[k]) || 0;
+    counts = { checks: n('checks'), high: n('high'), medium: n('medium'), tx: n('tx'), zetaphy: n('zetaphy') };
     renderCounts();
   } catch { /* the numbers are optional */ }
 }
 
 // Counts one "check" toward the monthly user goal, with the result level only
-// (high / medium / low / info). Sends nothing about the contract or the visitor;
+// (high / medium / low / info), its kind (contract / tx) and whether it was on
+// ZETAPHY. Sends nothing about the contract, the transaction or the visitor;
 // skipped when the browser asks not to be tracked.
-function reportUsage(level) {
+function reportUsage(level, kind, chain) {
   if (navigator.doNotTrack === '1' || navigator.globalPrivacyControl === true) return;
   if (!/^https?:$/.test(location.protocol)) return;
   fetch('/api/usage', {
     method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ event: 'check', level }),
+    body: JSON.stringify({ event: 'check', level, kind, chain: chain === 'zetaphy' ? 'zetaphy' : 'other' }),
   }).catch(() => { /* counter is optional */ });
   if (counts) {
     counts.checks += 1;
     if (level === 'high' || level === 'medium') counts[level] += 1;
+    if (kind === 'tx') counts.tx += 1;
+    if (chain === 'zetaphy') counts.zetaphy += 1;
     renderCounts();
   }
 }
 
 async function run(chain, address) {
   const ui = uiText(lang);
-  if (!isChainAddress(chain, address)) { status(ui.badAddress + FORMAT[kindOf(chain)].hint, true); return; }
+  const tx = isTxHash(address) && !(kindOf(chain) !== 'evm' && isChainAddress(chain, address));
+  if (tx && kindOf(chain) !== 'evm') { status(ui.badTx, true); return; }
+  if (!tx && !isChainAddress(chain, address)) { status(ui.badAddress + FORMAT[kindOf(chain)].hint, true); return; }
   $('go').disabled = true;
   $('result').hidden = true;
   status(ui.reading);
   try {
-    last = await readContract(chain, address);
+    last = tx ? await readTransaction(chain, address) : await readContract(chain, address);
     render(last);
     status('');
-    reportUsage(last.analysis?.level);
-    checkEarly(chain, address, last);
+    reportUsage(last.analysis?.level, tx ? 'tx' : 'contract', chain);
+    if (!tx) checkEarly(chain, address, last);
     const u = new URL(location.href);
     u.searchParams.set('chain', chain); u.searchParams.set('address', address);
     history.replaceState(null, '', u);

@@ -1,4 +1,4 @@
-import { fmtSupply, list } from './fmt.js';
+import { fmtSupply, list, short, sym } from './fmt.js';
 
 // Spanish (Español). Same keys as en.js; code names, brands and token names stay as they are.
 export const NAME = 'Español';
@@ -6,9 +6,9 @@ export const NAME = 'Español';
 export const LEVEL = { high: 'Riesgo alto', medium: 'Riesgo medio', low: 'Riesgo bajo', info: 'Estas reglas no encontraron riesgos' };
 
 export const UI = {
-  subtitle: 'Lee y explica contratos · nivel 1, solo lectura', chain: 'Red', address: 'Dirección del contrato o token', check: 'Revisar contrato',
+  subtitle: 'Lee y explica contratos · nivel 1, solo lectura', chain: 'Red', address: 'Dirección del contrato o token, o hash de transacción', check: 'Revisar contrato',
   details: 'Detalles', reading: 'Leyendo de la blockchain…', badAddress: 'Dirección no válida para esta red. Formatos aceptados: ',
-  failed: 'No se pudo leer: ', footer: 'Nunca pide conectar una wallet y nunca envía transacciones. Lee datos públicos de la blockchain; para la alerta temprana solo envía la red y la dirección del contrato al servidor de este sitio, que no guarda nada. No es asesoramiento de inversión.', stats: 'Estadísticas de uso', statChecks: 'Contratos revisados', statRisky: 'Contratos marcados con riesgo', statHigh: 'Riesgo alto encontrado', statNote: 'Todos los usuarios juntos, aproximado. Solo se cuenta el nivel del resultado, nunca el contrato.', language: 'Idioma',
+  failed: 'No se pudo leer: ', footer: 'Nunca pide conectar una wallet y nunca envía transacciones. Lee datos públicos de la blockchain; para la alerta temprana solo envía la red y la dirección del contrato al servidor de este sitio, que no guarda nada. No es asesoramiento de inversión.', stats: 'Estadísticas de uso', badTx: 'Para revisar transacciones hace falta una red EVM (Ethereum, BNB Chain, Base, Arbitrum o ZETAPHY) y un hash de 0x más 64 caracteres hexadecimales.', path: 'Qué pasó (recorrido)', statTx: 'Transacciones revisadas', statZetaphy: 'Revisiones en ZETAPHY', statChecks: 'Contratos revisados', statRisky: 'Contratos marcados con riesgo', statHigh: 'Riesgo alto encontrado', statNote: 'Todos los usuarios juntos, aproximado. Solo se cuenta el nivel del resultado, nunca el contrato.', language: 'Idioma',
   disclaimer: 'Esto es un análisis de código automático y reproducible, no una acusación contra ninguna persona o proyecto, y no es asesoramiento de inversión. El dueño del contrato puede responder o pedir una corrección.',
   correction: 'Cómo responder o pedir una corrección',
   reproduce: 'Compruébalo tú mismo',
@@ -24,6 +24,7 @@ export const UI = {
     pool: 'Pool de liquidez', simTax: 'Impuesto simulado (compra / venta)', simFailed: 'la venta falló',
     verdict: 'ID de veredicto (solo reglas)', command: 'Comando', rule: 'regla',
     earlyMatch: 'Coincide con un patrón vigilado. Categoría:', earlyRef: 'referencia',
+    hash: 'Transacción', status: 'Estado', block: 'Bloque', succeeded: 'correcta', reverted: 'fallida (revertida)',
   },
 };
 
@@ -247,4 +248,29 @@ export const T = {
     'btc-premine': (p) => `El ${p.percent}% del suministro máximo fue para el creador al crearse el token (premine). Puede venderlo en cualquier momento.`,
     'btc-turbo': () => 'El creador aceptó futuros cambios del protocolo Runes (turbo), así que el funcionamiento de este token puede cambiar con nuevas versiones del protocolo.',
     'btc-caveat': () => 'Leído de ord (ordinals.com), el indexador de referencia de Runes, con reglas fijas. Las Runes existen como reglas del indexador sobre Bitcoin. No se revisan los holders ni la liquidez. No es asesoramiento de inversión.',
+    // Transaction checks (src/tx.js)
+    'tx-not-found': () => 'No hay ninguna transacción con este hash en la red seleccionada. Revisa el hash o elige la red en la que se envió.',
+    'tx-summary': (p) => (p.created ? `${short(p.from)} creó un contrato nuevo en ${short(p.to)}.`
+      : p.method ? `${short(p.from)} llamó a ${p.method} en ${short(p.to)}${p.value !== '0' ? `, enviando ${fmtSupply(p.value, 18)} ${p.native}` : ''}.`
+        : `${short(p.from)} envió ${fmtSupply(p.value, 18)} ${p.native} a ${short(p.to)}.`),
+    'tx-failed': () => 'La transacción falló (revertida): no ocurrió nada de lo que intentaba hacer, pero la comisión se pagó.',
+    'tx-created': (p) => `Creó un contrato en ${p.address}. Revisa también esa dirección por separado.`,
+    'tx-approve-wallet': (p) => `El remitente permitió a una wallet normal (${p.spender}), no a un contrato, gastar sus ${sym(p)}${p.unlimited ? ' sin límite' : ''}. Las apps reales usan contratos; es una forma común de sacar tokens de las wallets. Revoca esta aprobación ahora (por ejemplo con revoke.cash).`,
+    'tx-approve-risky': (p) => `El remitente permitió a ${p.spender} gastar sus ${sym(p)}, y Neuro califica ese contrato como de riesgo alto. Revoca esta aprobación ahora (por ejemplo con revoke.cash).`,
+    'tx-approve-unlimited': (p) => `Aprobación ilimitada: ${p.spender} puede llevarse todos los ${sym(p)} del remitente en cualquier momento, ahora y más adelante. Es normal con apps de confianza; revócala cuando ya no uses la app.`,
+    'tx-approve-all-wallet': (p) => `El remitente permitió a una wallet normal (${p.operator}) mover TODOS sus NFTs de ${sym(p)}. Es una forma común de sacar NFTs de las wallets. Revócalo ahora (por ejemplo con revoke.cash).`,
+    'tx-approve-all': (p) => `El remitente permitió a ${p.operator} mover todos sus NFTs de ${sym(p)}. Hazlo solo con marketplaces de confianza.`,
+    'tx-zero-transfer': (p) => `Una transferencia de 0 ${sym(p)} de ${short(p.from)} a ${short(p.to)}. Esto es envenenamiento de direcciones (address poisoning): una entrada falsa en tu historial para que más adelante copies una dirección parecida. Nunca copies direcciones de tu historial de transacciones.`,
+    'tx-lookalike': (p) => `${p.a} se parece a ${p.b} (mismo inicio y final), pero es otra dirección. Se creó para que se confunda con ella: revisa cada carácter antes de enviar nada.`,
+    'tx-bait-payable': (p) => `Se enviaron ${fmtSupply(p.value, 18)} ${p.native} a la función del contrato "${p.method}". Los sitios falsos de airdrops, reclamos y "verificar wallet" usan funciones así para quedarse con el dinero; los airdrops reales nunca te piden pagar.`,
+    'tx-to-risky': (p) => `Neuro califica el contrato al que llamó esta transacción (${p.to}) como de riesgo ${p.level === 'high' ? 'alto' : 'medio'}. Revisa esa dirección por separado para ver los motivos.`,
+    'tx-nothing-found': () => 'Con estas reglas no se encontró nada riesgoso en esta transacción. Solo se revisa lo que muestran la transacción y sus logs.',
+    'path-call': (p) => (p.method ? `${short(p.from)} → ${short(p.to)}: ${p.method}${p.value !== '0' ? ` + ${fmtSupply(p.value, 18)} ${p.native}` : ''}`
+      : `${short(p.from)} → ${short(p.to)}: ${fmtSupply(p.value, 18)} ${p.native}`),
+    'path-create': (p) => `${short(p.from)} creó el contrato ${short(p.address)}`,
+    'path-token': (p) => `${fmtSupply(p.amount, p.decimals)} ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-nft': (p) => `NFT #${p.id} de ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-approve': (p) => `${short(p.owner)} permitió a ${short(p.spender)} gastar ${p.unlimited ? 'una cantidad ilimitada de' : fmtSupply(p.amount, p.decimals)} ${sym(p)}`,
+    'path-approveAll': (p) => `${short(p.owner)} ${p.approved ? 'permitió' : 'dejó de permitir'} a ${short(p.operator)} mover todos los NFTs de ${sym(p)}`,
+    'path-note': () => 'No se listan las monedas movidas dentro de contratos (eso necesita una API de trace).',
 };

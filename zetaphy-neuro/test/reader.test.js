@@ -139,7 +139,7 @@ test('chainConfig reads a chain the website does not list', async () => {
   assert.equal(r.chainId, 77390);
   assert.ok(r.analysis.findings.some((f) => f.id === 'erc20'));
   await assert.rejects(readContract('zetaphy', 'not-an-address', { rpc: chain.rpc, chainConfig: { kind: 'evm', id: 77390, rpcs: [] } }), /invalid address/);
-  await assert.rejects(readContract('zetaphy', addr, { rpc: chain.rpc }), /unknown chain/);
+  await assert.rejects(readContract('not-listed-chain', addr, { rpc: chain.rpc }), /unknown chain/);
 });
 
 test('a fingerprint flagged by the network is a high finding; an unreachable registry is ignored', async () => {

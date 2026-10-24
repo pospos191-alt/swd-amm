@@ -52,7 +52,7 @@ after(async () => { await browser?.close(); server?.kill(); rpcServer?.close(); 
 const SOL_GENESIS = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d';
 
 /** lang: pick that language in the menu after loading (the page opens in English). */
-async function openPage(scheme, solanaAccounts = {}, tonapi = {}, { lang } = {}) {
+async function openPage(scheme, solanaAccounts = {}, tonapi = {}, { lang, txs = {} } = {}) {
   const page = await browser.newPage({ colorScheme: scheme });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
@@ -72,6 +72,8 @@ async function openPage(scheme, solanaAccounts = {}, tonapi = {}, { lang } = {})
       let result;
       if (method === 'getGenesisHash') result = SOL_GENESIS;
       else if (method === 'getAccountInfo') result = { value: solanaAccounts[params[0]] ?? null };
+      else if (method === 'eth_getTransactionByHash') result = txs[params[0]]?.tx ?? null;
+      else if (method === 'eth_getTransactionReceipt') result = txs[params[0]]?.rc ?? null;
       else result = method === 'eth_chainId' ? '0x38' : await chain.rpc.call(method, params);
       body = { jsonrpc: '2.0', id, result };
     } catch (e) {
@@ -197,7 +199,7 @@ test('site-wide numbers under the form: checks, risky and high-risk results go u
   await page.fill('#address', addr);
   const sent = page.waitForRequest((r) => r.url().endsWith('/api/usage') && r.method() === 'POST');
   await page.click('#go');
-  assert.deepEqual(JSON.parse((await sent).postData()), { event: 'check', level: 'high' }, 'only the level, never the contract');
+  assert.deepEqual(JSON.parse((await sent).postData()), { event: 'check', level: 'high', kind: 'contract', chain: 'other' }, 'only the level and kind, never the contract');
   await page.waitForSelector('#result:not([hidden])');
   assert.deepEqual([await num('#c-checks'), await num('#c-risky'), await num('#c-high')], [c0 + 1, r0 + 1, h0 + 1]);
   const server = (await (await fetch(`http://localhost:${PORT}/api/usage`)).json()).total;
@@ -309,6 +311,42 @@ test('early warning: a match in the private rule pack shows an advisory notice, 
   assert.deepEqual(await (await again).json(), { warnings: [], configured: true });
   await page.waitForSelector('#result:not([hidden])');
   assert.equal(await page.isHidden('#early'), true);
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
+test('transaction hash: path, high risk for an unlimited approval to a wallet, counted as a transaction check', async () => {
+  const scam = (await chain.deploy('ScamToken')).toLowerCase();
+  const me = '0x' + '11'.repeat(20), spender = '0x' + '33'.repeat(20);
+  const w = (v) => BigInt(v).toString(16).padStart(64, '0');
+  const max = 2n ** 256n - 1n;
+  const hash = '0x' + 'ab'.repeat(32);
+  const txs = { [hash]: {
+    tx: { hash, from: me, to: scam, value: '0x0', input: '0x095ea7b3' + w(spender) + w(max), blockNumber: '0x20' },
+    rc: { status: '0x1', contractAddress: null, logs: [{ address: scam, topics: ['0x8c5be1e5ebec7d5bd14f71427d1e84f3dd0314c0f7b2291e5b200ac8c7c3b925', '0x' + w(me), '0x' + w(spender)], data: '0x' + w(max) }] },
+  } };
+  const { page, errors } = await openPage('light', {}, {}, { txs });
+  await page.waitForSelector('#counts:not([hidden])');
+  const txBefore = Number((await page.textContent('#c-tx')).replace(/[^0-9]/g, ''));
+  await page.fill('#address', hash);
+  const sent = page.waitForRequest((r) => r.url().endsWith('/api/usage') && r.method() === 'POST');
+  await page.click('#go');
+  assert.deepEqual(JSON.parse((await sent).postData()), { event: 'check', level: 'high', kind: 'tx', chain: 'other' });
+  await page.waitForSelector('#result:not([hidden])');
+  assert.equal(await page.textContent('#title'), 'High risk');
+  const path = await page.$$eval('#path-list li', (els) => els.map((e) => e.textContent));
+  assert.match(path[0], /approve\(address,uint256\)/);
+  assert.match(path[1], /allowed .* to spend unlimited/);
+  const findings = await page.textContent('#findings');
+  assert.match(findings, /plain wallet/);
+  assert.equal(Number((await page.textContent('#c-tx')).replace(/[^0-9]/g, '')), txBefore + 1);
+  assert.match(await page.getAttribute('#meta a', 'href'), /bscscan\.com\/tx\/0xabab/);
+  // a transaction hash on a chain without transaction checks
+  await page.selectOption('#chain', 'sol');
+  await page.fill('#address', hash);
+  await page.click('#go');
+  assert.match(await page.textContent('#status'), /EVM chain/);
+  if (shots) await page.screenshot({ path: `${shots}/neuro-tx.png`, fullPage: true });
   assert.deepEqual(errors, []);
   await page.close();
 });
