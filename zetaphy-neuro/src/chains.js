@@ -180,8 +180,8 @@ export function isChainAddress(chainKey, address) {
 
 /** Explorer link for a transaction (EVM chains), or null. */
 export function explorerTxUrl(chainKey, hash) {
-  const c = CHAINS[chainKey];
-  return c?.explorerTx ? c.explorerTx + hash : null;
+  const c = Object.hasOwn(CHAINS, chainKey) ? CHAINS[chainKey] : null;
+  return c?.explorerTx && /^0x[0-9a-fA-F]{64}$/.test(hash) ? c.explorerTx + hash.toLowerCase() : null;
 }
 
 /** Explorer link for a report's address on its chain. */

@@ -69,6 +69,7 @@ export function explain(report, lang = 'en') {
 export function explainPath(report, lang = 'en') {
   if (!report.path?.length) return [];
   const L = LANGS[pickLang(lang)];
-  const text = (id, p) => (L.T[id] ?? en.T[id] ?? (() => id))(p);
-  return [...report.path.map((e) => text(`path-${e.kind}`, e)), text('path-note', {})];
+  const KINDS = ['call', 'create', 'token', 'nft', 'approve', 'approveAll'];
+  const text = (id, p) => (Object.hasOwn(L.T, id) ? L.T[id] : en.T[id])(p);
+  return [...report.path.filter((e) => KINDS.includes(e.kind)).map((e) => text(`path-${e.kind}`, e)), text('path-note', {})];
 }

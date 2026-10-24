@@ -152,7 +152,8 @@ function render(report) {
   const dt = document.createElement('dt'); dt.textContent = m.explorer;
   const dd = document.createElement('dd');
   const a = document.createElement('a');
-  a.href = (report.kind === 'tx' ? explorerTxUrl(report.chain, report.hash) : explorerUrl(report.chain, report.address)) ?? '#'; // validated input
+  const link = report.kind === 'tx' ? explorerTxUrl(report.chain, report.hash) : explorerUrl(report.chain, report.address); // validated input
+  a.href = link && link.startsWith('https://') ? link : '#';
   a.target = '_blank'; a.rel = 'noopener noreferrer';
   a.textContent = new URL(a.href).hostname;
   dd.append(a); dl.append(dt, dd);
