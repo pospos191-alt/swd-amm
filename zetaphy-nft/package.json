@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "ZETAPHY NFT creator and marketplace (testnet): ERC-721/1155 collection factory, escrow-less marketplace with Neuro ThreatRegistry checks, and a static web app for nft.sawasdeecoin.com",
+  "license": "BUSL-1.1",
   "type": "module",
   "bin": {
     "zetaphy-nft": "./cli.js"
