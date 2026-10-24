@@ -1,4 +1,4 @@
-import { fmtSupply, list } from './fmt.js';
+import { fmtSupply, list, short, sym } from './fmt.js';
 
 // Vietnamese. Same keys as en.js (test/i18n.test.js checks it).
 export const NAME = 'Tiếng Việt';
@@ -6,9 +6,9 @@ export const NAME = 'Tiếng Việt';
 export const LEVEL = { high: 'Rủi ro cao', medium: 'Rủi ro trung bình', low: 'Rủi ro thấp', info: 'Không phát hiện rủi ro theo các quy tắc này' };
 
 export const UI = {
-  subtitle: 'Đọc và giải thích hợp đồng · cấp 1, chỉ đọc', chain: 'Chuỗi', address: 'Địa chỉ hợp đồng hoặc token', check: 'Kiểm tra hợp đồng',
+  subtitle: 'Đọc và giải thích hợp đồng · cấp 1, chỉ đọc', chain: 'Chuỗi', address: 'Địa chỉ hợp đồng, token hoặc mã giao dịch (hash)', check: 'Kiểm tra hợp đồng',
   details: 'Chi tiết', reading: 'Đang đọc dữ liệu từ chuỗi…', badAddress: 'Địa chỉ không hợp lệ cho chuỗi này. Các định dạng được chấp nhận: ',
-  failed: 'Không đọc được: ', footer: 'Không bao giờ yêu cầu kết nối ví và không bao giờ gửi giao dịch. Đọc dữ liệu công khai trên chuỗi; để cảnh báo sớm, chỉ gửi tên chuỗi và địa chỉ hợp đồng đến máy chủ của trang này (không lưu lại). Không phải lời khuyên đầu tư.', stats: 'Thống kê sử dụng', statChecks: 'Hợp đồng đã kiểm tra', statRisky: 'Hợp đồng bị gắn cờ rủi ro', statHigh: 'Phát hiện rủi ro cao', statNote: 'Tổng của mọi người dùng, ước tính. Chỉ đếm mức kết quả, không bao giờ lưu hợp đồng.', language: 'Ngôn ngữ',
+  failed: 'Không đọc được: ', footer: 'Không bao giờ yêu cầu kết nối ví và không bao giờ gửi giao dịch. Đọc dữ liệu công khai trên chuỗi; để cảnh báo sớm, chỉ gửi tên chuỗi và địa chỉ hợp đồng đến máy chủ của trang này (không lưu lại). Không phải lời khuyên đầu tư.', stats: 'Thống kê sử dụng', badTx: 'Kiểm tra giao dịch cần một chuỗi EVM (Ethereum, BNB Chain, Base, Arbitrum hoặc ZETAPHY) và mã hash gồm 0x cùng 64 ký tự hex.', path: 'Điều gì đã xảy ra (đường đi)', statTx: 'Giao dịch đã kiểm tra', statZetaphy: 'Lượt kiểm tra trên ZETAPHY', statChecks: 'Hợp đồng đã kiểm tra', statRisky: 'Hợp đồng bị gắn cờ rủi ro', statHigh: 'Phát hiện rủi ro cao', statNote: 'Tổng của mọi người dùng, ước tính. Chỉ đếm mức kết quả, không bao giờ lưu hợp đồng.', language: 'Ngôn ngữ',
   disclaimer: 'Đây là phân tích mã tự động, có thể kiểm chứng lại, không phải lời buộc tội bất kỳ cá nhân hay dự án nào và không phải lời khuyên đầu tư. Chủ hợp đồng có thể phản hồi hoặc yêu cầu đính chính.',
   correction: 'Cách phản hồi hoặc yêu cầu đính chính',
   reproduce: 'Tự kiểm tra lại',
@@ -24,6 +24,7 @@ export const UI = {
     pool: 'Pool thanh khoản', simTax: 'Thuế khi mô phỏng (mua / bán)', simFailed: 'bán thất bại',
     verdict: 'Mã phán định (chỉ quy tắc)', command: 'Lệnh', rule: 'quy tắc',
     earlyMatch: 'Khớp một mẫu đang theo dõi. Nhóm:', earlyRef: 'mã tham chiếu',
+    hash: 'Giao dịch', status: 'Trạng thái', block: 'Khối', succeeded: 'thành công', reverted: 'thất bại (reverted)',
   },
 };
 
@@ -247,4 +248,29 @@ export const T = {
     'btc-premine': (p) => `${p.percent}% nguồn cung tối đa đã thuộc về người tạo ngay khi token được tạo (premine). Người tạo có thể bán ra bất cứ lúc nào.`,
     'btc-turbo': () => 'Người tạo đã chọn nhận các thay đổi sau này của giao thức Runes (turbo), nên cách token này hoạt động có thể thay đổi theo các phiên bản giao thức mới.',
     'btc-caveat': () => 'Kiểm tra từ ord (ordinals.com), bộ lập chỉ mục chuẩn của Runes, theo các quy tắc cố định. Rune tồn tại dưới dạng quy tắc của bộ lập chỉ mục trên nền Bitcoin. Chưa kiểm tra người nắm giữ và thanh khoản. Không phải lời khuyên đầu tư.',
+    // Transaction checks (src/tx.js)
+    'tx-not-found': () => 'Không có giao dịch nào với mã hash này trên chuỗi đã chọn. Hãy kiểm tra lại mã hash, hoặc chọn chuỗi mà giao dịch được gửi lên.',
+    'tx-summary': (p) => (p.created ? `${short(p.from)} đã tạo một hợp đồng mới tại ${short(p.to)}.`
+      : p.method ? `${short(p.from)} đã gọi ${p.method} trên ${short(p.to)}${p.value !== '0' ? `, gửi kèm ${fmtSupply(p.value, 18)} ${p.native}` : ''}.`
+        : `${short(p.from)} đã gửi ${fmtSupply(p.value, 18)} ${p.native} tới ${short(p.to)}.`),
+    'tx-failed': () => 'Giao dịch thất bại (reverted): không thao tác nào của nó được thực hiện, nhưng phí giao dịch vẫn bị trừ.',
+    'tx-created': (p) => `Giao dịch này đã tạo một hợp đồng tại ${p.address}. Hãy kiểm tra riêng cả địa chỉ đó.`,
+    'tx-approve-wallet': (p) => `Người gửi đã cho phép một ví thông thường (${p.spender}), không phải hợp đồng, tiêu ${sym(p)} của họ${p.unlimited ? ' không giới hạn' : ''}. Ứng dụng thật dùng hợp đồng; đây là cách các công cụ rút sạch ví lấy token. Hãy thu hồi quyền này ngay (ví dụ bằng revoke.cash).`,
+    'tx-approve-risky': (p) => `Người gửi đã cho phép ${p.spender} tiêu ${sym(p)} của họ, và Neuro đánh giá hợp đồng đó có rủi ro cao. Hãy thu hồi quyền này ngay (ví dụ bằng revoke.cash).`,
+    'tx-approve-unlimited': (p) => `Phê duyệt không giới hạn: ${p.spender} có thể lấy toàn bộ ${sym(p)} của người gửi bất cứ lúc nào, cả bây giờ lẫn sau này. Điều này bình thường với ứng dụng bạn tin tưởng; hãy thu hồi khi không còn dùng ứng dụng đó.`,
+    'tx-approve-all-wallet': (p) => `Người gửi đã cho phép một ví thông thường (${p.operator}) chuyển TOÀN BỘ NFT ${sym(p)} của họ. Đây là cách các công cụ rút sạch NFT hoạt động. Hãy thu hồi ngay (ví dụ bằng revoke.cash).`,
+    'tx-approve-all': (p) => `Người gửi đã cho phép ${p.operator} chuyển toàn bộ NFT ${sym(p)} của họ. Chỉ nên làm vậy với các sàn NFT bạn tin tưởng.`,
+    'tx-zero-transfer': (p) => `Một lần chuyển 0 ${sym(p)} từ ${short(p.from)} tới ${short(p.to)}. Đây là chiêu đầu độc địa chỉ (address poisoning): một mục giả trong lịch sử giao dịch để sau này bạn sao chép nhầm một địa chỉ trông giống. Đừng bao giờ sao chép địa chỉ từ lịch sử giao dịch.`,
+    'tx-lookalike': (p) => `${p.a} trông giống ${p.b} (giống phần đầu và phần cuối) nhưng là một địa chỉ khác. Nó được tạo ra để bị nhầm với địa chỉ kia: hãy kiểm tra từng ký tự trước khi gửi bất cứ thứ gì.`,
+    'tx-bait-payable': (p) => `${fmtSupply(p.value, 18)} ${p.native} đã được gửi tới hàm hợp đồng "${p.method}". Các trang airdrop giả, trang nhận thưởng (claim) và trang "xác minh ví" dùng những hàm như thế này để lấy tiền; airdrop thật không bao giờ yêu cầu bạn trả tiền.`,
+    'tx-to-risky': (p) => `Hợp đồng mà giao dịch này gọi tới (${p.to}) được Neuro đánh giá rủi ro ${p.level === 'high' ? 'cao' : 'trung bình'}. Hãy kiểm tra riêng địa chỉ đó để xem lý do.`,
+    'tx-nothing-found': () => 'Theo các quy tắc này, không thấy điều gì rủi ro trong giao dịch này. Chỉ kiểm tra những gì giao dịch và nhật ký (log) của nó cho thấy.',
+    'path-call': (p) => (p.method ? `${short(p.from)} → ${short(p.to)}: ${p.method}${p.value !== '0' ? ` + ${fmtSupply(p.value, 18)} ${p.native}` : ''}`
+      : `${short(p.from)} → ${short(p.to)}: ${fmtSupply(p.value, 18)} ${p.native}`),
+    'path-create': (p) => `${short(p.from)} đã tạo hợp đồng ${short(p.address)}`,
+    'path-token': (p) => `${fmtSupply(p.amount, p.decimals)} ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-nft': (p) => `NFT #${p.id} của ${sym(p)}: ${short(p.from)} → ${short(p.to)}`,
+    'path-approve': (p) => `${short(p.owner)} đã cho phép ${short(p.spender)} tiêu ${p.unlimited ? `${sym(p)} không giới hạn` : `${fmtSupply(p.amount, p.decimals)} ${sym(p)}`}`,
+    'path-approveAll': (p) => `${short(p.owner)} ${p.approved ? 'đã cho phép' : 'đã ngừng cho phép'} ${short(p.operator)} chuyển toàn bộ NFT ${sym(p)}`,
+    'path-note': () => 'Coin được chuyển bên trong các hợp đồng không được liệt kê (việc này cần API trace).',
 };

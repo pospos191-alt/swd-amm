@@ -18,6 +18,8 @@ export const CHAINS = {
     name: 'Ethereum',
     rpcs: ['https://ethereum-rpc.publicnode.com', 'https://eth.drpc.org'],
     explorer: 'https://etherscan.io/address/',
+    explorerTx: 'https://etherscan.io/tx/',
+    native: 'ETH',
     // `dex`: the chain's main Uniswap-V2-style DEX, used by the trade
     // simulation (src/honeypot.js). scripts/live-check.js verifies it on
     // chain: code present, router.factory() and router.WETH() match.
@@ -32,6 +34,8 @@ export const CHAINS = {
     name: 'BNB Chain',
     rpcs: ['https://bsc-dataseed.bnbchain.org', 'https://bsc-rpc.publicnode.com'],
     explorer: 'https://bscscan.com/address/',
+    explorerTx: 'https://bscscan.com/tx/',
+    native: 'BNB',
     dex: {
       name: 'PancakeSwap V2', factory: '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73', router: '0x10ED43C718714eb63d5aA57B78B54704E256024E',
       weth: '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', native: 'WBNB', amountIn: '50000000000000000', // 0.05 BNB
@@ -43,6 +47,8 @@ export const CHAINS = {
     name: 'Base',
     rpcs: ['https://mainnet.base.org', 'https://base-rpc.publicnode.com'],
     explorer: 'https://basescan.org/address/',
+    explorerTx: 'https://basescan.org/tx/',
+    native: 'ETH',
     dex: {
       name: 'Uniswap V2', factory: '0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6', router: '0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24',
       weth: '0x4200000000000000000000000000000000000006', native: 'WETH', amountIn: '10000000000000000', // 0.01 ETH
@@ -54,10 +60,22 @@ export const CHAINS = {
     name: 'Arbitrum One',
     rpcs: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum-one-rpc.publicnode.com'],
     explorer: 'https://arbiscan.io/address/',
+    explorerTx: 'https://arbiscan.io/tx/',
+    native: 'ETH',
     dex: {
       name: 'Uniswap V2', factory: '0xf1D7CC64Fb4452F05c498126312eBE29f30Fbcf9', router: '0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24',
       weth: '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1', native: 'WETH', amountIn: '10000000000000000', // 0.01 ETH
     },
+  },
+  // ZETAPHY's own EVM (testnet). No DEX is configured, so no trade simulation.
+  zetaphy: {
+    kind: 'evm',
+    id: 77390,
+    name: 'ZETAPHY (testnet)',
+    rpcs: ['https://rpc.sawasdeecoin.com'],
+    explorer: 'https://explorer.sawasdeecoin.com/#/address/',
+    explorerTx: 'https://explorer.sawasdeecoin.com/#/tx/',
+    native: 'ZETAPHY',
   },
   sol: {
     kind: 'solana',
@@ -158,6 +176,12 @@ export function isChainAddress(chainKey, address) {
     case 'bitcoin': return isRuneInput(address);
     default: return EVM_ADDRESS.test(address);
   }
+}
+
+/** Explorer link for a transaction (EVM chains), or null. */
+export function explorerTxUrl(chainKey, hash) {
+  const c = Object.hasOwn(CHAINS, chainKey) ? CHAINS[chainKey] : null;
+  return c?.explorerTx && /^0x[0-9a-fA-F]{64}$/.test(hash) ? c.explorerTx + hash.toLowerCase() : null;
 }
 
 /** Explorer link for a report's address on its chain. */

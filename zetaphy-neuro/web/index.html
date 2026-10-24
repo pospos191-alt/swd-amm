@@ -32,6 +32,8 @@
     <div><b id="c-checks">–</b><span data-i18n="statChecks">Contracts checked</span></div>
     <div><b id="c-risky">–</b><span data-i18n="statRisky">Risky contracts flagged</span></div>
     <div><b id="c-high">–</b><span data-i18n="statHigh">High risk found</span></div>
+    <div><b id="c-tx">–</b><span data-i18n="statTx">Transactions checked</span></div>
+    <div><b id="c-zetaphy">–</b><span data-i18n="statZetaphy">Checks on ZETAPHY</span></div>
     <p data-i18n="statNote">All users together, approximate. Only the result level is counted, never the contract.</p>
   </section>
 
@@ -39,6 +41,10 @@
 
   <section id="result" hidden>
     <div id="verdict" class="verdict"><span class="dot"></span><strong id="title"></strong></div>
+    <section id="path" class="path" hidden>
+      <h2 data-i18n="path">What happened (path)</h2>
+      <ol id="path-list"></ol>
+    </section>
     <ul id="findings"></ul>
     <section id="early" class="early" hidden>
       <h2 data-i18n="early">Early warning: patterns not yet published</h2>

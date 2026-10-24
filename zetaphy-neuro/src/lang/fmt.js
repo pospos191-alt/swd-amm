@@ -20,3 +20,6 @@ export const short = (a) => {
   const s = String(a ?? '?');
   return s.length > 20 ? `${s.slice(0, 10)}…${s.slice(-6)}` : s;
 };
+
+/** A token's symbol as its contract writes it, or its short address. */
+export const sym = (p) => p.symbol || short(p.token);

@@ -13,7 +13,8 @@ test('counts unique visitors and total checks', async () => {
   await post(s);
   await post(s, { ip: '5.6.7.8' });
   const r = await get(s);
-  assert.deepEqual({ ...r.json, found: undefined, total: undefined }, { enabled: true, month: '2026-10', users: 2, checks: 3, goal: GOAL, found: undefined, total: undefined });
+  const { enabled, month, users, checks, goal } = r.json;
+  assert.deepEqual({ enabled, month, users, checks, goal }, { enabled: true, month: '2026-10', users: 2, checks: 3, goal: GOAL });
 });
 
 test('a new month starts a fresh count', async () => {
@@ -83,7 +84,7 @@ test('counts what checks found (only the level word) and all-time totals across 
   assert.equal(oct2.checks, 5);
   assert.deepEqual(oct2.found, { high: 1, medium: 1, low: 0, info: 1 });
   const nov = (await get(s, { now: new Date('2026-11-20T00:00:00Z') })).json;
-  assert.deepEqual(nov.total, { checks: 6, since: '2026-10', high: 2, medium: 1, low: 0, info: 1 });
+  assert.deepEqual(nov.total, { checks: 6, since: '2026-10', high: 2, medium: 1, low: 0, info: 1, tx: 0, zetaphy: 0 });
   assert.equal(nov.found.high, 1);
   assert.ok(!seen.join(' ').includes('bogus'));
 });
@@ -92,4 +93,19 @@ test('months for the totals', () => {
   assert.deepEqual(monthsUntil('2026-10'), ['2026-10']);
   assert.deepEqual(monthsUntil('2027-02'), ['2026-10', '2026-11', '2026-12', '2027-01', '2027-02']);
   assert.deepEqual(monthsUntil('2026-09'), []);
+});
+
+test('counts transaction checks and checks on ZETAPHY (only those two words, never the hash or address)', async () => {
+  const s = memoryStore();
+  const p = (body) => handleUsage({ method: 'POST', body: { event: 'check', ...body }, ip: '1.2.3.4', ua: 'UA', now: oct }, s, SECRET);
+  await p({ level: 'high', kind: 'tx', chain: 'zetaphy' });
+  await p({ level: 'info', kind: 'tx', chain: 'eth' });
+  await p({ level: 'info', kind: 'contract', chain: 'zetaphy' });
+  await p({ level: 'info', kind: 'weird', chain: 'ZETAPHY' });
+  const r = (await get(s)).json;
+  assert.equal(r.tx, 2);
+  assert.equal(r.zetaphy, 2);
+  assert.equal(r.total.tx, 2);
+  assert.equal(r.total.zetaphy, 2);
+  assert.equal(r.total.checks, 4);
 });
