@@ -34,6 +34,7 @@
     <div class="top-actions">
       <button type="button" class="btn ghost" id="add-net" data-tip-key="tipAddNet"><span data-i18n="addNet">Add network</span></button>
       <select class="lang-select" id="lang" aria-label="Language" title="Language"><option value="en">English</option></select>
+      <button type="button" class="btn" id="wb-btn" data-i18n="wbConnect">Connect wallet</button>
     </div>
   </header>
 
@@ -110,7 +111,7 @@
           <div class="card mine">
             <div class="card-head"><h2 data-i18n="myStake">My staking</h2><span class="info" data-tip-key="tipMyStake" tabindex="0">i</span></div>
             <div id="mine-body">
-              <button type="button" class="btn" id="connect" data-i18n="connect">Connect MetaMask</button>
+              <button type="button" class="btn" id="connect" data-i18n="connect">Connect wallet</button>
             </div>
           </div>
           <div class="card props">
@@ -142,6 +143,10 @@
       <button type="submit" class="btn" id="amount-ok" data-i18n="confirm">Confirm</button>
     </div>
   </form>
+</dialog>
+<dialog id="wb-dialog" aria-labelledby="wb-title">
+  <div class="wb-head"><h3 id="wb-title" data-i18n="wbConnect">Connect wallet</h3><button type="button" class="btn ghost sm" id="wb-close" aria-label="Close">×</button></div>
+  <div id="wb-body"></div>
 </dialog>
 </body>
 </html>

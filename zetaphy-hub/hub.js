@@ -10,6 +10,8 @@ import {
 } from './chainlib.js';
 import { PAGES } from './pages.js';
 import { LANGS, TEXT, TAB_TEXT, pickLang, locale } from './i18n.js';
+import { walletBar } from './walletbar.js';
+import * as walletLib from './wallet/wallets.js';
 
 const EVM_CHAIN_ID = 77390;
 const DEFAULT_NODE = 'https://rpc.sawasdeecoin.com';
@@ -259,6 +261,7 @@ function applyLang() {
   $('lang').value = lang;
   buildTabs();
   renderEndpoints();
+  wb.render();
   show(current ?? 'home', { push: false });
 }
 function syncApps() {
@@ -342,19 +345,17 @@ async function faucet(e) {
   } catch (err) { msg(out, err.message, 'bad'); }
 }
 
-// ------------------------------------------------------------------ wallet (MetaMask / any EIP-1193)
-const eth = () => window.ethereum;
-const CHAIN_PARAMS = () => ({
-  chainId: `0x${EVM_CHAIN_ID.toString(16)}`, chainName: 'ZETAPHY Testnet', nativeCurrency: { name: 'ZETAPHY', symbol: 'ZTPHY', decimals: 18 },
-  rpcUrls: [ep().evm], blockExplorerUrls: [new URL('?tab=explorer', location.href).href],
+// ------------------------------------------------------------------ wallet (one connection for the whole hub: walletbar.js)
+let account = null;
+const wb = walletBar({
+  win: window, evmCall, T, lib: walletLib, node: () => NODE,
+  tokens: () => HUB.tokens ?? [],
+  onChange: (a) => { account = a; if (current === 'stake') loadMine(); },
 });
+/** The wallet the user connected (any EVM wallet), switched to ZETAPHY. */
 async function addNetwork() {
-  if (!eth()) throw new Error(T('noWallet'));
-  try { await eth().request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN_PARAMS().chainId }] }); }
-  catch (e) {
-    if (e?.code !== 4902 && e?.code !== -32603) throw e;
-    await eth().request({ method: 'wallet_addEthereumChain', params: [CHAIN_PARAMS()] });
-  }
+  if (!wb.provider()) { wb.open(); throw new Error(T('wbConnectFirst')); }
+  await wb.ensureChain();
 }
 async function addKeplr() {
   if (!window.keplr) throw new Error(T('noKeplr'));
@@ -362,20 +363,30 @@ async function addKeplr() {
   await window.keplr.experimentalSuggestChain(info);
   await window.keplr.enable(info.chainId);
 }
-let account = null;
-async function connect() {
-  if (!eth()) throw new Error(T('noWallet'));
-  await addNetwork();
-  [account] = await eth().request({ method: 'eth_requestAccounts' });
-  return account;
+/** Resolves with the account once the user has connected in the wallet dialog (or rejects when it is closed). */
+function connect() {
+  if (account) return Promise.resolve(account);
+  wb.open();
+  return new Promise((resolve, reject) => {
+    const dlg = $('wb-dialog');
+    const done = () => { clearInterval(t); dlg.removeEventListener('close', onClose); };
+    const t = setInterval(() => { if (account) { done(); resolve(account); } }, 250);
+    const onClose = () => { setTimeout(() => { done(); account ? resolve(account) : reject(new Error(T('wbConnectFirst'))); }, 300); };
+    dlg.addEventListener('close', onClose);
+  });
 }
 async function send(to, data) {
+  if (!account) await connect();
   await addNetwork();
-  const hash = await eth().request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: '0x0' }] });
+  const p = wb.provider();
+  const cid = await p.request({ method: 'eth_chainId' }).catch(() => null);
+  if (cid == null || Number(BigInt(cid)) !== EVM_CHAIN_ID) throw new Error(T('wbWrongChain'));
+  const hash = await p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: '0x0', chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
+  if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error(T('failed'));
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     const rc = await evmCall('eth_getTransactionReceipt', [hash]).catch(() => null);
-    if (rc) { if (rc.status !== '0x1') throw new Error(`${T('failed')} · ${short(hash, 10, 6)}`); return hash; }
+    if (rc) { if (rc.status !== '0x1') throw new Error(`${T('failed')} · ${short(hash, 10, 6)}`); wb.refresh(); return hash; }
   }
   return hash;
 }
@@ -494,7 +505,7 @@ function stakeDialog(v, kind) {
 async function start() {
   $('lang').replaceChildren(...LANGS.map(([code, name]) => el('option', { value: code, lang: code, text: name })));
   $('lang').value = lang;
-  try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {} }; } catch { /* default */ }
+  try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {}, tokens: Array.isArray(c.tokens) ? c.tokens.filter((x) => isEvmAddress(x?.address)) : [] }; } catch { /* default */ }
   syncApps();
   bindTips(document, $('tip'));
   document.addEventListener('click', (e) => {
@@ -518,7 +529,7 @@ async function start() {
   $('add-keplr').addEventListener('click', () => report($('faucet-msg'))(addKeplr()));
   $('faucet-form').addEventListener('submit', faucet);
   $('connect').addEventListener('click', () => connect().then(loadMine).catch((e) => msg($('mine-body').querySelector('.msg') ?? $('mine-body').appendChild(el('p', { class: 'msg' })), e.message, 'bad')));
-  eth()?.on?.('accountsChanged', (a) => { account = a?.[0] ?? null; if (current === 'stake') loadMine(); });
+  wb.mount();
   current = new URL(location.href).searchParams.get('tab') ?? 'home';
   applyLang();
   refresh();

@@ -269,3 +269,18 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
   .grid2 { grid-auto-rows: auto; }
   .chart-box { height: 180px; }
 }
+
+/* wallet bar (walletbar.js) */
+#wb-btn { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+.wb-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.wb-list { display: grid; gap: 8px; margin: 8px 0; }
+.wb-wallet { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line-2); background: transparent; color: var(--text); font: inherit; cursor: pointer; text-align: left; text-decoration: none; }
+.wb-wallet:hover { border-color: var(--accent, #7c5cff); }
+.wb-wallet img, .wb-ico { width: 24px; height: 24px; border-radius: 6px; flex: none; }
+.wb-ico { background: var(--line-2); }
+.wb-acc { font-size: 12px; word-break: break-all; margin-bottom: 8px; }
+.wb-bal { list-style: none; margin: 4px 0 10px; padding: 0; display: grid; gap: 6px; }
+.wb-bal li { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-2); padding-bottom: 6px; }
+#wb-dialog h4 { margin: 8px 0 2px; font-size: 13px; color: var(--dim); }
+.wb-msg:empty { display: none; }
+@media (max-width: 640px) { #wb-btn { max-width: 40vw; padding: 8px 10px; } }

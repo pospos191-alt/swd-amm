@@ -29,8 +29,12 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     // a stand-in MetaMask: records what the page asks it to send
     await page.addInitScript(() => {
       window.__sent = [];
-      window.ethereum = { request: async ({ method, params }) => {
-        if (method === 'eth_requestAccounts') return ['0x6af57fC3633dD0F7907f7900dbd4A2822F43a245'];
+      // connected once (here or in another frame of this site): eth_accounts answers without a prompt
+      const ACC = '0x6af57fC3633dD0F7907f7900dbd4A2822F43a245';
+      window.ethereum = { isMetaMask: true, on: () => {}, request: async ({ method, params }) => {
+        if (method === 'eth_requestAccounts') { localStorage.setItem('__granted', '1'); return [ACC]; }
+        if (method === 'eth_accounts') return localStorage.getItem('__granted') ? [ACC] : [];
+        if (method === 'eth_chainId') return '0x12e4e';
         if (method === 'wallet_switchEthereumChain') return null;
         if (method === 'eth_sendTransaction') { window.__sent.push(params[0]); return `0x${'cd'.repeat(32)}`; }
         throw new Error(`not mocked: ${method}`);
@@ -85,7 +89,15 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await page.click('.tab[data-tab="saphan"]');
     await page.waitForFunction(() => document.querySelectorAll('#sp-routes tr').length === 1 && /Noble testnet/.test(document.getElementById('sp-routes').textContent));
     assert.match(await page.textContent('#sp-routes'), /channel-0 → channel-123/);
-    await page.click('#sp-go'); // connect first
+    await page.click('#sp-go'); // connect first: the site-wide wallet dialog
+    await page.waitForSelector('#wb-dialog[open] .wb-wallet');
+    assert.match(await page.textContent('#wb-dialog'), /MetaMask/, 'the wallets in this browser');
+    await page.click('#wb-dialog .wb-wallet');
+    await page.waitForFunction(() => /0x6af5…a245/.test(document.getElementById('wb-btn').textContent));
+    assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy:wallet')), '"injected:ethereum"', 'the choice is kept for the whole site (the id only)');
+    await page.waitForFunction(() => /1,000 ZETAPHY/.test(document.getElementById('wb-btn').textContent), null, { timeout: 10000 });
+    assert.match(await page.textContent('#wb-body'), /On the ZETAPHY chain[\s\S]*ZETAPHY[\s\S]*1,000/, 'balances on the ZETAPHY chain');
+    await page.click('#wb-close');
     await page.waitForFunction(() => /USDC · 2\.5/.test(document.getElementById('sp-asset')?.textContent ?? ''));
     assert.match(await page.textContent('#sp-recv'), /zetaphy1dt6hlsmr8/, 'own zetaphy1… address to receive');
     assert.match(await page.textContent('#sp-recv'), /channel-123/, 'which channel to use on the other side');
@@ -139,6 +151,9 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
       await f.waitForFunction(() => getComputedStyle(document.body).backgroundColor === 'rgb(5, 7, 10)');
       await page.waitForFunction((t) => document.querySelector(`iframe[title]:not([hidden])`)?.style.visibility === '', tab);
       if (tab === 'wallet' || tab === 'swap') assert.ok(await f.locator('.hub-i').count() > 0, `${tab}: hints folded into i icons`);
+      // connected once in the hub: Swap and NFT are connected too, without asking again
+      if (tab === 'swap') await f.waitForFunction(() => /0x6af5/i.test(document.getElementById('connect-btn').textContent), null, { timeout: 10000 });
+      if (tab === 'nft') await f.waitForFunction(() => /0x6af5/i.test(document.getElementById('connect').textContent), null, { timeout: 10000 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, `${tab}: one screen`);
       await shot(tab);
     }

@@ -24,7 +24,7 @@ export const APPS = {
 const SKIP_IN = { wallet: new Set(['src']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
-const HUB_FILES = ['index.html', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'embed.css', 'logo.svg', 'favicon.svg'];
+const HUB_FILES = ['index.html', 'walletbar.js', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'embed.css', 'logo.svg', 'favicon.svg'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. */
 export function hubConfig(cfg) {
@@ -41,7 +41,23 @@ export function hubConfig(cfg) {
     contracts,
     dex: Object.fromEntries(['factory', 'router', 'dlmmFactory', 'dlmmRouter'].filter((k) => isAddr(dex[k])).map((k) => [k, dex[k]])),
     nft: Object.fromEntries(['factory', 'marketplace'].filter((k) => isAddr(nft[k] ?? nft.contracts?.[k])).map((k) => [k, nft[k] ?? nft.contracts[k]])),
+    tokens: chainTokens(read),
   };
+}
+
+/** ZETAPHY-chain tokens the wallet bar shows when the account holds them (public addresses only). */
+export function chainTokens(read) {
+  const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
+  const sym = (s) => (typeof s === 'string' && /^[\w.-]{1,12}$/.test(s) ? s : undefined);
+  const out = [];
+  const add = (address, symbol, decimals) => {
+    if (!isAddr(address) || out.some((t) => t.address.toLowerCase() === address.toLowerCase())) return;
+    out.push({ address, ...(sym(symbol) ? { symbol } : {}), ...(Number.isInteger(decimals) ? { decimals } : {}) });
+  };
+  add(read('zetaphy-chain/rewards/points-testnet.json')?.points, 'BZTPHY');
+  add(read('zetaphy-chain/hyperlane/bridge-testnet.json')?.zetaphy?.bridgedToken);
+  for (const t of read('zetaphy-dex/web/deployments.json')?.tokens ?? []) add(t.address, t.symbol, t.decimals);
+  return out;
 }
 
 export function build() {
