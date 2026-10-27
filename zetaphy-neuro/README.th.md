@@ -46,8 +46,15 @@ npm run web                       # เปิดหน้าเว็บที�
 1. เข้า vercel.com → **Add New → Project** → เลือก repo นี้
 2. **Root Directory** ตั้งเป็น `zetaphy-neuro` (ไม่ต้องตั้ง build ใดๆ มี `vercel.json` แล้ว) → **Deploy**
 3. เปิดตัวนับผู้ใช้ (ไม่บังคับ แต่ต้องใช้วัดประตู 1,000 รายต่อเดือน):
-   - แท็บ **Storage → Create → Upstash for Redis** (แพ็กเกจฟรี) แล้ว Connect กับโปรเจกต์นี้
-     ระบบจะตั้ง `KV_REST_API_URL` และ `KV_REST_API_TOKEN` ให้เอง
+   - ที่เก็บข้อมูล เลือกอย่างใดอย่างหนึ่ง:
+     - **Cloudflare D1** (ฟรี: เขียน 100,000 แถว และอ่าน 5 ล้านแถวต่อวัน ถ้าตั้งไว้จะใช้อันนี้ก่อน)
+       ในหน้า Cloudflare: **Storage & Databases → D1 → Create** (ตั้งชื่ออะไรก็ได้) คัดลอก
+       **Database ID**, คัดลอก **Account ID** (หน้าแรกของบัญชี), **My Profile → API Tokens →
+       Create Token → Custom token** สิทธิ์ **Account · D1 · Edit** เฉพาะบัญชีของคุณ
+       แล้วใน Vercel เพิ่ม `NEURO_D1_ACCOUNT_ID`, `NEURO_D1_DATABASE_ID` และ `NEURO_D1_TOKEN` (Sensitive)
+       ตารางจะถูกสร้างเองตอนใช้งานครั้งแรก
+     - **Upstash for Redis**: แท็บ **Storage → Create → Upstash for Redis** (แพ็กเกจฟรี) แล้ว Connect
+       กับโปรเจกต์นี้ ระบบจะตั้ง `KV_REST_API_URL` และ `KV_REST_API_TOKEN` ให้เอง
    - **Settings → Environment Variables** เพิ่ม `USAGE_SALT` เป็นข้อความสุ่มยาว 16 ตัวขึ้นไป
      (เช่นผลของ `openssl rand -hex 32`) ห้ามใส่ใน repo หรือวางในแชต
    - **Redeploy** แล้วเปิด `/web/stats.html` จะเห็นตัวเลขเดือนนี้เทียบเป้า 1,000
@@ -231,7 +238,7 @@ set_fee, burn_from ฯลฯ)
   เซิร์ฟเวอร์อ่านใหม่ทุก ~10 นาที แก้กฎแล้วไม่ต้อง deploy ใหม่ ถ้าดึงไม่ได้จะใช้ชุดล่าสุดที่ดึงได้ต่อ
 - หรือ `NEURO_PRIVATE_RULES` = ตัวชุดกฎเป็น JSON (หรือ base64 ของ JSON) ต้อง Redeploy ทุกครั้งที่แก้
 - ไม่ตั้งเลย: ตอบ `{ "warnings": [], "configured": false }` หน้าเว็บทำงานเหมือนเดิม
-- การจำกัดอัตรา (12 ครั้ง/นาที, 300 ครั้ง/วัน ต่อ IP) ใช้ Redis ของตัวนับผู้ใช้ถ้าตั้ง `KV_REST_API_*` และ `USAGE_SALT` แล้ว
+- การจำกัดอัตรา (12 ครั้ง/นาที, 300 ครั้ง/วัน ต่อ IP) ใช้ที่เก็บข้อมูลของตัวนับผู้ใช้ (D1 หรือ Redis) ถ้าตั้งไว้พร้อม `USAGE_SALT` แล้ว
   (ใช้ร่วมทุก instance) ไม่งั้นนับในหน่วยความจำของแต่ละ instance
 - ทดลองบนเครื่อง: `NEURO_PRIVATE_RULES="$(cat ../../zetaphy-private/rules/pack.json)" npm run web`
 

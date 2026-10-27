@@ -10,17 +10,14 @@
 //     NEURO_RULES_REPO (default pospos191-alt/zetaphy-private) and
 //     NEURO_RULES_PATH (default rules/pack.json). Re-read every 10 minutes.
 // Without them it answers { warnings: [], configured: false }.
-// Rate limits: per IP, in the usage counter's Redis when KV_REST_API_URL /
-// KV_REST_API_TOKEN and USAGE_SALT are set (shared by all instances),
+// Rate limits: per IP, in the usage counter's store (server/store.js: D1 or Redis) when it
+// and USAGE_SALT are set (shared by all instances),
 // otherwise in this instance's memory.
 import { handleEarlyWarning, createPackLoader, memoryLimiter, redisLimiter, answerCache } from '../server/earlywarning.js';
-import { upstashStore } from '../server/usage.js';
+import { storeFromEnv } from '../server/store.js';
 
 const loader = createPackLoader({ env: process.env });
-const store = upstashStore(
-  process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL,
-  process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN,
-);
+const store = storeFromEnv(process.env);
 const salt = process.env.USAGE_SALT;
 const limiter = store && typeof salt === 'string' && salt.length >= 16 ? redisLimiter(store, salt) : memoryLimiter();
 const cache = answerCache();

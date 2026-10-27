@@ -1,15 +1,15 @@
 // Vercel serverless function: GET/POST /api/usage
-// Needs, in the Vercel project settings:
+// Needs, in the Vercel project settings, a store (server/store.js):
+//   - Cloudflare D1 (free): NEURO_D1_ACCOUNT_ID, NEURO_D1_DATABASE_ID and
+//     NEURO_D1_TOKEN (an API token with D1: Edit), or
 //   - a Redis store from the Marketplace (Upstash, free tier). It sets
 //     KV_REST_API_URL + KV_REST_API_TOKEN (or UPSTASH_REDIS_REST_URL/_TOKEN).
 //   - USAGE_SALT: a random secret of 16+ characters (e.g. `openssl rand -hex 32`).
 // Without them the counter stays off and the page works as before.
-import { handleUsage, upstashStore } from '../server/usage.js';
+import { handleUsage } from '../server/usage.js';
+import { storeFromEnv } from '../server/store.js';
 
-const store = upstashStore(
-  process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL,
-  process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN,
-);
+const store = storeFromEnv(process.env);
 
 // Vercel's own header first: a client can send any X-Forwarded-For it likes.
 function clientIp(req) {
