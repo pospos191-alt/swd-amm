@@ -37,3 +37,13 @@ test('headers: frames only from this site; scripts only from this site; Neuro AP
   assert.doesNotMatch(csp, /unsafe-(inline|eval)/);
   assert.deepEqual(v.rewrites, [{ source: '/api/:path*', destination: 'https://neuro.sawasdeecoin.com/api/:path*' }]);
 });
+
+test('validator guide: shipped, no inline script or style (the hub CSP stays strict), no third-party requests', () => {
+  const out = build();
+  for (const f of ['validators.html', 'validators.css', 'validators.js']) assert.ok(existsSync(join(out, f)), f);
+  const html = readFileSync(join(HERE, 'validators.html'), 'utf8');
+  assert.doesNotMatch(html, /<script>|<style|\sstyle="|\son[a-z]+="/i);
+  assert.match(html, /<script src="validators.js"><\/script>/);
+  assert.doesNotMatch(html + readFileSync(join(HERE, 'validators.css'), 'utf8'), /fonts\.googleapis|fonts\.gstatic/);
+  for (const k of ['getH', 'g1p', 'resH', 'r1', 'resWarn']) assert.match(readFileSync(join(HERE, 'validators.js'), 'utf8'), new RegExp(`"${k}"`));
+});

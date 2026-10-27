@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Join ZETAPHY Validators</title>
+<meta name="description" content="Become a ZETAPHY testnet validator with one command, get ZETAPHY from the faucet, and start your machine again after a restart.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="validators.css">
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="ruler" aria-hidden="true"></div>
+    <div class="top">
+      <span class="eyebrow">zetaphy_77390-1 · testnet</span>
+      <select id="lang" aria-label="Language">
+        <option value="en">English</option><option value="zh">中文</option><option value="es">Español</option>
+        <option value="ko">한국어</option><option value="ja">日本語</option><option value="ru">Русский</option>
+        <option value="vi">Tiếng Việt</option><option value="th">ไทย</option>
+      </select>
+    </div>
+    <h1 data-t="h1"></h1>
+    <p class="lede" data-t="lede"></p>
+  </header>
+
+  <section aria-labelledby="h-pick">
+    <h2 id="h-pick" data-t="pick"></h2>
+    <p class="small" data-t="pickSub"></p>
+    <div class="tiles">
+      <button type="button" class="tile" data-guide="oracle"><b data-t="w1h"></b><span data-t="t1"></span></button>
+      <button type="button" class="tile" data-guide="google"><b data-t="w2h"></b><span data-t="t2"></span></button>
+      <button type="button" class="tile" data-guide="home"><b data-t="w3h"></b><span data-t="t3"></span></button>
+      <button type="button" class="tile" data-guide="cloud"><b data-t="w4h"></b><span data-t="t4"></span></button>
+      <button type="button" class="tile" data-guide="pc"><b data-t="w5h"></b><span data-t="t5"></span></button>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-cmd">
+    <h2 id="h-cmd" data-t="hRun"></h2>
+    <div class="row tight">
+      <label for="moniker" data-t="moniker"></label>
+      <input id="moniker" value="my-node" maxlength="40" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="cmd">
+      <pre id="cmd"></pre>
+      <div class="row"><button class="ghost" id="copy-cmd" type="button" data-t="copyCmd"></button><span class="copied" id="copied-cmd" aria-live="polite"></span></div>
+    </div>
+    <p class="small" data-t="paste"></p>
+  </section>
+
+  <section aria-labelledby="h-check">
+    <h2 id="h-check" data-t="hCheck"></h2>
+    <div class="cmd"><pre id="k-status">sudo zetaphy-validator status</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="k-status" data-t="copy"></button><span class="copied" id="copied-k-status" aria-live="polite"></span></div></div>
+    <p data-t="checkP"></p>
+    <p class="small warnline" data-t="safe0"></p>
+  </section>
+
+  <section aria-labelledby="h-get" id="get">
+    <h2 id="h-get" data-t="getH"></h2>
+    <p class="small" data-t="getIntro"></p>
+    <div class="ways">
+      <div class="way"><h3 data-t="g1h"></h3><p class="small" data-t="g1p"></p><a class="btn sm" href="https://app.sawasdeecoin.com" data-t="openApp"></a></div>
+      <div class="way"><h3 data-t="g2h"></h3><p class="small" data-t="g2p"></p></div>
+      <div class="way"><h3 data-t="g3h"></h3><p class="small" data-t="g3p"></p></div>
+      <div class="way"><h3 data-t="g4h"></h3><p class="small" data-t="g4p"></p></div>
+    </div>
+    <p class="small warnline" data-t="getNote"></p>
+  </section>
+
+  <section aria-labelledby="h-res" id="resume">
+    <h2 id="h-res" data-t="resH"></h2>
+    <p data-t="resIntro"></p>
+    <ol class="steps">
+      <li data-n="1"><span data-t="r1"></span></li>
+      <li data-n="2"><span data-t="r2"></span>
+    <div class="cmd"><pre id="r-status">sudo zetaphy-validator status</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="r-status" data-t="copy"></button><span class="copied" id="copied-r-status" aria-live="polite"></span></div></div>
+        <p class="small" data-t="r3"></p></li>
+      <li data-n="3"><span data-t="r4"></span>
+    <div class="cmd"><pre id="r-unjail">sudo zetaphy-validator unjail</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="r-unjail" data-t="copy"></button><span class="copied" id="copied-r-unjail" aria-live="polite"></span></div></div>
+      </li>
+      <li data-n="4"><span data-t="r5"></span>
+    <div class="cmd"><pre id="r-restart">sudo systemctl restart zetaphyd &amp;&amp; sudo journalctl -u zetaphyd -n 30 --no-pager</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="r-restart" data-t="copy"></button><span class="copied" id="copied-r-restart" aria-live="polite"></span></div></div>
+      </li>
+    </ol>
+    <div class="note"><p data-t="resWarn"></p></div>
+  </section>
+
+  <section aria-labelledby="h-ai" id="ai" hidden>
+    <h2 id="h-ai" data-t="aiH"></h2>
+    <p class="small" data-t="aiSub"></p>
+    <div class="ai-log" id="ai-log" aria-live="polite"></div>
+    <div class="ai-box">
+      <textarea id="ai-in" rows="3"></textarea>
+      <div class="row">
+        <button type="button" id="ai-send" data-t="aiSend"></button>
+        <button type="button" class="outline" id="ai-stop" data-t="aiStop" hidden></button>
+        <label class="btn sm outline" id="ai-attach-l" hidden><span data-t="aiAttach"></span><input type="file" id="ai-img" accept="image/*" hidden></label>
+        <span class="small" id="ai-img-name"></span>
+        <button type="button" class="outline sm" id="ai-new" data-t="aiClear"></button>
+      </div>
+      <p class="small" id="ai-msg" aria-live="polite"></p>
+      <p class="small" data-t="aiNote"></p>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-earn">
+    <h2 id="h-earn" data-t="hEarn"></h2>
+    <p data-t="earnIntro"></p>
+    <div class="calc">
+      <label><span data-t="eVals"></span><input id="e-n" type="number" min="1" max="10000" value="25" inputmode="numeric"></label>
+      <label><span data-t="eUptime"></span><input id="e-up" type="number" min="0" max="100" value="95" inputmode="numeric"></label>
+    </div>
+    <dl class="facts out">
+      <dt data-t="eDay"></dt><dd id="e-day"></dd>
+      <dt data-t="eShare"></dt><dd id="e-share"></dd>
+      <dt data-t="eZeta"></dt><dd id="e-zeta"></dd>
+    </dl>
+    <p class="small" data-t="eNote"></p>
+  </section>
+
+  <section aria-labelledby="h-more">
+    <h2 id="h-more" data-t="moreH"></h2>
+    <details class="more" id="m-faq" open>
+      <summary><h2 id="faq-h"></h2></summary>
+      <div class="more-body" id="faq-list"></div>
+    </details>
+    <details class="more" id="m-h-steps">
+      <summary><h2 id="h-steps" data-t="hSteps"></h2></summary>
+      <div class="more-body">
+    <ol class="steps">
+      <li data-n="1"><span data-t="s1"></span>
+        <div class="stepbtns">
+          <a class="btn sm" href="https://github.com/pospos191-alt/swd-amm/releases/download/zetaphyd-3008c6775923/zetaphyd-linux-amd64" data-t="dlAmd"></a>
+          <a class="btn sm" href="https://github.com/pospos191-alt/swd-amm/releases/download/zetaphyd-3008c6775923/zetaphyd-linux-arm64" data-t="dlArm"></a>
+          <a class="btn sm outline" href="https://github.com/pospos191-alt/swd-amm/releases/download/zetaphyd-3008c6775923/SHA256SUMS" data-t="dlSums"></a>
+          <a class="btn sm outline" href="https://github.com/pospos191-alt/swd-amm/releases?q=zetaphyd" data-t="dlAll"></a>
+        </div>
+        <p class="small" data-t="dlNote"></p></li>
+      <li data-n="2"><span data-t="s2"></span>
+        <div class="stepbtns">
+          <button class="sm" type="button" id="w-evm" data-t="addEvm"></button>
+          <button class="sm" type="button" id="w-cosmos" data-t="addCosmos"></button>
+          <button class="sm outline" type="button" id="w-token" data-t="addToken"></button>
+          <a class="btn sm outline" href="https://wallet.sawasdeecoin.com" data-t="openWallet"></a>
+          <a class="btn sm outline" href="https://rpc.sawasdeecoin.com/zetaphy/genesis.json" data-t="dlGenesis"></a>
+        </div>
+        <p class="small" id="w-msg" aria-live="polite"></p>
+        <dl class="facts" id="w-manual" hidden>
+          <dt data-t="mName"></dt><dd>ZETAPHY Testnet</dd>
+          <dt data-t="mRpc"></dt><dd>https://rpc.sawasdeecoin.com</dd>
+          <dt data-t="mChain"></dt><dd>77390</dd>
+          <dt data-t="mSym"></dt><dd>ZTPHY</dd>
+          <dt data-t="mToken"></dt><dd>0x3cC2B1FFd3a7C7504a49426AE6BDEa501Bf1D59d</dd>
+        </dl></li>
+      <li data-n="3" data-t="s3"></li>
+      <li data-n="4" data-t="s4"></li>
+      <li data-n="5" data-t="s5"></li>
+    </ol>
+      </div>
+    </details>
+    <details class="more" id="m-h-keys">
+      <summary><h2 id="h-keys" data-t="hKeys"></h2></summary>
+      <div class="more-body">
+    <p data-t="keysIntro"></p>
+    <div class="ways">
+      <div class="way"><h3 data-t="k1h"></h3><p class="small" data-t="k1p"></p></div>
+      <div class="way"><h3 data-t="k2h"></h3><p class="small" data-t="k2p"></p></div>
+      <div class="way"><h3 data-t="k3h"></h3><p class="small" data-t="k3p"></p></div>
+    </div>
+    <p data-t="optA"></p>
+    <p data-t="optB"></p>
+    <div class="cmd"><pre id="k-import">sudo zetaphy-validator import-key</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="k-import" data-t="copy"></button><span class="copied" id="copied-k-import" aria-live="polite"></span></div></div>
+    <p class="small" data-t="optBnote"></p>
+    <p data-t="optC"></p>
+    <div class="cmd"><pre id="k-show">sudo cat /home/zetaphy/.zetaphy-genesis-keys/MNEMONICS-KEEP-SECRET.txt</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="k-show" data-t="copy"></button><span class="copied" id="copied-k-show" aria-live="polite"></span></div></div>
+    <div class="note"><p data-t="keysWarn"></p></div>
+      </div>
+    </details>
+    <details class="more" id="m-h-loop">
+      <summary><h2 id="h-loop" data-t="hLoop"></h2></summary>
+      <div class="more-body">
+    <p data-t="loopIntro"></p>
+    <ol class="steps">
+      <li data-n="1" data-t="l1"></li>
+      <li data-n="2" data-t="l2"></li>
+    </ol>
+    <div class="cmd">
+      <pre id="loop">C=$OCI_TENANCY
+AD=$(oci iam availability-domain list -c $C --query 'data[0].name' --raw-output)
+SUB=$(oci network subnet list -c $C --query 'data[?"prohibit-public-ip-on-vnic"==`false`] | [0].id' --raw-output)
+img() { oci compute image list -c $C --operating-system "Canonical Ubuntu" --operating-system-version "24.04" --shape $1 --sort-by TIMECREATED --query 'data[0].id' --raw-output; }
+IA=$(img VM.Standard.A1.Flex); IM=$(img VM.Standard.E2.1.Micro)
+[ -f ~/.ssh/id_rsa.pub ] || ssh-keygen -t rsa -b 4096 -N '' -q -f ~/.ssh/id_rsa
+for v in AD SUB IA IM; do echo "$v=${!v:0:40}"; done
+try() { oci compute instance launch --no-retry -c $C --availability-domain $AD --subnet-id $SUB --assign-public-ip true \
+  --display-name zetaphy-validator --ssh-authorized-keys-file ~/.ssh/id_rsa.pub "$@" --query 'data.id' --raw-output 2>~/launch.err; }
+n=0; while [ -n "$SUB" ]; do n=$((n+1))
+  if [ $((n % 2)) = 1 ]; then ID=$(try --shape VM.Standard.A1.Flex --shape-config '{"ocpus":1,"memoryInGBs":6}' --image-id $IA) || ID=
+  else ID=$(try --shape VM.Standard.E2.1.Micro --image-id $IM) || ID=; fi
+  [ -n "$ID" ] &amp;&amp; { echo "GOT $ID"; break; }
+  echo "$(date +%H:%M) round $n: $(grep -o '"message": "[^"]*' ~/launch.err | head -1 | cut -c13-90)"; sleep 300
+done
+[ -n "$ID" ] &amp;&amp; { sleep 90; echo "ssh ubuntu@$(oci compute instance list-vnics --instance-id $ID --query 'data[0]."public-ip"' --raw-output)"; }</pre>
+      <div class="row"><button class="ghost" id="copy-loop" type="button" data-t="copyLoop"></button><span class="copied" id="copied-loop" aria-live="polite"></span></div>
+    </div>
+    <ol class="steps">
+      <li data-n="3" data-t="l3"></li>
+      <li data-n="4" data-t="l4"></li>
+    </ol>
+    <p class="small" data-t="l5"></p>
+      </div>
+    </details>
+    <details class="more" id="m-h-cmds">
+      <summary><h2 id="h-cmds" data-t="hCmds"></h2></summary>
+      <div class="more-body">
+    <div class="tbl"><table>
+      <tr><td>sudo zetaphy-validator status</td><td data-t="cStatus"></td></tr>
+      <tr><td>sudo zetaphy-validator address</td><td data-t="cAddress"></td></tr>
+      <tr><td>sudo zetaphy-validator logs</td><td data-t="cLogs"></td></tr>
+      <tr><td>sudo zetaphy-validator unjail</td><td data-t="cUnjail"></td></tr>
+      <tr><td>sudo zetaphy-validator backup</td><td data-t="cBackup"></td></tr>
+    </table></div>
+      </div>
+    </details>
+    <details class="more" id="m-h-safe">
+      <summary><h2 id="h-safe" data-t="hSafe"></h2></summary>
+      <div class="more-body">
+    <div class="note">
+      <p data-t="safe0"></p>
+      <ul>
+        <li data-t="safe1"></li>
+        <li data-t="safe2"></li>
+        <li data-t="safe3"></li>
+      </ul>
+    </div>
+      </div>
+    </details>
+    <details class="more" id="m-h-facts">
+      <summary><h2 id="h-facts" data-t="hFacts"></h2></summary>
+      <div class="more-body">
+    <dl class="facts">
+      <dt data-t="fChain"></dt><dd>zetaphy_77390-1</dd>
+      <dt data-t="fEvm"></dt><dd>77390</dd>
+      <dt data-t="fRewards"></dt><dd data-t="fRewardsV"></dd>
+      <dt>RPC</dt><dd>https://rpc.sawasdeecoin.com</dd>
+      <dt data-t="fStake"></dt><dd data-t="fStakeV"></dd>
+      <dt data-t="fPorts"></dt><dd data-t="fPortsV"></dd>
+      <dt data-t="fSrc"></dt><dd><a href="https://github.com/pospos191-alt/swd-amm">github.com/pospos191-alt/swd-amm</a></dd>
+    </dl>
+      </div>
+    </details>
+    <details class="more" id="m-h-share">
+      <summary><h2 id="h-share" data-t="hShare"></h2></summary>
+      <div class="more-body">
+    <label for="share" class="small" data-t="shareLabel"></label>
+    <textarea id="share"></textarea>
+    <div class="row"><button id="copy-share" type="button" data-t="copyShare"></button><span class="copied" id="copied-share" aria-live="polite"></span></div>
+      </div>
+    </details>
+  </section>
+</div>
+
+<dialog id="guide" aria-labelledby="g-title">
+  <div class="g-head"><h2 id="g-title"></h2><button class="outline" type="button" id="g-close"></button></div>
+  <div class="g-body" id="g-body">
+  <p id="g-intro"></p>
+  <div class="g-links" id="g-links"></div>
+  <div class="cmd"><span class="eyebrow" id="g-cmd-h"></span><pre id="g-cmd"></pre>
+    <div class="row"><button class="ghost" type="button" data-copy="g-cmd" id="g-cmd-copy"></button><span class="copied" id="copied-g-cmd" aria-live="polite"></span></div></div>
+  <h3 id="g-steps-h"></h3>
+  <ol class="steps" id="g-steps"></ol>
+  <h3 id="g-probs-h"></h3>
+  <div id="g-probs"></div>
+  <p class="small" id="g-stuck"></p>
+  </div>
+</dialog>
+
+<script src="validators.js"></script>
+</body>
+</html>
