@@ -2483,7 +2483,7 @@ async function seal(seed, pass, address) {
 
 async function unseal(json, pass) {
   const b = JSON.parse(json);
-  if (b.v !== 1 || b.kdf !== 'PBKDF2-SHA256' || !(b.iterations >= KDF_ITERATIONS)) throw new Error('unknown wallet format');
+  if (b.v !== 1 || b.kdf !== 'PBKDF2-SHA256' || !(Number.isSafeInteger(b.iterations) && b.iterations >= KDF_ITERATIONS && b.iterations <= 5_000_000)) throw new Error('unknown wallet format');
   const key = await aesKey(pass, hexToBytes(b.salt), b.iterations);
   let seed;
   try {

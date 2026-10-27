@@ -15,6 +15,7 @@
 // otherwise in this instance's memory.
 import { handleEarlyWarning, createPackLoader, memoryLimiter, redisLimiter, answerCache } from '../server/earlywarning.js';
 import { storeFromEnv } from '../server/store.js';
+import { clientIp, cors, hubHosts } from '../server/http.js';
 
 const loader = createPackLoader({ env: process.env });
 const store = storeFromEnv(process.env);
@@ -22,21 +23,12 @@ const salt = process.env.USAGE_SALT;
 const limiter = store && typeof salt === 'string' && salt.length >= 16 ? redisLimiter(store, salt) : memoryLimiter();
 const cache = answerCache();
 
-// Vercel's own header first: a client can send any X-Forwarded-For it likes.
-function clientIp(req) {
-  for (const h of ['x-vercel-forwarded-for', 'x-real-ip', 'x-forwarded-for']) {
-    const v = req.headers[h];
-    if (typeof v === 'string' && v) return v.split(',')[0].trim().slice(0, 64);
-  }
-  return req.socket?.remoteAddress ?? '';
-}
-
-// The ZETAPHY hub (zetaphy-hub) shows this page in its own site and proxies /api/*
-// here, so its POSTs carry the hub's Origin.
-const HUB_HOSTS = String(process.env.NEURO_ALLOWED_ORIGIN_HOSTS ?? 'app.sawasdeecoin.com,zetaphy-hub.vercel.app')
-  .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+const HUB_HOSTS = hubHosts();
 
 export default async function handler(req, res) {
+  const c = cors(req, HUB_HOSTS, 'POST');
+  for (const [k, v] of Object.entries(c.headers)) res.setHeader(k, v);
+  if (c.preflight) { res.status(c.status).end(); return; }
   try {
     const out = await handleEarlyWarning({
       method: req.method,

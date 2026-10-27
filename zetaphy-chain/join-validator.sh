@@ -138,8 +138,30 @@ open_p2p() {
   return 0
 }
 
+# A joined validator serves nobody's wallets: its EVM JSON-RPC answers only this machine
+# (setup-node.sh opens 8545 and an https proxy for the chain's public nodes). Anyone could
+# otherwise load a validator with eth_call until it misses blocks. PUBLIC_RPC=1 keeps them public.
+private_rpc() {
+  [ "${PUBLIC_RPC:-}" = 1 ] && { echo "PUBLIC_RPC=1: this node keeps a public RPC"; return 0; }
+  local app="$NODE_HOME/config/app.toml" changed=
+  if [ -f "$app" ] && grep -q '^address = "0.0.0.0:8545"' "$app"; then
+    asn "sed -i 's/0\\.0\\.0\\.0:8545/127.0.0.1:8545/' '$app'" && changed=1
+  fi
+  if $SYSTEMCTL is-enabled caddy >/dev/null 2>&1; then
+    $SYSTEMCTL disable --now caddy >/dev/null 2>&1 && echo "https proxy (caddy) off: not needed on a validator"
+  fi
+  [ -n "$changed" ] && { $SYSTEMCTL restart zetaphyd >/dev/null 2>&1 || true; echo "EVM JSON-RPC 8545: this machine only"; }
+  return 0
+}
+
+# A node name: letters, digits, . _ - (it goes into commands and a systemd unit).
+check_moniker() {
+  [ -z "${MONIKER:-}" ] || [[ "$MONIKER" =~ ^[A-Za-z0-9._-]{1,40}$ ]] || die "MONIKER: use only letters, digits, . _ - (at most 40), e.g. MONIKER=my-node"
+}
+
 install_all() {
   [ "$(id -u)" = 0 ] || die "run with sudo"
+  check_moniker
   [ -n "${DOWNLOAD_ONLY:-}" ] || platform
   packages
   local arch; case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die "unsupported CPU $(uname -m)" ;; esac
@@ -171,6 +193,7 @@ install_all() {
   fi
 
   open_p2p
+  private_rpc
   say "becomes a validator by itself once synced and funded"
   install -m 755 "${BASH_SOURCE[0]}" "$SELF_BIN" 2>/dev/null \
     || curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/zetaphy-chain/join-validator.sh" -o "$SELF_BIN"
@@ -206,7 +229,7 @@ The node is syncing now. When it has caught up and holds $STAKE ZETAPHY or more 
 it stakes $STAKE ZETAPHY and becomes a validator by itself; nothing else to do.
   sudo zetaphy-validator status    progress
   sudo zetaphy-validator backup    the files to keep safe
-Ports: in a cloud, open TCP 26656 (P2P) in its firewall (and 80/443 if this node serves a public RPC).
+Ports: in a cloud, open TCP 26656 (P2P) in its firewall; nothing else is needed (the RPC answers this machine only).
 At home it works without opening any port; forwarding TCP 26656 on the router helps other nodes reach you.
 EOF
   if is_wsl; then echo "WSL: keep the PC awake and one Ubuntu window open, or the node stops."; fi

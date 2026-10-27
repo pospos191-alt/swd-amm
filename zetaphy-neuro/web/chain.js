@@ -1,4 +1,5 @@
 // "ZETAPHY chain this month" on the Neuro page: transaction counts by kind from
+import { api } from './api.js';
 // /api/chain-stats (server/chainstats.js). Strings live here, not in src/lang,
 // so they are not part of the skill id. Optional: hidden when unavailable.
 const TEXT = {
@@ -38,7 +39,7 @@ export function renderChainStats(lang) {
 export async function loadChainStats(getLang) {
   if (!/^https?:$/.test(location.protocol)) return;
   try {
-    const r = await (await fetch('/api/chain-stats')).json();
+    const r = await (await fetch(api('/api/chain-stats'))).json();
     if (!r?.enabled || !r.updatedAt) return;
     data = r;
     renderChainStats(getLang());

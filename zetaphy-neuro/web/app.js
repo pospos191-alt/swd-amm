@@ -1,5 +1,6 @@
 // Web page for Neuro ZETAPHY tier 1. Everything shown from the chain goes
 // through textContent, never innerHTML: token names are written by strangers.
+import { api } from './api.js';
 import { readContract } from '../src/reader.js';
 import { explain, explainPath, LANGS, uiText, pickLang } from '../src/explain.js';
 import { readTransaction, isTxHash } from '../src/tx.js';
@@ -185,7 +186,7 @@ function renderEarly() {
 async function checkEarly(chain, address, report) {
   if (kindOf(chain) !== 'evm' || !/^https?:$/.test(location.protocol)) return;
   try {
-    const res = await fetch('/api/early-warning', {
+    const res = await fetch(api('/api/early-warning'), {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chain, address }),
     });
     if (!res.ok) return;
@@ -229,7 +230,7 @@ function renderCounts() {
 async function loadCounts() {
   if (!/^https?:$/.test(location.protocol)) return;
   try {
-    const r = await (await fetch('/api/usage')).json();
+    const r = await (await fetch(api('/api/usage'))).json();
     if (!r.enabled || !r.total) return;
     const n = (k) => Number(r.total[k]) || 0;
     counts = { checks: n('checks'), high: n('high'), medium: n('medium'), tx: n('tx'), zetaphy: n('zetaphy') };
@@ -244,7 +245,7 @@ async function loadCounts() {
 function reportUsage(level, kind, chain) {
   if (navigator.doNotTrack === '1' || navigator.globalPrivacyControl === true) return;
   if (!/^https?:$/.test(location.protocol)) return;
-  fetch('/api/usage', {
+  fetch(api('/api/usage'), {
     method: 'POST', keepalive: true, headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ event: 'check', level, kind, chain: chain === 'zetaphy' ? 'zetaphy' : 'other' }),
   }).catch(() => { /* counter is optional */ });
@@ -296,6 +297,6 @@ loadCounts();
 loadChainStats(() => lang);
 // Shareable links: ?chain=bsc&address=0x…
 const q = new URLSearchParams(location.search);
-if (q.get('chain') in CHAINS) $('chain').value = q.get('chain');
+if (Object.hasOwn(CHAINS, q.get('chain') ?? '')) $('chain').value = q.get('chain');
 setPlaceholder();
 if (q.get('address')) { $('address').value = q.get('address'); run($('chain').value, q.get('address').trim()); }

@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -168,4 +168,43 @@ test('balances above 9.22 ZETAPHY (2^63 azetaphy) show right, with no printf ove
   assert.match(r.out, /waiting for funds: 10\.00 ZETAPHY, needs 11\.10/);
   assert.doesNotMatch(r.out, /out of range|warning/i);
   assert.match(node({ balance: '123456789000000000000000000' }).check({ STAKE: '200000000' }).out, /123456789\.00 ZETAPHY/);
+});
+
+// Runs one function of join-validator.sh (with asn and die) in a scratch NODE_HOME.
+function fn(name, extra = {}) {
+  const d = mkdtempSync(join(tmpdir(), 'zjv-'));
+  mkdirSync(join(d, 'config'));
+  writeFileSync(join(d, 'config', 'app.toml'), '[json-rpc]\nenable = true\naddress = "0.0.0.0:8545"\nws-address = "127.0.0.1:8546"\n[grpc]\naddress = "localhost:9090"\n');
+  writeFileSync(join(d, 'systemctl'), `#!/bin/sh\necho "$@" >> ${d}/systemctl.log\n[ "$1" = is-enabled ] && exit ${extra.caddy === false ? 1 : 0}\nexit 0\n`);
+  chmodSync(join(d, 'systemctl'), 0o755);
+  const src = readFileSync(JOIN_SH, 'utf8');
+  const pick = (f) => src.match(new RegExp(`^${f}\\(\\) \\{[\\s\\S]*?^\\}`, 'm'))[0];
+  const asn = src.match(/^asn\(\) .*$/m)[0];
+  const die = src.match(/^die\(\) .*$/m)[0];
+  const r = spawnSync('bash', ['-c', `${asn}\n${die}\n${pick(name)}\n${name}`], { encoding: 'utf8', env: { ...process.env, NODE_HOME: d, SYSTEMCTL: join(d, 'systemctl'), NODE_USER: 'no-such-user-zetaphy-test', ...extra.env } });
+  const read = (f) => (existsSync(join(d, f)) ? readFileSync(join(d, f), 'utf8') : '');
+  return { code: r.status, out: (r.stdout || '') + (r.stderr || ''), app: read('config/app.toml'), sys: read('systemctl.log') };
+}
+
+test('a joined validator keeps its RPC to itself: 8545 on localhost, no https proxy (PUBLIC_RPC=1 keeps them)', () => {
+  const r = fn('private_rpc');
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.app, /^address = "127\.0\.0\.1:8545"$/m);
+  assert.match(r.app, /^address = "localhost:9090"$/m, 'other sections untouched');
+  assert.match(r.sys, /disable --now caddy/);
+  assert.match(r.sys, /restart zetaphyd/);
+  const again = fn('private_rpc', { caddy: false });
+  assert.doesNotMatch(again.sys, /disable/);
+  const pub = fn('private_rpc', { env: { PUBLIC_RPC: '1' } });
+  assert.match(pub.app, /^address = "0\.0\.0\.0:8545"$/m);
+  assert.equal(pub.sys, '');
+});
+
+test('MONIKER: letters, digits, . _ - only (it goes into commands and a systemd unit)', () => {
+  for (const ok of ['', 'my-node', 'Node_1.a']) assert.equal(fn('check_moniker', { env: { MONIKER: ok } }).code, 0, ok);
+  for (const bad of ['a b', 'x;reboot', 'x$(id)', 'x"y', 'a'.repeat(41), 'x\nExecStart=/bin/sh']) {
+    const r = fn('check_moniker', { env: { MONIKER: bad } });
+    assert.notEqual(r.code, 0, bad);
+    assert.match(r.out, /MONIKER: use only/);
+  }
 });

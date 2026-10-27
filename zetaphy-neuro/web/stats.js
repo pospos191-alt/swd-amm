@@ -1,4 +1,5 @@
 // Usage stats page: users this month vs the plan's 1,000-users gate.
+import { api } from './api.js';
 const $ = (id) => document.getElementById(id);
 const UI = {
   th: { subtitle: 'ผู้ใช้ต่อเดือน เทียบกับเป้าก่อนเริ่มขั้น 2', usersLabel: 'ผู้ใช้เดือนนี้ (โดยประมาณ)', goal: 'เป้า',
@@ -42,8 +43,8 @@ function render() {
 
 async function load() {
   try {
-    const cur = await (await fetch('/api/usage')).json();
-    const prev = cur.enabled ? await (await fetch(`/api/usage?month=${prevMonth(cur.month)}`)).json() : null;
+    const cur = await (await fetch(api('/api/usage'))).json();
+    const prev = cur.enabled ? await (await fetch(api(`/api/usage?month=${prevMonth(cur.month)}`))).json() : null;
     data = { cur, prev };
   } catch {
     $('status').textContent = UI[lang].error;

@@ -8,24 +8,16 @@
 // Without them the counter stays off and the page works as before.
 import { handleUsage } from '../server/usage.js';
 import { storeFromEnv } from '../server/store.js';
+import { clientIp, cors, hubHosts } from '../server/http.js';
 
 const store = storeFromEnv(process.env);
 
-// Vercel's own header first: a client can send any X-Forwarded-For it likes.
-function clientIp(req) {
-  for (const h of ['x-vercel-forwarded-for', 'x-real-ip', 'x-forwarded-for']) {
-    const v = req.headers[h];
-    if (typeof v === 'string' && v) return v.split(',')[0].trim().slice(0, 64);
-  }
-  return req.socket?.remoteAddress ?? '';
-}
-
-// The ZETAPHY hub (zetaphy-hub) shows this page in its own site and proxies /api/*
-// here, so its POSTs carry the hub's Origin.
-const HUB_HOSTS = String(process.env.NEURO_ALLOWED_ORIGIN_HOSTS ?? 'app.sawasdeecoin.com,zetaphy-hub.vercel.app')
-  .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+const HUB_HOSTS = hubHosts();
 
 export default async function handler(req, res) {
+  const c = cors(req, HUB_HOSTS);
+  for (const [k, v] of Object.entries(c.headers)) res.setHeader(k, v);
+  if (c.preflight) { res.status(c.status).end(); return; }
   try {
     const out = await handleUsage({
       method: req.method,

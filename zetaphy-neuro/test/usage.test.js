@@ -43,6 +43,24 @@ test('one visitor cannot pump the check count past the daily cap', async () => {
   assert.equal(r.json.checks, 200);
 });
 
+test('changing the User-Agent or the IPv6 address inside one /64 does not reset the daily cap', async () => {
+  const s = memoryStore();
+  for (let i = 0; i < 205; i++) await post(s, { ua: `UA-${i}` });
+  for (let i = 0; i < 5; i++) await post(s, { ip: `2001:db8:1:2::${i + 1}`, ua: 'x' });
+  for (let i = 0; i < 205; i++) await post(s, { ip: `2001:db8:1:2:aaaa::${i + 1}`, ua: `v${i}` });
+  const r = await get(s);
+  assert.equal(r.json.checks, 400, 'one IPv4 and one /64: 200 each');
+  assert.equal(r.json.users, 200 + 1 + 195, 'people behind one address still count apart (User-Agent), within the cap');
+});
+
+test('all visitors together: counting stops at the daily cap (bounded store writes)', async () => {
+  const s = memoryStore();
+  let counted = 0;
+  for (let i = 0; i < 10010; i++) if ((await post(s, { ip: `10.${(i >> 16) & 255}.${(i >> 8) & 255}.${i & 255}` })).json.counted) counted += 1;
+  assert.equal(counted, 10000);
+  assert.equal((await get(s)).json.checks, 10000);
+});
+
 test('off without a store or a long enough secret', async () => {
   assert.deepEqual((await handleUsage({ method: 'POST', body: { event: 'check' } }, null, SECRET)).json, { counted: false });
   assert.deepEqual((await handleUsage({ method: 'POST', body: { event: 'check' } }, memoryStore(), 'short')).json, { counted: false });

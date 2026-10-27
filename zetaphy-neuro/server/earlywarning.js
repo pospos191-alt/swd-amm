@@ -39,6 +39,7 @@
 // advisory, can be wrong, and are not part of on-chain verdicts.
 
 import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { clientKeyOf } from './clientkey.js';
 import { CHAINS, isChainAddress } from '../src/chains.js';
 import { createRpc } from '../src/rpc.js';
 import { THREAT_REASONS } from '../src/threat-reasons.js';
@@ -411,18 +412,7 @@ export function warningsFor(pack, ctx) {
  * /64 (one subscriber usually holds a whole /64, so counting single IPv6
  * addresses would give one client 2^64 separate budgets).
  */
-export function clientKeyOf(ip) {
-  let s = String(ip ?? '').trim().toLowerCase().replace(/^\[|\]$/g, '').replace(/%.*$/, '');
-  const v4 = /^(?:::ffff:)?(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
-  if (v4) return v4[1];
-  if (!s.includes(':') || !/^[0-9a-f:.]+$/.test(s)) return s;
-  const [head, tail = null] = s.split('::');
-  const part = (x) => (x ? x.split(':') : []);
-  const h = part(head);
-  const t = tail == null ? [] : part(tail);
-  const groups = tail == null ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
-  return groups.slice(0, 4).map((g) => (g.includes('.') ? g : g.replace(/^0+(?=.)/, ''))).join(':') + '::/64';
-}
+export { clientKeyOf };
 
 /**
  * Fixed-window limits per client and for this instance as a whole. Clients
@@ -463,7 +453,7 @@ export function memoryLimiter({ perMinute = 12, perDay = 300, globalPerMinute = 
  * serverless instance. Clients are HMAC(secret, ip). Falls back to `fallback`
  * (a memoryLimiter) if Redis fails.
  */
-export function redisLimiter(store, secret, { perMinute = 12, perDay = 300, now = () => Date.now(), fallback = memoryLimiter() } = {}) {
+export function redisLimiter(store, secret, { perMinute = 12, perDay = 300, globalPerMinute = 600, now = () => Date.now(), fallback = memoryLimiter() } = {}) {
   return {
     async check(ip) {
       const t = now();
@@ -472,9 +462,10 @@ export function redisLimiter(store, secret, { perMinute = 12, perDay = 300, now 
       const day = new Date(t).toISOString().slice(0, 10);
       const m = `neuro:ew:m:${minute}:${id}`;
       const d = `neuro:ew:d:${day}:${id}`;
+      const g = `neuro:ew:g:${minute}`; // all clients together: bounds the public-RPC reads a minute
       try {
-        const [perM, , perD] = await store.pipeline([['INCR', m], ['EXPIRE', m, 120], ['INCR', d], ['EXPIRE', d, 2 * 86400]]);
-        if (Number(perM) > perMinute) return { ok: false, retryAfter: 60 - Math.floor((t % 60_000) / 1000) };
+        const [perM, , perD, , all] = await store.pipeline([['INCR', m], ['EXPIRE', m, 120], ['INCR', d], ['EXPIRE', d, 2 * 86400], ['INCR', g], ['EXPIRE', g, 120]]);
+        if (Number(perM) > perMinute || Number(all) > globalPerMinute) return { ok: false, retryAfter: 60 - Math.floor((t % 60_000) / 1000) };
         if (Number(perD) > perDay) return { ok: false, retryAfter: 3600 };
         return { ok: true };
       } catch {
