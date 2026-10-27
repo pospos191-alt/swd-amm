@@ -56,9 +56,10 @@ export function candidatePaths(a, b, wnative) {
   return paths;
 }
 
-/** Integer square root (LP of a first deposit: sqrt(a*b) - 1000). */
+/** Integer square root (LP of a first deposit: sqrt(a*b) - 1000). Same as ZetaphyPair._sqrt. */
 export function sqrt(y) {
-  if (y < 2n) return y;
+  // y = 2 or 3: the Babylonian step below would stop at 2 for y = 2 (the pair returns 1).
+  if (y < 4n) return y === 0n ? 0n : 1n;
   let z = y, x = y / 2n + 1n;
   while (x < z) { z = x; x = (y / x + x) / 2n; }
   return z;

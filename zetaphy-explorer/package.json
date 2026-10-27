@@ -20,7 +20,7 @@
     "@noble/hashes": "2.2.0",
     "@noble/post-quantum": "0.6.1",
     "esbuild": "0.25.11",
-    "ethers": "6.16.0",
+    "ethers": "6.17.0",
     "playwright-core": "1.56.1"
   }
 }

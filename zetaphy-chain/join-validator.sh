@@ -21,6 +21,8 @@
 #   sudo zetaphy-validator import-key use your own 12/24-word recovery phrase (MetaMask, Trust, Keplr, ...)
 #                                     for the staking account instead of the one this node made; only
 #                                     before it has staked. ACCOUNT_INDEX=n picks the wallet's account n+1.
+#   sudo zetaphy-validator update     move this node to the current release (keys and chain data kept);
+#                                     also for the chain's first node:  curl -fsSL …/join-validator.sh | sudo bash -s -- update
 #   sudo zetaphy-validator preflight  can this machine run a validator? (changes nothing, except on WSL
 #                                     without systemd: it switches systemd on in /etc/wsl.conf)
 #
@@ -159,20 +161,17 @@ check_moniker() {
   [ -z "${MONIKER:-}" ] || [[ "$MONIKER" =~ ^[A-Za-z0-9._-]{1,40}$ ]] || die "MONIKER: use only letters, digits, . _ - (at most 40), e.g. MONIKER=my-node"
 }
 
-install_all() {
-  [ "$(id -u)" = 0 ] || die "run with sudo"
-  check_moniker
-  [ -n "${DOWNLOAD_ONLY:-}" ] || platform
-  packages
-  local arch; case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die "unsupported CPU $(uname -m)" ;; esac
-
+# setup-node.sh from $REPO@$REF and the zetaphyd GitHub Actions built from it
+# (release named after its SHA-256; the binary's SHA-256 checked). Sets binenv.
+fetch_release() {
+  local arch=$1
   say "setup-node.sh and the prebuilt zetaphyd ($REPO@$REF)"
   install -d -m 755 "$LIB"
   curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/zetaphy-chain/setup-node.sh" -o "$LIB/setup-node.sh"
   local s tag rel; s=$(sha256sum "$LIB/setup-node.sh" | cut -d' ' -f1); tag="zetaphyd-${s:0:12}"
   rel="https://github.com/$REPO/releases/download/$tag"
   rm -f "$LIB/SHA256SUMS" "$LIB/zetaphyd-linux-$arch"
-  local binenv=()
+  binenv=()
   if curl -fsSL "$rel/SHA256SUMS" -o "$LIB/SHA256SUMS" && curl -fsSL "$rel/zetaphyd-linux-$arch" -o "$LIB/zetaphyd-linux-$arch"; then
     (cd "$LIB" && sha256sum -c --ignore-missing --quiet SHA256SUMS) || die "zetaphyd does not match the SHA-256 of release $tag: refused"
     chmod 755 "$LIB/zetaphyd-linux-$arch"
@@ -181,6 +180,17 @@ install_all() {
   else
     echo "no prebuilt zetaphyd for setup-node.sh ${s:0:12} yet: building from source (15-60 minutes, needs 2 GB RAM or swap)"
   fi
+}
+
+install_all() {
+  [ "$(id -u)" = 0 ] || die "run with sudo"
+  check_moniker
+  [ -n "${DOWNLOAD_ONLY:-}" ] || platform
+  packages
+  local arch; case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die "unsupported CPU $(uname -m)" ;; esac
+
+  binenv=()
+  fetch_release "$arch"
   [ -n "${DOWNLOAD_ONLY:-}" ] && { echo "DOWNLOAD_ONLY: stopping before the node setup"; return 0; }
 
   if [ -f "$NODE_HOME/config/genesis.json" ]; then
@@ -308,9 +318,31 @@ status() {
   fi
 }
 
+# A node set up earlier (this script, or setup-node.sh on the chain's first
+# node) moves to the current setup-node.sh and its prebuilt zetaphyd: settings,
+# rpc-guard and Caddy are redone, keys and chain data are kept, the node restarts.
+update_node() {
+  [ "$(id -u)" = 0 ] || die "run with sudo"
+  [ -f "$NODE_HOME/config/genesis.json" ] || die "no ZETAPHY node here: install first"
+  packages
+  local arch; case "$(uname -m)" in x86_64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die "unsupported CPU $(uname -m)" ;; esac
+  fetch_release "$arch"
+  [ ${#binenv[@]} -gt 0 ] || die "no prebuilt zetaphyd for this setup-node.sh yet: try again later"
+  # keep the public https name the node already has (rpc.example.com in its Caddyfile)
+  local host; host=${PUBLIC_HOST:-$(sed -n '1s/^[^,{]*, *\([a-z0-9.-]*\) *{$/\1/p' /etc/caddy/Caddyfile 2>/dev/null || true)}
+  say "update (log: /var/log/zetaphy-setup.log)"
+  env JOIN= "${binenv[@]}" ${host:+PUBLIC_HOST="$host"} bash "$LIB/setup-node.sh" > /dev/null \
+    || die "setup-node.sh failed: sudo tail -50 /var/log/zetaphy-setup.log"
+  # a validator that joined keeps its RPC to itself
+  [ -f "$NODE_HOME/config/seed-peer" ] && private_rpc
+  install -m 755 "${BASH_SOURCE[0]}" "$SELF_BIN" 2>/dev/null || true
+  say "updated: $("$ZETAPHYD" version 2>/dev/null)"
+}
+
 case "${1:-install}" in
   install|validator) install_all ;;
   check) check ;;
+  update) update_node ;;
   import-key) import_key ;;
   preflight) platform && echo "this machine can run a ZETAPHY validator" ;;
   status) status ;;
@@ -325,5 +357,5 @@ Copy these somewhere safe and offline (USB / paper), never into a chat or e-mail
 Never run two machines with the same priv_validator_key.json: that is double signing (slashed, jailed for good).
 EOF
   ;;
-  *) sed -n '2,27p' "$0"; exit 1 ;;
+  *) sed -n '2,29p' "$0"; exit 1 ;;
 esac

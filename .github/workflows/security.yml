@@ -546,10 +546,12 @@ jobs:
           go test ./precompiles/mldsa/ ./crypto/mldsa44/
           go test ./crypto/mldsa44/ -run '^$' -fuzz FuzzUnmarshalVerify -fuzztime 30s
           cd evmd
-          # QDay|Threat|Security: the security core (Q-day, threat gate, precompile 0x…0901)
+          # QDay|Threat|Security: the security core (Q-day, threat gate, precompile 0x…0901), rpc-guard
           # Wasm: CosmWasm (gov-only upload, Q-day / quantum lock on wasm txs, dispatch guard, zetaphy-v4)
           go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security|Wasm' .
           go test -run '^$' -fuzz FuzzEVMCallUnmarshal -fuzztime 20s .
+          # rpc-guard: no body gets a method past it that CometBFT would run
+          go test -run '^$' -fuzz FuzzRPCGuardComet -fuzztime 20s .
 
       # Static security checks on the code ZETAPHY added. G115 (int
       # conversions) is excluded only for the upstream rate-limit module,
