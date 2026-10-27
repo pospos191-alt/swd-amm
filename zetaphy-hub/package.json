@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "ZETAPHY: every app on one page (overview, wallet, swap, stake & vote, NFT, explorer, Neuro).",
+  "license": "BUSL-1.1",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",

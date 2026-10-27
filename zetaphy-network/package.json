@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "ZETAPHY stage 1-2: Neuro job market contract, node runner CLI and worker",
+  "license": "BUSL-1.1",
   "type": "module",
   "bin": {
     "zetaphy": "./cli.js"

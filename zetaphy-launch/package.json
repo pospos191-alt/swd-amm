@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "ZETAPHY testnet launch day: deploys and wires every contract once the chain is live, then writes the addresses into every web app's config.",
+  "license": "BUSL-1.1",
   "type": "module",
   "bin": {
     "zetaphy-launch": "./launch.js"

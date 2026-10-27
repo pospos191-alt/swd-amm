@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "ZETAPHY block explorer (explorer.sawasdeecoin.com). Static site: the browser reads the node's public RPC/REST directly; no server, no database, no indexer.",
+  "license": "BUSL-1.1",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.js",
