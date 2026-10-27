@@ -46,8 +46,15 @@ Shareable link: `/web/?chain=bsc&address=0x...` · Stats page: `/web/stats.html`
 1. Go to vercel.com → **Add New → Project** → choose this repo
 2. Set **Root Directory** to `zetaphy-neuro` (no build settings needed, `vercel.json` is already there) → **Deploy**
 3. Turn on the user counter (optional, but needed to measure gate 1,000 users per month):
-   - Tab **Storage → Create → Upstash for Redis** (free plan), then Connect it to this project.
-     The system sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` for you
+   - A store, one of:
+     - **Cloudflare D1** (free: 100,000 rows written and 5 million read a day; used first when set).
+       In the Cloudflare dashboard: **Storage & Databases → D1 → Create** (any name), copy its
+       **Database ID**; copy your **Account ID** (account home page); **My Profile → API Tokens →
+       Create Token → Custom token**, permission **Account · D1 · Edit**, your account only.
+       In Vercel add `NEURO_D1_ACCOUNT_ID`, `NEURO_D1_DATABASE_ID` and `NEURO_D1_TOKEN` (Sensitive).
+       The tables are created on the first request
+     - **Upstash for Redis**: tab **Storage → Create → Upstash for Redis** (free plan), then Connect it
+       to this project. The system sets `KV_REST_API_URL` and `KV_REST_API_TOKEN` for you
    - **Settings → Environment Variables**: add `USAGE_SALT` as a random string of 16 or more characters
      (for example the output of `openssl rand -hex 32`). Never put it in the repo or paste it in chat
    - **Redeploy**, then open `/web/stats.html` to see this month's number against the 1,000 target
@@ -234,7 +241,7 @@ in `src/threat-signatures.js`, which is a new skill and needs a `NeuroControl.ap
   The server re-reads it every ~10 minutes, so editing rules does not need a new deploy. If it cannot fetch, it keeps using the last pack it fetched
 - Or `NEURO_PRIVATE_RULES` = the rule pack itself as JSON (or base64 of JSON). You must Redeploy every time you edit it
 - Not set at all: it returns `{ "warnings": [], "configured": false }` and the web page works as before
-- Rate limits (12 per minute, 300 per day per IP) use the user counter's Redis if `KV_REST_API_*` and `USAGE_SALT` are set
+- Rate limits (12 per minute, 300 per day per IP) use the user counter's store (D1 or Redis) if it and `USAGE_SALT` are set
   (shared across all instances). Otherwise they are counted in each instance's memory
 - Try it locally: `NEURO_PRIVATE_RULES="$(cat ../../zetaphy-private/rules/pack.json)" npm run web`
 
