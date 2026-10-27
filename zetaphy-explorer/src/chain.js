@@ -187,8 +187,7 @@ export function chainApi(api) {
   }
 
   /** One aligned chunk [lo, hi] of txs (node's tx_search over a height range), newest first. */
-  async function chunkTxs(lo, hi, latest, maxPages = 4) {
-    const ttl = hi < Number(latest) ? TTL.forever : TTL.latest;
+  async function searchRange(lo, hi, ttl, maxPages) {
     const out = [];
     for (let page = 1; page <= maxPages; page++) {
       const r = await comet('tx_search', { query: `tx.height>=${lo} AND tx.height<=${hi}`, prove: false, page: String(page), per_page: '100', order_by: 'desc' }, ttl);
@@ -197,6 +196,22 @@ export function chainApi(api) {
       if (txs.length < 100 || out.length >= Number(r?.total_count ?? 0)) return { txs: out, complete: true };
     }
     return { txs: out, complete: false };
+  }
+
+  // The chunk the chain is still writing is extended with only the blocks added since the
+  // last look, instead of fetched whole on every refresh (every block carries a PQ
+  // certificate tx, so the whole chunk is large): this keeps the node's outbound data low.
+  const live = new Map(); // aligned chunk start -> { upTo, txs, complete }
+  async function chunkTxs(lo, hi, latest, maxPages = 4) {
+    const c = live.get(lo);
+    if (c && c.upTo >= hi) return { txs: c.txs, complete: c.complete };
+    if (hi < Number(latest) && !c) return searchRange(lo, hi, TTL.forever, maxPages);
+    const from = c ? c.upTo + 1 : lo;
+    const r = await searchRange(from, hi, TTL.latest, maxPages);
+    const next = { upTo: hi, txs: r.txs.concat(c?.txs ?? []), complete: r.complete && (c?.complete ?? true) };
+    live.set(lo, next);
+    for (const k of live.keys()) if (k < lo - 4 * CHUNK) live.delete(k); // keep a few recent chunks only
+    return { txs: next.txs, complete: next.complete };
   }
 
   /** Fallback when the node's tx_search is off: blocks with txs, one by one (bounded). */
