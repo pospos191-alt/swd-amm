@@ -25,6 +25,9 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
   del: (k) => { try { localStorage.removeItem(k); } catch { /* ignore */ } },
 };
+// One wallet connection for the whole site (zetaphy-hub/walletbar.js): the wallet's id as JSON text.
+const SHARED_WALLET = 'zetaphy:wallet';
+const sharedWalletId = () => { const raw = store.get(SHARED_WALLET); try { return cleanWalletId(JSON.parse(raw)); } catch { return cleanWalletId(raw); } };
 const NATIVE = Object.freeze({ address: 'native', symbol: EVM_SYMBOL, name: 'ZETAPHY', decimals: 18, source: 'native' });
 const MAX_POSITIONS_SCAN = 300;
 
@@ -334,6 +337,7 @@ async function connectWallet(w, silent = false) {
     state.account = acc;
     state.chainId = Number(BigInt(await w.provider.request({ method: 'eth_chainId' })));
     store.set(KEYS.wallet, w.id);
+    if (sharedWalletId() !== w.id) store.set(SHARED_WALLET, JSON.stringify(w.id));
     if (typeof w.provider.on === 'function' && !w.subscribed) {
       w.subscribed = true;
       w.provider.on('accountsChanged', (a) => { if (state.wallet !== w) return; state.account = Array.isArray(a) && isAddress(a[0]) ? a[0] : null; if (!state.account) state.wallet = null; refreshAll(); });
@@ -347,11 +351,12 @@ async function connectWallet(w, silent = false) {
   }
 }
 
-function disconnect() {
+function disconnect({ everywhere = true } = {}) {
   state.wallet = null;
   state.account = null;
   state.chainId = null;
   store.del(KEYS.wallet);
+  if (everywhere) store.del(SHARED_WALLET);
   refreshAll();
 }
 
@@ -1029,11 +1034,18 @@ async function init() {
 
   discovery = discoverWallets(window, () => { if ($('wallet-dialog').open) renderWalletList(); });
   // Reconnect silently to the wallet used last time (eth_accounts: no prompt).
-  setTimeout(() => {
-    const id = cleanWalletId(store.get(KEYS.wallet));
+  // The site-wide choice (the hub's wallet button) first, then this page's own.
+  const restore = () => {
+    const id = sharedWalletId() ?? cleanWalletId(store.get(KEYS.wallet));
     const w = id && walletsNow().find((x) => x.id === id);
-    if (w && !state.account) connectWallet(w, true);
-  }, 400);
+    if (w && (!state.account || state.wallet?.id !== id)) connectWallet(w, true);
+  };
+  setTimeout(restore, 400);
+  // Connected or disconnected on another page of this site (the hub, another app, another tab).
+  window.addEventListener('storage', (e) => {
+    if (e.key !== SHARED_WALLET) return;
+    if (sharedWalletId()) restore(); else if (state.account) disconnect({ everywhere: false });
+  });
 
   const tab = location.hash.slice(1);
   showTab(TABS.includes(tab) ? tab : 'swap');

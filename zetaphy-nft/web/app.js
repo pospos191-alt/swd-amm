@@ -16,6 +16,10 @@ import { threatQueries, readThreat, reasonText, DISCLAIMER, REPRODUCE } from './
 
 const store = (() => { try { const s = window.localStorage; s.setItem('__t', '1'); s.removeItem('__t'); return s; } catch { return null; } })();
 const load = (k, d) => { try { return JSON.parse(store?.getItem(k)) ?? d; } catch { return d; } };
+// One wallet connection for the whole site (zetaphy-hub/walletbar.js): the wallet's id as JSON text.
+const SHARED_WALLET = 'zetaphy:wallet';
+const WALLET_ID = /^(6963|injected):[A-Za-z0-9._:-]{1,120}$/;
+const walletId = (k) => { const v = load(k, null); return typeof v === 'string' && WALLET_ID.test(v) ? v : null; };
 const save = (k, v) => { try { store?.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 
 const S = {
@@ -214,6 +218,7 @@ async function connect(w) {
   if (!accounts?.[0] || !isAddress(accounts[0])) throw new Error(T('noAccount'));
   S.wallet = { name: w.name, id: w.id, provider: w.provider, account: checksum(accounts[0]) };
   save('zn.wallet', w.id);
+  if (walletId(SHARED_WALLET) !== w.id) save(SHARED_WALLET, w.id);
   try { w.provider.on?.('accountsChanged', (a) => { if (S.wallet) { S.wallet.account = a?.[0] ? checksum(a[0]) : null; if (!S.wallet.account) S.wallet = null; walletLabel(); route(); } }); } catch { /* optional */ }
   try { await ensureChain(w.provider, rpcUrl()); } catch (e) { status(T('switchNetwork'), 'error'); }
   walletLabel();
@@ -874,13 +879,22 @@ async function start() {
   window.addEventListener('hashchange', route);
   await initRpc();
   // Reconnect silently to the wallet used last time (eth_accounts: no prompt), before the first render.
-  const last = load('zn.wallet', null);
-  if (last) {
+  // The site-wide choice (the hub's wallet button) first, then this page's own.
+  const restore = async () => {
+    const last = walletId(SHARED_WALLET) ?? walletId('zn.wallet');
+    if (!last || S.wallet?.id === last) return;
     await new Promise((r) => setTimeout(r, 60)); // EIP-6963 wallets answer the request event at once
     const w = S.wallets.list().find((x) => x.id === last);
     const acc = w ? await Promise.race([w.provider.request({ method: 'eth_accounts' }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 1500))]) : [];
     if (acc?.[0] && isAddress(acc[0])) { S.wallet = { name: w.name, id: w.id, provider: w.provider, account: checksum(acc[0]) }; walletLabel(); }
-  }
+  };
+  await restore();
+  // Connected or disconnected on another page of this site (the hub, another app, another tab).
+  window.addEventListener('storage', (e) => {
+    if (e.key !== SHARED_WALLET) return;
+    if (walletId(SHARED_WALLET)) restore().then(route).catch(() => {});
+    else if (S.wallet) { S.wallet = null; try { store?.removeItem('zn.wallet'); } catch { /* private mode */ } walletLabel(); route(); }
+  });
   await route();
 }
 

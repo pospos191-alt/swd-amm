@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test test/chainlib.test.mjs test/build.test.mjs test/i18n.test.mjs",
+    "test": "node --test test/chainlib.test.mjs test/build.test.mjs test/i18n.test.mjs test/walletbar.test.mjs",
     "test:e2e": "node build.mjs && node --test test/hub.e2e.mjs"
   },
   "devDependencies": {
