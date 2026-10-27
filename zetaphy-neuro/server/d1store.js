@@ -3,7 +3,7 @@
 // Cloudflare Worker is needed. It speaks the same small pipeline of Redis
 // commands as upstashStore (server/usage.js), so the counter and the
 // early-warning rate limiter work unchanged:
-//   INCR, GET, EXPIRE, PERSIST (numbers with an optional expiry)
+//   INCR, GET, SET, EXPIRE, PERSIST (numbers with an optional expiry; SET takes an integer)
 //   PFADD, PFCOUNT (an exact set: the monthly visitor ids, already HMACs)
 // Expired rows are skipped on read and deleted now and then.
 
@@ -36,6 +36,16 @@ function toSql([cmd, key, arg], now) {
         params: [k, t],
         read: (r) => (r.results?.length ? String(r.results[0].n) : null),
       };
+    case 'SET': {
+      // integers only (the table holds numbers); clears any expiry, as Redis SET does
+      const v = Number(arg);
+      if (!Number.isSafeInteger(v)) throw new Error('d1: SET needs an integer');
+      return {
+        sql: `INSERT INTO ${KV} (k, n, exp) VALUES (?1, CAST(?2 AS INTEGER), NULL) ON CONFLICT (k) DO UPDATE SET n = excluded.n, exp = NULL`,
+        params: [k, String(v)],
+        read: () => 'OK',
+      };
+    }
     case 'EXPIRE':
       // set once (callers repeat it on every request; rewriting it would cost a write each time)
       return {

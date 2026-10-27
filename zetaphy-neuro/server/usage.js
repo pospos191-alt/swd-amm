@@ -148,6 +148,7 @@ export function memoryStore() {
       case 'PFCOUNT': return kv.get(key)?.size ?? 0;
       case 'INCR': { const v = Number(kv.get(key) ?? 0) + 1; kv.set(key, String(v)); return v; }
       case 'GET': return kv.get(key) ?? null;
+      case 'SET': kv.set(key, String(rest[0])); return 'OK';
       case 'EXPIRE': return kv.has(key) ? 1 : 0;
       case 'PERSIST': return kv.has(key) ? 1 : 0;
       default: throw new Error(`unsupported ${cmd}`);

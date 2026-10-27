@@ -34,6 +34,12 @@ The page always states the scanned range. Older transactions can be opened by ha
 - All requests go through one queue: at most 4 concurrent requests, at most 8 requests/second, in-memory cache (confirmed blocks and transactions are kept long; "latest" data expires in 4 seconds), duplicate pending requests share the same response
 - The home page refreshes every 6 seconds, only while the tab is open
 
+### Activity this month
+
+The home page shows this month's transactions by kind (transfers, staking, cross-chain, EVM and contracts, governance)
+and the total since genesis, from Neuro's daily counts (`chainStatsUrl`, default
+`https://neuro.sawasdeecoin.com/api/chain-stats`; empty turns it off). Read once per visit, not from the node.
+
 ### Quantum-resistant certificate (ML-DSA-44)
 
 Block H+1 has tx[0] = `MsgPQCertificate`, which aggregates the validators' ML-DSA-44 signatures for block H. The block page calls `verifyBlock` from

@@ -17,6 +17,8 @@ export const DEFAULTS = Object.freeze({
   threatRegistry: '',
   // Neuro web report of a contract; {address} and {chainId} are filled in. Empty: no link.
   neuroReportUrl: '',
+  // Chain activity counts (Neuro's /api/chain-stats, any origin may read it). Empty: not shown.
+  chainStatsUrl: 'https://neuro.sawasdeecoin.com/api/chain-stats',
   // How many recent blocks the explorer scans for "latest transactions" (no indexer).
   scanBlocks: 100,
   maxScanBlocks: 1000,
@@ -76,6 +78,7 @@ export function sanitizeConfig(...layers) {
       if (typeof DEFAULTS[k] === 'number') { const n = Number(v); if (Number.isFinite(n) && n > 0) out[k] = n; continue; }
       if (typeof v !== 'string') continue;
       if (k === 'threatRegistry' && v && !ADDR.test(v.trim())) continue;
+      if (k === 'chainStatsUrl' && v.trim()) { try { checkUrl(v); } catch { continue; } }
       out[k] = v.trim();
     }
   }

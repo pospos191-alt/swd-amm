@@ -73,6 +73,19 @@ If you skip step 3, the web page still works normally. It just does not count us
   shows the all-time totals under the form: contracts checked, risky contracts flagged (high + medium) and high risk found.
   Totals add up the monthly counters since 2026-10; the result levels are counted from this release on
 
+## ZETAPHY chain activity (`api/chain-stats.js`, `server/chainstats.js`)
+
+`GET /api/chain-stats` gives how many transactions the ZETAPHY chain had this month and since genesis, by kind:
+transfers, staking, cross-chain (IBC and Hyperlane deliveries), EVM and contracts, governance. The PQ certificate in
+every block is not counted. The page shows it under the form; the explorer shows the same numbers (any origin may read it).
+
+- Asks the node for counts only (`tx_search` with `per_page=1`, reading `total_count`): a few dozen small requests per
+  refresh, whatever the chain's size. Refreshed by a daily Vercel cron (`vercel.json`) or the first view after 6 hours,
+  at most once an hour, so page views do not spend the node's outbound data.
+- Stored in the counter's store (D1 or Redis, see above). No new settings; optional `NEURO_ZETAPHY_COMET` (default
+  `https://rpc.sawasdeecoin.com/rpc/`).
+- Not in `src/`: no skill vote needed. A rare transaction with two message types of one kind counts twice in that kind.
+
 ## Recognising tokens created by the ZETAPHY launcher
 
 Neuro recognises "code templates" by a code fingerprint (`src/fingerprint.js`): it masks the values that differ

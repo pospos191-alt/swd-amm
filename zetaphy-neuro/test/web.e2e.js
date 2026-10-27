@@ -168,6 +168,25 @@ test('a token name with a link is shown as text, never as HTML', async () => {
   await page.close();
 });
 
+test('ZETAPHY chain activity: shown from /api/chain-stats, in the chosen language', async () => {
+  const { page, errors } = await openPage('light');
+  const stats = { enabled: true, month: '2026-10', height: 1234567, updatedAt: '2026-10-27T03:23:00.000Z', stale: false,
+    total: { all: 98765, transfers: 4000, staking: 300, crossChain: 20, evm: 90000, governance: 7 },
+    thisMonth: { all: 4321, transfers: 120, staking: 15, crossChain: 2, evm: 4100, governance: 3 } };
+  await page.route((url) => url.pathname === '/api/chain-stats', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(stats) }));
+  await page.goto(`http://localhost:${PORT}/`);
+  await page.waitForSelector('#chainstats:not([hidden])');
+  const nums = await page.$$eval('#chainstats [data-cs] b', (e) => e.map((x) => x.textContent));
+  assert.deepEqual(nums, ['4,321', '120', '15', '2', '4,100', '3']);
+  assert.match(await page.textContent('#chainstats p'), /98,765/);
+  await page.selectOption('#lang', 'th');
+  assert.equal(await page.textContent('#chainstats h2'), 'บนเชน ZETAPHY เดือนนี้');
+  assert.equal(await page.textContent('#chainstats [data-cs="crossChain"] span'), 'ข้ามเชน');
+  if (shots) await page.screenshot({ path: `${shots}/neuro-chainstats.png`, fullPage: true });
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 test('each successful check is counted, and the stats page shows it', async () => {
   const before = await (await fetch(`http://localhost:${PORT}/api/usage`)).json();
   const addr = await chain.deploy('CleanToken');
