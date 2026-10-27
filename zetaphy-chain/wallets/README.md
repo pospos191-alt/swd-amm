@@ -137,7 +137,7 @@ The chain info is `keplr-chain-info.template.json` (the node publishes a version
 - `isTestnet: true`
 
 What the node must have (setup-node.sh does this):
-- `/rpc` forwards to CometBFT RPC, including websocket (`wss://HOST/rpc/websocket`)
+- `/rpc` forwards to CometBFT RPC through rpc-guard: the read methods wallets use and `broadcast_tx_sync/async` (no websocket)
 - `/rest` forwards to Cosmos REST
 - Both must be https: Keplr does not accept http
 
@@ -233,7 +233,6 @@ Checked (20 Oct 2026):
   - Answers `eth_chainId` = `0x12e4e`
   - `https://HOST/rpc/status` reports network `zetaphy_77390-1`
   - `https://HOST/rest/cosmos/base/tendermint/v1beta1/node_info` responds
-  - websocket `wss://HOST/rpc/websocket` can be opened
   - The registries check these connections when accepting the PR
 - **A domain name that does not change** (recommended)
   - `sslip.io` is tied to the IP; if the machine's IP changes, every listing breaks at once

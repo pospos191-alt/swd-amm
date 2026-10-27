@@ -57,7 +57,6 @@
 ### 3. เปิดพอร์ตให้คนภายนอกเข้าได้
 1. ในหน้าเครื่อง → **Primary VNIC → Subnet** (ลิงก์) → **Security Lists** → *Default Security List*
 2. **Add Ingress Rules** (Source CIDR `0.0.0.0/0`, IP Protocol **TCP**) ทีละพอร์ต:
-   - **8545** สำหรับ MetaMask
    - **26656** ให้เครื่องอื่นมาต่อเชน (ในขั้น 1)
    - **80** และ **443** สำหรับ https (กระเป๋าบนเว็บต้องใช้ https)
      - สคริปต์ติดตั้ง Caddy (จากคลังโปรแกรมของ Ubuntu) ซึ่งขอใบรับรอง Let's Encrypt ฟรีให้อัตโนมัติ
@@ -69,14 +68,14 @@
 ### 4. ตรวจว่าเชนทำงาน (ไม่ต้องใช้คอมพิวเตอร์)
 - **ทางที่ง่ายที่สุด:** เพิ่มเครือข่ายใน MetaMask (บนมือถือก็ได้):
   - Network name: `ZETAPHY Testnet`
-  - RPC URL: `http://<Public IP ของเครื่อง>:8545`
+  - RPC URL: `https://<IP มีขีด>.sslip.io` (หรือโดเมนของคุณเอง; `http://<IP>:8545` แบบธรรมดาปิดอยู่ เว้นแต่ตั้ง `PUBLIC_HTTP_RPC=1`)
   - Chain ID: `77390`
   - Currency symbol: `ZTPHY` (MetaMask และ chainlist รับได้ไม่เกิน 6 ตัว ดู [`wallets/README.md`](./wallets/README.th.md))
   ถ้าเพิ่มได้และเห็นยอด 1,000,000 ZTPHY (= ZETAPHY, กรณีใส่ OWNER_EVM_ADDRESS) แปลว่าเชนทำงานแล้ว
   - กระเป๋าอื่น (Rabby, Trust, OKX, Coinbase, Keplr, Leap, Ledger, มือถือ) และการขึ้นรายชื่อ chainlist / Keplr: [`wallets/README.md`](./wallets/README.th.md)
 - **หรือใช้ Cloud Shell ของ Oracle** (ไอคอน `>_` มุมขวาบนของหน้าเว็บ Oracle) แล้ววาง:
   ```bash
-  curl -s -X POST http://<Public IP>:8545 -H 'content-type: application/json' \
+  curl -s -X POST https://<IP มีขีด>.sslip.io -H 'content-type: application/json' \
     --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}'
   ```
   ตัวเลข `result` ควรเพิ่มขึ้นทุก ~5 วินาที
@@ -155,7 +154,7 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
    ```
    เป้าของประตู 3: validator อิสระ ≥ 20 ราย และไม่มีใครถือเกิน 33%
 
-**Faucet (testnet):** `zetaphy_faucet` บนพอร์ต 8545 ให้ 10 ZETAPHY ต่อที่อยู่ วันละครั้ง (รวมไม่เกิน 200 ครั้งต่อวัน)
+**Faucet (testnet):** `zetaphy_faucet` (ผ่าน https เท่านั้น) ให้ 10 ZETAPHY ต่อที่อยู่ วันละครั้ง ไม่เกิน 3 ครั้งต่อวันต่อ IP (IPv6 นับทั้ง /64 เป็นหนึ่ง) และรวมไม่เกิน 200 ครั้งต่อวัน
 และไม่ให้ที่อยู่ที่มีเงินอยู่แล้ว ใช้กุญแจแยกที่ถือ 1,000,000 ZETAPHY ทดลอง (จากส่วนสภาพคล่อง) เท่านั้น
 ```bash
 curl -s https://<ชื่อ>.sslip.io -H 'content-type: application/json' \
@@ -190,6 +189,11 @@ sudo tail -f /var/log/zetaphy-setup.log     # Ctrl+C เลิกดู กา�
 
 สคริปต์รันได้ทีละรอบ ถ้าสั่งซ้ำ รอบที่สองจะบอกแล้วออกเอง ใครก็ build ไฟล์นี้ใหม่จากซอร์สเดียวกัน
 (`.github/workflows/release-zetaphyd.yml`) แล้วเทียบ hash ได้
+ไฟล์แต่ละตัวมีลายเซ็นที่มาของการ build (Sigstore) ยืนยันว่า workflow นี้ build จาก commit ใน repo นี้ ไม่ได้อัปโหลดเอง:
+`gh attestation verify zetaphyd-linux-$ARCH --repo pospos191-alt/swd-amm`
+
+**อัปเดตโหนดที่รันอยู่** (เก็บกุญแจและข้อมูลเชนไว้ ตั้งค่า rpc-guard และ Caddy ใหม่ แล้วรีสตาร์ตโหนด):
+`curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- update`
 
 ### ใช้โดเมนของตัวเองเป็น RPC
 
@@ -206,7 +210,11 @@ WebSocket: `wss://<ชื่อ>/ws` (EVM JSON-RPC เช่น `eth_subscribe` 
 - เหรียญบนเชนนี้ไม่มีมูลค่า ห้ามโฆษณาหรือขาย
 - กุญแจของบัญชีตอนเปิดเชนเก็บแยกไว้ที่ `/home/zetaphy/.zetaphy-genesis-keys` (อ่านได้เฉพาะผู้ใช้ `zetaphy`)
   ไม่อยู่ในโฟลเดอร์ที่ node ใช้ คนที่ต่อ RPC จึงสั่งโอนเงินจากบัญชีเหล่านี้ไม่ได้
-- เปิดสาธารณะแค่ 8545 (EVM JSON-RPC: eth, net, web3, txpool, zetaphy), 26656 (P2P) และ 80/443 (Caddy: https ที่ส่งต่อไป 8545 ตัวเดียวกัน)
+- เปิดสาธารณะแค่ 26656 (P2P) และ 80/443 (Caddy, https) ส่วน 8545, 26657, 1317, 9090 ฟังเฉพาะในเครื่อง (`PUBLIC_HTTP_RPC=1` เปิด 8545 แบบธรรมดาด้วย)
+- Caddy ส่ง RPC ทั้งสองผ่าน `zetaphyd rpc-guard` (service `zetaphy-rpc-guard`):
+  - EVM JSON-RPC: เฉพาะ `eth_*`, `net_*`, `web3_*`, `zetaphy_*` (ไม่มี `txpool_`, `debug_`, `admin_`, `personal_`)
+  - CometBFT RPC (`/rpc`): เฉพาะคำสั่งอ่านที่กระเป๋าและ explorer ใช้ กับ `broadcast_tx_sync/async`; ไม่มี websocket, `dump_consensus_state`, `net_info`, `unconfirmed_txs`, `genesis`
+  - ไม่เกิน 300 คำขอต่อนาทีต่อ IP ในแต่ละฝั่ง, พร้อมกันรวม 64, batch ไม่เกิน 20, ขนาดไม่เกิน 1 MB
   ส่วน 26657 / 1317 / 9090 ฟังเฉพาะในเครื่อง
   - `zetaphy_sendCosmosTx` แค่ส่งต่อธุรกรรมที่เซ็นมาแล้ว (เหมือน `eth_sendRawTransaction`) ไม่ถือกุญแจใด ๆ
 - ก่อนขั้น 3 (เงินจริง) ต้องเปลี่ยน: กุญแจไปเก็บใน multisig/HSM, https บนชื่อโดเมนของโครงการเอง (แทน sslip.io),

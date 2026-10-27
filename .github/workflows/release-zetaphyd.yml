@@ -74,6 +74,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      id-token: write      # signs the provenance (Sigstore, keyless)
+      attestations: write
     steps:
       - uses: actions/checkout@v5
 
@@ -81,6 +83,13 @@ jobs:
         with:
           path: out
           merge-multiple: true
+
+      # Signed provenance for each binary: proves it was built by this
+      # workflow from this commit (not uploaded by hand). Anyone can check:
+      #   gh attestation verify zetaphyd-linux-amd64 --repo pospos191-alt/swd-amm
+      - uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: out/zetaphyd-linux-*
 
       - name: Publish the release (setup-node.sh fingerprint as the tag)
         env:
@@ -100,6 +109,8 @@ jobs:
             echo '```'
             cat SHA256SUMS
             echo '```'
+            echo
+            echo "Signed build provenance (Sigstore): \`gh attestation verify zetaphyd-linux-amd64 --repo ${GITHUB_REPOSITORY}\`"
           } > notes.md
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" zetaphyd-linux-* SHA256SUMS --clobber

@@ -137,7 +137,7 @@ chain info คือ `keplr-chain-info.template.json` (โหนดเผยแ�
 - `isTestnet: true`
 
 สิ่งที่โหนดต้องมี (setup-node.sh ทำให้):
-- `/rpc` ส่งต่อไปที่ CometBFT RPC รวม websocket (`wss://HOST/rpc/websocket`)
+- `/rpc` ส่งต่อไปที่ CometBFT RPC ผ่าน rpc-guard: คำสั่งอ่านที่กระเป๋าใช้ และ `broadcast_tx_sync/async` (ไม่มี websocket)
 - `/rest` ส่งต่อไปที่ Cosmos REST
 - ทั้งสองต้องเป็น https: Keplr ไม่รับ http
 
@@ -233,7 +233,6 @@ Phantom ให้เพิ่มเครือข่ายเองไม่ไ
   - ตอบ `eth_chainId` = `0x12e4e`
   - `https://HOST/rpc/status` บอก network `zetaphy_77390-1`
   - `https://HOST/rest/cosmos/base/tendermint/v1beta1/node_info` ตอบได้
-  - websocket `wss://HOST/rpc/websocket` เปิดได้
   - registry ตรวจการเชื่อมต่อเหล่านี้ตอนรับ PR
 - **ชื่อโดเมนที่ไม่เปลี่ยน** (แนะนำ)
   - `sslip.io` ผูกกับ IP ถ้า IP ของเครื่องเปลี่ยน ทุกรายชื่อพังพร้อมกัน

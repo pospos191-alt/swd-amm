@@ -57,7 +57,6 @@ Coin allocation at chain launch (according to plan B):
 ### 3. Open ports for outside access
 1. On the instance page → **Primary VNIC → Subnet** (link) → **Security Lists** → *Default Security List*
 2. **Add Ingress Rules** (Source CIDR `0.0.0.0/0`, IP Protocol **TCP**), one port at a time:
-   - **8545** for MetaMask
    - **26656** so other machines can join the chain (in stage 1)
    - **80** and **443** for https (the web wallet requires https)
      - The script installs Caddy (from the Ubuntu package archive), which requests a free Let's Encrypt certificate automatically
@@ -69,14 +68,14 @@ Coin allocation at chain launch (according to plan B):
 ### 4. Check that the chain is running (no computer needed)
 - **Easiest way:** add the network in MetaMask (on mobile is fine):
   - Network name: `ZETAPHY Testnet`
-  - RPC URL: `http://<Public IP of the machine>:8545`
+  - RPC URL: `https://<IP with dashes>.sslip.io` (or your own domain; plain `http://<IP>:8545` is closed unless `PUBLIC_HTTP_RPC=1`)
   - Chain ID: `77390`
   - Currency symbol: `ZTPHY` (MetaMask and chainlist accept at most 6 characters; see [`wallets/README.md`](./wallets/README.md))
   If the network is added and you see a balance of 1,000,000 ZTPHY (= ZETAPHY, if you set OWNER_EVM_ADDRESS), the chain is running.
   - Other wallets (Rabby, Trust, OKX, Coinbase, Keplr, Leap, Ledger, mobile) and listing on chainlist / Keplr: [`wallets/README.md`](./wallets/README.md)
 - **Or use Oracle Cloud Shell** (the `>_` icon at the top right of the Oracle web console) and paste:
   ```bash
-  curl -s -X POST http://<Public IP>:8545 -H 'content-type: application/json' \
+  curl -s -X POST https://<IP with dashes>.sslip.io -H 'content-type: application/json' \
     --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}'
   ```
   The `result` number should increase every ~5 seconds
@@ -182,8 +181,9 @@ The first machine publishes what is needed at `https://<name>.sslip.io/zetaphy/`
    ```
    Gate 3 target: ≥ 20 independent validators, and no one holds more than 33%
 
-**Faucet (testnet):** `zetaphy_faucet` on port 8545 gives 10 ZETAPHY per address once per day (at most 200 times per day in total),
-and does not give to addresses that already have funds. It uses only a separate key that holds 1,000,000 test ZETAPHY (from the liquidity part).
+**Faucet (testnet):** `zetaphy_faucet` (https only) gives 10 ZETAPHY per address once per day, at most 3 times per day
+from one internet address (an IPv6 /64 counts as one) and at most 200 times per day in total, and does not give to addresses
+that already have funds. It uses only a separate key that holds 1,000,000 test ZETAPHY (from the liquidity part).
 ```bash
 curl -s https://<name>.sslip.io -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"zetaphy_faucet","params":["0x<your address>"]}'
@@ -217,6 +217,12 @@ sudo tail -f /var/log/zetaphy-setup.log     # Ctrl+C stops watching, not the set
 
 Only one copy of the script runs at a time; a second one says so and exits. Anyone can rebuild the
 binary from the same sources (`.github/workflows/release-zetaphyd.yml`) and compare the hash.
+Each binary also has a signed build provenance (Sigstore), which shows it was built by that workflow
+from a commit of this repository and not uploaded by hand:
+`gh attestation verify zetaphyd-linux-$ARCH --repo pospos191-alt/swd-amm`
+
+**Updating a running node** (keys and chain data kept; settings, rpc-guard and Caddy redone, node restarted):
+`curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- update`
 
 ### Your own domain for the RPC
 
@@ -234,8 +240,13 @@ A node set up before this version gets it by running the same setup command agai
 - Coins on this chain have no value. Do not advertise or sell them
 - Keys of the chain-launch accounts are kept separately in `/home/zetaphy/.zetaphy-genesis-keys` (readable only by the `zetaphy` user),
   not in the folder the node uses, so people connecting to RPC cannot transfer funds from these accounts
-- Only 8545 (EVM JSON-RPC: eth, net, web3, txpool, zetaphy), 26656 (P2P) and 80/443 (Caddy: https forwarding to the same 8545) are public.
-  26657 / 1317 / 9090 listen only on the machine itself
+- Only 26656 (P2P) and 80/443 (Caddy, https) are public. 8545, 26657, 1317 and 9090 listen only on the machine itself
+  (`PUBLIC_HTTP_RPC=1` opens plain 8545 too).
+- Caddy sends both RPCs through `zetaphyd rpc-guard` (service `zetaphy-rpc-guard`):
+  - EVM JSON-RPC: only `eth_*`, `net_*`, `web3_*` and `zetaphy_*` (no `txpool_`, `debug_`, `admin_`, `personal_`)
+  - CometBFT RPC (`/rpc`): only the read methods wallets and the explorer use, plus `broadcast_tx_sync/async`;
+    no websocket, `dump_consensus_state`, `net_info`, `unconfirmed_txs`, `genesis`
+  - at most 300 requests a minute from one IP on each side, 64 at a time in all, batches of at most 20, bodies of at most 1 MB
   - `zetaphy_sendCosmosTx` only forwards transactions that are already signed (like `eth_sendRawTransaction`); it holds no keys
 - Before stage 3 (real money) these must change: keys go into multisig/HSM, https on the project's own domain name (instead of sslip.io),
   ≥ 20 independent validators, audit according to plan
