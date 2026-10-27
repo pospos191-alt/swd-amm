@@ -21,7 +21,7 @@ export function art(name) {
 }
 
 export const ONE = 10n ** 18n;
-export const sqrt = (y) => { if (y < 2n) return y; let z = y, x = y / 2n + 1n; while (x < z) { z = x; x = (y / x + x) / 2n; } return z; };
+export const sqrt = (y) => { if (y < 4n) return y === 0n ? 0n : 1n; let z = y, x = y / 2n + 1n; while (x < z) { z = x; x = (y / x + x) / 2n; } return z; };
 export const amountOut = (ain, rin, rout) => (ain * 997n * rout) / (rin * 1000n + ain * 997n);
 export const amountIn = (aout, rin, rout) => (rin * aout * 1000n) / ((rout - aout) * 997n) + 1n;
 

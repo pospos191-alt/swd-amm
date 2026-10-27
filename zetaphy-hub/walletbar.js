@@ -24,17 +24,20 @@ const SYMBOL = '0x95d89b41';
 const DECIMALS = '0x313ce567';
 /** balanceOf(account) call data. */
 export const balanceOfData = (account) => BALANCE_OF + account.slice(2).toLowerCase().padStart(64, '0');
+// Letters, digits, space and ._- only, at most 12 UTF-16 units; a letter outside the
+// BMP (e.g. U+1D400) cut in half by the limit is dropped, not left as a lone surrogate.
+const plainShort = (s) => s.replace(/[^\p{L}\p{N} ._-]/gu, '').slice(0, 12).replace(/[\ud800-\udbff]$/, '');
 /** An ABI string return value (symbol()), as plain short text; '' when it is not one. */
 export function decodeString(hex) {
   try {
     const h = String(hex).replace(/^0x/, '');
     if (h.length === 64) { // bytes32 symbols (old tokens)
-      return new TextDecoder().decode(Uint8Array.from(h.match(/../g).map((b) => parseInt(b, 16)))).replace(/\0+$/, '').replace(/[^\p{L}\p{N} ._-]/gu, '').slice(0, 12);
+      return plainShort(new TextDecoder().decode(Uint8Array.from(h.match(/../g).map((b) => parseInt(b, 16)))).replace(/\0+$/, ''));
     }
     const len = parseInt(h.slice(64, 128), 16);
     if (!Number.isSafeInteger(len) || len > 64) return '';
     const bytes = Uint8Array.from((h.slice(128, 128 + len * 2).match(/../g) ?? []).map((b) => parseInt(b, 16)));
-    return new TextDecoder().decode(bytes).replace(/[^\p{L}\p{N} ._-]/gu, '').slice(0, 12);
+    return plainShort(new TextDecoder().decode(bytes));
   } catch { return ''; }
 }
 /** An amount with `decimals` as a short decimal string (at most 4 fraction digits). */
