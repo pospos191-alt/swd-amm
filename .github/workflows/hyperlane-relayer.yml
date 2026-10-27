@@ -1,6 +1,6 @@
 # ZETAPHY Saphan, EVM route: the Hyperlane relayer on GitHub Actions (until a server runs it all
 # the time with zetaphy-chain/hyperlane/setup-agents.sh). Every 15 minutes it runs the pinned
-# relayer for about 8 minutes: Sepolia -> ZETAPHY messages from our HyperlaneLockBox are
+# relayer for about 8 minutes (only while the lockbox was active in the last ~2 days): Sepolia -> ZETAPHY messages from our HyperlaneLockBox are
 # delivered to the HyperlaneLane on ZETAPHY (the ZETAPHY Mailbox's ISM checks Hyperlane's
 # Sepolia validator signature). It relays nothing else (whitelist: that lockbox, that route),
 # so its key spends nothing on Sepolia. Its database is kept between runs in the Actions cache.
@@ -52,8 +52,36 @@ jobs:
           { echo "go=yes"; echo "lockbox=$lockbox"; echo "sfrom=$sfrom"; echo "zfrom=$zfrom"; } >> "$GITHUB_OUTPUT"
           echo "relaying messages from $lockbox (Sepolia, from block $sfrom) to ZETAPHY"
 
-      - name: Restore the relayer database
+      # The relayer polls the ZETAPHY node for its whole run, and the node's free outbound data is
+      # small (setup-node.sh EGRESS_LIMIT_MB). So it only starts when the lockbox did something
+      # on Sepolia in the last ~2 days (that gives a message many runs to be signed and
+      # delivered), or when started by hand. This check asks Sepolia only, never the node.
+      - name: Anything to relay?
+        id: g
         if: steps.b.outputs.go == 'yes'
+        env:
+          LOCKBOX: ${{ steps.b.outputs.lockbox }}
+          EVENT: ${{ github.event_name }}
+          WINDOW: '14400'
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then echo "started by hand: relaying"; echo "run=yes" >> "$GITHUB_OUTPUT"; exit 0; fi
+          rpc() { curl -fsS --max-time 30 -H 'content-type: application/json' --data "$1" "$SEPOLIA_RPC"; }
+          latest=$(rpc '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' | jq -r '.result // empty') || latest=""
+          n=""
+          if [[ "$latest" =~ ^0x[0-9a-fA-F]+$ ]]; then
+            from=$(( latest - WINDOW )); [ "$from" -lt 0 ] && from=0
+            n=$(rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getLogs\",\"params\":[{\"address\":\"$LOCKBOX\",\"fromBlock\":\"$(printf '0x%x' "$from")\",\"toBlock\":\"$latest\"}]}" | jq -r 'if (.result | type) == "array" then (.result | length) else empty end') || n=""
+          fi
+          if [ "$n" = 0 ]; then
+            echo "no lockbox activity on Sepolia in the last $WINDOW blocks: the relayer is not started (saves the node's data)"
+            echo "run=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "lockbox events in the last $WINDOW blocks: ${n:-unknown (check failed, relaying anyway)}"
+            echo "run=yes" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore the relayer database
+        if: steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/relayer-db
@@ -61,7 +89,7 @@ jobs:
           restore-keys: hyperlane-relayer-db-
 
       - name: Run the relayer
-        if: steps.b.outputs.go == 'yes'
+        if: steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
         env:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
           LOCKBOX: ${{ steps.b.outputs.lockbox }}
@@ -103,7 +131,7 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" "$DB"
 
       - name: What this run did
-        if: always() && steps.b.outputs.go == 'yes'
+        if: always() && steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
         run: |
           L="$RUNNER_TEMP/relayer.log"; [ -f "$L" ] || exit 0
           d=$(grep -ci 'delivered\|Message processed' "$L" || true); e=$(grep -c ' ERROR ' "$L" || true)
@@ -112,7 +140,7 @@ jobs:
           { echo "### Hyperlane relayer"; echo "deliveries in the log: $d, errors: $e"; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save the relayer database
-        if: always() && steps.b.outputs.go == 'yes'
+        if: always() && steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
         uses: actions/cache/save@v4
         with:
           path: ${{ runner.temp }}/relayer-db

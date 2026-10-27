@@ -462,6 +462,33 @@ test('recentTxs: aligned chunks via tx_search, certificates counted apart, cache
   assert.equal(r3.complete, false);
 });
 
+test('recentTxs: the chunk still being written is extended with new blocks only (node data stays low)', async () => {
+  const cert = encodeTxRaw({ bodyBytes: encodeTxBody({ messages: [{ typeUrl: TYPES.pqCertificate, value: uintField(2, 1) }] }), authInfoBytes: new Uint8Array(), signatures: [] });
+  const queries = [];
+  const api = {
+    comet: async (method, params) => {
+      if (method !== 'tx_search') throw new Error(method);
+      const [, lo, hi] = /tx.height>=(\d+) AND tx.height<=(\d+)/.exec(params.query).map(Number);
+      queries.push(`${lo}-${hi}`);
+      const all = []; for (let h = hi; h >= lo; h--) all.push({ hash: `H${h}`, height: String(h), index: 0, tx: toBase64(cert), tx_result: { code: 0 } });
+      return { txs: all.slice((Number(params.page) - 1) * 100, Number(params.page) * 100), total_count: String(all.length) };
+    },
+    evm: async () => { throw new Error('no'); },
+    rest: async () => { throw new Error('no'); },
+  };
+  const chain = chainApi(api);
+  assert.equal((await chain.recentTxs('120', 20)).certificates, 20);
+  assert.deepEqual(queries, ['101-120']);
+  const r = await chain.recentTxs('125', 20);
+  assert.deepEqual(queries, ['101-120', '121-125'], 'only the 5 new blocks are asked for');
+  assert.equal(r.certificates, 20); assert.equal(r.from, '106'); assert.equal(r.to, '125');
+  await chain.recentTxs('125', 20);
+  assert.equal(queries.length, 2, 'nothing new: nothing asked');
+  // the chunk fills up and the next one starts: the finished one comes from memory
+  await chain.recentTxs('152', 60);
+  assert.deepEqual(queries.slice(2), ['151-152', '126-150', '51-100']);
+});
+
 // ---------------- i18n and static checks ----------------
 
 test('i18n: the 8 languages, each with exactly the English keys and placeholders', () => {
