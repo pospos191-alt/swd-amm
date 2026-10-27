@@ -27,5 +27,9 @@
     "@solana/web3.js": "^1.95.4",
     "playwright-core": "^1.56.1",
     "solc": "0.8.26"
+  },
+  "overrides": {
+    "tmp": "0.2.7",
+    "jayson": "5.0.0"
   }
 }

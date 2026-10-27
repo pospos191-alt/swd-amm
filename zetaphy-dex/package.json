@@ -20,7 +20,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "ethers": "6.16.0"
+    "ethers": "6.17.0"
   },
   "devDependencies": {
     "@ethereumjs/common": "4.4.0",
@@ -28,5 +28,8 @@
     "@ethereumjs/util": "9.1.0",
     "playwright-core": "1.56.1",
     "solc": "0.8.26"
+  },
+  "overrides": {
+    "tmp": "0.2.7"
   }
 }
