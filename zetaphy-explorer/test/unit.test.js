@@ -292,6 +292,8 @@ test('config: https only, no credentials, placeholder detection, endpoints with 
   const c = sanitizeConfig({ node: 'https://a.example', bogus: 1, threatRegistry: 'nope', scanBlocks: 99999, maxRps: 'x' });
   assert.equal(c.node, 'https://a.example'); assert.equal(c.bogus, undefined); assert.equal(c.threatRegistry, ''); assert.equal(c.scanBlocks, DEFAULTS.maxScanBlocks); assert.equal(c.maxRps, DEFAULTS.maxRps);
   assert.equal(sanitizeConfig({ threatRegistry: TOK }).threatRegistry, TOK);
+  assert.equal(sanitizeConfig({ chainStatsUrl: 'javascript:alert(1)' }).chainStatsUrl, DEFAULTS.chainStatsUrl, 'a bad stats URL keeps the default');
+  assert.equal(sanitizeConfig({ chainStatsUrl: '' }).chainStatsUrl, '', 'empty turns it off');
   assert.equal(neuroLink({ neuroReportUrl: 'https://neuro.example/web/?chain=zetaphy&address={address}', evmChainId: 77390 }, A), `https://neuro.example/web/?chain=zetaphy&address=${A}`);
   assert.equal(neuroLink({ neuroReportUrl: 'javascript:alert({address})' }, A), '');
   assert.equal(neuroLink({ neuroReportUrl: '' }, A), '');

@@ -99,6 +99,12 @@ test('d1 store on real SQL: same numbers as the in-memory store, expiry, limiter
   assert.deepEqual(await s.pipeline([['EXPIRE', 'e', 10], ['PERSIST', 'e']]), [1, 1]);
   clock += 11_000;
   assert.deepEqual(await s.pipeline([['GET', 'e']]), ['1'], 'persisted');
+  // SET: an integer, replaces the value and clears an expiry
+  assert.deepEqual(await s.pipeline([['SET', 'z', 41], ['SET', 'z', 42], ['GET', 'z']]), ['OK', 'OK', '42']);
+  assert.deepEqual(await s.pipeline([['EXPIRE', 'z', 5], ['SET', 'z', 7]]), [1, 'OK']);
+  clock += 6_000;
+  assert.deepEqual(await s.pipeline([['GET', 'z']]), ['7']);
+  await assert.rejects(s.pipeline([['SET', 'z', 'x']]), /integer/);
   // PFADD/PFCOUNT
   assert.deepEqual(await s.pipeline([['PFADD', 'u', 'a'], ['PFADD', 'u', 'a'], ['PFADD', 'u', 'b'], ['PFCOUNT', 'u'], ['PFCOUNT', 'none']]), [1, 0, 1, 2, 0]);
 

@@ -41,7 +41,7 @@ async function launch() {
 
 before(async () => {
   const cfg = join(dir, 'config.json');
-  writeFileSync(cfg, JSON.stringify({ node: NODE, threatRegistry: REGISTRY, neuroReportUrl: NEURO, scanBlocks: 100 }));
+  writeFileSync(cfg, JSON.stringify({ node: NODE, threatRegistry: REGISTRY, neuroReportUrl: NEURO, chainStatsUrl: 'https://stats.zetaphy.test/api/chain-stats', scanBlocks: 100 }));
   // The placeholder a fresh checkout ships (the launch replaces config.json with the live node).
   const placeholder = join(dir, 'placeholder.json');
   writeFileSync(placeholder, JSON.stringify({ node: 'https://<node-host>', evmRpc: '', cometRpc: '', rest: '', threatRegistry: '', neuroReportUrl: '', scanBlocks: 100 }));
@@ -50,6 +50,9 @@ before(async () => {
 });
 after(async () => { await browser?.close(); for (const s of servers) s.kill(); rmSync(dir, { recursive: true, force: true }); });
 
+const CHAIN_STATS = { enabled: true, month: '2026-10', height: 30, updatedAt: new Date(Date.now() - 2 * 3600_000).toISOString(), stale: false,
+  total: { all: 98765, transfers: 4000, staking: 300, crossChain: 20, evm: 90000, governance: 7 },
+  thisMonth: { all: 4321, transfers: 120, staking: 15, crossChain: 2, evm: 4100, governance: 3 } };
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Content-Type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
 
 /** A page with the mock node behind https://node.zetaphy.test (and other.zetaphy.test); records problems. */
@@ -61,6 +64,8 @@ async function openPage({ viewport, lang = 'th', origin = ORIGIN } = {}) {
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) problems.push(`console: ${m.text()}`); });
   page.on('requestfailed', (r) => { if (!/node\.zetaphy\.test|other\.zetaphy\.test/.test(r.url())) problems.push(`requestfailed: ${r.url()}`); });
+  // Neuro's chain activity counts (/api/chain-stats)
+  await ctx.route((url) => url.host === 'stats.zetaphy.test', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(CHAIN_STATS) }));
   await ctx.route((url) => url.host === 'node.zetaphy.test' || url.host === 'other.zetaphy.test', async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -109,6 +114,10 @@ test('home: chain id, height, supply with burns, staking, PQ coverage, latest bl
   assert.match(t, /100,000 ZETAPHY/); // bonded
   assert.match(t, /10\.0% ของอุปทาน/);
   assert.match(t, /60\.0% ของพลังโหวตมีกุญแจโหวต PQ/);
+  // this month's activity, from Neuro's daily counts
+  await waitText(page, 'กิจกรรมเดือนนี้');
+  const act = await page.locator('section.activity').innerText();
+  assert.match(act, /4,321/); assert.match(act, /ข้ามเชน\s+2\b/); assert.match(act, /98,765/);
   assert.match(t, /สแกนเฉพาะ 30 บล็อกล่าสุด \(1–30\)/); // the chain has 30 blocks; scanBlocks 100
   // latest txs: EVM and Cosmos, certificates not listed, failed one marked
   assert.match(t, /EVM/); assert.match(t, /MsgPQVoteKey/); assert.match(t, /MsgSetPQEvidence/); assert.ok(!/MsgPQCertificate/.test(t));

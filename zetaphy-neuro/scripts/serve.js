@@ -10,6 +10,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { handleUsage, memoryStore } from '../server/usage.js';
 import { handleEarlyWarning, createPackLoader, memoryLimiter, answerCache, defaultRpcFor } from '../server/earlywarning.js';
+import { handleChainStats, cometClient } from '../server/chainstats.js';
 import { createRpc } from '../src/rpc.js';
 import { CHAINS } from '../src/chains.js';
 
@@ -54,6 +55,18 @@ createServer(async (req, res) => {
       res.writeHead(out.status, { 'content-type': 'application/json', ...(out.headers ?? {}) }).end(JSON.stringify(out.json ?? {}));
     } catch {
       res.writeHead(400).end();
+    }
+    return;
+  }
+
+  // ZETAPHY chain activity: counts from NEURO_DEV_COMET (a CometBFT RPC URL) when set.
+  if (path === '/api/chain-stats') {
+    try {
+      const comet = process.env.NEURO_DEV_COMET ? cometClient(process.env.NEURO_DEV_COMET) : null;
+      const out = await handleChainStats({ method: req.method }, store, comet);
+      res.writeHead(out.status, { 'content-type': 'application/json', ...(out.headers ?? {}) }).end(JSON.stringify(out.json ?? {}));
+    } catch {
+      res.writeHead(503).end();
     }
     return;
   }

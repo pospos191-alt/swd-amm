@@ -5,6 +5,7 @@ import { explain, explainPath, LANGS, uiText, pickLang } from '../src/explain.js
 import { readTransaction, isTxHash } from '../src/tx.js';
 import { CHAINS, isChainAddress, explorerUrl, explorerTxUrl } from '../src/chains.js';
 import { verdictOf } from '../src/verdict.js';
+import { loadChainStats, renderChainStats } from './chain.js';
 
 const $ = (id) => document.getElementById(id);
 // What an address looks like on each kind of chain (placeholder and error hint).
@@ -40,6 +41,7 @@ function applyLang() {
   const ui = uiText(lang);
   for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = ui[el.dataset.i18n];
   renderCounts();
+  renderChainStats(lang);
   $('lang').setAttribute('aria-label', ui.language);
   if (last) render(last);
 }
@@ -291,6 +293,7 @@ $('lang').addEventListener('change', () => {
 
 applyLang();
 loadCounts();
+loadChainStats(() => lang);
 // Shareable links: ?chain=bsc&address=0x…
 const q = new URLSearchParams(location.search);
 if (q.get('chain') in CHAINS) $('chain').value = q.get('chain');

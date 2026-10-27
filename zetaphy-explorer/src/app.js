@@ -119,13 +119,16 @@ function banner() {
 
 async function pageHome(view) {
   const stats = h('div', { class: 'stats' });
+  const activity = h('section', { class: 'activity', hidden: '' });
   const blocks = h('div', null, loading());
   const txs = h('div', null, loading());
   append(view, [
     h('h1', null, t('homeTitle')),
     stats,
+    activity,
     h('div', { class: 'grid2' }, card(t('latestBlocks'), blocks), card(t('latestTxs'), txs)),
   ]);
+  loadActivity(activity).catch(() => { activity.hidden = true; });
 
   const stat = (label, value, sub) => h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value' }, value), sub ? h('div', { class: 'stat-sub' }, sub) : null);
 
@@ -162,6 +165,24 @@ async function pageHome(view) {
     if (document.hidden || !view.isConnected) return;
     refresh(false).catch(() => { /* next tick */ });
   }, 6000);
+}
+
+// Chain activity this month, from Neuro's daily counts (cfg.chainStatsUrl), read once per visit.
+async function loadActivity(box) {
+  const url = String(cfg.chainStatsUrl ?? '').trim();
+  if (!url || isPlaceholder(cfg)) return;
+  const res = await fetch(checkUrl(url), { credentials: 'omit', cache: 'default' });
+  const r = res.ok ? await res.json() : null;
+  if (!r?.enabled || !r.updatedAt || !r.thisMonth || !box.isConnected) return;
+  const n = new Intl.NumberFormat(lang);
+  const num = (x) => n.format(Number(x) || 0);
+  const KEYS = [['all', 'actAll'], ['transfers', 'actTransfers'], ['staking', 'actStaking'], ['crossChain', 'actCrossChain'], ['evm', 'actEvm'], ['governance', 'actGovernance']];
+  fill(box,
+    h('h2', null, t('activityTitle')),
+    h('div', { class: 'stats' }, ...KEYS.map(([k, label]) => h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, t(label)), h('div', { class: 'stat-value' }, num(r.thisMonth[k]))))),
+    note(t('activityNote', { n: num(r.total?.all), when: ago(r.updatedAt, Date.now(), lang) })),
+  );
+  box.hidden = false;
 }
 
 function pqCoverage(rows) {
