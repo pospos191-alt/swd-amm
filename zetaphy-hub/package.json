@@ -11,7 +11,7 @@
     "test:e2e": "node build.mjs && node --test test/hub.e2e.mjs"
   },
   "devDependencies": {
-    "ethers": "6.16.0",
+    "ethers": "6.17.0",
     "playwright-core": "1.56.1"
   },
   "engines": { "node": ">=20" }
