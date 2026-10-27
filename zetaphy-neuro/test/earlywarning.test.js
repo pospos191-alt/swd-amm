@@ -332,6 +332,9 @@ test('limiters: memory windows reset; Redis counts per HMAC(ip), falls back if R
   assert.ok((await r.check('203.0.113.77')).ok);
   assert.equal((await r.check('203.0.113.77')).ok, false);
   assert.ok(!seen.join(' ').includes('203.0.113.77'), 'no IP stored');
+  const shared = redisLimiter(memoryStore(), 'salt-0123456789abcdef', { perMinute: 100, globalPerMinute: 2, now: () => 0 });
+  await shared.check('198.51.100.1'); await shared.check('198.51.100.2');
+  assert.equal((await shared.check('198.51.100.3')).ok, false, 'all clients together are capped (shared store)');
   const flaky = redisLimiter({ pipeline: async () => { throw new Error('down'); } }, 'salt-0123456789abcdef', { fallback: memoryLimiter({ perMinute: 1 }) });
   assert.ok((await flaky.check('a')).ok);
   assert.equal((await flaky.check('a')).ok, false);

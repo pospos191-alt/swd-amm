@@ -9,6 +9,7 @@
 // Numbers are approximate (HyperLogLog ~1% error) and can be inflated by
 // someone rotating IPs. Treat them as a signal, not an audited figure.
 
+import { clientKeyOf } from './clientkey.js';
 import { createHmac } from 'node:crypto';
 
 export const GOAL = 1000;
@@ -19,6 +20,8 @@ export const LEVELS = ['high', 'medium', 'low', 'info'];
 // Extra counters: transaction checks (src/tx.js) and checks on ZETAPHY's own chain.
 export const EXTRA = ['tx', 'zetaphy'];
 const MAX_CHECKS_PER_VISITOR_PER_DAY = 200;
+// All visitors together: at most this many counted checks a day (about 5 store writes each)
+const MAX_CHECKS_PER_DAY = 10000;
 const KEEP_SECONDS = 400 * 24 * 3600; // a bit over a year of monthly history
 const P = 'neuro:';
 
@@ -86,16 +89,18 @@ export async function handleUsage(req, store, secret) {
 
     const month = monthOf(now);
     const day = dayOf(now);
-    const id = createHmac('sha256', secret).update(`${month}|${req.ip ?? ''}|${req.ua ?? ''}`).digest('hex').slice(0, 32);
-    const rl = `${P}rl:${day}:${id}`;
-    const [, seenToday] = await store.pipeline([
-      ['PFADD', `${P}users:${month}`, id],
-      ['INCR', rl],
-      ['EXPIRE', rl, 2 * 24 * 3600],
-      ['EXPIRE', `${P}users:${month}`, KEEP_SECONDS],
-    ]);
+    // The daily limit is per network address (an IPv4, or an IPv6 /64), whatever the
+    // User-Agent says; the visitor id adds the User-Agent (people behind one address).
+    const key = clientKeyOf(req.ip ?? '');
+    const rl = `${P}rl:${day}:${createHmac('sha256', secret).update(`rl|${day}|${key}`).digest('hex').slice(0, 32)}`;
+    const all = `${P}all:${day}`;
+    const [seenToday, , allToday] = await store.pipeline([['INCR', rl], ['EXPIRE', rl, 2 * 24 * 3600], ['INCR', all], ['EXPIRE', all, 2 * 24 * 3600]]);
+    // Over either limit: nothing more is written (keeps the free store's daily writes bounded).
+    if (Number(seenToday) > MAX_CHECKS_PER_VISITOR_PER_DAY || Number(allToday) > MAX_CHECKS_PER_DAY) return { status: 202, json: { counted: false } };
+    const id = createHmac('sha256', secret).update(`${month}|${key}|${String(req.ua ?? '').slice(0, 256)}`).digest('hex').slice(0, 32);
+    await store.pipeline([['PFADD', `${P}users:${month}`, id], ['EXPIRE', `${P}users:${month}`, KEEP_SECONDS]]);
     let counted = false;
-    if (Number(seenToday) <= MAX_CHECKS_PER_VISITOR_PER_DAY) {
+    {
       // counters are kept for good (they are small and make the all-time totals)
       const level = LEVELS.includes(req.body.level) ? req.body.level : null;
       await store.pipeline([
