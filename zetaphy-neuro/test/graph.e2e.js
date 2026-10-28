@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { chromium } from 'playwright-core';
 import { W, rpcAnswer, blockscoutAnswer } from './helpers/flow-world.js';
 
-const PORT = 18090;
+const PORT = 18091;
 const shots = process.env.SCREENSHOT_DIR;
 let server; let browser;
 
