@@ -1932,26 +1932,29 @@ test('auto-lock: after the chosen idle time the seed is zeroed and the unlock sc
   const { page, context, errors, sent } = await importedPage(node, { clock: true, watchKeys: true });
   await page.click('#lock');
   await unlockWith(page, PASS); // the seed now comes from decrypt (watched)
-  assert.equal(await page.inputValue('#autolock-min'), '5', 'default 5 minutes');
-  assert.deepEqual(await page.$$eval('#autolock-min option', (os) => os.map((o) => o.textContent)), ['1 min', '5 min', '15 min', '30 min']);
-  assert.match(await page.textContent('#autolock-hint'), /^Locks automatically in [45]:\d\d without activity\.$/);
-  await page.selectOption('#autolock-min', '1');
-  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-wallet:autolock-minutes')), '1');
-  await page.clock.fastForward('00:50');
+  assert.equal(await page.inputValue('#autolock-min'), '30', 'default 30 minutes');
+  assert.deepEqual(await page.$$eval('#autolock-min option', (os) => os.map((o) => o.textContent)), ['30 min', '60 min', '120 min', '240 min']);
+  assert.match(await page.textContent('#autolock-hint'), /^Locks automatically in (29|30):\d\d without activity\.$/);
+  await page.selectOption('#autolock-min', '60');
+  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-wallet:autolock-minutes')), '60');
+  assert.match(await page.textContent('#autolock-hint'), /in (1:00|59):\d\d/);
+  await page.selectOption('#autolock-min', '30');
+  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-wallet:autolock-minutes')), '30');
+  await page.clock.fastForward('29:50');
   assert.match(await page.textContent('#autolock-hint'), /in 0:(0\d|1\d) /);
   await page.click('h1'); // activity
   await page.clock.fastForward('00:30');
   assert.ok(await page.isVisible('#wallet'), 'still unlocked: the click reset the countdown');
-  assert.match(await page.textContent('#autolock-hint'), /in 0:[2-3]\d /);
+  assert.match(await page.textContent('#autolock-hint'), /in 29:[2-3]\d /);
 
   // A transfer waiting for confirmation is dropped by the lock; nothing is signed or sent.
   await page.fill('#to', TO);
   await page.fill('#amount', '1');
   await page.click('#review');
   await visible(page, '#confirm');
-  await page.clock.fastForward('01:01');
+  await page.clock.fastForward('30:01');
   await visible(page, '#locked');
-  await statusMatches(page, /Locked automatically after 1 min without activity/);
+  await statusMatches(page, /Locked automatically after 30 min without activity/);
   assert.ok(await page.isHidden('#wallet'));
   assert.ok(await plainWiped(page), 'the seed in memory is zeros');
   assert.equal(sent.length, 0);
@@ -1966,7 +1969,7 @@ test('auto-lock: after the chosen idle time the seed is zeroed and the unlock sc
     document.dispatchEvent(new Event('visibilitychange'));
   }, h);
   await setHidden(true);
-  await page.clock.setSystemTime(await page.evaluate(() => Date.now() + 70_000)); // no timer fires
+  await page.clock.setSystemTime(await page.evaluate(() => Date.now() + 31 * 60_000)); // no timer fires
   assert.ok(await page.isVisible('#wallet'));
   await setHidden(false);
   assert.ok(await page.isVisible('#locked'), 'locked on return');

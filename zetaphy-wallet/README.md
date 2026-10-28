@@ -112,7 +112,7 @@ There is no WalletConnect SDK in the bundle yet, so the WalletConnect button on 
 
 ### Auto-lock
 
-- After N minutes without keyboard / pointer activity (default 5; 1, 5, 15 or 30 in "Security"), the wallet locks itself:
+- After N minutes without keyboard / pointer activity (default 30; 30, 60, 120 or 240 in "Security"), the wallet locks itself:
   the key is wiped from memory and the unlock screen comes back. A countdown under "Lock wallet" shows the time left
 - A tab hidden for longer than N minutes locks the moment it is shown again (browsers slow timers down in background tabs)
 - "Lock wallet" locks at once. A transaction waiting in a confirm box is dropped by the lock

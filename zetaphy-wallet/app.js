@@ -28,7 +28,7 @@ const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 
   evmWallet: 'zetaphy-wallet:evm-wallet', // the EVM wallet picked (its EIP-6963 rdns, or which injected object)
   wcId: 'zetaphy-wallet:walletconnect-project-id',
   threats: 'zetaphy-wallet:threat-registry', // ThreatRegistry address (the vaccine), else the page's meta tag
-  autolock: 'zetaphy-wallet:autolock-minutes', // 1, 5, 15 or 30
+  autolock: 'zetaphy-wallet:autolock-minutes', // 30, 60, 120 or 240
   passkey: 'zetaphy-wallet:passkey:v1', // the seed wrapped under a passkey's PRF output (security.js wrapSeed); never the PRF output
   bigHidden: 'zetaphy-wallet:big-balance-hidden-until:' }; // + address: the large-balance banner hidden until (ms)
 const EVM_CHAIN_ID = 77390n;
@@ -3305,8 +3305,8 @@ async function changePassword() {
 // autoLockMin minutes with no keyboard / pointer activity, or when the tab comes back
 // after being hidden that long. A timer shows the time left and checks every second
 // (browsers slow timers down in background tabs, so coming back also checks at once).
-const AUTOLOCK_CHOICES = [1, 5, 15, 30];
-const AUTOLOCK_DEFAULT = 5;
+const AUTOLOCK_CHOICES = [30, 60, 120, 240];
+const AUTOLOCK_DEFAULT = 30;
 let autoLockMin = (() => { const n = Number(store.get(KEYS.autolock)); return AUTOLOCK_CHOICES.includes(n) ? n : AUTOLOCK_DEFAULT; })();
 let lastActive = Date.now();
 let hiddenAt = null;
@@ -3332,7 +3332,7 @@ function autoLockTick() {
   const now = Date.now();
   if (now - lastActive >= autoLockMs() || (hiddenAt != null && now - hiddenAt >= autoLockMs())) return autoLock();
   const left = Math.ceil((autoLockMs() - (now - lastActive)) / 1000);
-  $('autolock-hint').textContent = t('autoLockIn', { time: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` });
+  $('autolock-hint').textContent = t('autoLockIn', { time: (left >= 3600 ? `${Math.floor(left / 3600)}:${String(Math.floor(left / 60) % 60).padStart(2, '0')}` : `${Math.floor(left / 60)}`) + `:${String(left % 60).padStart(2, '0')}` });
 }
 
 function autoLock() {
