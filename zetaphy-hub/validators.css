@@ -16,7 +16,7 @@
   --bg: #0c1322; --surface: #131d31; --ink: #e5ecf7; --muted: #9aa8c0; --line: #26334d;
   --accent: #3cc7bf; --accent-ink: #062523; --code-bg: #070d18; --code-fg: #d7e6ff; --warn: #f0b45a; color-scheme: dark }
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.7; }
-.wrap { max-width: 720px; margin: 0 auto; padding-block: 40px 64px;
+.wrap { max-width: 1200px; margin: 0 auto; padding-block: 40px 64px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: grid; gap: 40px; }
 h1, h2 { font-family: var(--display); text-wrap: balance; line-height: 1.25; margin: 0; }
@@ -138,6 +138,16 @@ textarea { width: 100%; box-sizing: border-box; min-height: 150px; font: 14px/1.
 .vpanel:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
 .tab-lede { margin: 0; font-size: 18px; font-weight: 500; }
 /* inside the hub (validators.html?embed): no own header, the hub's dark colours */
-html.embed { --bg: #05070a; --surface: #0d121b; --ink: #e8edf5; --muted: #8e9aae; --line: #1f2836; --accent: #7c6cff; --accent-ink: #ffffff; --warn: #f0b45a; color-scheme: dark; }
+html.embed { --bg: #10151f; --surface: #0b0f16; --ink: #e8edf5; --muted: #8e9aae; --line: #1f2836; --accent: #7c6cff; --accent-ink: #ffffff; --warn: #f0b45a; color-scheme: dark; }
 html.embed header { display: none; }
-html.embed .wrap { padding-block: 0 24px; gap: 28px; }
+html.embed .wrap { max-width: none; padding: 0 4px 16px; gap: 24px; }
+html.embed .vtabs { position: static; margin-bottom: -8px; padding-top: 0; }
+html.embed dialog.placed { position: absolute; margin: 0 auto; bottom: auto; }
+/* wide screens: the topics fit in one or two rows (no sideways scroll); the start topic's two parts side by side */
+@media (min-width: 641px) {
+  .vtabs { flex-wrap: wrap; overflow: visible; }
+}
+@media (min-width: 1000px) {
+  #p-start { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  #p-start > .tab-lede { grid-column: 1 / -1; }
+}

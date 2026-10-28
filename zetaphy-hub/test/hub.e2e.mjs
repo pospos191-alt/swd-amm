@@ -101,8 +101,22 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await vg.waitForFunction(() => document.documentElement.classList.contains('embed') && /MONIKER=my-node/.test(document.getElementById('cmd').textContent));
     assert.equal(await vg.getAttribute('#t-start', 'aria-selected'), 'true');
     assert.equal(await vg.isVisible('header h1'), false, 'no second header inside the hub');
+    // the frame grows to the guide (no scrollbar of its own), the topics fit without sideways scroll
+    const fitted = () => page.waitForFunction(() => {
+      const f = document.getElementById('earn-guide-frame'), b = f.contentDocument?.body;
+      return b && Math.abs(f.getBoundingClientRect().height - b.getBoundingClientRect().height) <= 2;
+    });
+    await fitted();
+    assert.ok(await vg.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), 'no scrollbar inside the frame');
+    assert.ok(await vg.evaluate(() => { const t = document.getElementById('vtabs'); return t.scrollWidth <= t.clientWidth; }), 'topics fit on wide screens');
+    // a guide opens where the reader is, not in the middle of the tall frame
+    await vg.click('[data-guide="oracle"]');
+    const dTop = await page.evaluate(() => { const f = document.getElementById('earn-guide-frame'); return f.getBoundingClientRect().top + f.contentDocument.getElementById('guide').getBoundingClientRect().top; });
+    assert.ok(dTop >= 0 && dTop < 768 - 100, `dialog on screen (${dTop})`);
+    await vg.click('#g-close');
     await vg.click('#t-get');
     assert.ok(await vg.isVisible('#vf-form'), 'the guide\'s faucet form');
+    await fitted();
     assert.doesNotMatch(await page.textContent('.earn-detail'), /null|undefined/);
     await shot('earn');
     // ZETAPHY Saphan: routes from the chain, send out through the ICS-20 precompile from MetaMask

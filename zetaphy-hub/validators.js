@@ -486,7 +486,22 @@ function guide(k) {
   $('g-links').innerHTML = (LINKS[k] || []).map(([lab, url]) => '<a class="btn sm outline" target="_blank" rel="noopener" href="' + esc(url) + '">' + (lab[0] === '@' ? tx(lab.slice(1)) : esc(lab)) + '</a>').join('');
   $('g-cmd-h').textContent = tx('hCmd'); $('g-cmd-copy').textContent = tx('copy'); $('copied-g-cmd').textContent = '';
   $('g-cmd').textContent = $('cmd').textContent;
-  if (!$('guide').open) { $('guide').showModal(); $('g-body').scrollTop = 0; }
+  if (!$('guide').open) { $('guide').showModal(); placeGuide(); $('g-body').scrollTop = 0; }
+}
+// Inside the hub the frame is as tall as the guide, so a centred dialog could open far off screen:
+// put it in the part of the frame the reader can see.
+function placeGuide() {
+  if (!EMBED) return;
+  const d = $('guide');
+  let top = 12, room = 0;
+  try {
+    const r = window.frameElement.getBoundingClientRect(), vh = window.parent.innerHeight;
+    top = Math.max(12, Math.round(-r.top) + 12);
+    room = Math.round(Math.min(r.bottom, vh) - Math.max(r.top, 0)) - 24;
+  } catch (e) { /* not reachable (another site's frame): keep the default */ }
+  d.classList.add('placed');
+  d.style.top = top + 'px';
+  d.style.maxHeight = room > 240 ? room + 'px' : '';
 }
 document.querySelectorAll('[data-guide]').forEach((b) => b.addEventListener('click', () => guide(b.dataset.guide)));
 // The faucet form in "get ZETAPHY": zetaphy_faucet through the public node; a clear message when it is paused.
@@ -571,6 +586,18 @@ TABS.forEach((b, i) => {
 window.addEventListener('hashchange', fromHash);
 fromHash();
 render(); apply(L);
+// Inside the hub (?embed): the frame has no scrollbar of its own. The guide tells the hub (same origin only) its
+// height whenever it changes (a tab, an open detail, the width), and the hub sizes the frame to it.
+if (EMBED && window.parent !== window) {
+  let last = 0;
+  const post = () => {
+    const h = Math.ceil(document.body.getBoundingClientRect().height);
+    if (h && h !== last) { last = h; window.parent.postMessage({ zetaphyGuideHeight: h }, location.origin); }
+  };
+  if (typeof ResizeObserver === 'function') new ResizeObserver(post).observe(document.body);
+  window.addEventListener('load', post);
+  post();
+}
 
 function copy(text, out, area, pre) {
   const done = () => { $(out).textContent = T[L].copied; setTimeout(() => { $(out).textContent = ''; }, 2500); };

@@ -130,43 +130,61 @@ function faucetForm(ctx, L) {
   });
   return ctx.el('div', { class: 'ef' }, ctx.el('label', { for: 'ef-addr', class: 'dim small', text: L.fAddr }), form, out);
 }
-// The Earn page: one tab per way to get coins, easiest first. Each tab: what you get / need / how long in one
-// line, then numbered steps with one big button; terminal commands come second. "Run a validator" shows the
-// validator guide itself (validators.html, its own tabs and texts) in a frame, so there is one copy of it.
+// The Earn page: one tab per way to get coins, easiest first. Each tab: short chips (get / need / time, the long
+// text on each chip's "i"), then the steps beside the one action (two columns on wide screens); terminal commands
+// come second. "Run a validator" shows the validator guide itself (validators.html, its own tabs and texts) in a
+// frame that grows to the guide's height (the guide posts it), so the page scrolls as one and there is one copy.
 export const EARN_TABS = ['faucet', 'mine', 'validator', 'stake', 'lp', 'runner'];
-let earnSel = 'faucet', bondText = 'BOND', runnerStats = null;
+let earnSel = 'faucet', bondText = 'BOND', runnerStats = null, guideHeard = false;
 function earnFill(ctx, s) {
   const host = new URL(ctx.ep().evm).host;
   return s.replaceAll('https://RPC', ctx.ep().evm).replaceAll('JOBS', ctx.cfg.contracts?.neuroJobs ?? '0x…').replaceAll('HOST', host).replaceAll('BOND', bondText);
 }
-const steps = (ctx, m, withCmds = true) => ctx.el('ol', { class: 'howto' }, m.steps.map(([text, cmd]) => ctx.el('li', {},
-  ctx.el('p', { text: earnFill(ctx, text) }), withCmds && cmd ? code(ctx, earnFill(ctx, cmd)) : null)));
+const steps = (ctx, m, cls = 'howto') => ctx.el('ol', { class: cls }, m.steps.map(([text, cmd]) => ctx.el('li', {},
+  ctx.el('p', { text: earnFill(ctx, text) }), cmd ? code(ctx, earnFill(ctx, cmd)) : null)));
+/** The guide frame's height: validators.html?embed posts its own height (same origin only, from that frame only). */
+function hearGuide() {
+  if (guideHeard) return;
+  guideHeard = true;
+  window.addEventListener('message', (e) => {
+    const f = document.getElementById('earn-guide-frame');
+    if (!f || e.origin !== location.origin || e.source !== f.contentWindow) return;
+    const h = Number(e.data?.zetaphyGuideHeight);
+    if (Number.isFinite(h) && h > 0) f.style.height = `${Math.ceil(Math.min(h, 50_000))}px`;
+  });
+}
 function earnDetail(ctx, root) {
   const L = earnText(ctx);
   const m = L.m.find((x) => x.id === earnSel) ?? L.m[0];
   const box = root.querySelector('.earn-detail');
   const el = ctx.el;
-  const open = (tab, primary = true) => el('button', { type: 'button', class: `btn${primary ? ' big' : ' ghost'}`, id: `earn-open-${m.id}`, text: L.openIt, onclick: () => ctx.show(tab) });
+  const open = (tab) => el('div', { class: 'earn-cta' }, el('button', { type: 'button', class: 'btn big', id: `earn-open-${m.id}`, text: L.openIt, onclick: () => ctx.show(tab) }));
+  const two = (main, side) => el('div', { class: 'earn-cols' }, el('div', { class: 'earn-main' }, main), el('div', { class: 'earn-side' }, side));
+  const chip = (label, short, long) => el('span', { class: 'earn-chip' }, el('b', { text: label }), el('span', { text: short }),
+    long && long !== short ? el('span', { class: 'info', tabindex: 0, 'data-tip': long, text: 'i' }) : null);
   const body = {
-    faucet: () => [faucetForm(ctx, L),
-      el('div', { class: 'row wrap' }, el('button', { type: 'button', class: 'btn ghost', id: 'earn-to-mine', text: `⛏ ${L.m.find((x) => x.id === 'mine').title}`, onclick: () => ctx.show('mine') })),
-      el('details', { class: 'earn-more' }, el('summary', { text: L.fTerminal }), steps(ctx, m))],
-    mine: () => [steps(ctx, m), el('p', { class: 'small dim', text: L.noPow }), open('mine')],
-    validator: () => [
-      el('iframe', { class: 'earn-guide-frame', id: 'earn-guide-frame', title: L.tabs.validator, src: `validators.html?embed=1&lang=${encodeURIComponent(ctx.lang)}#start` }),
-      el('a', { class: 'small', id: 'earn-guide', href: 'validators.html', target: '_blank', rel: 'noopener', text: L.openGuide })],
-    stake: () => [steps(ctx, m), open(m.tab)],
-    lp: () => [steps(ctx, m), open(m.tab)],
+    faucet: () => two([faucetForm(ctx, L),
+      el('div', { class: 'row wrap' }, el('button', { type: 'button', class: 'btn ghost', id: 'earn-to-mine', text: `⛏ ${L.m.find((x) => x.id === 'mine').title}`, onclick: () => ctx.show('mine') }))],
+    [el('h3', { text: L.fTerminal }), steps(ctx, m)]),
+    mine: () => two(steps(ctx, m), open('mine')),
+    validator: () => {
+      hearGuide();
+      return el('iframe', { class: 'earn-guide-frame', id: 'earn-guide-frame', title: L.tabs.validator, src: `validators.html?embed=1&lang=${encodeURIComponent(ctx.lang)}#start` });
+    },
+    stake: () => two(steps(ctx, m), open(m.tab)),
+    lp: () => two(steps(ctx, m), open(m.tab)),
     runner: () => [
       el('div', { class: 'stats three' }, tile(ctx, 'earnBond', 'tipEarnBond', 'e-bond'), tile(ctx, 'earnRunners', 'tipEarnRunners', 'e-runners'), tile(ctx, 'earnPool', 'tipEarnPool', 'e-pool')),
-      steps(ctx, m)],
+      steps(ctx, m, 'howto cols2')],
   }[m.id];
   box.classList.toggle('framed', m.id === 'validator');
+  box.setAttribute('aria-label', earnFill(ctx, m.title));
   box.replaceChildren(
-    el('div', { class: 'card-head' }, el('h2', { text: earnFill(ctx, m.title) }), el('span', { class: 'pill', text: m.level })),
-    el('p', { class: 'earn-sum' },
-      el('span', {}, el('b', { text: `${L.get}: ` }), m.get), el('span', {}, el('b', { text: `${L.need}: ` }), earnFill(ctx, m.need)), el('span', {}, el('b', { text: `${L.time}: ` }), m.time)),
-    ...body());
+    el('div', { class: 'earn-head' },
+      chip(L.get, m.getS, m.get), chip(L.need, earnFill(ctx, m.needS), earnFill(ctx, m.need)), chip(L.time, m.time),
+      el('span', { class: 'pill', text: m.level }),
+      m.id === 'validator' ? el('a', { class: 'small earn-ext', id: 'earn-guide', href: 'validators.html', target: '_blank', rel: 'noopener', text: L.openGuide }) : null),
+    ...[body()].flat());
   if (m.id === 'runner' && runnerStats) { setText('e-bond', runnerStats[0]); setText('e-runners', runnerStats[1]); setText('e-pool', runnerStats[2]); }
   for (const n of root.querySelectorAll('.earn-tab')) {
     const on = n.dataset.id === m.id;
@@ -191,9 +209,8 @@ const earn = {
     if (EARN_TABS.includes(way)) earnSel = way;
     const tabs = EARN_TABS.map((id) => L.m.find((x) => x.id === id));
     root.replaceChildren(
-      ctx.el('p', { class: 'earn-intro dim small', text: L.intro }),
       ctx.el('div', { class: 'earn-tabs', role: 'tablist', 'aria-label': L.tabsLabel },
-        tabs.map((m, i) => ctx.el('button', { type: 'button', role: 'tab', class: 'earn-tab', 'data-id': m.id, 'aria-controls': 'earn-panel', 'data-tip': m.get,
+        tabs.map((m, i) => ctx.el('button', { type: 'button', role: 'tab', class: 'earn-tab', 'data-id': m.id, 'aria-controls': 'earn-panel',
           onclick: () => earnPick(ctx, root, m.id),
           onkeydown: (e) => {
             const n = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
@@ -201,7 +218,7 @@ const earn = {
             e.preventDefault();
             earnPick(ctx, root, tabs[(n + tabs.length) % tabs.length].id, true);
           } }, svg(EARN_METHODS.find((x) => x.id === m.id).icon), ctx.el('span', { text: L.tabs[m.id] })))),
-      ctx.el('div', { class: 'card earn-detail scroll-y', id: 'earn-panel', role: 'tabpanel' }),
+      ctx.el('div', { class: 'card earn-detail', id: 'earn-panel', role: 'tabpanel' }),
       ctx.el('div', { class: 'earn-foot' },
         ctx.el('p', { class: 'note', 'data-tip': L.noPow, tabindex: 0, text: `⛏ ${L.whyNoPow}` }),
         ctx.el('p', { class: 'warnline small', text: L.warn })));
