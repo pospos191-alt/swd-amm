@@ -196,6 +196,60 @@ func TestSecurityRPCGuardEVMAndFaucet(t *testing.T) {
 	}
 }
 
+func TestSecurityRPCGuardFaucetPow(t *testing.T) {
+	g, _, evm := newTestGuard(t, GuardConfig{FaucetPerDay: 1, FaucetPowPerDay: 3})
+	clock := time.Date(2026, 10, 28, 22, 0, 0, 0, time.UTC)
+	g.now = func() time.Time { return clock }
+	h := g.EVMHandler()
+	pow := func(ip, addr string) int {
+		return do(h, "POST", "/", fmt.Sprintf(`{"method":"zetaphy_faucetPow","params":["%s","0x10","0x0000000000000001"]}`, addr), map[string]string{"X-Forwarded-For": ip}).Code
+	}
+	// one faucet call per request, whichever method
+	for _, b := range []string{
+		`[{"method":"zetaphy_faucetPow","params":[]},{"method":"zetaphy_faucetPow","params":[]}]`,
+		`[{"method":"zetaphy_faucet","params":["0x1"]},{"method":"zetaphy_faucetPow","params":[]}]`,
+	} {
+		if w := do(h, "POST", "/", b, nil); w.Code != 400 {
+			t.Errorf("%s: %d", b, w.Code)
+		}
+	}
+	// its own daily count per IP, apart from zetaphy_faucet's
+	before := evm.count()
+	for i := 0; i < 3; i++ {
+		if c := pow("203.0.113.20", fmt.Sprint("0x", i)); c != 200 {
+			t.Fatalf("claim %d: %d", i, c)
+		}
+	}
+	if c := pow("203.0.113.20", "0x9"); c != 429 {
+		t.Errorf("fourth claim from one IP: %d", c)
+	}
+	if c := pow("198.51.100.1, 203.0.113.20", "0x9"); c != 429 {
+		t.Errorf("spoofed earlier entry: %d", c)
+	}
+	if c := do(h, "POST", "/", `{"method":"zetaphy_faucet","params":["0x1"]}`, map[string]string{"X-Forwarded-For": "203.0.113.20"}).Code; c != 200 {
+		t.Errorf("zetaphy_faucet keeps its own count: %d", c)
+	}
+	if c := pow("2001:db8:5:6::1", "0x1"); c != 200 {
+		t.Errorf("another IP: %d", c)
+	}
+	// the info method is not a claim
+	for i := 0; i < 5; i++ {
+		if w := do(h, "POST", "/", `{"method":"zetaphy_faucetPowInfo","params":[]}`, map[string]string{"X-Forwarded-For": "203.0.113.20"}); w.Code != 200 {
+			t.Fatalf("info: %d", w.Code)
+		}
+	}
+	if got := evm.count() - before; got != 3+1+1+5 {
+		t.Errorf("forwarded %d", got)
+	}
+	clock = clock.Add(3 * time.Hour) // next UTC day
+	if c := pow("203.0.113.20", "0x9"); c != 200 {
+		t.Errorf("new day: %d", c)
+	}
+	if _, err := NewGuard(GuardConfig{Comet: "http://127.0.0.1:1", EVM: "http://127.0.0.1:2", PerMinute: 1, FaucetPowPerDay: -1, MaxInFlight: 1}); err == nil {
+		t.Error("negative faucet-pow-per-day accepted")
+	}
+}
+
 func TestSecurityRPCGuardLimits(t *testing.T) {
 	g, _, _ := newTestGuard(t, GuardConfig{PerMinute: 3, FaucetPerDay: 1})
 	clock := time.Date(2026, 10, 27, 10, 0, 0, 0, time.UTC)

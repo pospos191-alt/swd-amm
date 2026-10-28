@@ -6,6 +6,7 @@
 import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -24,7 +25,7 @@ export const APPS = {
 const SKIP_IN = { wallet: new Set(['src']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
-const HUB_FILES = ['index.html', 'walletbar.js', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'embed.css', 'logo.svg', 'favicon.svg'];
+const HUB_FILES = ['index.html', 'walletbar.js', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js', 'embed.css', 'logo.svg', 'favicon.svg'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. */
 export function hubConfig(cfg) {
@@ -120,10 +121,21 @@ export function chainTokens(read) {
   return out;
 }
 
+/**
+ * The prebuilt-binary release for the current setup-node.sh: zetaphyd-<first 12 hex of its sha256>, the tag
+ * .github/workflows/release-zetaphyd.yml publishes it under.
+ */
+export function releaseTag(root = ROOT) {
+  return `zetaphyd-${createHash('sha256').update(readFileSync(join(root, 'zetaphy-chain/setup-node.sh'))).digest('hex').slice(0, 12)}`;
+}
+/** validators.html with its download buttons pointing at releaseTag() (so they never go stale). */
+export const withRelease = (html, tag) => html.replace(/\/releases\/download\/zetaphyd-[0-9a-f]{12}\//g, `/releases/download/${tag}/`);
+
 export function build() {
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
   for (const f of HUB_FILES) cpSync(join(HERE, f), join(OUT, f));
+  writeFileSync(join(OUT, 'validators.html'), withRelease(readFileSync(join(HERE, 'validators.html'), 'utf8'), releaseTag()));
   const cfg = JSON.parse(readFileSync(join(ROOT, 'zetaphy-explorer/config.json'), 'utf8'));
   writeFileSync(join(OUT, 'hub-config.json'), `${JSON.stringify(hubConfig(cfg), null, 2)}\n`);
   for (const [path, src] of Object.entries(APPS)) {

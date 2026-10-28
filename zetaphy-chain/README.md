@@ -189,6 +189,15 @@ curl -s https://<name>.sslip.io -H 'content-type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"zetaphy_faucet","params":["0x<your address>"]}'
 ```
 
+**Proof-of-work faucet (testnet):** `zetaphy_faucetPow(address, height, nonce)` gives the same 10 ZETAPHY for a few minutes
+of browser work instead of trusting the caller's IP: `sha256(chainId as 8 bytes || hash of block height || address (20 bytes) || nonce (8 bytes))`
+must start with 30 zero bits (`zetaphy_faucetPowInfo` tells the difficulty, the reward, today's grants left), at a block among
+the last 100. A proof binds its address and is used once; the per-address day, the 200-a-day total and "no funds yet" are
+shared with `zetaphy_faucet`; rpc-guard allows 10 such claims per internet address a day (`--faucet-pow-per-day`). This is
+**not mining**: ZETAPHY stays proof of stake and the work secures nothing; it is a captcha so one person cannot empty the faucet.
+The hub's "Mine" page does it in the browser (`zetaphy-hub/README.md`). An operator can set another difficulty (12–48) in
+`<home>/config/faucet-pow-bits`, read on every call.
+
 ## Small machines (e.g. 1 GB RAM)
 
 The script adjusts itself to the machine's RAM:

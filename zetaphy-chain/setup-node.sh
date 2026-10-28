@@ -2231,6 +2231,192 @@ index 0000000..a786a35
 +		panic(fmt.Sprintf("failed to initialize pinned wasm codes: %s", err))
 +	}
 +}
+diff --git a/evmd/zetaphy_faucetpow.go b/evmd/zetaphy_faucetpow.go
+new file mode 100644
+index 0000000..796f884
+--- /dev/null
++++ b/evmd/zetaphy_faucetpow.go
+@@ -0,0 +1,180 @@
++package evmd
++
++// ZETAPHY testnet faucet behind a proof of work: zetaphy_faucetPow, for the
++// hub's "Mine testnet ZETAPHY" page. This is not mining: no block, coin or
++// reward comes from the work, and ZETAPHY stays proof of stake. The work is a
++// captcha a browser solves so one person cannot drain the faucet with many
++// addresses or internet addresses: every grant costs minutes of a computer.
++// The grant itself is zetaphy_faucet's (faucetGrant in zetaphy_rpc.go): the
++// same key and amount, the same daily cap and per-address cooldown, nothing
++// for an address that already has funds, and only through this machine's
++// https address (rpc-guard counts calls per IP).
++//
++// A proof for address A at block height h is an 8-byte nonce such that
++//
++//	sha256(chainId (8 bytes, big-endian) || hash of block h (32) || A (20) || nonce (8))
++//
++// starts with at least the difficulty's number of zero bits. h must be one of
++// the last FaucetPowMaxAge blocks (no work done in advance), the proof binds A
++// (it cannot be handed to another address), and an (address, height) pair
++// gets one grant. Nothing is stored on chain: the used pairs are kept in
++// memory and dropped once their height is too old to be used anyway.
++//
++// The difficulty is FaucetPowBits, or the number in <home>/config/faucet-pow-bits
++// (FaucetPowMinBits to FaucetPowMaxBits; read on every call, no restart).
++
++import (
++	"context"
++	"crypto/sha256"
++	"encoding/binary"
++	"fmt"
++	"math/bits"
++	"os"
++	"path/filepath"
++	"strconv"
++	"strings"
++
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/common/hexutil"
++
++	rpctypes "github.com/cosmos/evm/rpc/types"
++)
++
++const (
++	// FaucetPowBits: 2^30 tries on average, about 2–5 minutes for a laptop
++	// browser with two threads (measured numbers in zetaphy-hub/README.md).
++	FaucetPowBits     = 30
++	FaucetPowMinBits  = 12
++	FaucetPowMaxBits  = 48
++	FaucetPowMaxAge   = 100 // blocks (about 8 minutes at 5 s a block)
++	faucetPowBitsFile = "faucet-pow-bits"
++	faucetPowProof    = "sha256(chainId as 8 bytes big-endian || hash of block `height` (eth_getBlockByNumber) || address (20 bytes) || nonce (8 bytes)) starts with `bits` zero bits"
++)
++
++type powUse struct {
++	to     common.Address
++	height uint64
++}
++
++// FaucetPowDigest is the hash a proof must start with zero bits.
++func FaucetPowDigest(chainID uint64, blockHash []byte, to common.Address, nonce []byte) [32]byte {
++	b := make([]byte, 0, 68)
++	b = binary.BigEndian.AppendUint64(b, chainID)
++	b = append(b, blockHash...)
++	b = append(b, to.Bytes()...)
++	b = append(b, nonce...)
++	return sha256.Sum256(b)
++}
++
++// powZeroBits: the leading zero bits of a hash.
++func powZeroBits(h [32]byte) int {
++	for i, x := range h {
++		if x != 0 {
++			return i*8 + bits.LeadingZeros8(x)
++		}
++	}
++	return 256
++}
++
++// faucetPowBits: the operator's difficulty file, else FaucetPowBits.
++func (a *ZetaphyAPI) faucetPowBits() int {
++	raw, err := os.ReadFile(filepath.Join(a.clientCtx.HomeDir, "config", faucetPowBitsFile))
++	if err != nil {
++		return FaucetPowBits
++	}
++	n, err := strconv.Atoi(strings.TrimSpace(string(raw)))
++	if err != nil || n < FaucetPowMinBits || n > FaucetPowMaxBits {
++		return FaucetPowBits
++	}
++	return n
++}
++
++// FaucetPowInfo: what a miner needs before it starts.
++type FaucetPowInfo struct {
++	Enabled         bool         `json:"enabled"` // the faucet has its key on this node
++	Bits            int          `json:"bits"`
++	Reward          *hexutil.Big `json:"reward"`
++	ChainID         uint64       `json:"chainId"`
++	LatestHeight    uint64       `json:"latestHeight"`
++	MaxAgeBlocks    uint64       `json:"maxAgeBlocks"`
++	RemainingToday  int          `json:"remainingToday"` // grants left today (UTC), all addresses together
++	PerDay          int          `json:"perDay"`
++	CooldownSeconds int64        `json:"cooldownSeconds"` // per address, shared with zetaphy_faucet
++	Proof           string       `json:"proof"`
++}
++
++// FaucetPowInfo (zetaphy_faucetPowInfo): the difficulty, the reward, how old
++// a proof's block may be, and today's remaining grants.
++func (a *ZetaphyAPI) FaucetPowInfo(ctx context.Context) (*FaucetPowInfo, error) {
++	latest, err := a.backend.BlockNumber(ctx)
++	if err != nil {
++		return nil, err
++	}
++	out := &FaucetPowInfo{
++		Bits: a.faucetPowBits(), Reward: (*hexutil.Big)(FaucetAmount), ChainID: a.backend.ChainConfig().ChainID.Uint64(),
++		LatestHeight: uint64(latest), MaxAgeBlocks: FaucetPowMaxAge, PerDay: FaucetPerDay,
++		CooldownSeconds: int64(faucetCooldown.Seconds()), Proof: faucetPowProof,
++	}
++	faucet.Lock()
++	defer faucet.Unlock()
++	_, err = a.faucetKey()
++	out.Enabled = err == nil
++	faucetDay(faucetNow().UTC())
++	out.RemainingToday = max(0, FaucetPerDay-faucet.count)
++	return out, nil
++}
++
++// FaucetPow (zetaphy_faucetPow) sends FaucetAmount to address for a proof of
++// work at a recent block (see the top of this file).
++func (a *ZetaphyAPI) FaucetPow(ctx context.Context, address string, height hexutil.Uint64, nonce hexutil.Bytes) (*FaucetResult, error) {
++	addr, err := parseAccount(address)
++	if err != nil {
++		return nil, fmt.Errorf("invalid address: %w", err)
++	}
++	to := common.BytesToAddress(addr)
++	if err := faucetPeerOK(ctx); err != nil {
++		return nil, err
++	}
++	if len(nonce) != 8 {
++		return nil, fmt.Errorf("nonce: 8 bytes (0x and 16 hex digits)")
++	}
++	n, err := a.backend.BlockNumber(ctx)
++	if err != nil {
++		return nil, err
++	}
++	latest, h := uint64(n), uint64(height)
++	if h == 0 || h > latest {
++		return nil, fmt.Errorf("block %d is not there yet (latest %d)", h, latest)
++	}
++	if latest-h >= FaucetPowMaxAge {
++		return nil, fmt.Errorf("the proof's block %d is too old: use one of the last %d blocks (latest %d)", h, FaucetPowMaxAge, latest)
++	}
++	blk, err := a.backend.CometBlockByNumber(ctx, rpctypes.BlockNumber(h)) // #nosec G115 -- block heights
++	if err != nil || blk == nil || blk.Block == nil || len(blk.BlockID.Hash) != 32 {
++		return nil, fmt.Errorf("block %d not found", h)
++	}
++	need := a.faucetPowBits()
++	if got := powZeroBits(FaucetPowDigest(a.backend.ChainConfig().ChainID.Uint64(), blk.BlockID.Hash, to, nonce)); got < need {
++		return nil, fmt.Errorf("the proof has %d leading zero bits; %d are needed", got, need)
++	}
++	faucet.Lock()
++	defer faucet.Unlock()
++	if faucet.powUsed == nil {
++		faucet.powUsed = map[powUse]uint64{}
++	}
++	for k, kh := range faucet.powUsed {
++		if kh+FaucetPowMaxAge <= latest {
++			delete(faucet.powUsed, k)
++		}
++	}
++	use := powUse{to, h}
++	if _, used := faucet.powUsed[use]; used {
++		return nil, fmt.Errorf("this proof was used already; mine a new one")
++	}
++	res, err := a.faucetGrant(ctx, to)
++	if err != nil {
++		return nil, err
++	}
++	faucet.powUsed[use] = h
++	return res, nil
++}
 diff --git a/evmd/zetaphy_feeburn.go b/evmd/zetaphy_feeburn.go
 new file mode 100644
 index 0000000..a68e4a1
@@ -4670,10 +4856,10 @@ index 0000000..81a5fff
 +}
 diff --git a/evmd/zetaphy_rpc.go b/evmd/zetaphy_rpc.go
 new file mode 100644
-index 0000000..76340b8
+index 0000000..885caf8
 --- /dev/null
 +++ b/evmd/zetaphy_rpc.go
-@@ -0,0 +1,497 @@
+@@ -0,0 +1,526 @@
 +package evmd
 +
 +// ZETAPHY JSON-RPC namespace "zetaphy" on the public EVM endpoint (8545),
@@ -4683,6 +4869,9 @@ index 0000000..76340b8
 +//	zetaphy_pqAccount(address)  account number and sequence to sign with
 +//	zetaphy_sendCosmosTx(0x…)   broadcast a signed Cosmos tx (CheckTx only)
 +//	zetaphy_faucet(address)     testnet only: a little ZETAPHY for newcomers
++//	zetaphy_faucetPow(address, height, nonce), zetaphy_faucetPowInfo():
++//	                            the same faucet behind a browser proof of
++//	                            work (zetaphy_faucetpow.go)
 +//	zetaphy_securityStatus, zetaphy_migration, zetaphy_qdayCommitment,
 +//	zetaphy_consent, zetaphy_ibcHolds: the security core (end of this file)
 +//
@@ -4856,6 +5045,8 @@ index 0000000..76340b8
 +	day   int64
 +	count int
 +	last  map[common.Address]time.Time
++	// zetaphy_faucetPow: (address, height) pairs whose proof got a grant, by height
++	powUsed map[powUse]uint64
 +}
 +
 +type FaucetResult struct {
@@ -4888,21 +5079,45 @@ index 0000000..76340b8
 +		return nil, fmt.Errorf("invalid address: %w", err)
 +	}
 +	to := common.BytesToAddress(addr)
-+	// Only through this machine (rpc-guard behind Caddy counts calls per
-+	// IP): not over websocket, not from another machine straight to 8545.
-+	if p := gethrpc.PeerInfoFromContext(ctx); p.Transport != "http" || !loopbackPeer(p.RemoteAddr) {
-+		return nil, fmt.Errorf("the faucet answers only through this node's https address")
++	if err := faucetPeerOK(ctx); err != nil {
++		return nil, err
 +	}
 +	faucet.Lock()
 +	defer faucet.Unlock()
++	return a.faucetGrant(ctx, to)
++}
++
++// faucetNow is the faucet's clock (tests move it).
++var faucetNow = time.Now
++
++// faucetPeerOK: the faucet answers only through this machine (rpc-guard
++// behind Caddy counts calls per IP): not over websocket, not from another
++// machine straight to 8545.
++func faucetPeerOK(ctx context.Context) error {
++	if p := gethrpc.PeerInfoFromContext(ctx); p.Transport != "http" || !loopbackPeer(p.RemoteAddr) {
++		return fmt.Errorf("the faucet answers only through this node's https address")
++	}
++	return nil
++}
++
++// faucetDay starts a new UTC day's count when the day changed (faucet locked).
++func faucetDay(now time.Time) {
++	if d := now.Unix() / 86400; d != faucet.day {
++		faucet.day, faucet.count = d, 0
++	}
++}
++
++// faucetGrant: the limits every faucet method shares (FaucetPerDay grants a
++// UTC day in all, one grant per address per faucetCooldown, nothing for an
++// address that already holds FaucetAmount), then the transfer. The caller
++// holds faucet's lock.
++func (a *ZetaphyAPI) faucetGrant(ctx context.Context, to common.Address) (*FaucetResult, error) {
 +	key, err := a.faucetKey()
 +	if err != nil {
 +		return nil, err
 +	}
-+	now := time.Now().UTC()
-+	if d := now.Unix() / 86400; d != faucet.day {
-+		faucet.day, faucet.count = d, 0
-+	}
++	now := faucetNow().UTC()
++	faucetDay(now)
 +	if faucet.last == nil || len(faucet.last) > 100000 {
 +		faucet.last = map[common.Address]time.Time{}
 +	}
@@ -5173,10 +5388,10 @@ index 0000000..76340b8
 +}
 diff --git a/evmd/zetaphy_rpcguard.go b/evmd/zetaphy_rpcguard.go
 new file mode 100644
-index 0000000..dd3582c
+index 0000000..2835e0e
 --- /dev/null
 +++ b/evmd/zetaphy_rpcguard.go
-@@ -0,0 +1,406 @@
+@@ -0,0 +1,421 @@
 +package evmd
 +
 +// ZETAPHY: `zetaphyd rpc-guard`, a small filter between Caddy (the public
@@ -5191,6 +5406,9 @@ index 0000000..dd3582c
 +//     admin_*, personal_* and the rest stay on the machine.
 +//   - zetaphy_faucet: at most faucetPerDay calls a UTC day from one IP (an
 +//     IPv6 /64 counts as one), on top of the node's own faucet limits.
++//   - zetaphy_faucetPow (the faucet behind a browser proof of work, the main
++//     guard there): at most faucetPowPerDay calls a UTC day from one IP.
++//     One faucet call (either method) per request.
 +//   - everyone: at most perMinute requests a minute from one IP, and
 +//     maxInFlight requests at a time in all.
 +//
@@ -5240,28 +5458,31 @@ index 0000000..dd3582c
 +}
 +
 +const (
-+	guardBodyLimit = 1 << 20 // as CometBFT's max_body_bytes and the EVM http-body-limit
-+	guardMaxBatch  = 20
-+	faucetMethod   = "zetaphy_faucet"
++	guardBodyLimit  = 1 << 20 // as CometBFT's max_body_bytes and the EVM http-body-limit
++	guardMaxBatch   = 20
++	faucetMethod    = "zetaphy_faucet"
++	faucetPowMethod = "zetaphy_faucetPow"
 +)
 +
 +// GuardConfig: what rpc-guard forwards where, and its limits.
 +type GuardConfig struct {
-+	Comet        string // CometBFT RPC, e.g. http://127.0.0.1:26657
-+	EVM          string // EVM JSON-RPC, e.g. http://127.0.0.1:8545
-+	PerMinute    int    // requests a minute from one IP (each side)
-+	FaucetPerDay int    // zetaphy_faucet calls a UTC day from one IP
-+	MaxInFlight  int    // requests being answered at once (each side)
++	Comet           string // CometBFT RPC, e.g. http://127.0.0.1:26657
++	EVM             string // EVM JSON-RPC, e.g. http://127.0.0.1:8545
++	PerMinute       int    // requests a minute from one IP (each side)
++	FaucetPerDay    int    // zetaphy_faucet calls a UTC day from one IP
++	FaucetPowPerDay int    // zetaphy_faucetPow calls a UTC day from one IP
++	MaxInFlight     int    // requests being answered at once (each side)
 +}
 +
 +// Guard holds the counters shared by the two filters.
 +type Guard struct {
-+	cfg    GuardConfig
-+	comet  *url.URL
-+	evm    *url.URL
-+	minute *window
-+	faucet *window
-+	now    func() time.Time
++	cfg       GuardConfig
++	comet     *url.URL
++	evm       *url.URL
++	minute    *window
++	faucet    *window
++	faucetPow *window
++	now       func() time.Time
 +}
 +
 +// NewGuard checks the backend addresses.
@@ -5274,14 +5495,15 @@ index 0000000..dd3582c
 +	if err != nil || e.Host == "" {
 +		return nil, fmt.Errorf("--evm: an http://host:port address")
 +	}
-+	if cfg.PerMinute < 1 || cfg.FaucetPerDay < 0 || cfg.MaxInFlight < 1 {
++	if cfg.PerMinute < 1 || cfg.FaucetPerDay < 0 || cfg.FaucetPowPerDay < 0 || cfg.MaxInFlight < 1 {
 +		return nil, fmt.Errorf("limits must be positive")
 +	}
 +	return &Guard{
 +		cfg: cfg, comet: c, evm: e,
-+		minute: newWindow(time.Minute, 200_000),
-+		faucet: newWindow(24*time.Hour, 200_000),
-+		now:    time.Now,
++		minute:    newWindow(time.Minute, 200_000),
++		faucet:    newWindow(24*time.Hour, 200_000),
++		faucetPow: newWindow(24*time.Hour, 200_000),
++		now:       time.Now,
 +	}, nil
 +}
 +
@@ -5492,22 +5714,29 @@ index 0000000..dd3582c
 +			refuse(w, http.StatusBadRequest, err.Error())
 +			return
 +		}
-+		faucets := 0
++		faucets, pows := 0, 0
 +		for _, m := range ms {
 +			if !evmMethodOK(m) {
 +				refuse(w, http.StatusForbidden, "method not available on this public RPC: "+trimMethod(m))
 +				return
 +			}
-+			if m == faucetMethod {
++			switch m {
++			case faucetMethod:
 +				faucets++
++			case faucetPowMethod:
++				pows++
 +			}
 +		}
-+		if faucets > 1 {
-+			refuse(w, http.StatusBadRequest, "one zetaphy_faucet call per request")
++		if faucets+pows > 1 {
++			refuse(w, http.StatusBadRequest, "one zetaphy_faucet or zetaphy_faucetPow call per request")
 +			return
 +		}
 +		if faucets == 1 && !g.faucet.allow(ClientKey(r), g.cfg.FaucetPerDay, g.now()) {
 +			refuse(w, http.StatusTooManyRequests, fmt.Sprintf("the faucet gives at most %d grants a day to one internet address; try again tomorrow (UTC)", g.cfg.FaucetPerDay))
++			return
++		}
++		if pows == 1 && !g.faucetPow.allow(ClientKey(r), g.cfg.FaucetPowPerDay, g.now()) {
++			refuse(w, http.StatusTooManyRequests, fmt.Sprintf("the proof-of-work faucet takes at most %d claims a day from one internet address; try again tomorrow (UTC)", g.cfg.FaucetPowPerDay))
 +			return
 +		}
 +		r.URL.Path, r.URL.RawPath = "/", ""
@@ -5580,6 +5809,7 @@ index 0000000..dd3582c
 +	f.StringVar(&cfg.EVM, "evm", "http://127.0.0.1:8545", "the node's EVM JSON-RPC")
 +	f.IntVar(&cfg.PerMinute, "per-minute", 300, "requests a minute from one IP, on each side")
 +	f.IntVar(&cfg.FaucetPerDay, "faucet-per-day", 3, "zetaphy_faucet calls a UTC day from one IP")
++	f.IntVar(&cfg.FaucetPowPerDay, "faucet-pow-per-day", 10, "zetaphy_faucetPow calls a UTC day from one IP")
 +	f.IntVar(&cfg.MaxInFlight, "max-in-flight", 64, "requests answered at once, on each side")
 +	return cmd
 +}

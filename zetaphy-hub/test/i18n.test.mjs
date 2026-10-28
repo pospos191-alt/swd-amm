@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LANGS, LANG_CODES, pickLang, locale, withFallback, TEXT, TAB_TEXT } from '../i18n.js';
-import { EARN, EARN_METHODS, SAPHAN } from '../pages-i18n.js';
+import { EARN, EARN_METHODS, SAPHAN, MINE } from '../pages-i18n.js';
 
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -28,8 +28,8 @@ test('English by default; a stored code from the set is kept; anything else is E
   }
 });
 
-test('every language has the full English key set: TEXT, TAB_TEXT, Earn, Saphan', () => {
-  for (const [name, table] of [['TEXT', TEXT], ['TAB_TEXT', TAB_TEXT], ['EARN', EARN], ['SAPHAN', SAPHAN]]) {
+test('every language has the full English key set: TEXT, TAB_TEXT, Earn, Saphan, Mine', () => {
+  for (const [name, table] of [['TEXT', TEXT], ['TAB_TEXT', TAB_TEXT], ['EARN', EARN], ['SAPHAN', SAPHAN], ['MINE', MINE]]) {
     assert.deepEqual(Object.keys(table).sort(), [...LANG_CODES].sort(), `${name}: one entry per language`);
     const en = shape(table.en);
     for (const l of LANG_CODES) assert.deepEqual(shape(table[l]), en, `${name}.${l}`);
@@ -64,9 +64,20 @@ test('a missing key or language falls back to English, never a raw key', () => {
 });
 
 test('no Thai left in the code, only in the translation tables; the language menu is a select', () => {
-  for (const f of ['hub.js', 'pages.js']) assert.doesNotMatch(readFileSync(join(HERE, f), 'utf8'), /[฀-๿]/, f);
+  for (const f of ['hub.js', 'pages.js', 'mine.js', 'mine-core.js', 'mine-worker.js']) assert.doesNotMatch(readFileSync(join(HERE, f), 'utf8'), /[฀-๿]/, f);
   const html = readFileSync(join(HERE, 'index.html'), 'utf8');
   assert.match(html, /<select[^>]*id="lang"/);
   const build = readFileSync(join(HERE, 'build.mjs'), 'utf8');
   for (const f of ['i18n.js', 'pages-i18n.js']) assert.ok(build.includes(`'${f}'`), `${f} shipped in dist/`);
+});
+
+test('the browser mining page says plainly it is a faucet captcha, not mining (every language)', () => {
+  for (const l of LANG_CODES) {
+    assert.ok(MINE[l].how.length === MINE.en.how.length, `${l}: steps`);
+    assert.match(MINE[l].notMining, /ZETAPHY/, `${l}: notMining`);
+    assert.notEqual(MINE[l].notMining, l === 'en' ? '' : MINE.en.notMining, `${l}: translated`);
+    assert.ok(EARN[l].m.mine.title && EARN[l].noPow !== EARN.en.noPow || l === 'en', `${l}: Earn mine card and the PoW note`);
+    assert.ok(TAB_TEXT[l].mine.length === 3, `${l}: tab`);
+  }
+  assert.equal(EARN_METHODS.find((m) => m.id === 'mine').tab, 'mine', 'the Earn card opens the mining page');
 });

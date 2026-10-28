@@ -1,4 +1,5 @@
 {
+  "git": { "deploymentEnabled": { "claude/**": false } },
   "installCommand": "echo 'no install: the site is static and vendor/zetaphy-lib.js is committed'",
   "buildCommand": "echo 'no build: static files'",
   "outputDirectory": ".",

@@ -77,12 +77,46 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
 
     // the data pages, like a chain explorer's
     await page.click('.tab[data-tab="earn"]');
+    // a tab per way, easiest first; free coins open first
+    assert.deepEqual(await page.$$eval('.earn-tab', (b) => b.map((x) => x.dataset.id)), ['faucet', 'mine', 'validator', 'stake', 'lp', 'runner']);
+    assert.equal(await page.getAttribute('.earn-tab[data-id="faucet"]', 'aria-selected'), 'true');
+    assert.ok(await page.isVisible('#ef-form'), 'the faucet form first');
+    await page.click('.earn-tab[data-id="runner"]');
+    assert.match(page.url(), /way=runner/, 'the open way is in the address');
     await page.waitForFunction(() => document.getElementById('e-bond')?.textContent === '100');
     assert.match(await page.textContent('.earn-detail'), /node cli\.js node start/);
     assert.match(await page.textContent('.earn-detail'), /0x698dC17df6a34b02263b295d101BE39F3F3B433B/, 'the real NeuroJobs address in the commands');
     assert.match(await page.textContent('.earn-detail'), /100 ZETAPHY/, 'the live bond in the steps');
-    await page.click('.earn-item[data-id="validator"]');
-    assert.match(await page.textContent('.earn-detail'), /JOIN=rpc\.sawasdeecoin\.com/);
+    assert.doesNotMatch(await page.textContent('.earn-detail'), /null|undefined/);
+    // arrow keys move between the ways
+    await page.focus('.earn-tab[data-id="runner"]');
+    await page.keyboard.press('Home');
+    assert.equal(await page.getAttribute('.earn-tab[data-id="faucet"]', 'aria-selected'), 'true');
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.getAttribute('.earn-tab[data-id="runner"]', 'aria-selected'), 'true');
+    // "Run a validator" is the validator guide itself, with its own topic tabs, in the hub's colours
+    await page.click('.earn-tab[data-id="validator"]');
+    assert.match(await page.getAttribute('#earn-guide-frame', 'src'), /^validators\.html\?embed=1&lang=en#start$/);
+    const vg = await (await page.locator('#earn-guide-frame').elementHandle()).contentFrame();
+    await vg.waitForFunction(() => document.documentElement.classList.contains('embed') && /MONIKER=my-node/.test(document.getElementById('cmd').textContent));
+    assert.equal(await vg.getAttribute('#t-start', 'aria-selected'), 'true');
+    assert.equal(await vg.isVisible('header h1'), false, 'no second header inside the hub');
+    // the frame grows to the guide (no scrollbar of its own), the topics fit without sideways scroll
+    const fitted = () => page.waitForFunction(() => {
+      const f = document.getElementById('earn-guide-frame'), b = f.contentDocument?.body;
+      return b && Math.abs(f.getBoundingClientRect().height - b.getBoundingClientRect().height) <= 2;
+    });
+    await fitted();
+    assert.ok(await vg.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1), 'no scrollbar inside the frame');
+    assert.ok(await vg.evaluate(() => { const t = document.getElementById('vtabs'); return t.scrollWidth <= t.clientWidth; }), 'topics fit on wide screens');
+    // a guide opens where the reader is, not in the middle of the tall frame
+    await vg.click('[data-guide="oracle"]');
+    const dTop = await page.evaluate(() => { const f = document.getElementById('earn-guide-frame'); return f.getBoundingClientRect().top + f.contentDocument.getElementById('guide').getBoundingClientRect().top; });
+    assert.ok(dTop >= 0 && dTop < 768 - 100, `dialog on screen (${dTop})`);
+    await vg.click('#g-close');
+    await vg.click('#t-get');
+    assert.ok(await vg.isVisible('#vf-form'), 'the guide\'s faucet form');
+    await fitted();
     assert.doesNotMatch(await page.textContent('.earn-detail'), /null|undefined/);
     await shot('earn');
     // ZETAPHY Saphan: routes from the chain, send out through the ICS-20 precompile from MetaMask
@@ -200,7 +234,8 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await page.waitForSelector('#tip:not([hidden])');
     assert.match(await page.textContent('#tip'), /บล็อก/, 'Thai remembered');
     await page.click('.tab[data-tab="earn"]');
-    assert.match(await page.textContent('.page-earn'), /ทำไมไม่มีการขุด PoW\?/);
+    assert.match(await page.textContent('.earn-tab[data-id="validator"]'), /รัน validator/);
+    assert.match(await page.textContent('.page-earn'), /ขุดบนเบราว์เซอร์ใช่การขุดจริงไหม\?/);
 
     // an unknown stored language is English
     await page.evaluate(() => localStorage.setItem('zetaphy-hub:lang', 'fr'));

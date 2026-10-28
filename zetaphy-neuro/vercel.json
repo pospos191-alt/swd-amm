@@ -1,4 +1,5 @@
 {
+  "git": { "deploymentEnabled": { "claude/**": false } },
   "installCommand": "echo 'no runtime dependencies'",
   "redirects": [
     {

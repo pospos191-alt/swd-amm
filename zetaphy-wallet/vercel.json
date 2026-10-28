@@ -1,4 +1,5 @@
 {
+  "git": { "deploymentEnabled": { "claude/**": false } },
   "installCommand": "echo 'no install: vendor/pqwallet.js is committed'",
   "buildCommand": "echo 'no build: vendor/pqwallet.js is committed'",
   "outputDirectory": ".",

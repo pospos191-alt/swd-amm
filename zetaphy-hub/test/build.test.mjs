@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build, check, APPS } from '../build.mjs';
+import { build, check, APPS, releaseTag, withRelease } from '../build.mjs';
+import { createHash } from 'node:crypto';
 
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -46,4 +47,35 @@ test('validator guide: shipped, no inline script or style (the hub CSP stays str
   assert.match(html, /<script src="validators.js"><\/script>/);
   assert.doesNotMatch(html + readFileSync(join(HERE, 'validators.css'), 'utf8'), /fonts\.googleapis|fonts\.gstatic/);
   for (const k of ['getH', 'g1p', 'resH', 'r1', 'resWarn']) assert.match(readFileSync(join(HERE, 'validators.js'), 'utf8'), new RegExp(`"${k}"`));
+});
+
+test('the mining page ships with its worker; the validator guide downloads the current release', () => {
+  const out = build();
+  for (const f of ['mine.js', 'mine-core.js', 'mine-worker.js']) assert.ok(existsSync(join(out, f)), f);
+  const want = `zetaphyd-${createHash('sha256').update(readFileSync(join(HERE, '..', 'zetaphy-chain/setup-node.sh'))).digest('hex').slice(0, 12)}`;
+  assert.equal(releaseTag(), want, 'the tag release-zetaphyd.yml publishes');
+  const html = readFileSync(join(out, 'validators.html'), 'utf8');
+  const tags = [...html.matchAll(/releases\/download\/(zetaphyd-[0-9a-f]+)\//g)].map((m) => m[1]);
+  assert.ok(tags.length >= 3, 'the download buttons');
+  assert.deepEqual([...new Set(tags)], [want]);
+  assert.equal(withRelease('a/releases/download/zetaphyd-3008c6775923/x b/releases/download/zetaphyd-3008c6775923/y', 'zetaphyd-000000000000'),
+    'a/releases/download/zetaphyd-000000000000/x b/releases/download/zetaphyd-000000000000/y');
+  // the guide's faucet form and the link to the mining page
+  assert.match(html, /id="vf-form"/);
+  assert.match(html, /href="\.\/\?tab=mine"/);
+  // the worker is a same-origin module (script-src 'self'): no eval, no wasm
+  for (const f of ['mine.js', 'mine-core.js', 'mine-worker.js']) assert.doesNotMatch(readFileSync(join(HERE, f), 'utf8'), /\beval\(|new Function|WebAssembly/, f);
+});
+
+test('validator guide: topics as tabs, each named and introduced in all 8 languages', () => {
+  const html = readFileSync(join(HERE, 'validators.html'), 'utf8');
+  const tabs = [...html.matchAll(/role="tab" id="t-([a-z]+)" aria-controls="p-\1"/g)].map((m) => m[1]);
+  assert.deepEqual(tabs, ['start', 'check', 'get', 'fix', 'rewards', 'keys', 'advanced']);
+  for (const t of tabs) assert.match(html, new RegExp(`role="tabpanel" id="p-${t}" aria-labelledby="t-${t}"`));
+  const line = readFileSync(join(HERE, 'validators.js'), 'utf8').split('\n')[2];
+  const X = JSON.parse(line.slice('const X = /*EXTRA*/'.length, -1));
+  for (const l of ['en', 'zh', 'es', 'ko', 'ja', 'ru', 'vi', 'th']) {
+    for (const t of tabs) assert.ok(X[l][`tab_${t}`] && X[l][`lede_${t}`], `${l}: ${t}`);
+    for (const k of ['vfGet', 'vfOk', 'vfDown', 'vfBad', 'vfMine']) assert.ok(X[l][k], `${l}: ${k}`);
+  }
 });

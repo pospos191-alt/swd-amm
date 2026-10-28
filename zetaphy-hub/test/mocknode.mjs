@@ -1,4 +1,5 @@
 // A fake ZETAPHY node for the browser test: answers the few RPC / REST calls the hub makes.
+import { powPrefix, powOk } from '../mine-core.js';
 const now = Date.now();
 const H = 123456;
 const PROPOSER = 'A1B2C3D4E5F60718293A4B5C6D7E8F9012345678';
@@ -11,6 +12,9 @@ const ad = (a) => a.slice(2).toLowerCase().padStart(64, '0');
 const str = (t) => w(32) + w(t.length) + Buffer.from(t).toString('hex').padEnd(64, '0');
 const PAIR = '0x7c39825a9a7b9decb641b4ef707fb521882fb67c', ZT = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', TUSD = '0x9d44ea6837938d4fef98367a7b5867cdca8de596';
 const E18 = 10n ** 18n;
+export const POW_BITS = 12;
+export const BLOCK_HASH = `0x${'3c'.repeat(32)}`;
+export const powClaims = [];
 export const USDC = `ibc/${'5A'.repeat(32)}`;
 // eth_call answers by selector (and the address for token metadata)
 function ethCall({ to, data }) {
@@ -38,6 +42,17 @@ export function answer(url, body) {
   if (p === '/' || p === '') {
     const { method, id, params } = JSON.parse(body || '{}');
     if (method === 'eth_call') return { jsonrpc: '2.0', id, result: ethCall(params[0]) };
+    if (method === 'zetaphy_faucet' && /dead$/i.test(params?.[0] ?? '')) return { jsonrpc: '2.0', id, error: { code: -32000, message: 'this address already has ZETAPHY' } };
+    // the proof-of-work faucet, at a low difficulty; claims are checked as the node checks them
+    if (method === 'zetaphy_faucetPowInfo') return { jsonrpc: '2.0', id, result: { enabled: true, bits: POW_BITS, reward: '0x8ac7230489e80000', chainId: 77390, latestHeight: H, maxAgeBlocks: 100, remainingToday: 199, perDay: 200, cooldownSeconds: 86400, proof: 'sha256(…)' } };
+    if (method === 'eth_getBlockByNumber') return { jsonrpc: '2.0', id, result: { number: `0x${H.toString(16)}`, hash: BLOCK_HASH } };
+    if (method === 'zetaphy_faucetPow') {
+      const [addr, height, nonce] = params;
+      const n = String(nonce).replace(/^0x/, '');
+      const ok = Number(height) === H && /^[0-9a-f]{16}$/.test(n) && powOk(powPrefix(77390, BLOCK_HASH, addr), parseInt(n.slice(0, 8), 16), parseInt(n.slice(8), 16), POW_BITS);
+      powClaims.push({ addr, height, nonce, ok });
+      return ok ? { jsonrpc: '2.0', id, result: { txHash: `0x${'ef'.repeat(32)}`, amount: '0x8ac7230489e80000' } } : { jsonrpc: '2.0', id, error: { code: -32000, message: 'the proof has too few zero bits' } };
+    }
     if (method === 'eth_getTransactionReceipt') return { jsonrpc: '2.0', id, result: { status: '0x1', transactionHash: params[0],
       logs: [{ address: '0x0000000000000000000000000000000000000802', topics: ['0xc01eca5e742fe6641c4be501c2bebf224472f69176a0552e87e30147a6411303'] }] } };
     const r = { eth_chainId: '0x12e4e', eth_blockNumber: `0x${H.toString(16)}`, eth_getBalance: '0x3635c9adc5dea00000', zetaphy_faucet: { txHash: `0x${'ab'.repeat(32)}`, amount: '0x8ac7230489e80000' } }[method];
