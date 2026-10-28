@@ -272,6 +272,8 @@ async function run(chain, address) {
     last = tx ? await readTransaction(chain, address) : await readContract(chain, address);
     render(last);
     status('');
+    // web/flow.js (money flow, investigator, watch list) listens for this.
+    document.dispatchEvent(new CustomEvent('neuro:report', { detail: { chain, address, report: last } }));
     reportUsage(last.analysis?.level, tx ? 'tx' : 'contract', chain);
     if (!tx) checkEarly(chain, address, last);
     const u = new URL(location.href);

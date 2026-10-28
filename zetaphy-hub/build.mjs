@@ -21,6 +21,8 @@ export const APPS = {
   'neuro/web': 'zetaphy-neuro/web',
   'neuro/src': 'zetaphy-neuro/src', // the Neuro page imports ../src/*.js
   'neuro/ai': 'zetaphy-neuro/ai', // and ../ai/*.js (AI analyst, bring your own model)
+  'neuro/graph': 'zetaphy-neuro/graph', // money-flow graph (web/flow.js imports ../graph/*.js)
+  'neuro/agent': 'zetaphy-neuro/agent', // investigator + watch list (../agent/*.js)
 };
 // per app: folders that are build inputs, not served (the wallet serves vendor/pqwallet.js, built from src/)
 const SKIP_IN = { wallet: new Set(['src']) };

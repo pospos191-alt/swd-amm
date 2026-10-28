@@ -323,6 +323,75 @@ and the committed verdict is exactly the same with or without it. A failing mode
 
 **Not part of the skill id.** `ai/` sits outside `src/`, so adding or changing the AI layer is not a new Neuro skill and never needs a governance vote;
 runners and the CLI produce the same verdicts as before. No in-browser model is shipped (it would need third-party scripts).
+## Money flow (`graph/`)
+
+For a token or contract, Neuro can trace where its money came from and went, on demand ("Trace money flow" on the
+web page, or `node agent/cli.js graph <chain> <address>`):
+
+- **Deployer** (and the factory contract that created it, if any) and its **funding trail**: who first sent it native
+  coin, who funded that address, up to 3 hops back
+- **First receivers** of the token (mint and first transfers), and who funded each of them
+- **Wallets funded by the same source** ("sybil holders"): trails that meet at one address. A busy address (an exchange,
+  bridge or contract: has code, or sent thousands of transactions) ends a trail and never links wallets, because
+  thousands of unrelated people withdraw from the same exchange
+- **Liquidity** added to and removed from the token's V2-style pool, per address (LP token transfers + `Burn` events),
+  how much the deployer still holds, and LP sent to a burn address
+- **The deployer's earlier contracts**, and whether their liquidity was removed by the deployer's side
+- **Links to known addresses**: the ZETAPHY ThreatRegistry (`isAddressFlagged`, the same view as the wallet and the snap),
+  Neuro's own past high results (kept in this browser / process), and an optional list
+
+Fixed rules (`graph/signals.js`) turn those facts into signals, each with its evidence (transaction hashes and addresses):
+`deployer-flagged`, `funding-flagged`, `prior-flagged`, `prior-lp-removed`, `lp-removed`, `lp-held`, `lp-burned`,
+`holders-funded-by-deployer`, `holders-sybil`, `linked-flagged`, `fresh-deployer` and context lines. The wording (9 languages,
+`graph/i18n.js`) says what the chain shows ("90% of the liquidity that 0x… added was removed again, 35 blocks later"), never intent.
+The web page draws the graph as inline SVG (`graph/view.js`): no third-party code, keyboard-usable (Tab between addresses, Enter shows one).
+
+**Data sources (free, keyless, no server):**
+
+| Chain | Source |
+|---|---|
+| Ethereum, Base, Arbitrum | the public JSON-RPC (logs, nonces, code) + Blockscout's keyless Etherscan-compatible API (`eth.blockscout.com`, `base.…`, `arbitrum.…`: contract creation, first incoming transfer, logs; it sends CORS headers, so the browser reads it directly) |
+| BNB Chain | JSON-RPC only (creation by binary search on `eth_getCode`, chunked `eth_getLogs`, `trace_filter` where offered): funding trails are often "unknown" |
+| ZETAPHY (EVM) | its RPC + its Cosmos REST (`/cosmos/tx/v1beta1/txs?query=transfer.recipient=…`) for funding |
+| Solana (SPL) | the public RPC: `getSignaturesForAddress` (oldest pages) + `getTransaction` |
+| Osmosis, Neutron, ZETAPHY CosmWasm | the chain's REST: contract info, account sequence, tx search |
+
+**Bounded and quiet on purpose:** at most 220 requests and 60–75 s per graph in the browser (150 per token in the
+scheduled scan), one request at a time per host with a small gap, one retry on HTTP 429, answers that cannot change cached
+(IndexedDB, else localStorage, else memory; every storage call in try/catch). When a bound or a source stops it, the graph
+says "incomplete" and lists why; it never guesses. The clients only read (method allow-lists in `graph/clients.js`).
+Kept outside `src/`, so it does not change the skill id, and it is not part of any on-chain verdict: a graph depends on
+which RPC and block a machine reads.
+
+## Investigator (`agent/`)
+
+A fixed pipeline (`agent/pipeline.js`), not a free agent: **rules → trade test → money flow → ML score (optional) →
+AI review (optional) → report**. Each step has its own timeout; a step that fails or times out is recorded and the next
+one still runs. The report has a level, a 0-100 score, a **confidence** (how much of the evidence could be gathered:
+rules 0.4, trade test 0.2 when it applies, graph 0.4, half for an incomplete graph, plus the hooks when set) and every
+signal with its evidence; `reportHash` is the same for the same facts.
+
+Hooks for other modules (`agent/hooks.js`, empty by default; `registerMl` / `registerLlm`):
+- `ml.score(features)` → `{ score: 0..1 }`: plain numbers only (`featuresOf`). A score of 0.8 or more can raise the level to
+  medium at most, never lower it
+- `llm.review(context)` → `{ summary }`: ids, numbers and addresses only, never text a token's author wrote. Shown as
+  advisory text; it never changes the level
+
+Where it runs, with no always-on server:
+1. **In the browser while Neuro is open**: "Investigate (all steps)" on a result, and **Follow this token**: followed tokens
+   (stored only in this browser) are re-investigated every 30 minutes while the page is visible, and the page says when a
+   result gets worse. Another panel (e.g. wallet holdings) can add tokens with
+   `document.dispatchEvent(new CustomEvent('neuro:follow', { detail: { chain, address } }))`
+2. **On volunteer runner machines** (`agent/runner.js`, `node agent/cli.js runner --jobs 0x<NeuroJobs> --key-file … --registry 0x<NeuroIdentity> --agent <id>`):
+   reads new `JobRequested` events, investigates each target, signs the result as a Neuro message of kind `verdict`
+   (EIP-712, `zetaphy-network/src/neuromsg.js`) and appends it to an outbox file. It sends no transaction: the on-chain verdict
+   stays the rules-only commit-reveal of `worker.js`
+3. **GitHub Actions, hourly** (`.github/workflows/neuro-alerts.yml`, `agent/scan-pools.js`): `PairCreated` events of the ZETAPHY
+   DEX and DLMM factories in the last 2 hours → investigate each new token → an issue labelled `neuro-alert` for a high result
+   with confidence ≥ 0.5. Only `GITHUB_TOKEN` with `issues: write`; actions pinned by commit; deduped against every
+   neuro-alert issue (a hidden key in the body), at most 3 issues a run and 10 a day; issues hold only addresses, hashes, ids
+   and numbers. Until 2026-11-01 (ZETAPHY RPC paused), or while the RPC is down, it prints one line and succeeds.
+   `npm run scan-pools -- --dry-run` shows what it would open
 
 ## Tests
 
@@ -335,6 +404,9 @@ npm test          # compile real sample contracts (test/helpers/contracts.sol) a
                   # + AI analyst with mocked models: context builder, schema validation, prompt-injection cases (test/ai.test.js)
 npm run test:web  # open the web page in Chromium, answering RPC from a test chain, no internet
                   # (+ test/ai.e2e.js: the AI panel's settings, where the key goes, Ollama through the CSP)
+                  # + money-flow graph and investigator against mocked RPC (test/graph.test.js, test/agent.test.js)
+npm run test:web  # open the web page in Chromium, answering RPC from a test chain, no internet
+                  # (+ test/graph.e2e.js: money-flow view, keyboard, languages, investigator, watch list)
 ```
 
 ## Status
