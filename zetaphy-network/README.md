@@ -1053,6 +1053,13 @@ Defaults:
 | Challenge window (vote `set-challenge-window`) | Equal to the job timeout (600 seconds) |
 | Maximum defender silence (vote `set-defender-timeout`) | 6 hours |
 
+## ModelRegistry (AI models, skills, prompts, rule sets)
+
+`contracts/ModelRegistry.sol`: per (id, version) the manifest sha256, the chunks' Merkle root, size, license, author and
+status. Only governance (the timelock) publishes or changes status; a guardian may only suspend, at once; revoked is final.
+`node scripts/model-registry.js deploy | propose | status | show` (`src/modelregistry.js`); tests in `test/modelregistry.test.js`.
+Browsers check every downloaded chunk against it: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
+
 ## Testing
 
 - `npm test`: tests the contracts on an in-memory EVM and tests the runner program (CI runs it every time)

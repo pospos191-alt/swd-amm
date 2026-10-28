@@ -2,6 +2,9 @@
 // (app.js) only announces each report (a "neuro:report" event) and never
 // depends on this one.
 //
+// Provider "browser" (web/browser-ai.js): a model run in this page, loaded from
+// mirrors or other browsers and checked against the on-chain ModelRegistry; no key.
+//
 // Keys: typed by the user, kept in sessionStorage (until the tab closes) or,
 // only if the user ticks "remember", in localStorage. Sent only from this
 // browser to the provider the user picked (ai/providers.js checks the URL),
@@ -13,6 +16,8 @@ import { DEFAULT_MODELS, OLLAMA_URL, checkEndpoint } from '../ai/providers.js';
 import { aiText } from '../ai/i18n.js';
 import { CHAINS } from '../src/chains.js';
 import { createRpc } from '../src/rpc.js';
+import { verdictOf } from '../src/verdict.js';
+import { browserBox, knowledgeBox, wireBrowserBox, ensureEngine, loadedEngine, knowledgeFor } from './browser-ai.js';
 
 const SETTINGS = 'neuro-ai-settings'; // provider, model, endpoint: not secret
 const KEY = 'neuro-ai-key';           // the API key: sessionStorage, or localStorage when remembered
@@ -22,6 +27,7 @@ const local = () => store(() => globalThis.localStorage);
 const get = (s, k) => store(() => s?.getItem(k)) ?? null;
 const set = (s, k, v) => store(() => (v == null ? s?.removeItem(k) : s?.setItem(k, v)));
 
+const PROVIDERS = ['anthropic', 'openai', 'ollama', 'browser'];
 let report = null;
 let ctx = null;
 let history = [];
@@ -44,7 +50,7 @@ const $ = (id) => document.getElementById(id);
 function loadSettings() {
   let s = {};
   try { s = JSON.parse(get(local(), SETTINGS) ?? '{}') ?? {}; } catch { s = {}; }
-  const provider = ['anthropic', 'openai', 'ollama'].includes(s.provider) ? s.provider : 'anthropic';
+  const provider = PROVIDERS.includes(s.provider) ? s.provider : 'anthropic';
   const remembered = get(local(), KEY);
   return { provider, model: typeof s.model === 'string' ? s.model : '', endpoint: typeof s.endpoint === 'string' ? s.endpoint : '', key: get(session(), KEY) ?? remembered ?? '', remember: remembered != null };
 }
@@ -61,7 +67,7 @@ function saveKey() {
 function build() {
   const s = loadSettings();
   const provider = el('select', { id: 'ai-provider' });
-  for (const p of ['anthropic', 'openai', 'ollama']) provider.add(new Option(p, p));
+  for (const p of PROVIDERS) provider.add(new Option(p, p));
   provider.value = s.provider;
   const settings = el('details', { id: 'ai-settings' }, [
     el('summary', { 'data-ai': 'settings' }),
@@ -76,6 +82,8 @@ function build() {
     el('p', { class: 'ai-warn', id: 'ai-remember-warn', 'data-ai': 'rememberWarn' }),
     el('button', { type: 'button', id: 'ai-forget', 'data-ai': 'forget' }),
     el('p', { class: 'ai-help', id: 'ai-help', 'data-ai': 'ollamaHelp' }),
+    browserBox(el),
+    knowledgeBox(el),
   ]);
   root = el('section', { id: 'ai', class: 'ai' }, [
     el('h2', {}, [el('span', { 'data-ai': 'title' }), ' ', el('span', { class: 'ai-badge', 'data-ai': 'badge' })]),
@@ -108,6 +116,7 @@ function build() {
     status(aiText(lang()).forgotten);
   });
   $('ai-run').addEventListener('click', run);
+  wireBrowserBox();
   $('ai-ask').addEventListener('submit', (e) => { e.preventDefault(); ask(); });
   label();
   showFields();
@@ -115,17 +124,20 @@ function build() {
 
 function showFields() {
   const p = $('ai-provider').value;
-  $('ai-endpoint').hidden = $('ai-endpoint-label').hidden = p === 'anthropic';
-  for (const id of ['ai-key', 'ai-key-label', 'ai-remember-label', 'ai-remember-warn', 'ai-forget']) $(id).hidden = p === 'ollama';
+  const inBrowser = p === 'browser';
+  $('ai-endpoint').hidden = $('ai-endpoint-label').hidden = p === 'anthropic' || inBrowser;
+  for (const id of ['ai-key', 'ai-key-label', 'ai-remember-label', 'ai-remember-warn', 'ai-forget']) $(id).hidden = p === 'ollama' || inBrowser;
+  $('ai-model').hidden = $('ai-model').previousElementSibling.hidden = inBrowser;
   $('ai-help').hidden = p !== 'ollama';
-  $('ai-model').placeholder = DEFAULT_MODELS[p];
+  $('ai-browser').hidden = !inBrowser;
+  $('ai-model').placeholder = DEFAULT_MODELS[p] ?? '';
   $('ai-endpoint').placeholder = p === 'ollama' ? OLLAMA_URL : 'https://…/v1';
 }
 
 function label() {
   const t = aiText(lang());
   for (const e of root.querySelectorAll('[data-ai]')) e.textContent = t[e.dataset.ai];
-  const names = { anthropic: t.pAnthropic, openai: t.pOpenai, ollama: t.pOllama };
+  const names = { anthropic: t.pAnthropic, openai: t.pOpenai, ollama: t.pOllama, browser: t.pBrowser };
   for (const o of $('ai-provider').options) o.textContent = names[o.value];
 }
 
@@ -136,6 +148,7 @@ function status(text, error = false) {
 
 function settingsNow() {
   const provider = $('ai-provider').value;
+  if (provider === 'browser') return { provider, engine: loadedEngine() };
   const endpoint = $('ai-endpoint').value.trim();
   const s = { provider, model: $('ai-model').value.trim() || DEFAULT_MODELS[provider], key: provider === 'ollama' ? '' : $('ai-key').value.trim() };
   if (provider !== 'anthropic') {
@@ -186,15 +199,17 @@ async function run() {
   if (!report) return;
   let settings;
   try { settings = settingsNow(); } catch (e) { status(t.failed + e.message, true); return; }
-  if (settings.provider !== 'ollama' && !settings.key) { status(t.noKey, true); $('ai-settings').open = true; return; }
+  if (!['ollama', 'browser'].includes(settings.provider) && !settings.key) { status(t.noKey, true); $('ai-settings').open = true; return; }
   const mine = ++busy;
   const r = report;
   $('ai-run').disabled = true;
   status(t.running);
   try {
+    if (settings.provider === 'browser' && !settings.engine) settings.engine = await ensureEngine();
     const code = await codeOf(r);
-    const source = r.source && r.chainId ? await fetchVerifiedSource(r.chainId, r.proxy?.implementation ?? r.address) : null;
-    const out = await runAnalyst(r, settings, { lang: lang(), code, source });
+    const source = settings.provider !== 'browser' && r.source && r.chainId ? await fetchVerifiedSource(r.chainId, r.proxy?.implementation ?? r.address) : null;
+    const knowledge = await knowledgeFor(r, { code, verdict: r.analysis ? await verdictOf(r).catch(() => null) : null });
+    const out = await runAnalyst(r, settings, { lang: lang(), code, source, knowledge });
     if (mine !== busy || r !== report) return;
     ctx = out.ctx;
     history = [];

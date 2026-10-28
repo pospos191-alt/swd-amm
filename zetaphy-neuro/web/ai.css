@@ -22,3 +22,7 @@
 .ai .conf-medium b { color: var(--medium); }
 .ai-q { font-weight: 600; margin: 0; }
 .ai [hidden] { display: none !important; }
+/* In-browser model (web/browser-ai.js) */
+#ai-browser textarea { width: 100%; box-sizing: border-box; font: .75rem ui-monospace, SFMono-Regular, Menlo, monospace; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); padding: 6px; overflow-wrap: anywhere; }
+#ai-load-status, #ai-p2p-status { color: var(--muted); font-size: .82rem; min-height: 1.1em; overflow-wrap: anywhere; }
+#ai-load-status.error, #ai-p2p-status.error { color: var(--high); }

@@ -1054,6 +1054,13 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 | เวลาท้าทาย (โหวต `set-challenge-window`) | เท่าเวลาหมดงาน (600 วินาที) |
 | ร่างป้องกันเงียบได้ไม่เกิน (โหวต `set-defender-timeout`) | 6 ชั่วโมง |
 
+## ModelRegistry (ทะเบียนโมเดล AI, skill, prompt, ชุดกฎ)
+
+`contracts/ModelRegistry.sol`: ต่อ (id, version) เก็บ sha256 ของ manifest, Merkle root ของชิ้น, ขนาด, license, ผู้เขียน และสถานะ
+เผยแพร่หรือเปลี่ยนสถานะได้เฉพาะ governance (timelock) guardian ทำได้แค่ระงับทันที และ revoked ถาวร
+`node scripts/model-registry.js deploy | propose | status | show` เทสต์ใน `test/modelregistry.test.js`
+เบราว์เซอร์ตรวจทุกชิ้นที่ดาวน์โหลดกับทะเบียนนี้: [docs/future/browser-ai.th.md](../docs/future/browser-ai.th.md)
+
 ## ทดสอบ
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)

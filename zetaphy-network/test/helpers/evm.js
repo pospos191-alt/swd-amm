@@ -92,6 +92,12 @@ export async function createChain(names = [], fundAddresses = {}) {
       const out = iface.decodeFunctionResult(fn, bytesToHex(res.execResult.returnValue));
       return out.length === 1 ? out[0] : out;
     },
+    /** eth_call-like: raw 0x return data of a call (reverts throw), for readers that decode ABI themselves. */
+    async rawCall(toHex, dataHex) {
+      const res = await exec(acct[names[0]], Address.fromString(toHex), dataHex);
+      if (res.execResult.exceptionError) throw new Error('call reverted');
+      return bytesToHex(res.execResult.returnValue);
+    },
     now: () => time,
     /** An account's nonce (the next CREATE address is getCreateAddress({ from, nonce })). */
     nonce: async (who) => (await sm.getAccount(acct[who] ?? who))?.nonce ?? 0n,
