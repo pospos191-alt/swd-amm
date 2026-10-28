@@ -30,7 +30,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JsonRpcProvider, Wallet, Contract, ContractFactory, getAddress, isAddress, keccak256 } from 'ethers';
+import { JsonRpcProvider, Wallet, NonceManager, Contract, ContractFactory, getAddress, isAddress, keccak256 } from 'ethers';
 import { parseArgs, loadKey, checkDeployChain, NATIVE_PRECOMPILE, ZETAPHY_EVM_CHAIN_ID } from './cli.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -55,7 +55,9 @@ const addrOpt = (v, name) => {
 function connect(opt, needKey) {
   if (!opt.rpc) throw new Error('--rpc <url> is required');
   const provider = new JsonRpcProvider(opt.rpc, undefined, { staticNetwork: false, polling: true, pollingInterval: 1000 });
-  const signer = needKey ? new Wallet(loadKey(opt['key-file'] ?? process.env.ZETAPHY_DEX_KEY_FILE), provider) : null;
+  // NonceManager counts nonces locally: right after a receipt the node's "pending" count can
+  // still be the old one, and asking it again gave "nonce has already been used" on a devnet.
+  const signer = needKey ? new NonceManager(new Wallet(loadKey(opt['key-file'] ?? process.env.ZETAPHY_DEX_KEY_FILE), provider)) : null;
   return { provider, signer };
 }
 
