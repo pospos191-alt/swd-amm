@@ -92,6 +92,9 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     // EVM routes (Hyperlane) from the chain table in hub-config.json: every chain listed, planned until deployed
     assert.match(await page.textContent('#sp-evm'), /EVM chains \(Hyperlane\)[\s\S]*Sepolia[\s\S]*Base Sepolia[\s\S]*Arbitrum Sepolia/);
     assert.equal(await page.locator('#sp-evm .pill').count(), 3);
+    // token routes (tokens born on ZETAPHY): the native coin to the three chains, BZTPHY staying home
+    assert.match(await page.textContent('#sp-tok'), /Tokens born on ZETAPHY[\s\S]*ZETAPHY → Sepolia[\s\S]*zZETAPHY[\s\S]*BZTPHY[\s\S]*stays on ZETAPHY/);
+    assert.equal(await page.locator('#sp-tok .pill').count(), 4);
     await page.click('#sp-go'); // connect first: the site-wide wallet dialog
     await page.waitForSelector('#wb-dialog[open] .wb-wallet');
     assert.match(await page.textContent('#wb-dialog'), /MetaMask/, 'the wallets in this browser');

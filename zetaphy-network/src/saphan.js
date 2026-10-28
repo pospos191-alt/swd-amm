@@ -2,6 +2,8 @@
 // what the deployed routes look like (saphan-routes.json). Used by scripts/saphan.js, the
 // saphan-route and hyperlane-relayer workflows and the hub's build (zetaphy-hub/build.mjs reads the
 // same files). Adding a source chain = an entry in the table + a saphan-route workflow run.
+// Token routes (tokens born on ZETAPHY going out to those chains and back, contracts/SaphanTokens.sol): the
+// table's `tokens` section, deployed ones in saphan-routes.json `tokens`; adding a token = an entry + a workflow run.
 import { readFileSync } from 'node:fs';
 import { getAddress, isAddress, zeroPadValue, keccak256, solidityPacked, getBytes, concat, toBeHex } from 'ethers';
 
@@ -56,7 +58,79 @@ export function chainProblems(t) {
     for (const k of ['releaseDelay', 'quarantine']) if (!(Number.isInteger(l[k]) && l[k] >= 0 && l[k] <= 30 * 86400)) p.push(`${at}.limits.${k}: seconds, at most 30 days`);
     if (!(typeof c.estimateBlockTime === 'number' && c.estimateBlockTime > 0)) p.push(`${at}.estimateBlockTime: seconds`);
   }
+  p.push(...tokenProblems(t));
   return p;
+}
+
+/** The native coin's ERC-20 on ZETAPHY (the erc20 module's native precompile, setup-node.sh genesis). */
+export const NATIVE_ERC20 = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+const TOKEN_KEY = /^[a-z0-9]{1,15}$/;
+/** Whole tokens with at most `decimals` decimals, e.g. "100" or "0.5". */
+const amountOk = (v, decimals) => { const m = /^(\d{1,30})(?:\.(\d+))?$/.exec(String(v ?? '')); return !!m && (m[2]?.length ?? 0) <= decimals; };
+
+/**
+ * Problems with the `tokens` section (token routes: tokens born on ZETAPHY going out to the chains of the table).
+ * Adding a token = an entry here (key, ZETAPHY address, decimals, symbol, the synthetic's name and symbol, destinations,
+ * limits) + a saphan-route workflow run with that token (governance then opens it). A token that cannot be moved
+ * (transferable: false, e.g. BZTPHY) may be listed but has no destinations.
+ */
+export function tokenProblems(t) {
+  const p = [];
+  const tokens = t?.tokens;
+  if (tokens == null) return p;
+  if (typeof tokens !== 'object' || Array.isArray(tokens)) return ['tokens: an object of token entries'];
+  const addrs = new Set(), symbols = new Set(Object.values(t.chains ?? {}).map((c) => String(c.token?.symbol ?? '').toLowerCase()));
+  for (const [key, k] of Object.entries(tokens)) {
+    if (key === 'about') continue;
+    const at = `tokens.${key}`;
+    if (!TOKEN_KEY.test(key)) p.push(`${at}: a key of a-z 0-9, at most 15`);
+    if (!k || typeof k !== 'object') { p.push(`${at}: an object`); continue; }
+    if (!ADDR.test(String(k.address ?? '')) || !isAddress(String(k.address))) p.push(`${at}.address: not a 0x address (the token on ZETAPHY)`);
+    else if (addrs.has(k.address.toLowerCase())) p.push(`${at}.address: listed twice`);
+    else addrs.add(k.address.toLowerCase());
+    if (!(Number.isInteger(k.decimals) && k.decimals >= 0 && k.decimals <= 36)) p.push(`${at}.decimals: 0..36 (the token's decimals())`);
+    if (!SYMBOL.test(String(k.symbol ?? ''))) p.push(`${at}.symbol: 1-12 of A-Z a-z 0-9 _ . -`);
+    if (typeof k.displayName !== 'string' || !k.displayName.trim() || k.displayName.length > 40) p.push(`${at}.displayName: 1-40 characters`);
+    if (k.native === true && (String(k.address).toLowerCase() !== NATIVE_ERC20.toLowerCase() || k.decimals !== 18)) p.push(`${at}: native means the native coin's ERC-20 ${NATIVE_ERC20} with 18 decimals`);
+    const s = k.synthetic ?? {};
+    if (!SYMBOL.test(String(s.symbol ?? ''))) p.push(`${at}.synthetic.symbol: 1-12 of A-Z a-z 0-9 _ . -`);
+    else if (symbols.has(s.symbol.toLowerCase())) p.push(`${at}.synthetic.symbol ${s.symbol}: used twice`);
+    else symbols.add(s.symbol.toLowerCase());
+    if (typeof s.name !== 'string' || !s.name.trim() || s.name.length > 64) p.push(`${at}.synthetic.name: 1-64 characters`);
+    const dests = k.destinations;
+    if (!Array.isArray(dests)) p.push(`${at}.destinations: a list of chain names`);
+    else {
+      for (const d of dests) if (!t.chains?.[d]) p.push(`${at}.destinations: ${d} is not a chain of the table`);
+      if (new Set(dests).size !== dests.length) p.push(`${at}.destinations: a chain twice`);
+      if (k.transferable === false && dests.length) p.push(`${at}: not transferable, so no destinations (no vault can take it)`);
+    }
+    if (k.transferable === false && typeof k.why !== 'string') p.push(`${at}.why: say why it cannot be moved`);
+    const l = k.limits ?? {};
+    for (const f of ['lockCap', 'releaseDailyLimit', 'mintDailyLimit', 'supplyCap']) if (!amountOk(l[f], k.decimals)) p.push(`${at}.limits.${f}: whole tokens, e.g. "100" (at most ${k.decimals} decimals)`);
+    for (const f of ['releaseDelay', 'mintDelay']) if (!(Number.isInteger(l[f]) && l[f] >= 0 && l[f] <= 30 * 86400)) p.push(`${at}.limits.${f}: seconds, at most 30 days`);
+  }
+  return p;
+}
+
+/** One token entry (with its key), or an error naming the known ones. */
+export function tokenOf(t, key) {
+  const k = key !== 'about' ? t.tokens?.[String(key ?? '')] : null;
+  if (!k) throw new Error(`unknown token ${key}: one of ${Object.keys(t.tokens ?? {}).filter((x) => x !== 'about').join(', ')}`);
+  return { key, ...k };
+}
+
+/** The token routes the workflow deployed: tokens[key][chain] (saphan-routes.json). */
+export function loadTokenRoutes(file = process.env.SAPHAN_ROUTES || ROUTES_FILE) {
+  try { return JSON.parse(readFileSync(file, 'utf8')).tokens ?? {}; } catch { return {}; }
+}
+
+/** [key, chain, route] for every deployed token route of a chain in the table. */
+export function tokenRouteList(t, tokenRoutes = {}) {
+  const out = [];
+  for (const [key, byChain] of Object.entries(tokenRoutes ?? {})) {
+    for (const [chain, r] of Object.entries(byChain ?? {})) if (t.chains?.[chain] && r?.zetaphy?.vault && r?.destination?.synthetic) out.push([key, chain, r]);
+  }
+  return out;
 }
 
 export function loadChains(file = process.env.SAPHAN_CHAINS || CHAINS_FILE) {
@@ -84,7 +158,7 @@ export const bytes32 = (a) => zeroPadValue(getAddress(a), 32).toLowerCase();
  * ZETAPHY, and (two-way routes) the HyperlaneOutbox on ZETAPHY -> that lockbox. Plus `extra` entries
  * (e.g. the v1 Sepolia lockbox). Nothing else is relayed, so nobody can spend the relayer's gas.
  */
-export function relayerWhitelist(t, routes, extra = []) {
+export function relayerWhitelist(t, routes, extra = [], tokenRoutes = {}) {
   const out = [...extra];
   for (const [name, r] of Object.entries(routes)) {
     const c = t.chains[name];
@@ -92,7 +166,29 @@ export function relayerWhitelist(t, routes, extra = []) {
     out.push({ originDomain: c.domain, senderAddress: bytes32(r.origin.lockbox), destinationDomain: t.zetaphy.domain });
     if (r.zetaphy?.hyperlaneOutbox) out.push({ originDomain: t.zetaphy.domain, senderAddress: bytes32(r.zetaphy.hyperlaneOutbox), destinationDomain: c.domain });
   }
+  // token routes: each vault to its own destination, each synthetic back to ZETAPHY
+  for (const [, chain, r] of tokenRouteList(t, tokenRoutes)) {
+    const c = t.chains[chain];
+    out.push({ originDomain: t.zetaphy.domain, senderAddress: bytes32(r.zetaphy.vault), destinationDomain: c.domain });
+    out.push({ originDomain: c.domain, senderAddress: bytes32(r.destination.synthetic), destinationDomain: t.zetaphy.domain });
+  }
   return out;
+}
+
+/**
+ * The token routes as the hub shows them: every token of the table, and per destination its state (planned until
+ * deployed, then closed / open). A token that cannot move (transferable: false) is listed with no destinations. Public data only.
+ */
+export function hubTokenRoutes(t, tokenRoutes = {}) {
+  return Object.entries(t.tokens ?? {}).filter(([k]) => k !== 'about').map(([key, k]) => ({
+    key, symbol: k.symbol, displayName: k.displayName, synthetic: k.synthetic.symbol, address: k.address, transferable: k.transferable !== false,
+    destinations: (k.destinations ?? []).map((name) => {
+      const r = tokenRoutes?.[key]?.[name];
+      const deployed = !!(r?.zetaphy?.vault && r?.destination?.synthetic);
+      return { name, displayName: t.chains[name].displayName, state: !deployed ? 'planned' : r.state === 'OPEN' ? 'open' : 'closed',
+        ...(deployed ? { vault: r.zetaphy.vault, token: r.destination.synthetic } : {}) };
+    }),
+  }));
 }
 
 /** The routes as the hub shows them: every chain of the table, with its deployment (if any). Public data only. */

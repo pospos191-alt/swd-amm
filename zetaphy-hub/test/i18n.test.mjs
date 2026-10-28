@@ -39,6 +39,8 @@ test('every language has the full English key set: TEXT, TAB_TEXT, Earn, Saphan'
     for (const m of EARN_METHODS) assert.equal(EARN[l].m[m.id].steps.length, m.cmds.length, `EARN.${l}.${m.id}: one text per step`);
     assert.match(SAPHAN[l].badTo('noble'), /noble1…/, `SAPHAN.${l}.badTo`);
     assert.ok(SAPHAN[l].recvHow('channel-7', 'Noble').includes('channel-7') && SAPHAN[l].recvHow('channel-7', 'Noble').includes('Noble'), `SAPHAN.${l}.recvHow placeholders`);
+    const row = SAPHAN[l].tipTokRow('ZETAPHY', 'zZETAPHY', 'Base Sepolia');
+    assert.ok(row.includes('ZETAPHY') && row.includes('zZETAPHY') && row.includes('Base Sepolia'), `SAPHAN.${l}.tipTokRow placeholders`);
   }
 });
 

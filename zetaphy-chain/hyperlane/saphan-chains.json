@@ -88,5 +88,29 @@
       "faucetEth": "0.02",
       "faucets": ["https://faucet.quicknode.com/arbitrum/sepolia"]
     }
+  },
+  "tokens": {
+    "about": "Token routes: tokens born on ZETAPHY going out to the chains above and back (zetaphy-network/contracts/SaphanTokens.sol, docs/SAPHAN-TOKENS.md). Per token and destination: a ZetaphyTokenVault on ZETAPHY (escrow) and a SaphanSyntheticToken on the destination (minted only by that vault's messages, verified by our zetaphyValidators). Adding a token = an entry here (governance reviews it in the pull request) + a saphan-route workflow run with that token; it is deployed closed and opened by both timelocks. Limits are whole tokens per destination; delays in seconds.",
+    "zetaphy": {
+      "displayName": "ZETAPHY (native coin)",
+      "symbol": "ZETAPHY",
+      "address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "decimals": 18,
+      "native": true,
+      "synthetic": { "name": "ZETAPHY (from the ZETAPHY testnet)", "symbol": "zZETAPHY" },
+      "destinations": ["sepolia", "basesepolia", "arbitrumsepolia"],
+      "limits": { "lockCap": "1000", "releaseDailyLimit": "100", "releaseDelay": 3600, "mintDailyLimit": "100", "mintDelay": 3600, "supplyCap": "1000" }
+    },
+    "bztphy": {
+      "displayName": "BZTPHY (testnet reward points)",
+      "symbol": "BZTPHY",
+      "address": "0x3cC2B1FFd3a7C7504a49426AE6BDEa501Bf1D59d",
+      "decimals": 18,
+      "transferable": false,
+      "why": "ZetaphyPoints cannot be transferred or approved (NonTransferable): it records who did the work, and balances at the freeze become mainnet ZETAPHY. No vault can take it, and a tradable copy elsewhere would defeat that. It goes out only if governance makes it transferable, then this entry gets destinations.",
+      "synthetic": { "name": "BZTPHY (from the ZETAPHY testnet)", "symbol": "zBZTPHY" },
+      "destinations": [],
+      "limits": { "lockCap": "1000", "releaseDailyLimit": "100", "releaseDelay": 3600, "mintDailyLimit": "100", "mintDelay": 3600, "supplyCap": "1000" }
+    }
   }
 }

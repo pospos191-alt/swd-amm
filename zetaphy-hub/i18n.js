@@ -67,6 +67,7 @@ export const TEXT = {
     devApi: 'API ของเครือข่าย', devApiSub: 'ใช้ได้ฟรี ไม่ต้องมี API key คัดลอกคำสั่งไปวางในเทอร์มินัลได้เลย', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'ไฟล์ตั้งค่าเชน (Keplr / EVM)', devCli: 'เครื่องมือบรรทัดคำสั่ง zetaphy',
     devContracts: 'ที่อยู่สัญญา', tipDevContracts: 'สัญญาที่ deploy บน testnet และ precompile ของเชน กดที่อยู่เพื่อเปิดใน Explorer',
     wbConnect: "เชื่อมต่อกระเป๋า", wbConnectFirst: "เชื่อมต่อกระเป๋าก่อน (มุมขวาบน)", wbNoAccount: "กระเป๋าไม่ส่งบัญชีมา", wbHoldings: "บนเชน ZETAPHY", wbNoNode: "ดูยอดไม่ได้: โหนดยังไม่ตอบในตอนนี้", wbShared: "เชื่อมครั้งเดียวใช้ได้ทั้งเว็บ: Swap, NFT และ Stake & โหวต ใช้กระเป๋านี้ด้วย ส่วนกระเป๋าต้านควอนตัมใช้กุญแจของตัวเอง", wbRefresh: "รีเฟรช", wbDisconnect: "ยกเลิกการเชื่อมต่อ", wbRejected: "ยกเลิกในกระเป๋าแล้ว", wbNone: "ไม่พบกระเป๋าในเบราว์เซอร์นี้ เปิดหน้านี้ในแอปกระเป๋า:", wbPq: "อ่านแค่ที่อยู่ของคุณ ไม่มีการเซ็นอะไรจนกว่าคุณจะยืนยันในกระเป๋า", wbWrongChain: "สลับกระเป๋าไปที่ ZETAPHY (เชน 77390) แล้วลองใหม่",
+    wbSaphan: "Saphan ออก", wbSaphanTip: "โทเคนนี้ออกไปเชนอื่นผ่าน ZETAPHY Saphan (Hyperlane) ได้ที่ไหน: ล็อกบน ZETAPHY แล้วมีตัวแทนบนเชนปลายทาง", wbStPlanned: "วางแผนไว้", wbStClosed: "ปิด", wbStOpen: "เปิด",
   },
   en: {
     addNet: 'Add network', height: 'Latest block', blockTime: 'Block time', validators: 'Validators', bonded: 'ZETAPHY staked',
@@ -113,6 +114,7 @@ export const TEXT = {
     devApi: 'Network API', devApiSub: 'Free, no API key. Copy a command into a terminal.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'Chain registry files (Keplr / EVM)', devCli: 'The zetaphy command-line tool',
     devContracts: 'Contract addresses', tipDevContracts: 'Contracts deployed on the testnet and the chain\'s precompiles; click an address to open it in the Explorer',
     wbConnect: "Connect wallet", wbConnectFirst: "Connect a wallet first (top right)", wbNoAccount: "The wallet gave no account", wbHoldings: "On the ZETAPHY chain", wbNoNode: "Balances unavailable: the node is not answering right now", wbShared: "Connected for the whole site: Swap, NFT and Stake & vote use this wallet too. The quantum-resistant wallet keeps its own keys.", wbRefresh: "Refresh", wbDisconnect: "Disconnect", wbRejected: "Cancelled in the wallet", wbNone: "No wallet found in this browser. Open this page in a wallet app:", wbPq: "Only your address is read. Nothing is signed until you confirm it in your wallet.", wbWrongChain: "Switch your wallet to ZETAPHY (chain 77390) and try again",
+    wbSaphan: "Saphan out", wbSaphanTip: "Where this token can go out through ZETAPHY Saphan (Hyperlane): locked on ZETAPHY, a copy on the other chain", wbStPlanned: "planned", wbStClosed: "closed", wbStOpen: "open",
   },
   zh: {
     addNet: '添加网络', height: '最新区块', blockTime: '出块时间', validators: '验证者', bonded: '已质押 ZETAPHY',
@@ -159,6 +161,7 @@ export const TEXT = {
     devApi: '网络 API', devApiSub: '免费，无需 API 密钥。把命令复制到终端即可。', devFaucet: '水龙头（JSON-RPC）', devRegistry: '链注册文件（Keplr / EVM）', devCli: 'zetaphy 命令行工具',
     devContracts: '合约地址', tipDevContracts: '部署在测试网上的合约和链的预编译合约；点击地址即可在 Explorer 中打开',
     wbConnect: "连接钱包", wbConnectFirst: "请先连接钱包（右上角）", wbNoAccount: "钱包没有返回账户", wbHoldings: "在 ZETAPHY 链上", wbNoNode: "暂时无法显示余额：节点目前没有响应", wbShared: "整个网站只需连接一次：兑换、NFT 和质押与投票也使用这个钱包。抗量子钱包使用自己的密钥。", wbRefresh: "刷新", wbDisconnect: "断开连接", wbRejected: "已在钱包中取消", wbNone: "此浏览器中没有钱包。请在钱包应用中打开本页：", wbPq: "只读取你的地址。在你于钱包中确认之前不会签署任何内容。", wbWrongChain: "请将钱包切换到 ZETAPHY（链 77390）后重试",
+    wbSaphan: "Saphan 转出", wbSaphanTip: "此代币可通过 ZETAPHY Saphan（Hyperlane）转出到哪里：在 ZETAPHY 上锁定，在另一条链上得到副本", wbStPlanned: "计划中", wbStClosed: "已关闭", wbStOpen: "开放",
   },
   es: {
     addNet: 'Añadir red', height: 'Último bloque', blockTime: 'Tiempo de bloque', validators: 'Validadores', bonded: 'ZETAPHY en stake',
@@ -205,6 +208,7 @@ export const TEXT = {
     devApi: 'API de la red', devApiSub: 'Gratis, sin API key. Copia un comando en una terminal.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'Archivos de registro de la cadena (Keplr / EVM)', devCli: 'La herramienta de línea de comandos zetaphy',
     devContracts: 'Direcciones de contratos', tipDevContracts: 'Contratos desplegados en la testnet y precompiladas de la cadena; haz clic en una dirección para abrirla en el Explorer',
     wbConnect: "Conectar wallet", wbConnectFirst: "Conecta primero una wallet (arriba a la derecha)", wbNoAccount: "La wallet no dio ninguna cuenta", wbHoldings: "En la cadena ZETAPHY", wbNoNode: "Saldos no disponibles: el nodo no responde ahora mismo", wbShared: "Conectada para todo el sitio: Swap, NFT y Stake y voto también usan esta wallet. La wallet resistente a la computación cuántica usa sus propias claves.", wbRefresh: "Actualizar", wbDisconnect: "Desconectar", wbRejected: "Cancelado en la wallet", wbNone: "No hay ninguna wallet en este navegador. Abre esta página en una app de wallet:", wbPq: "Solo se lee tu dirección. No se firma nada hasta que lo confirmes en tu wallet.", wbWrongChain: "Cambia tu wallet a ZETAPHY (cadena 77390) e inténtalo de nuevo",
+    wbSaphan: "Saphan salida", wbSaphanTip: "Adónde puede salir este token con ZETAPHY Saphan (Hyperlane): se bloquea en ZETAPHY y hay una copia en la otra cadena", wbStPlanned: "planeada", wbStClosed: "cerrada", wbStOpen: "abierta",
   },
   ko: {
     addNet: '네트워크 추가', height: '최신 블록', blockTime: '블록 시간', validators: '검증인', bonded: '스테이킹된 ZETAPHY',
@@ -251,6 +255,7 @@ export const TEXT = {
     devApi: '네트워크 API', devApiSub: '무료, API 키 불필요. 명령어를 터미널에 복사하세요.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: '체인 레지스트리 파일 (Keplr / EVM)', devCli: 'zetaphy 명령줄 도구',
     devContracts: '컨트랙트 주소', tipDevContracts: '테스트넷에 배포된 컨트랙트와 체인의 프리컴파일; 주소를 클릭하면 Explorer에서 열립니다',
     wbConnect: "지갑 연결", wbConnectFirst: "먼저 지갑을 연결하세요(오른쪽 위)", wbNoAccount: "지갑에서 계정을 받지 못했어요", wbHoldings: "ZETAPHY 체인에서", wbNoNode: "잔액을 볼 수 없어요: 지금 노드가 응답하지 않아요", wbShared: "한 번 연결하면 사이트 전체에서 써요: 스왑, NFT, 스테이킹 & 투표도 이 지갑을 사용해요. 양자 내성 지갑은 자체 키를 사용해요.", wbRefresh: "새로고침", wbDisconnect: "연결 해제", wbRejected: "지갑에서 취소했어요", wbNone: "이 브라우저에 지갑이 없어요. 지갑 앱에서 이 페이지를 여세요:", wbPq: "주소만 읽어요. 지갑에서 확인하기 전에는 아무것도 서명하지 않아요.", wbWrongChain: "지갑을 ZETAPHY(체인 77390)로 바꾸고 다시 시도하세요",
+    wbSaphan: "Saphan 출금", wbSaphanTip: "이 토큰이 ZETAPHY Saphan(Hyperlane)으로 나갈 수 있는 곳: ZETAPHY에 잠기고 다른 체인에 사본이 생깁니다", wbStPlanned: "예정", wbStClosed: "닫힘", wbStOpen: "열림",
   },
   ja: {
     addNet: 'ネットワーク追加', height: '最新ブロック', blockTime: 'ブロック時間', validators: 'バリデーター', bonded: 'ステーク中の ZETAPHY',
@@ -297,6 +302,7 @@ export const TEXT = {
     devApi: 'ネットワーク API', devApiSub: '無料、API キー不要。コマンドをターミナルにコピーしてください。', devFaucet: 'Faucet（JSON-RPC）', devRegistry: 'チェーンレジストリファイル（Keplr / EVM）', devCli: 'zetaphy コマンドラインツール',
     devContracts: 'コントラクトアドレス', tipDevContracts: 'テストネットにデプロイされたコントラクトとチェーンのプリコンパイル。アドレスをクリックすると Explorer で開きます',
     wbConnect: "ウォレットを接続", wbConnectFirst: "先にウォレットを接続してください（右上）", wbNoAccount: "ウォレットからアカウントが返されませんでした", wbHoldings: "ZETAPHY チェーン上", wbNoNode: "残高を表示できません：ノードが今応答していません", wbShared: "一度の接続でサイト全体に有効です：スワップ、NFT、ステーク＆投票もこのウォレットを使います。耐量子ウォレットは独自の鍵を使います。", wbRefresh: "更新", wbDisconnect: "接続を解除", wbRejected: "ウォレットでキャンセルされました", wbNone: "このブラウザにウォレットがありません。ウォレットアプリでこのページを開いてください：", wbPq: "読み取るのはアドレスだけです。ウォレットで確認するまで何も署名されません。", wbWrongChain: "ウォレットを ZETAPHY（チェーン 77390）に切り替えて、もう一度試してください",
+    wbSaphan: "Saphan 送出", wbSaphanTip: "このトークンが ZETAPHY Saphan（Hyperlane）で出ていける先: ZETAPHY でロックされ、相手チェーンにコピーができます", wbStPlanned: "予定", wbStClosed: "閉鎖中", wbStOpen: "開通",
   },
   ru: {
     addNet: 'Добавить сеть', height: 'Последний блок', blockTime: 'Время блока', validators: 'Валидаторы', bonded: 'ZETAPHY в стейкинге',
@@ -343,6 +349,7 @@ export const TEXT = {
     devApi: 'API сети', devApiSub: 'Бесплатно, без API-ключа. Скопируйте команду в терминал.', devFaucet: 'Кран (JSON-RPC)', devRegistry: 'Файлы реестра сети (Keplr / EVM)', devCli: 'Утилита командной строки zetaphy',
     devContracts: 'Адреса контрактов', tipDevContracts: 'Контракты, развёрнутые в тестнете, и прекомпайлы сети; нажмите на адрес, чтобы открыть его в Explorer',
     wbConnect: "Подключить кошелёк", wbConnectFirst: "Сначала подключите кошелёк (вверху справа)", wbNoAccount: "Кошелёк не вернул аккаунт", wbHoldings: "В сети ZETAPHY", wbNoNode: "Балансы недоступны: узел сейчас не отвечает", wbShared: "Подключение для всего сайта: обмен, NFT и стейкинг с голосованием тоже используют этот кошелёк. Квантово-устойчивый кошелёк использует свои ключи.", wbRefresh: "Обновить", wbDisconnect: "Отключить", wbRejected: "Отменено в кошельке", wbNone: "В этом браузере нет кошелька. Откройте страницу в приложении кошелька:", wbPq: "Читается только ваш адрес. Ничего не подписывается, пока вы не подтвердите это в кошельке.", wbWrongChain: "Переключите кошелёк на ZETAPHY (сеть 77390) и попробуйте снова",
+    wbSaphan: "Saphan наружу", wbSaphanTip: "Куда этот токен может выйти через ZETAPHY Saphan (Hyperlane): блокируется в ZETAPHY, копия появляется в другой сети", wbStPlanned: "в планах", wbStClosed: "закрыт", wbStOpen: "открыт",
   },
   vi: {
     addNet: 'Thêm mạng', height: 'Khối mới nhất', blockTime: 'Thời gian khối', validators: 'Validator', bonded: 'ZETAPHY đã stake',
@@ -389,6 +396,7 @@ export const TEXT = {
     devApi: 'API mạng', devApiSub: 'Miễn phí, không cần API key. Sao chép lệnh vào terminal.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'Tệp đăng ký chuỗi (Keplr / EVM)', devCli: 'Công cụ dòng lệnh zetaphy',
     devContracts: 'Địa chỉ hợp đồng', tipDevContracts: 'Các hợp đồng đã triển khai trên testnet và precompile của chuỗi; nhấp vào địa chỉ để mở trong Explorer',
     wbConnect: "Kết nối ví", wbConnectFirst: "Hãy kết nối ví trước (góc trên bên phải)", wbNoAccount: "Ví không trả về tài khoản", wbHoldings: "Trên chuỗi ZETAPHY", wbNoNode: "Không xem được số dư: node hiện không phản hồi", wbShared: "Kết nối một lần cho cả trang: Swap, NFT và Stake & bỏ phiếu cũng dùng ví này. Ví kháng lượng tử dùng khóa riêng của nó.", wbRefresh: "Làm mới", wbDisconnect: "Ngắt kết nối", wbRejected: "Đã hủy trong ví", wbNone: "Không có ví trong trình duyệt này. Mở trang này trong ứng dụng ví:", wbPq: "Chỉ đọc địa chỉ của bạn. Không ký gì cho đến khi bạn xác nhận trong ví.", wbWrongChain: "Chuyển ví sang ZETAPHY (chuỗi 77390) rồi thử lại",
+    wbSaphan: "Saphan ra ngoài", wbSaphanTip: "Token này có thể ra ngoài qua ZETAPHY Saphan (Hyperlane) tới đâu: khóa trên ZETAPHY, có bản sao trên chuỗi kia", wbStPlanned: "dự kiến", wbStClosed: "đóng", wbStOpen: "mở",
   },
 };
 

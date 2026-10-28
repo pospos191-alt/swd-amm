@@ -15,8 +15,21 @@
 //       factory, unless it exists), for the route's HyperlaneLane.
 //   node scripts/saphan.js origin-lockbox --chain <name> --lane 0x… --outbox 0x… --expect 0x… --multisig 0x… --timelock 0x… --ism 0x…
 //       the HyperlaneLockBoxV2; refuses if the deployer's nonce moved (the ZETAPHY side points at --expect).
-//   node scripts/saphan.js whitelist          the relayer's HYP_WHITELIST for every deployed route (+ the v1 lockbox)
-//   node scripts/saphan.js pending            per two-way route: the outbox's sends on ZETAPHY vs releases the lockbox recorded
+//
+// Token routes (tokens born on ZETAPHY, contracts/SaphanTokens.sol; the table's `tokens`):
+//   node scripts/saphan.js token-check --token <key> --chain <name>
+//       read only: the destination (as check) and the token on ZETAPHY (code, decimals() as in the table)
+//   node scripts/saphan.js token-prepare --token <key> --chain <name> [--multisig 0x… --timelock 0x…]
+//       the destination's roles (the chain's v2 multisig and timelock when deployed, else new ones) and our ISM;
+//       then where the synthetic will be (syntheticAt)
+//   node scripts/saphan.js token-vault --token <key> --chain <name> --expect 0x<syntheticAt> [--governance --guardian --threats 0x…|none]
+//       on ZETAPHY: the ISM of Hyperlane's validators for the destination, then the ZetaphyTokenVault (paused: closed)
+//   node scripts/saphan.js token-synthetic --token <key> --chain <name> --vault 0x… --expect 0x… --multisig 0x… --timelock 0x… --ism 0x… [--governance 0x…]
+//       the SaphanSyntheticToken exactly at --expect (paused: closed); refuses if the deployer's nonce moved
+//
+//   node scripts/saphan.js whitelist          the relayer's HYP_WHITELIST for every deployed route (+ the v1 lockbox, + token routes)
+//   node scripts/saphan.js pending            per two-way route: the outbox's sends on ZETAPHY vs releases the lockbox recorded;
+//                                             per token route: messages each way the other end has not recorded
 //   node scripts/saphan.js relayer-env [--sepolia-v1-from <block>] [--validator yes]
 //       the relayer's settings for every deployed route (no secrets): chains, whitelist, where to start reading
 //   node scripts/saphan.js gate --state <file>  the relayer workflow's "anything to do?": run the relayer while a lockbox
@@ -27,8 +40,8 @@
 // KEYFILE (the deployer key file, never printed), DEPLOYER (check), SAPHAN_CHAINS / SAPHAN_ROUTES
 // (another chain table / routes file, e.g. a dry run's).
 import { readFileSync, writeFileSync } from 'node:fs';
-import { JsonRpcProvider, Wallet, Contract, ContractFactory, NonceManager, getAddress, getCreateAddress, formatEther, parseEther, zeroPadValue, AbiCoder, id as keccakId } from 'ethers';
-import { loadChains, chainOf, sortAddresses, loadRoutes, relayerWhitelist, bytes32 } from '../src/saphan.js';
+import { JsonRpcProvider, Wallet, Contract, ContractFactory, NonceManager, getAddress, getCreateAddress, formatEther, parseEther, parseUnits, zeroPadValue, AbiCoder, id as keccakId } from 'ethers';
+import { loadChains, chainOf, sortAddresses, loadRoutes, loadTokenRoutes, tokenOf, tokenRouteList, relayerWhitelist, bytes32, NATIVE_ERC20 } from '../src/saphan.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
 const ZERO = '0x' + '00'.repeat(20);
@@ -175,6 +188,87 @@ export async function originLockbox(t, c, p, signer, o) {
   return { chain: c.name, lockbox: addr, tx: rc?.hash ?? null, block: rc?.blockNumber ?? null, fee: formatEther(await k.quoteLock(me, 1n)) };
 }
 
+// ---------------------------------------------------------------- token routes (tokens born on ZETAPHY)
+
+const ERC20_READ = ['function decimals() view returns (uint8)', 'function symbol() view returns (string)', 'function totalSupply() view returns (uint256)'];
+/** The deploy settings tuple of both ends (SaphanTokenEndpoint.Config). */
+const endpointConfig = (o) => [o.mailbox, o.remoteDomain, BigInt(o.remoteChainId), bytes32(o.remote), o.hook ?? ZERO, o.originToken, o.ism, o.governance, o.guardian ?? ZERO,
+  o.dailyLimit, o.delay];
+
+/** Read only, on ZETAPHY: the token is a contract (or the native precompile) whose decimals() matches the table. */
+export async function tokenCheck(t, k, zp) {
+  const tok = new Contract(k.address, ERC20_READ, zp);
+  const code = await zp.getCode(k.address);
+  const decimals = await tok.decimals().then(Number, () => null);
+  const symbol = await tok.symbol().catch(() => null);
+  const problems = [];
+  if (code === '0x' && getAddress(k.address) !== getAddress(NATIVE_ERC20)) problems.push('no contract at the address');
+  if (decimals !== k.decimals) problems.push(`decimals() is ${decimals}, the table says ${k.decimals}`);
+  if (k.transferable === false) problems.push(`not transferable: ${k.why}`);
+  return { token: k.key, address: getAddress(k.address), code: code !== '0x', decimals, symbol, totalSupply: String(await tok.totalSupply().catch(() => '?')), problems };
+}
+
+/**
+ * On ZETAPHY: the multisig ISM of Hyperlane's validators for the destination (the same one the v2 HyperlaneLane of that
+ * chain uses: the factory returns it), then the ZetaphyTokenVault, sending to the synthetic at `expect` (where the
+ * destination's deployer nonce puts it). Deployed paused (closed). governance / guardian / threats: the table's ZETAPHY
+ * timelock, guardian multisig and ThreatRegistry unless given (the dry run gives its own key).
+ */
+export async function tokenVault(t, k, c, zp, signer, o) {
+  if (!k.destinations.includes(c.name)) throw new Error(`token ${k.key}: ${c.name} is not one of its destinations (${k.destinations.join(', ') || 'none'})`);
+  if (k.transferable === false) throw new Error(`token ${k.key} cannot be moved: ${k.why}`);
+  const chk = await tokenCheck(t, k, zp);
+  if (chk.problems.length) throw new Error(`token ${k.key} on ZETAPHY: ${chk.problems.join('; ')}`);
+  const { ism } = await zetaphyIsm(t, c, zp, signer);
+  const governance = getAddress(o.governance ?? t.zetaphy.timelock), guardian = getAddress(o.guardian ?? t.zetaphy.guardian);
+  const threats = o.threats === 'none' ? ZERO : getAddress(o.threats ?? t.zetaphy.threats);
+  const args = [endpointConfig({ mailbox: t.zetaphy.mailbox, remoteDomain: c.domain, remoteChainId: c.chainId, remote: o.expect, hook: ZERO, // the Mailbox default hook (merkle tree), as HyperlaneOutbox
+    originToken: k.address, ism, governance, guardian, dailyLimit: parseUnits(k.limits.releaseDailyLimit, k.decimals), delay: k.limits.releaseDelay }),
+  k.decimals, parseUnits(k.limits.lockCap, k.decimals), threats];
+  const v = await deployArt('ZetaphyTokenVault', args, signer);
+  const addr = getAddress(v.target);
+  const ok = (await v.paused()) && getAddress(await v.originToken()) === getAddress(k.address) && (await v.remote()).toLowerCase() === bytes32(o.expect)
+    && Number(await v.remoteDomain()) === c.domain && getAddress(await v.interchainSecurityModule()) === getAddress(ism) && getAddress(await v.governance()) === governance;
+  if (!ok) throw new Error('the deployed vault does not read back as configured');
+  const rc = await v.deploymentTransaction()?.wait();
+  return { token: k.key, chain: c.name, vault: addr, ism, governance, guardian, threats, tx: rc?.hash ?? null, block: rc?.blockNumber ?? null };
+}
+
+/** On the destination: the SaphanSyntheticToken exactly at `expect`, minted only by `vault` (deployed paused). */
+export async function tokenSynthetic(t, k, c, p, signer, o) {
+  const me = await signer.getAddress();
+  const nonce = await signer.getNonce('pending');
+  const at = getCreateAddress({ from: me, nonce });
+  if (getAddress(at) !== getAddress(o.expect)) throw new Error(`the deployer's ${c.name} nonce moved: the synthetic would be ${at}, not ${o.expect} (the vault on ZETAPHY sends to ${o.expect}); nothing deployed`);
+  for (const x of ['ism', 'timelock', 'multisig']) if ((await p.getCode(o[x])) === '0x') throw new Error(`no contract at --${x} ${o[x]}`);
+  const { hook } = await merkleHook(p, c);
+  const governance = getAddress(o.governance ?? o.timelock);
+  const args = [k.synthetic.name, k.synthetic.symbol, k.decimals, endpointConfig({ mailbox: c.mailbox, remoteDomain: t.zetaphy.domain, remoteChainId: t.zetaphy.chainId,
+    remote: o.vault, hook, originToken: k.address, ism: o.ism, governance, guardian: o.multisig, dailyLimit: parseUnits(k.limits.mintDailyLimit, k.decimals),
+    delay: k.limits.mintDelay }), parseUnits(k.limits.supplyCap, k.decimals)];
+  const s = await deployArt('SaphanSyntheticToken', args, signer);
+  const addr = getAddress(s.target);
+  if (addr !== getAddress(o.expect)) throw new Error(`deployed at ${addr}, expected ${o.expect}`);
+  const ok = (await s.paused()) && (await s.remote()).toLowerCase() === bytes32(o.vault) && Number(await s.remoteDomain()) === t.zetaphy.domain
+    && getAddress(await s.interchainSecurityModule()) === getAddress(o.ism) && getAddress(await s.governance()) === governance && (await s.guardian(o.multisig))
+    && Number(await s.decimals()) === k.decimals && getAddress(await s.originToken()) === getAddress(k.address);
+  if (!ok) throw new Error('the deployed synthetic does not read back as configured');
+  const rc = await s.deploymentTransaction()?.wait();
+  return { token: k.key, chain: c.name, synthetic: addr, symbol: k.synthetic.symbol, tx: rc?.hash ?? null, block: rc?.blockNumber ?? null };
+}
+
+/** Per token route: messages each way that the other end has not recorded yet. */
+export async function tokenPending(t, tokenRoutes, zp, originProvider) {
+  const out = {};
+  const N = ['function nonce() view returns (uint256)', 'function received() view returns (uint256)'];
+  for (const [key, chain, r] of tokenRouteList(t, tokenRoutes)) {
+    const v = new Contract(r.zetaphy.vault, N, zp), s = new Contract(r.destination.synthetic, N, await originProvider(chain));
+    const [locks, released, sendBacks, minted] = await Promise.all([v.nonce(), v.received(), s.nonce(), s.received()]).then((x) => x.map(Number));
+    out[`${key}:${chain}`] = { out: locks - minted, in: sendBacks - released, locks, sendBacks };
+  }
+  return out;
+}
+
 /** Per two-way route: sends on ZETAPHY (outbox nonce) vs releases recorded on the source chain (lockbox received). */
 export async function pending(t, routes, zp, originProvider) {
   const out = {};
@@ -200,7 +294,7 @@ const v1Whitelist = () => (v1Lockbox() ? [{ originDomain: 11155111, senderAddres
  * block each chain is read from (the route's deploy block; ZETAPHY: the bridge's, unless our validator
  * runs, whose merkle tree must be read from the Mailbox's start: agent-config.json index.from).
  */
-export function relayerEnv(t, routes, v1, { sepoliaV1From = null, zetaphyV1From = null, validator = false } = {}) {
+export function relayerEnv(t, routes, v1, { sepoliaV1From = null, zetaphyV1From = null, validator = false, tokenRoutes = {} } = {}) {
   const from = {};
   const at = (name, b) => { if (Number.isInteger(b) && b >= 0) from[name] = Math.min(from[name] ?? b, b); };
   if (v1) at('sepolia', sepoliaV1From);
@@ -212,10 +306,16 @@ export function relayerEnv(t, routes, v1, { sepoliaV1From = null, zetaphyV1From 
     at(name, r.origin.fromBlock);
     at('zetaphy', r.zetaphy?.fromBlock);
   }
-  const lines = [`HYP_RELAYCHAINS=${[...names, 'zetaphy'].join(',')}`, `HYP_WHITELIST=${JSON.stringify(relayerWhitelist(t, routes, v1 ? [{ originDomain: 11155111, senderAddress: bytes32(v1), destinationDomain: 77390 }] : []))}`,
+  for (const [, chain, r] of tokenRouteList(t, tokenRoutes)) {
+    names.add(chain);
+    at(chain, r.destination.fromBlock);
+    at('zetaphy', r.zetaphy.fromBlock);
+  }
+  const extra = v1 ? [{ originDomain: 11155111, senderAddress: bytes32(v1), destinationDomain: 77390 }] : [];
+  const lines = [`HYP_RELAYCHAINS=${[...names, 'zetaphy'].join(',')}`, `HYP_WHITELIST=${JSON.stringify(relayerWhitelist(t, routes, extra, tokenRoutes))}`,
     'HYP_CHAINS_ZETAPHY_INDEX_CHUNK=499'];
   for (const n of names) {
-    if (from[n] == null) throw new Error(`no start block for ${n}: saphan-routes.json needs origin.fromBlock (or --sepolia-v1-from)`);
+    if (from[n] == null) throw new Error(`no start block for ${n}: saphan-routes.json needs origin.fromBlock / destination.fromBlock (or --sepolia-v1-from)`);
     lines.push(`HYP_CHAINS_${n.toUpperCase()}_INDEX_FROM=${from[n]}`);
   }
   if (!validator && from.zetaphy != null) lines.push(`HYP_CHAINS_ZETAPHY_INDEX_FROM=${from.zetaphy}`);
@@ -229,9 +329,13 @@ export function relayerEnv(t, routes, v1, { sepoliaV1From = null, zetaphyV1From 
  * delivered(id): one call on ZETAPHY, and only inside the window). Outbound: a two-way route whose outbox
  * sent more than its lockbox recorded. A chain that does not answer counts as active (relay anyway);
  * ZETAPHY not answering stops the outbound check only.
+ * Token routes: the validator (and the relayer) while a vault on ZETAPHY locked more than its synthetic recorded
+ * (vault nonce vs synthetic received: one call on ZETAPHY per route); the relayer while a synthetic sent back more
+ * than its vault recorded (synthetic nonce vs vault received; ZETAPHY is asked only when the synthetic's nonce is
+ * above the last count the vault was seen with, kept in `state`).
  */
-export async function relayGate({ t, routes, v1, originProvider, zetaphyProvider, state, now, window = 2 * 86400 }) {
-  const s = { lockboxes: { ...(state?.lockboxes ?? {}) } };
+export async function relayGate({ t, routes, v1, originProvider, zetaphyProvider, state, now, window = 2 * 86400, tokenRoutes = {} }) {
+  const s = { lockboxes: { ...(state?.lockboxes ?? {}) }, tokens: { ...(state?.tokens ?? {}) } };
   const reasons = [];
   let inbound = false, outbound = false;
   const boxes = [...(v1 ? [['sepolia', v1, null]] : []),
@@ -261,6 +365,25 @@ export async function relayGate({ t, routes, v1, originProvider, zetaphyProvider
       for (const [name, x] of Object.entries(w)) if (x.waiting > 0) { outbound = true; reasons.push(`${name}: ${x.waiting} release(s) from ZETAPHY not delivered yet`); }
     } catch (e) { reasons.push(`outbound check failed (${(e.shortMessage ?? e.message).slice(0, 80)}): validator not started`); }
   }
+  const N = ['function nonce() view returns (uint256)', 'function received() view returns (uint256)'];
+  const short = (e) => (e.shortMessage ?? e.message).slice(0, 60);
+  for (const [key, chain, r] of tokenRouteList(t, tokenRoutes)) {
+    const id = `${key}:${chain}`;
+    let back, minted;
+    try {
+      const syn = new Contract(r.destination.synthetic, N, await originProvider(chain));
+      [back, minted] = (await Promise.all([syn.nonce(), syn.received()])).map(Number);
+    } catch (e) { inbound = true; reasons.push(`${id}: no answer from ${chain} (${short(e)}), relaying anyway`); continue; }
+    try {
+      const vault = new Contract(r.zetaphy.vault, N, await zetaphy());
+      if (back > (s.tokens[id]?.released ?? 0)) {
+        s.tokens[id] = { released: Number(await vault.received()) };
+        if (back > s.tokens[id].released) { inbound = true; reasons.push(`${id}: ${back - s.tokens[id].released} send-back(s) to ZETAPHY not delivered yet`); }
+      }
+      const locks = Number(await vault.nonce());
+      if (locks > minted) { outbound = true; reasons.push(`${id}: ${locks - minted} lock(s) on ZETAPHY not delivered yet`); }
+    } catch (e) { reasons.push(`${id}: ZETAPHY check failed (${short(e)}): validator not started`); }
+  }
   return { run: inbound || outbound, validator: outbound, reasons, state: s };
 }
 
@@ -279,11 +402,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const t = loadChains();
     const originP = (name) => { const c = chainOf(t, name); return providerFor(process.env.ORIGIN_RPC || c.rpc.join(','), c.chainId); };
     let res;
-    if (cmd === 'whitelist') res = relayerWhitelist(t, loadRoutes(), v1Whitelist());
+    const zetaphyP = () => providerFor(process.env.ZETAPHY_RPC || t.zetaphy.rpc.join(','), t.zetaphy.chainId);
+    if (cmd === 'whitelist') res = relayerWhitelist(t, loadRoutes(), v1Whitelist(), loadTokenRoutes());
     else if (cmd === 'relayer-env') {
       let zv1 = null;
       try { zv1 = JSON.parse(readFileSync(new URL('../../zetaphy-chain/hyperlane/bridge-testnet.json', import.meta.url), 'utf8'))?.zetaphy?.fromBlock ?? null; } catch { /* none */ }
-      const lines = relayerEnv(t, loadRoutes(), v1Lockbox(), { sepoliaV1From: o['sepolia-v1-from'] != null ? Number(o['sepolia-v1-from']) : null, zetaphyV1From: zv1, validator: o.validator === 'yes' });
+      const lines = relayerEnv(t, loadRoutes(), v1Lockbox(), { sepoliaV1From: o['sepolia-v1-from'] != null ? Number(o['sepolia-v1-from']) : null, zetaphyV1From: zv1, validator: o.validator === 'yes', tokenRoutes: loadTokenRoutes() });
       console.log(lines.join('\n'));
       process.exit(0);
     } else if (cmd === 'gate') {
@@ -291,7 +415,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       let state = null;
       try { state = JSON.parse(readFileSync(o.state, 'utf8')); } catch { /* first run */ }
       const cache = {};
-      res = await relayGate({ t, routes: loadRoutes(), v1: v1Lockbox(), state, now: Math.floor(Date.now() / 1000),
+      res = await relayGate({ t, routes: loadRoutes(), tokenRoutes: loadTokenRoutes(), v1: v1Lockbox(), state, now: Math.floor(Date.now() / 1000),
         originProvider: async (n) => (cache[n] ??= await providerFor(t.chains[n].rpc.join(','), t.chains[n].chainId)),
         zetaphyProvider: () => providerFor(process.env.ZETAPHY_RPC || t.zetaphy.rpc.join(','), t.zetaphy.chainId) });
       writeFileSync(o.state, JSON.stringify(res.state));
@@ -299,17 +423,31 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     else if (cmd === 'pending') {
       const zp = await providerFor(process.env.ZETAPHY_RPC || t.zetaphy.rpc.join(','), t.zetaphy.chainId);
       const cache = {};
-      res = await pending(t, loadRoutes(), zp, async (n) => (cache[n] ??= await providerFor(t.chains[n].rpc.join(','), t.chains[n].chainId)));
+      const op = async (n) => (cache[n] ??= await providerFor(t.chains[n].rpc.join(','), t.chains[n].chainId));
+      res = { routes: await pending(t, loadRoutes(), zp, op), tokens: await tokenPending(t, loadTokenRoutes(), zp, op) };
     } else if (cmd === 'zetaphy-ism') {
       const zp = await providerFor(process.env.ZETAPHY_RPC || t.zetaphy.rpc.join(','), t.zetaphy.chainId);
       res = await zetaphyIsm(t, chainOf(t, o.chain), zp, keySigner(zp));
+    } else if (cmd === 'token-vault') {
+      needAddr(o, ['expect']);
+      const zp = await zetaphyP();
+      res = await tokenVault(t, tokenOf(t, o.token), chainOf(t, o.chain), zp, keySigner(zp), o);
+    } else if (cmd === 'token-check') {
+      const k = tokenOf(t, o.token), c = chainOf(t, o.chain);
+      if (!k.destinations.includes(c.name)) throw new Error(`token ${k.key}: ${c.name} is not one of its destinations (${k.destinations.join(', ') || 'none'})`);
+      res = { destination: await check(t, c, await originP(o.chain), getAddress(String(process.env.DEPLOYER ?? ''))) };
+      try { res.zetaphy = await tokenCheck(t, k, await zetaphyP()); } catch (e) { res.zetaphy = { error: `ZETAPHY not reachable: ${e.shortMessage ?? e.message}` }; }
     } else {
       const c = chainOf(t, o.chain);
       const p = await originP(o.chain);
+      const v2 = loadRoutes()[c.name]?.origin ?? {};
       if (cmd === 'check') res = await check(t, c, p, getAddress(String(process.env.DEPLOYER ?? '')));
+      // token routes reuse the chain's v2 multisig and timelock when that route is deployed
+      else if (cmd === 'token-prepare') { tokenOf(t, o.token); res = await originPrepare(t, c, p, keySigner(p), { multisig: o.multisig ?? v2.multisig, timelock: o.timelock ?? v2.timelock }); res.syntheticAt = res.lockboxAt; }
+      else if (cmd === 'token-synthetic') { needAddr(o, ['vault', 'expect', 'multisig', 'timelock', 'ism']); res = await tokenSynthetic(t, tokenOf(t, o.token), c, p, keySigner(p), o); }
       else if (cmd === 'origin-prepare') res = await originPrepare(t, c, p, keySigner(p), { multisig: o.multisig, timelock: o.timelock });
       else if (cmd === 'origin-lockbox') { needAddr(o, ['lane', 'outbox', 'expect', 'multisig', 'timelock', 'ism']); res = await originLockbox(t, c, p, keySigner(p), o); }
-      else throw new Error('usage: saphan.js check|origin-prepare|zetaphy-ism|origin-lockbox --chain <name> … | whitelist | pending');
+      else throw new Error('usage: saphan.js check|origin-prepare|zetaphy-ism|origin-lockbox --chain <name> … | token-check|token-prepare|token-vault|token-synthetic --token <key> --chain <name> … | whitelist | pending');
     }
     console.log(JSON.stringify(res));
     process.exit(0);

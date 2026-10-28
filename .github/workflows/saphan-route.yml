@@ -16,6 +16,17 @@
 # mode = deploy   the real deploy (manual run only; key = ZETAPHY_DEPLOYER_KEY, the same deployer on both chains);
 #                 pushes the addresses (saphan-routes.json) to the branch saphan/<chain>
 # On pull requests: check + dry_run for every chain of the table. Cost: free (GitHub-hosted runner, public repository).
+#
+# token = <key>   a TOKEN route instead (tokens born on ZETAPHY, docs/SAPHAN-TOKENS.md): the token `tokens.<key>` of the
+#                 chain table, to this chain and back (contracts/SaphanTokens.sol):
+#   destination:  the chain's v2 SimpleMultisig + ZetaphyTimelock when that route is deployed (else new ones), our
+#                 multisig ISM for origin ZETAPHY, then SaphanSyntheticToken (mints after a delay; sendBack burns)
+#   ZETAPHY:      the ISM of Hyperlane's validators for this chain, ZetaphyTokenVault (escrow; releases after a delay)
+#   Both deployed CLOSED (paused; governance = the timelocks, guardian = the multisigs). The synthetic's address is
+#   fixed in advance (the deployer's nonce on the chain): roles there, then the vault on ZETAPHY, then the synthetic.
+#   check: the chain as above + the token on ZETAPHY; dry_run: the same local chains, a stand-in for the token (or
+#   token = test: a BZTPHY-like one); deploy: pushes saphan-routes.json `tokens` to the branch saphan/<token>-<chain>.
+#   On pull requests the dry run does both: the ETH route, then token = test.
 
 name: saphan-route
 
@@ -29,6 +40,7 @@ on:
       - 'zetaphy-network/src/saphan.js'
       - 'zetaphy-network/contracts/HyperlaneLockBoxV2.sol'
       - 'zetaphy-network/contracts/BridgeGuard.sol'
+      - 'zetaphy-network/contracts/SaphanTokens.sol'
   workflow_dispatch:
     inputs:
       chain:
@@ -43,13 +55,18 @@ on:
         default: 'check'
         type: choice
         options: ['check', 'dry_run', 'deploy']
+      token:
+        description: "empty = the ETH route of this chain; a key of `tokens` in saphan-chains.json (e.g. zetaphy) = that token's route to this chain; test = a BZTPHY-like stand-in (dry_run only)"
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
 
 jobs:
   route:
-    name: Saphan route ${{ matrix.chain }} <-> ZETAPHY (testnet)
+    name: Saphan route ${{ matrix.chain }} <-> ZETAPHY (testnet)${{ inputs.token != '' && format(' token {0}', inputs.token) || '' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -63,6 +80,7 @@ jobs:
     env:
       MODE: ${{ github.event_name == 'pull_request' && 'dry_run' || inputs.mode }}
       CHAIN: ${{ matrix.chain }}
+      TOKEN: ${{ github.event_name == 'pull_request' && 'test' || inputs.token }}
       HYP_CLI: "@hyperlane-xyz/cli@45.0.1"
       DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
       # anvil's well-known dev key #0 (public, dry run only)
@@ -83,6 +101,13 @@ jobs:
               console.log(`rpc=${c.rpc.join(",")}`); console.log(`chainId=${c.chainId}`); console.log(`faucetEth=${c.faucetEth ?? "0.05"}`);
               console.log(`validators=${t.zetaphyValidators.validators.length}`); console.log(`zrpc=${t.zetaphy.rpc[0]}`);
             })' | tee -a "$GITHUB_OUTPUT"
+          # a token route: the key must be a token of the table with this chain as a destination ("test": dry run only)
+          if [ -n "$TOKEN" ]; then
+            [[ "$TOKEN" =~ ^[a-z0-9]{1,15}$ ]] || { echo "::error::token: a key of a-z 0-9"; exit 1; }
+            if [ "$TOKEN" = test ]; then [ "$MODE" = dry_run ] || { echo "::error::token = test is for dry_run only"; exit 1; }
+            else node -e 'import("./src/saphan.js").then(({ loadChains, tokenOf }) => { const k = tokenOf(loadChains(), process.argv[1]);
+              if (!k.destinations.includes(process.argv[2])) { console.error(`token ${k.key}: ${process.argv[2]} is not one of its destinations (${k.destinations.join(", ") || "none"}${k.why ? `: ${k.why}` : ""})`); process.exit(1); } })' "$TOKEN" "$CHAIN"; fi
+          fi
 
       - name: Check the source chain (read only)
         id: check
@@ -92,6 +117,13 @@ jobs:
           out=$(node scripts/saphan.js check --chain "$CHAIN" | tail -1); echo "$out" | jq .
           echo "pending=$(jq -r .pendingTxs <<<"$out")" >> "$GITHUB_OUTPUT"
           echo "balance=$(jq -r .balance <<<"$out")" >> "$GITHUB_OUTPUT"
+
+      - name: Check the token on ZETAPHY (read only; token routes)
+        if: env.TOKEN != '' && env.TOKEN != 'test' && env.MODE != 'dry_run'
+        env:
+          ORIGIN_RPC: ${{ steps.t.outputs.rpc }}
+          ZETAPHY_RPC: ${{ steps.t.outputs.zrpc }}
+        run: node scripts/saphan.js token-check --token "$TOKEN" --chain "$CHAIN" | tail -1 | jq .zetaphy
 
       - name: Our validator's address (from ZETAPHY_VALIDATOR_KEY; the address only)
         if: github.event_name == 'workflow_dispatch' && env.MODE != 'dry_run'
@@ -128,12 +160,19 @@ jobs:
           # a local stand-in for ZETAPHY's core: the same contracts (Mailbox, merkle tree hook, ISM factories), a test default ISM
           printf 'owner: "%s"\ndefaultIsm:\n  type: testIsm\ndefaultHook:\n  type: merkleTreeHook\nrequiredHook:\n  type: protocolFee\n  owner: "%s"\n  beneficiary: "%s"\n  protocolFee: "0"\n  maxProtocolFee: "1000000000"\n' "$DEV" "$DEV" "$DEV" > "$W/core.yaml"
           HYP_KEY="$DEV_KEY" hyperlane core deploy --chain zetaphy --config "$W/core.yaml" -r "$W/reg" --yes > "$W/core.log" 2>&1 || { tail -40 "$W/core.log"; exit 1; }
-          ORIGIN_RPC=http://127.0.0.1:8601 ZETAPHY_RPC=http://127.0.0.1:8602 ZETAPHY_CORE="$W/reg/chains/zetaphy/addresses.yaml" \
+          export ORIGIN_RPC=http://127.0.0.1:8601 ZETAPHY_RPC=http://127.0.0.1:8602 ZETAPHY_CORE="$W/reg/chains/zetaphy/addresses.yaml"
+          if [ -z "$TOKEN" ] || [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             node scripts/saphan-dryrun.js --chain "$CHAIN" | tee "$W/dry.log"
-          grep -q 'DRY RUN OK' "$W/dry.log"
+            grep -q '^DRY RUN OK' "$W/dry.log"
+          fi
+          # a token route (on pull requests: token = test, a BZTPHY-like stand-in), on the same two chains
+          if [ -n "$TOKEN" ]; then
+            node scripts/saphan-dryrun.js --chain "$CHAIN" --token "$TOKEN" | tee "$W/token.log"
+            grep -q '^TOKEN DRY RUN OK' "$W/token.log"
+          fi
 
       - name: Deploy on the testnets
-        if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch'
+        if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch' && env.TOKEN == ''
         env:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
           ORIGIN_RPC: ${{ steps.t.outputs.rpc }}
@@ -184,14 +223,60 @@ jobs:
           mv "$H/routes.json" ../zetaphy-chain/hyperlane/saphan-routes.json
           jq ".routes[\"$CHAIN\"]" ../zetaphy-chain/hyperlane/saphan-routes.json
 
-      - name: Push the addresses to saphan/<chain>
+      - name: Deploy a token route on the testnets (closed)
+        if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch' && env.TOKEN != ''
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+          ORIGIN_RPC: ${{ steps.t.outputs.rpc }}
+          ZETAPHY_RPC: ${{ steps.t.outputs.zrpc }}
+          PENDING: ${{ steps.check.outputs.pending }}
+          BALANCE: ${{ steps.check.outputs.balance }}
+          NEED: ${{ steps.t.outputs.faucetEth }}
+          VALIDATORS: ${{ steps.t.outputs.validators }}
+        run: |
+          set -o pipefail
+          [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
+          [ "$VALIDATORS" -gt 0 ] || { echo "::error::saphan-chains.json zetaphyValidators.validators is empty: add the address of ZETAPHY_VALIDATOR_KEY first (mode = check prints it)"; exit 1; }
+          zc=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$ZETAPHY_RPC" | jq -r .result) || zc=""
+          [ "$zc" = "0x12e4e" ] || { echo "::error::the ZETAPHY RPC answers '$zc', not 0x12e4e (paused?): nothing deployed"; exit 1; }
+          [ "$PENDING" = 0 ] || { echo "::error::the deployer has pending $CHAIN transactions: the synthetic's address is not fixed; nothing deployed"; exit 1; }
+          awk -v b="$BALANCE" -v n="$NEED" 'BEGIN{exit !(b>=n/4)}' || { echo "::error::the deployer has $BALANCE ETH on $CHAIN (at least $NEED/4 needed)"; exit 1; }
+          [ "$(jq -r --arg k "$TOKEN" --arg c "$CHAIN" '.tokens[$k][$c].destination.synthetic // empty' ../zetaphy-chain/hyperlane/saphan-routes.json)" = "" ] \
+            || { echo "::error::saphan-routes.json already has the $TOKEN route to $CHAIN"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/zh"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/worker.key")" = "$DEPLOYER" ] \
+            || { rm -f "$H/worker.key"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          trap 'rm -f "$H/worker.key"' EXIT
+          export KEYFILE="$H/worker.key"
+          bn() { echo $(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "$1" | jq -r .result) )); }
+          OFROM=$(bn "${ORIGIN_RPC%%,*}"); ZFROM=$(bn "$ZETAPHY_RPC")
+          # 1. the destination's roles (the v2 route's when deployed) and our ISM; where the synthetic will be
+          node scripts/saphan.js token-prepare --token "$TOKEN" --chain "$CHAIN" | tail -1 | tee "$H/prep.json"
+          SYN=$(jq -r .syntheticAt "$H/prep.json")
+          # 2. ZETAPHY: the vault (governance: the ZETAPHY timelock; guardian: the guardian multisig; vaccine: the ThreatRegistry)
+          node scripts/saphan.js token-vault --token "$TOKEN" --chain "$CHAIN" --expect "$SYN" | tail -1 | tee "$H/vault.json"
+          # 3. the synthetic, exactly at $SYN (governance: the chain's timelock; guardian: its multisig)
+          node scripts/saphan.js token-synthetic --token "$TOKEN" --chain "$CHAIN" --vault "$(jq -r .vault "$H/vault.json")" --expect "$SYN" \
+            --multisig "$(jq -r .multisig "$H/prep.json")" --timelock "$(jq -r .timelock "$H/prep.json")" --ism "$(jq -r .ism "$H/prep.json")" | tail -1 | tee "$H/syn.json"
+          jq --arg key "$TOKEN" --arg chain "$CHAIN" --slurpfile prep "$H/prep.json" --slurpfile v "$H/vault.json" --slurpfile s "$H/syn.json" \
+            --argjson zfrom "$ZFROM" --argjson ofrom "$OFROM" --arg run "${{ github.run_id }}" \
+            '.tokens[$key][$chain] = {version: 1, state: "CLOSED",
+              zetaphy: {vault: $v[0].vault, ism: $v[0].ism, governance: $v[0].governance, guardian: $v[0].guardian, deployTx: $v[0].tx, fromBlock: $zfrom},
+              destination: {synthetic: $s[0].synthetic, symbol: $s[0].symbol, ism: $prep[0].ism, multisig: $prep[0].multisig, timelock: $prep[0].timelock, deployTx: $s[0].tx, fromBlock: $ofrom},
+              workflowRun: $run}' ../zetaphy-chain/hyperlane/saphan-routes.json > "$H/routes.json"
+          mv "$H/routes.json" ../zetaphy-chain/hyperlane/saphan-routes.json
+          jq ".tokens[\"$TOKEN\"][\"$CHAIN\"]" ../zetaphy-chain/hyperlane/saphan-routes.json
+
+      - name: Push the addresses to saphan/<chain> (saphan/<token>-<chain> for a token route)
         if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch'
         run: |
           cd ..
+          B="saphan/${TOKEN:+$TOKEN-}$CHAIN"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -q -B "saphan/$CHAIN"
+          git checkout -q -B "$B"
           git add zetaphy-chain/hyperlane/saphan-routes.json
-          git commit -q -m "Saphan route $CHAIN <-> ZETAPHY on the testnets: addresses" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
-          git push -q --force origin "saphan/$CHAIN"
-          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...saphan/$CHAIN"
+          git commit -q -m "Saphan route ${TOKEN:+$TOKEN }$CHAIN <-> ZETAPHY on the testnets: addresses" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin "$B"
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...$B"

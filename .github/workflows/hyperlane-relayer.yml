@@ -9,7 +9,11 @@
 #     checkpoints into a folder kept in the Actions cache, and the relayer reads them there and delivers each
 #     HyperlaneOutbox release to its lockbox, whose ISM trusts only our validator(s). Runs while a release waits
 #     (outbox nonce on ZETAPHY > lockbox received on the source chain: one small call per route on ZETAPHY).
-# It relays nothing else (whitelist: our lockboxes and outboxes, their routes), so its key spends nothing else.
+#   - token routes (tokens born on ZETAPHY, saphan-routes.json `tokens`): out = a ZetaphyTokenVault's lock to its
+#     synthetic on the destination (our validator signs, as for the outboxes; runs while vault nonce on ZETAPHY >
+#     synthetic received), back = a synthetic's burn to its vault (Hyperlane's validator for that chain signs; runs while
+#     synthetic nonce > vault received, ZETAPHY asked only when the synthetic's count moved).
+# It relays nothing else (whitelist: our lockboxes, outboxes, vaults and synthetics, their routes), so its key spends nothing else.
 # Databases and checkpoints are kept between runs in the Actions cache.
 #
 # Signer: the repository secret ZETAPHY_DEPLOYER_KEY (it keeps no role; it pays ZETAPHY gas, which is 0, and the
@@ -64,7 +68,7 @@ jobs:
       - name: Bridge deployed?
         id: b
         run: |
-          v2=$(jq -r '.routes | length' "$ROUTES" 2>/dev/null || echo 0)
+          v2=$(jq -r '(.routes | length) + ([.tokens // {} | .[] | length] | add // 0)' "$ROUTES" 2>/dev/null || echo 0)
           if [ ! -f "$BRIDGE" ] && [ "$v2" = 0 ]; then echo "no route deployed yet: nothing to relay"; echo "go=no" >> "$GITHUB_OUTPUT"; exit 0; fi
           sfrom=""
           if [ -f "$BRIDGE" ]; then
@@ -73,7 +77,7 @@ jobs:
             sfrom=$(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getTransactionReceipt\",\"params\":[\"$tx\"]}" "$SEPOLIA_RPC" | jq -r .result.blockNumber) ))
           fi
           { echo "go=yes"; echo "sfrom=$sfrom"; } >> "$GITHUB_OUTPUT"
-          echo "routes: v1 Sepolia $( [ -f "$BRIDGE" ] && echo yes || echo no ), v2: $(jq -r '.routes | keys | join(", ")' "$ROUTES")"
+          echo "routes: v1 Sepolia $( [ -f "$BRIDGE" ] && echo yes || echo no ), v2: $(jq -r '.routes | keys | join(", ")' "$ROUTES"), tokens: $(jq -r '[.tokens // {} | to_entries[] | .key as $k | .value | keys[] | "\($k)->\(.)"] | join(", ")' "$ROUTES")"
 
       - name: Restore the gate's state
         if: steps.b.outputs.go == 'yes'

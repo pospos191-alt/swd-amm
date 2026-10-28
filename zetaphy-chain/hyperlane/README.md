@@ -53,3 +53,11 @@ OUR validator(s) for origin ZETAPHY), and on ZETAPHY its own guard, bridged toke
 the pinned CLI from the registry). Deployed routes go to `saphan-routes.json`. The `hyperlane-relayer` workflow
 relays every route both ways and runs our validator (`ZETAPHY_VALIDATOR_KEY`) only while a release waits, with its
 checkpoints in the Actions cache. Design, egress estimate and the owner's steps: docs/SAPHAN-MULTICHAIN.md.
+
+## Saphan token routes: tokens born on ZETAPHY going out (`saphan-route` with `token = <key>`)
+
+The `tokens` section of `saphan-chains.json` lists tokens created on ZETAPHY (the native coin through its ERC-20
+precompile, `zZETAPHY` on the other side; BZTPHY listed but not movable) and their destination chains. Per token and
+destination: a `ZetaphyTokenVault` on ZETAPHY (escrow) and a `SaphanSyntheticToken` on the destination (minted only
+by that vault's messages, verified by our validators). Deployed routes go to `saphan-routes.json` under `tokens`; the
+relayer whitelists and relays them both ways. Design and the owner's steps: docs/SAPHAN-TOKENS.md.

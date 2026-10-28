@@ -403,6 +403,31 @@ export function evmRows(ctx) {
     })];
 }
 
+/**
+ * Token routes (tokens born on ZETAPHY going out over Hyperlane): per token, its copy on each destination and the
+ * route's state; a token that cannot move (BZTPHY) says so. From hub-config.json saphanTokens (build.mjs saphanTokenRoutes).
+ */
+export function tokenRows(ctx) {
+  const L = saphanText(ctx);
+  const list = (ctx.cfg.saphanTokens ?? []).filter((r) => r && typeof r.symbol === 'string' && Array.isArray(r.destinations));
+  if (!list.length) return [];
+  const pill = { open: ['passed', L.stOpen], closed: ['rejected', L.stClosed], planned: ['', L.stPlanned] };
+  return [ctx.el('tr', {}, ctx.el('td', { class: 'dim small', colspan: 2, 'data-tip': L.tipTok, tabindex: 0, text: L.tok })),
+    ...list.flatMap((r) => {
+      if (!r.transferable || !r.destinations.length) {
+        return [ctx.el('tr', {}, ctx.el('td', { 'data-tip': L.tipStays }, ctx.el('b', { text: r.symbol }), ctx.el('div', { class: 'dim small', text: L.stays })),
+          ctx.el('td', { class: 'num' }, ctx.el('span', { class: 'pill', text: '—' })))];
+      }
+      return r.destinations.filter((d) => typeof d?.displayName === 'string').map((d) => {
+        const [cls, word] = pill[d.state] ?? pill.planned;
+        return ctx.el('tr', {},
+          ctx.el('td', { 'data-tip': L.tipTokRow(r.symbol, r.synthetic, d.displayName) }, ctx.el('b', { text: `${r.symbol} → ${d.displayName}` }),
+            ctx.el('div', { class: 'dim small mono', text: `${r.synthetic} · ${L.twoWay}` })),
+          ctx.el('td', { class: 'num' }, ctx.el('span', { class: `pill ${cls}`.trim(), text: word })));
+      });
+    })];
+}
+
 const saphan = {
   render(root, ctx) {
     const L = saphanText(ctx);
@@ -411,7 +436,7 @@ const saphan = {
       ctx.el('p', { class: 'dim small sp-intro', text: L.intro }),
       ctx.el('div', { class: 'grid3 sp-grid' },
         ctx.el('div', { class: 'card' }, head(L.routes, L.tipRoutes), ctx.el('div', { class: 'scroll' }, ctx.el('table', { class: 'tbl' },
-          ctx.el('tbody', { id: 'sp-routes' }, ctx.el('tr', {}, ctx.el('td', { class: 'dim', text: '…' }))), ctx.el('tbody', { id: 'sp-evm' }, ...evmRows(ctx))))),
+          ctx.el('tbody', { id: 'sp-routes' }, ctx.el('tr', {}, ctx.el('td', { class: 'dim', text: '…' }))), ctx.el('tbody', { id: 'sp-evm' }, ...evmRows(ctx)), ctx.el('tbody', { id: 'sp-tok' }, ...tokenRows(ctx))))),
         ctx.el('div', { class: 'card' }, head(L.send, L.tipSend), ctx.el('div', { id: 'sp-send' }, ctx.el('p', { class: 'dim', text: '…' }))),
         ctx.el('div', { class: 'card' }, head(L.recv, L.tipRecv), ctx.el('div', { id: 'sp-recv', class: 'small' }))),
       ctx.el('p', { class: 'warnline small', text: L.limits }));

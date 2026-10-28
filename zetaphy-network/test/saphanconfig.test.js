@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { AbiCoder, Interface, getAddress, Wallet } from 'ethers';
-import { loadChains, chainProblems, chainOf, relayerWhitelist, hubRoutes, sortAddresses, CHAINS_FILE, messageIdMetadata } from '../src/saphan.js';
+import { loadChains, chainProblems, chainOf, relayerWhitelist, hubRoutes, sortAddresses, CHAINS_FILE, messageIdMetadata,
+  tokenProblems, tokenOf, tokenRouteList, hubTokenRoutes, NATIVE_ERC20 } from '../src/saphan.js';
 import { relayerEnv, relayGate } from '../scripts/saphan.js';
 
 const table = () => JSON.parse(readFileSync(CHAINS_FILE, 'utf8'));
@@ -133,4 +134,111 @@ test('multisig ISM validators are sorted; the metadata carries hook, root, index
   const m = messageIdMetadata(msg, [w, w], { merkleTreeHook: A(7), index: 5 });
   assert.equal((m.length - 2) / 2, 32 + 32 + 4 + 65 * 2);
   assert.equal(m.slice(2 + 128, 2 + 136), '00000005');
+});
+
+// ---------------------------------------------------------------- token routes (tokens born on ZETAPHY)
+
+const tokenRoutes = {
+  zetaphy: {
+    basesepolia: { state: 'CLOSED', zetaphy: { vault: A(0xd1), fromBlock: 21000 }, destination: { synthetic: A(0xd2), fromBlock: 600 } },
+    arbitrumsepolia: { state: 'OPEN', zetaphy: { vault: A(0xe1), fromBlock: 22000 }, destination: { synthetic: A(0xe2), fromBlock: 950 } },
+  },
+  ghost: { mainnet: { zetaphy: { vault: A(0xf1) }, destination: { synthetic: A(0xf2) } } },   // not a chain of the table: ignored
+};
+
+test('the committed token table: the native coin (its ERC-20 precompile) to all three chains; BZTPHY listed but not movable', () => {
+  const t = loadChains();
+  const z = tokenOf(t, 'zetaphy');
+  assert.deepEqual([z.address, z.decimals, z.native, z.synthetic.symbol], [NATIVE_ERC20, 18, true, 'zZETAPHY']);
+  assert.deepEqual(z.destinations, ['sepolia', 'basesepolia', 'arbitrumsepolia']);
+  // the same precompile address as the genesis (setup-node.sh: erc20 native_precompiles)
+  assert.ok(readFileSync(new URL('../../zetaphy-chain/setup-node.sh', import.meta.url), 'utf8').includes(`native_precompiles=[\\"${NATIVE_ERC20}\\"]`));
+  const b = tokenOf(t, 'bztphy');
+  // BZTPHY's address (the rewards deployment) and why it stays home (ZetaphyPoints is NonTransferable)
+  assert.equal(b.address, JSON.parse(readFileSync(new URL('../../zetaphy-chain/rewards/points-testnet.json', import.meta.url), 'utf8')).points);
+  assert.deepEqual([b.transferable, b.destinations], [false, []]);
+  assert.ok(readFileSync(new URL('../contracts/ZetaphyPoints.sol', import.meta.url), 'utf8').includes('error NonTransferable()'));
+  assert.throws(() => tokenOf(t, 'usdc'), /unknown token usdc: one of zetaphy, bztphy/);
+  assert.throws(() => tokenOf(t, 'about'), /unknown token/);
+});
+
+test('token table problems are named: keys, addresses, decimals, symbols, destinations, limits, a token that cannot move', () => {
+  const t = table();
+  assert.deepEqual(tokenProblems(t), []);
+  t.tokens.bztphy.destinations = ['basesepolia'];                             // not transferable: no destinations
+  t.tokens.zetaphy.destinations = ['basesepolia', 'mainnet', 'basesepolia'];
+  t.tokens.zetaphy.limits.lockCap = '1.0000000000000000001';                  // 19 decimals of an 18-decimal token
+  t.tokens.zetaphy.limits.mintDelay = 31 * 86400;
+  t.tokens['Bad Key'] = { ...t.tokens.zetaphy, address: 'nope', native: false, decimals: 40, synthetic: { name: '', symbol: 'baseETH' } };
+  t.tokens.dup = { ...t.tokens.zetaphy, native: false, synthetic: { name: 'x', symbol: 'zZETAPHY' } };
+  t.tokens.fake = { ...t.tokens.zetaphy, address: A(5), synthetic: { name: 'y', symbol: 'zFAKE' } };   // "native" but not the precompile
+  const p = tokenProblems(t).join('\n');
+  for (const re of [/tokens\.bztphy: not transferable, so no destinations/, /tokens\.zetaphy\.destinations: mainnet is not a chain/, /tokens\.zetaphy\.destinations: a chain twice/,
+    /tokens\.zetaphy\.limits\.lockCap/, /tokens\.zetaphy\.limits\.mintDelay/, /tokens\.Bad Key: a key/, /tokens\.Bad Key\.address/, /tokens\.Bad Key\.decimals/,
+    /tokens\.Bad Key\.synthetic\.symbol baseETH: used twice/, /tokens\.Bad Key\.synthetic\.name/, /tokens\.dup\.address: listed twice/, /tokens\.dup\.synthetic\.symbol zZETAPHY: used twice/,
+    /tokens\.fake: native means/]) assert.match(p, re);
+  assert.match(chainProblems(t).join('\n'), /tokens\.dup/);                    // part of the table check (loadChains refuses it)
+  assert.deepEqual(tokenProblems({ chains: {} }), []);                         // no tokens section: fine
+});
+
+test('token routes: the relayer whitelist and settings include each vault -> its chain and each synthetic -> ZETAPHY', () => {
+  const t = loadChains();
+  assert.deepEqual(tokenRouteList(t, tokenRoutes).map(([k, c]) => `${k}:${c}`), ['zetaphy:basesepolia', 'zetaphy:arbitrumsepolia']);
+  const w = relayerWhitelist(t, {}, [], tokenRoutes);
+  const pad = (x) => '0x' + '00'.repeat(12) + x.slice(2);
+  assert.deepEqual(w, [
+    { originDomain: 77390, senderAddress: pad(A(0xd1)), destinationDomain: 84532 },
+    { originDomain: 84532, senderAddress: pad(A(0xd2)), destinationDomain: 77390 },
+    { originDomain: 77390, senderAddress: pad(A(0xe1)), destinationDomain: 421614 },
+    { originDomain: 421614, senderAddress: pad(A(0xe2)), destinationDomain: 77390 },
+  ]);
+  const env = relayerEnv(t, routes, null, { tokenRoutes });
+  assert.equal(env[0], 'HYP_RELAYCHAINS=basesepolia,arbitrumsepolia,zetaphy');
+  assert.ok(env.includes('HYP_CHAINS_BASESEPOLIA_INDEX_FROM=500') && env.includes('HYP_CHAINS_ARBITRUMSEPOLIA_INDEX_FROM=900'));  // the earlier of lockbox and synthetic
+  assert.ok(env.includes('HYP_CHAINS_ZETAPHY_INDEX_FROM=19000'));
+  assert.equal(JSON.parse(env[1].slice('HYP_WHITELIST='.length)).length, 3 + 4);
+  assert.deepEqual(relayerEnv(t, {}, null, { tokenRoutes: { zetaphy: { sepolia: tokenRoutes.zetaphy.basesepolia } } })[0], 'HYP_RELAYCHAINS=sepolia,zetaphy');
+});
+
+test('relay gate, token routes: validator while a lock waits on ZETAPHY; relayer while a send-back waits; ZETAPHY asked sparingly', async () => {
+  const t = loadChains();
+  const vals = {};
+  const set = (addr, fn, v) => { vals[`${getAddress(addr)}:${fn}`] = v; };
+  for (const [v, s] of [[0xd1, 0xd2], [0xe1, 0xe2]]) { set(A(v), 'nonce', 0); set(A(v), 'received', 0); set(A(s), 'nonce', 0); set(A(s), 'received', 0); }
+  let zCalls = 0;
+  const z = fakeRpc(vals);
+  const zeta = { call: (tx) => { zCalls++; return z.call(tx); } };
+  const gate = (state, zp = zeta) => relayGate({ t, routes: {}, tokenRoutes, v1: null, originProvider: async () => fakeRpc(vals), zetaphyProvider: async () => zp, state, now: 1_900_000_000 });
+  let g = await gate(null);
+  assert.deepEqual([g.run, g.validator], [false, false]);
+  assert.equal(zCalls, 2);                                       // one nonce() per vault; received() not asked (nothing sent back)
+  set(A(0xd1), 'nonce', 2); set(A(0xd2), 'received', 1);         // a lock on ZETAPHY not yet on Base: our validator must sign
+  g = await gate(g.state);
+  assert.deepEqual([g.run, g.validator], [true, true]);
+  assert.match(g.reasons.join(), /zetaphy:basesepolia: 1 lock\(s\) on ZETAPHY not delivered yet/);
+  set(A(0xd2), 'received', 2);
+  set(A(0xe2), 'nonce', 1);                                      // a send-back on Arbitrum: Hyperlane's validator signs, the relayer delivers
+  g = await gate(g.state);
+  assert.deepEqual([g.run, g.validator], [true, false]);
+  assert.match(g.reasons.join(), /zetaphy:arbitrumsepolia: 1 send-back\(s\) to ZETAPHY not delivered yet/);
+  set(A(0xe1), 'received', 1);
+  g = await gate(g.state);
+  assert.deepEqual([g.run, g.validator], [false, false]);
+  zCalls = 0;
+  g = await gate(g.state);                                       // seen delivered: the vault's received() is not asked again
+  assert.equal(zCalls, 2);
+  // ZETAPHY down: no validator, nothing to do on its word; a destination down: relay anyway
+  g = await gate(g.state, fakeRpc({}, { down: true }));
+  assert.deepEqual([g.run, g.validator], [false, false]);
+  assert.match(g.reasons.join(), /ZETAPHY check failed/);
+  g = await relayGate({ t, routes: {}, tokenRoutes, v1: null, originProvider: async () => fakeRpc({}, { down: true }), zetaphyProvider: async () => zeta, state: g.state, now: 1 });
+  assert.equal(g.run, true);
+});
+
+test('the hub lists every token of the table with its destinations (planned, closed, open); BZTPHY with none', () => {
+  const h = hubTokenRoutes(loadChains(), tokenRoutes);
+  assert.deepEqual(h.map((x) => [x.key, x.symbol, x.synthetic, x.transferable]), [['zetaphy', 'ZETAPHY', 'zZETAPHY', true], ['bztphy', 'BZTPHY', 'zBZTPHY', false]]);
+  assert.deepEqual(h[0].destinations.map((d) => [d.name, d.state]), [['sepolia', 'planned'], ['basesepolia', 'closed'], ['arbitrumsepolia', 'open']]);
+  assert.equal(h[0].destinations[2].token, A(0xe2));
+  assert.deepEqual(h[1].destinations, []);
 });
