@@ -151,7 +151,7 @@ saphan-route run per destination + both timelocks opening it. No code. Deployed 
 
 ## What the owner does after 2026-11-01 (the ZETAPHY RPC is back)
 
-Needs what v2 needs first: `ZETAPHY_DEPLOYER_KEY` and `ZETAPHY_VALIDATOR_KEY` (repository secrets, names only), the
+Needs what v2 needs first: `ZETAPHY_DEPLOYER_KEY` and `ZETAPHY_VALIDATOR_KEY` (environment secrets, names only: [SECRETS-HARDENING.md](SECRETS-HARDENING.md)), the
 validator's address in `zetaphyValidators` (docs/SAPHAN-MULTICHAIN.md). No new secret. The same validator signs the
 v2 releases and the token mints.
 

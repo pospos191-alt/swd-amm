@@ -35,6 +35,8 @@ jobs:
       REF: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Install with the one command (code pinned to this commit)
         run: |
           # the same pipe a user runs, with this commit's install.sh and code
@@ -74,6 +76,8 @@ jobs:
       REF: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Prebuilt zetaphyd for this setup-node.sh, SHA-256 checked
         run: |
           cat install.sh | sudo REF="$REF" DOWNLOAD_ONLY=1 bash -s -- validator | tee /tmp/v.log
@@ -106,6 +110,8 @@ jobs:
       REF: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: install.sh validator (DOWNLOAD_ONLY) in a clean ${{ matrix.image }}
         run: |
           # curl first, as a user needs it to run the one-liner at all; the script installs the rest

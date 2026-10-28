@@ -5,7 +5,7 @@
 # the factory and each new token:
 #   - Sourcify: free, every chain, no key needed.
 #   - Etherscan family (etherscan, arbiscan; bscscan/basescan need a paid
-#     plan): only when the repository secret ETHERSCAN_API_KEY is set. A free
+#     plan): only when the secret ETHERSCAN_API_KEY (environment explorer-verify) is set. A free
 #     key is enough for Ethereum and Arbitrum; chains the free tier skips show
 #     "plan-required" and do not fail the run. For BscScan / BaseScan use the
 #     free web form once (README: "BscScan for free").
@@ -56,9 +56,14 @@ jobs:
     name: verify ZETAPHY contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # ETHERSCAN_API_KEY is a secret of the environment explorer-verify (main only, no required
+    # reviewer: the job is scheduled; docs/SECRETS-HARDENING.md)
+    environment: explorer-verify
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5

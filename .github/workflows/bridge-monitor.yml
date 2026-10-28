@@ -22,7 +22,8 @@
 #   ZETAPHY_RPC            the RPC, instead of "rpc" in the file above
 #   BRIDGE_ALERT_ISSUES    "on": also open issues labelled bridge-alert here (with the built-in GITHUB_TOKEN)
 #   PRIVATE_ALERTS_REPO    owner/name for PRIVATE_ALERTS_TOKEN (default pospos191-alt/zetaphy-private)
-# Repository secrets (… → Secrets), all optional, passed through the environment, never printed:
+# Secrets of the environment `monitoring` (Settings → Environments → monitoring; docs/SECRETS-HARDENING.md),
+# all optional, passed through the environment, never printed:
 #   BRIDGE_MONITOR_THRESHOLDS  JSON over the committed defaults, e.g. {"volumePct": 60, "largePct": 10}
 #                              (keys volumePct, largePct, silentMinutes, disagreeMinutes)
 #   BRIDGE_WATCHLIST           JSON [{"address": "0x…", "callerTopic": 1}]: contracts whose every log is an
@@ -81,6 +82,9 @@ jobs:
     name: Watch the ZETAPHY bridge
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # The monitor secrets (BRIDGE_*, TELEGRAM_*, DISCORD_WEBHOOK_URL, PRIVATE_ALERTS_TOKEN) are secrets of the
+    # environment monitoring (docs/SECRETS-HARDENING.md): main only, no required reviewer (it will be scheduled).
+    environment: monitoring
     defaults:
       run:
         shell: bash
@@ -89,6 +93,8 @@ jobs:
       LAUNCH_STATE: zetaphy-launch/state/77390.json
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Is a bridge deployed?
         id: check

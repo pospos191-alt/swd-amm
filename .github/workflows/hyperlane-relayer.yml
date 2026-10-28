@@ -16,9 +16,10 @@
 # It relays nothing else (whitelist: our lockboxes, outboxes, vaults and synthetics, their routes), so its key spends nothing else.
 # Databases and checkpoints are kept between runs in the Actions cache.
 #
-# Signer: the repository secret ZETAPHY_DEPLOYER_KEY (it keeps no role; it pays ZETAPHY gas, which is 0, and the
-# source chains' gas for releases: keep some faucet ETH on it). Validator: ZETAPHY_VALIDATOR_KEY (needs a little
-# ZETAPHY once, for its announce). Delivery takes about 5-30 minutes. Cost: free (GitHub-hosted runner, public repository).
+# Signer: ZETAPHY_RELAYER_KEY if set, else ZETAPHY_DEPLOYER_KEY (it keeps no role; it pays ZETAPHY gas, which is 0,
+# and the source chains' gas for releases: keep some faucet ETH on it). Validator: ZETAPHY_VALIDATOR_KEY (needs a
+# little ZETAPHY once, for its announce). All are secrets of the environment testnet-automation (main only, no
+# reviewer: docs/SECRETS-HARDENING.md). Delivery takes about 5-30 minutes. Cost: free (GitHub-hosted runner, public repository).
 
 name: hyperlane-relayer
 
@@ -46,6 +47,9 @@ jobs:
     name: Hyperlane relayer (+ our validator for origin ZETAPHY)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # Keys from the environment testnet-automation (docs/SECRETS-HARDENING.md): deployment branches
+    # main only and NO required reviewers, since a reviewer would hold every scheduled run.
+    environment: testnet-automation
     defaults:
       run:
         shell: bash
@@ -59,6 +63,8 @@ jobs:
       SEPOLIA_RPC: https://ethereum-sepolia-rpc.publicnode.com
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
@@ -136,7 +142,7 @@ jobs:
         env:
           VKEY: ${{ secrets.ZETAPHY_VALIDATOR_KEY }}
         run: |
-          [ -n "$VKEY" ] || { echo "::error::the repository secret ZETAPHY_VALIDATOR_KEY is not set (docs/SAPHAN-MULTICHAIN.md)"; exit 1; }
+          [ -n "$VKEY" ] || { echo "::error::the secret ZETAPHY_VALIDATOR_KEY is not set in the environment testnet-automation (docs/SAPHAN-MULTICHAIN.md, docs/SECRETS-HARDENING.md)"; exit 1; }
           k=$(printf '%s' "$VKEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
           mkdir -p "$RUNNER_TEMP/validator-db" "$RUNNER_TEMP/checkpoints"; sudo chown -R 10391:10391 "$RUNNER_TEMP/validator-db" "$RUNNER_TEMP/checkpoints"
           ENVF="$RUNNER_TEMP/validator.env"; umask 077
@@ -169,11 +175,12 @@ jobs:
       - name: Run the relayer
         if: steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
         env:
-          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+          # a dedicated relayer key when the owner adds one (recommended), else the deployer key
+          KEY: ${{ secrets.ZETAPHY_RELAYER_KEY || secrets.ZETAPHY_DEPLOYER_KEY }}
           SFROM: ${{ steps.b.outputs.sfrom }}
           VAL: ${{ steps.g.outputs.validator }}
         run: |
-          [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
+          [ -n "$KEY" ] || { echo "::error::neither ZETAPHY_RELAYER_KEY nor ZETAPHY_DEPLOYER_KEY is set in the environment testnet-automation"; exit 1; }
           k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
           DB="$RUNNER_TEMP/relayer-db"; mkdir -p "$DB"; sudo chown -R 10391:10391 "$DB"
           ENVF="$RUNNER_TEMP/relayer.env"; umask 077

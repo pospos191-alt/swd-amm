@@ -75,6 +75,109 @@ concurrency:
 
 jobs:
   timelock:
+    # status, schedule, cancel: no key, no environment
+    if: inputs.action != 'execute'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Check the inputs
+        env:
+          ACTION: ${{ inputs.action }}
+          RPC: ${{ inputs.rpc }}
+          TL: ${{ inputs.timelock }}
+          TO: ${{ inputs.to }}
+          SIG: ${{ inputs.sig }}
+          ARGS: ${{ inputs.args }}
+          DATA: ${{ inputs.data }}
+          SALT: ${{ inputs.salt }}
+          ID: ${{ inputs.id }}
+        run: |
+          [[ "$RPC" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/?$ ]] || { echo "::error::rpc must be https://<host>"; exit 1; }
+          [ -z "$TL" ] || [[ "$TL" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "::error::timelock must be 0x<40 hex>"; exit 1; }
+          [ -z "$TO" ] || [[ "$TO" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "::error::to must be 0x<40 hex>"; exit 1; }
+          [ -z "$SIG" ] || [[ "$SIG" =~ ^[A-Za-z_][A-Za-z0-9_]*\([a-z0-9,\[\]]*\)$ ]] || { echo "::error::sig must look like setFee(uint16,address)"; exit 1; }
+          [ -z "$ARGS" ] || [[ "$ARGS" =~ ^[A-Za-z0-9,x.:_-]{1,600}$ ]] || { echo "::error::args: comma-separated numbers, addresses, true/false"; exit 1; }
+          [ -z "$DATA" ] || [[ "$DATA" =~ ^0x[0-9a-fA-F]{8,}$ ]] || { echo "::error::data must be 0x calldata"; exit 1; }
+          [ -z "$SALT" ] || [[ "$SALT" =~ ^[A-Za-z0-9._-]{1,64}$ ]] || { echo "::error::salt: letters, digits . _ - (up to 64)"; exit 1; }
+          [ -z "$ID" ] || [[ "$ID" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "::error::id must be 0x<64 hex>"; exit 1; }
+          if [ "$ACTION" = schedule ] && { [ -z "$TO" ] || { [ -z "$SIG" ] && [ -z "$DATA" ]; }; }; then echo "::error::schedule needs to, and sig (+ args) or data"; exit 1; fi
+          if [ "$ACTION" = execute ] || [ "$ACTION" = cancel ]; then [ -n "$ID" ] || { echo "::error::$ACTION needs id"; exit 1; }; fi
+
+      - name: Install
+        run: npm ci --prefix zetaphy-network --omit=dev --no-audit --no-fund
+
+      - name: Find the timelock
+        id: tl
+        env:
+          TL: ${{ inputs.timelock }}
+        run: |
+          if [ -z "$TL" ] && git fetch -q origin launch/testnet 2>/dev/null; then
+            git show FETCH_HEAD:zetaphy-launch/state/77390.json > "$RUNNER_TEMP/state.json" 2>/dev/null || true
+            TL=$(jq -r '[.steps[].out.timelock // empty][0] // empty' "$RUNNER_TEMP/state.json" 2>/dev/null)
+            BLOCK=$(jq -r '[.steps[].out.timelockBlock // empty][0] // empty' "$RUNNER_TEMP/state.json" 2>/dev/null)
+          fi
+          [ -n "$TL" ] || { echo "::error::no timelock: give its address (or hand over first: docs/LAUNCH.md step 8)"; exit 1; }
+          echo "address=$TL" >> "$GITHUB_OUTPUT"
+          echo "block=${BLOCK:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Run
+        env:
+          ACTION: ${{ inputs.action }}
+          RPC: ${{ inputs.rpc }}
+          TL: ${{ steps.tl.outputs.address }}
+          FROM_BLOCK: ${{ steps.tl.outputs.block }}
+          TO: ${{ inputs.to }}
+          SIG: ${{ inputs.sig }}
+          ARGS: ${{ inputs.args }}
+          DATA: ${{ inputs.data }}
+          SALT: ${{ inputs.salt }}
+          ID: ${{ inputs.id }}
+          ZETAPHY_HOME: ${{ runner.temp }}/home
+        run: |
+          mkdir -p "$ZETAPHY_HOME" && chmod 700 "$ZETAPHY_HOME"
+          a=(timelock "$ACTION")
+          case "$ACTION" in
+            status) [ -n "$ID" ] && a+=("$ID") ;;
+            cancel) a+=("$ID") ;;
+            execute)
+              a+=("$ID")
+              # a call a gov vote scheduled leaves no log the node returns: give it in full (as schedule printed)
+              if [ -n "$TO" ]; then
+                a+=(--to "$TO")
+                if [ -n "$DATA" ]; then a+=(--data "$DATA"); else a+=(--sig "$SIG"); [ -n "$ARGS" ] && a+=(--args "$ARGS"); fi
+                [ -n "$SALT" ] && a+=(--salt "$SALT")
+              fi ;;
+            schedule)
+              a+=(--to "$TO" --proposal-out "$RUNNER_TEMP/proposal/timelock-proposal.json")
+              if [ -n "$DATA" ]; then a+=(--data "$DATA"); else a+=(--sig "$SIG"); [ -n "$ARGS" ] && a+=(--args "$ARGS"); fi
+              [ -n "$SALT" ] && a+=(--salt "$SALT") ;;
+          esac
+          node zetaphy-network/cli.js "${a[@]}" --timelock "$TL" --from-block "$FROM_BLOCK" --rpc "$RPC" 2>&1 | tee "$RUNNER_TEMP/out.txt"
+          { echo '```'; cat "$RUNNER_TEMP/out.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the gov proposal (schedule, when the gov module is a proposer)
+        if: inputs.action == 'schedule'
+        uses: actions/upload-artifact@v4
+        with:
+          name: timelock-proposal
+          path: ${{ runner.temp }}/proposal/
+          if-no-files-found: ignore
+
+  execute:
+    # execute signs (the key pays gas, holds no role): ZETAPHY_DEPLOYER_KEY from the environment
+    # testnet-deploy (required reviewer + main only, docs/SECRETS-HARDENING.md)
+    if: inputs.action == 'execute'
+    environment: testnet-deploy
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -188,11 +291,3 @@ jobs:
       - name: Remove the key
         if: always()
         run: rm -rf "$RUNNER_TEMP/home"
-
-      - name: Upload the gov proposal (schedule, when the gov module is a proposer)
-        if: inputs.action == 'schedule'
-        uses: actions/upload-artifact@v4
-        with:
-          name: timelock-proposal
-          path: ${{ runner.temp }}/proposal/
-          if-no-files-found: ignore

@@ -12,7 +12,7 @@
 # again: a run then only finishes the setup (owner checks, the interchain account
 # router handed to the timelock, the agent config).
 #
-# The deployer key is the repository secret ZETAPHY_DEPLOYER_KEY (the launch key: it
+# The deployer key is ZETAPHY_DEPLOYER_KEY of the environment testnet-deploy (the launch key: it
 # only pays gas here, gas is 0 on the testnet, and it keeps no role). It is passed to
 # the CLI as HYP_KEY and masked in logs.
 # Cost: free (GitHub-hosted runner, public repository).
@@ -29,15 +29,67 @@ on:
         type: choice
         options: ['yes', 'no']
 
+# Least privilege: read-only by default; only the deploy job (environment testnet-deploy: required
+# reviewer + main only, docs/SECRETS-HARDENING.md) gets ZETAPHY_DEPLOYER_KEY and write access.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  deploy:
-    name: Hyperlane core on ZETAPHY
+  dry-run:
+    name: Hyperlane core on ZETAPHY (dry run, local chain)
+    if: inputs.dry_run == 'yes'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      HYP_CLI: "@hyperlane-xyz/cli@45.0.1"
+      DIR: zetaphy-chain/hyperlane
+      BRANCH: hyperlane/testnet
+      RPC: https://rpc.sawasdeecoin.com
+      TIMELOCK: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Install the pinned Hyperlane CLI
+        run: npm i -g --no-audit --no-fund "$HYP_CLI" && hyperlane --version
+
+      - name: Dry run on a local chain (chain id 77390)
+        env:
+          GH_AUTH_TOKEN: ${{ github.token }}   # the CLI reads Sepolia from the GitHub registry
+        run: |
+          W=$(mktemp -d); cd "$W"
+          npm i --silent --no-audit --no-fund hardhat@2.22.17
+          printf 'module.exports={networks:{hardhat:{chainId:77390}}};\n' > hardhat.config.js
+          npx hardhat node --port 18545 > node.log 2>&1 &
+          for _ in $(seq 1 30); do curl -fs -X POST -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' http://127.0.0.1:18545 >/dev/null && break; sleep 1; done
+          mkdir -p reg/chains/zetaphy
+          sed 's#https://rpc.sawasdeecoin.com#http://127.0.0.1:18545#' "$GITHUB_WORKSPACE/$DIR/registry/chains/zetaphy/metadata.yaml" > reg/chains/zetaphy/metadata.yaml
+          # hardhat's well-known test key #0 (public, holds only local test ETH)
+          HYP_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
+            hyperlane core deploy --chain zetaphy --config "$GITHUB_WORKSPACE/$DIR/core-config.yaml" \
+            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$W/reg" --yes
+          printf 'interchainGasPaymaster: "0x0000000000000000000000000000000000000000"\n' >> reg/chains/zetaphy/addresses.yaml
+          hyperlane registry agent-config --chains sepolia zetaphy --out "$W/agent-config.json" \
+            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$W/reg" --yes
+          jq '.chains.zetaphy.mailbox' "$W/agent-config.json"
+          echo "dry run OK: nothing was sent to the testnet"
+
+  deploy:
+    name: Hyperlane core on ZETAPHY
+    if: inputs.dry_run == 'no'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: testnet-deploy
+    permissions:
+      contents: write        # pushes hyperlane/testnet
+      pull-requests: write   # opens its pull request
     defaults:
       run:
         shell: bash
@@ -65,28 +117,6 @@ jobs:
             echo "deployed=yes" >> "$GITHUB_OUTPUT"; echo "core already deployed: finishing the setup only"
           else echo "deployed=no" >> "$GITHUB_OUTPUT"; fi
 
-      - name: Dry run on a local chain (chain id 77390)
-        if: inputs.dry_run == 'yes'
-        env:
-          GH_AUTH_TOKEN: ${{ github.token }}   # the CLI reads Sepolia from the GitHub registry
-        run: |
-          W=$(mktemp -d); cd "$W"
-          npm i --silent --no-audit --no-fund hardhat@2.22.17
-          printf 'module.exports={networks:{hardhat:{chainId:77390}}};\n' > hardhat.config.js
-          npx hardhat node --port 18545 > node.log 2>&1 &
-          for _ in $(seq 1 30); do curl -fs -X POST -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' http://127.0.0.1:18545 >/dev/null && break; sleep 1; done
-          mkdir -p reg/chains/zetaphy
-          sed 's#https://rpc.sawasdeecoin.com#http://127.0.0.1:18545#' "$GITHUB_WORKSPACE/$DIR/registry/chains/zetaphy/metadata.yaml" > reg/chains/zetaphy/metadata.yaml
-          # hardhat's well-known test key #0 (public, holds only local test ETH)
-          HYP_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-            hyperlane core deploy --chain zetaphy --config "$GITHUB_WORKSPACE/$DIR/core-config.yaml" \
-            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$W/reg" --yes
-          printf 'interchainGasPaymaster: "0x0000000000000000000000000000000000000000"\n' >> reg/chains/zetaphy/addresses.yaml
-          hyperlane registry agent-config --chains sepolia zetaphy --out "$W/agent-config.json" \
-            -r https://github.com/hyperlane-xyz/hyperlane-registry -r "$W/reg" --yes
-          jq '.chains.zetaphy.mailbox' "$W/agent-config.json"
-          echo "dry run OK: nothing was sent to the testnet"
-
       - name: Check the RPC is ZETAPHY (eth_chainId 0x12e4e) before the key is used
         if: inputs.dry_run == 'no'
         run: |
@@ -99,7 +129,7 @@ jobs:
         env:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
         run: |
-          [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in this job's environment (docs/SECRETS-HARDENING.md)"; exit 1; }
           k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}
           echo "::add-mask::$k"; echo "::add-mask::0x$k"
           umask 077; printf '0x%s' "$k" > "$RUNNER_TEMP/deployer.key"

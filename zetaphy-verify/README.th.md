@@ -39,7 +39,7 @@ API ของ Etherscan แบบฟรีไม่รองรับ BNB Chain 
 1. คัดลอกไฟล์ build-info ของโปรเจกต์ launcher มาไว้ใน `zetaphy-verify/build-info/`
    - Hardhat: `artifacts/build-info/*.json` (Hardhat 3 ต้องคัดลอกไฟล์ `*.output.json` ที่อยู่คู่กันมาด้วย)
    - Foundry: `out/build-info/*.json`
-2. (ไม่บังคับ) สมัคร API key ฟรีที่ etherscan.io แล้วเพิ่มเป็น `ETHERSCAN_API_KEY` ที่ GitHub → Settings → Secrets and variables → Actions
+2. (ไม่บังคับ) สมัคร API key ฟรีที่ etherscan.io แล้วเพิ่มเป็น `ETHERSCAN_API_KEY` ที่ GitHub → Settings → Environments → `explorer-verify` → Environment secrets (docs/SECRETS-HARDENING.th.md)
    - ห้ามวาง key ลงในโค้ดหรือในแชต
 3. ถ้า launcher อยู่บนเชนอื่นด้วย ให้เพิ่มที่อยู่ factory ใน `src/config.js` ใต้เชนนั้น
    - ระบบลองที่อยู่ factory เดียวกันบนทุกเชนให้อยู่แล้ว แต่จะใช้ก็ต่อเมื่อโค้ดตรงกับ build-info
