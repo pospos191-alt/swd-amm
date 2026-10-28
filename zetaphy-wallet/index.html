@@ -80,6 +80,12 @@
       </div>
       <label for="pass1" data-i18n="pass1">Choose a passphrase (at least 8 characters)</label>
       <input id="pass1" type="password" autocomplete="new-password">
+      <div class="pw-meter" id="pass1-meter" hidden>
+        <meter min="0" max="4" low="2" high="3" optimum="4" value="0"></meter>
+        <span class="pw-label"></span>
+        <ul class="pw-reasons"></ul>
+      </div>
+      <p class="hint" data-i18n="pwTip">Tip: four or five random, unrelated words make a passphrase that is both strong and easy to remember.</p>
       <label for="pass2" data-i18n="pass2">Type the passphrase again</label>
       <input id="pass2" type="password" autocomplete="new-password">
       <button id="save-key" type="submit" data-i18n="saveKey">Create wallet</button>
@@ -94,6 +100,7 @@
       <input id="unlock-pass" type="password" autocomplete="current-password">
       <button id="unlock" type="submit" data-i18n="unlock">Unlock</button>
     </form>
+    <button id="pk-unlock" type="button" class="ghost" data-i18n="pkUnlock" hidden>Unlock with fingerprint / Face ID</button>
     <button id="forget" type="button" class="ghost danger" data-i18n="forget">Remove the wallet from this browser</button>
   </section>
 
@@ -112,6 +119,18 @@
   </section>
 
   <section id="wallet" hidden>
+    <div class="warn" id="weak-nudge" hidden>
+      <p id="weak-nudge-text"></p>
+      <button id="weak-nudge-go" type="button" data-i18n="weakNudgeGo">Change it now</button>
+    </div>
+    <div class="warn" id="big-balance" hidden>
+      <strong data-i18n="bigTitle">Large balance: consider a safer place for the key</strong>
+      <p id="big-balance-text"></p>
+      <div class="row">
+        <button id="big-help" type="button" data-i18n="bigHow">How to</button>
+        <button id="big-later" type="button" class="ghost" data-i18n="bigLater">Hide for 7 days</button>
+      </div>
+    </div>
     <div class="card">
       <h2 data-i18n="accountTitle">Your account</h2>
       <p class="hint" data-i18n="sameAccount">Both are the same account. It can receive funds at either.</p>
@@ -125,6 +144,10 @@
       <p id="acct-status" class="hint"></p>
       <p id="snap-mode" class="hint" data-i18n="snapMode" hidden>The key is in MetaMask (ZETAPHY Snap), not in this page. Your MetaMask Secret Recovery Phrase is its backup.</p>
       <button id="snap-disconnect" type="button" class="ghost" data-i18n="snapDisconnect" hidden>Disconnect MetaMask from this page</button>
+      <div class="row lock-row">
+        <button id="lock" type="button" class="ghost" data-i18n="lock">Lock wallet</button>
+        <span id="autolock-hint" class="hint"></span>
+      </div>
     </div>
 
     <div class="card" id="owned-card">
@@ -337,7 +360,48 @@
       <label class="check"><input id="backup-ok" type="checkbox"> <span data-i18n="backupOk">I understand</span></label>
       <button id="backup" type="button" disabled data-i18n="backup">Download seed backup</button>
       <p class="hint" data-i18n="backupCli">The file works as ~/.zetaphy/pq.seed for the zetaphy pq native command.</p>
-      <button id="lock" type="button" class="ghost" data-i18n="lock">Lock wallet</button>
+    </div>
+
+    <div class="card" id="security-card">
+      <h2 data-i18n="secTitle">Security</h2>
+      <label for="autolock-min" data-i18n="autoLockLabel">Lock automatically after this long without activity, or in a background tab</label>
+      <select id="autolock-min">
+        <option value="1"></option>
+        <option value="5"></option>
+        <option value="15"></option>
+        <option value="30"></option>
+      </select>
+
+      <div id="chpw-box">
+        <h3 data-i18n="chpwTitle">Change the passphrase</h3>
+        <form id="chpw-form" autocomplete="off">
+          <label for="chpw-old" data-i18n="chpwOld">Current passphrase</label>
+          <input id="chpw-old" type="password" autocomplete="current-password">
+          <label for="chpw-new1" data-i18n="chpwNew">New passphrase (at least 12 characters, rated Strong)</label>
+          <input id="chpw-new1" type="password" autocomplete="new-password">
+          <div class="pw-meter" id="chpw-meter" hidden>
+        <meter min="0" max="4" low="2" high="3" optimum="4" value="0"></meter>
+        <span class="pw-label"></span>
+        <ul class="pw-reasons"></ul>
+      </div>
+          <label for="chpw-new2" data-i18n="pass2">Type the passphrase again</label>
+          <input id="chpw-new2" type="password" autocomplete="new-password">
+          <button id="chpw-save" type="submit" data-i18n="chpwSave">Change passphrase</button>
+        </form>
+      </div>
+
+      <div id="pk-box">
+        <h3 data-i18n="pkTitle">Unlock with fingerprint / Face ID (passkey)</h3>
+        <p class="hint" data-i18n="pkIntro">Creates a passkey for this site on this device.</p>
+        <p class="hint" data-i18n="pkSyncNote">Passkeys may sync to your other devices.</p>
+        <p id="pk-state" class="hint"></p>
+        <div class="row">
+          <button id="pk-enable" type="button" data-i18n="pkEnable">Turn on fingerprint / Face ID unlock</button>
+          <button id="pk-disable" type="button" class="ghost danger" data-i18n="pkDisable" hidden>Turn off fingerprint / Face ID unlock</button>
+        </div>
+      </div>
+
+      <button id="help-open" type="button" class="ghost" data-i18n="helpOpen">Keeping a larger balance safe</button>
     </div>
   </section>
 
@@ -411,6 +475,26 @@
       <p class="hint" data-i18n="wcIdHint">Free at cloud.reown.com. Set it here (remembered in this browser), or for everyone in index.html's zetaphy-walletconnect-project-id meta tag.</p>
     </details>
   </section>
+
+  <dialog id="help-dialog" aria-labelledby="help-title">
+    <h2 id="help-title" data-i18n="helpTitle">Keeping a larger balance safe</h2>
+    <p data-i18n="helpIntro">A key in a web page is only as safe as the browser and the computer it runs on.</p>
+    <h3 data-i18n="helpSnapTitle">Native PQ account: move to the ZETAPHY Snap (key inside MetaMask)</h3>
+    <ol>
+      <li data-i18n="helpSnap1">Install MetaMask (Flask until the snap is published).</li>
+      <li data-i18n="helpSnap2">Lock this wallet, then click "Connect MetaMask".</li>
+      <li data-i18n="helpSnap3">Copy the new account's zetaphy1… address.</li>
+      <li data-i18n="helpSnap4">Unlock this wallet again and send the funds to that address.</li>
+    </ol>
+    <h3 data-i18n="helpHwTitle">EVM accounts: a hardware wallet</h3>
+    <ol>
+      <li data-i18n="helpHw1">Connect a Ledger or Trezor to MetaMask or Rabby.</li>
+      <li data-i18n="helpHw2">Add the ZETAPHY Testnet network to it.</li>
+      <li data-i18n="helpHw3">Send the funds to the hardware account's 0x… address.</li>
+    </ol>
+    <p class="hint" data-i18n="helpMore">The README's security section has the details.</p>
+    <button id="help-close" type="button" data-i18n="helpClose">Close</button>
+  </dialog>
 
   <p id="status" role="status" aria-live="polite"></p>
 

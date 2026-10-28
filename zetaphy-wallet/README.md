@@ -96,16 +96,69 @@ There is no WalletConnect SDK in the bundle yet, so the WalletConnect button on 
 - **Next step:** add the SDK in `src/entry.js`, then `npm run build` (and commit `vendor/pqwallet.js`), then wire it to the button
 - Needed for mobile wallets when this page is opened from another browser, such as Binance Web3 Wallet outside the Binance app
 
-## How keys are stored
+## How keys are stored (security)
 
 - The seed is stored in localStorage **encrypted only**
-  - PBKDF2-SHA256 with 600,000 rounds from the password the user types, then encrypted with AES-256-GCM (WebCrypto)
-- The seed and secret key are in memory only while unlocked. Clicking "Lock wallet" clears them
+  - PBKDF2-SHA256 with 600,000 rounds from the password the user types, then encrypted with AES-256-GCM (WebCrypto) (`security.js` `seal` / `unseal`)
+- The seed and secret key are in memory only while unlocked. Locking overwrites both `Uint8Array`s with zeros and drops every reference
+  (the backup download makes a hex string, which JavaScript cannot wipe: download it only when needed)
+- Every signature checks, at the moment of signing, that the wallet is still unlocked (an auto-lock in between refuses it, and nothing is sent)
 - The only thing sent out is JSON-RPC to the node the user enters: addresses, balances, and signed transactions. No seed
 - MetaMask Snap mode: the web page has no seed at all. It sends MetaMask (through the local `window.ethereum`) only the transaction messages to sign
-- No scripts are loaded from a CDN or anywhere else. All code is in `app.js` and `vendor/pqwallet.js`
+- No scripts are loaded from a CDN or anywhere else. All code is in `app.js`, `security.js`, `wallets.js` and `vendor/`
 - `vercel.json` sets a strict CSP (`script-src 'self'`, `frame-ancestors 'none'`) and `X-Content-Type-Options: nosniff`
   - `connect-src *` because users enter their own node's RPC
+  - WebAuthn (passkeys) needs no extra origin in the CSP
+
+### Auto-lock
+
+- After N minutes without keyboard / pointer activity (default 5; 1, 5, 15 or 30 in "Security"), the wallet locks itself:
+  the key is wiped from memory and the unlock screen comes back. A countdown under "Lock wallet" shows the time left
+- A tab hidden for longer than N minutes locks the moment it is shown again (browsers slow timers down in background tabs)
+- "Lock wallet" locks at once. A transaction waiting in a confirm box is dropped by the lock
+
+### Passphrase strength
+
+- New wallets, imported seeds and "Change the passphrase" need **at least 12 characters and a rating of Strong** or better
+- The meter under the field is an estimate made in the page (`security.js` `passwordStrength`, no library): length and character classes,
+  the 2,000 most common passwords (`vendor/common-passwords.js`, from SecLists, MIT), also in leetspeak, sequences (abc, 321, qwerty),
+  repeats, years, and words tied to this wallet ("zetaphy", "wallet", parts of its address). It lists what to fix
+- A wallet made earlier with a weaker passphrase still unlocks; the page then suggests changing it ("Change it now"). The change re-checks
+  the current passphrase against the stored blob and seals the same seed again
+
+### Unlock with fingerprint / Face ID (passkey, WebAuthn PRF)
+
+- "Turn on fingerprint / Face ID unlock" creates a platform passkey for this site (rpId = the page's own hostname,
+  `userVerification: required`, `residentKey: preferred`) with the WebAuthn **`prf` extension**
+- The PRF output for a random 32-byte input goes through HKDF-SHA256 (random salt, info `zetaphy-wallet passkey-prf v1 <address>`) to an
+  AES-256-GCM key that wraps **the same seed** into a second blob (`zetaphy-wallet:passkey:v1`, bound to the address, credential ID and rpId).
+  The passphrase blob stays: the passphrase is always the fallback
+- Unlocking calls `navigator.credentials.get` with `prf.eval` and unwraps the seed. The PRF output is never stored; it is zeroed right after use.
+  There is no server, so no assertion signature is checked: what protects the seed is that only the authenticator can compute the PRF output,
+  and only after your fingerprint, face or device PIN
+- Turning it off deletes the blob (and asks the passkey manager to forget the passkey where the browser supports `signalUnknownCredential`;
+  otherwise delete "ZETAPHY PQ Wallet" in the device's passkey settings). "Remove the wallet from this browser" deletes it too
+- **Passkeys sync.** With iCloud Keychain, Google Password Manager, 1Password and the like, the passkey also exists on your other devices
+  signed in to that account. The wrapped seed stays only in this browser's storage, but anyone who controls that account and gets this browser's
+  data could unlock it. Protect the passkey account as well as the passphrase
+- Browser support for PRF (the page detects it with `PublicKeyCredential.getClientCapabilities()` and the extension results, and says so
+  when it is missing, keeping the passphrase):
+  - Chrome / Edge 116+ with Google Password Manager or Windows Hello (Windows 11), and on Android
+  - Safari 18+ on macOS 15 / iOS 18 with iCloud Keychain
+  - Firefox 135+ (desktop) with a provider that supports PRF
+  - Some third-party passkey managers and older OS versions create the passkey without PRF: the page then reports "does not support the PRF extension"
+    and stores nothing
+
+### Large balances: a safer place for the key
+
+When this page's account holds more than 1,000 ZETAPHY (native balance; staked coins are not counted), a banner suggests moving it.
+"Hide for 7 days" hides it for that address in this browser. The in-app "How to" dialog has the same steps:
+
+- **Native PQ account → ZETAPHY Snap (key inside MetaMask):** install MetaMask (Flask until the snap is published) and back up its Secret
+  Recovery Phrase; lock this wallet and click "Connect MetaMask"; copy the zetaphy1… address it shows; unlock this wallet again and send the funds there
+- **EVM accounts → hardware wallet:** connect a Ledger or Trezor to MetaMask or Rabby, add ZETAPHY Testnet with the buttons on this page,
+  send the funds to the hardware account's 0x… address, and confirm every transaction on the device's own screen
+- This is testnet: none of it is real money
 
 ## Using it with a node
 
@@ -122,6 +175,8 @@ Enter the JSON-RPC address of a ZETAPHY node (port 8545) in the RPC field. There
 | File | What it is |
 |---|---|
 | `index.html`, `app.js`, `style.css` | The web page |
+| `security.js` | Passphrase and passkey (WebAuthn PRF) encryption of the seed, and the passphrase strength estimate |
+| `vendor/common-passwords.js` | The 2,000 most common passwords (SecLists, MIT licence in the file) for the strength estimate |
 | `wallets.js` | Network settings for other wallets (EIP-3085, Keplr chain info) and EVM wallet discovery (EIP-6963), matching `zetaphy-chain/wallets/*.template.json` |
 | `vendor/pqwallet.js` | Bundle of `zetaphy-network/src/pqtx.js` + `zetaphy-neuro/src/fingerprint.js` + ML-DSA-44 from `@noble/post-quantum` + `@noble/hashes` (committed, so Vercel does not need to build) |
 | `src/entry.js`, `scripts/build.js` | Builds the bundle with esbuild |
@@ -140,6 +195,8 @@ npm test          # headless Chromium: create key, encrypt/unlock, send, token s
                   # other wallets: fake wallets announcing via EIP-6963, Binance Wallet (4200), Phantom, Keplr/Leap/Cosmostation,
                   # disabled WalletConnect, and checks that the page's values match zetaphy-chain/wallets/
                   # vaccine: mock ThreatRegistry; flagged destinations refused before signing (incl. Snap mode), unflagged ones sent, fast-track flags refused immediately
+                  # security: passphrase strength (refused / accepted, weak-wallet nudge, change), auto-lock with fake timers (seed zeroed),
+                  # passkey unlock with Chromium's virtual authenticator (CDP WebAuthn, hasPrf) and without PRF, the large-balance banner
 ```
 
 If you edit `zetaphy-network/src/pqtx.js` or `zetaphy-neuro/src/fingerprint.js`, you must `npm run build` and commit `vendor/pqwallet.js` too. CI checks that the committed file matches a fresh build

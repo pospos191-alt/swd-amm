@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
-const PUBLIC = new Set(['/index.html', '/app.js', '/wallets.js', '/style.css', '/logo.svg', '/favicon.svg', '/vendor/pqwallet.js']);
+const PUBLIC = new Set(['/index.html', '/app.js', '/wallets.js', '/security.js', '/vendor/common-passwords.js', '/style.css', '/logo.svg', '/favicon.svg', '/vendor/pqwallet.js']);
 const vercel = JSON.parse(await readFile(join(ROOT, 'vercel.json'), 'utf8'));
 const headers = Object.fromEntries(vercel.headers[0].headers.filter((h) => h.key !== 'Strict-Transport-Security').map((h) => [h.key, h.value]));
 const port = Number(process.argv[2] ?? 8090);
