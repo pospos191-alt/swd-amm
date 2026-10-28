@@ -215,3 +215,24 @@ sender's own consent, precompile `0x…0901`), and the IBC large-transfer hold (
 guardian can only return them to the sender). User guide: [`docs/SECURITY-CORE.md`](docs/SECURITY-CORE.md) (Thai: [`SECURITY-CORE.th.md`](docs/SECURITY-CORE.th.md));
 audit scope: [`docs/CHAIN_AUDIT_SCOPE.md`](docs/CHAIN_AUDIT_SCOPE.md). **Unaudited; testnet only.**
 Known limits and internal review notes are kept separately for the team.
+
+## Dependency (Dependabot) alerts — reviewed 2026-10-28
+
+Four alerts were open on the default branch; one had a fix and it is applied:
+
+- **Fixed: playwright < 1.55.1** (high, GHSA-7mvr-c777-76hp — browser downloads did not verify
+  the TLS certificate). `test-ui/tests/package.json` now pins 1.64.1; the page smoke test passes on it.
+
+Three have **no patched release from upstream** (checked against the npm advisory feed on the date
+above). All three sit in development-only dependency chains — none ships in anything a user runs:
+
+- **bigint-buffer <= 1.1.5** (high, GHSA-3gc7-fjrx-p6mg, crash-only overflow in `toBigIntLE()`):
+  via `@solana/spl-token` / `@sqds/multisig` in the root `yarn.lock` (devDependencies for Anchor
+  tests and scripts). Re-check for a release before mainnet; the Solana v1 JS stack still depends on it.
+- **deepmerge 4.2.0–4.3.1** (low, GHSA-gcqx-w48m-w2h4) and **elliptic <= 6.6.1** (low,
+  GHSA-848j-6mx2-7j84): via `@metamask/snaps-cli` / jest dev tooling in `zetaphy-snap` (already on
+  the latest snaps-cli). The affected versions are the latest published; nothing newer exists to move to.
+
+When one of these packages publishes a fix, bump it (root: `yarn.lock` resolutions; snap: lockfile
+refresh) rather than dismissing the alert. Rust (`Cargo.lock`) audits clean — `cargo audit` reports
+0 vulnerabilities (only unmaintained-crate warnings: bincode, libsecp256k1, rand 0.7 via Solana 1.x pins).
