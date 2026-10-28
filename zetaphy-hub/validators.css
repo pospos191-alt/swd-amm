@@ -151,3 +151,5 @@ html.embed dialog.placed { position: absolute; margin: 0 auto; bottom: auto; }
   #p-start { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   #p-start > .tab-lede { grid-column: 1 / -1; }
 }
+
+.g-offon { display: grid; grid-template-columns: 1fr; gap: 0; }
