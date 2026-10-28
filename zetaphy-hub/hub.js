@@ -36,6 +36,7 @@ const ICONS = {
   defi: '<circle cx="8" cy="8" r="5"/><circle cx="16" cy="16" r="5"/>',
   leaderboard: '<path d="M8 21V11H3v10zM14.5 21V4h-5v17zM21 21v-7h-5v7z"/>',
   dev: '<path d="M8 8l-5 4 5 4M16 8l5 4-5 4M13.5 5l-3 14"/>',
+  agents: '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5"/>',
   saphan: '<path d="M2 18h20"/><path d="M4 18v-3a8 8 0 0 1 16 0v3"/><path d="M8 18v-6M12 18v-7M16 18v-6"/>',
   neuro: '<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-6 0"/>',
 };
@@ -48,6 +49,7 @@ const TABS = [
   { id: 'earn', page: true, fresh: true },
   { id: 'mine', page: true, fresh: true },
   { id: 'saphan', page: true, fresh: true },
+  { id: 'agents', page: true, fresh: true },
   { id: 'nft', src: 'nft/' },
   { id: 'explorer', src: 'explorer/', group: 'data' },
   { id: 'neuro', src: 'neuro/web/' },
@@ -192,7 +194,7 @@ function show(id, { hash, push = true } = {}) {
 
 // The data pages (pages.js): drawn once per language, refreshed while shown.
 const pageCtx = () => ({
-  T, lang, ep, cfg: HUB, getJson, evmCall, el, short, formatZeta, show, account: () => account, connect, send,
+  T, lang, ep, cfg: HUB, getJson, evmCall, el, short, formatZeta, show, account: () => account, connect, send, signTyped,
   copyBtn: (text) => el('button', { type: 'button', class: 'copy', text: T('copy'), onclick: async (ev) => {
     try { await navigator.clipboard.writeText(text); ev.target.textContent = T('copied'); setTimeout(() => { ev.target.textContent = T('copy'); }, 1200); } catch { /* blocked */ }
   } }),
@@ -405,6 +407,18 @@ async function send(to, data, action = '', value = 0n) {
     if (rc) { if (rc.status !== '0x1') throw new Error(`${T('failed')} · ${short(hash, 10, 6)}`); wb.refresh(); return hash; }
   }
   return hash;
+}
+
+/** EIP-712 signature from the connected wallet (eth_signTypedData_v4); the page has shown the fields first. */
+async function signTyped(td) {
+  if (!account) await connect();
+  await addNetwork();
+  const p = wb.provider();
+  const cid = await p.request({ method: 'eth_chainId' }).catch(() => null);
+  if (cid == null || Number(BigInt(cid)) !== EVM_CHAIN_ID || Number(td?.domain?.chainId) !== EVM_CHAIN_ID) throw new Error(T('wbWrongChain'));
+  const sig = await p.request({ method: 'eth_signTypedData_v4', params: [account, JSON.stringify(td)] });
+  if (typeof sig !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(sig)) throw new Error(T('failed'));
+  return sig;
 }
 
 // ------------------------------------------------------------------ stake & vote

@@ -1089,3 +1089,9 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 
 สัญญาเหล่านี้ยังไม่ผ่าน audit ใช้กับ ZETAPHY testnet เท่านั้น รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
 
+
+## AI agent (ต้นแบบบน testnet)
+
+AgentRegistry (ตัวตน กุญแจ ML-DSA-44 เงินประกัน constitution คำร้อง), IntentExecutor (Proof of Intent), LabelRegistry + WebAuthnVerifier
+(ป้ายคน/agent ตรวจ passkey ด้วย precompile P-256 0x…0100), AgentPolicyWallet (รั้วกั้นกระเป๋า AI) และ CosignCommittee (runner ร่วมเซ็นหลังตรวจด้วย Neuro)
+CLI: `zetaphy intent …`, `zetaphy cosign …` รายละเอียด: [docs/future/agents.th.md](../docs/future/agents.th.md)

@@ -1088,3 +1088,10 @@ Browsers check every downloaded chunk against it: [docs/future/browser-ai.md](..
 
 These contracts have not been audited yet. Use them with ZETAPHY testnet only. Security details are kept separately for the team.
 
+
+## AI agents (testnet prototypes)
+
+AgentRegistry (agent identity, ML-DSA-44 key, bond, constitution, claims), IntentExecutor (Proof of Intent),
+LabelRegistry + WebAuthnVerifier (human/agent labels; passkeys checked by the P-256 precompile 0x…0100), AgentPolicyWallet
+(guardrails for AI wallets) and CosignCommittee (runner co-signing after Neuro checks). CLI: `zetaphy intent …`, `zetaphy cosign …`.
+Design, use and limits: [docs/future/agents.md](../docs/future/agents.md).

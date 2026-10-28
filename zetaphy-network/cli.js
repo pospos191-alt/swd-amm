@@ -180,6 +180,12 @@
 //                                      signer: the agent's owner/operator/agentWallet, or a runner for an unclaimed Neuro identity
 //   zetaphy msg verify <file> [--me <agentId>]   check a signed message from another Neuro (it is data, never a command)
 //                                      (--identity / ZETAPHY_IDENTITY, --validation / ZETAPHY_VALIDATION: the two addresses)
+//   zetaphy intent show | compile | execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x…]
+//                                      Proof of Intent, as a solver: build the calls for a signed intent (from the hub's Agents
+//                                      page) and submit them to IntentExecutor, which reverts unless the effects match
+//   zetaphy cosign review --wallet 0x<AgentPolicyWallet> --to 0x… [--value wei --data 0x… --deadline unix --strict]
+//                                      AI co-signer, as a committee runner: run Neuro on what the action touches, sign if clean
+//   zetaphy cosign combine <a.json> <b.json> …   order the runners' signatures for executeCosigned (docs/future/agents.md)
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
 // (ZETAPHY_CHAIN_ID: Cosmos chain id `pq native` expects, default zetaphy_77390-1)
@@ -206,6 +212,7 @@ import { identityCommand } from './src/identitycli.js';
 import { bridgeCommand } from './src/bridgecli.js';
 import { timelockCommand, timelockHint } from './src/timelockcli.js';
 import { oracleCommand } from './src/oraclecli.js';
+import { agentsCommand } from './src/agentscli.js';
 import { devnetOf, testnetOf, testnetWrite, roleChecks, capProblems, STARTER_UNITS } from './src/bridgegate.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -1659,6 +1666,11 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   // ERC-8004 identity and signed Neuro messages (src/identitycli.js)
   if (group === 'identity' || group === 'deploy-identity' || group === 'msg') {
     return identityCommand({ group, cmd, rest, opt, env, write, s, connect, connectRpc });
+  }
+
+  // Proof of Intent (solver side) and the AI co-signer (runner side): src/agentscli.js, docs/future/agents.md
+  if (group === 'intent' || group === 'cosign') {
+    return agentsCommand({ group, cmd, rest, opt, write, s, connect, connectRpc });
   }
 
   write(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').filter((l) => l.startsWith('//   ')).map((l) => l.slice(3)).join('\n'));

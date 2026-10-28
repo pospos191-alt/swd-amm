@@ -9,8 +9,12 @@ import { readFileSync } from 'node:fs';
 
 export const ZETA = 10n ** 18n;
 
-/** @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds */
-export async function createChain(names = [], fundAddresses = {}) {
+/**
+ * @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds
+ * @param opts.precompiles  {'0x…address': (input: Uint8Array) => Uint8Array} precompiles written in JS
+ *   (e.g. helpers/precompiles.js: the real ML-DSA check at 0x…0900, P-256 at 0x…0100)
+ */
+export async function createChain(names = [], fundAddresses = {}, opts = {}) {
   // BLOCKHASH: a fixed hash per block number (keccak of a salt and the
   // number), like a real chain; setBlockHashSalt() gives another history,
   // noBlockHash() a chain whose BLOCKHASH is always 0. The EVM itself
@@ -24,7 +28,11 @@ export async function createChain(names = [], fundAddresses = {}) {
     },
     shallowCopy() { return this; },
   };
-  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }), blockchain });
+  const customPrecompiles = Object.entries(opts.precompiles ?? {}).map(([addr, fn]) => ({
+    address: Address.fromString(addr),
+    function: ({ data }) => ({ executionGasUsed: 3000n, returnValue: fn(data) ?? new Uint8Array(0) }),
+  }));
+  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }), blockchain, customPrecompiles });
   const sm = evm.stateManager;
   let time = 1_800_000_000n;
   let number = 1n;
