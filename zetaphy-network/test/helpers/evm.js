@@ -94,6 +94,11 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
       }
       return res;
     },
+    /** A raw call (state changes stay, as a transaction): { ok, returnHex }. `from` is a name or a 0x address. */
+    async rawCall(from, toHex, dataHex, value = 0n) {
+      const res = await exec(acct[from] ?? Address.fromString(from), Address.fromString(toHex), dataHex, value);
+      return { ok: !res.execResult.exceptionError, returnHex: bytesToHex(res.execResult.returnValue) };
+    },
     async callAt(toHex, iface, fn, args = []) {
       const res = await exec(acct[names[0]], Address.fromString(toHex), iface.encodeFunctionData(fn, args));
       if (res.execResult.exceptionError) throw new Error('call reverted');

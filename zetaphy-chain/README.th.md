@@ -123,7 +123,7 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
 ```
 - ใช้ไฟล์เชนสำเร็จรูป (ตรวจ SHA-256) ไม่ต้อง build เอง ต่อเข้ากับ `rpc.sawasdeecoin.com` และขอ 10 ZETAPHY จาก faucet ให้เอง
 - ตัวจับเวลาเช็กทุก 10 นาที: ซิงก์ครบและมีเหรียญแล้ว จะ stake 9 ZETAPHY เป็น validator เอง แล้วหยุดเช็ก
-- `sudo zetaphy-validator status` ดูความคืบหน้า, `sudo zetaphy-validator backup` ไฟล์ที่ต้องเก็บไว้ออฟไลน์,
+- `sudo zetaphy-validator status` ดูความคืบหน้าและการวินิจฉัยพร้อมคำแนะนำ (peers, ดิสก์, บล็อกที่พลาด, ความเสี่ยงถูก jail พร้อมเวลาโดยประมาณ), `sudo zetaphy-validator backup` ไฟล์ที่ต้องเก็บไว้ออฟไลน์,
   `sudo zetaphy-validator unjail` กลับมาทำงานหลังถูกพักเพราะเครื่องดับ
 - หลังสำรองกุญแจแล้ว: `sudo zetaphy-validator secure` ทำลายไฟล์ 24 คำที่เก็บเป็นข้อความธรรมดา (เฉพาะเมื่อคุณยืนยันว่า
   จดเก็บออฟไลน์แล้ว และกุญแจบัญชี stake อยู่ใน keyring), ปิดการเข้า SSH ด้วยรหัสผ่านและการเข้าเป็น root (เฉพาะเมื่อมีบัญชีที่ใช้ sudo

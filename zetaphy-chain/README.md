@@ -123,7 +123,7 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
 ```
 - Uses the prebuilt chain binary (SHA-256 checked), no build. Joins `rpc.sawasdeecoin.com` and asks its faucet for 10 ZETAPHY
 - A timer checks every 10 minutes: once synced and funded, it stakes 9 ZETAPHY and becomes a validator by itself, then stops checking
-- `sudo zetaphy-validator status` shows progress, `sudo zetaphy-validator backup` lists the files to keep offline,
+- `sudo zetaphy-validator status` shows progress and diagnostics with advice (peers, disk, missed blocks, jail risk with a time estimate), `sudo zetaphy-validator backup` lists the files to keep offline,
   `sudo zetaphy-validator unjail` brings it back after downtime
 - After the backup: `sudo zetaphy-validator secure` shreds the plaintext 24-word file (only once you confirm the
   words are saved offline, and only if the staking key is in the keyring), turns SSH passwords and root login off

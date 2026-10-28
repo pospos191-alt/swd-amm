@@ -68,3 +68,5 @@
   .ws-row.end { justify-content: stretch; }
   .ws-row.end .ws-btn { flex: 1 1 auto; }
 }
+.ws-sim, .ws-ai { margin: 8px 0; }
+.ws-sim h4 { margin: 0 0 4px; font-size: 13px; }

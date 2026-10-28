@@ -19,6 +19,9 @@ Every ZETAPHY app on one page and one screen, at **https://app.sawasdeecoin.com*
 | Leaderboard | **New.** Top ZETAPHY holders (module accounts named) and validators by stake |
 | Developers | **New.** API endpoints with curl examples (EVM JSON-RPC, CometBFT, REST, faucet), chain registry files, the CLI, every contract address |
 | Neuro | Neuro contract checks (`zetaphy-neuro/web`); its `/api/*` is proxied to neuro.sawasdeecoin.com |
+| Governance | **New.** Open proposals and the ZetaphyTimelock queue in plain words: parameter changes compared with the current ones, EVM calls simulated with `eth_call` (as the gov module / the timelock), risky changes flagged (`govassist.js`; docs/future/crosschain-assist.md) |
+| Immunity | **New.** Coverage of Neuro's flags on other chains (NeuroOracle mirrors), the Neuro-checked certificate lookup, and a quantum-safe (ML-DSA-44) attestation verifier that runs in the browser (`assist.js`, `pqattest.js`) |
+| (signing summary) | Before every transaction the summary also simulates it on the latest block (balance changes through a state-override probe, `presign.js`) and, if a model is set up in Neuro, can ask your own AI to explain it |
 
 ## How it works
 

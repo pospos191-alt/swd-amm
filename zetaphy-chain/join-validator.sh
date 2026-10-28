@@ -13,7 +13,8 @@
 #  3. a timer checks every 10 minutes: once the node has caught up and holds the coins, it stakes
 #     9 ZETAPHY and becomes a validator by itself; then the timer stops
 #
-#   sudo zetaphy-validator status     height, sync, address, balance, validator state
+#   sudo zetaphy-validator status     height, sync, address, balance, validator state, and diagnostics with advice:
+#                                     peers, disk, missed blocks, jail risk (time to jail if the node stopped now)
 #   sudo zetaphy-validator address    the address (send ZETAPHY here to stake more later)
 #   sudo zetaphy-validator logs       setup and become-validator log lines
 #   sudo zetaphy-validator unjail     back to work after being jailed for downtime
@@ -326,7 +327,7 @@ import_key() {
 }
 
 status() {
-  local st v
+  local st v vj=""
   st=$(asn "$ZETAPHYD status --home $NODE_HOME --node $NODE" 2>/dev/null) || { echo "node: not answering (journalctl -u zetaphyd -n 30)"; return 1; }
   echo "block:     $(echo "$st" | jq -r .sync_info.latest_block_height)  (catching up: $(echo "$st" | jq -r .sync_info.catching_up))"
   echo "account:   $(acc)  ($(hexaddr))"
@@ -341,7 +342,78 @@ status() {
     echo "note:      the 24 words are still in a plain file on this machine; once they are backed up offline,"
     echo "           run: sudo zetaphy-validator secure"
   fi
+  diagnose "$st" "${vj:-}" || true
   return 0
+}
+
+# Jail risk (pure arithmetic, tested): missed blocks in the window, the window, min_signed_per_window (a decimal),
+# seconds per block -> "<misses left> <seconds until jailed if every next block is missed>".
+# Jailed once missed > window - ceil(window * min_signed) (x/slashing HandleValidatorSignature).
+jail_eta() {
+  awk -v m="${1:-0}" -v w="${2:-0}" -v f="${3:-0}" -v bt="${4:-1}" 'BEGIN {
+    need = w * f; if (need != int(need)) need = int(need) + 1;
+    allowed = w - need; left = allowed - m; if (left < 0) left = 0;
+    printf "%d %d\n", left, left * bt }'
+}
+
+# "3h 20m" / "45s" from seconds.
+human_secs() { awk -v s="${1:-0}" 'BEGIN { if (s >= 86400) printf "%dd %dh\n", s/86400, (s%86400)/3600; else if (s >= 3600) printf "%dh %dm\n", s/3600, (s%3600)/60; else if (s >= 60) printf "%dm\n", s/60; else printf "%ds\n", s }'; }
+
+# Diagnostics for `status`: sync, peers, disk, missed blocks and jail risk, each with advice in plain words.
+# $1: `zetaphyd status` JSON, $2: the staking validator JSON (empty: not a validator yet).
+diagnose() {
+  local st="$1" vj="$2" catching h t eh et bt peers rpc_url df_line used avail cons si params missed window minsig jailed_until tomb eta left secs jailed
+  echo
+  echo "== diagnostics"
+  catching=$(jq -r .sync_info.catching_up <<<"$st")
+  h=$(jq -r '.sync_info.latest_block_height // 0' <<<"$st"); t=$(jq -r '.sync_info.latest_block_time // empty' <<<"$st")
+  eh=$(jq -r '.sync_info.earliest_block_height // 0' <<<"$st"); et=$(jq -r '.sync_info.earliest_block_time // empty' <<<"$st")
+  bt=1
+  if [ -n "$t" ] && [ -n "$et" ] && [ "$h" -gt "$eh" ] 2>/dev/null; then
+    bt=$(awk -v a="$(date -u -d "$et" +%s 2>/dev/null || echo 0)" -v b="$(date -u -d "$t" +%s 2>/dev/null || echo 0)" -v n=$((h - eh)) 'BEGIN { x = (b - a) / n; if (x <= 0) x = 1; printf "%.2f\n", x }')
+  fi
+  if [ "$catching" = true ]; then
+    echo "sync:      catching up (block $h). Advice: wait; a validator that is still syncing misses blocks, so stake only once this says 'in sync'."
+  else
+    echo "sync:      in sync (block $h, about ${bt}s per block)"
+  fi
+  rpc_url="http://${NODE#tcp://}"
+  peers=$(curl -fsS --max-time 5 "$rpc_url/net_info" 2>/dev/null | jq -r '.result.n_peers // empty' 2>/dev/null || true)
+  if [ -z "$peers" ]; then echo "peers:     unknown (the node's RPC did not answer net_info)"
+  elif [ "$peers" -eq 0 ]; then echo "peers:     0. Advice: the node is alone; check the internet connection and that port 26656 is open (zetaphy-validator preflight)."
+  elif [ "$peers" -lt 3 ]; then echo "peers:     $peers (few). Advice: open port 26656 inbound so more nodes can connect; few peers make missed blocks more likely."
+  else echo "peers:     $peers"; fi
+  df_line=$(${DF:-df} -Pk "$NODE_HOME" 2>/dev/null | awk 'NR==2 {gsub("%","",$5); print $5, $4}' || true)
+  if [ -n "$df_line" ]; then
+    used=${df_line%% *}; avail=$(( ${df_line##* } / 1024 / 1024 ))
+    if [ "$used" -ge 95 ]; then echo "disk:      ${used}% used, ${avail} GB free. Advice: URGENT, the node stops when the disk is full (and then misses every block): free space or grow the disk now."
+    elif [ "$used" -ge 85 ]; then echo "disk:      ${used}% used, ${avail} GB free. Advice: free space soon (old logs: journalctl --vacuum-size=200M) or grow the disk."
+    else echo "disk:      ${used}% used, ${avail} GB free"; fi
+  fi
+  if [ -z "$vj" ]; then echo "jail risk: not a validator yet"; return 0; fi
+  jailed=$(jq -r '.validator.jailed // false' <<<"$vj")
+  cons=$(asn "$ZETAPHYD comet show-address --home $NODE_HOME" 2>/dev/null || asn "$ZETAPHYD tendermint show-address --home $NODE_HOME" 2>/dev/null || true)
+  si=$( [ -n "$cons" ] && zq q slashing signing-info "$cons" 2>/dev/null || true)
+  params=$(zq q slashing params 2>/dev/null || true)
+  if [ -z "$si" ] || [ -z "$params" ]; then echo "jail risk: unknown (could not read the slashing module)"; return 0; fi
+  missed=$(jq -r '(.val_signing_info // .info // .).missed_blocks_counter // 0' <<<"$si")
+  tomb=$(jq -r '(.val_signing_info // .info // .).tombstoned // false' <<<"$si")
+  jailed_until=$(jq -r '(.val_signing_info // .info // .).jailed_until // empty' <<<"$si")
+  window=$(jq -r '(.params // .).signed_blocks_window // 0' <<<"$params")
+  minsig=$(jq -r '(.params // .).min_signed_per_window // 0' <<<"$params")
+  echo "missed:    $missed of the last $window blocks (at least $(awk -v f="$minsig" 'BEGIN{printf "%g", f*100}')% must be signed)"
+  if [ "$tomb" = true ]; then echo "jail risk: TOMBSTONED (double signing): this validator can never come back. Advice: never run the same key on two machines; make a new validator."; return 0; fi
+  if [ "$jailed" = true ]; then
+    echo "jail risk: JAILED now${jailed_until:+ (until $jailed_until)}. Advice: fix the cause above, wait until then, then: sudo zetaphy-validator unjail"
+    return 0
+  fi
+  eta=$(jail_eta "$missed" "$window" "$minsig" "$bt"); left=${eta% *}; secs=${eta#* }
+  if [ "$left" -eq 0 ]; then echo "jail risk: HIGH, the next missed block jails this validator. Advice: keep the node running and in sync right now."
+  elif [ "$missed" -gt 0 ] && [ $(( left * 4 )) -lt "$(jail_eta 0 "$window" "$minsig" 1 | cut -d' ' -f1)" ]; then   # under a quarter of the allowance left
+    echo "jail risk: medium: $left more missed blocks allowed, about $(human_secs "$secs") if the node stopped now. Advice: find why blocks were missed (sync, peers, disk, restarts: journalctl -u zetaphyd -n 50)."
+  else
+    echo "jail risk: low: $left more missed blocks allowed; if the node stopped now it would be jailed in about $(human_secs "$secs")."
+  fi
 }
 
 # A node set up earlier (this script, or setup-node.sh on the chain's first
@@ -697,5 +769,5 @@ case "${1:-install}" in
   unjail) asn "$ZETAPHYD tx slashing unjail --from validator $K --home $NODE_HOME --node $NODE --chain-id zetaphy_77390-1 --gas auto --gas-adjustment 1.5 --gas-prices 1000000000$DENOM -y -o json" | jq -c '{code, txhash, raw_log}' ;;
   backup) if [ "${2:-}" = words ]; then backup_words; else backup; fi ;;
   secure) shift; secure "$@" ;;
-  *) sed -n '2,35p' "$0"; exit 1 ;;
+  *) sed -n '2,36p' "$0"; exit 1 ;;
 esac

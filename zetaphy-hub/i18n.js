@@ -434,6 +434,8 @@ export const TAB_TEXT = {
     defi: ['DeFi', 'DeFi on ZETAPHY', 'Every DEX pool with liquidity and price, DLMM and Neuro jobs'],
     leaderboard: ['Leaderboard', 'Top holders and validators', 'The accounts holding the most ZETAPHY, and validators by stake'],
     dev: ['Developers', 'API and contracts', 'Endpoints, curl examples, chain registry files and every contract address'],
+    gov: ['Governance', 'Governance assistant', 'Open proposals and the timelock queue in plain words, simulated on the current state, with flags on risky changes'],
+    immune: ['Immunity', 'Neuro immunity', 'Herd immunity across chains (coverage of Neuro\'s flags), Neuro-checked certificates and quantum-safe attestations'],
   },
   th: {
     home: ['ภาพรวม', 'ภาพรวมเครือข่าย ZETAPHY', 'สถานะเชน บล็อกล่าสุด และขั้นตอนเริ่มต้น'],
@@ -451,6 +453,8 @@ export const TAB_TEXT = {
     defi: ['DeFi', 'DeFi บน ZETAPHY', 'พูลทั้งหมดบน DEX พร้อมสภาพคล่องและราคา, DLMM และงาน Neuro'],
     leaderboard: ['อันดับ', 'อันดับผู้ถือและ Validator', 'บัญชีที่ถือ ZETAPHY มากที่สุด และ validator เรียงตาม stake'],
     dev: ['นักพัฒนา', 'API และสัญญา', 'endpoint, ตัวอย่างคำสั่ง curl, ไฟล์ตั้งค่าเชน และที่อยู่สัญญาทั้งหมด'],
+    gov: ['ธรรมาภิบาล', 'ผู้ช่วยธรรมาภิบาล', 'ข้อเสนอที่เปิดอยู่และคิว timelock เป็นภาษาง่าย จำลองบนสถานะปัจจุบัน พร้อมธงบนการเปลี่ยนแปลงที่เสี่ยง'],
+    immune: ['ภูมิคุ้มกัน', 'ภูมิคุ้มกัน Neuro', 'ภูมิคุ้มกันหมู่ข้ามเชน (ความครอบคลุมของธง Neuro) ใบรับรอง Neuro-checked และการรับรองที่ทนควอนตัม'],
   },
   zh: {
     home: ['概览', 'ZETAPHY 网络概览', '链的状态、最新区块和入门步骤'],
@@ -468,6 +472,8 @@ export const TAB_TEXT = {
     defi: ['DeFi', 'ZETAPHY 上的 DeFi', 'DEX 上所有池的流动性和价格、DLMM 及 Neuro 任务'],
     leaderboard: ['排行榜', '持有者与验证者排行', '持有 ZETAPHY 最多的账户，以及按质押排序的验证者'],
     dev: ['开发者', 'API 与合约', '端点、curl 示例、链注册文件和所有合约地址'],
+    gov: ['治理', '治理助手', '用通俗的话说明开放的提案和 timelock 队列，在当前状态上模拟，并标记有风险的更改'],
+    immune: ['免疫', 'Neuro 免疫', '跨链群体免疫（Neuro 标记的覆盖率）、Neuro-checked 证书和抗量子证明'],
   },
   es: {
     home: ['Resumen', 'Resumen de la red ZETAPHY', 'Estado de la cadena, últimos bloques y cómo empezar'],
@@ -485,6 +491,8 @@ export const TAB_TEXT = {
     defi: ['DeFi', 'DeFi en ZETAPHY', 'Cada pool del DEX con su liquidez y precio, DLMM y trabajos de Neuro'],
     leaderboard: ['Ranking', 'Mayores holders y validadores', 'Las cuentas con más ZETAPHY y los validadores por stake'],
     dev: ['Desarrolladores', 'API y contratos', 'Endpoints, ejemplos con curl, archivos de registro de la cadena y todas las direcciones de contratos'],
+    gov: ['Gobernanza', 'Asistente de gobernanza', 'Propuestas abiertas y la cola del timelock en palabras sencillas, simuladas sobre el estado actual, con marcas en los cambios arriesgados'],
+    immune: ['Inmunidad', 'Inmunidad Neuro', 'Inmunidad de grupo entre cadenas (cobertura de las marcas de Neuro), certificados Neuro-checked y atestaciones resistentes a la computación cuántica'],
   },
   ko: {
     home: ['개요', 'ZETAPHY 네트워크 개요', '체인 상태, 최신 블록, 시작 방법'],
@@ -502,6 +510,8 @@ export const TAB_TEXT = {
     defi: ['DeFi', 'ZETAPHY의 DeFi', '모든 DEX 풀의 유동성과 가격, DLMM 및 Neuro 작업'],
     leaderboard: ['순위', '상위 보유자 및 검증인', 'ZETAPHY를 가장 많이 보유한 계정과 스테이킹 순 검증인'],
     dev: ['개발자', 'API 및 컨트랙트', '엔드포인트, curl 예제, 체인 레지스트리 파일, 모든 컨트랙트 주소'],
+    gov: ['거버넌스', '거버넌스 도우미', '열린 제안과 timelock 대기열을 쉬운 말로, 현재 상태에서 시뮬레이션하고 위험한 변경에 표시해요'],
+    immune: ['면역', 'Neuro 면역', '체인 간 집단 면역 (Neuro 표시 커버리지), Neuro-checked 인증서, 양자 내성 증명'],
   },
   ja: {
     home: ['概要', 'ZETAPHY ネットワーク概要', 'チェーンの状態、最新ブロック、始め方'],
@@ -519,6 +529,8 @@ export const TAB_TEXT = {
     defi: ['DeFi', 'ZETAPHY の DeFi', 'すべての DEX プールの流動性と価格、DLMM、Neuro ジョブ'],
     leaderboard: ['ランキング', '上位ホルダーとバリデーター', 'ZETAPHY を最も多く保有するアカウントと、ステーク順のバリデーター'],
     dev: ['開発者', 'API とコントラクト', 'エンドポイント、curl の例、チェーンレジストリファイル、すべてのコントラクトアドレス'],
+    gov: ['ガバナンス', 'ガバナンス・アシスタント', '公開中の提案と timelock の待ち行列をわかりやすく、現在の状態でシミュレーションし、危険な変更にフラグを付けます'],
+    immune: ['免疫', 'Neuro 免疫', 'チェーン間の集団免疫（Neuro のフラグのカバー率）、Neuro-checked 証明書、耐量子の証明'],
   },
   ru: {
     home: ['Обзор', 'Обзор сети ZETAPHY', 'Состояние сети, последние блоки и как начать'],
@@ -536,6 +548,8 @@ export const TAB_TEXT = {
     defi: ['DeFi', 'DeFi в ZETAPHY', 'Все пулы DEX с ликвидностью и ценой, DLMM и задачи Neuro'],
     leaderboard: ['Рейтинг', 'Крупнейшие держатели и валидаторы', 'Аккаунты с наибольшим количеством ZETAPHY и валидаторы по стейку'],
     dev: ['Разработчикам', 'API и контракты', 'Эндпоинты, примеры curl, файлы реестра сети и все адреса контрактов'],
+    gov: ['Управление', 'Помощник по управлению', 'Открытые предложения и очередь timelock простыми словами, с симуляцией на текущем состоянии и флажками на рискованных изменениях'],
+    immune: ['Иммунитет', 'Иммунитет Neuro', 'Коллективный иммунитет между сетями (покрытие флажков Neuro), сертификаты Neuro-checked и квантово-устойчивые аттестации'],
   },
   vi: {
     home: ['Tổng quan', 'Tổng quan mạng ZETAPHY', 'Trạng thái chuỗi, khối mới nhất và cách bắt đầu'],
@@ -553,5 +567,7 @@ export const TAB_TEXT = {
     defi: ['DeFi', 'DeFi trên ZETAPHY', 'Mọi pool trên DEX cùng thanh khoản và giá, DLMM và việc Neuro'],
     leaderboard: ['Xếp hạng', 'Top người nắm giữ và validator', 'Các tài khoản nắm giữ nhiều ZETAPHY nhất và validator theo stake'],
     dev: ['Nhà phát triển', 'API và hợp đồng', 'Endpoint, ví dụ curl, tệp đăng ký chuỗi và mọi địa chỉ hợp đồng'],
+    gov: ['Quản trị', 'Trợ lý quản trị', 'Đề xuất đang mở và hàng đợi timelock bằng lời dễ hiểu, mô phỏng trên trạng thái hiện tại, gắn cờ các thay đổi rủi ro'],
+    immune: ['Miễn dịch', 'Miễn dịch Neuro', 'Miễn dịch cộng đồng xuyên chuỗi (độ phủ cờ của Neuro), chứng nhận Neuro-checked và chứng thực kháng lượng tử'],
   },
 };

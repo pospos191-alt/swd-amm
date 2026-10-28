@@ -425,3 +425,8 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 .ag-card .row { flex-wrap: wrap; }
 .ag-review th { width: 170px; }
 @media (max-width: 1000px) { .ag-grid { grid-template-columns: minmax(0, 1fr); } }
+/* assistant pages (assist.js): governance items, the Neuro-checked badge in the wallet bar */
+.ga-item { padding: 10px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); }
+.ga-item h3 { margin: 0 0 4px; font-size: 14px; }
+.ga-item p { margin: 2px 0; overflow-wrap: anywhere; }
+.wb-neuro { color: var(--ok, #3fb950); font-size: 11px; white-space: nowrap; }

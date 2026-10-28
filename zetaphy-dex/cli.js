@@ -29,6 +29,8 @@
 //   --web [file]             also write the web app's deployments.json; with no file: web/deployments.json
 //                            (next to this CLI, whatever the current directory)
 //   --any-chain              deploy on a chain other than ZETAPHY (EVM chain id 77390); refused without it
+//   --attest <addr>          NeuroAttest: run Neuro on each test token made here and attest it "Neuro-checked"
+//                            (this key must be an approved attester; zetaphy-network/src/assistcli.js certify)
 
 import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -187,6 +189,18 @@ async function deployWith(provider, signer, opt, log) {
     artifactsHash: keccak256(Buffer.from(['ZetaphyFactory', 'ZetaphyPair', 'ZetaphyRouter'].map((n) => art(n).bytecode).join(''))),
   };
   if (out.contracts.pairCodeHash !== keccak256(art('ZetaphyPair').bytecode)) throw new Error('PAIR_CODE_HASH does not match artifacts/ZetaphyPair.json');
+  const attest = addrOpt(opt.attest, '--attest');
+  if (attest && attest !== ZERO) {
+    // the launch tool's "Neuro-checked" certificates (docs/future/crosschain-assist.md, item 19)
+    const { certify, ATTEST_ABI } = await import('../zetaphy-network/src/assistcli.js');
+    const k = new Contract(attest, ATTEST_ABI, signer);
+    for (const tk of tokens) {
+      const r = await certify({ attest: k, token: tk.address, rpc: opt.rpc, model: 'rules' });
+      tk.neuroChecked = { attest, reportHash: r.reportHash, skill: r.skill };
+      log(`${tk.symbol}: Neuro-checked (report ${r.reportHash})`);
+    }
+    out.contracts.neuroAttest = attest;
+  }
   const file = resolve(opt.out ?? resolve(HERE, 'deployments', `${net.chainId}.json`));
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(out, null, 2) + '\n');

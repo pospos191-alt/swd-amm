@@ -11,7 +11,7 @@
 import { TEXT, pickLang } from './i18n.js';
 import { encodeCall, decode, decodeError, decodeBytes32String, parseUnits, formatUnits, isAddress, ZERO_ADDRESS, SEL } from './lib/abi.js';
 import { getAmountOut, minWithSlippage, priceImpactBps, impactLevel, quote, candidatePaths, poolKind, addLiquidityMins } from './lib/amm.js';
-import { checkToken, reasonText, DISCLAIMER } from './lib/neuro.js';
+import { checkToken, checkBadge, reasonText, DISCLAIMER } from './lib/neuro.js';
 import { cleanName, cleanSymbol, validEntry, lookalikes } from './lib/tokens.js';
 import { EVM_CHAIN_ID, EVM_CHAIN_ID_HEX, EVM_SYMBOL, nodeEndpoints, evmChainParams, discoverWallets, openInAppLinks } from './lib/wallets.js';
 import { parseSettings, serializeSettings, parseImported, cleanWalletId, rpcIsCustom, SLIPPAGE_MAX_BPS, SLIPPAGE_CONFIRM_BPS } from './lib/storage.js';
@@ -263,6 +263,8 @@ async function neuroCheck(address) {
   const c = state.neuro.get(k);
   if (c && Date.now() - c.at < 60_000) return c.result;
   const result = await checkToken(rpc, await registryAddress(), address);
+  // the Neuro-checked certificate (NeuroAttest), when this deployment names one
+  if (result.status !== 'nocode') result.badge = await checkBadge(rpc, state.cfg?.contracts?.neuroAttest, address);
   state.neuro.set(k, { at: Date.now(), result });
   return result;
 }
@@ -306,6 +308,7 @@ function renderNeuro(box, item) {
   else if (result.status === 'unknown') lines.push(el('p', { text: t('neuroUnknown', { why: result.error === 'noRegistry' ? t('neuroNoRegistry') : String(result.error ?? '').slice(0, 80) }) }));
   else if (result.status === 'nocode') lines.push(el('p', { text: t('noCode') }));
   if (result.via && result.status !== 'clear') lines.push(el('p', { class: 'hint', text: t('neuroVia', { via: result.via }) }));
+  if (result.badge) lines.push(el('p', { class: 'neuro-badge', 'data-badge': result.badge.checked ? 'checked' : 'revoked', text: t(result.badge.checked ? 'neuroBadge' : 'neuroBadgeRevoked', { uid: String(result.badge.uid), by: `${result.badge.by.slice(0, 8)}…` }) }));
   lines.push(el('p', { class: 'neuro-disclaimer', text: DISCLAIMER[state.lang] ?? DISCLAIMER.en }));
   box.replaceChildren(...lines);
   box.hidden = false;

@@ -1,0 +1,28 @@
+[package]
+name = "neuro-oracle-osmo"
+version = "0.1.0"
+edition = "2021"
+description = "ZETAPHY Neuro oracle mirror for Osmosis (osmo-test-5): written by ZETAPHY's NeuroOracleSender over IBC (ICS-20 memo, ibc-hooks)"
+license = "MIT"
+publish = false
+
+# Not part of the repo's Anchor workspace (Cargo.toml at the root): build it on its own.
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "z"
+debug = false
+lto = true
+codegen-units = 1
+panic = "abort"
+overflow-checks = true
+
+[dependencies]
+cosmwasm-std = { version = "=2.1.4", default-features = false, features = ["std"] }
+serde = { version = "1.0.210", default-features = false, features = ["derive"] }
+
+[features]
+library = []
