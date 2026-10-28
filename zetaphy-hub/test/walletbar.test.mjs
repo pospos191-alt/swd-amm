@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanId, decodeString, formatUnits, balanceOfData, SHARED_KEY } from '../walletbar.js';
-import { chainTokens } from '../build.mjs';
+import { readFileSync } from 'node:fs';
+import { chainTokens, saphanRoutes } from '../build.mjs';
 
 test('stored wallet id: only an id this site writes (JSON or plain), nothing else', () => {
   assert.equal(SHARED_KEY, 'zetaphy:wallet');
@@ -32,4 +33,26 @@ test('tokens shown: BZTPHY, the bridged token and the DEX tokens, addresses only
     'zetaphy-dex/web/deployments.json': { tokens: [{ address: '0x9D44EA6837938d4FEF98367A7b5867cdCa8DE596', symbol: 'tUSD', decimals: 18 }, { address: 'nope', symbol: 'X' }, { address: '0x3cc2b1ffd3a7c7504a49426ae6bdea501bf1d59d', symbol: 'DUP' }] },
   })[f] ?? null);
   assert.deepEqual(t.map((x) => x.symbol ?? x.address), ['BZTPHY', '0xb0e25f7ab80e55d6f06F401c8301B3d9B90Ab855', 'tUSD']);
+});
+
+test('Saphan EVM routes: every chain of the table, its state from saphan-routes.json; deployed tokens join the wallet bar', () => {
+  const read = (f) => ({
+    'zetaphy-chain/hyperlane/saphan-chains.json': { chains: {
+      sepolia: { displayName: 'Sepolia', chainId: 11155111, explorer: 'https://sepolia.etherscan.io/', token: { symbol: 'sepETH' } },
+      basesepolia: { displayName: 'Base Sepolia', chainId: 84532, explorer: 'javascript:alert(1)', token: { symbol: 'baseETH' } },
+      'Bad Name': { displayName: 'x', chainId: 1, token: { symbol: 'X' } },
+      evil: { displayName: 'Evil', chainId: 2, token: { symbol: '<script>' } },
+    } },
+    'zetaphy-chain/hyperlane/saphan-routes.json': { routes: {
+      sepolia: { state: 'OPEN', origin: { lockbox: '0x' + '11'.repeat(20) }, zetaphy: { bridgedToken: '0x' + '22'.repeat(20), hyperlaneOutbox: '0x' + '33'.repeat(20) } },
+      basesepolia: { state: 'CLOSED', origin: { lockbox: 'nope' }, zetaphy: { bridgedToken: '0x' + '44'.repeat(20) } },
+    } },
+  })[f] ?? null;
+  const r = saphanRoutes(read);
+  assert.deepEqual(r.map((x) => [x.name, x.state, x.twoWay, x.explorer]), [['sepolia', 'open', true, 'https://sepolia.etherscan.io'], ['basesepolia', 'planned', false, '']]);
+  assert.equal(r[0].lockbox, '0x' + '11'.repeat(20));
+  assert.deepEqual(chainTokens(read), [{ address: '0x' + '22'.repeat(20), symbol: 'sepETH', decimals: 18 }]);
+  // the committed table: the three test networks, planned until the saphan-route workflow deploys them
+  const real = saphanRoutes((f) => { try { return JSON.parse(readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')); } catch { return null; } });
+  assert.deepEqual(real.map((x) => [x.name, x.state]), [['sepolia', 'planned'], ['basesepolia', 'planned'], ['arbitrumsepolia', 'planned']]);
 });

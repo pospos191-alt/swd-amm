@@ -89,6 +89,9 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await page.click('.tab[data-tab="saphan"]');
     await page.waitForFunction(() => document.querySelectorAll('#sp-routes tr').length === 1 && /Noble testnet/.test(document.getElementById('sp-routes').textContent));
     assert.match(await page.textContent('#sp-routes'), /channel-0 → channel-123/);
+    // EVM routes (Hyperlane) from the chain table in hub-config.json: every chain listed, planned until deployed
+    assert.match(await page.textContent('#sp-evm'), /EVM chains \(Hyperlane\)[\s\S]*Sepolia[\s\S]*Base Sepolia[\s\S]*Arbitrum Sepolia/);
+    assert.equal(await page.locator('#sp-evm .pill').count(), 3);
     await page.click('#sp-go'); // connect first: the site-wide wallet dialog
     await page.waitForSelector('#wb-dialog[open] .wb-wallet');
     assert.match(await page.textContent('#wb-dialog'), /MetaMask/, 'the wallets in this browser');

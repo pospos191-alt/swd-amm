@@ -266,7 +266,7 @@ export const EARN = {
   },
 };
 
-// ------------------------------------------------------------------ ZETAPHY Saphan (IBC)
+// ------------------------------------------------------------------ ZETAPHY Saphan (IBC, and the EVM routes over Hyperlane)
 export const SAPHAN = {
   en: {
     intro: 'ZETAPHY Saphan ("bridge" in Thai) moves coins chain to chain over IBC: each chain checks the other with a light client, no custodian holds the funds',
@@ -279,6 +279,8 @@ export const SAPHAN = {
     myAddr: 'Your ZETAPHY address', bal: 'Balance', limits: 'Damage limits: the chain caps daily flow (rate limit) and holds large transfers for review (IBC hold); a transfer over them is refused or refunded',
     sent: 'Sent; the relayer carries it (about a minute)', noEvent: 'The transaction went through but nothing was sent across (the IBC precompile is off on this chain); the coins are still yours', badTo: (p) => `The receiver must start with ${p}1…`, noRoute: 'No route yet',
     noBalance: 'Not enough balance',
+    evm: 'EVM chains (Hyperlane)', tipEvm: 'Ethereum test networks bridged through Hyperlane, from the chain table (zetaphy-chain/hyperlane/saphan-chains.json)\nEach source chain has its own bridged token on ZETAPHY\nLock ETH in that chain\'s lockbox; the way back burns the token and releases the ETH after a delay',
+    stPlanned: 'planned', stClosed: 'closed', stOpen: 'open', twoWay: 'both ways', inOnly: 'into ZETAPHY only', lockbox: 'lockbox',
   },
   zh: {
     intro: 'ZETAPHY Saphan（泰语“桥”）通过 IBC 在链与链之间转移代币：两条链用轻客户端互相验证，没有托管方持有资金',
@@ -291,6 +293,8 @@ export const SAPHAN = {
     myAddr: '你的 ZETAPHY 地址', bal: '余额', limits: '损失上限：链对每日流量设有上限（速率限制），并暂扣大额转账以供审核（IBC hold）；超出的转账会被拒绝或退款',
     sent: '已发送；由中继器传递（约一分钟）', noEvent: '交易已成功，但没有任何内容被跨链发送（此链未启用 IBC 预编译合约）；代币仍在你手中', badTo: (p) => `接收地址必须以 ${p}1… 开头`, noRoute: '暂无路由',
     noBalance: '余额不足',
+    evm: 'EVM 链（Hyperlane）', tipEvm: '通过 Hyperlane 桥接的以太坊测试网，来自链表（zetaphy-chain/hyperlane/saphan-chains.json）\n每条来源链在 ZETAPHY 上都有自己的桥接代币\n在该链的锁仓合约（lockbox）中锁定 ETH；返回时销毁代币，延迟后释放 ETH',
+    stPlanned: '计划中', stClosed: '已关闭', stOpen: '开放', twoWay: '双向', inOnly: '仅转入 ZETAPHY', lockbox: '锁仓合约',
   },
   es: {
     intro: 'ZETAPHY Saphan ("puente" en tailandés) mueve monedas de una cadena a otra mediante IBC: cada cadena verifica a la otra con un cliente ligero; ningún custodio guarda los fondos',
@@ -303,6 +307,8 @@ export const SAPHAN = {
     myAddr: 'Tu dirección de ZETAPHY', bal: 'Saldo', limits: 'Límites de daño: la cadena limita el flujo diario (rate limit) y retiene las transferencias grandes para revisarlas (IBC hold); una transferencia que los supere se rechaza o se reembolsa',
     sent: 'Enviado; el relayer lo transporta (aprox. un minuto)', noEvent: 'La transacción se completó pero no se envió nada a otra cadena (la precompilada IBC está desactivada en esta cadena); las monedas siguen siendo tuyas', badTo: (p) => `El destinatario debe empezar por ${p}1…`, noRoute: 'Aún no hay rutas',
     noBalance: 'Saldo insuficiente',
+    evm: 'Cadenas EVM (Hyperlane)', tipEvm: 'Redes de prueba de Ethereum conectadas mediante Hyperlane, según la tabla de cadenas (zetaphy-chain/hyperlane/saphan-chains.json)\nCada cadena de origen tiene su propio token puenteado en ZETAPHY\nBloquea ETH en el lockbox de esa cadena; la vuelta quema el token y libera el ETH tras un retraso',
+    stPlanned: 'planeada', stClosed: 'cerrada', stOpen: 'abierta', twoWay: 'en ambos sentidos', inOnly: 'solo hacia ZETAPHY', lockbox: 'lockbox',
   },
   ko: {
     intro: 'ZETAPHY Saphan(태국어로 "다리")은 IBC로 체인 간에 코인을 옮깁니다: 각 체인이 라이트 클라이언트로 상대 체인을 검증하며, 자금을 보관하는 수탁자가 없습니다',
@@ -315,6 +321,8 @@ export const SAPHAN = {
     myAddr: '내 ZETAPHY 주소', bal: '잔액', limits: '피해 한도: 체인은 하루 전송량을 제한(rate limit)하고 큰 전송은 검토를 위해 보류(IBC hold)합니다. 한도를 넘는 전송은 거부되거나 환불됩니다',
     sent: '전송됨; 릴레이어가 전달합니다 (약 1분)', noEvent: '트랜잭션은 성공했지만 다른 체인으로 보낸 것은 없습니다 (이 체인에서 IBC 프리컴파일이 꺼져 있음). 코인은 그대로 있습니다', badTo: (p) => `받는 주소는 ${p}1…로 시작해야 합니다`, noRoute: '아직 경로 없음',
     noBalance: '잔액이 부족합니다',
+    evm: 'EVM 체인 (Hyperlane)', tipEvm: '체인 표(zetaphy-chain/hyperlane/saphan-chains.json)에 있는, Hyperlane으로 연결된 이더리움 테스트넷\n출발 체인마다 ZETAPHY에 자체 브리지 토큰이 있습니다\n해당 체인의 락박스(lockbox)에 ETH를 잠그고, 돌아갈 때는 토큰을 소각하면 지연 후 ETH가 풀립니다',
+    stPlanned: '예정', stClosed: '닫힘', stOpen: '열림', twoWay: '양방향', inOnly: 'ZETAPHY로만', lockbox: '락박스',
   },
   ja: {
     intro: 'ZETAPHY Saphan（タイ語で「橋」）は IBC でチェーン間にコインを移動します: 各チェーンがライトクライアントで相手を検証し、資金を預かるカストディアンはいません',
@@ -327,6 +335,8 @@ export const SAPHAN = {
     myAddr: 'あなたの ZETAPHY アドレス', bal: '残高', limits: '被害の上限: チェーンは 1 日の流量を制限し（レートリミット）、大口の転送は審査のため保留します（IBC hold）。上限を超える転送は拒否または返金されます',
     sent: '送信しました。リレイヤーが運びます（約 1 分）', noEvent: 'トランザクションは成功しましたが、他チェーンへは何も送られていません（このチェーンでは IBC プリコンパイルが無効）。コインはそのままです', badTo: (p) => `受取アドレスは ${p}1… で始まる必要があります`, noRoute: 'ルートはまだありません',
     noBalance: '残高が足りません',
+    evm: 'EVM チェーン（Hyperlane）', tipEvm: 'チェーン表（zetaphy-chain/hyperlane/saphan-chains.json）にある、Hyperlane でつながるイーサリアムのテストネット\n送金元チェーンごとに ZETAPHY 上の独自のブリッジトークンがあります\nそのチェーンのロックボックス（lockbox）に ETH をロックし、戻すときはトークンをバーンすると遅延の後に ETH が解放されます',
+    stPlanned: '予定', stClosed: '閉鎖中', stOpen: '開通', twoWay: '双方向', inOnly: 'ZETAPHY への片道のみ', lockbox: 'ロックボックス',
   },
   ru: {
     intro: 'ZETAPHY Saphan («мост» по-тайски) переводит монеты между сетями по IBC: каждая сеть проверяет другую через лёгкий клиент, и никакой кастодиан не держит средства',
@@ -339,6 +349,8 @@ export const SAPHAN = {
     myAddr: 'Ваш адрес ZETAPHY', bal: 'Баланс', limits: 'Ограничение ущерба: сеть ограничивает дневной поток (rate limit) и задерживает крупные переводы на проверку (IBC hold); перевод сверх лимитов отклоняется или возвращается',
     sent: 'Отправлено; релейер переносит перевод (около минуты)', noEvent: 'Транзакция прошла, но в другую сеть ничего не отправлено (прекомпайл IBC в этой сети выключен); монеты по-прежнему ваши', badTo: (p) => `Адрес получателя должен начинаться с ${p}1…`, noRoute: 'Маршрутов пока нет',
     noBalance: 'Недостаточно средств',
+    evm: 'EVM-сети (Hyperlane)', tipEvm: 'Тестовые сети Ethereum, связанные через Hyperlane, из таблицы сетей (zetaphy-chain/hyperlane/saphan-chains.json)\nУ каждой исходной сети свой мостовой токен в ZETAPHY\nЗаблокируйте ETH в lockbox этой сети; обратный путь сжигает токен и после задержки освобождает ETH',
+    stPlanned: 'в планах', stClosed: 'закрыт', stOpen: 'открыт', twoWay: 'в обе стороны', inOnly: 'только в ZETAPHY', lockbox: 'lockbox',
   },
   vi: {
     intro: 'ZETAPHY Saphan ("cây cầu" trong tiếng Thái) chuyển coin giữa các chuỗi qua IBC: mỗi chuỗi tự xác minh chuỗi kia bằng light client, không có bên lưu ký nào giữ tiền',
@@ -351,6 +363,8 @@ export const SAPHAN = {
     myAddr: 'Địa chỉ ZETAPHY của bạn', bal: 'Số dư', limits: 'Giới hạn thiệt hại: chuỗi giới hạn lưu lượng mỗi ngày (rate limit) và tạm giữ giao dịch lớn để xem xét (IBC hold); giao dịch vượt mức sẽ bị từ chối hoặc hoàn tiền',
     sent: 'Đã gửi; relayer đang chuyển tiếp (khoảng một phút)', noEvent: 'Giao dịch đã thành công nhưng không có gì được gửi sang chuỗi khác (precompile IBC đang tắt trên chuỗi này); coin vẫn là của bạn', badTo: (p) => `Địa chỉ nhận phải bắt đầu bằng ${p}1…`, noRoute: 'Chưa có tuyến',
     noBalance: 'Số dư không đủ',
+    evm: 'Chuỗi EVM (Hyperlane)', tipEvm: 'Các mạng thử nghiệm Ethereum nối qua Hyperlane, theo bảng chuỗi (zetaphy-chain/hyperlane/saphan-chains.json)\nMỗi chuỗi nguồn có token cầu nối riêng trên ZETAPHY\nKhóa ETH trong lockbox của chuỗi đó; chiều về đốt token và giải phóng ETH sau một khoảng chờ',
+    stPlanned: 'dự kiến', stClosed: 'đóng', stOpen: 'mở', twoWay: 'hai chiều', inOnly: 'chỉ vào ZETAPHY', lockbox: 'lockbox',
   },
   th: {
     intro: 'ZETAPHY Saphan (สะพาน) ส่งเหรียญข้ามเชนด้วย IBC: ทั้งสองเชนตรวจกันเองด้วย light client ไม่มีคนกลางถือเงิน',
@@ -363,5 +377,7 @@ export const SAPHAN = {
     myAddr: 'ที่อยู่ของคุณบน ZETAPHY', bal: 'ยอดคงเหลือ', limits: 'กันความเสียหาย: เชนมีเพดานโอนต่อวัน (rate limit) และพักรายการใหญ่ไว้ตรวจก่อน (IBC hold) รายการที่เกินจะถูกปฏิเสธหรือคืนเงิน',
     sent: 'ส่งแล้ว รอ relayer ส่งต่อ (ราว 1 นาที)', noEvent: 'ธุรกรรมผ่านแต่ไม่มีการส่งข้ามเชน (precompile IBC ไม่ได้เปิดบนเชนนี้) เหรียญยังอยู่ในกระเป๋า', badTo: (p) => `ที่อยู่ปลายทางต้องขึ้นต้นด้วย ${p}1…`, noRoute: 'ยังไม่มีเส้นทาง',
     noBalance: 'ยอดไม่พอ',
+    evm: 'เชน EVM (Hyperlane)', tipEvm: 'เครือข่ายทดสอบ Ethereum ที่เชื่อมผ่าน Hyperlane จากตารางเชน (zetaphy-chain/hyperlane/saphan-chains.json)\nแต่ละเชนต้นทางมีโทเคนบริดจ์ของตัวเองบน ZETAPHY\nล็อก ETH ใน lockbox ของเชนนั้น ขากลับเผาโทเคนแล้วปล่อย ETH หลังรอระยะหนึ่ง',
+    stPlanned: 'วางแผนไว้', stClosed: 'ปิด', stOpen: 'เปิด', twoWay: 'สองทาง', inOnly: 'เข้า ZETAPHY อย่างเดียว', lockbox: 'lockbox',
   },
 };

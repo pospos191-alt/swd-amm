@@ -1,0 +1,4 @@
+{
+  "about": "ZETAPHY Saphan, EVM routes v2: what the saphan-route workflow deployed, per source chain (written by its deploy mode). Empty until the first deploy. The first route (Sepolia -> ZETAPHY only, v1, never opened) is in bridge-testnet.json.",
+  "routes": {}
+}

@@ -14,3 +14,11 @@ What testnet mode relaxes, and only on the public ZETAPHY testnet (chain id 7739
 Everything else still applies: 2+ independent lanes, no deployer key in any role, the on-chain hard cap and its 7-day raise delay, pause by a guardian.
 
 **Mainnet requires a real audit and every gate.** `--testnet` is refused on any other chain.
+
+## EVM routes v2 (both directions, several source chains)
+
+The same notice covers the Saphan v2 routes (docs/SAPHAN-MULTICHAIN.md): Sepolia, Base Sepolia and Arbitrum Sepolia
+to ZETAPHY and back. `zetaphy bridge open --testnet` opens a route's way back (its `HyperlaneOutbox`, an
+outbound-only route of the guard) together with the way in, with the same daily limit. On each source chain the
+lockbox releases only after a delay, within a daily limit and its own locked balance, and its guardian can pause
+or veto a release at once.

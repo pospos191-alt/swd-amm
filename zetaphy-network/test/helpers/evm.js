@@ -93,6 +93,8 @@ export async function createChain(names = [], fundAddresses = {}) {
       return out.length === 1 ? out[0] : out;
     },
     now: () => time,
+    /** An account's nonce (the next CREATE address is getCreateAddress({ from, nonce })). */
+    nonce: async (who) => (await sm.getAccount(acct[who] ?? who))?.nonce ?? 0n,
     balance: async (who) => (await sm.getAccount(acct[who] ?? who))?.balance ?? 0n,
     async deploy(artifactName, args, from) {
       return this.deployRaw(JSON.parse(readFileSync(new URL(`../../artifacts/${artifactName}.json`, import.meta.url), 'utf8')), args, from);

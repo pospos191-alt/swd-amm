@@ -293,10 +293,12 @@ const dev = {
 };
 
 
-// ------------------------------------------------------------------ ZETAPHY Saphan (IBC, chain to chain)
-// Routes are the open ICS-20 channels the chain reports (no config to keep in
+// ------------------------------------------------------------------ ZETAPHY Saphan (IBC, chain to chain; EVM chains over Hyperlane)
+// IBC routes are the open ICS-20 channels the chain reports (no config to keep in
 // sync); a transfer goes out through the ICS-20 precompile (0x…0802) from
 // MetaMask. Coming in, the other chain's wallet sends to this account's zetaphy1….
+// EVM routes (Hyperlane) come from the chain table, through hub-config.json (build.mjs
+// saphanRoutes): a chain added to zetaphy-chain/hyperlane/saphan-chains.json is listed.
 export const KNOWN_CHAINS = {
   'grand-1': { name: 'Noble testnet', prefix: 'noble', note: 'USDC (Circle)' },
   'noble-1': { name: 'Noble', prefix: 'noble', note: 'USDC (Circle)' },
@@ -382,6 +384,25 @@ function saphanForm(ctx, root) {
   });
   box.replaceChildren(form);
 }
+/** The EVM routes (Hyperlane) of the chain table: name, token, one way or both, state, the lockbox. */
+export function evmRows(ctx) {
+  const L = saphanText(ctx);
+  const list = (ctx.cfg.saphan ?? []).filter((r) => r && typeof r.displayName === 'string');
+  if (!list.length) return [];
+  const pill = { open: ['passed', L.stOpen], closed: ['rejected', L.stClosed], planned: ['', L.stPlanned] };
+  return [ctx.el('tr', {}, ctx.el('td', { class: 'dim small', colspan: 2, 'data-tip': L.tipEvm, tabindex: 0, text: L.evm })),
+    ...list.map((r) => {
+      const [cls, word] = pill[r.state] ?? pill.planned;
+      const box = /^0x[0-9a-fA-F]{40}$/.test(r.lockbox ?? '') && /^https:\/\//.test(r.explorer ?? '')
+        ? [' · ', ctx.el('a', { href: `${r.explorer}/address/${r.lockbox}`, target: '_blank', rel: 'noopener noreferrer', text: L.lockbox })] : [];
+      const way = r.state === 'planned' ? '' : ` · ${r.twoWay ? L.twoWay : L.inOnly}`;
+      return ctx.el('tr', {},
+        ctx.el('td', { 'data-tip': `${r.chainId} · Hyperlane` }, ctx.el('b', { text: r.displayName }),
+          ctx.el('div', { class: 'dim small mono' }, `${r.symbol}${way}`, ...box)),
+        ctx.el('td', { class: 'num' }, ctx.el('span', { class: `pill ${cls}`.trim(), text: word })));
+    })];
+}
+
 const saphan = {
   render(root, ctx) {
     const L = saphanText(ctx);
@@ -389,7 +410,8 @@ const saphan = {
     root.replaceChildren(
       ctx.el('p', { class: 'dim small sp-intro', text: L.intro }),
       ctx.el('div', { class: 'grid3 sp-grid' },
-        ctx.el('div', { class: 'card' }, head(L.routes, L.tipRoutes), ctx.el('div', { class: 'scroll' }, ctx.el('table', { class: 'tbl' }, ctx.el('tbody', { id: 'sp-routes' }, ctx.el('tr', {}, ctx.el('td', { class: 'dim', text: '…' })))))),
+        ctx.el('div', { class: 'card' }, head(L.routes, L.tipRoutes), ctx.el('div', { class: 'scroll' }, ctx.el('table', { class: 'tbl' },
+          ctx.el('tbody', { id: 'sp-routes' }, ctx.el('tr', {}, ctx.el('td', { class: 'dim', text: '…' }))), ctx.el('tbody', { id: 'sp-evm' }, ...evmRows(ctx))))),
         ctx.el('div', { class: 'card' }, head(L.send, L.tipSend), ctx.el('div', { id: 'sp-send' }, ctx.el('p', { class: 'dim', text: '…' }))),
         ctx.el('div', { class: 'card' }, head(L.recv, L.tipRecv), ctx.el('div', { id: 'sp-recv', class: 'small' }))),
       ctx.el('p', { class: 'warnline small', text: L.limits }));

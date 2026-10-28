@@ -85,6 +85,10 @@ contract BridgedToken {
 ///             and is raised only by governance, at most x2 per step (or back up
 ///             to the cap before a lowerMaxDailyLimit cut), each step 7 days after
 ///             it was proposed: caps grow gradually and in public.
+///         Outbound-only routes (setOutboundRoute): an adapter that only burns, e.g. a
+///         HyperlaneOutbox sending the token back to its source chain. inbound() refuses
+///         such a route, so it never mints and needs no airlock; enabling it still needs the
+///         audit on record and a daily limit within the hard cap. An id is either kind, for good.
 ///         Governance should be the ZetaphyTimelock (proposers: the chain's gov
 ///         module or a multisig). Guardians act at once, but only to reduce risk:
 ///         pause, lowerMaxDailyLimit, cancelMaxDailyLimit, disableRoute.
@@ -133,6 +137,8 @@ contract BridgeGuard {
         bool done;       // released or dropped
     }
     HeldMint[] public held;
+    /// Routes that only burn (setOutboundRoute): inbound() refuses them.
+    mapping(bytes32 => bool) public outboundOnly;
 
     event RouteSet(bytes32 indexed id, address adapter, uint128 dailyLimit, bool enabled);
     event GovernanceSet(address governance);
@@ -149,6 +155,7 @@ contract BridgeGuard {
     event InboundHeld(uint256 indexed id, bytes32 indexed route, address indexed to, uint256 amount);
     event HeldReleased(uint256 indexed id, address indexed to, uint256 amount);
     event HeldDropped(uint256 indexed id);
+    event OutboundOnly(bytes32 indexed id);
 
     error NotGovernance();
     error NotGuardian();
@@ -163,6 +170,7 @@ contract BridgeGuard {
     error CapStep(uint128 most);
     error TooEarly(uint64 at);
     error NoPending();
+    error RouteKind();
 
     constructor(address governance_) {
         governance = governance_;
@@ -284,6 +292,7 @@ contract BridgeGuard {
     /// an adapter that is a BridgeAirlock with 2+ independent lanes. Disabling (or
     /// setting a closed route up) needs none of them: closing always works.
     function setRoute(bytes32 id, address adapter, uint128 dailyLimit, bool enabled) external onlyGov {
+        if (outboundOnly[id]) revert RouteKind();
         if (enabled) {
             if (dailyLimit > maxDailyLimit) revert OverCap(maxDailyLimit);
             if (auditSha256 == bytes32(0)) revert AuditMissing();
@@ -291,6 +300,27 @@ contract BridgeGuard {
             if (n < 2) revert NeedLanes(n);
         }
         Route storage r = routes[id];
+        r.adapter = adapter;
+        r.dailyLimit = dailyLimit;
+        r.enabled = enabled;
+        emit RouteSet(id, adapter, dailyLimit, enabled);
+    }
+
+    /// An outbound-only route: its adapter may only burn (outbound); inbound() refuses it.
+    /// Enabling needs the audit on record and a daily limit within the hard cap, and an
+    /// adapter that is a contract; an id used by an inbound route is refused (RouteKind).
+    function setOutboundRoute(bytes32 id, address adapter, uint128 dailyLimit, bool enabled) external onlyGov {
+        Route storage r = routes[id];
+        if (!outboundOnly[id]) {
+            if (r.adapter != address(0)) revert RouteKind();
+            outboundOnly[id] = true;
+            emit OutboundOnly(id);
+        }
+        if (enabled) {
+            if (dailyLimit > maxDailyLimit) revert OverCap(maxDailyLimit);
+            if (auditSha256 == bytes32(0)) revert AuditMissing();
+            if (adapter.code.length == 0) revert NotAdapter();
+        }
         r.adapter = adapter;
         r.dailyLimit = dailyLimit;
         r.enabled = enabled;
@@ -332,7 +362,7 @@ contract BridgeGuard {
         HeldMint storage h = held[hid];
         if (paused) revert BridgePaused();
         Route storage r = routes[h.route];
-        if (!r.enabled) revert NotAdapter();
+        if (!r.enabled || outboundOnly[h.route]) revert NotAdapter();
         _clean(h.to);
         uint64 today = uint64(block.timestamp / 1 days);
         if (r.day != today) { r.day = today; r.inToday = 0; r.outToday = 0; }
@@ -412,7 +442,7 @@ contract BridgeGuard {
     function _use(bytes32 id, uint256 amount, bool isIn) private returns (Route storage r) {
         if (paused) revert BridgePaused();
         r = routes[id];
-        if (!r.enabled || msg.sender != r.adapter) revert NotAdapter();
+        if (!r.enabled || msg.sender != r.adapter || (isIn && outboundOnly[id])) revert NotAdapter();
         uint64 today = uint64(block.timestamp / 1 days);
         if (r.day != today) { r.day = today; r.inToday = 0; r.outToday = 0; }
         uint256 used = isIn ? r.inToday : r.outToday;

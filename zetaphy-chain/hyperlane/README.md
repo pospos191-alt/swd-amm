@@ -42,3 +42,14 @@ the `HyperlaneLane` on ZETAPHY; `zetaphy deploy-bridge --testnet` deploys the ZE
 gas paymaster does not quote ZETAPHY, the lockbox uses Sepolia's MerkleTreeHook alone and our own
 relayer delivers (`setup-agents.sh start-relayer` with `RELAYER_SENDERS=<the lockbox>`).
 Run: Actions -> **bridge-testnet** -> `check`, then `dry_run` (local copies of both chains), then `deploy`.
+
+## Saphan v2: more source chains, both directions (`saphan-route` workflow)
+
+`saphan-chains.json` is the chain table (Sepolia, Base Sepolia, Arbitrum Sepolia: addresses from the Hyperlane
+registry, default validators from the Hyperlane monorepo, both pinned by commit in the file). Each source chain gets
+its own stack: a `HyperlaneLockBoxV2` on the source chain (locks; releases after a delay, behind a multisig ISM of
+OUR validator(s) for origin ZETAPHY), and on ZETAPHY its own guard, bridged token, airlock, lanes and a
+`HyperlaneOutbox` (the way back). `agent-config.json` now also lists `basesepolia` and `arbitrumsepolia` (made with
+the pinned CLI from the registry). Deployed routes go to `saphan-routes.json`. The `hyperlane-relayer` workflow
+relays every route both ways and runs our validator (`ZETAPHY_VALIDATOR_KEY`) only while a release waits, with its
+checkpoints in the Actions cache. Design, egress estimate and the owner's steps: docs/SAPHAN-MULTICHAIN.md.

@@ -2,7 +2,7 @@
 // The bridge is deployed closed (deploy-bridge); `bridge open` checks every opening
 // gate (src/bridgegate.js) and only then enables the route, through governance.
 
-import { Contract, Wallet, NonceManager, getAddress, parseUnits, formatUnits } from 'ethers';
+import { Contract, Wallet, NonceManager, getAddress, parseUnits, formatUnits, encodeBytes32String } from 'ethers';
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { timelockHint } from './timelockcli.js';
@@ -31,6 +31,16 @@ export async function govCall(k, c, write, fn, args, what) {
   if (same(gov, GOV_MODULE)) write('  (the gov module: submit this as a MsgEVMCall proposal, zetaphy-chain/gov.sh)');
   else write('  (SimpleMultisig: an owner calls propose(to, 0, data), others confirm, then execute; Safe: Transaction Builder, each owner signs on a hardware wallet)');
   return false;
+}
+
+/** Saphan v2: the guard's outbound-only route ('out', a HyperlaneOutbox), or null (v1 guards have none). */
+export async function outboundRoute(guard) {
+  const id = encodeBytes32String('out');
+  try {
+    if (!(await guard.outboundOnly(id))) return null;
+    const r = await guard.routes(id);
+    return /^0x0{40}$/i.test(r.adapter) ? null : { id, adapter: r.adapter, dailyLimit: r.dailyLimit, enabled: r.enabled };
+  } catch { return null; }
 }
 
 function bridgeContracts(s, opt, runner) {
@@ -84,6 +94,8 @@ export async function openGates({ provider, guard, airlock, jobs, deployer, rpc,
   const markers = Number(await airlock.markerCount());
   write(`Markers: ${markers} (keys that may mark an address, holding its bridge transfers until governance untrips it; they move no funds)`);
   write(`Daily limit: ${units(limitUnits, decimals)} (hard cap ${units(maxDailyLimit, decimals)}, starter ${STARTER_UNITS})`);
+  const out = await outboundRoute(guard);
+  if (out) write(`Way back: HyperlaneOutbox ${out.adapter} (outbound-only route, ${out.enabled ? 'enabled' : 'opens with the route'}, same daily limit)`);
   write(`Audit: ${audit ? `${audit.url} sha256 ${audit.sha}` : '(missing)'}${(await guard.auditSha256()) !== '0x' + '0'.repeat(64) ? ` (on-chain now: ${await guard.auditUrl()} ${await guard.auditSha256()})` : ''}`);
   for (const w of warnings) write(`warning: ${w}`);
   return { problems, warnings, audit, limitUnits, lanes, roles, runners, devnet, testnet, markers };
@@ -110,6 +122,9 @@ export async function bridgeCommand({ cmd, rest, opt, env, write, s, connect, co
     }
     const route = await airlock.route();
     const done = await govCall(guard, c, write, 'setRoute', [route, airlock.target, g.limitUnits, true], `enable route ${route} (daily limit ${g.limitUnits} units)`);
+    // Saphan v2: the way back (HyperlaneOutbox) opens with it, same daily limit.
+    const out = await outboundRoute(guard);
+    if (out && !out.enabled) await govCall(guard, c, write, 'setOutboundRoute', [out.id, out.adapter, g.limitUnits, true], `enable the outbound route ${out.id} (HyperlaneOutbox ${out.adapter}, daily limit ${g.limitUnits} units)`);
     if (done) write('bridge OPEN. Watch it: zetaphy bridge monitor; stop it: a guardian runs zetaphy bridge pause');
     return 0;
   }
@@ -125,6 +140,8 @@ export async function bridgeCommand({ cmd, rest, opt, env, write, s, connect, co
     const route = await airlock.route();
     const r = await guard.routes(route);
     await govCall(guard, c, write, 'setRoute', [route, r.adapter, r.dailyLimit, false], `close route ${route}`);
+    const out = await outboundRoute(guard);
+    if (out?.enabled) await govCall(guard, c, write, 'setOutboundRoute', [out.id, out.adapter, out.dailyLimit, false], `close the outbound route ${out.id}`);
     return 0;
   }
 

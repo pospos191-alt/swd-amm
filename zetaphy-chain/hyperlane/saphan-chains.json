@@ -1,0 +1,92 @@
+{
+  "about": "ZETAPHY Saphan, EVM routes v2: the chain table. One entry per source chain; adding a chain = an entry here + the saphan-route workflow. Testnets only. Addresses of each source chain: the Hyperlane registry (registry, below); their default validators: the Hyperlane monorepo (validators, below). Deployed routes are written to saphan-routes.json by the workflow.",
+  "sources": {
+    "registry": "https://github.com/hyperlane-xyz/hyperlane-registry/tree/fd1acc240ea812d1ae76cd81a9872c0b526c020a/chains (chains/<name>/metadata.yaml, addresses.yaml)",
+    "validators": "https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/1aadbba0696ecf96ed4c06f78c978d08db22c0ad/typescript/sdk/src/consts/multisigIsm.ts (defaultMultisigConfigs: DEFAULT_AW_TESTNET_VALIDATOR, threshold 1, for sepolia, basesepolia and arbitrumsepolia)",
+    "fetched": "2026-10-28"
+  },
+  "zetaphy": {
+    "name": "zetaphy",
+    "displayName": "ZETAPHY Testnet",
+    "chainId": 77390,
+    "domain": 77390,
+    "rpc": ["https://rpc.sawasdeecoin.com"],
+    "explorer": "https://explorer.sawasdeecoin.com",
+    "mailbox": "0x0f1C59C6e98c88E1ddc2Ff98Bee11dadA07fEaCe",
+    "merkleTreeHook": "0x58a95FcFddfB4f4df2288c563Ce0AE669FE5d4fc",
+    "validatorAnnounce": "0x7a5226c7cb683B87Afd3E0c72b564756b82D3841",
+    "staticMessageIdMultisigIsmFactory": "0x35Ef33EFA25F0CDDC083076f401e7823E6b9B02B",
+    "neuroJobs": "0x698dC17df6a34b02263b295d101BE39F3F3B433B",
+    "neuroControl": "0xc0081832ABf11BF68Df37cbA1A3E6805e10b23c6",
+    "threats": "0xaB5745b61f83975E68F6546be9F83651df12417f",
+    "timelock": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+    "guardian": "0x5bcC8290fff6f1410d7a04c5f6839b6AfD917Eb5"
+  },
+  "zetaphyValidators": {
+    "about": "OUR Hyperlane validator(s) for origin ZETAPHY: the ISM on every source chain's lockbox trusts these for releases. The address of the repository secret ZETAPHY_VALIDATOR_KEY goes here (saphan-route check prints it). More validators: add them, raise the threshold, then governance sets the new ISM on each lockbox.",
+    "validators": [],
+    "threshold": 1
+  },
+  "origin": {
+    "about": "Defaults for every source chain's own governance: a SimpleMultisig (these owners, the ZETAPHY guardian multisig's owners) is guardian and proposes to a ZetaphyTimelock (this delay), which is governance of the lockbox.",
+    "owners": ["0xeBc7EAcfFE5Fdd6261f40E4aE0bDFa62F1299d1b", "0x6138233a3DF6f2714E598346Fda7566Fd3f3b5ec"],
+    "threshold": 2,
+    "timelockDelay": 172800
+  },
+  "chains": {
+    "sepolia": {
+      "displayName": "Sepolia",
+      "chainId": 11155111,
+      "domain": 11155111,
+      "rpc": ["https://ethereum-sepolia-rpc.publicnode.com", "https://sepolia.drpc.org", "https://1rpc.io/sepolia"],
+      "explorer": "https://sepolia.etherscan.io",
+      "estimateBlockTime": 13,
+      "mailbox": "0xfFAEF09B3cd11D9b20d1a19bECca54EEC2884766",
+      "merkleTreeHook": "0x4917a9746A7B6E0A57159cCb7F5a6744247f2d0d",
+      "validatorAnnounce": "0xE6105C59480a1B7DD3E4f28153aFdbE12F4CfCD9",
+      "staticMessageIdMultisigIsmFactory": "0xFEb9585b2f948c1eD74034205a7439261a9d27DD",
+      "validators": ["0x3c659e0fe8d01b80d7828b421630085777346e7c"],
+      "threshold": 1,
+      "token": { "name": "Sepolia ETH (bridged, testnet)", "symbol": "sepETH", "decimals": 18 },
+      "limits": { "zetaphyDailyLimit": "1", "releaseDailyLimit": "1", "releaseDelay": 3600, "quarantine": 3600 },
+      "faucetEth": "0.1",
+      "faucets": ["https://cloud.google.com/application/web3/faucet/ethereum/sepolia"]
+    },
+    "basesepolia": {
+      "displayName": "Base Sepolia",
+      "chainId": 84532,
+      "domain": 84532,
+      "rpc": ["https://sepolia.base.org", "https://base-sepolia-rpc.publicnode.com"],
+      "explorer": "https://sepolia.basescan.org",
+      "estimateBlockTime": 2,
+      "mailbox": "0x6966b0E55883d49BFB24539356a2f8A673E02039",
+      "merkleTreeHook": "0x86fb9F1c124fB20ff130C41a79a432F770f67AFD",
+      "validatorAnnounce": "0x20c44b1E3BeaDA1e9826CFd48BeEDABeE9871cE9",
+      "staticMessageIdMultisigIsmFactory": "0xfc6e546510dC9d76057F1f76633FCFfC188CB213",
+      "validators": ["0x3c659e0fe8d01b80d7828b421630085777346e7c"],
+      "threshold": 1,
+      "token": { "name": "Base Sepolia ETH (bridged, testnet)", "symbol": "baseETH", "decimals": 18 },
+      "limits": { "zetaphyDailyLimit": "1", "releaseDailyLimit": "1", "releaseDelay": 3600, "quarantine": 3600 },
+      "faucetEth": "0.02",
+      "faucets": ["https://docs.base.org/base-chain/tools/network-faucets"]
+    },
+    "arbitrumsepolia": {
+      "displayName": "Arbitrum Sepolia",
+      "chainId": 421614,
+      "domain": 421614,
+      "rpc": ["https://sepolia-rollup.arbitrum.io/rpc", "https://arbitrum-sepolia.drpc.org"],
+      "explorer": "https://sepolia.arbiscan.io",
+      "estimateBlockTime": 0.25,
+      "mailbox": "0x598facE78a4302f11E3de0bee1894Da0b2Cb71F8",
+      "merkleTreeHook": "0xAD34A66Bf6dB18E858F6B686557075568c6E031C",
+      "validatorAnnounce": "0x1b33611fCc073aB0737011d5512EF673Bff74962",
+      "staticMessageIdMultisigIsmFactory": "0xF7F0DaB0BECE4498dAc7eb616e288809D4499371",
+      "validators": ["0x3c659e0fe8d01b80d7828b421630085777346e7c"],
+      "threshold": 1,
+      "token": { "name": "Arbitrum Sepolia ETH (bridged, testnet)", "symbol": "arbETH", "decimals": 18 },
+      "limits": { "zetaphyDailyLimit": "1", "releaseDailyLimit": "1", "releaseDelay": 3600, "quarantine": 3600 },
+      "faucetEth": "0.02",
+      "faucets": ["https://faucet.quicknode.com/arbitrum/sepolia"]
+    }
+  }
+}
