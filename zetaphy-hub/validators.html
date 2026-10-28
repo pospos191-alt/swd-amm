@@ -25,6 +25,18 @@
     <p class="lede" data-t="lede"></p>
   </header>
 
+  <nav class="vtabs" role="tablist" aria-label="Topics" id="vtabs">
+    <button type="button" role="tab" id="t-start" aria-controls="p-start" aria-selected="true" tabindex="0" data-tab="start" data-t="tab_start"></button>
+    <button type="button" role="tab" id="t-check" aria-controls="p-check" aria-selected="false" tabindex="-1" data-tab="check" data-t="tab_check"></button>
+    <button type="button" role="tab" id="t-get" aria-controls="p-get" aria-selected="false" tabindex="-1" data-tab="get" data-t="tab_get"></button>
+    <button type="button" role="tab" id="t-fix" aria-controls="p-fix" aria-selected="false" tabindex="-1" data-tab="fix" data-t="tab_fix"></button>
+    <button type="button" role="tab" id="t-rewards" aria-controls="p-rewards" aria-selected="false" tabindex="-1" data-tab="rewards" data-t="tab_rewards"></button>
+    <button type="button" role="tab" id="t-keys" aria-controls="p-keys" aria-selected="false" tabindex="-1" data-tab="keys" data-t="tab_keys"></button>
+    <button type="button" role="tab" id="t-advanced" aria-controls="p-advanced" aria-selected="false" tabindex="-1" data-tab="advanced" data-t="tab_advanced"></button>
+  </nav>
+
+  <div class="vpanel" role="tabpanel" id="p-start" aria-labelledby="t-start" tabindex="0">
+    <p class="tab-lede" data-t="lede_start"></p>
   <section aria-labelledby="h-pick">
     <h2 id="h-pick" data-t="pick"></h2>
     <p class="small" data-t="pickSub"></p>
@@ -49,7 +61,10 @@
     </div>
     <p class="small" data-t="paste"></p>
   </section>
+  </div>
 
+  <div class="vpanel" role="tabpanel" id="p-check" aria-labelledby="t-check" tabindex="0" hidden>
+    <p class="tab-lede" data-t="lede_check"></p>
   <section aria-labelledby="h-check">
     <h2 id="h-check" data-t="hCheck"></h2>
     <div class="cmd"><pre id="k-status">sudo zetaphy-validator status</pre>
@@ -57,7 +72,10 @@
     <p data-t="checkP"></p>
     <p class="small warnline" data-t="safe0"></p>
   </section>
+  </div>
 
+  <div class="vpanel" role="tabpanel" id="p-get" aria-labelledby="t-get" tabindex="0" hidden>
+    <p class="tab-lede" data-t="lede_get"></p>
   <section aria-labelledby="h-get" id="get">
     <h2 id="h-get" data-t="getH"></h2>
     <p class="small" data-t="getIntro"></p>
@@ -65,14 +83,17 @@
       <div class="way"><h3 data-t="g1h"></h3><p class="small" data-t="g1p"></p>
         <form class="row tight vf" id="vf-form" autocomplete="off"><input id="vf-addr" spellcheck="false" placeholder="0x… / zetaphy1…" aria-label="address"><button type="submit" class="sm" id="vf-get" data-t="vfGet"></button></form>
         <p class="small vf-msg" id="vf-msg" role="status" aria-live="polite"></p>
-        <div class="row tight"><a class="btn sm" href="https://app.sawasdeecoin.com" data-t="openApp"></a><a class="btn sm outline" href="./?tab=mine" id="vf-mine" data-t="vfMine"></a></div></div>
+        <div class="row tight"><a class="btn sm" href="https://app.sawasdeecoin.com" target="_top" data-t="openApp"></a><a class="btn sm outline" href="./?tab=mine" target="_top" id="vf-mine" data-t="vfMine"></a></div></div>
       <div class="way"><h3 data-t="g2h"></h3><p class="small" data-t="g2p"></p></div>
       <div class="way"><h3 data-t="g3h"></h3><p class="small" data-t="g3p"></p></div>
       <div class="way"><h3 data-t="g4h"></h3><p class="small" data-t="g4p"></p></div>
     </div>
     <p class="small warnline" data-t="getNote"></p>
   </section>
+  </div>
 
+  <div class="vpanel" role="tabpanel" id="p-fix" aria-labelledby="t-fix" tabindex="0" hidden>
+    <p class="tab-lede" data-t="lede_fix"></p>
   <section aria-labelledby="h-res" id="resume">
     <h2 id="h-res" data-t="resH"></h2>
     <p data-t="resIntro"></p>
@@ -93,25 +114,10 @@
     </ol>
     <div class="note"><p data-t="resWarn"></p></div>
   </section>
+  </div>
 
-  <section aria-labelledby="h-ai" id="ai" hidden>
-    <h2 id="h-ai" data-t="aiH"></h2>
-    <p class="small" data-t="aiSub"></p>
-    <div class="ai-log" id="ai-log" aria-live="polite"></div>
-    <div class="ai-box">
-      <textarea id="ai-in" rows="3"></textarea>
-      <div class="row">
-        <button type="button" id="ai-send" data-t="aiSend"></button>
-        <button type="button" class="outline" id="ai-stop" data-t="aiStop" hidden></button>
-        <label class="btn sm outline" id="ai-attach-l" hidden><span data-t="aiAttach"></span><input type="file" id="ai-img" accept="image/*" hidden></label>
-        <span class="small" id="ai-img-name"></span>
-        <button type="button" class="outline sm" id="ai-new" data-t="aiClear"></button>
-      </div>
-      <p class="small" id="ai-msg" aria-live="polite"></p>
-      <p class="small" data-t="aiNote"></p>
-    </div>
-  </section>
-
+  <div class="vpanel" role="tabpanel" id="p-rewards" aria-labelledby="t-rewards" tabindex="0" hidden>
+    <p class="tab-lede" data-t="lede_rewards"></p>
   <section aria-labelledby="h-earn">
     <h2 id="h-earn" data-t="hEarn"></h2>
     <p data-t="earnIntro"></p>
@@ -126,7 +132,50 @@
     </dl>
     <p class="small" data-t="eNote"></p>
   </section>
+  </div>
 
+  <div class="vpanel" role="tabpanel" id="p-keys" aria-labelledby="t-keys" tabindex="0" hidden>
+    <p class="tab-lede" data-t="lede_keys"></p>
+  <section aria-labelledby="h-keys-t">
+    <h2 id="h-keys-t" class="vh" data-t="tab_keys"></h2>
+    <details class="more" id="m-h-keys" open>
+      <summary><h2 id="h-keys" data-t="hKeys"></h2></summary>
+      <div class="more-body">
+    <p data-t="keysIntro"></p>
+    <div class="ways">
+      <div class="way"><h3 data-t="k1h"></h3><p class="small" data-t="k1p"></p></div>
+      <div class="way"><h3 data-t="k2h"></h3><p class="small" data-t="k2p"></p></div>
+      <div class="way"><h3 data-t="k3h"></h3><p class="small" data-t="k3p"></p></div>
+    </div>
+    <p data-t="optA"></p>
+    <p data-t="optB"></p>
+    <div class="cmd"><pre id="k-import">sudo zetaphy-validator import-key</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="k-import" data-t="copy"></button><span class="copied" id="copied-k-import" aria-live="polite"></span></div></div>
+    <p class="small" data-t="optBnote"></p>
+    <p data-t="optC"></p>
+    <div class="cmd"><pre id="k-show">sudo cat /home/zetaphy/.zetaphy-genesis-keys/MNEMONICS-KEEP-SECRET.txt</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="k-show" data-t="copy"></button><span class="copied" id="copied-k-show" aria-live="polite"></span></div></div>
+    <div class="note"><p data-t="keysWarn"></p></div>
+      </div>
+    </details>
+    <details class="more" id="m-h-safe" open>
+      <summary><h2 id="h-safe" data-t="hSafe"></h2></summary>
+      <div class="more-body">
+    <div class="note">
+      <p data-t="safe0"></p>
+      <ul>
+        <li data-t="safe1"></li>
+        <li data-t="safe2"></li>
+        <li data-t="safe3"></li>
+      </ul>
+    </div>
+      </div>
+    </details>
+  </section>
+  </div>
+
+  <div class="vpanel" role="tabpanel" id="p-advanced" aria-labelledby="t-advanced" tabindex="0" hidden>
+    <p class="tab-lede" data-t="lede_advanced"></p>
   <section aria-labelledby="h-more">
     <h2 id="h-more" data-t="moreH"></h2>
     <details class="more" id="m-faq" open>
@@ -165,26 +214,6 @@
       <li data-n="4" data-t="s4"></li>
       <li data-n="5" data-t="s5"></li>
     </ol>
-      </div>
-    </details>
-    <details class="more" id="m-h-keys">
-      <summary><h2 id="h-keys" data-t="hKeys"></h2></summary>
-      <div class="more-body">
-    <p data-t="keysIntro"></p>
-    <div class="ways">
-      <div class="way"><h3 data-t="k1h"></h3><p class="small" data-t="k1p"></p></div>
-      <div class="way"><h3 data-t="k2h"></h3><p class="small" data-t="k2p"></p></div>
-      <div class="way"><h3 data-t="k3h"></h3><p class="small" data-t="k3p"></p></div>
-    </div>
-    <p data-t="optA"></p>
-    <p data-t="optB"></p>
-    <div class="cmd"><pre id="k-import">sudo zetaphy-validator import-key</pre>
-      <div class="row"><button class="ghost" type="button" data-copy="k-import" data-t="copy"></button><span class="copied" id="copied-k-import" aria-live="polite"></span></div></div>
-    <p class="small" data-t="optBnote"></p>
-    <p data-t="optC"></p>
-    <div class="cmd"><pre id="k-show">sudo cat /home/zetaphy/.zetaphy-genesis-keys/MNEMONICS-KEEP-SECRET.txt</pre>
-      <div class="row"><button class="ghost" type="button" data-copy="k-show" data-t="copy"></button><span class="copied" id="copied-k-show" aria-live="polite"></span></div></div>
-    <div class="note"><p data-t="keysWarn"></p></div>
       </div>
     </details>
     <details class="more" id="m-h-loop">
@@ -233,19 +262,6 @@ done
     </table></div>
       </div>
     </details>
-    <details class="more" id="m-h-safe">
-      <summary><h2 id="h-safe" data-t="hSafe"></h2></summary>
-      <div class="more-body">
-    <div class="note">
-      <p data-t="safe0"></p>
-      <ul>
-        <li data-t="safe1"></li>
-        <li data-t="safe2"></li>
-        <li data-t="safe3"></li>
-      </ul>
-    </div>
-      </div>
-    </details>
     <details class="more" id="m-h-facts">
       <summary><h2 id="h-facts" data-t="hFacts"></h2></summary>
       <div class="more-body">
@@ -269,6 +285,25 @@ done
       </div>
     </details>
   </section>
+
+  <section aria-labelledby="h-ai" id="ai" hidden>
+    <h2 id="h-ai" data-t="aiH"></h2>
+    <p class="small" data-t="aiSub"></p>
+    <div class="ai-log" id="ai-log" aria-live="polite"></div>
+    <div class="ai-box">
+      <textarea id="ai-in" rows="3"></textarea>
+      <div class="row">
+        <button type="button" id="ai-send" data-t="aiSend"></button>
+        <button type="button" class="outline" id="ai-stop" data-t="aiStop" hidden></button>
+        <label class="btn sm outline" id="ai-attach-l" hidden><span data-t="aiAttach"></span><input type="file" id="ai-img" accept="image/*" hidden></label>
+        <span class="small" id="ai-img-name"></span>
+        <button type="button" class="outline sm" id="ai-new" data-t="aiClear"></button>
+      </div>
+      <p class="small" id="ai-msg" aria-live="polite"></p>
+      <p class="small" data-t="aiNote"></p>
+    </div>
+  </section>
+  </div>
 </div>
 
 <dialog id="guide" aria-labelledby="g-title">

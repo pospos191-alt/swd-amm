@@ -66,3 +66,16 @@ test('the mining page ships with its worker; the validator guide downloads the c
   // the worker is a same-origin module (script-src 'self'): no eval, no wasm
   for (const f of ['mine.js', 'mine-core.js', 'mine-worker.js']) assert.doesNotMatch(readFileSync(join(HERE, f), 'utf8'), /\beval\(|new Function|WebAssembly/, f);
 });
+
+test('validator guide: topics as tabs, each named and introduced in all 8 languages', () => {
+  const html = readFileSync(join(HERE, 'validators.html'), 'utf8');
+  const tabs = [...html.matchAll(/role="tab" id="t-([a-z]+)" aria-controls="p-\1"/g)].map((m) => m[1]);
+  assert.deepEqual(tabs, ['start', 'check', 'get', 'fix', 'rewards', 'keys', 'advanced']);
+  for (const t of tabs) assert.match(html, new RegExp(`role="tabpanel" id="p-${t}" aria-labelledby="t-${t}"`));
+  const line = readFileSync(join(HERE, 'validators.js'), 'utf8').split('\n')[2];
+  const X = JSON.parse(line.slice('const X = /*EXTRA*/'.length, -1));
+  for (const l of ['en', 'zh', 'es', 'ko', 'ja', 'ru', 'vi', 'th']) {
+    for (const t of tabs) assert.ok(X[l][`tab_${t}`] && X[l][`lede_${t}`], `${l}: ${t}`);
+    for (const k of ['vfGet', 'vfOk', 'vfDown', 'vfBad', 'vfMine']) assert.ok(X[l][k], `${l}: ${k}`);
+  }
+});

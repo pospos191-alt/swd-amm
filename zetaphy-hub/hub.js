@@ -29,7 +29,7 @@ const ICONS = {
   stake: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/>',
   nft: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 16l-5-5-9 9"/>',
   explorer: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
-  mine: '<path d="M4 9c4-4 12-4 16 0"/><path d="M12 6v15"/>',
+  mine: '<path d="M3 9c4-5 13-6 18-2"/><path d="M12 6l-5 15"/>',
   guide: '<path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/>',
   earn: '<circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.4 0-2.5.8-2.5 2s1.1 1.7 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6.5v1.5M12 16v1.5"/>',
   analytics: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',

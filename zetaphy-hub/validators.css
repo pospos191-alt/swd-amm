@@ -128,3 +128,16 @@ textarea { width: 100%; box-sizing: border-box; min-height: 150px; font: 14px/1.
 .vf-msg { margin: 0; min-height: 1.2em; word-break: break-word; }
 .vf-msg.ok { color: var(--ok, #1a7f37); }
 .vf-msg.bad { color: var(--bad, #b42318); }
+
+/* topics as tabs (validators.js): a scrollable row on phones */
+.vtabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: -16px; scrollbar-width: thin; position: sticky; top: 0; z-index: 2; background: var(--bg); padding-top: 8px; }
+.vtabs [role="tab"] { flex: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 14px; font: 600 14px var(--body); cursor: pointer; white-space: nowrap; }
+.vtabs [role="tab"][aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.vpanel { display: grid; gap: 28px; min-width: 0; }
+.vpanel:focus { outline: none; }
+.vpanel:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+.tab-lede { margin: 0; font-size: 18px; font-weight: 500; }
+/* inside the hub (validators.html?embed): no own header, the hub's dark colours */
+html.embed { --bg: #05070a; --surface: #0d121b; --ink: #e8edf5; --muted: #8e9aae; --line: #1f2836; --accent: #7c6cff; --accent-ink: #ffffff; --warn: #f0b45a; color-scheme: dark; }
+html.embed header { display: none; }
+html.embed .wrap { padding-block: 0 24px; gap: 28px; }

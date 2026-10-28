@@ -81,7 +81,7 @@ const EARN_ICONS = {
   server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
   stake: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/>',
   swap: '<path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/>',
-  pick: '<path d="M4 9c4-4 12-4 16 0"/><path d="M12 6v15"/>',
+  pick: '<path d="M3 9c4-5 13-6 18-2"/><path d="M12 6l-5 15"/>',
 };
 
 /**
@@ -130,41 +130,81 @@ function faucetForm(ctx, L) {
   });
   return ctx.el('div', { class: 'ef' }, ctx.el('label', { for: 'ef-addr', class: 'dim small', text: L.fAddr }), form, out);
 }
-let earnSel = 'runner', bondText = 'BOND';
+// The Earn page: one tab per way to get coins, easiest first. Each tab: what you get / need / how long in one
+// line, then numbered steps with one big button; terminal commands come second. "Run a validator" shows the
+// validator guide itself (validators.html, its own tabs and texts) in a frame, so there is one copy of it.
+export const EARN_TABS = ['faucet', 'mine', 'validator', 'stake', 'lp', 'runner'];
+let earnSel = 'faucet', bondText = 'BOND', runnerStats = null;
 function earnFill(ctx, s) {
   const host = new URL(ctx.ep().evm).host;
   return s.replaceAll('https://RPC', ctx.ep().evm).replaceAll('JOBS', ctx.cfg.contracts?.neuroJobs ?? '0x…').replaceAll('HOST', host).replaceAll('BOND', bondText);
 }
+const steps = (ctx, m, withCmds = true) => ctx.el('ol', { class: 'howto' }, m.steps.map(([text, cmd]) => ctx.el('li', {},
+  ctx.el('p', { text: earnFill(ctx, text) }), withCmds && cmd ? code(ctx, earnFill(ctx, cmd)) : null)));
 function earnDetail(ctx, root) {
   const L = earnText(ctx);
   const m = L.m.find((x) => x.id === earnSel) ?? L.m[0];
   const box = root.querySelector('.earn-detail');
+  const el = ctx.el;
+  const open = (tab, primary = true) => el('button', { type: 'button', class: `btn${primary ? ' big' : ' ghost'}`, id: `earn-open-${m.id}`, text: L.openIt, onclick: () => ctx.show(tab) });
+  const body = {
+    faucet: () => [faucetForm(ctx, L),
+      el('div', { class: 'row wrap' }, el('button', { type: 'button', class: 'btn ghost', id: 'earn-to-mine', text: `⛏ ${L.m.find((x) => x.id === 'mine').title}`, onclick: () => ctx.show('mine') })),
+      el('details', { class: 'earn-more' }, el('summary', { text: L.fTerminal }), steps(ctx, m))],
+    mine: () => [steps(ctx, m), el('p', { class: 'small dim', text: L.noPow }), open('mine')],
+    validator: () => [
+      el('iframe', { class: 'earn-guide-frame', id: 'earn-guide-frame', title: L.tabs.validator, src: `validators.html?embed=1&lang=${encodeURIComponent(ctx.lang)}#start` }),
+      el('a', { class: 'small', id: 'earn-guide', href: 'validators.html', target: '_blank', rel: 'noopener', text: L.openGuide })],
+    stake: () => [steps(ctx, m), open(m.tab)],
+    lp: () => [steps(ctx, m), open(m.tab)],
+    runner: () => [
+      el('div', { class: 'stats three' }, tile(ctx, 'earnBond', 'tipEarnBond', 'e-bond'), tile(ctx, 'earnRunners', 'tipEarnRunners', 'e-runners'), tile(ctx, 'earnPool', 'tipEarnPool', 'e-pool')),
+      steps(ctx, m)],
+  }[m.id];
+  box.classList.toggle('framed', m.id === 'validator');
   box.replaceChildren(
-    ctx.el('div', { class: 'card-head' }, ctx.el('h2', { text: earnFill(ctx, m.title) }), ctx.el('span', { class: 'pill', text: m.level })),
-    ctx.el('dl', { class: 'kv3' },
-      ctx.el('dt', { text: L.need }), ctx.el('dd', { text: earnFill(ctx, m.need) }),
-      ctx.el('dt', { text: L.get }), ctx.el('dd', { text: m.get }),
-      ctx.el('dt', { text: L.time }), ctx.el('dd', { text: m.time })),
-    ...(m.id === 'faucet' ? [faucetForm(ctx, L), ctx.el('p', { class: 'dim small', text: L.fTerminal })] : []),
-    ctx.el('ol', { class: 'howto' }, m.steps.map(([text, cmd]) => ctx.el('li', {}, ctx.el('p', { text: earnFill(ctx, text) }), cmd ? code(ctx, earnFill(ctx, cmd)) : null))),
-    ...(m.tab ? [ctx.el('button', { type: 'button', class: 'btn', id: `earn-open-${m.id}`, text: L.openIt, onclick: () => ctx.show(m.tab) })] : []),
-    ...(m.id === 'validator' ? [ctx.el('a', { class: 'btn', id: 'earn-guide', href: 'validators.html', text: L.openGuide })] : []));
-  root.querySelectorAll('.earn-item').forEach((n) => n.setAttribute('aria-selected', String(n.dataset.id === m.id)));
+    el('div', { class: 'card-head' }, el('h2', { text: earnFill(ctx, m.title) }), el('span', { class: 'pill', text: m.level })),
+    el('p', { class: 'earn-sum' },
+      el('span', {}, el('b', { text: `${L.get}: ` }), m.get), el('span', {}, el('b', { text: `${L.need}: ` }), earnFill(ctx, m.need)), el('span', {}, el('b', { text: `${L.time}: ` }), m.time)),
+    ...body());
+  if (m.id === 'runner' && runnerStats) { setText('e-bond', runnerStats[0]); setText('e-runners', runnerStats[1]); setText('e-pool', runnerStats[2]); }
+  for (const n of root.querySelectorAll('.earn-tab')) {
+    const on = n.dataset.id === m.id;
+    n.setAttribute('aria-selected', String(on));
+    n.tabIndex = on ? 0 : -1;
+  }
+}
+function earnPick(ctx, root, id, focus = false) {
+  earnSel = EARN_TABS.includes(id) ? id : 'faucet';
+  earnDetail(ctx, root);
+  const u = new URL(location.href);
+  u.searchParams.set('way', earnSel);
+  history.replaceState(history.state, '', u);
+  if (focus) root.querySelector(`.earn-tab[data-id="${earnSel}"]`)?.focus();
+  if (earnSel === 'runner') earn.refresh(root, ctx);
 }
 const earn = {
   render(root, ctx) {
     const L = earnText(ctx);
-    const svg = (k) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.innerHTML = EARN_ICONS[k]; return s; };
+    const svg = (k) => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); s.innerHTML = EARN_ICONS[k]; return s; };
+    const way = new URL(location.href).searchParams.get('way');
+    if (EARN_TABS.includes(way)) earnSel = way;
+    const tabs = EARN_TABS.map((id) => L.m.find((x) => x.id === id));
     root.replaceChildren(
-      ctx.el('div', { class: 'stats three' }, tile(ctx, 'earnBond', 'tipEarnBond', 'e-bond'), tile(ctx, 'earnRunners', 'tipEarnRunners', 'e-runners'), tile(ctx, 'earnPool', 'tipEarnPool', 'e-pool')),
-      ctx.el('div', { class: 'earn-grid' },
-        ctx.el('div', { class: 'card earn-list' },
-          ctx.el('p', { class: 'dim small', text: L.intro }),
-          ctx.el('div', { class: 'list' }, L.m.map((m) => ctx.el('button', { type: 'button', class: 'earn-item', 'data-id': m.id, onclick: () => { earnSel = m.id; earnDetail(ctx, root); } },
-            svg(m.icon), ctx.el('span', {}, ctx.el('b', { text: m.title }), ctx.el('small', { class: 'dim', text: m.get })), ctx.el('span', { class: 'pill', text: m.level })))),
-          ctx.el('p', { class: 'note', 'data-tip': L.noPow, tabindex: 0, text: `⛏ ${L.whyNoPow}` }),
-          ctx.el('p', { class: 'warnline small', text: L.warn })),
-        ctx.el('div', { class: 'card earn-detail scroll-y' })));
+      ctx.el('p', { class: 'earn-intro dim small', text: L.intro }),
+      ctx.el('div', { class: 'earn-tabs', role: 'tablist', 'aria-label': L.tabsLabel },
+        tabs.map((m, i) => ctx.el('button', { type: 'button', role: 'tab', class: 'earn-tab', 'data-id': m.id, 'aria-controls': 'earn-panel', 'data-tip': m.get,
+          onclick: () => earnPick(ctx, root, m.id),
+          onkeydown: (e) => {
+            const n = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+            if (n === undefined) return;
+            e.preventDefault();
+            earnPick(ctx, root, tabs[(n + tabs.length) % tabs.length].id, true);
+          } }, svg(EARN_METHODS.find((x) => x.id === m.id).icon), ctx.el('span', { text: L.tabs[m.id] })))),
+      ctx.el('div', { class: 'card earn-detail scroll-y', id: 'earn-panel', role: 'tabpanel' }),
+      ctx.el('div', { class: 'earn-foot' },
+        ctx.el('p', { class: 'note', 'data-tip': L.noPow, tabindex: 0, text: `⛏ ${L.whyNoPow}` }),
+        ctx.el('p', { class: 'warnline small', text: L.warn })));
     earnDetail(ctx, root);
   },
   async refresh(root, ctx) {
@@ -173,8 +213,9 @@ const earn = {
     try {
       const [b, w, p] = await Promise.all([SEL.workerBond, SEL.activeWorkers, SEL.rewardPool].map((s) => call(ctx, jobs, s)));
       bondText = `${formatZeta(uintAt(b), 2)} ZETAPHY`;
-      setText('e-bond', formatZeta(uintAt(b), 2)); setText('e-runners', uintAt(w).toString()); setText('e-pool', formatZeta(uintAt(p), 2));
-      earnDetail(ctx, root);
+      runnerStats = [formatZeta(uintAt(b), 2), uintAt(w).toString(), formatZeta(uintAt(p), 2)];
+      // only the runner tab shows these: other tabs keep what the user typed (the faucet form, the guide)
+      if (earnSel === 'runner') earnDetail(ctx, root);
     } catch { /* node unreachable: the steps still show */ }
   },
 };

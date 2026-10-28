@@ -80,11 +80,11 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
     // Earn: the mining card opens the mining page; the faucet card has a working form
     await page.click('.tab[data-tab="earn"]');
     assert.match(await page.textContent('.page-earn'), /Is browser mining real mining\?/);
-    await page.click('.earn-item[data-id="mine"]');
+    await page.click('.earn-tab[data-id="mine"]');
     await page.click('#earn-open-mine');
     await page.waitForFunction(() => new URL(location.href).searchParams.get('tab') === 'mine');
     await page.click('.tab[data-tab="earn"]');
-    await page.click('.earn-item[data-id="faucet"]');
+    await page.click('.earn-tab[data-id="faucet"]');
     assert.equal(await page.inputValue('#ef-addr'), '', 'no wallet connected: empty');
     await page.fill('#ef-addr', ACC);
     await page.click('#ef-get');
@@ -103,7 +103,7 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
     await page.click('#ef-get');
     await page.waitForFunction(() => /0x… or zetaphy1…/.test(document.getElementById('ef-msg').textContent));
     nodeDown = false;
-    await page.click('.earn-item[data-id="validator"]');
+    await page.click('.earn-tab[data-id="validator"]');
     assert.equal(await page.getAttribute('#earn-guide', 'href'), 'validators.html');
     assert.equal(await page.getAttribute('#nav-guide', 'href'), 'validators.html', 'the guide in the menu');
 
@@ -114,8 +114,24 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
     assert.match(await page.textContent('.page-mine'), /ไม่ใช่การขุดจริง/);
     await page.selectOption('#lang', 'en');
 
-    // the validator guide: its own faucet form and the link to the mining page
+    // the validator guide: topics as tabs (hash in the address, arrow keys), its own faucet form, the mining page
     await page.goto(`${site.url}validators.html`);
+    assert.deepEqual(await page.$$eval('#vtabs [role="tab"]', (b) => b.map((x) => x.dataset.tab)), ['start', 'check', 'get', 'fix', 'rewards', 'keys', 'advanced']);
+    assert.ok(await page.isVisible('#cmd') && !(await page.isVisible('#k-status')), 'Start open, the others closed');
+    assert.equal(await page.textContent('#t-check'), 'Check it works');
+    assert.match(await page.textContent('#p-start .tab-lede'), /Pick where/);
+    await page.focus('#t-start');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.getAttribute('#t-check', 'aria-selected'), 'true');
+    assert.equal(new URL(page.url()).hash, '#check');
+    assert.ok(await page.isVisible('#k-status'));
+    await page.keyboard.press('End');
+    assert.equal(new URL(page.url()).hash, '#advanced');
+    await page.goto(`${site.url}validators.html#resume`); // an old link: the restart steps
+    assert.equal(await page.getAttribute('#t-fix', 'aria-selected'), 'true');
+    assert.ok(await page.isVisible('#r-unjail'));
+    await page.goto(`${site.url}validators.html#get`);
+    assert.ok(await page.isVisible('#vf-form'));
     await page.fill('#vf-addr', ACC);
     await page.click('#vf-get');
     await page.waitForFunction(() => document.getElementById('vf-msg').classList.contains('ok'));
