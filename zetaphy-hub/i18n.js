@@ -23,6 +23,7 @@ export function withFallback(table, l) {
 
 export const TEXT = {
   th: {
+    navGuide: "คู่มือ validator", tipGuide: "รัน validator ด้วยคำสั่งเดียว: เครื่อง cloud ฟรี คำสั่งติดตั้ง ดูสถานะ และวิธีเปิดเครื่องใหม่",
     addNet: 'เพิ่มเครือข่าย', height: 'บล็อกล่าสุด', blockTime: 'เวลาต่อบล็อก', validators: 'Validator', bonded: 'ZETAPHY ที่ stake',
     startTitle: 'เริ่มใช้งาน', step1: 'เพิ่มเครือข่าย ZETAPHY ในกระเป๋า', step2: 'รับ ZETAPHY ทดลอง (ฟรี)', step3: 'ลองใช้งาน', faucetBtn: 'รับ',
     latestBlocks: 'บล็อกล่าสุด', viewAll: 'ดูทั้งหมด', colHeight: 'บล็อก', colTxs: 'ธุรกรรม', colProposer: 'ผู้สร้าง', colAge: 'เมื่อ',
@@ -70,6 +71,7 @@ export const TEXT = {
     wbSaphan: "Saphan ออก", wbSaphanTip: "โทเคนนี้ออกไปเชนอื่นผ่าน ZETAPHY Saphan (Hyperlane) ได้ที่ไหน: ล็อกบน ZETAPHY แล้วมีตัวแทนบนเชนปลายทาง", wbStPlanned: "วางแผนไว้", wbStClosed: "ปิด", wbStOpen: "เปิด",
   },
   en: {
+    navGuide: "Validator guide", tipGuide: "Run a validator with one command: free cloud machines, the install command, status and restart help",
     addNet: 'Add network', height: 'Latest block', blockTime: 'Block time', validators: 'Validators', bonded: 'ZETAPHY staked',
     startTitle: 'Get started', step1: 'Add ZETAPHY to your wallet', step2: 'Get test ZETAPHY (free)', step3: 'Try the apps', faucetBtn: 'Get',
     latestBlocks: 'Latest blocks', viewAll: 'View all', colHeight: 'Block', colTxs: 'Txs', colProposer: 'Proposer', colAge: 'Age',
@@ -117,6 +119,7 @@ export const TEXT = {
     wbSaphan: "Saphan out", wbSaphanTip: "Where this token can go out through ZETAPHY Saphan (Hyperlane): locked on ZETAPHY, a copy on the other chain", wbStPlanned: "planned", wbStClosed: "closed", wbStOpen: "open",
   },
   zh: {
+    navGuide: "验证者指南", tipGuide: "一条命令运行验证者：免费云服务器、安装命令、状态查看与重启帮助",
     addNet: '添加网络', height: '最新区块', blockTime: '出块时间', validators: '验证者', bonded: '已质押 ZETAPHY',
     startTitle: '快速开始', step1: '将 ZETAPHY 添加到钱包', step2: '领取测试 ZETAPHY（免费）', step3: '试用应用', faucetBtn: '领取',
     latestBlocks: '最新区块', viewAll: '查看全部', colHeight: '区块', colTxs: '交易', colProposer: '提议者', colAge: '时间',
@@ -164,6 +167,7 @@ export const TEXT = {
     wbSaphan: "Saphan 转出", wbSaphanTip: "此代币可通过 ZETAPHY Saphan（Hyperlane）转出到哪里：在 ZETAPHY 上锁定，在另一条链上得到副本", wbStPlanned: "计划中", wbStClosed: "已关闭", wbStOpen: "开放",
   },
   es: {
+    navGuide: "Guía de validadores", tipGuide: "Ejecuta un validador con un solo comando: máquinas gratis en la nube, el comando de instalación, estado y ayuda para reiniciar",
     addNet: 'Añadir red', height: 'Último bloque', blockTime: 'Tiempo de bloque', validators: 'Validadores', bonded: 'ZETAPHY en stake',
     startTitle: 'Primeros pasos', step1: 'Añade ZETAPHY a tu wallet', step2: 'Consigue ZETAPHY de prueba (gratis)', step3: 'Prueba las apps', faucetBtn: 'Obtener',
     latestBlocks: 'Últimos bloques', viewAll: 'Ver todo', colHeight: 'Bloque', colTxs: 'Txs', colProposer: 'Proponente', colAge: 'Hace',
@@ -211,6 +215,7 @@ export const TEXT = {
     wbSaphan: "Saphan salida", wbSaphanTip: "Adónde puede salir este token con ZETAPHY Saphan (Hyperlane): se bloquea en ZETAPHY y hay una copia en la otra cadena", wbStPlanned: "planeada", wbStClosed: "cerrada", wbStOpen: "abierta",
   },
   ko: {
+    navGuide: "검증인 가이드", tipGuide: "명령어 하나로 검증인 실행: 무료 클라우드 머신, 설치 명령어, 상태 확인과 재시작 도움말",
     addNet: '네트워크 추가', height: '최신 블록', blockTime: '블록 시간', validators: '검증인', bonded: '스테이킹된 ZETAPHY',
     startTitle: '시작하기', step1: '지갑에 ZETAPHY 추가', step2: '테스트 ZETAPHY 받기 (무료)', step3: '앱 사용해 보기', faucetBtn: '받기',
     latestBlocks: '최신 블록', viewAll: '전체 보기', colHeight: '블록', colTxs: 'Tx', colProposer: '제안자', colAge: '경과',
@@ -258,6 +263,7 @@ export const TEXT = {
     wbSaphan: "Saphan 출금", wbSaphanTip: "이 토큰이 ZETAPHY Saphan(Hyperlane)으로 나갈 수 있는 곳: ZETAPHY에 잠기고 다른 체인에 사본이 생깁니다", wbStPlanned: "예정", wbStClosed: "닫힘", wbStOpen: "열림",
   },
   ja: {
+    navGuide: "バリデーターガイド", tipGuide: "コマンド 1 つでバリデーターを運用: 無料クラウドマシン、インストールコマンド、状態確認と再起動のヘルプ",
     addNet: 'ネットワーク追加', height: '最新ブロック', blockTime: 'ブロック時間', validators: 'バリデーター', bonded: 'ステーク中の ZETAPHY',
     startTitle: 'はじめに', step1: 'ウォレットに ZETAPHY を追加', step2: 'テスト用 ZETAPHY を受け取る（無料）', step3: 'アプリを試す', faucetBtn: '受け取る',
     latestBlocks: '最新ブロック', viewAll: 'すべて表示', colHeight: 'ブロック', colTxs: 'Tx', colProposer: 'プロポーザー', colAge: '経過',
@@ -305,6 +311,7 @@ export const TEXT = {
     wbSaphan: "Saphan 送出", wbSaphanTip: "このトークンが ZETAPHY Saphan（Hyperlane）で出ていける先: ZETAPHY でロックされ、相手チェーンにコピーができます", wbStPlanned: "予定", wbStClosed: "閉鎖中", wbStOpen: "開通",
   },
   ru: {
+    navGuide: "Гайд валидатора", tipGuide: "Запустите валидатор одной командой: бесплатные облачные машины, команда установки, статус и помощь с перезапуском",
     addNet: 'Добавить сеть', height: 'Последний блок', blockTime: 'Время блока', validators: 'Валидаторы', bonded: 'ZETAPHY в стейкинге',
     startTitle: 'С чего начать', step1: 'Добавьте ZETAPHY в кошелёк', step2: 'Получите тестовые ZETAPHY (бесплатно)', step3: 'Попробуйте приложения', faucetBtn: 'Получить',
     latestBlocks: 'Последние блоки', viewAll: 'Все', colHeight: 'Блок', colTxs: 'Транз.', colProposer: 'Пропозер', colAge: 'Возраст',
@@ -352,6 +359,7 @@ export const TEXT = {
     wbSaphan: "Saphan наружу", wbSaphanTip: "Куда этот токен может выйти через ZETAPHY Saphan (Hyperlane): блокируется в ZETAPHY, копия появляется в другой сети", wbStPlanned: "в планах", wbStClosed: "закрыт", wbStOpen: "открыт",
   },
   vi: {
+    navGuide: "Hướng dẫn validator", tipGuide: "Chạy validator bằng một lệnh: máy cloud miễn phí, lệnh cài đặt, xem trạng thái và trợ giúp khởi động lại",
     addNet: 'Thêm mạng', height: 'Khối mới nhất', blockTime: 'Thời gian khối', validators: 'Validator', bonded: 'ZETAPHY đã stake',
     startTitle: 'Bắt đầu', step1: 'Thêm ZETAPHY vào ví', step2: 'Nhận ZETAPHY thử nghiệm (miễn phí)', step3: 'Dùng thử các ứng dụng', faucetBtn: 'Nhận',
     latestBlocks: 'Khối mới nhất', viewAll: 'Xem tất cả', colHeight: 'Khối', colTxs: 'Giao dịch', colProposer: 'Người đề xuất', colAge: 'Thời gian',
@@ -408,6 +416,7 @@ export const TAB_TEXT = {
     swap: ['Swap', 'Swap and liquidity', 'AMM and DLMM DEX: swap, add or remove liquidity\nNeuro checks each token\'s code before you trade'],
     stake: ['Stake & vote', 'Stake and vote', 'Stake ZETAPHY with validators, earn rewards and vote on proposals from MetaMask'],
     earn: ['Earn', 'How to earn ZETAPHY', 'Every way to get coins, with terminal commands: faucet, Neuro runner, validator, staking, liquidity'],
+    mine: ["Mine", "Mine testnet ZETAPHY", "Browser proof of work for the testnet faucet: a few minutes of work, 10 test ZETAPHY\nNot real mining: test coins have no value, and nothing runs until you press Start"],
     saphan: ['Saphan', 'ZETAPHY Saphan · cross-chain', 'Move coins between chains over IBC (e.g. USDC from Noble) from MetaMask\nEach chain checks the other with a light client; no custodian'],
     nft: ['NFT', 'NFT marketplace', 'Create collections, mint, buy and sell NFTs on ZETAPHY'],
     explorer: ['Explorer', 'Blocks and transactions', 'Search blocks, transactions, addresses, validators and post-quantum block certificates'],
@@ -423,6 +432,7 @@ export const TAB_TEXT = {
     swap: ['แลกเปลี่ยน', 'แลกเปลี่ยนและสภาพคล่อง', 'DEX แบบ AMM และ DLMM: แลกเหรียญ เพิ่ม/ถอนสภาพคล่อง\nNeuro ตรวจโค้ดเหรียญก่อนแลกทุกครั้ง'],
     stake: ['Stake & โหวต', 'Stake และโหวต', 'stake ZETAPHY กับ validator รับรางวัล และโหวตข้อเสนอของเชน จาก MetaMask'],
     earn: ['รับเหรียญ', 'วิธีได้ ZETAPHY', 'ทุกวิธีที่ได้เหรียญ พร้อมคำสั่งเทอร์มินัล: faucet, รันร่าง Neuro, validator, stake, สภาพคล่อง'],
+    mine: ["ขุด", "ขุด ZETAPHY ทดลอง", "proof of work บนเบราว์เซอร์สำหรับ faucet testnet: คำนวณไม่กี่นาที ได้ ZETAPHY ทดลอง 10 เหรียญ\nไม่ใช่การขุดจริง: เหรียญทดลองไม่มีมูลค่า และไม่มีอะไรทำงานจนกว่าจะกดเริ่ม"],
     saphan: ['Saphan', 'ZETAPHY Saphan · ข้ามเชน', 'ส่งเหรียญข้ามเชนด้วย IBC (เช่น USDC จาก Noble) จาก MetaMask\nสองเชนตรวจกันเองด้วย light client ไม่มีคนกลางถือเงิน'],
     nft: ['NFT', 'ตลาด NFT', 'สร้างคอลเลกชัน มินต์ ซื้อขาย NFT บน ZETAPHY'],
     explorer: ['Explorer', 'สำรวจบล็อกและธุรกรรม', 'ค้นหาบล็อก ธุรกรรม ที่อยู่ validator และใบรับรองบล็อกต้านควอนตัม'],
@@ -438,6 +448,7 @@ export const TAB_TEXT = {
     swap: ['兑换', '兑换与流动性', 'AMM 和 DLMM DEX：兑换、添加或移除流动性\n每次交易前 Neuro 都会检查代币的代码'],
     stake: ['质押与投票', '质押与投票', '通过 MetaMask 向验证者质押 ZETAPHY、赚取奖励并为提案投票'],
     earn: ['赚取', '如何赚取 ZETAPHY', '获取代币的所有方式，附终端命令：水龙头、Neuro 运行者、验证者、质押、流动性'],
+    mine: ["挖矿", "挖测试网 ZETAPHY", "测试网水龙头的浏览器工作量证明：计算几分钟，得到 10 个测试 ZETAPHY\n不是真正的挖矿：测试币没有价值，不按“开始”就不会运行"],
     saphan: ['Saphan', 'ZETAPHY Saphan · 跨链', '通过 MetaMask 经 IBC 在链之间转移代币（如来自 Noble 的 USDC）\n两条链用轻客户端互相验证；没有托管方'],
     nft: ['NFT', 'NFT 市场', '在 ZETAPHY 上创建合集、铸造、买卖 NFT'],
     explorer: ['Explorer', '区块与交易', '搜索区块、交易、地址、验证者和抗量子区块证书'],
@@ -453,6 +464,7 @@ export const TAB_TEXT = {
     swap: ['Swap', 'Swap y liquidez', 'DEX AMM y DLMM: intercambia, añade o retira liquidez\nNeuro revisa el código de cada token antes de que operes'],
     stake: ['Stake y votación', 'Stake y votación', 'Haz stake de ZETAPHY con validadores, gana recompensas y vota propuestas desde MetaMask'],
     earn: ['Ganar', 'Cómo ganar ZETAPHY', 'Todas las formas de conseguir monedas, con comandos de terminal: faucet, runner de Neuro, validador, staking, liquidez'],
+    mine: ["Minar", "Mina ZETAPHY de testnet", "Prueba de trabajo en el navegador para el faucet de testnet: unos minutos de trabajo, 10 ZETAPHY de prueba\nNo es minería real: las monedas de prueba no tienen valor y nada se ejecuta hasta que pulsas Empezar"],
     saphan: ['Saphan', 'ZETAPHY Saphan · cross-chain', 'Mueve monedas entre cadenas por IBC (p. ej. USDC desde Noble) desde MetaMask\nCada cadena verifica a la otra con un cliente ligero; sin custodio'],
     nft: ['NFT', 'Marketplace de NFT', 'Crea colecciones, mintea, compra y vende NFT en ZETAPHY'],
     explorer: ['Explorer', 'Bloques y transacciones', 'Busca bloques, transacciones, direcciones, validadores y certificados de bloque poscuánticos'],
@@ -468,6 +480,7 @@ export const TAB_TEXT = {
     swap: ['스왑', '스왑 및 유동성', 'AMM 및 DLMM DEX: 스왑, 유동성 추가 또는 제거\n거래 전에 Neuro가 각 토큰의 코드를 검사합니다'],
     stake: ['스테이킹 & 투표', '스테이킹 및 투표', 'MetaMask로 검증인에게 ZETAPHY를 스테이킹하고, 보상을 받고, 거버넌스 제안에 투표하세요'],
     earn: ['수익', 'ZETAPHY 버는 방법', '코인을 얻는 모든 방법과 터미널 명령어: Faucet, Neuro 러너, 검증인, 스테이킹, 유동성'],
+    mine: ["채굴", "테스트넷 ZETAPHY 채굴", "테스트넷 Faucet을 위한 브라우저 작업 증명: 몇 분 작업하면 테스트 ZETAPHY 10개\n진짜 채굴이 아닙니다: 테스트 코인은 가치가 없고, 시작을 누르기 전에는 실행되지 않습니다"],
     saphan: ['Saphan', 'ZETAPHY Saphan · 크로스체인', 'MetaMask에서 IBC로 체인 간 코인 이동 (예: Noble의 USDC)\n각 체인이 라이트 클라이언트로 상대를 검증; 수탁자 없음'],
     nft: ['NFT', 'NFT 마켓플레이스', 'ZETAPHY에서 컬렉션 생성, 민팅, NFT 사고팔기'],
     explorer: ['Explorer', '블록 및 트랜잭션', '블록, 트랜잭션, 주소, 검증인, 양자 내성 블록 인증서 검색'],
@@ -483,6 +496,7 @@ export const TAB_TEXT = {
     swap: ['スワップ', 'スワップと流動性', 'AMM と DLMM の DEX: スワップ、流動性の追加・削除\n取引の前に Neuro が各トークンのコードをチェックします'],
     stake: ['ステーク & 投票', 'ステークと投票', 'MetaMask からバリデーターに ZETAPHY をステークし、報酬を得て、ガバナンス提案に投票'],
     earn: ['稼ぐ', 'ZETAPHY を得る方法', 'コインを得るすべての方法をターミナルコマンド付きで: Faucet、Neuro ランナー、バリデーター、ステーキング、流動性'],
+    mine: ["マイニング", "テストネット ZETAPHY をマイニング", "テストネット Faucet 用のブラウザのプルーフ・オブ・ワーク: 数分の作業でテスト用 ZETAPHY 10 枚\n本当のマイニングではありません: テストコインに価値はなく、開始を押すまで何も動きません"],
     saphan: ['Saphan', 'ZETAPHY Saphan · クロスチェーン', 'MetaMask から IBC でチェーン間にコインを移動（例: Noble の USDC）\n各チェーンがライトクライアントで相手を検証。カストディアンなし'],
     nft: ['NFT', 'NFT マーケットプレイス', 'ZETAPHY でコレクションを作成し、NFT をミント・売買'],
     explorer: ['Explorer', 'ブロックとトランザクション', 'ブロック、トランザクション、アドレス、バリデーター、耐量子ブロック証明書を検索'],
@@ -498,6 +512,7 @@ export const TAB_TEXT = {
     swap: ['Обмен', 'Обмен и ликвидность', 'AMM и DLMM DEX: обмен, добавление и вывод ликвидности\nNeuro проверяет код каждого токена перед сделкой'],
     stake: ['Стейкинг', 'Стейкинг и голосование', 'Стейкайте ZETAPHY у валидаторов, получайте награды и голосуйте за предложения из MetaMask'],
     earn: ['Заработать', 'Как заработать ZETAPHY', 'Все способы получить монеты, с командами для терминала: кран, раннер Neuro, валидатор, стейкинг, ликвидность'],
+    mine: ["Майнинг", "Майнинг тестовых ZETAPHY", "Proof of work в браузере для тестового крана: несколько минут работы — 10 тестовых ZETAPHY\nНе настоящий майнинг: тестовые монеты ничего не стоят, и ничего не запускается до нажатия «Старт»"],
     saphan: ['Saphan', 'ZETAPHY Saphan · кросс-чейн', 'Переводите монеты между сетями по IBC (например, USDC из Noble) из MetaMask\nКаждая сеть проверяет другую через лёгкий клиент; без кастодиана'],
     nft: ['NFT', 'NFT-маркетплейс', 'Создавайте коллекции, минтите, покупайте и продавайте NFT в ZETAPHY'],
     explorer: ['Explorer', 'Блоки и транзакции', 'Поиск блоков, транзакций, адресов, валидаторов и постквантовых сертификатов блоков'],
@@ -513,6 +528,7 @@ export const TAB_TEXT = {
     swap: ['Swap', 'Swap và thanh khoản', 'DEX AMM và DLMM: swap, thêm hoặc rút thanh khoản\nNeuro kiểm tra mã của từng token trước khi bạn giao dịch'],
     stake: ['Stake & bỏ phiếu', 'Stake và bỏ phiếu', 'Stake ZETAPHY với validator, nhận thưởng và bỏ phiếu cho đề xuất từ MetaMask'],
     earn: ['Kiếm coin', 'Cách kiếm ZETAPHY', 'Mọi cách để có coin, kèm lệnh terminal: faucet, runner Neuro, validator, staking, thanh khoản'],
+    mine: ["Đào", "Đào ZETAPHY testnet", "Bằng chứng công việc trên trình duyệt cho faucet testnet: vài phút tính toán, 10 ZETAPHY thử nghiệm\nKhông phải đào thật: coin thử nghiệm không có giá trị và không có gì chạy cho đến khi bạn bấm Bắt đầu"],
     saphan: ['Saphan', 'ZETAPHY Saphan · xuyên chuỗi', 'Chuyển coin giữa các chuỗi qua IBC (ví dụ USDC từ Noble) từ MetaMask\nMỗi chuỗi tự xác minh chuỗi kia bằng light client; không có bên lưu ký'],
     nft: ['NFT', 'Chợ NFT', 'Tạo bộ sưu tập, mint, mua và bán NFT trên ZETAPHY'],
     explorer: ['Explorer', 'Khối và giao dịch', 'Tìm khối, giao dịch, địa chỉ, validator và chứng chỉ khối kháng lượng tử'],

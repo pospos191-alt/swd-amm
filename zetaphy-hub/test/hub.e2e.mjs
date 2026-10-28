@@ -200,7 +200,7 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await page.waitForSelector('#tip:not([hidden])');
     assert.match(await page.textContent('#tip'), /บล็อก/, 'Thai remembered');
     await page.click('.tab[data-tab="earn"]');
-    assert.match(await page.textContent('.page-earn'), /ทำไมไม่มีการขุด PoW\?/);
+    assert.match(await page.textContent('.page-earn'), /ขุดบนเบราว์เซอร์ใช่การขุดจริงไหม\?/);
 
     // an unknown stored language is English
     await page.evaluate(() => localStorage.setItem('zetaphy-hub:lang', 'fr'));

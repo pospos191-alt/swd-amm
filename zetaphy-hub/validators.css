@@ -123,3 +123,8 @@ textarea { width: 100%; box-sizing: border-box; min-height: 150px; font: 14px/1.
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 .row.tight { gap: 8px; }
 .facts a { color: var(--accent); }
+/* the faucet form in "get ZETAPHY" */
+.vf input { max-width: none; flex: 1 1 180px; font-size: 14px; }
+.vf-msg { margin: 0; min-height: 1.2em; word-break: break-word; }
+.vf-msg.ok { color: var(--ok, #1a7f37); }
+.vf-msg.bad { color: var(--bad, #b42318); }

@@ -62,7 +62,10 @@
     <h2 id="h-get" data-t="getH"></h2>
     <p class="small" data-t="getIntro"></p>
     <div class="ways">
-      <div class="way"><h3 data-t="g1h"></h3><p class="small" data-t="g1p"></p><a class="btn sm" href="https://app.sawasdeecoin.com" data-t="openApp"></a></div>
+      <div class="way"><h3 data-t="g1h"></h3><p class="small" data-t="g1p"></p>
+        <form class="row tight vf" id="vf-form" autocomplete="off"><input id="vf-addr" spellcheck="false" placeholder="0x… / zetaphy1…" aria-label="address"><button type="submit" class="sm" id="vf-get" data-t="vfGet"></button></form>
+        <p class="small vf-msg" id="vf-msg" role="status" aria-live="polite"></p>
+        <div class="row tight"><a class="btn sm" href="https://app.sawasdeecoin.com" data-t="openApp"></a><a class="btn sm outline" href="./?tab=mine" id="vf-mine" data-t="vfMine"></a></div></div>
       <div class="way"><h3 data-t="g2h"></h3><p class="small" data-t="g2p"></p></div>
       <div class="way"><h3 data-t="g3h"></h3><p class="small" data-t="g3p"></p></div>
       <div class="way"><h3 data-t="g4h"></h3><p class="small" data-t="g4p"></p></div>

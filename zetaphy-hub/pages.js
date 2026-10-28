@@ -1,9 +1,10 @@
-// The hub's data pages (like a chain explorer's): Earn, Analytics, DeFi, Leaderboard, Developers.
+// The hub's data pages (like a chain explorer's): Earn, Mine (mine.js), Analytics, DeFi, Leaderboard, Developers.
 // Each page: render(root, ctx) draws it once; refresh(ctx) (optional) updates live numbers.
 // ctx = { T, lang, ep(), cfg, getJson, evmCall, el, short, formatZeta, show, copyBtn, account(), connect(), send(to, data) }
 import { formatZeta, toEvm, toBech32, bech32Decode, parseUnits, formatUnits, encodeIbcTransfer, sentIbcTransfer, PRECOMPILES } from './chainlib.js';
 import { withFallback } from './i18n.js';
 import { EARN, EARN_METHODS, SAPHAN } from './pages-i18n.js';
+import mine, { mineAddress } from './mine.js';
 
 /** The Earn words in ctx.lang (English underneath), with each method's commands, icon and tab. */
 const earnText = (ctx) => {
@@ -80,7 +81,55 @@ const EARN_ICONS = {
   server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
   stake: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/>',
   swap: '<path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/>',
+  pick: '<path d="M4 9c4-4 12-4 16 0"/><path d="M12 6v15"/>',
 };
+
+/**
+ * Asks the node's faucet (zetaphy_faucet) for `address`. Resolves { txHash } or rejects with an Error whose
+ * `down` is true when the node cannot be reached (paused, offline, or a gateway error) and false when the node
+ * answered with its own reason (already funded, daily limit, …), which is then the message.
+ */
+export async function askFaucet(rpcUrl, address, fetchFn = fetch) {
+  const down = (m) => Object.assign(new Error(m), { down: true });
+  let r;
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 15_000);
+  try {
+    r = await fetchFn(rpcUrl, { method: 'POST', cache: 'no-store', credentials: 'omit', signal: ctl.signal, headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'zetaphy_faucet', params: [address] }) });
+  } catch (e) { throw down(e?.message || 'unreachable'); } finally { clearTimeout(t); }
+  let j = null;
+  try { j = await r.json(); } catch { /* not JSON: a proxy or gateway page */ }
+  if (j?.error) throw Object.assign(new Error(String(j.error.message || 'error').slice(0, 300)), { down: false });
+  if (!r.ok || !j) throw down(`HTTP ${r.status}`);
+  return { txHash: typeof j.result?.txHash === 'string' ? j.result.txHash : '' };
+}
+
+/** The faucet form of the Earn page's Faucet card: address (the connected wallet's, if any) and Get. */
+function faucetForm(ctx, L) {
+  const out = ctx.el('p', { class: 'msg', id: 'ef-msg', role: 'status', 'aria-live': 'polite' });
+  const say = (text, cls = '') => { out.textContent = text; out.className = `msg ${cls}`; };
+  const input = ctx.el('input', { id: 'ef-addr', class: 'mono', spellcheck: 'false', autocomplete: 'off', placeholder: '0x… / zetaphy1…', 'aria-label': L.fAddr, value: ctx.account?.() ?? null });
+  const btn = ctx.el('button', { type: 'submit', class: 'btn', id: 'ef-get', text: L.fGet });
+  const form = ctx.el('form', { class: 'row ef-form', id: 'ef-form', autocomplete: 'off' }, input, btn);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const raw = input.value.trim();
+    if (!mineAddress(raw)) { say(L.fBad, 'bad'); return; }
+    btn.disabled = true;
+    say('…');
+    try {
+      const { txHash } = await askFaucet(ctx.ep().evm, raw);
+      say(L.fOk, 'ok');
+      if (/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+        out.append(' · ', ctx.el('a', { href: `explorer/#/tx/${txHash}`, class: 'mono', 'data-tip': txHash, text: `${L.fTx} ${ctx.short(txHash, 10, 6)}`,
+          onclick: (ev) => { ev.preventDefault(); ctx.show('explorer', { hash: `#/tx/${txHash}` }); } }));
+      }
+    } catch (err) { say(err.down ? L.fDown : err.message, 'bad'); }
+    btn.disabled = false;
+  });
+  return ctx.el('div', { class: 'ef' }, ctx.el('label', { for: 'ef-addr', class: 'dim small', text: L.fAddr }), form, out);
+}
 let earnSel = 'runner', bondText = 'BOND';
 function earnFill(ctx, s) {
   const host = new URL(ctx.ep().evm).host;
@@ -96,8 +145,10 @@ function earnDetail(ctx, root) {
       ctx.el('dt', { text: L.need }), ctx.el('dd', { text: earnFill(ctx, m.need) }),
       ctx.el('dt', { text: L.get }), ctx.el('dd', { text: m.get }),
       ctx.el('dt', { text: L.time }), ctx.el('dd', { text: m.time })),
+    ...(m.id === 'faucet' ? [faucetForm(ctx, L), ctx.el('p', { class: 'dim small', text: L.fTerminal })] : []),
     ctx.el('ol', { class: 'howto' }, m.steps.map(([text, cmd]) => ctx.el('li', {}, ctx.el('p', { text: earnFill(ctx, text) }), cmd ? code(ctx, earnFill(ctx, cmd)) : null))),
-    ...(m.tab ? [ctx.el('button', { type: 'button', class: 'btn', text: L.openIt, onclick: () => ctx.show(m.tab) })] : []));
+    ...(m.tab ? [ctx.el('button', { type: 'button', class: 'btn', id: `earn-open-${m.id}`, text: L.openIt, onclick: () => ctx.show(m.tab) })] : []),
+    ...(m.id === 'validator' ? [ctx.el('a', { class: 'btn', id: 'earn-guide', href: 'validators.html', text: L.openGuide })] : []));
   root.querySelectorAll('.earn-item').forEach((n) => n.setAttribute('aria-selected', String(n.dataset.id === m.id)));
 }
 const earn = {
@@ -464,4 +515,4 @@ const saphan = {
   },
 };
 
-export const PAGES = { earn, saphan, analytics, defi, leaderboard, dev };
+export const PAGES = { earn, mine, saphan, analytics, defi, leaderboard, dev };

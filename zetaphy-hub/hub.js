@@ -8,7 +8,7 @@ import {
   PRECOMPILES, toBech32, isEvmAddress, encodeDelegate, encodeUndelegate, encodeClaimRewards, encodeVote,
   parseZeta, formatZeta, short,
 } from './chainlib.js';
-import { PAGES } from './pages.js';
+import { PAGES, askFaucet } from './pages.js';
 import { LANGS, TEXT, TAB_TEXT, pickLang, locale } from './i18n.js';
 import { walletBar } from './walletbar.js';
 import * as walletLib from './wallet/wallets.js';
@@ -29,6 +29,8 @@ const ICONS = {
   stake: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/>',
   nft: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="M21 16l-5-5-9 9"/>',
   explorer: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  mine: '<path d="M4 9c4-4 12-4 16 0"/><path d="M12 6v15"/>',
+  guide: '<path d="M4 4h11l5 5v11H4z"/><path d="M8 13h8M8 17h5"/>',
   earn: '<circle cx="12" cy="12" r="9"/><path d="M14.5 9.5c-.5-1-1.5-1.5-2.5-1.5-1.4 0-2.5.8-2.5 2s1.1 1.7 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2c-1 0-2-.5-2.5-1.5M12 6.5v1.5M12 16v1.5"/>',
   analytics: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   defi: '<circle cx="8" cy="8" r="5"/><circle cx="16" cy="16" r="5"/>',
@@ -44,6 +46,7 @@ const TABS = [
   { id: 'swap', src: 'swap/' },
   { id: 'stake', fresh: true },
   { id: 'earn', page: true, fresh: true },
+  { id: 'mine', page: true, fresh: true },
   { id: 'saphan', page: true, fresh: true },
   { id: 'nft', src: 'nft/' },
   { id: 'explorer', src: 'explorer/', group: 'data' },
@@ -145,7 +148,9 @@ function buildTabs() {
     last = t.group;
     return [head, el('a', { class: 'tab', href: `?tab=${t.id}`, 'data-tab': t.id, 'data-tip': tabText(t, TIP) },
       svg(t.id), el('span', { text: tabText(t, LABEL) }), t.fresh ? el('span', { class: 'new', text: 'new' }) : null)];
-  }).filter(Boolean));
+  }).filter(Boolean),
+  // the validator guide is a page of its own on this site (validators.html), not a tab
+  el('a', { class: 'tab', href: 'validators.html', id: 'nav-guide', 'data-tip': T('tipGuide') }, svg('guide'), el('span', { text: T('navGuide') })));
   const quick = $('quick');
   quick.replaceChildren(...TABS.filter((t) => t.id !== 'home' && !t.group).map((t) => el('a', { class: 'chip', href: `?tab=${t.id}`, 'data-tab': t.id, 'data-tip': tabText(t, TIP) }, svg(t.id), el('span', { text: tabText(t, LABEL) }))));
 }
@@ -340,9 +345,9 @@ async function faucet(e) {
   if (!isEvmAddress(a) && !/^zetaphy1[02-9ac-hj-np-z]{38}$/.test(a)) { msg(out, T('badAddr'), 'bad'); return; }
   msg(out, '…');
   try {
-    const r = await evmCall('zetaphy_faucet', [a]);
+    const r = await askFaucet(ep().evm, a);
     msg(out, `${T('faucetOk')}${r?.txHash ? ` · ${short(r.txHash, 10, 6)}` : ''}`, 'ok');
-  } catch (err) { msg(out, err.message, 'bad'); }
+  } catch (err) { msg(out, err.down ? `${T('netDown')}` : err.message, 'bad'); }
 }
 
 // ------------------------------------------------------------------ wallet (one connection for the whole hub: walletbar.js)
