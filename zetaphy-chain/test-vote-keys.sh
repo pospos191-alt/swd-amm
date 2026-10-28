@@ -9,6 +9,8 @@
 #   6. each block starts with the ML-DSA vote certificate of the block before
 #   7. a new full node catches up from genesis (blocksync checks certificates)
 #   8. a governance vote switches off slashing on ed25519-only evidence
+#   9. v5: governance turns the immune system on; a new contract gets the
+#      median of both validators' vote-extension scores (docs/future/chain-protocol.md)
 #   bash test-vote-keys.sh <zetaphyd> [workdir]
 set -euo pipefail
 BIN=$1; W=${2:-$(mktemp -d)}; CHAIN=zetaphy-ve-1; D=azetaphy
@@ -93,3 +95,47 @@ for _ in $(seq 1 20); do
 done
 [ "$v" = "AQ==" ] || fail "8: the switch is not on after the vote (proposal $id)"
 moving 3 || fail "8: blocks stopped after the switch"; echo "ok 8 governance turned the evidence switch on (proposal $id); blocks continue"
+
+# 9. v5 immune system on the live devnet: governance turns it on, a contract
+# is deployed, both validators score it in their vote extensions (after the
+# ML-DSA signature) and the median is recorded; certificates keep working and
+# the full node C, which follows by blocksync/consensus, has the same score.
+$BIN tx security-proposal immune '{"enabled":true,"enforce_bps":5000}' --deposit "10000000$D" --from valA --home $W/A $F >/dev/null
+sleep 4
+id=$($BIN q gov proposals --node tcp://127.0.0.1:28645 -o json 2>/dev/null | jq -r '[.proposals[]?.id | tonumber] | max // empty')
+for n in A B; do $BIN tx gov vote "$id" yes --from val$n --home $W/$n $F >/dev/null; done
+for _ in $(seq 1 20); do
+  v=$(curl -s "127.0.0.1:28645/abci_query?path=%22/store/zetaphypq/key%22&data=0x22" | jq -r '.result.response.value // empty')
+  [ -n "$v" ] && break; sleep 2
+done
+echo "$v" | base64 -d | grep -q '"enabled":true' || fail "9: the immune system is not on after the vote (proposal $id)"
+runtime=63a9059cbb6370a0823163095ea7b363f9f92be43260ff50ff   # ERC-20 look, blacklist, tx.origin, SELFDESTRUCT: 5500 bps
+init=6019600c60003960196000f3$runtime
+# The contract is deployed with an Ethereum tx signed by tools/ethsign (run
+# from the patched cosmos/evm checkout, which has go-ethereum).
+[ -n "${ZETAPHY_SRC:-}" ] || { echo "skip 9: set ZETAPHY_SRC=<patched cosmos/evm checkout> to deploy a contract"; exit 0; }
+from=$($BIN keys show valA -a --keyring-backend test --home $W/A)
+key=$(echo y | $BIN keys unsafe-export-eth-key valA --keyring-backend test --home $W/A 2>/dev/null | tail -1)
+nonce=$($BIN q auth account "$from" --node tcp://127.0.0.1:28645 -o json | jq -r '.account.value.sequence // .account.sequence // "0"')
+evmcid=$(sed -n 's/^evm-chain-id = //p' $W/A/config/app.toml)
+ethsign=$(dirname "$(readlink -f "$0")")/tools/ethsign/main.go
+signed=$(cd "$ZETAPHY_SRC/evmd" && go run "$ethsign" "$key" "$evmcid" "$nonce" - "$init" $D) || fail "9: could not sign the deploy"
+raw=$(echo "$signed" | sed -n 1p); c=$(echo "$signed" | sed -n 2p)
+[ -n "$raw" ] && [ -n "$c" ] || fail "9: could not sign the deploy"
+r=$(curl -s "127.0.0.1:28645/broadcast_tx_sync?tx=$raw")
+[ "$(echo "$r" | jq -r .result.code)" = 0 ] || fail "9: deploy refused: $(echo "$r" | jq -c .)"
+sleep 5
+[ "$($BIN q tx "$(echo "$r" | jq -r .result.hash)" --node tcp://127.0.0.1:28645 -o json | jq -r .code)" = 0 ] || fail "9: deploy failed"
+key=0x24$(echo "${c#0x}" | tr 'A-F' 'a-f')
+for port in 28645 28865; do
+  for _ in $(seq 1 20); do
+    s=$(curl -s "127.0.0.1:$port/abci_query?path=%22/store/zetaphypq/key%22&data=$key" | jq -r '.result.response.value // empty')
+    [ -n "$s" ] && break; sleep 2
+  done
+  [ "$(echo "$s" | base64 -d | od -An -tx1 -N2 | tr -d ' \n')" = 157c ] || fail "9: no immune score 5500 for $c on port $port (got '$s')"
+done
+moving 3 || fail "9: blocks stopped"
+h=$(( $(hgt) - 1 ))
+acts=$(curl -s "127.0.0.1:28645/block_results?height=$h" | jq -r '.result.txs_results[0].events[]? | select(.type=="message") | .attributes[] | select(.key=="action") | .value')
+echo "$acts" | grep -q "/zetaphy.pq.v1.MsgPQCertificate" || fail "9: block $h no longer starts with a vote certificate"
+echo "ok 9 v5 immune system: $c scored 5500 bps by both validators' vote extensions, same on the full node; certificates continue"
