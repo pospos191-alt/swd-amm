@@ -259,6 +259,11 @@ zetaphy gate
    - ฝั่งต้นทาง: `HyperlaneLockBoxV2` ล็อกแบบเดียวกับ `HyperlaneLockBox` และปล่อยคืนได้ด้วย: รับเฉพาะข้อความจาก domain ของ ZETAPHY และ `HyperlaneOutbox` ของเส้นทางนั้น ตรวจด้วย multisig ISM ของ validator ของเราเองสำหรับ origin ZETAPHY ทุกการปล่อยต้องรอระยะหนึ่ง (guardian veto ได้) มีเพดานต่อวัน หยุดชั่วคราวได้ และไม่เกินยอดที่ lockbox นั้นล็อกไว้
    - ฝั่ง ZETAPHY: `HyperlaneOutbox.send(to, amount)` เผาโทเคนของเส้นทางผ่าน route ขาออกอย่างเดียวของ guard (`BridgeGuard.setOutboundRoute`: mint ไม่ได้ ต้องมี audit และอยู่ใต้เพดาน) แล้วส่งข้อความปล่อยคืน `deploy-bridge --hyperlane-outbox` ติดตั้งแบบปิด `bridge open` / `bridge close` จัดการทั้งสองทิศ
    - ตารางเชน (`zetaphy-chain/hyperlane/saphan-chains.json`), `scripts/saphan.js` (ฝั่งเชนต้นทาง) และ workflow `saphan-route`; `scripts/saphan-dryrun.js` รันเส้นทางทั้งเส้นบนเชนในเครื่อง
+10. **โทเคนที่เกิดบน ZETAPHY ส่งออกไปเชนอื่น (Saphan token routes, docs/SAPHAN-TOKENS.md, `contracts/SaphanTokens.sol`):** กลับทิศกับ v2 ใช้กับเหรียญหลัก (ERC-20 precompile `0xEeee…EEeE`) และ ERC-20 ใดก็ได้บน ZETAPHY ที่ governance เพิ่มใน `tokens` ของตาราง
+   - ฝั่ง ZETAPHY: `ZetaphyTokenVault` หนึ่งตัวต่อ (โทเคน, เชนปลายทาง): `lock(to, amount)` เก็บโทเคนไว้แล้วส่งข้อความ mint ขากลับปล่อยคืนเฉพาะข้อความจาก domain ของเชนนั้นและโทเคนตัวแทนของมัน (ISM ของ validator ของ Hyperlane สำหรับเชนนั้น) หลังรอระยะหนึ่ง (guardian veto ได้) อยู่ใต้เพดานต่อวัน และไม่เกินที่ vault นั้นถือไว้ ปฏิเสธโทเคนที่หักค่าธรรมเนียมตอนโอน โทเคนที่คืนค่า false และ `decimals()` ที่ไม่ตรงกับตาราง พัก (hold) ผ่าน ThreatRegistry ได้ถ้าตั้งไว้
+   - ฝั่งปลายทาง: `SaphanSyntheticToken` (เช่น `zZETAPHY`) ERC-20 ที่ mint ได้เฉพาะจากข้อความของ vault ตัวเอง (multisig ISM ของ validator ของเราเองสำหรับ origin ZETAPHY) หลังรอระยะหนึ่ง อยู่ใต้เพดานต่อวันและเพดานจำนวนรวม `sendBack(to, amount)` เผาแล้วส่งข้อความปล่อยคืน ทั้งสองฝั่งเริ่มแบบหยุดไว้ (ปิด) governance (timelock) เป็นผู้เปิด
+   - `scripts/saphan.js token-check | token-prepare | token-vault | token-synthetic`, workflow `saphan-route` แบบ `token = <key>`, `scripts/saphan-dryrun.js --token <key|test>`; ทดสอบ: `test/saphantokens.test.js`, `npm run test:devnet:saphantokens` (เหรียญหลักผ่าน precompile จริงบน zetaphyd devnet)
+   - BZTPHY (`ZetaphyPoints`) โอนไม่ได้ จึงอยู่ในตารางแต่ไม่มีเส้นทาง
 
 ```
 zetaphy deploy-threats --quorum 3 --min-agreed 5 --enforce-delay 3600

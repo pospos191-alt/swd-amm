@@ -22,3 +22,7 @@ to ZETAPHY and back. `zetaphy bridge open --testnet` opens a route's way back (i
 outbound-only route of the guard) together with the way in, with the same daily limit. On each source chain the
 lockbox releases only after a delay, within a daily limit and its own locked balance, and its guardian can pause
 or veto a release at once.
+
+It also covers the Saphan token routes (docs/SAPHAN-TOKENS.md): tokens born on ZETAPHY (first the native coin)
+going out to those chains as synthetic tokens (`zZETAPHY`) and back. Bridging the native coin out locks it on
+ZETAPHY; the synthetic is worth only what its vault holds.

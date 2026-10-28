@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanId, decodeString, formatUnits, balanceOfData, SHARED_KEY } from '../walletbar.js';
 import { readFileSync } from 'node:fs';
-import { chainTokens, saphanRoutes } from '../build.mjs';
+import { chainTokens, saphanRoutes, saphanTokenRoutes } from '../build.mjs';
 
 test('stored wallet id: only an id this site writes (JSON or plain), nothing else', () => {
   assert.equal(SHARED_KEY, 'zetaphy:wallet');
@@ -55,4 +55,37 @@ test('Saphan EVM routes: every chain of the table, its state from saphan-routes.
   // the committed table: the three test networks, planned until the saphan-route workflow deploys them
   const real = saphanRoutes((f) => { try { return JSON.parse(readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')); } catch { return null; } });
   assert.deepEqual(real.map((x) => [x.name, x.state]), [['sepolia', 'planned'], ['basesepolia', 'planned'], ['arbitrumsepolia', 'planned']]);
+});
+
+test('Saphan token routes: tokens born on ZETAPHY with their destinations; held tokens carry their routes into the wallet bar', () => {
+  const A = (b) => '0x' + b.repeat(20);
+  const read = (f) => ({
+    'zetaphy-chain/hyperlane/saphan-chains.json': {
+      chains: { sepolia: { displayName: 'Sepolia' }, basesepolia: { displayName: 'Base Sepolia' } },
+      tokens: {
+        about: 'text',
+        zetaphy: { displayName: 'ZETAPHY (native coin)', symbol: 'ZETAPHY', address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', native: true, synthetic: { symbol: 'zZETAPHY' }, destinations: ['sepolia', 'basesepolia', 'nowhere'] },
+        tusd: { displayName: 'Test USD', symbol: 'tUSD', address: A('55'), synthetic: { symbol: 'ztUSD' }, destinations: ['basesepolia'] },
+        bztphy: { displayName: 'BZTPHY', symbol: 'BZTPHY', address: A('66'), transferable: false, synthetic: { symbol: 'zBZTPHY' }, destinations: ['sepolia'] },
+        evil: { displayName: 'x', symbol: '<img>', address: A('77'), synthetic: { symbol: 'z' }, destinations: [] },
+        'Bad Key': { displayName: 'x', symbol: 'X', address: A('88'), synthetic: { symbol: 'zX' }, destinations: [] },
+      },
+    },
+    'zetaphy-chain/hyperlane/saphan-routes.json': { tokens: {
+      zetaphy: { basesepolia: { state: 'OPEN', zetaphy: { vault: A('11') }, destination: { synthetic: A('22') } } },
+      tusd: { basesepolia: { state: 'CLOSED', zetaphy: { vault: 'nope' }, destination: { synthetic: A('33') } } },
+    } },
+  })[f] ?? null;
+  const r = saphanTokenRoutes(read);
+  assert.deepEqual(r.map((x) => [x.key, x.native, x.transferable, x.destinations.map((d) => `${d.name}:${d.state}`).join()]),
+    [['zetaphy', true, true, 'sepolia:planned,basesepolia:open'], ['tusd', false, true, 'basesepolia:planned'], ['bztphy', false, false, '']]);
+  assert.equal(r[0].destinations[1].token, A('22'));
+  // the wallet bar: tUSD with its route (the native coin is shown as ZETAPHY already; BZTPHY cannot move)
+  assert.deepEqual(chainTokens(read), [
+    { address: A('55'), symbol: 'tUSD', saphan: [{ chain: 'Base Sepolia', symbol: 'ztUSD', state: 'planned' }] },
+    { address: A('66'), symbol: 'BZTPHY' },
+  ]);
+  // the committed tables: ZETAPHY to the three test networks (planned), BZTPHY listed without a route
+  const real = saphanTokenRoutes((f) => { try { return JSON.parse(readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')); } catch { return null; } });
+  assert.deepEqual(real.map((x) => [x.symbol, x.synthetic, x.destinations.map((d) => d.state).join()]), [['ZETAPHY', 'zZETAPHY', 'planned,planned,planned'], ['BZTPHY', 'zBZTPHY', '']]);
 });

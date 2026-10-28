@@ -26,6 +26,7 @@
 - คำอธิบาย: ทุกตัวเลข ปุ่ม และขั้นตอน มีข้อความเด้งเมื่อชี้ (`data-tip` / `data-tip-key`) ตัวหน้าเว็บจึงมีข้อความสั้น
 - ที่อยู่โหนดอ่านจาก `zetaphy-explorer/config.json` (launch เขียนไว้) แล้วบันทึกเป็น `dist/hub-config.json`
 - เส้นทาง EVM ของ Saphan (Hyperlane) อ่านจากตารางเชน `zetaphy-chain/hyperlane/saphan-chains.json` และเส้นทางที่ติดตั้งแล้วใน `saphan-routes.json` (อยู่ใน `dist/hub-config.json` ด้วย) เชนที่เพิ่มในตารางจะขึ้นในหน้า Saphan เป็น "วางแผนไว้" แล้วเป็น "ปิด" หรือ "เปิด"
+- เส้นทางโทเคนของ Saphan (โทเคนที่เกิดบน ZETAPHY ส่งออกไปเชนอื่น docs/SAPHAN-TOKENS.md) อ่านจาก `tokens` ในตารางเดียวกันและใน `saphan-routes.json` (`saphanTokens` ใน `dist/hub-config.json`) หน้า Saphan แสดงแต่ละโทเคนต่อเชนปลายทาง (BZTPHY แสดงว่าอยู่บน ZETAPHY) และแถบกระเป๋าแสดงใต้โทเคนที่ถืออยู่ (และใต้ ZETAPHY) ว่าส่งออกไปที่ไหนได้
 
 ## ขึ้นเว็บ (Vercel ฟรี)
 

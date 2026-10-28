@@ -281,6 +281,9 @@ export const SAPHAN = {
     noBalance: 'Not enough balance',
     evm: 'EVM chains (Hyperlane)', tipEvm: 'Ethereum test networks bridged through Hyperlane, from the chain table (zetaphy-chain/hyperlane/saphan-chains.json)\nEach source chain has its own bridged token on ZETAPHY\nLock ETH in that chain\'s lockbox; the way back burns the token and releases the ETH after a delay',
     stPlanned: 'planned', stClosed: 'closed', stOpen: 'open', twoWay: 'both ways', inOnly: 'into ZETAPHY only', lockbox: 'lockbox',
+    tok: 'Tokens born on ZETAPHY (Hyperlane)', tipTok: 'Tokens created on ZETAPHY going out to Ethereum test networks, from the token table (zetaphy-chain/hyperlane/saphan-chains.json tokens)\nFor each chain the token is locked in its own vault on ZETAPHY, and that chain mints a copy (z…) after a delay\nSending the copy back burns it and frees the token after a delay\nThe copy is worth only what the vault holds: if the vault, our validators or ZETAPHY fail, it can be worth less or nothing',
+    stays: 'stays on ZETAPHY (cannot be transferred)', tipStays: 'This token cannot be transferred (BZTPHY records who did the work; balances at the freeze become mainnet ZETAPHY), so it has no route out',
+    tipTokRow: (s, z, c) => `${s} locked on ZETAPHY becomes ${z} on ${c}; ${z} sent back is burned and ${s} is released after a delay`,
   },
   zh: {
     intro: 'ZETAPHY Saphan（泰语“桥”）通过 IBC 在链与链之间转移代币：两条链用轻客户端互相验证，没有托管方持有资金',
@@ -295,6 +298,9 @@ export const SAPHAN = {
     noBalance: '余额不足',
     evm: 'EVM 链（Hyperlane）', tipEvm: '通过 Hyperlane 桥接的以太坊测试网，来自链表（zetaphy-chain/hyperlane/saphan-chains.json）\n每条来源链在 ZETAPHY 上都有自己的桥接代币\n在该链的锁仓合约（lockbox）中锁定 ETH；返回时销毁代币，延迟后释放 ETH',
     stPlanned: '计划中', stClosed: '已关闭', stOpen: '开放', twoWay: '双向', inOnly: '仅转入 ZETAPHY', lockbox: '锁仓合约',
+    tok: 'ZETAPHY 原生代币（Hyperlane）', tipTok: '在 ZETAPHY 上创建的代币转出到以太坊测试网，来自代币表（zetaphy-chain/hyperlane/saphan-chains.json tokens）\n每条链都有 ZETAPHY 上自己的金库锁定该代币，延迟后该链铸造一个副本（z…）\n把副本送回会将其销毁，延迟后释放代币\n副本的价值只取决于金库中的资产：如果金库、我们的验证者或 ZETAPHY 出问题，它可能贬值甚至归零',
+    stays: '留在 ZETAPHY（不可转账）', tipStays: '此代币不可转账（BZTPHY 记录谁做了工作，冻结时的余额将变成主网 ZETAPHY），因此没有转出路线',
+    tipTokRow: (s, z, c) => `在 ZETAPHY 锁定的 ${s} 在 ${c} 上变成 ${z}；送回的 ${z} 会被销毁，延迟后释放 ${s}`,
   },
   es: {
     intro: 'ZETAPHY Saphan ("puente" en tailandés) mueve monedas de una cadena a otra mediante IBC: cada cadena verifica a la otra con un cliente ligero; ningún custodio guarda los fondos',
@@ -309,6 +315,9 @@ export const SAPHAN = {
     noBalance: 'Saldo insuficiente',
     evm: 'Cadenas EVM (Hyperlane)', tipEvm: 'Redes de prueba de Ethereum conectadas mediante Hyperlane, según la tabla de cadenas (zetaphy-chain/hyperlane/saphan-chains.json)\nCada cadena de origen tiene su propio token puenteado en ZETAPHY\nBloquea ETH en el lockbox de esa cadena; la vuelta quema el token y libera el ETH tras un retraso',
     stPlanned: 'planeada', stClosed: 'cerrada', stOpen: 'abierta', twoWay: 'en ambos sentidos', inOnly: 'solo hacia ZETAPHY', lockbox: 'lockbox',
+    tok: 'Tokens nacidos en ZETAPHY (Hyperlane)', tipTok: 'Tokens creados en ZETAPHY que salen a redes de prueba de Ethereum, según la tabla de tokens (zetaphy-chain/hyperlane/saphan-chains.json tokens)\nPara cada cadena el token se bloquea en su propia bóveda en ZETAPHY, y esa cadena acuña una copia (z…) tras un retraso\nDevolver la copia la quema y libera el token tras un retraso\nLa copia vale solo lo que guarda la bóveda: si fallan la bóveda, nuestros validadores o ZETAPHY, puede valer menos o nada',
+    stays: 'se queda en ZETAPHY (no se puede transferir)', tipStays: 'Este token no se puede transferir (BZTPHY registra quién hizo el trabajo; los saldos al congelarse pasan a ser ZETAPHY de mainnet), así que no tiene ruta de salida',
+    tipTokRow: (s, z, c) => `${s} bloqueado en ZETAPHY se convierte en ${z} en ${c}; ${z} devuelto se quema y ${s} se libera tras un retraso`,
   },
   ko: {
     intro: 'ZETAPHY Saphan(태국어로 "다리")은 IBC로 체인 간에 코인을 옮깁니다: 각 체인이 라이트 클라이언트로 상대 체인을 검증하며, 자금을 보관하는 수탁자가 없습니다',
@@ -323,6 +332,9 @@ export const SAPHAN = {
     noBalance: '잔액이 부족합니다',
     evm: 'EVM 체인 (Hyperlane)', tipEvm: '체인 표(zetaphy-chain/hyperlane/saphan-chains.json)에 있는, Hyperlane으로 연결된 이더리움 테스트넷\n출발 체인마다 ZETAPHY에 자체 브리지 토큰이 있습니다\n해당 체인의 락박스(lockbox)에 ETH를 잠그고, 돌아갈 때는 토큰을 소각하면 지연 후 ETH가 풀립니다',
     stPlanned: '예정', stClosed: '닫힘', stOpen: '열림', twoWay: '양방향', inOnly: 'ZETAPHY로만', lockbox: '락박스',
+    tok: 'ZETAPHY에서 태어난 토큰 (Hyperlane)', tipTok: 'ZETAPHY에서 만든 토큰이 이더리움 테스트넷으로 나갑니다. 토큰 표(zetaphy-chain/hyperlane/saphan-chains.json tokens) 기준\n체인마다 ZETAPHY의 자체 금고에 토큰이 잠기고, 지연 후 그 체인에서 사본(z…)이 발행됩니다\n사본을 돌려보내면 소각되고 지연 후 토큰이 풀립니다\n사본의 가치는 금고에 있는 만큼입니다: 금고, 우리 검증자 또는 ZETAPHY에 문제가 생기면 가치가 줄거나 없어질 수 있습니다',
+    stays: 'ZETAPHY에 남음 (전송 불가)', tipStays: '이 토큰은 전송할 수 없습니다 (BZTPHY는 누가 일했는지 기록하며, 동결 시점의 잔액이 메인넷 ZETAPHY가 됩니다). 그래서 나가는 경로가 없습니다',
+    tipTokRow: (s, z, c) => `ZETAPHY에 잠긴 ${s}는 ${c}에서 ${z}가 됩니다. 돌려보낸 ${z}는 소각되고 지연 후 ${s}가 풀립니다`,
   },
   ja: {
     intro: 'ZETAPHY Saphan（タイ語で「橋」）は IBC でチェーン間にコインを移動します: 各チェーンがライトクライアントで相手を検証し、資金を預かるカストディアンはいません',
@@ -337,6 +349,9 @@ export const SAPHAN = {
     noBalance: '残高が足りません',
     evm: 'EVM チェーン（Hyperlane）', tipEvm: 'チェーン表（zetaphy-chain/hyperlane/saphan-chains.json）にある、Hyperlane でつながるイーサリアムのテストネット\n送金元チェーンごとに ZETAPHY 上の独自のブリッジトークンがあります\nそのチェーンのロックボックス（lockbox）に ETH をロックし、戻すときはトークンをバーンすると遅延の後に ETH が解放されます',
     stPlanned: '予定', stClosed: '閉鎖中', stOpen: '開通', twoWay: '双方向', inOnly: 'ZETAPHY への片道のみ', lockbox: 'ロックボックス',
+    tok: 'ZETAPHY 生まれのトークン（Hyperlane）', tipTok: 'ZETAPHY で作られたトークンをイーサリアムのテストネットへ送ります。トークン表（zetaphy-chain/hyperlane/saphan-chains.json tokens）より\nチェーンごとに ZETAPHY 上の専用の金庫にトークンがロックされ、遅延の後そのチェーンでコピー（z…）が発行されます\nコピーを送り返すとバーンされ、遅延の後トークンが解放されます\nコピーの価値は金庫にある分だけです: 金庫、私たちのバリデーター、または ZETAPHY に問題があれば、価値が下がるかゼロになることがあります',
+    stays: 'ZETAPHY に残る（送金不可）', tipStays: 'このトークンは送金できません（BZTPHY は誰が働いたかを記録し、凍結時の残高がメインネットの ZETAPHY になります）。そのため外へのルートはありません',
+    tipTokRow: (s, z, c) => `ZETAPHY でロックした ${s} は ${c} で ${z} になります。送り返した ${z} はバーンされ、遅延の後 ${s} が解放されます`,
   },
   ru: {
     intro: 'ZETAPHY Saphan («мост» по-тайски) переводит монеты между сетями по IBC: каждая сеть проверяет другую через лёгкий клиент, и никакой кастодиан не держит средства',
@@ -351,6 +366,9 @@ export const SAPHAN = {
     noBalance: 'Недостаточно средств',
     evm: 'EVM-сети (Hyperlane)', tipEvm: 'Тестовые сети Ethereum, связанные через Hyperlane, из таблицы сетей (zetaphy-chain/hyperlane/saphan-chains.json)\nУ каждой исходной сети свой мостовой токен в ZETAPHY\nЗаблокируйте ETH в lockbox этой сети; обратный путь сжигает токен и после задержки освобождает ETH',
     stPlanned: 'в планах', stClosed: 'закрыт', stOpen: 'открыт', twoWay: 'в обе стороны', inOnly: 'только в ZETAPHY', lockbox: 'lockbox',
+    tok: 'Токены, рождённые в ZETAPHY (Hyperlane)', tipTok: 'Токены, созданные в ZETAPHY, выходят в тестовые сети Ethereum, из таблицы токенов (zetaphy-chain/hyperlane/saphan-chains.json tokens)\nДля каждой сети токен блокируется в своём хранилище в ZETAPHY, и та сеть после задержки выпускает копию (z…)\nОтправка копии обратно сжигает её и после задержки освобождает токен\nКопия стоит ровно столько, сколько держит хранилище: если хранилище, наши валидаторы или ZETAPHY подведут, она может подешеветь или обесцениться',
+    stays: 'остаётся в ZETAPHY (нельзя перевести)', tipStays: 'Этот токен нельзя перевести (BZTPHY фиксирует, кто сделал работу; балансы на момент заморозки станут ZETAPHY в mainnet), поэтому маршрута наружу нет',
+    tipTokRow: (s, z, c) => `${s}, заблокированный в ZETAPHY, становится ${z} в ${c}; отправленный обратно ${z} сжигается, и после задержки ${s} освобождается`,
   },
   vi: {
     intro: 'ZETAPHY Saphan ("cây cầu" trong tiếng Thái) chuyển coin giữa các chuỗi qua IBC: mỗi chuỗi tự xác minh chuỗi kia bằng light client, không có bên lưu ký nào giữ tiền',
@@ -365,6 +383,9 @@ export const SAPHAN = {
     noBalance: 'Số dư không đủ',
     evm: 'Chuỗi EVM (Hyperlane)', tipEvm: 'Các mạng thử nghiệm Ethereum nối qua Hyperlane, theo bảng chuỗi (zetaphy-chain/hyperlane/saphan-chains.json)\nMỗi chuỗi nguồn có token cầu nối riêng trên ZETAPHY\nKhóa ETH trong lockbox của chuỗi đó; chiều về đốt token và giải phóng ETH sau một khoảng chờ',
     stPlanned: 'dự kiến', stClosed: 'đóng', stOpen: 'mở', twoWay: 'hai chiều', inOnly: 'chỉ vào ZETAPHY', lockbox: 'lockbox',
+    tok: 'Token sinh ra trên ZETAPHY (Hyperlane)', tipTok: 'Token tạo trên ZETAPHY đi ra các mạng thử nghiệm Ethereum, theo bảng token (zetaphy-chain/hyperlane/saphan-chains.json tokens)\nVới mỗi chuỗi, token bị khóa trong kho riêng trên ZETAPHY, và chuỗi đó đúc một bản sao (z…) sau một khoảng chờ\nGửi bản sao về sẽ đốt nó và giải phóng token sau một khoảng chờ\nBản sao chỉ có giá trị bằng những gì kho giữ: nếu kho, validator của chúng tôi hoặc ZETAPHY gặp sự cố, nó có thể mất giá hoặc mất hết',
+    stays: 'ở lại ZETAPHY (không chuyển được)', tipStays: 'Token này không chuyển được (BZTPHY ghi lại ai đã làm việc; số dư lúc đóng băng sẽ thành ZETAPHY mainnet), nên không có tuyến ra ngoài',
+    tipTokRow: (s, z, c) => `${s} khóa trên ZETAPHY thành ${z} trên ${c}; ${z} gửi về bị đốt và ${s} được giải phóng sau một khoảng chờ`,
   },
   th: {
     intro: 'ZETAPHY Saphan (สะพาน) ส่งเหรียญข้ามเชนด้วย IBC: ทั้งสองเชนตรวจกันเองด้วย light client ไม่มีคนกลางถือเงิน',
@@ -379,5 +400,8 @@ export const SAPHAN = {
     noBalance: 'ยอดไม่พอ',
     evm: 'เชน EVM (Hyperlane)', tipEvm: 'เครือข่ายทดสอบ Ethereum ที่เชื่อมผ่าน Hyperlane จากตารางเชน (zetaphy-chain/hyperlane/saphan-chains.json)\nแต่ละเชนต้นทางมีโทเคนบริดจ์ของตัวเองบน ZETAPHY\nล็อก ETH ใน lockbox ของเชนนั้น ขากลับเผาโทเคนแล้วปล่อย ETH หลังรอระยะหนึ่ง',
     stPlanned: 'วางแผนไว้', stClosed: 'ปิด', stOpen: 'เปิด', twoWay: 'สองทาง', inOnly: 'เข้า ZETAPHY อย่างเดียว', lockbox: 'lockbox',
+    tok: 'โทเคนที่เกิดบน ZETAPHY (Hyperlane)', tipTok: 'โทเคนที่สร้างบน ZETAPHY ส่งออกไปเครือข่ายทดสอบ Ethereum ตามตารางโทเคน (zetaphy-chain/hyperlane/saphan-chains.json tokens)\nแต่ละเชนมีตู้นิรภัย (vault) ของตัวเองบน ZETAPHY ที่ล็อกโทเคนไว้ แล้วเชนนั้นสร้างโทเคนตัวแทน (z…) หลังรอระยะหนึ่ง\nส่งตัวแทนกลับจะถูกเผา แล้วปล่อยโทเคนคืนหลังรอระยะหนึ่ง\nตัวแทนมีค่าเท่าที่ตู้นิรภัยถือไว้เท่านั้น ถ้าตู้นิรภัย validator ของเรา หรือ ZETAPHY มีปัญหา อาจมีค่าลดลงหรือไม่มีค่าเลย',
+    stays: 'อยู่บน ZETAPHY (โอนไม่ได้)', tipStays: 'โทเคนนี้โอนไม่ได้ (BZTPHY บันทึกว่าใครทำงาน ยอดตอนหยุดนับจะกลายเป็น ZETAPHY บน mainnet) จึงไม่มีเส้นทางออก',
+    tipTokRow: (s, z, c) => `${s} ที่ล็อกบน ZETAPHY กลายเป็น ${z} บน ${c}; ส่ง ${z} กลับจะถูกเผาแล้วปล่อย ${s} หลังรอระยะหนึ่ง`,
   },
 };

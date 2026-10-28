@@ -43,6 +43,7 @@ export function hubConfig(cfg) {
     nft: Object.fromEntries(['factory', 'marketplace'].filter((k) => isAddr(nft[k] ?? nft.contracts?.[k])).map((k) => [k, nft[k] ?? nft.contracts[k]])),
     tokens: chainTokens(read),
     saphan: saphanRoutes(read),
+    saphanTokens: saphanTokenRoutes(read),
   };
 }
 
@@ -71,16 +72,48 @@ export function saphanRoutes(read) {
   return out;
 }
 
-/** ZETAPHY-chain tokens the wallet bar shows when the account holds them (public addresses only). */
+/**
+ * ZETAPHY Saphan's token routes: tokens born on ZETAPHY (the `tokens` of saphan-chains.json) and, per destination
+ * chain, the state of their route from saphan-routes.json `tokens` (planned / closed / open). A token that cannot move
+ * (transferable: false, e.g. BZTPHY) is listed with no destinations. The same shape as zetaphy-network/src/saphan.js
+ * hubTokenRoutes(). Public data only; anything malformed is left out.
+ */
+export function saphanTokenRoutes(read) {
+  const t = read('zetaphy-chain/hyperlane/saphan-chains.json');
+  const deployed = read('zetaphy-chain/hyperlane/saphan-routes.json')?.tokens ?? {};
+  const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
+  const sym = (s) => typeof s === 'string' && /^[\w.-]{1,12}$/.test(s);
+  const out = [];
+  for (const [key, k] of Object.entries(t?.tokens ?? {})) {
+    if (key === 'about' || !/^[a-z0-9]{1,15}$/.test(key) || !isAddr(k?.address) || !sym(k.symbol) || !sym(k.synthetic?.symbol) || typeof k.displayName !== 'string') continue;
+    const destinations = (Array.isArray(k.destinations) && k.transferable !== false ? k.destinations : []).filter((d) => typeof t.chains?.[d]?.displayName === 'string').map((name) => {
+      const r = deployed[key]?.[name];
+      const live = isAddr(r?.zetaphy?.vault) && isAddr(r?.destination?.synthetic);
+      return { name, displayName: t.chains[name].displayName.slice(0, 40), state: !live ? 'planned' : r.state === 'OPEN' ? 'open' : 'closed',
+        ...(live ? { vault: r.zetaphy.vault, token: r.destination.synthetic } : {}) };
+    });
+    out.push({ key, symbol: k.symbol, synthetic: k.synthetic.symbol, displayName: k.displayName.slice(0, 40), address: k.address,
+      native: k.native === true, transferable: k.transferable !== false, destinations });
+  }
+  return out;
+}
+
+/** ZETAPHY-chain tokens the wallet bar shows when the account holds them (public addresses only), with their Saphan token routes. */
 export function chainTokens(read) {
   const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
   const sym = (s) => (typeof s === 'string' && /^[\w.-]{1,12}$/.test(s) ? s : undefined);
   const out = [];
+  const routes = saphanTokenRoutes(read);
+  const saphanOf = (address) => routes.find((r) => !r.native && r.address.toLowerCase() === address.toLowerCase())?.destinations
+    .map((d) => ({ chain: d.displayName, symbol: routes.find((r) => r.address.toLowerCase() === address.toLowerCase()).synthetic, state: d.state }));
   const add = (address, symbol, decimals) => {
     if (!isAddr(address) || out.some((t) => t.address.toLowerCase() === address.toLowerCase())) return;
-    out.push({ address, ...(sym(symbol) ? { symbol } : {}), ...(Number.isInteger(decimals) ? { decimals } : {}) });
+    const s = saphanOf(address);
+    out.push({ address, ...(sym(symbol) ? { symbol } : {}), ...(Number.isInteger(decimals) ? { decimals } : {}), ...(s?.length ? { saphan: s } : {}) });
   };
   add(read('zetaphy-chain/rewards/points-testnet.json')?.points, 'BZTPHY');
+  // tokens of the Saphan token table (not the native coin: the wallet bar shows it already)
+  for (const r of routes) if (!r.native) add(r.address, r.symbol);
   add(read('zetaphy-chain/hyperlane/bridge-testnet.json')?.zetaphy?.bridgedToken);
   for (const r of saphanRoutes(read)) if (r.token) add(r.token, r.symbol, 18);
   for (const t of read('zetaphy-dex/web/deployments.json')?.tokens ?? []) add(t.address, t.symbol, t.decimals);

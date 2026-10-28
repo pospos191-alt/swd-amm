@@ -5,17 +5,20 @@ import { readFileSync } from 'node:fs';
 import solc from 'solc';
 import { Wallet, keccak256, solidityPacked } from 'ethers';
 
-let cache = null;
-export function kitArtifacts() {
-  if (cache) return cache;
-  const input = { language: 'Solidity', sources: { 'HyperlaneKit.sol': { content: readFileSync(new URL('./HyperlaneKit.sol', import.meta.url), 'utf8') } },
+const cache = {};
+function compile(file) {
+  if (cache[file]) return cache[file];
+  const input = { language: 'Solidity', sources: { [file]: { content: readFileSync(new URL(`./${file}`, import.meta.url), 'utf8') } },
     settings: { optimizer: { enabled: true, runs: 200 }, evmVersion: 'cancun', outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object'] } } } };
   const out = JSON.parse(solc.compile(JSON.stringify(input)));
   const errors = (out.errors ?? []).filter((e) => e.severity === 'error');
   if (errors.length) throw new Error(errors.map((e) => e.formattedMessage).join('\n'));
-  cache = Object.fromEntries(Object.entries(out.contracts['HyperlaneKit.sol']).map(([n, c]) => [n, { abi: c.abi, bytecode: '0x' + c.evm.bytecode.object }]));
-  return cache;
+  cache[file] = Object.fromEntries(Object.entries(out.contracts[file]).map(([n, c]) => [n, { abi: c.abi, bytecode: '0x' + c.evm.bytecode.object }]));
+  return cache[file];
 }
+export const kitArtifacts = () => compile('HyperlaneKit.sol');
+/** Test ERC-20s, plain and odd ones (helpers/TokenKit.sol), and a ThreatRegistry stand-in. */
+export const tokenKitArtifacts = () => compile('TokenKit.sol');
 
 /** The metadata a relayer hands a message-id multisig ISM (src/saphan.js). */
 export { messageIdMetadata } from '../../src/saphan.js';

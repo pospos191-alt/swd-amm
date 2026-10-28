@@ -597,6 +597,7 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:timelock
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:security
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:wasm
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:saphantokens
 
       - name: DEX DLMM on a real devnet (deploy CLI, native liquidity, swaps, Neuro check)
         working-directory: zetaphy-dex

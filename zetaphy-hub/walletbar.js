@@ -2,7 +2,8 @@
 //  - Finds every EVM wallet in the browser (EIP-6963 + older injected objects:
 //    MetaMask, Rabby, Trust, OKX, Coinbase, Brave, Binance, Phantom, Keplr, ...);
 //    on a phone without one, links that open this page in a wallet app.
-//  - Shows the account's ZETAPHY and the tokens it holds on the ZETAPHY chain.
+//  - Shows the account's ZETAPHY and the tokens it holds on the ZETAPHY chain, and for each the ZETAPHY Saphan
+//    token routes it can take out to other chains (planned / closed / open, from hub-config.json).
 //  - Connecting here connects Swap, NFT and Stake & vote too: the choice is kept
 //    under SHARED_KEY in this site's storage, which the apps in the frames read
 //    (same origin) and follow through the "storage" event. Only eth_accounts is
@@ -53,13 +54,15 @@ export function formatUnits(v, decimals = 18) {
  * @param {object} o
  * @param {Window} o.win
  * @param {(m: string, p?: any[]) => Promise<any>} o.evmCall  the node's JSON-RPC (reads only)
- * @param {() => Array<{address:string, symbol?:string, decimals?:number}>} o.tokens  ZETAPHY-chain tokens to show
+ * @param {() => Array<{address:string, symbol?:string, decimals?:number, saphan?:Array<{chain:string, symbol:string, state:string}>}>} o.tokens
+ *        ZETAPHY-chain tokens to show (saphan: its token routes out, build.mjs chainTokens)
+ * @param {() => Array<{chain:string, symbol:string, state:string}>} [o.nativeSaphan]  the native coin's token routes out
  * @param {(k: string) => string} o.T   texts
  * @param {object} o.lib   { discoverWallets, openInAppLinks, evmChainParams, nodeEndpoints, EVM_CHAIN_ID_HEX }
  * @param {() => string} o.node   the node URL (for wallet_addEthereumChain)
  * @param {(account: string|null) => void} [o.onChange]
  */
-export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () => {} }) {
+export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () => {}, nativeSaphan = () => [] }) {
   const doc = win.document;
   const $ = (id) => doc.getElementById(id);
   const store = {
@@ -146,7 +149,7 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
       const list = await Promise.all(tokens().map(async (t) => {
         const raw = await evmCall('eth_call', [{ to: t.address, data: balanceOfData(a) }, 'latest']).catch(() => '0x0');
         let v = 0n; try { v = BigInt(raw === '0x' ? '0x0' : raw); } catch { v = 0n; }
-        return { ...(await tokenMeta(t)), address: t.address, value: v };
+        return { ...(await tokenMeta(t)), address: t.address, value: v, saphan: Array.isArray(t.saphan) ? t.saphan : [] };
       }));
       if (a !== account) return;
       balances = { native, tokens: list.filter((x) => x.value > 0n) };
@@ -165,7 +168,9 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
           : balances.error ? el('p', { class: 'dim', text: T('wbNoNode') })
             : el('ul', { class: 'wb-bal' },
               el('li', {}, el('span', { text: 'ZETAPHY' }), el('b', { class: 'mono', text: formatUnits(balances.native) })),
-              balances.tokens.map((x) => el('li', {}, el('span', { text: x.symbol, title: x.address }), el('b', { class: 'mono', text: formatUnits(x.value, x.decimals) })))),
+              saphanLine(nativeSaphan()),
+              balances.tokens.flatMap((x) => [el('li', {}, el('span', { text: x.symbol, title: x.address }), el('b', { class: 'mono', text: formatUnits(x.value, x.decimals) })),
+                saphanLine(x.saphan)])),
         el('p', { class: 'dim small', text: T('wbShared') }),
         el('div', { class: 'row' },
           el('button', { type: 'button', class: 'btn ghost sm', text: T('wbRefresh'), onclick: () => { balances = null; renderDialog(); loadBalances(); } }),
@@ -183,6 +188,15 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
       body.append(el('p', { text: T('wbNone') }), el('div', { class: 'wb-list' }, lib.openInAppLinks(win.location.href).map((l) => el('a', { class: 'wb-wallet', href: l.href, rel: 'noopener noreferrer', text: l.name }))));
     }
     body.append(el('p', { class: 'wb-msg bad', id: 'wb-msg', role: 'status' }), el('p', { class: 'dim small', text: T('wbPq') }));
+  }
+
+  /** "Saphan: zZETAPHY → Sepolia (planned), Base Sepolia (open)": where this token can go out (or nothing). */
+  function saphanLine(list) {
+    const ok = (Array.isArray(list) ? list : []).filter((r) => typeof r?.chain === 'string' && typeof r?.symbol === 'string');
+    if (!ok.length) return null;
+    const word = { open: T('wbStOpen'), closed: T('wbStClosed') };
+    return el('li', { class: 'wb-saphan dim small', title: T('wbSaphanTip') },
+      `${T('wbSaphan')}: ${ok[0].symbol} → ${ok.map((r) => `${r.chain.slice(0, 40)} (${word[r.state] ?? T('wbStPlanned')})`).join(', ')}`);
   }
 
   function render() {

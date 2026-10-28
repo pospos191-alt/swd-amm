@@ -7,6 +7,9 @@ The first route (v1, `bridge-testnet.json`) went one way only: Sepolia -> ZETAPH
 release. v2 adds the way back, more source chains, and a chain table so the next chain is a config entry plus a
 workflow run.
 
+The reverse direction, tokens born on ZETAPHY (first the native coin) going out to these chains and back, is in
+docs/SAPHAN-TOKENS.md: the same chain table (`tokens`), workflow (`token = <key>`), validators and relayer.
+
 ## Design
 
 ```
