@@ -28,7 +28,8 @@ test('no third-party code, no inline scripts or styles; strict CSP', () => {
   assert.doesNotMatch(html, /\son[a-z]+=/i, 'no inline event handlers');
   assert.doesNotMatch(html, /<style|style="/i, 'no inline styles');
   assert.doesNotMatch(html, /(src|href)="(https?:)?\/\//i, 'nothing loaded from elsewhere');
-  const js = readdirSync(new URL('../web/lib/', import.meta.url)).map((f) => web(`lib/${f}`)).join('\n') + web('app.js');
+  // lib/ and lib/vendor/ (the Ledger transport bundle, lib/ledger.js): every script file
+  const js = readdirSync(new URL('../web/lib/', import.meta.url), { recursive: true }).filter((f) => /\.js$/.test(f)).map((f) => web(`lib/${f}`)).join('\n') + web('app.js');
   assert.doesNotMatch(js, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/, 'no HTML insertion or eval');
   for (const m of js.matchAll(/from '([^']+)'/g)) assert.match(m[1], /^\.\.?\//, `relative import only: ${m[1]}`);
   const csp = JSON.parse(web('vercel.json')).headers[0].headers.find((h) => h.key === 'Content-Security-Policy').value;

@@ -194,6 +194,12 @@ jobs:
         working-directory: test-ui/tests
         run: node smoke.mjs
 
+      - name: Wallet safety (hardware help, balance banner, idle disconnect, summary before signing)
+        working-directory: test-ui/tests
+        run: |
+          node --test sol-safety.test.mjs
+          node safety.mjs
+
       - name: Faucet attack tests (rate limits, spoofed IPs, secret leaks)
         run: node test-ui/tests/faucet-attacks.mjs
 

@@ -46,11 +46,30 @@ export async function servePage(overrides = {}) {
 }
 
 /**
+ * The user's side of the in-page summary shown before every transaction (lib/wallet-safety.js):
+ * records what it showed in window.__summaries and clicks "Continue to wallet".
+ */
+export async function autoConfirm(page) {
+  await page.addInitScript(() => {
+    window.__summaries = [];
+    new MutationObserver(() => {
+      const d = document.querySelector('#ws-confirm[open]:not([data-seen])');
+      if (!d) return;
+      d.setAttribute('data-seen', '');
+      window.__summaries.push(d.textContent);
+      setTimeout(() => d.querySelector('[data-ws="go"]').click(), 0);
+    }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
+  });
+}
+
+/**
  * Puts a mock wallet in the page: announced over EIP-6963 as "Mock Wallet"
  * (rdns test.zdex.mock). `handler(method, params)` answers in Node; throwing
- * { code, message } becomes a wallet error in the page.
+ * { code, message } becomes a wallet error in the page. The summary before each
+ * transaction is confirmed by autoConfirm() unless `confirm: false`.
  */
-export async function injectWallet(page, handler) {
+export async function injectWallet(page, handler, { confirm = true } = {}) {
+  if (confirm) await autoConfirm(page);
   await page.exposeFunction('__zdexWallet', async (method, paramsJson) => {
     try {
       return JSON.stringify({ result: await handler(method, JSON.parse(paramsJson ?? '[]')) });

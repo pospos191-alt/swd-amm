@@ -5,7 +5,9 @@
   "description": "CI checks for test-ui/index.html — see smoke.mjs and check-syntax.mjs",
   "scripts": {
     "check": "node check-syntax.mjs",
-    "smoke": "node smoke.mjs"
+    "smoke": "node smoke.mjs",
+    "safety": "node safety.mjs",
+    "test:unit": "node --test sol-safety.test.mjs"
   },
   "devDependencies": {
     "playwright": "1.49.1"

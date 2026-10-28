@@ -484,7 +484,7 @@ function saphanForm(ctx, root) {
       const data = encodeIbcTransfer({ channel: r.channel, denom: a.denom, amount, sender: ctx.account(), receiver: to,
         timeoutNs: BigInt(Date.now() + 10 * 60_000) * 1_000_000n, memo: 'ZETAPHY Saphan' });
       say('…');
-      const hash = await ctx.send(PRECOMPILES.ics20, data);
+      const hash = await ctx.send(PRECOMPILES.ics20, data, `ZETAPHY Saphan · ${form.querySelector('#sp-amount').value} ${a.symbol ?? a.denom} → ${to}`);
       const rc = await ctx.evmCall('eth_getTransactionReceipt', [hash]).catch(() => null);
       if (rc && !sentIbcTransfer(rc)) throw new Error(`${L.noEvent} · ${ctx.short(hash, 10, 6)}`);
       say(`${L.sent} · ${ctx.short(hash, 10, 6)}`, 'ok');

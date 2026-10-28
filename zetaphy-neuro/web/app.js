@@ -7,6 +7,7 @@ import { readTransaction, isTxHash } from '../src/tx.js';
 import { CHAINS, isChainAddress, explorerUrl, explorerTxUrl } from '../src/chains.js';
 import { verdictOf } from '../src/verdict.js';
 import { loadChainStats, renderChainStats } from './chain.js';
+import { safety } from './wallet-safety.js';
 
 const $ = (id) => document.getElementById(id);
 // What an address looks like on each kind of chain (placeholder and error hint).
@@ -29,6 +30,10 @@ let last = null;
 let early = null;
 const EARLY_SEVERITY = new Set(['high', 'medium', 'low', 'info']);
 try { lang = pickLang(localStorage.getItem('neuro-lang') ?? 'en'); } catch { /* storage blocked */ }
+// "Use a hardware wallet" help (wallet-safety.js, shared with the hub; Indonesian falls back to English).
+// Neuro connects no wallet; it records activity so the hub's idle check counts reading here (same origin, in a frame).
+const sf = safety({ win: window, lang: () => lang });
+sf.track();
 
 for (const [key, c] of Object.entries(CHAINS)) $('chain').add(new Option(c.name, key));
 $('chain').value = 'bsc';
@@ -44,6 +49,7 @@ function applyLang() {
   renderCounts();
   renderChainStats(lang);
   $('lang').setAttribute('aria-label', ui.language);
+  $('footer-help')?.replaceChildren(sf.helpLink({ chains: ['evm', 'solana', 'cosmos'], ledger: false }));
   if (last) render(last);
 }
 

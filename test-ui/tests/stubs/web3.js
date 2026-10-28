@@ -25,7 +25,7 @@ export const SYSVAR_RENT_PUBKEY = new PublicKey(new Uint8Array(32).fill(1));
 export function clusterApiUrl(c){return "https://api."+c+".solana.com";}
 export class Connection {
   constructor(url){this.rpcEndpoint=url;}
-  async getAccountInfo(){return null;} async getMultipleAccountsInfo(k){return k.map(()=>null);} async getBalance(){return 0;}
+  async getAccountInfo(){return null;} async getMultipleAccountsInfo(k){return k.map(()=>null);} async getBalance(){return globalThis.__smokeLamports ?? 0;}
   async getSignaturesForAddress(){return [];} async getProgramAccounts(){return [];} async getParsedTokenAccountsByOwner(){return {value:[]};}
   async getLatestBlockhash(){return {blockhash:"1".repeat(32),lastValidBlockHeight:1};} async getTransaction(){return null;} async getTransactions(k){return k.map(()=>null);}
   async getParsedTransactions(k){return k.map(()=>null);} async getSlot(){return 1;} async getBlockTime(){return 0;} async getTokenAccountBalance(){return {value:{amount:"0",uiAmount:0,decimals:0}};}

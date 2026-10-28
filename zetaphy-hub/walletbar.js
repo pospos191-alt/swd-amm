@@ -8,10 +8,19 @@
 //    under SHARED_KEY in this site's storage, which the apps in the frames read
 //    (same origin) and follow through the "storage" event. Only eth_accounts is
 //    used to reconnect (no prompt). The post-quantum wallet keeps its own keys.
-// Never stores a key or a signature: only the wallet's id ("6963:io.metamask").
+// Never stores a key or a signature: only the wallet's id ("6963:io.metamask", or "ledger:<i>" for the
+// i-th account of a Ledger over USB: ledger.js, an EIP-1193 shim, so every app's code path is the same).
+// Safety (wallet-safety.js): "Use a hardware wallet" help, a banner above BIG_BALANCE, the account
+// forgotten after 30 minutes without activity (60 / 120 / 240 to choose in the help), and a summary before each transaction (hub.js send()).
+import { safety } from './wallet-safety.js';
+import { LEDGER_ID_RE, ledgerId, ledgerProvider, hidSupported, preloadTransport } from './ledger.js';
 
 export const SHARED_KEY = 'zetaphy:wallet';
-const ID_RE = /^(6963:[\w.:-]{1,120}|injected:[a-z0-9]{1,20})$/;
+const ID_RE = /^(6963:[\w.:-]{1,120}|injected:[a-z0-9]{1,20}|ledger:\d{1,3})$/;
+/** At or above this many ZETAPHY on the connected account, the hardware-wallet banner shows. */
+export const BIG_BALANCE = 1000n * 10n ** 18n;
+/** Which help sections the hub shows (EVM with Ledger over USB, Cosmos/Keplr). */
+export const HELP = { chains: ['evm', 'cosmos'], ledger: true };
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 /** A stored wallet id, or null when it is not one this site writes. */
 export function cleanId(raw) {
@@ -61,8 +70,10 @@ export function formatUnits(v, decimals = 18) {
  * @param {object} o.lib   { discoverWallets, openInAppLinks, evmChainParams, nodeEndpoints, EVM_CHAIN_ID_HEX }
  * @param {() => string} o.node   the node URL (for wallet_addEthereumChain)
  * @param {(account: string|null) => void} [o.onChange]
+ * @param {() => string} [o.lang]   the page language (for the safety texts)
+ * @param {() => Element|null} [o.bannerHost]  where the large-balance banner goes
  */
-export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () => {}, nativeSaphan = () => [] }) {
+export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () => {}, nativeSaphan = () => [], lang = () => 'en', bannerHost = () => null }) {
   const doc = win.document;
   const $ = (id) => doc.getElementById(id);
   const store = {
@@ -85,6 +96,18 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
   let account = null;
   let balances = null;
   const discovery = lib.discoverWallets(win, () => { if ($('wb-dialog')?.open && !account) renderDialog(); });
+  const sf = safety({ win, lang });
+  const chainId = Number(BigInt(lib.EVM_CHAIN_ID_HEX));
+  let ledgerW = null;
+  /** The Ledger as a wallet entry (index null: not chosen yet; the picker sets it). */
+  function ledgerWallet(index = null) {
+    if (ledgerW && (index == null || ledgerW.provider.index() === index)) return ledgerW;
+    const w = { id: index == null ? 'ledger:new' : ledgerId(index), name: 'Ledger', hardware: true };
+    w.provider = ledgerProvider({ win, rpc: evmCall, chainId, index, chooseAccount: sf.chooseAccount, onDevice: sf.deviceToast, onIndex: (i) => { w.id = ledgerId(i); } });
+    ledgerW = w;
+    return w;
+  }
+  const isHardware = () => !!(wallet?.hardware || wallet?.provider?.isHardware);
 
   async function ensureChain(p) {
     try { await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: lib.EVM_CHAIN_ID_HEX }] }); } catch (e) {
@@ -117,15 +140,27 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
   }
 
   function disconnect() {
+    wallet?.provider?.forget?.();
+    if (wallet && wallet === ledgerW) ledgerW = null; // the next Ledger connection asks for the account again
     store.del();
     setAccount(null, null);
+  }
+
+  /** Idle: forget the account here and in every page of the site; ask the wallet to drop this site's permission. */
+  function forgetIdle() {
+    const p = wallet?.provider;
+    disconnect();
+    p?.request?.({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })?.catch?.(() => {});
+    if ($('wb-dialog')?.open) $('wb-dialog').close();
+    sf.idleNotice();
   }
 
   async function restore() {
     const id = cleanId(store.get());
     if (!id) { if (account) setAccount(null, null); return; }
     if (wallet?.id === id && account) return;
-    const w = discovery.list().find((x) => x.id === id);
+    const m = LEDGER_ID_RE.exec(id);
+    const w = m ? ledgerWallet(Number(m[1])) : discovery.list().find((x) => x.id === id);
     if (w) await connect(w, { silent: true }).catch(() => {});
   }
 
@@ -155,6 +190,7 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
       balances = { native, tokens: list.filter((x) => x.value > 0n) };
     } catch { if (a === account) balances = { error: true }; }
     render();
+    banner();
   }
 
   function renderDialog() {
@@ -162,7 +198,7 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
     body.replaceChildren();
     if (account) {
       body.append(
-        el('div', { class: 'wb-acc mono', text: account }),
+        el('div', { class: 'wb-acc mono', text: account }, isHardware() ? el('span', { class: 'ws-hw', text: sf.t('hwBadge') }) : null),
         el('h4', { text: T('wbHoldings') }),
         !balances ? el('p', { class: 'dim', text: '…' })
           : balances.error ? el('p', { class: 'dim', text: T('wbNoNode') })
@@ -175,6 +211,7 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
         el('div', { class: 'row' },
           el('button', { type: 'button', class: 'btn ghost sm', text: T('wbRefresh'), onclick: () => { balances = null; renderDialog(); loadBalances(); } }),
           el('button', { type: 'button', class: 'btn ghost sm', text: T('wbDisconnect'), onclick: () => { disconnect(); $('wb-dialog').close(); } })),
+        el('p', { class: 'small' }, sf.helpLink(HELP)),
       );
       return;
     }
@@ -187,7 +224,17 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
     } else {
       body.append(el('p', { text: T('wbNone') }), el('div', { class: 'wb-list' }, lib.openInAppLinks(win.location.href).map((l) => el('a', { class: 'wb-wallet', href: l.href, rel: 'noopener noreferrer', text: l.name }))));
     }
-    body.append(el('p', { class: 'wb-msg bad', id: 'wb-msg', role: 'status' }), el('p', { class: 'dim small', text: T('wbPq') }));
+    // A Ledger over USB (Chrome, Edge, Brave on a computer); elsewhere: use it through MetaMask / Rabby.
+    if (hidSupported(win)) {
+      preloadTransport();
+      body.append(el('div', { class: 'wb-list' }, el('button', { type: 'button', class: 'wb-wallet', id: 'wb-ledger', onclick: async () => {
+        $('wb-msg').textContent = '';
+        try { await connect(ledgerWallet()); renderDialog(); } catch (e) { $('wb-msg').textContent = e?.code === 4001 ? T('wbRejected') : String(e?.message ?? e).slice(0, 200); }
+      } }, el('span', { class: 'wb-ico' }), el('span', { text: sf.t('ldBtn') }))));
+    } else {
+      body.append(el('p', { class: 'dim small', text: sf.t('ldNoHid') }));
+    }
+    body.append(el('p', { class: 'wb-msg bad', id: 'wb-msg', role: 'status' }), el('p', { class: 'dim small', text: T('wbPq') }), el('p', { class: 'small' }, sf.helpLink(HELP)));
   }
 
   /** "Saphan: zZETAPHY → Sepolia (planned), Base Sepolia (open)": where this token can go out (or nothing). */
@@ -206,6 +253,12 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
     b.textContent = account ? `${short(account)}${bal}` : T('wbConnect');
     b.classList.toggle('ghost', !!account);
     if ($('wb-dialog')?.open) renderDialog();
+    banner();
+  }
+
+  /** The large-balance banner (a hardware account, or one under BIG_BALANCE, gets none). */
+  function banner() {
+    sf.balanceBanner({ host: bannerHost(), amount: account && balances && !balances.error ? balances.native : null, threshold: BIG_BALANCE, symbol: 'ZETAPHY', hardware: isHardware(), help: HELP });
   }
 
   function mount() {
@@ -213,9 +266,10 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
     $('wb-close').addEventListener('click', () => $('wb-dialog').close());
     // Another page of this site (an app in a frame, another tab) connected or disconnected.
     win.addEventListener('storage', (e) => { if (e.key === SHARED_KEY || e.key === null) restore(); });
+    sf.idleGuard({ active: () => !!account, onIdle: forgetIdle });
     render();
     setTimeout(restore, 400); // EIP-6963 wallets answer within a moment
   }
 
-  return { mount, render, connect, disconnect, restore, refresh: loadBalances, account: () => account, provider: () => wallet?.provider ?? null, ensureChain: () => ensureChain(wallet.provider), open: () => $('wb-btn').click() };
+  return { mount, render, connect, disconnect, restore, refresh: loadBalances, account: () => account, provider: () => wallet?.provider ?? null, ensureChain: () => ensureChain(wallet.provider), open: () => $('wb-btn').click(), safety: sf, isHardware };
 }

@@ -157,6 +157,18 @@ test('token with many owner powers shows high risk in Thai, then English', async
   await page.close();
 });
 
+test('"Use a hardware wallet" help in the footer: Ledger/Trezor via MetaMask/Rabby, Phantom/Solflare, Keplr; in Thai too', async () => {
+  const { page, errors } = await openPage('light', {}, {}, { lang: 'th' });
+  assert.equal(await page.textContent('#footer-help [data-ws="help"]'), 'ใช้กระเป๋าฮาร์ดแวร์');
+  await page.selectOption('#lang', 'en');
+  await page.click('#footer-help [data-ws="help"]');
+  await page.waitForSelector('#ws-help[open]');
+  assert.match(await page.textContent('#ws-help'), /MetaMask[\s\S]*Rabby[\s\S]*connect\.trezor\.io[\s\S]*Phantom[\s\S]*Solflare[\s\S]*Keplr[\s\S]*cannot lock your wallet extension/);
+  assert.equal(await page.$$eval('link[rel=stylesheet]', (l) => l.every((x) => new URL(x.href).origin === location.origin)), true, 'styles from this site only');
+  assert.deepEqual(errors, []);
+  await page.close();
+});
+
 test('a token name with a link is shown as text, never as HTML', async () => {
   const addr = await chain.deploy('PhishToken');
   const { page, errors } = await openPage('dark');

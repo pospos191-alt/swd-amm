@@ -397,3 +397,6 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
   .mn-table td .row input { flex: 1 1 100%; }
 }
 .ef { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+
+/* wallet-safety.js: the large-balance banner floats over the top of the stage (the hub fits one screen) */
+.stage > .ws-banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 6; width: min(760px, calc(100% - 24px)); margin: 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }

@@ -187,6 +187,9 @@ export async function runScenario(b, d, log = () => {}) {
     assert.equal((await balance(tokens.tUSD)) - u0, expected, 'got exactly the quoted amount');
     log(`swapped 1 ZTPHY -> ${formatUnits(expected, 18)} tUSD in the page`);
     assert.equal(sent.at(-1).chainId, '0x12e4e', 'L1: the transaction names chain 77390');
+    // the summary shown in the page before the wallet: network, sender, the router, the value, the method
+    const sum = await page.evaluate(() => window.__summaries.at(-1));
+    for (const part of ['ZETAPHY (77390)', user, `Router · ${router}`, '1 ZTPHY', 'swapExactETHForTokens']) assert.ok(sum.includes(part), `summary shows ${part}: ${sum}`);
     assert.equal(sent.at(-1).from.toLowerCase(), user.toLowerCase());
     // L1: the wallet moved to another chain without telling the page: nothing is sent.
     walletChain = '0x1';

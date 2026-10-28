@@ -1759,6 +1759,11 @@
     .hdr-actions .icon-btn, .hdr-actions #notif-bell-btn { width: 32px; min-width: 32px; }
     #connect-btn, #disconnect-btn { padding: 0 7px; font-size: 12px; }
   }
+  /* wallet-safety.js: the large-balance banner floats under the header; the help links */
+  #ws-host { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 900; width: min(760px, calc(100% - 24px)); }
+  #ws-host:empty { display: none; }
+  #ws-host .ws-banner { box-shadow: var(--shadow-md); margin: 0; }
+  .ws-help-row { margin-top: 10px; font-size: 13px; color: var(--text-dim); }
 </style>
 </head>
 <body>
@@ -1855,6 +1860,7 @@
     <div class="hint" data-i18n="shortcutsHint">Keyboard shortcuts: 1-8 switch tabs (1 Explore, 2 AMM, 3 DLMM, 4 Swap, 5 Dev Tools, 6 Liquidity, 7 Portfolio, 8 Marketplace), R refreshes Explore data (not while typing in a field).</div>
   </div>
 </header>
+<div id="ws-host"></div>
 <div class="warning-banner" id="devnet-warning">
   ⚠️ <strong data-i18n="warnStrong">Devnet test tool</strong>
   <span data-i18n="warnMid">— every transaction here runs on Solana Devnet only; tokens have no real value. This AMM program has not passed a security audit — do not use with real funds or mainnet until every item in</span>
@@ -1868,6 +1874,7 @@
     <button id="wallet-modal-close" class="modal-close" aria-label="Close" type="button">✕</button>
     <h3 data-i18n="walletModalTitle">Select a wallet</h3>
     <div id="wallet-modal-list"></div>
+    <div class="ws-help-row" id="wallet-modal-help"></div>
   </div>
 </div>
 
@@ -3764,6 +3771,7 @@
   <span data-i18n="programIdLabel">Program ID:</span> <code class="inline" id="program-id-display">…</code> · <code class="inline" title="test-ui version — if this doesn't match what you were told, the browser is showing a cached copy">build 2026-10-08b</code> —
   <span data-i18n="subText">Talks directly to the program via the RPC selected below — no backend server in between.</span>
 </div>
+<div class="sub app-footer-line" id="footer-help"></div>
 </footer>
 
 <!-- KLineChart: candlestick charting engine for the Trading Board (indicators + drawing tools), loaded from a public CDN. The Trading Board falls back to the page's own lightweight SVG chart if this fails to load (see ensureTbChart()). -->
@@ -3810,6 +3818,9 @@ import {
   createCloseAccountInstruction,
 } from "https://esm.sh/@solana/spl-token@0.4.9?deps=@solana/web3.js@1.95.4";
 import { Buffer as BufferPolyfill } from "https://esm.sh/buffer@6.0.3";
+// Wallet safety (same files as the ZETAPHY sites: zetaphy-hub/tools/sync-shared.mjs) and its Solana reader.
+import { safety } from "./wallet-safety.js";
+import { confirmSolana } from "./sol-safety.js";
 
 // Browsers have no global Buffer, yet this page uses Buffer.from(...) for
 // PDA seeds. Until 2026-09-29 it only worked because the MetaMask SDK
@@ -13453,6 +13464,11 @@ function wrapWalletForToasts(provider) {
       if (desc && desc.configurable === false && desc.writable === false) return value;
       if (SIGN_METHODS.has(prop)) {
         return async (...args) => {
+          // The in-page summary first (network, account, programs, SOL sent, token approvals);
+          // nothing reaches the wallet when it is cancelled.
+          const owner = target.publicKey?.toBase58?.() ?? "";
+          const ok = await confirmSolana(sf, { network: safetyNetworkName(), owner, txs: args[0], labels: { [PROGRAM_ID]: "SWD AMM" } });
+          if (!ok) throw Object.assign(new Error(sf.t("cfCancelled")), { code: 4001 });
           txAwaitingOutcome = true;
           showPendingToast(t("toastAwaitWallet"));
           const result = await value.apply(target, args);
@@ -13464,6 +13480,37 @@ function wrapWalletForToasts(provider) {
     },
   });
 }
+
+// ---------------------------------------------------------------------
+// Wallet safety (wallet-safety.js, shared with the ZETAPHY sites; texts in en zh es ko ja ru vi th,
+// the page's other languages fall back to English):
+//  - "Use a hardware wallet" help (Ledger through Phantom / Solflare) in the wallet picker and footer,
+//  - a banner when the connected account holds SAFETY_BIG_SOL or more (hidden 7 days on request),
+//  - after 30 idle minutes (60 / 120 / 240 to choose in the help) the page disconnects the wallet,
+//  - the summary above before every signature.
+const sf = safety({ win: window, lang: () => state.lang });
+const SAFETY_HELP = { chains: ["solana"], ledger: false, snap: false };
+const SAFETY_BIG_SOL = 10n * 1_000_000_000n; // 10 SOL (lamports)
+function safetyNetworkName() {
+  if (state.network === "devnet") return "Solana devnet";
+  if (state.network === "localnet") return "Solana localnet (127.0.0.1:8899)";
+  let host = "";
+  try { host = new URL(state.customRpc).host; } catch {}
+  return `Solana (${host || "custom RPC"})`;
+}
+function renderSafetyLinks() {
+  document.getElementById("footer-help")?.replaceChildren(sf.helpLink(SAFETY_HELP));
+  document.getElementById("wallet-modal-help")?.replaceChildren(sf.helpLink(SAFETY_HELP));
+}
+function renderSafetyBanner(lamports) {
+  sf.balanceBanner({ host: document.getElementById("ws-host"), amount: lamports == null ? null : BigInt(lamports), threshold: SAFETY_BIG_SOL, decimals: 9, symbol: "SOL", help: SAFETY_HELP });
+}
+document.addEventListener("swd-lang", renderSafetyLinks);
+renderSafetyLinks();
+sf.idleGuard({ active: () => !!state.wallet, onIdle: async () => {
+  await disconnectWallet();
+  sf.idleNotice();
+} });
 
 // After any successful transaction, refresh the Trading Board chart (if a
 // pair is loaded there) so a new swap or liquidity change shows up without
@@ -14127,6 +14174,7 @@ async function refreshBalance() {
   try {
     const lamports = await state.connection.getBalance(state.wallet.publicKey);
     document.getElementById("sol-balance").textContent = `${(lamports / 1e9).toFixed(4)} SOL`;
+    renderSafetyBanner(state.wallet ? lamports : null);
     solBalanceHistory.push({ t: Date.now(), sol: lamports / 1e9 });
     if (solBalanceHistory.length > SOL_BALANCE_HISTORY_MAX) solBalanceHistory.shift();
     renderSolBalanceSparkline();
@@ -14514,6 +14562,7 @@ async function disconnectWallet() {
   document.getElementById("wallet-status").className = "status-pill disconnected";
   const disconnectBtnEl = document.getElementById("disconnect-btn");
   if (disconnectBtnEl) disconnectBtnEl.hidden = true;
+  renderSafetyBanner(null);
   setupConnectionAndProgram();
   log(t("logWalletDisconnected"), "ok");
 }

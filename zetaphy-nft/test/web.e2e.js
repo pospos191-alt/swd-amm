@@ -71,6 +71,18 @@ async function contextFor(account, label) {
     }
     throw new Error(`wallet: ${method} not supported`);
   });
+  // The user's side of the in-page summary before every transaction (lib/wallet-safety.js): note what it
+  // showed, then "Continue to wallet".
+  await ctx.addInitScript(() => {
+    window.__summaries = [];
+    new MutationObserver(() => {
+      const d = document.querySelector('#ws-confirm[open]:not([data-seen])');
+      if (!d || window.__holdSummary) return;
+      d.setAttribute('data-seen', '');
+      window.__summaries.push(d.textContent);
+      setTimeout(() => d.querySelector('[data-ws="go"]').click(), 0);
+    }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
+  });
   await ctx.addInitScript(() => {
     window.__problems = [];
     document.addEventListener('securitypolicyviolation', (e) => window.__problems.push(`CSP ${e.violatedDirective} ${e.blockedURI}`));
@@ -235,6 +247,9 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   assert.match(await b.textContent('#listings .quote'), /Total 1\.5 ZTPHY · fee 0\.015 · Royalty 0\.075 · seller gets 1\.41/);
   await clickAndWait(b, 'Buy', statusIs(/Buy: done/));
   assert.equal((await nft.call('ownerOf', [1])).toLowerCase(), buyer.toLowerCase());
+  // the summary the buyer saw before the wallet: network, the marketplace, the price, the action
+  const sum = await b.evaluate(() => window.__summaries.at(-1));
+  for (const part of ['ZETAPHY (77390)', buyer, `Marketplace · ${market.address}`, '1.5 ZTPHY', 'Buy']) assert.ok(sum.includes(part), `summary shows ${part}: ${sum}`);
   assert.match(await b.textContent('.item-info .facts'), new RegExp(buyer, 'i'));
 
   // ---- seller withdraws exactly 1.41 (sale) + 0.075 (royalty: the creator is the receiver) ZTPHY ----
@@ -388,4 +403,43 @@ test('create, mint, list, buy, offer, withdraw, stale listing, Neuro, external, 
   assert.deepEqual(problems, [], 'no CSP violations, script dialogs or page errors');
   // The node was asked in bounded ranges only.
   assert.ok(shim.stats.calls.eth_getLogs > 0);
+});
+
+test('wallet safety: the banner at 1,000+ ZETAPHY, hardware-wallet help, Ledger (USB), idle forget, cancel sends nothing', { timeout: 120_000 }, async () => {
+  const p = await contextFor(other, 'safety');
+  await p.clock.install();
+  await go(p, '#/');
+  await p.click('#footer-help [data-ws="help"]');
+  await p.waitForSelector('#ws-help[open]');
+  assert.match(await p.textContent('#ws-help'), /MetaMask[\s\S]*Rabby[\s\S]*Ledger \(USB\)[\s\S]*connect\.trezor\.io[\s\S]*Keplr[\s\S]*cannot lock your wallet extension/);
+  await p.keyboard.press('Escape');
+  await p.click('#connect');
+  await p.waitForSelector('dialog[open] #wallet-ledger');
+  assert.match(await p.textContent('#walletDialog'), /Ledger \(USB\)[\s\S]*Use a hardware wallet/);
+  await p.click('dialog .wallet-choice');
+  await p.waitForFunction(() => /^0x/.test(document.querySelector('#connect').textContent));
+  await p.waitForSelector('#ws-host .ws-banner');
+  assert.match(await p.textContent('.ws-banner'), /1,000,000 ZETAPHY[\s\S]*hardware wallet/);
+  // "Cancel" on the summary: nothing reaches the wallet
+  const sentBefore = wallet.sent.length;
+  await go(p, '#/me');
+  await p.evaluate(() => { window.__holdSummary = true; });
+  await p.waitForFunction(() => /^0x/.test(document.querySelector('#connect').textContent));
+  await p.getByRole('button', { name: 'Cancel all my listings', exact: true }).click();
+  await p.waitForSelector('#ws-confirm[open]');
+  assert.match(await p.textContent('#ws-confirm'), /ZETAPHY \(77390\)[\s\S]*Marketplace[\s\S]*Cancel all my listings/);
+  await p.click('#ws-confirm [data-ws="cancel"]');
+  await p.waitForFunction(() => /nothing was sent/.test(document.querySelector('#status').textContent));
+  assert.equal(wallet.sent.length, sentBefore, 'nothing sent after Cancel');
+  // 30 idle minutes (the default): forgotten here and for the whole site
+  await p.clock.fastForward('29:00');
+  assert.match(await p.textContent('#connect'), /^0x/, 'still connected at 29 minutes');
+  await p.clock.fastForward('01:30');
+  await p.waitForFunction(() => !/^0x/.test(document.querySelector('#connect').textContent));
+  await p.waitForSelector('#ws-idle');
+  assert.match(await p.textContent('#ws-idle'), /30 minutes/);
+  assert.equal(await p.evaluate(() => localStorage.getItem('zetaphy:wallet')), null);
+  assert.equal(await p.locator('.ws-banner').count(), 0);
+  problems.push(...(await p.evaluate(() => window.__problems)));
+  assert.deepEqual(problems, [], 'no CSP violations, script dialogs or page errors');
 });
