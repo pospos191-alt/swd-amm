@@ -1,4 +1,5 @@
 {
+  "git": { "deploymentEnabled": { "claude/**": false } },
   "redirects": [
     { "source": "/zetaphy", "destination": "https://swap.sawasdeecoin.com/", "permanent": true },
     { "source": "/zetaphy/:path*", "destination": "https://swap.sawasdeecoin.com/:path*", "permanent": true }
