@@ -280,11 +280,24 @@ Relayer addresses (public; fund them, never share anything else):
 INFO
 }
 
-channel_open() { # is the saved channel open on ZETAPHY?
+channel_open() { # is the saved channel open on ZETAPHY, with live light clients on both sides?
   [ -f "$CHAN" ] || return 1
-  local zc; zc=$(sed -n 's/^ZETAPHY_CHANNEL=//p' "$CHAN")
+  local zc nc; zc=$(sed -n 's/^ZETAPHY_CHANNEL=//p' "$CHAN"); nc=$(sed -n 's/^NOBLE_CHANNEL=//p' "$CHAN")
   hermes --json query channel end --chain "$ZETAPHY_CHAIN_ID" --port transfer --channel "$zc" 2>/dev/null \
-    | jq -e 'select(.result != null) | .result.state | ascii_downcase | test("open")' >/dev/null 2>&1
+    | jq -e 'select(.result != null) | .result.state | ascii_downcase | test("open")' >/dev/null 2>&1 || return 1
+  # A client left without updates past its trusting period (relayer stopped for days) expires,
+  # and the channel stays "open" but can carry nothing: then a new channel is needed.
+  client_active "$ZETAPHY_CHAIN_ID" "$zc" && client_active "$NOBLE_CHAIN_ID" "$nc"
+}
+
+client_active() { # client_active <chain> <channel>: the channel's light client is Active
+  local cl
+  cl=$(hermes --json query channel client --chain "$1" --port transfer --channel "$2" 2>/dev/null \
+    | jq -r 'select(.result != null) | .result.client_id // empty' | tail -1)
+  [ -n "$cl" ] || return 1
+  hermes --json query client status --chain "$1" --client "$cl" 2>/dev/null \
+    | jq -e 'select(.result != null) | .result | tostring | ascii_downcase | test("active")' >/dev/null 2>&1 \
+    || { echo "light client $cl on $1 is not active (expired or frozen)" >&2; return 1; }
 }
 
 running() {
@@ -372,6 +385,7 @@ NEXT
   create-channel)
     need_root create-channel
     if channel_open; then echo "channel already open:"; cat "$CHAN"; exit 0; fi
+    [ -f "$CHAN" ] && { echo "the saved channel cannot carry transfers any more: opening a new one"; as_relayer "mv '$CHAN' '$CHAN.old'"; }
     echo "creating light clients, connection and transfer channel (a few minutes)..."
     out=$(hermes --json create channel --a-chain "$ZETAPHY_CHAIN_ID" --b-chain "$NOBLE_CHAIN_ID" \
       --a-port transfer --b-port transfer --new-client-connection --yes 2>&1) || { echo "$out" | tail -5; exit 1; }
