@@ -178,6 +178,17 @@ gov.sh ratelimits                               # after the vote passes (10 minu
 
 ---
 
+## Sending ZETAPHY and tokens made on ZETAPHY out over IBC
+On the node, as the node user (`FROM` picks the key that pays; `NODE_HOME`/`KEYS_DIR` as for every gov.sh command):
+```bash
+gov.sh ibc-send channel-1 ZETAPHY 1000000000000000000 osmo1…     # 1 ZETAPHY (18 decimals) to Osmosis
+gov.sh erc20-register 0x<token>                                  # once per ERC-20 made on ZETAPHY (a vote, or a plain tx
+                                                                 #   when registration is permissionless)
+gov.sh ibc-send channel-1 0x<token> <amount> osmo1…              # the ERC-20 is converted to its coin erc20/0x<token> first
+```
+On the other chain the coin arrives as `ibc/<hash>`; sending it back through the same channel returns the original.
+A timeout (no relayer for 10 minutes) refunds the sender here.
+
 ## Looking after the relayer
 
 | View | Command (on the machine) |

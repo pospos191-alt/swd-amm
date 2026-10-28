@@ -65,14 +65,14 @@ test('gov.sh usage lists every command, and only the header', () => {
   assert.match(lines[0], /^ {2}gov\.sh propose-upgrade/);
   assert.match(lines.at(-1), /^ {2}gov\.sh wasm-codes/);
   assert.ok(!lines.some((l) => l.startsWith('#') || l.startsWith('set ')), out);
-  for (const c of ['ibc-usdc-denom', 'ibc-usdc-ratelimit', 'ibc-usdc-erc20', 'propose-ratelimit', 'vote-key', 'wasm-store', 'wasm-upload-access', 'propose-min-gas-price']) {
+  for (const c of ['ibc-usdc-denom', 'ibc-usdc-ratelimit', 'ibc-usdc-erc20', 'propose-ratelimit', 'vote-key', 'wasm-store', 'wasm-upload-access', 'propose-min-gas-price', 'erc20-register', 'ibc-send']) {
     assert.ok(out.includes(`gov.sh ${c}`), c);
   }
 });
 
 // A stand-in zetaphyd: answers the queries gov.sh makes and keeps the
 // proposal file it is asked to submit.
-function fakeChain({ supply = '100000000', erc20On = true, pair = 'enabled', meta = 'none', limit = false } = {}) {
+function fakeChain({ supply = '100000000', erc20On = true, pair = 'enabled', meta = 'none', limit = false, open = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'zetaphy-ibc-gov-'));
   const bin = join(dir, 'zetaphyd');
   writeFileSync(bin, `#!/bin/bash
@@ -81,9 +81,10 @@ case "$1 $2 $3" in
   "q auth module-account") echo '{"account":{"value":{"address":"${GOV_ADDR}"}}}' ;;
   "q bank total-supply-of") echo "{\\"amount\\":{\\"denom\\":\\"$4\\",\\"amount\\":\\"${supply}\\"}}" ;;
   "q gov proposals"*) if [ -f $D/proposal.json ]; then echo '{"proposals":[{"id":"7"}]}'; else echo '{"proposals":[]}'; fi ;;
-  "q erc20 params") echo '{"params":{"enable_erc20":${erc20On},"permissionless_registration":true}}' ;;
+  "q erc20 params") echo '{"params":{"enable_erc20":${erc20On},"permissionless_registration":${open}}}' ;;
   "q erc20 token-pair")
     [ "${pair}" = none ] && { echo "not found" >&2; exit 1; }
+    case "$4" in 0x*) echo "{\\"token_pair\\":{\\"erc20_address\\":\\"$4\\",\\"denom\\":\\"erc20/$4\\",\\"enabled\\":${pair === 'enabled'}}}"; exit 0 ;; esac
     echo "{\\"token_pair\\":{\\"erc20_address\\":\\"0x$(echo \${4:28} | tr A-F a-f)\\",\\"denom\\":\\"$4\\",\\"enabled\\":${pair === 'enabled'}}}" ;;
   "q ratelimit list-rate-limits")
     if [ "${limit}" = true ]; then echo "{\\"rate_limits\\":[{\\"path\\":{\\"denom\\":\\"ibc/${usdc('channel-3')}\\",\\"channel_or_client_id\\":\\"channel-3\\"}}]}"
@@ -95,13 +96,15 @@ case "$1 $2 $3" in
   "q feemarket params") echo '{"params":{"no_base_fee":false,"base_fee_change_denominator":8,"elasticity_multiplier":2,"enable_height":"0","base_fee":"0.000000000000000000","min_gas_price":"0.000000000000000000","min_gas_multiplier":"0.500000000000000000"}}' ;;
   "q wasm params") echo '{"code_upload_access":{"permission":"Nobody","addresses":[]},"instantiate_default_permission":"Everybody"}' ;;
   "tx gov submit-proposal") cp "$4" $D/proposal.json; echo "$*" > $D/args; echo '{"code":0,"txhash":"AB"}' ;;
+  "tx erc20 register-erc20"|"tx erc20 convert-erc20"|"tx ibc-transfer transfer") echo "$*" >> $D/txs; echo '{"code":0,"txhash":"AB"}' ;;
   *) echo "unexpected: $*" >&2; exit 1 ;;
 esac
 `);
   chmodSync(bin, 0o755);
   const env = { ZETAPHYD: bin, NODE_HOME: dir, KEYS_DIR: dir };
+  const txs = () => (existsSync(join(dir, 'txs')) ? readFileSync(join(dir, 'txs'), 'utf8') : '');
   const proposal = () => (existsSync(join(dir, 'proposal.json')) ? JSON.parse(readFileSync(join(dir, 'proposal.json'), 'utf8')) : null);
-  return { env, proposal, dir };
+  return { env, proposal, dir, txs };
 }
 
 test('propose-min-gas-price: feemarket MsgUpdateParams that only changes min_gas_price', () => {
@@ -343,4 +346,59 @@ test('wasm-store: MsgStoreCode from the gov module, gzipped code, sha256 in the 
   assert.equal(run(GOV, ['wasm-upload-access', 'nobody'], c5.env).code, 0);
   assert.equal(c5.proposal().messages[0].params.code_upload_access.permission, 'Nobody');
   assert.notEqual(run(GOV, ['wasm-upload-access', 'anyone'], fakeChain().env).code, 0);
+});
+
+const TOKEN = '0x3cC2000000000000000000000000000000000001';
+
+test('erc20-register: a plain tx when permissionless, a vote otherwise (with the module switched on)', () => {
+  const c = fakeChain({ pair: 'none' });
+  let r = run(GOV, ['erc20-register', TOKEN], c.env);
+  assert.equal(r.code, 0, r.out);
+  assert.match(c.txs(), new RegExp(`tx erc20 register-erc20 ${TOKEN}`));
+  assert.equal(c.proposal(), null);
+
+  const v = fakeChain({ pair: 'none', open: false, erc20On: false });
+  r = run(GOV, ['erc20-register', TOKEN, '0x00000000000000000000000000000000000000Ab'], v.env);
+  assert.equal(r.code, 0, r.out);
+  assert.deepEqual(v.proposal().messages, [
+    { '@type': '/cosmos.evm.erc20.v1.MsgUpdateParams', authority: GOV_ADDR, params: { enable_erc20: true, permissionless_registration: false } },
+    { '@type': '/cosmos.evm.erc20.v1.MsgRegisterERC20', signer: GOV_ADDR, erc20addresses: [TOKEN, '0x00000000000000000000000000000000000000Ab'] },
+  ]);
+
+  // already a coin: nothing sent
+  const k = fakeChain();
+  r = run(GOV, ['erc20-register', TOKEN, '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'], k.env);
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /registered already/);
+  assert.match(r.out, /ZETAPHY itself/);
+  assert.equal(k.txs(), '');
+  for (const bad of ['0x123', 'zetaphy1abc', "0x3cC2000000000000000000000000000000000001'; x"]) {
+    assert.notEqual(run(GOV, ['erc20-register', bad], fakeChain({ pair: 'none' }).env).code, 0, bad);
+  }
+});
+
+test('ibc-send: ZETAPHY as azetaphy, an ERC-20 converted to its coin first, input checked', () => {
+  const c = fakeChain();
+  let r = run(GOV, ['ibc-send', 'channel-1', 'ZETAPHY', '1000000000000000000', 'osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2'], c.env);
+  assert.equal(r.code, 0, r.out);
+  assert.match(c.txs(), /tx ibc-transfer transfer transfer channel-1 osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2 1000000000000000000azetaphy/);
+
+  const e = fakeChain();
+  r = run(GOV, ['ibc-send', 'channel-1', TOKEN, '5', 'osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2'], e.env);
+  assert.equal(r.code, 0, r.out);
+  const lines = e.txs().trim().split('\n');
+  assert.match(lines[0], new RegExp(`tx erc20 convert-erc20 ${TOKEN} 5`));
+  assert.match(lines[1], new RegExp(`transfer channel-1 osmo1\\S+ 5erc20/${TOKEN}`));
+
+  assert.notEqual(run(GOV, ['ibc-send', 'channel-1', TOKEN, '5', 'osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2'], fakeChain({ pair: 'none' }).env).code, 0);
+  assert.notEqual(run(GOV, ['ibc-send', 'channel-1', TOKEN, '5', 'osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2'], fakeChain({ pair: 'disabled' }).env).code, 0);
+  for (const args of [['channel-x', 'ZETAPHY', '1', 'osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2'],
+    ['channel-1', 'ZETAPHY', '0', 'osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2'],
+    ['channel-1', 'ZETAPHY', '1.5', 'osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2'],
+    ['channel-1', 'ZETAPHY', '1', 'osmo1; rm -rf /'],
+    ['channel-1', 'bad denom!', '1', 'osmo1s0sdx8pr6vkc0hjwxl97anpqnkv28v03le59r2']]) {
+    const f = fakeChain();
+    assert.notEqual(run(GOV, ['ibc-send', ...args], f.env).code, 0, args.join(' '));
+    assert.equal(f.txs(), '', args.join(' '));
+  }
 });

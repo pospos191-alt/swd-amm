@@ -39,6 +39,11 @@
 #   gov.sh ibc-usdc-ratelimit <channel> [send%] [recv%] [hours]   cap USDC on it, or change the cap (default 1 1 24)
 #   gov.sh ibc-usdc-erc20 <channel>                      USDC as an ERC-20 (MetaMask, explorer, DEX token lists)
 #   gov.sh ibc-usdc-metadata <channel>                   its bank metadata (USDC, 6 decimals) for a genesis / upgrade
+#   gov.sh erc20-register <0x…> [0x…]                    ERC-20 tokens made on ZETAPHY become coins (erc20/0x…) that IBC can carry
+#                                                        (a vote, or a plain tx when registration is permissionless)
+#   gov.sh ibc-send <channel> <ZETAPHY|0x…|denom> <amount> <receiver>
+#                                                        send from FROM over IBC (amount in base units: 18 decimals for ZETAPHY);
+#                                                        an ERC-20 is converted to its coin first
 #   ---- CosmWasm (README.md, stage 7) ----
 #   gov.sh wasm-store <file.wasm> "<title>" [everybody|nobody|zetaphy1…,zetaphy1…]
 #                                                        propose storing contract code (who may instantiate it; default everybody)
@@ -267,6 +272,57 @@ case "${1:-}" in
     send tx ibc-hold-cancel "$id"
     echo "held transfer $id returned: the relayer carries the error acknowledgement back and the source chain refunds the sender" ;;
 
+  # ---- ERC-20s made on ZETAPHY, and sending over IBC ------------------------
+  erc20-register)
+    shift; [ $# -ge 1 ] || { echo "usage: gov.sh erc20-register <0x…> [0x…]"; exit 1; }
+    native=0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee   # ZETAPHY itself (native precompile): a coin already
+    todo=()
+    for a in "$@"; do
+      [[ "$a" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "not an ERC-20 address: $a"; exit 1; }
+      [ "$(echo "$a" | tr 'A-F' 'a-f')" = "$native" ] && { echo "$a is ZETAPHY itself: already a coin (azetaphy)"; continue; }
+      if $ZETAPHYD q erc20 token-pair "$a" $QF >/dev/null 2>&1; then echo "$a is registered already"; continue; fi
+      todo+=("$a")
+    done
+    [ ${#todo[@]} -gt 0 ] || exit 0
+    gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
+    params=$($ZETAPHYD q erc20 params $QF | jq -c .params)
+    on=$(echo "$params" | jq -r '.enable_erc20 // false'); open=$(echo "$params" | jq -r '.permissionless_registration // false')
+    if [ "$on" = true ] && [ "$open" = true ]; then
+      send tx erc20 register-erc20 "${todo[@]}"
+      echo "registered: ${todo[*]} (coins erc20/<address>)"; exit 0
+    fi
+    # Governance registers them (MsgRegisterERC20 signed by the gov module);
+    # the ERC-20 module is switched on in the same proposal when it is off.
+    f=$(mktemp)
+    printf '%s\n' "${todo[@]}" | jq -R . | jq -s --arg gov "$gov" --argjson p "$params" --arg on "$on" --arg d "$DEPOSIT" \
+      '. as $a | {messages:((if $on == "true" then [] else [{"@type":"/cosmos.evm.erc20.v1.MsgUpdateParams",authority:$gov,
+          params:{enable_erc20:true,permissionless_registration:($p.permissionless_registration // false)}}] end)
+        + [{"@type":"/cosmos.evm.erc20.v1.MsgRegisterERC20",signer:$gov,erc20addresses:$a}]),
+        metadata:"",deposit:$d,title:("Register " + ($a | length | tostring) + " ERC-20 token(s) as coins"),
+        summary:("So IBC can carry them: " + ($a | join(", ")) + ". Each becomes the coin erc20/<address>."),expedited:false}' > "$f"
+    submit tx gov submit-proposal "$f"; rm -f "$f" ;;
+
+  ibc-send)
+    ch=${2:?channel on the ZETAPHY side, e.g. channel-1}; tok=${3:?ZETAPHY, an ERC-20 0x…, or a coin denom}
+    amt=${4:?amount in base units}; to=${5:?receiver on the other chain, e.g. osmo1…}
+    [[ "$ch" =~ ^channel-[0-9]+$ ]] || { echo "channel: channel-N"; exit 1; }
+    [[ "$amt" =~ ^[1-9][0-9]{0,35}$ ]] || { echo "amount: a whole number of base units"; exit 1; }
+    [[ "$to" =~ ^[a-z][a-z0-9]{0,19}1[02-9ac-hj-np-z]{20,90}$ || "$to" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "receiver: a bech32 address (e.g. osmo1…) or 0x…"; exit 1; }
+    case "$tok" in
+      ZETAPHY|zetaphy|azetaphy|0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE|0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee) denom=azetaphy ;;
+      0x*)
+        [[ "$tok" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "not an ERC-20 address: $tok"; exit 1; }
+        pair=$($ZETAPHYD q erc20 token-pair "$tok" $QF 2>/dev/null | jq -c '.token_pair // empty' || true)
+        [ -n "$pair" ] || { echo "$tok is not registered as a coin yet: gov.sh erc20-register $tok"; exit 1; }
+        [ "$(echo "$pair" | jq -r '.enabled // false')" = true ] || { echo "$tok: its conversion is paused by governance"; exit 1; }
+        denom=$(echo "$pair" | jq -r .denom)
+        # An ERC-20 made on ZETAPHY travels as its coin: convert the amount first.
+        [[ "$denom" == erc20/* ]] && { send tx erc20 convert-erc20 "$tok" "$amt"; echo "converted $amt of $tok to $denom"; } ;;
+      *) [[ "$tok" =~ ^[a-zA-Z][a-zA-Z0-9/:._-]{1,127}$ ]] || { echo "not a coin denom: $tok"; exit 1; }; denom=$tok ;;
+    esac
+    send tx ibc-transfer transfer transfer "$ch" "$to" "${amt}${denom}"
+    echo "sent $amt $denom through $ch to $to; the relayer carries it (a timeout refunds it here)" ;;
+
   # ---- IBC: USDC from Noble (zetaphy-chain/ibc/README.md) ------------------
   ibc-usdc-denom|ibc-usdc-ratelimit|ibc-usdc-erc20|ibc-usdc-metadata)
     ch=${2:?ZETAPHY side channel, e.g. channel-0 (ibc/setup-relayer.sh status)}
@@ -410,5 +466,5 @@ case "${1:-}" in
     $ZETAPHYD q wasm list-code $QF | jq -c '.code_infos[]? | {code_id, creator, data_hash, instantiate_permission}' ;;
 
   *)
-    sed -n '8,46p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,51p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

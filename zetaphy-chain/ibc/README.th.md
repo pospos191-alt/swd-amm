@@ -178,6 +178,17 @@ gov.sh ratelimits                               # หลังโหวตผ่
 
 ---
 
+## ส่ง ZETAPHY และเหรียญที่สร้างบน ZETAPHY ออกไปทาง IBC
+บนเครื่องโหนด ในนามผู้ใช้โหนด (`FROM` คือกุญแจที่จ่าย; `NODE_HOME`/`KEYS_DIR` เหมือนคำสั่ง gov.sh อื่น):
+```bash
+gov.sh ibc-send channel-1 ZETAPHY 1000000000000000000 osmo1…     # 1 ZETAPHY (18 ทศนิยม) ไป Osmosis
+gov.sh erc20-register 0x<token>                                  # ครั้งเดียวต่อ ERC-20 ที่สร้างบน ZETAPHY (โหวต หรือ tx ธรรมดา
+                                                                 #   ถ้าการลงทะเบียนเปิดให้ทุกคน)
+gov.sh ibc-send channel-1 0x<token> <จำนวน> osmo1…               # แปลง ERC-20 เป็นเหรียญ erc20/0x<token> ก่อนส่ง
+```
+ฝั่งปลายทางจะได้เหรียญ `ibc/<hash>` ส่งกลับทางช่องเดิมจะได้ของเดิมคืน
+ถ้าหมดเวลา (ไม่มี relayer ภายใน 10 นาที) เหรียญคืนผู้ส่งที่นี่
+
 ## ดูแล relayer
 
 | ดู | คำสั่ง (บนเครื่อง) |
