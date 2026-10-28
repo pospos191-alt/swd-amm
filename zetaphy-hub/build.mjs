@@ -28,7 +28,8 @@ export const APPS = {
 const SKIP_IN = { wallet: new Set(['src']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
-const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js', 'embed.css', 'logo.svg', 'favicon.svg'];
+const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
+  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'embed.css', 'logo.svg', 'favicon.svg'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. */
 export function hubConfig(cfg) {
@@ -36,7 +37,8 @@ export function hubConfig(cfg) {
   const out = {};
   for (const st of Object.values(read('zetaphy-launch/state/77390.json')?.steps ?? {})) Object.assign(out, st.out ?? {});
   const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
-  const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity']
+  const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity',
+    'usefulWork', 'bugBounty', 'workerReputation', 'usefulIssuance']
     .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
   const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};
   const nft = read('zetaphy-nft/web/deployments.json') ?? {};

@@ -21,6 +21,7 @@
 | 4 · AI compute market paid in ZETAPHY | `ComputeMarket`: the AI job deposit is held by the contract until the work is delivered and accepted |
 | 1 contract = 1 identity (ERC-8004) + signed cross-chain messages | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: messages from other Neuro instances are data, not commands |
 | 5 · Quantum resistance | ML-DSA precompile (FIPS 204) in the chain + `QuantumWallet` + `zetaphy pq` + true PQ accounts (`zetaphy pq native`) |
+| Future · Useful work (prototype, not deployed) | `UsefulWork` (browser scan jobs: PoW stamp, 2-of-3 commit-reveal, canaries) + `WorkerReputation` (ERC-8004-style) + `BugBounty` (browser fuzzing, runner-verified; `VulnerableVault` is deliberately vulnerable) + `UsefulIssuance` (a timelocked RewardVault share for verified work) + `zetaphy work` / `zetaphy bounty`: [docs/future/useful-work.md](../docs/future/useful-work.md) |
 
 **No stage holds real money yet:** stage 3 and above on mainnet must first pass the gates in the "Before real money" section at the end of this file
 

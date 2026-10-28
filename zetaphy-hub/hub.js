@@ -385,8 +385,8 @@ function connect() {
     dlg.addEventListener('close', onClose);
   });
 }
-/** Sends a call through the connected wallet after an in-page summary (`action`: what it does, in words). */
-async function send(to, data, action = '') {
+/** Sends a call through the connected wallet after an in-page summary (`action`: what it does, in words; `value`: wei it pays). */
+async function send(to, data, action = '', value = 0n) {
   if (!account) await connect();
   await addNetwork();
   const p = wb.provider();
@@ -395,7 +395,7 @@ async function send(to, data, action = '') {
   const ok = await wb.safety.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: account, to, toLabel: TO_LABEL[to], data, action });
   if (ok == null) throw Object.assign(new Error(wb.safety.t('cfCancelled')), { code: 4001 });
   data = ok;
-  const hash = await p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: '0x0', chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
+  const hash = await p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: `0x${BigInt(value).toString(16)}`, chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
   if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error(T('failed'));
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 2000));

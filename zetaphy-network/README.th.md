@@ -21,6 +21,7 @@
 | 4 · ตลาดพลัง AI จ่ายเป็น ZETAPHY | `ComputeMarket`: วางเงินมัดจำงาน AI ไว้กับสัญญาจนกว่าจะส่งงานและยอมรับ |
 | 1 สัญญา = 1 ตัวตน (ERC-8004) + ข้อความข้ามเชนที่มีลายเซ็น | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: ข้อความจาก Neuro ตัวอื่นเป็นข้อมูล ไม่ใช่คำสั่ง |
 | 5 · ต้านควอนตัม | precompile ML-DSA (FIPS 204) ในเชน + `QuantumWallet` + `zetaphy pq` + บัญชี PQ แท้ (`zetaphy pq native`) |
+| อนาคต · งานที่มีประโยชน์ (ต้นแบบ ยังไม่ deploy) | `UsefulWork` (งานสแกนในเบราว์เซอร์: ตราประทับ PoW, commit-reveal 2 ใน 3, นกขมิ้น) + `WorkerReputation` (แบบ ERC-8004) + `BugBounty` (fuzzing ในเบราว์เซอร์ รันเนอร์ตรวจ; `VulnerableVault` ตั้งใจให้มีช่องโหว่) + `UsefulIssuance` (ส่วนแบ่งจาก RewardVault หลัง timelock สำหรับงานที่ผ่านการตรวจ) + `zetaphy work` / `zetaphy bounty`: [docs/future/useful-work.th.md](../docs/future/useful-work.th.md) |
 
 **ยังไม่มีเงินจริงในขั้นไหนเลย:** ขั้น 3 ขึ้นไปบน mainnet ต้องผ่านประตูในหัวข้อ "ก่อนเงินจริง" ท้ายไฟล์ก่อน
 

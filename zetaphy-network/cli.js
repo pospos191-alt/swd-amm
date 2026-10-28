@@ -163,6 +163,9 @@
 //   zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --claim-quorum 3 --claim-min-agreed 5
 //                           --claim-delay 259200 --governance 0x<multisig>]
 //                                      NeuroIdentity (ERC-8004 identity: 1 contract = 1 agent) + NeuroValidation (runner verdicts)
+//   zetaphy work verdict <chain> <address>              the code-only verdict a browser scan job gets (docs/future/useful-work.md)
+//   zetaphy work verify-finding <spec.json> <finding.json | 0x…>   replay a browser's bug finding against a bounty spec
+//   zetaphy bounty check <findingId> --bounty 0x… --spec <spec.json> [--attest]   runners: verify a revealed finding, then vote
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
 //   zetaphy identity get <chain> <address> | <agentId>   who controls it, its Neuro report link, runner verdicts
 //   zetaphy identity claim <agentId>                      the contract (or its owner()) takes control of its identity
@@ -1645,6 +1648,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     if (!r.ok) throw new Error(`relay refused: ${body.error}`);
     write(`job ${body.jobId} requested: ${chainKey} ${target}, paid ${formatUnits(cost + tip, 6)} ${tokenKey.toUpperCase()} (no ZETAPHY used)`);
     return 0;
+  }
+
+  // useful work: browser scan jobs and bug bounties, checked by runners (src/usefulworkcli.js)
+  if (group === 'work' || group === 'bounty') {
+    const { usefulWorkCommand } = await import('./src/usefulworkcli.js');
+    return usefulWorkCommand({ group, cmd, rest, opt, write, s, connect, connectRpc });
   }
 
   // ERC-8004 identity and signed Neuro messages (src/identitycli.js)

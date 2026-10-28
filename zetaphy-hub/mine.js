@@ -10,6 +10,7 @@ import { isEvmAddress, toEvm } from './chainlib.js';
 import { withFallback } from './i18n.js';
 import { MINE } from './pages-i18n.js';
 import { powPrefix, powOk, nonceHex, expectedTries } from './mine-core.js';
+import { WORK } from './work-i18n.js';
 
 const B32 = /^zetaphy1[02-9ac-hj-np-z]{38}$/;
 /** The address as the node binds the proof to it (0x…), or null. */
@@ -35,6 +36,8 @@ const UNIT = 'ZTPHY';
 let run = null; // the running miner (one per page)
 let threads = 0; // the chosen number of workers (kept across redraws)
 let rewardText = `10 ${UNIT}`;
+let mode = 'mine'; // 'mine' (the faucet proof of work) or 'work' (useful work: work.js, loaded when chosen)
+let workMod = null;
 
 function stopRun() {
   if (!run) return;
@@ -74,9 +77,25 @@ function crew(n) {
   c.dataset.n = String(n);
 }
 
+/** The two modes of the page: the faucet's proof of work, or useful work (scan jobs, bug hunting). */
+function modeBar(root, ctx) {
+  const W = withFallback(WORK, ctx.lang);
+  const b = (id, text) => ctx.el('button', { type: 'button', role: 'tab', class: `wk-mode-btn${mode === id ? ' on' : ''}`, id: `mode-${id}`,
+    'aria-selected': String(mode === id), text, onclick: () => { if (mode !== id) { mode = id; mine.render(root, ctx); } } });
+  return ctx.el('div', { class: 'wk-mode', role: 'tablist' }, b('mine', `⛏ ${W.modeMine}`), b('work', `🧠 ${W.modeWork}`));
+}
+
 const mine = {
   render(root, ctx) {
     stopRun();
+    workMod?.stopWork();
+    if (mode === 'work') {
+      const host = ctx.el('div', { id: 'wk-host' });
+      root.replaceChildren(modeBar(root, ctx), host);
+      import('./work.js').then((m) => { workMod = m; if (host.isConnected) m.renderWork(host, ctx); })
+        .catch((e) => { host.textContent = String(e?.message ?? e); });
+      return;
+    }
     const L = withFallback(MINE, ctx.lang);
     const el = ctx.el;
     if (!threads) threads = Math.min(2, maxThreads());
@@ -84,6 +103,7 @@ const mine = {
     const row = (label, tip, ...value) => el('tr', {}, el('th', { scope: 'row', text: label, 'data-tip': tip ?? null }), el('td', {}, ...value));
     const dd = (id, text = '–', cls = 'mono') => el('span', { id, class: cls, text });
     root.replaceChildren(
+      modeBar(root, ctx),
       el('div', { class: 'mn-grid' },
         el('div', { class: 'card mn-card', 'aria-label': L.card },
           el('div', { class: 'mn-head' },
