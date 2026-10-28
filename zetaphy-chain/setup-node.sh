@@ -587,13 +587,26 @@ if [ "\$now" -ge "\$last" ]; then used=\$(( used + now - last )); else used=\$((
 if [ "\$m" != "\$month" ]; then m=\$month; used=0; fi
 echo "\$m \$now \$used" > \$S/state
 echo "\$(date -u +%FT%TZ) sent this month: \$(( used / 1048576 )) MB of $EGRESS_LIMIT_MB MB" > \$S/status
+# The rule closes 8545 to the outside only (! -i lo): the node's own tools, rpc-guard and
+# zetaphy-validator reach it on 127.0.0.1. The rule of older versions blocked loopback too:
+# it is removed on every run.
+for ipt in iptables ip6tables; do
+  command -v \$ipt >/dev/null || continue
+  while \$ipt -D INPUT -p tcp --dport 8545 -j DROP 2>/dev/null; do :; done
+done
 if [ "\$used" -ge "\$LIMIT" ]; then
   # applied on every run: a reboot drops the iptables rule and starts Caddy again
   systemctl stop caddy 2>/dev/null
-  iptables -C INPUT -p tcp --dport 8545 -j DROP 2>/dev/null || iptables -I INPUT 1 -p tcp --dport 8545 -j DROP
+  for ipt in iptables ip6tables; do
+    command -v \$ipt >/dev/null || continue
+    \$ipt -C INPUT ! -i lo -p tcp --dport 8545 -j DROP 2>/dev/null || \$ipt -I INPUT 1 ! -i lo -p tcp --dport 8545 -j DROP
+  done
   [ -f \$S/paused ] || { touch \$S/paused; logger -t zetaphy-egress "public RPC paused: \$(( used / 1048576 )) MB sent this month"; }
 elif [ -f \$S/paused ]; then
-  iptables -D INPUT -p tcp --dport 8545 -j DROP 2>/dev/null
+  for ipt in iptables ip6tables; do
+    command -v \$ipt >/dev/null || continue
+    \$ipt -D INPUT ! -i lo -p tcp --dport 8545 -j DROP 2>/dev/null
+  done
   systemctl start caddy 2>/dev/null; rm -f \$S/paused
   logger -t zetaphy-egress "public RPC reopened for \$month"
 fi
@@ -636,6 +649,11 @@ ZETAPHY testnet node is starting.
   Currency symbol:     ZETAPHY
   Genesis keys:        $KEYS_DIR (testnet only; MNEMONICS-KEEP-SECRET.txt)
   Back up:             $NODE_HOME/config/priv_validator_key.json and pq_vote_key.seed
+                       (and the words in $KEYS_DIR/MNEMONICS-KEEP-SECRET.txt), offline
+  Then lock it down:   sudo zetaphy-validator secure   (deletes the plaintext words file once you
+                       confirm the backup; SSH keys only; security updates; asks first). Where
+                       zetaphy-validator is not installed (the chain's first node):
+                       curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/join-validator.sh -o /tmp/zv && sudo bash /tmp/zv secure
   Logs:                journalctl -u zetaphyd -f
 INFO
 

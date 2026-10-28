@@ -125,6 +125,12 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
 - ตัวจับเวลาเช็กทุก 10 นาที: ซิงก์ครบและมีเหรียญแล้ว จะ stake 9 ZETAPHY เป็น validator เอง แล้วหยุดเช็ก
 - `sudo zetaphy-validator status` ดูความคืบหน้า, `sudo zetaphy-validator backup` ไฟล์ที่ต้องเก็บไว้ออฟไลน์,
   `sudo zetaphy-validator unjail` กลับมาทำงานหลังถูกพักเพราะเครื่องดับ
+- หลังสำรองกุญแจแล้ว: `sudo zetaphy-validator secure` ทำลายไฟล์ 24 คำที่เก็บเป็นข้อความธรรมดา (เฉพาะเมื่อคุณยืนยันว่า
+  จดเก็บออฟไลน์แล้ว และกุญแจบัญชี stake อยู่ใน keyring), ปิดการเข้า SSH ด้วยรหัสผ่านและการเข้าเป็น root (เฉพาะเมื่อมีบัญชีที่ใช้ sudo
+  ได้และมี SSH key หรือเปิด Google OS Login อยู่ จึงไม่ล็อกตัวเองออก; ตรวจด้วย `sshd -t` และถอยกลับถ้าผิดพลาด), เปิดอัปเดตความปลอดภัย
+  อัตโนมัติ (unattended-upgrades / dnf-automatic ไม่รีบูตเอง) และ fail2ban, ตั้งโฟลเดอร์กุญแจเป็น 700 ไฟล์กุญแจเป็น 600
+  และแสดงพอร์ตที่เปิดสู่ภายนอก ถามก่อนทุกขั้น (`--yes` ไม่ถาม แต่การลบ 24 คำต้องมี `--words-saved` ด้วย; `--only ssh,updates`
+  ทำเฉพาะบางขั้น) ไม่ลบ `priv_validator_key.json`, `pq_vote_key.seed`, `node_key.json` หรือ keyring เด็ดขาด
 - เปิดพอร์ต 26656 (และ 80, 443) ใน firewall ของผู้ให้บริการคลาวด์ หรือใช้ปุ่ม Oracle (`deploy/oracle`) เลือก `validator` ซึ่งเปิดให้เอง
 
 วิธีเดิมแบบทำเองทีละขั้น:
@@ -224,6 +230,10 @@ WebSocket: `wss://<ชื่อ>/ws` (EVM JSON-RPC เช่น `eth_subscribe` 
   - ไม่เกิน 300 คำขอต่อนาทีต่อ IP ในแต่ละฝั่ง, พร้อมกันรวม 64, batch ไม่เกิน 20, ขนาดไม่เกิน 1 MB
   ส่วน 26657 / 1317 / 9090 ฟังเฉพาะในเครื่อง
   - `zetaphy_sendCosmosTx` แค่ส่งต่อธุรกรรมที่เซ็นมาแล้ว (เหมือน `eth_sendRawTransaction`) ไม่ถือกุญแจใด ๆ
+- `sudo zetaphy-validator secure` (ข้างบน) ล็อกเครื่อง node หลังสำรองกุญแจแล้ว ตัวจำกัดปริมาณข้อมูลขาออก (low-egress guard)
+  ปิด 8545 เฉพาะจากภายนอก (`! -i lo` ทั้ง IPv4 และ IPv6) เครื่องมือของ node เองยังเข้าที่ 127.0.0.1 ได้
+- ตัวเซ็นแบบแบ่งกุญแจ ed25519 (Horcrux, 2 ใน 3 เครื่อง) เป็นทางเลือกได้ สิ่งที่ป้องกันได้และไม่ได้
+  (กุญแจโหวต ML-DSA ยังอยู่บน node): [`horcrux/README.th.md`](horcrux/README.th.md)
 - ก่อนขั้น 3 (เงินจริง) ต้องเปลี่ยน: กุญแจไปเก็บใน multisig/HSM, https บนชื่อโดเมนของโครงการเอง (แทน sslip.io),
   validator อิสระ ≥ 20 ราย, audit ตามแผน
 

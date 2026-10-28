@@ -17,7 +17,13 @@
 #   sudo zetaphy-validator address    the address (send ZETAPHY here to stake more later)
 #   sudo zetaphy-validator logs       setup and become-validator log lines
 #   sudo zetaphy-validator unjail     back to work after being jailed for downtime
-#   sudo zetaphy-validator backup     which files to copy somewhere safe (offline)
+#   sudo zetaphy-validator backup     which files to copy somewhere safe (offline), and how
+#   sudo zetaphy-validator backup words   shows the 24 words once (for paper), then clears the screen
+#   sudo zetaphy-validator secure     after the backup: deletes the plaintext 24-word file, SSH with keys only
+#                                     and no root login, automatic security updates, fail2ban, key file
+#                                     permissions, a report of open ports. Asks before each change
+#                                     (--yes: no questions; the words are deleted only with --words-saved too;
+#                                     --only words,perms,ssh,updates,fail2ban,ports: just those steps)
 #   sudo zetaphy-validator import-key use your own 12/24-word recovery phrase (MetaMask, Trust, Keplr, ...)
 #                                     for the staking account instead of the one this node made; only
 #                                     before it has staked. ACCOUNT_INDEX=n picks the wallet's account n+1.
@@ -47,6 +53,19 @@ UNAME_S="${UNAME_S:-$(uname -s)}"
 PROC_VERSION="${PROC_VERSION:-/proc/version}"
 SYSTEMD_DIR="${SYSTEMD_DIR:-/run/systemd/system}"
 WSL_CONF="${WSL_CONF:-/etc/wsl.conf}"
+# what "secure" looks at and changes (tests point these at stand-ins)
+SSHD="${SSHD:-sshd}"
+SSHD_DIR="${SSHD_DIR:-/etc/ssh}"
+RUN_SSHD="${RUN_SSHD:-/run/sshd}"
+NSSWITCH="${NSSWITCH:-/etc/nsswitch.conf}"
+SUDOERS_DIR="${SUDOERS_DIR:-/etc/sudoers.d}"
+PASSWD_FILE="${PASSWD_FILE:-}"                       # empty: getent passwd
+HOME_BASE="${HOME_BASE:-/home}"
+ROOT_HOME="${ROOT_HOME:-/root}"
+APT_CONF_DIR="${APT_CONF_DIR:-/etc/apt/apt.conf.d}"
+DNF_AUTO_CONF="${DNF_AUTO_CONF:-/etc/dnf/automatic.conf}"
+F2B_DIR="${F2B_DIR:-/etc/fail2ban/jail.d}"
+SECURE_TTY="${SECURE_TTY:-/dev/tty}"
 DENOM=azetaphy
 
 say() { printf '\n== %s\n' "$*"; }
@@ -238,7 +257,9 @@ Validator account: $(acc)   ($(hexaddr))
 The node is syncing now. When it has caught up and holds $STAKE ZETAPHY or more (the faucet sent 10),
 it stakes $STAKE ZETAPHY and becomes a validator by itself; nothing else to do.
   sudo zetaphy-validator status    progress
-  sudo zetaphy-validator backup    the files to keep safe
+  sudo zetaphy-validator backup    the files to keep safe, and how to copy them off this machine
+  sudo zetaphy-validator secure    AFTER the backup: deletes the plaintext 24-word file, SSH with keys only,
+                                   automatic security updates (asks before each change)
 Ports: in a cloud, open TCP 26656 (P2P) in its firewall; nothing else is needed (the RPC answers this machine only).
 At home it works without opening any port; forwarding TCP 26656 on the router helps other nodes reach you.
 EOF
@@ -316,6 +337,11 @@ status() {
   else
     echo "validator: not yet (the timer stakes $STAKE ZETAPHY once synced and funded)"
   fi
+  if [ -f "$WORDS" ]; then
+    echo "note:      the 24 words are still in a plain file on this machine; once they are backed up offline,"
+    echo "           run: sudo zetaphy-validator secure"
+  fi
+  return 0
 }
 
 # A node set up earlier (this script, or setup-node.sh on the chain's first
@@ -339,6 +365,322 @@ update_node() {
   say "updated: $("$ZETAPHYD" version 2>/dev/null)"
 }
 
+# ---- backup and secure ------------------------------------------------------------------------
+WORDS="$KEYS_DIR/MNEMONICS-KEEP-SECRET.txt"
+
+backup() {
+  local in_secure=${1:-}
+  cat <<EOF
+Copy these somewhere safe and offline (USB stick / paper), never into a chat, e-mail or website:
+  $NODE_HOME/config/priv_validator_key.json   the validator's signing key
+  $NODE_HOME/config/pq_vote_key.seed          its ML-DSA vote key
+  $WORDS         the 24 words of the staking account
+EOF
+  [ -f "$WORDS" ] || echo "  (the words file is gone: secure deleted it after the backup, or import-key was used, which keeps no copy)"
+  cat <<EOF
+
+How to get them off this machine (nothing to install on your own computer):
+  1. on this machine:  mkdir -p ~/zbackup && sudo cp $NODE_HOME/config/priv_validator_key.json \\
+       $NODE_HOME/config/pq_vote_key.seed $WORDS ~/zbackup/ && sudo chown -R \$USER ~/zbackup
+  2. Google Cloud (SSH in the browser): gear menu -> Download file, once per file in ~/zbackup.
+     Oracle Cloud Shell: scp -r ubuntu@SERVER_IP:zbackup ~/ then the Cloud Shell menu -> Download,
+     then rm -rf ~/zbackup in Cloud Shell too.
+     Home machine or Raspberry Pi: copy ~/zbackup to a USB stick.
+  3. put the files on a USB stick kept offline, then on this machine:  rm -rf ~/zbackup
+     (secure also shreds a zbackup folder it finds).
+  Paper, the 24 words only:  sudo zetaphy-validator backup words
+EOF
+  [ -n "$in_secure" ] || cat <<EOF
+Then:  sudo zetaphy-validator secure   deletes the words file from this machine once you confirm
+       they are saved, and locks the machine down (it asks before each change).
+EOF
+  cat <<EOF
+Never run two machines with the same priv_validator_key.json: that is double signing (slashed, jailed for good).
+EOF
+}
+
+# y/N question (--yes answers yes). Reads the terminal, also when this script came in through a pipe.
+ask() {
+  [ -n "${YES:-}" ] && { echo "$1 [y/N] y (--yes)"; return 0; }
+  local a=
+  printf '%s [y/N] ' "$1"
+  if { : < "$SECURE_TTY"; } 2>/dev/null; then read -r a < "$SECURE_TTY" || true; else read -r a || true; fi
+  [[ "$a" =~ ^[Yy]([Ee][Ss])?$ ]]
+}
+
+# The 24 words once, for paper; the screen is cleared when Enter is pressed.
+backup_words() {
+  [ "$(id -u)" = 0 ] || [ -n "${SECURE_TEST:-}" ] || die "run with sudo"
+  [ -f "$WORDS" ] || die "no recovery words on this machine ($WORDS is gone: secure deleted it, or import-key was used, which keeps no copy)"
+  echo "Write these on paper, keep it offline. Never type them into a chat, e-mail or website."
+  echo
+  cat "$WORDS"
+  echo
+  printf 'Press Enter to clear the screen. '
+  if { : < "$SECURE_TTY"; } 2>/dev/null; then read -r _ < "$SECURE_TTY" || true; else read -r _ || true; fi
+  printf '\033[3J\033[H\033[2J'
+  echo "cleared. Once the words are safe: sudo zetaphy-validator secure"
+}
+
+shred_file() {
+  shred -u -z "$1" 2>/dev/null && return 0
+  local n; n=$(( ($(stat -c %s "$1" 2>/dev/null || echo 0) + 1023) / 1024 ))
+  dd if=/dev/urandom of="$1" bs=1024 count="$n" conv=notrunc,fsync 2>/dev/null || true
+  rm -f "$1"
+}
+
+# Plaintext recovery words the setup leaves, and copies made while backing up (zbackup folders).
+plain_words() {
+  local f
+  for f in "$WORDS" "$KEYS_DIR".unfinished-*/MNEMONICS-KEEP-SECRET.txt "$HOME_BASE"/*/zbackup/* "$ROOT_HOME"/zbackup/*; do
+    [ -f "$f" ] && echo "$f"
+  done
+  return 0
+}
+
+secure_words() {
+  say "1. the 24 words: back up, then delete the plaintext file from this machine"
+  local files f
+  files=$(plain_words)
+  if [ -z "$files" ]; then
+    echo "no plaintext recovery words left on this machine: nothing to do"
+  else
+    echo "plaintext secrets found (anyone who gets root on this machine can read them):"
+    while IFS= read -r f; do echo "  $f"; done <<<"$files"
+    if grep -qxF "$WORDS" <<<"$files" && ! asn "$ZETAPHYD keys show validator -a $K --home $NODE_HOME" >/dev/null 2>&1; then
+      echo "kept: the staking key is not in this node's keyring, so these words are its only copy here"
+      return 0
+    fi
+    echo
+    backup in-secure
+    echo
+    if [ -n "${YES:-}" ] && [ -z "${WORDS_SAVED:-}" ]; then
+      echo "kept: with --yes the words are deleted only when --words-saved is given too"
+    elif [ -z "${YES:-}" ] && ! ask "Have you saved the 24 words and the two key files offline, and should the files above be shredded?"; then
+      echo "kept. Run secure again once the backup is done."
+    else
+      while IFS= read -r f; do shred_file "$f" && echo "shredded: $f"; done <<<"$files"
+      for f in "$HOME_BASE"/*/zbackup "$ROOT_HOME"/zbackup; do if [ -d "$f" ]; then rmdir "$f" 2>/dev/null || true; fi; done
+      echo "(on SSDs and copy-on-write disks shred cannot promise the old blocks are gone; the files are, and"
+      echo " with them the easy way to read the words)"
+    fi
+  fi
+  cat <<EOF
+What stays on this machine, because the node needs it to run (back these up, never delete them):
+  $NODE_HOME/config/priv_validator_key.json   signs blocks (ed25519)
+  $NODE_HOME/config/pq_vote_key.seed          signs votes post-quantum (ML-DSA-44)
+  $NODE_HOME/config/node_key.json             this node's P2P identity (not a money key)
+  $NODE_HOME/data/priv_validator_state.json   the last height signed: protects against double signing
+  $KEYS_DIR/                    the keyring with the staking account's key (unjail, staking).
+      It is a test keyring (not encrypted), so root on this machine can still use that account;
+      what is gone is the plain file with the words, which also open every other account of the phrase.
+EOF
+  [ -f "$NODE_HOME/config/faucet.key" ] && echo "  $NODE_HOME/config/faucet.key                  the faucet's key (the chain's first node only)"
+  return 0
+}
+
+secure_perms() {
+  say "2. key files: folders 700, files 600, owner $NODE_USER"
+  local p n=0 own=
+  id "$NODE_USER" >/dev/null 2>&1 && own=1
+  for p in "$KEYS_DIR" "$NODE_HOME/config"; do
+    [ -d "$p" ] || continue
+    n=$((n + $(find "$p" -type d ! -perm 700 | wc -l)))
+    find "$p" -type d -exec chmod 700 {} +
+    [ -n "$own" ] && chown -R "$NODE_USER:" "$p"
+  done
+  [ -d "$KEYS_DIR" ] && { n=$((n + $(find "$KEYS_DIR" -type f ! -perm 600 | wc -l))); find "$KEYS_DIR" -type f -exec chmod 600 {} +; }
+  for p in "$NODE_HOME/config/priv_validator_key.json" "$NODE_HOME/config/node_key.json" "$NODE_HOME/config/pq_vote_key.seed" \
+           "$NODE_HOME/config/pq_vote_key.seed.old" "$NODE_HOME/config/faucet.key" "$NODE_HOME/data/priv_validator_state.json"; do
+    [ -f "$p" ] || continue
+    [ "$(stat -c %a "$p")" = 600 ] || { chmod 600 "$p"; n=$((n + 1)); }
+    [ -n "$own" ] && chown "$NODE_USER:" "$p"
+  done
+  echo "done ($n changed)"
+}
+
+passwd_db() { if [ -n "$PASSWD_FILE" ]; then cat "$PASSWD_FILE"; else getent passwd; fi; }
+
+# Accounts other than root that can log in with an SSH key and use sudo.
+ssh_key_users() {
+  local name uid home
+  passwd_db | while IFS=: read -r name _ uid _ _ home _; do
+    if ! [ "$uid" -ge 1000 ] 2>/dev/null || [ "$name" = nobody ]; then continue; fi
+    grep -qsE '^[[:space:]]*([^#[:space:]].*[[:space:]])?(ssh-(ed25519|rsa|dss)|ecdsa-sha2-|sk-ssh-|sk-ecdsa-)' "$home/.ssh/authorized_keys" || continue
+    id -nG "$name" 2>/dev/null | grep -qwE 'sudo|wheel|admin|google-sudoers' || grep -rqsE "^${name}[[:space:]]" "$SUDOERS_DIR" || continue
+    echo "$name"
+  done
+}
+
+# Google Cloud OS Login: keys come from the Google account (no authorized_keys file).
+os_login() { grep -qs oslogin "$NSSWITCH" || grep -rqs google_authorized_keys "$SSHD_DIR/sshd_config" "$SSHD_DIR/sshd_config.d"; }
+
+secure_ssh() {
+  say "3. SSH: keys only, no root login"
+  local sshd conf="$SSHD_DIR/sshd_config.d/60-zetaphy.conf" want users old='' eff f
+  sshd=$(command -v "$SSHD" || command -v /usr/sbin/sshd || true)
+  if [ -z "$sshd" ] || [ ! -f "$SSHD_DIR/sshd_config" ]; then echo "no SSH server on this machine: nothing to do"; return 0; fi
+  want='# ZETAPHY (zetaphy-validator secure): SSH logins with a key only, and never as root.
+# Undo: sudo rm this file, then sudo systemctl reload ssh (or sshd).
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no'
+  if [ -f "$conf" ] && [ "$(cat "$conf")" = "$want" ]; then echo "already set ($conf)"; return 0; fi
+  if ! grep -qsiE '^[[:space:]]*Include[[:space:]].*sshd_config\.d' "$SSHD_DIR/sshd_config"; then
+    echo "skipped: $SSHD_DIR/sshd_config does not read sshd_config.d/ (an older system); the main file is left alone"
+    return 0
+  fi
+  users=$(ssh_key_users | tr '\n' ' ')
+  if [ -n "$users" ]; then
+    echo "these accounts log in with an SSH key and can use sudo: $users"
+  elif os_login; then
+    echo "Google OS Login is on: logins use the keys of your Google account (and the browser SSH button)"
+  else
+    echo "WARNING: skipped. No account other than root has an SSH key (~/.ssh/authorized_keys) and sudo,"
+    echo "so turning passwords or root login off could lock you out. Add your key to a sudo account, then run secure again."
+    return 0
+  fi
+  echo "after this, SSH asks for a key: password logins and root logins stop (your cloud's web console still works)."
+  ask "Turn off SSH passwords and root login?" || { echo "skipped"; return 0; }
+  [ -f "$conf" ] && old=$(cat "$conf")
+  mkdir -p "$SSHD_DIR/sshd_config.d"
+  printf '%s\n' "$want" > "$conf" && chmod 644 "$conf"
+  [ -d "$RUN_SSHD" ] || install -d -m 755 "$RUN_SSHD" 2>/dev/null || true   # sshd -t needs it (socket-activated ssh)
+  if ! "$sshd" -t; then
+    if [ -n "$old" ]; then printf '%s\n' "$old" > "$conf"; else rm -f "$conf"; fi
+    echo "sshd -t refused the new setting: rolled back, SSH is as it was"
+    return 0
+  fi
+  # sshd keeps the first value it reads: a file read earlier can still win
+  eff=$("$sshd" -T 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
+  if [ -n "$eff" ] && ! grep -qx 'passwordauthentication no' <<<"$eff"; then
+    echo "note: sshd still allows passwords because a file read earlier says so:"
+    for f in "$SSHD_DIR"/sshd_config.d/*.conf "$SSHD_DIR/sshd_config"; do
+      grep -qsiE '^[[:space:]]*PasswordAuthentication[[:space:]]+yes' "$f" && echo "  $f"
+    done
+    echo "change PasswordAuthentication to no there (sudo nano FILE), then: sudo sshd -t && sudo systemctl reload ssh"
+  fi
+  $SYSTEMCTL reload ssh >/dev/null 2>&1 || $SYSTEMCTL reload sshd >/dev/null 2>&1 || true
+  echo "on: $conf (sshd -t ok). Keep this session open and try a new SSH login before closing it."
+}
+
+secure_updates() {
+  say "4. automatic security updates"
+  if command -v apt-get >/dev/null; then
+    local f="$APT_CONF_DIR/20auto-upgrades"
+    if dpkg -s unattended-upgrades >/dev/null 2>&1 && grep -qs 'Unattended-Upgrade "1"' "$f"; then echo "already on (unattended-upgrades)"; return 0; fi
+    echo "unattended-upgrades installs security updates every day. It never reboots by itself (a reboot is"
+    echo "downtime): when a kernel update needs one, it says so at login; reboot at a quiet time."
+    ask "Turn on automatic security updates?" || { echo "skipped"; return 0; }
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get -o DPkg::Lock::Timeout=900 install -y -qq unattended-upgrades >/dev/null 2>&1 \
+      || { apt-get -o DPkg::Lock::Timeout=900 update -qq >/dev/null 2>&1 && apt-get -o DPkg::Lock::Timeout=900 install -y -qq unattended-upgrades >/dev/null 2>&1; } \
+      || { echo "could not install unattended-upgrades: skipped"; return 0; }
+    mkdir -p "$APT_CONF_DIR"
+    printf 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n' > "$f"
+    echo "on: $f (security updates only, no automatic reboot)"
+  elif command -v dnf >/dev/null; then
+    local t
+    if grep -qs '^upgrade_type *= *security' "$DNF_AUTO_CONF" && grep -qs '^apply_updates *= *yes' "$DNF_AUTO_CONF"; then echo "already on (dnf-automatic)"; return 0; fi
+    echo "dnf-automatic installs security updates every day (no automatic reboot)."
+    ask "Turn on automatic security updates?" || { echo "skipped"; return 0; }
+    dnf install -y -q dnf-automatic >/dev/null 2>&1 || dnf install -y -q dnf5-plugin-automatic >/dev/null 2>&1 \
+      || { echo "could not install dnf-automatic: skipped"; return 0; }
+    [ -f "$DNF_AUTO_CONF" ] || { mkdir -p "$(dirname "$DNF_AUTO_CONF")"; printf '[commands]\n' > "$DNF_AUTO_CONF"; }
+    grep -q '^\[commands\]' "$DNF_AUTO_CONF" || printf '\n[commands]\n' >> "$DNF_AUTO_CONF"
+    local kv
+    for kv in 'upgrade_type = security' 'apply_updates = yes'; do
+      local k=${kv%% *}
+      if grep -qE "^#? *$k *=" "$DNF_AUTO_CONF"; then sed -i -E "s/^#? *$k *=.*/$kv/" "$DNF_AUTO_CONF"
+      else sed -i "/^\[commands\]/a $kv" "$DNF_AUTO_CONF"; fi
+    done
+    for t in dnf-automatic.timer dnf5-automatic.timer; do $SYSTEMCTL enable --now "$t" >/dev/null 2>&1 && { echo "on: $t ($DNF_AUTO_CONF)"; return 0; }; done
+    echo "installed, but no dnf-automatic timer could be started: systemctl list-timers | grep dnf"
+  else
+    echo "no apt or dnf here: turn on this system's automatic security updates yourself"
+    echo "  (openSUSE: zypper install yast2-online-update-configuration; Arch: no automatic updates, run pacman -Syu weekly)"
+  fi
+}
+
+secure_fail2ban() {
+  say "5. fail2ban: blocks an address for an hour after 5 failed SSH logins (optional)"
+  command -v "$SSHD" >/dev/null || [ -x /usr/sbin/sshd ] || { echo "no SSH server: not needed"; return 0; }
+  local f="$F2B_DIR/zetaphy-sshd.local" ignore="127.0.0.1/8 ::1"
+  if [ -f "$f" ] && command -v fail2ban-client >/dev/null; then echo "already on ($f)"; return 0; fi
+  if ! command -v fail2ban-client >/dev/null; then
+    if command -v apt-get >/dev/null && apt-cache show fail2ban >/dev/null 2>&1; then
+      ask "Install fail2ban?" || { echo "skipped"; return 0; }
+      DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=900 install -y -qq fail2ban >/dev/null 2>&1 || { echo "fail2ban could not be installed: skipped"; return 0; }
+    elif command -v dnf >/dev/null && dnf -q list fail2ban >/dev/null 2>&1; then
+      ask "Install fail2ban?" || { echo "skipped"; return 0; }
+      dnf install -y -q fail2ban >/dev/null 2>&1 || { echo "fail2ban could not be installed: skipped"; return 0; }
+    else
+      echo "fail2ban is not in this system's package sources: skipped"; return 0
+    fi
+  fi
+  # Google's browser SSH comes through IAP from 35.235.240.0/20: never ban it
+  { os_login || grep -qs 'Google' /sys/class/dmi/id/product_name; } && ignore="$ignore 35.235.240.0/20"
+  mkdir -p "$F2B_DIR"
+  printf '# ZETAPHY (zetaphy-validator secure)\n[sshd]\nenabled = true\nbackend = systemd\nmaxretry = 5\nfindtime = 10m\nbantime = 1h\nignoreip = %s\n' "$ignore" > "$f"
+  $SYSTEMCTL enable fail2ban >/dev/null 2>&1 || true
+  if $SYSTEMCTL restart fail2ban >/dev/null 2>&1; then echo "on: $f"; else echo "fail2ban did not start (journalctl -u fail2ban -n 20); SSH is unaffected"; fi
+}
+
+# What answers from outside: listening sockets not bound to loopback. Reports only, changes nothing.
+secure_ports() {
+  say "6. open ports (what this machine answers from outside)"
+  command -v ss >/dev/null || { echo "ss not found: skipped"; return 0; }
+  local ok="tcp:22 tcp:26656 udp:68 udp:546" others="" proto addr port prog
+  $SYSTEMCTL is-active caddy >/dev/null 2>&1 && ok="$ok tcp:80 tcp:443 udp:443"
+  grep -qsE '^priv_validator_laddr = "tcp://' "$NODE_HOME/config/config.toml" && ok="$ok tcp:1234"
+  while read -r proto _ _ _ addr _ prog; do
+    port=${addr##*:}; addr=${addr%:*}
+    case "$addr" in 127.*|\[::1\]|::1|\[::ffff:127.*|*%lo) continue ;; esac
+    case " $ok " in *" $proto:$port "*) continue ;; esac
+    prog=$(grep -o '"[^"]*"' <<<"$prog" | head -1 | tr -d '"')
+    others="$others  $proto $addr:$port ${prog:+($prog)}"$'\n'
+  done < <(ss -Hlntup 2>/dev/null | sort -u)
+  echo "needed: 26656/tcp (P2P), 22/tcp (SSH)$($SYSTEMCTL is-active caddy >/dev/null 2>&1 && echo ', 80 and 443 (Caddy, https RPC)')"
+  case " $ok " in *" tcp:1234 "*) echo "  and 1234/tcp for the Horcrux cosigners only: allow just their addresses" ;; esac
+  if [ -n "$others" ]; then
+    echo "also listening on a public address (reachable unless a firewall blocks it):"
+    printf '%s' "$others"
+    echo "if one of these is not meant for the internet, close it in your cloud's firewall (Oracle: security list;"
+    echo "Google: VPC firewall rules) or on this machine, or stop the program."
+  else
+    echo "nothing else listens on a public address"
+  fi
+  if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q 'Status: active'; then echo "this machine's firewall: ufw (active)"
+  elif command -v firewall-cmd >/dev/null && firewall-cmd --state >/dev/null 2>&1; then echo "this machine's firewall: firewalld (active)"
+  elif command -v iptables >/dev/null && iptables -S INPUT 2>/dev/null | grep -q -- '-j REJECT\|-P INPUT DROP'; then echo "this machine's firewall: iptables (rejects what is not allowed)"
+  else echo "this machine has no firewall of its own: your cloud's firewall is the one that counts"; fi
+}
+
+secure() {
+  local only="words perms ssh updates fail2ban ports" a s
+  YES=''; WORDS_SAVED=''
+  while [ $# -gt 0 ]; do
+    a=$1; shift
+    case "$a" in
+      --yes|-y) YES=1 ;;
+      --words-saved) WORDS_SAVED=1 ;;
+      --only) only=${1:-}; only=${only//,/ }; shift || true ;;
+      --only=*) only=${a#--only=}; only=${only//,/ } ;;
+      *) die "secure: unknown option $a (--yes, --words-saved, --only words,perms,ssh,updates,fail2ban,ports)" ;;
+    esac
+  done
+  [ "$(id -u)" = 0 ] || [ -n "${SECURE_TEST:-}" ] || die "run with sudo"
+  echo "zetaphy-validator secure: each step says what it does and asks first. Safe to run again."
+  for s in $only; do
+    case "$s" in
+      words) secure_words ;; perms) secure_perms ;; ssh) secure_ssh ;;
+      updates) secure_updates ;; fail2ban) secure_fail2ban ;; ports) secure_ports ;;
+      *) die "secure --only: unknown step $s" ;;
+    esac
+  done
+  say "secure: done"
+}
+
 case "${1:-install}" in
   install|validator) install_all ;;
   check) check ;;
@@ -349,13 +691,7 @@ case "${1:-install}" in
   address) echo "$(acc)  $(hexaddr)" ;;
   logs) journalctl -u zetaphy-become-validator -n "${2:-30}" --no-pager; tail -n 5 /var/log/zetaphy-setup.log 2>/dev/null || true ;;
   unjail) asn "$ZETAPHYD tx slashing unjail --from validator $K --home $NODE_HOME --node $NODE --chain-id zetaphy_77390-1 --gas auto --gas-adjustment 1.5 --gas-prices 1000000000$DENOM -y -o json" | jq -c '{code, txhash, raw_log}' ;;
-  backup) cat <<EOF
-Copy these somewhere safe and offline (USB / paper), never into a chat or e-mail:
-  $NODE_HOME/config/priv_validator_key.json   the validator's signing key
-  $NODE_HOME/config/pq_vote_key.seed          its ML-DSA vote key
-  $KEYS_DIR/MNEMONICS-KEEP-SECRET.txt         the 24 words of the staking account
-Never run two machines with the same priv_validator_key.json: that is double signing (slashed, jailed for good).
-EOF
-  ;;
-  *) sed -n '2,29p' "$0"; exit 1 ;;
+  backup) if [ "${2:-}" = words ]; then backup_words; else backup; fi ;;
+  secure) shift; secure "$@" ;;
+  *) sed -n '2,35p' "$0"; exit 1 ;;
 esac

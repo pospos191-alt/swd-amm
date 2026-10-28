@@ -125,6 +125,13 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
 - A timer checks every 10 minutes: once synced and funded, it stakes 9 ZETAPHY and becomes a validator by itself, then stops checking
 - `sudo zetaphy-validator status` shows progress, `sudo zetaphy-validator backup` lists the files to keep offline,
   `sudo zetaphy-validator unjail` brings it back after downtime
+- After the backup: `sudo zetaphy-validator secure` shreds the plaintext 24-word file (only once you confirm the
+  words are saved offline, and only if the staking key is in the keyring), turns SSH passwords and root login off
+  (only when a sudo account has an SSH key, or Google OS Login is on, so you cannot lock yourself out; checked with
+  `sshd -t`, rolled back on error), turns on automatic security updates (unattended-upgrades / dnf-automatic, no
+  automatic reboot) and fail2ban, sets key folders to 700 and key files to 600, and lists ports open to the outside.
+  It asks before each change (`--yes` for none; the words then also need `--words-saved`; `--only ssh,updates` runs
+  some steps). It never deletes `priv_validator_key.json`, `pq_vote_key.seed`, `node_key.json` or the keyring.
 - Open port 26656 (and 80, 443) in your cloud provider's firewall, or use the Oracle button (`deploy/oracle`) with `validator`, which opens them
 - Where it runs:
 
@@ -257,6 +264,10 @@ A node set up before this version gets it by running the same setup command agai
     no websocket, `dump_consensus_state`, `net_info`, `unconfirmed_txs`, `genesis`
   - at most 300 requests a minute from one IP on each side, 64 at a time in all, batches of at most 20, bodies of at most 1 MB
   - `zetaphy_sendCosmosTx` only forwards transactions that are already signed (like `eth_sendRawTransaction`); it holds no keys
+- `sudo zetaphy-validator secure` (above) locks a node down after the backup. The low-egress guard closes 8545 to the
+  outside only (`! -i lo`, IPv4 and IPv6): the node's own tools keep reaching it on 127.0.0.1
+- A threshold signer for the ed25519 key (Horcrux, 2 of 3 machines) is possible as an option; what it protects and
+  what it does not (the ML-DSA vote key stays on the node): [`horcrux/README.md`](horcrux/README.md)
 - Before stage 3 (real money) these must change: keys go into multisig/HSM, https on the project's own domain name (instead of sslip.io),
   ≥ 20 independent validators, audit according to plan
 
