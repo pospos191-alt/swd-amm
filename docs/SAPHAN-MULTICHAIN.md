@@ -146,8 +146,9 @@ So about 4 MB/month idle and ~2-3 MB per round trip: hundreds of test transfers 
 Secrets and keys (names only; values never in the repository):
 
 1. `ZETAPHY_DEPLOYER_KEY`: exists (deployer `0x6af57fC3633dD0F7907f7900dbd4A2822F43a245`; also the relayer's signer).
-2. **New** `ZETAPHY_VALIDATOR_KEY`: a fresh secp256k1 key made on your own machine, kept offline too. Add it as a
-   repository secret. Run Actions -> **saphan-route** (`mode = check`): it prints the key's address.
+2. **New** `ZETAPHY_VALIDATOR_KEY`: a fresh secp256k1 key, made in a cloud shell (e.g. Google Cloud Shell:
+   `openssl rand -hex 32`), never on a shared screen or in a chat. Copy it straight into a repository secret,
+   keep a copy offline, then clear the shell (`history -c; clear`). Run Actions -> **saphan-route** (`mode = check`): it prints the key's address.
 3. Put that address in `saphan-chains.json` -> `zetaphyValidators.validators` (threshold 1; add more validators and
    raise the threshold later) and merge.
 
