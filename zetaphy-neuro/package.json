@@ -14,7 +14,11 @@
     "tradesim": "node scripts/build-tradesim.js",
     "threat-signatures": "node scripts/build-threat-signatures.js",
     "web": "node scripts/serve.js",
-    "test:web": "node --test test/web.e2e.js test/ai.e2e.js"
+    "test:web": "node --test test/web.e2e.js test/ai.e2e.js",
+    "test:ml": "node --test ml/test/*.test.js",
+    "ml:corpus": "node ml/data/build-corpus.js",
+    "ml:train": "node ml/train/train.js",
+    "ml:redteam": "node ml/redteam/run.js"
   },
   "engines": {
     "node": ">=20"

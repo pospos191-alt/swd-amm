@@ -1,0 +1,532 @@
+{
+ "modelId": "nml-b4c35477f7b1",
+ "bytes": 87086,
+ "trees": 160,
+ "features": 133,
+ "seconds": 8,
+ "data": {
+  "rows": 1867,
+  "positives": 979,
+  "sources": {
+   "synthetic-sol": 1200,
+   "tests-10k": 600,
+   "redteam": 67
+  },
+  "files": [
+   "ml/data/out/corpus.jsonl",
+   "ml/data/redteam/evasions.jsonl"
+  ]
+ },
+ "split": {
+  "train": 1197,
+  "calib": 280,
+  "test": 390
+ },
+ "thresholds": {
+  "low": 0.5,
+  "medium": 0.8,
+  "high": 0.95
+ },
+ "calib": {
+  "a": 0.8262107,
+  "b": 0.3170766
+ },
+ "heldOut": {
+  "model": {
+   "n": 390,
+   "positives": 201,
+   "negatives": 189,
+   "auc": 0.9975,
+   "recallAt1Fpr": 0.9502,
+   "thresholdAt1Fpr": 0.7878,
+   "recallAt5Fpr": 0.9851,
+   "thresholdAt5Fpr": 0.3652,
+   "brier": 0.0202,
+   "logloss": 0.0726,
+   "ece": 0.0263
+  },
+  "codeOnly": {
+   "n": 390,
+   "positives": 201,
+   "negatives": 189,
+   "auc": 0.9963,
+   "recallAt1Fpr": 0.9502,
+   "thresholdAt1Fpr": 0.7878,
+   "recallAt5Fpr": 0.9751,
+   "thresholdAt5Fpr": 0.5116,
+   "brier": 0.026,
+   "logloss": 0.0922,
+   "ece": 0.0371
+  },
+  "solidityOnly": {
+   "n": 274,
+   "positives": 130,
+   "negatives": 144,
+   "auc": 0.9949,
+   "recallAt1Fpr": 0.9231,
+   "thresholdAt1Fpr": 0.7878,
+   "recallAt5Fpr": 0.9769,
+   "thresholdAt5Fpr": 0.3773,
+   "brier": 0.0287,
+   "logloss": 0.1011,
+   "ece": 0.0352
+  },
+  "rulesOnly": {
+   "auc": 0.7966
+  },
+  "alarm": {
+   "rules": {
+    "recall": 0.7114,
+    "fpr": 0.2275
+   },
+   "combined": {
+    "recall": 0.9502,
+    "fpr": 0.2275
+   },
+   "combinedCodeOnly": {
+    "recall": 0.9502,
+    "fpr": 0.2328
+   }
+  },
+  "loweredByModel": 0,
+  "byFamily": {
+   "antiwhale": {
+    "n": 14,
+    "label": 0,
+    "flaggedRules": 9,
+    "flaggedCombined": 9
+   },
+   "blacklist-trap": {
+    "n": 14,
+    "label": 1,
+    "flaggedRules": 5,
+    "flaggedCombined": 14
+   },
+   "burnable": {
+    "n": 14,
+    "label": 0,
+    "flaggedRules": 0,
+    "flaggedCombined": 0
+   },
+   "compliance": {
+    "n": 11,
+    "label": 0,
+    "flaggedRules": 8,
+    "flaggedCombined": 8
+   },
+   "t10k-power": {
+    "n": 20,
+    "label": 1,
+    "flaggedRules": 20,
+    "flaggedCombined": 20
+   },
+   "t10k-link": {
+    "n": 28,
+    "label": 1,
+    "flaggedRules": 28,
+    "flaggedCombined": 28
+   },
+   "t10k-renounced-power": {
+    "n": 20,
+    "label": 0,
+    "flaggedRules": 0,
+    "flaggedCombined": 0
+   },
+   "t10k-selfdestruct": {
+    "n": 23,
+    "label": 1,
+    "flaggedRules": 23,
+    "flaggedCombined": 23
+   },
+   "t10k-benign": {
+    "n": 25,
+    "label": 0,
+    "flaggedRules": 0,
+    "flaggedCombined": 0
+   },
+   "dormant-fee": {
+    "n": 14,
+    "label": 1,
+    "flaggedRules": 7,
+    "flaggedCombined": 13
+   },
+   "drain": {
+    "n": 16,
+    "label": 1,
+    "flaggedRules": 0,
+    "flaggedCombined": 11
+   },
+   "hidden-mint": {
+    "n": 18,
+    "label": 1,
+    "flaggedRules": 9,
+    "flaggedCombined": 17
+   },
+   "high-tax": {
+    "n": 12,
+    "label": 1,
+    "flaggedRules": 12,
+    "flaggedCombined": 12
+   },
+   "honeypot": {
+    "n": 11,
+    "label": 1,
+    "flaggedRules": 11,
+    "flaggedCombined": 11
+   },
+   "max-sell": {
+    "n": 18,
+    "label": 1,
+    "flaggedRules": 18,
+    "flaggedCombined": 18
+   },
+   "mintable-capped": {
+    "n": 15,
+    "label": 0,
+    "flaggedRules": 10,
+    "flaggedCombined": 10
+   },
+   "pausable": {
+    "n": 9,
+    "label": 0,
+    "flaggedRules": 6,
+    "flaggedCombined": 6
+   },
+   "phish-link": {
+    "n": 10,
+    "label": 1,
+    "flaggedRules": 10,
+    "flaggedCombined": 10
+   },
+   "plain": {
+    "n": 18,
+    "label": 0,
+    "flaggedRules": 0,
+    "flaggedCombined": 0
+   },
+   "plain-renounced": {
+    "n": 18,
+    "label": 0,
+    "flaggedRules": 0,
+    "flaggedCombined": 0
+   },
+   "rewards": {
+    "n": 10,
+    "label": 0,
+    "flaggedRules": 0,
+    "flaggedCombined": 0
+   },
+   "stealth": {
+    "n": 3,
+    "label": 1,
+    "flaggedRules": 0,
+    "flaggedCombined": 0
+   },
+   "seize": {
+    "n": 14,
+    "label": 1,
+    "flaggedRules": 0,
+    "flaggedCombined": 14
+   },
+   "small-tax": {
+    "n": 14,
+    "label": 0,
+    "flaggedRules": 2,
+    "flaggedCombined": 2
+   },
+   "trading-launch": {
+    "n": 11,
+    "label": 0,
+    "flaggedRules": 8,
+    "flaggedCombined": 8
+   },
+   "vesting": {
+    "n": 10,
+    "label": 0,
+    "flaggedRules": 0,
+    "flaggedCombined": 0
+   }
+  }
+ },
+ "current": {
+  "modelId": "nml-5b00bf3c9e1d",
+  "heldOut": {
+   "model": {
+    "n": 390,
+    "positives": 201,
+    "negatives": 189,
+    "auc": 0.9938,
+    "recallAt1Fpr": 0.9502,
+    "thresholdAt1Fpr": 0.7451,
+    "recallAt5Fpr": 0.9801,
+    "thresholdAt5Fpr": 0.3021,
+    "brier": 0.0239,
+    "logloss": 0.0919,
+    "ece": 0.023
+   },
+   "codeOnly": {
+    "n": 390,
+    "positives": 201,
+    "negatives": 189,
+    "auc": 0.9903,
+    "recallAt1Fpr": 0.9005,
+    "thresholdAt1Fpr": 0.8808,
+    "recallAt5Fpr": 0.9602,
+    "thresholdAt5Fpr": 0.5248,
+    "brier": 0.0326,
+    "logloss": 0.1213,
+    "ece": 0.0322
+   },
+   "solidityOnly": {
+    "n": 274,
+    "positives": 130,
+    "negatives": 144,
+    "auc": 0.9891,
+    "recallAt1Fpr": 0.9231,
+    "thresholdAt1Fpr": 0.7451,
+    "recallAt5Fpr": 0.9538,
+    "thresholdAt5Fpr": 0.3632,
+    "brier": 0.034,
+    "logloss": 0.1267,
+    "ece": 0.0286
+   },
+   "rulesOnly": {
+    "auc": 0.7966
+   },
+   "alarm": {
+    "rules": {
+     "recall": 0.7114,
+     "fpr": 0.2275
+    },
+    "combined": {
+     "recall": 0.9403,
+     "fpr": 0.2328
+    },
+    "combinedCodeOnly": {
+     "recall": 0.9403,
+     "fpr": 0.2381
+    }
+   },
+   "loweredByModel": 0,
+   "byFamily": {
+    "antiwhale": {
+     "n": 14,
+     "label": 0,
+     "flaggedRules": 9,
+     "flaggedCombined": 9
+    },
+    "blacklist-trap": {
+     "n": 14,
+     "label": 1,
+     "flaggedRules": 5,
+     "flaggedCombined": 13
+    },
+    "burnable": {
+     "n": 14,
+     "label": 0,
+     "flaggedRules": 0,
+     "flaggedCombined": 0
+    },
+    "compliance": {
+     "n": 11,
+     "label": 0,
+     "flaggedRules": 8,
+     "flaggedCombined": 8
+    },
+    "t10k-power": {
+     "n": 20,
+     "label": 1,
+     "flaggedRules": 20,
+     "flaggedCombined": 20
+    },
+    "t10k-link": {
+     "n": 28,
+     "label": 1,
+     "flaggedRules": 28,
+     "flaggedCombined": 28
+    },
+    "t10k-renounced-power": {
+     "n": 20,
+     "label": 0,
+     "flaggedRules": 0,
+     "flaggedCombined": 0
+    },
+    "t10k-selfdestruct": {
+     "n": 23,
+     "label": 1,
+     "flaggedRules": 23,
+     "flaggedCombined": 23
+    },
+    "t10k-benign": {
+     "n": 25,
+     "label": 0,
+     "flaggedRules": 0,
+     "flaggedCombined": 0
+    },
+    "dormant-fee": {
+     "n": 14,
+     "label": 1,
+     "flaggedRules": 7,
+     "flaggedCombined": 13
+    },
+    "drain": {
+     "n": 16,
+     "label": 1,
+     "flaggedRules": 0,
+     "flaggedCombined": 12
+    },
+    "hidden-mint": {
+     "n": 18,
+     "label": 1,
+     "flaggedRules": 9,
+     "flaggedCombined": 15
+    },
+    "high-tax": {
+     "n": 12,
+     "label": 1,
+     "flaggedRules": 12,
+     "flaggedCombined": 12
+    },
+    "honeypot": {
+     "n": 11,
+     "label": 1,
+     "flaggedRules": 11,
+     "flaggedCombined": 11
+    },
+    "max-sell": {
+     "n": 18,
+     "label": 1,
+     "flaggedRules": 18,
+     "flaggedCombined": 18
+    },
+    "mintable-capped": {
+     "n": 15,
+     "label": 0,
+     "flaggedRules": 10,
+     "flaggedCombined": 10
+    },
+    "pausable": {
+     "n": 9,
+     "label": 0,
+     "flaggedRules": 6,
+     "flaggedCombined": 6
+    },
+    "phish-link": {
+     "n": 10,
+     "label": 1,
+     "flaggedRules": 10,
+     "flaggedCombined": 10
+    },
+    "plain": {
+     "n": 18,
+     "label": 0,
+     "flaggedRules": 0,
+     "flaggedCombined": 1
+    },
+    "plain-renounced": {
+     "n": 18,
+     "label": 0,
+     "flaggedRules": 0,
+     "flaggedCombined": 0
+    },
+    "rewards": {
+     "n": 10,
+     "label": 0,
+     "flaggedRules": 0,
+     "flaggedCombined": 0
+    },
+    "stealth": {
+     "n": 3,
+     "label": 1,
+     "flaggedRules": 0,
+     "flaggedCombined": 0
+    },
+    "seize": {
+     "n": 14,
+     "label": 1,
+     "flaggedRules": 0,
+     "flaggedCombined": 14
+    },
+    "small-tax": {
+     "n": 14,
+     "label": 0,
+     "flaggedRules": 2,
+     "flaggedCombined": 2
+    },
+    "trading-launch": {
+     "n": 11,
+     "label": 0,
+     "flaggedRules": 8,
+     "flaggedCombined": 8
+    },
+    "vesting": {
+     "n": 10,
+     "label": 0,
+     "flaggedRules": 0,
+     "flaggedCombined": 0
+    }
+   }
+  }
+ },
+ "decision": {
+  "better": true,
+  "why": "AUC 0.9938 -> 0.9975 (+0.0037), recall@1%FPR 0.9502 -> 0.9502 (+0.0000)"
+ },
+ "leaveFamilyOut": {
+  "blacklist-trap": {
+   "n": 66,
+   "recallAt1Fpr": 0.682,
+   "rulesAlarm": 0.379,
+   "combinedAlarm": 0.682
+  },
+  "dormant-fee": {
+   "n": 71,
+   "recallAt1Fpr": 0.31,
+   "rulesAlarm": 0.394,
+   "combinedAlarm": 0.69
+  },
+  "drain": {
+   "n": 73,
+   "recallAt1Fpr": 0.863,
+   "rulesAlarm": 0,
+   "combinedAlarm": 0.795
+  },
+  "hidden-mint": {
+   "n": 73,
+   "recallAt1Fpr": 0.37,
+   "rulesAlarm": 0.452,
+   "combinedAlarm": 0.616
+  },
+  "high-tax": {
+   "n": 60,
+   "recallAt1Fpr": 1,
+   "rulesAlarm": 1,
+   "combinedAlarm": 1
+  },
+  "honeypot": {
+   "n": 60,
+   "recallAt1Fpr": 1,
+   "rulesAlarm": 1,
+   "combinedAlarm": 1
+  },
+  "max-sell": {
+   "n": 60,
+   "recallAt1Fpr": 1,
+   "rulesAlarm": 1,
+   "combinedAlarm": 1
+  },
+  "phish-link": {
+   "n": 60,
+   "recallAt1Fpr": 0.8,
+   "rulesAlarm": 1,
+   "combinedAlarm": 1
+  },
+  "seize": {
+   "n": 72,
+   "recallAt1Fpr": 0.917,
+   "rulesAlarm": 0,
+   "combinedAlarm": 0.847
+  }
+ },
+ "caveat": "Held-out rows come from the same synthetic generators as the training rows (and synthetic market facts), so these numbers are optimistic for real contracts. See leaveFamilyOut and codeOnly for harder estimates."
+}
