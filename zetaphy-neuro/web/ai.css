@@ -1,0 +1,24 @@
+/* AI analyst panel (web/ai-panel.js). Uses the page's colour tokens (style.css). */
+.ai { margin: 16px 0; padding: 12px 14px; border: 1px dashed var(--accent); border-radius: 12px; background: var(--card); }
+.ai h2 { font-size: 1.05rem; margin: 0 0 6px; }
+.ai h3 { font-size: .95rem; margin: 12px 0 4px; }
+.ai-badge { display: inline-block; font-size: .7rem; font-weight: 600; letter-spacing: .02em; padding: 1px 7px; border-radius: 999px; color: var(--on-accent); background: var(--accent); vertical-align: middle; }
+.ai-intro, .ai-meta, .ai-help { color: var(--muted); font-size: .85rem; margin: 4px 0 8px; }
+.ai details { margin: 8px 0; }
+.ai details summary { cursor: pointer; color: var(--accent); }
+.ai label { display: block; font-size: .85rem; color: var(--muted); margin-top: 6px; }
+.ai input[type="checkbox"] { width: auto; margin-right: 6px; }
+.ai-check { display: flex !important; align-items: center; }
+.ai-warn { color: var(--medium); font-size: .82rem; margin: 6px 0; }
+.ai-contradict, .ai-suspicious { border-left: 3px solid var(--medium); padding-left: 8px; }
+.ai button { margin-top: 8px; font: inherit; border-radius: 10px; padding: 8px 12px; cursor: pointer; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+#ai-run, #ai-ask-go { font-weight: 600; color: var(--on-accent); background: var(--accent); border: 0; }
+.ai button:disabled { opacity: .6; cursor: progress; }
+#ai-status { color: var(--muted); min-height: 1.2em; margin: 8px 0; }
+#ai-status.error { color: var(--high); }
+.ai ul, .ai ol { margin: 4px 0; padding-left: 20px; display: grid; gap: 6px; overflow-wrap: anywhere; }
+.ai li small.evidence { display: block; color: var(--muted); font-size: .75rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.ai .conf-high b { color: var(--high); }
+.ai .conf-medium b { color: var(--medium); }
+.ai-q { font-weight: 600; margin: 0; }
+.ai [hidden] { display: none !important; }

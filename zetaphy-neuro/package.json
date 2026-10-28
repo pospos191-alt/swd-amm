@@ -14,7 +14,7 @@
     "tradesim": "node scripts/build-tradesim.js",
     "threat-signatures": "node scripts/build-threat-signatures.js",
     "web": "node scripts/serve.js",
-    "test:web": "node --test test/web.e2e.js"
+    "test:web": "node --test test/web.e2e.js test/ai.e2e.js"
   },
   "engines": {
     "node": ">=20"

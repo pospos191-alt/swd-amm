@@ -163,6 +163,8 @@ function render(report) {
   dd.append(a); dl.append(dt, dd);
   renderEarly();
   $('result').hidden = false;
+  // Optional add-ons (web/ai-panel.js) listen for the report shown; the page never depends on them.
+  dispatchEvent(new CustomEvent('neuro:report', { detail: { report } }));
 }
 
 // Advisory notice from the project's server: a reason category, a severity
