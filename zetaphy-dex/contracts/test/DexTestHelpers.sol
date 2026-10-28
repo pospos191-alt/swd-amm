@@ -168,6 +168,21 @@ contract GasHogRegistry {
     }
 }
 
+/// A NeuroScore stand-in for the router's score check: a fixed answer, after
+/// burning `burn` gas (to test SCORE_GAS and the fail-closed path).
+contract GasHogScorer {
+    uint256 public burn;
+    int256 public score;
+    bool public known;
+    function set(uint256 b, bool k, int256 s) external { burn = b; known = k; score = s; }
+    function scoreOf(address) external view returns (bool, int256, uint8) {
+        uint256 start = gasleft();
+        uint256 x;
+        while (start - gasleft() < burn) x++;
+        return (known, score, 0);
+    }
+}
+
 /// Sends its value to `to` without calling it (SELFDESTRUCT in the
 /// constructor), the way stray native coins can reach the router.
 contract ForceSend {

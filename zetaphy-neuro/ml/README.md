@@ -145,6 +145,13 @@ Everything else runs with `contents: read`. Actions are pinned by SHA; no secret
 One-time setting: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
 Pull requests also run the ML tests when `zetaphy-neuro/ml/**` or `src/**` change.
 
+## On-chain score and zkML (`onchain/`)
+
+`node ml/onchain/export.js` turns `model.json` into integers (scale 1e7) packed 6 bytes per node (`onchain/model.fixed.json`,
+18,616 bytes, its keccak256 is the model hash H). `zetaphy-network/contracts/NeuroScore.sol` runs exactly those bytes on-chain;
+the DEX router can optionally refuse buys above a score. `onchain/zk/` is a Groth16 prototype proving "a committed feature
+vector yields this margin under H". Parity, gas, proof size/time and limits: `docs/future/onchain-ml.md`.
+
 ## Commands
 
 ```bash

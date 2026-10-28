@@ -121,6 +121,13 @@ export async function createChain(names = [], fundAddresses = {}) {
           if (res.execResult.exceptionError) throw new Error(decodeError(res.execResult.returnValue));
           return (res.execResult.logs ?? []).map(([, topics, data]) => { try { return iface.parseLog({ topics: topics.map(bytesToHex), data: bytesToHex(data) }); } catch { return null; } });
         },
+        /** Execution gas of a call/tx (without the 21000 base and calldata cost), and the calldata. */
+        async gas(from, fn, args = []) {
+          const data = iface.encodeFunctionData(fn, args);
+          const res = await exec(from, address, data);
+          if (res.execResult.exceptionError) throw new Error(decodeError(res.execResult.returnValue));
+          return { exec: Number(res.execResult.executionGasUsed), data };
+        },
         async sendValue(from, value) {
           const res = await exec(from, address, '0x', value);
           if (res.execResult.exceptionError) throw new Error(decodeError(res.execResult.returnValue));

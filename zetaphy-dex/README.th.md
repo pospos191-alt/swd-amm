@@ -63,6 +63,11 @@ router ใช้แค่ `deposit` / `withdraw` / `transfer` / `balanceOf` จ�
   `RegistryUnavailable`) ทั้ง router**: ทุกการซื้อเหรียญและทุกการเพิ่มสภาพคล่องหยุด จนกว่า governance จะตั้ง registry เป็น `0`
   (ปลดทันที) หรือเปลี่ยนเป็นตัวที่ตอบได้ ตอนตั้งค่า factory ตรวจว่าที่อยู่นั้นตอบ `isContractEnforced` ได้ภายในแก๊สเดียวกัน (กันพิมพ์ผิด)
   แต่พิสูจน์ไม่ได้ว่าจะตอบต่อไปในอนาคต
+- *คะแนนจากโมเดลของ Neuro (เลือกเปิดได้, ค่าเริ่มต้นปิด):* governance ตั้ง `factory.setNeuroScore(<NeuroScore>, threshold)`
+  (`node cli.js set-neuro-score <addr> --min-p 0.8`; `0x0` = ปิด) เมื่อเปิด router จะ **ปฏิเสธการซื้อ (swap เข้า)** เหรียญที่คะแนนปัจจุบัน
+  ภายใต้โมเดลที่ใช้งานอยู่ของ NeuroScore `>= threshold` (`TokenScoreTooHigh(token, score)`; คะแนนคือ calibrated logit x 1e7
+  เป็นการประมาณทางสถิติ ไม่ใช่ข้อค้นพบ) เหรียญที่ยังไม่มีคะแนนภายใต้โมเดลปัจจุบันผ่านได้ การขายและสภาพคล่องไม่ถาม scorer
+  fail closed เหมือน registry (`ScoreUnavailable`, `SCORE_GAS` = 50,000) รายละเอียด แก๊ส และข้อจำกัด: `docs/future/onchain-ml.md`
 - *หน้าเว็บ:* ตรวจเหรียญก่อนซื้อ ก่อนเพิ่มสภาพคล่อง และก่อนนำเข้าด้วยที่อยู่ ด้วยคีย์เดียวกับกระเป๋า ZETAPHY
   (`zetaphy-network/src/vaccine.js`): ที่อยู่/โค้ด (`isContractFlagged`/`isContractEnforced`), ลายนิ้วมือ fp1 ของ Neuro
   (`isFlagged`/`isEnforced`) และโค้ดปลายทางของ proxy (EIP-1167, EIP-1967) ธงที่ยังไม่บังคับ = **เตือน** และต้องติ๊กยืนยัน,

@@ -134,6 +134,13 @@ red team รอบใหม่กับผู้สมัคร, ผู้สม
 ตั้งค่าครั้งเดียว: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests"
 PR ที่แก้ `zetaphy-neuro/ml/**` หรือ `src/**` จะรันเทสต์ ML ด้วย
 
+## คะแนนบนเชนและ zkML (`onchain/`)
+
+`node ml/onchain/export.js` แปลง `model.json` เป็นจำนวนเต็ม (สเกล 1e7) อัดแน่น 6 ไบต์ต่อโหนด (`onchain/model.fixed.json`
+18,616 ไบต์ keccak256 ของมันคือแฮชโมเดล H) `zetaphy-network/contracts/NeuroScore.sol` รันไบต์ชุดเดียวกันนี้บนเชน
+router ของ DEX เลือกปฏิเสธการซื้อเมื่อคะแนนสูงเกินได้ `onchain/zk/` คือต้นแบบ Groth16 ที่พิสูจน์ว่า "เวกเตอร์ฟีเจอร์ที่ commit ไว้
+ให้ margin นี้ภายใต้ H" ความตรงกัน แก๊ส ขนาด/เวลาของ proof และข้อจำกัด: `docs/future/onchain-ml.th.md`
+
 ## คำสั่ง
 
 ```bash

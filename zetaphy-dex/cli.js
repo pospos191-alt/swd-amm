@@ -5,6 +5,9 @@
 //   node cli.js status  --rpc <url> [--deployments <file>]
 //   node cli.js set-registry <address|0x0> --rpc <url> --key-file <file> [--deployments <file>]
 //   node cli.js set-fee-to   <address|0x0> --rpc <url> --key-file <file> [--deployments <file>]
+//   node cli.js set-neuro-score <NeuroScore|0x0> [--min-p 0.8] --rpc <url> --key-file <file> [--deployments <file>]
+//                            the router's optional buy check (off by default): refuse buying a token whose
+//                            current NeuroScore probability is >= --min-p (stored as the calibrated logit x 1e7)
 //   node cli.js mint-test <token> <to> <amount> --rpc <url> --key-file <file>
 //
 // The key: a file holding a 0x… private key, or an Ethereum keystore JSON (then
@@ -224,6 +227,25 @@ async function govSet(fn, value, opt, log) {
   log(`${fn}(${a}) done`);
 }
 
+/** Probability -> NeuroScore's fixed score (calibrated logit x 1e7), as in zetaphy-neuro/ml/onchain/fixed.js. */
+export function scoreThresholdOf(p) {
+  const x = Number(p);
+  if (!(x > 0 && x < 1)) throw new Error(`--min-p: a probability strictly between 0 and 1, got ${p}`);
+  return BigInt(Math.round(Math.log(x / (1 - x)) * 1e7));
+}
+
+async function setNeuroScore(value, opt, log) {
+  const a = addrOpt(value, 'set-neuro-score');
+  if (a === undefined) throw new Error('set-neuro-score <address|0x0> [--min-p 0.8]');
+  const threshold = a === ZERO ? 0n : scoreThresholdOf(opt['min-p'] ?? '0.8');
+  const { provider, signer } = connect(opt, true);
+  const net = await provider.getNetwork();
+  const d = readDeployments(opt, net.chainId);
+  const f = new Contract(d.contracts.factory, art('ZetaphyFactory').abi, signer);
+  await wait(f.setNeuroScore(a, threshold));
+  log(`setNeuroScore(${a}, ${threshold}) done`);
+}
+
 async function mintTest(pos, opt, log) {
   const [token, to, amount] = pos;
   if (!isAddress(token) || !isAddress(to) || !amount) throw new Error('mint-test <token> <to> <amount>');
@@ -248,6 +270,7 @@ export async function main(argv, log = console.log) {
     case 'status': return status(opt, log);
     case 'set-registry': return govSet('setThreatRegistry', pos[0], opt, log);
     case 'set-fee-to': return govSet('setFeeTo', pos[0], opt, log);
+    case 'set-neuro-score': return setNeuroScore(pos[0], opt, log);
     case 'mint-test': return mintTest(pos, opt, log);
     default: log(HELP); if (cmd && cmd !== 'help' && cmd !== '--help') throw new Error(`unknown command ${cmd}`);
   }

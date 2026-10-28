@@ -63,6 +63,11 @@ The router only uses `deposit` / `withdraw` / `transfer` / `balanceOf`, so it ca
   `RegistryUnavailable`) for the whole router**: every token buy and every liquidity add stops until governance sets the registry to `0`
   (unblocks immediately) or changes it to one that responds. When it is set, the factory checks that the address can answer `isContractEnforced` within the same gas (to catch typos),
   but it cannot prove that it will keep answering in the future.
+- *Neuro model score (optional, OFF by default):* governance sets `factory.setNeuroScore(<NeuroScore>, threshold)`
+  (`node cli.js set-neuro-score <addr> --min-p 0.8`; `0x0` = off). When on, the router **refuses buys (swap in)** of a token whose
+  current score under NeuroScore's active model is `>= threshold` (`TokenScoreTooHigh(token, score)`; the score is a calibrated logit x 1e7,
+  a statistical estimate, not a finding). A token with no score under the active model is let through. Selling and liquidity never ask the
+  scorer. Fails closed like the registry (`ScoreUnavailable`, `SCORE_GAS` = 50,000). Design, gas and limits: `docs/future/onchain-ml.md`.
 - *Web page:* checks tokens before buying, before adding liquidity, and before importing by address, using the same keys as the ZETAPHY wallet
   (`zetaphy-network/src/vaccine.js`): address/code (`isContractFlagged`/`isContractEnforced`), Neuro fp1 fingerprint
   (`isFlagged`/`isEnforced`), and the target code behind proxies (EIP-1167, EIP-1967). A flag that is not yet enforced = **warning**, and the user must tick to confirm;

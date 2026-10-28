@@ -24,6 +24,14 @@ pragma solidity 0.8.26;
 // liquidity always work, so nobody is locked in. A flag is automated,
 // reproducible code analysis, not an accusation (docs/LEGAL.md).
 //
+// Neuro score (optional, OFF by default): when governance set
+// factory.neuroScore() (zero = off), the router also refuses to swap INTO a
+// token whose score under NeuroScore's active model is >= factory.scoreThreshold()
+// (TokenScoreTooHigh). A token without a current score is let through; selling
+// and liquidity never ask the scorer. Like the registry, the scorer FAILS
+// CLOSED (ScoreUnavailable) if it stops answering within SCORE_GAS; governance
+// lifts that by setting it to zero.
+//
 // Governance's reach over the router (stated plainly, see README):
 //   - the registry check FAILS CLOSED: if the registry governance set stops
 //     answering (reverts, returns junk, or needs more than REGISTRY_GAS), or
@@ -47,6 +55,7 @@ interface IFactory {
     function createPair(address, address) external returns (address);
     function threatRegistry() external view returns (address);
     function governance() external view returns (address);
+    function buyChecks() external view returns (address registry, address scorer, int256 threshold);
     function PAIR_CODE_HASH() external view returns (bytes32);
 }
 
@@ -72,6 +81,10 @@ interface IThreatView {
     function isContractEnforced(address who) external view returns (bool enforced, uint8 reason);
 }
 
+interface IScoreView {
+    function scoreOf(address token) external view returns (bool known, int256 score, uint8 level);
+}
+
 contract ZetaphyRouter {
     address public immutable factory;
     address public immutable WETH;
@@ -79,6 +92,8 @@ contract ZetaphyRouter {
 
     /// Gas given to each ThreatRegistry query: a registry that needs more fails closed (RegistryUnavailable).
     uint256 public constant REGISTRY_GAS = 100_000;
+    /// Gas given to each NeuroScore query (a stored score: a few SLOADs).
+    uint256 public constant SCORE_GAS = 50_000;
 
     error Expired();
     error InvalidPath();
@@ -99,6 +114,10 @@ contract ZetaphyRouter {
     error TokenEnforced(address token, uint8 reason);
     /// The ThreatRegistry governance set did not answer (within REGISTRY_GAS); fails closed.
     error RegistryUnavailable();
+    /// NeuroScore's current score for this token is at or above the threshold governance set.
+    error TokenScoreTooHigh(address token, int256 score);
+    /// The NeuroScore governance set did not answer (within SCORE_GAS); fails closed.
+    error ScoreUnavailable();
 
     event Swept(address indexed to, uint256 amount);
 
@@ -141,11 +160,23 @@ contract ZetaphyRouter {
         if (enforced) revert TokenEnforced(token, reason);
     }
 
+    /// Reverts with TokenScoreTooHigh if `token` has a current score >= threshold.
+    function _refuseScored(address scorer, int256 threshold, address token) private view {
+        if (token == WETH) return;
+        (bool ok, bytes memory r) = scorer.staticcall{gas: SCORE_GAS}(abi.encodeCall(IScoreView.scoreOf, (token)));
+        if (!ok || r.length < 96) revert ScoreUnavailable();
+        (bool known, int256 score,) = abi.decode(r, (bool, int256, uint8));
+        if (known && score >= threshold) revert TokenScoreTooHigh(token, score);
+    }
+
     /// Every token a swap along `path` receives into a pool or hands out (path[1..]); not the one sold.
     function _checkPath(address[] calldata path) private view {
-        address registry = IFactory(factory).threatRegistry();
-        if (registry == address(0)) return;
-        for (uint256 i = 1; i < path.length; i++) _refuseEnforced(registry, path[i]);
+        (address registry, address scorer, int256 threshold) = IFactory(factory).buyChecks();
+        if (registry == address(0) && scorer == address(0)) return;
+        for (uint256 i = 1; i < path.length; i++) {
+            if (registry != address(0)) _refuseEnforced(registry, path[i]);
+            if (scorer != address(0)) _refuseScored(scorer, threshold, path[i]);
+        }
     }
 
     function _checkPair(address a, address b) private view {

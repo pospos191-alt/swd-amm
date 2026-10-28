@@ -1,0 +1,66 @@
+{
+ "modelId": "nml-b4c35477f7b1",
+ "hash": "0x7c420111bec7912ea5aeea2cc23cf1cb61e5d1379aa36eb825e241eab81a4132",
+ "row": "antiwhale-1",
+ "marginOffset": "1099511627776",
+ "a": [
+  "0x15d43712ea0efc4473a42e6b304e064425b9d398ebe44ec599d7bcd1895e9cac",
+  "0x2ed4f8a1343a7c5e7a3510a490faeb36d659ee0f873893ccaf941f70290dcbb5"
+ ],
+ "b": [
+  [
+   "0x1cbfde0b55f5be73604fa9bfb9a421b6b55658670f794bf50113305f35e90ae4",
+   "0x130d0b509d8af22ee116d0b808631ac79ae90743c8fa9fd9646ab00bbcb6bb28"
+  ],
+  [
+   "0x0d27fbc9c1b6c6e428b44c3101484e78449b1f36de95f49e037f4c1a96852624",
+   "0x0a400ca6f0668911ab5a7a662f63adf44821d6ef8884290632d2efaeb267240d"
+  ]
+ ],
+ "c": [
+  "0x2806457ecab05f1db88dfdb760df64e75ba191ef413c72bdbdab98669139eac7",
+  "0x10fe74caa2b52e68c348c0f4037b331f4a13987b907ddc3fc1133ab921d98a60"
+ ],
+ "publicSignals": [
+  "0x2d9a08e47c0228f60bc978e6fdab6b7603051ab63719939a3069dad73b67ca31",
+  "0x000000000000000000000000000000000000000000000000000000fffc92b6ac",
+  "0x000000000000000000000000000000007c420111bec7912ea5aeea2cc23cf1cb",
+  "0x0000000000000000000000000000000061e5d1379aa36eb825e241eab81a4132"
+ ],
+ "report": {
+  "when": "2026-10-28T20:43:04.480Z",
+  "node": "v22.22.0",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "steps": {
+   "groth16Setup": {
+    "seconds": 19.855,
+    "zkeyBytes": 11338859
+   }
+  },
+  "model": {
+   "id": "nml-b4c35477f7b1",
+   "hash": "0x7c420111bec7912ea5aeea2cc23cf1cb61e5d1379aa36eb825e241eab81a4132",
+   "trees": 160,
+   "features": 133
+  },
+  "circuit": {
+   "constraints": 21689,
+   "wires": 21318,
+   "publicOutputs": 4,
+   "privateInputs": 134,
+   "compileSeconds": 9.105
+  },
+  "proofs": {
+   "rows": 5,
+   "proveSeconds": {
+    "min": 1.114,
+    "max": 1.528,
+    "mean": 1.299
+   },
+   "verifySecondsJs": 0.086,
+   "proofBytesOnChain": 256,
+   "proofBytesJson": 722,
+   "publicSignals": 4
+  }
+ }
+}

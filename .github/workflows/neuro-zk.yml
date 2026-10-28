@@ -1,0 +1,73 @@
+# Neuro zkML prototype (zetaphy-neuro/ml/onchain/zk, docs/future/onchain-ml.md).
+#
+# Rebuilds the circuit for the committed model, makes a throwaway Groth16 setup on
+# the runner (TESTNET ONLY: one machine's randomness), proves a few held-out rows,
+# verifies them, exports the Solidity verifier, and publishes sizes and timings in
+# the job summary + an artifact. Then the on-chain test runs against that fresh
+# verifier and proof. Nothing is committed, pushed or deployed. No secrets.
+# On demand, and on pull requests that touch the model or the zk code.
+
+name: Neuro zkML
+
+on:
+  workflow_dispatch:
+    inputs:
+      rows:
+        description: 'Held-out rows to prove'
+        required: false
+        default: '5'
+  pull_request:
+    paths: ['zetaphy-neuro/ml/model.json', 'zetaphy-neuro/ml/onchain/**', 'zetaphy-network/contracts/NeuroScore*.sol', '.github/workflows/neuro-zk.yml']
+
+permissions: {}
+
+concurrency:
+  group: neuro-zk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prove:
+    name: Circuit, setup, prove, verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      ROWS: ${{ github.event.inputs.rows || '5' }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - name: Install circom2 (WASM) + snarkjs + circomlib, pinned
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        run: npm ci --no-audit --no-fund
+      - name: Build, set up, prove and verify
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        run: |
+          node run.js --rows "$ROWS" --install
+          {
+            echo '## Neuro zkML (testnet-only setup made on this runner)'
+            echo '```json'
+            cat out/report.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: On-chain verifier test against the fresh verifier and proof
+        working-directory: zetaphy-network
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+          node --test test/neuroscore-zk.test.js
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: neuro-zk-${{ github.run_id }}
+          path: |
+            zetaphy-neuro/ml/onchain/zk/out/report.json
+            zetaphy-neuro/ml/onchain/zk/out/fixture.json
+            zetaphy-neuro/ml/onchain/zk/out/verification_key.json
+            zetaphy-neuro/ml/onchain/zk/out/NeuroScoreVerifier.sol
+          retention-days: 30
+          if-no-files-found: warn
