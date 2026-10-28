@@ -24,7 +24,7 @@
   },
   "zetaphyValidators": {
     "about": "OUR Hyperlane validator(s) for origin ZETAPHY: the ISM on every source chain's lockbox trusts these for releases. The address of the repository secret ZETAPHY_VALIDATOR_KEY goes here (saphan-route check prints it). More validators: add them, raise the threshold, then governance sets the new ISM on each lockbox.",
-    "validators": [],
+    "validators": ["0x80b654fdB439348D2A3DC7bbF0eC398e165019Bc"],
     "threshold": 1
   },
   "origin": {
