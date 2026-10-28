@@ -153,9 +153,19 @@
       <div class="row"><button class="ghost" type="button" data-copy="k-import" data-t="copy"></button><span class="copied" id="copied-k-import" aria-live="polite"></span></div></div>
     <p class="small" data-t="optBnote"></p>
     <p data-t="optC"></p>
-    <div class="cmd"><pre id="k-show">sudo cat /home/zetaphy/.zetaphy-genesis-keys/MNEMONICS-KEEP-SECRET.txt</pre>
+    <div class="cmd"><pre id="k-show">sudo zetaphy-validator backup words</pre>
       <div class="row"><button class="ghost" type="button" data-copy="k-show" data-t="copy"></button><span class="copied" id="copied-k-show" aria-live="polite"></span></div></div>
     <div class="note"><p data-t="keysWarn"></p></div>
+      </div>
+    </details>
+    <details class="more" id="m-h-secure" open>
+      <summary><h2 id="h-secure" data-t="secH"></h2></summary>
+      <div class="more-body">
+    <p data-t="secP"></p>
+    <div class="cmd"><pre id="k-secure">sudo zetaphy-validator secure</pre>
+      <div class="row"><button class="ghost" type="button" data-copy="k-secure" data-t="copy"></button><span class="copied" id="copied-k-secure" aria-live="polite"></span></div></div>
+    <p data-t="secDo"></p>
+    <p class="small" data-t="secNote"></p>
       </div>
     </details>
     <details class="more" id="m-h-safe" open>
@@ -259,6 +269,8 @@ done
       <tr><td>sudo zetaphy-validator logs</td><td data-t="cLogs"></td></tr>
       <tr><td>sudo zetaphy-validator unjail</td><td data-t="cUnjail"></td></tr>
       <tr><td>sudo zetaphy-validator backup</td><td data-t="cBackup"></td></tr>
+      <tr><td>sudo zetaphy-validator backup words</td><td data-t="cWords"></td></tr>
+      <tr><td>sudo zetaphy-validator secure</td><td data-t="cSecure"></td></tr>
     </table></div>
       </div>
     </details>
