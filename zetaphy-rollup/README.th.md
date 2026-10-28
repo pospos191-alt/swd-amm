@@ -1,6 +1,10 @@
 [English](README.md) | **ภาษาไทย**
 
-# ZETAPHY Rollup — เชนใหม่ แบบที่ 2 (Rollup) งบ 0 บาท
+# ZETAPHY Rollup — เชนใหม่แบบ OP Stack บน Sepolia งบ 0 บาท
+
+> ตามเอกสาร "ทางเลือกความปลอดภัยร่วม" โฟลเดอร์นี้คือแถว "OP Stack (รันเอง)"
+> ของตารางแบบที่ 2 ส่วนทางที่เอกสารแนะนำ (Evolve บน Celestia, มีเหรียญแก๊ส
+> ของตัวเอง) อยู่ที่ [`zetaphy-evolve/`](../zetaphy-evolve/README.th.md)
 
 **เชนใหม่แยกต่างหาก ไม่ใช่การย้าย ZETAPHY**: เชน ZETAPHY เดิม (Cosmos EVM,
 chain id 77390) ยังรันอยู่ที่เดิมทุกอย่าง ไม่ถูกแตะ ไม่ถูกย้าย

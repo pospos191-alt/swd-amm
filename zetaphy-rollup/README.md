@@ -2,6 +2,11 @@
 
 # ZETAPHY Rollup — a second, separate chain (OP Stack L2 on Sepolia), zero-baht plan
 
+> In the shared-security document's option-2 table this folder is the
+> "self-hosted OP Stack" row; the variant the document recommends
+> (Evolve on Celestia, with its own gas coin) lives in
+> [`zetaphy-evolve/`](../zetaphy-evolve/README.md).
+
 A **new chain**, not a migration: the existing ZETAPHY Cosmos chain
 (chain id 77390) keeps running untouched. This one is an OP Stack rollup
 that posts its data to Ethereum Sepolia.
