@@ -20,7 +20,7 @@ const CSP = vercel.headers[0].headers.find((h) => h.key === 'Content-Security-Po
 test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120_000 }, async () => {
   const site = await serve(DIST, { headers: { 'content-security-policy': CSP } });
   const browser = await chromium.launch(exe ? { executablePath: exe } : {});
-  let nodeDown = false;
+  let nodeDown = false, hardPow = false;
   try {
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     const errors = [];
@@ -32,6 +32,7 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
       if (new URL(u).origin === 'https://rpc.sawasdeecoin.com') {
         if (nodeDown) return route.abort('connectionrefused');
         const a = answer(u, route.request().postData());
+        if (hardPow && a?.result?.proof) a.result = { ...a.result, bits: 40 }; // a session that keeps mining
         if (a) return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(a) });
       }
       return route.fulfill({ status: 404, headers: { 'access-control-allow-origin': '*' }, body: '' });
@@ -52,25 +53,68 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
     assert.match(await page.textContent('.page-mine'), /not real mining/);
     await page.waitForFunction(() => /12 zero bits/.test(document.getElementById('mn-bits').textContent));
     assert.match(await page.textContent('#mn-left'), /199 \/ 200/);
-    assert.equal(await page.inputValue('#mn-threads'), '2', 'two threads by default');
-    assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, 'mine: one screen');
+    assert.equal(await page.textContent('#mn-threads'), '2', 'two workers by default');
+    assert.equal(await page.textContent('#mn-status'), 'Idle');
+    assert.equal(await page.textContent('#mn-start'), 'Start mining');
+    assert.equal(await page.locator('#mn-crew svg').count(), 2, 'a miner per worker');
+    assert.equal(await page.evaluate(() => document.getElementById('mn-art').classList.contains('on')), false, 'still while idle');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight), true, 'mine: no page scroll outside the panel');
     assert.deepEqual(await page.evaluate(() => window.__workers), { made: 0, ended: 0 }, 'nothing runs before Start');
 
     await page.click('#mn-start');
     await page.waitForFunction(() => document.getElementById('mn-msg').classList.contains('bad'));
     assert.match(await page.textContent('#mn-msg'), /0x… or zetaphy1…/, 'an address first');
     await page.fill('#mn-addr', ACC);
-    await page.selectOption('#mn-threads', '1');
+
+    // a long session: the status, the miners at work, workers changed live, pause, stop
+    hardPow = true;
+    const live = () => page.evaluate(() => window.__workers.made - window.__workers.ended);
+    await page.click('#mn-start');
+    await page.waitForFunction(() => document.getElementById('mn-status').dataset.s === 'mining');
+    assert.equal(await page.textContent('#mn-status'), 'Mining');
+    assert.equal(await page.textContent('#mn-start'), 'Stop mining');
+    assert.ok(await page.isVisible('#mn-art.on #mn-crew svg .mg-arm'), 'the miners swing while mining');
+    assert.match(await page.textContent('#mn-session'), /Session started \d\d:\d\d · 0x6af5/);
+    assert.equal(await live(), 2);
+    if (await page.evaluate(() => (navigator.hardwareConcurrency || 2) >= 3)) {
+      await page.click('#mn-more');
+      await page.waitForFunction(() => window.__workers.made - window.__workers.ended === 3);
+      assert.equal(await page.textContent('#mn-threads'), '3');
+      assert.equal(await page.locator('#mn-crew svg').count(), 3);
+      await page.click('#mn-less');
+    }
+    await page.click('#mn-less');
+    await page.waitForFunction(() => window.__workers.made - window.__workers.ended === 1);
+    assert.equal(await page.textContent('#mn-threads'), '1');
+    assert.equal(await page.isDisabled('#mn-less'), true, 'at least one worker');
+    await page.waitForFunction(() => /H\/s/.test(document.getElementById('mn-rate').textContent) && document.getElementById('mn-tries').textContent !== '0');
+    await page.click('#mn-pause');
+    await page.waitForFunction(() => document.getElementById('mn-status').dataset.s === 'paused');
+    assert.equal(await live(), 0, 'paused: no workers');
+    assert.equal(await page.evaluate(() => document.getElementById('mn-art').classList.contains('on')), false);
+    await page.click('#mn-pause');
+    await page.waitForFunction(() => document.getElementById('mn-status').dataset.s === 'mining');
+    assert.equal(await live(), 1);
+    await page.click('#mn-start');
+    assert.equal(await page.textContent('#mn-status'), 'Idle');
+    assert.equal(await live(), 0, 'Stop ends the workers');
+    hardPow = false;
+
+    // a quick session: the proof is found and claimed by itself
+    const made = await page.evaluate(() => window.__workers.made);
     await page.click('#mn-start');
     await page.waitForFunction(() => document.getElementById('mn-msg').classList.contains('ok'), null, { timeout: 30_000 });
     assert.match(await page.textContent('#mn-msg'), /10 test ZETAPHY/);
+    assert.equal(await page.textContent('#mn-status'), 'Done');
+    assert.equal(await page.textContent('#mn-start'), 'Done');
+    assert.equal(await page.textContent('#mn-won'), '10 ZTPHY');
     assert.equal(powClaims.length, 1);
     assert.ok(powClaims[0].ok, 'the proof holds');
     assert.equal(powClaims[0].addr, ACC);
     assert.match(powClaims[0].nonce, /^0x[0-9a-f]{16}$/);
     assert.equal(powClaims[0].height, '0x1e240');
     const w = await page.evaluate(() => window.__workers);
-    assert.equal(w.made, 1, 'one thread');
+    assert.equal(w.made - made, 1, 'one worker');
     assert.equal(w.ended, w.made, 'the workers stop once the proof is found');
     assert.equal(await page.isDisabled('#mn-start'), false);
     assert.ok(POW_BITS < 20);
