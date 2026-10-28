@@ -64,7 +64,7 @@ const T = (k) => TEXT[lang]?.[k] ?? TEXT.en[k] ?? k;
 const tabText = (t, i) => TAB_TEXT[lang]?.[t.id]?.[i] ?? TAB_TEXT.en[t.id][i];
 const LABEL = 0, TITLE = 1, TIP = 2;
 let NODE = DEFAULT_NODE;
-let HUB = { contracts: {}, dex: {}, nft: {} }; // hub-config.json (written by build.mjs from the launch state)
+let HUB = { contracts: {}, dex: {}, nft: {}, saphan: [] }; // hub-config.json (written by build.mjs from the launch state and the Saphan chain table)
 const ep = () => ({ evm: NODE, ws: `${NODE.replace(/^https:/, 'wss:')}/ws`, comet: `${NODE}/rpc`, rest: `${NODE}/rest`, files: `${NODE}/zetaphy` });
 let current = null;
 const frames = new Map();
@@ -505,7 +505,7 @@ function stakeDialog(v, kind) {
 async function start() {
   $('lang').replaceChildren(...LANGS.map(([code, name]) => el('option', { value: code, lang: code, text: name })));
   $('lang').value = lang;
-  try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {}, tokens: Array.isArray(c.tokens) ? c.tokens.filter((x) => isEvmAddress(x?.address)) : [] }; } catch { /* default */ }
+  try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {}, tokens: Array.isArray(c.tokens) ? c.tokens.filter((x) => isEvmAddress(x?.address)) : [], saphan: Array.isArray(c.saphan) ? c.saphan : [] }; } catch { /* default */ }
   syncApps();
   bindTips(document, $('tip'));
   document.addEventListener('click', (e) => {

@@ -54,7 +54,7 @@
 //   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
 //                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
 //                          --hyperlane-mailbox 0x… [--hyperlane-origin <domain> --hyperlane-sender 0x… --hyperlane-ism 0x…]
-//                          --marker 0x<monitor key address> --devnet | --allow-eoa-for-testing]
+//                          [--hyperlane-outbox] --marker 0x<monitor key address> --devnet | --allow-eoa-for-testing]
 //                                      BridgeGuard + BridgeAirlock + NeuroLane (+ HyperlaneLane), CLOSED:
 //                                      the route is disabled until zetaphy bridge open. A --guardian / --governance must be
 //                                      a multisig (Safe or SimpleMultisig, 3+ owners, threshold 2+) or (governance) the gov
@@ -62,7 +62,10 @@
 //                                      Daily limit: at most 1,000 tokens (the starter cap; on-chain maxDailyLimit). NeuroLane's
 //                                      pause switch defaults to the NeuroJobs' control(); the bridge's own contracts (and
 //                                      the lockbox) are protected in the ThreatRegistry. --marker: a key that may mark
-//                                      addresses (airlock.trip; e.g. the bridge monitor's own key, BRIDGE_MARKER_KEY)
+//                                      addresses (airlock.trip; e.g. the bridge monitor's own key, BRIDGE_MARKER_KEY).
+//                                      --hyperlane-outbox: the way back too (Saphan v2, --lockbox is a HyperlaneLockBoxV2):
+//                                      a HyperlaneOutbox burning through an outbound-only route of the guard (closed)
+//                                      and dispatching releases to that lockbox (docs/SAPHAN-MULTICHAIN.md)
 //   zetaphy bridge gates|open --audit-report <https url> --audit-sha256 <hex> [--daily-limit 1000 --min-runners 10
 //                          --raise-cap --i-understand-real-funds --devnet --testnet --allow-eoa-for-testing]
 //                                      --testnet: the public ZETAPHY testnet only (chain id 77390 + its block 1 hash),
@@ -204,7 +207,7 @@ const STABLE = art('TestStable');
 const GATEWAY = art('StableGateway');
 const QWALLET = art('QuantumWallet');
 const QFACTORY = art('QuantumWalletFactory');
-const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'HyperlaneLane', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault', 'ThreatRegistry', 'ThreatReports'].map((n) => [n, art(n)]));
+const B = Object.fromEntries(['BridgeGuard', 'BridgeAirlock', 'NeuroLane', 'HyperlaneLane', 'HyperlaneOutbox', 'LockBox', 'BridgedToken', 'SimpleMultisig', 'RewardVault', 'ThreatRegistry', 'ThreatReports'].map((n) => [n, art(n)]));
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 /** --governance: who takes over the admin role after setup (a multisig). */
 function governanceOf(opt, write) {
@@ -276,7 +279,7 @@ function settings(opt, env) {
   const file = join(HOME, 'config.json');
   const saved = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   const s = { ...saved, rpc: opt.rpc ?? env.ZETAPHY_RPC ?? saved.rpc, jobs: opt.jobs ?? env.ZETAPHY_JOBS ?? saved.jobs };
-  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'hyperlaneLane', 'bridgeGuard', 'vault', 'threats', 'reports',
+  for (const k of ['gateway', 'usdc', 'usdt', 'pqFactory', 'airlock', 'neuroLane', 'hyperlaneLane', 'hyperlaneOutbox', 'bridgeGuard', 'vault', 'threats', 'reports',
     'timelock', 'timelockBlock', 'oracle', 'twapRecorder', 'pythRelay', 'zetaAsset']) if (opt[k]) s[k] = opt[k];
   if (!s.vault && env.ZETAPHY_VAULT) s.vault = env.ZETAPHY_VAULT;
   if (opt.hybrid) s.pqHybrid = true;
@@ -1042,6 +1045,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     if (opt.enable || opt.open) throw new Error('deploy-bridge deploys the bridge CLOSED; open it with zetaphy bridge open once every gate is met');
     const hyp = opt['hyperlane-mailbox'];
     if (hyp != null && (!ADDR_RE.test(String(hyp)) || !opt.lockbox)) throw new Error('--hyperlane-mailbox 0x<Mailbox on ZETAPHY> needs --lockbox <chainId>:0x<HyperlaneLockBox>');
+    if (opt['hyperlane-outbox'] && hyp == null) throw new Error('--hyperlane-outbox needs --hyperlane-mailbox 0x<Mailbox on ZETAPHY> and --lockbox <chainId>:0x<HyperlaneLockBoxV2>');
     const markers = [].concat(opt.marker ?? []).map(String);
     if (markers.some((m) => !ADDR_RE.test(m))) throw new Error('--marker must be a 0x address (the key that may mark addresses, e.g. the bridge monitor\'s)');
     const devnet = devnetOf(s.rpc, opt);
@@ -1083,7 +1087,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     // Markers: keys that may mark an address (its bridge transfers wait until governance untrips it); they move no funds.
     for (const m of markers) { await (await airlock.setMarker(m, true)).wait(); write(`marker ${m}: may mark addresses (BridgeAirlock.trip)`); }
     // The second lane: Hyperlane (its Mailbox on ZETAPHY; messages from the source chain's HyperlaneLockBox).
-    let hypLane = null;
+    let hypLane = null, outbox = null;
     if (hyp) {
       const [srcId, srcAddr] = String(opt.lockbox).split(':');
       const sender = String(opt['hyperlane-sender'] ?? srcAddr);
@@ -1093,6 +1097,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       hypLane = await deploy(B.HyperlaneLane, [airlock.target, c.me, String(hyp), Number(opt['hyperlane-origin'] ?? srcId), '0x' + sender.slice(2).toLowerCase().padStart(64, '0'), BigInt(srcId), srcAddr, ism]);
       await (await airlock.setLane(hypLane.target, true)).wait();
       write(`HyperlaneLane: Mailbox ${hyp}, origin domain ${opt['hyperlane-origin'] ?? srcId}, sender ${sender}, ISM ${ism === ZERO_ADDR ? "the Mailbox's default" : ism}`);
+      // The way back (Saphan v2): burn through the guard's outbound-only route, dispatch a release to the lockbox.
+      if (opt['hyperlane-outbox']) {
+        const outRoute = encodeBytes32String('out');
+        outbox = await deploy(B.HyperlaneOutbox, [guard.target, outRoute, String(hyp), Number(opt['hyperlane-origin'] ?? srcId), BigInt(srcId),
+          '0x' + srcAddr.slice(2).toLowerCase().padStart(64, '0'), ZERO_ADDR]);
+        await (await guard.setOutboundRoute(outRoute, outbox.target, limitUnits, false)).wait();
+        write(`HyperlaneOutbox: releases to ${srcId}:${srcAddr} (domain ${opt['hyperlane-origin'] ?? srcId}); outbound route CLOSED`);
+      }
     }
     for (const l of [].concat(opt.lane ?? [])) await (await airlock.setLane(l, true)).wait();
     for (const g of guardians) { await (await airlock.setVetoer(g, true)).wait(); await (await guard.setGuardian(g, true)).wait(); }
@@ -1103,7 +1115,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       write(`vaccine on: BridgeAirlock and BridgeGuard check ThreatRegistry ${s.threats}`);
       // The bridge's own parts must never be frozen by a runner flag: protect their addresses and code hashes.
       const reg = new Contract(s.threats, B.ThreatRegistry.abi, c.signer);
-      const own = [guard.target, await guard.token(), airlock.target, lane.target, ...(hypLane ? [hypLane.target] : [])];
+      const own = [guard.target, await guard.token(), airlock.target, lane.target, ...(hypLane ? [hypLane.target] : []), ...(outbox ? [outbox.target] : [])];
       const keys = await threatKeys(reg, c.provider, [...own, ...(opt.lockbox ? [String(opt.lockbox)] : [])]);
       await governAction(reg, c, write, 'setProtected', [keys.map((k) => k[1]), true], `protect the bridge's own contracts${opt.lockbox ? ' and the lockbox' : ''}`);
       if (!opt.lockbox) write('WARNING: --no-lockbox-protect: the source lockbox is NOT protected; protect it now: zetaphy threat protect <chainId>:0x<LockBox>');
@@ -1112,8 +1124,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
       for (const k of [guard, airlock, ...(hypLane ? [hypLane] : [])]) await (await k.setGovernance(gov)).wait();
       write(`admin of BridgeGuard, BridgeAirlock${hypLane ? ' and HyperlaneLane' : ''} handed to ${gov}`);
     }
-    settings({ ...opt, airlock: airlock.target, neuroLane: lane.target, bridgeGuard: guard.target, ...(hypLane ? { hyperlaneLane: hypLane.target } : {}) }, {});
-    write(`BridgeGuard ${guard.target}\nBridgedToken ${await guard.token()}\nBridgeAirlock ${airlock.target}\nNeuroLane ${lane.target}${hypLane ? `\nHyperlaneLane ${hypLane.target}` : ''}`);
+    settings({ ...opt, airlock: airlock.target, neuroLane: lane.target, bridgeGuard: guard.target, ...(hypLane ? { hyperlaneLane: hypLane.target } : {}),
+      ...(outbox ? { hyperlaneOutbox: outbox.target } : {}) }, {});
+    write(`BridgeGuard ${guard.target}\nBridgedToken ${await guard.token()}\nBridgeAirlock ${airlock.target}\nNeuroLane ${lane.target}${hypLane ? `\nHyperlaneLane ${hypLane.target}` : ''}${outbox ? `\nHyperlaneOutbox ${outbox.target}` : ''}`);
     write(`bridge CLOSED (route disabled, daily limit ${tokenAmount(limitUnits, decimals)}, hard cap ${tokenAmount(await guard.maxDailyLimit(), decimals)}).`);
     write('To open: a second independent lane, an audit, 10+ Neuro runners, multisig guardian + governance, then zetaphy bridge open --audit-report <url> --audit-sha256 <hex>');
     return 0;

@@ -1,0 +1,197 @@
+# ZETAPHY Saphan, EVM routes v2: one source chain <-> ZETAPHY, both ways, testnets only.
+# The chain comes from zetaphy-chain/hyperlane/saphan-chains.json (adding a chain = an entry there + this workflow).
+#   source chain: SimpleMultisig (guardian, proposer) + ZetaphyTimelock (governance), our multisig ISM for origin
+#                 ZETAPHY (the chain's Hyperlane factory), HyperlaneLockBoxV2 (locks; releases after a delay)
+#   ZETAPHY:      the ISM for this origin (ZETAPHY's factory, Hyperlane's validators), then
+#                 zetaphy deploy-bridge --hyperlane-outbox: its own BridgeGuard + bridged token, BridgeAirlock,
+#                 NeuroLane, HyperlaneLane, HyperlaneOutbox; deployed CLOSED (admin = the timelock, guardian = the multisig)
+# The lockbox's address is fixed in advance (the deployer's nonce on the source chain), so the source chain's roles
+# go first, then ZETAPHY, then the lockbox exactly there (docs/SAPHAN-MULTICHAIN.md).
+#
+# mode = check    read only: the source chain (Mailbox, hook, ISM factory, fee, our ISM's address), the deployer,
+#                 and the address of ZETAPHY_VALIDATOR_KEY (to put in the chain table)
+# mode = dry_run  the whole deploy and a round trip on local chains: an anvil fork of the source chain (its real
+#                 Mailbox and ISM factory) and a fresh local ZETAPHY (77390) with Hyperlane core from the pinned CLI;
+#                 throwaway validator keys sign the checkpoints. Needs neither secrets nor the ZETAPHY RPC.
+# mode = deploy   the real deploy (manual run only; key = ZETAPHY_DEPLOYER_KEY, the same deployer on both chains);
+#                 pushes the addresses (saphan-routes.json) to the branch saphan/<chain>
+# On pull requests: check + dry_run for every chain of the table. Cost: free (GitHub-hosted runner, public repository).
+
+name: saphan-route
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/saphan-route.yml'
+      - 'zetaphy-chain/hyperlane/saphan-chains.json'
+      - 'zetaphy-network/scripts/saphan.js'
+      - 'zetaphy-network/scripts/saphan-dryrun.js'
+      - 'zetaphy-network/src/saphan.js'
+      - 'zetaphy-network/contracts/HyperlaneLockBoxV2.sol'
+      - 'zetaphy-network/contracts/BridgeGuard.sol'
+  workflow_dispatch:
+    inputs:
+      chain:
+        description: "the source chain (a name in zetaphy-chain/hyperlane/saphan-chains.json)"
+        required: true
+        default: 'basesepolia'
+        type: choice
+        options: ['sepolia', 'basesepolia', 'arbitrumsepolia']
+      mode:
+        description: "check = read only; dry_run = on local chains; deploy = the real testnets"
+        required: true
+        default: 'check'
+        type: choice
+        options: ['check', 'dry_run', 'deploy']
+
+permissions:
+  contents: write
+
+jobs:
+  route:
+    name: Saphan route ${{ matrix.chain }} <-> ZETAPHY (testnet)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        chain: ${{ github.event_name == 'pull_request' && fromJSON('["sepolia","basesepolia","arbitrumsepolia"]') || fromJSON(format('["{0}"]', inputs.chain)) }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      MODE: ${{ github.event_name == 'pull_request' && 'dry_run' || inputs.mode }}
+      CHAIN: ${{ matrix.chain }}
+      HYP_CLI: "@hyperlane-xyz/cli@45.0.1"
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+      # anvil's well-known dev key #0 (public, dry run only)
+      DEV_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: The chain table entry
+        id: t
+        run: |
+          node -e '
+            import("./src/saphan.js").then(({ loadChains, chainOf }) => {
+              const t = loadChains(), c = chainOf(t, process.env.CHAIN);
+              console.log(`rpc=${c.rpc.join(",")}`); console.log(`chainId=${c.chainId}`); console.log(`faucetEth=${c.faucetEth ?? "0.05"}`);
+              console.log(`validators=${t.zetaphyValidators.validators.length}`); console.log(`zrpc=${t.zetaphy.rpc[0]}`);
+            })' | tee -a "$GITHUB_OUTPUT"
+
+      - name: Check the source chain (read only)
+        id: check
+        env:
+          ORIGIN_RPC: ${{ steps.t.outputs.rpc }}
+        run: |
+          out=$(node scripts/saphan.js check --chain "$CHAIN" | tail -1); echo "$out" | jq .
+          echo "pending=$(jq -r .pendingTxs <<<"$out")" >> "$GITHUB_OUTPUT"
+          echo "balance=$(jq -r .balance <<<"$out")" >> "$GITHUB_OUTPUT"
+
+      - name: Our validator's address (from ZETAPHY_VALIDATOR_KEY; the address only)
+        if: github.event_name == 'workflow_dispatch' && env.MODE != 'dry_run'
+        env:
+          VKEY: ${{ secrets.ZETAPHY_VALIDATOR_KEY }}
+        run: |
+          if [ -z "$VKEY" ]; then echo "::warning::the repository secret ZETAPHY_VALIDATOR_KEY is not set (docs/SAPHAN-MULTICHAIN.md: make one, add it, put its address in saphan-chains.json zetaphyValidators)"; exit 0; fi
+          k=$(printf '%s' "$VKEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          a=$(K="0x$k" node -e 'console.log(new (require("ethers").Wallet)(process.env.K).address)'); unset k VKEY
+          echo "ZETAPHY_VALIDATOR_KEY address: $a"
+          node -e 'import("./src/saphan.js").then(({ loadChains }) => { const v = loadChains().zetaphyValidators.validators.map((x) => x.toLowerCase());
+            if (!v.includes(process.argv[1].toLowerCase())) { console.log(`::warning::${process.argv[1]} is not in saphan-chains.json zetaphyValidators.validators yet`); } })' "$a"
+
+      - name: Install anvil (pinned)
+        if: env.MODE == 'dry_run'
+        uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1
+        with:
+          version: v1.2.3
+
+      - name: Dry run on local chains (a fork of the source chain, a fresh ZETAPHY with Hyperlane core)
+        if: env.MODE == 'dry_run'
+        env:
+          ORIGIN_URL: ${{ steps.t.outputs.rpc }}
+        run: |
+          set -o pipefail
+          W=$(mktemp -d)
+          anvil --fork-url "${ORIGIN_URL%%,*}" --port 8601 --silent &
+          anvil --chain-id 77390 --port 8602 --silent &
+          for port in 8601 8602; do for _ in $(seq 1 60); do curl -fs -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' 127.0.0.1:$port >/dev/null && break; sleep 2; done; done
+          npm i -g --no-audit --no-fund "$HYP_CLI"
+          mkdir -p "$W/reg/chains/zetaphy"
+          sed 's#https://rpc.sawasdeecoin.com#http://127.0.0.1:8602#' ../zetaphy-chain/hyperlane/registry/chains/zetaphy/metadata.yaml > "$W/reg/chains/zetaphy/metadata.yaml"
+          DEV=$(node -e 'console.log(new (require("ethers").Wallet)(process.argv[1]).address)' "$DEV_KEY")
+          # a local stand-in for ZETAPHY's core: the same contracts (Mailbox, merkle tree hook, ISM factories), a test default ISM
+          printf 'owner: "%s"\ndefaultIsm:\n  type: testIsm\ndefaultHook:\n  type: merkleTreeHook\nrequiredHook:\n  type: protocolFee\n  owner: "%s"\n  beneficiary: "%s"\n  protocolFee: "0"\n  maxProtocolFee: "1000000000"\n' "$DEV" "$DEV" "$DEV" > "$W/core.yaml"
+          HYP_KEY="$DEV_KEY" hyperlane core deploy --chain zetaphy --config "$W/core.yaml" -r "$W/reg" --yes > "$W/core.log" 2>&1 || { tail -40 "$W/core.log"; exit 1; }
+          ORIGIN_RPC=http://127.0.0.1:8601 ZETAPHY_RPC=http://127.0.0.1:8602 ZETAPHY_CORE="$W/reg/chains/zetaphy/addresses.yaml" \
+            node scripts/saphan-dryrun.js --chain "$CHAIN" | tee "$W/dry.log"
+          grep -q 'DRY RUN OK' "$W/dry.log"
+
+      - name: Deploy on the testnets
+        if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch'
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+          ORIGIN_RPC: ${{ steps.t.outputs.rpc }}
+          ZETAPHY_RPC: ${{ steps.t.outputs.zrpc }}
+          PENDING: ${{ steps.check.outputs.pending }}
+          BALANCE: ${{ steps.check.outputs.balance }}
+          NEED: ${{ steps.t.outputs.faucetEth }}
+          VALIDATORS: ${{ steps.t.outputs.validators }}
+        run: |
+          set -o pipefail
+          [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
+          [ "$VALIDATORS" -gt 0 ] || { echo "::error::saphan-chains.json zetaphyValidators.validators is empty: add the address of ZETAPHY_VALIDATOR_KEY first (mode = check prints it)"; exit 1; }
+          zc=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$ZETAPHY_RPC" | jq -r .result) || zc=""
+          [ "$zc" = "0x12e4e" ] || { echo "::error::the ZETAPHY RPC answers '$zc', not 0x12e4e (paused?): nothing deployed"; exit 1; }
+          [ "$PENDING" = 0 ] || { echo "::error::the deployer has pending $CHAIN transactions: the lockbox address is not fixed; nothing deployed"; exit 1; }
+          awk -v b="$BALANCE" -v n="$NEED" 'BEGIN{exit !(b>=n/2)}' || { echo "::error::the deployer has $BALANCE ETH on $CHAIN ($NEED recommended, at least half needed)"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/zh"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/worker.key")" = "$DEPLOYER" ] \
+            || { rm -f "$H/worker.key"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          trap 'rm -f "$H/worker.key"' EXIT
+          export KEYFILE="$H/worker.key"
+          T=$(node -e 'import("./src/saphan.js").then(({ loadChains, chainOf }) => { const t = loadChains(); console.log(JSON.stringify({ z: t.zetaphy, c: chainOf(t, process.argv[1]) })); })' "$CHAIN")
+          z() { jq -r ".z.$1" <<<"$T"; }; c() { jq -r ".c.$1" <<<"$T"; }
+          # 1. the source chain's roles and our ISM; the lockbox's address
+          OFROM=$(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "${ORIGIN_RPC%%,*}" | jq -r .result) ))
+          node scripts/saphan.js origin-prepare --chain "$CHAIN" | tail -1 | tee "$H/prep.json"
+          LB=$(jq -r .lockboxAt "$H/prep.json")
+          # 2. ZETAPHY: the ISM for this origin, then the bridge with the way back (CLOSED)
+          node scripts/saphan.js zetaphy-ism --chain "$CHAIN" | tail -1 | tee "$H/zism.json"
+          ZFROM=$(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "$ZETAPHY_RPC" | jq -r .result) ))
+          ZETAPHY_HOME="$H" node cli.js deploy-bridge --testnet --rpc "$ZETAPHY_RPC" --jobs "$(z neuroJobs)" --threats "$(z threats)" \
+            --control "$(z neuroControl)" --lockbox "$(c chainId):$LB" --hyperlane-mailbox "$(z mailbox)" --hyperlane-origin "$(c domain)" \
+            --hyperlane-ism "$(jq -r .ism "$H/zism.json")" --hyperlane-outbox --governance "$(z timelock)" --guardian "$(z guardian)" \
+            --decimals 18 --daily-limit "$(c limits.zetaphyDailyLimit)" --quarantine "$(c limits.quarantine)" \
+            --token-name "$(c token.name)" --token-symbol "$(c token.symbol)" | tee "$H/zetaphy.log"
+          pick() { grep -Eo "$1 0x[0-9a-fA-F]{40}" "$H/zetaphy.log" | tail -1 | awk '{print $2}'; }
+          # 3. the lockbox, exactly at $LB
+          node scripts/saphan.js origin-lockbox --chain "$CHAIN" --lane "$(pick HyperlaneLane)" --outbox "$(pick HyperlaneOutbox)" --expect "$LB" \
+            --multisig "$(jq -r .multisig "$H/prep.json")" --timelock "$(jq -r .timelock "$H/prep.json")" --ism "$(jq -r .ism "$H/prep.json")" | tail -1 | tee "$H/lockbox.json"
+          jq --arg chain "$CHAIN" --arg guard "$(pick BridgeGuard)" --arg token "$(pick BridgedToken)" --arg airlock "$(pick BridgeAirlock)" \
+            --arg neuroLane "$(pick NeuroLane)" --arg lane "$(pick HyperlaneLane)" --arg outbox "$(pick HyperlaneOutbox)" --arg zism "$(jq -r .ism "$H/zism.json")" \
+            --argjson zfrom "$ZFROM" --argjson ofrom "$OFROM" --slurpfile prep "$H/prep.json" --slurpfile lb "$H/lockbox.json" --arg run "${{ github.run_id }}" \
+            '.routes[$chain] = {version: 2, state: "CLOSED",
+              zetaphy: {bridgeGuard: $guard, bridgedToken: $token, bridgeAirlock: $airlock, neuroLane: $neuroLane, hyperlaneLane: $lane, hyperlaneOutbox: $outbox, ism: $zism, fromBlock: $zfrom},
+              origin: {lockbox: $lb[0].lockbox, ism: $prep[0].ism, multisig: $prep[0].multisig, timelock: $prep[0].timelock, deployTx: $lb[0].tx, fromBlock: $ofrom},
+              workflowRun: $run}' ../zetaphy-chain/hyperlane/saphan-routes.json > "$H/routes.json"
+          mv "$H/routes.json" ../zetaphy-chain/hyperlane/saphan-routes.json
+          jq ".routes[\"$CHAIN\"]" ../zetaphy-chain/hyperlane/saphan-routes.json
+
+      - name: Push the addresses to saphan/<chain>
+        if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch'
+        run: |
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B "saphan/$CHAIN"
+          git add zetaphy-chain/hyperlane/saphan-routes.json
+          git commit -q -m "Saphan route $CHAIN <-> ZETAPHY on the testnets: addresses" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin "saphan/$CHAIN"
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...saphan/$CHAIN"

@@ -42,7 +42,33 @@ export function hubConfig(cfg) {
     dex: Object.fromEntries(['factory', 'router', 'dlmmFactory', 'dlmmRouter'].filter((k) => isAddr(dex[k])).map((k) => [k, dex[k]])),
     nft: Object.fromEntries(['factory', 'marketplace'].filter((k) => isAddr(nft[k] ?? nft.contracts?.[k])).map((k) => [k, nft[k] ?? nft.contracts[k]])),
     tokens: chainTokens(read),
+    saphan: saphanRoutes(read),
   };
+}
+
+/**
+ * ZETAPHY Saphan's EVM routes (Hyperlane): every source chain of zetaphy-chain/hyperlane/saphan-chains.json with
+ * its deployment from saphan-routes.json, so a chain added to the table shows up (as planned until deployed).
+ * The same shape as zetaphy-network/src/saphan.js hubRoutes(). Public data only; anything malformed is left out.
+ */
+export function saphanRoutes(read) {
+  const t = read('zetaphy-chain/hyperlane/saphan-chains.json');
+  const routes = read('zetaphy-chain/hyperlane/saphan-routes.json')?.routes ?? {};
+  const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
+  const out = [];
+  for (const [name, c] of Object.entries(t?.chains ?? {})) {
+    if (!/^[a-z0-9]{1,31}$/.test(name) || !Number.isInteger(c?.chainId) || typeof c.displayName !== 'string' || !/^[\w.-]{1,12}$/.test(c.token?.symbol ?? '')) continue;
+    const r = routes[name];
+    const deployed = isAddr(r?.origin?.lockbox) && isAddr(r?.zetaphy?.bridgedToken);
+    out.push({
+      name, displayName: c.displayName.slice(0, 40), chainId: c.chainId, symbol: c.token.symbol,
+      explorer: /^https:\/\/[^\s"<>]+$/.test(c.explorer ?? '') ? c.explorer.replace(/\/$/, '') : '',
+      state: !deployed ? 'planned' : r.state === 'OPEN' ? 'open' : 'closed',
+      twoWay: deployed && isAddr(r.zetaphy.hyperlaneOutbox),
+      ...(deployed ? { lockbox: r.origin.lockbox, token: r.zetaphy.bridgedToken } : {}),
+    });
+  }
+  return out;
 }
 
 /** ZETAPHY-chain tokens the wallet bar shows when the account holds them (public addresses only). */
@@ -56,6 +82,7 @@ export function chainTokens(read) {
   };
   add(read('zetaphy-chain/rewards/points-testnet.json')?.points, 'BZTPHY');
   add(read('zetaphy-chain/hyperlane/bridge-testnet.json')?.zetaphy?.bridgedToken);
+  for (const r of saphanRoutes(read)) if (r.token) add(r.token, r.symbol, 18);
   for (const t of read('zetaphy-dex/web/deployments.json')?.tokens ?? []) add(t.address, t.symbol, t.decimals);
   return out;
 }

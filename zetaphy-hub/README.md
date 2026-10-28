@@ -25,6 +25,7 @@ Every ZETAPHY app on one page and one screen, at **https://app.sawasdeecoin.com*
 - Language: one menu of 8 (English, 中文, Español, 한국어, 日本語, Русский, Tiếng Việt, ไทย; English by default). The words live in `i18n.js` (hub and tabs) and `pages-i18n.js` (data pages); a missing one shows in English. The hub writes each app's own language setting and reloads the frames.
 - Explanations: every number, button and step has hover text (`data-tip` / `data-tip-key`). The page text itself stays short.
 - The node comes from `zetaphy-explorer/config.json` (written by the launch), saved as `dist/hub-config.json`.
+- Saphan's EVM routes (Hyperlane) come from the chain table `zetaphy-chain/hyperlane/saphan-chains.json` and the deployed routes in `saphan-routes.json` (also in `dist/hub-config.json`): a chain added to the table appears on the Saphan page as planned, then closed or open.
 
 ## Deploy (Vercel, free)
 

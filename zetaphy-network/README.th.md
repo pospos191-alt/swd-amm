@@ -255,6 +255,10 @@ zetaphy gate
    - interface ของ Hyperlane v3 เขียนเองแบบสั้น (ไม่มีแพ็กเกจ offline) ตรวจกับ `hyperlane-xyz/hyperlane-monorepo` commit `bc8cfcec461930ec005590bc838871f903a297a1` (ดูหัวไฟล์ `contracts/HyperlaneLane.sol`)
    - ZETAPHY ยังไม่มี Hyperlane: ต้องติดตั้ง Mailbox + ISM + relayer + validator ของ Hyperlane เอง (permissionless) ก่อน และ validator ของ Hyperlane ต้องไม่ใช่กลุ่มเดียวกับคนรันร่าง Neuro
    - `independentLanes()` นับ lane ตาม "ผู้ควบคุม" (`laneController()`: NeuroLane = NeuroJobs, HyperlaneLane = Mailbox, key ตรง ๆ = ตัวมันเอง) NeuroLane สองตัวบน NeuroJobs เดียวกันนับเป็น 1
+9. **ขากลับและเชนต้นทางหลายเชน (Saphan v2, docs/SAPHAN-MULTICHAIN.md):** เชนต้นทางละหนึ่งชุด (`BridgeGuard` ของตัวเอง จึงมีโทเคนบริดจ์ airlock และ lane ของตัวเอง) ช่องโหว่ในเส้นทางหนึ่งจึงปล่อย ETH ที่ล็อกไว้ให้อีกเส้นทางไม่ได้
+   - ฝั่งต้นทาง: `HyperlaneLockBoxV2` ล็อกแบบเดียวกับ `HyperlaneLockBox` และปล่อยคืนได้ด้วย: รับเฉพาะข้อความจาก domain ของ ZETAPHY และ `HyperlaneOutbox` ของเส้นทางนั้น ตรวจด้วย multisig ISM ของ validator ของเราเองสำหรับ origin ZETAPHY ทุกการปล่อยต้องรอระยะหนึ่ง (guardian veto ได้) มีเพดานต่อวัน หยุดชั่วคราวได้ และไม่เกินยอดที่ lockbox นั้นล็อกไว้
+   - ฝั่ง ZETAPHY: `HyperlaneOutbox.send(to, amount)` เผาโทเคนของเส้นทางผ่าน route ขาออกอย่างเดียวของ guard (`BridgeGuard.setOutboundRoute`: mint ไม่ได้ ต้องมี audit และอยู่ใต้เพดาน) แล้วส่งข้อความปล่อยคืน `deploy-bridge --hyperlane-outbox` ติดตั้งแบบปิด `bridge open` / `bridge close` จัดการทั้งสองทิศ
+   - ตารางเชน (`zetaphy-chain/hyperlane/saphan-chains.json`), `scripts/saphan.js` (ฝั่งเชนต้นทาง) และ workflow `saphan-route`; `scripts/saphan-dryrun.js` รันเส้นทางทั้งเส้นบนเชนในเครื่อง
 
 ```
 zetaphy deploy-threats --quorum 3 --min-agreed 5 --enforce-delay 3600

@@ -1,14 +1,20 @@
-# ZETAPHY Saphan, EVM route: the Hyperlane relayer on GitHub Actions (until a server runs it all
-# the time with zetaphy-chain/hyperlane/setup-agents.sh). Every 15 minutes it runs the pinned
-# relayer for about 8 minutes (only while the lockbox was active in the last ~2 days): Sepolia -> ZETAPHY messages from our HyperlaneLockBox are
-# delivered to the HyperlaneLane on ZETAPHY (the ZETAPHY Mailbox's ISM checks Hyperlane's
-# Sepolia validator signature). It relays nothing else (whitelist: that lockbox, that route),
-# so its key spends nothing on Sepolia. Its database is kept between runs in the Actions cache.
+# ZETAPHY Saphan, EVM routes: the Hyperlane relayer, and our validator for origin ZETAPHY, on GitHub Actions
+# (no server to keep running). Every 15 minutes, and only when there is something to do, it runs the pinned
+# agents for about 8 minutes:
+#   - in (source chain -> ZETAPHY): messages from our lockboxes (the v1 Sepolia HyperlaneLockBox in
+#     bridge-testnet.json and every HyperlaneLockBoxV2 in saphan-routes.json) are delivered to their
+#     HyperlaneLane on ZETAPHY; ZETAPHY's ISM checks Hyperlane's own validator for that source chain.
+#     Runs while a lockbox locked something in the last ~2 days (its nonce changed; asked of the source chain only).
+#   - out (ZETAPHY -> source chain, two-way routes): our validator (key: ZETAPHY_VALIDATOR_KEY) signs ZETAPHY's
+#     checkpoints into a folder kept in the Actions cache, and the relayer reads them there and delivers each
+#     HyperlaneOutbox release to its lockbox, whose ISM trusts only our validator(s). Runs while a release waits
+#     (outbox nonce on ZETAPHY > lockbox received on the source chain: one small call per route on ZETAPHY).
+# It relays nothing else (whitelist: our lockboxes and outboxes, their routes), so its key spends nothing else.
+# Databases and checkpoints are kept between runs in the Actions cache.
 #
-# Delivery takes about 5-30 minutes. Starts only once zetaphy-chain/hyperlane/bridge-testnet.json
-# (written by the bridge-testnet deploy) is on main.
-# Signer: the repository secret ZETAPHY_DEPLOYER_KEY (it keeps no role; it only pays ZETAPHY gas, which is 0).
-# Cost: free (GitHub-hosted runner, public repository).
+# Signer: the repository secret ZETAPHY_DEPLOYER_KEY (it keeps no role; it pays ZETAPHY gas, which is 0, and the
+# source chains' gas for releases: keep some faucet ETH on it). Validator: ZETAPHY_VALIDATOR_KEY (needs a little
+# ZETAPHY once, for its announce). Delivery takes about 5-30 minutes. Cost: free (GitHub-hosted runner, public repository).
 
 name: hyperlane-relayer
 
@@ -16,6 +22,13 @@ on:
   schedule:
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
+    inputs:
+      validator:
+        description: "auto = only while a ZETAPHY -> source release waits; yes = always this run; no = never"
+        required: false
+        default: 'auto'
+        type: choice
+        options: ['auto', 'yes', 'no']
 
 concurrency:
   group: hyperlane-relayer
@@ -26,7 +39,7 @@ permissions:
 
 jobs:
   relay:
-    name: Hyperlane relayer (Sepolia -> ZETAPHY)
+    name: Hyperlane relayer (+ our validator for origin ZETAPHY)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -37,48 +50,64 @@ jobs:
       IMAGE: ghcr.io/hyperlane-xyz/hyperlane-agent@sha256:6414aecfdc1b6ea2e364019f672004c113c2a347dd4d1343aa856921d1e0a685
       CONFIG: zetaphy-chain/hyperlane/agent-config.json
       BRIDGE: zetaphy-chain/hyperlane/bridge-testnet.json
+      ROUTES: zetaphy-chain/hyperlane/saphan-routes.json
       RUN_SECONDS: '480'
       SEPOLIA_RPC: https://ethereum-sepolia-rpc.publicnode.com
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+        working-directory: zetaphy-network
 
       - name: Bridge deployed?
         id: b
         run: |
-          if [ ! -f "$BRIDGE" ]; then echo "no $BRIDGE yet: nothing to relay"; echo "go=no" >> "$GITHUB_OUTPUT"; exit 0; fi
-          lockbox=$(jq -r .sepolia.hyperlaneLockBox "$BRIDGE"); tx=$(jq -r .sepolia.deployTx "$BRIDGE"); zfrom=$(jq -r '.zetaphy.fromBlock // empty' "$BRIDGE")
-          [[ "$lockbox" =~ ^0x[0-9a-fA-F]{40}$ && "$tx" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "::error::$BRIDGE lacks the lockbox or its deploy tx"; exit 1; }
-          sfrom=$(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getTransactionReceipt\",\"params\":[\"$tx\"]}" "$SEPOLIA_RPC" | jq -r .result.blockNumber) ))
-          { echo "go=yes"; echo "lockbox=$lockbox"; echo "sfrom=$sfrom"; echo "zfrom=$zfrom"; } >> "$GITHUB_OUTPUT"
-          echo "relaying messages from $lockbox (Sepolia, from block $sfrom) to ZETAPHY"
+          v2=$(jq -r '.routes | length' "$ROUTES" 2>/dev/null || echo 0)
+          if [ ! -f "$BRIDGE" ] && [ "$v2" = 0 ]; then echo "no route deployed yet: nothing to relay"; echo "go=no" >> "$GITHUB_OUTPUT"; exit 0; fi
+          sfrom=""
+          if [ -f "$BRIDGE" ]; then
+            lockbox=$(jq -r .sepolia.hyperlaneLockBox "$BRIDGE"); tx=$(jq -r .sepolia.deployTx "$BRIDGE")
+            [[ "$lockbox" =~ ^0x[0-9a-fA-F]{40}$ && "$tx" =~ ^0x[0-9a-fA-F]{64}$ ]] || { echo "::error::$BRIDGE lacks the lockbox or its deploy tx"; exit 1; }
+            sfrom=$(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getTransactionReceipt\",\"params\":[\"$tx\"]}" "$SEPOLIA_RPC" | jq -r .result.blockNumber) ))
+          fi
+          { echo "go=yes"; echo "sfrom=$sfrom"; } >> "$GITHUB_OUTPUT"
+          echo "routes: v1 Sepolia $( [ -f "$BRIDGE" ] && echo yes || echo no ), v2: $(jq -r '.routes | keys | join(", ")' "$ROUTES")"
 
-      # The relayer polls the ZETAPHY node for its whole run, and the node's free outbound data is
-      # small (setup-node.sh EGRESS_LIMIT_MB). So it only starts when the lockbox did something
-      # on Sepolia in the last ~2 days (that gives a message many runs to be signed and
-      # delivered), or when started by hand. This check asks Sepolia only, never the node.
+      - name: Restore the gate's state
+        if: steps.b.outputs.go == 'yes'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/gate
+          key: saphan-relay-gate-${{ github.run_id }}
+          restore-keys: saphan-relay-gate-
+
+      # The agents poll the ZETAPHY node for their whole run, and the node's free outbound data is small
+      # (setup-node.sh EGRESS_LIMIT_MB). So they start only when there is something to do, or by hand.
       - name: Anything to relay?
         id: g
         if: steps.b.outputs.go == 'yes'
         env:
-          LOCKBOX: ${{ steps.b.outputs.lockbox }}
           EVENT: ${{ github.event_name }}
-          WINDOW: '14400'
+          VALIDATOR: ${{ inputs.validator || 'auto' }}
+        working-directory: zetaphy-network
         run: |
-          if [ "$EVENT" = workflow_dispatch ]; then echo "started by hand: relaying"; echo "run=yes" >> "$GITHUB_OUTPUT"; exit 0; fi
-          rpc() { curl -fsS --max-time 30 -H 'content-type: application/json' --data "$1" "$SEPOLIA_RPC"; }
-          latest=$(rpc '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' | jq -r '.result // empty') || latest=""
-          n=""
-          if [[ "$latest" =~ ^0x[0-9a-fA-F]+$ ]]; then
-            from=$(( latest - WINDOW )); [ "$from" -lt 0 ] && from=0
-            n=$(rpc "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getLogs\",\"params\":[{\"address\":\"$LOCKBOX\",\"fromBlock\":\"$(printf '0x%x' "$from")\",\"toBlock\":\"$latest\"}]}" | jq -r 'if (.result | type) == "array" then (.result | length) else empty end') || n=""
-          fi
-          if [ "$n" = 0 ]; then
-            echo "no lockbox activity on Sepolia in the last $WINDOW blocks: the relayer is not started (saves the node's data)"
-            echo "run=no" >> "$GITHUB_OUTPUT"
-          else
-            echo "lockbox events in the last $WINDOW blocks: ${n:-unknown (check failed, relaying anyway)}"
-            echo "run=yes" >> "$GITHUB_OUTPUT"
-          fi
+          mkdir -p "$RUNNER_TEMP/gate"
+          out=$(node scripts/saphan.js gate --state "$RUNNER_TEMP/gate/state.json" | tail -1) || out='{"run":true,"validator":false,"reasons":["gate failed: relaying anyway"]}'
+          echo "$out" | jq -r '.reasons[]' || true
+          run=$(jq -r 'if .run then "yes" else "no" end' <<<"$out"); val=$(jq -r 'if .validator then "yes" else "no" end' <<<"$out")
+          if [ "$EVENT" = workflow_dispatch ]; then run=yes; echo "started by hand: relaying"; fi
+          [ "$VALIDATOR" = yes ] && val=yes; [ "$VALIDATOR" = no ] && val=no
+          [ "$run" = yes ] || [ "$val" = yes ] || echo "nothing to relay: the agents are not started (saves the node's data)"
+          { echo "run=$( [ "$run" = yes ] || [ "$val" = yes ] && echo yes || echo no)"; echo "validator=$val"; } >> "$GITHUB_OUTPUT"
+
+      - name: Save the gate's state
+        if: always() && steps.b.outputs.go == 'yes'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/gate
+          key: saphan-relay-gate-${{ github.run_id }}
 
       - name: Restore the relayer database
         if: steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
@@ -88,39 +117,83 @@ jobs:
           key: hyperlane-relayer-db-${{ github.run_id }}
           restore-keys: hyperlane-relayer-db-
 
+      - name: Restore the validator's database and checkpoints
+        if: steps.b.outputs.go == 'yes' && steps.g.outputs.validator == 'yes'
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/validator-db
+            ${{ runner.temp }}/checkpoints
+          key: hyperlane-validator-${{ github.run_id }}
+          restore-keys: hyperlane-validator-
+
+      - name: Start our validator for origin ZETAPHY
+        if: steps.b.outputs.go == 'yes' && steps.g.outputs.validator == 'yes'
+        env:
+          VKEY: ${{ secrets.ZETAPHY_VALIDATOR_KEY }}
+        run: |
+          [ -n "$VKEY" ] || { echo "::error::the repository secret ZETAPHY_VALIDATOR_KEY is not set (docs/SAPHAN-MULTICHAIN.md)"; exit 1; }
+          k=$(printf '%s' "$VKEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          mkdir -p "$RUNNER_TEMP/validator-db" "$RUNNER_TEMP/checkpoints"; sudo chown -R 10391:10391 "$RUNNER_TEMP/validator-db" "$RUNNER_TEMP/checkpoints"
+          ENVF="$RUNNER_TEMP/validator.env"; umask 077
+          # checkpoints: local storage at /checkpoints (announced as file:///checkpoints); the relayer mounts the same folder there
+          {
+            echo "CONFIG_FILES=/config/agent-config.json"
+            echo "HYP_ORIGINCHAINNAME=zetaphy"
+            echo "HYP_DB=/data"
+            echo "HYP_VALIDATOR_TYPE=hexKey"
+            echo "HYP_VALIDATOR_KEY=0x$k"
+            echo "HYP_CHAINS_ZETAPHY_SIGNER_TYPE=hexKey"
+            echo "HYP_CHAINS_ZETAPHY_SIGNER_KEY=0x$k"
+            echo "HYP_CHECKPOINTSYNCER_TYPE=localStorage"
+            echo "HYP_CHECKPOINTSYNCER_PATH=/checkpoints"
+            echo "HYP_CHAINS_ZETAPHY_INDEX_CHUNK=499"
+            echo "HYP_METRICSPORT=9090"
+            echo "HYP_LOG_FORMAT=pretty"
+            echo "HYP_LOG_LEVEL=info"
+          } > "$ENVF"
+          unset k VKEY
+          docker pull -q "$IMAGE"
+          docker run -d --name hyp-validator --user 10391:10391 --cap-drop ALL --security-opt no-new-privileges \
+            --env-file "$ENVF" -v "$GITHUB_WORKSPACE/$CONFIG:/config/agent-config.json:ro" -v "$RUNNER_TEMP/validator-db:/data" \
+            -v "$RUNNER_TEMP/checkpoints:/checkpoints" "$IMAGE" ./validator > /dev/null
+          rm -f "$ENVF"
+          sleep 10
+          [ "$(docker inspect -f '{{.State.Running}}' hyp-validator)" = true ] || { docker logs --tail 60 hyp-validator; echo "::error::the validator stopped"; exit 1; }
+          echo "validator running (checkpoints in the Actions cache)"
+
       - name: Run the relayer
         if: steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
         env:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
-          LOCKBOX: ${{ steps.b.outputs.lockbox }}
           SFROM: ${{ steps.b.outputs.sfrom }}
-          ZFROM: ${{ steps.b.outputs.zfrom }}
+          VAL: ${{ steps.g.outputs.validator }}
         run: |
           [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
           k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
           DB="$RUNNER_TEMP/relayer-db"; mkdir -p "$DB"; sudo chown -R 10391:10391 "$DB"
           ENVF="$RUNNER_TEMP/relayer.env"; umask 077
+          # chains, whitelist (our lockboxes and outboxes only) and start blocks, from saphan-routes.json and bridge-testnet.json
+          (cd zetaphy-network && node scripts/saphan.js relayer-env ${SFROM:+--sepolia-v1-from "$SFROM"} --validator "$VAL") > "$RUNNER_TEMP/routes.env"
+          cat "$RUNNER_TEMP/routes.env"
           {
             echo "CONFIG_FILES=/config/agent-config.json"
-            echo "HYP_RELAYCHAINS=sepolia,zetaphy"
             echo "HYP_DB=/data"
             echo "HYP_DEFAULTSIGNER_TYPE=hexKey"
             echo "HYP_DEFAULTSIGNER_KEY=0x$k"
             echo 'HYP_GASPAYMENTENFORCEMENT=[{"type":"none"}]'
-            # Hyperlane addresses are 32 bytes: the lockbox left-padded with zeros
-            echo "HYP_WHITELIST=[{\"originDomain\":11155111,\"senderAddress\":\"0x000000000000000000000000$(echo "${LOCKBOX#0x}" | tr 'A-F' 'a-f')\",\"destinationDomain\":77390}]"
-            echo "HYP_CHAINS_SEPOLIA_INDEX_FROM=$SFROM"
-            echo "HYP_CHAINS_ZETAPHY_INDEX_CHUNK=499"
-            [ -n "$ZFROM" ] && echo "HYP_CHAINS_ZETAPHY_INDEX_FROM=$ZFROM"
+            echo "HYP_ALLOWLOCALCHECKPOINTSYNCERS=true"
+            cat "$RUNNER_TEMP/routes.env"
             echo "HYP_METRICSPORT=9091"
             echo "HYP_LOG_FORMAT=pretty"
             echo "HYP_LOG_LEVEL=info"
           } > "$ENVF"
           unset k KEY
           docker pull -q "$IMAGE"
+          CP=(); [ "$VAL" = yes ] && CP=(-v "$RUNNER_TEMP/checkpoints:/checkpoints:ro")
           set +e
           timeout "$RUN_SECONDS" docker run --rm --name hyp-relayer --user 10391:10391 --cap-drop ALL --security-opt no-new-privileges \
-            --env-file "$ENVF" -v "$GITHUB_WORKSPACE/$CONFIG:/config/agent-config.json:ro" -v "$DB:/data" \
+            --env-file "$ENVF" -v "$GITHUB_WORKSPACE/$CONFIG:/config/agent-config.json:ro" -v "$DB:/data" "${CP[@]}" \
             "$IMAGE" ./relayer > "$RUNNER_TEMP/relayer.log" 2>&1
           code=$?
           set -e
@@ -130,6 +203,15 @@ jobs:
           [ "$code" = 124 ] || { tail -60 "$RUNNER_TEMP/relayer.log"; echo "::error::the relayer exited early (code $code)"; exit 1; }
           sudo chown -R "$(id -u):$(id -g)" "$DB"
 
+      - name: Stop the validator
+        if: always() && steps.g.outputs.validator == 'yes'
+        run: |
+          docker logs hyp-validator > "$RUNNER_TEMP/validator.log" 2>&1 || true
+          docker rm -f hyp-validator >/dev/null 2>&1 || true
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/validator-db" "$RUNNER_TEMP/checkpoints" 2>/dev/null || true
+          echo "checkpoints signed: $(ls "$RUNNER_TEMP/checkpoints" 2>/dev/null | grep -c '_with_id.json$' || true)"
+          grep -iE 'announc| ERROR ' "$RUNNER_TEMP/validator.log" | tail -10 || true
+
       - name: What this run did
         if: always() && steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
         run: |
@@ -137,7 +219,7 @@ jobs:
           d=$(grep -ci 'delivered\|Message processed' "$L" || true); e=$(grep -c ' ERROR ' "$L" || true)
           echo "deliveries in the log: $d, errors: $e"
           grep -iE 'delivered|Message processed| ERROR ' "$L" | tail -20 || true
-          { echo "### Hyperlane relayer"; echo "deliveries in the log: $d, errors: $e"; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "### Hyperlane relayer"; echo "deliveries in the log: $d, errors: $e"; echo "validator this run: ${{ steps.g.outputs.validator }}"; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save the relayer database
         if: always() && steps.b.outputs.go == 'yes' && steps.g.outputs.run == 'yes'
@@ -145,3 +227,12 @@ jobs:
         with:
           path: ${{ runner.temp }}/relayer-db
           key: hyperlane-relayer-db-${{ github.run_id }}
+
+      - name: Save the validator's database and checkpoints
+        if: always() && steps.b.outputs.go == 'yes' && steps.g.outputs.validator == 'yes'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}/validator-db
+            ${{ runner.temp }}/checkpoints
+          key: hyperlane-validator-${{ github.run_id }}

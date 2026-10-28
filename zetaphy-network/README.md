@@ -256,6 +256,10 @@ Attacker ──► contract watched by the monitor (secret list) ──► bridg
    - The Hyperlane v3 interface is hand-written in short form (no offline package), checked against `hyperlane-xyz/hyperlane-monorepo` commit `bc8cfcec461930ec005590bc838871f903a297a1` (see the header of `contracts/HyperlaneLane.sol`)
    - ZETAPHY does not have Hyperlane yet: Hyperlane's Mailbox + ISM + relayer + validators must be installed first (permissionless), and Hyperlane's validators must not be the same group as the Neuro runners
    - `independentLanes()` counts lanes by "controller" (`laneController()`: NeuroLane = NeuroJobs, HyperlaneLane = Mailbox, a direct key = itself). Two NeuroLanes on the same NeuroJobs count as 1
+9. **The way back and more source chains (Saphan v2, docs/SAPHAN-MULTICHAIN.md):** one stack per source chain (its own `BridgeGuard`, so its own bridged token, airlock, lanes), so a hole in one route can never release ETH locked for another
+   - Source side: `HyperlaneLockBoxV2` locks exactly like `HyperlaneLockBox` and also releases: only messages from ZETAPHY's domain and that route's `HyperlaneOutbox`, verified by a multisig ISM of OUR validators for origin ZETAPHY; each release waits a delay (guardian veto), a daily limit, a pause, and never exceeds what that lockbox holds for locks
+   - ZETAPHY side: `HyperlaneOutbox.send(to, amount)` burns the route's token through an outbound-only route of the guard (`BridgeGuard.setOutboundRoute`: never mints, needs the audit and the cap) and dispatches the release; `deploy-bridge --hyperlane-outbox` deploys it closed, `bridge open` / `bridge close` handle both directions
+   - The chain table (`zetaphy-chain/hyperlane/saphan-chains.json`), `scripts/saphan.js` (source-chain side) and the `saphan-route` workflow; `scripts/saphan-dryrun.js` runs a whole route on local chains
 
 ```
 zetaphy deploy-threats --quorum 3 --min-agreed 5 --enforce-delay 3600
