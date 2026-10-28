@@ -151,7 +151,7 @@ jobs:
           out ui '^test-ui/'
           out neuro '^zetaphy-neuro/'
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
-          out network '^(zetaphy-network/|zetaphy-neuro/src/)'
+          out network '^(zetaphy-network/|zetaphy-neuro/src/|zetaphy-chain/horcrux/|zetaphy-chain/join-validator\.sh$)'
           out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$|zetaphy-neuro/src/(fingerprint|bytecode)\.js$|zetaphy-chain/wallets/)'
           out explorer '^(zetaphy-explorer/|zetaphy-network/src/(pqcert|pqtx|vaccine)\.js$)'
           out dex '^(zetaphy-dex/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
