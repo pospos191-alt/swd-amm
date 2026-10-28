@@ -1,0 +1,37 @@
+{
+ "format": "neuro-detector/1",
+ "name": "seed-rules-sim",
+ "bias": -2,
+ "rules": [
+  {
+   "feature": "r_level",
+   "op": ">=",
+   "threshold": 2,
+   "weight": 2.5
+  },
+  {
+   "feature": "m_sim_cannot_sell",
+   "op": ">=",
+   "threshold": 1,
+   "weight": 4
+  },
+  {
+   "feature": "m_sim_tax_high",
+   "op": ">=",
+   "threshold": 1,
+   "weight": 3
+  },
+  {
+   "feature": "p_hash_guard",
+   "op": ">=",
+   "threshold": 0.5,
+   "weight": 1
+  },
+  {
+   "feature": "r_ctl_renounced",
+   "op": ">=",
+   "threshold": 1,
+   "weight": -0.5
+  }
+ ]
+}

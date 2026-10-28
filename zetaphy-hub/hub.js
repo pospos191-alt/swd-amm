@@ -150,7 +150,9 @@ function buildTabs() {
       svg(t.id), el('span', { text: tabText(t, LABEL) }), t.fresh ? el('span', { class: 'new', text: 'new' }) : null)];
   }).filter(Boolean),
   // the validator guide is a page of its own on this site (validators.html), not a tab
-  el('a', { class: 'tab', href: 'validators.html', id: 'nav-guide', 'data-tip': T('tipGuide') }, svg('guide'), el('span', { text: T('navGuide') })));
+  el('a', { class: 'tab', href: 'validators.html', id: 'nav-guide', 'data-tip': T('tipGuide') }, svg('guide'), el('span', { text: T('navGuide') })),
+  // risk forecasts, Proof of Foresight, detectors, Data DAO, arena: a page of its own (forecasts.html; docs/future/markets.md)
+  el('a', { class: 'tab', href: 'forecasts.html', id: 'nav-forecasts', 'data-tip': T('tipForecasts') }, svg('guide'), el('span', { text: T('navForecasts') })));
   const quick = $('quick');
   quick.replaceChildren(...TABS.filter((t) => t.id !== 'home' && !t.group).map((t) => el('a', { class: 'chip', href: `?tab=${t.id}`, 'data-tab': t.id, 'data-tip': tabText(t, TIP) }, svg(t.id), el('span', { text: tabText(t, LABEL) }))));
 }

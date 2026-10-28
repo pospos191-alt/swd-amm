@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ZETAPHY risk forecasts</title>
+<meta name="description" content="Testnet risk forecasts, Proof of Foresight, evolving detectors, the Data DAO and the red-vs-blue arena that train Neuro. Testnet only: no real money.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="forecasts.css">
+<script type="module" src="forecasts.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top">
+      <a class="eyebrow" href="./" id="back">ZETAPHY · zetaphy_77390-1 · testnet</a>
+      <select id="lang" aria-label="Language">
+        <option value="en">English</option><option value="zh">中文</option><option value="es">Español</option>
+        <option value="ko">한국어</option><option value="ja">日本語</option><option value="ru">Русский</option>
+        <option value="vi">Tiếng Việt</option><option value="th">ไทย</option>
+      </select>
+    </div>
+    <h1 data-t="title"></h1>
+    <p class="lede" data-t="lede"></p>
+    <p class="note" data-t="testnetOnly"></p>
+  </header>
+
+  <nav class="ftabs" role="tablist" aria-label="Topics" id="ftabs">
+    <button type="button" role="tab" id="t-forecasts" aria-controls="p-forecasts" aria-selected="true" tabindex="0" data-tab="forecasts" data-t="tab_forecasts"></button>
+    <button type="button" role="tab" id="t-foresight" aria-controls="p-foresight" aria-selected="false" tabindex="-1" data-tab="foresight" data-t="tab_foresight"></button>
+    <button type="button" role="tab" id="t-detectors" aria-controls="p-detectors" aria-selected="false" tabindex="-1" data-tab="detectors" data-t="tab_detectors"></button>
+    <button type="button" role="tab" id="t-data" aria-controls="p-data" aria-selected="false" tabindex="-1" data-tab="data" data-t="tab_data"></button>
+    <button type="button" role="tab" id="t-arena" aria-controls="p-arena" aria-selected="false" tabindex="-1" data-tab="arena" data-t="tab_arena"></button>
+  </nav>
+
+  <section role="tabpanel" id="p-forecasts" aria-labelledby="t-forecasts"></section>
+  <section role="tabpanel" id="p-foresight" aria-labelledby="t-foresight" hidden></section>
+  <section role="tabpanel" id="p-detectors" aria-labelledby="t-detectors" hidden></section>
+  <section role="tabpanel" id="p-data" aria-labelledby="t-data" hidden></section>
+  <section role="tabpanel" id="p-arena" aria-labelledby="t-arena" hidden></section>
+
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+</div>
+</body>
+</html>
