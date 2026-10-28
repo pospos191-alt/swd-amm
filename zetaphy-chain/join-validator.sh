@@ -451,6 +451,10 @@ secure_words() {
       echo "kept: the staking key is not in this node's keyring, so these words are its only copy here"
       return 0
     fi
+    if [ "$(grep -c . "$WORDS" 2>/dev/null || true)" -gt 2 ]; then
+      echo "NOTE: $WORDS holds the chain's genesis accounts too ($(cut -d' ' -f1 "$WORDS" | paste -sd' ' -))."
+      echo "      Back up the whole file, and check the copy opens, before it goes."
+    fi
     echo
     backup in-secure
     echo
