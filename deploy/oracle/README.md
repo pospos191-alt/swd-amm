@@ -20,6 +20,18 @@ Wait about 5 minutes; the install finishes by itself.
 - Go to Compute > Instances > `zetaphy-node` > **Run command** and run `sudo zetaphy-runner address`
   (runner) or `sudo zetaphy-validator status` (validator), then read the output
 
+## New chain: ZETAPHY EVOLVE (Evolve rollup on Celestia)
+
+Pick **What to install** = `evolve` (it needs `VM.Standard.A1.Flex`; the stack gives it 2 CPU / 12 GB,
+still Always Free). It starts a **new chain** (chain id `77392`, coin ZEVO) — the ZETAPHY chain is not touched.
+
+1. After Apply, open Compute > Instances > `zetaphy-node` > **Run command** and run `sudo zetaphy-evolve status`
+2. Send free Mocha TIA to the `celestia1…` address it prints
+   ([mocha.celenium.io/faucet](https://mocha.celenium.io/faucet) or
+   [faucet.noders.services/celestia](https://faucet.noders.services/celestia))
+3. About 20–40 minutes later `sudo zetaphy-evolve status` shows the chain height and the MetaMask RPC
+   (`https://<ip-with-dashes>.sslip.io`). Details: [`zetaphy-evolve/README.md`](../../zetaphy-evolve/README.md)
+
 ## If it says "Out of host capacity"
 
 Oracle has no free machine available right now. **Nothing is broken and nothing is charged.**

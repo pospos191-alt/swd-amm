@@ -28,7 +28,15 @@
 | validator | ไม่ต้องมี — ความปลอดภัยของข้อมูลมาจาก Celestia, full node ตรวจซ้ำได้จาก DA |
 | https + ชื่อโดเมน | Caddy + Let's Encrypt + sslip.io ฟรี |
 
-## ตั้งเครื่องบน Oracle Cloud (ทำบนหน้าเว็บทั้งหมด)
+## วิธีที่ง่ายที่สุด: ปุ่มเดียว (หลัง merge เข้า main)
+
+1. กดปุ่ม **Deploy to Oracle Cloud** ใน [`deploy/oracle/`](../deploy/oracle/README.md) แล้วล็อกอิน Oracle
+2. เลือก Machine size `VM.Standard.A1.Flex` และ **What to install** = `evolve` → Next → ติ๊ก Run apply → Create
+   (stack เปิดพอร์ต 80/443 และจัดเครื่อง 2 CPU / 12 GB ให้เอง ยังอยู่ใน Always Free)
+3. หน้าเครื่อง `zetaphy-node` → **Run command** → `sudo zetaphy-evolve status`
+   จะได้ที่อยู่ `celestia1…` ไปขอ TIA ฟรี แล้วรอ ~20–40 นาที สั่งคำสั่งเดิมอีกครั้งจะเห็นความสูงบล็อกและ RPC
+
+## ตั้งเครื่องบน Oracle Cloud แบบวางสคริปต์เอง (ใช้ได้ทันที ไม่ต้องรอ merge)
 
 1. สร้างเครื่องแบบเดียวกับ [เชน ZETAPHY](../zetaphy-chain/README.th.md):
    Ubuntu 24.04, **A1.Flex 2–4 OCPU / 12–24 GB** (ev-reth + light node + sequencer

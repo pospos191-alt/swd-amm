@@ -35,13 +35,14 @@ variables:
   roles:
     type: enum
     title: "What to install"
-    description: "runner = ZETAPHY runner, agents = helper agents, validator = ZETAPHY chain validator (joins and stakes by itself)."
+    description: "runner = ZETAPHY runner, agents = helper agents, validator = ZETAPHY chain validator (joins and stakes by itself), evolve = a NEW chain, ZETAPHY EVOLVE (Evolve rollup on Celestia; needs A1.Flex; then send free faucet TIA to the address from: sudo zetaphy-evolve status)."
     enum:
       - runner
       - agents
       - "runner,agents"
       - validator
       - "validator,runner"
+      - evolve
     default: runner
     required: true
 

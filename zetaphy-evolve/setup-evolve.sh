@@ -139,6 +139,25 @@ for i in $(seq 1 60); do
 done
 [ -n "${CEL_ADDR:-}" ] || { echo "celestia light node did not come up (journalctl -u zevolve-celestia)"; exit 1; }
 echo "Celestia (Mocha) account: $CEL_ADDR"
+# `sudo zetaphy-evolve status`: what to fund and how far the chain is, from
+# the Oracle console's Run command (no SSH needed).
+cat > /usr/local/bin/zetaphy-evolve <<EOF
+#!/bin/bash
+[ "\${1:-status}" = status ] || { echo "usage: zetaphy-evolve status"; exit 1; }
+cel() { su -s /bin/bash $NODE_USER -c "celestia \$1 --node.store '$CEL_STORE' \${*:2}" 2>/dev/null; }
+echo "Celestia (Mocha) address to fund with free TIA: $CEL_ADDR"
+echo "  faucets: https://mocha.celenium.io/faucet  https://faucet.noders.services/celestia"
+b=\$(cel 'state balance' | jq -r '.result.amount // empty' 2>/dev/null)
+echo "TIA balance (utia):  \${b:-? (light node still starting)}"
+h=\$(curl -s -X POST http://127.0.0.1:8545 -H 'content-type: application/json' \\
+  --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' | jq -r '.result // empty')
+echo "chain height:        \${h:+\$((h))}\${h:-not started yet (tail /var/log/zevolve-setup.log)}"
+ip=\$(curl -fsS -m 5 https://checkip.amazonaws.com 2>/dev/null)
+echo "RPC (MetaMask):      https://\${ip//./-}.sslip.io   chain id $EVM_CHAIN_ID, coin $COIN_SYMBOL"
+for s in zevolve-celestia zevolve-seq; do printf '%-18s   %s\n' "\$s" "\$(systemctl is-active \$s 2>/dev/null)"; done
+printf '%-18s   %s\n' zevolve-reth "\$(docker inspect -f '{{.State.Status}}' zevolve-reth 2>/dev/null || echo absent)"
+EOF
+chmod 755 /usr/local/bin/zetaphy-evolve
 
 if [ -z "$JOIN" ]; then
   step "5/9 waiting for free TIA on the Celestia account (pays for DA blobs)"

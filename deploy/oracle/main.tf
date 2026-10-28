@@ -85,8 +85,12 @@ resource "oci_core_security_list" "zetaphy" {
   }
 
   # A validator: P2P (26656) and its public HTTPS RPC (80 for the certificate, 443).
+  # The evolve chain: only its HTTPS RPC (it syncs over Celestia, no P2P port).
   dynamic "ingress_security_rules" {
-    for_each = contains(local.roles, "validator") ? [26656, 80, 443] : []
+    for_each = distinct(concat(
+      contains(local.roles, "validator") ? [26656, 80, 443] : [],
+      contains(local.roles, "evolve") ? [80, 443] : [],
+    ))
     content {
       source   = "0.0.0.0/0"
       protocol = "6"
@@ -118,8 +122,10 @@ resource "oci_core_instance" "zetaphy" {
   dynamic "shape_config" {
     for_each = local.is_flex ? [1] : []
     content {
-      ocpus         = 1
-      memory_in_gbs = 6
+      # The evolve chain runs Reth + a Celestia light node + the sequencer
+      # (and compiles the sequencer): 2 OCPU / 12 GB, still inside Always Free.
+      ocpus         = contains(local.roles, "evolve") ? 2 : 1
+      memory_in_gbs = contains(local.roles, "evolve") ? 12 : 6
     }
   }
 
@@ -155,6 +161,10 @@ resource "oci_core_instance" "zetaphy" {
     precondition {
       condition     = length(data.oci_core_images.ubuntu.images) > 0
       error_message = "No Ubuntu 24.04 image found for this shape in this region."
+    }
+    precondition {
+      condition     = !contains(local.roles, "evolve") || local.is_flex
+      error_message = "The evolve chain needs VM.Standard.A1.Flex (E2.1.Micro has 1 GB, too little for Reth)."
     }
     # A newer image or edited roles must not wipe a running node.
     # To change roles: Destroy, then Apply.

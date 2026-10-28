@@ -8,6 +8,8 @@
 #   validator  a ZETAPHY chain validator: joins the running chain, gets 10 ZETAPHY from the faucet,
 #              and stakes 9 by itself once synced (your name: … | sudo MONIKER=my-name bash -s -- validator)
 #   update     a ZETAPHY node set up before: the current release and settings (keys and chain data kept)
+#   evolve     a NEW chain, ZETAPHY EVOLVE (Evolve rollup on Celestia Mocha, chain id 77392): the
+#              sequencer; waits for free faucet TIA, then starts (sudo zetaphy-evolve status)
 #
 # Several at once: ... | sudo bash -s -- runner agents
 # Safe to run again (it updates and keeps the keys). Testnet only.
@@ -15,7 +17,7 @@ set -euo pipefail
 REPO="pospos191-alt/swd-amm"
 REF="${REF:-main}"
 [ "$(id -u)" = 0 ] || { echo "ERROR: run with sudo (… | sudo bash -s -- runner)" >&2; exit 1; }
-[ $# -gt 0 ] || { sed -n '2,14p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null || echo "usage: install.sh runner|agents|validator"; exit 1; }
+[ $# -gt 0 ] || { sed -n '2,15p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null || echo "usage: install.sh runner|agents|validator"; exit 1; }
 
 run() { # run <path in the repo> [args…]: download that script (pinned to $REF) and run it
   local f; f=$(mktemp); curl -fsSL "https://raw.githubusercontent.com/$REPO/$REF/$1" -o "$f"; shift
@@ -28,6 +30,7 @@ for role in "$@"; do
     agents) run zetaphy-chain/hyperlane/setup-agents.sh ;;
     validator) run zetaphy-chain/join-validator.sh install ;;
     update) run zetaphy-chain/join-validator.sh update ;;
-    *) echo "unknown role '$role': runner, agents, validator or update" >&2; exit 1 ;;
+    evolve) run zetaphy-evolve/setup-evolve.sh ;;
+    *) echo "unknown role '$role': runner, agents, validator, update or evolve" >&2; exit 1 ;;
   esac
 done
