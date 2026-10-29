@@ -306,6 +306,7 @@ async function neuroOracleDryRun({ t, C, op, zp, os, zs, dev, ours, sourceValida
     const K = kitArtifacts();
     t.zetaphy.mailbox = getAddress((await deploy(K.KitMailbox, [t.zetaphy.domain], zs)).target);
     C.mailbox = getAddress((await deploy(K.KitMailbox, [C.domain], os)).target);
+    t.chains[C.name].mailbox = C.mailbox;
     ism = getAddress((await deploy(K.KitMessageIdMultisigIsm, [ours.map((w) => w.address), 2], os)).target);
     hookZ = null;
     log(`kit: Mailbox ${t.zetaphy.mailbox} (ZETAPHY), Mailbox ${C.mailbox} (${C.name}), our ISM ${ism}`);
@@ -329,7 +330,28 @@ async function neuroOracleDryRun({ t, C, op, zp, os, zs, dev, ours, sourceValida
   log(`ZETAPHY: NeuroOracleSender ${S.sender}`);
   const R = await deployReceiver(t, C, op, os, { sender: S.sender, ism, ...(kit ? { multisig: dev.address, timelock: dev.address } : {}) });
   log(`${C.name}: NeuroOracle ${R.oracle} (ISM ${R.ism}, governance ${R.governance})`);
-  await wire(t, zs, S.sender, { [C.name]: R.oracle });
+  const W = await wire(t, zs, S.sender, { [C.name]: R.oracle });
+  if (W.routes[0] !== C.name || W.proposals.length || W.handedOver) fail(`wire: ${JSON.stringify(W)}`);
+  // what the deploy mode does next: record into neuro-oracle.json, verify it, hand governance over, verify again
+  const { recordDeployment, verifyDeployment } = await import('./neuro-oracle.js');
+  const { relayerWhitelist } = await import('../src/saphan.js');
+  const zfrom = await zp.getBlockNumber(), ofrom = await op.getBlockNumber();
+  const rec = recordDeployment({ sender: null, receivers: {} }, { name: C.name, sender: S, receiver: R, zfrom, ofrom, run: 'dry-run' });
+  const vOpts = { factoryIsm: !kit, deployer: dev.address };
+  const v1 = await verifyDeployment(t, rec, C.name, zp, op, { ...vOpts, governance: 'deployer' });
+  if (!v1.ok) fail(`verify after the deploy: ${v1.checks.filter((x) => !x.ok).map((x) => `${x.what}: ${x.got} (want ${x.want})`).join('; ')}`);
+  log(`verify: ${v1.checks.length} read-back checks pass (before the hand-over)`);
+  const timelockZ = Wallet.createRandom().address;   // stands for the ZETAPHY timelock
+  const H = await wire(t, zs, S.sender, { [C.name]: R.oracle }, timelockZ);
+  if (!H.handedOver || getAddress(H.governance) !== getAddress(timelockZ)) fail(`hand-over: ${JSON.stringify(H)}`);
+  const v2 = await verifyDeployment(t, rec, C.name, zp, op, { ...vOpts, governance: 'timelock', timelock: timelockZ });
+  if (!v2.ok) fail(`verify after the hand-over: ${v2.checks.filter((x) => !x.ok).map((x) => x.what).join('; ')}`);
+  const other = Object.keys(t.chains).find((n) => n !== C.name);
+  const P = await wire(t, zs, S.sender, { [other]: Wallet.createRandom().address });
+  if (P.proposals.length !== 1 || P.routes.length) fail(`after the hand-over a new route must be a timelock proposal: ${JSON.stringify(P)}`);
+  log(`hand-over: governance is the timelock stand-in; a new route (${other}) comes out as a timelock proposal, not a transaction`);
+  const wl = relayerWhitelist(t, {}, [], {}, rec);
+  if (wl.length !== 1 || wl[0].destinationDomain !== C.domain || wl[0].senderAddress !== bytes32(S.sender)) fail(`relayer whitelist: ${JSON.stringify(wl)}`);
   const sender = new Contract(S.sender, art('NeuroOracleSender').abi, zs);
   const oracle = new Contract(R.oracle, art('NeuroOracle').abi, os);
   const sign = async (m, signers) => {

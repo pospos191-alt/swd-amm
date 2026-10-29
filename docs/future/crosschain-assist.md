@@ -11,11 +11,11 @@ contracts, in the browser (the hub), on runners and validators people already ru
 
 | # | Item | Status | Where |
 |---|---|---|---|
-| 18 | Neuro cross-chain security oracle | **Built and tested on local chains**. EVM testnet deploy waits for 1 November. Osmosis has a working contract and memo path, not deployed | `contracts/NeuroOracle.sol`, `src/neurooracle.js`, `scripts/neuro-oracle.js`, `scripts/saphan-dryrun.js --neuro-oracle`, `.github/workflows/neuro-oracle.yml`, `cosmwasm/neuro-oracle-osmo/` |
+| 18 | Neuro cross-chain security oracle | **Built, tested on local chains, deploy-ready.** The workflow's `deploy` mode (sender, receivers, wire, record, verify) waits for the ZETAPHY RPC (paused until 1 November). Osmosis: contract, build workflow and commands ready, not uploaded | `contracts/NeuroOracle.sol`, `src/neurooracle.js`, `scripts/neuro-oracle.js`, `scripts/saphan-dryrun.js --neuro-oracle`, `.github/workflows/neuro-oracle.yml`, `.github/workflows/neuro-oracle-osmo.yml`, `cosmwasm/neuro-oracle-osmo/`, `zetaphy-chain/hyperlane/neuro-oracle.json` |
 | 28 | Herd immunity + coverage per chain | **Built**: the pusher and the coverage meter (CLI and hub). Shows "not deployed" until 18 is deployed | `src/neurooracle.js`, `zetaphy immune push/coverage`, hub **Immunity** tab |
 | 19 | "Neuro-checked" certificate | **Built**: contract, CLI, DEX `--attest`, wallet bar and swap page badge, hub lookup. Not deployed yet | `contracts/NeuroAttest.sol`, `zetaphy certify`, `zetaphy-dex/cli.js deploy --attest`, `walletbar.js`, `zetaphy-dex/web` |
 | 30 | Quantum-safe AI attestations | **Built**: ML-DSA-44 archive, on-chain anchor, CLI verifier, browser verifier, tamper tests | `zetaphy-hub/pqattest.js`, `src/pqattest.js`, `contracts/NeuroAttest.sol` (`NeuroAnchor`), `zetaphy attest-pq` |
-| 32 | Parametric hack insurance (testnet) | **Prototype contract with tests**. Not deployed. The replay tool that makes the forensic report is not part of this workstream | `contracts/HackInsurance.sol` |
+| 32 | Parametric hack insurance (testnet) | **Prototype contract and the deterministic replay tool, with tests** (in-memory EVM and anvil). Not deployed | `contracts/HackInsurance.sol`, `src/replay.js`, `zetaphy insurance replay/vote`, `.github/workflows/insurance-replay.yml` |
 | 20 | Pre-sign assistant | **Built**: a simulation of balance changes on a real ZETAPHY node (state-override probe) and an optional AI explanation | `zetaphy-hub/presign.js`, `tools/PresignProbe.sol`, `wallet-safety.js` (`simulate` / `explain`) |
 | 21 | Governance assistant | **Built**: proposals and the timelock queue, decoded, simulated and flagged, in 8 languages | `zetaphy-hub/govassist.js`, hub **Governance** tab |
 | 22 | Validator assistant | **Built**: `zetaphy-validator status` diagnostics with plain-language advice | `zetaphy-chain/join-validator.sh` (`diagnose`, `jail_eta`) |
@@ -67,17 +67,79 @@ NeuroJobs (settled verdicts) ───┴─ read by NeuroOracleSender ── Hy
   - `check --chain <name>`: read only.
   - `sender`: on ZETAPHY.
   - `receiver --chain <name> --sender 0x…`: our ISM through the factory, then NeuroOracle with the chain's v2 timelock and multisig, or new ones made the way `origin-prepare` makes them.
-  - `wire --sender 0x… --receivers a=0x…,b=0x…`: sets the routes, then hands governance to the ZETAPHY timelock.
+  - `wire --sender 0x… --receivers a=0x…,b=0x… [--handover]`: sets each missing route. With `--handover`, governance then goes to the ZETAPHY timelock. Once the timelock governs the sender, `wire` does not send anything for a new route: it prints the call as a timelock proposal (`proposals`: `to`, `data`) for `timelock.yml`.
+  - `verify --chain <name>`: read only. Reads back every address of `neuro-oracle.json` on both chains: the sender's registry, NeuroJobs, Mailbox, route and governance; the mirror's Mailbox, origin domain and chain id, sender, ISM (the factory's address for our validators, and its validator set and threshold), governance, guardian, and that it is not paused. Exit 1 on any mismatch.
+  - `record --chain <name> …`: writes the deploy results into `neuro-oracle.json`.
   - `coverage`.
-- `.github/workflows/neuro-oracle.yml` has the modes **check** and **dry_run** only. On pull requests it runs dry_run for Base Sepolia.
-- **The deploy is after 2026-11-01.** It has three steps (sender, receivers, wire), and the result goes into `zetaphy-chain/hyperlane/neuro-oracle.json` as `{ sender, receivers: { <chain>: { oracle } } }`. The hub reads that file. A `deploy` mode will be added then. It needs the `testnet-deploy` environment, as in `saphan-route.yml`.
-- **The relayer must whitelist the sender:** `{ originDomain: 77390, senderAddress: <sender>, destinationDomain: <chain> }` in `HYP_WHITELIST` (`src/saphan.js relayerWhitelist` needs this entry added once deployed). Otherwise our validators sign the messages but nobody relays them.
-- Osmosis:
-  1. Build the wasm with `cosmwasm/optimizer` (the code needs no feature beyond `cosmwasm-std` 2.1).
-  2. Upload it to osmo-test-5.
-  3. Instantiate with `hook_sender = osmosisd q ibc-hooks wasm-sender <osmosis channel> <zetaphy1… of the sender>`. Compare that result with `ibcHooksSender()` before trusting either.
-  4. On ZETAPHY, governance calls `setIbcRoute("channel-N", "osmo1…", 600)`.
-  5. The IBC channel to osmo-test-5 is the Saphan Osmosis route (`zetaphy-chain/ibc`, `ROUTE=osmosis`).
+- `zetaphy-chain/hyperlane/neuro-oracle.json` is committed with `sender: null` (nothing deployed). The deploy fills it in as `{ sender, zetaphy: { threats, jobs, mailbox, governance, tx, fromBlock }, receivers: { <chain>: { oracle, ism, governance, guardian, tx, fromBlock, workflowRun } } }`. Three readers follow it with no other change:
+  - the hub's **Immunity** tab (`zetaphy-hub/build.mjs` `immuneMirrors`);
+  - `neuro-oracle.js coverage`;
+  - the relayer: `saphan.js whitelist` / `relayer-env` add `{ originDomain: 77390, senderAddress: <sender>, destinationDomain: <chain> }` per mirror to `HYP_WHITELIST`, and the chain to `HYP_RELAYCHAINS`. Without this our validators would sign the messages but nobody would relay them.
+- `.github/workflows/neuro-oracle.yml` modes:
+  - **check**: read only.
+  - **dry_run**: on local chains. Pull requests run it for Base Sepolia.
+  - **verify**: read only, any time; the deploy's verify step against the file on the branch.
+  - **deploy**: the real testnets. A manual run on `main`, job environment `testnet-deploy` (the owner approves; key `ZETAPHY_DEPLOYER_KEY`, referenced by name only; docs/SECRETS-HARDENING.md). Same pattern as `saphan-route.yml`'s deploy job.
+  - `chain = all` runs every chain of the table in one run.
+
+#### Runbook: the deploy after 2026-11-01 (the owner presses one button)
+
+Before (once):
+
+1. `saphan-chains.json` `zetaphyValidators.validators` holds the address of `ZETAPHY_VALIDATOR_KEY` (**saphan-route** `mode = check` prints it). The deploy refuses an empty list.
+2. The deployer `0x6af5…a245` has ZETAPHY testnet coins and faucet ETH on each chain: at least a quarter of `faucetEth` in the table (0.1 Sepolia, 0.02 Base Sepolia, 0.02 Arbitrum Sepolia). **neuro-oracle** `mode = check` shows the balances.
+3. The environment `testnet-deploy` exists with the secret `ZETAPHY_DEPLOYER_KEY`, branch `main` only, the owner as reviewer (docs/SECRETS-HARDENING.md, section 3).
+
+The button: **Actions → neuro-oracle → Run workflow** on `main`, `chain = all`, `mode = deploy`, `handover = true` → **Review deployments → Approve**. The job then:
+
+1. **Preflight** (read only). The ZETAPHY RPC must answer chain id `0x12e4e`, else nothing is deployed (until 1 November it does not answer). It also checks the deployer's balance on ZETAPHY and on every chain, and that our validators are set.
+2. **Sender** on ZETAPHY, reading the table's ThreatRegistry and NeuroJobs. It is skipped when `neuro-oracle.json` already has one.
+3. **Receivers.** Per chain: our ISM through the chain's factory, then NeuroOracle. Governance is the chain's v2 timelock and the guardian its multisig (the Saphan route's when deployed, else new ones). A chain already in the file is skipped.
+4. **Wire.** `setReceiver` per new chain, then (with `handover`) the sender's governance goes to the ZETAPHY timelock.
+5. **Record** into `neuro-oracle.json`.
+6. **Verify.** The read-back above for every chain, plus the relayer whitelist entries and the coverage meter.
+7. **Push** the file to the branch `neuro-oracle/all`. This happens even when verify failed, so that deployed addresses are never lost. The log prints the compare link. Open the pull request and merge it: the hub, coverage and the relayer pick the file up from `main`.
+
+Afterwards:
+
+- Run **hyperlane-relayer** once by hand (or wait for its schedule) so that pushes are relayed.
+- Push the flags with `zetaphy immune push --sender <sender>` (item 28).
+- **Adding a chain later** (after the hand-over): run `mode = deploy` for that chain. The receiver is deployed and recorded, and `wire` prints the `setReceiver` call as a timelock proposal. Verify fails on the route until the proposal is scheduled and executed (**timelock** workflow, `schedule` then `execute` after the delay). Then **neuro-oracle** `mode = verify` passes.
+- One chain at a time instead of `all`: deploy with `handover = false` for each chain, merge each pull request before the next run (the file on `main` carries the sender), and hand over at the end (`mode = deploy`, `handover = true`, a chain already recorded: only the hand-over runs).
+
+#### Osmosis: build, store and instantiate
+
+The build is `.github/workflows/neuro-oracle-osmo.yml`, on pull requests touching the contract or by hand. It runs:
+
+- `cargo test`;
+- the optimized wasm from `cosmwasm/optimizer:0.17.0`, pinned by digest `sha256:7e0b9229…7f85`. That image uses Rust 1.86.0. The older 0.16.x images (Rust 1.81) cannot read the lockfile, because some current dependencies use edition 2024;
+- `artifacts/checksums.txt`, and a check that the wasm is at most 819200 bytes;
+- `cosmwasm-check` 2.1.4;
+- an artifact `neuro-oracle-osmo-wasm` holding the wasm and its checksum.
+
+Then a person with an Osmosis testnet key and a little testnet OSMO stores and instantiates it on osmo-test-5. This is free: testnet OSMO comes from the faucet. Commands, with `NODE=https://rpc.testnet.osmosis.zone:443`:
+
+```sh
+# 0. uploads must be open to everyone on the testnet (else it takes a testnet governance proposal)
+osmosisd q wasm params --node $NODE            # code_upload_access: Everybody
+# 1. store the wasm from the workflow's artifact, after comparing its sha256 with checksums.txt
+osmosisd tx wasm store neuro_oracle_osmo.wasm --from <key> --chain-id osmo-test-5 --node $NODE \
+  --gas auto --gas-adjustment 1.4 --gas-prices 0.025uosmo -y
+osmosisd q tx <txhash> --node $NODE -o json | jq -r '.events[] | select(.type=="store_code") | .attributes[] | select(.key=="code_id") | .value'
+osmosisd q wasm code-info <code_id> --node $NODE  # data_hash = the sha256 of checksums.txt
+# 2. the sender as ibc-hooks sees it: the chain's own answer, compared with ibcHooksSender() before trusting either
+ZSENDER=$(node -e 'import("./src/neurooracle.js").then(m => console.log(m.zetaphyBech32(process.argv[1])))' <NeuroOracleSender 0x…>)
+osmosisd q ibc-hooks wasm-sender <osmosis channel-N> $ZSENDER --node $NODE
+node -e 'import("./src/neurooracle.js").then(m => console.log(m.ibcHooksSender(process.argv[1], process.argv[2])))' <channel-N> $ZSENDER
+# 3. instantiate: admin = our Osmosis-side admin (pause, setHookSender), no wasm admin (no migration; a fix is a new contract)
+osmosisd tx wasm instantiate <code_id> '{"admin":"osmo1<admin>","hook_sender":"<osmo1… from step 2>","src_chain":77390}' \
+  --label zetaphy-neuro-oracle --no-admin --from <key> --chain-id osmo-test-5 --node $NODE \
+  --gas auto --gas-adjustment 1.4 --gas-prices 0.025uosmo -y
+osmosisd q wasm list-contract-by-code <code_id> --node $NODE
+```
+
+4. On ZETAPHY, governance (the timelock after the hand-over) calls `setIbcRoute("channel-N", "osmo1<contract>", 600)` on the sender. `channel-N` here is ZETAPHY's side of the Saphan Osmosis channel (`zetaphy-chain/ibc`, `ROUTE=osmosis`).
+5. Check: `zetaphy immune push` with a flag, then `osmosisd q wasm contract-state smart osmo1<contract> '{"stats":{}}'`.
 
 ### Tests
 
@@ -92,8 +154,12 @@ NeuroJobs (settled verdicts) ───┴─ read by NeuroOracleSender ── Hy
   - coverage
   - the IBC memo and the ibc-hooks sender
   - roles
-- **Dry run on two real local chains.** `node scripts/saphan-dryrun.js --chain basesepolia --neuro-oracle --kit` ran against two `zetaphyd` devnets (chain ids 77390 and 84532, `scripts/devnet.sh`). The kit Mailbox and ISM stand in for Hyperlane core. It prints `NEURO ORACLE DRY RUN OK`, including the refusals and 100.0% coverage. Without `--kit` it uses the real Mailboxes and ISM factory, which is the workflow's dry_run. That path was **not run here**, because it needs anvil and the Hyperlane CLI, which this environment does not have.
-- `cargo test` in `cosmwasm/neuro-oracle-osmo` (`npm run test:cosmwasm`), 3 tests: sender check, newest-round rule, pause, key format, and parsing the memo ZETAPHY builds.
+- **Dry run on two real local chains.** `node scripts/saphan-dryrun.js --chain basesepolia --neuro-oracle --kit` ran against two `zetaphyd` devnets (chain ids 77390 and 84532, `scripts/devnet.sh`). The kit Mailbox and ISM stand in for Hyperlane core. It prints `NEURO ORACLE DRY RUN OK`, including the refusals and 100.0% coverage. Without `--kit` it uses the real Mailboxes and ISM factory, which is the workflow's dry_run. That path is still **not run here**: it forks a public testnet RPC, which this environment cannot reach (anvil itself is now installed here, at the pinned 1.2.3). The pull request CI runs it.
+- `cargo test` in `cosmwasm/neuro-oracle-osmo` (`npm run test:cosmwasm`), 3 tests: sender check, newest-round rule, pause, key format, and parsing the memo ZETAPHY builds. Passes again with this change.
+- **The deploy steps** (added with the `deploy` mode):
+  - The dry run (`saphan-dryrun.js --neuro-oracle`) now also runs what the deploy runs after the contracts exist: `recordDeployment`, then `verifyDeployment` (17 read-back checks before the hand-over), the hand-over to a timelock stand-in, `verify` again, and a new route after the hand-over coming out as a timelock proposal. With `--kit` on two local anvils (77390 and 84532): `NEURO ORACLE DRY RUN OK`.
+  - The deploy job's shell steps themselves were run against three local anvils (ZETAPHY 77390, Base Sepolia 84532, Sepolia 11155111) with a stand-in ISM factory, three times: first deploy of one chain, a second run adding a chain with `handover`, and a re-run (nothing to do). All steps pass, verify passes, and neuro-oracle.json comes out as the hub reads it. That run is not committed (it needs a local HTTPS stand-in for the table's RPCs).
+  - `test/saphanconfig.test.js`: the committed `neuro-oracle.json` (no sender) gives no relayer entry and the hub shows "not deployed"; records merge (sender kept, one per chain, refusals); the relayer whitelist and settings carry ZETAPHY → each mirror; the hub's `immuneMirrors` reads the same file.
 
 ### Limits
 
@@ -101,7 +167,8 @@ NeuroJobs (settled verdicts) ───┴─ read by NeuroOracleSender ── Hy
 - On a pause the mirror fails open (it answers "not flagged"). This keeps DEXes working when our validators are compromised, at the cost of protection during the pause.
 - The mirror is only as current as the last push. See 28 for how fast that is.
 - The ICS-20 path spends 1 azetaphy per message. If the Osmosis execution fails, the transfer is refunded and the message is lost. The pusher does not track IBC deliveries; resend with another `pushIbc`.
-- The wasm build was not checked for size or for `cosmwasm-check` here (only native tests ran), and the contract is not on osmo-test-5.
+- The optimized wasm (`cosmwasm/optimizer`) and `cosmwasm-check` run only in `neuro-oracle-osmo.yml` on GitHub: this sandbox has no Docker daemon, and installing `cosmwasm-check` was not allowed here. A plain `cargo build --target wasm32-unknown-unknown` with Rust 1.86.0 (the optimizer's toolchain) does build (245 KB before `wasm-opt`). The contract is not on osmo-test-5.
+- The relayer's schedule gate (`saphan.js gate`) watches the bridge routes, not the oracle. Oracle messages are whitelisted and relayed whenever the relayer runs; after a push, run **hyperlane-relayer** by hand if nothing else is moving.
 
 ---
 
@@ -220,17 +287,85 @@ NeuroJobs (settled verdicts) ───┴─ read by NeuroOracleSender ── Hy
 6. **Payout** = min(loss, cover, the target's cap, `maxClaimBps` of the pool (20%), what is left of the daily cap), and never more than the pool holds. One payout per cover. Anyone can trigger it.
 7. **Deploy:** `zetaphy deploy-assist insurance --jobs 0x…`.
 
+### The deterministic replay: Neuro's forensic report (`src/replay.js`, `zetaphy insurance`)
+
+A claim names the transactions and the block range. The replay turns them into a report whose hash every honest runner computes identically. That hash is the `reportHash` the claim files and the votes restate.
+
+1. **Fetch.** Each claimed transaction and its receipt come from the chain's RPC. Every one must be in `[fromBlock, toBlock]`. `toBlock` must also be at least `--confirmations` blocks (default 12) behind the head: a load-balanced public RPC may not have the newest blocks yet, and those can still reorg.
+2. **Fork and replay.** anvil forks the chain at `fromBlock - 1`. The foundry version is pinned to **v1.2.3**, the same as the workflows, and another version is refused. Only the claimed transactions are replayed, in chain order:
+   - Each runs in a block with its original number, timestamp, base fee and coinbase (anvil `--no-mining --order fifo`, empty blocks in between), sent from the original sender (impersonated), with the original data, value, gas and fees.
+   - Other transactions of the range are left out on purpose. The report says what these transactions did.
+3. **Balance deltas** of the target:
+   - before: the fork state (`evm_snapshot` / `evm_revert`); after: the state after the replay;
+   - assets counted: the native coin, every ERC-20 given with `--tokens`, and every ERC-20 a replayed transaction moved to or from the target (from its `Transfer` logs).
+4. **Prices**, in wei of the chain's native coin. There are only two sources:
+   - prices given explicitly: `--price 0x<token>=1.5` means 1.5 native coins per whole token;
+   - on-chain data read **at the fork state**, before the exploit: a ZetaphyOracle's `price(token) / price(native asset)`, both in USD with 18 decimals (`--price-oracle 0x… --native-asset 0x<WZETAPHY>`).
+
+   An asset with neither, or one the oracle refuses (stale, paused, tripped), is listed in `unpriced` and counts zero. The pricing inputs are part of the report, so a different pricing gives a different hash.
+5. **Loss** = max(0, −(sum of the priced deltas)), in wei. Values are truncated toward zero per asset.
+6. **Canonical JSON**:
+   - keys sorted, no whitespace, printable ASCII only;
+   - every integer a decimal string; no floats, no wall clock, no host, path or tool output;
+   - fields: the evidence (with `evidenceHash` and `targetKey` exactly as `HackInsurance` computes them), the fork block and its hash, per transaction the original block, index, timestamp, status and the replay's status (`matchesOriginal`), the assets with before, after, delta, price and value, `unpriced`, and `loss`.
+
+   The file is written as exactly those bytes, so `keccak256(file)` is the report hash.
+
+Commands (testnet only):
+
+```sh
+zetaphy insurance replay --target 0x<covered contract> --tx 0x…,0x… --from-block N --to-block M \
+  [--price 0x<token>=1.5 | --price-oracle 0x<ZetaphyOracle> --native-asset 0x<WZETAPHY>] [--tokens 0x…] \
+  [--source-rpc <another EVM chain> --chain-id <its id>] [--confirmations 12] [--anvil <path>] [--out report.json]
+zetaphy insurance hash report.json                  # recompute and check a report (evidence fields, hash)
+zetaphy insurance claim --insurance 0x… --cover <id> --report report.json [--uri <where the report is published>]
+zetaphy insurance vote --insurance 0x… --claim <id> --report <the claimant's report> [--accept-explicit-prices] [--dry-run]
+```
+
+**The committee voter** (`vote`) works like this:
+
+1. It reads the claim, its cover and its `ClaimEvidence` event.
+2. It takes the pricing inputs from the runner's own flags, or else from the claimant's report. A report that prices by hand is refused, and no vote is sent, unless the runner passes `--accept-explicit-prices` after checking those prices.
+3. It replays the evidence itself and checks:
+   - the target is the cover's;
+   - the evidence hash is the claim's;
+   - every transaction ends as it did on chain;
+   - no transaction is after the cover's end;
+   - the loss is not zero;
+   - the recomputed hash and loss equal the claim's.
+4. It votes approve (restating the hash and loss) only if every check passes, else reject.
+
 ### Tests
 
-`test/insurance.test.js`, 7 tests: pool and premium, capacity, approval and capped payout, rejection on a different replay, evidence rules, both dispute outcomes, expiry and LP withdrawal delay, daily cap.
+- `test/insurance.test.js`, 7 tests: pool and premium, capacity, approval and capped payout, rejection on a different replay, evidence rules, both dispute outcomes, expiry and LP withdrawal delay, daily cap.
+- `test/replay.test.js`, 7 tests on the in-memory EVM. The "fork" is the same deterministic setup rebuilt, and the incident is a scripted test fixture (`test/helpers/ReplayKit.sol`: a vault whose `sweep()` lacks its owner check; three fixture transactions, one valid only at its own timestamp, with unrelated noise in between). They cover:
+  - canonical JSON;
+  - `targetKey` and `evidenceHash` equal to the contract's;
+  - loss = 50 native + 2 tokens × 1.5 = 53. Two runs give byte-identical reports and hashes. Tokens are found from the logs, the unpriced token is listed, and the noise is not replayed. A replay at the wrong time shows `matchesOriginal: false` and gives another hash;
+  - on-chain prices (a price stub) give the same loss as explicit prices but another hash;
+  - refusals: outside the range, too close to the head, wrong chain, unknown transaction;
+  - tamper detection;
+  - the committee on the real `HackInsurance`: runners recompute and approve, so the claim is **Approved**; a claim with loss + 1 gets rejected by both runners, so it is **Rejected**. A transaction after the cover's end is rejected.
+- `npm run test:anvil` (`scripts/insurance-replay-e2e.js`; CI: `.github/workflows/insurance-replay.yml` with foundry v1.2.3). This is the same incident on a local anvil chain (77390), through the CLI:
+  - two `zetaphy insurance replay` runs, each forking with a fresh anvil, give byte-identical files, the same hash, `keccak256(file)` = the hash, and loss 53;
+  - an oracle-priced run;
+  - `claim`, then two runners' `vote`, so the claim is **Approved**; a claim with a tampered loss gets two `vote` rejections, so it is **Rejected**.
+
+  It ran here with anvil 1.2.3 (installed from the pinned release): `INSURANCE REPLAY E2E OK`.
+
+
 
 ### Not done, and why
 
-- The **replay tool** that turns transaction hashes and a block range into a deterministic forensic report (fork at `fromBlock-1`, re-execute, diff balances) does not exist yet. Today runners would have to build that report themselves for their votes to agree. This is the main missing piece.
-- Covers only contracts on ZETAPHY: block numbers are this chain's.
+- Covers only contracts on ZETAPHY: block numbers are this chain's. (The replay tool itself works on any EVM chain with an RPC that serves the fork block.)
+- Replay limits:
+  - Only the claimed transactions are replayed. An exploit that needs another transaction of the range (the attacker's setup, a price move) must claim it too; at most 16.
+  - Fidelity: `PREVRANDAO` and the hashes of the rebuilt blocks are anvil's, not the original ones. A contract that reads them can behave differently, and then `matchesOriginal` turns false and runners reject.
+  - Determinism needs the same anvil (pinned, enforced) and an RPC that serves the fork block honestly. A runner should replay against its own node or an RPC it trusts: an RPC that lies about state gives another report, and the votes disagree rather than agree on a lie.
+  - Counted: the native coin and ERC-20 balances. Not counted: NFTs, LP or lending positions, or approvals left behind.
 - No risk pricing.
 - No protection against a governance mistake in disputes.
-- The incident's block timestamps are not checked against the cover's end on chain. Runners must check that in the replay.
+- The incident's block timestamps are not checked against the cover's end on chain. The replay report carries each transaction's original timestamp and `zetaphy insurance vote` rejects any after the cover's end.
 - It must never hold real value. The doc, the contract header and the deploy command all say so.
 
 ---
@@ -344,6 +479,10 @@ Limits:
 | zetaphy-network | `npm test` | 463 / 463 pass (new: neurooracle 10, neuroattest 4, insurance 7, pqattest 5, assist 4, presign 6, validatorstatus 4) |
 | zetaphy-network | dry run `saphan-dryrun.js --neuro-oracle --kit` on two local zetaphyd devnets | NEURO ORACLE DRY RUN OK |
 | neuro-oracle-osmo | `cargo test` | 3 / 3 pass |
+| zetaphy-network | `npm test` after `npm run build` (with items 18 deploy-ready and 32 replay) | 566 / 566 pass, 0 fail, 0 cancelled (new: replay 7, saphanconfig 1) |
+| zetaphy-network | `npm run test:anvil` (`scripts/insurance-replay-e2e.js`, anvil 1.2.3) | INSURANCE REPLAY E2E OK |
+| zetaphy-network | `saphan-dryrun.js --neuro-oracle --kit` on two local anvils (77390, 84532), with record / verify / hand-over | NEURO ORACLE DRY RUN OK |
+| neuro-oracle-osmo | `cargo test` (again); `cargo +1.86.0 build --release --target wasm32-unknown-unknown` | 3 / 3 pass; builds |
 | zetaphy-hub | `npm test`; e2e `hub`, `safety`, `mine`, `assist` | 50 / 50; e2e all pass |
 | zetaphy-dex | `npm test` | 111 / 111 pass (new: badge 2) |
 | zetaphy-launch | `npm test` | 20 / 20 pass |
@@ -351,16 +490,10 @@ Limits:
 ## What remains (in order)
 
 1. After 2026-11-01:
-   - deploy the sender, the receivers and wire them (`scripts/neuro-oracle.js`)
-   - add the sender to the relayer whitelist
-   - add the `deploy` mode to `neuro-oracle.yml` and write `neuro-oracle.json`
+   - press the button: **neuro-oracle** → `chain = all`, `mode = deploy`, `handover = true` (the runbook in 18), then merge the `neuro-oracle/all` pull request (the relayer whitelist and the hub follow from the file)
    - deploy NeuroAttest and NeuroAnchor, and put them in the launch state and `deployments.json`
-2. Run the workflow's real-core dry run (anvil + Hyperlane CLI) at least once.
-3. Osmosis:
-   - build and check the wasm (`cosmwasm/optimizer`, `cosmwasm-check`)
-   - upload to osmo-test-5
-   - instantiate with the `wasm-sender` the chain itself reports
-   - `setIbcRoute`
-4. The deterministic forensic replay tool for 32. Without it, insurance votes cannot agree in practice.
+2. Run the workflow's real-core dry run (anvil + Hyperlane CLI) at least once: on any pull request touching the oracle, or by hand.
+3. Osmosis: run **neuro-oracle-osmo**, then store, instantiate and `setIbcRoute` by the commands in 18 (needs an Osmosis testnet key and the Saphan Osmosis channel).
+4. Insurance (32): deploy HackInsurance on the testnet only when there are runners who will run `zetaphy insurance vote` with anvil 1.2.3.
 5. Pass the pre-sign hooks from the DEX and NFT apps too.
 6. An on-chain list of runner PQ keys, so "trusted signer" does not depend on the reader's list.

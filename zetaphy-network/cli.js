@@ -62,6 +62,11 @@
 //   zetaphy immune push --sender 0x<NeuroOracleSender> [--once --interval 30 --max-fee 0.1]   relay new flags to every chain's NeuroOracle
 //   zetaphy immune coverage --sender 0x… --mirror <name>=<rpc>@0x<NeuroOracle> …   share of flags each chain mirrors
 //   zetaphy deploy-assist attest|anchor|insurance [--governance 0x… --jobs 0x…]   NeuroAttest, NeuroAnchor, HackInsurance (testnet only)
+//   zetaphy insurance replay --target 0x… --tx 0x…,… --from-block N --to-block M [--price 0x<token>=1.5,… | --price-oracle 0x… --native-asset 0x…]
+//                    [--source-rpc URL --chain-id N --tokens 0x…,… --confirmations 12 --anvil anvil --out report.json]
+//                                      the deterministic forensic replay (anvil fork, foundry v1.2.3): canonical report + reportHash + loss
+//   zetaphy insurance hash <report.json> | claim --insurance 0x… --cover <id> --report <file> | vote --insurance 0x… --claim <id> [--report <file> --dry-run]
+//                                      check a report, file a claim, or (a runner) recompute the replay and vote (HackInsurance, testnet only)
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
 //                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
@@ -1675,6 +1680,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   // Neuro-checked certificates, ML-DSA-44 attestations, the herd-immunity pusher (src/assistcli.js)
   if (group === 'certify' || group === 'attest-pq' || group === 'immune' || group === 'deploy-assist') {
     return assistCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, argv });
+  }
+
+  // parametric hack insurance: the deterministic forensic replay and the committee vote (src/insurancecli.js)
+  if (group === 'insurance') {
+    const { insuranceCommand } = await import('./src/insurancecli.js');
+    return insuranceCommand({ cmd, rest, opt, write, s, connect, connectRpc });
   }
 
   // ERC-8004 identity and signed Neuro messages (src/identitycli.js)

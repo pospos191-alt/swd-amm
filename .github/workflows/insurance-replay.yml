@@ -1,0 +1,58 @@
+# Parametric hack insurance, testnet only (docs/future/crosschain-assist.md, item 32): the deterministic forensic
+# replay (zetaphy-network/src/replay.js, `zetaphy insurance replay | claim | vote`).
+#
+#   unit   test/replay.test.js on the in-memory EVM: canonical JSON, HackInsurance's hashes, the report, the vote
+#   anvil  scripts/insurance-replay-e2e.js with anvil from foundry v1.2.3 (the version every runner must use):
+#          a local chain with the test fixtures and a scripted incident, two replays (each a fresh anvil fork at
+#          fromBlock - 1) giving byte-identical reports and the same hash, then a claim filed and two runners' votes
+#          (approved), and a claim with a tampered loss (rejected). Prints INSURANCE REPLAY E2E OK.
+# Local chains only: no key, no RPC, no testnet. Cost: free (GitHub-hosted runner).
+
+name: insurance-replay
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/insurance-replay.yml'
+      - 'zetaphy-network/src/replay.js'
+      - 'zetaphy-network/src/insurancecli.js'
+      - 'zetaphy-network/contracts/HackInsurance.sol'
+      - 'zetaphy-network/scripts/insurance-replay-e2e.js'
+      - 'zetaphy-network/test/replay.test.js'
+      - 'zetaphy-network/test/helpers/ReplayKit.sol'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    name: Insurance replay (in-memory EVM + anvil v1.2.3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Unit tests (in-memory EVM)
+        run: node --test test/replay.test.js
+
+      - name: Install anvil (pinned; the replay refuses another version)
+        uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1
+        with:
+          version: v1.2.3
+
+      - name: End to end on local anvil chains
+        run: |
+          set -o pipefail
+          node scripts/insurance-replay-e2e.js | tee "$RUNNER_TEMP/e2e.log"
+          grep -q '^INSURANCE REPLAY E2E OK' "$RUNNER_TEMP/e2e.log"

@@ -1,0 +1,77 @@
+# Neuro oracle mirror for Osmosis (docs/future/crosschain-assist.md, item 18): the CosmWasm contract
+# zetaphy-network/cosmwasm/neuro-oracle-osmo, built the way it is uploaded to osmo-test-5.
+#
+#   test     cargo test (Rust 1.86.0, the optimizer's toolchain)
+#   build    the optimized wasm from cosmwasm/optimizer 0.17.0 (pinned by digest; Rust 1.86.0, wasm-opt), its
+#            sha256 (checksums.txt), the size limit (819200 bytes, CosmWasm's default upload limit) and
+#            cosmwasm-check 2.1.4 (the cosmwasm-std version the contract uses). Artifact: neuro-oracle-osmo-wasm.
+#
+# No key, no upload: storing and instantiating on osmo-test-5 is done by a person with an Osmosis testnet key, with
+# the commands in the doc (section "Osmosis: store and instantiate"), after checking the wasm's sha256 against this
+# run's checksums.txt. The same source and image give the same bytes, so anyone can rebuild and compare.
+# Cost: free (GitHub-hosted runner).
+
+name: neuro-oracle-osmo
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/neuro-oracle-osmo.yml'
+      - 'zetaphy-network/cosmwasm/neuro-oracle-osmo/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wasm:
+    name: neuro-oracle-osmo (cargo test, optimized wasm, checksum, cosmwasm-check)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network/cosmwasm/neuro-oracle-osmo
+    env:
+      OPTIMIZER: "cosmwasm/optimizer:0.17.0@sha256:7e0b9229c1a4118d0c9a2af2e7f5d95a91f264c26a2ce5681c779926e74d7f85"
+      COSMWASM_CHECK: "2.1.4"
+      MAX_WASM: "819200"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Rust 1.86.0 (the optimizer's toolchain)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: 1.86.0
+
+      - name: cargo test
+        run: cargo +1.86.0 test --locked
+
+      - name: The optimized wasm (cosmwasm/optimizer, pinned by digest)
+        run: |
+          docker run --rm -v "$PWD":/code \
+            --mount type=volume,source=neuro_oracle_osmo_target,target=/target \
+            --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+            "$OPTIMIZER"
+          ls -l artifacts
+          cat artifacts/checksums.txt
+          sha256sum artifacts/neuro_oracle_osmo.wasm
+          size=$(stat -c %s artifacts/neuro_oracle_osmo.wasm)
+          [ "$size" -le "$MAX_WASM" ] || { echo "::error::the wasm is $size bytes, over $MAX_WASM"; exit 1; }
+          echo "### neuro-oracle-osmo wasm" >> "$GITHUB_STEP_SUMMARY"
+          echo "size $size bytes; sha256 \`$(sha256sum artifacts/neuro_oracle_osmo.wasm | cut -d' ' -f1)\` (optimizer \`$OPTIMIZER\`)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: cosmwasm-check (pinned)
+        run: |
+          cargo +1.86.0 install cosmwasm-check --version "$COSMWASM_CHECK" --locked
+          cosmwasm-check artifacts/neuro_oracle_osmo.wasm
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: neuro-oracle-osmo-wasm
+          path: |
+            zetaphy-network/cosmwasm/neuro-oracle-osmo/artifacts/neuro_oracle_osmo.wasm
+            zetaphy-network/cosmwasm/neuro-oracle-osmo/artifacts/checksums.txt
+          if-no-files-found: error

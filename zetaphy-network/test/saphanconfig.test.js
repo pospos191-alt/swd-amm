@@ -242,3 +242,40 @@ test('the hub lists every token of the table with its destinations (planned, clo
   assert.equal(h[0].destinations[2].token, A(0xe2));
   assert.deepEqual(h[1].destinations, []);
 });
+
+test('Neuro oracle (item 18): neuro-oracle.json feeds the relayer (ZETAPHY -> each mirror) and the hub; the deploy records merge into it', async () => {
+  const { recordDeployment, ABOUT } = await import('../scripts/neuro-oracle.js');
+  const t = loadChains();
+  const committed = JSON.parse(readFileSync(new URL('../../zetaphy-chain/hyperlane/neuro-oracle.json', import.meta.url), 'utf8'));
+  assert.equal(committed.sender, null, 'nothing deployed yet: the committed file has no sender');
+  assert.deepEqual(relayerWhitelist(t, {}, [], {}, committed), [], 'no sender: nothing to relay');
+  const sender = { sender: A(0x51), threats: t.zetaphy.threats, jobs: t.zetaphy.neuroJobs, mailbox: t.zetaphy.mailbox, tx: '0x' + '01'.repeat(32) };
+  const rec = (chain, n) => ({ chain, oracle: A(n), ism: A(n + 1), governance: A(n + 2), guardian: A(n + 3), tx: '0x' + '02'.repeat(32) });
+  let d = recordDeployment(committed, { name: 'basesepolia', sender, receiver: rec('basesepolia', 0x60), zfrom: 30000, ofrom: 700, run: '9' });
+  d = recordDeployment(d, { name: 'arbitrumsepolia', receiver: rec('arbitrumsepolia', 0x70), ofrom: 800, governance: t.zetaphy.timelock });
+  assert.equal(d.about, ABOUT);
+  assert.deepEqual(Object.keys(d.receivers), ['arbitrumsepolia', 'basesepolia'], 'sorted, the earlier receiver kept');
+  assert.equal(d.zetaphy.fromBlock, 30000);
+  assert.equal(d.zetaphy.governance, getAddress(t.zetaphy.timelock));
+  assert.equal(d.receivers.basesepolia.workflowRun, '9');
+  assert.throws(() => recordDeployment(d, { name: 'sepolia', sender: { ...sender, sender: A(0x99) }, zfrom: 1 }), /already has the sender/);
+  assert.throws(() => recordDeployment(committed, { name: 'sepolia', receiver: rec('sepolia', 0x80), ofrom: 1 }), /no sender/);
+  assert.throws(() => recordDeployment(d, { name: 'sepolia', receiver: rec('basesepolia', 0x80), ofrom: 1 }), /not sepolia/);
+  const pad = (x) => '0x' + '00'.repeat(12) + x.slice(2);
+  assert.deepEqual(relayerWhitelist(t, {}, [], {}, d), [
+    { originDomain: 77390, senderAddress: pad(A(0x51)), destinationDomain: 421614 },
+    { originDomain: 77390, senderAddress: pad(A(0x51)), destinationDomain: 84532 },
+  ]);
+  const env = relayerEnv(t, routes, null, { oracles: d });
+  assert.equal(env[0], 'HYP_RELAYCHAINS=basesepolia,arbitrumsepolia,zetaphy');
+  assert.ok(env.includes('HYP_CHAINS_BASESEPOLIA_INDEX_FROM=500') && env.includes('HYP_CHAINS_ARBITRUMSEPOLIA_INDEX_FROM=800'), 'the earlier of lockbox and mirror');
+  assert.equal(JSON.parse(env[1].slice('HYP_WHITELIST='.length)).length, 3 + 2);
+  assert.equal(relayerEnv(t, {}, null, { oracles: d })[0], 'HYP_RELAYCHAINS=arbitrumsepolia,basesepolia,zetaphy', 'mirrors alone are relayed too');
+  // the hub reads the same file (zetaphy-hub/build.mjs immuneMirrors)
+  const { immuneMirrors } = await import('../../zetaphy-hub/build.mjs');
+  const files = { 'zetaphy-chain/hyperlane/saphan-chains.json': t, 'zetaphy-chain/hyperlane/neuro-oracle.json': d };
+  const hub = immuneMirrors((f) => files[f]);
+  assert.equal(hub.sender, getAddress(A(0x51)));
+  assert.deepEqual(hub.mirrors.map((m) => [m.name, m.oracle]), [['arbitrumsepolia', getAddress(A(0x70))], ['basesepolia', getAddress(A(0x60))]]);
+  assert.deepEqual(immuneMirrors((f) => (f.endsWith('neuro-oracle.json') ? committed : t)), { sender: null, mirrors: [] }, 'the committed file: "not deployed"');
+});

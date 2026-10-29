@@ -28,6 +28,7 @@ No workflow uses `pull_request_target` or `workflow_run` (checked; see section 5
 | | | `launch-testnet` → `launch` | manual | no | `testnet-deploy` |
 | | | `rewards` → `deploy` | PR, sched, manual | no (manual `deploy` only) | `testnet-deploy` |
 | | | `saphan-route` → `deploy` | PR, manual | no (manual `deploy` only) | `testnet-deploy` |
+| | | `neuro-oracle` → `deploy` | PR, manual | no (manual `deploy` only) | `testnet-deploy` |
 | | | `timelock` → `execute` | manual | no | `testnet-deploy` |
 | | | `rewards` → `award` | PR, sched, manual | no (daily schedule, manual `award`) | `testnet-automation` |
 | | | `hyperlane-relayer` → `relay` (fallback signer) | sched, manual | no | `testnet-automation` |
@@ -157,7 +158,7 @@ For each row of the table in section 2:
   keeps working without approvals (also for fork PRs, which get no secrets anyway):
   `bridge-testnet` (`bridge` | `deploy`), `rewards` (`dry-run` | `deploy` | `award`), `saphan-route`
   (`route` | `validator-address` | `deploy`), `hyperlane-core` (`dry-run` | `deploy`), `timelock`
-  (`timelock` for status/schedule/cancel | `execute`).
+  (`timelock` for status/schedule/cancel | `execute`), `neuro-oracle` (`oracle` for check/dry_run/verify | `deploy`).
 - `environment:` added to exactly the jobs that read a key (section 1). Every one of them is conditioned on
   `workflow_dispatch` or `schedule`, never `pull_request`.
 - `launch-testnet`: its dry run also reads the key (it checks the deployer's address and balance), so the whole
@@ -165,7 +166,7 @@ For each row of the table in section 2:
 - **Least privilege**: every workflow's top-level `permissions:` is `contents: read`; `contents: write` /
   `pull-requests: write` only on the jobs that push a branch or open a PR (the deploy jobs, the release jobs).
 - `actions/checkout` with `persist-credentials: false` everywhere except the jobs that `git push` or
-  `git fetch` afterwards (the deploy jobs of `bridge-testnet`, `rewards`, `saphan-route`, `hyperlane-core`,
+  `git fetch` afterwards (the deploy jobs of `bridge-testnet`, `rewards`, `saphan-route`, `neuro-oracle`, `hyperlane-core`,
   `launch-testnet`, and both `timelock` jobs).
 - `hyperlane-relayer` signs with `ZETAPHY_RELAYER_KEY` when it is set, else `ZETAPHY_DEPLOYER_KEY`.
 - Third-party actions were already pinned by commit SHA (`foundry-rs/foundry-toolchain`, `hashicorp/setup-terraform`,

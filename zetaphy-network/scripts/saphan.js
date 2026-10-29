@@ -41,7 +41,7 @@
 // (another chain table / routes file, e.g. a dry run's).
 import { readFileSync, writeFileSync } from 'node:fs';
 import { JsonRpcProvider, Wallet, Contract, ContractFactory, NonceManager, getAddress, getCreateAddress, formatEther, parseEther, parseUnits, zeroPadValue, AbiCoder, id as keccakId } from 'ethers';
-import { loadChains, chainOf, sortAddresses, loadRoutes, loadTokenRoutes, tokenOf, tokenRouteList, relayerWhitelist, bytes32, NATIVE_ERC20 } from '../src/saphan.js';
+import { loadChains, chainOf, sortAddresses, loadRoutes, loadTokenRoutes, tokenOf, tokenRouteList, relayerWhitelist, oracleChains, bytes32, NATIVE_ERC20 } from '../src/saphan.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
 const ZERO = '0x' + '00'.repeat(20);
@@ -283,6 +283,11 @@ export async function pending(t, routes, zp, originProvider) {
   return out;
 }
 
+/** neuro-oracle.json (item 18; NEURO_ORACLE: another file), or null. */
+function loadOracleFile() {
+  try { return JSON.parse(readFileSync(process.env.NEURO_ORACLE || new URL('../../zetaphy-chain/hyperlane/neuro-oracle.json', import.meta.url), 'utf8')); } catch { return null; }
+}
+
 /** The v1 Sepolia lockbox (bridge-testnet.json), still relayed to its HyperlaneLane. */
 function v1Lockbox() {
   try { return JSON.parse(readFileSync(new URL('../../zetaphy-chain/hyperlane/bridge-testnet.json', import.meta.url), 'utf8'))?.sepolia?.hyperlaneLockBox ?? null; } catch { return null; }
@@ -294,7 +299,7 @@ const v1Whitelist = () => (v1Lockbox() ? [{ originDomain: 11155111, senderAddres
  * block each chain is read from (the route's deploy block; ZETAPHY: the bridge's, unless our validator
  * runs, whose merkle tree must be read from the Mailbox's start: agent-config.json index.from).
  */
-export function relayerEnv(t, routes, v1, { sepoliaV1From = null, zetaphyV1From = null, validator = false, tokenRoutes = {} } = {}) {
+export function relayerEnv(t, routes, v1, { sepoliaV1From = null, zetaphyV1From = null, validator = false, tokenRoutes = {}, oracles = null } = {}) {
   const from = {};
   const at = (name, b) => { if (Number.isInteger(b) && b >= 0) from[name] = Math.min(from[name] ?? b, b); };
   if (v1) at('sepolia', sepoliaV1From);
@@ -311,8 +316,14 @@ export function relayerEnv(t, routes, v1, { sepoliaV1From = null, zetaphyV1From 
     at(chain, r.destination.fromBlock);
     at('zetaphy', r.zetaphy.fromBlock);
   }
+  // the Neuro oracle's mirrors (neuro-oracle.json): ZETAPHY -> chain only
+  for (const name of oracleChains(t, oracles)) {
+    names.add(name);
+    at(name, oracles.receivers[name].fromBlock);
+    at('zetaphy', oracles.zetaphy?.fromBlock);
+  }
   const extra = v1 ? [{ originDomain: 11155111, senderAddress: bytes32(v1), destinationDomain: 77390 }] : [];
-  const lines = [`HYP_RELAYCHAINS=${[...names, 'zetaphy'].join(',')}`, `HYP_WHITELIST=${JSON.stringify(relayerWhitelist(t, routes, extra, tokenRoutes))}`,
+  const lines = [`HYP_RELAYCHAINS=${[...names, 'zetaphy'].join(',')}`, `HYP_WHITELIST=${JSON.stringify(relayerWhitelist(t, routes, extra, tokenRoutes, oracles))}`,
     'HYP_CHAINS_ZETAPHY_INDEX_CHUNK=499'];
   for (const n of names) {
     if (from[n] == null) throw new Error(`no start block for ${n}: saphan-routes.json needs origin.fromBlock / destination.fromBlock (or --sepolia-v1-from)`);
@@ -403,11 +414,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const originP = (name) => { const c = chainOf(t, name); return providerFor(process.env.ORIGIN_RPC || c.rpc.join(','), c.chainId); };
     let res;
     const zetaphyP = () => providerFor(process.env.ZETAPHY_RPC || t.zetaphy.rpc.join(','), t.zetaphy.chainId);
-    if (cmd === 'whitelist') res = relayerWhitelist(t, loadRoutes(), v1Whitelist(), loadTokenRoutes());
+    if (cmd === 'whitelist') res = relayerWhitelist(t, loadRoutes(), v1Whitelist(), loadTokenRoutes(), loadOracleFile());
     else if (cmd === 'relayer-env') {
       let zv1 = null;
       try { zv1 = JSON.parse(readFileSync(new URL('../../zetaphy-chain/hyperlane/bridge-testnet.json', import.meta.url), 'utf8'))?.zetaphy?.fromBlock ?? null; } catch { /* none */ }
-      const lines = relayerEnv(t, loadRoutes(), v1Lockbox(), { sepoliaV1From: o['sepolia-v1-from'] != null ? Number(o['sepolia-v1-from']) : null, zetaphyV1From: zv1, validator: o.validator === 'yes', tokenRoutes: loadTokenRoutes() });
+      const lines = relayerEnv(t, loadRoutes(), v1Lockbox(), { sepoliaV1From: o['sepolia-v1-from'] != null ? Number(o['sepolia-v1-from']) : null, zetaphyV1From: zv1, validator: o.validator === 'yes', tokenRoutes: loadTokenRoutes(), oracles: loadOracleFile() });
       console.log(lines.join('\n'));
       process.exit(0);
     } else if (cmd === 'gate') {
