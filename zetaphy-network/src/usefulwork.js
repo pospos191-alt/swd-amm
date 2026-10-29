@@ -6,7 +6,7 @@ import { readContract } from '../../zetaphy-neuro/src/reader.js';
 import { verdictOf } from '../../zetaphy-neuro/src/verdict.js';
 import { CHAINS } from '../../zetaphy-neuro/src/chains.js';
 import { codeVerdict, keccakHex, jobCommitment, canaryCommitment, findingCommitment, randomSalt } from '../../zetaphy-hub/work-core.js';
-import { replay, fuzz, findingHash, parseFinding, specHash } from '../../zetaphy-hub/fuzz-core.js';
+import { replay, fuzz, findingHash, parseFinding, specHash, reproducer, findingBytes } from '../../zetaphy-hub/fuzz-core.js';
 import { powPrefix, search } from '../../zetaphy-hub/mine-core.js';
 
 export const neuro = { readContract, verdictOf, keccak256: neuroKeccak, CHAINS };
@@ -44,7 +44,8 @@ export async function verifyFinding({ specText, finding, expectSpecHash, expectF
   try { parsed = parseFinding(bytes); } catch (e) { return { valid: false, reason: e.message }; }
   try {
     const r = await replay(await loadEvm(), JSON.parse(specText), parsed);
-    return { valid: r.valid, profit: r.profit, reason: r.valid ? 'invariant broken' : 'replay does not break the invariant' };
+    const broken = r.violations.filter((v) => v.kind !== 'reentrancy').map((v) => v.kind);
+    return { valid: r.valid, profit: r.profit, kinds: r.kinds, violations: r.violations, reason: r.valid ? `invariant broken: ${[...new Set(broken)].join(', ')}` : 'replay does not break an invariant' };
   } catch (e) {
     return { valid: false, reason: e.message };
   }
@@ -53,6 +54,17 @@ export async function verifyFinding({ specText, finding, expectSpecHash, expectF
 /** Fuzzes a spec in Node (the same fuzzer as the browser). */
 export async function hunt(specText, opts) {
   return fuzz(await loadEvm(), JSON.parse(specText), opts);
+}
+
+/** A reproducer file for a fuzz result (see zetaphy-hub/fuzz-core.js reproducer). */
+export async function reproducerOf(specText, res) {
+  return reproducer(await loadEvm(), JSON.parse(specText), specText, res);
+}
+
+/** A finding from a file or argument: the JSON finding itself, or a reproducer (format zetaphy-fuzz-repro/1). */
+export function findingFromText(text) {
+  const o = JSON.parse(text);
+  return o?.format === 'zetaphy-fuzz-repro/1' ? findingBytes(o.finding) : new TextEncoder().encode(text.trim());
 }
 
 /** Finds a PoW stamp nonce: sha256(chainId || seed || worker || nonce) with `bits` zero bits. */

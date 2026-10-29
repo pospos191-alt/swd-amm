@@ -42,8 +42,14 @@ function mocks() {
   return mockBins;
 }
 
-export async function createChain() {
+/**
+ * @param opts.block  a fixed block environment for every call ({ number, timestamp } as bigint; the rest is
+ *   zero): the red-vs-blue arena pins it (ml/redteam/sandbox.js) so independent runners get the same bytes.
+ *   Without it EthereumJS uses its default block (all zero), which is also fixed.
+ */
+export async function createChain(opts = {}) {
   const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }) });
+  const block = opts.block ? { header: { number: BigInt(opts.block.number), timestamp: BigInt(opts.block.timestamp), coinbase: Address.zero(), difficulty: 0n, prevRandao: new Uint8Array(32), gasLimit: 30_000_000n, baseFeePerGas: 0n, getBlobGasPrice: () => 0n } } : undefined;
   const sm = evm.stateManager;
   const deployer = Address.fromString(DEPLOYER);
 
@@ -57,7 +63,7 @@ export async function createChain() {
 
   /** Runs creation code (+ ABI-encoded args) from the deployer; returns the new address. */
   async function deployCode(creationHex, argsHex = '') {
-    const r = await evm.runCall({ caller: deployer, data: hexToBytes('0x' + creationHex.replace(/^0x/, '') + argsHex), gasLimit: 30_000_000n });
+    const r = await evm.runCall({ caller: deployer, data: hexToBytes('0x' + creationHex.replace(/^0x/, '') + argsHex), gasLimit: 30_000_000n, block });
     if (r.execResult.exceptionError) throw new Error(`deploy: ${r.execResult.exceptionError.error}`);
     return r.createdAddress.toString();
   }
@@ -65,7 +71,7 @@ export async function createChain() {
   /** A state-changing call from the deployer; args are 32-byte words (hex or bigint). */
   async function send(to, sig, args = [], value = 0n) {
     const data = '0x' + selectorOf(sig) + args.map((a) => (typeof a === 'bigint' ? a.toString(16).padStart(64, '0') : word(a))).join('');
-    const r = await evm.runCall({ caller: deployer, to: Address.fromString(to), data: hexToBytes(data), value: BigInt(value), gasLimit: 30_000_000n });
+    const r = await evm.runCall({ caller: deployer, to: Address.fromString(to), data: hexToBytes(data), value: BigInt(value), gasLimit: 30_000_000n, block });
     if (r.execResult.exceptionError) throw new Error(`${sig}: ${r.execResult.exceptionError.error}`);
     return bytesToHex(r.execResult.returnValue);
   }
@@ -115,7 +121,7 @@ export async function createChain() {
           }
           const balance = (await sm.getAccount(caller))?.balance ?? 0n;
           if (price > 0n && balance < gasLimit * price) throw new Error('insufficient funds for gas * price + value');
-          const r = await evm.runCall({ caller, to: Address.fromString(to), data: hexToBytes(data), gasLimit, gasPrice: price });
+          const r = await evm.runCall({ caller, to: Address.fromString(to), data: hexToBytes(data), gasLimit, gasPrice: price, block });
           if (r.execResult.exceptionError) throw new Error('execution reverted');
           return bytesToHex(r.execResult.returnValue);
         } finally {
@@ -126,7 +132,7 @@ export async function createChain() {
     },
   };
 
-  return { evm, deployCode, send, fund, getCode, putCode, installDex, rpc };
+  return { evm, block, deployCode, send, fund, getCode, putCode, installDex, rpc };
 }
 
 export { word };

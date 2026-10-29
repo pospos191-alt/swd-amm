@@ -3,9 +3,14 @@
 //   - scan jobs (UsefulWork): a PoW stamp buys seats; Neuro's code-only rules scan of each job's
 //     contract; the answers go on-chain sealed (commitMany), are revealed when the seats are full
 //     (revealMany) and paid when 2 of 3 agree (settle, withdraw);
-//   - bug hunting (BugBounty): fuzz a bounty's test contract in an in-page EVM (vendor/evm.js); a
-//     finding is committed sealed, revealed one block later, and paid after runners replay it.
-// When the contracts are not in hub-config.json yet, both run as practice (nothing sent, nothing paid).
+//   - bug hunting (BugBounty): a coverage-guided fuzz of a bounty's test contract in an in-page EVM
+//     (vendor/evm.js, fuzz-core.js) against the spec's invariants; a finding is committed sealed,
+//     revealed one block later, and paid after runners replay it. Each finding can be saved as a
+//     reproducer (JSON: the steps, the seed, a per-step trace; `zetaphy work verify-finding` replays it).
+// The addresses come from hub-config.json (build.mjs: the launch state + zetaphy-network/deployments/
+// useful-work-77390.json written by `zetaphy deploy-useful-work`). Not there yet: both run as practice
+// (nothing sent, nothing paid). Deployed but paused (the deploy default, until a timelock vote opens
+// them): practice too, with a notice saying so.
 // Nothing runs until a button is pressed; leaving or redrawing the page stops everything (stopWork).
 import { withFallback } from './i18n.js';
 import { WORK } from './work-i18n.js';
@@ -54,8 +59,9 @@ export function renderWork(host, ctx) {
   const L = withFallback(WORK, ctx.lang);
   const el = ctx.el;
   const C = ctx.cfg?.contracts ?? {};
-  const uw = C.usefulWork, bb = C.bugBounty, rep = C.workerReputation;
-  const practice = !uw;
+  const uw = C.usefulWork, bb0 = C.bugBounty, rep = C.workerReputation;
+  let bb = bb0;
+  let practice = !uw;
   const $ = (id) => document.getElementById(id);
   const say = (id, text, cls = '') => { const n = $(id); if (n) { n.textContent = text; n.className = `msg ${cls}`; } };
   const call = async (to, sig, args, types) => decodeArgs(types, await ctx.evmCall('eth_call', [{ to, data: calldata(keccak256, sig, args) }, 'latest']));
@@ -69,7 +75,7 @@ export function renderWork(host, ctx) {
         el('h2', { text: L.title }),
         el('p', { class: 'small', text: L.intro }),
         el('p', { class: 'small warnline', text: L.notMoney }),
-        practice ? el('p', { class: 'small notice', id: 'wk-practice', text: L.notDeployed }) : null,
+        practice ? el('p', { class: 'small notice', id: 'wk-practice', text: L.notDeployed }) : el('p', { class: 'small notice', id: 'wk-paused', hidden: true, text: L.paused }),
         el('h3', { text: L.scanH }),
         el('ol', { class: 'howto small' }, L.scanHow.map((t) => el('li', {}, el('p', { text: t })))),
         practice ? null : el('table', { class: 'mn-table' }, el('tbody', {},
@@ -83,11 +89,13 @@ export function renderWork(host, ctx) {
         el('h2', { text: L.huntH }),
         el('p', { class: 'small', text: L.huntIntro }),
         el('p', { class: 'small dim', text: L.vulnNote }),
-        el('table', { class: 'mn-table' }, el('tbody', {}, row(L.bounty, 'wk-bounty'), row(L.reward, 'wk-reward'), row(L.runs, 'wk-runs'))),
+        el('table', { class: 'mn-table' }, el('tbody', {}, row(L.bounty, 'wk-bounty'), row(L.reward, 'wk-reward'), row(L.runs, 'wk-runs'), row(L.coverage, 'wk-cov', L.tipCoverage))),
         el('div', { class: 'row wrap' },
           el('button', { type: 'button', class: 'btn', id: 'wk-hunt-go', text: L.startHunt, onclick: () => huntToggle() }),
-          el('button', { type: 'button', class: 'btn ghost', id: 'wk-submit', hidden: true, text: L.submit, onclick: () => submitFinding() })),
+          el('button', { type: 'button', class: 'btn ghost', id: 'wk-submit', hidden: true, text: L.submit, onclick: () => submitFinding() }),
+          el('button', { type: 'button', class: 'btn ghost', id: 'wk-repro', hidden: true, text: L.saveRepro, onclick: () => saveRepro() })),
         el('p', { class: 'msg', id: 'wk-hunt-msg', role: 'status', 'aria-live': 'polite' }),
+        el('ul', { class: 'small wk-kinds', id: 'wk-kinds', hidden: true }),
         el('pre', { class: 'mono small wk-finding', id: 'wk-finding', hidden: true }))));
 
   const showVerdicts = (rows) => $('wk-scan-out')?.replaceChildren(el('table', { class: 'mn-table wk-results' }, el('tbody', {},
@@ -237,7 +245,7 @@ export function renderWork(host, ctx) {
   async function pickBounty() {
     if (!bb) {
       const text = await (await fetch('bounties/vulnerable-vault.json')).text();
-      return { spec: JSON.parse(text), bountyId: null, reward: null };
+      return { spec: JSON.parse(text), specText: text, bountyId: null, reward: null };
     }
     const [n] = await call(bb, 'bountyCount()', [], ['uint256']);
     const now = Date.now() / 1000;
@@ -246,37 +254,70 @@ export function renderWork(host, ctx) {
       if (b.paid || b.refunded || Number(b.deadline) < now || !/^bounties\/[\w.-]+\.json$/.test(b.specURI)) continue;
       const text = await (await fetch(b.specURI)).text();
       if (specHash(keccak256, text).toLowerCase() !== b.specHash.toLowerCase()) throw new Error(L.specBad);
-      return { spec: JSON.parse(text), bountyId: i, reward: b.reward };
+      return { spec: JSON.parse(text), specText: text, bountyId: i, reward: b.reward };
     }
     throw new Error(L.noJobs);
   }
 
+  const showFinding = (f) => {
+    $('wk-finding').textContent = f.steps.map((s) => `${s.via ? `[${L.viaHook}] ` : ''}${s.sig}${s.args.length ? ` ${s.args.join(', ')}` : ''}${s.value !== '0' ? ` {value: ${s.value}}` : ''}${s.reenter ? ` ↺ ${s.reenter.sig} ×${s.reenter.times}` : ''}`).join('\n');
+    $('wk-finding').hidden = false;
+  };
+  const kindName = (k) => L.kinds[k] ?? k;
+
   async function huntToggle() {
     const btn = $('wk-hunt-go');
-    if (hunt?.worker) { hunt.worker.terminate(); live?.workers.delete(hunt.worker); hunt.worker = null; btn.textContent = L.startHunt; say('wk-hunt-msg', ''); return; }
-    $('wk-submit').hidden = true;
-    $('wk-finding').hidden = true;
+    if (hunt?.worker) { hunt.worker.terminate(); live?.workers.delete(hunt.worker); hunt.worker = null; btn.textContent = L.startHunt; if (!hunt.found?.length) say('wk-hunt-msg', ''); return; }
+    for (const id of ['wk-submit', 'wk-repro', 'wk-finding', 'wk-kinds']) $(id).hidden = true;
+    $('wk-kinds').replaceChildren();
     try {
       hunt = await pickBounty();
+      hunt.found = [];
       $('wk-bounty').textContent = hunt.bountyId == null ? hunt.spec.name : `#${hunt.bountyId} · ${hunt.spec.name}`;
       $('wk-reward').textContent = hunt.reward == null ? '–' : zt(hunt.reward);
     } catch (e) { say('wk-hunt-msg', e.message, 'bad'); return; }
     btn.textContent = L.stopHunt;
     const seed = crypto.getRandomValues(new Uint32Array(1))[0];
+    say('wk-hunt-msg', fill(L.hunting, { n: seed }));
     hunt.worker = worker((d) => {
-      if (d.fuzzRuns) { $('wk-runs').textContent = String(d.fuzzRuns); return; }
+      if (d.fuzzRuns) {
+        $('wk-runs').textContent = String(d.fuzzRuns);
+        if (d.coverage) $('wk-cov').textContent = `${d.coverage.pct}% · ${d.coverage.edges} ${L.edges}`;
+        return;
+      }
+      if (d.found) {
+        hunt.found.push(d);
+        if (d.coverage) $('wk-cov').textContent = `${d.coverage.pct}% · ${d.coverage.edges} ${L.edges}`;
+        // the finding to submit: one where the attacker gains coins first, else the first one found
+        const best = hunt.found.find((x) => x.kinds.includes('attacker-profit')) ?? hunt.found[0];
+        hunt.finding = best.found;
+        hunt.repro = best.repro;
+        $('wk-kinds').append(el('li', {}, el('b', { text: d.kinds.map(kindName).join(' + ') }), el('span', { class: 'dim', text: ` · ${fill(L.atRun, { n: d.runs })}` })));
+        $('wk-kinds').hidden = false;
+        say('wk-hunt-msg', best.kinds.includes('attacker-profit') ? fill(L.found, { p: ctx.formatZeta(BigInt(best.profit), 4) }) : fill(L.foundKinds, { k: best.kinds.map(kindName).join(' + ') }), 'ok');
+        showFinding(best.found);
+        $('wk-submit').hidden = hunt.bountyId == null; // practice: nothing to submit to
+        $('wk-repro').hidden = false;
+        return;
+      }
       hunt.worker?.terminate(); live?.workers.delete(hunt.worker); hunt.worker = null;
       btn.textContent = L.startHunt;
       if (d.error) { say('wk-hunt-msg', `${L.failed}: ${d.error}`, 'bad'); return; }
       $('wk-runs').textContent = String(d.runs);
-      if (!d.found) { say('wk-hunt-msg', fill(L.notFound, { n: d.runs })); return; }
-      hunt.finding = d.found;
-      say('wk-hunt-msg', fill(L.found, { p: ctx.formatZeta(BigInt(d.profit), 4) }), 'ok');
-      $('wk-finding').textContent = d.found.steps.map((s) => `${s.sig}${s.args.length ? ` ${s.args.join(', ')}` : ''}${s.value !== '0' ? ` {value: ${s.value}}` : ''}`).join('\n');
-      $('wk-finding').hidden = false;
-      $('wk-submit').hidden = hunt.bountyId == null; // practice: nothing to submit to
+      if (d.coverage) $('wk-cov').textContent = `${d.coverage.pct}% · ${d.coverage.edges} ${L.edges}`;
+      if (!hunt.found.length) say('wk-hunt-msg', fill(L.notFound, { n: d.runs }));
     });
-    hunt.worker.postMessage({ fuzz: { spec: hunt.spec, seed, runs: 20000 } });
+    hunt.worker.postMessage({ fuzz: { spec: hunt.spec, specText: hunt.specText, seed, runs: 20000 } });
+  }
+
+  function saveRepro() {
+    if (!hunt?.repro) return;
+    const blob = new Blob([hunt.repro], { type: 'application/json' });
+    const a = el('a', { href: URL.createObjectURL(blob), download: `zetaphy-repro-${keccakHex(keccak256, findingBytes(hunt.finding)).slice(2, 10)}.json` });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
   }
 
   async function submitFinding() {
@@ -308,5 +349,21 @@ export function renderWork(host, ctx) {
     b.disabled = false;
   }
 
-  if (!practice) refresh(ctx.account?.() || null);
+  // deployed but still paused (the deploy default): practice until governance opens it
+  if (!practice) {
+    (async () => {
+      let paused = false;
+      try { paused = (await call(uw, 'paused()', [], ['bool']))[0]; } catch { /* an older deployment without pause */ }
+      // bounties may stay paused on their own: hunt as practice then
+      try { if (bb && (await call(bb, 'paused()', [], ['bool']))[0]) bb = null; } catch { /* idem */ }
+      if (paused) {
+        practice = true;
+        bb = null;
+        if ($('wk-paused')) $('wk-paused').hidden = false;
+        const go = $('wk-scan-go');
+        if (go) { go.textContent = L.practiceScan; go.onclick = () => practiceScan(); }
+        if ($('wk-withdraw')) $('wk-withdraw').hidden = true;
+      } else refresh(ctx.account?.() || null);
+    })();
+  }
 }

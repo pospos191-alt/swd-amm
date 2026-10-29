@@ -16,7 +16,12 @@
 // Blue entry: a detector spec (ml/detectors/spec.js, "neuro-detector/1"). Score = valid red tokens
 //   it gives p >= 0.5 minus 2 x benign reference tokens it gives p >= 0.5 (same Neuro features).
 //
-//   node ml/redteam/arena.js --round round.json [--out ml/out/arena] [--benign n-per-family]
+// Several runners judge each round (k-of-n, RedBlueArena): everything that decides the result is pinned in the
+// sandbox (ml/redteam/sandbox.js: exact EVM / solc versions, a fixed block, the model, the benign set), the
+// round names its hash, and this runner refuses to judge in another sandbox or with other package versions.
+//
+//   node ml/redteam/arena.js --sandbox                        the sandbox id (and description) to open a round with
+//   node ml/redteam/arena.js --round round.json [--out ml/out/arena]
 //   round.json (zetaphy-network/scripts/markets.js arena-fetch writes it):
 //     { "round": 1, "red": [{ "index": 0, "revealed": true, "contentHash": "0x…", "content": "…" }],
 //       "blue": [{ "index": 0, "revealed": true, "contentHash": "0x…", "content": "…" }] }
@@ -38,6 +43,7 @@ import { checkSpec, predict } from '../detectors/spec.js';
 import { makeSample, BENIGN_FAMILIES } from '../data/solgen.js';
 import { loadModel } from './run.js';
 import { rng } from '../lib/rng.js';
+import { sandboxOf, sandboxHash, checkPinned, BLOCK, BENIGN } from './sandbox.js';
 
 const DEX = CHAINS.bsc.dex;
 const POOL_WEI = 10n ** 20n;
@@ -71,7 +77,7 @@ async function balance(chain, a) {
 
 /** A call from any address. Returns { ok, ret }. */
 async function callAs(chain, from, to, sig, args = [], value = 0n) {
-  const r = await chain.evm.runCall({ caller: Address.fromString(from), to: Address.fromString(to), data: hexToBytes(calldata(sig, args)), value, gasLimit: 30_000_000n });
+  const r = await chain.evm.runCall({ caller: Address.fromString(from), to: Address.fromString(to), data: hexToBytes(calldata(sig, args)), value, gasLimit: 30_000_000n, block: chain.block });
   return { ok: !r.execResult.exceptionError, ret: b2h(r.execResult.returnValue) };
 }
 
@@ -135,18 +141,31 @@ export async function judgeRed(chain, manifest, model) {
   return { token, valid, evaded: valid && RANK[shown] < RANK.medium, level: shown, rulesLevel: report.analysis.level, sim: report.sim?.stage ?? null, p: ml?.p ?? null, reason, f };
 }
 
-/** Benign reference rows (Neuro features of benign generated tokens), fixed seed. */
-export async function benignRows(perFamily = 2, families = BENIGN_FAMILIES) {
-  const R = rng('arena-benign');
+/** A sandbox chain: the pinned block environment and the mock DEX. */
+export async function sandboxChain() {
+  const chain = await createChain({ block: BLOCK });
+  chain.addPool = await chain.installDex(DEX);
+  return chain;
+}
+
+/** Benign reference rows (Neuro features of benign generated tokens), fixed seed, in the sandbox. */
+export async function benignRows(perFamily = BENIGN.perFamily, families = BENIGN_FAMILIES) {
+  const R = rng(BENIGN.seed);
   const samples = families.flatMap((fam) => Array.from({ length: perFamily }, (_, i) => makeSample(R, { id: `arena-benign-${fam}-${i}`, family: fam, label: 0 })));
-  const { rows } = await runSamples(samples, { optimize: true });
+  const { rows } = await runSamples(samples, { optimize: true, chain: await sandboxChain() });
   return rows;
 }
 
-/** Judges a whole round. */
-export async function judgeRound(round, { model = loadModel(), benign = null } = {}) {
-  const chain = await createChain();
-  chain.addPool = await chain.installDex(DEX);
+/**
+ * Judges a whole round in the pinned sandbox. `round.sandbox` (from arena-fetch: the id the round was opened
+ * with) must be this runner's sandbox id; `benignPerFamily` is part of the id (tests use a smaller set).
+ */
+export async function judgeRound(round, { model = loadModel(), benign = null, benignPerFamily = BENIGN.perFamily } = {}) {
+  checkPinned();
+  const desc = sandboxOf(model, { benign: { ...BENIGN, perFamily: benignPerFamily } });
+  const sandbox = sandboxHash(desc);
+  if (round.sandbox && String(round.sandbox).toLowerCase() !== sandbox) throw new Error(`round ${round.round} was opened for sandbox ${round.sandbox}; this runner's is ${sandbox} (other package versions, model or settings): not judged`);
+  const chain = await sandboxChain();
   const red = [];
   for (const e of round.red ?? []) {
     const base = { index: e.index, valid: false, evaded: false };
@@ -158,7 +177,7 @@ export async function judgeRound(round, { model = loadModel(), benign = null } =
       red.push({ ...base, reason: `rejected: ${String(err.message).split('\n')[0].slice(0, 200)}` });
     }
   }
-  const ref = benign ?? await benignRows();
+  const ref = benign ?? await benignRows(benignPerFamily);
   const validReds = red.filter((r) => r.valid);
   const blue = [];
   for (const e of round.blue ?? []) {
@@ -171,7 +190,7 @@ export async function judgeRound(round, { model = loadModel(), benign = null } =
   }
   const bits = (xs) => '0x' + xs.reduce((m, r) => m | (1n << BigInt(r.index)), 0n).toString(16);
   return {
-    round: round.round, modelId: model?.id ?? null, benignRows: ref.length,
+    round: round.round, sandbox, sandboxDesc: desc, modelId: model?.id ?? null, benignRows: ref.length,
     red: red.map(({ f, ...rest }) => rest),
     blue: blue.sort((a, b) => a.index - b.index),
     args: { redValid: bits(red.filter((r) => r.valid)), redEvaded: bits(red.filter((r) => r.evaded)), blueScore: blue.sort((a, b) => a.index - b.index).map((b) => b.score) },
@@ -184,11 +203,14 @@ function arg(name, def) {
   return i > 0 ? process.argv[i + 1] : def;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === `file://${process.argv[1]}` && process.argv.includes('--sandbox')) {
+  checkPinned();
+  const desc = sandboxOf(loadModel());
+  console.log(JSON.stringify({ sandbox: sandboxHash(desc), description: desc }, null, 1));
+} else if (import.meta.url === `file://${process.argv[1]}`) {
   const round = JSON.parse(readFileSync(arg('round'), 'utf8'));
   const out = arg('out', new URL('../out/arena', import.meta.url).pathname);
-  const benign = await benignRows(Number(arg('benign', 2)));
-  const res = await judgeRound(round, { benign });
+  const res = await judgeRound(round);
   mkdirSync(out, { recursive: true });
   const { dataset, ...result } = res;
   writeFileSync(`${out}/result.json`, JSON.stringify(result, null, 1) + '\n');

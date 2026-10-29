@@ -6,9 +6,9 @@
 
 | ข้อ | สิ่งที่มีแล้ว | สถานะ |
 |---|---|---|
-| 5 · Proof of useful work ในเบราว์เซอร์ | `UsefulWork.sol` + โหมด "งานที่มีประโยชน์" ในหน้า Mine ของฮับ (`work.js`, `work-worker.js`) | ต้นแบบที่ใช้งานได้ ทดสอบครบวงจรใน Chromium กับสัญญาจริงบน EVM ในหน่วยความจำ ยังไม่ deploy บนเทสต์เน็ต |
+| 5 · Proof of useful work ในเบราว์เซอร์ | `UsefulWork.sol` + โหมด "งานที่มีประโยชน์" ในหน้า Mine ของฮับ (`work.js`, `work-worker.js`), `zetaphy deploy-useful-work`, feeder (`zetaphy work feed`, `.github/workflows/useful-work.yml`) | **พร้อม deploy**: มีทาง deploy (หยุดไว้ก่อน เป็นของ timelock), feeder ตามตารางเวลา และสถานะในฮับ ยัง-ไม่-deploy / deploy-แต่-หยุด / เปิด ทดสอบครบ **ยังไม่ได้ deploy**: เจ้าของต้องรัน workflow หนึ่งครั้ง (ด้านล่าง) |
 | 10 · ชื่อเสียงบนเชน | `WorkerReputation.sol` (ชื่อเสียงแบบ ERC-8004 ผูกกับเอเจนต์ใน `NeuroIdentity` และอ่านประวัติรันเนอร์ของ NeuroJobs) | เสร็จสำหรับตลาดใหม่ NeuroJobs ไม่ได้เขียนเข้า (ถูกอ่านแทน) |
-| 17 · ล่าบั๊กในเบราว์เซอร์ | `BugBounty.sol`, `VulnerableVault.sol` (ตั้งใจให้มีช่องโหว่), `fuzz-core.js`, `vendor/evm.js`, `zetaphy bounty check` | ต้นแบบที่ใช้งานได้กับสัญญาที่ตั้งใจให้มีช่องโหว่ ตัว fuzzer ยังเรียบง่าย |
+| 17 · ล่าบั๊กในเบราว์เซอร์ | `BugBounty.sol`, `VulnerableVault.sol` (ตั้งใจให้มีช่องโหว่), `fuzz-core.js` + `fuzz-hook.js`, `vendor/evm.js`, `zetaphy work fuzz`, `zetaphy bounty check` | **fuzzer แบบนำทางด้วย coverage และมีสถานะ** มี invariant 7 แบบ reentrancy ผ่านสัญญาของผู้โจมตี การย่อ seed corpus และไฟล์ทำซ้ำ พบบั๊กทุกตัวใน VulnerableVault และในสัญญาทดสอบที่ตั้งใจให้มีช่องโหว่อีก 5 ตัว ไม่พบอะไรในสัญญาปลอดภัย 3 ตัว (มีเทสต์) |
 | 34 · การออกรางวัลที่หนุนด้วยความปลอดภัย | `UsefulIssuance.sol` (ผู้รับจาก RewardVault, แบ่งเป็นถังมีเพดาน, ดึงได้อย่างเดียว, อยู่หลัง timelock) | เสร็จในระดับโมดูลสัญญาบนเทสต์เน็ตพร้อมเทสต์ เศรษฐศาสตร์อยู่ด้านล่าง ยังไม่ deploy และยังไม่อยู่ใน `zetaphy-launch` |
 
 ## ชิ้นส่วนต่อกันอย่างไร
@@ -70,7 +70,35 @@ commit พร้อมมัดจำ รอที่นั่งอื่น �
 `stampLife`, `seatsPerDay`, `seats`, `quorum`, `commitWindow`, `revealWindow`, `seatDeposit`, `subsidy`, `priorityScore`, `priorityWindow`
 ความเร็ว PoW ที่วัดได้ (README ของฮับ): ประมาณ 2.4 MH/s ต่อเธรดเบราว์เซอร์ ดังนั้น 20 บิต ≈ 0.4 วินาที 24 บิต ≈ 7 วินาที 28 บิต ≈ 2 นาทีด้วยเธรดเดียว
 
-**สถานะ: ต้นแบบที่ใช้งานได้** ยังไม่ deploy
+### นำขึ้นเทสต์เน็ต
+
+ทุกอย่างด้านล่างสร้างและทดสอบแล้ว (`test/usefulwork-deploy.test.js`: ธุรกรรมที่เซ็นจริงบนเชนในหน่วยความจำที่ chain id 77390 และ CLI
+ผ่านโหนด JSON-RPC) **ยังไม่มีอะไรถูก deploy**: เป็นการรันด้วยมือหนึ่งครั้งโดยเจ้าของ
+
+1. **Deploy แบบหยุดไว้ก่อน เป็นของ timelock** `zetaphy deploy-useful-work [--feeder 0x…]` (หรือ Actions → **Useful work** → Run workflow
+   โหมด `deploy`: environment `testnet-deploy` เจ้าของกดอนุมัติ ใช้ secret `ZETAPHY_DEPLOYER_KEY` ที่อยู่ของ feeder มาจาก *variable* ของ repo ชื่อ
+   `USEFUL_WORK_FEEDER`) อ่าน ZetaphyTimelock, NeuroJobs, NeuroIdentity, multisig ผู้พิทักษ์ และ RewardVault (overflow ของ issuance) จาก
+   `zetaphy-launch/state/77390.json` ปฏิเสธ timelock ที่หน่วงน้อยกว่า 2 วัน และเชนอื่นนอกจาก 77390 แล้ว deploy WorkerReputation,
+   UsefulIssuance, UsefulWork และ BugBounty เชื่อมกัน (reporter, feeder, ผู้พิทักษ์) **หยุด** UsefulWork และ BugBounty และโอนสิทธิ์ผู้ดูแลทุกอย่าง
+   ให้ timelock (ตรวจก่อนจบ) ผู้ deploy ไม่เหลือสิทธิ์ใด เขียน `zetaphy-network/deployments/useful-work-77390.json` และ workflow เปิด pull request ให้
+2. **หยุด** หมายถึง: ไม่รับตราประทับ ไม่รับงานหรือที่นั่งใหม่ ไม่รับเงินรางวัลหรือสิ่งที่พบใหม่ แต่การเปิดเผย นกขมิ้น settle การโหวต การเคลม
+   การคืนเงิน และการถอนยังทำได้ มัดจำจึงไม่ค้าง **ผู้พิทักษ์** (multisig) หยุดได้ทันที แต่เปิดได้เฉพาะ governance (timelock)
+3. **เปิด** ไฟล์ deploy มีรายการการดำเนินการของ timelock (`proposals`): `UsefulIssuance.setBuckets` (งานสแกน 60% เงินรางวัลบั๊ก 40% เพดาน
+   500 ZETAPHY ทดสอบ), `UsefulWork.setPaused(false)`, `BugBounty.setPaused(false)` แต่ละรายการมี operation id และ calldata ของ `schedule` /
+   `execute` ผู้เสนอ schedule ใครก็ execute ได้หลังครบเวลาหน่วง
+4. **feeder** (`zetaphy work feed`, Actions → **Useful work** ทุก 3 ชั่วโมง): เปิดเผยนกขมิ้นที่ปิดรับ commit แล้ว settle งานที่เสร็จ และโพสต์งาน
+   สแกนใหม่ (สัญญาที่สร้างใน 300 บล็อกล่าสุดของ ZETAPHY สัญญาใน launch state และไฟล์ `--targets` ถ้ามี) ทุกงานที่ 3 เป็นนกขมิ้น ไม่เก็บสถานะ:
+   salt ของนกขมิ้นคือ `keccak(คีย์, UsefulWork, jobId)` คำนวณใหม่ตอนเปิดเผย ข้ามสัญญาที่เพิ่งโพสต์ด้วยโค้ดเดียวกัน ใช้ environment
+   `testnet-automation` และ secret **`USEFUL_WORK_FEEDER_KEY`** (คีย์เทสต์เน็ตเฉพาะ มี ZETAPHY ทดสอบเล็กน้อย governance ตั้งให้เป็น feeder ผ่าน
+   `--feeder` ตอน deploy หรือ `setFeeder` ผ่าน timelock) ถ้าไม่มี secret จะเป็น dry run ถ้ายังไม่มีไฟล์ deploy จะไม่ทำอะไร
+5. **ฮับ** อ่านที่อยู่จาก `hub-config.json` ซึ่ง `build.mjs` เติมจากไฟล์ deploy ด้วย (เฉพาะ chain id ของเทสต์เน็ต) มีสามสถานะ ทดสอบใน Chromium
+   ทุกสถานะ: *ยังไม่ deploy* (ฝึกหัด และบอกไว้) *deploy แล้วแต่หยุด* ("เปิดหลังการโหวตผ่าน timelock" ฝึกหัด ไม่ส่งอะไร) *เปิด* (งานมีค่าตอบแทน)
+
+สิ่งที่เจ้าของต้องทำ (การเปลี่ยนแปลงนี้ไม่ได้เพิ่ม secret ใด): ตั้ง variable `USEFUL_WORK_FEEDER` (ที่อยู่ของ feeder) และ secret
+`USEFUL_WORK_FEEDER_KEY` ใน `testnet-automation` (ดู docs/SECRETS-HARDENING.md) รันโหมด `deploy` หนึ่งครั้ง merge pull request นั้น และให้
+timelock ดำเนินการ proposal ที่เปิดตลาด
+
+**สถานะ: พร้อม deploy** (ทาง deploy, feeder และสถานะในฮับ มีเทสต์) ยังไม่ได้ deploy
 
 ## ข้อ 10 · ชื่อเสียงบนเชน (`WorkerReputation`)
 
@@ -92,8 +120,36 @@ commit พร้อมมัดจำ รอที่นั่งอื่น �
   spec มีโค้ดสร้างสัญญา ฟังก์ชันที่เรียกได้ การตั้งค่า (เหยื่อฝาก 5 ZETAPHY) และ invariant (`attacker-profit`: ผู้โจมตีต้องไม่จบด้วยเงินมากกว่าตอนเริ่ม
   ≥ `minProfit` ในการเล่นซ้ำค่าแก๊สเป็นศูนย์ จึงแม่นยำ)
 - เบราว์เซอร์ทำ fuzzing ใน **EthereumJS EVM** (EVM เดียวกับที่เทสต์สัญญาใช้) ซึ่งรวมเป็น `zetaphy-hub/vendor/evm.js` ด้วย `npm run build:evm`
-  (437 KB, gzip 132 KB ไม่มี eval ไม่มี WebAssembly: precompile bn254 ถูกแทนด้วย stub) โหลดเฉพาะตอนเริ่มล่า `fuzz-core.js` สร้างลำดับการเรียกแบบสุ่ม
-  (1–4 ครั้ง อาร์กิวเมนต์จากพจนานุกรมของที่อยู่ ยอดเงิน และค่าขอบ) ย้อนกลับด้วย checkpoint หลังแต่ละครั้ง และย่อสิ่งที่พบให้เหลือขั้นที่จำเป็น
+  (437 KB, gzip 132 KB ไม่มี eval ไม่มี WebAssembly: precompile bn254 ถูกแทนด้วย stub) โหลดเฉพาะตอนเริ่มล่า `fuzz-core.js` เป็น **fuzzer ที่นำทาง
+  ด้วย coverage และมีสถานะ** (ไฟล์เดียวกันรันใน Web Worker ของเบราว์เซอร์ ในการเล่นซ้ำของรันเนอร์ และใน `zetaphy work fuzz`):
+  - **coverage**: บันทึกทุก edge ของ JUMP/JUMPI ที่รันในสัญญาเป้าหมายจาก event `step` ของ EVM ลำดับการเรียกที่ไปถึง edge ใหม่จะเข้า corpus และ
+    ลำดับใหม่ 3 ใน 4 เป็นการกลายพันธุ์ของสมาชิก corpus (เปลี่ยนอาร์กิวเมนต์หรือ value แทรก / ลบ / สลับ / ซ้ำขั้น ต่อสองลำดับ ส่งขั้นผ่านสัญญาของ
+    ผู้โจมตี ตั้งการเรียกซ้ำ) หน้าเว็บแสดงสัดส่วนจุดกระโดดของสัญญาที่ไปถึงแล้ว
+  - **ลำดับที่มีสถานะ** 1–8 การเรียกโดยผู้โจมตี โดยตรงหรือผ่าน **FuzzHook** (`fuzz-hook.js` จาก `zetaphy-network/test/fixtures/fuzz/FuzzHook.sol`)
+    สัญญาของผู้โจมตีเอง ที่เรียกเป้าหมายพร้อม value และเมื่อถูกตั้งไว้จะ **เรียกเป้าหมายซ้ำ (re-enter)** จาก `receive`/`fallback` ได้ถึง N ครั้ง ขั้นที่ทำให้
+    เป้าหมายเรียกกลับมาที่ hook จะถูกเก็บไว้และถูกตั้งการเรียกซ้ำบ่อยขึ้น
+  - **อาร์กิวเมนต์** จากพจนานุกรม: ผู้เล่น hook เป้าหมาย ค่าขอบ ยอดเงินของเป้าหมาย ตัวเลขที่การตั้งค่าใน spec ใช้ และค่าคงที่ที่ bytecode ของเป้าหมาย
+    PUSH เอง อาร์กิวเมนต์ `bytes` ได้ selector ของ spec และของ hook
+  - **invariant** (spec เวอร์ชัน 2 สิ่งที่พบถูกต้องเมื่อการเล่นซ้ำละเมิดอย่างน้อยหนึ่งข้อ): `attacker-profit` (ผู้โจมตี + hook จบด้วยเงินมากขึ้น ≥ `minProfit`),
+    `victim-can-exit` (หลังการโจมตี เหยื่อรัน `exit` แล้วได้คืน `exitMin`), `balance-conservation` (เป้าหมายถือเงินอย่างน้อยเท่าผลรวม
+    `solvency(actor)` ของผู้เล่น), `privileged-unchanged` (view ใน `watch` เช่น `owner()` ตอบเหมือนเดิม), `no-selfdestruct`,
+    `no-delegatecall-to-attacker` (DELEGATECALL / CALLCODE ไปยังผู้โจมตีหรือ hook), `token-drain` (ผู้โจมตีได้โทเคนในรายการ ≥ `minTokenProfit`
+    หรือเหยื่อเสียโทเคน) การละเมิดที่เป้าหมายถูกเรียกซ้ำขณะยังทำงานจะติดป้าย `reentrancy` ด้วย
+  - **การย่อ**: ย่อการละเมิดให้เหลือขั้นน้อยสุด เรียกซ้ำน้อยสุด value เล็กสุด และเรียกตรง โดยยังละเมิด invariant เดิม
+  - **ทำซ้ำได้**: ตัวสุ่มเดียวที่มี seed (xorshift32) และสภาพบล็อกคงที่ seed, spec และตัวเลือกเดียวกันให้ผลเหมือนกันทุกไบต์ (มีเทสต์) corpus ที่ย่อแล้ว
+    (set cover แบบละโมบของ edge) บันทึกและใช้ต่อได้ (`--save-corpus`, `--corpus`)
+  - **ส่งออกไฟล์ทำซ้ำ**: บันทึกสิ่งที่พบแต่ละรายการได้ (หน้าเว็บ: **บันทึกไฟล์ทำซ้ำ** CLI: `--out`) เป็น JSON `zetaphy-fuzz-repro/1`: แฮชของ spec, seed,
+    สภาพแวดล้อม, การละเมิด, trace รายขั้น (สำเร็จไหม / ยอดของผู้โจมตีและเป้าหมาย) และสิ่งที่พบตรงตามที่จะเปิดเผย `zetaphy work verify-finding <spec>
+    <reproducer.json>` เล่นซ้ำได้
+  การล่าทำต่อหลังพบครั้งแรก (หนึ่งรายการต่อ invariant) หน้าเว็บส่งรายการที่ร้ายแรงสุด (ผู้โจมตีได้เงินก่อน) spec เวอร์ชัน 1 (มีแค่ `attacker-profit`)
+  ยังเล่นซ้ำได้เหมือนเดิม
+- **มีเทสต์** (`zetaphy-network/test/fuzz.test.js`): บั๊กทุกตัวใน **VulnerableVault** (ยึดความเป็นเจ้าของด้วย `initialize()` ขโมยด้วย
+  `initialize(); sweep(attacker)` เหยื่อถอนไม่ได้ สัญญาติดหนี้) และในสัญญาทดสอบที่ตั้งใจให้มีช่องโหว่อีกห้าตัว (`test/fixtures/fuzz/Vulnerable.sol`):
+  **ReentrantBank** (ดูดเงินด้วย reentrancy ผ่าน hook), **OpenDelegate** (delegatecall ไปยังโค้ดผู้โจมตี), **KillSwitch** (ใครก็ selfdestruct ได้),
+  **LeakyToken** (transferFrom ไม่ตรวจ allowance: ดูดโทเคน), **OwnerTakeover** (`transferOwnership` ไม่มีการป้องกัน) ทุกรายการเล่นซ้ำแล้วถูกต้องและ
+  ไม่เกิน 3 ขั้น **ไม่มี false positive** กับเวอร์ชันที่แก้แล้ว (`Safe.sol`: SafeBank, SafeVault, SafeToken) และ: seed เดียวกันได้ผลเดียวกัน
+  การย่อ corpus คง coverage และใช้ต่อได้ ไฟล์ทำซ้ำเล่นซ้ำผ่าน CLI ได้ สิ่งที่พบผิดรูปถูกปฏิเสธ ฝั่งเบราว์เซอร์: `zetaphy-hub/test/work.e2e.mjs`
+  ล่าใน Chromium และดาวน์โหลดไฟล์ทำซ้ำ
 - **Commit-reveal**: `commitFinding(bountyId, keccak(findingHash, finder, salt, bountyId))` พร้อมมัดจำ แล้ว `revealFinding` ในบล็อกถัดไป
   ภายใน `revealWindow` ใส่สิ่งที่พบ (ลำดับการเรียกแบบ JSON) ใน calldata และ event รันเนอร์จึงไม่ต้องมีเซิร์ฟเวอร์ สิ่งที่พบเรียงตามลำดับ commit
   **สิ่งที่พบที่ถูกต้องและมาก่อนสุดชนะ** (ที่ซ้ำภายหลังได้แค่มัดจำคืน) การดูการเปิดเผยของคนอื่นจึงไม่ช่วยคนลอก
@@ -102,9 +158,12 @@ commit พร้อมมัดจำ รอที่นั่งอื่น �
   แล้ว `attest` เสียงตรงกันครบ `quorum` จะยอมรับหรือปฏิเสธ ยอมรับ: `claim` จ่ายรางวัล + เงินอุดหนุนของรางวัลนั้น (UsefulIssuance) + มัดจำ
   ปฏิเสธ: มัดจำเพิ่มเข้ารางวัล ผลลัพธ์ส่งไป WorkerReputation
 - **สัญญาที่ตั้งใจให้มีช่องโหว่** `VulnerableVault.sol` (สำหรับทดสอบเท่านั้น): `initialize()` ไม่มีการควบคุมสิทธิ์ และการ deploy ไม่เคยเรียกมัน
-  ใครก็เป็นเจ้าของได้แล้ว `sweep` เงินฝากทั้งหมด fuzzer พบ `initialize(); sweep(attacker)` ภายในไม่กี่สิบลำดับ
+  ใครก็เป็นเจ้าของได้แล้ว `sweep` เงินฝากทั้งหมด spec ของมัน (`bounties/vulnerable-vault.json` เวอร์ชัน 2) ตรวจหก invariant fuzzer พบการยึด
+  ความเป็นเจ้าของทันที และ `initialize(); sweep(attacker)` ภายในไม่กี่สิบลำดับ
+- **ใช้วิจัย**: `zetaphy work fuzz <spec.json> [--seed n --runs n --all --out repro.json --save-corpus c.json]`
 
-**สถานะ: ต้นแบบที่ใช้งานได้** ทดสอบครบวงจร (เบราว์เซอร์พบ commit เปิดเผยในบล็อกถัดไป รันเนอร์เล่นซ้ำแล้วยอมรับ สิ่งที่พบก่อนสุดได้รับเงิน)
+**สถานะ: fuzzer จริง มีเทสต์** (นำทางด้วย coverage ลำดับที่มีสถานะพร้อม reentrancy, 7 invariant, การย่อ, seed, corpus, ไฟล์ทำซ้ำ ครบวงจร: เบราว์เซอร์พบ
+commit เปิดเผยในบล็อกถัดไป รันเนอร์เล่นซ้ำแล้วยอมรับ สิ่งที่พบก่อนสุดได้รับเงิน) ข้อจำกัดอยู่ใน "สิ่งที่ยังขาด"
 
 ## ข้อ 34 · การออกรางวัลที่หนุนด้วยความปลอดภัย (`UsefulIssuance`)
 
@@ -141,24 +200,30 @@ commit พร้อมมัดจำ รอที่นั่งอื่น �
 ## เทสต์
 
 ```
-cd zetaphy-network && npm ci && npm run build && npm test          # 439 เทสต์ รวม usefulwork.test.js
+cd zetaphy-network && npm ci && npm run build && npm test          # รวม usefulwork, usefulwork-deploy, fuzz
 cd zetaphy-hub && npm ci && npm test && npm run test:e2e           # รวม work.test.mjs, work.e2e.mjs (Chromium, CSP ของเว็บ)
 ```
 
 `work.e2e.mjs` รันสัญญาจริงบน EVM ในหน่วยความจำ หลังโหนดจำลองที่ chain id 77390 และวอลเล็ตจำลอง: เบราว์เซอร์ทำตราประทับ สแกน commit
-เปิดเผย และ settle ร่วมกับผู้ทำงานอีกสองคน แล้วล่าบั๊กและส่งสิ่งที่พบ (commit แล้วเปิดเผยในบล็อกถัดไป)
+เปิดเผย และ settle ร่วมกับผู้ทำงานอีกสองคน แล้วล่าบั๊กและส่งสิ่งที่พบ (commit แล้วเปิดเผยในบล็อกถัดไป) ในโหมดฝึกหัดจะล่า แสดงบั๊กทุกชนิดที่พบ
+แสดง coverage และดาวน์โหลดไฟล์ทำซ้ำ เมื่อ deploy แล้วแต่หยุด หน้าเว็บบอกไว้และอยู่ในโหมดฝึกหัด `usefulwork-deploy.test.js` deploy ผ่าน
+`deployUsefulWork` และ CLI `zetaphy deploy-useful-work` (โหนด JSON-RPC ที่พอร์ต 18096) รัน proposal ของ timelock และรัน feeder (หยุด → ไม่มีงาน
+เปิด → งานและนกขมิ้น นกขมิ้นเปิดเผยด้วย salt ที่คำนวณใหม่ settle แล้ว) `fuzz.test.js` อธิบายไว้ในข้อ 17
 
 ## สิ่งที่ยังขาด
 
-- **การ deploy**: สัญญาใหม่ยังไม่ได้ deploy บนเทสต์เน็ตหรือใน `zetaphy-launch` ฮับทำงานในโหมดฝึกหัดจนกว่า `usefulWork` / `bugBounty` /
-  `workerReputation` จะปรากฏใน launch state
-- **feeder**: ยังไม่มี Action ที่โพสต์งานสแกนหรือนกขมิ้น
+- **ตัวการ deploy เอง**: ทางพร้อมและมีเทสต์ แต่ยังไม่มีอะไรถูก deploy จนกว่าเจ้าของจะตั้ง `USEFUL_WORK_FEEDER` / `USEFUL_WORK_FEEDER_KEY`
+  รันโหมด `deploy` หนึ่งครั้ง merge pull request และให้ timelock ดำเนินการ proposal ที่เปิดตลาด ไม่ได้อยู่ใน `zetaphy-launch` (มีไฟล์และ workflow ของตัวเอง)
+- **เป้าหมายของ feeder** คือสัญญาที่เพิ่งสร้างบน ZETAPHY และสัญญาที่รู้จักไม่กี่ตัว รายการเฝ้าดูของ Neuro อยู่ในเบราว์เซอร์ของผู้ใช้เท่านั้น จึงใช้ป้อนงานไม่ได้
+  เชนอื่นต้องใช้ไฟล์ `--targets`
 - **การจับฉลากที่นั่ง** (สุ่มด้วย blockhash ในหมู่ผู้มีตราประทับ) เพื่อกันคนเดียวรับสามที่นั่ง
 - **แต้ม BZTPHY** สำหรับงานที่มีประโยชน์: งานแจกแต้มรายวันยังไม่อ่าน `SeatOutcome` / `BountyPaid`
 - **รางวัลรันเนอร์สำหรับการตรวจบั๊ก** และการ slash พันธบัตร NeuroJobs ของรันเนอร์ที่รับรองผิด
 - **งานสแกนที่ไม่ใช่ EVM** (Solana, Move, TON): การสแกนแบบโค้ดอย่างเดียวรองรับเฉพาะ EVM
-- **fuzzer** เป็นแบบสุ่ม (ไม่มีการนำทางด้วย coverage ไม่มี symbolic execution) รองรับเฉพาะอาร์กิวเมนต์ชนิด static และ invariant เดียว
-  (`attacker-profit`) เป้าหมายจริงต้องมี invariant มากขึ้นและการค้นที่ฉลาดขึ้น
+- **ข้อจำกัดของ fuzzer**: ไม่มี symbolic execution หรือ SMT (บั๊กที่ซ่อนหลังค่าวิเศษ 32 ไบต์ที่ไม่อยู่ในโค้ด หรือ preimage ของแฮช เข้าไม่ถึง) หนึ่ง
+  สัญญาเป้าหมายต่อ spec บวก hook ของผู้โจมตี (ยังไม่รองรับระบบหลายสัญญา หรือ callback ของโทเคนอย่าง ERC-721/1155/777) เวลาไม่เดิน (บั๊กที่ล็อกด้วยเวลา
+  ต้องตั้งใน setup ของ spec) ทุก invariant ต้องให้ผู้เขียน spec ระบุ view (`watch`, `solvency`, `exit`, `tokens`) และ view ใน `watch` ที่เปลี่ยนได้อย่างชอบธรรม
+  จะถูกรายงาน array และ tuple ลึกได้ไม่มาก ความเร็ว: ราว 10–25 ms ต่อลำดับ (ต้นทุนของ event `step` ต่อ opcode) คือไม่กี่พันลำดับต่อนาที
 - **ตลาดประเมินโมเดล** (sink ของถัง "การปรับปรุงโมเดล")
 - การติดตั้งรันเนอร์ (`setup-runner.sh`) ตอนนี้คัดลอกไฟล์แกนกลางสามไฟล์ของเบราว์เซอร์แล้ว แต่การตรวจสิ่งที่พบต้องใช้ EthereumJS EVM ด้วย
   (devDependency ของ zetaphy-network: `npm i` แบบรวม dev dependencies)

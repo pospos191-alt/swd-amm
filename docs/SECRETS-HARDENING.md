@@ -32,6 +32,9 @@ No workflow uses `pull_request_target` or `workflow_run` (checked; see section 5
 | | | `rewards` → `award` | PR, sched, manual | no (daily schedule, manual `award`) | `testnet-automation` |
 | | | `hyperlane-relayer` → `relay` (fallback signer) | sched, manual | no | `testnet-automation` |
 | `ZETAPHY_RELAYER_KEY` (new, optional) | dedicated relayer signer; used instead of the deployer key when set | `hyperlane-relayer` → `relay` | sched, manual | no | `testnet-automation` |
+| `USEFUL_WORK_FEEDER_KEY` (new, optional) | the useful-work job feeder (posts scan jobs and canaries, reveals, settles; a governance-named feeder with a little testnet ZETAPHY, never the deployer) | `useful-work` → `feed` | sched, manual | no | `testnet-automation` |
+| | | `useful-work` → `deploy` uses `ZETAPHY_DEPLOYER_KEY` (above) | manual | no | `testnet-deploy` |
+| `MARKETS_KEY` (optional) | testnet key that owns the detector organisms (commits / reveals forecasts, registers children) | `markets` → `detectors` | sched, manual | no | `testnet-automation` |
 | `ZETAPHY_VALIDATOR_KEY` | our Hyperlane validator key (signs ZETAPHY checkpoints) | `hyperlane-relayer` → `relay` | sched, manual | no | `testnet-automation` |
 | | | `saphan-route` → `validator-address` (prints the address only) | PR, manual | no (manual `check` / `deploy`) | `testnet-automation` |
 | `BRIDGE_MARKER_KEY` | private key of an airlock *marker* (marks callers, moves no funds) | `bridge-monitor` → `monitor` | manual (schedule commented out, planned) | no | `monitoring` |
@@ -57,7 +60,7 @@ endpoint, origin-restricted if the provider allows, and rotate it if in doubt.
 | Environment | Secrets | Deployment branches | Required reviewers | Why |
 |---|---|---|---|---|
 | `testnet-deploy` | `ZETAPHY_DEPLOYER_KEY` | `main` only | **owner** | manual deploys and timelock execute: a person approves every run |
-| `testnet-automation` | `ZETAPHY_VALIDATOR_KEY`, `ZETAPHY_DEPLOYER_KEY` (BZTPHY minter; relayer fallback), `ZETAPHY_RELAYER_KEY` (optional) | `main` only | **none** | scheduled (relayer every 15 min, daily awards): a reviewer would hold every scheduled run |
+| `testnet-automation` | `ZETAPHY_VALIDATOR_KEY`, `ZETAPHY_DEPLOYER_KEY` (BZTPHY minter; relayer fallback), `ZETAPHY_RELAYER_KEY` (optional), `USEFUL_WORK_FEEDER_KEY` (optional), `MARKETS_KEY` (optional) | `main` only | **none** | scheduled (relayer every 15 min, daily awards): a reviewer would hold every scheduled run |
 | `monitoring` | `BRIDGE_*`, `TELEGRAM_*`, `DISCORD_WEBHOOK_URL`, `PRIVATE_ALERTS_TOKEN` | `main` only | **none** | will run on a schedule |
 | `explorer-verify` | `ETHERSCAN_API_KEY` | `main` only | **none** | daily schedule |
 | `devnet` | `DEVNET_DEPLOYER_KEYPAIR`, `PROGRAM_KEYPAIR` | `main` only | **owner** | manual Solana devnet deploy |

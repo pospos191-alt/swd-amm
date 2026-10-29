@@ -2,6 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { judgeRound, benignRows, keccakHex, checkRed } from '../redteam/arena.js';
+import { sandboxOf, sandboxHash, checkPinned, installed, PINNED } from '../redteam/sandbox.js';
+import { loadModel } from '../redteam/run.js';
 import { seedSpec, SPEC_FORMAT } from '../detectors/spec.js';
 
 const TOKEN = (name, extra, transferHook = '') => `// SPDX-License-Identifier: MIT
@@ -67,7 +69,8 @@ test('arena: a fee switch flipped after the scan is a working scam; a plain toke
   };
   const benign = await benignRows(1, ['plain', 'small-tax']);
   assert.equal(benign.length, 2);
-  const res = await judgeRound(round, { benign });
+  const res = await judgeRound(round, { benign, benignPerFamily: 1 });
+  assert.equal(res.sandbox, sandboxHash(sandboxOf(loadModel(), { benign: { seed: 'arena-benign', perFamily: 1 } })));
   const r = Object.fromEntries(res.red.map((x) => [x.index, x]));
   assert.equal(r[0].valid, true, r[0].reason);
   if (process.env.ARENA_DEBUG) console.log(JSON.stringify(res.red), JSON.stringify(res.blue));
@@ -88,4 +91,33 @@ test('arena: a fee switch flipped after the scan is a working scam; a plain toke
   assert.equal(res.dataset.length, 1);
   assert.equal(res.dataset[0].label, 1); assert.equal(res.dataset[0].src, 'arena');
   assert.ok(Object.keys(res.dataset[0].f).length > 5, 'features for training');
+});
+
+const FEE_SWITCH = () => TOKEN('Feeswitch',
+  'uint256 public sellFee; function setPair(address p) external { require(msg.sender == owner); pairAddr = p; } function setSellFee(uint256 f) external { require(msg.sender == owner); sellFee = f; }',
+  'if (to == pairAddr && sellFee > 0 && f != owner) { uint256 cut = v * sellFee / 10000; balanceOf[f] -= cut; balanceOf[owner] += cut; v -= cut; }');
+
+test('arena sandbox: pinned packages, a stable id, and a round opened for another sandbox is refused', async () => {
+  assert.equal(checkPinned(), true);
+  for (const [n, v] of Object.entries(PINNED)) assert.equal(installed(n), v, n);
+  const model = loadModel();
+  const a = sandboxHash(sandboxOf(model));
+  assert.match(a, /^0x[0-9a-f]{64}$/);
+  assert.equal(sandboxHash(sandboxOf(model)), a, 'stable');
+  assert.notEqual(sandboxHash(sandboxOf(null)), a, 'the model is part of it');
+  assert.notEqual(sandboxHash(sandboxOf(model, { benign: { seed: 'arena-benign', perFamily: 3 } })), a, 'the benign set is part of it');
+  const round = { round: 1, sandbox: '0x' + '11'.repeat(32), red: [], blue: [] };
+  await assert.rejects(judgeRound(round, { benign: [] }), /opened for sandbox 0x1111/);
+});
+
+test('arena sandbox: two independent runs of a round give byte-identical results (what k-of-n runners need)', { timeout: 240_000 }, async () => {
+  const content = JSON.stringify({ format: 'arena-red/1', source: FEE_SWITCH(), token: 'Feeswitch', trap: [{ call: 'setPair(address)', args: ['pair'] }, { call: 'setSellFee(uint256)', args: ['9900'] }] });
+  const seed = JSON.stringify(seedSpec());
+  const sandbox = sandboxHash(sandboxOf(loadModel(), { benign: { seed: 'arena-benign', perFamily: 1 } }));
+  const round = { round: 3, sandbox, red: [{ index: 0, revealed: true, contentHash: keccakHex(content), content }], blue: [{ index: 0, revealed: true, contentHash: keccakHex(seed), content: seed }] };
+  const one = await judgeRound(round, { benignPerFamily: 1, benign: await benignRows(1, ['plain', 'small-tax']) });
+  const two = await judgeRound(JSON.parse(JSON.stringify(round)), { benignPerFamily: 1, benign: await benignRows(1, ['plain', 'small-tax']) });
+  assert.equal(JSON.stringify(one), JSON.stringify(two));
+  assert.equal(one.sandbox, sandbox);
+  assert.equal(one.args.redValid, '0x1');
 });

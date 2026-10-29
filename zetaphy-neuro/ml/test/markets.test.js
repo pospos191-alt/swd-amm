@@ -72,6 +72,17 @@ test('mutation + crossover keep specs valid; evolution only keeps children bette
   for (const p of preds) for (const v of Object.values(p.p)) assert.ok(Number.isInteger(v) && v >= 1 && v <= 9999);
 });
 
+test('evolution judged on a curated held-out set: children beat the parent there, and the fit rows are all used', () => {
+  const fit = rows(500, 'fit');
+  const held = rows(200, 'curated');
+  const a = evolve({ parents: [{ organism: 2, spec: seedSpec() }], rows: fit, held, round: 4, n: 3 });
+  assert.equal(a.fitRows, 500);
+  assert.equal(a.heldRows, 200);
+  const parentHeld = brierOf(seedSpec(), held);
+  for (const c of a.children) assert.ok(c.brierHeld < parentHeld, `${c.brierHeld} < ${parentHeld}`);
+  assert.deepEqual(evolve({ parents: [{ organism: 2, spec: seedSpec() }], rows: fit, held, round: 4, n: 3 }), a, 'deterministic');
+});
+
 test('data DAO attribution: useful data scores, noisy data scores less, copied data gets nothing', { timeout: 120_000 }, () => {
   const base = rows(80, 'base');
   const held = rows(300, 'held');
