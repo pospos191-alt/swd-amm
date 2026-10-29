@@ -1,0 +1,35 @@
+{
+ "format": "zetaphy-zk-ceremony/1",
+ "circuit": {
+  "name": "neuro_score",
+  "modelHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+  "csHash": "87cc5c27f8520e93e84b372d6915ea87a5ba5fcf3a51f123a0aa2bd263aa08097347b21a5352d2db272e18d128c1a06209384056a55729ff0f07d79195bc7498",
+  "r1csSha256": "8eeeb0a1ac70037e4adc73fd0c7a3139f907c2d4043993e51b6dfed8495f1c3b"
+ },
+ "phase1": {
+  "name": "TEST ONLY local tiny powers of tau",
+  "file": "tiny.ptau",
+  "url": "https://example.invalid/tiny.ptau",
+  "sha256": "01614ce0841f60f5ec4344c689db76c3cab0be8dd67dc1a0706f48e21e36742d",
+  "blake2b": "4c812a380d6e304f97befc42621e082e9b543902b49d2e048ccbbe68a593de994b43dfeffa4c8f80e85e5e0fb632b5cb91485fb3783bb31c4a783f92919c6b3e",
+  "power": 4
+ },
+ "snarkjs": "0.7.6",
+ "minContributions": 2,
+ "beaconRpc": {
+  "ethereum": [
+   "https://ethereum-rpc.publicnode.com",
+   "https://cloudflare-eth.com"
+  ],
+  "zetaphy": [
+   "https://rpc.sawasdeecoin.com"
+  ]
+ },
+ "init": {
+  "zkeySha256": "72b9a5e9a599726a3c76a69e945824c89ea4b7ee24efe827362f77b11a476934",
+  "zkeyBytes": 2988,
+  "link": "19f24c9f62abbd7cc15ba920bcd5d595662ef834bc0c2159fba7782c87d6e0e9"
+ },
+ "beacon": null,
+ "contributions": []
+}
