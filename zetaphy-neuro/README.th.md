@@ -83,6 +83,30 @@ npm run web                       # เปิดหน้าเว็บที�
   ค่าเริ่มต้น `https://rpc.sawasdeecoin.com/rpc/`)
 - ไม่อยู่ใน `src/` จึงไม่ต้องโหวตทักษะ ธุรกรรมที่มีข้อความสองชนิดในประเภทเดียวกัน (พบน้อย) จะถูกนับสองครั้งในประเภทนั้น
 
+## บอท Telegram (`api/telegram.js`, `server/telegram.js`)
+
+บอท ZETAPHY (@awasdeebot) ตอบตามภาษา Telegram ของผู้ใช้ (8 ภาษา) และเก็บรายชื่อแอร์ดรอป testnet
+บอทไม่ถือกุญแจหรือเหรียญเลย แอดมินดึงรายชื่อออกมาแล้วส่งด้วย `gov.sh airdrop`
+
+| คำสั่ง | ใครใช้ | ทำอะไร |
+|---|---|---|
+| `/start` | ทุกคน | ZETAPHY คืออะไร พร้อมปุ่มไปแอป Neuro และหน้า "ZETAPHY คืออะไร" |
+| `/claim <0x… หรือ zetaphy1…>` | ทุกคน ในแชทส่วนตัว | ใส่กระเป๋าในรายชื่อ: หนึ่งบัญชี Telegram ต่อหนึ่งกระเป๋า หนึ่งกระเป๋าต่อหนึ่งบัญชี ไม่เกิน `AIRDROP_MAX` ถ้าตั้ง `TELEGRAM_CHANNEL` ต้องเป็นสมาชิกช่องก่อน |
+| `/check <ที่อยู่> [เชน]` | ทุกคน | ลิงก์ไปหน้าเช็กของ Neuro |
+| `/count`, `/export`, `/announce <ข้อความ>` | `TELEGRAM_ADMIN_IDS` | นับจำนวน ดึงรายชื่อเป็น `airdrop.txt` และโพสต์ลงช่อง |
+
+ตั้งค่า (ครั้งเดียว):
+1. **@BotFather** › `/mybots` › เลือกบอท › **API Token** แล้วใน Vercel โปรเจกต์ `swd-amm-zetaphy-neuro` › Settings ›
+   Environment Variables ใส่ `TELEGRAM_BOT_TOKEN` (ติ๊ก Sensitive) ห้ามวางในแชท
+2. ใส่เพิ่มได้: `TELEGRAM_ADMIN_IDS` (เลข id Telegram ของคุณ ถาม **@userinfobot**), `TELEGRAM_CHANNEL`
+   (`@ชื่อช่อง` และตั้งบอทเป็นแอดมินของช่อง), `AIRDROP_MAX` (10000), `AIRDROP_AMOUNT` (100)
+3. รายชื่อใช้ที่เก็บข้อมูลเดียวกับตัวนับผู้ใช้ (D1 หรือ Upstash ด้านบน)
+4. Redeploy แล้วเปิด `https://neuro.sawasdeecoin.com/api/telegram?setup=1` ครั้งเดียว ระบบจะผูกบอทกับ webhook
+   (มีรหัสลับที่สร้างจาก token ตรวจทุกครั้ง) และตั้งเมนูคำสั่ง
+
+ตอนแจก: พิมพ์ `/export` ในบอท คัดลอก `airdrop.txt` ไปเครื่องโหนดแรก แล้วรัน `gov.sh airdrop airdrop.txt 100`
+(zetaphy-chain/README.th.md หัวข้อ "แอร์ดรอปบน testnet") ระบบจำกระเป๋าที่จ่ายแล้วไว้
+
 ## จำเหรียญที่สร้างจาก ZETAPHY launcher
 
 Neuro จำ "แม่แบบโค้ด" ได้ด้วยลายนิ้วมือโค้ด (`src/fingerprint.js`): ปิดค่าที่ต่างกัน

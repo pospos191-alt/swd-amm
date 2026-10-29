@@ -86,6 +86,30 @@ every block is not counted. The page shows it under the form; the explorer shows
   `https://rpc.sawasdeecoin.com/rpc/`).
 - Not in `src/`: no skill vote needed. A rare transaction with two message types of one kind counts twice in that kind.
 
+## Telegram bot (`api/telegram.js`, `server/telegram.js`)
+
+The ZETAPHY bot (@awasdeebot) answers in the user's Telegram language (8 languages) and keeps the testnet
+airdrop list. It holds no key and no coin: the admin exports the list and sends with `gov.sh airdrop`.
+
+| Command | Who | What |
+|---|---|---|
+| `/start` | anyone | what ZETAPHY is, buttons to the app, Neuro and "What is ZETAPHY?" |
+| `/claim <0x… or zetaphy1…>` | anyone, private chat | puts the wallet on the list: one wallet per Telegram account, one account per wallet, at most `AIRDROP_MAX`; members of `TELEGRAM_CHANNEL` only, when it is set |
+| `/check <address> [chain]` | anyone | a link to Neuro's check |
+| `/count`, `/export`, `/announce <text>` | `TELEGRAM_ADMIN_IDS` | how many, the list as `airdrop.txt`, a post to the channel |
+
+Set it up (once):
+1. **@BotFather** › `/mybots` › the bot › **API Token**. In Vercel, project `swd-amm-zetaphy-neuro` › Settings ›
+   Environment Variables: `TELEGRAM_BOT_TOKEN` (Sensitive). Never paste it in a chat.
+2. Optional: `TELEGRAM_ADMIN_IDS` (your numeric Telegram id; **@userinfobot** tells it), `TELEGRAM_CHANNEL`
+   (`@name`; make the bot an admin of the channel), `AIRDROP_MAX` (10000), `AIRDROP_AMOUNT` (100).
+3. The list needs the store of the user counter (D1 or Upstash, above).
+4. Redeploy, then open `https://neuro.sawasdeecoin.com/api/telegram?setup=1` once: it points Telegram at the
+   webhook (with a secret derived from the token, checked on every call) and sets the command menu.
+
+To send: `/export` in the bot, copy `airdrop.txt` to the genesis node, `gov.sh airdrop airdrop.txt 100`
+(zetaphy-chain/README.md, "Testnet airdrop"); paid wallets are remembered there.
+
 ## Recognising tokens created by the ZETAPHY launcher
 
 Neuro recognises "code templates" by a code fingerprint (`src/fingerprint.js`): it masks the values that differ

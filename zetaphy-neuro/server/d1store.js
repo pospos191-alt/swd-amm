@@ -5,6 +5,7 @@
 // early-warning rate limiter work unchanged:
 //   INCR, GET, SET, EXPIRE, PERSIST (numbers with an optional expiry; SET takes an integer)
 //   PFADD, PFCOUNT (an exact set: the monthly visitor ids, already HMACs)
+//   SADD, SREM, SCARD, SMEMBERS (a set whose members can be read back: the Telegram airdrop list)
 // Expired rows are skipped on read and deleted now and then.
 
 const KV = 'neuro_kv';
@@ -70,6 +71,22 @@ function toSql([cmd, key, arg], now) {
         sql: `SELECT COUNT(*) AS n FROM ${SET} WHERE k = ?1`,
         params: [k],
         read: (r) => Number(r.results?.[0]?.n ?? 0),
+      };
+    case 'SADD':
+      return { ...toSql(['PFADD', key, arg], now) };
+    case 'SCARD':
+      return { ...toSql(['PFCOUNT', key], now) };
+    case 'SREM':
+      return {
+        sql: `DELETE FROM ${SET} WHERE k = ?1 AND v = ?2`,
+        params: [k, String(arg)],
+        read: (r) => (r.meta?.changes ? 1 : 0),
+      };
+    case 'SMEMBERS':
+      return {
+        sql: `SELECT v FROM ${SET} WHERE k = ?1 ORDER BY v`,
+        params: [k],
+        read: (r) => (r.results ?? []).map((x) => String(x.v)),
       };
     default:
       throw new Error(`d1: unsupported ${cmd}`);
