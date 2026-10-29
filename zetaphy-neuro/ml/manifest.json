@@ -1,0 +1,13 @@
+{
+ "format": "neuro-model-manifest/1",
+ "model": {
+  "id": "nml-b4c35477f7b1",
+  "sha256": "3ec693f33ea613abc7549655f6be64c7c50aaecf4cee3ee968a6c49b985f8d49",
+  "path": "ml/model.json"
+ },
+ "head": {
+  "id": "nfh-ec54f839dc2d",
+  "sha256": "2bad42f3716a3c675aa539756f88d03048851f0efc6c3aa3efd847573144d3e6",
+  "path": "ml/fl/head.json"
+ }
+}

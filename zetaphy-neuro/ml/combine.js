@@ -10,6 +10,7 @@
 //    simulation) decided, and no finding is added. The score lives in `ml`.
 
 import { explainPrediction, modelLevel } from './model.js';
+import { headProbability, checkHead } from './fl/head.js';
 import { extractFeatures } from './features.js';
 import { featureLabel } from './features.js';
 
@@ -41,11 +42,15 @@ export function combine(analysis, ml) {
  * Scores a readContract() report with a model.
  * @param {object} model  parsed ml/model.json
  * @param {object} report
- * @param {{code?:string, logicCode?:string, market?:object, top?:number, lang?:'en'|'th'}} [opts]
+ * @param {{code?:string, logicCode?:string, market?:object, top?:number, lang?:'en'|'th', head?:object}} [opts]
+ *   head: a federated head (ml/fl/head.json) for this model; it changes p (and so the level), while
+ *   `top` still explains the trees. A head for another model is refused.
  */
 export function scoreReport(model, report, opts = {}) {
   const features = extractFeatures({ report, code: opts.code, logicCode: opts.logicCode, market: opts.market });
   const e = explainPrediction(model, features);
+  const head = opts.head ? checkHead(model, opts.head) : null;
+  const p = head ? headProbability(model, head, features) : e.p;
   const lang = opts.lang === 'th' ? 'th' : 'en';
   const top = e.contributions.slice(0, opts.top ?? 5).map((c) => ({
     feature: c.feature,
@@ -53,7 +58,9 @@ export function scoreReport(model, report, opts = {}) {
     value: Math.round(c.value * 1000) / 1000,
     effect: Math.round(c.logit * 1000) / 1000, // + raises the risk, - lowers it (calibrated logit units)
   }));
-  return { model: model.id, p: Math.round(e.p * 10000) / 10000, level: modelLevel(model, e.p), top };
+  const out = { model: model.id, p: Math.round(p * 10000) / 10000, level: modelLevel(model, p), top };
+  if (head) out.head = head.id;
+  return out;
 }
 
 /** Report with the model's opinion folded in (never lower than the rules). */
