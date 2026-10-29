@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { Contract, getAddress } from 'ethers';
-import { compile, executeArgs, readSigned, intentDigest, KIND_NAMES } from './intent.js';
+import { compile, executeArgs, spendArgs, readSigned, intentDigest, KIND_NAMES } from './intent.js';
 import { cosignDigest, review, signCosign, combine } from './cosign.js';
 import { loadOrCreateKey, HOME, sealSecret, openSecret } from './keys.js';
 import { dkgRound1, dkgRound2, dkgRound3, signRound1, signingPackage, signRound2, aggregateShares } from './frost.js';
@@ -49,17 +49,35 @@ export async function reviewedDigest({ opt, s, connectRpc }) {
 export async function agentsCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, deps = {} }) {
   if (group === 'intent') {
     const file = rest[0];
-    if (!['show', 'compile', 'execute'].includes(cmd) || !file) {
-      throw new Error('usage: zetaphy intent show|compile|execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x…]');
+    if (!['show', 'compile', 'execute', 'spend'].includes(cmd) || !file) {
+      throw new Error('usage: zetaphy intent show|compile|execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x… | --bridge 0x…]\n'
+        + '       zetaphy intent spend <signed allowance intent> --to 0x… --amount <base units>   (the spender of an approve intent)');
     }
     const signed = readSigned(readFileSync(file, 'utf8'), Math.floor(Date.now() / 1000));
     const route = { ...signed.route, ...(opt.router ? { router: addrOpt(opt.router, '--router') } : {}), ...(opt.vault ? { vault: addrOpt(opt.vault, '--vault') } : {}),
-      ...(opt.path ? { path: String(opt.path).split(',').map((a) => addrOpt(a, '--path')) } : {}) };
+      ...(opt.bridge ? { bridge: addrOpt(opt.bridge, '--bridge') } : {}), ...(opt.path ? { path: String(opt.path).split(',').map((a) => addrOpt(a, '--path')) } : {}) };
     const i = signed.intent;
     if (cmd === 'show') {
-      write(`${KIND_NAMES[i.kind]}: at most ${i.maxIn} of ${i.tokenIn} from ${i.user}; at least ${i.minOut} of ${i.tokenOut} to ${i.recipient}`);
+      const kind = KIND_NAMES[i.kind];
+      if (kind === 'approve') write(`approve: ${i.recipient} may take up to ${i.maxIn} of ${i.tokenIn} from ${i.user} in total, until the deadline`);
+      else if (kind === 'bridge') write(`bridge: exactly ${i.maxIn} of ${i.tokenIn} from ${i.user} to ${i.recipient} on the other chain`);
+      else write(`${kind}: at most ${i.maxIn} of ${i.tokenIn} from ${i.user}; at least ${i.minOut} of ${i.tokenOut} to ${i.recipient}`);
       write(`deadline ${new Date(Number(i.deadline) * 1000).toISOString()}, nonce ${i.nonce}, signed with ${signed.auth.sigType === 1 ? 'ML-DSA-44' : 'ECDSA (EIP-712)'}`);
       write(`digest ${intentDigest(i, signed.executor, signed.chainId)} (executor ${signed.executor}, chain ${signed.chainId})`);
+      return 0;
+    }
+    if (cmd === 'spend') {
+      const to = addrOpt(opt.to, '--to');
+      if (!/^\d{1,78}$/.test(String(opt.amount ?? ''))) throw new Error('--amount <base units>');
+      const c = await connect(s, { needJobs: false });
+      const net = await c.provider.getNetwork();
+      if (net.chainId !== signed.chainId) throw new Error(`the intent is for chain ${signed.chainId}, the RPC is ${net.chainId}`);
+      const exe = new Contract(signed.executor, art('IntentExecutor').abi, c.signer);
+      const args = spendArgs(i, signed.auth, to, BigInt(opt.amount));
+      const left = await exe.spendAllowance.staticCall(...args);
+      const tx = await exe.spendAllowance(...args);
+      await tx.wait();
+      write(`pulled ${opt.amount} to ${to} (${tx.hash}); ${left} left until ${new Date(Number(i.deadline) * 1000).toISOString()}`);
       return 0;
     }
     const plan = compile(i, route);
@@ -164,6 +182,7 @@ export async function agentsCommand({ group, cmd, rest, opt, write, s, connect, 
       const nonceFile = join(dirname(String(opt.key)), `${key.groupKey.slice(0, 16)}-${key.id}.nonces-${String(mine.hiding).slice(2, 18)}.json`);
       if (!existsSync(nonceFile)) throw new Error('no unused nonces for this commitment (each commitment signs once): run `zetaphy cosign commit` again');
       // the member re-runs Neuro and computes the digest itself: it signs what it checked, not what it was told
+      write(`co-signing for wallet ${pkg.wallet}: call ${pkg.to}, value ${pkg.value}, data ${String(pkg.data).slice(0, 74)}${String(pkg.data).length > 74 ? '…' : ''}, deadline ${pkg.deadline}`);
       const r = await reviewed({ wallet: pkg.wallet, to: pkg.to, value: pkg.value, data: pkg.data, deadline: pkg.deadline, strict: pkg.strict || opt.strict });
       for (const x of r.reports) write(`Neuro: ${x.role} ${x.address} level ${x.level}`);
       if (!r.ok) { write(`refused: ${r.reasons.join('; ')}`); return 1; }

@@ -188,9 +188,11 @@
 //                                      signer: the agent's owner/operator/agentWallet, or a runner for an unclaimed Neuro identity
 //   zetaphy msg verify <file> [--me <agentId>]   check a signed message from another Neuro (it is data, never a command)
 //                                      (--identity / ZETAPHY_IDENTITY, --validation / ZETAPHY_VALIDATION: the two addresses)
-//   zetaphy intent show | compile | execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x…]
+//   zetaphy intent show | compile | execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x… | --bridge 0x…]
 //                                      Proof of Intent, as a solver: build the calls for a signed intent (from the hub's Agents
 //                                      page) and submit them to IntentExecutor, which reverts unless the effects match
+//   zetaphy intent spend <signed allowance intent> --to 0x… --amount <base units>   the spender of an "approve with cap" intent
+//                                      pulls up to the cap until it expires (IntentExecutor.spendAllowance)
 //   zetaphy cosign review --wallet 0x<AgentPolicyWallet> --to 0x… [--value wei --data 0x… --deadline unix --strict]
 //                                      AI co-signer, as a committee runner: run Neuro on what the action touches, sign if clean
 //   zetaphy cosign combine <a.json> <b.json> …   order the runners' signatures for executeCosigned (docs/future/agents.md)
