@@ -86,7 +86,7 @@ test('Agents page: AI draft -> review, key only to the provider, label lookup, T
     assert.match(modelBody.messages[0].content, /<<USER-TEXT>>\nswap 10 TKA/);
     assert.deepEqual([...keySeenBy], ['https://api.anthropic.com'], 'the key went only to the provider');
     // no wallet connected: the review asks for one and nothing can be signed
-    assert.match(await page.textContent('#ag-msg'), /connected wallet/);
+    await page.waitForFunction(() => /connected wallet/.test(document.getElementById('ag-msg').textContent), null, { timeout: 10_000 });
     assert.equal(await page.locator('#ag-sign').count(), 0);
 
     // label lookup (the registry answers 1 = person)
