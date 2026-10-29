@@ -1063,6 +1063,14 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 `node scripts/model-registry.js deploy | propose | status | show` เทสต์ใน `test/modelregistry.test.js`
 เบราว์เซอร์ตรวจทุกชิ้นที่ดาวน์โหลดกับทะเบียนนี้: [docs/future/browser-ai.th.md](../docs/future/browser-ai.th.md)
 
+## SignalBoard (เบราว์เซอร์หากันเจอ)
+
+`contracts/SignalBoard.sol`: กระดานประกาศสำหรับ signaling ของ WebRTC `post(topic, to, expiresAt, payload)` แค่ปล่อย event `Signal(...)`
+(payload 1..2048 ไบต์, หมดอายุไม่เกิน 600 วินาทีข้างหน้า, ผู้ส่งหนึ่งราย 12 โพสต์ต่อ 60 วินาที) ไม่มีเจ้าของ ไม่ถือเงิน ไม่มีอะไรต้องโหวต
+เบราว์เซอร์โพสต์ข้อเสนอที่เซ็นและเข้ารหัสจาก key ชั่วคราวที่ได้เหรียญจาก faucet และอ่านด้วย `eth_getLogs`
+`KEYFILE=… node scripts/signal-board.js deploy | show --board 0x…` เทสต์ใน `test/signalboard.test.js` ยังไม่ได้ deploy
+รายละเอียดและความเป็นส่วนตัว: [docs/future/browser-ai.th.md](../docs/future/browser-ai.th.md)
+
 ## ทดสอบ
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)

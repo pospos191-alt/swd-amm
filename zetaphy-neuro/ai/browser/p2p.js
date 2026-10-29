@@ -21,7 +21,7 @@
 export const FRAG = 60 * 1024;
 const HDR = 13; // kind u8 | reqId u32 | method u8 | part u16 | parts u16 | reserved u8 x3
 export const KIND = { request: 1, response: 2, error: 3 };
-export const METHOD = { chunk: 1, manifest: 2, forward: 10, hello: 11 };
+export const METHOD = { chunk: 1, manifest: 2, forward: 10, hello: 11, llm: 12, llmEnd: 13 };
 const MAX_PARTS = 2048; // 120 MiB per message
 
 /** Two connected in-memory channels with RTCDataChannel's shape (send / message events). */
@@ -52,7 +52,9 @@ export function memoryPair({ dropEvery = 0 } = {}) {
  * Returns {request(method, payload, {timeoutMs}) -> Promise<Uint8Array>, close()}.
  */
 export function rpcChannel(channel, handlers = {}, { maxInFlight = 64 } = {}) {
-  let next = 1;
+  // Several rpcChannels may share one data channel (chunks, pipeline stages): request ids
+  // start at a random point and a response must match the method, so answers never cross.
+  let next = 1 + Math.floor(Math.random() * 0x7fff0000);
   const waiting = new Map();   // reqId -> {resolve, reject, parts, got, timer}
   const incoming = new Map();  // reqId -> {method, parts, got}
   let served = 0;
@@ -113,7 +115,7 @@ export function rpcChannel(channel, handlers = {}, { maxInFlight = 64 } = {}) {
       return;
     }
     const w = waiting.get(reqId);
-    if (!w) return;
+    if (!w || w.method !== method) return;
     if (!w.got) { w.got = new Array(parts); w.parts = parts; w.n = 0; }
     if (w.parts !== parts || w.got[part]) return;
     w.got[part] = body; w.n++;
@@ -130,7 +132,7 @@ export function rpcChannel(channel, handlers = {}, { maxInFlight = 64 } = {}) {
       const reqId = next++;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => { waiting.delete(reqId); reject(new Error('peer timed out')); }, timeoutMs);
-        waiting.set(reqId, { resolve, reject, timer });
+        waiting.set(reqId, { resolve, reject, timer, method });
         sendMsg(KIND.request, reqId, method, payload).catch((e) => { clearTimeout(timer); waiting.delete(reqId); reject(e); });
       });
     },
@@ -146,12 +148,27 @@ const hashBytes = (h) => { const s = String(h).replace(/^0x/, ''); const o = new
  * Serves chunks (and manifests) this browser already has to a peer. It only
  * answers with what is in `store` under that hash; it never fetches for the peer.
  */
-export function servePeer(channel, store, { extra = {} } = {}) {
-  return rpcChannel(channel, {
-    [METHOD.chunk]: async (p) => (p.length === 32 ? store.get(hexOf(p)) : null),
+export function servePeer(channel, store, { extra = {}, maxBytesPerSecond = 0, maxBytesTotal = 0 } = {}) {
+  // Upload limits: an average rate (answers wait their turn) and a total for this peer (then it gets "not available").
+  let sent = 0, nextFree = 0;
+  const limited = async (b) => {
+    if (!b) return null;
+    if (maxBytesTotal && sent + b.length > maxBytesTotal) return null;
+    sent += b.length;
+    if (maxBytesPerSecond > 0) {
+      const t = Date.now();
+      const start = Math.max(t, nextFree);
+      nextFree = start + (b.length / maxBytesPerSecond) * 1000;
+      if (start > t) await new Promise((r) => setTimeout(r, start - t));
+    }
+    return b;
+  };
+  const rpc = rpcChannel(channel, {
+    [METHOD.chunk]: async (p) => (p.length === 32 ? limited(await store.get(hexOf(p))) : null),
     [METHOD.manifest]: async (p) => (p.length === 32 ? store.get(`m-${hexOf(p)}`) : null),
     ...extra,
   });
+  return Object.defineProperty(rpc, 'bytesSent', { get: () => sent });
 }
 
 /** A loader source backed by a peer: {id, getChunk(hash), getManifest(hash)}. Answers are verified by the loader. */
