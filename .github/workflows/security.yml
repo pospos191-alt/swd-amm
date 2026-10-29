@@ -489,6 +489,11 @@ jobs:
       - name: Install Chromium
         run: npx playwright-core install --with-deps chromium
 
+      # the Agents browser test runs a signed intent through zetaphy-network/src/intent.js (needs its ethers)
+      - name: Install zetaphy-network (used by the Agents browser test)
+        working-directory: zetaphy-network
+        run: npm ci --no-audit --no-fund
+
       - name: Browser test (every tab, mocked node)
         run: npm run test:e2e
 
