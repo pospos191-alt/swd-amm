@@ -35,7 +35,7 @@ const SKIP_IN = { wallet: new Set(['src']),
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data',
   'robots.txt', 'sitemap.xml', `${INDEXNOW_KEY}.txt`]);
 const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'ceremony.html', 'ceremony.css', 'ceremony.js', 'ceremony-i18n.js', 'ceremony-core.js', 'vendor/snarkjs.min.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
-  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js'];
+  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. `files`: {path: json} in place of the repo's (tests). */
 export function hubConfig(cfg, files = null) {
@@ -141,19 +141,37 @@ export function chainTokens(read) {
   const routes = saphanTokenRoutes(read);
   const saphanOf = (address) => routes.find((r) => !r.native && r.address.toLowerCase() === address.toLowerCase())?.destinations
     .map((d) => ({ chain: d.displayName, symbol: routes.find((r) => r.address.toLowerCase() === address.toLowerCase()).synthetic, state: d.state }));
-  const add = (address, symbol, decimals) => {
+  const add = (address, symbol, decimals, logo) => {
     if (!isAddr(address) || out.some((t) => t.address.toLowerCase() === address.toLowerCase())) return;
     const s = saphanOf(address);
-    out.push({ address, ...(sym(symbol) ? { symbol } : {}), ...(Number.isInteger(decimals) ? { decimals } : {}), ...(s?.length ? { saphan: s } : {}) });
+    out.push({ address, ...(sym(symbol) ? { symbol } : {}), ...(Number.isInteger(decimals) ? { decimals } : {}), ...(logo ? { logo } : {}), ...(s?.length ? { saphan: s } : {}) });
   };
   add(read('zetaphy-chain/rewards/points-testnet.json')?.points, 'BZTPHY');
-  add(read('zetaphy-chain/rewards/early-testnet.json')?.token, 'ZEARLY', 18); // ZETAPHY Early (zetaphy-chain/rewards/EARLY.md)
+  add(read('zetaphy-chain/rewards/early-testnet.json')?.token, 'ZEARLY', 18, 'zearly-256.png'); // ZETAPHY Early (zetaphy-chain/rewards/EARLY.md)
   // tokens of the Saphan token table (not the native coin: the wallet bar shows it already)
   for (const r of routes) if (!r.native) add(r.address, r.symbol);
   add(read('zetaphy-chain/hyperlane/bridge-testnet.json')?.zetaphy?.bridgedToken);
   for (const r of saphanRoutes(read)) if (r.token) add(r.token, r.symbol, 18);
   for (const t of read('zetaphy-dex/web/deployments.json')?.tokens ?? []) add(t.address, t.symbol, t.decimals);
   return out;
+}
+
+/**
+ * The ZETAPHY tokens as a standard token list (tokenlists.org schema; DEXs and wallets that take a list URL read it):
+ * chain id 77390 on every token, its logo when it has one, the ZETAPHY network logo for the list.
+ */
+export function tokenList(tokens, origin = 'https://app.sawasdeecoin.com', version = { major: 1, minor: 0, patch: 0 }) {
+  const NAME = { BZTPHY: 'ZETAPHY Testnet Reward Points', ZEARLY: 'ZETAPHY Early' };
+  return {
+    name: 'ZETAPHY',
+    logoURI: `${origin}/zetaphy-256.png`,
+    keywords: ['zetaphy', 'testnet'],
+    version,
+    tokens: tokens.filter((t) => t.symbol).map((t) => ({
+      chainId: 77390, address: t.address, symbol: t.symbol, name: NAME[t.symbol] ?? t.symbol, decimals: t.decimals ?? 18,
+      ...(t.logo ? { logoURI: `${origin}/${t.logo}` } : {}),
+    })),
+  };
 }
 
 /**
@@ -176,7 +194,9 @@ export function build() {
   for (const [f, c] of Object.entries(hubSeoFiles())) { mkdirSync(dirname(join(dir, f)), { recursive: true }); writeFileSync(join(dir, f), c); }
   writeFileSync(join(dir, 'validators.html'), withRelease(readFileSync(join(HERE, 'validators.html'), 'utf8'), releaseTag()));
   const cfg = JSON.parse(readFileSync(join(ROOT, 'zetaphy-explorer/config.json'), 'utf8'));
-  writeFileSync(join(dir, 'hub-config.json'), `${JSON.stringify(hubConfig(cfg), null, 2)}\n`);
+  const hc = hubConfig(cfg);
+  writeFileSync(join(dir, 'hub-config.json'), `${JSON.stringify(hc, null, 2)}\n`);
+  writeFileSync(join(dir, 'tokenlist.json'), `${JSON.stringify({ ...tokenList(hc.tokens ?? []), timestamp: '2026-10-29T00:00:00.000Z' }, null, 2)}\n`);
   for (const [path, src] of Object.entries(APPS)) {
     const from = join(ROOT, src);
     const top = (p) => p.slice(from.length + 1).split(/[\\/]/)[0];

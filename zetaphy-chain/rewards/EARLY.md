@@ -9,7 +9,7 @@
 | Supply | **1,000,000,000**, all created once at deploy for the airdrop wallet |
 | Who can make more | Nobody: no owner, no mint, no pause, no fee |
 | Address | `early-testnet.json` in this folder, once deployed |
-| Logo | `logo/zearly.svg`, `logo/zearly-512.png`, `-256`, `-64` (the ZETAPHY "Z" on a gold coin) |
+| Logo | `logo/zearly.svg`, `logo/zearly-512.png`, `-256`, `-64` (a white Z with a gold stroke and a gold dot, on a dark coin); wallets show it via the hub's "Add to wallet" and `app.sawasdeecoin.com/tokenlist.json` |
 
 ZEARLY shows who joined ZETAPHY early. Anyone can hold it, send it and trade it on the ZETAPHY Swap.
 **It has no value, it is not ZETAPHY, and it is never converted into ZETAPHY** (unlike BZTPHY, the validators' and
