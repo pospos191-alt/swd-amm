@@ -9,6 +9,7 @@
 | Supply | **1,000,000,000**, all created once at deploy for the airdrop wallet |
 | Who can make more | Nobody: no owner, no mint, no pause, no fee |
 | Address | `early-testnet.json` in this folder, once deployed |
+| Logo | `logo/zearly.svg`, `logo/zearly-512.png`, `-256`, `-64` (the ZETAPHY "Z" on a gold coin) |
 
 ZEARLY shows who joined ZETAPHY early. Anyone can hold it, send it and trade it on the ZETAPHY Swap.
 **It has no value, it is not ZETAPHY, and it is never converted into ZETAPHY** (unlike BZTPHY, the validators' and
