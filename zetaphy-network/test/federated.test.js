@@ -27,9 +27,26 @@ beforeEach(async () => {
   c = await createChain(NAMES);
   start = c.blockNumber() + 10n;
   fr = await c.deploy('FederatedRounds', [a('gov'), start, COMMIT, REVEAL, 20], 'gov');
+  assert.equal(await fr.call('paused'), true, 'closed by default');
+  await fr.send('gov', 'setPaused', [false]);
 });
 const goTo = (block) => { const n = block - c.blockNumber(); if (n > 0n) c.mine(Number(n)); };
 const update = (R, round = 0) => encodeUpdate({ headHash: HEAD, round, clip: 1, z: 2, values: privatize([0.2, -0.1, 0.05, 0.3], { clip: 1, z: 2 }, R.float) });
+
+test('closed by default: no commit until governance opens it; reveals stay possible while paused', async () => {
+  const closed = await c.deploy('FederatedRounds', [a('gov'), start, COMMIT, REVEAL, 20], 'gov');
+  assert.equal(await closed.call('paused'), true);
+  goTo(start);
+  const p = update(rng('closed'));
+  const salt = hashText('s');
+  await assert.rejects(closed.send('u0', 'commit', [0, commitmentFor(p, salt, a('u0'))]), /IsPaused/);
+  await assert.rejects(closed.send('u0', 'setPaused', [false]), /NotGovernance/);
+  await closed.send('gov', 'setPaused', [false]);
+  await closed.send('u0', 'commit', [0, commitmentFor(p, salt, a('u0'))]);
+  await closed.send('gov', 'setPaused', [true]);
+  goTo(start + COMMIT);
+  assert.equal(revealedFromEvents(await closed.send('u0', 'reveal', [0, salt, p])).length, 1);
+});
 
 test('constructor and phases', async () => {
   const Z = '0x' + '00'.repeat(20);

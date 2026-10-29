@@ -30,6 +30,7 @@ No workflow uses `pull_request_target` or `workflow_run` (checked; see section 5
 | | | `saphan-route` → `deploy` | PR, manual | no (manual `deploy` only) | `testnet-deploy` |
 | | | `neuro-oracle` → `deploy` | PR, manual | no (manual `deploy` only) | `testnet-deploy` |
 | | | `timelock` → `execute` | manual | no | `testnet-deploy` |
+| | | `neuro-fl` → `deploy` (FederatedRounds, closed, owned by the timelock; `mode: deploy` only) | sched, PR, manual | no (manual `deploy` only; the weekly `aggregate` and `propose` jobs use no stored secret) | `testnet-deploy` |
 | | | `rewards` → `award` | PR, sched, manual | no (daily schedule, manual `award`) | `testnet-automation` |
 | | | `hyperlane-relayer` → `relay` (fallback signer) | sched, manual | no | `testnet-automation` |
 | `ZETAPHY_RELAYER_KEY` (new, optional) | dedicated relayer signer; used instead of the deployer key when set | `hyperlane-relayer` → `relay` | sched, manual | no | `testnet-automation` |

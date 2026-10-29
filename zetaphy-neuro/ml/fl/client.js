@@ -6,7 +6,8 @@
 // clipped, noised change to the head's weights ever leaves the device.
 
 import { headInputs } from './head.js';
-import { privatize, DEFAULT_PRIVACY } from './dp.js';
+import { privatize, DEFAULT_PRIVACY, l2 } from './dp.js';
+import { encodeUpdate } from './codec.js';
 
 export const DEFAULT_LOCAL = Object.freeze({ epochs: 10, lr: 1, l2: 0.01, maxExamples: 64 });
 
@@ -58,4 +59,20 @@ export function localDelta(model, head, examples, opts = {}) {
 export function clientUpdate(model, head, examples, { privacy = DEFAULT_PRIVACY, local = {}, uniform } = {}) {
   const raw = localDelta(model, head, examples, local);
   return privatize(raw, privacy, uniform);
+}
+
+/**
+ * Everything a browser does for one round, from its stored labels to the bytes it sends:
+ * examples -> local delta -> clip + noise -> wire format. Runs in a Web Worker on the page
+ * (web/fl-worker.js); nothing in `rows` leaves it.
+ * @param {Array<{f:object, y:0|1}>} rows  named (sparse) features + the final label (ml/fl/labels.js)
+ * @returns {{bytes:Uint8Array, n:number, dim:number, norm:number}}
+ */
+export function roundUpdate(model, head, rows, { round, privacy = DEFAULT_PRIVACY, local = {}, uniform } = {}) {
+  if (!head.hash) throw new Error('the head has no hash (sealHead it first)');
+  if (!rows.length) throw new Error('no labelled examples');
+  const ex = rows.map((r) => makeExample(model, head, r.f, r.y));
+  const values = clientUpdate(model, head, ex, { privacy, local, uniform });
+  const bytes = encodeUpdate({ headHash: head.hash, round, clip: privacy.clip, z: privacy.z, values });
+  return { bytes, n: Math.min(ex.length, local.maxExamples ?? DEFAULT_LOCAL.maxExamples), dim: values.length, norm: l2(values) };
 }

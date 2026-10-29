@@ -1,0 +1,10 @@
+{
+ "format": "neuro-fl-deployment/1",
+ "network": "zetaphy-testnet",
+ "chainId": 77390,
+ "rpc": "https://rpc.sawasdeecoin.com",
+ "rounds": null,
+ "deployBlock": null,
+ "governance": null,
+ "threatRegistry": "0xab5745b61f83975e68f6546be9f83651df12417f"
+}
