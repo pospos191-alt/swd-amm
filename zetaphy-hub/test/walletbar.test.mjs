@@ -26,13 +26,14 @@ test('token answers: balanceOf call data, string and bytes32 symbols, amounts', 
   assert.equal(formatUnits(0n), '0');
 });
 
-test('tokens shown: BZTPHY, the bridged token and the DEX tokens, addresses only from the repo', () => {
+test('tokens shown: BZTPHY, ZETAPHY Early, the bridged token and the DEX tokens, addresses only from the repo', () => {
   const t = chainTokens((f) => ({
     'zetaphy-chain/rewards/points-testnet.json': { points: '0x3cC2B1FFd3a7C7504a49426AE6BDEa501Bf1D59d' },
+    'zetaphy-chain/rewards/early-testnet.json': { token: '0x00000000000000000000000000000000000E4B1E' },
     'zetaphy-chain/hyperlane/bridge-testnet.json': { zetaphy: { bridgedToken: '0xb0e25f7ab80e55d6f06F401c8301B3d9B90Ab855' } },
     'zetaphy-dex/web/deployments.json': { tokens: [{ address: '0x9D44EA6837938d4FEF98367A7b5867cdCa8DE596', symbol: 'tUSD', decimals: 18 }, { address: 'nope', symbol: 'X' }, { address: '0x3cc2b1ffd3a7c7504a49426ae6bdea501bf1d59d', symbol: 'DUP' }] },
   })[f] ?? null);
-  assert.deepEqual(t.map((x) => x.symbol ?? x.address), ['BZTPHY', '0xb0e25f7ab80e55d6f06F401c8301B3d9B90Ab855', 'tUSD']);
+  assert.deepEqual(t.map((x) => x.symbol ?? x.address), ['BZTPHY', 'ZEARLY', '0xb0e25f7ab80e55d6f06F401c8301B3d9B90Ab855', 'tUSD']);
 });
 
 test('Saphan EVM routes: every chain of the table, its state from saphan-routes.json; deployed tokens join the wallet bar', () => {

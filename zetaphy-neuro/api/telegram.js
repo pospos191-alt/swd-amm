@@ -5,7 +5,8 @@
 //   - optional: TELEGRAM_ADMIN_IDS (numeric Telegram user ids, comma separated: /count /export /announce),
 //     TELEGRAM_CHANNEL (@name: /announce posts there, and /claim needs membership),
 //     TELEGRAM_BOT_USERNAME (default awasdeebot), AIRDROP_MAX (10000), AIRDROP_AMOUNT (100),
-//     TELEGRAM_BOT_LANG (en by default; auto = each user's Telegram language).
+//     TELEGRAM_BOT_LANG (en by default; auto = each user's Telegram language),
+//     AIRDROP_EARLY + EARLY_TOKEN (ZETAPHY Early per wallet and its address: /claim then mentions it).
 // After a deploy, open https://neuro.sawasdeecoin.com/api/telegram?setup=1 once: it points Telegram at
 // this function (with a secret derived from the token, checked on every call) and sets the command menu.
 import { timingSafeEqual } from 'node:crypto';

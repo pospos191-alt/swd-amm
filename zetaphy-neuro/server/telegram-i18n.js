@@ -22,6 +22,7 @@ export const BOT = {
     exported: '{n} wallets. On the genesis node: gov.sh airdrop airdrop.txt {amount}',
     posted: 'Posted to {ch}.',
     noChannel: 'No channel is set (TELEGRAM_CHANNEL).',
+    early: '🎉 Plus {early} ZETAPHY Early (ZEARLY), the community token of early supporters. It has no value and is not ZETAPHY. In MetaMask: Import token {token}',
   },
   th: {
     start: '👋 ยินดีต้อนรับสู่ ZETAPHY บล็อกเชน EVM ที่ทนคอมพิวเตอร์ควอนตัม (testnet)\n\n🎁 แอร์ดรอป: พิมพ์ /claim ตามด้วยที่อยู่กระเป๋า (0x… จาก MetaMask, Trust หรือกระเป๋า EVM ใดก็ได้ หรือ zetaphy1… จาก Keplr) หนึ่งบัญชี Telegram ต่อหนึ่งกระเป๋า คนละ {amount} ZETAPHY ทดสอบ\n🔍 /check 0x… ให้ Neuro อ่านสัญญาโทเค็นก่อนซื้อ\n\n⚠️ เหรียญทดสอบไม่มีมูลค่า เราไม่ทักแชทหาคุณก่อน และไม่ขอ 24 คำ (seed) ของคุณเด็ดขาด',
@@ -41,6 +42,7 @@ export const BOT = {
     exported: '{n} กระเป๋า บนโหนดแรกรัน: gov.sh airdrop airdrop.txt {amount}',
     posted: 'โพสต์ลง {ch} แล้ว',
     noChannel: 'ยังไม่ได้ตั้งช่อง (TELEGRAM_CHANNEL)',
+    early: '🎉 พร้อม {early} ZETAPHY Early (ZEARLY) เหรียญชุมชนของผู้สนับสนุนรุ่นแรก ไม่มีมูลค่า และไม่ใช่ ZETAPHY ใน MetaMask กด Import token แล้วใส่ {token}',
   },
   zh: {
     start: '👋 欢迎来到 ZETAPHY，一条抗量子的 EVM 链（测试网）。\n\n🎁 空投：发送 /claim 加上你的钱包地址（MetaMask、Trust 或任何 EVM 钱包的 0x…，或 Keplr 的 zetaphy1…）。每个 Telegram 账户一个钱包，每人 {amount} 个测试 ZETAPHY。\n🔍 /check 0x… — 买入前让 Neuro 读取代币合约。\n\n⚠️ 测试币没有价值。我们不会主动私信你，也绝不会索要你的助记词。',
@@ -60,6 +62,7 @@ export const BOT = {
     exported: '{n} 个钱包。在创世节点上运行：gov.sh airdrop airdrop.txt {amount}',
     posted: '已发布到 {ch}。',
     noChannel: '尚未设置频道（TELEGRAM_CHANNEL）。',
+    early: '🎉 另有 {early} 个 ZETAPHY Early（ZEARLY），早期支持者的社区代币。它没有价值，也不是 ZETAPHY。在 MetaMask 中导入代币：{token}',
   },
   es: {
     start: '👋 Bienvenido a ZETAPHY, una cadena EVM poscuántica (testnet).\n\n🎁 Airdrop: envía /claim y la dirección de tu billetera (0x… de MetaMask, Trust o cualquier billetera EVM, o zetaphy1… de Keplr). Una billetera por cuenta de Telegram, {amount} ZETAPHY de prueba cada una.\n🔍 /check 0x… — Neuro lee el contrato de un token antes de comprar.\n\n⚠️ Las monedas de prueba no tienen valor. Nunca te escribimos primero y nunca pedimos tu frase semilla.',
@@ -79,6 +82,7 @@ export const BOT = {
     exported: '{n} billeteras. En el nodo génesis: gov.sh airdrop airdrop.txt {amount}',
     posted: 'Publicado en {ch}.',
     noChannel: 'No hay canal configurado (TELEGRAM_CHANNEL).',
+    early: '🎉 Además {early} ZETAPHY Early (ZEARLY), el token de la comunidad de los primeros seguidores. No tiene valor y no es ZETAPHY. En MetaMask: Importar token {token}',
   },
   ko: {
     start: '👋 양자 내성 EVM 체인 ZETAPHY(테스트넷)에 오신 것을 환영합니다.\n\n🎁 에어드롭: /claim 과 지갑 주소를 보내세요 (MetaMask, Trust 등 EVM 지갑의 0x… 또는 Keplr의 zetaphy1…). Telegram 계정당 지갑 하나, 각 {amount} 테스트 ZETAPHY.\n🔍 /check 0x… — 구매 전에 Neuro가 토큰 컨트랙트를 읽어 줍니다.\n\n⚠️ 테스트 코인은 가치가 없습니다. 저희는 먼저 메시지를 보내지 않으며 시드 문구를 절대 요구하지 않습니다.',
@@ -98,6 +102,7 @@ export const BOT = {
     exported: '지갑 {n}개. 제네시스 노드에서: gov.sh airdrop airdrop.txt {amount}',
     posted: '{ch}에 게시했습니다.',
     noChannel: '채널이 설정되지 않았습니다 (TELEGRAM_CHANNEL).',
+    early: '🎉 추가로 ZETAPHY Early(ZEARLY) {early}개: 초기 지지자를 위한 커뮤니티 토큰입니다. 가치가 없으며 ZETAPHY가 아닙니다. MetaMask에서 토큰 가져오기: {token}',
   },
   ja: {
     start: '👋 耐量子 EVM チェーン ZETAPHY（テストネット）へようこそ。\n\n🎁 エアドロップ：/claim とウォレットアドレスを送ってください（MetaMask・Trust など EVM ウォレットの 0x…、または Keplr の zetaphy1…）。Telegram アカウントごとに 1 ウォレット、各 {amount} テスト ZETAPHY。\n🔍 /check 0x… — 購入前に Neuro がトークンのコントラクトを読みます。\n\n⚠️ テストコインに価値はありません。こちらから先に連絡することはなく、シードフレーズを求めることも絶対にありません。',
@@ -117,6 +122,7 @@ export const BOT = {
     exported: '{n} ウォレット。ジェネシスノードで：gov.sh airdrop airdrop.txt {amount}',
     posted: '{ch} に投稿しました。',
     noChannel: 'チャンネルが設定されていません（TELEGRAM_CHANNEL）。',
+    early: '🎉 さらに ZETAPHY Early（ZEARLY）を {early}：初期サポーターのコミュニティトークンです。価値はなく、ZETAPHY ではありません。MetaMask でトークンをインポート：{token}',
   },
   ru: {
     start: '👋 Добро пожаловать в ZETAPHY — постквантовую EVM-сеть (тестовая сеть).\n\n🎁 Аирдроп: отправьте /claim и адрес кошелька (0x… из MetaMask, Trust или любого EVM-кошелька, либо zetaphy1… из Keplr). Один кошелёк на аккаунт Telegram, по {amount} тестовых ZETAPHY.\n🔍 /check 0x… — Neuro читает контракт токена до покупки.\n\n⚠️ Тестовые монеты ничего не стоят. Мы никогда не пишем первыми и никогда не просим сид-фразу.',
@@ -136,6 +142,7 @@ export const BOT = {
     exported: 'Кошельков: {n}. На генезис-узле: gov.sh airdrop airdrop.txt {amount}',
     posted: 'Опубликовано в {ch}.',
     noChannel: 'Канал не задан (TELEGRAM_CHANNEL).',
+    early: '🎉 Плюс {early} ZETAPHY Early (ZEARLY) — токен сообщества первых участников. Он ничего не стоит и не является ZETAPHY. В MetaMask: «Импорт токена» {token}',
   },
   vi: {
     start: '👋 Chào mừng đến với ZETAPHY, chuỗi EVM kháng lượng tử (testnet).\n\n🎁 Airdrop: gửi /claim và địa chỉ ví (0x… từ MetaMask, Trust hoặc ví EVM bất kỳ, hoặc zetaphy1… từ Keplr). Mỗi tài khoản Telegram một ví, mỗi ví {amount} ZETAPHY thử nghiệm.\n🔍 /check 0x… — Neuro đọc hợp đồng token trước khi bạn mua.\n\n⚠️ Coin thử nghiệm không có giá trị. Chúng tôi không bao giờ nhắn tin trước và không bao giờ hỏi cụm từ khôi phục của bạn.',
@@ -155,6 +162,7 @@ export const BOT = {
     exported: '{n} ví. Trên node genesis: gov.sh airdrop airdrop.txt {amount}',
     posted: 'Đã đăng lên {ch}.',
     noChannel: 'Chưa đặt kênh (TELEGRAM_CHANNEL).',
+    early: '🎉 Thêm {early} ZETAPHY Early (ZEARLY), token cộng đồng của người ủng hộ sớm. Nó không có giá trị và không phải ZETAPHY. Trong MetaMask: Nhập token {token}',
   },
 };
 

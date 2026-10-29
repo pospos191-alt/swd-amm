@@ -147,6 +147,7 @@ export function chainTokens(read) {
     out.push({ address, ...(sym(symbol) ? { symbol } : {}), ...(Number.isInteger(decimals) ? { decimals } : {}), ...(s?.length ? { saphan: s } : {}) });
   };
   add(read('zetaphy-chain/rewards/points-testnet.json')?.points, 'BZTPHY');
+  add(read('zetaphy-chain/rewards/early-testnet.json')?.token, 'ZEARLY', 18); // ZETAPHY Early (zetaphy-chain/rewards/EARLY.md)
   // tokens of the Saphan token table (not the native coin: the wallet bar shows it already)
   for (const r of routes) if (!r.native) add(r.address, r.symbol);
   add(read('zetaphy-chain/hyperlane/bridge-testnet.json')?.zetaphy?.bridgedToken);
