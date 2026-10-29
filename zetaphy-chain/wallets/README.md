@@ -206,6 +206,7 @@ The protection on ZETAPHY is the **quantum lock**:
 | `keplr-chain-info.template.json` | Chain info for `experimentalSuggestChain` (Keplr, Leap, Cosmostation) |
 | `chain-registry/zetaphytestnet/` | `chain.json`, `assetlist.json`, `images/zetaphy.svg` for `testnets/` of cosmos/chain-registry |
 | `ethereum-lists/eip155-77390.json` | For `_data/chains/` of ethereum-lists/chains (chainlist.org) |
+| `ethereum-lists/icons/zetaphy.json` + `zetaphy-256.png` | For `_data/icons/`: the network icon. Upload the PNG to IPFS first and put its CID in the file |
 
 - Fill in `HOST` with the node's https name (without `https://`):
   ```bash

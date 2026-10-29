@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanId, decodeString, formatUnits, balanceOfData, SHARED_KEY } from '../walletbar.js';
 import { readFileSync } from 'node:fs';
-import { chainTokens, saphanRoutes, saphanTokenRoutes } from '../build.mjs';
+import { chainTokens, saphanRoutes, saphanTokenRoutes, tokenList } from '../build.mjs';
 
 test('stored wallet id: only an id this site writes (JSON or plain), nothing else', () => {
   assert.equal(SHARED_KEY, 'zetaphy:wallet');
@@ -26,13 +26,14 @@ test('token answers: balanceOf call data, string and bytes32 symbols, amounts', 
   assert.equal(formatUnits(0n), '0');
 });
 
-test('tokens shown: BZTPHY, the bridged token and the DEX tokens, addresses only from the repo', () => {
+test('tokens shown: BZTPHY, ZETAPHY Early, the bridged token and the DEX tokens, addresses only from the repo', () => {
   const t = chainTokens((f) => ({
     'zetaphy-chain/rewards/points-testnet.json': { points: '0x3cC2B1FFd3a7C7504a49426AE6BDEa501Bf1D59d' },
+    'zetaphy-chain/rewards/early-testnet.json': { token: '0x00000000000000000000000000000000000E4B1E' },
     'zetaphy-chain/hyperlane/bridge-testnet.json': { zetaphy: { bridgedToken: '0xb0e25f7ab80e55d6f06F401c8301B3d9B90Ab855' } },
     'zetaphy-dex/web/deployments.json': { tokens: [{ address: '0x9D44EA6837938d4FEF98367A7b5867cdCa8DE596', symbol: 'tUSD', decimals: 18 }, { address: 'nope', symbol: 'X' }, { address: '0x3cc2b1ffd3a7c7504a49426ae6bdea501bf1d59d', symbol: 'DUP' }] },
   })[f] ?? null);
-  assert.deepEqual(t.map((x) => x.symbol ?? x.address), ['BZTPHY', '0xb0e25f7ab80e55d6f06F401c8301B3d9B90Ab855', 'tUSD']);
+  assert.deepEqual(t.map((x) => x.symbol ?? x.address), ['BZTPHY', 'ZEARLY', '0xb0e25f7ab80e55d6f06F401c8301B3d9B90Ab855', 'tUSD']);
 });
 
 test('Saphan EVM routes: every chain of the table, its state from saphan-routes.json; deployed tokens join the wallet bar', () => {
@@ -88,4 +89,13 @@ test('Saphan token routes: tokens born on ZETAPHY with their destinations; held 
   // the committed tables: ZETAPHY to the three test networks (planned), BZTPHY listed without a route
   const real = saphanTokenRoutes((f) => { try { return JSON.parse(readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')); } catch { return null; } });
   assert.deepEqual(real.map((x) => [x.symbol, x.synthetic, x.destinations.map((d) => d.state).join()]), [['ZETAPHY', 'zZETAPHY', 'planned,planned,planned'], ['BZTPHY', 'zBZTPHY', '']]);
+});
+
+test('token list: every token on chain 77390, its logo when it has one, the ZETAPHY logo for the list', () => {
+  const l = tokenList([{ address: '0x00000000000000000000000000000000000E4B1E', symbol: 'ZEARLY', decimals: 18, logo: 'zearly-256.png' }, { address: '0x3cC2B1FFd3a7C7504a49426AE6BDEa501Bf1D59d', symbol: 'BZTPHY' }, { address: '0x9D44EA6837938d4FEF98367A7b5867cdCa8DE596' }]);
+  assert.equal(l.logoURI, 'https://app.sawasdeecoin.com/zetaphy-256.png');
+  assert.deepEqual(l.tokens.map((t) => [t.chainId, t.symbol, t.name, t.logoURI ?? null]), [
+    [77390, 'ZEARLY', 'ZETAPHY Early', 'https://app.sawasdeecoin.com/zearly-256.png'],
+    [77390, 'BZTPHY', 'ZETAPHY Testnet Reward Points', null],
+  ]);
 });

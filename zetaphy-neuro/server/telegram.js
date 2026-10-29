@@ -46,6 +46,9 @@ export function botConfig(env = process.env) {
     channel: /^@[A-Za-z0-9_]{5,32}$/.test(ch) ? ch : '',
     max: Math.max(1, Number.parseInt(env.AIRDROP_MAX ?? '10000', 10) || 10000),
     amount: Math.max(1, Number.parseInt(env.AIRDROP_AMOUNT ?? '100', 10) || 100),
+    // ZETAPHY Early (ZEARLY, zetaphy-chain/rewards/EARLY.md): the per-wallet amount and the token, once deployed
+    early: Math.max(0, Number.parseInt(env.AIRDROP_EARLY ?? '0', 10) || 0),
+    earlyToken: /^0x[0-9a-fA-F]{40}$/.test(env.EARLY_TOKEN ?? '') ? env.EARLY_TOKEN : '',
     // the bot's language: English for everyone by default; "auto" follows each user's Telegram language
     lang: String(env.TELEGRAM_BOT_LANG ?? 'en').trim().toLowerCase() === 'auto' ? 'auto' : botLang(env.TELEGRAM_BOT_LANG ?? 'en'),
   };
@@ -118,7 +121,7 @@ export async function handleUpdate(update, { api, store, cfg, me = 'awasdeebot' 
       if (!Number(newUser)) { await say(L.already); return 'claim-already'; }
       const [newAddr] = await store.pipeline([['SADD', K_ADDRS, a]]);
       if (!Number(newAddr)) { await store.pipeline([['SREM', K_USERS, String(m.from.id)]]); await say(L.taken); return 'claim-taken'; }
-      await say(fill(L.claimOk, { a, amount: cfg.amount }));
+      await say(fill(L.claimOk, { a, amount: cfg.amount }) + (cfg.early && cfg.earlyToken ? `\n\n${fill(L.early, { early: cfg.early.toLocaleString('en-US'), token: cfg.earlyToken })}` : ''));
       return 'claim-ok';
     }
 

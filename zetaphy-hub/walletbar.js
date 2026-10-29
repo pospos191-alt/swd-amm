@@ -187,7 +187,8 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
         const raw = await evmCall('eth_call', [{ to: t.address, data: balanceOfData(a) }, 'latest']).catch(() => '0x0');
         let v = 0n; try { v = BigInt(raw === '0x' ? '0x0' : raw); } catch { v = 0n; }
         const checked = v > 0n && neuroBadge ? await neuroBadge.check(t.address).catch(() => false) : false;
-        return { ...(await tokenMeta(t)), address: t.address, value: v, saphan: Array.isArray(t.saphan) ? t.saphan : [], checked };
+        const logo = typeof t.logo === 'string' && /^[\w-]+\.(png|svg)$/.test(t.logo) ? t.logo : null; // a file of this site
+        return { ...(await tokenMeta(t)), address: t.address, value: v, saphan: Array.isArray(t.saphan) ? t.saphan : [], checked, logo };
       }));
       if (a !== account) return;
       balances = { native, tokens: list.filter((x) => x.value > 0n) };
@@ -197,6 +198,10 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
   }
 
   function renderDialog() {
+    // every token: its picture (logo, else its first letter) with the ZETAPHY network badge, as wallets show a token's chain
+    const tokIcon = (logo, sym) => el('span', { class: 'wb-tok', title: 'ZETAPHY' },
+      logo ? el('img', { class: 'wb-logo', src: logo, alt: '', width: 20, height: 20 }) : el('span', { class: 'wb-logo wb-letter', 'data-l': String(sym ?? '?').slice(0, 1).toUpperCase(), 'aria-hidden': 'true' }),
+      el('img', { class: 'wb-net', src: 'favicon.svg', alt: '', width: 10, height: 10 }));
     const body = $('wb-body');
     body.replaceChildren();
     if (account) {
@@ -206,9 +211,13 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
         !balances ? el('p', { class: 'dim', text: '…' })
           : balances.error ? el('p', { class: 'dim', text: T('wbNoNode') })
             : el('ul', { class: 'wb-bal' },
-              el('li', {}, el('span', { text: 'ZETAPHY' }), el('b', { class: 'mono', text: formatUnits(balances.native) })),
+              el('li', {}, el('span', {}, tokIcon('logo.svg', 'Z'), 'ZETAPHY'), el('b', { class: 'mono', text: formatUnits(balances.native) })),
               saphanLine(nativeSaphan()),
-              balances.tokens.flatMap((x) => [el('li', {}, el('span', { text: x.symbol, title: x.address },
+              balances.tokens.flatMap((x) => [el('li', {}, el('span', { title: x.address },
+                tokIcon(x.logo, x.symbol), x.symbol,
+                // into the wallet's own token list, with its picture when it has one (EIP-747)
+                el('button', { type: 'button', class: 'btn ghost sm wb-add', text: T('wbAddToken'), onclick: () => wallet?.provider?.request({ method: 'wallet_watchAsset',
+                  params: { type: 'ERC20', options: { address: x.address, symbol: x.symbol, decimals: x.decimals ?? 18, ...(x.logo ? { image: new URL(x.logo, win.location.href).href } : {}) } } }).catch(() => {}) }),
                 x.checked && neuroBadge ? el('span', { class: 'wb-neuro', 'data-badge': 'neuro-checked', title: neuroBadge.tip(), text: ` ✓ ${neuroBadge.label()}` }) : null),
                 el('b', { class: 'mono', text: formatUnits(x.value, x.decimals) })),
                 saphanLine(x.saphan)])),

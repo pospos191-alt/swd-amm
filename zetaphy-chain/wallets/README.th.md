@@ -206,6 +206,7 @@ Phantom ให้เพิ่มเครือข่ายเองไม่ไ
 | `keplr-chain-info.template.json` | chain info ของ `experimentalSuggestChain` (Keplr, Leap, Cosmostation) |
 | `chain-registry/zetaphytestnet/` | `chain.json`, `assetlist.json`, `images/zetaphy.svg` สำหรับ `testnets/` ของ cosmos/chain-registry |
 | `ethereum-lists/eip155-77390.json` | สำหรับ `_data/chains/` ของ ethereum-lists/chains (chainlist.org) |
+| `ethereum-lists/icons/zetaphy.json` + `zetaphy-256.png` | สำหรับ `_data/icons/`: ไอคอนเครือข่าย อัปโหลด PNG ขึ้น IPFS ก่อน แล้วใส่ CID ในไฟล์ |
 
 - กรอก `HOST` ด้วยชื่อ https ของโหนด (ไม่มี `https://`):
   ```bash

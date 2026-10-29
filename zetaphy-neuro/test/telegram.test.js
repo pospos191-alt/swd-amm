@@ -47,6 +47,11 @@ test('/claim: one wallet per account and one account per wallet, then the list i
   assert.equal(await go(`/claim 0x${'cd'.repeat(20)}`, { id: 3 }), 'claim-closed');
   assert.match(t.texts().at(-1), /full \(2 wallets\)/);
   assert.deepEqual((await store.pipeline([['SMEMBERS', 'tg:airdrop:addrs']]))[0], [B, A].sort());
+  assert.doesNotMatch(t.texts().join(' '), /ZEARLY/, 'no ZETAPHY Early line until it is set');
+  const e = fakeApi();
+  const T = '0x' + 'ee'.repeat(20);
+  await handleUpdate(msg(`/claim 0x${'cd'.repeat(20)}`, { id: 5 }), { api: e.api, store: memoryStore(), cfg: botConfig({ AIRDROP_EARLY: '10000', EARLY_TOKEN: T }) });
+  assert.match(e.texts().at(-1), new RegExp(`Plus 10,000 ZETAPHY Early \\(ZEARLY\\)[\\s\\S]*no value[\\s\\S]*${T}`));
   assert.equal(await go('/claim nope', { id: 4 }), 'claim-bad');
   assert.equal(await go('/claim', { id: 4 }), 'claim-how');
 });
