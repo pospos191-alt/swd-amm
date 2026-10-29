@@ -14,7 +14,7 @@ English: [chain-protocol.md](chain-protocol.md)
 | 12 | ระบบภูมิคุ้มกันของเชนผ่าน vote extension | เสร็จ มีข้อจำกัดที่ระบุไว้ | vote extension, `0x…0903` |
 | 13 | โหมดบัญชีที่ได้รับการป้องกัน | เสร็จ | ante handler, `0x…0904` |
 | 31 | ตัวตัดวงจรของสะพาน (bridge circuit breaker) | เสร็จ มีข้อจำกัดที่ระบุไว้ | vote extension, BeginBlock |
-| 33 | การกักธุรกรรมผิดปกติสำหรับบัญชีที่สมัครใช้ | เสร็จ (เฉพาะเหรียญหลัก) | ante handler, `0x…0904` |
+| 33 | การกักธุรกรรมผิดปกติสำหรับบัญชีที่สมัครใช้ | เสร็จ: เหรียญหลักและโทเคน ERC-20 (กฎแยกต่อโทเคน) มีข้อจำกัดที่ระบุไว้ | ante handler, `0x…0904` |
 
 ## การเปิดใช้ (ความสูงบล็อก v5)
 
@@ -32,6 +32,7 @@ bash gov.sh ai-model model.hex          # node zetaphy-chain/tools/gbdt-export.m
 bash gov.sh immune '{"enabled":true,"enforce_bps":9000,"hold_bps":8000,"protect_bps":7000}'
 bash gov.sh breaker '{"bridge":"0x…","topic":"0x<topic0>","recipient_topic":2,"amount_word":0,"min_volume":"1000000000000000000000","vol_mult_bps":50000,"new_ratio_bps":5000,"enabled":true}'
 bash gov.sh breaker-rearm 0x…
+bash gov.sh model-epochs 0x…            # registry ModelEpochs ของ Neuro (ข้อ 35, federated.th.md)
 ```
 
 ## (11) AI precompile `0x…0902`
@@ -135,22 +136,50 @@ governance ต้องให้สิทธิ์ผู้หยุด (pauser)
 
 ## (33) การกักธุรกรรมผิดปกติ `0x…0904`
 
-`holdOptIn(guardian, timeout, minAmount, multBps)` เปิดใช้การกัก
-เชนเก็บสถิติราคาถูกต่อบัญชี: จำนวนครั้งที่ส่งเหรียญหลักออก และค่าเฉลี่ยเคลื่อนที่
+`holdOptIn(guardian, timeout, minAmount, multBps)` เปิดใช้การกักสำหรับเหรียญหลัก
+`holdToken(token, minAmount, multBps)` เพิ่มกฎของโทเคน ERC-20 ทีละตัว (ไม่เกิน 16 ตัวต่อบัญชี)
+โดยใช้ guardian และ timeout เดียวกับบัญชี แต่ละกฎมีเกณฑ์ในหน่วยของโทเคนนั้นเอง
+เชนเก็บสถิติราคาถูกต่อกฎ: จำนวนครั้งที่ส่งออก และค่าเฉลี่ยเคลื่อนที่
 
-ยอดส่งออกถูก **กัก** เมื่อเกิน `minAmount` และเข้าข้อใดข้อหนึ่ง:
-- เป็น 5 ครั้งแรกของบัญชี
+ยอดส่งออกถูก **กัก** เมื่อเกิน `minAmount` ของกฎ และเข้าข้อใดข้อหนึ่ง:
+- เป็น 5 ครั้งแรกของกฎนั้น
 - เกินค่าเฉลี่ย × `multBps`
 
 ยอดที่ถูกกักจะผ่านได้เมื่อ:
-1. บัญชีเรียก `requestRelease(amount)`
-2. แล้วรอจนครบ timeout **หรือ** ให้ guardian (กุญแจที่สอง เช่น บัญชี ML-DSA-44 หรือ passkey wallet) เรียก `confirmRelease`
+1. บัญชีเรียก `requestRelease(amount)` (เหรียญหลัก) หรือ `requestTokenRelease(token, amount)`
+2. แล้วรอจนครบ timeout **หรือ** ให้ guardian (กุญแจที่สอง เช่น บัญชี ML-DSA-44 หรือ passkey wallet)
+   เรียก `confirmRelease` / `confirmTokenRelease`
 
-guardian ยกเลิกคำขอได้ การยกเลิกการใช้งานต้องรอ timeout และ guardian ยกเลิกการยกเลิกนั้นได้
+guardian (หรือตัวบัญชีเอง) ยกเลิกคำขอได้ การยกเลิกการใช้งานต้องรอ timeout และ guardian ยกเลิกการยกเลิกนั้นได้
+ทั้งแบบทั้งบัญชี (`holdOptOut` ซึ่งปิดกฎโทเคนทั้งหมดด้วย) และแบบรายโทเคน (`holdTokenOptOut`, `cancelTokenOptOut`)
+การเพิ่มกฎโทเคนมีผลทันที เพราะทำให้บัญชีเข้มงวดขึ้นเท่านั้น
+
+สิ่งที่นับเป็นการส่งออก (เฉพาะที่ข้อความของผู้ลงนามเองระบุ รวมกันทั้งธุรกรรม):
+- ค่า value ของ Ethereum tx และ `MsgEVMCall`
+- `MsgSend` / `MsgMultiSend`, IBC `MsgTransfer`, `transfer` ของ ICS-20 precompile (`0x…0802`):
+  นับเป็นเหรียญหลักถ้าเป็น denom ของ EVM หรือเป็นโทเคนถ้าเหรียญนั้นมีคู่ ERC-20 (`erc20/0x…`, denom IBC)
+- `transfer` และ `transferFrom(ตัวเอง, …)` บนโทเคน ส่วนบน interface ERC-20 ของเหรียญหลัก
+  (`0xEeee…EEeE`) นับเป็นเหรียญหลัก
+- `approve`, `increaseAllowance` และ `approve` ของ Permit2: **ตรวจ** เหมือนยอดที่อนุมัติออกไป แต่ **ไม่สอน** โปรไฟล์
+  ดังนั้นการอนุมัติแบบไม่จำกัดจะถูกกักเสมอจนกว่าจะมีการปลดล็อก (`requestTokenRelease` รับได้ถึง `2^256 - 1`)
+- `MsgConvertERC20` / `MsgConvertCoin` ไปยังที่อยู่อื่น
+
+ต้นทุนในฉันทามติ: บัญชีที่ไม่ได้สมัครใช้อ่าน store สองครั้งเท่าเดิม
+บัญชีที่สมัครใช้อ่านเพิ่มหนึ่งครั้งต่อกฎ และค้นคู่โทเคนสำหรับเหรียญ การค้นของการกักไม่คิดแก๊ส
+
+การทดสอบ: `TestAnomalyHold` (เหรียญหลัก), `TestAnomalyHoldERC20` (กฎโทเคน: warm-up, โปรไฟล์,
+การส่งออกทุกแบบข้างต้นถูกกักทั้งใน CheckTx และในบล็อก, guardian, timeout, การยกเลิก, บัญชีอื่นไม่ได้รับผล)
+และ `TestAnomalyHoldNativeERC20` (`0xEeee…EEeE`, IBC และ convert ของเหรียญหลักนับในกฎเหรียญหลัก)
+การทดสอบนี้ยังพบและแก้บั๊กใน `guardTargets` ที่ทำให้การเรียกสัญญาทั่วไปของบัญชีที่สมัครใช้ panic
 
 ข้อจำกัด:
-- นับเฉพาะเหรียญหลัก ยังไม่นับ ERC-20
+- เห็นเฉพาะข้อความของผู้ลงนามเอง ไม่เห็นโทเคนที่สัญญาย้ายภายใน (router ของ DEX ที่ใช้ allowance,
+  smart wallet, multicall), ลายเซ็น `permit` (EIP-2612) หรือ Permit2 ที่ลงนามนอกเชนแล้วคนอื่นส่ง
+  และ allowance ที่ให้ไว้ก่อนสมัครใช้ (ควรเพิกถอนหลังสมัคร)
+- `transferFrom` ที่ spender ลงนามไม่นับให้เจ้าของ (การกักตรวจตอน `approve` แทน)
 - ถ้า guardian ไม่ทำอะไร หัวขโมยยังส่งออกได้หลังครบ timeout การกักช่วยซื้อเวลา ไม่ใช่สิทธิ์ยับยั้ง
+- เชน v5 ที่รันอยู่: กฎใหม่เปลี่ยนว่าธุรกรรมของบัญชี **ที่สมัครใช้** ผ่านหรือไม่
+  validator ทุกรายต้องเปลี่ยนไบนารีที่ความสูงเดียวกัน (ไม่มีการย้าย store)
 
 ## ประสิทธิภาพและความปลอดภัย
 
@@ -166,7 +195,7 @@ guardian ยกเลิกคำขอได้ การยกเลิกก�
 
 - ให้คะแนนสัญญาที่สร้างจาก factory
 - ลายเซ็น post-quantum สำหรับข้อมูลคะแนน
-- โปรไฟล์ของ ERC-20
+- การกักเห็นเฉพาะข้อความของผู้ลงนามเอง การเห็นโทเคนที่ย้ายภายในสัญญาต้องใช้ tracer ที่ปลอดภัยต่อฉันทามติ
 - ถอด calldata ของ multicall
 - ตัดแต่งชุดผู้รับที่เคยเห็น
 - ทดสอบตัวตัดวงจรสะพาน, AI precompile และตัวป้องกันบัญชีบน devnet จริง

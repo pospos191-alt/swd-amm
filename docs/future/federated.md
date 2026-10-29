@@ -7,7 +7,7 @@ Workstream `fut-federated`. Two items:
 | # | item | status |
 |---|---|---|
 | 6 | Federated learning for Neuro's learned score (`zetaphy-neuro/ml/`) | **prototype**: client, privacy, wire format, commit-reveal contract, signed envelopes, robust aggregation, canary gate, aggregator script + weekly workflow, simulated honest and poisoned clients. No browser UI yet, no real labels yet, contracts not deployed. |
-| 35 | Consensus-synchronized model (version bound to chain height) | **done on the contract and JS side**: `ModelEpochs` contract, deterministic version-by-height selection in JS (browsers, runners) checked against the contract, manifest hashing, gov proposal builder. **Node side: specification only** (below), for the chain-protocol workstream. |
+| 35 | Consensus-synchronized model (version bound to chain height) | **done on the contract, JS and node side**: `ModelEpochs` contract, deterministic version-by-height selection in JS (browsers, runners) checked against the contract, manifest hashing, gov proposal builder; in the chain patch, the registry address set by governance (`gov.sh model-epochs`), the keeper lookup `ModelVersionAt`, `zetaphyd q neuro model-at`, JSON-RPC `zetaphy_modelAt` and a `modelEpochs()` view on `0x…0902`. Nothing in consensus uses the model yet; no sidecar daemon (below). |
 
 Everything is testnet only, free, and has no always-on server: browsers compute updates, the chain or a runner
 carries them, a scheduled GitHub Actions job aggregates, a governance vote decides.
@@ -226,43 +226,75 @@ latest block it reads; for a network job, the block of its request transaction (
 `NeuroJobs` also keeps a round's `startBlock`), so every runner of that job selects the same version however late it runs; for re-checking an old report, the height
 stored with it.
 
-### Node-side specification (for the chain-protocol workstream; not implemented here)
+### Node side (in the chain patch: `zetaphy-chain/setup-node.sh`, file `evmd/zetaphy_modelat.go`)
 
-The registry is an EVM contract, so nodes need no new state: they read it. What a node implementation must do if
-Neuro's model output ever enters consensus (e.g. an ML score in a vote extension or in a reportHash that validators
-attest to):
+The registry is an EVM contract, so nodes need no new state beyond its address: they read it.
 
-1. **Where the registry is.** Add a module param `neuro.model_epochs` (EVM address, 20 bytes, default empty =
-   no model in consensus), changeable only by gov (`MsgUpdateParams`). Recommended deployment: a preinstall at a
-   fixed address with `governance` = the gov module's EVM address
-   `0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2`, `epochLength = 14400` (one day at 6 s blocks) and
-   `minDelay >= epochLength`.
-2. **Lookup.** `ModelVersionAt(ctx sdk.Context, h int64) (found bool, index uint64, hash [32]byte, activation int64,
-   uri string, err error)`: a read-only EVM call (no state commit, fixed gas cap e.g. 200,000, `from` = the neuro
-   module address) of `versionAt(uint256)` (selector `0x` + first 4 bytes of `keccak256("versionAt(uint256)")`,
-   ABI in `zetaphy-network/artifacts/ModelEpochs.json`) on the param address. Any error, an empty param, or no code
-   at the address is `found = false`. Called while processing block `h` (PrepareProposal / ProcessProposal /
-   ExtendVote / VerifyVoteExtension / FinalizeBlock of `h`), the context's state is the committed state after `h-1`,
-   which is exactly the state whose answer is final (finality argument above).
+1. **Where the registry is.** One 20-byte value in the `zetaphypq` store (key `0x30`, with the other v5 settings),
+   set only by governance through `MsgSetFuture{kind: "model-epochs", data: {"address":"0x…"}}`:
+   ```bash
+   bash zetaphy-chain/gov.sh model-epochs 0xModelEpochs   # - removes it (no model in consensus)
+   ```
+   The chain refuses an address with no contract, and refuses the setting before the v5 height like every v5
+   setting. The value is kept in genesis exports. (The spec's `neuro.model_epochs` "module param" is this value:
+   the chain has no neuro module, and v5 keeps every setting in the `zetaphypq` store.) Recommended deployment:
+   `governance` = the gov module's EVM address `0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2`, `epochLength = 14400`
+   (one day at 6 s blocks) and `minDelay >= epochLength`.
+2. **Lookup.** `app.ModelVersionAt(ctx sdk.Context, h int64) (ModelVersion{Found, Index, Hash, Activation, URI}, error)`:
+   a read-only EVM call of `versionAt(h)` on a cache context that is never written back (no commit, 200,000 gas,
+   `from` = the `neuro` module address `authtypes.NewModuleAddress("neuro")`, free gas meter, no events). Not found,
+   with the reason in `error`, when: no registry is set, no code at it, the call reverts or runs out of gas, the
+   answer is not the ABI shape or longer than 4 KiB, or the registry breaks its own rules (a zero hash, an
+   activation above `h`, an empty uri or one above 256 bytes). Called while processing block `h`, the context's
+   state is the committed state after `h-1`, whose answer is final (finality argument above).
 3. **Determinism rules.** Consensus code compares **hashes only**. It never downloads the manifest or files in the
    consensus path. A validator that has not fetched and verified the files for the selected hash, or whose local
    files hash differently, **abstains** (puts no ML score in its vote extension) rather than use another version.
-   VerifyVoteExtension must reject an extension whose stated model hash differs from `ModelVersionAt(h).hash`.
-4. **Query and CLI.** gRPC `zetaphy.neuro.v1.Query/ModelAt { height }` -> `{ found, index, hash, activation, uri }`
-   and `zetaphyd q neuro model-at <height>`, both wrapping the same lookup on the state at `height - 1` (needs a node
-   that keeps that state; archive nodes for old heights). Browsers and runners use `eth_call` with
-   `blockTag = height - 1` instead, which gives the same answer.
-5. **Off-chain fetch (node side, outside consensus).** A sidecar or the runner fetches `uri`, verifies the manifest
-   sha256 and each file's sha256 (`loadForHeight`), and keeps the last few versions, starting at least one epoch
-   before activation (minDelay guarantees the notice).
-6. **Tests the node workstream should add.** On a 3-validator devnet: schedule a version at `H`; all validators
-   return the old version for `H-1` and the new one for `H`; a validator restarted and replayed from genesis returns
-   the same; a vote extension carrying the wrong hash at `H` is rejected; `cancelLast` before `H` restores the old
-   answer for every height; a guardian cannot schedule.
+   VerifyVoteExtension must reject an extension whose stated model hash differs from `ModelVersionAt(h).Hash`. These
+   rules bind whatever first puts a model output into consensus; today nothing does.
+4. **Queries.** All read the state after `height - 1` (an archive node for old heights) and give
+   `{height, stateHeight, registry, found, index, hash, activation, uri, error}`:
+   - `zetaphyd q neuro model-at <height>` (`gov.sh model-at <height>`);
+   - JSON-RPC `zetaphy_modelAt(height)` on the public EVM endpoint (8545), next to `zetaphy_faucet` and the other
+     `zetaphy_*` methods;
+   - `modelEpochs()` on the AI precompile `0x…0902` returns the registry address, so contracts can call
+     `versionAt` on it directly.
 
-Today nothing in consensus uses the model (`combine.js` keeps it out of the verdict and reportHash on purpose), so
-this spec is the contract the node side must meet when that changes. Until then, the registry is already useful
-off chain: every browser and runner selects the same model for the same height.
+   The queries read the registry address with a store query and run `versionAt` through the EVM module's `EthCall`
+   at that height; the tests check this path against the keeper lookup. Browsers and runners can still use
+   `eth_call` with `blockTag = height - 1`, which gives the same answer. A separate gRPC service
+   `zetaphy.neuro.v1.Query/ModelAt` was not added: the chain's other ZETAPHY queries are JSON-RPC and CLI, and the
+   EVM module's `EthCall` query is already there for gRPC clients.
+5. **Off-chain fetch (outside consensus).** Not a daemon: the runner or browser calls `zetaphy_modelAt` (or
+   `eth_call`) and `loadForHeight` (`zetaphy-neuro/ml/fl/registry.js`) fetches the manifest and files and checks
+   every sha256, starting at least one epoch before activation (minDelay guarantees the notice).
+6. **Tests** (`zetaphy-chain/fork-tests/evmd/zetaphy_modelat_test.go`, `TestFutureModelAt`, on the real
+   `ModelEpochs` bytecode from `artifacts/ModelEpochs.json`):
+   - no registry set; a non-contract, a non-governance sender and unknown JSON fields refused; the `modelEpochs()`
+     view;
+   - an empty registry (no version, no error);
+   - versions at 20 and 30: not found at 11 and 19, the first at 20 and 29, the second at 30 and 1,000,000;
+     the query path (`EthCall`) agrees at every height;
+   - determinism: 20 repeated lookups agree, with no account, nonce or event change; a second app that replays the
+     same txs gives the same answer at every height;
+   - finality: at height 21, `cancelLast` drops only the version at 30, the version in force cannot be cancelled
+     or replaced, and every answer for heights <= 21 stays;
+   - a registry that loops (out of gas), one that answers junk, and decoded answers that break the rules (an
+     activation above `h`, a zero hash) are "not found"; height 0 is refused;
+   - removal by governance; the genesis export keeps the address; the `security-proposal model-epochs` command.
+
+**What remains (item 35, node side).**
+
+- Nothing in consensus uses the model (`combine.js` keeps it out of the verdict and reportHash on purpose), so the
+  abstain / VerifyVoteExtension rule of point 3 has no caller yet; it applies when an ML score enters a vote
+  extension.
+- The multi-validator devnet test of the spec (3 validators, a version scheduled at `H`, replay from genesis, a
+  wrong-hash vote extension rejected) is not done: the fork tests run the real keeper, EVM and contract inside one
+  app, and `TestFutureModelAt` compares two apps. `zetaphy_modelAt` and `q neuro model-at` have not been run
+  against a live node yet.
+- No sidecar process that pre-fetches files; `loadForHeight` does it on demand.
+- Running v5 chains get the new store key, the `modelEpochs()` view and the queries with the new binary; the
+  registry stays unset (nothing changes) until a governance vote sets it.
 
 ---
 

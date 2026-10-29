@@ -39,6 +39,8 @@
 #   gov.sh immune '<json>'                               immune system settings, e.g. '{"enabled":true,"enforce_bps":9000,"hold_bps":8000}'
 #   gov.sh breaker '<json>'                              watch a bridge (circuit breaker); "enabled":false stops watching it
 #   gov.sh breaker-rearm <bridge 0x…>                    let a tripped breaker fire again (after governance unpaused the bridge)
+#   gov.sh model-epochs <ModelEpochs 0x… | ->            propose the Neuro model registry the chain reads (ModelAt; - removes it)
+#   gov.sh model-at <height>                             the Neuro model version in force at a height (state after height-1)
 #   gov.sh ibc-hold-cancel <id>                          the guardian (FROM) returns a held transfer to its sender
 #   gov.sh ibc-usdc-denom <channel>                      USDC from Noble via that channel: ibc/<hash>, ERC-20 0x…
 #   gov.sh ibc-usdc-ratelimit <channel> [send%] [recv%] [hours]   cap USDC on it, or change the cap (default 1 1 24)
@@ -279,6 +281,13 @@ case "${1:-}" in
   breaker-rearm)
     b=${2:?bridge 0x…}; [[ "$b" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "bridge: 0x + 40 hex"; exit 1; }
     submit tx security-proposal breaker-rearm "$b" --deposit "$DEPOSIT" ;;
+  model-epochs)
+    r=${2:?ModelEpochs 0x… (zetaphy-network/contracts/ModelEpochs.sol), or - to remove it}
+    [ "$r" = - ] || [[ "$r" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "registry: 0x + 40 hex, or -"; exit 1; }
+    submit tx security-proposal model-epochs "$r" --deposit "$DEPOSIT" ;;
+  model-at)
+    h=${2:?height}; [[ "$h" =~ ^[0-9]+$ ]] || { echo "height: a block number"; exit 1; }
+    $ZETAPHYD q neuro model-at "$h" $QF ;;
   ibc-holds)
     rpc=${EVM_RPC:-http://127.0.0.1:8545}
     curl -fsS "$rpc" -H 'content-type: application/json' \

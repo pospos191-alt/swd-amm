@@ -7,7 +7,7 @@
 | # | หัวข้อ | สถานะ |
 |---|---|---|
 | 6 | Federated learning สำหรับคะแนนความเสี่ยงที่เรียนรู้ของ Neuro (`zetaphy-neuro/ml/`) | **ต้นแบบ**: โค้ดฝั่งไคลเอนต์, ความเป็นส่วนตัว (DP), รูปแบบข้อมูลที่ส่ง, สัญญา commit-reveal, ซองข้อมูลที่ลงลายเซ็น, การรวมแบบทนการโจมตี, ด่านตรวจ canary, สคริปต์รวมผล + workflow รายสัปดาห์, การจำลองไคลเอนต์สุจริตและไคลเอนต์ที่วางยา ยังไม่มีหน้าจอให้ผู้ใช้, ยังไม่มีป้ายกำกับจริง, ยังไม่ได้ deploy สัญญา |
-| 35 | โมเดลที่ซิงก์กับฉันทามติ (เวอร์ชันผูกกับความสูงบล็อก) | **เสร็จฝั่งสัญญาและ JS**: สัญญา `ModelEpochs`, การเลือกเวอร์ชันตามความสูงบล็อกแบบกำหนดแน่นอนใน JS (เบราว์เซอร์, runner) ที่ตรวจเทียบกับสัญญา, การแฮช manifest, ตัวสร้าง proposal ของ gov **ฝั่งโหนด: เป็นสเปกเท่านั้น** (ด้านล่าง) สำหรับทีมโปรโตคอลเชน |
+| 35 | โมเดลที่ซิงก์กับฉันทามติ (เวอร์ชันผูกกับความสูงบล็อก) | **เสร็จฝั่งสัญญา, JS และโหนด**: สัญญา `ModelEpochs`, การเลือกเวอร์ชันตามความสูงบล็อกแบบกำหนดแน่นอนใน JS (เบราว์เซอร์, runner) ที่ตรวจเทียบกับสัญญา, การแฮช manifest, ตัวสร้าง proposal ของ gov และใน patch ของเชน: ที่อยู่ registry ที่ governance ตั้ง (`gov.sh model-epochs`), `ModelVersionAt` ใน keeper, `zetaphyd q neuro model-at`, JSON-RPC `zetaphy_modelAt` และ view `modelEpochs()` บน `0x…0902` ยังไม่มีส่วนใดของฉันทามติใช้โมเดล และไม่มี sidecar (ด้านล่าง) |
 
 ทั้งหมดใช้บน testnet เท่านั้น ฟรี และไม่มีเซิร์ฟเวอร์ที่เปิดตลอดเวลา: เบราว์เซอร์คำนวณการอัปเดต, เชนหรือ runner
 เป็นผู้นำส่ง, งาน GitHub Actions ตามตารางเวลาเป็นผู้รวมผล, การโหวต governance เป็นผู้ตัดสิน
@@ -163,27 +163,49 @@ manifest ที่ commit อยู่ (โมเดล `nml-b4c35477f7b1`, ห�
 ความสูงที่ใช้: ความสูงของบล็อกที่ **กำหนดคำถาม** สแกนสดในเบราว์เซอร์ใช้บล็อกล่าสุดที่อ่าน, งานของเครือข่ายใช้บล็อกของธุรกรรมคำขอ
 ทุก runner ของงานนั้นจึงเลือกเวอร์ชันเดียวกันไม่ว่าจะรันช้าแค่ไหน, การตรวจรายงานเก่าใช้ความสูงที่บันทึกไว้กับรายงาน
 
-### สเปกฝั่งโหนด (สำหรับทีมโปรโตคอลเชน; ไม่ได้ implement ที่นี่)
+### ฝั่งโหนด (ใน patch ของเชน: `zetaphy-chain/setup-node.sh` ไฟล์ `evmd/zetaphy_modelat.go`)
 
-registry เป็นสัญญา EVM โหนดจึงไม่ต้องมีสถานะใหม่ แค่อ่าน หากผลของโมเดลเข้าสู่ฉันทามติเมื่อใด (เช่นคะแนน ML ใน vote extension) โหนดต้อง:
+registry เป็นสัญญา EVM โหนดจึงเก็บแค่ที่อยู่ของมัน แล้วอ่านจากสัญญา
 
-1. **ที่อยู่ของ registry**: เพิ่ม module param `neuro.model_epochs` (address EVM, ค่าว่าง = ไม่มีโมเดลในฉันทามติ) เปลี่ยนได้ทาง gov เท่านั้น
-   แนะนำ preinstall ที่ address คงที่ โดย `governance` = address EVM ของโมดูล gov `0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2`,
-   `epochLength = 14400` (หนึ่งวันที่บล็อก 6 วินาที), `minDelay >= epochLength`
-2. **การค้นหา**: `ModelVersionAt(ctx, h) (found, index, hash, activation, uri, err)` เป็นการเรียก EVM แบบอ่านอย่างเดียว (ไม่ commit,
-   จำกัด gas เช่น 200,000) ไปที่ `versionAt(uint256)` ข้อผิดพลาดใด ๆ, param ว่าง หรือไม่มีโค้ด = `found = false`
-   เมื่อเรียกขณะประมวลผลบล็อก `h` (PrepareProposal / ProcessProposal / ExtendVote / VerifyVoteExtension / FinalizeBlock)
-   สถานะคือหลังบล็อก `h-1` ซึ่งเป็นคำตอบที่เป็นที่สุดพอดี
+1. **ที่อยู่ของ registry**: ค่า 20 ไบต์ใน store `zetaphypq` (คีย์ `0x30` อยู่กับค่าตั้ง v5 อื่น ๆ) ตั้งได้ทาง governance เท่านั้น
+   ผ่าน `MsgSetFuture{kind: "model-epochs", data: {"address":"0x…"}}`:
+   ```bash
+   bash zetaphy-chain/gov.sh model-epochs 0xModelEpochs   # - คือเอาออก (ไม่มีโมเดลในฉันทามติ)
+   ```
+   เชนปฏิเสธที่อยู่ที่ไม่มีสัญญา และค่านี้อยู่ใน genesis export ด้วย (`neuro.model_epochs` ในสเปกเดิมคือค่านี้
+   เพราะเชนไม่มีโมดูล neuro และ v5 เก็บค่าตั้งทั้งหมดใน store `zetaphypq`) แนะนำ `governance` = address EVM ของโมดูล gov
+   `0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2`, `epochLength = 14400`, `minDelay >= epochLength`
+2. **การค้นหา**: `app.ModelVersionAt(ctx, h)` คืน `ModelVersion{Found, Index, Hash, Activation, URI}` และ error
+   เป็นการเรียก `versionAt(h)` แบบอ่านอย่างเดียวบน cache context ที่ไม่เขียนกลับ (gas 200,000, `from` = address ของโมดูล `neuro`)
+   ไม่ตั้ง registry, ไม่มีโค้ด, revert หรือ gas หมด, คำตอบผิดรูปแบบหรือยาวเกิน 4 KiB, หรือ registry ผิดกฎของตัวเอง
+   (แฮชเป็นศูนย์, activation เกิน `h`, uri ว่างหรือยาวเกิน 256 ไบต์) = `Found = false` พร้อมเหตุผลใน error
+   เมื่อเรียกขณะประมวลผลบล็อก `h` สถานะคือหลังบล็อก `h-1` ซึ่งเป็นคำตอบที่เป็นที่สุด
 3. **ความแน่นอน**: โค้ดฉันทามติเทียบ **แฮชเท่านั้น** ไม่ดาวน์โหลดไฟล์ในเส้นทางฉันทามติ validator ที่ยังไม่มีไฟล์ที่ตรวจแล้ว **งดออกเสียง**
-   (ไม่ใส่คะแนน ML) แทนการใช้เวอร์ชันอื่น VerifyVoteExtension ต้องปฏิเสธ extension ที่แฮชโมเดลไม่ตรง `ModelVersionAt(h).hash`
-4. **Query และ CLI**: gRPC `zetaphy.neuro.v1.Query/ModelAt { height }` และ `zetaphyd q neuro model-at <height>` บนสถานะที่ `height - 1`
-   เบราว์เซอร์และ runner ใช้ `eth_call` ที่ `blockTag = height - 1` ได้คำตอบเดียวกัน
-5. **ดึงไฟล์นอกฉันทามติ**: sidecar หรือ runner ดึง `uri` และตรวจแฮช (`loadForHeight`) ล่วงหน้าอย่างน้อยหนึ่ง epoch (minDelay รับประกันการแจ้งล่วงหน้า)
-6. **การทดสอบที่ทีมโหนดควรเพิ่ม**: devnet 3 validator: ตั้งเวอร์ชันที่ `H`; ทุกตัวได้เวอร์ชันเก่าที่ `H-1` และใหม่ที่ `H`;
-   validator ที่รีสตาร์ตและ replay ได้ผลเดียวกัน; vote extension ที่แฮชผิดที่ `H` ถูกปฏิเสธ; `cancelLast` ก่อน `H` คืนคำตอบเดิม; guardian ตั้งเวอร์ชันไม่ได้
+   VerifyVoteExtension ต้องปฏิเสธ extension ที่แฮชโมเดลไม่ตรง `ModelVersionAt(h).Hash` กฎนี้ผูกกับสิ่งแรกที่นำผลโมเดลเข้าฉันทามติ
+   ซึ่งตอนนี้ยังไม่มี
+4. **Query**: อ่านสถานะหลัง `height - 1` (โหนด archive สำหรับความสูงเก่า) และคืน
+   `{height, stateHeight, registry, found, index, hash, activation, uri, error}`:
+   - `zetaphyd q neuro model-at <height>` (`gov.sh model-at <height>`)
+   - JSON-RPC `zetaphy_modelAt(height)` บน endpoint EVM สาธารณะ (8545) เช่นเดียวกับ `zetaphy_faucet`
+   - `modelEpochs()` บน AI precompile `0x…0902` คืนที่อยู่ registry ให้สัญญาเรียก `versionAt` เองได้
 
-ปัจจุบันยังไม่มีส่วนใดของฉันทามติใช้โมเดล (`combine.js` กันไว้โดยตั้งใจ) สเปกนี้จึงเป็นสัญญาที่ฝั่งโหนดต้องทำตามเมื่อถึงเวลานั้น
-ระหว่างนี้ registry ก็ใช้นอกเชนได้แล้ว: ทุกเบราว์เซอร์และ runner เลือกโมเดลเดียวกันสำหรับความสูงเดียวกัน
+   query อ่านที่อยู่ registry จาก store แล้วเรียก `versionAt` ผ่าน `EthCall` ของโมดูล EVM ที่ความสูงนั้น
+   การทดสอบตรวจว่าทางนี้ตรงกับ keeper ทุกความสูง เบราว์เซอร์และ runner ยังใช้ `eth_call` ที่ `blockTag = height - 1` ได้คำตอบเดียวกัน
+   ไม่ได้เพิ่มบริการ `zetaphy.neuro.v1.Query/ModelAt` แยก เพราะ query อื่นของ ZETAPHY เป็น JSON-RPC และ CLI และ `EthCall` มีอยู่แล้ว
+5. **ดึงไฟล์นอกฉันทามติ**: ไม่มี daemon runner หรือเบราว์เซอร์เรียก `zetaphy_modelAt` (หรือ `eth_call`)
+   แล้ว `loadForHeight` ดึง manifest และไฟล์พร้อมตรวจ sha256 ทุกไฟล์ ล่วงหน้าอย่างน้อยหนึ่ง epoch
+6. **การทดสอบ** (`TestFutureModelAt` บน bytecode จริงของ `ModelEpochs`): ไม่ตั้ง registry, ปฏิเสธที่อยู่ที่ไม่ใช่สัญญา/ผู้ส่งที่ไม่ใช่ gov/ฟิลด์ JSON ที่ไม่รู้จัก,
+   registry ว่าง, เวอร์ชันที่ 20 และ 30 (ไม่พบที่ 11 และ 19, ตัวแรกที่ 20 และ 29, ตัวที่สองที่ 30 ขึ้นไป) โดยทาง query ตรงกับ keeper,
+   ความแน่นอน (เรียกซ้ำ 20 ครั้งได้ผลเดิม ไม่เปลี่ยนบัญชี/nonce/event, แอปที่สอง replay ได้ผลเดียวกัน),
+   ความเป็นที่สุด (ที่ความสูง 21 `cancelLast` ลบได้แค่เวอร์ชันที่ 30 คำตอบสำหรับความสูง <= 21 ไม่เปลี่ยน),
+   registry ที่วนไม่จบ/ตอบขยะ/ผิดกฎ = ไม่พบ, การเอาออก, genesis export และคำสั่ง proposal
+
+**สิ่งที่ยังเหลือ (ข้อ 35 ฝั่งโหนด)**
+- ยังไม่มีส่วนใดของฉันทามติใช้โมเดล (`combine.js` กันไว้โดยตั้งใจ) กฎงดออกเสียง / VerifyVoteExtension ในข้อ 3 จึงยังไม่มีผู้เรียก
+- ยังไม่ได้ทดสอบบน devnet หลาย validator ตามสเปก (3 validator, replay จาก genesis, vote extension ที่แฮชผิด)
+  และยังไม่ได้เรียก `zetaphy_modelAt` / `q neuro model-at` กับโหนดจริง
+- ไม่มี sidecar ที่ดึงไฟล์ล่วงหน้า `loadForHeight` ดึงเมื่อใช้
+- เชน v5 ที่รันอยู่: คีย์ใหม่, view และ query มากับไบนารีใหม่ registry จะยังไม่ถูกตั้ง (ไม่มีอะไรเปลี่ยน) จนกว่าจะโหวต
 
 ---
 

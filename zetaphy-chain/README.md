@@ -496,13 +496,16 @@ with sha256 checked, then instantiate, transfer, and check the fee burn). CI run
 
 Design, usage and limits are in [`docs/future/chain-protocol.md`](../docs/future/chain-protocol.md). The patch is in the same `setup-node.sh`
 (`evmd/zetaphy_future.go`, `zetaphy_aimodel.go`, `zetaphy_immune.go`, `zetaphy_breaker.go`, `zetaphy_guard.go`).
-Everything stays **off until it is voted on** (`gov.sh ai-model | immune | breaker | breaker-rearm`) or until an account opts in:
+Everything stays **off until it is voted on** (`gov.sh ai-model | immune | breaker | breaker-rearm | model-epochs`) or until an account opts in:
 - `0x…0902` AI precompile: an integer-only GBDT model in chain state (`tools/gbdt-export.mjs` exports Neuro's model)
 - vote extensions carry, **after** the ML-DSA vote signature, validators' bytecode scores for new contracts and bridge outflow flags.
   The PQ certificate is unchanged. The power-weighted median (with more than 2/3 of the power) is readable at `0x…0903`,
   which has ThreatRegistry-compatible views, so `gov.sh threat-gate 0x…0903 on` works
 - bridge circuit breaker: on a 2/3 flag the chain calls `pause()` from `BreakerAddress`; unpausing stays with governance
-- `0x…0904` account guard: protected-account mode and anomaly hold (second key, or a timeout), for accounts that opt in
+- `0x…0904` account guard: protected-account mode and anomaly hold (second key, or a timeout), for accounts that opt in;
+  the hold covers the native coin and, per token, ERC-20s (`holdToken`), approvals included
+- Neuro model by height (item 35, [`docs/future/federated.md`](../docs/future/federated.md)): `gov.sh model-epochs <ModelEpochs 0x…>`
+  points the chain at the registry; `zetaphyd q neuro model-at <h>` / JSON-RPC `zetaphy_modelAt` answer on the state after h-1
 
 New chains have v5 from block 1. Running chains: `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`.
-Tests: `fork-tests/evmd/zetaphy_future_test.go`, `node --test zetaphy-chain/tools/gbdt-export.test.mjs`.
+Tests: `fork-tests/evmd/zetaphy_future_test.go`, `zetaphy_holdtoken_test.go`, `zetaphy_modelat_test.go`, `node --test zetaphy-chain/tools/gbdt-export.test.mjs`.
