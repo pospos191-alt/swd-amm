@@ -33,10 +33,11 @@ test('about pages: static, canonical, every language linked, structured data par
     assert.match(html, new RegExp(`<html lang="${l}">`));
     assert.ok(html.includes(`<link rel="canonical" href="${ORIGIN.hub}${aboutPath(l)}">`), l);
     for (const m of [...LANG_CODES, 'x-default']) assert.match(html, new RegExp(`hreflang="${m}" href="https://`), `${l} -> ${m}`);
-    const scripts = [...html.matchAll(/<script([^>]*)>([\s\S]*?)<\/script>/g)];
-    assert.equal(scripts.length, 1, 'no script but the JSON-LD block');
-    assert.match(scripts[0][1], /type="application\/ld\+json"/);
-    const data = JSON.parse(scripts[0][2]);
+    // one script element, the JSON-LD data block (split on its fixed start and end; no HTML parsing by regex)
+    assert.equal(html.split('<script').length, 2, 'no script but the JSON-LD block');
+    const open = '<script type="application/ld+json">';
+    assert.ok(html.includes(open));
+    const data = JSON.parse(html.split(open)[1].split('</script>')[0]);
     assert.ok(data['@graph'].some((n) => n['@type'] === 'SoftwareApplication' && n.offers.price === '0'));
     assert.doesNotMatch(html, /\sstyle="|\son[a-z]+="/, 'nothing the hub CSP would block');
     assert.ok(html.includes(ABOUT[l].testnet), 'testnet notice');
