@@ -37,5 +37,9 @@ ZEARLY แสดงว่าใครเข้าร่วม ZETAPHY รุ่�
    - ZETAPHY ทดสอบ 100 ของรายชื่อเดียวกัน: `gov.sh airdrop airdrop.txt 100` บนโหนดแรก (README.th.md ของ zetaphy-chain
      หัวข้อ "แอร์ดรอปบน testnet")
 
-สคริปต์: `node zetaphy-network/scripts/early.js deploy | airdrop --list <ไฟล์> [--each 10000] [--send]`
+**ผู้ใช้เชนของเราก่อน:** Actions › `early-token` › mode `collect` (`max` 1000) รวบรวมกระเป๋าที่เคยใช้ ZETAPHY แล้ว
+(faucet ขุด โอน แลก stake; ตัดสัญญา บัญชีระบบ และกองทุนใหญ่ออก) แล้ว push `early-users.txt` ไป branch `rewards/early-users`
+merge แล้วใช้ mode `airdrop` โดยตั้ง list = `zetaphy-chain/rewards/early-users.txt`
+
+สคริปต์: `node zetaphy-network/scripts/early.js deploy | airdrop --list <ไฟล์> [--each 10000] [--send] | collect [--max 1000]`
 เทสต์: `zetaphy-network/test/early.test.js` (ตัวเหรียญ และ deploy + แจกครบวงจรด้วยธุรกรรมที่เซ็นจริง)

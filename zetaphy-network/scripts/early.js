@@ -9,9 +9,17 @@
 //       Wallets that already got ZEARLY from the airdrop wallet (its Transfer events) are skipped, so a re-run
 //       pays only new ones. Without --send it only prints what it would do. Batches of 200 (batchTransfer).
 //
-// env: ZETAPHY_RPC (EVM JSON-RPC), KEYFILE, EARLY and FROM_BLOCK (else zetaphy-chain/rewards/early-testnet.json).
+//   node scripts/early.js collect [--max 1000] [--out early-users.txt]
+//       the wallets that already used the ZETAPHY chain (sent or received anything: faucet, mining, transfers,
+//       swaps, staking), oldest first, from the transactions themselves (CometBFT tx_search, 100 a page: light on
+//       the node). Left out: contracts, module accounts, the airdrop wallet, and funds holding over 1,000,000
+//       ZETAPHY (the genesis accounts). The file is a list for `airdrop`.
+//
+// env: ZETAPHY_RPC (EVM JSON-RPC), ZETAPHY_COMET (CometBFT RPC, default <ZETAPHY_RPC>/rpc),
+// ZETAPHY_REST (default <ZETAPHY_RPC>/rest), KEYFILE, EARLY and FROM_BLOCK (else zetaphy-chain/rewards/early-testnet.json).
 import { readFileSync, existsSync } from 'node:fs';
 import { JsonRpcProvider, Wallet, Contract, ContractFactory, Interface, getAddress, hexlify, parseEther, formatEther } from 'ethers';
+import { writeFileSync } from 'node:fs';
 import { fromBech32 } from '../src/pqtx.js';
 
 const CHAIN_ID = 77390n;
@@ -38,6 +46,56 @@ export function readList(text) {
     if (!seen.has(a)) { seen.add(a); wallets.push(a); }
   }
   return { wallets, bad };
+}
+
+/** Every wallet address (0x…, checksummed) in one tx_search result, in order: event attributes that are addresses. */
+export function addressesInTx(tx) {
+  const out = [];
+  for (const ev of tx?.tx_result?.events ?? []) {
+    for (const at of ev.attributes ?? []) {
+      const v = String(at.value ?? '').trim();
+      let a = null;
+      if (/^0x[0-9a-fA-F]{40}$/.test(v)) a = getAddress(v.toLowerCase());
+      else if (/^zetaphy1[02-9ac-hj-np-z]{38}$/.test(v)) { try { a = getAddress(hexlify(fromBech32(v))); } catch { /* not an account */ } }
+      if (a && a !== '0x0000000000000000000000000000000000000000' && !out.includes(a)) out.push(a);
+    }
+  }
+  return out;
+}
+
+/** The chain's users, oldest first: { wallets, scanned } (see `collect` above). fetchJson(url) -> JSON. */
+export async function collectUsers({ comet, rest, fetchJson, isContract, balanceOf, skip = new Set(), max = 1000, big = 1_000_000n * 10n ** 18n, log = () => {} }) {
+  const modules = new Set();
+  try {
+    for (const m of (await fetchJson(`${rest}/cosmos/auth/v1beta1/module_accounts`)).accounts ?? []) {
+      const b = m.base_account?.address ?? m.address;
+      if (b) try { modules.add(getAddress(hexlify(fromBech32(b)))); } catch { /* skip */ }
+    }
+  } catch { /* REST down: contracts and big balances still filter most of them */ }
+  const seen = new Set(), wallets = [];
+  let scanned = 0;
+  for (let page = 1; wallets.length < max; page++) {
+    const q = encodeURIComponent('"tx.height>=1"');
+    const r = await fetchJson(`${comet}/tx_search?query=${q}&page=${page}&per_page=100&order_by=%22asc%22`);
+    const txs = r?.result?.txs ?? [];
+    if (!txs.length) break;
+    for (const tx of txs) {
+      scanned++;
+      for (const a of addressesInTx(tx)) {
+        if (seen.has(a)) continue;
+        seen.add(a);
+        if (modules.has(a) || skip.has(a)) continue;
+        if (await isContract(a)) continue;
+        if ((await balanceOf(a)) > big) continue;
+        wallets.push(a);
+        if (wallets.length >= max) break;
+      }
+      if (wallets.length >= max) break;
+    }
+    log(`page ${page}: ${scanned} transactions, ${wallets.length} wallets`);
+    if (page * 100 >= Number(r?.result?.total_count ?? 0)) break;
+  }
+  return { wallets, scanned };
 }
 
 async function provider() {
@@ -76,6 +134,20 @@ async function main() {
     const r = await ct.deploymentTransaction().wait();
     console.log(`ZetaphyEarly ${await ct.getAddress()}`);
     console.log(JSON.stringify({ chainId: 77390, token: await ct.getAddress(), symbol: 'ZEARLY', holder: w.address, fromBlock: r.blockNumber, deployTx: r.hash }));
+  } else if (cmd === 'collect') {
+    const base = (process.env.ZETAPHY_RPC || die('ZETAPHY_RPC is not set')).replace(/\/+$/, '');
+    const comet = (process.env.ZETAPHY_COMET || `${base}/rpc`).replace(/\/+$/, '');
+    const rest = (process.env.ZETAPHY_REST || `${base}/rest`).replace(/\/+$/, '');
+    const p = await provider();
+    const c = config();
+    const skip = new Set([c.holder, process.env.KEYFILE ? signer(p).address : null].filter(Boolean).map((a) => getAddress(a)));
+    const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(`${url.split('?')[0]}: HTTP ${r.status}`); return r.json(); };
+    const max = Math.max(1, Math.min(100000, Number(opt('max', '1000')) || 1000));
+    const { wallets, scanned } = await collectUsers({ comet, rest, fetchJson, max, skip,
+      isContract: async (a) => (await p.getCode(a)) !== '0x', balanceOf: (a) => p.getBalance(a), log: (m) => console.error(m) });
+    const out = opt('out', 'early-users.txt');
+    writeFileSync(out, `# ZETAPHY Early: wallets that used the ZETAPHY chain (${wallets.length}, from ${scanned} transactions), oldest first\n${wallets.join('\n')}\n`);
+    console.log(JSON.stringify({ wallets: wallets.length, scanned, out }));
   } else if (cmd === 'airdrop') {
     const { wallets, bad } = readList(readFileSync(opt('list') || die('--list <file>'), 'utf8'));
     const each = parseEther(String(opt('each', '10000')));
@@ -102,7 +174,7 @@ async function main() {
     }
     console.log(JSON.stringify({ paid: todo.length, each: formatEther(each), total: formatEther(need) }));
   } else {
-    die('usage: early.js deploy | airdrop --list <file> [--each 10000] [--send] (see the top of this file)');
+    die('usage: early.js deploy | airdrop --list <file> [--each 10000] [--send] | collect [--max 1000] [--out <file>] (see the top of this file)');
   }
 }
 

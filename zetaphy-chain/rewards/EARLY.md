@@ -39,5 +39,10 @@ With 10,000 people that is 100,000,000 ZEARLY (10%); the rest stays in the airdr
    - the 100 test ZETAPHY of the same list: `gov.sh airdrop airdrop.txt 100` on the genesis node (README.md
      of zetaphy-chain, "Testnet airdrop").
 
-The script: `node zetaphy-network/scripts/early.js deploy | airdrop --list <file> [--each 10000] [--send]`.
+**The chain's own users first:** Actions → `early-token` → mode `collect` (`max` 1000) lists the wallets that already
+used ZETAPHY (faucet, mining, transfers, swaps, staking; contracts, module accounts and big funds left out) and pushes
+`early-users.txt` to the branch `rewards/early-users`. Merge it, then mode `airdrop` with list =
+`zetaphy-chain/rewards/early-users.txt`.
+
+The script: `node zetaphy-network/scripts/early.js deploy | airdrop --list <file> [--each 10000] [--send] | collect [--max 1000]`.
 Tests: `zetaphy-network/test/early.test.js` (the token, and deploy + airdrop end to end with signed transactions).

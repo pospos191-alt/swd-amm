@@ -4,6 +4,9 @@
 #   mode = airdrop   sends `each` ZEARLY to every wallet in `list` (a file in the repo, e.g. the Telegram bot's
 #                    /export committed as zetaphy-chain/rewards/early-airdrop.txt) that has not had it yet.
 #                    `send` unticked = a dry run that only prints what it would do.
+#   mode = collect   the wallets that already used the ZETAPHY chain (at most `max`, oldest first; contracts,
+#                    module accounts and big funds left out), pushed as zetaphy-chain/rewards/early-users.txt to
+#                    the branch rewards/early-users; merge it, then airdrop with list = that file.
 # The key: ZETAPHY_DEPLOYER_KEY in the environment testnet-deploy (docs/SECRETS-HARDENING.md), checked against DEPLOYER.
 name: early-token
 
@@ -13,7 +16,7 @@ on:
       mode:
         description: "deploy = ZEARLY on the testnet; airdrop = send to a list"
         type: choice
-        options: [airdrop, deploy]
+        options: [airdrop, deploy, collect]
         default: airdrop
       list:
         description: "airdrop: the list file in the repo (one 0x… or zetaphy1… per line)"
@@ -21,6 +24,9 @@ on:
       each:
         description: "airdrop: ZEARLY per wallet"
         default: "10000"
+      max:
+        description: "collect: at most this many wallets"
+        default: "1000"
       send:
         description: "airdrop: send (unticked = dry run)"
         type: boolean
@@ -98,6 +104,26 @@ jobs:
           [ -f ../zetaphy-chain/rewards/early-testnet.json ] || { echo "::error::ZEARLY is not deployed yet (run mode deploy, merge rewards/early)"; exit 1; }
           node scripts/early.js airdrop --list "../$LIST" --each "$EACH" $([ "$SEND" = true ] && echo --send) | tee "$RUNNER_TEMP/airdrop.log"
           { echo "### ZEARLY airdrop ($([ "$SEND" = true ] && echo sent || echo dry run))"; echo '```'; cat "$RUNNER_TEMP/airdrop.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect the chain's users
+        if: inputs.mode == 'collect'
+        env:
+          MAX: ${{ inputs.max }}
+        run: |
+          set -o pipefail
+          [[ "$MAX" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "::error::max: a whole number"; exit 1; }
+          node scripts/early.js collect --max "$MAX" --out ../zetaphy-chain/rewards/early-users.txt | tee "$RUNNER_TEMP/collect.json"
+          n=$(jq -r .wallets "$RUNNER_TEMP/collect.json")
+          { echo "### ZEARLY: wallets that used the ZETAPHY chain: $n"; echo '```'; head -n 21 ../zetaphy-chain/rewards/early-users.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          [ "$n" -gt 0 ] || { echo "no wallets found"; exit 0; }
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B rewards/early-users
+          git add zetaphy-chain/rewards/early-users.txt
+          git commit -q -m "ZETAPHY Early: $n wallets that used the ZETAPHY chain" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin rewards/early-users
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...rewards/early-users"
 
       - name: Remove the key
         if: always()

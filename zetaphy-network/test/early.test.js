@@ -106,3 +106,36 @@ test('deploy, dry run, airdrop in batches, re-run pays only new wallets (real si
     assert.equal(await t.balanceOf(people[0]), 10_000n * ZETA, 'nobody paid twice');
   } finally { node.close(); }
 });
+
+// ---------------------------------------------------------------- collect: the wallets that used the chain
+import { addressesInTx, collectUsers } from '../scripts/early.js';
+
+test('collect: users oldest first; contracts, module accounts, big funds and the airdrop wallet left out; capped', async () => {
+  const w = (n) => '0x' + n.toString(16).padStart(40, '0');
+  const b32 = (n) => toBech32(getBytes(w(n)));
+  const ev = (...vals) => ({ tx_result: { events: [{ type: 'transfer', attributes: vals.map((value, i) => ({ key: `k${i}`, value })) }] } });
+  // page 1: 100 txs; page 2: the rest
+  const txs = [
+    ev(b32(1), b32(2), '1000azetaphy'), // two users, one as zetaphy1…
+    ev(w(3), w(0xc0de)),                 // a user and a contract
+    ev(b32(0xf00d), w(1)),               // a module account, a repeat
+    ev(w(0xb16), w(4)),                  // a big fund, a user
+    ev(w(0xd0), w(5)),                   // the airdrop wallet, a user
+    ...Array.from({ length: 96 }, () => ev('nothing here')),
+    ev(w(6), w(7)), ev(w(8)),
+  ];
+  const fetchJson = async (url) => {
+    if (url.includes('module_accounts')) return { accounts: [{ base_account: { address: b32(0xf00d) } }] };
+    const page = Number(new URL(url).searchParams.get('page'));
+    return { result: { txs: txs.slice((page - 1) * 100, page * 100), total_count: String(txs.length) } };
+  };
+  const opts = { comet: 'http://x/rpc', rest: 'http://x/rest', fetchJson, skip: new Set(readList(w(0xd0)).wallets), // the airdrop wallet (checksummed)
+    isContract: async (a) => a.toLowerCase() === w(0xc0de), balanceOf: async (a) => (a.toLowerCase() === w(0xb16) ? 2_000_000n * ZETA : ZETA) };
+  const all = await collectUsers({ ...opts, max: 1000 });
+  assert.deepEqual(all.wallets.map((a) => Number(BigInt(a))), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(all.scanned, txs.length);
+  const three = await collectUsers({ ...opts, max: 3 });
+  assert.deepEqual(three.wallets.map((a) => Number(BigInt(a))), [1, 2, 3]);
+  assert.deepEqual(addressesInTx({}), []);
+  assert.deepEqual(readList(all.wallets.join('\n')).wallets, all.wallets, 'the output is a list for airdrop');
+});
