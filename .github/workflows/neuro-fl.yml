@@ -10,11 +10,18 @@
 # not the decision: the manifest hash takes effect only after a governance
 # vote schedules it in the ModelEpochs from a future block height.
 #
-# No secrets: the RPC URL and contract addresses are repository VARIABLES
-# (Settings -> Secrets and variables -> Actions -> Variables):
-#   ZETAPHY_RPC, FL_ROUNDS_ADDRESS (both optional: without them only the inbox is read)
-#   MODEL_EPOCHS_ADDRESS, GOV_BECH32, FL_ACTIVATION (optional: also write proposal.json)
-# Only the `propose` job may write. Actions pinned by SHA.
+# Where the round contract is: zetaphy-neuro/ml/fl/deployment.json (the same record the Neuro page
+# reads; `rounds: null` = not deployed yet, and then only the inbox is read). Once a pull request
+# commits a deployed record, the weekly job reads that contract with no settings at all.
+# Optional repository VARIABLES (Settings -> Secrets and variables -> Actions -> Variables) override it:
+#   ZETAPHY_RPC, FL_ROUNDS_ADDRESS
+#   MODEL_EPOCHS_ADDRESS, GOV_BECH32, FL_ACTIVATION (also write proposal.json)
+# Aggregating needs NO secret (public chain data; the pull request uses the built-in GITHUB_TOKEN).
+# The manual `deploy` mode is the one job with a key: ZETAPHY_DEPLOYER_KEY, an existing secret that lives
+# only in the `testnet-deploy` environment (main only, owner approves each run; docs/SECRETS-HARDENING.md).
+# It deploys FederatedRounds CLOSED (paused), owned by the ZetaphyTimelock, and pushes the deployment
+# record to the branch neuro-fl/deployment for a pull request; opening the contract is a separate
+# timelock operation (zetaphy fl propose open). Only `propose` and `deploy` may write. Actions pinned by SHA.
 
 name: Neuro FL
 
@@ -23,6 +30,12 @@ on:
     - cron: '43 5 * * 4' # Thursdays 05:43 UTC
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'aggregate (default) or deploy (testnet-deploy environment: FederatedRounds, closed, owned by the timelock)'
+        required: false
+        default: 'aggregate'
+        type: choice
+        options: [aggregate, deploy]
       round:
         description: 'Round to aggregate (empty = the last finished one)'
         required: false
@@ -30,7 +43,8 @@ on:
   pull_request:
     paths: ['zetaphy-neuro/ml/fl/**', 'zetaphy-neuro/ml/model.json', 'zetaphy-neuro/ml/manifest.json',
             'zetaphy-network/contracts/ModelEpochs.sol', 'zetaphy-network/contracts/FederatedRounds.sol',
-            'zetaphy-network/src/fl.js', 'zetaphy-network/src/modelepochs.js', 'zetaphy-network/scripts/fl-aggregate.js',
+            'zetaphy-network/src/fl.js', 'zetaphy-network/src/flcli.js', 'zetaphy-network/src/modelepochs.js', 'zetaphy-network/scripts/fl-aggregate.js',
+            'zetaphy-neuro/web/fl-*.js', 'zetaphy-neuro/test/fl.e2e.js',
             '.github/workflows/neuro-fl.yml']
 
 permissions: {}
@@ -61,14 +75,19 @@ jobs:
         working-directory: zetaphy-neuro
         run: |
           node ml/fl/manifest.js --check
-          node --test ml/test/fl.test.js ml/test/registry.test.js
+          node --test ml/test/fl.test.js ml/test/registry.test.js ml/test/flbrowser.test.js
       - name: Network side (ModelEpochs, FederatedRounds, envelopes, aggregator)
         working-directory: zetaphy-network
-        run: node --test test/modelepochs.test.js test/federated.test.js
+        run: node --test test/modelepochs.test.js test/federated.test.js test/flcli.test.js
+      - name: Browser panel, a whole round with five browsers (Chromium from Playwright)
+        working-directory: zetaphy-neuro
+        run: |
+          npx playwright-core install --with-deps chromium
+          node --test ml/test/fl.browser.e2e.js test/fl.e2e.js
 
   aggregate:
     name: Aggregate a round
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode != 'deploy')
     needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -104,7 +123,8 @@ jobs:
           [ -n "$RPC" ] && [ -n "$ROUNDS" ] && A+=(--rpc "$RPC" --rounds "$ROUNDS")
           [ -n "$REGISTRY" ] && [ -n "$GOV" ] && [ -n "$ACTIVATION" ] && A+=(--registry "$REGISTRY" --gov-bech32 "$GOV" --activation "$ACTIVATION" \
             --uri "https://raw.githubusercontent.com/${{ github.repository }}/main/zetaphy-neuro/ml/manifest.json")
-          if [ -z "$ROUND" ] && { [ -z "$RPC" ] || [ -z "$ROUNDS" ]; }; then echo "no round given and no chain configured: nothing to do"; echo "better=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          DEPLOYED=$(node -e 'const d=require("../zetaphy-neuro/ml/fl/deployment.json");console.log(/^0x[0-9a-fA-F]{40}$/.test(d.rounds??"")?"yes":"no")')
+          if [ -z "$ROUND" ] && [ "$DEPLOYED" != yes ] && { [ -z "$RPC" ] || [ -z "$ROUNDS" ]; }; then echo "FederatedRounds is not deployed yet (zetaphy-neuro/ml/fl/deployment.json) and no round was given: nothing to do"; echo "better=false" >> "$GITHUB_OUTPUT"; exit 0; fi
           node scripts/fl-aggregate.js "${A[@]}" | tee out.json
           echo "better=$(node -p "require('./out.json').better")" >> "$GITHUB_OUTPUT"
           echo "head=$(node -p "require('./out.json').candidate ?? ''")" >> "$GITHUB_OUTPUT"
@@ -150,3 +170,49 @@ jobs:
           git commit -m "neuro-fl: candidate head $HEAD_ID" -m "Federated round aggregated by run ${{ github.run_id }}. Takes effect only after a governance vote schedules the manifest in the ModelEpochs."
           git push origin "$BRANCH"
           gh pr create --base "$BASE" --head "$BRANCH" --title "Neuro FL: candidate head $HEAD_ID" --body-file artifact/body.md
+
+  deploy:
+    name: Deploy FederatedRounds (testnet, closed, owned by the timelock)
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: testnet-deploy
+    permissions:
+      contents: write   # pushes the deployment record to neuro-fl/deployment (never the default branch)
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+      TIMELOCK: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - name: Deploy (closed) and write the record
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          set -o pipefail
+          node -e 'const d=require("../zetaphy-neuro/ml/fl/deployment.json"); if (d.rounds) { console.error("::error::already deployed: " + d.rounds); process.exit(1); }'
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in this job's environment (docs/SECRETS-HARDENING.md)"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/zh"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          trap 'rm -f "$H/worker.key"' EXIT
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/worker.key")" = "$DEPLOYER" ] \
+            || { echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          ZETAPHY_HOME="$H" node cli.js fl deploy --rpc "$ZETAPHY_RPC" --governance "$TIMELOCK" --out ../zetaphy-neuro/ml/fl/deployment.json | tee "$H/deploy.log"
+          node cli.js fl propose open --timelock "$TIMELOCK" | tee -a "$GITHUB_STEP_SUMMARY"
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B neuro-fl/deployment
+          git add zetaphy-neuro/ml/fl/deployment.json
+          git commit -q -m "Neuro FL: FederatedRounds deployed on the testnet (closed)" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. Opening it is a timelock operation: zetaphy fl propose open."
+          git push -q --force origin neuro-fl/deployment
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...neuro-fl/deployment" | tee -a "$GITHUB_STEP_SUMMARY"

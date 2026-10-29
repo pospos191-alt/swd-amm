@@ -27,6 +27,7 @@
 | | | `rewards` → `deploy` | PR, sched, manual | ไม่ (เฉพาะ manual `deploy`) | `testnet-deploy` |
 | | | `saphan-route` → `deploy` | PR, manual | ไม่ (เฉพาะ manual `deploy`) | `testnet-deploy` |
 | | | `timelock` → `execute` | manual | ไม่ | `testnet-deploy` |
+| | | `neuro-fl` → `deploy` (FederatedRounds ปิดไว้ก่อน เป็นของ timelock; เฉพาะ `mode: deploy`) | sched, PR, manual | ไม่ (เฉพาะ `deploy` ที่สั่งเอง; งาน `aggregate` รายสัปดาห์และ `propose` ไม่ใช้ secret ที่เก็บไว้) | `testnet-deploy` |
 | | | `rewards` → `award` | PR, sched, manual | ไม่ (ตาม schedule รายวัน และ manual `award`) | `testnet-automation` |
 | | | `hyperlane-relayer` → `relay` (signer สำรอง) | sched, manual | ไม่ | `testnet-automation` |
 | `ZETAPHY_RELAYER_KEY` (ใหม่ ไม่บังคับ) | key เฉพาะของ relayer ถ้าตั้งไว้จะใช้แทน deployer key | `hyperlane-relayer` → `relay` | sched, manual | ไม่ | `testnet-automation` |

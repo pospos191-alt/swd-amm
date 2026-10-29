@@ -23,9 +23,12 @@ export const APPS = {
   'neuro/ai': 'zetaphy-neuro/ai', // and ../ai/*.js (AI analyst, bring your own model)
   'neuro/graph': 'zetaphy-neuro/graph', // money-flow graph (web/flow.js imports ../graph/*.js)
   'neuro/agent': 'zetaphy-neuro/agent', // investigator + watch list (../agent/*.js)
+  'neuro/ml': 'zetaphy-neuro/ml', // federated-learning panel (web/fl-panel.js: ../ml/model.js, ../ml/fl/*.js, model + head + deployment record)
 };
 // per app: folders that are build inputs, not served (the wallet serves vendor/pqwallet.js, built from src/)
-const SKIP_IN = { wallet: new Set(['src']) };
+const SKIP_IN = { wallet: new Set(['src']),
+  // the browser needs the model, its features and fl/; training, red team, datasets and on-chain export stay out
+  'neuro/ml': new Set(['train', 'redteam', 'dao', 'onchain', 'detectors', 'lib', 'cli.js', 'metrics.json']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
 const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',

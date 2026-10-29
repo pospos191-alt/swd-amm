@@ -93,7 +93,10 @@ function attackVector(model, rows, round, sigmas) {
  * Runs federated rounds.
  * @param {object} o  {rounds, perRound, population, attackers (fraction of each round), attack: 'none'|'flip'|'push',
  *                     method: 'mean'|'trimmed'|'median', trim, clip, z, serverLr, seed, leaves, maxNorm,
- *                     gate: true = the canary gate may refuse a round}
+ *                     gate: true = the canary gate may refuse a round,
+ *                     labelNoise: {fp, fn} = automatic-label noise: each browser label 0 becomes 1 with
+ *                       probability fp (an honest pool migration read as "liquidity pulled") and 1 becomes 0
+ *                       with probability fn (a trap that fired after the observation window)}
  */
 export function simulate(o = {}) {
   const opt = { rounds: 30, perRound: 300, population: 3000, attackers: 0, attack: 'none', method: 'trimmed', trim: 0.2,
@@ -106,6 +109,10 @@ export function simulate(o = {}) {
   const test = world.test.map(prep);
   // each browser: 1-8 labels from the drifted world
   const clients = Array.from({ length: opt.population }, (_, c) => Array.from({ length: 1 + R.int(8) }, (_, k) => prep(worldRow(R, k, 1, `c${c}`))));
+  if (opt.labelNoise) { // its own generator: the other scenarios' draws stay the same
+    const N = rng(`${opt.seed}-label-noise`);
+    for (const rows of clients) for (const r of rows) if (N.float() < (r.y ? opt.labelNoise.fn : opt.labelNoise.fp)) r.y = 1 - r.y;
+  }
   const attackerPool = Array.from({ length: 6 }, (_, k) => prep(worldRow(R, k, 1, `a${k}`))).concat(test.slice(0, 200));
   const reference = head; // the governance-approved model (theta = 0): the gate compares against it, not the last round, so small losses cannot ratchet
   const before = evalHead(model, head, test);
@@ -158,6 +165,8 @@ async function main() {
     ['honest, trimmed mean, gate off', { gate: false }],
     ['honest, trimmed mean, no noise (z = 0, no privacy; reference only)', { z: 0 }],
     ['honest, trimmed mean, no noise, gate off (reference only)', { z: 0, gate: false }],
+    ['honest, trimmed mean, automatic-label noise 10% false scam / 30% missed scam', { labelNoise: { fp: 0.1, fn: 0.3 } }],
+    ['honest, trimmed mean, automatic-label noise 5% false scam / 10% missed scam', { labelNoise: { fp: 0.05, fn: 0.1 } }],
     ['20% label flippers, plain mean', { attackers: 0.2, attack: 'flip', method: 'mean' }],
     ['20% label flippers, trimmed mean', { attackers: 0.2, attack: 'flip' }],
     ['15% colluding push-down, plain mean, no gate', { attackers: 0.15, attack: 'push', method: 'mean', gate: false }],

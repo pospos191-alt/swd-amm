@@ -15,6 +15,11 @@ pragma solidity 0.8.26;
 ///         period = commitBlocks + revealBlocks; the first commitBlocks of it
 ///         are the commit phase, the rest the reveal phase.
 ///
+///         Closed by default: the constructor leaves it paused (no commits) until
+///         governance (the ZetaphyTimelock) calls setPaused(false); see
+///         `zetaphy fl propose open`. Reveals of commitments already made stay
+///         possible while paused, so a pause never strands a committed update.
+///
 ///         Limits (testnet): one commitment per address per round, at most
 ///         maxPerRound commitments per round, payload <= 16 KiB. Sybil
 ///         resistance is NOT provided here: robust aggregation bounds what a
@@ -55,6 +60,8 @@ contract FederatedRounds {
         commitBlocks = commitBlocks_;
         revealBlocks = revealBlocks_;
         maxPerRound = maxPerRound_;
+        paused = true; // closed until governance opens it
+        emit Paused(true);
     }
 
     modifier onlyGovernance() {

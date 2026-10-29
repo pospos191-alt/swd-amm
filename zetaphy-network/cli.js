@@ -62,6 +62,11 @@
 //   zetaphy immune push --sender 0x<NeuroOracleSender> [--once --interval 30 --max-fee 0.1]   relay new flags to every chain's NeuroOracle
 //   zetaphy immune coverage --sender 0x… --mirror <name>=<rpc>@0x<NeuroOracle> …   share of flags each chain mirrors
 //   zetaphy deploy-assist attest|anchor|insurance [--governance 0x… --jobs 0x…]   NeuroAttest, NeuroAnchor, HackInsurance (testnet only)
+//   zetaphy fl deploy --governance 0x<ZetaphyTimelock>|gov [--start-in 14400 --commit-blocks 72000 --reveal-blocks 28800
+//                     --max-per-round 1000 --out deployment.json --devnet]   FederatedRounds for Neuro's federated learning,
+//                                      CLOSED until governance opens it; prints the record the Neuro page reads
+//   zetaphy fl propose open|close|max <n>|governance <0x…> [--rounds 0x… --timelock 0x… --proposal-out f]   calldata only
+//   zetaphy fl status [--rounds 0x…] | fl config --rounds 0x… --block N --governance 0x… [--out f]   (src/flcli.js)
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
 //                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
@@ -222,6 +227,7 @@ import { timelockCommand, timelockHint } from './src/timelockcli.js';
 import { oracleCommand } from './src/oraclecli.js';
 import { agentsCommand } from './src/agentscli.js';
 import { assistCommand } from './src/assistcli.js';
+import { flCommand } from './src/flcli.js';
 import { devnetOf, testnetOf, testnetWrite, roleChecks, capProblems, STARTER_UNITS } from './src/bridgegate.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -1675,6 +1681,11 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   // Neuro-checked certificates, ML-DSA-44 attestations, the herd-immunity pusher (src/assistcli.js)
   if (group === 'certify' || group === 'attest-pq' || group === 'immune' || group === 'deploy-assist') {
     return assistCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, argv });
+  }
+
+  // Neuro federated learning: FederatedRounds deploy / governance calls / status (src/flcli.js)
+  if (group === 'fl') {
+    return flCommand({ cmd, rest, opt, write, s, connect, connectRpc });
   }
 
   // ERC-8004 identity and signed Neuro messages (src/identitycli.js)
