@@ -7,6 +7,7 @@ import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, rea
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { hubSeoFiles, INDEXNOW_KEY } from './seo.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -30,9 +31,11 @@ const SKIP_IN = { wallet: new Set(['src']),
   // the browser needs the model, its features and fl/; training, red team, datasets and on-chain export stay out
   'neuro/ml': new Set(['train', 'redteam', 'dao', 'onchain', 'detectors', 'lib', 'cli.js', 'metrics.json']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
-const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
+// (robots.txt, sitemap.xml and the IndexNow key belong to each app's own site, not to its copy in the hub)
+const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data',
+  'robots.txt', 'sitemap.xml', `${INDEXNOW_KEY}.txt`]);
 const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'ceremony.html', 'ceremony.css', 'ceremony.js', 'ceremony-i18n.js', 'ceremony-core.js', 'vendor/snarkjs.min.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
-  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg'];
+  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. `files`: {path: json} in place of the repo's (tests). */
 export function hubConfig(cfg, files = null) {
@@ -168,6 +171,8 @@ export function build() {
   const dir = `${OUT}.tmp-${process.pid}-${Date.now()}`;
   mkdirSync(dir, { recursive: true });
   for (const f of HUB_FILES) cpSync(join(HERE, f), join(dir, f));
+  // search engines: "What is ZETAPHY?" in 8 languages, robots.txt, sitemap.xml, IndexNow key (seo.mjs)
+  for (const [f, c] of Object.entries(hubSeoFiles())) { mkdirSync(dirname(join(dir, f)), { recursive: true }); writeFileSync(join(dir, f), c); }
   writeFileSync(join(dir, 'validators.html'), withRelease(readFileSync(join(HERE, 'validators.html'), 'utf8'), releaseTag()));
   const cfg = JSON.parse(readFileSync(join(ROOT, 'zetaphy-explorer/config.json'), 'utf8'));
   writeFileSync(join(dir, 'hub-config.json'), `${JSON.stringify(hubConfig(cfg), null, 2)}\n`);

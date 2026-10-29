@@ -53,6 +53,16 @@ SHA-256 JavaScript ใน Web Worker **2.38 MH/s** ต่อ 1 worker (~1.8–2.
 โน้ตบุ๊กรุ่นใหม่เร็วกว่าราว 1.5 เท่า: **~2.6 นาทีด้วย 2 เธรด ~5 นาทีด้วย 1 เธรด** มือถือช้ากว่า 2–4 เท่า เวลาเป็นแบบสุ่ม: 1 ใน 10 ครั้งใช้นานเกิน 2.3 เท่าของค่าเฉลี่ย
 ผู้ดูแลโหนดเปลี่ยนความยากได้โดยไม่ต้องออกเวอร์ชันใหม่ (`<home>/config/faucet-pow-bits`, 12–48)
 
+## เครื่องมือค้นหา (`seo.mjs`)
+
+- **ZETAPHY คืออะไร** หน้า `/about/` และ `/about/<lang>.html` ครบ 8 ภาษา เป็น HTML ธรรมดาที่สร้างจาก
+  `about-content.mjs` เครื่องมือค้นหาจึงอ่านได้โดยไม่ต้องรันสคริปต์ แถบด้านข้างของ hub มีลิงก์ไปหน้านี้
+- ทุกเว็บมี `robots.txt`, `sitemap.xml`, ลิงก์ canonical ไปโดเมนของตัวเอง, การ์ดแชร์ (`og.png`) และไฟล์ key ของ IndexNow
+  ของ hub สร้างโดย `build.mjs` ของเว็บอื่น commit ไว้ในรีโป (แก้ `SITES` แล้วรัน `node seo.mjs --write` มีเทสต์ตรวจให้)
+- **Bing, Yandex, Seznam, Naver:** หลัง deploy รัน `node seo.mjs --indexnow` เพื่อแจ้งทุกหน้า
+- **Google:** หา sitemap ผ่าน robots.txt เอง ถ้าอยากให้เร็วขึ้น เจ้าของ sawasdeecoin.com เพิ่ม property แบบ *Domain*
+  ใน Google Search Console (ระเบียน DNS TXT เดียวครอบคลุมทุกเว็บ) แล้วส่ง `https://<เว็บ>/sitemap.xml` ของแต่ละเว็บ
+
 ## ขึ้นเว็บ (Vercel ฟรี)
 
 ตั้ง root ของโปรเจกต์เป็น `zetaphy-hub` framework เลือก "Other" ส่วน `vercel.json` กำหนดคำสั่ง build, header (frame ได้เฉพาะจากเว็บนี้ สคริปต์โหลดได้เฉพาะจากเว็บนี้) และการส่งต่อ Neuro API โดเมน: `app.sawasdeecoin.com` (Cloudflare: CNAME `app` → `cname.vercel-dns.com` แบบ DNS only)

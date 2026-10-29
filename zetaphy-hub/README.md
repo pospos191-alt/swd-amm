@@ -59,6 +59,18 @@ the page uses the pure-JS code. Node.js 22 on the same machine: 2.65 MH/s. That 
 Phones are 2–4× slower. The time is random (exponential): 1 in 10 searches takes more than 2.3× the average.
 An operator can change it without a new release (`<home>/config/faucet-pow-bits`, 12–48).
 
+## Search engines (`seo.mjs`)
+
+- **What is ZETAPHY?** `/about/` and `/about/<lang>.html` in all 8 languages: plain HTML built from
+  `about-content.mjs`, so search engines read it without running scripts. The hub's sidebar links to it.
+- Every site has `robots.txt`, `sitemap.xml`, a canonical link to its own domain, a share card (`og.png`)
+  and the IndexNow key file. The hub's are written by `build.mjs`; the other sites' are committed
+  (`node seo.mjs --write` after changing `SITES`; a test checks them).
+- **Bing, Yandex, Seznam, Naver:** after a deploy, `node seo.mjs --indexnow` tells them about every page.
+- **Google:** finds the sitemaps through robots.txt. To speed it up, the owner of sawasdeecoin.com adds a
+  *Domain* property in Google Search Console (one DNS TXT record covers every site) and submits each
+  `https://<site>/sitemap.xml`.
+
 ## Deploy (Vercel, free)
 
 Project root `zetaphy-hub`, framework "Other". `vercel.json` sets the build, the headers (frames only from this site; scripts only from this site) and the Neuro API rewrite. Domain: `app.sawasdeecoin.com` (Cloudflare: CNAME `app` → `cname.vercel-dns.com`, DNS only).

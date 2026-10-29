@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://neuro.sawasdeecoin.com/sitemap.xml
