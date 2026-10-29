@@ -314,7 +314,8 @@ async function neuroOracleDryRun({ t, C, op, zp, os, zs, dev, ours, sourceValida
   const oMailbox = new Contract(C.mailbox, MAILBOX, os);
   // 1. ZETAPHY: NeuroJobs + ThreatRegistry with two bonded runners (stand-ins for the testnet's)
   const jobs = await deploy(art('NeuroJobs'), [100n * E, E, E / 10n, 120, 600, 3600, 1000n * E], zs);
-  const runners = [Wallet.createRandom(), Wallet.createRandom()].map((w) => w.connect(zp));
+  // NonceManager: right after a receipt a node can still report the old pending nonce
+  const runners = [Wallet.createRandom(), Wallet.createRandom()].map((w) => Object.assign(new NonceManager(w.connect(zp)), { address: w.address }));
   for (const w of runners) {
     await (await zs.sendTransaction({ to: w.address, value: 101n * E })).wait();
     await (await jobs.connect(w).register({ value: 100n * E })).wait();
