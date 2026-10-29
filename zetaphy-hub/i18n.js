@@ -2,6 +2,8 @@
 // One convention for every ZETAPHY app: these 8 codes, in this menu order; English is the default,
 // a stored code from the set is kept, anything else falls back to English, and so does any missing key.
 
+import { AI_TAB } from './flow-i18n.js';
+
 /** [code, native name], in menu order. */
 export const LANGS = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['ko', '한국어'], ['ja', '日本語'], ['ru', 'Русский'], ['vi', 'Tiếng Việt'], ['th', 'ไทย']];
 export const LANG_CODES = LANGS.map(([c]) => c);
@@ -25,7 +27,7 @@ export const TEXT = {
   th: {
     navGuide: "คู่มือ validator", tipGuide: "รัน validator ด้วยคำสั่งเดียว: เครื่อง cloud ฟรี คำสั่งติดตั้ง ดูสถานะ และวิธีเปิดเครื่องใหม่",
     navForecasts: "พยากรณ์ความเสี่ยง", tipForecasts: "พยากรณ์ความเสี่ยงของเหรียญ, Proof of Foresight, ตัวตรวจจับ, Data DAO และแดงปะทะน้ำเงิน (testnet เท่านั้น ไม่ใช่เงินจริง)",
-    addNet: 'เพิ่มเครือข่าย', height: 'บล็อกล่าสุด', blockTime: 'เวลาต่อบล็อก', validators: 'Validator', bonded: 'ZETAPHY ที่ stake',
+    aboutLink: 'ZETAPHY คืออะไร', addNet: 'เพิ่มเครือข่าย', height: 'บล็อกล่าสุด', blockTime: 'เวลาต่อบล็อก', validators: 'Validator', bonded: 'ZETAPHY ที่ stake',
     startTitle: 'เริ่มใช้งาน', step1: 'เพิ่มเครือข่าย ZETAPHY ในกระเป๋า', step2: 'รับ ZETAPHY ทดลอง (ฟรี)', step3: 'ลองใช้งาน', faucetBtn: 'รับ',
     latestBlocks: 'บล็อกล่าสุด', viewAll: 'ดูทั้งหมด', colHeight: 'บล็อก', colTxs: 'ธุรกรรม', colProposer: 'ผู้สร้าง', colAge: 'เมื่อ',
     network: 'เครือข่าย', validatorsTitle: 'Validator', colName: 'ชื่อ', colPower: 'พลังโหวต', colCommission: 'ค่าธรรมเนียม',
@@ -74,7 +76,7 @@ export const TEXT = {
   en: {
     navGuide: "Validator guide", tipGuide: "Run a validator with one command: free cloud machines, the install command, status and restart help",
     navForecasts: "Risk forecasts", tipForecasts: "Token risk forecasts, Proof of Foresight, detectors, the Data DAO and red vs blue (testnet only, no real money)",
-    addNet: 'Add network', height: 'Latest block', blockTime: 'Block time', validators: 'Validators', bonded: 'ZETAPHY staked',
+    aboutLink: 'What is ZETAPHY?', addNet: 'Add network', height: 'Latest block', blockTime: 'Block time', validators: 'Validators', bonded: 'ZETAPHY staked',
     startTitle: 'Get started', step1: 'Add ZETAPHY to your wallet', step2: 'Get test ZETAPHY (free)', step3: 'Try the apps', faucetBtn: 'Get',
     latestBlocks: 'Latest blocks', viewAll: 'View all', colHeight: 'Block', colTxs: 'Txs', colProposer: 'Proposer', colAge: 'Age',
     network: 'Network', validatorsTitle: 'Validators', colName: 'Name', colPower: 'Voting power', colCommission: 'Commission',
@@ -123,7 +125,7 @@ export const TEXT = {
   zh: {
     navGuide: "验证者指南", tipGuide: "一条命令运行验证者：免费云服务器、安装命令、状态查看与重启帮助",
     navForecasts: "风险预测", tipForecasts: "代币风险预测、Proof of Foresight、检测器、Data DAO 与红蓝对抗（仅限测试网，非真钱）",
-    addNet: '添加网络', height: '最新区块', blockTime: '出块时间', validators: '验证者', bonded: '已质押 ZETAPHY',
+    aboutLink: 'ZETAPHY 是什么？', addNet: '添加网络', height: '最新区块', blockTime: '出块时间', validators: '验证者', bonded: '已质押 ZETAPHY',
     startTitle: '快速开始', step1: '将 ZETAPHY 添加到钱包', step2: '领取测试 ZETAPHY（免费）', step3: '试用应用', faucetBtn: '领取',
     latestBlocks: '最新区块', viewAll: '查看全部', colHeight: '区块', colTxs: '交易', colProposer: '提议者', colAge: '时间',
     network: '网络', validatorsTitle: '验证者', colName: '名称', colPower: '投票权', colCommission: '佣金',
@@ -172,7 +174,7 @@ export const TEXT = {
   es: {
     navGuide: "Guía de validadores", tipGuide: "Ejecuta un validador con un solo comando: máquinas gratis en la nube, el comando de instalación, estado y ayuda para reiniciar",
     navForecasts: "Pronósticos de riesgo", tipForecasts: "Pronósticos de riesgo de tokens, Proof of Foresight, detectores, la Data DAO y rojo vs azul (solo testnet, sin dinero real)",
-    addNet: 'Añadir red', height: 'Último bloque', blockTime: 'Tiempo de bloque', validators: 'Validadores', bonded: 'ZETAPHY en stake',
+    aboutLink: '¿Qué es ZETAPHY?', addNet: 'Añadir red', height: 'Último bloque', blockTime: 'Tiempo de bloque', validators: 'Validadores', bonded: 'ZETAPHY en stake',
     startTitle: 'Primeros pasos', step1: 'Añade ZETAPHY a tu wallet', step2: 'Consigue ZETAPHY de prueba (gratis)', step3: 'Prueba las apps', faucetBtn: 'Obtener',
     latestBlocks: 'Últimos bloques', viewAll: 'Ver todo', colHeight: 'Bloque', colTxs: 'Txs', colProposer: 'Proponente', colAge: 'Hace',
     network: 'Red', validatorsTitle: 'Validadores', colName: 'Nombre', colPower: 'Poder de voto', colCommission: 'Comisión',
@@ -221,7 +223,7 @@ export const TEXT = {
   ko: {
     navGuide: "검증인 가이드", tipGuide: "명령어 하나로 검증인 실행: 무료 클라우드 머신, 설치 명령어, 상태 확인과 재시작 도움말",
     navForecasts: "위험 예측", tipForecasts: "토큰 위험 예측, Proof of Foresight, 탐지기, Data DAO, 레드 대 블루 (테스트넷 전용, 실제 돈 아님)",
-    addNet: '네트워크 추가', height: '최신 블록', blockTime: '블록 시간', validators: '검증인', bonded: '스테이킹된 ZETAPHY',
+    aboutLink: 'ZETAPHY란?', addNet: '네트워크 추가', height: '최신 블록', blockTime: '블록 시간', validators: '검증인', bonded: '스테이킹된 ZETAPHY',
     startTitle: '시작하기', step1: '지갑에 ZETAPHY 추가', step2: '테스트 ZETAPHY 받기 (무료)', step3: '앱 사용해 보기', faucetBtn: '받기',
     latestBlocks: '최신 블록', viewAll: '전체 보기', colHeight: '블록', colTxs: 'Tx', colProposer: '제안자', colAge: '경과',
     network: '네트워크', validatorsTitle: '검증인', colName: '이름', colPower: '투표력', colCommission: '수수료율',
@@ -270,7 +272,7 @@ export const TEXT = {
   ja: {
     navGuide: "バリデーターガイド", tipGuide: "コマンド 1 つでバリデーターを運用: 無料クラウドマシン、インストールコマンド、状態確認と再起動のヘルプ",
     navForecasts: "リスク予測", tipForecasts: "トークンのリスク予測、Proof of Foresight、検知器、Data DAO、レッド対ブルー（テストネット専用、実際のお金ではありません）",
-    addNet: 'ネットワーク追加', height: '最新ブロック', blockTime: 'ブロック時間', validators: 'バリデーター', bonded: 'ステーク中の ZETAPHY',
+    aboutLink: 'ZETAPHY とは', addNet: 'ネットワーク追加', height: '最新ブロック', blockTime: 'ブロック時間', validators: 'バリデーター', bonded: 'ステーク中の ZETAPHY',
     startTitle: 'はじめに', step1: 'ウォレットに ZETAPHY を追加', step2: 'テスト用 ZETAPHY を受け取る（無料）', step3: 'アプリを試す', faucetBtn: '受け取る',
     latestBlocks: '最新ブロック', viewAll: 'すべて表示', colHeight: 'ブロック', colTxs: 'Tx', colProposer: 'プロポーザー', colAge: '経過',
     network: 'ネットワーク', validatorsTitle: 'バリデーター', colName: '名前', colPower: '投票力', colCommission: '手数料率',
@@ -319,7 +321,7 @@ export const TEXT = {
   ru: {
     navGuide: "Гайд валидатора", tipGuide: "Запустите валидатор одной командой: бесплатные облачные машины, команда установки, статус и помощь с перезапуском",
     navForecasts: "Прогнозы рисков", tipForecasts: "Прогнозы рисков токенов, Proof of Foresight, детекторы, Data DAO и красные против синих (только тестнет, не настоящие деньги)",
-    addNet: 'Добавить сеть', height: 'Последний блок', blockTime: 'Время блока', validators: 'Валидаторы', bonded: 'ZETAPHY в стейкинге',
+    aboutLink: 'Что такое ZETAPHY?', addNet: 'Добавить сеть', height: 'Последний блок', blockTime: 'Время блока', validators: 'Валидаторы', bonded: 'ZETAPHY в стейкинге',
     startTitle: 'С чего начать', step1: 'Добавьте ZETAPHY в кошелёк', step2: 'Получите тестовые ZETAPHY (бесплатно)', step3: 'Попробуйте приложения', faucetBtn: 'Получить',
     latestBlocks: 'Последние блоки', viewAll: 'Все', colHeight: 'Блок', colTxs: 'Транз.', colProposer: 'Пропозер', colAge: 'Возраст',
     network: 'Сеть', validatorsTitle: 'Валидаторы', colName: 'Имя', colPower: 'Сила голоса', colCommission: 'Комиссия',
@@ -368,7 +370,7 @@ export const TEXT = {
   vi: {
     navGuide: "Hướng dẫn validator", tipGuide: "Chạy validator bằng một lệnh: máy cloud miễn phí, lệnh cài đặt, xem trạng thái và trợ giúp khởi động lại",
     navForecasts: "Dự báo rủi ro", tipForecasts: "Dự báo rủi ro token, Proof of Foresight, bộ phát hiện, Data DAO và đỏ đấu xanh (chỉ testnet, không phải tiền thật)",
-    addNet: 'Thêm mạng', height: 'Khối mới nhất', blockTime: 'Thời gian khối', validators: 'Validator', bonded: 'ZETAPHY đã stake',
+    aboutLink: 'ZETAPHY là gì?', addNet: 'Thêm mạng', height: 'Khối mới nhất', blockTime: 'Thời gian khối', validators: 'Validator', bonded: 'ZETAPHY đã stake',
     startTitle: 'Bắt đầu', step1: 'Thêm ZETAPHY vào ví', step2: 'Nhận ZETAPHY thử nghiệm (miễn phí)', step3: 'Dùng thử các ứng dụng', faucetBtn: 'Nhận',
     latestBlocks: 'Khối mới nhất', viewAll: 'Xem tất cả', colHeight: 'Khối', colTxs: 'Giao dịch', colProposer: 'Người đề xuất', colAge: 'Thời gian',
     network: 'Mạng', validatorsTitle: 'Validator', colName: 'Tên', colPower: 'Quyền biểu quyết', colCommission: 'Hoa hồng',
@@ -571,3 +573,6 @@ export const TAB_TEXT = {
     immune: ['Miễn dịch', 'Miễn dịch Neuro', 'Miễn dịch cộng đồng xuyên chuỗi (độ phủ cờ của Neuro), chứng nhận Neuro-checked và chứng thực kháng lượng tử'],
   },
 };
+
+// the AI map tab (flow-i18n.js)
+for (const l of Object.keys(TAB_TEXT)) if (AI_TAB[l]) TAB_TEXT[l].ai = AI_TAB[l];

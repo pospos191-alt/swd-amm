@@ -151,7 +151,8 @@ test('the page loads nothing from other sites: no inline or external scripts, no
     assert.match(m[1], /src="\.\/[a-z]+\.js"/, 'only same-origin script files (relative, so the page also works under the hub\'s /swap/)');
     assert.equal(m[2].trim(), '', 'no inline script');
   }
-  assert.doesNotMatch(html, /<link[^>]+href="https?:/, 'no remote stylesheets or fonts');
+  // (the canonical link only names the page's own address for search engines; nothing is loaded from it)
+  assert.doesNotMatch(html, /<link(?![^>]*rel="canonical")[^>]+href="https?:/, 'no remote stylesheets or fonts');
   assert.doesNotMatch(html, /\son[a-z]+=/i, 'no inline event handlers');
   assert.doesNotMatch(html, /style="/, 'no inline styles (CSP style-src self)');
   const walk = (d) => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));

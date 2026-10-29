@@ -473,6 +473,22 @@ handler `zetaphy-v4`) และบนเชนจริง `npm run test:devnet:
 
 เชนใหม่มี v5 ตั้งแต่บล็อก 1 ส่วนเชนที่รันอยู่ใช้ `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`
 
+### แอร์ดรอปบน testnet (`gov.sh airdrop`)
+
+ส่ง ZETAPHY ทดสอบให้หลายกระเป๋าพร้อมกัน จากกองทุน `community` (200 ล้านของผู้ถือ SWD ไม่ถูกแตะ)
+ใส่ที่อยู่บรรทัดละหนึ่งในไฟล์ (`0x…` จาก MetaMask, Trust หรือกระเป๋า EVM ใดก็ได้ หรือ `zetaphy1…` จาก Keplr;
+`ที่อยู่,จำนวน` ให้บางคนได้จำนวนต่างจากคนอื่น; `#` คือหมายเหตุ) แล้วรันบนโหนดแรก:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh -o /tmp/gov.sh
+sudo -u zetaphy -H nano /home/zetaphy/airdrop.txt
+sudo -u zetaphy -H bash -c 'cd ~ && bash /tmp/gov.sh airdrop ~/airdrop.txt 100'
+```
+
+ระบบตรวจทุกบรรทัด แปลง `0x…` เป็น `zetaphy1…` ตัดที่อยู่ซ้ำ แสดงจำนวนคนและยอดรวมเทียบกับยอดในกองทุน
+แล้วส่งเมื่อตอบ `y` เท่านั้น (ทีละ 50 คนต่อหนึ่ง `multi-send`) ที่อยู่ที่ได้แล้วบันทึกใน `~/.zetaphy/airdrop-paid.txt`
+เพิ่มรายชื่อแล้วรันใหม่ก็จ่ายเฉพาะคนใหม่ ข้อจำกัด: จำนวนเต็มเท่านั้น ไม่เกิน `MAX_EACH` (10,000) ต่อคน เหรียญทดสอบไม่มีมูลค่า
+
 ### โหวต upgrade โปรแกรมบนเชนที่รันอยู่ (อ่านก่อน `propose-upgrade` ทุกครั้ง)
 
 วันที่ 2026-10-29 testnet หยุดที่บล็อก 123343 เพราะติดตั้ง release ที่มี handler ของ `zetaphy-v5` ไว้ก่อนโหวตผ่าน

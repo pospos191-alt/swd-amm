@@ -4,8 +4,9 @@
 // Not mining: ZETAPHY is proof of stake and this work secures nothing. The node's faucet
 // (zetaphy_faucetPow) wants a few minutes of computer work per grant, so one person cannot empty it
 // with many addresses; it pays one fixed reward per valid proof (nothing accumulates). Nothing runs until
-// Start is pressed; it pauses while the tab or this page is hidden (or on Pause), and stops when the proof
-// is found, on Stop, or when the page is left or redrawn.
+// Start is pressed; it keeps running while other hub tabs are open (the hub shows a "Running" pill), pauses
+// on Pause, and stops when the proof is found, on Stop, or when the page is redrawn (a new language).
+// The two modes (faucet, useful work) live side by side: switching shows the other one and stops neither.
 import { isEvmAddress, toEvm } from './chainlib.js';
 import { withFallback } from './i18n.js';
 import { MINE } from './pages-i18n.js';
@@ -41,6 +42,7 @@ let workMod = null;
 
 function stopRun() {
   if (!run) return;
+  announce('faucet', false);
   clearInterval(run.tick);
   for (const w of run.workers) w.terminate();
   run.workers = [];
@@ -81,29 +83,44 @@ function crew(n) {
 function modeBar(root, ctx) {
   const W = withFallback(WORK, ctx.lang);
   const b = (id, text) => ctx.el('button', { type: 'button', role: 'tab', class: `wk-mode-btn${mode === id ? ' on' : ''}`, id: `mode-${id}`,
-    'aria-selected': String(mode === id), text, onclick: () => { if (mode !== id) { mode = id; mine.render(root, ctx); } } });
+    'aria-selected': String(mode === id), text, onclick: () => setMode(root, ctx, id) });
   return ctx.el('div', { class: 'wk-mode', role: 'tablist' }, b('mine', `⛏ ${W.modeMine}`), b('work', `🧠 ${W.modeWork}`));
 }
+
+/** Show one mode; the other keeps running underneath. Useful work is loaded the first time it is shown. */
+function setMode(root, ctx, m) {
+  mode = m;
+  for (const b of root.querySelectorAll('.wk-mode-btn')) { const on = b.id === `mode-${m}`; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); }
+  const mh = $('mn-host'), wh = $('wk-host');
+  if (!mh || !wh) return;
+  mh.hidden = m !== 'mine';
+  wh.hidden = m !== 'work';
+  if (m === 'work' && !wh.dataset.ready) {
+    wh.dataset.ready = '1';
+    import('./work.js').then((w) => { workMod = w; if (wh.isConnected) w.renderWork(wh, ctx); })
+      .catch((e) => { wh.textContent = String(e?.message ?? e); });
+  }
+}
+let modeRoot = null;
+// the AI map opens Mine on its useful-work side
+globalThis.addEventListener?.('hub:mine-mode', (e) => { if (modeRoot?.root.isConnected) setMode(modeRoot.root, modeRoot.ctx, e.detail); else mode = e.detail; });
+/** Tell the hub whether something runs here (its "Running" pill and the tab's dot). */
+export const announce = (job, on) => globalThis.dispatchEvent?.(new CustomEvent('hub:busy', { detail: { id: 'mine', job, on } }));
 
 const mine = {
   render(root, ctx) {
     stopRun();
     workMod?.stopWork();
-    if (mode === 'work') {
-      const host = ctx.el('div', { id: 'wk-host' });
-      root.replaceChildren(modeBar(root, ctx), host);
-      import('./work.js').then((m) => { workMod = m; if (host.isConnected) m.renderWork(host, ctx); })
-        .catch((e) => { host.textContent = String(e?.message ?? e); });
-      return;
-    }
+    modeRoot = { root, ctx };
     const L = withFallback(MINE, ctx.lang);
     const el = ctx.el;
     if (!threads) threads = Math.min(2, maxThreads());
     threads = Math.min(threads, maxThreads());
     const row = (label, tip, ...value) => el('tr', {}, el('th', { scope: 'row', text: label, 'data-tip': tip ?? null }), el('td', {}, ...value));
     const dd = (id, text = '–', cls = 'mono') => el('span', { id, class: cls, text });
-    root.replaceChildren(
-      modeBar(root, ctx),
+    const mineHost = el('div', { id: 'mn-host' });
+    root.replaceChildren(modeBar(root, ctx), mineHost, el('div', { id: 'wk-host', hidden: true }));
+    mineHost.replaceChildren(
       el('div', { class: 'mn-grid' },
         el('div', { class: 'card mn-card', 'aria-label': L.card },
           el('div', { class: 'mn-head' },
@@ -151,6 +168,7 @@ const mine = {
     const acc = ctx.account?.();
     if (acc) $('mn-addr').value = acc;
     info(ctx, L).catch(() => {});
+    setMode(root, ctx, mode);
   },
 };
 
@@ -162,6 +180,7 @@ function status(L, s) {
   if (!p) return;
   p.dataset.s = s;
   p.textContent = L.st[s];
+  announce('faucet', s === 'mining' || s === 'paused' || s === 'claiming');
   $('mn-art').classList.toggle('on', s === 'mining');
   const b = $('mn-start');
   const busy = s === 'mining' || s === 'paused';
@@ -276,7 +295,8 @@ async function start(ctx, root, L) {
   const tick = async () => {
     if (run !== r) return;
     // pause while nobody looks (the browser tab hidden, or another hub tab open) or on Pause
-    const away = document.hidden || root.hidden || !root.isConnected || r.userPaused;
+    // pause only on Pause (other hub tabs and other browser tabs do not stop it)
+    const away = !root.isConnected || r.userPaused;
     if (away && !r.paused) { r.paused = true; for (const w of r.workers) w.terminate(); r.workers = []; r.window = []; status(L, 'paused'); say(r.userPaused ? '' : L.paused); return; }
     if (!away && r.paused) { r.paused = false; r.spawn(); status(L, 'mining'); say(L.mining); }
     if (r.paused) return;

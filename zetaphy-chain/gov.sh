@@ -17,6 +17,9 @@
 #   gov.sh ratelimits                                    the IBC limits in force
 #   gov.sh delegate <zetaphyvaloper1…> <ZETAPHY> [key]   stake from a fund (default community)
 #   gov.sh validators                                    who validates, and their share
+#   gov.sh airdrop <list> [ZETAPHY each] [key]           testnet airdrop: send to every 0x…/zetaphy1… in a file (one per line,
+#                                                        "address,amount" also works), default 100 each from community;
+#                                                        shows the total first, pays each address once (SEND=1: no question)
 #   gov.sh quantum-lock <ML-DSA controller>              hand the FROM account to a PQ account, for good
 #   gov.sh vote-key                                      register or replace this node's ML-DSA vote key
 #   gov.sh pq-evidence on|off                            propose to stop (on) / resume (off) slashing on
@@ -215,6 +218,61 @@ case "${1:-}" in
     TXF=${TXF/--from $FROM/--from $key}
     send tx staking delegate "$val" "${amt}000000000000000000azetaphy"
     echo "delegated $amt ZETAPHY from $key to $val" ;;
+  airdrop)
+    # Testnet airdrop: the same coins anyone can get from the faucet, sent to a list at once. Addresses are
+    # checked and turned into zetaphy1… (0x… works too), duplicates dropped; nothing is sent before the total
+    # is shown and confirmed. Paid addresses go to $AIRDROP_LEDGER, so running it again pays only new ones.
+    list=${2:?a file with one address per line (0x… or zetaphy1…), optionally "address,amount"}
+    each=${3:-100}; key=${4:-community}
+    LEDGER=${AIRDROP_LEDGER:-$NODE_HOME/airdrop-paid.txt}
+    MAX_EACH=${MAX_EACH:-10000}   # whole ZETAPHY per address; a typo guard
+    BATCH=${BATCH:-50}
+    [ -r "$list" ] || { echo "cannot read $list"; exit 1; }
+    [[ "$each" =~ ^[1-9][0-9]*$ ]] || { echo "amount: whole ZETAPHY, e.g. 100"; exit 1; }
+    touch "$LEDGER"
+    declare -A want=()
+    bad=0; dup=0; paid=0
+    while IFS= read -r line || [ -n "$line" ]; do
+      line=${line%%#*}; line=$(tr -d ' \t\r' <<<"$line"); [ -n "$line" ] || continue
+      a=${line%%,*}; amt=$each; [[ "$line" == *,* ]] && amt=${line#*,}
+      if ! [[ "$amt" =~ ^[1-9][0-9]*$ ]] || [ "$amt" -gt "$MAX_EACH" ]; then echo "skip (amount $amt): $a"; bad=$((bad + 1)); continue; fi
+      if [[ "$a" =~ ^0x[0-9a-fA-F]{40}$ ]]; then
+        h=$a; a=$("$ZETAPHYD" debug addr "$h" 2>/dev/null | awk '/Bech32 Acc/ {print $3}')
+        [ -n "$a" ] || a=$("$ZETAPHYD" debug addr "${h#0x}" 2>/dev/null | awk '/Bech32 Acc/ {print $3}')
+      elif ! [[ "$a" =~ ^zetaphy1[02-9ac-hj-np-z]{38}$ ]]; then a=""; fi
+      [[ "$a" =~ ^zetaphy1[02-9ac-hj-np-z]{38}$ ]] || { echo "skip (not an address): ${line%%,*}"; bad=$((bad + 1)); continue; }
+      if [ -n "${want[$a]:-}" ]; then dup=$((dup + 1)); continue; fi
+      if grep -qxF "$a" "$LEDGER"; then paid=$((paid + 1)); continue; fi
+      want[$a]=$amt
+    done <"$list"
+    n=${#want[@]}; total=0
+    for a in "${!want[@]}"; do total=$((total + want[$a])); done
+    from=$("$ZETAPHYD" keys show "$key" -a --keyring-backend test --keyring-dir "$KEYS_DIR" --home "$NODE_HOME" 2>/dev/null) || { echo "no key \"$key\" in $KEYS_DIR"; exit 1; }
+    bal=$("$ZETAPHYD" q bank balances "$from" $QF | jq -r '[.balances[]? | select(.denom == "azetaphy") | .amount][0] // "0"')
+    have=$(awk -v b="$bal" 'BEGIN { printf "%d", b / 1e18 }')
+    echo "airdrop from $key ($from): $n addresses, $total ZETAPHY in all; the fund has $have ZETAPHY"
+    echo "  skipped: $bad bad, $dup repeated, $paid paid before ($LEDGER)"
+    [ "$n" -gt 0 ] || { echo "nothing to send"; exit 0; }
+    awk -v t="$total" -v h="$have" 'BEGIN { exit !(t + 1 <= h) }' || { echo "refused: the fund has $have ZETAPHY, the airdrop needs $total (+ gas)"; exit 1; }
+    if [ "${SEND:-}" != 1 ]; then
+      [ -t 0 ] || { echo "dry run: nothing sent (SEND=1 sends)"; exit 0; }
+      read -r -p "send $total ZETAPHY to $n addresses? [y/N] " ok
+      [[ "$ok" =~ ^[yY]$ ]] || { echo "nothing sent"; exit 0; }
+    fi
+    TXF=${TXF/--from $FROM/--from $key}
+    # one multi-send per amount and per $BATCH addresses; the ledger is written after each accepted batch
+    for amt in $(printf '%s\n' "${want[@]}" | sort -un); do
+      group=(); for a in "${!want[@]}"; do [ "${want[$a]}" = "$amt" ] && group+=("$a"); done
+      for ((i = 0; i < ${#group[@]}; i += BATCH)); do
+        part=("${group[@]:i:BATCH}")
+        if [ ${#part[@]} -eq 1 ]; then send tx bank send "$key" "${part[0]}" "${amt}000000000000000000azetaphy"
+        else send tx bank multi-send "$key" "${part[@]}" "${amt}000000000000000000azetaphy"; fi
+        printf '%s\n' "${part[@]}" >>"$LEDGER"
+        echo "sent $amt ZETAPHY each to ${#part[@]} addresses"
+        sleep 6   # the next block, so the sender's sequence number moves on
+      done
+    done
+    echo "airdrop done: $n addresses, $total ZETAPHY" ;;
   validators)
     $ZETAPHYD q staking validators $QF | jq -r '[.validators[] | select(.status=="BOND_STATUS_BONDED")] as $v
       | ($v | map(.tokens | tonumber) | add) as $t
@@ -530,5 +588,5 @@ case "${1:-}" in
     $ZETAPHYD q wasm list-code $QF | jq -c '.code_infos[]? | {code_id, creator, data_hash, instantiate_permission}' ;;
 
   *)
-    sed -n '8,58p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,61p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

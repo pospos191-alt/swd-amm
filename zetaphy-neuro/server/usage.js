@@ -146,11 +146,15 @@ export function memoryStore() {
       case 'PFADD': {
         const s = kv.get(key) ?? new Set();
         const before = s.size;
-        rest.forEach((v) => s.add(v));
+        rest.forEach((v) => s.add(String(v)));
         kv.set(key, s);
         return s.size > before ? 1 : 0;
       }
       case 'PFCOUNT': return kv.get(key)?.size ?? 0;
+      case 'SADD': return run(['PFADD', key, ...rest]);
+      case 'SCARD': return kv.get(key)?.size ?? 0;
+      case 'SREM': return kv.get(key)?.delete(String(rest[0])) ? 1 : 0;
+      case 'SMEMBERS': return [...(kv.get(key) ?? [])].map(String).sort();
       case 'INCR': { const v = Number(kv.get(key) ?? 0) + 1; kv.set(key, String(v)); return v; }
       case 'GET': return kv.get(key) ?? null;
       case 'SET': kv.set(key, String(rest[0])); return 'OK';
