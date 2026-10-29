@@ -41,7 +41,16 @@ async function mined(txOrPromise) {
   for (let i = 0; i < 240; i++) {
     let r = null;
     try { r = await zp.getTransactionReceipt(tx.hash); } catch (e) { if (!/timed out/.test(e.message)) throw e; }
-    if (r) { if (r.status !== 1) throw new Error(`reverted: ${tx.hash}`); return r; }
+    if (r) {
+      if (r.status !== 1) throw new Error(`reverted: ${tx.hash}`);
+      // the receipt can be indexed before the app commits that block: wait until its state is readable,
+      // so the balance checks below never see the block before it
+      for (let j = 0; j < 120; j++) {
+        try { await zp.getBalance(tx.from, r.blockNumber); return r; } catch {}
+        await new Promise((ok) => setTimeout(ok, 250));
+      }
+      return r;
+    }
     await new Promise((ok) => setTimeout(ok, 250));
   }
   throw new Error(`not mined: ${tx.hash}`);
