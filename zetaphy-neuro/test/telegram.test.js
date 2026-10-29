@@ -65,9 +65,20 @@ test('/claim only in a private chat, only for channel members when a channel is 
   assert.equal(await handleUpdate(msg(`/claim ${A}`), { api: t.api, store: null, cfg: botConfig({}) }), 'claim-nostore');
 });
 
-test('/start in the user\'s language with buttons; /check links to Neuro; unknown text is ignored', async () => {
+test('English for everyone by default, whatever the user\'s Telegram language', async () => {
   const t = fakeApi();
-  const cfg = botConfig({});
+  assert.equal(botConfig({}).lang, 'en');
+  await handleUpdate(msg('/start', { lang: 'th' }), { api: t.api, store: memoryStore(), cfg: botConfig({}) });
+  const [, p] = t.calls.find(([m]) => m === 'sendMessage');
+  assert.equal(p.text, BOT.en.start.replace('{amount}', '100'));
+  assert.equal(p.reply_markup.inline_keyboard.flat().at(-1).url, 'https://app.sawasdeecoin.com/about/');
+  assert.equal(botConfig({ TELEGRAM_BOT_LANG: 'ja' }).lang, 'ja');
+  assert.equal(botConfig({ TELEGRAM_BOT_LANG: 'xx' }).lang, 'en');
+});
+
+test('TELEGRAM_BOT_LANG=auto: /start in the user\'s language with buttons; /check links to Neuro; unknown text is ignored', async () => {
+  const t = fakeApi();
+  const cfg = botConfig({ TELEGRAM_BOT_LANG: 'auto' });
   await handleUpdate(msg('/start', { lang: 'th' }), { api: t.api, store: memoryStore(), cfg });
   const [, p] = t.calls.find(([m]) => m === 'sendMessage');
   assert.equal(p.text, BOT.th.start.replace('{amount}', '100'));
@@ -128,7 +139,12 @@ test('setup: webhook with the secret derived from the token, commands in every l
   assert.equal(w.secret_token, webhookSecret('TOKEN'));
   assert.match(w.secret_token, /^[0-9a-f]{48}$/);
   assert.notEqual(webhookSecret('TOKEN'), webhookSecret('OTHER'));
-  assert.equal(t.calls.filter(([m]) => m === 'setMyCommands').length, BOT_LANGS.length);
+  // one language (English by default): one menu, the per-language menus removed
+  assert.deepEqual(t.calls.filter(([m]) => m === 'setMyCommands').map(([, p]) => p.commands[2].description), [COMMANDS.en[2][1]]);
+  assert.equal(t.calls.filter(([m]) => m === 'deleteMyCommands').length, BOT_LANGS.length - 1);
+  const auto = fakeApi();
+  await setupBot(auto.api, 'https://neuro.sawasdeecoin.com/api/telegram', 'TOKEN', 'auto');
+  assert.equal(auto.calls.filter(([m]) => m === 'setMyCommands').length, BOT_LANGS.length);
 });
 
 test('set commands on the real D1 SQL (node:sqlite) and in memory', async () => {

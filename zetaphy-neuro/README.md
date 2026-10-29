@@ -88,7 +88,7 @@ every block is not counted. The page shows it under the form; the explorer shows
 
 ## Telegram bot (`api/telegram.js`, `server/telegram.js`)
 
-The ZETAPHY bot (@awasdeebot) answers in the user's Telegram language (8 languages) and keeps the testnet
+The ZETAPHY bot (@awasdeebot) answers in English (`TELEGRAM_BOT_LANG`: another of the 8 languages, or `auto` for each user's Telegram language; open `?setup=1` again after changing it) and keeps the testnet
 airdrop list. It holds no key and no coin: the admin exports the list and sends with `gov.sh airdrop`.
 
 | Command | Who | What |

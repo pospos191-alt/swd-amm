@@ -85,7 +85,7 @@ npm run web                       # เปิดหน้าเว็บที�
 
 ## บอท Telegram (`api/telegram.js`, `server/telegram.js`)
 
-บอท ZETAPHY (@awasdeebot) ตอบตามภาษา Telegram ของผู้ใช้ (8 ภาษา) และเก็บรายชื่อแอร์ดรอป testnet
+บอท ZETAPHY (@awasdeebot) ตอบเป็นภาษาอังกฤษ (`TELEGRAM_BOT_LANG`: เปลี่ยนเป็นภาษาอื่นใน 8 ภาษา หรือ `auto` ให้ตอบตามภาษา Telegram ของแต่ละคน เปลี่ยนแล้วเปิด `?setup=1` อีกครั้ง) และเก็บรายชื่อแอร์ดรอป testnet
 บอทไม่ถือกุญแจหรือเหรียญเลย แอดมินดึงรายชื่อออกมาแล้วส่งด้วย `gov.sh airdrop`
 
 | คำสั่ง | ใครใช้ | ทำอะไร |
