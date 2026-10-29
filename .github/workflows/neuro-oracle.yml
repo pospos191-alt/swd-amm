@@ -92,7 +92,10 @@ jobs:
         run: |
           set -o pipefail
           W=$(mktemp -d)
-          anvil --fork-url "${ORIGIN_URL%%,*}" --port 8601 --silent &
+          # fork a few blocks behind the head: a load-balanced public RPC may not have the newest block yet ("block not found")
+          FORK_URL="${ORIGIN_URL%%,*}"
+          HEAD=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "$FORK_URL" | jq -r .result)
+          anvil --fork-url "$FORK_URL" --fork-block-number $(( HEAD - 12 )) --retries 10 --fork-retry-backoff 2000 --port 8601 --silent &
           anvil --chain-id 77390 --port 8602 --silent &
           for port in 8601 8602; do for _ in $(seq 1 60); do curl -fs -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' 127.0.0.1:$port >/dev/null && break; sleep 2; done; done
           npm i -g --no-audit --no-fund "$HYP_CLI"
