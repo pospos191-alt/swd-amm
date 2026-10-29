@@ -1,34 +1,46 @@
 // The Agents page (a data page of pages.js): AI agents on ZETAPHY, testnet.
-//  1. Proof of Intent: say what you want; a model of YOUR choice (Neuro's AI layer, bring your own key)
-//     drafts an intent; you check every field; you sign it (EIP-712 in your wallet) and hand the signed
-//     JSON to any solver (`zetaphy intent execute`). IntentExecutor reverts unless the effects match.
-//  2. Human or agent: the label of an account (LabelRegistry), and "prove I'm a person" with a passkey,
-//     checked on chain by the P-256 precompile.
+//  1. Proof of Intent: pick a template (swap, send, stake, approve with a cap, bridge) and fill it in, or say
+//     what you want and let a model of YOUR choice (Neuro's AI layer, bring your own key) draft the fields.
+//     The form is validated strictly (intent-core.js validateBuilder/buildIntent), shown as one sentence and
+//     as rows, and SIMULATED on the latest block before signing (IntentExecutor.simulate through eth_call;
+//     the approval transaction goes through the hub's pre-sign assistant, presign.js). You sign it (EIP-712
+//     in your wallet) and hand the signed JSON to any solver (`zetaphy intent execute`), or for an allowance
+//     to the spender (`zetaphy intent spend`). IntentExecutor enforces the limits, the expiry and your own
+//     daily spend cap (settable here). The model is advisory: nothing it says is kept unless it checks out.
+//  2. Human or agent: the label of an account (LabelRegistry), "prove I'm a person" with a passkey (P-256
+//     precompile), and the optional uniqueness level (VouchRegistry): passkey human (NOT proven unique) or
+//     vouched unique human; vouch for someone, withdraw a vouch, update a status.
 //  3. AI agents: who answers for an agent (AgentRegistry): operator, bond, constitution, actions, claims.
 //  4. Agent wallet guardrails: an AgentPolicyWallet's state; freeze it with your passkey.
-// Contract addresses come from hub-config.json (contracts.intentExecutor, labelRegistry, agentRegistry)
-// or are typed in. Everything shown is set with textContent; the model's answer is data, checked by
-// intent-core.js, and never signed without the user pressing Sign after the review.
-import { isEvmAddress, short, formatZeta, parseUnits } from './chainlib.js';
+// Contract addresses come from hub-config.json (contracts.intentExecutor, labelRegistry, vouchRegistry,
+// agentRegistry) or are typed in. Everything shown is set with textContent.
+import { isEvmAddress, short, formatZeta, formatUnits } from './chainlib.js';
 import { withFallback } from './i18n.js';
 import { AGENTS } from './agents-i18n.js';
-import { KINDS, KIND_NAMES, typedData, targetsHash, checkIntent, newNonce, buildIntentPrompt, intentFromModel, describe, MODEL_SCHEMA, ZERO_HASH } from './intent-core.js';
+import {
+  KIND_NAMES, BUILDER_FIELDS, typedData, checkIntent, newNonce, buildIntentPrompt, intentFromModel, describe, summary, buildIntent, planFor,
+  encodeSimulate, decodeSimulation, encodeSetSpendCap, encodeCapLeft, MODEL_SCHEMA,
+} from './intent-core.js';
 import {
   SEL, callAddr, callUint, encodeProveHuman, encodeFreezeWithPasskey, encodeSetEmergencyKeys, encodeApprove, encodeAllowance, encodeGetAmountsOut,
-  uintAt, bytes32At, lastOfArray, decodeAgent, p256FromSpki, rsFromDer, toHex, fromHex, b64url, rpIdHash,
+  uintAt, bytes32At, lastOfArray, decodeAgent, decodeVouchStatus, p256FromSpki, rsFromDer, toHex, fromHex, b64url, rpIdHash,
 } from './agents-lib.js';
+import { revertReason } from './presign.js';
+import { rawSender } from './assist.js';
 
 const EVM_CHAIN_ID = 77390;
 const AI_SETTINGS = 'neuro-ai-settings'; // the same settings and key as Neuro's AI panel (same origin)
 const AI_KEY = 'neuro-ai-key';
 const PASSKEY = 'zetaphy-hub:passkey'; // public data only: credential id and public key
+const MAX_UINT = 2n ** 256n - 1n;
 const L = (ctx) => withFallback(AGENTS, ctx.lang);
 const safe = (f) => { try { return f(); } catch { return null; } };
 const store = { local: () => safe(() => globalThis.localStorage), session: () => safe(() => globalThis.sessionStorage) };
 const sget = (s, k) => safe(() => s?.getItem(k)) ?? null;
 const sset = (s, k, v) => safe(() => (v == null ? s?.removeItem(k) : s?.setItem(k, v)));
 const say = (node, text, cls = '') => { if (node) { node.textContent = text; node.className = `msg ${cls}`; } };
-const call = (ctx, to, data) => ctx.evmCall('eth_call', [{ to, data }, 'latest']);
+const call = (ctx, to, data, from) => ctx.evmCall('eth_call', [{ to, data, ...(from ? { from } : {}) }, 'latest']);
+const fill = (s, vars) => String(s).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 
 /** Tokens the intent form offers: the hub's known ERC-20s with known decimals. */
 export function intentTokens(cfg) {
@@ -38,8 +50,11 @@ export function intentTokens(cfg) {
 }
 
 // ---------------------------------------------------------------- 1. intent
-let draft = null;   // the intent being reviewed (strings), or null
+let draft = null;   // { intent, executor, targets, route, tokens, sim, signAnyway } being reviewed, or null
 let signed = null;
+
+/** Form input ids per builder field. */
+const FIELD_IDS = { tokenIn: 'ag-tin', amount: 'ag-amount', tokenOut: 'ag-tout', minOut: 'ag-min', recipient: 'ag-to', minutes: 'ag-mins', days: 'ag-days', contract: 'ag-targets' };
 
 function aiSettings() {
   let s = {};
@@ -48,14 +63,38 @@ function aiSettings() {
     endpoint: typeof s.endpoint === 'string' ? s.endpoint : '', key: sget(store.session(), AI_KEY) ?? sget(store.local(), AI_KEY) ?? '' };
 }
 
+/** Shows the fields the chosen template takes, with that template's words. */
+function applyTemplate(ctx, root) {
+  const t = L(ctx);
+  const kind = root.querySelector('#ag-kind')?.value ?? 'swap';
+  const spec = BUILDER_FIELDS[kind];
+  const take = new Set([...spec.required, ...spec.optional]);
+  for (const [field, id] of Object.entries(FIELD_IDS)) {
+    const input = root.querySelector(`#${id}`);
+    const label = root.querySelector(`label[for="${id}"]`);
+    if (!input) continue;
+    input.hidden = !take.has(field);
+    if (label) label.hidden = !take.has(field);
+  }
+  const lab = (id, text) => { const n = root.querySelector(`label[for="${id}"]`); if (n) n.textContent = text; };
+  lab('ag-amount', kind === 'approve' ? t.capLabel : kind === 'send' || kind === 'bridge' ? t.amountExact : t.amountIn);
+  lab('ag-tin', kind === 'swap' || kind === 'stake' ? t.tokenIn : t.token);
+  lab('ag-to', kind === 'approve' ? t.spenderLabel : kind === 'bridge' ? t.remoteLabel : t.recipient);
+  root.querySelector('#ag-to').placeholder = kind === 'swap' || kind === 'stake' ? t.recipientMe : '0x…';
+  lab('ag-targets', kind === 'stake' ? t.vaultLabel : kind === 'bridge' ? t.bridgeLabel : t.routerLabel);
+  const contract = root.querySelector('#ag-targets');
+  if (kind === 'swap' && !contract.value) contract.value = ctx.cfg?.dex?.router ?? '';
+  root.querySelector('#ag-template-note').textContent = t.tpl[kind] ?? '';
+}
+
 function intentCard(ctx, t) {
   const el = ctx.el;
   const tokens = intentTokens(ctx.cfg);
   const s = aiSettings();
   const opt = (v, text, sel) => el('option', { value: v, text, selected: sel || null });
-  const tokSel = (id) => el('select', { id, 'aria-label': t[id === 'ag-tin' ? 'tokenIn' : 'tokenOut'] }, opt('', '—'), ...tokens.map((k) => opt(k.address, k.symbol)));
+  const tokSel = (id) => el('select', { id }, opt('', '—'), ...tokens.map((k) => opt(k.address, k.symbol)));
   const field = (label, node, tip) => [el('label', { for: node.id, text: label, 'data-tip': tip ?? null }), node];
-  return el('div', { class: 'card ag-card' },
+  const card = el('div', { class: 'card ag-card' },
     el('div', { class: 'card-head' }, el('h2', { text: t.intentTitle }), el('span', { class: 'info', tabindex: 0, 'data-tip': t.tipIntent, text: 'i' })),
     el('p', { class: 'dim small', text: t.intentHow }),
     el('textarea', { id: 'ag-text', rows: 2, maxlength: 600, placeholder: t.placeholder, 'aria-label': t.intentTitle }),
@@ -70,30 +109,41 @@ function intentCard(ctx, t) {
       el('span', { class: 'dim small', text: t.orForm })),
     el('p', { class: 'msg', id: 'ag-ai-msg', role: 'status', 'aria-live': 'polite' }),
     el('div', { class: 'sp-form', id: 'ag-form' },
-      ...field(t.kind, el('select', { id: 'ag-kind' }, opt('swap', t.kSwap), opt('send', t.kSend), opt('stake', t.kStake))),
+      ...field(t.template, el('select', { id: 'ag-kind', onchange: () => { applyTemplate(ctx, card); clearReview(); } },
+        opt('swap', t.kSwap), opt('send', t.kSend), opt('stake', t.kStake), opt('approve', t.kApprove), opt('bridge', t.kBridge))),
+      el('p', { class: 'dim small ag-wide', id: 'ag-template-note' }),
       ...field(t.tokenIn, tokSel('ag-tin')),
-      ...field(t.amountIn, el('input', { id: 'ag-amount', inputmode: 'decimal', placeholder: '10' })),
+      ...field(t.amountIn, el('input', { id: 'ag-amount', inputmode: 'decimal', placeholder: '10', autocomplete: 'off' })),
       ...field(t.tokenOut, tokSel('ag-tout')),
-      ...field(t.minOut, el('input', { id: 'ag-min', inputmode: 'decimal', placeholder: '19.5' }), t.tipMinOut),
+      ...field(t.minOut, el('input', { id: 'ag-min', inputmode: 'decimal', placeholder: '19.5', autocomplete: 'off' }), t.tipMinOut),
       ...field(t.recipient, el('input', { id: 'ag-to', class: 'mono', placeholder: t.recipientMe, spellcheck: 'false' })),
       ...field(t.deadlineMin, el('input', { id: 'ag-mins', inputmode: 'numeric', value: '30' })),
-      ...field(t.executor, el('input', { id: 'ag-exe', class: 'mono', value: ctx.cfg?.contracts?.intentExecutor ?? '', placeholder: '0x…', spellcheck: 'false' })),
-      ...field(t.targets, el('input', { id: 'ag-targets', class: 'mono', value: ctx.cfg?.dex?.router ?? '', placeholder: '0x…, 0x…', spellcheck: 'false' }), t.tipTargets)),
+      ...field(t.days, el('input', { id: 'ag-days', inputmode: 'numeric', value: '7' })),
+      ...field(t.routerLabel, el('input', { id: 'ag-targets', class: 'mono', value: ctx.cfg?.dex?.router ?? '', placeholder: '0x…', spellcheck: 'false' }), t.tipTargets),
+      ...field(t.executor, el('input', { id: 'ag-exe', class: 'mono', value: ctx.cfg?.contracts?.intentExecutor ?? '', placeholder: '0x…', spellcheck: 'false' }))),
     el('div', { class: 'row' }, el('button', { type: 'button', class: 'btn ghost', id: 'ag-review', text: t.review, onclick: () => review(ctx) })),
     el('div', { id: 'ag-review-out' }),
     el('p', { class: 'msg', id: 'ag-msg', role: 'status', 'aria-live': 'polite' }));
+  applyTemplate(ctx, card);
+  return card;
 }
 
-function fillForm(root, d, tokens) {
+function clearReview() {
+  draft = null; signed = null;
+  document.querySelector('#ag-review-out')?.replaceChildren();
+}
+
+function fillForm(ctx, root, d, tokens) {
   const set = (id, v) => { const n = root.querySelector(`#${id}`); if (n && v != null) n.value = v; };
   const tok = (a) => tokens.find((k) => k.address.toLowerCase() === String(a).toLowerCase());
   set('ag-kind', d.kind);
+  applyTemplate(ctx, root);
   set('ag-tin', d.tokenIn);
   set('ag-tout', d.tokenOut);
   const fmt = (v, a) => { const k = tok(a); if (v == null || !k) return ''; const one = 10n ** BigInt(k.decimals); const f = (v % one).toString().padStart(k.decimals, '0').replace(/0+$/, ''); return `${v / one}${f ? `.${f}` : ''}`; };
   set('ag-amount', fmt(d.maxIn, d.tokenIn));
   set('ag-min', fmt(d.minOut, d.tokenOut));
-  set('ag-to', d.recipient);
+  set('ag-to', d.recipient && d.recipient.toLowerCase() === String(ctx.account?.() ?? '').toLowerCase() && d.kind !== 'send' ? '' : d.recipient);
   set('ag-mins', String(Math.max(1, Math.round((d.deadline - Date.now() / 1000) / 60))));
 }
 
@@ -129,7 +179,7 @@ async function draftWithAi(ctx) {
       if (q) r = intentFromModel(answer, { tokens, account, quote: () => q });
     }
     if (!r.draft) { say(out, `${t.aiNoIntent}${r.unclear ? ` ${r.unclear}` : ''}`, 'bad'); return; }
-    fillForm(root, r.draft, tokens);
+    fillForm(ctx, root, r.draft, tokens);
     say(out, `${t.aiDrafted}${r.problems.length ? ` ${t.fixFields}: ${r.problems.map((p) => t.f[p] ?? p).join(', ')}.` : ''}${r.unclear ? ` ${t.aiUnclear}: ${r.unclear}` : ''}`, r.problems.length ? 'bad' : 'ok');
     review(ctx);
   } catch (e) {
@@ -137,35 +187,28 @@ async function draftWithAi(ctx) {
   } finally { btn.disabled = false; }
 }
 
-/** The form -> an intent (strings), or a list of problems. */
+/** The visible form fields -> the builder input (strings only; empty optional fields left out). */
+export function formInput(root) {
+  const kind = root.querySelector('#ag-kind')?.value ?? '';
+  const spec = BUILDER_FIELDS[kind];
+  if (!spec) return { kind };
+  const input = { kind };
+  for (const f of [...spec.required, ...spec.optional]) {
+    const v = root.querySelector(`#${FIELD_IDS[f]}`)?.value.trim() ?? '';
+    if (v !== '' || spec.required.includes(f)) input[f] = v;
+  }
+  return input;
+}
+
+/** The form -> { intent, executor, targets, route, tokens } or { problems }. */
 async function formIntent(ctx, root) {
   const tokens = intentTokens(ctx.cfg);
-  const v = (id) => root.querySelector(`#${id}`)?.value.trim() ?? '';
-  const problems = [];
-  const account = ctx.account();
-  if (!account) problems.push('user');
-  const kind = v('ag-kind');
-  const tin = tokens.find((k) => k.address === v('ag-tin'));
-  const tout = kind === 'send' ? tin : tokens.find((k) => k.address === v('ag-tout'));
-  let maxIn = null, minOut = null;
-  try { maxIn = parseUnits(v('ag-amount'), tin?.decimals ?? 18); } catch { problems.push('amountIn'); }
-  if (kind === 'send') minOut = maxIn;
-  else { try { minOut = parseUnits(v('ag-min'), tout?.decimals ?? 18); } catch { problems.push('minOut'); } }
-  const recipient = v('ag-to') || account;
-  const executor = v('ag-exe');
-  if (!isEvmAddress(executor)) problems.push('executor');
-  const targets = kind === 'send' ? [] : v('ag-targets').split(/[\s,]+/).filter(Boolean);
-  if (targets.some((a) => !isEvmAddress(a)) || (kind !== 'send' && !targets.length)) problems.push('targets');
-  const mins = Number(v('ag-mins'));
-  if (!tin) problems.push('tokenIn');
-  if (!tout) problems.push('tokenOut');
-  if (problems.length) return { problems };
+  const executor = root.querySelector('#ag-exe')?.value.trim() ?? '';
   const { keccak256 } = await import('./neuro/src/keccak.js');
-  const intent = {
-    user: account, kind: KINDS[kind], tokenIn: tin.address, maxIn: String(maxIn), tokenOut: tout.address, minOut: String(minOut ?? 0), recipient,
-    targetsHash: targetsHash(targets, keccak256), nonce: newNonce(), deadline: String(Math.floor(Date.now() / 1000) + (Number.isInteger(mins) && mins > 0 ? mins : 30) * 60),
-  };
-  return { intent, executor, targets, tokens, problems: checkIntent(intent) };
+  const r = buildIntent(formInput(root), { account: ctx.account() ?? '', tokens, nonce: newNonce(), keccak: keccak256 });
+  const problems = [...(r.problems ?? [])];
+  if (!isEvmAddress(executor)) problems.push('executor');
+  return { ...r, executor, tokens, problems };
 }
 
 async function review(ctx) {
@@ -173,27 +216,103 @@ async function review(ctx) {
   const root = document.querySelector('.page-agents');
   const box = root.querySelector('#ag-review-out');
   const msg = root.querySelector('#ag-msg');
-  draft = null; signed = null;
+  clearReview();
   const r = await formIntent(ctx, root);
   if (r.problems.length) {
-    box.replaceChildren();
-    say(msg, `${t.fixFields}: ${r.problems.map((p) => t.f[p] ?? p).join(', ')}`, 'bad');
+    say(msg, `${t.fixFields}: ${[...new Set(r.problems)].map((p) => t.f[p] ?? p).join(', ')}`, 'bad');
     return;
   }
-  draft = r;
+  draft = { ...r, sim: null, signAnyway: false };
   const el = ctx.el;
-  const rows = describe(r.intent, r.tokens, ctx.lang === 'en' ? 'en-GB' : ctx.lang);
+  const locale = ctx.lang === 'en' ? 'en-GB' : ctx.lang;
+  const kind = KIND_NAMES[Number(r.intent.kind)];
+  const rows = describe(r.intent, r.tokens, locale);
+  const kindName = { swap: t.kSwap, send: t.kSend, stake: t.kStake, approve: t.kApprove, bridge: t.kBridge };
+  const tokenSym = r.tokens.find((k) => k.address === r.intent.tokenIn)?.symbol ?? r.intent.tokenIn;
   box.replaceChildren(
     el('h3', { text: t.checkAll }),
-    el('table', { class: 'mn-table ag-review' }, el('tbody', {}, ...rows.map(([k, val]) => el('tr', {}, el('th', { text: t.rows[k] ?? k }), el('td', { class: 'mono', text: k === 'kind' ? t[`k${val[0].toUpperCase()}${val.slice(1)}`] ?? val : val }))),
+    el('p', { class: 'ag-summary', id: 'ag-summary', text: summary(r.intent, r.tokens, t.sum, locale) }),
+    el('table', { class: 'mn-table ag-review' }, el('tbody', {}, ...rows.map(([k, val]) => el('tr', {}, el('th', { text: t.rows[k] ?? k }), el('td', { class: 'mono', text: k === 'kind' ? kindName[val] ?? val : val }))),
       el('tr', {}, el('th', { text: t.executor }), el('td', { class: 'mono', text: r.executor })),
       el('tr', {}, el('th', { text: t.targets }), el('td', { class: 'mono', text: r.targets.join(', ') || '—' })))),
-    el('p', { class: 'warnline small', text: t.enforced }),
+    el('p', { class: 'warnline small', text: kind === 'approve' ? t.enforcedApprove : kind === 'bridge' ? t.enforcedBridge : t.enforced }),
+    el('h3', { text: t.simTitle }),
+    el('p', { class: 'msg', id: 'ag-sim', role: 'status', 'aria-live': 'polite', text: '…' }),
+    el('p', { class: 'dim small', text: t.simAdvisory }),
+    el('div', { class: 'sp-form' },
+      el('label', { for: 'ag-cap', text: fill(t.capLabelFor, { token: tokenSym }), 'data-tip': t.tipCap }),
+      el('div', { class: 'row' }, el('input', { id: 'ag-cap', inputmode: 'decimal', placeholder: t.capNone, autocomplete: 'off' }),
+        el('button', { type: 'button', class: 'btn ghost', id: 'ag-cap-set', text: t.capSet, onclick: () => setCap(ctx) })),
+      el('p', { class: 'dim small ag-wide', id: 'ag-cap-left' })),
     el('div', { class: 'row' },
       el('button', { type: 'button', class: 'btn ghost', id: 'ag-approve', text: t.approve, onclick: () => approveIn(ctx) }),
+      el('button', { type: 'button', class: 'btn ghost', id: 'ag-simulate', text: t.simulate, onclick: () => simulate(ctx) }),
       el('button', { type: 'button', class: 'btn', id: 'ag-sign', text: t.sign, onclick: () => signDraft(ctx) })),
     el('div', { id: 'ag-signed' }));
   say(msg, '');
+  await Promise.all([simulate(ctx), showCap(ctx)]);
+}
+
+/** IntentExecutor.simulate() through eth_call from the user: what would happen on the latest block, nothing sent. */
+async function simulate(ctx) {
+  const t = L(ctx);
+  const out = document.querySelector('#ag-sim');
+  const d = draft;
+  if (!d || !out) return null;
+  const kind = KIND_NAMES[Number(d.intent.kind)];
+  let res;
+  try {
+    const plan = kind === 'approve' ? { targets: [], spender: `0x${'0'.repeat(40)}`, calls: [] } : planFor(d.intent, d.route);
+    const send = rawSender(ctx.ep().evm);
+    const j = await send('eth_call', [{ from: d.intent.user, to: d.executor, data: encodeSimulate(d.intent, plan) }, 'latest']);
+    const data = j?.error?.data ?? (typeof j?.error?.message === 'string' && /0x[0-9a-f]{8}/i.test(j.error.message) ? j.error.message.match(/0x[0-9a-f]+/i)[0] : null);
+    const dec = decodeSimulation(data);
+    if (dec?.ok) res = { ok: true, ...dec };
+    else if (dec) res = { ok: false, error: dec.error, args: dec.args, needsAllow: dec.error === 'TokenFailed' };
+    else if (j?.error) res = { ok: false, reason: revertReason(data ?? '') || String(j.error.message ?? '').slice(0, 200) };
+    else res = { ok: false, unavailable: true, reason: t.simNoAnswer };
+  } catch (e) { res = { ok: false, unavailable: true, reason: String(e?.message ?? e).slice(0, 200) }; }
+  if (draft !== d) return null; // the form changed meanwhile
+  d.sim = res;
+  d.signAnyway = false;
+  const tok = (a) => d.tokens.find((k) => k.address.toLowerCase() === String(a).toLowerCase());
+  const amt = (v, a) => { const k = tok(a); return k ? `${formatUnits(v, k.decimals, k.decimals)} ${k.symbol}` : String(v); };
+  if (res.ok) {
+    say(out, kind === 'approve' ? t.simOkApprove : kind === 'bridge' ? fill(t.simOkBridge, { spent: amt(res.spent, d.intent.tokenIn) })
+      : fill(t.simOk, { spent: amt(res.spent, d.intent.tokenIn), received: amt(res.received, d.intent.tokenOut) }), 'ok');
+  } else if (res.needsAllow) say(out, t.simNeedsAllow, 'bad');
+  else if (res.unavailable) say(out, fill(t.simUnavailable, { reason: res.reason }), 'bad');
+  else say(out, fill(t.simFail, { reason: res.error ? `${t.errors[res.error] ?? res.error}` : res.reason }), 'bad');
+  return res;
+}
+
+async function showCap(ctx) {
+  const t = L(ctx);
+  const d = draft;
+  const out = document.querySelector('#ag-cap-left');
+  if (!d || !out) return;
+  try {
+    const left = uintAt(await call(ctx, d.executor, encodeCapLeft(d.intent.user, d.intent.tokenIn)));
+    const k = d.tokens.find((x) => x.address === d.intent.tokenIn);
+    out.textContent = left === MAX_UINT ? `${t.capLeft}: ${t.capNone}` : `${t.capLeft}: ${formatUnits(left, k?.decimals ?? 18, k?.decimals ?? 18)} ${k?.symbol ?? ''}`;
+  } catch { out.textContent = ''; }
+}
+
+async function setCap(ctx) {
+  const t = L(ctx);
+  const msg = document.querySelector('#ag-msg');
+  const d = draft;
+  if (!d) return;
+  const k = d.tokens.find((x) => x.address === d.intent.tokenIn);
+  const v = document.querySelector('#ag-cap').value.trim();
+  const { parseUnits } = await import('./chainlib.js');
+  let perDay;
+  try { perDay = v === '' || v === '0' ? 0n : parseUnits(v, k.decimals); } catch { say(msg, `${t.fixFields}: ${t.f.amount}`, 'bad'); return; }
+  try {
+    await ctx.send(d.executor, encodeSetSpendCap(d.intent.tokenIn, perDay), t.capAction);
+    say(msg, t.capOk, 'ok');
+    await Promise.all([showCap(ctx), simulate(ctx)]);
+  } catch (e) { say(msg, String(e?.message ?? e).slice(0, 200), 'bad'); }
 }
 
 async function approveIn(ctx) {
@@ -202,29 +321,40 @@ async function approveIn(ctx) {
   if (!draft) return;
   try {
     const have = uintAt(await call(ctx, draft.intent.tokenIn, encodeAllowance(draft.intent.user, draft.executor)));
-    if (have >= BigInt(draft.intent.maxIn)) { say(msg, t.approved, 'ok'); return; }
-    say(msg, '…');
-    await ctx.send(draft.intent.tokenIn, encodeApprove(draft.executor, draft.intent.maxIn), t.approveAction);
+    if (have < BigInt(draft.intent.maxIn)) {
+      say(msg, '…');
+      // the hub's send() shows its pre-sign summary and simulation (presign.js) before the wallet opens
+      await ctx.send(draft.intent.tokenIn, encodeApprove(draft.executor, draft.intent.maxIn), t.approveAction);
+    }
     say(msg, t.approved, 'ok');
+    await simulate(ctx);
   } catch (e) { say(msg, String(e?.message ?? e).slice(0, 200), 'bad'); }
 }
 
 async function signDraft(ctx) {
   const t = L(ctx);
   const msg = document.querySelector('#ag-msg');
-  if (!draft) return;
-  const problems = checkIntent(draft.intent);
-  if (problems.length) { say(msg, `${t.fixFields}: ${problems.join(', ')}`, 'bad'); return; }
+  const d = draft;
+  if (!d) return;
+  const problems = checkIntent(d.intent);
+  if (problems.length) { say(msg, `${t.fixFields}: ${problems.map((p) => t.f[p] ?? p).join(', ')}`, 'bad'); return; }
+  if (!d.sim) await simulate(ctx); // never sign what was not simulated
+  if (!d.sim?.ok && !d.signAnyway) {
+    d.signAnyway = true;
+    say(msg, t.signAnyway, 'bad');
+    return;
+  }
   try {
-    const sig = await ctx.signTyped(typedData(draft.intent, draft.executor, EVM_CHAIN_ID));
-    const route = KIND_NAMES[draft.intent.kind] === 'swap' ? { router: draft.targets[0] } : KIND_NAMES[draft.intent.kind] === 'stake' ? { vault: draft.targets[0] } : {};
-    signed = JSON.stringify({ executor: draft.executor, chainId: EVM_CHAIN_ID, intent: draft.intent, auth: { sigType: 0, sig, pqPublicKey: '0x' }, route }, null, 2);
+    const sig = await ctx.signTyped(typedData(d.intent, d.executor, EVM_CHAIN_ID));
+    const kind = KIND_NAMES[Number(d.intent.kind)];
+    signed = JSON.stringify({ executor: d.executor, chainId: EVM_CHAIN_ID, intent: d.intent, auth: { sigType: 0, sig, pqPublicKey: '0x' }, route: d.route }, null, 2);
     const el = ctx.el;
+    const cmd = kind === 'approve' ? 'zetaphy intent spend signed-intent.json --to 0x… --amount <base units>' : 'zetaphy intent execute signed-intent.json';
     document.querySelector('#ag-signed').replaceChildren(
       el('h3', { text: t.signedTitle }),
       el('div', { class: 'code' }, el('pre', { class: 'mono', text: signed }), ctx.copyBtn(signed)),
-      el('p', { class: 'dim small', text: t.solverHow }),
-      el('div', { class: 'code' }, el('pre', { class: 'mono', text: 'zetaphy intent execute signed-intent.json' }), ctx.copyBtn('zetaphy intent execute signed-intent.json')));
+      el('p', { class: 'dim small', text: kind === 'approve' ? t.spenderHow : t.solverHow }),
+      el('div', { class: 'code' }, el('pre', { class: 'mono', text: cmd }), ctx.copyBtn(cmd)));
     say(msg, t.signedOk, 'ok');
   } catch (e) { say(msg, String(e?.message ?? e).slice(0, 200), 'bad'); }
 }
@@ -264,15 +394,17 @@ async function assertWith(pk, challengeHex) {
 }
 
 // ---------------------------------------------------------------- 2. labels, 3. agents, 4. wallets
-function addrCard(ctx, t, { id, title, tip, cfgKey, placeholder, button, onCheck, extra = [] }) {
+function addrCard(ctx, t, { id, title, tip, cfgKey, placeholder, button, onCheck, extra = [], fields = [], note = null }) {
   const el = ctx.el;
   return el('div', { class: 'card ag-card' },
     el('div', { class: 'card-head' }, el('h2', { text: title }), el('span', { class: 'info', tabindex: 0, 'data-tip': tip, text: 'i' })),
     el('div', { class: 'sp-form' },
       el('label', { for: `${id}-c`, text: t.contract }), el('input', { id: `${id}-c`, class: 'mono', value: ctx.cfg?.contracts?.[cfgKey] ?? '', placeholder: '0x…', spellcheck: 'false' }),
+      ...fields,
       el('label', { for: `${id}-q`, text: placeholder }), el('input', { id: `${id}-q`, class: 'mono', value: ctx.account?.() ?? '', placeholder: '0x…', spellcheck: 'false' })),
     el('div', { class: 'row' }, el('button', { type: 'button', class: 'btn ghost', text: button, onclick: () => onCheck(ctx) }), ...extra),
     el('div', { id: `${id}-out` }),
+    note ? el('p', { class: 'dim small', text: note }) : null,
     el('p', { class: 'msg', id: `${id}-msg`, role: 'status', 'aria-live': 'polite' }));
 }
 const val = (id) => document.querySelector(`#${id}`)?.value.trim() ?? '';
@@ -280,15 +412,45 @@ const kv = (ctx, rows) => ctx.el('dl', { class: 'kv3' }, rows.flatMap(([k, v]) =
 
 async function checkLabel(ctx) {
   const t = L(ctx);
-  const [c, a] = [val('ag-lab-c'), val('ag-lab-q')];
+  const [c, a, vr] = [val('ag-lab-c'), val('ag-lab-q'), val('ag-lab-v')];
   const out = document.querySelector('#ag-lab-out');
-  if (!isEvmAddress(c) || !isEvmAddress(a)) { say(document.querySelector('#ag-lab-msg'), t.badAddr, 'bad'); return; }
+  const msg = document.querySelector('#ag-lab-msg');
+  if (!isEvmAddress(c) || !isEvmAddress(a) || (vr && !isEvmAddress(vr))) { say(msg, t.badAddr, 'bad'); return; }
   try {
     const label = Number(uintAt(await call(ctx, c, callAddr(SEL.labelOf, a))));
-    const name = [t.labelNone, t.labelHuman, t.labelAgent][label] ?? '?';
-    out.replaceChildren(ctx.el('p', {}, ctx.el('span', { class: `pill ${label === 1 ? 'passed' : label === 2 ? 'voting' : ''}`, text: name }), ctx.el('span', { class: 'mono small', text: ` ${short(a)}` })));
-    say(document.querySelector('#ag-lab-msg'), '');
-  } catch (e) { say(document.querySelector('#ag-lab-msg'), String(e?.message ?? e).slice(0, 200), 'bad'); }
+    const el = ctx.el;
+    let pill = [t.labelNone, t.labelHuman, t.labelAgent][label] ?? '?';
+    let cls = label === 1 ? 'passed' : label === 2 ? 'voting' : '';
+    const lines = [];
+    if (label === 1 && isEvmAddress(vr)) {
+      const st = decodeVouchStatus(await call(ctx, vr, callAddr(SEL.vouchStatus, a)));
+      pill = st.level === 2 ? t.levelUnique : t.levelPasskey;
+      cls = st.level === 2 ? 'passed' : '';
+      lines.push(fill(t.vouchCount, { n: st.vouches, need: st.needed }));
+      if (st.banned) lines.push(t.levelBanned);
+      else if (st.flags >= st.flagsToSuspend) lines.push(t.levelSuspended);
+      else if (st.flags > 0) lines.push(fill(t.flagCount, { n: st.flags, max: st.flagsToSuspend }));
+      if (st.level === 1 && st.vouches >= st.needed && !st.banned) lines.push(t.needsRefresh);
+    } else if (label === 1) pill = t.levelPasskey; // without the uniqueness registry: still say it is not proven unique
+    out.replaceChildren(el('p', {}, el('span', { class: `pill ${cls}`, id: 'ag-lab-level', text: pill }), el('span', { class: 'mono small', text: ` ${short(a)}` })),
+      ...lines.map((l) => el('p', { class: 'dim small', text: l })));
+    say(msg, '');
+  } catch (e) { say(msg, String(e?.message ?? e).slice(0, 200), 'bad'); }
+}
+
+/** vouch / unvouch / refresh on VouchRegistry for the address in the box. */
+async function vouchAct(ctx, what) {
+  const t = L(ctx);
+  const [vr, a] = [val('ag-lab-v'), val('ag-lab-q')];
+  const msg = document.querySelector('#ag-lab-msg');
+  if (!isEvmAddress(vr) || !isEvmAddress(a)) { say(msg, t.badAddr, 'bad'); return; }
+  const data = callAddr(SEL[what], a);
+  const action = { vouch: t.vouchAction, unvouch: t.unvouchAction, refresh: t.refreshAction }[what];
+  try {
+    await ctx.send(vr, data, action);
+    say(msg, { vouch: t.vouchOk, unvouch: t.unvouchOk, refresh: t.refreshOk }[what], 'ok');
+    checkLabel(ctx);
+  } catch (e) { say(msg, String(e?.message ?? e).slice(0, 200), 'bad'); }
 }
 
 async function proveHuman(ctx) {
@@ -383,7 +545,13 @@ export default {
         intentCard(ctx, t),
         el('div', { class: 'ag-col' },
           addrCard(ctx, t, { id: 'ag-lab', title: t.labelTitle, tip: t.tipLabel, cfgKey: 'labelRegistry', placeholder: t.address, button: t.check, onCheck: checkLabel,
-            extra: [el('button', { type: 'button', class: 'btn', id: 'ag-prove', text: t.prove, onclick: () => proveHuman(ctx) })] }),
+            fields: [el('label', { for: 'ag-lab-v', text: t.vouchContract, 'data-tip': t.tipVouch }),
+              el('input', { id: 'ag-lab-v', class: 'mono', value: ctx.cfg?.contracts?.vouchRegistry ?? '', placeholder: t.optional, spellcheck: 'false' })],
+            extra: [el('button', { type: 'button', class: 'btn', id: 'ag-prove', text: t.prove, onclick: () => proveHuman(ctx) }),
+              el('button', { type: 'button', class: 'btn ghost', id: 'ag-vouch', text: t.vouch, onclick: () => vouchAct(ctx, 'vouch') }),
+              el('button', { type: 'button', class: 'btn ghost', id: 'ag-unvouch', text: t.unvouch, onclick: () => vouchAct(ctx, 'unvouch') }),
+              el('button', { type: 'button', class: 'btn ghost', id: 'ag-refresh', text: t.refresh, onclick: () => vouchAct(ctx, 'refresh') })],
+            note: t.uniqueNote }),
           addrCard(ctx, t, { id: 'ag-ag', title: t.agentTitle, tip: t.tipAgent, cfgKey: 'agentRegistry', placeholder: t.agentQuery, button: t.check, onCheck: checkAgent }),
           (() => {
             const card = addrCard(ctx, t, { id: 'ag-w', title: t.walletTitle, tip: t.tipWallet, cfgKey: 'agentPolicyWallet', placeholder: t.walletAddr, button: t.check, onCheck: checkWallet,

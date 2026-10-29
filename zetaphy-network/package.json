@@ -31,6 +31,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@noble/curves": "1.9.7",
     "@noble/hashes": "~2.2.0",
     "@noble/post-quantum": "^0.6.1",
     "ethers": "6.17.0"

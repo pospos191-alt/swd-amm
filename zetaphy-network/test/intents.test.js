@@ -7,8 +7,8 @@ import { Wallet, Interface, TypedDataEncoder, AbiCoder, keccak256 } from 'ethers
 import { createChain, ZETA } from './helpers/evm.js';
 import { PRECOMPILES, mldsaKey } from './helpers/precompiles.js';
 import { dexArt, agentKit } from './helpers/mocks.js';
-import { compile, executeArgs, signIntent, signIntentPq, hashTargets, intentDigest, signedJson, readSigned, intentOf, TYPES } from '../src/intent.js';
-import { typedData, domain } from '../../zetaphy-hub/intent-core.js';
+import { compile, executeArgs, spendArgs, signIntent, signIntentPq, hashTargets, intentDigest, signedJson, readSigned, intentOf, TYPES } from '../src/intent.js';
+import { typedData, domain, planFor, encodeSimulate, decodeSimulation } from '../../zetaphy-hub/intent-core.js';
 
 const user = Wallet.createRandom();
 const ROUTER = new Interface(['function swapExactTokensForTokens(uint256,uint256,address[],address,uint256)', 'function transferFrom(address,address,uint256)']);
@@ -186,4 +186,119 @@ test('signed intent files round-trip; malformed ones are refused before any tran
   const bad = JSON.parse(text); bad.intent.minOut = '0';
   assert.throws(() => readSigned(JSON.stringify(bad), Number(c.now())), /minOut/);
   assert.throws(() => readSigned(text, Number(c.now()) + 3600), /deadline/);
+});
+
+// ---------------------------------------------------------------- templates: approve with cap, bridge; daily caps; simulate
+
+const ZERO32 = '0x' + '00'.repeat(32);
+const allowanceIntent = ({ cap = 30n * ZETA, spender = addr('bob'), nonce = 21n, deadline = c.now() + 3n * 86_400n } = {}) =>
+  ({ user: user.address, kind: 4, tokenIn: tA.address, maxIn: cap, tokenOut: tA.address, minOut: 0n, recipient: spender, targetsHash: ZERO32, nonce, deadline });
+
+test('approve with cap: the spender pulls up to the cap in total, until it expires; nobody else; cancel ends it', async () => {
+  const intent = allowanceIntent();
+  await approve(intent.maxIn);
+  const auth = await signIntent(user, intent, exe.address, chainId);
+  const spend = (from, to, amount, i = intent, a = auth) => exe.send(from, 'spendAllowance', spendArgs(i, a, to, amount));
+  await assert.rejects(spend('thief', addr('thief'), 1n), /NotSpender/);
+  await spend('bob', addr('bob'), 10n * ZETA);
+  await spend('bob', addr('solver'), 15n * ZETA);
+  assert.equal(await tA.call('balanceOf', [addr('bob')]), 10n * ZETA);
+  assert.equal(await exe.call('allowanceLeft', [Object.values(intent)]), 5n * ZETA);
+  await assert.rejects(spend('bob', addr('bob'), 6n * ZETA), /AllowanceExceeded/);
+  await assert.rejects(spend('bob', addr('bob'), 5n * ZETA, { ...intent, maxIn: 100n * ZETA }), /BadSignature/); // a bigger cap is another intent
+  // execute() never runs an allowance; a malformed allowance is refused
+  await assert.rejects(run(intent, auth, { targets: [], spender: '0x' + '00'.repeat(20), calls: [] }), /BadIntent/);
+  const selfAllow = allowanceIntent({ spender: user.address, nonce: 22n });
+  await assert.rejects(spend('user', addr('bob'), 1n, selfAllow, await signIntent(user, selfAllow, exe.address, chainId)), /BadIntent/);
+  assert.throws(() => compile(intent), /spendAllowance/);
+  // expiry
+  c.advance(3 * 86_400 + 1);
+  await assert.rejects(spend('bob', addr('bob'), 1n), /Expired/);
+  assert.equal(await exe.call('allowanceLeft', [Object.values(intent)]), 0n);
+  // cancel
+  const second = allowanceIntent({ nonce: 23n });
+  await approve(second.maxIn);
+  const a2 = await signIntent(user, second, exe.address, chainId);
+  await spend('bob', addr('bob'), 1n, second, a2);
+  await exe.send('user', 'cancel', [23n]);
+  await assert.rejects(spend('bob', addr('bob'), 1n, second, a2), /NonceUsed/);
+});
+
+test('bridge: exactly maxIn through the one bridge the user listed, for the remote recipient; a bridge taking less is refused', async () => {
+  const bridge = await c.deployRaw(agentKit().MockBridge, [tA.address], 'deployer');
+  const remote = '0x' + 'be'.repeat(20);
+  const intent = { user: user.address, kind: 5, tokenIn: tA.address, maxIn: 8n * ZETA, tokenOut: tA.address, minOut: 8n * ZETA, recipient: remote,
+    targetsHash: hashTargets([bridge.address]), nonce: 31n, deadline: c.now() + 600n };
+  await approve(intent.maxIn);
+  const auth = await signIntent(user, intent, exe.address, chainId);
+  const plan = compile(intent, { bridge: bridge.address });
+  assert.deepEqual(plan, planFor(intent, { bridge: plan.targets[0] })); // the hub builds the same plan
+  await assert.rejects(run(intent, auth, { ...plan, targets: [addr('thief')] }), /BadIntent/);
+  await assert.rejects(run(intent, auth, { ...plan, calls: [{ target: bridge.address, data: '0x' }] }), /BadIntent/);
+  await bridge.send('deployer', 'setSkim', [1n]);
+  await assert.rejects(run(intent, auth, plan), /Leftover/);
+  await bridge.send('deployer', 'setSkim', [0n]);
+  const ev = await run(intent, auth, plan);
+  assert.equal(ev.find((e) => e?.name === 'IntentExecuted').args.received, 8n * ZETA);
+  assert.equal((await bridge.call('lastTo')).toLowerCase(), remote);
+  assert.equal(await bridge.call('lastAmount'), 8n * ZETA);
+  assert.equal(await tA.call('balanceOf', [user.address]), 92n * ZETA);
+  assert.equal(await tA.call('allowance', [exe.address, bridge.address]), 0n);
+  const loose = { ...intent, minOut: 7n * ZETA, nonce: 32n }; // a bridge intent sends exactly maxIn
+  await assert.rejects(run(loose, await signIntent(user, loose, exe.address, chainId), plan), /BadIntent/);
+});
+
+test('daily spend caps: the user caps what all intents together may spend per token per day', async () => {
+  await exe.send('user', 'setSpendCap', [tA.address, 15n * ZETA]);
+  assert.equal(await exe.call('capLeft', [user.address, tA.address]), 15n * ZETA);
+  assert.equal(await exe.call('capLeft', [user.address, tB.address]), 2n ** 256n - 1n);
+  await approve(100n * ZETA);
+  const one = await swapIntent({ nonce: 41n });
+  await run(one, await signIntent(user, one, exe.address, chainId), compile(one, { router: router.address }));
+  assert.equal(await exe.call('capLeft', [user.address, tA.address]), 5n * ZETA);
+  const two = await swapIntent({ nonce: 42n });
+  await assert.rejects(run(two, await signIntent(user, two, exe.address, chainId), compile(two, { router: router.address })), /OverDailyCap/);
+  // allowances count too
+  const al = allowanceIntent({ nonce: 43n });
+  const alAuth = await signIntent(user, al, exe.address, chainId);
+  await exe.send('bob', 'spendAllowance', spendArgs(al, alAuth, addr('bob'), 5n * ZETA));
+  await assert.rejects(exe.send('bob', 'spendAllowance', spendArgs(al, alAuth, addr('bob'), 1n)), /OverDailyCap/);
+  c.advance(86_400);
+  const two2 = await swapIntent({ nonce: 44n });
+  await run(two2, await signIntent(user, two2, exe.address, chainId), compile(two2, { router: router.address }));
+  await exe.send('user', 'setSpendCap', [tA.address, 0n]); // removed
+  assert.equal(await exe.call('capLeft', [user.address, tA.address]), 2n ** 256n - 1n);
+});
+
+test('simulate: a preview without a signature that always reverts (Simulated or the failure); the hub encodes and decodes it', async () => {
+  const intent = await swapIntent({ nonce: 51n });
+  const sim = async (i, plan) => {
+    const data = encodeSimulate(typedData(i, exe.address, chainId).message, plan);
+    assert.equal(data, exe.iface.encodeFunctionData('simulate', [Object.values(intentOf(i)), [plan.targets, plan.spender, plan.calls.map((x) => [x.target, x.data])]]).toLowerCase());
+    const r = await c.rawCall(user.address, exe.address, data);
+    assert.equal(r.ok, false, 'simulate always reverts');
+    return decodeSimulation(r.returnHex);
+  };
+  const plan = planFor(typedData(intent, exe.address, chainId).message, { router: router.address });
+  const ethersPlan = compile(intent, { router: router.address });
+  assert.deepEqual(plan.calls.map((x) => x.data.toLowerCase()), ethersPlan.calls.map((x) => x.data.toLowerCase()));
+  assert.deepEqual({ ...(await sim(intent, plan)) }, { ok: false, error: 'TokenFailed', args: [] }); // not approved yet
+  await approve(intent.maxIn);
+  const r = await sim(intent, plan);
+  assert.equal(r.ok, true);
+  assert.equal(r.spent, intent.maxIn);
+  assert.ok(r.received >= intent.minOut);
+  assert.equal(await tA.call('balanceOf', [user.address]), 100n * ZETA, 'nothing moved');
+  assert.equal(await exe.call('nonceUsed', [user.address, 51n]), false, 'the nonce is still free');
+  const greedy = await swapIntent({ nonce: 52n, minOut: r.received + 1n });
+  const g = await sim(greedy, planFor(typedData(greedy, exe.address, chainId).message, { router: router.address }));
+  assert.equal(g.ok, false);
+  assert.ok(['CallFailed', 'ReceivedTooLittle'].includes(g.error));
+  // stake plans agree with the CLI compiler too
+  const vault = await c.deployRaw(agentKit().ShareVault, [tA.address], 'deployer');
+  const stake = { ...intent, kind: 3, tokenOut: vault.address, targetsHash: hashTargets([vault.address]) };
+  assert.deepEqual(planFor(typedData(stake, exe.address, chainId).message, { vault: vault.address }).calls[0].data, compile(stake, { vault: vault.address }).calls[0].data.toLowerCase());
+  const al = allowanceIntent({ nonce: 53n });
+  assert.deepEqual({ ...(await sim(al, { targets: [], spender: '0x' + '00'.repeat(20), calls: [] })) }, { ok: true, spent: 0n, received: 0n });
+  assert.equal(decodeSimulation('0x08c379a0'), null);
 });

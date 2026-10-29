@@ -21,6 +21,11 @@ export const SEL = {
   allowance: '0xdd62ed3e',
   getAmountsOut: '0xd06ca61f',
   decimals: '0x313ce567',
+  // VouchRegistry (the optional uniqueness level)
+  vouchStatus: '0x645b8b1b',
+  vouch: '0xdd66e16b',
+  unvouch: '0xab43cc36',
+  refresh: '0x0afb0409',
 };
 
 const strip = (h) => String(h).replace(/^0x/, '');
@@ -62,6 +67,12 @@ export function lastOfArray(hex) {
 export function decodeAgent(hex) {
   return { operator: addrAt(hex, 0), account: addrAt(hex, 1), pqKeyHash: bytes32At(hex, 2), constitution: bytes32At(hex, 3), checker: addrAt(hex, 4),
     bond: uintAt(hex, 5), unbondAt: uintAt(hex, 6), actions: uintAt(hex, 7), openClaims: uintAt(hex, 8) };
+}
+
+/** VouchRegistry.status(a) (uint256[10]) -> the fields the page shows. */
+export function decodeVouchStatus(hex) {
+  const n = (i) => Number(uintAt(hex, i));
+  return { level: n(0), vouches: n(1), needed: n(2), uniqueSince: n(3), flags: n(4), flagsToSuspend: n(5), banned: n(6) === 1, genesis: n(7) === 1, given: n(8), nextVouchAt: n(9) };
 }
 
 // ---------------------------------------------------------------- WebAuthn

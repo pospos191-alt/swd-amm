@@ -424,6 +424,7 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 .ag-wide { grid-column: 1 / -1; margin: 0; }
 .ag-card .row { flex-wrap: wrap; }
 .ag-review th { width: 170px; }
+.ag-summary { font-weight: 600; margin: 4px 0 8px; }
 @media (max-width: 1000px) { .ag-grid { grid-template-columns: minmax(0, 1fr); } }
 /* assistant pages (assist.js): governance items, the Neuro-checked badge in the wallet bar */
 .ga-item { padding: 10px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); }

@@ -193,12 +193,23 @@
 //                                      signer: the agent's owner/operator/agentWallet, or a runner for an unclaimed Neuro identity
 //   zetaphy msg verify <file> [--me <agentId>]   check a signed message from another Neuro (it is data, never a command)
 //                                      (--identity / ZETAPHY_IDENTITY, --validation / ZETAPHY_VALIDATION: the two addresses)
-//   zetaphy intent show | compile | execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x…]
+//   zetaphy intent show | compile | execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x… | --bridge 0x…]
 //                                      Proof of Intent, as a solver: build the calls for a signed intent (from the hub's Agents
 //                                      page) and submit them to IntentExecutor, which reverts unless the effects match
+//   zetaphy intent spend <signed allowance intent> --to 0x… --amount <base units>   the spender of an "approve with cap" intent
+//                                      pulls up to the cap until it expires (IntentExecutor.spendAllowance)
 //   zetaphy cosign review --wallet 0x<AgentPolicyWallet> --to 0x… [--value wei --data 0x… --deadline unix --strict]
 //                                      AI co-signer, as a committee runner: run Neuro on what the action touches, sign if clean
 //   zetaphy cosign combine <a.json> <b.json> …   order the runners' signatures for executeCosigned (docs/future/agents.md)
+//   zetaphy cosign dkg1 --id i --threshold t --participants n --session <32 hex> [--out f]
+//   zetaphy cosign dkg2 --secret <dkg secret> <every round-1 package…> [--out f]
+//   zetaphy cosign dkg3 --secret <dkg secret> --round1 a.json,b.json,… <round-2 messages…> [--key f --out group.json]
+//                                      FROST (RFC 9591) threshold key for the committee, made by the members (no dealer);
+//                                      every step is a file or a copy-paste; compare the printed transcript out of band
+//   zetaphy cosign commit --key <frost key> [--out f]   signing round 1: a one-time commitment
+//   zetaphy cosign frost-package --group group.json --wallet 0x… --to 0x… [--value --data --deadline --strict] <commitments…>
+//   zetaphy cosign frost-sign --key <frost key> --package pkg.json   round 2: re-runs Neuro, signs only the digest it computed
+//   zetaphy cosign frost-aggregate --group group.json --package pkg.json <shares…>   one 65-byte signature for executeCosignedFrost
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
 // (ZETAPHY_CHAIN_ID: Cosmos chain id `pq native` expects, default zetaphy_77390-1)
