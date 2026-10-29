@@ -123,7 +123,7 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
 ```
 - ใช้ไฟล์เชนสำเร็จรูป (ตรวจ SHA-256) ไม่ต้อง build เอง ต่อเข้ากับ `rpc.sawasdeecoin.com` และขอ 10 ZETAPHY จาก faucet ให้เอง
 - ตัวจับเวลาเช็กทุก 10 นาที: ซิงก์ครบและมีเหรียญแล้ว จะ stake 9 ZETAPHY เป็น validator เอง แล้วหยุดเช็ก
-- `sudo zetaphy-validator status` ดูความคืบหน้า, `sudo zetaphy-validator backup` ไฟล์ที่ต้องเก็บไว้ออฟไลน์,
+- `sudo zetaphy-validator status` ดูความคืบหน้าและการวินิจฉัยพร้อมคำแนะนำ (peers, ดิสก์, บล็อกที่พลาด, ความเสี่ยงถูก jail พร้อมเวลาโดยประมาณ), `sudo zetaphy-validator backup` ไฟล์ที่ต้องเก็บไว้ออฟไลน์,
   `sudo zetaphy-validator unjail` กลับมาทำงานหลังถูกพักเพราะเครื่องดับ
 - หลังสำรองกุญแจแล้ว: `sudo zetaphy-validator secure` ทำลายไฟล์ 24 คำที่เก็บเป็นข้อความธรรมดา (เฉพาะเมื่อคุณยืนยันว่า
   จดเก็บออฟไลน์แล้ว และกุญแจบัญชี stake อยู่ใน keyring), ปิดการเข้า SSH ด้วยรหัสผ่านและการเข้าเป็น root (เฉพาะเมื่อมีบัญชีที่ใช้ sudo
@@ -457,3 +457,16 @@ CosmWasm แล้วตรวจ hash เดียวกัน
 อัปโหลดเฉพาะ governance, instantiate/execute, Q-day และล็อกควอนตัมกับธุรกรรม wasm, สิ่งที่สัญญาส่งต่อ, พอร์ต IBC ปิด,
 handler `zetaphy-v4`) และบนเชนจริง `npm run test:devnet:wasm` (zetaphy-network: โหวตเก็บ cw20-base v2.0.0
 ที่ตรวจ sha256 แล้ว instantiate โอน และดูการเผาค่าธรรมเนียม) CI รันทั้งบน x86_64 และ ARM64
+
+## ขั้นที่ 8 (v5 งานวิจัยบน testnet): ระบบภูมิคุ้มกัน, AI precompile, ตัวตัดวงจรสะพาน, ตัวป้องกันบัญชี
+
+การออกแบบ วิธีใช้ และข้อจำกัดอยู่ใน [`docs/future/chain-protocol.th.md`](../docs/future/chain-protocol.th.md) patch อยู่ใน `setup-node.sh` ไฟล์เดียวกัน
+ทุกอย่าง **ปิดอยู่จนกว่าจะมีการโหวต** (`gov.sh ai-model | immune | breaker | breaker-rearm`) หรือจนกว่าบัญชีจะสมัครใช้เอง:
+- `0x…0902` AI precompile: โมเดล GBDT แบบจำนวนเต็มที่เก็บใน state (`tools/gbdt-export.mjs` แปลงโมเดลของ Neuro)
+- vote extension มีคะแนน bytecode ของสัญญาใหม่และธงการไหลออกของสะพาน ต่อท้ายลายเซ็น ML-DSA
+  ใบรับรอง PQ ไม่เปลี่ยน ค่ามัธยฐานถ่วงด้วย power อ่านได้ที่ `0x…0903` ซึ่งเข้ากันได้กับ ThreatRegistry
+- ตัวตัดวงจรสะพาน: เมื่อ validator เกิน 2/3 ติดธง เชนจะเรียก `pause()` ส่วนการเปิดสะพานอีกครั้งเป็นหน้าที่ของ governance
+- `0x…0904` ตัวป้องกันบัญชี: โหมดป้องกันบัญชี และการกักธุรกรรมผิดปกติ (ปล่อยด้วยกุญแจที่สองหรือเมื่อครบเวลา) สำหรับบัญชีที่สมัครใช้
+
+เชนใหม่มี v5 ตั้งแต่บล็อก 1 ส่วนเชนที่รันอยู่ใช้ `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`
+ทดสอบ: `fork-tests/evmd/zetaphy_future_test.go` และ `node --test zetaphy-chain/tools/gbdt-export.test.mjs`

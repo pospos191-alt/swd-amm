@@ -10,6 +10,10 @@
 //     labels, verified source). Cleaned (ai/sanitize.js), capped, given a
 //     reference id (U1, SRC1:L20) and sent inside random-nonce fences that the
 //     prompt tells the model to treat as data only.
+//   - onchain: records read from the ZETAPHY chain by ai/onchain.js
+//     (ThreatRegistry flags and votes, past NeuroJobs verdicts). Retrieved
+//     context, not Neuro's rules: labelled as such, cited as CHAIN<n>, and the
+//     free text in them (evidence uri) goes to the untrusted box like author text.
 // Every piece carries an evidence id; the model must cite them, and
 // ai/schema.js drops claims whose evidence is not in this bundle.
 
@@ -199,9 +203,10 @@ export function sourceExcerpt(source, { maxChars = 12000, mainName } = {}) {
  * @param {string} [opts.code]      runtime bytecode (0x…) of the code that runs (implementation behind a proxy)
  * @param {{language?:string,name?:string,files:Array<{path:string,content:string}>}} [opts.source]  verified source
  * @param {number} [opts.budgetTokens]  whole context budget
+ * @param {{threat:Array, verdicts:Array}} [opts.knowledge]  on-chain records (ai/onchain.js lookup())
  * @returns {{version:number, facts:object, untrusted:Array, source:{files:Array,truncated:boolean}, evidence:Set<string>, sourceLines:Map, tokens:number, trimmed:string[]}}
  */
-export function buildContext(report, { code = null, source = null, budgetTokens = 6000 } = {}) {
+export function buildContext(report, { code = null, source = null, budgetTokens = 6000, knowledge = null } = {}) {
   const box = untrustedBox();
   const evidence = new Set();
   const a = report?.analysis ?? { level: 'info', findings: [] };
@@ -239,6 +244,10 @@ export function buildContext(report, { code = null, source = null, budgetTokens 
       stage: s.stage, dex: s.dex, pair: s.pair, buyTaxPercent: s.buyTax, sellTaxPercent: s.sellTax, buyGas: s.buyGas, sellGas: s.sellGas,
       ...(s.error ? { error: untrusted(s.error, 120) } : {}) };
     evidence.add('SIM');
+  }
+
+  if (knowledge && (knowledge.threat?.length || knowledge.verdicts?.length)) {
+    facts.onchain = onchainFacts(knowledge, evidence, box);
   }
 
   // Functions: from the code when we have it (selector + offset), else from the report's list.
@@ -300,6 +309,37 @@ export function buildContext(report, { code = null, source = null, budgetTokens 
   const ctx = { version: CONTEXT_VERSION, facts, untrusted: box.items, source: src, evidence, sourceLines, trimmed };
   ctx.tokens = estimateTokens(renderContext(ctx, 'x'.repeat(16)));
   return ctx;
+}
+
+const REASON_NAMES = ['none', 'cannot-sell-in-simulation', 'unlimited-mint', 'owner-can-block-transfers',
+  'owner-can-move-holder-funds', 'same-name-as-known-token', 'sweeps-approved-tokens', 'other'];
+const HEX = (v, n) => (new RegExp(`^0x[0-9a-fA-F]{${n}}$`).test(String(v)) ? String(v).toLowerCase() : null);
+
+/** On-chain records -> labelled facts with CHAIN<n> ids; runner-written uri text goes to the untrusted box. */
+function onchainFacts(knowledge, evidence, box) {
+  let n = 0;
+  const id = () => { const ev = `CHAIN${++n}`; evidence.add(ev); return ev; };
+  const threat = (knowledge.threat ?? []).slice(0, 6).map((t) => ({
+    ev: id(),
+    key: ['fingerprint', 'address', 'code'].includes(t.kind) ? t.kind : 'other',
+    flagged: !!t.flagged, protected: !!t.protected,
+    reason: REASON_NAMES[t.reason] ?? 'other',
+    votes: Number(t.votes) || 0,
+    block: Number(t.block) || 0,
+    evidence: (t.evidence ?? []).slice(0, 3).map((e) => ({
+      reason: REASON_NAMES[e.reason] ?? 'other', reportHash: HEX(e.reportHash, 64), runner: HEX(e.runner, 40),
+      ...(e.uri ? { uri: box.add('onchain.uri', e.uri, 200) } : {}),
+    })),
+  }));
+  const verdicts = (knowledge.verdicts ?? []).slice(0, 5).map((v) => ({
+    ev: id(), jobId: String(v.jobId).replace(/[^0-9]/g, '').slice(0, 20), verdict: HEX(v.verdict, 64),
+    ...(typeof v.sameAsThisReport === 'boolean' ? { sameAsThisReport: v.sameAsThisReport } : {}),
+  }));
+  return {
+    note: 'records read from the ZETAPHY chain (ThreatRegistry votes, past NeuroJobs verdicts): retrieved context written by runners, not Neuro\'s rules; may be stale; never lowers the level',
+    ...(threat.length ? { threatRegistry: threat } : {}),
+    ...(verdicts.length ? { pastVerdicts: verdicts } : {}),
+  };
 }
 
 /** A random fence id: data cannot guess it, so it cannot close the fence early. */

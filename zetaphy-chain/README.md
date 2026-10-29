@@ -123,7 +123,7 @@ curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.
 ```
 - Uses the prebuilt chain binary (SHA-256 checked), no build. Joins `rpc.sawasdeecoin.com` and asks its faucet for 10 ZETAPHY
 - A timer checks every 10 minutes: once synced and funded, it stakes 9 ZETAPHY and becomes a validator by itself, then stops checking
-- `sudo zetaphy-validator status` shows progress, `sudo zetaphy-validator backup` lists the files to keep offline,
+- `sudo zetaphy-validator status` shows progress and diagnostics with advice (peers, disk, missed blocks, jail risk with a time estimate), `sudo zetaphy-validator backup` lists the files to keep offline,
   `sudo zetaphy-validator unjail` brings it back after downtime
 - After the backup: `sudo zetaphy-validator secure` shreds the plaintext 24-word file (only once you confirm the
   words are saved offline, and only if the staking key is in the keyring), turns SSH passwords and root login off
@@ -491,3 +491,18 @@ Tests: `fork-tests/evmd/zetaphy_cosmwasm_test.go` (reference contracts hackatom/
 governance-only upload, instantiate/execute, Q-day and quantum lock with wasm transactions, what contracts send on, IBC ports closed,
 `zetaphy-v4` handler), and on a live chain `npm run test:devnet:wasm` (zetaphy-network: vote to store cw20-base v2.0.0
 with sha256 checked, then instantiate, transfer, and check the fee burn). CI runs on both x86_64 and ARM64
+
+## Stage 8 (v5, testnet research): immune system, AI precompile, bridge breaker, account guard
+
+Design, usage and limits are in [`docs/future/chain-protocol.md`](../docs/future/chain-protocol.md). The patch is in the same `setup-node.sh`
+(`evmd/zetaphy_future.go`, `zetaphy_aimodel.go`, `zetaphy_immune.go`, `zetaphy_breaker.go`, `zetaphy_guard.go`).
+Everything stays **off until it is voted on** (`gov.sh ai-model | immune | breaker | breaker-rearm`) or until an account opts in:
+- `0x…0902` AI precompile: an integer-only GBDT model in chain state (`tools/gbdt-export.mjs` exports Neuro's model)
+- vote extensions carry, **after** the ML-DSA vote signature, validators' bytecode scores for new contracts and bridge outflow flags.
+  The PQ certificate is unchanged. The power-weighted median (with more than 2/3 of the power) is readable at `0x…0903`,
+  which has ThreatRegistry-compatible views, so `gov.sh threat-gate 0x…0903 on` works
+- bridge circuit breaker: on a 2/3 flag the chain calls `pause()` from `BreakerAddress`; unpausing stays with governance
+- `0x…0904` account guard: protected-account mode and anomaly hold (second key, or a timeout), for accounts that opt in
+
+New chains have v5 from block 1. Running chains: `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`.
+Tests: `fork-tests/evmd/zetaphy_future_test.go`, `node --test zetaphy-chain/tools/gbdt-export.test.mjs`.

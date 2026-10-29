@@ -40,8 +40,8 @@ func TestPQV2Genesis(t *testing.T) {
 	app, ctx := pqApp(t)
 	require.Equal(t, int64(1), app.zetaphyV2Height(ctx))
 	def := app.DefaultGenesis()[pqStoreKey]
-	// 08: v2 features; 0f: the security core (zetaphy_security.go), both from block 1
-	require.JSONEq(t, `[{"key":"08","value":"0000000000000001"},{"key":"0f","value":"0000000000000001"}]`, string(def))
+	// 08: v2 features; 0f: the security core (zetaphy_security.go); 20: v5 (zetaphy_future.go), all from block 1
+	require.JSONEq(t, `[{"key":"08","value":"0000000000000001"},{"key":"0f","value":"0000000000000001"},{"key":"20","value":"0000000000000001"}]`, string(def))
 	b := pqGenesisBasic{}
 	require.NoError(t, b.ValidateGenesis(nil, nil, def))
 	require.NoError(t, b.ValidateGenesis(nil, nil, nil), "a genesis from before the patch has none")

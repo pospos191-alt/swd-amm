@@ -134,6 +134,13 @@ red team รอบใหม่กับผู้สมัคร, ผู้สม
 ตั้งค่าครั้งเดียว: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests"
 PR ที่แก้ `zetaphy-neuro/ml/**` หรือ `src/**` จะรันเทสต์ ML ด้วย
 
+## คะแนนบนเชนและ zkML (`onchain/`)
+
+`node ml/onchain/export.js` แปลง `model.json` เป็นจำนวนเต็ม (สเกล 1e7) อัดแน่น 6 ไบต์ต่อโหนด (`onchain/model.fixed.json`
+18,616 ไบต์ keccak256 ของมันคือแฮชโมเดล H) `zetaphy-network/contracts/NeuroScore.sol` รันไบต์ชุดเดียวกันนี้บนเชน
+router ของ DEX เลือกปฏิเสธการซื้อเมื่อคะแนนสูงเกินได้ `onchain/zk/` คือต้นแบบ Groth16 ที่พิสูจน์ว่า "เวกเตอร์ฟีเจอร์ที่ commit ไว้
+ให้ margin นี้ภายใต้ H" ความตรงกัน แก๊ส ขนาด/เวลาของ proof และข้อจำกัด: `docs/future/onchain-ml.th.md`
+
 ## คำสั่ง
 
 ```bash
@@ -153,3 +160,11 @@ node ml/cli.js bsc 0x...                # ให้คะแนนโทเค�
 - รองรับเฉพาะ EVM (ฟีเจอร์ bytecode ต้องใช้โค้ด EVM)
 - โมเดลเห็นเฉพาะสิ่งที่ Neuro อ่าน กับดักหลัง proxy ที่ไม่รู้จักหรือในสัญญาอื่นมองเห็นได้เพียงบางส่วน
 - โมเดลถูกศึกษาและหลบได้เหมือนกฎทุกข้อ นั่นคือเหตุผลของ red team รายสัปดาห์
+
+## Federated learning (ต้นแบบ, `fl/`)
+
+เบราว์เซอร์ช่วยปรับคะแนนจากป้ายที่ผู้ใช้ยืนยันหลังรู้ผลได้ โดยไม่ส่งป้ายออกไป: หัว logistic regression ขนาดเล็กบนต้นไม้ที่ตรึงไว้
+(`fl/head.js`, theta = 0 คือโมเดลนี้), การอัปเดตในเครื่องถูกตัดและใส่สัญญาณรบกวนก่อนออกจากอุปกรณ์ (local differential privacy,
+epsilon 5.3 ต่อรอบที่ z = 2, งบ 16), commit-reveal บนเชนหรือซองที่ลงลายเซ็น, trimmed mean รายพิกัด, ด่านตรวจ canary และ trust region
+โมเดล + หัวที่มีผลที่ความสูงบล็อกใดถูกเลือกโดย ModelEpochs บนเชน (`manifest.json` คือสิ่งที่บันทึก) รายละเอียด, การคำนวณความเป็นส่วนตัว,
+การจำลองไคลเอนต์สุจริตกับไคลเอนต์วางยา และข้อจำกัด: [docs/future/federated.th.md](../../docs/future/federated.th.md) ยังไม่มีหน้าจอในเบราว์เซอร์

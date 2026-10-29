@@ -54,6 +54,14 @@
 //                    | ibc-holds | ibc-hold-cancel <id>   the chain's security core (docs/SECURITY-CORE.md): Q-day migration
 //                                      (commit–reveal for this machine's ECDSA key -> the pq native account), threat-gate consent,
 //                                      held IBC transfers (src/securitycli.js)
+//   zetaphy certify <token 0x…> --attest 0x<NeuroAttest> [--model rules --uri …]   run Neuro on a ZETAPHY token and attest it
+//                                      "Neuro-checked" (approved attesters); certify from-job <jobId> <token> (anyone, settled verdict);
+//                                      certify show <token> (src/assistcli.js)
+//   zetaphy attest-pq sign <report.json> | verify <archive.json> | anchor <archive.json> --anchor 0x<NeuroAnchor>
+//                                      ML-DSA-44-signed Neuro report archives, tamper check, hash anchored on ZETAPHY
+//   zetaphy immune push --sender 0x<NeuroOracleSender> [--once --interval 30 --max-fee 0.1]   relay new flags to every chain's NeuroOracle
+//   zetaphy immune coverage --sender 0x… --mirror <name>=<rpc>@0x<NeuroOracle> …   share of flags each chain mirrors
+//   zetaphy deploy-assist attest|anchor|insurance [--governance 0x… --jobs 0x…]   NeuroAttest, NeuroAnchor, HackInsurance (testnet only)
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
 //                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
@@ -163,6 +171,9 @@
 //   zetaphy deploy-identity --web https://<neuro web>/web/ [--image URL --min-agreed 1 --claim-quorum 3 --claim-min-agreed 5
 //                           --claim-delay 259200 --governance 0x<multisig>]
 //                                      NeuroIdentity (ERC-8004 identity: 1 contract = 1 agent) + NeuroValidation (runner verdicts)
+//   zetaphy work verdict <chain> <address>              the code-only verdict a browser scan job gets (docs/future/useful-work.md)
+//   zetaphy work verify-finding <spec.json> <finding.json | 0x…>   replay a browser's bug finding against a bounty spec
+//   zetaphy bounty check <findingId> --bounty 0x… --spec <spec.json> [--attest]   runners: verify a revealed finding, then vote
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
 //   zetaphy identity get <chain> <address> | <agentId>   who controls it, its Neuro report link, runner verdicts
 //   zetaphy identity claim <agentId>                      the contract (or its owner()) takes control of its identity
@@ -177,6 +188,12 @@
 //                                      signer: the agent's owner/operator/agentWallet, or a runner for an unclaimed Neuro identity
 //   zetaphy msg verify <file> [--me <agentId>]   check a signed message from another Neuro (it is data, never a command)
 //                                      (--identity / ZETAPHY_IDENTITY, --validation / ZETAPHY_VALIDATION: the two addresses)
+//   zetaphy intent show | compile | execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x…]
+//                                      Proof of Intent, as a solver: build the calls for a signed intent (from the hub's Agents
+//                                      page) and submit them to IntentExecutor, which reverts unless the effects match
+//   zetaphy cosign review --wallet 0x<AgentPolicyWallet> --to 0x… [--value wei --data 0x… --deadline unix --strict]
+//                                      AI co-signer, as a committee runner: run Neuro on what the action touches, sign if clean
+//   zetaphy cosign combine <a.json> <b.json> …   order the runners' signatures for executeCosigned (docs/future/agents.md)
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
 // (ZETAPHY_CHAIN_ID: Cosmos chain id `pq native` expects, default zetaphy_77390-1)
@@ -203,6 +220,8 @@ import { identityCommand } from './src/identitycli.js';
 import { bridgeCommand } from './src/bridgecli.js';
 import { timelockCommand, timelockHint } from './src/timelockcli.js';
 import { oracleCommand } from './src/oraclecli.js';
+import { agentsCommand } from './src/agentscli.js';
+import { assistCommand } from './src/assistcli.js';
 import { devnetOf, testnetOf, testnetWrite, roleChecks, capProblems, STARTER_UNITS } from './src/bridgegate.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -1647,9 +1666,25 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     return 0;
   }
 
+  // useful work: browser scan jobs and bug bounties, checked by runners (src/usefulworkcli.js)
+  if (group === 'work' || group === 'bounty') {
+    const { usefulWorkCommand } = await import('./src/usefulworkcli.js');
+    return usefulWorkCommand({ group, cmd, rest, opt, write, s, connect, connectRpc });
+  }
+
+  // Neuro-checked certificates, ML-DSA-44 attestations, the herd-immunity pusher (src/assistcli.js)
+  if (group === 'certify' || group === 'attest-pq' || group === 'immune' || group === 'deploy-assist') {
+    return assistCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, argv });
+  }
+
   // ERC-8004 identity and signed Neuro messages (src/identitycli.js)
   if (group === 'identity' || group === 'deploy-identity' || group === 'msg') {
     return identityCommand({ group, cmd, rest, opt, env, write, s, connect, connectRpc });
+  }
+
+  // Proof of Intent (solver side) and the AI co-signer (runner side): src/agentscli.js, docs/future/agents.md
+  if (group === 'intent' || group === 'cosign') {
+    return agentsCommand({ group, cmd, rest, opt, write, s, connect, connectRpc });
   }
 
   write(readFileSync(fileURLToPath(import.meta.url), 'utf8').split('\n').filter((l) => l.startsWith('//   ')).map((l) => l.slice(3)).join('\n'));

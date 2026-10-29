@@ -28,7 +28,8 @@ export const APPS = {
 const SKIP_IN = { wallet: new Set(['src']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
-const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js', 'embed.css', 'logo.svg', 'favicon.svg'];
+const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
+  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. */
 export function hubConfig(cfg) {
@@ -36,8 +37,11 @@ export function hubConfig(cfg) {
   const out = {};
   for (const st of Object.values(read('zetaphy-launch/state/77390.json')?.steps ?? {})) Object.assign(out, st.out ?? {});
   const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
-  const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity']
+  const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity',
+    'usefulWork', 'bugBounty', 'workerReputation', 'usefulIssuance', 'riskForecasts', 'foresight', 'detectorPool', 'dataDao', 'arena', 'intentExecutor', 'labelRegistry', 'agentRegistry', 'agentPolicyWallet',
+    'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance']
     .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
+  if (Number.isInteger(out.timelockBlock) && contracts.timelock) contracts.timelockBlock = out.timelockBlock;
   const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};
   const nft = read('zetaphy-nft/web/deployments.json') ?? {};
   return {
@@ -48,7 +52,25 @@ export function hubConfig(cfg) {
     tokens: chainTokens(read),
     saphan: saphanRoutes(read),
     saphanTokens: saphanTokenRoutes(read),
+    immune: immuneMirrors(read),
   };
+}
+
+/**
+ * The Neuro cross-chain oracle (docs/future/crosschain-assist.md, item 18): the sender on ZETAPHY and the NeuroOracle
+ * mirror on each chain of saphan-chains.json, from zetaphy-chain/hyperlane/neuro-oracle.json (written by the
+ * neuro-oracle workflow once deployed), with each chain's first https RPC so the hub can measure coverage. Public data only.
+ */
+export function immuneMirrors(read) {
+  const t = read('zetaphy-chain/hyperlane/saphan-chains.json');
+  const d = read('zetaphy-chain/hyperlane/neuro-oracle.json');
+  const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
+  if (!isAddr(d?.sender)) return { sender: null, mirrors: [] };
+  const mirrors = Object.entries(d.receivers ?? {}).filter(([name, r]) => isAddr(r?.oracle) && t?.chains?.[name]).map(([name, r]) => {
+    const c = t.chains[name];
+    return { name, displayName: String(c.displayName).slice(0, 40), chainId: c.chainId, oracle: r.oracle, rpc: (c.rpc ?? []).find((u) => /^https:\/\/[^\s"<>]+$/.test(u)) ?? '' };
+  }).filter((m) => m.rpc);
+  return { sender: d.sender, mirrors };
 }
 
 /**

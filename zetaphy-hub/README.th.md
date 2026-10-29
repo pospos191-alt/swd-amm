@@ -10,7 +10,8 @@
 | Stake & โหวต | **ใหม่** รายชื่อ validator, ยอด stake และรางวัลของคุณ, ข้อเสนอ ทั้ง stake / ถอน / รับรางวัล / โหวต ส่งจาก MetaMask ไปที่ precompile ของเชน (staking `0x…0800`, distribution `0x…0801`, gov `0x…0805`) |
 | รับเหรียญ | **ใหม่** แท็บละหนึ่งวิธี เรียงจากง่ายไปยาก (`?tab=earn&way=…`): **รับเหรียญฟรี** (ฟอร์ม faucet ส่วนคำสั่ง curl อยู่ใน "ใช้เทอร์มินัล"), **ขุดบนเบราว์เซอร์**, **รัน validator** (คู่มือ `validators.html` ตัวจริงในกรอบ สีเดียวกับ hub ข้อความและโค้ดมีชุดเดียว), **Stake**, **เพิ่มสภาพคล่อง**, **รันร่าง Neuro** ("การขุด" แบบ ZETAPHY ไม่มี PoW รางวัลมาจากงานตรวจสัญญา ค่ามัดจำ จำนวนคนรัน และกองรางวัลอ่านสดจาก NeuroJobs) ทุกแท็บบอกได้อะไร/ต้องมีอะไร/ใช้เวลาเท่าไร ตามด้วยขั้นตอนเป็นข้อ และปุ่มหลักหนึ่งปุ่ม |
 | คู่มือ validator | `validators.html` (อยู่ในเมนูด้วย): แบ่งหัวข้อเป็นแท็บ — เริ่ม, ตรวจว่าทำงาน, รับ ZETAPHY (ฟอร์ม faucet), เปิดใหม่ / แก้ไข, รางวัล, กุญแจและความปลอดภัย, ขั้นสูง — แท็บที่เปิดอยู่ใน URL (`#start`, `#check`, `#get`, `#fix`, `#rewards`, `#keys`, `#advanced` ลิงก์เก่า `#resume` ยังใช้ได้) ใช้ปุ่มลูกศรได้ ปุ่มดาวน์โหลดชี้ไปที่ release ของ `setup-node.sh` ปัจจุบัน (`zetaphyd-<sha256[:12]>` ใส่ให้ตอน `build.mjs`) |
-| ขุด | **ใหม่** "ขุด ZETAPHY ทดลอง": faucet แบบ proof of work ในเบราว์เซอร์ (ดูด้านล่าง) ไม่ใช่การขุดจริง |
+| ขุด | **ใหม่** "ขุด ZETAPHY ทดลอง": faucet แบบ proof of work ในเบราว์เซอร์ (ดูด้านล่าง) ไม่ใช่การขุดจริง โหมดที่สอง **งานที่มีประโยชน์** ทำงานสแกนของ Neuro และล่าบั๊กใน Web Worker แทน (`work.js`; [docs/future/useful-work.th.md](../docs/future/useful-work.th.md)) เป็นโหมดฝึกหัดจนกว่าจะ deploy สัญญา |
+| Agent | **ใหม่** AI agent (testnet, `agents.js`): บอกสิ่งที่ต้องการแล้วเซ็นแค่ขอบเขต (Proof of Intent: โมเดลของคุณร่าง คุณตรวจ `IntentExecutor` บังคับ) ป้ายคน/agent ด้วย passkey ตรวจบนเชน เงินประกันและความรับผิดของ agent แช่แข็งกระเป๋า agent ด้วย passkey ดู `docs/future/agents.th.md` |
 | NFT | ตลาด NFT (`zetaphy-nft/web`) |
 | Explorer | Explorer ของเชน (`zetaphy-explorer`) |
 | สถิติ | **ใหม่** ซัพพลาย เวลาต่อบล็อก ธุรกรรมต่อนาที สัดส่วน stake กราฟธุรกรรมต่อบล็อกและเวลาระหว่างบล็อก (60 บล็อกล่าสุด) การแบ่งเหรียญตอนเปิดเชน และพลังโหวตของ validator |
@@ -18,6 +19,9 @@
 | อันดับ | **ใหม่** ผู้ถือ ZETAPHY สูงสุด (มีชื่อบัญชีของโมดูลระบบ) และ validator ตาม stake |
 | นักพัฒนา | **ใหม่** endpoint พร้อมตัวอย่าง curl (EVM JSON-RPC, CometBFT, REST, faucet) ไฟล์ตั้งค่าเชน เครื่องมือบรรทัดคำสั่ง และที่อยู่สัญญาทั้งหมด |
 | Neuro | Neuro ตรวจสัญญา (`zetaphy-neuro/web`) ส่วน `/api/*` ส่งต่อไปที่ neuro.sawasdeecoin.com |
+| ธรรมาภิบาล | **ใหม่** ข้อเสนอที่เปิดอยู่และคิว ZetaphyTimelock เป็นภาษาง่าย: เทียบพารามิเตอร์กับค่าปัจจุบัน จำลองการเรียก EVM ด้วย `eth_call` (ในฐานะ gov module / timelock) และติดธงการเปลี่ยนที่เสี่ยง (`govassist.js`; docs/future/crosschain-assist.th.md) |
+| ภูมิคุ้มกัน | **ใหม่** ความครอบคลุมของธง Neuro บนเชนอื่น (mirror NeuroOracle), ค้นใบรับรอง Neuro-checked และตัวตรวจการรับรองที่ทนควอนตัม (ML-DSA-44) ที่ทำงานในเบราว์เซอร์ (`assist.js`, `pqattest.js`) |
+| (สรุปก่อนลงนาม) | ก่อนทุกธุรกรรม สรุปจะจำลองบนบล็อกล่าสุดด้วย (ยอดเงินที่เปลี่ยนผ่านโพรบ state override, `presign.js`) และถ้าตั้งค่าโมเดลไว้ใน Neuro จะให้ AI ของคุณเองอธิบายได้ |
 
 ## ทำงานอย่างไร
 
@@ -58,5 +62,7 @@ SHA-256 JavaScript ใน Web Worker **2.38 MH/s** ต่อ 1 worker (~1.8–2.
 ```
 npm ci
 npm test            # calldata เทียบ ethers, bech32, จำนวนเหรียญ, ไฟล์ใน dist/, header
-npm run test:e2e    # Chromium: ทุกแท็บกับโหนดจำลอง, จอเดียว, ข้อความเด้ง, stake/โหวต, มือถือ
+npm run test:e2e    # Chromium: ทุกแท็บกับโหนดจำลอง, จอเดียว, ข้อความเด้ง, stake/โหวต, มือถือ;
+                    # งานที่มีประโยชน์: สแกน+ล่าฝึกหัด และสัญญาจริงบน EVM ในหน่วยความจำ
+npm run build:evm   # สร้าง vendor/evm.js ใหม่ (EthereumJS EVM สำหรับ worker ล่าบั๊ก)
 ```

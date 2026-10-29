@@ -12,6 +12,7 @@ import { PAGES, askFaucet } from './pages.js';
 import { LANGS, TEXT, TAB_TEXT, pickLang, locale } from './i18n.js';
 import { walletBar } from './walletbar.js';
 import * as walletLib from './wallet/wallets.js';
+import { A as assistText, badgeOf, presignHooks } from './assist.js';
 
 const EVM_CHAIN_ID = 77390;
 const DEFAULT_NODE = 'https://rpc.sawasdeecoin.com';
@@ -36,7 +37,10 @@ const ICONS = {
   defi: '<circle cx="8" cy="8" r="5"/><circle cx="16" cy="16" r="5"/>',
   leaderboard: '<path d="M8 21V11H3v10zM14.5 21V4h-5v17zM21 21v-7h-5v7z"/>',
   dev: '<path d="M8 8l-5 4 5 4M16 8l5 4-5 4M13.5 5l-3 14"/>',
+  agents: '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5"/>',
   saphan: '<path d="M2 18h20"/><path d="M4 18v-3a8 8 0 0 1 16 0v3"/><path d="M8 18v-6M12 18v-7M16 18v-6"/>',
+  gov: '<path d="M3 21h18M5 21V10M19 21V10M9 21v-7M15 21v-7M12 3l9 6H3z"/>',
+  immune: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M12 8v8M8 12h8"/>',
   neuro: '<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-6 0"/>',
 };
 // Their words (label, title, hover text) are in i18n.js TAB_TEXT.
@@ -48,12 +52,15 @@ const TABS = [
   { id: 'earn', page: true, fresh: true },
   { id: 'mine', page: true, fresh: true },
   { id: 'saphan', page: true, fresh: true },
+  { id: 'agents', page: true, fresh: true },
   { id: 'nft', src: 'nft/' },
   { id: 'explorer', src: 'explorer/', group: 'data' },
   { id: 'neuro', src: 'neuro/web/' },
   { id: 'analytics', page: true, group: 'data', fresh: true },
   { id: 'defi', page: true, group: 'data', fresh: true },
   { id: 'leaderboard', page: true, group: 'data', fresh: true },
+  { id: 'gov', page: true, group: 'data', fresh: true },
+  { id: 'immune', page: true, group: 'data', fresh: true },
   { id: 'dev', page: true, group: 'build', fresh: true },
 ];
 const APP_HOSTS = { 'wallet.sawasdeecoin.com': 'wallet', 'swap.sawasdeecoin.com': 'swap', 'nft.sawasdeecoin.com': 'nft', 'explorer.sawasdeecoin.com': 'explorer', 'neuro.sawasdeecoin.com': 'neuro' };
@@ -150,7 +157,9 @@ function buildTabs() {
       svg(t.id), el('span', { text: tabText(t, LABEL) }), t.fresh ? el('span', { class: 'new', text: 'new' }) : null)];
   }).filter(Boolean),
   // the validator guide is a page of its own on this site (validators.html), not a tab
-  el('a', { class: 'tab', href: 'validators.html', id: 'nav-guide', 'data-tip': T('tipGuide') }, svg('guide'), el('span', { text: T('navGuide') })));
+  el('a', { class: 'tab', href: 'validators.html', id: 'nav-guide', 'data-tip': T('tipGuide') }, svg('guide'), el('span', { text: T('navGuide') })),
+  // risk forecasts, Proof of Foresight, detectors, Data DAO, arena: a page of its own (forecasts.html; docs/future/markets.md)
+  el('a', { class: 'tab', href: 'forecasts.html', id: 'nav-forecasts', 'data-tip': T('tipForecasts') }, svg('guide'), el('span', { text: T('navForecasts') })));
   const quick = $('quick');
   quick.replaceChildren(...TABS.filter((t) => t.id !== 'home' && !t.group).map((t) => el('a', { class: 'chip', href: `?tab=${t.id}`, 'data-tab': t.id, 'data-tip': tabText(t, TIP) }, svg(t.id), el('span', { text: tabText(t, LABEL) }))));
 }
@@ -190,7 +199,7 @@ function show(id, { hash, push = true } = {}) {
 
 // The data pages (pages.js): drawn once per language, refreshed while shown.
 const pageCtx = () => ({
-  T, lang, ep, cfg: HUB, getJson, evmCall, el, short, formatZeta, show, account: () => account, connect, send,
+  T, lang, ep, cfg: HUB, getJson, evmCall, el, short, formatZeta, show, account: () => account, connect, send, signTyped,
   copyBtn: (text) => el('button', { type: 'button', class: 'copy', text: T('copy'), onclick: async (ev) => {
     try { await navigator.clipboard.writeText(text); ev.target.textContent = T('copied'); setTimeout(() => { ev.target.textContent = T('copy'); }, 1200); } catch { /* blocked */ }
   } }),
@@ -359,6 +368,7 @@ const wb = walletBar({
   onChange: (a) => { account = a; if (current === 'stake') loadMine(); },
   lang: () => lang,
   bannerHost: () => $('stage'),
+  neuroBadge: { check: async (a) => (await badgeOf(evmCall, HUB.contracts?.neuroAttest, a))?.checked === true, label: () => assistText(lang).badge, tip: () => assistText(lang).badgeTip },
 });
 // What each precompile is, for the summary shown before the wallet.
 const TO_LABEL = { [PRECOMPILES.staking]: 'Staking', [PRECOMPILES.distribution]: 'Distribution', [PRECOMPILES.gov]: 'Governance', [PRECOMPILES.ics20]: 'ICS-20 (ZETAPHY Saphan)' };
@@ -385,17 +395,19 @@ function connect() {
     dlg.addEventListener('close', onClose);
   });
 }
-/** Sends a call through the connected wallet after an in-page summary (`action`: what it does, in words). */
-async function send(to, data, action = '') {
+/** Sends a call through the connected wallet after an in-page summary (`action`: what it does, in words; `value`: wei it pays). */
+async function send(to, data, action = '', value = 0n) {
   if (!account) await connect();
   await addNetwork();
   const p = wb.provider();
   const cid = await p.request({ method: 'eth_chainId' }).catch(() => null);
   if (cid == null || Number(BigInt(cid)) !== EVM_CHAIN_ID) throw new Error(T('wbWrongChain'));
-  const ok = await wb.safety.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: account, to, toLabel: TO_LABEL[to], data, action });
+  // pre-sign assistant (assist.js / presign.js): a simulation on the latest block and, if set up in Neuro, an AI explanation
+  const hooks = presignHooks({ lang, url: ep().evm, from: account, to, data, tokens: HUB.tokens ?? [] });
+  const ok = await wb.safety.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: account, to, toLabel: TO_LABEL[to], data, action, simulate: hooks.simulate, explain: hooks.explain ?? undefined });
   if (ok == null) throw Object.assign(new Error(wb.safety.t('cfCancelled')), { code: 4001 });
   data = ok;
-  const hash = await p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: '0x0', chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
+  const hash = await p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: `0x${BigInt(value).toString(16)}`, chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
   if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error(T('failed'));
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 2000));
@@ -403,6 +415,18 @@ async function send(to, data, action = '') {
     if (rc) { if (rc.status !== '0x1') throw new Error(`${T('failed')} · ${short(hash, 10, 6)}`); wb.refresh(); return hash; }
   }
   return hash;
+}
+
+/** EIP-712 signature from the connected wallet (eth_signTypedData_v4); the page has shown the fields first. */
+async function signTyped(td) {
+  if (!account) await connect();
+  await addNetwork();
+  const p = wb.provider();
+  const cid = await p.request({ method: 'eth_chainId' }).catch(() => null);
+  if (cid == null || Number(BigInt(cid)) !== EVM_CHAIN_ID || Number(td?.domain?.chainId) !== EVM_CHAIN_ID) throw new Error(T('wbWrongChain'));
+  const sig = await p.request({ method: 'eth_signTypedData_v4', params: [account, JSON.stringify(td)] });
+  if (typeof sig !== 'string' || !/^0x[0-9a-fA-F]{130}$/.test(sig)) throw new Error(T('failed'));
+  return sig;
 }
 
 // ------------------------------------------------------------------ stake & vote

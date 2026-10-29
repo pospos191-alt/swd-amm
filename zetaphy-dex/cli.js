@@ -5,6 +5,9 @@
 //   node cli.js status  --rpc <url> [--deployments <file>]
 //   node cli.js set-registry <address|0x0> --rpc <url> --key-file <file> [--deployments <file>]
 //   node cli.js set-fee-to   <address|0x0> --rpc <url> --key-file <file> [--deployments <file>]
+//   node cli.js set-neuro-score <NeuroScore|0x0> [--min-p 0.8] --rpc <url> --key-file <file> [--deployments <file>]
+//                            the router's optional buy check (off by default): refuse buying a token whose
+//                            current NeuroScore probability is >= --min-p (stored as the calibrated logit x 1e7)
 //   node cli.js mint-test <token> <to> <amount> --rpc <url> --key-file <file>
 //
 // The key: a file holding a 0x… private key, or an Ethereum keystore JSON (then
@@ -26,6 +29,8 @@
 //   --web [file]             also write the web app's deployments.json; with no file: web/deployments.json
 //                            (next to this CLI, whatever the current directory)
 //   --any-chain              deploy on a chain other than ZETAPHY (EVM chain id 77390); refused without it
+//   --attest <addr>          NeuroAttest: run Neuro on each test token made here and attest it "Neuro-checked"
+//                            (this key must be an approved attester; zetaphy-network/src/assistcli.js certify)
 
 import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -184,6 +189,18 @@ async function deployWith(provider, signer, opt, log) {
     artifactsHash: keccak256(Buffer.from(['ZetaphyFactory', 'ZetaphyPair', 'ZetaphyRouter'].map((n) => art(n).bytecode).join(''))),
   };
   if (out.contracts.pairCodeHash !== keccak256(art('ZetaphyPair').bytecode)) throw new Error('PAIR_CODE_HASH does not match artifacts/ZetaphyPair.json');
+  const attest = addrOpt(opt.attest, '--attest');
+  if (attest && attest !== ZERO) {
+    // the launch tool's "Neuro-checked" certificates (docs/future/crosschain-assist.md, item 19)
+    const { certify, ATTEST_ABI } = await import('../zetaphy-network/src/assistcli.js');
+    const k = new Contract(attest, ATTEST_ABI, signer);
+    for (const tk of tokens) {
+      const r = await certify({ attest: k, token: tk.address, rpc: opt.rpc, model: 'rules' });
+      tk.neuroChecked = { attest, reportHash: r.reportHash, skill: r.skill };
+      log(`${tk.symbol}: Neuro-checked (report ${r.reportHash})`);
+    }
+    out.contracts.neuroAttest = attest;
+  }
   const file = resolve(opt.out ?? resolve(HERE, 'deployments', `${net.chainId}.json`));
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(out, null, 2) + '\n');
@@ -224,6 +241,25 @@ async function govSet(fn, value, opt, log) {
   log(`${fn}(${a}) done`);
 }
 
+/** Probability -> NeuroScore's fixed score (calibrated logit x 1e7), as in zetaphy-neuro/ml/onchain/fixed.js. */
+export function scoreThresholdOf(p) {
+  const x = Number(p);
+  if (!(x > 0 && x < 1)) throw new Error(`--min-p: a probability strictly between 0 and 1, got ${p}`);
+  return BigInt(Math.round(Math.log(x / (1 - x)) * 1e7));
+}
+
+async function setNeuroScore(value, opt, log) {
+  const a = addrOpt(value, 'set-neuro-score');
+  if (a === undefined) throw new Error('set-neuro-score <address|0x0> [--min-p 0.8]');
+  const threshold = a === ZERO ? 0n : scoreThresholdOf(opt['min-p'] ?? '0.8');
+  const { provider, signer } = connect(opt, true);
+  const net = await provider.getNetwork();
+  const d = readDeployments(opt, net.chainId);
+  const f = new Contract(d.contracts.factory, art('ZetaphyFactory').abi, signer);
+  await wait(f.setNeuroScore(a, threshold));
+  log(`setNeuroScore(${a}, ${threshold}) done`);
+}
+
 async function mintTest(pos, opt, log) {
   const [token, to, amount] = pos;
   if (!isAddress(token) || !isAddress(to) || !amount) throw new Error('mint-test <token> <to> <amount>');
@@ -248,6 +284,7 @@ export async function main(argv, log = console.log) {
     case 'status': return status(opt, log);
     case 'set-registry': return govSet('setThreatRegistry', pos[0], opt, log);
     case 'set-fee-to': return govSet('setFeeTo', pos[0], opt, log);
+    case 'set-neuro-score': return setNeuroScore(pos[0], opt, log);
     case 'mint-test': return mintTest(pos, opt, log);
     default: log(HELP); if (cmd && cmd !== 'help' && cmd !== '--help') throw new Error(`unknown command ${cmd}`);
   }

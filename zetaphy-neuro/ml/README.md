@@ -145,6 +145,13 @@ Everything else runs with `contents: read`. Actions are pinned by SHA; no secret
 One-time setting: Settings -> Actions -> General -> "Allow GitHub Actions to create and approve pull requests".
 Pull requests also run the ML tests when `zetaphy-neuro/ml/**` or `src/**` change.
 
+## On-chain score and zkML (`onchain/`)
+
+`node ml/onchain/export.js` turns `model.json` into integers (scale 1e7) packed 6 bytes per node (`onchain/model.fixed.json`,
+18,616 bytes, its keccak256 is the model hash H). `zetaphy-network/contracts/NeuroScore.sol` runs exactly those bytes on-chain;
+the DEX router can optionally refuse buys above a score. `onchain/zk/` is a Groth16 prototype proving "a committed feature
+vector yields this margin under H". Parity, gas, proof size/time and limits: `docs/future/onchain-ml.md`.
+
 ## Commands
 
 ```bash
@@ -164,3 +171,13 @@ node ml/cli.js bsc 0x...                # score a real token
 - EVM only (the bytecode features need EVM code).
 - The model sees only what Neuro reads; a trap behind an unknown proxy or in another contract is only partly visible.
 - A model can be studied and evaded like any rule: that is what the weekly red team is for.
+
+## Federated learning (prototype, `fl/`)
+
+Browsers can improve the score from labels users confirm after the outcome, without sending the labels: a small
+logistic-regression head on top of the fixed trees (`fl/head.js`, theta = 0 = this model), local updates clipped
+and noised on the device (local differential privacy, epsilon 5.3 per round at the default z = 2, budget 16),
+commit-reveal on chain or signed envelopes, a coordinate-wise trimmed mean, a canary gate, and a trust region.
+The model + head in force at a block height is chosen by the on-chain ModelEpochs (`manifest.json` is what it
+schedules). Design, privacy accounting, simulated honest vs poisoned clients and limits:
+[docs/future/federated.md](../../docs/future/federated.md). No browser UI yet.

@@ -72,8 +72,10 @@ export function formatUnits(v, decimals = 18) {
  * @param {(account: string|null) => void} [o.onChange]
  * @param {() => string} [o.lang]   the page language (for the safety texts)
  * @param {() => Element|null} [o.bannerHost]  where the large-balance banner goes
+ * @param {{check: (address: string) => Promise<boolean>, label: () => string, tip: () => string}} [o.neuroBadge]
+ *        the "Neuro-checked" certificate (NeuroAttest.badge, assist.js): shown next to a held token that has one
  */
-export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () => {}, nativeSaphan = () => [], lang = () => 'en', bannerHost = () => null }) {
+export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () => {}, nativeSaphan = () => [], lang = () => 'en', bannerHost = () => null, neuroBadge = null }) {
   const doc = win.document;
   const $ = (id) => doc.getElementById(id);
   const store = {
@@ -184,7 +186,8 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
       const list = await Promise.all(tokens().map(async (t) => {
         const raw = await evmCall('eth_call', [{ to: t.address, data: balanceOfData(a) }, 'latest']).catch(() => '0x0');
         let v = 0n; try { v = BigInt(raw === '0x' ? '0x0' : raw); } catch { v = 0n; }
-        return { ...(await tokenMeta(t)), address: t.address, value: v, saphan: Array.isArray(t.saphan) ? t.saphan : [] };
+        const checked = v > 0n && neuroBadge ? await neuroBadge.check(t.address).catch(() => false) : false;
+        return { ...(await tokenMeta(t)), address: t.address, value: v, saphan: Array.isArray(t.saphan) ? t.saphan : [], checked };
       }));
       if (a !== account) return;
       balances = { native, tokens: list.filter((x) => x.value > 0n) };
@@ -205,7 +208,9 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
             : el('ul', { class: 'wb-bal' },
               el('li', {}, el('span', { text: 'ZETAPHY' }), el('b', { class: 'mono', text: formatUnits(balances.native) })),
               saphanLine(nativeSaphan()),
-              balances.tokens.flatMap((x) => [el('li', {}, el('span', { text: x.symbol, title: x.address }), el('b', { class: 'mono', text: formatUnits(x.value, x.decimals) })),
+              balances.tokens.flatMap((x) => [el('li', {}, el('span', { text: x.symbol, title: x.address },
+                x.checked && neuroBadge ? el('span', { class: 'wb-neuro', 'data-badge': 'neuro-checked', title: neuroBadge.tip(), text: ` ✓ ${neuroBadge.label()}` }) : null),
+                el('b', { class: 'mono', text: formatUnits(x.value, x.decimals) })),
                 saphanLine(x.saphan)])),
         el('p', { class: 'dim small', text: T('wbShared') }),
         el('div', { class: 'row' },

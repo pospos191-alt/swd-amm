@@ -10,7 +10,8 @@ Every ZETAPHY app on one page and one screen, at **https://app.sawasdeecoin.com*
 | Stake & vote | **New.** Validators, your stake and rewards, proposals. Stake / unstake / claim / vote are sent from MetaMask to the chain's precompiles (staking `0x…0800`, distribution `0x…0801`, gov `0x…0805`) |
 | Earn | **New.** A tab per way to get ZETAPHY, easiest first (`?tab=earn&way=…`): **Free coins** (a faucet form; the curl command under "from a terminal"), **Mine in browser**, **Run a validator** (the validator guide `validators.html` itself, in a frame with the hub's colours: one copy of its text and code), **Stake**, **Add liquidity**, **Neuro runner** (ZETAPHY's "mining": no proof-of-work, the reward is for useful contract checks; the live bond, runner count and job pool from NeuroJobs). Each tab: what you get / need / how long, numbered steps, one big button |
 | Validator guide | `validators.html` (also in the menu): topics as tabs — Start, Check it works, Get ZETAPHY (faucet form), Restart / fix, Rewards, Keys & safety, Advanced — with the open tab in the address (`#start`, `#check`, `#get`, `#fix`, `#rewards`, `#keys`, `#advanced`; old `#resume` still works) and arrow keys. Its download buttons point at the release of the current `setup-node.sh` (`zetaphyd-<sha256[:12]>`, filled in by `build.mjs`) |
-| Mine | **New.** "Mine testnet ZETAPHY": the proof-of-work faucet in the browser (see below). Not real mining |
+| Mine | **New.** "Mine testnet ZETAPHY": the proof-of-work faucet in the browser (see below). Not real mining. A second mode, **Useful work**, does Neuro scan jobs and bug hunts in Web Workers instead (`work.js`; [docs/future/useful-work.md](../docs/future/useful-work.md)); practice only until its contracts are deployed |
+| Agents | **New.** AI agents (testnet, `agents.js`): say what you want and sign only the limits (Proof of Intent: your own model drafts, you review, `IntentExecutor` enforces); person-or-agent labels with an on-chain passkey proof; agent bonds and liability; freeze an agent wallet with your passkey. See `docs/future/agents.md` |
 | NFT | The NFT marketplace (`zetaphy-nft/web`) |
 | Explorer | The block explorer (`zetaphy-explorer`) |
 | Analytics | **New.** Supply, block time, transactions per minute, staked share; charts of transactions per block and time between blocks (last 60), the genesis split and validator voting power |
@@ -18,6 +19,9 @@ Every ZETAPHY app on one page and one screen, at **https://app.sawasdeecoin.com*
 | Leaderboard | **New.** Top ZETAPHY holders (module accounts named) and validators by stake |
 | Developers | **New.** API endpoints with curl examples (EVM JSON-RPC, CometBFT, REST, faucet), chain registry files, the CLI, every contract address |
 | Neuro | Neuro contract checks (`zetaphy-neuro/web`); its `/api/*` is proxied to neuro.sawasdeecoin.com |
+| Governance | **New.** Open proposals and the ZetaphyTimelock queue in plain words: parameter changes compared with the current ones, EVM calls simulated with `eth_call` (as the gov module / the timelock), risky changes flagged (`govassist.js`; docs/future/crosschain-assist.md) |
+| Immunity | **New.** Coverage of Neuro's flags on other chains (NeuroOracle mirrors), the Neuro-checked certificate lookup, and a quantum-safe (ML-DSA-44) attestation verifier that runs in the browser (`assist.js`, `pqattest.js`) |
+| (signing summary) | Before every transaction the summary also simulates it on the latest block (balance changes through a state-override probe, `presign.js`) and, if a model is set up in Neuro, can ask your own AI to explain it |
 
 ## How it works
 
@@ -65,5 +69,7 @@ Project root `zetaphy-hub`, framework "Other". `vercel.json` sets the build, the
 npm ci
 npm test            # calldata vs ethers, bech32, amounts, dist/ contents, headers, the PoW hash vs node:crypto
 npm run test:e2e    # Chromium: every tab against a mocked node, one screen, hover text, stake/vote, mobile;
-                    # mining a proof (low difficulty, the site's CSP) and the faucet forms
+                    # mining a proof (low difficulty, the site's CSP) and the faucet forms;
+                    # useful work: practice scan + hunt, and the real contracts in an in-memory EVM
+npm run build:evm   # rebuilds vendor/evm.js (EthereumJS EVM for the bug-hunting worker)
 ```

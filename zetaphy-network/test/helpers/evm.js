@@ -9,8 +9,12 @@ import { readFileSync } from 'node:fs';
 
 export const ZETA = 10n ** 18n;
 
-/** @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds */
-export async function createChain(names = [], fundAddresses = {}) {
+/**
+ * @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds
+ * @param opts.precompiles  {'0x…address': (input: Uint8Array) => Uint8Array} precompiles written in JS
+ *   (e.g. helpers/precompiles.js: the real ML-DSA check at 0x…0900, P-256 at 0x…0100)
+ */
+export async function createChain(names = [], fundAddresses = {}, opts = {}) {
   // BLOCKHASH: a fixed hash per block number (keccak of a salt and the
   // number), like a real chain; setBlockHashSalt() gives another history,
   // noBlockHash() a chain whose BLOCKHASH is always 0. The EVM itself
@@ -24,7 +28,11 @@ export async function createChain(names = [], fundAddresses = {}) {
     },
     shallowCopy() { return this; },
   };
-  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }), blockchain });
+  const customPrecompiles = Object.entries(opts.precompiles ?? {}).map(([addr, fn]) => ({
+    address: Address.fromString(addr),
+    function: ({ data }) => ({ executionGasUsed: 3000n, returnValue: fn(data) ?? new Uint8Array(0) }),
+  }));
+  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }), blockchain, customPrecompiles });
   const sm = evm.stateManager;
   let time = 1_800_000_000n;
   let number = 1n;
@@ -86,11 +94,22 @@ export async function createChain(names = [], fundAddresses = {}) {
       }
       return res;
     },
+    /** A raw call (state changes stay, as a transaction): { ok, returnHex }. `from` is a name or a 0x address. */
+    async rawCall(from, toHex, dataHex, value = 0n) {
+      const res = await exec(acct[from] ?? Address.fromString(from), Address.fromString(toHex), dataHex, value);
+      return { ok: !res.execResult.exceptionError, returnHex: bytesToHex(res.execResult.returnValue) };
+    },
     async callAt(toHex, iface, fn, args = []) {
       const res = await exec(acct[names[0]], Address.fromString(toHex), iface.encodeFunctionData(fn, args));
       if (res.execResult.exceptionError) throw new Error('call reverted');
       const out = iface.decodeFunctionResult(fn, bytesToHex(res.execResult.returnValue));
       return out.length === 1 ? out[0] : out;
+    },
+    /** eth_call-like: raw 0x return data of a call (reverts throw), for readers that decode ABI themselves. */
+    async rawCallHex(toHex, dataHex) {
+      const res = await exec(acct[names[0]], Address.fromString(toHex), dataHex);
+      if (res.execResult.exceptionError) throw new Error('call reverted');
+      return bytesToHex(res.execResult.returnValue);
     },
     now: () => time,
     /** An account's nonce (the next CREATE address is getCreateAddress({ from, nonce })). */
@@ -114,6 +133,13 @@ export async function createChain(names = [], fundAddresses = {}) {
           const res = await exec(from, address, iface.encodeFunctionData(fn, args), value);
           if (res.execResult.exceptionError) throw new Error(decodeError(res.execResult.returnValue));
           return (res.execResult.logs ?? []).map(([, topics, data]) => { try { return iface.parseLog({ topics: topics.map(bytesToHex), data: bytesToHex(data) }); } catch { return null; } });
+        },
+        /** Execution gas of a call/tx (without the 21000 base and calldata cost), and the calldata. */
+        async gas(from, fn, args = []) {
+          const data = iface.encodeFunctionData(fn, args);
+          const res = await exec(from, address, data);
+          if (res.execResult.exceptionError) throw new Error(decodeError(res.execResult.returnValue));
+          return { exec: Number(res.execResult.executionGasUsed), data };
         },
         async sendValue(from, value) {
           const res = await exec(from, address, '0x', value);

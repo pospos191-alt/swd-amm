@@ -21,6 +21,8 @@
 | 4 · ตลาดพลัง AI จ่ายเป็น ZETAPHY | `ComputeMarket`: วางเงินมัดจำงาน AI ไว้กับสัญญาจนกว่าจะส่งงานและยอมรับ |
 | 1 สัญญา = 1 ตัวตน (ERC-8004) + ข้อความข้ามเชนที่มีลายเซ็น | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: ข้อความจาก Neuro ตัวอื่นเป็นข้อมูล ไม่ใช่คำสั่ง |
 | 5 · ต้านควอนตัม | precompile ML-DSA (FIPS 204) ในเชน + `QuantumWallet` + `zetaphy pq` + บัญชี PQ แท้ (`zetaphy pq native`) |
+| อนาคต · งานที่มีประโยชน์ (ต้นแบบ ยังไม่ deploy) | `UsefulWork` (งานสแกนในเบราว์เซอร์: ตราประทับ PoW, commit-reveal 2 ใน 3, นกขมิ้น) + `WorkerReputation` (แบบ ERC-8004) + `BugBounty` (fuzzing ในเบราว์เซอร์ รันเนอร์ตรวจ; `VulnerableVault` ตั้งใจให้มีช่องโหว่) + `UsefulIssuance` (ส่วนแบ่งจาก RewardVault หลัง timelock สำหรับงานที่ผ่านการตรวจ) + `zetaphy work` / `zetaphy bounty`: [docs/future/useful-work.th.md](../docs/future/useful-work.th.md) |
+| ความปลอดภัยข้ามเชน (testnet, docs/future/crosschain-assist.th.md) | `NeuroOracleSender` + `NeuroOracle`: ส่งต่อธงของ Neuro ไปยัง EVM testnet อื่นผ่าน Hyperlane (`zetaphy immune push/coverage`, `scripts/neuro-oracle.js`) และไป Osmosis ผ่าน IBC (`cosmwasm/neuro-oracle-osmo`) · `NeuroAttest`: ใบรับรอง "Neuro-checked" (`zetaphy certify`) · `NeuroAnchor` + `zetaphy attest-pq`: ไฟล์รายงานที่ลงนามด้วย ML-DSA-44 · `HackInsurance`: ต้นแบบประกันการถูกแฮ็กแบบพาราเมตริก (testnet เท่านั้น) |
 
 **ยังไม่มีเงินจริงในขั้นไหนเลย:** ขั้น 3 ขึ้นไปบน mainnet ต้องผ่านประตูในหัวข้อ "ก่อนเงินจริง" ท้ายไฟล์ก่อน
 
@@ -1054,6 +1056,13 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 | เวลาท้าทาย (โหวต `set-challenge-window`) | เท่าเวลาหมดงาน (600 วินาที) |
 | ร่างป้องกันเงียบได้ไม่เกิน (โหวต `set-defender-timeout`) | 6 ชั่วโมง |
 
+## ModelRegistry (ทะเบียนโมเดล AI, skill, prompt, ชุดกฎ)
+
+`contracts/ModelRegistry.sol`: ต่อ (id, version) เก็บ sha256 ของ manifest, Merkle root ของชิ้น, ขนาด, license, ผู้เขียน และสถานะ
+เผยแพร่หรือเปลี่ยนสถานะได้เฉพาะ governance (timelock) guardian ทำได้แค่ระงับทันที และ revoked ถาวร
+`node scripts/model-registry.js deploy | propose | status | show` เทสต์ใน `test/modelregistry.test.js`
+เบราว์เซอร์ตรวจทุกชิ้นที่ดาวน์โหลดกับทะเบียนนี้: [docs/future/browser-ai.th.md](../docs/future/browser-ai.th.md)
+
 ## ทดสอบ
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)
@@ -1081,3 +1090,9 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 
 สัญญาเหล่านี้ยังไม่ผ่าน audit ใช้กับ ZETAPHY testnet เท่านั้น รายละเอียดด้านความปลอดภัยเก็บแยกไว้สำหรับทีม
 
+
+## AI agent (ต้นแบบบน testnet)
+
+AgentRegistry (ตัวตน กุญแจ ML-DSA-44 เงินประกัน constitution คำร้อง), IntentExecutor (Proof of Intent), LabelRegistry + WebAuthnVerifier
+(ป้ายคน/agent ตรวจ passkey ด้วย precompile P-256 0x…0100), AgentPolicyWallet (รั้วกั้นกระเป๋า AI) และ CosignCommittee (runner ร่วมเซ็นหลังตรวจด้วย Neuro)
+CLI: `zetaphy intent …`, `zetaphy cosign …` รายละเอียด: [docs/future/agents.th.md](../docs/future/agents.th.md)

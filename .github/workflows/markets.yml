@@ -1,0 +1,156 @@
+# Risk forecasts keeper + evolving detectors (docs/future/markets.md). TESTNET ONLY.
+#
+# Not a server: scheduled jobs on the free Actions allowance.
+#   keeper  (hourly): pokes open risk-forecast questions, proposes answers from chain facts,
+#           finalizes undisputed ones (zetaphy-network/scripts/markets.js keeper). Runs only when the
+#           repository variable RISK_FORECASTS holds the contract address; sends only when the secret
+#           MARKETS_KEY (a testnet key with a little testnet ZETAPHY for gas) is set, else a dry run.
+#   evolve  (weekly): breeds new detector variants from the best living organisms (DetectorPool, read
+#           with DETECTOR_POOL) or the seed spec, on the synthetic corpus; a child is kept only if it
+#           beats its parent on held-out rows. The children are uploaded as an artifact.
+#   submit  (weekly, after evolve): only when the variable DETECTORS_SUBMIT is 'on' and MARKETS_KEY is
+#           set: commits the children's specs to the branch detectors/population (their URI) and
+#           registers them (ForesightRegistry model + DetectorPool organism with a testnet stake).
+# Actions pinned by SHA; the key goes to a 0600 file, is masked, and never printed.
+
+name: Markets
+
+on:
+  schedule:
+    - cron: '23 * * * *'   # keeper, hourly
+    - cron: '43 5 * * 2'   # evolve, Tuesdays 05:43 UTC
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'keeper or evolve'
+        required: true
+        default: 'keeper'
+
+permissions: {}
+
+concurrency:
+  group: markets-${{ github.event.schedule || inputs.job }}
+  cancel-in-progress: false
+
+env:
+  ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+
+jobs:
+  keeper:
+    if: (github.event.schedule == '23 * * * *' || inputs.job == 'keeper') && vars.RISK_FORECASTS != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: zetaphy-network
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - name: Load the testnet key (if set)
+        env:
+          KEY: ${{ secrets.MARKETS_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then echo "SEND=" >> "$GITHUB_ENV"; exit 0; fi
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/mk"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/k"; unset k KEY
+          echo "KEYFILE=$H/k" >> "$GITHUB_ENV"; echo "SEND=--send" >> "$GITHUB_ENV"
+      - name: Keeper
+        env:
+          RISK_FORECASTS: ${{ vars.RISK_FORECASTS }}
+        run: node scripts/markets.js keeper --forecasts "$RISK_FORECASTS" $SEND
+      - name: Forget the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/mk/k"
+
+  evolve:
+    if: github.event.schedule == '43 5 * * 2' || inputs.job == 'evolve'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+        working-directory: zetaphy-neuro
+      - run: npm ci --no-audit --no-fund
+        working-directory: zetaphy-network
+      - name: Parents (best living organisms, else the seed population)
+        env:
+          DETECTOR_POOL: ${{ vars.DETECTOR_POOL }}
+        run: |
+          if [ -n "$DETECTOR_POOL" ]; then
+            node zetaphy-network/scripts/markets.js detectors-parents --pool "$DETECTOR_POOL" --dir zetaphy-neuro/ml/detectors/population --out "$RUNNER_TEMP/parents.json" || true
+          fi
+          if [ ! -s "$RUNNER_TEMP/parents.json" ] || [ "$(jq length "$RUNNER_TEMP/parents.json")" = 0 ]; then
+            node -e 'const fs=require("fs");const d="zetaphy-neuro/ml/detectors/population";fs.writeFileSync(process.argv[1],JSON.stringify(fs.readdirSync(d).filter(f=>f.endsWith(".json")).map(f=>({organism:0,spec:JSON.parse(fs.readFileSync(d+"/"+f,"utf8"))}))))' "$RUNNER_TEMP/parents.json"
+          fi
+      - name: Labelled rows (synthetic corpus + recorded red-team evasions)
+        working-directory: zetaphy-neuro
+        run: node ml/data/build-corpus.js --per-family 30 --dispatch 300
+      - name: Breed
+        working-directory: zetaphy-neuro
+        run: |
+          node ml/detectors/mutate.js --parents "$RUNNER_TEMP/parents.json" --rows ml/data/out/corpus.jsonl,ml/data/redteam/evasions.jsonl \
+            --round "$(date -u +%G%V)" --n 6 --out "$RUNNER_TEMP/detectors"
+          cat "$RUNNER_TEMP/detectors/summary.json" | jq '{round, heldRows, children: [.children[] | {name, specHash, brierHeld, parentHeld}]}' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: detectors
+          path: ${{ runner.temp }}/detectors
+
+  submit:
+    needs: evolve
+    if: vars.DETECTORS_SUBMIT == 'on' && vars.DETECTOR_POOL != '' && vars.FORESIGHT != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write   # the branch detectors/population only
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: detectors
+          path: ${{ runner.temp }}/detectors
+      - run: npm ci --no-audit --no-fund
+        working-directory: zetaphy-network
+      - name: Publish the specs (content-addressed) on detectors/population
+        run: |
+          [ -n "$(ls "$RUNNER_TEMP/detectors/specs" 2>/dev/null)" ] || { echo "no children this week"; exit 0; }
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin detectors/population && git checkout -B detectors/population origin/detectors/population || git checkout -B detectors/population
+          cp "$RUNNER_TEMP"/detectors/specs/*.json zetaphy-neuro/ml/detectors/population/
+          git add zetaphy-neuro/ml/detectors/population && git commit -m "detectors: round $(jq .round "$RUNNER_TEMP/detectors/summary.json")" && git push origin detectors/population || true
+      - name: Load the testnet key
+        env:
+          KEY: ${{ secrets.MARKETS_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::MARKETS_KEY is not set"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/mk"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/k"; unset k KEY
+          echo "KEYFILE=$H/k" >> "$GITHUB_ENV"
+      - name: Register the children
+        env:
+          DETECTOR_POOL: ${{ vars.DETECTOR_POOL }}
+          FORESIGHT: ${{ vars.FORESIGHT }}
+        run: |
+          [ -s "$RUNNER_TEMP/detectors/summary.json" ] || exit 0
+          node zetaphy-network/scripts/markets.js detectors-submit --summary "$RUNNER_TEMP/detectors/summary.json" --pool "$DETECTOR_POOL" --foresight "$FORESIGHT" \
+            --uri-base "https://raw.githubusercontent.com/${{ github.repository }}/detectors/population/zetaphy-neuro/ml/detectors/population" --stake 1 --send
+      - name: Forget the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/mk/k"

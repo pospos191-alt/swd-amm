@@ -10,6 +10,13 @@ interface IThreatRegistryView {
     function isContractEnforced(address who) external view returns (bool enforced, uint8 reason);
 }
 
+/// The part of Neuro's on-chain scorer (zetaphy-network/contracts/NeuroScore.sol) the
+/// DEX reads: a token's score under the ACTIVE model (the calibrated logit x 1e7),
+/// known = false when it was never scored or only under an older model.
+interface INeuroScoreView {
+    function scoreOf(address token) external view returns (bool known, int256 score, uint8 level);
+}
+
 /// @title ZetaphyFactory: creates one ZetaphyPair per token pair (CREATE2) and
 ///        holds the DEX's governance settings.
 /// @notice Governance (a multisig on the testnet) may:
@@ -20,6 +27,12 @@ interface IThreatRegistryView {
 ///                                    liquidity with, a token whose flag is ENFORCED there.
 ///                                    Selling a token for the native coin and removing
 ///                                    liquidity never ask the registry, so they always work;
+///           - setNeuroScore(s, t):   Neuro's on-chain model score (NeuroScore). Zero (the
+///                                    default) = off; otherwise the router refuses to swap
+///                                    INTO a token whose score under the active model is
+///                                    >= t (a calibrated logit x 1e7: p = sigmoid(t / 1e7)).
+///                                    A token with no current score is not refused; selling
+///                                    and liquidity never ask the scorer;
 ///           - sweep the router's stray native coins (ZetaphyRouter.sweep; never user funds);
 ///           - transfer governance (two steps: setGovernance, then acceptGovernance).
 ///         Governance cannot move anyone's funds, change the 0.3% fee, or stop the
@@ -34,6 +47,9 @@ contract ZetaphyFactory {
     address public pendingGovernance;
     address public feeTo;
     address public threatRegistry;
+    /// NeuroScore (zero = the score check is off) and its threshold, in one slot.
+    address public neuroScore;
+    int96 public scoreThreshold;
 
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
@@ -47,6 +63,7 @@ contract ZetaphyFactory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint256 allPairsLength);
     event FeeToSet(address feeTo);
     event ThreatRegistrySet(address registry);
+    event NeuroScoreSet(address scorer, int96 threshold);
     event GovernanceProposed(address governance);
     event GovernanceSet(address governance);
 
@@ -56,6 +73,7 @@ contract ZetaphyFactory {
     error NotGovernance();
     error NotPendingGovernance();
     error NotARegistry();
+    error NotAScorer();
 
     modifier onlyGov() {
         if (msg.sender != governance) revert NotGovernance();
@@ -112,6 +130,27 @@ contract ZetaphyFactory {
         }
         threatRegistry = registry;
         emit ThreatRegistrySet(registry);
+    }
+
+    /// Gas for the query below; the same cap as ZetaphyRouter.SCORE_GAS.
+    uint256 public constant SCORE_GAS = 50_000;
+
+    /// Zero switches the router's score check off. A nonzero address must answer
+    /// scoreOf within SCORE_GAS (checked here), so a typo cannot stop every buy.
+    /// Governance on the testnet = the ZetaphyTimelock, so turning it on waits the delay.
+    function setNeuroScore(address scorer, int96 threshold) external onlyGov {
+        if (scorer != address(0)) {
+            (bool ok, bytes memory r) = scorer.staticcall{gas: SCORE_GAS}(abi.encodeCall(INeuroScoreView.scoreOf, (address(this))));
+            if (!ok || r.length < 96) revert NotAScorer();
+        }
+        neuroScore = scorer;
+        scoreThreshold = threshold;
+        emit NeuroScoreSet(scorer, threshold);
+    }
+
+    /// What the router's buy check needs, in one call.
+    function buyChecks() external view returns (address registry, address scorer, int256 threshold) {
+        return (threatRegistry, neuroScore, scoreThreshold);
     }
 
     function setGovernance(address next) external onlyGov {

@@ -34,6 +34,11 @@
 #   gov.sh ibc-hold <delay-seconds> [guardian]           propose the IBC large-transfer hold delay and guardian
 #   gov.sh ibc-hold-rule <denom|*> <min-amount> <bps>    propose when an inbound transfer is held (0 0 removes the rule; "*": bps from min-amount up)
 #   gov.sh ibc-holds                                     inbound transfers waiting
+#   ---- v5 protocol research (docs/future/chain-protocol.md; all off until voted) ----
+#   gov.sh ai-model <model.hex | ->                      propose the AI precompile's model (tools/gbdt-export.mjs; - removes it)
+#   gov.sh immune '<json>'                               immune system settings, e.g. '{"enabled":true,"enforce_bps":9000,"hold_bps":8000}'
+#   gov.sh breaker '<json>'                              watch a bridge (circuit breaker); "enabled":false stops watching it
+#   gov.sh breaker-rearm <bridge 0x…>                    let a tripped breaker fire again (after governance unpaused the bridge)
 #   gov.sh ibc-hold-cancel <id>                          the guardian (FROM) returns a held transfer to its sender
 #   gov.sh ibc-usdc-denom <channel>                      USDC from Noble via that channel: ibc/<hash>, ERC-20 0x…
 #   gov.sh ibc-usdc-ratelimit <channel> [send%] [recv%] [hours]   cap USDC on it, or change the cap (default 1 1 24)
@@ -263,6 +268,17 @@ case "${1:-}" in
     dn=${2:?denom (ibc/… or *)}; min=${3:?minimum amount in the base unit (0: none)}; bps=${4:?share of supply in basis points (0: none)}
     [[ "$min" =~ ^[0-9]+$ && "$bps" =~ ^[0-9]+$ ]] || { echo "min-amount and bps: whole numbers"; exit 1; }
     submit tx security-proposal ibc-hold-rule "$dn" "$min" "$bps" --deposit "$DEPOSIT" ;;
+  ai-model)
+    f=${2:?model hex file (node zetaphy-chain/tools/gbdt-export.mjs > model.hex), or - to remove}
+    [ "$f" = - ] || [ -f "$f" ] || { echo "$f: no such file"; exit 1; }
+    submit tx security-proposal ai-model "$f" --deposit "$DEPOSIT" ;;
+  immune|breaker)
+    j=${2:?settings as JSON}
+    echo "$j" | jq -e . >/dev/null || { echo "settings: JSON"; exit 1; }
+    submit tx security-proposal "$1" "$j" --deposit "$DEPOSIT" ;;
+  breaker-rearm)
+    b=${2:?bridge 0x…}; [[ "$b" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "bridge: 0x + 40 hex"; exit 1; }
+    submit tx security-proposal breaker-rearm "$b" --deposit "$DEPOSIT" ;;
   ibc-holds)
     rpc=${EVM_RPC:-http://127.0.0.1:8545}
     curl -fsS "$rpc" -H 'content-type: application/json' \
@@ -466,5 +482,5 @@ case "${1:-}" in
     $ZETAPHYD q wasm list-code $QF | jq -c '.code_infos[]? | {code_id, creator, data_hash, instantiate_permission}' ;;
 
   *)
-    sed -n '8,51p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,56p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

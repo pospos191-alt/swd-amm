@@ -5,6 +5,8 @@ import { formatZeta, toEvm, toBech32, bech32Decode, parseUnits, formatUnits, enc
 import { withFallback } from './i18n.js';
 import { EARN, EARN_METHODS, SAPHAN } from './pages-i18n.js';
 import mine, { mineAddress } from './mine.js';
+import agents from './agents.js';
+import { ASSIST_PAGES } from './assist.js';
 
 /** The Earn words in ctx.lang (English underneath), with each method's commands, icon and tab. */
 const earnText = (ctx) => {
@@ -573,4 +575,4 @@ const saphan = {
   },
 };
 
-export const PAGES = { earn, mine, saphan, analytics, defi, leaderboard, dev };
+export const PAGES = { earn, mine, saphan, agents, analytics, defi, leaderboard, dev, ...ASSIST_PAGES };

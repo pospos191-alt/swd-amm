@@ -1,0 +1,13 @@
+{
+  "note": "What ModelRegistry must hold for this pack. Until a registry is deployed and this release published there through the timelock, a page may only use it as a release PINNED in its own code (same trust as the page).",
+  "registryId": "0xb11cf1692c32a5697b13a3bd33e65fa906bae2fd92b4b40c6a1fc5623b15f8ef",
+  "kind": "model",
+  "name": "neuro-ml-gbdt",
+  "version": 1,
+  "manifestHash": "0x5b4896cc85d32a230a05099ffb3855f39a03ac61895af4760edbe0d0517c2302",
+  "chunkRoot": "0xfa1b039d506793c52e004260d82657279543fc143cf992919adb67d8589265db",
+  "size": 87087,
+  "chunkSize": 16384,
+  "license": "BUSL-1.1",
+  "runtime": "neuro-ml-gbdt/1"
+}

@@ -8,6 +8,13 @@
 //   openai     any OpenAI-compatible /chat/completions endpoint (https, or
 //              http on this machine only)
 //   ollama     a local Ollama, OpenAI-compatible at http://localhost:11434/v1
+//   browser    a model run inside this browser (ai/browser/engine.js), loaded
+//              by the verified loader (ai/browser/loader.js) from mirrors or
+//              peers and checked chunk by chunk against the on-chain
+//              ModelRegistry. No key, no request leaves the page for it.
+//              settings.engine is the loaded engine; it gets the context
+//              object (not the prompt text) and its JSON answer goes through
+//              the same validator as every other provider's.
 
 import { modelText } from './sanitize.js';
 
@@ -108,12 +115,21 @@ export async function callOpenAICompatible({ baseUrl, key = '', model, system, u
   return { text, model: typeof out.model === 'string' ? out.model : m };
 }
 
+/** The in-browser provider: the engine writes the JSON from the context (ai/browser/engine.js). */
+export async function callBrowserModel(engine, local) {
+  if (!engine?.report) throw new ProviderError('the in-browser model is not loaded yet');
+  if (!local?.ctx) throw new ProviderError('no context');
+  const out = local.task === 'answer' ? engine.answer(local) : engine.report(local);
+  return { text: JSON.stringify(out), model: engine.id };
+}
+
 /**
  * One entry point for every provider.
- * @param {{provider:'anthropic'|'openai'|'ollama', key?:string, model?:string, baseUrl?:string}} settings
+ * @param {{provider:'anthropic'|'openai'|'ollama'|'browser', key?:string, model?:string, baseUrl?:string, engine?:object}} settings
  */
-export function complete(settings, { system, user, schema, fetchImpl, signal, timeoutMs }) {
+export function complete(settings, { system, user, schema, fetchImpl, signal, timeoutMs, local }) {
   const p = settings?.provider;
+  if (p === 'browser') return callBrowserModel(settings.engine, local);
   if (p === 'anthropic') return callAnthropic({ key: settings.key, model: settings.model || DEFAULT_MODELS.anthropic, system, user, schema, fetchImpl, signal, ...(timeoutMs ? { timeoutMs } : {}) });
   if (p === 'openai' || p === 'ollama') {
     return callOpenAICompatible({

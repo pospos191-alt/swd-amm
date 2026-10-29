@@ -315,6 +315,18 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 .wb-msg:empty { display: none; }
 @media (max-width: 640px) { #wb-btn { max-width: 40vw; padding: 8px 10px; } }
 
+/* Mine page modes and "Do useful work" (work.js) */
+.wk-mode { display: inline-flex; gap: 4px; padding: 4px; margin-bottom: 14px; border: 1px solid var(--line-2); border-radius: 99px; background: var(--surface); max-width: 100%; flex-wrap: wrap; }
+.wk-mode-btn { border: 0; background: transparent; color: var(--dim); font: inherit; font-size: 13.5px; font-weight: 600; padding: 7px 14px; border-radius: 99px; cursor: pointer; }
+.wk-mode-btn.on { background: var(--card-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
+.wk-mode-btn:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; }
+.mn-grid.wk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 1000px) { .mn-grid.wk-grid { grid-template-columns: minmax(0, 1fr); } }
+.wk-card { display: flex; flex-direction: column; gap: 10px; }
+.wk-card h2 { margin: 0; font-size: 17px; }
+.wk-card h3 { margin: 4px 0 0; font-size: 14px; }
+.wk-card .notice { margin: 0; color: var(--accent-2); }
+.wk-finding { margin: 0; padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); white-space: pre-wrap; word-break: break-all; }
 /* Mine testnet ZETAPHY (mine.js) and the Earn page's faucet form */
 .mn-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); align-items: start; }
 .mn-grid .howto { gap: 4px; }
@@ -400,3 +412,21 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 
 /* wallet-safety.js: the large-balance banner floats over the top of the stage (the hub fits one screen) */
 .stage > .ws-banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 6; width: min(760px, calc(100% - 24px)); margin: 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+
+/* ---------- Agents (agents.js): intent card beside labels / agents / wallet cards ---------- */
+.ag-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; flex: none; }
+.ag-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ag-card { gap: 8px; overflow-wrap: anywhere; }
+.ag-card textarea { width: 100%; box-sizing: border-box; resize: vertical; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 12px; color: inherit; font: inherit; outline: none; }
+.ag-card textarea:focus { border-color: var(--accent); }
+.ag-card .sp-form input, .ag-card .sp-form select { width: 100%; box-sizing: border-box; }
+.ag-model summary { cursor: pointer; color: var(--dim); font-size: 13px; margin-bottom: 6px; }
+.ag-wide { grid-column: 1 / -1; margin: 0; }
+.ag-card .row { flex-wrap: wrap; }
+.ag-review th { width: 170px; }
+@media (max-width: 1000px) { .ag-grid { grid-template-columns: minmax(0, 1fr); } }
+/* assistant pages (assist.js): governance items, the Neuro-checked badge in the wallet bar */
+.ga-item { padding: 10px 0; border-bottom: 1px solid var(--line, rgba(255,255,255,.08)); }
+.ga-item h3 { margin: 0 0 4px; font-size: 14px; }
+.ga-item p { margin: 2px 0; overflow-wrap: anywhere; }
+.wb-neuro { color: var(--ok, #3fb950); font-size: 11px; white-space: nowrap; }

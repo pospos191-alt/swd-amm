@@ -217,6 +217,9 @@ export function safety({ win, lang = () => 'en' }) {
    * @param {{symbol:string, decimals:number}} [o.token]  the token when `to` is one (approvals)
    * @param {bigint} [o.exact]        the amount actually needed: offered instead of an unlimited approve
    * @param {Array<[string,string]>} [o.details]  more rows
+   * @param {() => Promise<{rows?: Array<[string,string]>, warnings?: string[], note?: string}>} [o.simulate]
+   *        a pre-sign simulation (the hub's presign.js): shown under "Simulation" when it resolves, in the caller's words
+   * @param {() => Promise<string>} [o.explain]  an optional AI explanation (Neuro's AI layer, the user's own model): a button
    */
   function confirmTx(o) {
     return new Promise((resolve) => {
@@ -242,6 +245,28 @@ export function safety({ win, lang = () => 'en' }) {
       }
       const action = o.action || (ap?.kind === 'erc20' ? t('cfApprove', { spender: short(ap.spender), amount: ap.unlimited ? '∞' : fmtUnits(ap.amount, dec), token: tok }) : '');
       const hasData = typeof o.data === 'string' && o.data.length > 2;
+      // Simulation and AI explanation: filled in when they answer (the dialog never waits for them).
+      const sim = o.simulate ? el('section', { class: 'ws-sim', 'data-ws': 'sim' }, el('h4', { text: t('cfSim') }), el('p', { class: 'ws-dim', 'data-ws': 'sim-wait', text: t('cfSimWait') })) : null;
+      if (sim) {
+        Promise.resolve().then(() => o.simulate()).then((r) => {
+          sim.replaceChildren(...[el('h4', { text: t('cfSim') }),
+            (r?.rows ?? []).map(([k, v]) => row(k, v)),
+            (r?.warnings ?? []).map((w) => el('p', { class: 'ws-warn', role: 'alert', 'data-ws': 'sim-warning', text: w })),
+            r?.note ? el('p', { class: 'ws-dim', 'data-ws': 'sim-note', text: r.note }) : null].flat().filter(Boolean));
+        }, (e) => { sim.replaceChildren(el('h4', { text: t('cfSim') }), el('p', { class: 'ws-dim', 'data-ws': 'sim-note', text: String(e?.message ?? e).slice(0, 200) })); });
+      }
+      const ai = o.explain ? el('section', { class: 'ws-ai', 'data-ws': 'ai' }) : null;
+      if (ai) {
+        const btn = el('button', { type: 'button', class: 'ws-btn ghost sm', 'data-ws': 'explain', text: t('cfExplain'), onclick: async () => {
+          btn.disabled = true;
+          ai.replaceChildren(btn, el('p', { class: 'ws-dim', text: '…' }));
+          try {
+            const text = String(await o.explain()).slice(0, 1500);
+            ai.replaceChildren(el('p', { class: 'ws-dim', text: t('cfExplainNote') }), el('p', { 'data-ws': 'ai-text', text }));
+          } catch (e) { btn.disabled = false; ai.replaceChildren(btn, el('p', { class: 'ws-warn', text: t('cfExplainErr', { msg: String(e?.message ?? e).slice(0, 200) }) })); }
+        } });
+        ai.append(btn);
+      }
       const d = modal('ws-confirm', t('cfTitle'), [
         row(t('cfNet'), o.network),
         row(t('cfFrom'), o.from, 'mono'),
@@ -250,6 +275,8 @@ export function safety({ win, lang = () => 'en' }) {
         row(t('cfAction'), action || (hasData ? o.data.slice(0, 10) : '')),
         (o.details ?? []).map(([k, v]) => row(k, v)),
         warn,
+        sim,
+        ai,
         el('p', { class: 'ws-dim', text: t('cfHint') }),
         el('div', { class: 'ws-row end' },
           el('button', { type: 'button', class: 'ws-btn ghost', 'data-ws': 'cancel', text: t('cancel'), onclick: () => d.close() }),

@@ -323,6 +323,15 @@ and the committed verdict is exactly the same with or without it. A failing mode
 
 **Not part of the skill id.** `ai/` sits outside `src/`, so adding or changing the AI layer is not a new Neuro skill and never needs a governance vote;
 runners and the CLI produce the same verdicts as before. No in-browser model is shipped (it would need third-party scripts).
+### In this browser: a verified model, no key (`ai/browser/`)
+
+Provider "In this browser": a model loaded by a verified loader (chunks from this site, GitHub Releases, IPFS or other
+browsers over WebRTC, each checked against hashes held by the on-chain ModelRegistry) and run in plain JS (CSP unchanged).
+Today it is the learned risk score with fixed templates, not a language model. The checkbox "Also use records from the
+ZETAPHY chain" adds ThreatRegistry flags and past verdicts as `CHAIN<n>` context for any provider (`ai/onchain.js`).
+Pack a model: `npm run model-pack -- --in <file> --name <n> --version <v> --runtime <r> --license <spdx>`.
+Design, limits and what is missing: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
+
 ## Money flow (`graph/`)
 
 For a token or contract, Neuro can trace where its money came from and went, on demand ("Trace money flow" on the

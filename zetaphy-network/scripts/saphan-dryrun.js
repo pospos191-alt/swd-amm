@@ -20,6 +20,14 @@
 //   the delay; synthetic.sendBack (burn) -> Mailbox.process on ZETAPHY (signed for origin = destination) -> vault
 //   release after the delay; deployed closed, then opened; and the refusals. Prints TOKEN DRY RUN OK.
 //
+//   node scripts/saphan-dryrun.js --chain <name> --neuro-oracle [--kit]
+//
+// The Neuro cross-chain security oracle instead (contracts/NeuroOracle.sol, scripts/neuro-oracle.js, item 18 of
+// docs/future/crosschain-assist.md): a ThreatRegistry flag on ZETAPHY -> NeuroOracleSender.push -> Mailbox.process on
+// the destination (signed by "our" validators) -> NeuroOracle; check(token), out-of-order delivery, the refusals and
+// the coverage meter. Prints NEURO ORACLE DRY RUN OK. --kit: no Hyperlane core needed (two plain local chains, e.g.
+// two anvils): the test kit's Mailbox and message-id multisig ISM (test/helpers/HyperlaneKit.sol) stand in for core.
+//
 // env: ORIGIN_RPC, ZETAPHY_RPC, DEV_KEY (funded on both), ORIGIN_CORE / ZETAPHY_CORE (optional: the
 // addresses.yaml of a local Hyperlane core deploy; without one, the chain table's addresses are used,
 // as on a fork). Prints DRY RUN OK at the end.
@@ -88,6 +96,7 @@ async function main() {
   const dev = new Wallet(process.env.DEV_KEY);
   const os = new NonceManager(dev.connect(op)), zs = new NonceManager(dev.connect(zp));
   log(`dry run: ${C.displayName} (${C.chainId}) <-> ZETAPHY (local), deployer ${dev.address}`);
+  if (process.argv.includes('--neuro-oracle')) return neuroOracleDryRun({ t, C, op, zp, os, zs, dev, ours, sourceValidator, kit: process.argv.includes('--kit') });
   log(JSON.stringify(await check(t, C, op, dev.address)));
   const tokenArg = process.argv.includes('--token') ? process.argv[process.argv.indexOf('--token') + 1] : null;
   if (tokenArg) return tokenDryRun({ t, C, op, zp, os, zs, dev, ours, sourceValidator, key: tokenArg });
@@ -282,4 +291,87 @@ async function tokenDryRun({ t, C, op, zp, os, zs, dev, ours, sourceValidator, k
   log(`TOKEN DRY RUN OK: ${K.symbol} -> ${C.displayName} -> ZETAPHY through the real Mailboxes and ISMs; nothing was sent to any testnet`);
 }
 
-main().then(() => process.exit(0), (e) => { console.error(`dry run FAILED: ${e.shortMessage ?? e.message}`); process.exit(1); });
+/**
+ * The Neuro cross-chain security oracle on the same two local chains, with the deploy code of scripts/neuro-oracle.js.
+ * ZETAPHY gets a NeuroJobs and a ThreatRegistry of its own (quorum 2, two throwaway runners) so the dry run can flag.
+ */
+async function neuroOracleDryRun({ t, C, op, zp, os, zs, dev, ours, sourceValidator, kit }) {
+  const { deploySender, deployReceiver, wire } = await import('./neuro-oracle.js');
+  const { senderContract, oracleContract, measure, coverageText } = await import('../src/neurooracle.js');
+  const E = 10n ** 18n;
+  const deploy = async (a, args, signer) => { const k = await new ContractFactory(a.abi, a.bytecode, signer).deploy(...args); await k.waitForDeployment(); return k; };
+  let hookZ = t.zetaphy.merkleTreeHook, ism = null;
+  if (kit) {
+    const { kitArtifacts } = await import('../test/helpers/hyperlanekit.js');
+    const K = kitArtifacts();
+    t.zetaphy.mailbox = getAddress((await deploy(K.KitMailbox, [t.zetaphy.domain], zs)).target);
+    C.mailbox = getAddress((await deploy(K.KitMailbox, [C.domain], os)).target);
+    ism = getAddress((await deploy(K.KitMessageIdMultisigIsm, [ours.map((w) => w.address), 2], os)).target);
+    hookZ = null;
+    log(`kit: Mailbox ${t.zetaphy.mailbox} (ZETAPHY), Mailbox ${C.mailbox} (${C.name}), our ISM ${ism}`);
+  }
+  const zMailbox = new Contract(t.zetaphy.mailbox, MAILBOX, zs);
+  const oMailbox = new Contract(C.mailbox, MAILBOX, os);
+  // 1. ZETAPHY: NeuroJobs + ThreatRegistry with two bonded runners (stand-ins for the testnet's)
+  const jobs = await deploy(art('NeuroJobs'), [100n * E, E, E / 10n, 120, 600, 3600, 1000n * E], zs);
+  // NonceManager: right after a receipt a node can still report the old pending nonce
+  const runners = [Wallet.createRandom(), Wallet.createRandom()].map((w) => Object.assign(new NonceManager(w.connect(zp)), { address: w.address }));
+  for (const w of runners) {
+    await (await zs.sendTransaction({ to: w.address, value: 101n * E })).wait();
+    await (await jobs.connect(w).register({ value: 100n * E })).wait();
+  }
+  const reg = await deploy(art('ThreatRegistry'), [await jobs.getAddress(), 2, 0, dev.address, 600], zs);
+  const flagKey = async (key, on) => {
+    for (const w of runners) await (await reg.connect(w).vote(key, on, on ? 1 : 0, on ? '0x' + 'e7'.repeat(32) : '0x' + '00'.repeat(32), on ? 'neuro:dry-run' : '')).wait();
+  };
+  // 2. the sender, 3. the receiver (our ISM; roles as the route's), 4. the route
+  const S = await deploySender(t, zp, zs, { threats: await reg.getAddress(), jobs: await jobs.getAddress() });
+  log(`ZETAPHY: NeuroOracleSender ${S.sender}`);
+  const R = await deployReceiver(t, C, op, os, { sender: S.sender, ism, ...(kit ? { multisig: dev.address, timelock: dev.address } : {}) });
+  log(`${C.name}: NeuroOracle ${R.oracle} (ISM ${R.ism}, governance ${R.governance})`);
+  await wire(t, zs, S.sender, { [C.name]: R.oracle });
+  const sender = new Contract(S.sender, art('NeuroOracleSender').abi, zs);
+  const oracle = new Contract(R.oracle, art('NeuroOracle').abi, os);
+  const sign = async (m, signers) => {
+    if (!hookZ) return messageIdMetadata(m, signers, {});
+    const [root, index] = await new Contract(hookZ, HOOK, zp).latestCheckpoint();
+    return messageIdMetadata(m, signers, { merkleTreeHook: hookZ, root, index: Number(index) });
+  };
+  const pushKeys = async (keys) => messageOf(await (await sender.push(C.domain, keys, { value: await sender.quote(C.domain, keys) })).wait());
+
+  // 5. a token's address on the destination flagged on ZETAPHY -> mirrored -> check(token)
+  const token = Wallet.createRandom().address;
+  const key = await reg.addressKey(C.chainId, token);
+  await flagKey(key, true);
+  if (!(await sender.pending(C.domain, [key]))[0]) fail('the flag is not pending');
+  const m = await pushKeys([key]);
+  await refused('a mirror update signed by 1 of our 2 validators', async () => oMailbox.process.staticCall(await sign(m, [ours[0]]), m));
+  await refused(`a mirror update signed by ${C.displayName}'s validator`, async () => oMailbox.process.staticCall(await sign(m, [sourceValidator]), m));
+  await (await oMailbox.process(await sign(m, ours), m, { gasLimit: 1_500_000 })).wait();
+  await refused('the same update again', async () => oMailbox.process.staticCall(await sign(m, ours), m));
+  const [f, , reason] = await oracle.check(token);
+  if (!f || Number(reason) !== 1) fail('check(token) does not show the flag');
+  log(`mirror: the flag on ${token} arrived; check(token) = flagged, reason ${reason}`);
+  // 6. out of order: flag then clear another key; the clear arrives first, the old flag after: stays cleared
+  const key2 = '0x' + 'f2'.repeat(32);
+  await flagKey(key2, true);
+  const mA = await pushKeys([key2]);
+  await flagKey(key2, false);
+  const mB = await pushKeys([key2]);
+  await (await oMailbox.process(await sign(mB, ours), mB, { gasLimit: 1_500_000 })).wait();
+  await (await oMailbox.process(await sign(mA, ours), mA, { gasLimit: 1_500_000 })).wait(); // a relayer adds a margin to the estimate too
+  if ((await oracle.isFlagged(key2))[0]) fail('an older message rolled a cleared key back');
+  log('mirror: a delayed older message did not roll a cleared key back');
+  // 7. a validly signed update from a contract that is not the sender
+  const body = await sender.threatsBody([key]);
+  const rcF = await (await zMailbox.dispatch(C.domain, bytes32(R.oracle), body, { value: await zMailbox.quoteDispatch(C.domain, bytes32(R.oracle), body) })).wait();
+  const mF = messageOf(rcF);
+  await refused('an update from a sender that is not NeuroOracleSender (validly signed)', async () => oMailbox.process.staticCall(await sign(mF, ours), mF));
+  // 8. the coverage meter
+  const cov = await measure(senderContract(S.sender, zp), [{ name: C.name, oracle: oracleContract(R.oracle, op) }]);
+  if (cov.mirrors[0].share !== 1) fail(`coverage ${JSON.stringify(cov)}`);
+  log(`coverage: ${C.name} ${coverageText(cov.mirrors[0].share)} of ${cov.flagged} flag(s)`);
+  log(`NEURO ORACLE DRY RUN OK: ZETAPHY -> ${C.displayName} through ${kit ? "the kit's" : 'the real'} Mailboxes and our ISM; nothing was sent to any testnet`);
+}
+
+main().then(() => process.exit(0), (e) => { console.error(`dry run FAILED: ${e.shortMessage ?? e.message}`); if (process.env.DRY_DEBUG) console.error(e.stack); process.exit(1); });

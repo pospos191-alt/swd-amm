@@ -1,0 +1,27 @@
+{
+  "format": "zetaphy-manifest/1",
+  "kind": "model",
+  "name": "neuro-ml-gbdt",
+  "version": 1,
+  "runtime": "neuro-ml-gbdt/1",
+  "license": "BUSL-1.1",
+  "size": 87087,
+  "chunkSize": 16384,
+  "sha256": "3ec693f33ea613abc7549655f6be64c7c50aaecf4cee3ee968a6c49b985f8d49",
+  "root": "fa1b039d506793c52e004260d82657279543fc143cf992919adb67d8589265db",
+  "chunks": [
+    "b426f2bc4b87db3f698126bb2946f9fb37610b0b2daf1443015eea00ddafa088",
+    "cb7f7dc6407b7b663d139f3af2b9fa408e373af2c5533ead8b3b5f7e265591ed",
+    "43eaa9c04a77a56723153792f261f9cc310de86d8d35919327b8c09ea61cea59",
+    "fdb7ca42bcc4587121ab8eb87ad304b87ff0ee7d28312fee33918d06bef4f87f",
+    "8ab9528efd47ae59ccb052df684d39ff287be58e6b9288087af88ad9cae430a1",
+    "3cbc945a2183da718e760670a6652144b6cda1c5e091be47ef843aba93934267"
+  ],
+  "mirrors": [
+    {
+      "label": "same-site",
+      "chunk": "./{hash}.bin"
+    }
+  ],
+  "meta": {}
+}

@@ -211,3 +211,18 @@ export async function checkToken(rpc, registry, token) {
     return { status: 'unknown', reason: 0, via: null, error: String(e?.message ?? e) };
   }
 }
+
+/**
+ * The "Neuro-checked" certificate of `token` (NeuroAttest.badge, docs/future/crosschain-assist.md item 19):
+ * { checked, uid, by } or null (no NeuroAttest configured, none for this token, or no answer). A check, not a guarantee.
+ */
+export async function checkBadge(rpc, attest, token) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(attest ?? '') || !/^0x[0-9a-fA-F]{40}$/.test(token ?? '')) return null;
+  try {
+    const h = String(await rpc('eth_call', [{ to: attest, data: `0x88e179c7${token.slice(2).toLowerCase().padStart(64, '0')}` }, 'latest'])).replace(/^0x/, '');
+    if (h.length < 7 * 64) return null;
+    const uid = BigInt(`0x${h.slice(64, 128)}`);
+    if (uid === 0n) return null;
+    return { checked: BigInt(`0x${h.slice(0, 64)}`) !== 0n, uid, by: `0x${h.slice(5 * 64 + 24, 6 * 64)}` };
+  } catch { return null; }
+}

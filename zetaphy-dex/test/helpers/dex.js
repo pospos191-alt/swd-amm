@@ -7,9 +7,10 @@ import { createChain, ZETA } from './evm.js';
 
 export { ZETA };
 export const ART_DIR = new URL('../../artifacts/', import.meta.url);
-const NAMES = ['ZetaphyFactory', 'ZetaphyPair', 'ZetaphyRouter', 'WZETAPHY', 'TestToken', 'FlashBorrower', 'ReentrantToken', 'MockRunners', 'RevertProbe', 'GasHogRegistry', 'ForceSend'];
+const NAMES = ['ZetaphyFactory', 'ZetaphyPair', 'ZetaphyRouter', 'WZETAPHY', 'TestToken', 'FlashBorrower', 'ReentrantToken', 'MockRunners', 'RevertProbe', 'GasHogRegistry', 'GasHogScorer', 'ForceSend'];
 const raw = Object.fromEntries(NAMES.map((n) => [n, JSON.parse(readFileSync(new URL(`${n}.json`, ART_DIR), 'utf8'))]));
 raw.ThreatRegistry = JSON.parse(readFileSync(new URL('../../../zetaphy-network/artifacts/ThreatRegistry.json', import.meta.url), 'utf8'));
+raw.NeuroScore = JSON.parse(readFileSync(new URL('../../../zetaphy-network/artifacts/NeuroScore.json', import.meta.url), 'utf8'));
 
 // Every contract's errors in every interface, so an error bubbling up from a
 // pair through the router (e.g. K) is reported by name.

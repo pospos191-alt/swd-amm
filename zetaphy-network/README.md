@@ -21,6 +21,8 @@
 | 4 · AI compute market paid in ZETAPHY | `ComputeMarket`: the AI job deposit is held by the contract until the work is delivered and accepted |
 | 1 contract = 1 identity (ERC-8004) + signed cross-chain messages | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: messages from other Neuro instances are data, not commands |
 | 5 · Quantum resistance | ML-DSA precompile (FIPS 204) in the chain + `QuantumWallet` + `zetaphy pq` + true PQ accounts (`zetaphy pq native`) |
+| Future · Useful work (prototype, not deployed) | `UsefulWork` (browser scan jobs: PoW stamp, 2-of-3 commit-reveal, canaries) + `WorkerReputation` (ERC-8004-style) + `BugBounty` (browser fuzzing, runner-verified; `VulnerableVault` is deliberately vulnerable) + `UsefulIssuance` (a timelocked RewardVault share for verified work) + `zetaphy work` / `zetaphy bounty`: [docs/future/useful-work.md](../docs/future/useful-work.md) |
+| Cross-chain security (testnet, docs/future/crosschain-assist.md) | `NeuroOracleSender` + `NeuroOracle`: Neuro's flags mirrored to other EVM testnets over Hyperlane (`zetaphy immune push/coverage`, `scripts/neuro-oracle.js`) and to Osmosis over IBC (`cosmwasm/neuro-oracle-osmo`) · `NeuroAttest`: "Neuro-checked" certificates (`zetaphy certify`) · `NeuroAnchor` + `zetaphy attest-pq`: ML-DSA-44-signed report archives · `HackInsurance`: parametric hack insurance prototype (testnet only) |
 
 **No stage holds real money yet:** stage 3 and above on mainnet must first pass the gates in the "Before real money" section at the end of this file
 
@@ -1053,6 +1055,13 @@ Defaults:
 | Challenge window (vote `set-challenge-window`) | Equal to the job timeout (600 seconds) |
 | Maximum defender silence (vote `set-defender-timeout`) | 6 hours |
 
+## ModelRegistry (AI models, skills, prompts, rule sets)
+
+`contracts/ModelRegistry.sol`: per (id, version) the manifest sha256, the chunks' Merkle root, size, license, author and
+status. Only governance (the timelock) publishes or changes status; a guardian may only suspend, at once; revoked is final.
+`node scripts/model-registry.js deploy | propose | status | show` (`src/modelregistry.js`); tests in `test/modelregistry.test.js`.
+Browsers check every downloaded chunk against it: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
+
 ## Testing
 
 - `npm test`: tests the contracts on an in-memory EVM and tests the runner program (CI runs it every time)
@@ -1080,3 +1089,10 @@ Defaults:
 
 These contracts have not been audited yet. Use them with ZETAPHY testnet only. Security details are kept separately for the team.
 
+
+## AI agents (testnet prototypes)
+
+AgentRegistry (agent identity, ML-DSA-44 key, bond, constitution, claims), IntentExecutor (Proof of Intent),
+LabelRegistry + WebAuthnVerifier (human/agent labels; passkeys checked by the P-256 precompile 0x…0100), AgentPolicyWallet
+(guardrails for AI wallets) and CosignCommittee (runner co-signing after Neuro checks). CLI: `zetaphy intent …`, `zetaphy cosign …`.
+Design, use and limits: [docs/future/agents.md](../docs/future/agents.md).
