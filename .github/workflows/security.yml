@@ -315,6 +315,11 @@ jobs:
           npm run build
           git diff --exit-code -- artifacts/
 
+      # the detector loop (test/detectorloop.test.js) breeds organisms with zetaphy-neuro/ml/detectors (needs its packages)
+      - name: Install zetaphy-neuro (used by the detector-loop test)
+        working-directory: zetaphy-neuro
+        run: npm ci --no-audit --no-fund
+
       - name: Unit tests (NeuroJobs on an in-memory EVM, runner loop, native PQ txs)
         run: npm test
 
