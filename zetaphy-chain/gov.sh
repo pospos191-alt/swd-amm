@@ -67,6 +67,9 @@ FROM=${FROM:-validator}
 NODE=${NODE:-tcp://127.0.0.1:26657}
 CHAIN_ID=${CHAIN_ID:-zetaphy_77390-1}
 DEPOSIT=${DEPOSIT:-1000000000000000000000azetaphy}   # 1,000 ZETAPHY
+REPO=${REPO:-pospos191-alt/swd-amm}
+SETUP_URL=${SETUP_URL:-https://raw.githubusercontent.com/$REPO/main/zetaphy-chain/setup-node.sh}
+RELEASE_BASE=${RELEASE_BASE:-https://github.com/$REPO/releases/download}
 
 # Flags go after the subcommand: zetaphyd rejects tx/query flags placed before it.
 QF="--home $NODE_HOME --node $NODE -o json"
@@ -78,6 +81,41 @@ send() {
   out=$("$ZETAPHYD" "$@" $TXF 2>&1) || { echo "rejected: $(echo "$out" | grep -m1 -E 'rpc error|Error' || echo "$out" | tail -1)"; exit 1; }
   out=$(echo "$out" | tail -1)
   [ "$(echo "$out" | jq -r .code 2>/dev/null)" = 0 ] || { echo "rejected: $(echo "$out" | jq -r .raw_log 2>/dev/null || echo "$out")"; exit 1; }
+}
+
+# Before a binary-upgrade vote (the 2026-10-29 testnet stop at block 123343 is why):
+#  - the upgrade must exist in the current release on main, or the chain would stop at the height
+#    with no binary that can go on;
+#  - if the binary running here already has the handler, the upgrade must be one that may run
+#    early (zetaphyEarlyUpgrades, evmd/zetaphy_upgradeguard.go); otherwise x/upgrade stops the
+#    chain one block after the vote passes ("BINARY UPDATED BEFORE TRIGGER").
+# FORCE=1 skips these checks.
+upgrade_preflight() {
+  local name=$1 height=$2 setup tag const early
+  [ "${FORCE:-}" = 1 ] && { echo "FORCE=1: upgrade checks skipped"; return 0; }
+  local sf; sf=$(mktemp)
+  curl -fsSL "$SETUP_URL" -o "$sf" || { echo "cannot read $SETUP_URL to check the upgrade (FORCE=1 skips)"; exit 1; }
+  setup=$(cat "$sf"); tag="zetaphyd-$(sha256sum "$sf" | cut -c1-12)"; unlink "$sf"
+  const=$(grep -oE "^\+?[[:space:]]*(const )?Zetaphy[A-Za-z0-9]*UpgradeName *= *\"$name\"" <<<"$setup" | grep -oE 'Zetaphy[A-Za-z0-9]*UpgradeName' | head -n 1 || true)
+  [ -n "$const" ] || { echo "refused: no release on main has an upgrade handler named \"$name\"; the chain would stop at block $height with no binary to go on"; exit 1; }
+  curl -fsSIL "$RELEASE_BASE/$tag/SHA256SUMS" >/dev/null 2>&1 || { echo "refused: release $tag (with \"$name\") is not built yet; wait for the release-zetaphyd workflow"; exit 1; }
+  early=no
+  grep -qE "^\+?[[:space:]]+$const: true," <<<"$setup" && early=yes
+  if grep -aqF "$name" "$ZETAPHYD" 2>/dev/null && [ "$early" = no ]; then
+    echo "refused: the zetaphyd running here already has the \"$name\" handler, and \"$name\" may not run early:"
+    echo "the chain would stop one block after the vote passes. Run the previous release until block $height"
+    echo "(sudo zetaphy-validator upgrade-watch moves the node to $tag when the chain stops there)."
+    exit 1
+  fi
+  echo "upgrade \"$name\" at block $height: release $tag"
+  if [ "$early" = yes ]; then
+    echo "  validators may install $tag any time before block $height (sudo zetaphy-validator update);"
+    echo "  the chain does not stop. A node still on an older binary stops at $height until it updates,"
+    echo "  which the zetaphy-upgrade timer does by itself within a minute."
+  else
+    echo "  validators keep the current binary until block $height, where the chain stops; the"
+    echo "  zetaphy-upgrade timer (sudo zetaphy-validator update installs it) then moves each node to $tag."
+  fi
 }
 
 submit() { # the tx that submits the proposal, e.g.: tx gov submit-proposal <file>
@@ -127,6 +165,7 @@ case "${1:-}" in
     [[ "$height" =~ ^[0-9]+$ ]] || { echo "height must be a block number"; exit 1; }
     now=$($ZETAPHYD --home "$NODE_HOME" --node "$NODE" status | jq -r '.sync_info.latest_block_height')
     [ "$height" -gt "$((now + 100))" ] || { echo "height must be well after the current block ($now) so the vote can finish"; exit 1; }
+    upgrade_preflight "$name" "$height"
     gov=$($ZETAPHYD q auth module-account gov $QF | jq -r '.account.value.address')
     f=$(mktemp)
     jq -n --arg gov "$gov" --arg name "$name" --arg h "$height" --arg d "$DEPOSIT" --arg s "$summary" \

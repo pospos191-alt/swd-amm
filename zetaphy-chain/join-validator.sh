@@ -30,6 +30,10 @@
 #                                     before it has staked. ACCOUNT_INDEX=n picks the wallet's account n+1.
 #   sudo zetaphy-validator update     move this node to the current release (keys and chain data kept);
 #                                     also for the chain's first node:  curl -fsSL …/join-validator.sh | sudo bash -s -- update
+#   sudo zetaphy-validator upgrade-watch   what the 1-minute timer runs: if the chain stopped at a voted upgrade
+#                                     this binary lacks ("UPGRADE <name> NEEDED at height: H"), move to the
+#                                     current release (as update) so the node applies it and goes on.
+#                                     Off: AUTO_UPGRADE=0 at install/update, or systemctl disable --now zetaphy-upgrade.timer
 #   sudo zetaphy-validator preflight  can this machine run a validator? (changes nothing, except on WSL
 #                                     without systemd: it switches systemd on in /etc/wsl.conf)
 #
@@ -49,6 +53,10 @@ ZETAPHYD="${ZETAPHYD:-/usr/local/bin/zetaphyd}"
 NODE="${NODE:-tcp://127.0.0.1:26657}"
 STATE="${STATE:-/var/lib/zetaphy-validator}"          # done marker, faucet time
 SYSTEMCTL="${SYSTEMCTL:-systemctl}"
+JOURNALCTL="${JOURNALCTL:-journalctl}"
+AUTO_UPGRADE="${AUTO_UPGRADE:-1}"                     # 0: no zetaphy-upgrade.timer
+UPGRADE_CMD="${UPGRADE_CMD:-update_node}"              # what upgrade-watch runs (tests use a stand-in)
+SYSTEMD_UNITS="${SYSTEMD_UNITS:-/etc/systemd/system}"
 # where this runs (tests point these at stand-ins)
 UNAME_S="${UNAME_S:-$(uname -s)}"
 PROC_VERSION="${PROC_VERSION:-/proc/version}"
@@ -251,6 +259,7 @@ WantedBy=timers.target
 EOF
   $SYSTEMCTL daemon-reload
   $SYSTEMCTL enable --now zetaphy-become-validator.timer >/dev/null 2>&1
+  install_upgrade_timer
   rm -f "$STATE/done"
   say "done"
   cat <<EOF
@@ -434,7 +443,69 @@ update_node() {
   # a validator that joined keeps its RPC to itself
   [ -f "$NODE_HOME/config/seed-peer" ] && private_rpc
   install -m 755 "${BASH_SOURCE[0]}" "$SELF_BIN" 2>/dev/null || true
+  install_upgrade_timer
   say "updated: $("$ZETAPHYD" version 2>/dev/null)"
+}
+
+# ---- voted upgrades --------------------------------------------------------------------------
+# A voted upgrade stops the chain at its height on a node whose binary lacks the handler
+# ("UPGRADE "<name>" NEEDED at height: H"). The 1-minute timer below moves such a node to the
+# current release (SHA-256 checked, as update does), so it applies the upgrade and goes on.
+# Since zetaphy-v5 a binary with the handler may also be installed before the height: the chain
+# does not stop for it (evmd/zetaphy_upgradeguard.go).
+install_upgrade_timer() {
+  if [ "$AUTO_UPGRADE" != 1 ]; then
+    $SYSTEMCTL disable --now zetaphy-upgrade.timer >/dev/null 2>&1 || true
+    return 0
+  fi
+  cat > "$SYSTEMD_UNITS/zetaphy-upgrade.service" <<EOF
+[Unit]
+Description=ZETAPHY: move to the current release when the chain stops at a voted upgrade
+After=zetaphyd.service
+
+[Service]
+Type=oneshot
+ExecStart=$SELF_BIN upgrade-watch
+EOF
+  cat > "$SYSTEMD_UNITS/zetaphy-upgrade.timer" <<EOF
+[Unit]
+Description=ZETAPHY: check every minute for a voted upgrade this binary lacks
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+
+[Install]
+WantedBy=timers.target
+EOF
+  $SYSTEMCTL daemon-reload >/dev/null 2>&1 || true
+  $SYSTEMCTL enable --now zetaphy-upgrade.timer >/dev/null 2>&1 || true
+}
+
+upgrade_watch() {
+  local line name h cur mark
+  line=$($JOURNALCTL -u zetaphyd --since "-30min" --no-pager 2>/dev/null \
+    | grep -o 'UPGRADE "[a-z0-9.-]*" NEEDED at height: [0-9]*' | tail -n 1 || true)
+  [ -n "$line" ] || return 0
+  name=$(sed 's/^UPGRADE "\([^"]*\)".*/\1/' <<<"$line")
+  h=${line##*: }
+  cur=$(asn "$ZETAPHYD status --home $NODE_HOME --node $NODE" 2>/dev/null | jq -r '.sync_info.latest_block_height // empty' 2>/dev/null || true)
+  # still stopped below the upgrade height (no answer: the node is down, which also counts)
+  if [ -n "$cur" ] && [ "$cur" -ge "$h" ]; then return 0; fi
+  install -d -m 700 "$STATE"
+  mark="$STATE/upgrade-$name-$h"
+  if [ -f "$mark" ] && [ $(( $(date +%s) - $(stat -c %Y "$mark") )) -lt 3600 ]; then
+    echo "upgrade $name at $h: tried within the hour; waiting (see /var/log/zetaphy-setup.log)"
+    return 0
+  fi
+  echo "the chain stopped at block $h for the voted upgrade \"$name\": moving to the current release"
+  touch "$mark"
+  if ! ( $UPGRADE_CMD ); then
+    unlink "$mark" 2>/dev/null || true   # no release yet, or a download failed: try again next minute
+    echo "upgrade $name: no usable release yet, trying again in a minute"
+    return 1
+  fi
+  echo "upgrade $name: the node runs the current release; it applies the upgrade at block $h"
 }
 
 # ---- backup and secure ------------------------------------------------------------------------
@@ -761,6 +832,7 @@ case "${1:-install}" in
   install|validator) install_all ;;
   check) check ;;
   update) update_node ;;
+  upgrade-watch) upgrade_watch ;;
   import-key) import_key ;;
   preflight) platform && echo "this machine can run a ZETAPHY validator" ;;
   status) status ;;
@@ -769,5 +841,5 @@ case "${1:-install}" in
   unjail) asn "$ZETAPHYD tx slashing unjail --from validator $K --home $NODE_HOME --node $NODE --chain-id zetaphy_77390-1 --gas auto --gas-adjustment 1.5 --gas-prices 1000000000$DENOM -y -o json" | jq -c '{code, txhash, raw_log}' ;;
   backup) if [ "${2:-}" = words ]; then backup_words; else backup; fi ;;
   secure) shift; secure "$@" ;;
-  *) sed -n '2,36p' "$0"; exit 1 ;;
+  *) sed -n '2,40p' "$0"; exit 1 ;;
 esac

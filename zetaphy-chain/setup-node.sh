@@ -1162,7 +1162,7 @@ index 0000000..62d63ad
 +	return pk.UnmarshalBinary(bytes.Clone(m.Key)) == nil
 +}
 diff --git a/evmd/app.go b/evmd/app.go
-index 204345c..4785bdd 100644
+index 204345c..e7cffda 100644
 --- a/evmd/app.go
 +++ b/evmd/app.go
 @@ -14,6 +14,10 @@ import (
@@ -1272,6 +1272,15 @@ index 204345c..4785bdd 100644
  
  	// Create static IBC router, add transfer route, then set and seal it
  	ibcRouter := porttypes.NewRouter()
+@@ -570,7 +628,7 @@ func NewExampleApp(
+ 		slashing.NewAppModule(appCodec, app.SlashingKeeper, app.AccountKeeper, app.BankKeeper, app.StakingKeeper, nil, app.interfaceRegistry),
+ 		distr.NewAppModule(appCodec, app.DistrKeeper, app.AccountKeeper, app.BankKeeper, app.StakingKeeper, nil),
+ 		staking.NewAppModule(appCodec, app.StakingKeeper, app.AccountKeeper, app.BankKeeper, nil),
+-		upgrade.NewAppModule(app.UpgradeKeeper, app.AccountKeeper.AddressCodec()),
++		newZetaphyUpgradeModule(upgrade.NewAppModule(app.UpgradeKeeper, app.AccountKeeper.AddressCodec()), app.UpgradeKeeper), // ZETAPHY: early binaries for listed upgrades (zetaphy_upgradeguard.go)
+ 		evidence.NewAppModule(app.EvidenceKeeper),
+ 		authzmodule.NewAppModule(appCodec, app.AuthzKeeper, app.AccountKeeper, app.BankKeeper, app.interfaceRegistry),
+ 		consensus.NewAppModule(appCodec, app.ConsensusParamsKeeper),
 @@ -579,10 +637,13 @@ func NewExampleApp(
  		ibc.NewAppModule(app.IBCKeeper),
  		ibctm.NewAppModule(tmLightClientModule),
@@ -9996,6 +10005,85 @@ index 0000000..d629c38
 +func (pqGenesisBasic) ValidateGenesis(_ codec.JSONCodec, _ client.TxEncodingConfig, raw json.RawMessage) error {
 +	_, err := pqParseGenesis(raw)
 +	return err
++}
+diff --git a/evmd/zetaphy_upgradeguard.go b/evmd/zetaphy_upgradeguard.go
+new file mode 100644
+index 0000000..3bb3a85
+--- /dev/null
++++ b/evmd/zetaphy_upgradeguard.go
+@@ -0,0 +1,73 @@
++package evmd
++
++// ZETAPHY: upgrades whose binary may run before the upgrade height.
++//
++// x/upgrade stops the chain when the running binary already has the handler
++// of a scheduled plan that is not due yet ("BINARY UPDATED BEFORE TRIGGER!").
++// That guard protects upgrades whose new code would change blocks before the
++// height. A ZETAPHY upgrade listed in zetaphyEarlyUpgrades does not: below its
++// height the new binary runs blocks exactly as the old one (its features are
++// gated by a height kept in state, which only the handler sets), and it adds
++// no store. For those, a validator may install the new binary any time before
++// the height; at the height the handler runs and the chain does not stop.
++//
++// The 2026-10-29 testnet halt at block 123343 (proposal 3, "zetaphy-v5") is the
++// case this covers: the release with the v5 handler was installed before the
++// vote passed, and the chain stopped one block later.
++//
++// Rules for adding a name here: the handler only sets activation heights or
++// params from the upgrade height on, every new code path is gated by them, and
++// the upgrade has no StoreUpgrades. Upgrades that add a store (zetaphy-v2..v4
++// add the wasm store) keep the SDK's guard.
++
++import (
++	"context"
++	"fmt"
++
++	"cosmossdk.io/core/appmodule"
++
++	sdk "github.com/cosmos/cosmos-sdk/types"
++	"github.com/cosmos/cosmos-sdk/x/upgrade"
++	upgradekeeper "github.com/cosmos/cosmos-sdk/x/upgrade/keeper"
++)
++
++var zetaphyEarlyUpgrades = map[string]bool{
++	ZetaphyV5UpgradeName: true,
++}
++
++// zetaphyUpgradeModule is x/upgrade with one change in PreBlock: a scheduled,
++// not yet due plan named in zetaphyEarlyUpgrades does not stop the chain when
++// this binary already has its handler.
++type zetaphyUpgradeModule struct {
++	upgrade.AppModule
++	k *upgradekeeper.Keeper
++}
++
++func newZetaphyUpgradeModule(m upgrade.AppModule, k *upgradekeeper.Keeper) zetaphyUpgradeModule {
++	return zetaphyUpgradeModule{AppModule: m, k: k}
++}
++
++// PreBlock keeps every other case of x/upgrade's PreBlocker: a due plan is
++// applied (or, without a handler, stops the chain with "UPGRADE NEEDED"), and
++// any other early handler still stops it.
++func (m zetaphyUpgradeModule) PreBlock(ctx context.Context) (appmodule.ResponsePreBlock, error) {
++	sdkCtx := sdk.UnwrapSDKContext(ctx)
++	plan, err := m.k.GetUpgradePlan(ctx)
++	if err != nil || !zetaphyEarlyUpgrades[plan.Name] || plan.ShouldExecute(sdkCtx.HeaderInfo().Height) || !m.k.HasHandler(plan.Name) {
++		return m.AppModule.PreBlock(ctx)
++	}
++	// The check x/upgrade runs once per process: the last applied upgrade must
++	// have its handler in this binary.
++	if !m.k.DowngradeVerified() {
++		m.k.SetDowngradeVerified(true)
++		last, _, err := m.k.GetLastCompletedUpgrade(ctx)
++		if err != nil {
++			return nil, err
++		}
++		if last != "" && !m.k.HasHandler(last) {
++			return nil, fmt.Errorf("upgrade handler is missing for %s upgrade plan", last)
++		}
++	}
++	sdkCtx.Logger().Debug("ZETAPHY: binary with the handler of a scheduled upgrade, before its height (allowed)", "upgrade", plan.Name, "height", plan.Height)
++	return &sdk.ResponsePreBlock{ConsensusParamsChanged: false}, nil
 +}
 diff --git a/go.mod b/go.mod
 index 777e52d..c4797ba 100644

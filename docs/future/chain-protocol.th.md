@@ -20,7 +20,9 @@ English: [chain-protocol.md](chain-protocol.md)
 
 - **เชนใหม่:** v5 ทำงานตั้งแต่บล็อก 1 (`zetaphyd init` และ `setup-node.sh` เขียนคีย์ `20` ไว้ใน `app_state.zetaphypq`)
 - **เชนที่รันอยู่แล้ว:** เสนอ `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"` แล้วโหวตให้ผ่าน v5 จะมีผลตั้งแต่บล็อก H+1
-  เชนต้องผ่าน `zetaphy-v4` มาก่อน
+  เชนต้องมีสโตร์ wasm อยู่แล้ว (จาก genesis หรือ `zetaphy-v4`) `zetaphy-v5` ติดตั้งก่อนถึงความสูงได้ (`evmd/zetaphy_upgradeguard.go`)
+  validator ติดตั้ง release ได้ทุกเมื่อก่อน H และเชนไม่หยุด โหนดที่ยังใช้โปรแกรมเก่าจะหยุดที่ H จนกว่า `zetaphy-upgrade.timer`
+  จะย้ายไป release ใหม่ ดู zetaphy-chain/README.th.md หัวข้อ "โหวต upgrade โปรแกรม"
 - ก่อนถึงความสูง v5 ทุกอย่างทำงานเหมือนเดิม:
   - ที่อยู่ทั้งสามเป็นบัญชีว่าง
   - vote extension ที่มีข้อมูลเกินลายเซ็น ML-DSA จะถูกปฏิเสธเหมือนเดิม
