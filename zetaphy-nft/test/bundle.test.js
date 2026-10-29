@@ -27,7 +27,8 @@ test('no third-party code, no inline scripts or styles; strict CSP', () => {
   }
   assert.doesNotMatch(html, /\son[a-z]+=/i, 'no inline event handlers');
   assert.doesNotMatch(html, /<style|style="/i, 'no inline styles');
-  assert.doesNotMatch(html, /(src|href)="(https?:)?\/\//i, 'nothing loaded from elsewhere');
+  // (the canonical link only names the page's own address for search engines; nothing is loaded from it)
+  assert.doesNotMatch(html.replace(/<link rel="canonical" href="[^"]*">/, ''), /(src|href)="(https?:)?\/\//i, 'nothing loaded from elsewhere');
   // lib/ and lib/vendor/ (the Ledger transport bundle, lib/ledger.js): every script file
   const js = readdirSync(new URL('../web/lib/', import.meta.url), { recursive: true }).filter((f) => /\.js$/.test(f)).map((f) => web(`lib/${f}`)).join('\n') + web('app.js');
   assert.doesNotMatch(js, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(|new Function/, 'no HTML insertion or eval');
