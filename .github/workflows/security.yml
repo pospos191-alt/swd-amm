@@ -589,7 +589,7 @@ jobs:
           cd evmd
           # QDay|Threat|Security: the security core (Q-day, threat gate, precompile 0x…0901), rpc-guard
           # Wasm: CosmWasm (gov-only upload, Q-day / quantum lock on wasm txs, dispatch guard, zetaphy-v4)
-          go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security|Wasm|Future|Immune|Breaker|Guard|Anomaly|AI' .
+          go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security|Wasm|Future|Immune|Breaker|Guard|Anomaly|AI|Upgrade|ModelAt' .
           go test -run '^$' -fuzz FuzzEVMCallUnmarshal -fuzztime 20s .
           # rpc-guard: no body gets a method past it that CometBFT would run
           go test -run '^$' -fuzz FuzzRPCGuardComet -fuzztime 20s .
@@ -644,6 +644,8 @@ jobs:
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:security
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:wasm
           ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:saphantokens
+          # the 2026-10-29 testnet stop: a voted upgrade whose handler is already installed must not stop the chain
+          ZETAPHYD="$RUNNER_TEMP/zetaphyd" npm run test:devnet:upgrade
 
       - name: DEX DLMM on a real devnet (deploy CLI, native liquidity, swaps, Neuro check)
         working-directory: zetaphy-dex
@@ -698,7 +700,7 @@ jobs:
 
       - name: Fork tests on aarch64 (PQ, security core, CosmWasm)
         working-directory: ${{ env.SRC }}/evmd
-        run: go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security|Wasm|Future|Immune|Breaker|Guard|Anomaly|AI' .
+        run: go test -tags=test -run 'EVMCall|PQ|QDay|Threat|Security|Wasm|Future|Immune|Breaker|Guard|Anomaly|AI|Upgrade|ModelAt' .
 
   program:
     name: program (cargo test + anchor test)

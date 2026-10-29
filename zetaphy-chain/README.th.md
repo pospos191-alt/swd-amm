@@ -472,4 +472,23 @@ handler `zetaphy-v4`) และบนเชนจริง `npm run test:devnet:
   ชี้เชนไปที่ registry ส่วน `zetaphyd q neuro model-at <h>` / JSON-RPC `zetaphy_modelAt` ตอบจากสถานะหลัง h-1
 
 เชนใหม่มี v5 ตั้งแต่บล็อก 1 ส่วนเชนที่รันอยู่ใช้ `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`
+
+### โหวต upgrade โปรแกรมบนเชนที่รันอยู่ (อ่านก่อน `propose-upgrade` ทุกครั้ง)
+
+วันที่ 2026-10-29 testnet หยุดที่บล็อก 123343 เพราะติดตั้ง release ที่มี handler ของ `zetaphy-v5` ไว้ก่อนโหวตผ่าน
+และ x/upgrade ไม่ยอมให้โปรแกรมที่มี handler ของ upgrade ที่ตั้งไว้แต่ยังไม่ถึงความสูงทำงานต่อ ("BINARY UPDATED BEFORE TRIGGER!")
+ตอนนี้มี 3 ชั้นกันไว้:
+
+1. **ตัวเชน (`evmd/zetaphy_upgradeguard.go`)** upgrade ที่อยู่ใน `zetaphyEarlyUpgrades` (ตอนนี้คือ `zetaphy-v5`)
+   ติดตั้งก่อนถึงความสูงได้ เพราะโค้ดใหม่เปิดตามความสูงที่ handler ตั้ง และไม่เพิ่มสโตร์ โหนดติดตั้ง release ได้ทุกเมื่อก่อน H
+   พอถึง H handler ทำงานและเชนไม่หยุด กรณีอื่นยังเป็นแบบเดิมของ x/upgrade upgrade ใหม่จะเข้ารายชื่อนี้ได้ก็ต่อเมื่อไม่เพิ่มสโตร์และไม่เปลี่ยนอะไรก่อนความสูงของมัน
+2. **`gov.sh propose-upgrade`** ไม่ยอมยื่นถ้า release บน `main` ไม่มีชื่อนั้น ถ้า release ยังไม่ build
+   หรือถ้า zetaphyd ในเครื่องมี handler แล้วแต่ upgrade นั้นติดตั้งก่อนไม่ได้ (`FORCE=1` ข้ามการตรวจ)
+3. **`zetaphy-upgrade.timer`** (ติดตั้งโดย `zetaphy-validator update` และการติดตั้งใหม่ ปิดด้วย `AUTO_UPGRADE=0`)
+   ถ้าเชนหยุดที่ H พร้อมข้อความ "UPGRADE "<name>" NEEDED" โหนดจะย้ายไป release ปัจจุบันภายในหนึ่งนาที (ตรวจ SHA-256) แล้วทำ upgrade
+
+ขั้นตอน: build และออก release ก่อน (merge เข้า `main` รอ `release-zetaphyd`) แล้ว `gov.sh propose-upgrade <name> <H> "<summary>"`
+และ `gov.sh vote <id> yes` ถ้าเป็น upgrade ที่ติดตั้งก่อนได้ validator รัน `sudo zetaphy-validator update` ก่อน H
+ถ้าไม่ใช่ ให้ใช้โปรแกรมเดิมไว้ แล้ว timer จะสลับให้ที่ H ทดสอบ: `fork-tests/evmd/zetaphy_upgradeguard_test.go`,
+`npm run test:devnet:upgrade` (zetaphy-network: กรณี 2026-10-29 บนโหนดจริง), `test/govupgrade.test.js`, `test/upgradewatch.test.js`
 ทดสอบ: `fork-tests/evmd/zetaphy_future_test.go` และ `node --test zetaphy-chain/tools/gbdt-export.test.mjs`

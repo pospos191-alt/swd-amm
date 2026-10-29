@@ -22,9 +22,12 @@ Each account turns on its own protection.
   `0000000000000001` in `app_state.zetaphypq`, and `setup-node.sh` writes it
   again.
 - **Running chains:** submit `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`
-  and vote it through. Every validator switches binary at H, and v5 applies
-  from H+1. The chain must already have run `zetaphy-v4`, because v5 adds no
-  store.
+  and vote it through; v5 applies from H+1. The chain must already have the
+  wasm store (from genesis or `zetaphy-v4`), because v5 adds no store.
+  `zetaphy-v5` may run early (`evmd/zetaphy_upgradeguard.go`): validators can
+  install its release any time before H and the chain does not stop; a node
+  still on an older binary stops at H until `zetaphy-upgrade.timer` moves it
+  to the release. See zetaphy-chain/README.md, "Voting a binary upgrade".
 - Below the v5 height, blocks run exactly as before:
   - the three addresses are empty accounts;
   - a vote extension that carries anything beyond the ML-DSA signature is

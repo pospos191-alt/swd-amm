@@ -25,7 +25,8 @@
     "test:devnet:wasm": "node --test test/devnet.wasm.integration.js",
     "test:devnet:saphantokens": "node --test test/devnet.saphantokens.integration.js",
     "test:cosmwasm": "cd cosmwasm/neuro-oracle-osmo && cargo test",
-    "test:anvil": "node scripts/insurance-replay-e2e.js"
+    "test:anvil": "node scripts/insurance-replay-e2e.js",
+    "test:devnet:upgrade": "node --test test/devnet.upgrade.integration.js"
   },
   "engines": {
     "node": ">=20"

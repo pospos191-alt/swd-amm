@@ -508,4 +508,29 @@ Everything stays **off until it is voted on** (`gov.sh ai-model | immune | break
   points the chain at the registry; `zetaphyd q neuro model-at <h>` / JSON-RPC `zetaphy_modelAt` answer on the state after h-1
 
 New chains have v5 from block 1. Running chains: `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`.
+
+### Voting a binary upgrade on a running chain (read before every `propose-upgrade`)
+
+On 2026-10-29 the testnet stopped at block 123343: the release with the `zetaphy-v5` handler was
+installed before the vote passed, and x/upgrade refuses a binary that already has the handler of a
+scheduled, not yet due upgrade ("BINARY UPDATED BEFORE TRIGGER!"). Three things now prevent it:
+
+1. **The chain (`evmd/zetaphy_upgradeguard.go`).** Upgrades in `zetaphyEarlyUpgrades` (today
+   `zetaphy-v5`) may run early: their new code is gated by a height the handler sets, and they add no
+   store. A node may install their release any time before H; at H the handler runs and nothing stops.
+   Every other case keeps x/upgrade's behaviour. A new upgrade goes on that list only if it adds no
+   store and changes nothing below its height.
+2. **`gov.sh propose-upgrade`** refuses a name no release on `main` has, a release not built yet, and
+   (when the zetaphyd it runs next to already has the handler) an upgrade that may not run early.
+   `FORCE=1` skips these checks.
+3. **`zetaphy-upgrade.timer`** (installed by `zetaphy-validator update` and new installs; off with
+   `AUTO_UPGRADE=0`): if the chain stops at H with "UPGRADE "<name>" NEEDED", the node moves to the
+   current release within a minute (SHA-256 checked) and applies the upgrade.
+
+Steps: build and release first (merge to `main`, wait for `release-zetaphyd`), then
+`gov.sh propose-upgrade <name> <H> "<summary>"` and `gov.sh vote <id> yes`. For an early-allowed
+upgrade, validators run `sudo zetaphy-validator update` before H; otherwise they keep their binary
+and the timer switches it at H. Tests: `fork-tests/evmd/zetaphy_upgradeguard_test.go`,
+`npm run test:devnet:upgrade` (zetaphy-network: the 2026-10-29 case on a real node), `test/govupgrade.test.js`,
+`test/upgradewatch.test.js`.
 Tests: `fork-tests/evmd/zetaphy_future_test.go`, `zetaphy_holdtoken_test.go`, `zetaphy_modelat_test.go`, `node --test zetaphy-chain/tools/gbdt-export.test.mjs`.
