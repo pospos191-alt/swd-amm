@@ -327,6 +327,8 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 .wk-card h3 { margin: 4px 0 0; font-size: 14px; }
 .wk-card .notice { margin: 0; color: var(--accent-2); }
 .wk-finding { margin: 0; padding: 10px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); white-space: pre-wrap; word-break: break-all; }
+.wk-kinds { margin: 0; padding-left: 18px; }
+.wk-kinds li { margin: 2px 0; overflow-wrap: anywhere; }
 /* Mine testnet ZETAPHY (mine.js) and the Earn page's faucet form */
 .mn-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr); align-items: start; }
 .mn-grid .howto { gap: 4px; }

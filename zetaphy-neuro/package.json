@@ -30,9 +30,9 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@ethereumjs/common": "^4.4.0",
-    "@ethereumjs/evm": "^3.1.1",
-    "@ethereumjs/util": "^9.1.0",
+    "@ethereumjs/common": "4.4.0",
+    "@ethereumjs/evm": "3.1.1",
+    "@ethereumjs/util": "9.1.0",
     "@noble/hashes": "1.5.0",
     "@solana/web3.js": "^1.95.4",
     "playwright-core": "^1.56.1",

@@ -11,8 +11,8 @@ Nothing here changes `zetaphy-neuro/src/` (Neuro's skill id is unchanged); the M
 |---|---|---|
 | 15 | Risk forecasts (RiskForecasts) + labelled export | **Done** (testnet prototype, tested; not deployed) |
 | 16 | Data DAO (DataDAO) + attribution + rewards root | **Done** (prototype; attribution on real data not yet run) |
-| 26 | Evolving detectors (DetectorPool) + mutation schedule | **Done** (prototype; the forecasting loop for organisms is partly manual, see limits) |
-| 27 | Red-vs-blue arena (RedBlueArena) + sandbox runner | **Done** (prototype; one runner implementation, runners must be trusted) |
+| 26 | Evolving detectors (DetectorPool) + the automated loop | **Done** (testnet prototype; breed → submit → forecast → reveal → score → settle runs as one scheduled command, deterministic, tested; not deployed) |
+| 27 | Red-vs-blue arena (RedBlueArena) + k-of-n sandbox runners | **Done** (testnet prototype; k-of-n bonded runners with commit-reveal results, slashing, a pinned sandbox and a challenge path, tested; not deployed) |
 | 29 | Proof of Foresight (ForesightRegistry) | **Done** (tested; not deployed) |
 
 How they fit: RiskForecasts (and later the arena) *resolve* questions from chain facts → ForesightRegistry scores every
@@ -89,11 +89,28 @@ labelled data by how much it improves Neuro's model.
 - Mutation (`ml/detectors/mutate.js`): threshold moves (often to a value seen in the data), weight/bias jitter, op flip, rule
   drop/add, crossover, then a short hill-climb; a child is kept only if its Brier on a **held-out 30%** beats its parent's.
   Deterministic per round. `--predict` gives each spec's probability (basis points) per row for Foresight commits.
-- Schedule (`.github/workflows/markets.yml`): `evolve` weekly — parents = best living organisms (`markets.js detectors-parents`)
-  whose spec is in `ml/detectors/population/` (seed spec committed), else the seed; rows = synthetic corpus + red-team
-  evasions; children uploaded as an artifact. `submit` (only if `DETECTORS_SUBMIT=on` and `MARKETS_KEY`) commits the specs to
-  branch `detectors/population` (their URI) and registers model + organism with a 1-ZETAPHY testnet stake.
-- Tests: `test/detectorpool.test.js` (pay/slash/retire/idle/exit with real Foresight records), `ml/test/markets.test.js`.
+- **The loop, automated** (`zetaphy-network/src/detectorloop.js`, `node scripts/markets.js detectors-round`, scheduled every 6 hours by
+  the `detectors` job of `.github/workflows/markets.yml`). One pass does whatever is due, so repeated passes complete a round with
+  no hand work:
+  1. **breed**, once per DetectorPool round: parents = the living organisms whose spec is in the population folder (else the seed);
+     `mutate.js evolve()` seeded with the pool's round number; a child is kept only if its Brier on **held-out labelled rows** beats
+     its parent's. The held-out rows are a curated file when given (`--held`, never trained on: `ml/detectors/held-out.jsonl` once
+     curated) else the deterministic 30% split;
+  2. **submit**: each child gets its Foresight model id and a DetectorPool organism with the testnet stake; its spec file is
+     content-addressed (`<first 16 hex of specHash>.json`) and published on the branch `detectors/population` (its URI);
+  3. **forecast**: for every open Foresight event of RiskForecasts (or an `--events` list), each of the runner's living organisms
+     commits p = its spec on Neuro's features of the event's token (read with Neuro from ZETAPHY, read-only), salt derived from the key;
+  4. **reveal** after the commit deadline: p is recovered from the on-chain commitment by trying its 10,001 possible values with the
+     derived salt, so nothing is stored between runs and a token that changed meanwhile cannot change what is revealed;
+  5. **score** resolved events (`scoreMany`, every living organism's model); 6. **settle** the pool round (`scoreRound`) once it ended.
+  Each pass writes a **manifest** (inputs' hashes, seed, parents, children, every prediction with the features it used, every
+  action; uploaded as an artifact); `checkManifest` re-derives the children and predictions offline. Without `--send` (the workflow
+  without `DETECTORS_SUBMIT=on`) it only plans. Testnet only (chain 77390).
+- `evolve` (weekly, no key) still breeds offline from the synthetic corpus and uploads the children as an artifact.
+- Tests: `test/detectorpool.test.js` (pay/slash/retire/idle/exit with real Foresight records), `test/detectorloop.test.js` (the
+  whole loop with real signed transactions at chain id 77390: breed on held-out rows, submit, commit, reveal with p recovered, score,
+  `scoreRound` pays the detectors; idempotent passes; a second world gives the same children and predictions; dry run sends nothing;
+  the `detectors-round` CLI through a JSON-RPC node), `ml/test/markets.test.js` (incl. the curated held-out set).
 
 ## 27. Red-vs-blue arena — `contracts/RedBlueArena.sol`, `zetaphy-neuro/ml/redteam/arena.js`
 
@@ -105,15 +122,39 @@ labelled data by how much it improves Neuro's model.
   (rules + sell simulation) and the committed model; then a victim buys for 0.1, the owner runs the declared trap steps
   (or `dump`), and the victim sells. **Valid** = the victim gets back < 50% of the quote right after buying (or cannot sell);
   **evaded** = valid and Neuro shows < medium. Blue score = valid reds caught (p ≥ 0.5) − 2 × benign reference tokens flagged
-  (generated benign families, fixed seed). Output: `result.json` (postResult args) + `dataset.jsonl` (each valid red as a
+  (generated benign families, fixed seed). Output: `result.json` (the result and its sandbox id, what runners commit and reveal) + `dataset.jsonl` (each valid red as a
   label-1 row with features and `evaded`).
-- Contract: `quorum` approved runners must post the identical result (bitmaps + blue scores; bits only for revealed reds,
-  evaded ⊆ valid). `settle` after `judgeEnd`: evading reds split the red pool, valid reds get bonds back, invalid/unrevealed
-  lose them; positive blue scores split the blue pool; leftovers carry to the next round; no quorum → void, revealed bonds
-  back.
+- **No single trusted runner** (the contract):
+  - **k-of-n**: up to `seats` (n, default 3) runners that governance approved **and** that posted `runnerBond` (10 testnet ZETAPHY)
+    take a seat by committing `keccak(arena, round, runner, resultKey, salt)` before `resultCommitEnd`; nobody can copy another's
+    result. They reveal the full result (bitmaps + blue scores; bits only for revealed reds, evaded ⊆ valid) before `judgeEnd`.
+  - **pinned sandbox**: the round names `sandbox`, the hash of the runner environment (`ml/redteam/sandbox.js`: exact
+    `@ethereumjs/evm` 3.1.1 / common 4.4.0 / util 9.1.0 and solc 0.8.26, optimizer settings, a fixed block (number, timestamp; zero
+    coinbase, prevRandao, base fee), Neuro's model id, the simulation seed, the benign reference set's seed and size, the judging
+    rules' version); `resultKey = keccak(sandbox, result)`. The runner refuses to judge with other package versions or for a round
+    opened with another sandbox, and two runs give byte-identical results (tested), so honest runners agree.
+  - **finalize** (anyone, after `judgeEnd`): the result `quorum` (k > n/2, default 2) runners revealed is the round's result. Runners
+    that revealed another result, or never revealed, lose `slashBps` (50%) of the runner bond; no quorum → void (silent runners are
+    still slashed).
+  - **challenge** (anyone, during `challengeWindow`, 1 day, with `challengeBond`, 5 testnet ZETAPHY), naming the result it says is
+    right. Governance (the timelock) re-runs the pinned sandbox and resolves: **upheld** → the challenger's result replaces it, the
+    runners who posted the wrong one are slashed, the challenger gets its bond back plus half of those slashes; **rejected** → the bond
+    goes to the agreeing runners. Unanswered within `appealWindow` (7 days) → it lapses: bond back, result stands.
+  - **settle** (after the challenge window): evading reds split the red pool, valid reds get bonds back, invalid/unrevealed lose
+    them; positive blue scores split the blue pool; the agreeing runners split `runnerFeeBps` (5%) of the pools plus the slashed
+    bonds; leftovers carry to the next round; void → revealed bonds back. Runner bonds unbond after `unbondDelay` (14 days) and not
+    while seated in an open round.
+- **Runner commands** (`scripts/markets.js`): `arena-fetch` (entries + the round's sandbox) → `node ml/redteam/arena.js --round
+  round.json` → `arena-commit` → `arena-reveal` (the salt is derived from the runner's key, so the reveal needs only the same
+  result.json) → `arena-finalize` → `arena-check [--challenge]` → `arena-settle`. `node ml/redteam/arena.js --sandbox` prints the
+  sandbox id to open a round with.
 - Test result (`ml/test/arena.test.js`): a token whose 99% sell fee is switched on after the scan is judged valid but
   **caught** (rules show medium because of the fee setter); a plain token is invalid; tampered/unrevealed/uncompilable
-  entries are rejected; the seed detector catches it with 0 false positives on the reference set.
+  entries are rejected; the seed detector catches it with 0 false positives on the reference set; the sandbox id is stable,
+  includes the model and the benign set, the pinned versions are installed, a round opened for another sandbox is refused, and
+  two independent judgings of a round are byte-identical. `test/arena.test.js`: k-of-n judging and payouts, a colluding
+  quorum overturned by an upheld challenge, a rejected and a lapsed challenge, no quorum, bonds, seats, parameters;
+  `test/arena-runners.test.js`: three runners through the real CLI (one slashed).
 
 ## Hub page
 
@@ -127,10 +168,11 @@ Red vs blue (rounds, entries, result). Contract addresses come from `hub-config.
 ## How to run
 
 ```bash
-cd zetaphy-network && npm ci && node --test test/forecasts.test.js test/datadao.test.js test/detectorpool.test.js test/arena.test.js
+cd zetaphy-network && npm ci && node --test test/forecasts.test.js test/datadao.test.js test/detectorpool.test.js test/detectorloop.test.js test/arena.test.js test/arena-runners.test.js
 cd ../zetaphy-neuro && npm ci && node --test ml/test/markets.test.js ml/test/arena.test.js
 node ml/detectors/mutate.js --rows ml/data/redteam/evasions.jsonl,ml/data/out/corpus.jsonl --round 1
 node ml/dao/attribute.js --base corpus.jsonl --held held.jsonl --contrib contributions.json --method shapley --perms 20
+node ml/redteam/arena.js --sandbox          # the sandbox id a round is opened with
 node ml/redteam/arena.js --round round.json
 cd ../zetaphy-hub && npm ci && npm test && npm run test:e2e
 ```
@@ -147,15 +189,20 @@ cd ../zetaphy-hub && npm ci && npm test && npm run test:e2e
 - **Selection bias in Foresight**: a model chooses which events it forecasts. DetectorPool needs ≥ 3 per round and retires
   idle organisms, but a model can still skip hard questions. A fix (score every open event, missing = 0.25 or 1.0) needs an
   on-chain list of events per round — not built.
-- **Detector forecasting loop is partly manual**: `mutate.js --predict` needs feature rows for each open question's token;
-  getting them means reading the token with Neuro (`ml/data/votes.js`/`lib/live.js` on the zetaphy chain) and joining by
-  event id. `detectors-commit` then commits, but there is no scheduled job that chains these steps and reveals later yet.
+- **Detector loop**: automated end to end, but it needs the contracts deployed and the variables `DETECTOR_POOL`, `FORESIGHT`,
+  `RISK_FORECASTS`, `DETECTORS_SUBMIT=on` and the secret `MARKETS_KEY` in the `testnet-automation` environment. The curated
+  held-out file (`ml/detectors/held-out.jsonl`) does not exist yet, so until it is curated children are judged on the 30% split of
+  the synthetic corpus + red-team evasions (synthetic data: a child that wins there can still do badly on real tokens; the
+  Foresight scores are the real test). Features are read at commit time; a token that changes later is forecast as it was. A
+  runner only forecasts with its own organisms (Foresight model owners).
 - **Data DAO attribution** has only been run on synthetic rows in tests. On real data its cost is (C+1) trainings for LOO and
   ~perms × C for Shapley; with 40 trees and ~2k rows each training is seconds, so tens of contributors fit in a CI job;
   hundreds would need grouping. Leave-one-out undervalues overlapping datasets (use Shapley). The held-out set must be
   curated and never contributable — that curation is not done. The poster is a trusted (governance) role.
-- **Arena runners are trusted** (quorum of approved addresses posting the same result); there is one implementation, and it
-  is deterministic so independent runners should agree. The validity test covers "the victim loses ≥ 50%" scams (sell blocks,
+- **Arena runners**: no single runner is trusted any more, but runners are still governance-approved and seats are first come,
+  first served, so one operator with several approved, bonded addresses could fill a quorum; the challenge path is the backstop and
+  it ends with governance (the timelock) re-running the sandbox, so governance is trusted to resolve challenges honestly. There is
+  still one runner implementation (pinned, deterministic). The validity test covers "the victim loses ≥ 50%" scams (sell blocks,
   fees, blacklists, seizes, mint-and-dump) but not slow drains, approvals phishing or multi-contract setups beyond one source
   file. Trap steps run as the deployer on the token only. Time-based traps need explicit trigger calls (the sandbox does not
   advance time).

@@ -27,7 +27,7 @@ export const FORECASTS = {
     colAuthor: 'Author', colParent: 'Parent', colStake: 'Stake', colStrikesWins: 'Strikes / wins', colLastBrier: 'Last Brier',
     submissions: 'Submissions', rounds: 'Rounds', available: 'Unpromised funds',
     colContributor: 'Contributor', colRows: 'Rows', colLicense: 'Licence', vetoed: 'vetoed', colClaimed: 'Claimed / total', colClaimsOpen: 'Claims open', colReport: 'Report',
-    colCommitEnd: 'Commits close', colJudgeEnd: 'Judging ends', colEntries: 'Red / blue', colPools: 'Red / blue bounty', colResult: 'Result',
+    colCommitEnd: 'Commits close', colJudgeEnd: 'Judging ends', colEntries: 'Red / blue', colPools: 'Red / blue bounty', colResult: 'Result', colRunners: 'Runners (seats)', challenged: 'challenged',
     judgedN: (valid, evaded) => `${valid} working scams, ${evaded} got past Neuro`,
   },
   th: {
@@ -55,7 +55,7 @@ export const FORECASTS = {
     colAuthor: 'ผู้สร้าง', colParent: 'ต้นแบบ', colStake: 'เงินวาง', colStrikesWins: 'แพ้ / ชนะ', colLastBrier: 'Brier ล่าสุด',
     submissions: 'ข้อมูลที่ส่ง', rounds: 'รอบ', available: 'เงินที่ยังไม่ได้สัญญาจ่าย',
     colContributor: 'ผู้ส่ง', colRows: 'แถว', colLicense: 'สัญญาอนุญาต', vetoed: 'ถูกยับยั้ง', colClaimed: 'เคลมแล้ว / ทั้งหมด', colClaimsOpen: 'เปิดให้เคลม', colReport: 'รายงาน',
-    colCommitEnd: 'ปิดรับ', colJudgeEnd: 'ตัดสินถึง', colEntries: 'แดง / น้ำเงิน', colPools: 'รางวัล แดง / น้ำเงิน', colResult: 'ผล',
+    colCommitEnd: 'ปิดรับ', colJudgeEnd: 'ตัดสินถึง', colEntries: 'แดง / น้ำเงิน', colPools: 'รางวัล แดง / น้ำเงิน', colResult: 'ผล', colRunners: 'ผู้ตัดสิน (ที่นั่ง)', challenged: 'ถูกโต้แย้ง',
     judgedN: (valid, evaded) => `หลอกลวงได้จริง ${valid} รายการ หลบ Neuro ได้ ${evaded}`,
   },
   zh: {
@@ -83,7 +83,7 @@ export const FORECASTS = {
     colAuthor: '作者', colParent: '父代', colStake: '质押', colStrikesWins: '失败 / 胜利', colLastBrier: '上轮 Brier',
     submissions: '提交', rounds: '轮次', available: '未承诺资金',
     colContributor: '贡献者', colRows: '行数', colLicense: '许可', vetoed: '已否决', colClaimed: '已领取 / 总额', colClaimsOpen: '开放领取', colReport: '报告',
-    colCommitEnd: '承诺截止', colJudgeEnd: '裁判截止', colEntries: '红 / 蓝', colPools: '红 / 蓝 赏金', colResult: '结果',
+    colCommitEnd: '承诺截止', colJudgeEnd: '裁判截止', colEntries: '红 / 蓝', colPools: '红 / 蓝 赏金', colResult: '结果', colRunners: '运行者（席位）', challenged: '已被质疑',
     judgedN: (valid, evaded) => `${valid} 个有效诈骗，${evaded} 个绕过了 Neuro`,
   },
   es: {
@@ -111,7 +111,7 @@ export const FORECASTS = {
     colAuthor: 'Autor', colParent: 'Padre', colStake: 'Depósito', colStrikesWins: 'Faltas / victorias', colLastBrier: 'Último Brier',
     submissions: 'Envíos', rounds: 'Rondas', available: 'Fondos sin comprometer',
     colContributor: 'Contribuyente', colRows: 'Filas', colLicense: 'Licencia', vetoed: 'vetada', colClaimed: 'Reclamado / total', colClaimsOpen: 'Reclamos desde', colReport: 'Informe',
-    colCommitEnd: 'Cierre de compromisos', colJudgeEnd: 'Fin del juicio', colEntries: 'Rojo / azul', colPools: 'Recompensa roja / azul', colResult: 'Resultado',
+    colCommitEnd: 'Cierre de compromisos', colJudgeEnd: 'Fin del juicio', colEntries: 'Rojo / azul', colPools: 'Recompensa roja / azul', colResult: 'Resultado', colRunners: 'Ejecutores (puestos)', challenged: 'impugnado',
     judgedN: (valid, evaded) => `${valid} estafas funcionales, ${evaded} burlaron a Neuro`,
   },
   ko: {
@@ -139,7 +139,7 @@ export const FORECASTS = {
     colAuthor: '작성자', colParent: '부모', colStake: '스테이크', colStrikesWins: '패 / 승', colLastBrier: '최근 Brier',
     submissions: '제출', rounds: '라운드', available: '약정되지 않은 자금',
     colContributor: '기여자', colRows: '행', colLicense: '라이선스', vetoed: '거부됨', colClaimed: '청구됨 / 총액', colClaimsOpen: '청구 시작', colReport: '보고서',
-    colCommitEnd: '커밋 마감', colJudgeEnd: '판정 마감', colEntries: '레드 / 블루', colPools: '레드 / 블루 보상', colResult: '결과',
+    colCommitEnd: '커밋 마감', colJudgeEnd: '판정 마감', colEntries: '레드 / 블루', colPools: '레드 / 블루 보상', colResult: '결과', colRunners: '러너 (좌석)', challenged: '이의 제기됨',
     judgedN: (valid, evaded) => `작동하는 사기 ${valid}개, Neuro 회피 ${evaded}개`,
   },
   ja: {
@@ -167,7 +167,7 @@ export const FORECASTS = {
     colAuthor: '作成者', colParent: '親', colStake: 'ステーク', colStrikesWins: '負け / 勝ち', colLastBrier: '直近の Brier',
     submissions: '提出', rounds: 'ラウンド', available: '未割当の資金',
     colContributor: '貢献者', colRows: '行', colLicense: 'ライセンス', vetoed: '拒否', colClaimed: '請求済み / 合計', colClaimsOpen: '請求開始', colReport: 'レポート',
-    colCommitEnd: 'コミット締切', colJudgeEnd: '判定締切', colEntries: 'レッド / ブルー', colPools: 'レッド / ブルー報奨', colResult: '結果',
+    colCommitEnd: 'コミット締切', colJudgeEnd: '判定締切', colEntries: 'レッド / ブルー', colPools: 'レッド / ブルー報奨', colResult: '結果', colRunners: 'ランナー（席）', challenged: '異議あり',
     judgedN: (valid, evaded) => `有効な詐欺 ${valid} 件、Neuro をすり抜けたもの ${evaded} 件`,
   },
   ru: {
@@ -195,7 +195,7 @@ export const FORECASTS = {
     colAuthor: 'Автор', colParent: 'Родитель', colStake: 'Залог', colStrikesWins: 'Поражения / победы', colLastBrier: 'Последний Брайер',
     submissions: 'Данные', rounds: 'Раунды', available: 'Свободные средства',
     colContributor: 'Участник', colRows: 'Строки', colLicense: 'Лицензия', vetoed: 'отклонён', colClaimed: 'Получено / всего', colClaimsOpen: 'Получение с', colReport: 'Отчёт',
-    colCommitEnd: 'Конец фиксации', colJudgeEnd: 'Конец оценки', colEntries: 'Красные / синие', colPools: 'Награда красным / синим', colResult: 'Итог',
+    colCommitEnd: 'Конец фиксации', colJudgeEnd: 'Конец оценки', colEntries: 'Красные / синие', colPools: 'Награда красным / синим', colResult: 'Итог', colRunners: 'Раннеры (места)', challenged: 'оспорено',
     judgedN: (valid, evaded) => `рабочих мошенничеств: ${valid}, обошли Neuro: ${evaded}`,
   },
   vi: {
@@ -223,7 +223,7 @@ export const FORECASTS = {
     colAuthor: 'Tác giả', colParent: 'Cha', colStake: 'Cọc', colStrikesWins: 'Thua / thắng', colLastBrier: 'Brier gần nhất',
     submissions: 'Dữ liệu đã gửi', rounds: 'Vòng', available: 'Quỹ chưa cam kết',
     colContributor: 'Người đóng góp', colRows: 'Dòng', colLicense: 'Giấy phép', vetoed: 'bị phủ quyết', colClaimed: 'Đã nhận / tổng', colClaimsOpen: 'Mở nhận từ', colReport: 'Báo cáo',
-    colCommitEnd: 'Hết cam kết', colJudgeEnd: 'Hết chấm', colEntries: 'Đỏ / xanh', colPools: 'Thưởng đỏ / xanh', colResult: 'Kết quả',
+    colCommitEnd: 'Hết cam kết', colJudgeEnd: 'Hết chấm', colEntries: 'Đỏ / xanh', colPools: 'Thưởng đỏ / xanh', colResult: 'Kết quả', colRunners: 'Runner (ghế)', challenged: 'bị khiếu nại',
     judgedN: (valid, evaded) => `${valid} token lừa đảo hợp lệ, ${evaded} qua mặt được Neuro`,
   },
 };

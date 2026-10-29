@@ -18,14 +18,27 @@
 //        the best living organisms (last round Brier) whose spec is in the folder: mutate.js parents
 //   node scripts/markets.js detectors-commit --predictions preds.json --foresight 0x… [--send]
 //        commits each organism's forecast (mutate.js --predict output, rows with "event") for open events
+//   node scripts/markets.js detectors-round --pool 0x… --foresight 0x… (--forecasts 0x<RiskForecasts> | --events events.json)
+//          --dir <population folder> --rows a.jsonl[,b.jsonl] [--held held.jsonl] [--n 6] [--stake 1] --uri-base <url>
+//          [--out manifest.json] [--no-breed] [--send]
+//        one pass of the whole detector loop (src/detectorloop.js): breed once per pool round on held-out rows,
+//        submit the children, commit forecasts for open events (features read with Neuro from ZETAPHY), reveal
+//        (p recovered from the commitment), score resolved events, settle the pool round. Without --send: a plan
 //   node scripts/markets.js arena-fetch --arena 0x… --round <n> [--out round.json]
 //        reads the revealed entries and downloads their content (https:// or ipfs://, 100 kB max)
-//   node scripts/markets.js arena-post --arena 0x… --round <n> --result result.json [--send]
+//   node scripts/markets.js arena-commit   --arena 0x… --round <n> --result result.json [--send]
+//   node scripts/markets.js arena-reveal   --arena 0x… --round <n> --result result.json [--send]
+//        a bonded runner's sealed result (k-of-n: a quorum of the round's seats must reveal the same result);
+//        the salt is derived from the key, so the reveal needs only the same result.json
+//   node scripts/markets.js arena-finalize --arena 0x… --round <n> [--send]      anyone, after the reveals
+//   node scripts/markets.js arena-check    --arena 0x… --round <n> --result result.json [--challenge] [--send]
+//        compares a local judging with the on-chain result; --challenge posts the challenge bond if they differ
+//   node scripts/markets.js arena-settle   --arena 0x… --round <n> [--send]      anyone, after the challenge window
 //
 // env: ZETAPHY_RPC (default https://rpc.sawasdeecoin.com), KEYFILE (sending commands), IPFS_GATEWAY.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { JsonRpcProvider, Wallet, Contract, parseEther, formatEther, getAddress } from 'ethers';
-import { artifact, readQuestions, exportRows, toJsonl, foresightCommitment, derivedSalt, modelIdOf, rewardsTree, rewardsFromReport } from '../src/markets.js';
+import { JsonRpcProvider, Wallet, NonceManager, Contract, parseEther, formatEther, getAddress } from 'ethers';
+import { artifact, readQuestions, exportRows, toJsonl, foresightCommitment, derivedSalt, modelIdOf, rewardsTree, rewardsFromReport, arenaResultKey, arenaResultCommitment, arenaResultSalt } from '../src/markets.js';
 
 const CHAIN_ID = 77390n;
 const args = process.argv.slice(2);
@@ -42,7 +55,8 @@ async function provider() {
   return p;
 }
 const keyText = () => readFileSync(process.env.KEYFILE || die('KEYFILE is not set'), 'utf8').trim();
-const signer = (p) => new Wallet(keyText(), p);
+// a NonceManager: several transactions in one run must not reuse a nonce the provider cached
+const signer = (p) => new NonceManager(new Wallet(keyText(), p));
 
 /** Sends (with --send) or prints a planned call; checks it with a static call first either way. */
 async function act(c, fn, fnArgs, { value = 0n, label } = {}) {
@@ -176,21 +190,85 @@ const commands = {
       }
       return list;
     };
-    const out = { round: Number(round), arena: arena.target, red: await entries(0, nRed), blue: await entries(1, nBlue) };
+    const j = await arena.judging(round);
+    const out = { round: Number(round), arena: arena.target, sandbox: j.sandbox, red: await entries(0, nRed), blue: await entries(1, nBlue) };
     writeFileSync(opt('out', 'round.json'), JSON.stringify(out, null, 1) + '\n');
     console.log(`round ${round}: ${out.red.length} red, ${out.blue.length} blue entries -> ${opt('out', 'round.json')}`);
   },
 
-  async 'arena-post'() {
+  async 'detectors-round'() {
+    const { detectorRound } = await import('../src/detectorloop.js');
     const p = await provider();
-    const wallet = flag('send') ? signer(p) : null;
-    const arena = new Contract(addr('arena'), artifact('RedBlueArena').abi, wallet ?? p);
-    const res = JSON.parse(readFileSync(need('result'), 'utf8'));
-    if (String(res.round) !== need('round')) die('the result is for another round');
-    const a = res.args;
-    console.log(JSON.stringify(await act(arena, 'postResult', [BigInt(need('round')), BigInt(a.redValid), BigInt(a.redEvaded), a.blueScore]), null, 1));
+    const wallet = signer(p);
+    const readJsonl = (paths) => paths.split(',').filter(Boolean).flatMap((f) => readFileSync(f, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l))).filter((r) => r.label === 0 || r.label === 1);
+    const events = opt('events', null) ? JSON.parse(readFileSync(opt('events'), 'utf8')) : null;
+    const known = new Map((events ?? []).filter((e) => e.f).map((e) => [String(e.token).toLowerCase(), e.f]));
+    const featuresOf = async (token) => known.get(String(token).toLowerCase()) ?? liveFeatures(token);
+    const m = await detectorRound({
+      signer: wallet, foresight: addr('foresight'), pool: addr('pool'), forecasts: opt('forecasts', null), events: events?.map(({ eventId, token }) => ({ eventId, token })) ?? null,
+      featuresOf, privateKey: keyText(), dir: need('dir'), rows: readJsonl(need('rows')), held: opt('held', null) ? readJsonl(opt('held')) : null,
+      n: Number(opt('n', '6')), stake: parseEther(opt('stake', '1')), uriBase: opt('uri-base', ''), breed: !flag('no-breed'), dryRun: !flag('send'),
+      out: opt('out', null), log: (l) => console.error(l),
+    });
+    console.log(JSON.stringify({ round: m.round, children: m.breed?.children.length ?? 0, predictions: m.predictions.length, sent: m.actions.filter((a) => a.tx).length,
+      planned: m.actions.filter((a) => a.planned).length, skipped: m.actions.filter((a) => a.skipped).length }));
+  },
+
+  async 'arena-commit'() { await arenaRunner('commit'); },
+  async 'arena-reveal'() { await arenaRunner('reveal'); },
+  async 'arena-check'() { await arenaRunner('check'); },
+  async 'arena-finalize'() {
+    const p = await provider();
+    const arena = new Contract(addr('arena'), artifact('RedBlueArena').abi, flag('send') ? signer(p) : p);
+    console.log(JSON.stringify(await act(arena, 'finalize', [BigInt(need('round'))]), null, 1));
+  },
+  async 'arena-settle'() {
+    const p = await provider();
+    const arena = new Contract(addr('arena'), artifact('RedBlueArena').abi, flag('send') ? signer(p) : p);
+    console.log(JSON.stringify(await act(arena, 'settle', [BigInt(need('round'))]), null, 1));
   },
 };
+
+/** Neuro's ML features of a token on ZETAPHY (read-only, like the runners' scan; no trade simulation). */
+async function liveFeatures(token) {
+  const [{ readContract }, { extractFeatures }, { sparse, SIM_SEED }] = await Promise.all([
+    import('../../zetaphy-neuro/src/reader.js'), import('../../zetaphy-neuro/ml/features.js'), import('../../zetaphy-neuro/ml/lib/pipeline.js')]);
+  const rpc = process.env.ZETAPHY_RPC || 'https://rpc.sawasdeecoin.com';
+  const chainConfig = { kind: 'evm', id: 77390, name: 'ZETAPHY testnet', rpcs: [rpc] };
+  const report = await readContract('zetaphy', String(token).toLowerCase(), { chainConfig, sourcify: false, simulate: false, simSeed: SIM_SEED });
+  const p = new JsonRpcProvider(rpc, CHAIN_ID, { staticNetwork: true });
+  const code = await p.getCode(token);
+  const impl = report.proxy?.implementation;
+  return sparse(extractFeatures({ report, code, logicCode: impl ? await p.getCode(impl) : null }));
+}
+
+/** A runner's side of a round: commit / reveal its result.json (arena.js output), or check it against the chain. */
+async function arenaRunner(mode) {
+  const p = await provider();
+  const wallet = flag('send') || mode !== 'check' ? signer(p) : null;
+  const arena = new Contract(addr('arena'), artifact('RedBlueArena').abi, wallet ?? p);
+  const round = BigInt(need('round'));
+  const res = JSON.parse(readFileSync(need('result'), 'utf8'));
+  if (String(res.round) !== String(round)) die('the result is for another round');
+  const j = await arena.judging(round);
+  if (String(res.sandbox).toLowerCase() !== String(j.sandbox).toLowerCase()) die(`judged in sandbox ${res.sandbox}, the round wants ${j.sandbox}`);
+  const args = [BigInt(res.args.redValid), BigInt(res.args.redEvaded), res.args.blueScore.map(Number)];
+  const key = arenaResultKey(j.sandbox, args);
+  if (mode === 'check') {
+    const r = await arena.rounds(round);
+    const same = r.judged && j.resultKey === key;
+    const out = { round: Number(round), judged: r.judged, onChain: j.resultKey, local: key, same };
+    if (!same && r.judged && flag('challenge')) out.challenge = await act(arena, 'challenge', [round, ...args], { value: await arena.challengeBond() });
+    console.log(JSON.stringify(out, null, 1));
+    return;
+  }
+  const me = await wallet.getAddress();
+  const salt = arenaResultSalt(keyText(), arena.target, round);
+  const r = mode === 'commit'
+    ? await act(arena, 'commitResult', [round, arenaResultCommitment(arena.target, round, me, key, salt)])
+    : await act(arena, 'revealResult', [round, ...args, salt]);
+  console.log(JSON.stringify({ round: Number(round), key, ...r }, null, 1));
+}
 
 async function foresight(isReveal) {
   const p = await provider();

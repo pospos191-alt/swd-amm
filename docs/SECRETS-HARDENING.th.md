@@ -32,6 +32,9 @@
 | | | `rewards` → `award` | PR, sched, manual | ไม่ (ตาม schedule รายวัน และ manual `award`) | `testnet-automation` |
 | | | `hyperlane-relayer` → `relay` (signer สำรอง) | sched, manual | ไม่ | `testnet-automation` |
 | `ZETAPHY_RELAYER_KEY` (ใหม่ ไม่บังคับ) | key เฉพาะของ relayer ถ้าตั้งไว้จะใช้แทน deployer key | `hyperlane-relayer` → `relay` | sched, manual | ไม่ | `testnet-automation` |
+| `USEFUL_WORK_FEEDER_KEY` (ใหม่ ไม่บังคับ) | feeder ของงานที่มีประโยชน์ (โพสต์งานสแกนและนกขมิ้น เปิดเผย settle เป็น feeder ที่ governance ตั้ง มี ZETAPHY ทดสอบเล็กน้อย ไม่ใช่ deployer) | `useful-work` → `feed` | sched, manual | ไม่ | `testnet-automation` |
+| | | `useful-work` → `deploy` ใช้ `ZETAPHY_DEPLOYER_KEY` (ด้านบน) | manual | ไม่ | `testnet-deploy` |
+| `MARKETS_KEY` (ไม่บังคับ) | key เทสต์เน็ตที่เป็นเจ้าของ organism ตัวตรวจจับ (commit / เปิดเผยคำพยากรณ์ ลงทะเบียนลูก) | `markets` → `detectors` | sched, manual | ไม่ | `testnet-automation` |
 | `ZETAPHY_VALIDATOR_KEY` | key ของ Hyperlane validator ของเรา (เซ็น checkpoint ของ ZETAPHY) | `hyperlane-relayer` → `relay` | sched, manual | ไม่ | `testnet-automation` |
 | | | `saphan-route` → `validator-address` (แสดงแค่ address) | PR, manual | ไม่ (manual `check` / `deploy`) | `testnet-automation` |
 | `BRIDGE_MARKER_KEY` | private key ของ *marker* ของ airlock (ทำเครื่องหมายผู้เรียก ไม่ย้ายเงิน) | `bridge-monitor` → `monitor` | manual (schedule ยัง comment ไว้ จะเปิดภายหลัง) | ไม่ | `monitoring` |
@@ -55,7 +58,7 @@
 | Environment | Secrets | Deployment branches | Required reviewers | เหตุผล |
 |---|---|---|---|---|
 | `testnet-deploy` | `ZETAPHY_DEPLOYER_KEY` | `main` เท่านั้น | **เจ้าของ** | deploy ด้วยมือ และ timelock execute: ต้องมีคนอนุมัติทุกครั้ง |
-| `testnet-automation` | `ZETAPHY_VALIDATOR_KEY`, `ZETAPHY_DEPLOYER_KEY` (minter ของ BZTPHY และ signer สำรองของ relayer), `ZETAPHY_RELAYER_KEY` (ไม่บังคับ) | `main` เท่านั้น | **ไม่มี** | รันตาม schedule (relayer ทุก 15 นาที, award รายวัน) ถ้ามี reviewer ทุก run จะค้างรออนุมัติ |
+| `testnet-automation` | `ZETAPHY_VALIDATOR_KEY`, `ZETAPHY_DEPLOYER_KEY` (minter ของ BZTPHY และ signer สำรองของ relayer), `ZETAPHY_RELAYER_KEY` (ไม่บังคับ), `USEFUL_WORK_FEEDER_KEY` (ไม่บังคับ), `MARKETS_KEY` (ไม่บังคับ) | `main` เท่านั้น | **ไม่มี** | รันตาม schedule (relayer ทุก 15 นาที, award รายวัน) ถ้ามี reviewer ทุก run จะค้างรออนุมัติ |
 | `monitoring` | `BRIDGE_*`, `TELEGRAM_*`, `DISCORD_WEBHOOK_URL`, `PRIVATE_ALERTS_TOKEN` | `main` เท่านั้น | **ไม่มี** | จะรันตาม schedule |
 | `explorer-verify` | `ETHERSCAN_API_KEY` | `main` เท่านั้น | **ไม่มี** | schedule รายวัน |
 | `devnet` | `DEVNET_DEPLOYER_KEYPAIR`, `PROGRAM_KEYPAIR` | `main` เท่านั้น | **เจ้าของ** | deploy Solana devnet ด้วยมือ |

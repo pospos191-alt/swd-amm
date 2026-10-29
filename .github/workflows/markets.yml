@@ -8,9 +8,16 @@
 #   evolve  (weekly): breeds new detector variants from the best living organisms (DetectorPool, read
 #           with DETECTOR_POOL) or the seed spec, on the synthetic corpus; a child is kept only if it
 #           beats its parent on held-out rows. The children are uploaded as an artifact.
-#   submit  (weekly, after evolve): only when the variable DETECTORS_SUBMIT is 'on' and MARKETS_KEY is
-#           set: commits the children's specs to the branch detectors/population (their URI) and
-#           registers them (ForesightRegistry model + DetectorPool organism with a testnet stake).
+#   detectors (every 6 hours): the whole evolving-detector loop, automated (zetaphy-network/src/detectorloop.js,
+#           `markets.js detectors-round`): once per DetectorPool round it breeds children that beat their parent
+#           on held-out labelled rows and registers them; every pass it commits forecasts for open RiskForecasts
+#           events (features read with Neuro from ZETAPHY), reveals them after the deadline (p recovered from
+#           the commitment with the key-derived salt: nothing stored), scores resolved events and settles the
+#           pool round. New specs are pushed to the branch detectors/population (their URI). Runs when the
+#           variables DETECTOR_POOL and FORESIGHT are set (RISK_FORECASTS for events); sends only when
+#           DETECTORS_SUBMIT is 'on', otherwise a dry run that writes the plan. Environment testnet-automation,
+#           secret MARKETS_KEY (docs/SECRETS-HARDENING.md). Deterministic: the manifest (an artifact) lists the
+#           inputs' hashes, the seed, parents, children and every prediction; checkManifest re-derives them.
 # Actions pinned by SHA; the key goes to a 0600 file, is masked, and never printed.
 
 name: Markets
@@ -19,10 +26,11 @@ on:
   schedule:
     - cron: '23 * * * *'   # keeper, hourly
     - cron: '43 5 * * 2'   # evolve, Tuesdays 05:43 UTC
+    - cron: '53 */6 * * *' # detectors loop, every 6 hours
   workflow_dispatch:
     inputs:
       job:
-        description: 'keeper or evolve'
+        description: 'keeper, evolve or detectors'
         required: true
         default: 'keeper'
 
@@ -110,11 +118,11 @@ jobs:
           name: detectors
           path: ${{ runner.temp }}/detectors
 
-  submit:
-    needs: evolve
-    if: vars.DETECTORS_SUBMIT == 'on' && vars.DETECTOR_POOL != '' && vars.FORESIGHT != ''
+  detectors:
+    if: (github.event.schedule == '53 */6 * * *' || inputs.job == 'detectors') && vars.DETECTOR_POOL != '' && vars.FORESIGHT != ''
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
+    environment: testnet-automation
     permissions:
       contents: write   # the branch detectors/population only
     steps:
@@ -122,35 +130,57 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '20'
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: detectors
-          path: ${{ runner.temp }}/detectors
+      - run: npm ci --no-audit --no-fund
+        working-directory: zetaphy-neuro
       - run: npm ci --no-audit --no-fund
         working-directory: zetaphy-network
-      - name: Publish the specs (content-addressed) on detectors/population
+      - name: Population (committed seed + the published specs)
         run: |
-          [ -n "$(ls "$RUNNER_TEMP/detectors/specs" 2>/dev/null)" ] || { echo "no children this week"; exit 0; }
-          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin detectors/population && git checkout -B detectors/population origin/detectors/population || git checkout -B detectors/population
-          cp "$RUNNER_TEMP"/detectors/specs/*.json zetaphy-neuro/ml/detectors/population/
-          git add zetaphy-neuro/ml/detectors/population && git commit -m "detectors: round $(jq .round "$RUNNER_TEMP/detectors/summary.json")" && git push origin detectors/population || true
+          P="$RUNNER_TEMP/population"; mkdir -p "$P"; cp zetaphy-neuro/ml/detectors/population/*.json "$P"/
+          if git fetch -q origin detectors/population 2>/dev/null; then
+            git archive origin/detectors/population zetaphy-neuro/ml/detectors/population | tar -x -C "$RUNNER_TEMP" && cp "$RUNNER_TEMP"/zetaphy-neuro/ml/detectors/population/*.json "$P"/ || true
+          fi
+          echo "POP=$P" >> "$GITHUB_ENV"; ls "$P" | wc -l
+      - name: Labelled rows (synthetic corpus + recorded red-team evasions; curated held-out set if committed)
+        working-directory: zetaphy-neuro
+        run: |
+          node ml/data/build-corpus.js --per-family 30 --dispatch 300
+          echo "ROWS=$PWD/ml/data/out/corpus.jsonl,$PWD/ml/data/redteam/evasions.jsonl" >> "$GITHUB_ENV"
+          if [ -s ml/detectors/held-out.jsonl ]; then echo "HELD=--held $PWD/ml/detectors/held-out.jsonl" >> "$GITHUB_ENV"; else echo "HELD=" >> "$GITHUB_ENV"; fi
       - name: Load the testnet key
         env:
           KEY: ${{ secrets.MARKETS_KEY }}
+          SUBMIT: ${{ vars.DETECTORS_SUBMIT }}
         run: |
-          [ -n "$KEY" ] || { echo "::error::MARKETS_KEY is not set"; exit 1; }
+          [ -n "$KEY" ] || { echo "no MARKETS_KEY in this environment: nothing to do (the salts need the key)"; echo "NOKEY=1" >> "$GITHUB_ENV"; exit 0; }
           k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
           H="$RUNNER_TEMP/mk"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/k"; unset k KEY
           echo "KEYFILE=$H/k" >> "$GITHUB_ENV"
-      - name: Register the children
+          if [ "$SUBMIT" = on ]; then echo "SEND=--send" >> "$GITHUB_ENV"; else echo "SEND=" >> "$GITHUB_ENV"; fi
+      - name: One pass of the loop
+        if: env.NOKEY != '1'
         env:
           DETECTOR_POOL: ${{ vars.DETECTOR_POOL }}
           FORESIGHT: ${{ vars.FORESIGHT }}
+          RISK_FORECASTS: ${{ vars.RISK_FORECASTS }}
         run: |
-          [ -s "$RUNNER_TEMP/detectors/summary.json" ] || exit 0
-          node zetaphy-network/scripts/markets.js detectors-submit --summary "$RUNNER_TEMP/detectors/summary.json" --pool "$DETECTOR_POOL" --foresight "$FORESIGHT" \
-            --uri-base "https://raw.githubusercontent.com/${{ github.repository }}/detectors/population/zetaphy-neuro/ml/detectors/population" --stake 1 --send
+          node zetaphy-network/scripts/markets.js detectors-round --pool "$DETECTOR_POOL" --foresight "$FORESIGHT" ${RISK_FORECASTS:+--forecasts "$RISK_FORECASTS"} \
+            --dir "$POP" --rows "$ROWS" $HELD --n 6 --stake 1 \
+            --uri-base "https://raw.githubusercontent.com/${{ github.repository }}/detectors/population/zetaphy-neuro/ml/detectors/population" \
+            --out "$RUNNER_TEMP/detectors/manifest.json" $SEND | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Publish new specs (content-addressed) on detectors/population
+        if: env.NOKEY != '1' && env.SEND == '--send'
+        run: |
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch -q origin detectors/population && git checkout -q -B detectors/population origin/detectors/population || git checkout -q -B detectors/population
+          cp "$POP"/*.json zetaphy-neuro/ml/detectors/population/
+          git add zetaphy-neuro/ml/detectors/population
+          git diff --cached --quiet || { git commit -q -m "detectors: round $(jq .round "$RUNNER_TEMP/detectors/manifest.json")" && git push -q origin detectors/population; }
       - name: Forget the key
         if: always()
         run: rm -f "$RUNNER_TEMP/mk/k"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: env.NOKEY != '1'
+        with:
+          name: detectors-round
+          path: ${{ runner.temp }}/detectors

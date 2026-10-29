@@ -182,7 +182,14 @@
 //                           --claim-delay 259200 --governance 0x<multisig>]
 //                                      NeuroIdentity (ERC-8004 identity: 1 contract = 1 agent) + NeuroValidation (runner verdicts)
 //   zetaphy work verdict <chain> <address>              the code-only verdict a browser scan job gets (docs/future/useful-work.md)
-//   zetaphy work verify-finding <spec.json> <finding.json | 0x…>   replay a browser's bug finding against a bounty spec
+//   zetaphy work verify-finding <spec.json> <finding.json | reproducer.json | 0x…>   replay a browser's bug finding against a bounty spec
+//   zetaphy work fuzz <spec.json> [--seed 1 --runs 10000 --all --corpus in.json --save-corpus out.json --out repro.json]
+//                                      the browser's coverage-guided fuzzer (same seed, same run); --out writes a reproducer
+//   zetaphy work feed [--useful-work 0x… --targets t.json --max-jobs 5 --fee 0.01 --canary-every 3 --dry-run]
+//                                      the scan-job feeder (canaries, settling, new jobs); .github/workflows/useful-work.yml runs it
+//   zetaphy deploy-useful-work [--timelock 0x… --jobs 0x… --guardian 0x… --overflow 0x… --feeder 0x… --no-issuance --devnet]
+//                                      UsefulWork + BugBounty + WorkerReputation (+ UsefulIssuance), PAUSED, owned by the timelock;
+//                                      writes deployments/useful-work-77390.json (the hub reads it) and the proposals that open them
 //   zetaphy bounty check <findingId> --bounty 0x… --spec <spec.json> [--attest]   runners: verify a revealed finding, then vote
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
 //   zetaphy identity get <chain> <address> | <agentId>   who controls it, its Neuro report link, runner verdicts
@@ -1689,7 +1696,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   }
 
   // useful work: browser scan jobs and bug bounties, checked by runners (src/usefulworkcli.js)
-  if (group === 'work' || group === 'bounty') {
+  if (group === 'work' || group === 'bounty' || group === 'deploy-useful-work') {
     const { usefulWorkCommand } = await import('./src/usefulworkcli.js');
     return usefulWorkCommand({ group, cmd, rest, opt, write, s, connect, connectRpc });
   }

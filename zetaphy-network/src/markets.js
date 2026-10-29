@@ -150,4 +150,19 @@ export function arenaResultArgs(result) {
   return [bits(valid), bits(evaded), [...result.blue].sort((a, b) => a.index - b.index).map((b) => b.score)];
 }
 
+/** RedBlueArena.resultKey(sandbox, redValid, redEvaded, blueScore): what runners commit to and the quorum agrees on. */
+export function arenaResultKey(sandbox, [redValid, redEvaded, blueScore]) {
+  return keccak256(coder.encode(['bytes32', 'uint256', 'uint256', 'int32[]'], [sandbox, BigInt(redValid), BigInt(redEvaded), blueScore.map(Number)]));
+}
+
+/** RedBlueArena.resultCommitmentOf(round, runner, key, salt): a runner's sealed result. */
+export function arenaResultCommitment(arena, round, runner, key, salt) {
+  return keccak256(coder.encode(['address', 'uint256', 'address', 'bytes32', 'bytes32'], [getAddress(arena), BigInt(round), getAddress(runner), key, salt]));
+}
+
+/** A runner's result salt, derived from its key (commit and reveal need nothing stored in between). */
+export function arenaResultSalt(privateKey, arena, round) {
+  return keccak256(coder.encode(['string', 'bytes32', 'address', 'uint256'], ['zetaphy arena result salt', keccak256(privateKey), getAddress(arena), BigInt(round)]));
+}
+
 export { toBeHex };

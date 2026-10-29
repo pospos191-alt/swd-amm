@@ -12,6 +12,7 @@ export const SEL = {
   payoutOf: '0x16df4910', owed: '0xdf18e047', minStake: '0x375b3c0a', eventCount: '0x71be2e4a', brierOf: '0xdcd0439e', skill: '0xa7095c23',
   organismCount: '0x97f330b0', aliveCount: '0x0145a938', organism: '0x1939fce3', round: '0x146ca531', roundEnd: '0xc02e580e', pool: '0x16f0115b',
   submissionCount: '0x6ec02be9', submission: '0x9c8c701b', roundCount: '0x127f0b3f', rounds: '0x8c65c81f', counts: '0xdc715d1b', available: '0x48a0d754',
+  judging: '0x178eeb6d', seats: '0x9c5655d6',
 };
 export const STATUS = ['none', 'open', 'proposed', 'disputed', 'final'];
 export const ANSWER = ['none', 'no', 'yes', 'void'];
@@ -212,17 +213,20 @@ async function arenaPanel(root) {
   const at = C.arena;
   if (!at) { root.append(...notDeployed('cd zetaphy-neuro && node --test ml/test/arena.test.js\nnode ml/redteam/arena.js --round round.json\ncd ../zetaphy-network && node --test test/arena.test.js')); return; }
   const n = Number(uintAt(await call(at, SEL.roundCount)));
+  const seats = Number(uintAt(await call(at, SEL.seats)));
   const rows = [];
   for (let id = n; id >= 1 && rows.length < MAX_ROWS; id--) {
     const x = await call(at, SEL.rounds + word(id));
     const c = await call(at, SEL.counts + word(id));
+    const j = await call(at, SEL.judging + word(id)); // k-of-n runners: seats taken, challenged?
     const pop = (v) => v.toString(2).split('').filter((b) => b === '1').length;
     rows.push(el('tr', {}, el('td', { class: 'mono', text: `#${id}` }), el('td', { text: when(uintAt(x, 0)) }), el('td', { text: when(uintAt(x, 2)) }),
       el('td', { class: 'mono', text: `${uintAt(c, 0)} / ${uintAt(c, 1)}` }), el('td', { class: 'mono', text: `${fmtZeta(uintAt(x, 5))} / ${fmtZeta(uintAt(x, 6))}` }),
+      el('td', { class: 'mono', text: `${uintAt(j, 5)} / ${seats}${uintAt(j, 3) ? ` · ${T('challenged')}` : ''}` }),
       el('td', { text: uintAt(x, 3) ? T('judgedN', pop(uintAt(x, 7)), pop(uintAt(x, 8))) : '–' })));
   }
   root.append(el('div', { class: 'stats' }, stat(T('rounds'), String(n))),
-    rows.length ? table(['#', T('colCommitEnd'), T('colJudgeEnd'), T('colEntries'), T('colPools'), T('colResult')], rows) : el('p', { class: 'muted', text: T('none') }));
+    rows.length ? table(['#', T('colCommitEnd'), T('colJudgeEnd'), T('colEntries'), T('colPools'), T('colRunners'), T('colResult')], rows) : el('p', { class: 'muted', text: T('none') }));
 }
 
 const PANELS = { forecasts: forecastsPanel, foresight: foresightPanel, detectors: detectorsPanel, data: dataPanel, arena: arenaPanel };
