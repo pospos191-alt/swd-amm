@@ -57,7 +57,14 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: '20'
+      - name: Is there a ceremony on the target branch yet?
+        id: base
+        run: |
+          # the PR that adds the ceremony itself has no tools on its target branch to check it with
+          if [ -f "$TRANSCRIPT" ] && [ -f zetaphy-neuro/ml/onchain/zk/ceremony/ceremony.js ]; then echo "has=1" >> "$GITHUB_OUTPUT"
+          else echo "::notice::the target branch has no ceremony yet (this PR adds it): no contribution to check"; fi
       - name: The PR changes only transcript.json; take it as data
+        if: steps.base.outputs.has == '1'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -72,9 +79,11 @@ jobs:
           gh api "repos/$HEAD_REPO/contents/$TRANSCRIPT?ref=$HEAD_SHA" -H 'Accept: application/vnd.github.raw' > "$RUNNER_TEMP/head.json"
           node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$RUNNER_TEMP/head.json"
       - name: Install circom2 (WASM) + snarkjs + circomlib, pinned
+        if: steps.base.outputs.has == '1'
         working-directory: zetaphy-neuro/ml/onchain/zk
         run: npm ci --no-audit --no-fund
       - name: Verify (download the zkey, snarkjs zkey verify, hash chain, author, beacon)
+        if: steps.base.outputs.has == '1'
         working-directory: zetaphy-neuro/ml/onchain/zk
         env:
           AUTHOR: ${{ github.event.pull_request.user.login }}
