@@ -509,6 +509,23 @@ Everything stays **off until it is voted on** (`gov.sh ai-model | immune | break
 
 New chains have v5 from block 1. Running chains: `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`.
 
+### Testnet airdrop (`gov.sh airdrop`)
+
+Send test ZETAPHY to many wallets at once, from the `community` fund (the SWD holders' 200M stays untouched).
+Put one address per line in a file (`0x…` from MetaMask, Trust or any EVM wallet, or `zetaphy1…` from Keplr;
+`address,amount` gives one person a different amount; `#` starts a comment), then on the genesis node:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh -o /tmp/gov.sh
+sudo -u zetaphy -H nano /home/zetaphy/airdrop.txt
+sudo -u zetaphy -H bash -c 'cd ~ && bash /tmp/gov.sh airdrop ~/airdrop.txt 100'
+```
+
+It checks every line, turns `0x…` into `zetaphy1…`, drops repeats, shows how many people and how much in all
+against the fund's balance, and sends only after you answer `y` (batches of 50, one `multi-send` each).
+Paid addresses go to `~/.zetaphy/airdrop-paid.txt`, so adding names to the file and running it again pays only
+the new ones. Limits: whole ZETAPHY, at most `MAX_EACH` (10,000) per address. Test coins have no value.
+
 ### Voting a binary upgrade on a running chain (read before every `propose-upgrade`)
 
 On 2026-10-29 the testnet stopped at block 123343: the release with the `zetaphy-v5` handler was
