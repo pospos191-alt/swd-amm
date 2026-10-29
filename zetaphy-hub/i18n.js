@@ -2,6 +2,8 @@
 // One convention for every ZETAPHY app: these 8 codes, in this menu order; English is the default,
 // a stored code from the set is kept, anything else falls back to English, and so does any missing key.
 
+import { AI_TAB } from './flow-i18n.js';
+
 /** [code, native name], in menu order. */
 export const LANGS = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['ko', '한국어'], ['ja', '日本語'], ['ru', 'Русский'], ['vi', 'Tiếng Việt'], ['th', 'ไทย']];
 export const LANG_CODES = LANGS.map(([c]) => c);
@@ -571,3 +573,6 @@ export const TAB_TEXT = {
     immune: ['Miễn dịch', 'Miễn dịch Neuro', 'Miễn dịch cộng đồng xuyên chuỗi (độ phủ cờ của Neuro), chứng nhận Neuro-checked và chứng thực kháng lượng tử'],
   },
 };
+
+// the AI map tab (flow-i18n.js)
+for (const l of Object.keys(TAB_TEXT)) if (AI_TAB[l]) TAB_TEXT[l].ai = AI_TAB[l];

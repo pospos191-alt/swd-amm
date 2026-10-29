@@ -41,11 +41,15 @@
       <span class="badge" data-tip-key="tipTestnet" tabindex="0">Testnet</span>
     </div>
     <div class="top-actions">
+      <button type="button" class="busy-pill" id="busy-pill" hidden></button>
       <button type="button" class="btn ghost" id="add-net" data-tip-key="tipAddNet"><span data-i18n="addNet">Add network</span></button>
       <select class="lang-select" id="lang" aria-label="Language" title="Language"><option value="en">English</option></select>
       <button type="button" class="btn" id="wb-btn" data-i18n="wbConnect">Connect wallet</button>
     </div>
   </header>
+
+  <!-- "How it works" for the open tab (hub.js renderHow) -->
+  <div class="how" id="how" hidden></div>
 
   <main class="stage" id="stage">
     <!-- Overview -->

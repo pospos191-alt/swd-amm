@@ -9,6 +9,8 @@ import {
   parseZeta, formatZeta, short,
 } from './chainlib.js';
 import { PAGES, askFaucet } from './pages.js';
+import { FLOWS, flowText, icon as flIcon } from './flow.js';
+import { FLOW } from './flow-i18n.js';
 import { LANGS, TEXT, TAB_TEXT, pickLang, locale } from './i18n.js';
 import { walletBar } from './walletbar.js';
 import * as walletLib from './wallet/wallets.js';
@@ -24,6 +26,7 @@ const store = {
 
 // The tabs: native panels and the apps (with their own explanations as hover text).
 const ICONS = {
+  ai: '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15"/>',
   home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',
   wallet: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h2"/><path d="M3 9h15a3 3 0 0 0-3-3H6"/>',
   swap: '<path d="M7 7h12l-3-3"/><path d="M17 17H5l3 3"/>',
@@ -56,6 +59,7 @@ const TABS = [
   { id: 'nft', src: 'nft/' },
   { id: 'explorer', src: 'explorer/', group: 'data' },
   { id: 'neuro', src: 'neuro/web/' },
+  { id: 'ai', page: true, fresh: true },
   { id: 'analytics', page: true, group: 'data', fresh: true },
   { id: 'defi', page: true, group: 'data', fresh: true },
   { id: 'leaderboard', page: true, group: 'data', fresh: true },
@@ -176,6 +180,7 @@ function show(id, { hash, push = true } = {}) {
   $('panel-stake').hidden = tab.id !== 'stake';
   for (const p of document.querySelectorAll('.panel[data-page]')) p.hidden = p.dataset.page !== tab.id;
   if (tab.page) openPage(tab.id);
+  renderHow(tab.id);
   for (const [fid, f] of frames) f.hidden = fid !== tab.id;
   if (tab.src) {
     let f = frames.get(tab.id);
@@ -196,6 +201,53 @@ function show(id, { hash, push = true } = {}) {
     if (u.href !== location.href) history.pushState({ tab: tab.id }, '', u);
   }
 }
+
+// ------------------------------------------------------------------ "How it works" strip and running jobs
+// Above every tab: its four steps as icons, lit one after another (CSS animation; still under reduced motion),
+// and the tabs to go to next. Hidden or shown by the toggle, remembered in this browser.
+const FL = () => FLOW[lang] ?? FLOW.en;
+function renderHow(id) {
+  const box = $('how');
+  const f = FLOWS[id];
+  if (!box || !f) { if (box) box.hidden = true; return; }
+  box.hidden = false;
+  const steps = flowText(lang, id);
+  const open = store.get('zetaphy-hub:how') !== '0';
+  box.classList.toggle('closed', !open);
+  const toggle = el('button', { type: 'button', class: 'how-toggle', 'aria-expanded': String(open), onclick: () => {
+    store.set('zetaphy-hub:how', open ? '0' : '1'); renderHow(id);
+  } }, flIcon('spark', 'fl-ic sm'), el('span', { text: open ? FL().how : FL().how }), el('span', { class: 'how-caret', text: open ? '▴' : '▾' }));
+  if (!open) { box.replaceChildren(toggle); return; }
+  box.replaceChildren(toggle,
+    el('ol', { class: 'how-steps', 'aria-label': FL().how }, ...steps.map((t, i) => el('li', { class: 'how-step', 'data-i': String(i) },
+      el('span', { class: 'how-pic' }, flIcon(f.icons[i], 'fl-ic'), el('span', { class: 'how-n', text: String(i + 1) })),
+      el('span', { class: 'how-t', text: t })))),
+    el('nav', { class: 'how-next', 'aria-label': FL().related }, el('span', { class: 'how-k', text: FL().related }),
+      ...f.next.map((t) => el('a', { class: `chip${busy.has(t) ? ' busy' : ''}`, href: `?tab=${t}`, 'data-tab': t }, svg(t), el('span', { text: tabText(TABS.find((x) => x.id === t), LABEL) })))));
+}
+// Jobs that keep running on other tabs (mining, useful work, bug hunts): pages send `hub:busy` {id, on};
+// the tab gets a pulsing dot, and a "Running" pill in the top bar leads back to it.
+const busy = new Set();
+function renderBusy() {
+  for (const a of document.querySelectorAll('.tab[data-tab], .chip[data-tab]')) a.classList.toggle('busy', busy.has(a.dataset.tab));
+  const pill = $('busy-pill');
+  if (!pill) return;
+  pill.hidden = busy.size === 0;
+  const first = [...busy][0];
+  pill.dataset.tab = first ?? '';
+  pill.dataset.tip = FL().runningTip;
+  pill.replaceChildren(el('i', { class: 'dot' }), el('span', { text: `${FL().running}: ${[...busy].map((t) => tabText(TABS.find((x) => x.id === t), LABEL)).join(', ')}` }));
+}
+const jobs = new Map(); // tab -> Set of job names (one tab can run several: Mine has the faucet and useful work)
+window.addEventListener('hub:busy', (e) => {
+  const { id, job = id, on } = e.detail ?? {};
+  if (!TABS.some((t) => t.id === id)) return;
+  const set = jobs.get(id) ?? new Set();
+  if (on) set.add(job); else set.delete(job);
+  jobs.set(id, set);
+  if (set.size) busy.add(id); else busy.delete(id);
+  renderBusy();
+});
 
 // The data pages (pages.js): drawn once per language, refreshed while shown.
 const pageCtx = () => ({
@@ -274,6 +326,7 @@ function applyLang() {
   for (const n of document.querySelectorAll('[data-i18n]')) n.textContent = T(n.dataset.i18n);
   $('lang').value = lang;
   buildTabs();
+  renderBusy();
   renderEndpoints();
   wb.render();
   show(current ?? 'home', { push: false });
@@ -553,6 +606,7 @@ async function start() {
     show(a.dataset.tab);
   });
   window.addEventListener('popstate', () => show(new URL(location.href).searchParams.get('tab') ?? 'home', { push: false }));
+  $('busy-pill').addEventListener('click', () => { const t = $('busy-pill').dataset.tab; if (t) show(t); });
   $('lang').addEventListener('change', (e) => {
     lang = pickLang(e.target.value);
     store.set('zetaphy-hub:lang', lang);

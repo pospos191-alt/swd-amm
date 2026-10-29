@@ -11,7 +11,8 @@
 // useful-work-77390.json written by `zetaphy deploy-useful-work`). Not there yet: both run as practice
 // (nothing sent, nothing paid). Deployed but paused (the deploy default, until a timelock vote opens
 // them): practice too, with a notice saying so.
-// Nothing runs until a button is pressed; leaving or redrawing the page stops everything (stopWork).
+// Nothing runs until a button is pressed. Work goes on while other hub tabs are open (the hub's "Running"
+// pill says so); redrawing the page (a new language) stops everything (stopWork).
 import { withFallback } from './i18n.js';
 import { WORK } from './work-i18n.js';
 import { keccak256 } from './neuro/src/keccak.js';
@@ -26,7 +27,12 @@ const STORE = 'zetaphy:work:v1';
 const FINDING_TOPIC = keccakHex(keccak256, new TextEncoder().encode('FindingCommitted(uint256,uint256,address)'));
 let live = null; // { workers: Set<Worker>, stopped }
 
+let busyTimer = 0, wasBusy = false;
+const announce = (on) => { if (on !== wasBusy) { wasBusy = on; window.dispatchEvent(new CustomEvent('hub:busy', { detail: { id: 'mine', job: 'work', on } })); } };
+
 export function stopWork() {
+  clearInterval(busyTimer);
+  announce(false);
   if (!live) return;
   live.stopped = true;
   for (const w of live.workers) w.terminate();
@@ -242,6 +248,8 @@ export function renderWork(host, ctx) {
 
   // ---------------------------------------------------------------- bug hunting
   let hunt = null; // { spec, bountyId, worker, finding }
+  // a scan (its button is disabled while it runs) or a hunt (its worker) counts as running work
+  busyTimer = setInterval(() => announce(Boolean(hunt?.worker) || Boolean($('wk-scan-go')?.disabled)), 1000);
   async function pickBounty() {
     if (!bb) {
       const text = await (await fetch('bounties/vulnerable-vault.json')).text();

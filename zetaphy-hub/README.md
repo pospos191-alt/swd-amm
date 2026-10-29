@@ -59,6 +59,17 @@ the page uses the pure-JS code. Node.js 22 on the same machine: 2.65 MH/s. That 
 Phones are 2–4× slower. The time is random (exponential): 1 in 10 searches takes more than 2.3× the average.
 An operator can change it without a new release (`<home>/config/faucet-pow-bits`, 12–48).
 
+## Every tab: how it works, what to do next, and jobs that keep running
+
+- **How it works** (`flow.js`, words in `flow-i18n.js`): above every tab, four steps as icons that light up
+  one after another, then the tabs to go to next. It can be folded; the browser remembers.
+- **AI map** tab (`aimap.js`): all 35 AI features (docs/future/) as picture cards, grouped, with their status
+  (works now, practice, waiting for a contract, inside the chain, command line) and an Open button that goes
+  where each one lives.
+- **Running jobs:** mining, useful-work scans and bug hunts keep going while other tabs are open, and both
+  Mine modes stay alive when you switch between them. The tab gets a green dot and the top bar a "Running"
+  pill that leads back. Pause and Stop still work as before; a new language redraws the page and stops them.
+
 ## Search engines (`seo.mjs`)
 
 - **What is ZETAPHY?** `/about/` and `/about/<lang>.html` in all 8 languages: plain HTML built from
