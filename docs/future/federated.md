@@ -290,8 +290,10 @@ The registry is an EVM contract, so nodes need no new state beyond its address: 
   extension.
 - The multi-validator devnet test of the spec (3 validators, a version scheduled at `H`, replay from genesis, a
   wrong-hash vote extension rejected) is not done: the fork tests run the real keeper, EVM and contract inside one
-  app, and `TestFutureModelAt` compares two apps. `zetaphy_modelAt` and `q neuro model-at` have not been run
-  against a live node yet.
+  app, and `TestFutureModelAt` compares two apps. `zetaphy_modelAt` and `q neuro model-at` were run once by
+  hand against a single-node devnet (`zetaphy-network/scripts/devnet.sh`) with a stand-in registry put in genesis
+  (both answered from the state after `height - 1`; height 1 is refused); not yet against the real `ModelEpochs`
+  on a live chain, and there is no devnet test in CI for it.
 - No sidecar process that pre-fetches files; `loadForHeight` does it on demand.
 - Running v5 chains get the new store key, the `modelEpochs()` view and the queries with the new binary; the
   registry stays unset (nothing changes) until a governance vote sets it.

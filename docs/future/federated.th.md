@@ -203,7 +203,8 @@ registry เป็นสัญญา EVM โหนดจึงเก็บแค
 **สิ่งที่ยังเหลือ (ข้อ 35 ฝั่งโหนด)**
 - ยังไม่มีส่วนใดของฉันทามติใช้โมเดล (`combine.js` กันไว้โดยตั้งใจ) กฎงดออกเสียง / VerifyVoteExtension ในข้อ 3 จึงยังไม่มีผู้เรียก
 - ยังไม่ได้ทดสอบบน devnet หลาย validator ตามสเปก (3 validator, replay จาก genesis, vote extension ที่แฮชผิด)
-  และยังไม่ได้เรียก `zetaphy_modelAt` / `q neuro model-at` กับโหนดจริง
+  `zetaphy_modelAt` และ `q neuro model-at` ทดลองด้วยมือครั้งเดียวบน devnet โหนดเดียว (`scripts/devnet.sh`) กับ registry
+  จำลองใน genesis (ตอบจากสถานะหลัง `height - 1` และปฏิเสธความสูง 1) ยังไม่ได้ลองกับ `ModelEpochs` จริงบนเชนจริง และยังไม่มีการทดสอบ devnet ใน CI
 - ไม่มี sidecar ที่ดึงไฟล์ล่วงหน้า `loadForHeight` ดึงเมื่อใช้
 - เชน v5 ที่รันอยู่: คีย์ใหม่, view และ query มากับไบนารีใหม่ registry จะยังไม่ถูกตั้ง (ไม่มีอะไรเปลี่ยน) จนกว่าจะโหวต
 
