@@ -1,13 +1,16 @@
 // Guardrails for AI-driven wallets (AgentPolicyWallet) and the AI co-signer (CosignCommittee +
 // src/cosign.js): caps per period, allow-lists, timelock or committee co-signatures above a threshold,
-// emergency freeze by the owner's account, passkey (P-256) or ML-DSA-44 key.
+// emergency freeze by the owner's account, passkey (P-256) or ML-DSA-44 key. Co-signatures: k-of-n ECDSA,
+// or one FROST threshold signature (RFC 9591; DKG without a dealer, src/frost.js) checked on chain.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet, id as textHash, Interface, ZeroHash } from 'ethers';
 import { createChain, ZETA } from './helpers/evm.js';
 import { PRECOMPILES, passkey, mldsaKey } from './helpers/precompiles.js';
 import { dexArt, agentKit } from './helpers/mocks.js';
+import { runDkg } from './helpers/frost.js';
 import { cosignDigest, signCosign, combine, review, touched } from '../src/cosign.js';
+import { signRound1, signingPackage, signRound2, aggregateShares } from '../src/frost.js';
 
 const HOUR = 3600, DAY = 86_400;
 const NATIVE = '0x' + '00'.repeat(20);
@@ -189,4 +192,54 @@ test('only the owner changes the policy', async () => {
   await w.send('owner', 'setAllowed', [w.address, true, false]);
   await assert.rejects(exec(w.address, 0n, w.iface.encodeFunctionData('setLimit', [NATIVE, 10n ** 30n, 10n ** 30n])), /CallFailed/);
   await assert.rejects(w.send('owner', 'setConfig', [addr('agent'), committee.address, 0n, 0n]), /BadConfig/);
+});
+
+test('above the threshold, path 2 with FROST: a DKG group key set by governance, one 65-byte threshold signature; k-of-n stays as fallback', async () => {
+  const { r3 } = runDkg(2, 3);
+  const group = r3[0].group;
+  await assert.rejects(committee.send('owner', 'setFrostKey', ['0x' + group.groupKey]), /NotGovernance/);
+  await assert.rejects(committee.send('gov', 'setFrostKey', ['0x02' + 'ff'.repeat(32)]), /BadFrostKey/);
+  await assert.rejects(committee.send('gov', 'setFrostKey', ['0x' + group.groupKey.slice(0, 64)]), /BadFrostKey/);
+  /** Two members commit, the agent builds the package, each signs the digest it computed itself, the agent aggregates. */
+  async function frostSigned(to, value, data, { signers = [r3[0].key, r3[2].key], deadline = c.now() + 600n, grp = group } = {}) {
+    const read = async (_chain, address) => ({ chain: 'zetaphy', address, analysis: { level: 'low', findings: [] }, functions: [] });
+    const r = await review({ to, data, read, hasCode: async () => false });
+    const digest = cosignDigest({ chainId: 1n, wallet: w.address, nonce: await w.call('cosignNonce'), to, value, data, reportHash: r.reportHash, deadline });
+    const rounds = signers.map((key) => ({ key, ...signRound1(key) }));
+    const pkg = signingPackage({ group: grp, digest, commitments: rounds.map((x) => x.commitment) });
+    const sig = aggregateShares({ group: grp, pkg, shares: rounds.map((x) => signRound2({ key: x.key, nonces: x.nonces, pkg, expectDigest: digest })) });
+    return [to, value, data, MODEL, PROMPT, r.reportHash, deadline, sig];
+  }
+  const early = await frostSigned(addr('bob'), 5n * ZETA, '0x');
+  await assert.rejects(w.send('agent', 'executeCosignedFrost', early), /BadCosign/); // no group key yet
+  await committee.send('gov', 'setFrostKey', ['0x' + group.groupKey]);
+  const before = await c.balance('bob');
+  const ev = await w.send('agent', 'executeCosignedFrost', early);
+  assert.equal(await c.balance('bob') - before, 5n * ZETA);
+  assert.equal(ev.find((e) => e?.name === 'AgentAction').args.path, 3n);
+  await assert.rejects(w.send('agent', 'executeCosignedFrost', early), /BadCosign/); // the nonce moved on
+  const other = await frostSigned(addr('bob'), 4n * ZETA, '0x', { signers: [r3[1].key, r3[2].key] });
+  const tampered = [...other];
+  tampered[1] = 3n * ZETA; // another amount than the members signed
+  await assert.rejects(w.send('agent', 'executeCosignedFrost', tampered), /BadCosign/);
+  await assert.rejects(w.send('thief', 'executeCosignedFrost', other), /NotAgent/);
+  const late = await frostSigned(addr('bob'), 4n * ZETA, '0x', { deadline: c.now() - 1n });
+  await assert.rejects(w.send('agent', 'executeCosignedFrost', late), /Expired/);
+  await w.send('agent', 'executeCosignedFrost', other);
+  // another group's signature does not count
+  const stranger = runDkg(2, 3, 'cd'.repeat(16));
+  const foreign = await frostSigned(addr('bob'), 1n * ZETA, '0x', { signers: [stranger.r3[0].key, stranger.r3[1].key], grp: stranger.r3[0].group });
+  await assert.rejects(w.send('agent', 'executeCosignedFrost', foreign), /BadCosign/);
+  // caps still apply
+  const tooMuch = await frostSigned(tok.address, 0n, xfer(addr('bob'), 1001n * ZETA));
+  await assert.rejects(w.send('agent', 'executeCosignedFrost', tooMuch), /OverCap/);
+  // the k-of-n path keeps working next to it
+  const ok = await cosigned(addr('bob'), 1n * ZETA, '0x');
+  await w.send('agent', 'executeCosigned', ok.args);
+  c.advance(DAY); // 5 + 4 + 1 used the native cap of this period
+  const { exec: gas } = await w.gas('agent', 'executeCosignedFrost', await frostSigned(addr('bob'), 1n * ZETA, '0x'));
+  assert.ok(gas < 80_000, `gas ${gas}`);
+  await committee.send('gov', 'setFrostKey', ['0x']);
+  assert.equal(await committee.call('frostKeyX'), 0n);
+  await assert.rejects(w.send('agent', 'executeCosignedFrost', await frostSigned(addr('bob'), 1n * ZETA, '0x')), /BadCosign/);
 });
