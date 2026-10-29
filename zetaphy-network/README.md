@@ -1062,6 +1062,14 @@ status. Only governance (the timelock) publishes or changes status; a guardian m
 `node scripts/model-registry.js deploy | propose | status | show` (`src/modelregistry.js`); tests in `test/modelregistry.test.js`.
 Browsers check every downloaded chunk against it: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
 
+## SignalBoard (browsers finding each other)
+
+`contracts/SignalBoard.sol`: a notice board for WebRTC signaling. `post(topic, to, expiresAt, payload)` only emits
+`Signal(...)` (payload 1..2048 bytes, expiry at most 600 s ahead, 12 posts per sender per 60 s); no owner, no funds,
+nothing to govern. Browsers post signed, encrypted offers from a throwaway faucet-funded key and read with `eth_getLogs`.
+`KEYFILE=… node scripts/signal-board.js deploy | show --board 0x…`; tests in `test/signalboard.test.js`.
+Not deployed yet. Design and privacy: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
+
 ## Testing
 
 - `npm test`: tests the contracts on an in-memory EVM and tests the runner program (CI runs it every time)

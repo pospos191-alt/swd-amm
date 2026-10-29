@@ -8,8 +8,8 @@ Nothing here moves money. Each part says what is built, how to use it, its limit
 | Item | Status |
 |---|---|
 | (1) On-chain model registry | **Done** (contract, deploy/propose script, tests). Not deployed: needs the timelock owners |
-| (2) Chunked, verified distribution + P2P | **Done** for mirrors and manual-code WebRTC; **gap**: automatic peer discovery needs a signaling channel (see below) |
-| (7) Large model split across browsers | **Prototype** on a toy MLP (mechanism proven, bit-exact); not a real LLM |
+| (2) Chunked, verified distribution + P2P | **Done**: mirrors, manual codes, and **automatic peer discovery through the ZETAPHY chain** (SignalBoard contract, tested end to end in Chromium). Not live yet: SignalBoard must be deployed (one command, no owner) and its address set in `config.js`. Optional WebTorrent-tracker board built but off |
+| (7) Model split across browsers | **Done for a real (tiny) language model**: a 0.34M-parameter Llama-architecture model trained here, split layer-wise across two browsers that found each other on chain, **same tokens as one browser** (bit-exact, any JS engine). Small and slow by design: not a useful assistant; big models still need WebGPU |
 | (8) On-chain knowledge for RAG | **Done** (reader, local index, context integration, panel option) |
 | In-browser provider | **Done, with a tiny model**: Neuro's learned risk score (87 KB) + templates; no LLM runtime vendored |
 
@@ -73,29 +73,125 @@ byte. Every rejection is recorded in `stats.rejected`. Mirrors must be https (or
 cap messages ~256 KiB), backpressure, timeouts, a cap on in-flight requests. `servePeer` answers only from the local
 store; `peerSource` is a loader source (its answers are verified like any mirror's).
 
-**Signaling — what is free and what is not.** Implemented: **manual codes**. One browser makes an offer code (SDP with
-all ICE candidates, deflated, base64url, `ZP1.` prefix, ~0.5–1 KB), the other pastes it and returns an answer code.
-Any chat app, email or a QR code can carry them; no server is involved. ICE: no STUN/TURN by default → **same machine or
-same LAN only**. Passing `iceServers` (a public STUN) makes most home NATs work; **symmetric NATs / strict corporate
-networks need a TURN relay, which is a server: not provided.** Automatic discovery ("find any browser that has chunk X")
-needs a rendezvous channel; options considered: a public BitTorrent WebTorrent tracker or a public Nostr relay (both
-third-party servers, free but not ours, and they see who is online) — **not implemented**; it would also need a
-`connect-src` entry for `wss:` (today `https:` only). QR rendering is not bundled (the code is plain text).
+**Signaling, manual.** One browser makes an offer code (SDP with all ICE candidates, deflated, base64url, `ZP1.`
+prefix, ~0.5–1 KB), the other pastes it and returns an answer code. Any chat app, email or a QR code can carry them; no
+server is involved. QR rendering is not bundled (the code is plain text).
 
-## (7) Large model split across browsers — `pipeline.js`, `toymodel.js` (prototype)
+**Signaling, automatic: the ZETAPHY chain is the rendezvous** (`ai/browser/signal.js`, `boards.js`, `discovery.js`,
+`zetaphy-network/contracts/SignalBoard.sol`). No server of ours, no third party, no CSP change (the RPC is already https):
 
-Layers are cut into contiguous ranges with about equal parameters (`planStages`); each peer runs `serveStage` for one
-range; the coordinator (`createPipeline`) cuts the batch into micro-batches and keeps several in flight so all stages
-work at once (GPipe-style, forward only). Activations travel as float32 over the data channel.
-Proven: the pipelined output is **bit-for-bit** the single-machine output, over in-memory channels (3 stages) and over a
-**real WebRTC channel between two Chromium contexts** (`test/browserai.e2e.js`). A stage asked for another range refuses;
-a lying stage is caught by the coordinator's spot check (recompute a share of micro-batches when it holds the weights).
+1. Each browser makes a **session identity** in memory (WebCrypto ECDSA P-256 to sign, ECDH P-256 to receive) and posts
+   a signed **announce** under a **topic** = `sha256("zetaphy-signal/1|<purpose>|<manifest hash>")` (purpose `chunks`
+   for model files, `stage` for pipeline stages), with a small public `meta` (e.g. `{role: 'stage', from: 3, to: 6}`).
+2. A browser that wants a peer it saw posts an **offer** to that peer id: its SDP, **encrypted to the peer** (ECDH →
+   HKDF-SHA256 → AES-256-GCM, header as associated data) and signed. The lower peer id offers first (the other waits
+   3 polls), and simultaneous offers resolve to one connection.
+3. The peer posts the encrypted **answer**; the data channel opens. Peers only ever get a channel: chunks are still
+   checked against the registry hashes, activations by the coordinator.
 
-Limits, honestly: the model is a seeded toy MLP (16→48…→8), not a language model. No autoregressive decoding loop, no KV
-cache, no attention layers, no quantisation, no fault tolerance (a peer leaving stops the run), no partial download of
-only one stage's chunks yet (each peer loads the whole pack), and no proof that a remote stage computed honestly
-(spot checks need the weights; replicas cost double). Per-token latency would be (stages × network round trip): fine on a
-LAN, slow across the internet. Running a real 7B+ model this way needs a WebGPU runtime with layer-range loading.
+Envelope (binary, ≤ 2048 bytes): `"ZS" v1 | kind | topic | to (16) | expiresAt | idPub | ecdhPub | nonce | body | sig`.
+The signature covers a **domain** naming the board (chain id + contract address, or the tracker URL), so an envelope
+cannot be replayed onto another board; readers drop expired ones (2 min clock skew), other topics, bad signatures,
+envelopes whose on-chain indexed fields disagree with their content, and repeats.
+
+**SignalBoard** (no owner, no funds, no settings, nothing stored but a rate counter): `post(topic, to, expiresAt,
+payload)` emits `Signal(topic, to, from, expiresAt, payload)`; payload 1..2048 bytes; `expiresAt` in (now, now + 600 s];
+≤ 12 posts per sender per 60 s. Browsers read it with `eth_getLogs` (the last 150 blocks first, then only new ones).
+Posting needs gas: the page makes a **throwaway session key** (`ai/browser/evmtx.js`: secp256k1 + RFC 6979 + legacy
+EIP-155 tx in plain JS, cross-checked with `@ethereumjs/tx`; not constant-time, holds faucet coins only), asks the
+testnet faucet (`zetaphy_faucet`, free, once) when it cannot pay, and signs only `SignalBoard.post`. Measured: an announce
+(303-byte envelope) 56k gas, an offer (766 bytes, a typical LAN SDP) 50k gas, ≈ 0.00005 testnet ZETAPHY each at 1 gwei,
+so the faucet's 10 ZETAPHY pays ~200,000 posts; a connection costs 3 posts (announce, offer, answer), ~15 s at 5 s blocks.
+Deploy: `KEYFILE=… node zetaphy-network/scripts/signal-board.js deploy`, then set `signalBoard` in
+`zetaphy-neuro/ai/browser/config.js`; `signal-board.js show --board 0x…` lists recent posts per topic.
+
+**Tracker board (optional, off):** `trackerBoard({url})` speaks the WebTorrent tracker WebSocket protocol (announce
+offers to random peers, `to_peer_id` answers); the tracker only forwards the same signed, encrypted envelopes. Off by
+default because a public tracker is a third party that sees every peer's IP address and topic, and because the CSP
+allows no `wss:` today: to use one, add its exact `wss://` URL to `connect-src` in `web/index.html` and `vercel.json`
+(and the hub's, if embedded) and to `trackers` in `config.js`. Swappable for any tracker URL.
+
+**Limits (all options of `createSwarm` / `servePeer` / `config.js`):** `maxPeers` 4 (counting half-open ones),
+`maxPending` 2 offers, a post budget of 10 per minute, `offerTimeoutMs` 90 s then a cooldown before re-offering, ≤ 256
+remembered peers, ≤ 4096 remembered message hashes; upload **2 MiB/s and 256 MiB per peer** (`servePeer`
+`maxBytesPerSecond` / `maxBytesTotal`); the loader stops asking a peer after 3 wrong or failed answers and falls back to
+**mirrors** (same verification), so a slow or lying peer costs time only.
+
+**Privacy, honestly:** an announce is **public and permanent** on chain (session address, topic = which model, time),
+even after it "expires" (expiry is enforced by readers). The SDP (IP addresses) inside offers/answers is encrypted to
+the one recipient, and the session keys live only in that page, so old logs cannot be opened later from this side. But
+**a peer you connect to sees your IP address**, as with any WebRTC. ICE: no STUN/TURN by default → **same machine or
+same LAN only**; `iceServers` in `config.js` (a public STUN, a third party that sees the asking IP) makes most home NATs
+work; **symmetric NATs / strict networks need TURN, a relay server: not provided.** The session key is kept in
+localStorage (so the faucet is asked once per browser), never shown; it is not a wallet.
+
+Tests: `zetaphy-neuro/test/signal.test.js` (envelopes: tamper/replay/domain/topic/expiry/recipient; session-key txs
+verified by `@ethereumjs/tx`; the real SignalBoard on an in-memory chain: post, look up, faucet, bounds, rate limit,
+mismatched logs; swarms over memory, chain and a fake WebTorrent tracker; `maxPeers`, glare, `want`, forged and replayed
+posts), `zetaphy-network/test/signalboard.test.js` (contract + ABI cross-check), `zetaphy-neuro/test/swarm.e2e.js`
+(two Chromium contexts discover each other through the contract with no codes and run the split model).
+
+## (7) A language model split across browsers — `llama.js`, `tokenizer.js`, `detmath.js`, `llmload.js`, `pipeline.js`
+
+**The model.** `ai/browser/llama.js` runs Karpathy's llama2.c architecture (MIT) in plain JS: RMSNorm, rotary position
+embedding, grouped-query attention, SwiGLU, KV cache, tied or separate classifier; `tokenizer.js` is llama2.c's
+tokenizer (same `encode`/`decode`, byte fallback). Any llama2.c legacy checkpoint converts (`fromLlama2c`), so
+Karpathy's TinyStories models (stories260K, stories15M, MIT) run with the same code:
+`node scripts/build-llm-pack.js --model stories15M.bin --tokenizer tokenizer.bin --name stories15m --license MIT`
+(not in the repo: huggingface.co was not reachable from where this was built, and stories15M is 58 MiB).
+
+The repo ships **`zetaphy-docs-tiny` v1** (`web/models/zetaphy-docs-tiny/1/`, 1.37 MB in 21 chunks of 64 KiB, pinned
+as `PINNED_LLM` until ModelRegistry is deployed): **338,240 parameters** (dim 64, 6 layers, 8 heads / 4 KV heads, FFN
+172, vocabulary 1024, context 256), trained here from scratch by `scripts/llm/train-tiny-llama.py` (numpy only, hand-
+written backward pass with a gradient check, 3000 steps of 8 × 256 tokens, ~1 h on one CPU core) on this repository's
+own English docs (prose paragraphs of the 45 `*.md` files, 219k tokens). Validation loss 3.44 nats/token (perplexity
+≈ 31; training loss 2.2: it overfits a corpus this small). **What it writes, honestly:** English that sounds like these
+docs and means nothing ("ZETAPHY is a new chain: the chain's address on ZETAPHY testnet…"). It is there to prove that a
+real trained transformer runs split across browsers, not to answer questions; its license is the repo's (BUSL-1.1),
+because its training data is the repo's docs.
+
+**File format `zllm/1`** (layer-major): header JSON + tokenizer + embedding + final norm (+ classifier) + one contiguous
+section per layer, so **a peer downloads only the chunks of its own layers** (`llmload.js`, loader option `only`):
+in the shipped model the stage serving layers 3–6 fetches 10 of 21 chunks (with the header) and the coordinator (head + layers 0–3) 13.
+Every fetched chunk is still checked against the manifest, the manifest against the registry release; a lying mirror
+or peer is refused exactly as for whole files.
+
+**Split across browsers.** `createStage(model, {from, to})` runs a layer range with its own KV cache per generation
+("session"); `serveLlmStage(channel, stage)` serves it to one peer (sessions keyed per channel, so peers never share a
+cache; positions must follow each other; another range or model is refused); `remoteLlmStage(channel, {from, to})`
+is the coordinator's proxy; `chainStages([...])` joins local and remote ranges; `generate()` does the prompt in one
+message (prefill), then one message per token (greedy, or top-p sampling with a seeded xorshift RNG). The coordinator
+keeps the embedding and output layer. In the page (AI panel → "In this browser" → "Tiny language model, split across
+browsers"): **Lend this browser** loads layers 3–6 and announces a `stage` on SignalBoard; **Write, split with another
+browser** loads the head + layers 0–3, finds such a browser through the chain, generates, and says whether the tokens
+equal a run with every layer here (**Write here**).
+
+**Bit-exact, by construction.** Weights and activations are float32; every dot product is summed in float64 in a fixed
+order; exp / sin / cos / pow come from `detmath.js`, built only from operations IEEE 754 fixes exactly (+ − × ÷, sqrt,
+round), with fixed-bit tests. So the split gives **the same bits as one browser in any JS engine** (no reliance on
+`Math.exp` being equal across V8 / SpiderMonkey / JavaScriptCore). Tests compare logits at every step and greedy and
+sampled text for 2 and 3 stages (GQA, MHA, separate classifier), and in Chromium over WebRTC
+(`test/swarm.e2e.js`). Against an **independent implementation** (numpy, float64, no KV cache, in the training
+script's `--reference` mode) the shipped model's logits differ by at most **3.3e-6** and the greedy tokens are equal
+(`test/fixtures/llm-reference.json`). Not compared with llama2.c's own C code here (running downloaded code was not
+allowed in the build environment); the format and tokenizer follow run.c and the round trip to its file format is tested.
+
+**Speed and size, honestly.** One browser: ~400–500 tokens/s for this 0.34M model on one CPU core (the cost is ~2 ×
+parameters flops per token). Split: each token is one round trip per remote stage: measured **7–11 ms per hop** between
+two Chromium contexts on one machine (`test/swarm.e2e.js`, ~90–150 tokens/s), more on a real LAN, and tens to hundreds of
+ms across the internet. So the split is **slower than one browser for any model that fits in one browser**, and only
+pays off when a model does not fit. Finding the other browser took 5–6 s in that test (a chain that mines at once); on the
+testnet expect ~15–20 s (three posts at ~5 s blocks plus polling). stories15M (15M params, 58 MiB) would run roughly
+10 tokens/s per browser in this plain JS path (estimated from the flops, not measured).
+Models of 1B+ parameters need a WebGPU runtime, quantised weights and a CSP with `'wasm-unsafe-eval'`: **not done**.
+
+**Still missing:** fault tolerance (a stage that leaves ends the generation; the coordinator does not re-route),
+proof that a remote stage computed honestly (the coordinator can only recompute when it holds those layers, or use a
+second stage as a replica), batching several users' tokens into one hop, and a coordinator that finds several stages
+for a 3+-way split by itself (the code supports any number of stages; the page wires two).
+
+The batch prototype on a toy MLP (`toymodel.js`, `createPipeline` / `serveStage`, GPipe-style micro-batches, spot
+checks) stays as it was (`test/browserai.e2e.js`).
 
 ## (8) On-chain knowledge for RAG — `zetaphy-neuro/ai/onchain.js`
 

@@ -51,9 +51,13 @@ async function fetchBytes(fetchImpl, url, { maxBytes, timeoutMs, signal }) {
  * @param {Array<{id:string, getManifest?:Function, getChunk:Function}>} [o.peers]  P2P sources (ai/browser/p2p.js)
  * @param {object} [o.store]  chunk cache (ai/browser/stores.js); memory by default
  * @param {Function} [o.onProgress]  ({done, total, from}) after each chunk
+ * @param {Function} [o.only]  (manifest) => chunk indexes to load (a pipeline stage needs only its layers' chunks).
+ *   The other bytes stay zero; each loaded chunk is still checked against the manifest, which is checked against
+ *   the registry, but the whole-file sha256 cannot be (stats.partial = true).
+ * @param {number} [o.peerStrikes]  a peer that fails this many chunks is not asked again during this load
  * @returns {Promise<{bytes:Uint8Array, manifest:object, stats:object}>}
  */
-export async function loadVerified({ release, mirrors = [], peers = [], store = memoryStore(), fetchImpl = globalThis.fetch, onProgress, signal, timeoutMs = 60_000, base } = {}) {
+export async function loadVerified({ release, mirrors = [], peers = [], store = memoryStore(), fetchImpl = globalThis.fetch, onProgress, signal, timeoutMs = 60_000, base, only = null, peerStrikes = 3 } = {}) {
   if (!release) throw new LoadError('no registry release');
   if (release.status && release.status !== 'active') throw new LoadError(`the registry marks this release "${release.status}": not loaded`);
   const mh = normHash(release.manifestHash);
@@ -92,8 +96,16 @@ export async function loadVerified({ release, mirrors = [], peers = [], store = 
   ];
   const out = new Uint8Array(manifest.size);
   const total = manifest.chunks.length;
+  let want = null;
+  if (only) {
+    want = new Set([...only(manifest)].filter((i) => Number.isInteger(i) && i >= 0 && i < total));
+    stats.partial = want.size < total;
+  }
+  const strikes = new Map(); // peer -> wrong answers / errors (a missing chunk is not a strike)
+  let loaded = 0;
   for (let i = 0; i < total; i++) {
     if (signal?.aborted) throw new LoadError('stopped');
+    if (want && !want.has(i)) continue;
     const h = manifest.chunks[i];
     const len = chunkLength(i, manifest.size, manifest.chunkSize);
     const ok = async (b) => b && b.length === len && (await sha256Hex(b)) === h;
@@ -101,22 +113,25 @@ export async function loadVerified({ release, mirrors = [], peers = [], store = 
     let from = 'cache';
     if (bytes && !(await ok(bytes))) { reject('cache', h, 'cached bytes do not match'); await store.delete(h).catch(() => {}); bytes = null; }
     if (!bytes) {
-      const peerSources = sources.filter((s) => s.kind === 'peer');
+      const peerSources = sources.filter((s) => s.kind === 'peer' && (strikes.get(s.from) ?? 0) < peerStrikes);
       const mirrorSources = sources.filter((s) => s.kind === 'mirror');
       const rotated = mirrorSources.length ? [...mirrorSources.slice(i % mirrorSources.length), ...mirrorSources.slice(0, i % mirrorSources.length)] : [];
       for (const s of [...peerSources, ...rotated]) {
+        const strike = () => { if (s.kind === 'peer') strikes.set(s.from, (strikes.get(s.from) ?? 0) + 1); };
         try {
           const b = await s.get(h, len);
           if (await ok(b)) { bytes = b; from = s.from; stats[s.kind]++; break; }
           reject(s.from, h, b ? 'wrong bytes' : 'not available');
-        } catch (e) { reject(s.from, h, e.message); }
+          if (b) strike();
+        } catch (e) { reject(s.from, h, e.message); strike(); }
       }
       if (!bytes) throw new LoadError(`chunk ${i + 1}/${total} (${h.slice(0, 12)}…): no source served the right bytes`);
       await store.put(h, bytes).catch(() => {});
     } else stats.cache++;
     out.set(bytes, i * manifest.chunkSize);
-    onProgress?.({ done: i + 1, total, from });
+    onProgress?.({ done: ++loaded, total: want ? want.size : total, from });
   }
-  if ((await sha256Hex(out)) !== manifest.sha256) throw new LoadError('assembled artifact does not match the manifest sha256');
+  stats.chunks = loaded;
+  if (!stats.partial && (await sha256Hex(out)) !== manifest.sha256) throw new LoadError('assembled artifact does not match the manifest sha256');
   return { bytes: out, manifest, stats };
 }

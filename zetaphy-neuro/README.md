@@ -330,6 +330,11 @@ browsers over WebRTC, each checked against hashes held by the on-chain ModelRegi
 Today it is the learned risk score with fixed templates, not a language model. The checkbox "Also use records from the
 ZETAPHY chain" adds ThreatRegistry flags and past verdicts as `CHAIN<n>` context for any provider (`ai/onchain.js`).
 Pack a model: `npm run model-pack -- --in <file> --name <n> --version <v> --runtime <r> --license <spdx>`.
+Browsers find each other by themselves through the SignalBoard contract on the ZETAPHY chain (signed, encrypted,
+short-lived offers; `ai/browser/discovery.js`), once it is deployed and set in `ai/browser/config.js`; the manual codes
+still work without it. The box "Tiny language model, split across browsers" runs a 0.34M-parameter Llama-style model
+trained on these docs (`web/models/zetaphy-docs-tiny/1`, `ai/browser/llama.js`), here or with its layers split across
+two browsers, with the same tokens either way (it writes doc-like text, not answers).
 Design, limits and what is missing: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
 
 ## Money flow (`graph/`)
