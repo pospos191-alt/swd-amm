@@ -4,7 +4,8 @@
 //   - a store (server/store.js: Cloudflare D1 or Upstash), for the airdrop list;
 //   - optional: TELEGRAM_ADMIN_IDS (numeric Telegram user ids, comma separated: /count /export /announce),
 //     TELEGRAM_CHANNEL (@name: /announce posts there, and /claim needs membership),
-//     TELEGRAM_BOT_USERNAME (default awasdeebot), AIRDROP_MAX (10000), AIRDROP_AMOUNT (100).
+//     TELEGRAM_BOT_USERNAME (default awasdeebot), AIRDROP_MAX (10000), AIRDROP_AMOUNT (100),
+//     TELEGRAM_BOT_LANG (en by default; auto = each user's Telegram language).
 // After a deploy, open https://neuro.sawasdeecoin.com/api/telegram?setup=1 once: it points Telegram at
 // this function (with a secret derived from the token, checked on every call) and sets the command menu.
 import { timingSafeEqual } from 'node:crypto';
@@ -28,7 +29,7 @@ export default async function handler(req, res) {
     if (req.query?.setup !== '1') { res.status(200).json({ bot: true, store: Boolean(store), channel: cfg.channel || null }); return; }
     const host = String(req.headers.host ?? '').toLowerCase();
     if (!HOSTS.has(host)) { res.status(400).json({ error: 'unknown host' }); return; }
-    try { res.status(200).json(await setupBot(api, `https://${host}/api/telegram`, cfg.token)); }
+    try { res.status(200).json(await setupBot(api, `https://${host}/api/telegram`, cfg.token, cfg.lang)); }
     catch (e) { res.status(502).json({ error: String(e.message ?? e).replace(cfg.token, '…') }); }
     return;
   }

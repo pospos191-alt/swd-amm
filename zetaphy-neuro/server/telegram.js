@@ -1,6 +1,7 @@
 // The ZETAPHY Telegram bot (api/telegram.js is its webhook). It keeps a list of wallets for the testnet
 // airdrop and never holds a key or a coin: the list is exported to the admin, who sends with
 // `gov.sh airdrop` on the genesis node (zetaphy-chain/README.md, "Testnet airdrop").
+// It answers in English (TELEGRAM_BOT_LANG: another of the 8 codes, or "auto" for each user's language).
 //   /start            what ZETAPHY is, buttons to the apps
 //   /claim <address>  put a wallet on the list: private chat only, one wallet per Telegram account, one
 //                     account per wallet, at most AIRDROP_MAX wallets, and (if TELEGRAM_CHANNEL is set)
@@ -45,6 +46,8 @@ export function botConfig(env = process.env) {
     channel: /^@[A-Za-z0-9_]{5,32}$/.test(ch) ? ch : '',
     max: Math.max(1, Number.parseInt(env.AIRDROP_MAX ?? '10000', 10) || 10000),
     amount: Math.max(1, Number.parseInt(env.AIRDROP_AMOUNT ?? '100', 10) || 100),
+    // the bot's language: English for everyone by default; "auto" follows each user's Telegram language
+    lang: String(env.TELEGRAM_BOT_LANG ?? 'en').trim().toLowerCase() === 'auto' ? 'auto' : botLang(env.TELEGRAM_BOT_LANG ?? 'en'),
   };
 }
 
@@ -75,7 +78,8 @@ export function telegramApi(token, fetchImpl = globalThis.fetch) {
 export async function handleUpdate(update, { api, store, cfg, me = 'awasdeebot' }) {
   const m = update?.message;
   if (!m || typeof m.text !== 'string' || !m.from || m.from.is_bot) return 'ignored';
-  const L = BOT[botLang(m.from.language_code)];
+  const lang = (cfg.lang ?? 'auto') === 'auto' ? botLang(m.from.language_code) : cfg.lang;
+  const L = BOT[lang];
   const chat = m.chat.id;
   const say = (text, extra = {}) => api('sendMessage', { chat_id: chat, text, disable_web_page_preview: true, ...extra });
   const [head, ...args] = m.text.trim().split(/\s+/);
@@ -93,7 +97,7 @@ export async function handleUpdate(update, { api, store, cfg, me = 'awasdeebot' 
     case '/help':
       await say(fill(L.start, { amount: cfg.amount }), { reply_markup: { inline_keyboard: [
         [{ text: L.open, url: APP }, { text: L.neuro, url: NEURO }],
-        [{ text: L.about, url: `${APP}/about/${botLang(m.from.language_code) === 'en' ? '' : `${botLang(m.from.language_code)}.html`}` }],
+        [{ text: L.about, url: `${APP}/about/${lang === 'en' ? '' : `${lang}.html`}` }],
       ] } });
       return 'start';
 
@@ -158,11 +162,18 @@ export async function handleUpdate(update, { api, store, cfg, me = 'awasdeebot' 
   }
 }
 
-/** Point Telegram at this webhook and set the command menu in every language. */
-export async function setupBot(api, url, token) {
+/**
+ * Point Telegram at this webhook and set the command menu: in the bot's one language for everyone (the menus
+ * per language are removed), or with lang "auto" in every language.
+ */
+export async function setupBot(api, url, token, lang = 'en') {
   await api('setWebhook', { url, secret_token: webhookSecret(token), allowed_updates: ['message'], drop_pending_updates: true });
-  for (const l of BOT_LANGS) {
-    await api('setMyCommands', { commands: COMMANDS[l].map(([command, description]) => ({ command, description })), ...(l === 'en' ? {} : { language_code: l }) });
+  const menu = (l) => COMMANDS[l].map(([command, description]) => ({ command, description }));
+  if (lang === 'auto') {
+    for (const l of BOT_LANGS) await api('setMyCommands', { commands: menu(l), ...(l === 'en' ? {} : { language_code: l }) });
+  } else {
+    await api('setMyCommands', { commands: menu(lang) });
+    for (const l of BOT_LANGS) if (l !== 'en') await api('deleteMyCommands', { language_code: l });
   }
   const me = await api('getMe');
   return { ok: true, bot: me?.username ?? null, url };
