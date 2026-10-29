@@ -2,11 +2,13 @@
   "name": "neuro-score-zk",
   "version": "0.1.0",
   "private": true,
-  "description": "zkML prototype for Neuro's risk model: a Groth16 proof that a committed feature vector yields a margin under model hash H (circom 2 via circom2 WASM + snarkjs, no native tools)",
+  "description": "zkML for Neuro's risk model: a Groth16 proof that a committed feature vector yields a margin under model hash H, keyed by a multi-party phase-2 ceremony on the public Perpetual Powers of Tau (circom 2 via circom2 WASM + snarkjs, no native tools)",
   "license": "BUSL-1.1",
   "type": "module",
   "scripts": {
-    "zk": "node run.js"
+    "zk": "node run.js",
+    "ceremony": "node ceremony/ceremony.js",
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=20"

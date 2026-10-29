@@ -24,12 +24,14 @@
     "test:devnet:security": "node --test test/devnet.security.integration.js",
     "test:devnet:wasm": "node --test test/devnet.wasm.integration.js",
     "test:devnet:saphantokens": "node --test test/devnet.saphantokens.integration.js",
-    "test:cosmwasm": "cd cosmwasm/neuro-oracle-osmo && cargo test"
+    "test:cosmwasm": "cd cosmwasm/neuro-oracle-osmo && cargo test",
+    "test:anvil": "node scripts/insurance-replay-e2e.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@noble/curves": "1.9.7",
     "@noble/hashes": "~2.2.0",
     "@noble/post-quantum": "^0.6.1",
     "ethers": "6.17.0"

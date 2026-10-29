@@ -71,6 +71,8 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
       await sm.putContractCode(Address.fromString(addressHex), hexToBytes(runtimeHex));
     },
     advance(seconds) { time += BigInt(seconds); },
+    /** Sets the clock (block.timestamp of the next transactions). */
+    setTime(t) { time = BigInt(t); },
     /** PREVRANDAO (block.prevrandao) of the next blocks, as a 0x… 32-byte hex. */
     setPrevRandao(hex) { prevRandao = hexToBytes(hex); },
     blockNumber: () => number,
@@ -98,6 +100,12 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
     async rawCall(from, toHex, dataHex, value = 0n) {
       const res = await exec(acct[from] ?? Address.fromString(from), Address.fromString(toHex), dataHex, value);
       return { ok: !res.execResult.exceptionError, returnHex: bytesToHex(res.execResult.returnValue) };
+    },
+    /** A raw transaction with its logs: { ok, logs: [{ address, topics, data }] } (`to` null: a contract creation). */
+    async rawTx(from, toHex, dataHex, value = 0n) {
+      const res = await exec(acct[from] ?? Address.fromString(from), toHex ? Address.fromString(toHex) : undefined, dataHex, value);
+      const logs = (res.execResult.logs ?? []).map(([address, topics, data]) => ({ address: bytesToHex(address), topics: topics.map(bytesToHex), data: bytesToHex(data) }));
+      return { ok: !res.execResult.exceptionError, logs: res.execResult.exceptionError ? [] : logs };
     },
     async callAt(toHex, iface, fn, args = []) {
       const res = await exec(acct[names[0]], Address.fromString(toHex), iface.encodeFunctionData(fn, args));

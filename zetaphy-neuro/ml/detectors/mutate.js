@@ -5,7 +5,7 @@
 // of two parents. A child is kept only if it beats its parent on held-out rows (Brier score), so the
 // schedule never submits a variant that is worse offline. Deterministic for the same seed and rows.
 //
-//   node ml/detectors/mutate.js --parents parents.json --rows a.jsonl[,b.jsonl] [--round 1] [--n 8] [--out ml/out/detectors]
+//   node ml/detectors/mutate.js --parents parents.json --rows a.jsonl[,b.jsonl] [--held held.jsonl] [--round 1] [--n 8] [--out ml/out/detectors]
 //     parents.json: [{ "organism": 3, "brier": 0.11, "spec": {...} }, ...]  (best first; from DetectorPool + the spec files)
 //     rows: labelled feature rows (the ML corpus, resolved risk forecasts read by Neuro, arena exports)
 //   node ml/detectors/mutate.js --predict --specs dir --rows rows.jsonl     # p (basis points) per spec and row, for Foresight commits
@@ -83,10 +83,11 @@ export function splitRows(rows) {
  * maybe cross it with another, then 1-3 mutations, then a short hill-climb on the fit rows. Kept only
  * if its held-out Brier beats the parent's by `margin`.
  */
-export function evolve({ parents, rows, round = 1, n = 8, seed = 'neuro-detectors', tries = 6, margin = 0.002 }) {
+export function evolve({ parents, rows, held: curated = null, round = 1, n = 8, seed = 'neuro-detectors', tries = 6, margin = 0.002 }) {
   if (!parents.length) parents = [{ organism: 0, spec: seedSpec() }];
   const R = rng(`${seed}:${round}`);
-  const { fit, held } = splitRows(rows);
+  // a curated held-out file (never contributable, never trained on) when given; else a fixed 30% split
+  const { fit, held } = curated?.length ? { fit: rows, held: curated } : splitRows(rows);
   const scored = parents.map((p) => ({ ...p, spec: checkSpec(p.spec), hash: specHash(p.spec), held: brierOf(p.spec, held) }));
   const children = [];
   const seen = new Set(scored.map((p) => p.hash));
@@ -148,7 +149,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const rows = readJsonl(arg('rows', ''));
     if (!rows.length) { console.error('no labelled rows (--rows a.jsonl,b.jsonl)'); process.exit(1); }
     const out = arg('out', new URL('../out/detectors', import.meta.url).pathname);
-    const res = evolve({ parents, rows, round: Number(arg('round', 1)), n: Number(arg('n', 8)), seed: arg('seed', 'neuro-detectors') });
+    const held = arg('held', null) ? readJsonl(arg('held')) : null;
+    const res = evolve({ parents, rows, held, round: Number(arg('round', 1)), n: Number(arg('n', 8)), seed: arg('seed', 'neuro-detectors') });
     mkdirSync(`${out}/specs`, { recursive: true });
     for (const c of res.children) writeFileSync(`${out}/specs/${c.specHash.slice(2, 18)}.json`, JSON.stringify(c.spec, null, 1) + '\n');
     writeFileSync(`${out}/summary.json`, JSON.stringify({ ...res, children: res.children.map(({ spec, ...rest }) => ({ name: spec.name, ...rest })) }, null, 1) + '\n');

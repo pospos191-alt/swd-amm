@@ -22,7 +22,7 @@
 | 1 contract = 1 identity (ERC-8004) + signed cross-chain messages | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: messages from other Neuro instances are data, not commands |
 | 5 · Quantum resistance | ML-DSA precompile (FIPS 204) in the chain + `QuantumWallet` + `zetaphy pq` + true PQ accounts (`zetaphy pq native`) |
 | Future · Useful work (prototype, not deployed) | `UsefulWork` (browser scan jobs: PoW stamp, 2-of-3 commit-reveal, canaries) + `WorkerReputation` (ERC-8004-style) + `BugBounty` (browser fuzzing, runner-verified; `VulnerableVault` is deliberately vulnerable) + `UsefulIssuance` (a timelocked RewardVault share for verified work) + `zetaphy work` / `zetaphy bounty`: [docs/future/useful-work.md](../docs/future/useful-work.md) |
-| Cross-chain security (testnet, docs/future/crosschain-assist.md) | `NeuroOracleSender` + `NeuroOracle`: Neuro's flags mirrored to other EVM testnets over Hyperlane (`zetaphy immune push/coverage`, `scripts/neuro-oracle.js`) and to Osmosis over IBC (`cosmwasm/neuro-oracle-osmo`) · `NeuroAttest`: "Neuro-checked" certificates (`zetaphy certify`) · `NeuroAnchor` + `zetaphy attest-pq`: ML-DSA-44-signed report archives · `HackInsurance`: parametric hack insurance prototype (testnet only) |
+| Cross-chain security (testnet, docs/future/crosschain-assist.md) | `NeuroOracleSender` + `NeuroOracle`: Neuro's flags mirrored to other EVM testnets over Hyperlane (`zetaphy immune push/coverage`, `scripts/neuro-oracle.js`) and to Osmosis over IBC (`cosmwasm/neuro-oracle-osmo`) · `NeuroAttest`: "Neuro-checked" certificates (`zetaphy certify`) · `NeuroAnchor` + `zetaphy attest-pq`: ML-DSA-44-signed report archives · `HackInsurance`: parametric hack insurance prototype (testnet only), with the deterministic forensic replay (`zetaphy insurance replay/vote`, anvil 1.2.3) |
 
 **No stage holds real money yet:** stage 3 and above on mainnet must first pass the gates in the "Before real money" section at the end of this file
 
@@ -1061,6 +1061,14 @@ Defaults:
 status. Only governance (the timelock) publishes or changes status; a guardian may only suspend, at once; revoked is final.
 `node scripts/model-registry.js deploy | propose | status | show` (`src/modelregistry.js`); tests in `test/modelregistry.test.js`.
 Browsers check every downloaded chunk against it: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
+
+## SignalBoard (browsers finding each other)
+
+`contracts/SignalBoard.sol`: a notice board for WebRTC signaling. `post(topic, to, expiresAt, payload)` only emits
+`Signal(...)` (payload 1..2048 bytes, expiry at most 600 s ahead, 12 posts per sender per 60 s); no owner, no funds,
+nothing to govern. Browsers post signed, encrypted offers from a throwaway faucet-funded key and read with `eth_getLogs`.
+`KEYFILE=… node scripts/signal-board.js deploy | show --board 0x…`; tests in `test/signalboard.test.js`.
+Not deployed yet. Design and privacy: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
 
 ## Testing
 

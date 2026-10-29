@@ -9,6 +9,9 @@
 //   (without --round but with --rpc/--rounds: the last round whose reveal phase is over)
 //        [--rows held-out.jsonl] [--out out/fl]
 //        [--registry 0xModelEpochs --gov-bech32 zetaphy1… --activation H --uri https://…/manifest.json]
+//        [--deployment zetaphy-neuro/ml/fl/deployment.json]   (default: that file; its `rounds` and `rpc` are
+//          used when --rounds / --rpc are not given, so the weekly job needs no variables once it is committed)
+//        [--min-updates 20]   (fewer only on a devnet or in tests: robust aggregation needs many updates)
 //
 // Inputs: signed envelopes (*.json in --inbox) and/or Revealed events of the
 // round on chain. Every update must be computed on the committed head
@@ -25,6 +28,7 @@ import { aggregateRound, DEFAULT_AGG } from '../../zetaphy-neuro/ml/fl/aggregate
 import { gateHead } from '../../zetaphy-neuro/ml/fl/gate.js';
 import { buildManifest } from '../../zetaphy-neuro/ml/fl/registry.js';
 import { DEFAULT_PRIVACY, epsilonOf, rhoPerRound } from '../../zetaphy-neuro/ml/fl/dp.js';
+import { checkDeployment } from '../../zetaphy-neuro/ml/fl/deployment.js';
 import { verifyEnvelope, readRevealed, ROUNDS_ABI } from '../src/fl.js';
 import { scheduleProposal } from '../src/modelepochs.js';
 
@@ -88,8 +92,15 @@ function body(d, proposal) {
   return lines.join('\n') + '\n';
 }
 
+/** The committed deployment record (ml/fl/deployment.json), or null when absent / malformed. */
+export function readDeployment(path) {
+  try { return checkDeployment(JSON.parse(readFileSync(path ?? new URL('ml/fl/deployment.json', NEURO), 'utf8'))); } catch { return null; }
+}
+
 async function main() {
   const o = args(process.argv.slice(2));
+  const dep = readDeployment(o.deployment);
+  if (!o.rounds && dep?.deployed) { o.rounds = dep.rounds; o.rpc ??= dep.rpc; }
   const provider = o.rpc ? new JsonRpcProvider(o.rpc) : null;
   if (o.round == null && provider && o.rounds) {
     const [r] = await new Contract(o.rounds, ROUNDS_ABI, provider).phaseAt(await provider.getBlockNumber());
@@ -117,7 +128,9 @@ async function main() {
     submissions.push(...await readRevealed(o.rounds, provider, round, { fromBlock: from, toBlock: to }));
   }
   const privacy = { ...DEFAULT_PRIVACY, ...(o.clip ? { clip: Number(o.clip) } : {}), ...(o.z ? { z: Number(o.z) } : {}) };
-  const r = await aggregateToCandidate({ model, modelBytes, head, submissions, round, privacy, canaries: canaryRows(o.rows) });
+  const agg = o['min-updates'] ? { minUpdates: Number(o['min-updates']) } : {};
+  if (agg.minUpdates != null && !(Number.isInteger(agg.minUpdates) && agg.minUpdates >= 1)) { console.error('--min-updates: a positive integer'); process.exit(2); }
+  const r = await aggregateToCandidate({ model, modelBytes, head, submissions, round, privacy, agg, canaries: canaryRows(o.rows) });
   r.decision.rejected.push(...bad);
   const out = o.out ?? 'out/fl';
   mkdirSync(out, { recursive: true });
@@ -133,7 +146,8 @@ async function main() {
     }
     writeFileSync(`${out}/body.md`, body(r.decision, proposal));
   }
-  console.log(JSON.stringify({ better: r.decision.better, why: r.decision.why ?? null, accepted: r.decision.accepted, candidate: r.decision.candidate ?? null, manifestHash: r.decision.manifestHash ?? null }));
+  console.log(JSON.stringify({ round, better: r.decision.better, why: r.decision.why ?? null, accepted: r.decision.accepted, rejected: r.decision.rejected.length,
+    candidate: r.decision.candidate ?? null, manifestHash: r.decision.manifestHash ?? null }));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e.message); process.exit(1); });

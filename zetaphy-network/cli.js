@@ -62,6 +62,16 @@
 //   zetaphy immune push --sender 0x<NeuroOracleSender> [--once --interval 30 --max-fee 0.1]   relay new flags to every chain's NeuroOracle
 //   zetaphy immune coverage --sender 0x… --mirror <name>=<rpc>@0x<NeuroOracle> …   share of flags each chain mirrors
 //   zetaphy deploy-assist attest|anchor|insurance [--governance 0x… --jobs 0x…]   NeuroAttest, NeuroAnchor, HackInsurance (testnet only)
+//   zetaphy insurance replay --target 0x… --tx 0x…,… --from-block N --to-block M [--price 0x<token>=1.5,… | --price-oracle 0x… --native-asset 0x…]
+//                    [--source-rpc URL --chain-id N --tokens 0x…,… --confirmations 12 --anvil anvil --out report.json]
+//                                      the deterministic forensic replay (anvil fork, foundry v1.2.3): canonical report + reportHash + loss
+//   zetaphy insurance hash <report.json> | claim --insurance 0x… --cover <id> --report <file> | vote --insurance 0x… --claim <id> [--report <file> --dry-run]
+//                                      check a report, file a claim, or (a runner) recompute the replay and vote (HackInsurance, testnet only)
+//   zetaphy fl deploy --governance 0x<ZetaphyTimelock>|gov [--start-in 14400 --commit-blocks 72000 --reveal-blocks 28800
+//                     --max-per-round 1000 --out deployment.json --devnet]   FederatedRounds for Neuro's federated learning,
+//                                      CLOSED until governance opens it; prints the record the Neuro page reads
+//   zetaphy fl propose open|close|max <n>|governance <0x…> [--rounds 0x… --timelock 0x… --proposal-out f]   calldata only
+//   zetaphy fl status [--rounds 0x…] | fl config --rounds 0x… --block N --governance 0x… [--out f]   (src/flcli.js)
 //   zetaphy deploy-multisig --owners 0xA,0xB,0xC [--threshold 2]   k-of-n admin for the contracts below
 //   zetaphy deploy-bridge --lockbox <chainId>:0x<LockBox> [--quarantine 3600 --threshold 2 --lane 0x... --guardian 0x<multisig>
 //                          --governance 0x<multisig>|gov --threats 0x<ThreatRegistry> --control 0x<NeuroControl> --daily-limit 1000
@@ -172,7 +182,14 @@
 //                           --claim-delay 259200 --governance 0x<multisig>]
 //                                      NeuroIdentity (ERC-8004 identity: 1 contract = 1 agent) + NeuroValidation (runner verdicts)
 //   zetaphy work verdict <chain> <address>              the code-only verdict a browser scan job gets (docs/future/useful-work.md)
-//   zetaphy work verify-finding <spec.json> <finding.json | 0x…>   replay a browser's bug finding against a bounty spec
+//   zetaphy work verify-finding <spec.json> <finding.json | reproducer.json | 0x…>   replay a browser's bug finding against a bounty spec
+//   zetaphy work fuzz <spec.json> [--seed 1 --runs 10000 --all --corpus in.json --save-corpus out.json --out repro.json]
+//                                      the browser's coverage-guided fuzzer (same seed, same run); --out writes a reproducer
+//   zetaphy work feed [--useful-work 0x… --targets t.json --max-jobs 5 --fee 0.01 --canary-every 3 --dry-run]
+//                                      the scan-job feeder (canaries, settling, new jobs); .github/workflows/useful-work.yml runs it
+//   zetaphy deploy-useful-work [--timelock 0x… --jobs 0x… --guardian 0x… --overflow 0x… --feeder 0x… --no-issuance --devnet]
+//                                      UsefulWork + BugBounty + WorkerReputation (+ UsefulIssuance), PAUSED, owned by the timelock;
+//                                      writes deployments/useful-work-77390.json (the hub reads it) and the proposals that open them
 //   zetaphy bounty check <findingId> --bounty 0x… --spec <spec.json> [--attest]   runners: verify a revealed finding, then vote
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
 //   zetaphy identity get <chain> <address> | <agentId>   who controls it, its Neuro report link, runner verdicts
@@ -188,12 +205,23 @@
 //                                      signer: the agent's owner/operator/agentWallet, or a runner for an unclaimed Neuro identity
 //   zetaphy msg verify <file> [--me <agentId>]   check a signed message from another Neuro (it is data, never a command)
 //                                      (--identity / ZETAPHY_IDENTITY, --validation / ZETAPHY_VALIDATION: the two addresses)
-//   zetaphy intent show | compile | execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x…]
+//   zetaphy intent show | compile | execute <signed-intent.json> [--router 0x… --path 0xA,0xB | --vault 0x… | --bridge 0x…]
 //                                      Proof of Intent, as a solver: build the calls for a signed intent (from the hub's Agents
 //                                      page) and submit them to IntentExecutor, which reverts unless the effects match
+//   zetaphy intent spend <signed allowance intent> --to 0x… --amount <base units>   the spender of an "approve with cap" intent
+//                                      pulls up to the cap until it expires (IntentExecutor.spendAllowance)
 //   zetaphy cosign review --wallet 0x<AgentPolicyWallet> --to 0x… [--value wei --data 0x… --deadline unix --strict]
 //                                      AI co-signer, as a committee runner: run Neuro on what the action touches, sign if clean
 //   zetaphy cosign combine <a.json> <b.json> …   order the runners' signatures for executeCosigned (docs/future/agents.md)
+//   zetaphy cosign dkg1 --id i --threshold t --participants n --session <32 hex> [--out f]
+//   zetaphy cosign dkg2 --secret <dkg secret> <every round-1 package…> [--out f]
+//   zetaphy cosign dkg3 --secret <dkg secret> --round1 a.json,b.json,… <round-2 messages…> [--key f --out group.json]
+//                                      FROST (RFC 9591) threshold key for the committee, made by the members (no dealer);
+//                                      every step is a file or a copy-paste; compare the printed transcript out of band
+//   zetaphy cosign commit --key <frost key> [--out f]   signing round 1: a one-time commitment
+//   zetaphy cosign frost-package --group group.json --wallet 0x… --to 0x… [--value --data --deadline --strict] <commitments…>
+//   zetaphy cosign frost-sign --key <frost key> --package pkg.json   round 2: re-runs Neuro, signs only the digest it computed
+//   zetaphy cosign frost-aggregate --group group.json --package pkg.json <shares…>   one 65-byte signature for executeCosignedFrost
 //
 // Settings: --rpc / ZETAPHY_RPC (ZETAPHY testnet JSON-RPC), --jobs / ZETAPHY_JOBS
 // (ZETAPHY_CHAIN_ID: Cosmos chain id `pq native` expects, default zetaphy_77390-1)
@@ -222,6 +250,7 @@ import { timelockCommand, timelockHint } from './src/timelockcli.js';
 import { oracleCommand } from './src/oraclecli.js';
 import { agentsCommand } from './src/agentscli.js';
 import { assistCommand } from './src/assistcli.js';
+import { flCommand } from './src/flcli.js';
 import { devnetOf, testnetOf, testnetWrite, roleChecks, capProblems, STARTER_UNITS } from './src/bridgegate.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`./artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -1667,7 +1696,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   }
 
   // useful work: browser scan jobs and bug bounties, checked by runners (src/usefulworkcli.js)
-  if (group === 'work' || group === 'bounty') {
+  if (group === 'work' || group === 'bounty' || group === 'deploy-useful-work') {
     const { usefulWorkCommand } = await import('./src/usefulworkcli.js');
     return usefulWorkCommand({ group, cmd, rest, opt, write, s, connect, connectRpc });
   }
@@ -1675,6 +1704,17 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   // Neuro-checked certificates, ML-DSA-44 attestations, the herd-immunity pusher (src/assistcli.js)
   if (group === 'certify' || group === 'attest-pq' || group === 'immune' || group === 'deploy-assist') {
     return assistCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, argv });
+  }
+
+  // parametric hack insurance: the deterministic forensic replay and the committee vote (src/insurancecli.js)
+  if (group === 'insurance') {
+    const { insuranceCommand } = await import('./src/insurancecli.js');
+    return insuranceCommand({ cmd, rest, opt, write, s, connect, connectRpc });
+  }
+
+  // Neuro federated learning: FederatedRounds deploy / governance calls / status (src/flcli.js)
+  if (group === 'fl') {
+    return flCommand({ cmd, rest, opt, write, s, connect, connectRpc });
   }
 
   // ERC-8004 identity and signed Neuro messages (src/identitycli.js)

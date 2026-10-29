@@ -40,7 +40,7 @@ export function signIntentPq(pq, intent, executor, chainId) {
  * Builds the calls for an intent. The targets are fixed by the intent's targetsHash (the user
  * signed them), so the compiler can only pick routes through those contracts.
  * @param {object} intent
- * @param {{router?:string, path?:string[], vault?:string, swapDeadline?:bigint}} route
+ * @param {{router?:string, path?:string[], vault?:string, bridge?:string, swapDeadline?:bigint}} route
  * @returns {{targets:string[], spender:string, calls:Array<{target:string,data:string}>}}
  */
 export function compile(intent, route = {}) {
@@ -60,7 +60,17 @@ export function compile(intent, route = {}) {
     const vault = getAddress(route.vault);
     return { targets: [vault], spender: vault, calls: [{ target: vault, data: VAULT.encodeFunctionData('deposit', [i.maxIn, i.recipient]) }] };
   }
+  if (kind === 'bridge') {
+    if (!route.bridge) throw new Error('a bridge intent needs --bridge (the bridge the intent lists)');
+    return { targets: [getAddress(route.bridge)], spender: '0x0000000000000000000000000000000000000000', calls: [] }; // the executor calls send() itself
+  }
+  if (kind === 'approve') throw new Error('an allowance intent is not executed: its spender calls IntentExecutor.spendAllowance(intent, auth, to, amount)');
   throw new Error('unknown intent kind');
+}
+
+/** The arguments of IntentExecutor.spendAllowance(intent, auth, to, amount) (APPROVE intents, called by the spender). */
+export function spendArgs(intent, auth, to, amount) {
+  return [intentTuple(intentOf(intent)), [auth.sigType, auth.sig, auth.pqPublicKey ?? '0x'], getAddress(to), BigInt(amount)];
 }
 
 /** The arguments of IntentExecutor.execute(intent, auth, plan). */

@@ -14,7 +14,7 @@
     "tradesim": "node scripts/build-tradesim.js",
     "threat-signatures": "node scripts/build-threat-signatures.js",
     "web": "node scripts/serve.js",
-    "test:web": "node --test test/web.e2e.js test/ai.e2e.js test/graph.e2e.js test/browserai.e2e.js ml/test/fl.browser.e2e.js",
+    "test:web": "node --test test/web.e2e.js test/ai.e2e.js test/graph.e2e.js test/browserai.e2e.js test/swarm.e2e.js ml/test/fl.browser.e2e.js test/fl.e2e.js",
     "model-pack": "node scripts/build-model-pack.js",
     "test:ml": "node --test ml/test/*.test.js",
     "ml:corpus": "node ml/data/build-corpus.js",
@@ -30,9 +30,9 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@ethereumjs/common": "^4.4.0",
-    "@ethereumjs/evm": "^3.1.1",
-    "@ethereumjs/util": "^9.1.0",
+    "@ethereumjs/common": "4.4.0",
+    "@ethereumjs/evm": "3.1.1",
+    "@ethereumjs/util": "9.1.0",
     "@noble/hashes": "1.5.0",
     "@solana/web3.js": "^1.95.4",
     "playwright-core": "^1.56.1",

@@ -1,0 +1,22 @@
+{
+ "about": "Phase 1 (powers of tau) of Neuro's zkML setup: NOT made by ZETAPHY. The Perpetual Powers of Tau (BN254, 80+ independent contributors 2019-2023, coordinated by the Ethereum Foundation's Privacy & Scaling Explorations team), contribution 0080, beacon applied, prepared for phase 2 and truncated to 2^15 by PSE. Pinned by sha256 and blake2b-512: lib.js getPtau() refuses any other bytes. See docs/future/onchain-ml.md (zkML ceremony) for how the pin was checked.",
+ "name": "Perpetual Powers of Tau, contribution 0080 (PSE), prepared for phase 2, power 15",
+ "file": "ppot_0080_15.ptau",
+ "url": "https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_15.ptau",
+ "listedAt": "https://github.com/privacy-scaling-explorations/perpetualpowersoftau#prepared-and-truncated-files",
+ "power": 15,
+ "maxConstraints": 32768,
+ "bytes": 37842066,
+ "sha256": "4a8eb5a754ed4710d6ad603c2e1a89c72325a448e4474f8694d2c71c7c272f3d",
+ "blake2b": "a6dd3adcf80f6716c4d082be2626e790af1f5ed3d760814dc439a07d91e93421382c91d4f705abe8cd90ef1956e4b7eaf58db29d81be5abe624dab4dae827f24",
+ "publishedChecks": {
+  "beacon": "randao_reveal of Ethereum beacon-chain slot 7,325,000, announced in advance in Ethereum tx 0x4615d32912922103bdead12dcb5762415958fe2470c6f8233b76c5d697770f36; PSE README: '31 iterations were used in calculating the beacon hash'",
+  "contribution0080ResponseBlake2b": "28af03a3e4000bff5f7e6b731b4bf94250421f078da8705689f3807202d06386072793085a2a6d07484c6af5e64c1326681d66ef59fcfef0183cfbd98d04edb1"
+ },
+ "alternative": {
+  "about": "Hermez/Polygon's prepared file, whose blake2b-512 is published in the snarkjs README (shipped inside the pinned snarkjs 0.7.6 npm package). Its bucket answered 403 from here on 2026-10-29, so it is not the default; to use it, set file/url/bytes/sha256/blake2b from it after checking its blake2b against the README.",
+  "file": "powersOfTau28_hez_final_15.ptau",
+  "url": "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_15.ptau",
+  "blake2b": "982372c867d229c236091f767e703253249a9b432c1710b4f326306bfa2428a17b06240359606cfe4d580b10a5a1f63fbed499527069c18ae17060472969ae6e"
+ }
+}

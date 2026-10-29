@@ -7,10 +7,18 @@
 # mode = check    read only: the chain's Mailbox, our ISM's address there, the deployer's balance and nonce
 # mode = dry_run  the whole flow on LOCAL chains (an anvil fork of the chain with its real Mailbox and ISM factory,
 #                 a fresh local ZETAPHY with Hyperlane core from the pinned CLI), throwaway validator keys:
-#                 flag on ZETAPHY -> push -> process on the chain -> NeuroOracle.check(token); prints NEURO ORACLE DRY RUN OK.
-#                 No secret, no ZETAPHY RPC.
-# There is NO deploy mode yet: the testnet deploy is planned after 2026-11-01 (the commands are
-# scripts/neuro-oracle.js sender | receiver | wire; the doc lists the steps). Cost: free (GitHub-hosted runner).
+#                 flag on ZETAPHY -> push -> process on the chain -> NeuroOracle.check(token), plus the deploy mode's
+#                 record / verify / hand-over code; prints NEURO ORACLE DRY RUN OK. No secret, no ZETAPHY RPC.
+# mode = deploy   the real testnet deploy (manual run on main only; environment testnet-deploy, a person approves;
+#                 key = ZETAPHY_DEPLOYER_KEY). Refuses unless the ZETAPHY RPC answers chain 77390 (it is paused until
+#                 2026-11-01). Steps: sender (on ZETAPHY, unless neuro-oracle.json has one) -> receiver per chain ->
+#                 wire (routes; with handover = true, governance then goes to the ZETAPHY timelock) -> record into
+#                 zetaphy-chain/hyperlane/neuro-oracle.json -> verify (every address read back on both chains) ->
+#                 push the file to the branch neuro-oracle/<chain> (open the pull request: the hub, the coverage meter
+#                 and the relayer whitelist read the file once merged). chain = all: the three chains in one run.
+# mode = verify   read only, any time after a deploy (e.g. once the timelock has executed a route proposal): the
+#                 deploy's verify step for the chain(s) against neuro-oracle.json on the branch run.
+# On pull requests: dry_run for Base Sepolia. Cost: free (GitHub-hosted runner; testnet gas from faucets).
 
 name: neuro-oracle
 
@@ -20,34 +28,44 @@ on:
       - '.github/workflows/neuro-oracle.yml'
       - 'zetaphy-network/contracts/NeuroOracle.sol'
       - 'zetaphy-network/scripts/neuro-oracle.js'
+      - 'zetaphy-network/scripts/saphan-dryrun.js'
       - 'zetaphy-network/src/neurooracle.js'
+      - 'zetaphy-chain/hyperlane/neuro-oracle.json'
   workflow_dispatch:
     inputs:
       chain:
-        description: "the chain (a name in zetaphy-chain/hyperlane/saphan-chains.json)"
+        description: "the chain (a name in zetaphy-chain/hyperlane/saphan-chains.json); all = every chain of the table"
         required: true
         default: 'basesepolia'
         type: choice
-        options: ['sepolia', 'basesepolia', 'arbitrumsepolia']
+        options: ['sepolia', 'basesepolia', 'arbitrumsepolia', 'all']
       mode:
-        description: "check = read only; dry_run = on local chains"
+        description: "check = read only; dry_run = on local chains; deploy = the real testnets (approval required); verify = read back what neuro-oracle.json records"
         required: true
         default: 'check'
         type: choice
-        options: ['check', 'dry_run']
+        options: ['check', 'dry_run', 'deploy', 'verify']
+      handover:
+        description: "deploy: after wiring, hand the sender's governance to the ZETAPHY timelock (later routes then need a timelock proposal)"
+        required: false
+        default: false
+        type: boolean
 
+# Least privilege: read-only by default. The key only in the environment (docs/SECRETS-HARDENING.md):
+#   deploy -> testnet-deploy (ZETAPHY_DEPLOYER_KEY; required reviewer, main only). check / dry_run: no secret.
 permissions:
   contents: read
 
 jobs:
   oracle:
     name: Neuro oracle ${{ matrix.chain }} (testnet, ${{ github.event_name == 'pull_request' && 'dry_run' || inputs.mode }})
+    if: github.event_name == 'pull_request' || inputs.mode != 'deploy'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        chain: ${{ github.event_name == 'pull_request' && fromJSON('["basesepolia"]') || fromJSON(format('["{0}"]', inputs.chain)) }}
+        chain: ${{ github.event_name == 'pull_request' && fromJSON('["basesepolia"]') || (inputs.chain == 'all' && fromJSON('["sepolia","basesepolia","arbitrumsepolia"]') || fromJSON(format('["{0}"]', inputs.chain))) }}
     defaults:
       run:
         shell: bash
@@ -79,6 +97,10 @@ jobs:
           ORIGIN_RPC: ${{ steps.t.outputs.rpc }}
         run: node scripts/neuro-oracle.js check --chain "$CHAIN" | tail -1 | jq .
 
+      - name: Verify the recorded deployment (read only)
+        if: env.MODE == 'verify'
+        run: node scripts/neuro-oracle.js verify --chain "$CHAIN" --governance any | grep -v '^{'; exit "${PIPESTATUS[0]}"
+
       - name: Install anvil (pinned)
         if: env.MODE == 'dry_run'
         uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1
@@ -107,3 +129,151 @@ jobs:
           export ORIGIN_RPC=http://127.0.0.1:8601 ZETAPHY_RPC=http://127.0.0.1:8602 ZETAPHY_CORE="$W/reg/chains/zetaphy/addresses.yaml"
           node scripts/saphan-dryrun.js --chain "$CHAIN" --neuro-oracle | tee "$W/dry.log"
           grep -q '^NEURO ORACLE DRY RUN OK' "$W/dry.log"
+
+  deploy:
+    name: Neuro oracle deploy ${{ inputs.chain }} (testnet)
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: testnet-deploy
+    permissions:
+      contents: write   # pushes neuro-oracle.json to neuro-oracle/<chain>
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      CHAINS: ${{ inputs.chain == 'all' && 'sepolia basesepolia arbitrumsepolia' || inputs.chain }}
+      BRANCH: neuro-oracle/${{ inputs.chain }}
+      HANDOVER: ${{ inputs.handover && 'yes' || 'no' }}
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+      FILE: ../zetaphy-chain/hyperlane/neuro-oracle.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Preflight (read only) - ZETAPHY answers 77390, our validators are set, gas on every chain
+        id: pre
+        run: |
+          set -o pipefail
+          ZRPC=$(node -e 'import("./src/saphan.js").then(({ loadChains }) => console.log(loadChains().zetaphy.rpc[0]))')
+          zc=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$ZRPC" | jq -r .result) || zc=""
+          [ "$zc" = "0x12e4e" ] || { echo "::error::the ZETAPHY RPC answers '$zc', not 0x12e4e (paused until 2026-11-01?): nothing deployed"; exit 1; }
+          zb=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getBalance\",\"params\":[\"$DEPLOYER\",\"latest\"]}" "$ZRPC" | jq -r .result)
+          [ "$(( zb ))" -gt 0 ] || { echo "::error::the deployer has no ZETAPHY on the testnet (faucet first)"; exit 1; }
+          [ "$(node -e 'import("./src/saphan.js").then(({ loadChains }) => console.log(loadChains().zetaphyValidators.validators.length))')" -gt 0 ] \
+            || { echo "::error::saphan-chains.json zetaphyValidators.validators is empty: add the address of ZETAPHY_VALIDATOR_KEY first (saphan-route mode = check prints it)"; exit 1; }
+          for c in $CHAINS; do
+            out=$(node scripts/neuro-oracle.js check --chain "$c" | tail -1); echo "$out" | jq -c '{chain, domain, mailbox, ourIsm, balance, routeRoles}'
+            need=$(node -e 'import("./src/saphan.js").then(({ loadChains, chainOf }) => console.log(chainOf(loadChains(), process.argv[1]).faucetEth ?? "0.05"))' "$c")
+            awk -v b="$(jq -r .balance <<<"$out")" -v n="$need" 'BEGIN{exit !(b>=n/4)}' || { echo "::error::the deployer has $(jq -r .balance <<<"$out") ETH on $c (at least $need/4 needed)"; exit 1; }
+          done
+          echo "zrpc=$ZRPC" >> "$GITHUB_OUTPUT"
+
+      - name: The key file (masked, checked against DEPLOYER, removed at the end)
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in this job's environment (docs/SECRETS-HARDENING.md)"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/zh"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/worker.key")" = "$DEPLOYER" ] \
+            || { rm -f "$H/worker.key"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          echo "KEYFILE=$H/worker.key" >> "$GITHUB_ENV"
+          echo "H=$H" >> "$GITHUB_ENV"
+
+      - name: 1. The sender on ZETAPHY (unless neuro-oracle.json has one)
+        id: sender
+        env:
+          ZETAPHY_RPC: ${{ steps.pre.outputs.zrpc }}
+        run: |
+          set -o pipefail
+          S=$(jq -r '.sender // empty' "$FILE")
+          if [ -n "$S" ]; then echo "::notice::reusing the recorded NeuroOracleSender $S"; echo "sender=$S" >> "$GITHUB_OUTPUT"; exit 0; fi
+          ZFROM=$(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "$ZETAPHY_RPC" | jq -r .result) ))
+          node scripts/neuro-oracle.js sender | tail -1 | tee "$H/sender.json"
+          echo "sender=$(jq -r .sender "$H/sender.json")" >> "$GITHUB_OUTPUT"
+          echo "zfrom=$ZFROM" >> "$GITHUB_OUTPUT"
+
+      - name: 2. A NeuroOracle on each chain (our ISM through the chain's factory; the v2 route's timelock and multisig, else new ones)
+        env:
+          SENDER: ${{ steps.sender.outputs.sender }}
+        run: |
+          set -o pipefail
+          for c in $CHAINS; do
+            if [ -n "$(jq -r --arg c "$c" '.receivers[$c].oracle // empty' "$FILE")" ]; then echo "::notice::$c already has a NeuroOracle in neuro-oracle.json: skipped"; continue; fi
+            rpc=$(node -e 'import("./src/saphan.js").then(({ loadChains, chainOf }) => console.log(chainOf(loadChains(), process.argv[1]).rpc[0]))' "$c")
+            echo $(( $(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_blockNumber","params":[]}' "$rpc" | jq -r .result) )) > "$H/ofrom-$c"
+            node scripts/neuro-oracle.js receiver --chain "$c" --sender "$SENDER" | tail -1 | tee "$H/receiver-$c.json"
+          done
+
+      - name: 3. Wire - the sender's route to each new NeuroOracle (then the hand-over, when asked)
+        env:
+          SENDER: ${{ steps.sender.outputs.sender }}
+          ZETAPHY_RPC: ${{ steps.pre.outputs.zrpc }}
+        run: |
+          set -o pipefail
+          R=$(for c in $CHAINS; do [ -f "$H/receiver-$c.json" ] && printf '%s=%s,' "$c" "$(jq -r .oracle "$H/receiver-$c.json")"; done; true)
+          R=${R%,}
+          if [ -z "$R" ] && [ "$HANDOVER" != yes ]; then echo "nothing to wire"; echo '{}' > "$H/wire.json"; exit 0; fi
+          node scripts/neuro-oracle.js wire --sender "$SENDER" --receivers "$R" $([ "$HANDOVER" = yes ] && echo --handover) | tail -1 | tee "$H/wire.json"
+          if [ "$(jq '.proposals | length' "$H/wire.json")" -gt 0 ]; then
+            echo "::warning::the sender is governed by the timelock already: schedule these routes through the timelock workflow (to, data):"
+            jq -c '.proposals[]' "$H/wire.json"
+          fi
+
+      - name: 4. Record the addresses into zetaphy-chain/hyperlane/neuro-oracle.json
+        id: record
+        env:
+          ZFROM: ${{ steps.sender.outputs.zfrom }}
+        run: |
+          set -o pipefail
+          first=yes
+          for c in $CHAINS; do
+            [ -f "$H/receiver-$c.json" ] || continue
+            args=(--chain "$c" --receiver-json "$H/receiver-$c.json" --ofrom "$(cat "$H/ofrom-$c")" --wire-json "$H/wire.json" --run "${{ github.run_id }}")
+            if [ "$first" = yes ] && [ -f "$H/sender.json" ]; then args+=(--sender-json "$H/sender.json" --zfrom "$ZFROM"); fi
+            node scripts/neuro-oracle.js record "${args[@]}" > /dev/null
+            first=no
+          done
+          # a new sender with no new receiver (e.g. every chain skipped): record the sender alone
+          if [ "$first" = yes ] && [ -f "$H/sender.json" ]; then
+            set -- $CHAINS
+            node scripts/neuro-oracle.js record --chain "$1" --sender-json "$H/sender.json" --zfrom "$ZFROM" --wire-json "$H/wire.json" > /dev/null
+          fi
+          jq . "$FILE"
+
+      - name: 5. Verify (read only) - every recorded address read back on ZETAPHY and on each chain
+        env:
+          ZETAPHY_RPC: ${{ steps.pre.outputs.zrpc }}
+        run: |
+          gov=$([ "$HANDOVER" = yes ] && echo timelock || echo any)
+          fail=0
+          for c in $CHAINS; do
+            echo "== $c"
+            node scripts/neuro-oracle.js verify --chain "$c" --governance "$gov" > "$H/verify-$c.txt" || fail=1
+            grep -v '^{' "$H/verify-$c.txt" || true
+          done
+          # the relayer's whitelist now carries ZETAPHY -> each mirror (read by hyperlane-relayer once the file is on main)
+          node scripts/saphan.js whitelist | tail -1 | jq -c --arg s "$(jq -r .sender "$FILE")" '[.[] | select(.originDomain == 77390 and (.senderAddress | ascii_downcase | endswith($s[2:] | ascii_downcase)))]'
+          node scripts/neuro-oracle.js coverage || true
+          exit $fail
+
+      - name: Remove the key file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/zh/worker.key"
+
+      - name: Push the addresses to neuro-oracle/<chain> (also after a failed verify, so deployed addresses are not lost)
+        if: always() && steps.record.outcome == 'success'
+        run: |
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B "$BRANCH"
+          git add zetaphy-chain/hyperlane/neuro-oracle.json
+          git commit -q -m "Neuro oracle on the testnets (${{ inputs.chain }}): addresses" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}." || { echo "nothing new to record"; exit 0; }
+          git push -q --force origin "$BRANCH"
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...$BRANCH"

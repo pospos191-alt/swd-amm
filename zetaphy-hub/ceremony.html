@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ZETAPHY zkML ceremony</title>
+<meta name="description" content="Contribute randomness to the trusted setup of Neuro's zkML proofs, entirely in this browser. Only one honest contributor is needed.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="ceremony.css">
+<script src="vendor/snarkjs.min.js"></script>
+<script type="module" src="ceremony.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top">
+      <a class="eyebrow" href="./">ZETAPHY · zetaphy_77390-1 · testnet</a>
+      <select id="lang" aria-label="Language">
+        <option value="en">English</option><option value="zh">中文</option><option value="es">Español</option>
+        <option value="ko">한국어</option><option value="ja">日本語</option><option value="ru">Русский</option>
+        <option value="vi">Tiếng Việt</option><option value="th">ไทย</option>
+      </select>
+    </div>
+    <h1 data-t="title"></h1>
+    <p class="lede" data-t="lede"></p>
+    <p class="note" data-t="oneHonest"></p>
+    <p class="note" data-t="local"></p>
+  </header>
+
+  <section class="step" aria-labelledby="h1s">
+    <h2 id="h1s" data-t="step1"></h2>
+    <p class="muted" data-t="step1Help"></p>
+    <label class="file"><span data-t="pickTranscript"></span> <input type="file" id="transcript" accept=".json,application/json"></label>
+    <p id="tstatus" class="mono" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="step" aria-labelledby="h2s">
+    <h2 id="h2s" data-t="step2"></h2>
+    <p class="muted" data-t="step2Help"></p>
+    <label class="file"><span data-t="pickZkey"></span> <input type="file" id="zkey" accept=".zkey"></label>
+    <p id="zstatus" class="mono" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="step" aria-labelledby="h3s">
+    <h2 id="h3s" data-t="step3"></h2>
+    <div class="form">
+      <label><span data-t="name"></span> <input id="name" maxlength="64" autocomplete="off"></label>
+      <label><span data-t="github"></span> <input id="github" maxlength="39" autocomplete="off" spellcheck="false"></label>
+      <label class="wide"><span data-t="url"></span> <input id="url" autocomplete="off" spellcheck="false"></label>
+      <label class="wide"><span data-t="entropy"></span> <textarea id="entropy" rows="3" autocomplete="off" spellcheck="false"></textarea></label>
+    </div>
+    <p class="muted" data-t="entropyHelp"></p>
+    <div class="act"><button type="button" id="go" data-t="go" disabled></button> <progress id="bar" max="100" value="0" hidden></progress></div>
+    <p id="gstatus" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="step" aria-labelledby="h4s" id="done" hidden>
+    <h2 id="h4s" data-t="step4"></h2>
+    <dl class="kv">
+      <dt data-t="contribHash"></dt><dd id="chash" class="mono"></dd>
+      <dt data-t="zkeySha"></dt><dd id="zsha" class="mono"></dd>
+      <dt data-t="took"></dt><dd id="took" class="mono"></dd>
+    </dl>
+    <div class="act"><button type="button" id="dlZkey" data-t="dlZkey"></button> <button type="button" id="dlTranscript" class="ghost" data-t="dlTranscript"></button></div>
+    <ol id="next" class="next"></ol>
+  </section>
+</div>
+</body>
+</html>

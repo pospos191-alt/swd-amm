@@ -1,0 +1,35 @@
+{
+ "format": "zetaphy-zk-ceremony/1",
+ "circuit": {
+  "name": "neuro_score",
+  "modelHash": "0x7c420111bec7912ea5aeea2cc23cf1cb61e5d1379aa36eb825e241eab81a4132",
+  "csHash": "213499ee807d3886f9498f2a4a54690c0a386459276c673b353c26fa352608b6a4a04be5afd40344b5a0118c58c6e320c8e4c452c24d5551bb1b8359b0e7adb5",
+  "r1csSha256": "1d99d6d4d7806a7e59c7ed943b5d51d4e75f2bbe7f518cb22c2a89d4052d739c"
+ },
+ "phase1": {
+  "name": "Perpetual Powers of Tau, contribution 0080 (PSE), prepared for phase 2, power 15",
+  "file": "ppot_0080_15.ptau",
+  "url": "https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/pot28_0080/ppot_0080_15.ptau",
+  "sha256": "4a8eb5a754ed4710d6ad603c2e1a89c72325a448e4474f8694d2c71c7c272f3d",
+  "blake2b": "a6dd3adcf80f6716c4d082be2626e790af1f5ed3d760814dc439a07d91e93421382c91d4f705abe8cd90ef1956e4b7eaf58db29d81be5abe624dab4dae827f24",
+  "power": 15
+ },
+ "snarkjs": "0.7.6",
+ "minContributions": 3,
+ "beaconRpc": {
+  "ethereum": [
+   "https://ethereum-rpc.publicnode.com",
+   "https://cloudflare-eth.com"
+  ],
+  "zetaphy": [
+   "https://rpc.sawasdeecoin.com"
+  ]
+ },
+ "init": {
+  "zkeySha256": "4351818234f50ae81799299186fd32e983475202ecef38dc952376abd8747c75",
+  "zkeyBytes": 11338460,
+  "link": "f1e346a4b77b68058854ba80d1bf594e9e499cffc4f582e1753c57b641781b6b"
+ },
+ "beacon": null,
+ "contributions": []
+}

@@ -127,11 +127,23 @@ test('useful work, practice mode: the browser scan matches Node; the hunt finds 
     assert.match(await page.textContent('#wk-scan-msg'), /Done: 1 job/);
     // bug hunt in the in-page EVM
     await page.click('#wk-hunt-go');
-    await page.waitForSelector('#wk-finding:not([hidden])', { timeout: 90_000 });
+    await page.waitForFunction(() => /attacker gains 5 ZTPHY/.test(document.getElementById('wk-hunt-msg').textContent), null, { timeout: 120_000 });
     const f = await page.textContent('#wk-finding');
-    assert.match(f, /^initialize\(\)\nsweep\(address\) 0x00000000000000000000000000000000000a77a1$/);
-    assert.match(await page.textContent('#wk-hunt-msg'), /attacker gains 5 ZTPHY/);
+    // the hunt's seed is random in the browser: the coins go to the attacker's account or to its callback contract
+    assert.match(f, /^initialize\(\)\nsweep\(address\) 0x[0-9a-f]{40}$/);
+    const kinds = await page.$$eval('#wk-kinds li', (li) => li.map((x) => x.textContent));
+    assert.ok(kinds.some((k) => /owner \/ role changed/.test(k)), `the takeover is listed: ${kinds}`);
+    assert.ok(kinds.some((k) => /the attacker gains coins/.test(k)), `the theft is listed: ${kinds}`);
+    assert.match(await page.textContent('#wk-cov'), /^\d+(\.\d)?% · \d+ branches$/);
     assert.equal(await page.isHidden('#wk-submit'), true, 'practice: nothing to submit');
+    // the reproducer: a JSON file the runners' CLI replays
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#wk-repro')]);
+    assert.match(dl.suggestedFilename(), /^zetaphy-repro-[0-9a-f]{8}\.json$/);
+    const repro = JSON.parse(readFileSync(await dl.path(), 'utf8'));
+    assert.equal(repro.format, 'zetaphy-fuzz-repro/1');
+    assert.equal(repro.valid, true);
+    assert.deepEqual(repro.finding.steps.map((x) => x.sig), ['initialize()', 'sweep(address)']);
+    if (await page.textContent('#wk-hunt-go') === 'Stop') await page.click('#wk-hunt-go');
     // a phone: one column, no sideways scroll
     await page.setViewportSize({ width: 375, height: 800 });
     await page.waitForTimeout(300);
@@ -249,6 +261,40 @@ test('useful work on-chain: stamp, scan, commit, reveal, settle with two other w
     } finally {
       clearInterval(confirmAll);
     }
+    assert.deepEqual(errors, []);
+  } finally {
+    await browser.close();
+    site.close();
+  }
+});
+
+test('useful work deployed but paused: the page says so and stays in practice mode', { timeout: 120_000 }, async () => {
+  const c = await chain();
+  const GOV = '0x' + '90'.repeat(20);
+  await c.fund(GOV);
+  const rep = await c.deploy('WorkerReputation', [GOV, ZeroAddress, ZeroAddress], GOV);
+  const PARAMS = { stampBits: 10, stampSeats: 5, stampLife: 86400, seatsPerDay: 20, seats: 3, quorum: 2, commitWindow: 600, revealWindow: 600, seatDeposit: ZETA / 10n, subsidy: 0n, priorityScore: 0, priorityWindow: 0 };
+  const uw = await c.deploy('UsefulWork', [GOV, rep.address, ZeroAddress, PARAMS], GOV);
+  await uw.send(GOV, 'setPaused', [true]);
+  const handle = async (u, body) => {
+    if (new URL(u).pathname !== '/' && new URL(u).pathname !== '') return answer(u, body);
+    const { method, id, params } = JSON.parse(body || '{}');
+    if (method === 'eth_call' && (await c.code(params[0].to)) !== '0x') return { jsonrpc: '2.0', id, result: await c.ethCall(params[0]) };
+    return answer(u, body);
+  };
+  const site = await serve(DIST, { headers: { 'content-security-policy': CSP } });
+  const browser = await launch();
+  try {
+    const { page, errors } = await openPage(browser, site, { handle, config: { usefulWork: uw.address, workerReputation: rep.address } });
+    await page.goto(`${site.url}?tab=mine`);
+    await page.waitForSelector('#mode-work');
+    await page.click('#mode-work');
+    await page.waitForSelector('#wk-paused:not([hidden])');
+    assert.match(await page.textContent('#wk-paused'), /paused.*timelock/);
+    assert.equal(await page.isHidden('#wk-withdraw'), true);
+    assert.equal(await page.textContent('#wk-scan-go'), 'Practice scan');
+    await page.click('#wk-scan-go');
+    await page.waitForSelector('.wk-verdict', { timeout: 60_000 });
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();

@@ -39,3 +39,22 @@ contract Sink {
     function poke(bytes calldata data) external payable { calls++; last = data; }
     receive() external payable {}
 }
+
+/// A bridge's outbound side (HyperlaneOutbox's interface): send(to, amount) takes `amount` from the caller.
+/// `skim` makes it take less than asked (a broken bridge the executor must refuse).
+contract MockBridge {
+    address public immutable token;
+    uint256 public skim;
+    uint256 public sends;
+    address public lastTo;
+    uint256 public lastAmount;
+    constructor(address token_) { token = token_; }
+    function setSkim(uint256 s) external { skim = s; }
+    function send(address to, uint256 amount) external payable returns (bytes32) {
+        require(IKitERC20(token).transferFrom(msg.sender, address(this), amount - skim), "pull");
+        sends++;
+        lastTo = to;
+        lastAmount = amount - skim;
+        return keccak256(abi.encode(sends));
+    }
+}

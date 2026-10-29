@@ -1,0 +1,9 @@
+{
+  "package": "snarkjs",
+  "version": "0.7.6",
+  "license": "GPL-3.0",
+  "file": "build/snarkjs.min.js",
+  "integrity": "sha512-4uH1xA5JzVU5jaaWS2fXej3+RC6L5Erhr6INTJtUA27du4Elbh4VXCeeRjB4QiwL6N6y7SNKePw5prTxyEf4Zg==",
+  "resolved": "https://registry.npmjs.org/snarkjs/-/snarkjs-0.7.6.tgz",
+  "sha256": "3f61bbd9ac0a10173902eaef65b510fa4e9a2c057f759c7f18a6d0446b20fd06"
+}

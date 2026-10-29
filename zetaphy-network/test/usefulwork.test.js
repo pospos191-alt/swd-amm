@@ -348,8 +348,12 @@ test('bug hunt: the browser fuzzer finds the deliberate bug; commit-reveal; runn
   await w.bb.send('poster', 'post', [sh, 'bounties/vulnerable-vault.json', 7 * DAY], 10n * ZETA);
   await w.bb.send('gov', 'setSubsidy', [0n, 5n * ZETA]);
   // the hunt (same code as the browser's Web Worker)
-  const res = await hunt(text, { seed: 7, runs: 2000 });
-  assert.ok(res.finding, 'found');
+  // the spec has several invariants: an owner takeover alone (initialize()) is a finding too; hunt on
+  // until the attacker gains coins
+  const all = await hunt(text, { seed: 7, runs: 2000, stopOnFirst: false, want: ['attacker-profit'] });
+  assert.ok(all.findings.some((f) => f.kinds.includes('privileged-unchanged')), 'the owner takeover');
+  const res = all.findings.find((f) => f.kinds.includes('attacker-profit'));
+  assert.ok(res?.finding, 'found');
   assert.deepEqual(res.finding.steps.map((s) => s.sig), ['initialize()', 'sweep(address)']);
   assert.equal(res.finding.steps[1].args[0], ACTORS.attacker);
   assert.equal(res.profit, 5n * ZETA);
@@ -421,6 +425,34 @@ test('the deliberately vulnerable vault really is vulnerable on the EVM (and hon
   assert.equal(await c.balance(Address.fromString(v.address)), 0n);
 });
 
+test('pause: stamps, posts and seats stop; reveals, settle and withdraw go on; the guardian only pauses', async () => {
+  const w = await world();
+  const { verdict } = await scan(VAULT_CODE);
+  const job = [ZB('zetaphy'), '0x' + '12'.repeat(20), codeHash(VAULT_CODE), 0];
+  await w.uw.send('poster', 'post', job, ZETA);
+  for (const who of ['w1', 'w2']) {
+    await stampFor(w, who);
+    await w.uw.send(who, 'commit', [0n, jobCommitment(k, verdict, w.A(who), salt(1), 0n)], DEPOSIT);
+  }
+  await assert.rejects(w.uw.send('w4', 'setGuardian', [w.A('w4')]), /NotGovernance/);
+  await w.uw.send('gov', 'setGuardian', [w.A('w4')]);
+  await w.uw.send('w4', 'setPaused', [true]);
+  assert.equal(await w.uw.call('paused'), true);
+  await assert.rejects(w.uw.send('w4', 'setPaused', [false]), /NotGovernance/, 'the guardian cannot unpause');
+  await assert.rejects(stampFor(w, 'w3'), /Paused/);
+  await assert.rejects(w.uw.send('poster', 'post', job, ZETA), /Paused/);
+  await assert.rejects(w.uw.send('feeder', 'postFeeder', [...job, true, ZeroHash], ZETA), /Paused/);
+  await assert.rejects(w.uw.send('w3', 'commit', [0n, salt(9)], DEPOSIT), /Paused/);
+  w.c.advance(601); // the commit window closes: the seated workers reveal while paused
+  for (const who of ['w1', 'w2']) await w.uw.send(who, 'reveal', [0n, verdict, salt(1)]);
+  w.c.advance(601);
+  await w.uw.send('w3', 'settle', [0n]);
+  assert.ok((await w.uw.call('owed', [w.A('w1')])) > DEPOSIT);
+  await w.uw.send('w1', 'withdraw');
+  await w.uw.send('gov', 'setPaused', [false]);
+  await w.uw.send('poster', 'post', job, ZETA);
+});
+
 test('cli: zetaphy work verify-finding replays a finding offline', async () => {
   const { main } = await import('../cli.js');
   const { writeFileSync, mkdtempSync, rmSync } = await import('node:fs');
@@ -429,7 +461,7 @@ test('cli: zetaphy work verify-finding replays a finding offline', async () => {
   try {
     const good = `${dir}/good.json`, bad = `${dir}/bad.json`;
     writeFileSync(good, JSON.stringify({ v: 1, steps: [{ sig: 'initialize()', args: [], value: '0' }, { sig: 'sweep(address)', args: [ACTORS.attacker], value: '0' }] }));
-    writeFileSync(bad, JSON.stringify({ v: 1, steps: [{ sig: 'initialize()', args: [], value: '0' }] }));
+    writeFileSync(bad, JSON.stringify({ v: 1, steps: [{ sig: 'deposit()', args: [], value: '5' }, { sig: 'withdraw(uint256)', args: ['5'], value: '0' }] }));
     const out = [];
     assert.equal(await main(['work', 'verify-finding', SPEC_FILE.pathname, good], {}, (l) => out.push(l)), 0);
     assert.match(out.join('\n'), /^VALID/);

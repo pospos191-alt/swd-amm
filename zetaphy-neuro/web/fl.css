@@ -1,0 +1,23 @@
+/* Federated-learning panel (web/fl-panel.js). Uses the page's colour tokens (style.css). */
+.fl { margin: 16px 0; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 12px; background: var(--card); }
+.fl h2 { font-size: 1.05rem; margin: 0 0 6px; }
+.fl h3 { font-size: .95rem; margin: 14px 0 4px; }
+.fl-help { color: var(--muted); font-size: .85rem; margin: 4px 0 8px; }
+.fl-check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: .95rem; margin: 8px 0; cursor: pointer; }
+.fl-check input { width: auto; margin: 0; }
+.fl [hidden] { display: none !important; }
+.fl-list { list-style: none; margin: 6px 0; padding: 0; display: grid; gap: 8px; }
+.fl-list li { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.fl-token { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+.fl-list small { color: var(--muted); font-size: .8rem; }
+.fl-list small.fl-conflict { color: var(--medium); }
+.fl-label-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.fl-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+.fl button { font: inherit; font-size: .9rem; border-radius: 10px; padding: 7px 12px; cursor: pointer; border: 0; font-weight: 600; color: var(--on-accent); background: var(--accent); }
+.fl button.secondary { font-weight: 400; color: var(--text); background: var(--bg); border: 1px solid var(--line); }
+.fl button.secondary.on { border-color: var(--accent); color: var(--accent); }
+.fl button:disabled { opacity: .55; cursor: not-allowed; }
+.fl-acc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; overflow-wrap: anywhere; }
+.fl-status { color: var(--muted); min-height: 1.2em; margin: 8px 0 0; overflow-wrap: anywhere; }
+.fl-status.error { color: var(--high); }
+#fl-round, #fl-mine, #fl-privacy { margin: 4px 0; overflow-wrap: anywhere; }

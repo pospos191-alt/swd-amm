@@ -13,14 +13,125 @@ interface IPolicyWebAuthn {
         external view returns (bool);
 }
 
+/// @title FrostSecp256k1: on-chain check of a FROST(secp256k1, SHA-256) signature (RFC 9591)
+/// @notice A FROST signature is a plain Schnorr signature (R, z) under the group key PK:
+///         z·G == R + c·PK with c = H2(R ‖ PK ‖ msg) (RFC 9591 §6.5: hash_to_field over
+///         expand_message_xmd(SHA-256), DST "FROST-secp256k1-SHA256-v1chal"; points SEC1-compressed).
+///         The EVM has no secp256k1 point multiplication, so the check uses ECRECOVER:
+///         ecrecover(h, v, r, s) returns the address of r⁻¹·(s·Rr − h·G), where Rr is the point with
+///         x = r and y-parity v−27. With r = PK.x, v from PK.y, s = −c·PK.x and h = −z·PK.x (mod n) it
+///         returns the address of z·G − c·PK, which must equal R: we compare it with the address of
+///         R, lifted from its compressed form with the modexp precompile. This is the construction
+///         of V. Buterin, "You can *kinda* abuse ECRECOVER to do ECMUL in secp256k1 today"
+///         (ethresear.ch, 2018), used by Chainlink's SchnorrSECP256K1.sol, noot/schnorr-verify and
+///         Chronicle's Scribe. Unlike those, the challenge here is RFC 9591's (so signatures from any
+///         RFC 9591 implementation verify) and R is a whole curve point lifted from x and parity,
+///         not an address the signer supplies.
+///         Caveats (docs/future/agents.md): like every ecrecover verifier it compares 160-bit
+///         addresses; the group key's x must be below the curve order n (true except with ~2^-128
+///         probability; the DKG refuses such a key).
+library FrostSecp256k1 {
+    uint256 internal constant N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+    uint256 internal constant P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
+
+    /// y of the curve point with this x and y-parity (ok = false when x is not on the curve).
+    function liftX(uint256 x, uint256 parity) internal view returns (bool ok, uint256 y) {
+        if (x >= P || parity > 1) return (false, 0);
+        uint256 rhs = addmod(mulmod(mulmod(x, x, P), x, P), 7, P);
+        y = _modexp(rhs, (P + 1) / 4, P); // P ≡ 3 (mod 4)
+        if (mulmod(y, y, P) != rhs) return (false, 0);
+        if (y & 1 != parity) y = P - y; // y != 0: secp256k1 has no point of order 2
+        return (true, y);
+    }
+
+    /// RFC 9380 hash_to_field(msg, 1) for secp256k1's scalar field: expand_message_xmd with SHA-256,
+    /// L = 48 bytes, reduced mod n. RFC 9591 uses it for H1, H2, H3 with DST = context ‖ tag.
+    function hashToScalar(bytes memory message, bytes memory dst) internal pure returns (uint256) {
+        bytes memory dstPrime = abi.encodePacked(dst, uint8(dst.length));
+        bytes32 b0 = sha256(abi.encodePacked(bytes32(0), bytes32(0), message, uint16(48), uint8(0), dstPrime));
+        bytes32 b1 = sha256(abi.encodePacked(b0, uint8(1), dstPrime));
+        bytes32 b2 = sha256(abi.encodePacked(b0 ^ b1, uint8(2), dstPrime));
+        // the 48 bytes b1 ‖ b2[0:16] as an integer, mod n
+        return addmod(mulmod(uint256(b1), 1 << 128, N), uint256(b2) >> 128, N);
+    }
+
+    /// RFC 9591 H2 (the challenge) for R (33 bytes), the group key (x, parity) and the message.
+    function challenge(bytes memory rEnc, uint256 pkX, uint256 pkParity, bytes memory message) internal pure returns (uint256) {
+        return hashToScalar(abi.encodePacked(rEnc, uint8(2 + pkParity), pkX, message), "FROST-secp256k1-SHA256-v1chal");
+    }
+
+    /// True when `sig` (RFC 9591 serialization: compressed R ‖ z, 65 bytes) is a valid signature of
+    /// `message` under the group key (pkX, pkParity = PK.y mod 2).
+    function verify(uint256 pkX, uint256 pkParity, bytes memory message, bytes memory sig) internal view returns (bool) {
+        if (sig.length != 65 || pkX == 0 || pkX >= N || pkParity > 1) return false;
+        uint256 prefix = uint8(sig[0]);
+        if (prefix != 2 && prefix != 3) return false;
+        uint256 rx;
+        uint256 z;
+        assembly {
+            rx := mload(add(sig, 33))
+            z := mload(add(sig, 65))
+        }
+        if (z == 0 || z >= N) return false;
+        (bool ok, uint256 ry) = liftX(rx, prefix - 2);
+        if (!ok) return false;
+        uint256 c = challenge(abi.encodePacked(uint8(prefix), rx), pkX, pkParity, message);
+        if (c == 0) return false;
+        address q = _zGminusCP(pkX, pkParity, z, c);
+        return q != address(0) && q == address(uint160(uint256(keccak256(abi.encodePacked(rx, ry)))));
+    }
+
+    /// The address of z·G − c·PK: ecrecover(−z·x, v(PK), x, −c·x) = x⁻¹·(−c·x·PK + z·x·G).
+    function _zGminusCP(uint256 pkX, uint256 pkParity, uint256 z, uint256 c) private pure returns (address) {
+        return ecrecover(bytes32(N - mulmod(z, pkX, N)), uint8(27 + pkParity), bytes32(pkX), bytes32(N - mulmod(c, pkX, N)));
+    }
+
+    /// A compressed group key (33 bytes) -> (x, parity), checking it is a curve point with 0 < x < n.
+    function parseKey(bytes memory key) internal view returns (bool ok, uint256 x, uint256 parity) {
+        if (key.length != 33 || (uint8(key[0]) != 2 && uint8(key[0]) != 3)) return (false, 0, 0);
+        assembly { x := mload(add(key, 33)) }
+        parity = uint8(key[0]) - 2;
+        if (x == 0 || x >= N) return (false, 0, 0);
+        (ok,) = liftX(x, parity);
+    }
+
+    function _modexp(uint256 b, uint256 e, uint256 m) private view returns (uint256 r) {
+        (bool ok, bytes memory out) = address(0x05).staticcall(abi.encode(uint256(32), uint256(32), uint256(32), b, e, m));
+        require(ok && out.length == 32, "modexp");
+        r = uint256(bytes32(out));
+    }
+}
+
+/// @title FrostVerifier: FrostSecp256k1 as a contract anyone can call (and the tests use)
+contract FrostVerifier {
+    /// groupKey: SEC1-compressed (33 bytes); sig: R (33) ‖ z (32), RFC 9591's serialization.
+    function verify(bytes calldata groupKey, bytes calldata message, bytes calldata sig) external view returns (bool) {
+        (bool ok, uint256 x, uint256 parity) = FrostSecp256k1.parseKey(groupKey);
+        return ok && FrostSecp256k1.verify(x, parity, message, sig);
+    }
+
+    /// RFC 9591's challenge H2(R ‖ PK ‖ msg), for cross-checking implementations.
+    function challenge(bytes calldata rEnc, bytes calldata groupKey, bytes calldata message) external view returns (uint256) {
+        (bool ok, uint256 x, uint256 parity) = FrostSecp256k1.parseKey(groupKey);
+        require(ok && rEnc.length == 33, "key");
+        return FrostSecp256k1.challenge(rEnc, x, parity, message);
+    }
+}
+
 /// @title CosignCommittee: runners that co-sign large agent transactions
-/// @notice A k-of-n set of runner keys, chosen by governance (the chain's gov
-///         module through a MsgEVMCall proposal, or a SimpleMultisig). A
-///         member signs a co-sign digest only after running Neuro's checks
-///         on the transaction (`zetaphy cosign`); isValid() counts distinct
-///         member signatures (signers in ascending order, no repeats).
-///         k-of-n separate ECDSA signatures, not a threshold-cryptography
-///         signature: simple and checkable, at the cost of k signatures of gas.
+/// @notice Two ways to co-sign, both set by governance (the chain's gov module
+///         through a MsgEVMCall proposal, or a SimpleMultisig):
+///           - k-of-n separate ECDSA signatures (isValid): each member signs
+///             the digest; signers in ascending order, no repeats. Simple and
+///             checkable, k signatures of gas. Kept as the fallback.
+///           - a FROST threshold signature (isValidFrost, RFC 9591): the
+///             members ran a distributed key generation (no dealer;
+///             `zetaphy cosign dkg1|dkg2|dkg3`) for a t-of-n group key; any t
+///             of them make ONE 65-byte Schnorr signature in two rounds
+///             (`zetaphy cosign commit | frost-sign | frost-aggregate`),
+///             checked by FrostSecp256k1 at the cost of about one ecrecover
+///             whatever t is. Which members signed is not visible on chain.
+///         A member signs only after running Neuro's checks on the transaction.
 contract CosignCommittee {
     uint256 public constant MAX_MEMBERS = 32;
 
@@ -28,12 +139,16 @@ contract CosignCommittee {
     mapping(address => bool) public isMember;
     address[] private memberList;
     uint256 public threshold;
+    uint256 public frostKeyX;      // FROST group key: x (0 = none) ...
+    uint256 public frostKeyParity; // ... and the parity of y
 
     event MembersSet(address[] members, uint256 threshold);
     event GovernanceChanged(address governance);
+    event FrostKeySet(bytes groupKey);
 
     error NotGovernance();
     error BadMembers();
+    error BadFrostKey();
 
     constructor(address governance_, address[] memory initialMembers, uint256 threshold_) {
         governance = governance_;
@@ -49,6 +164,27 @@ contract CosignCommittee {
         if (msg.sender != governance) revert NotGovernance();
         governance = g;
         emit GovernanceChanged(g);
+    }
+
+    /// The FROST group key (33 bytes, SEC1-compressed, from `zetaphy cosign dkg3`); empty removes it.
+    function setFrostKey(bytes calldata groupKey) external {
+        if (msg.sender != governance) revert NotGovernance();
+        if (groupKey.length == 0) {
+            frostKeyX = 0;
+            frostKeyParity = 0;
+        } else {
+            (bool ok, uint256 x, uint256 parity) = FrostSecp256k1.parseKey(groupKey);
+            if (!ok) revert BadFrostKey();
+            frostKeyX = x;
+            frostKeyParity = parity;
+        }
+        emit FrostKeySet(groupKey);
+    }
+
+    /// True when `sig` is the group's FROST signature (RFC 9591, 65 bytes) of the 32-byte digest.
+    function isValidFrost(bytes32 digest, bytes calldata sig) external view returns (bool) {
+        if (frostKeyX == 0) return false;
+        return FrostSecp256k1.verify(frostKeyX, frostKeyParity, abi.encodePacked(digest), sig);
     }
 
     function members() external view returns (address[] memory) {
@@ -95,6 +231,7 @@ contract CosignCommittee {
 
 interface ICosignCommittee {
     function isValid(bytes32 digest, bytes[] calldata sigs) external view returns (bool);
+    function isValidFrost(bytes32 digest, bytes calldata sig) external view returns (bool);
 }
 
 /// @title AgentPolicyWallet: a wallet an AI agent runs inside guardrails (testnet)
@@ -111,7 +248,8 @@ interface ICosignCommittee {
 ///             waits in a timelock (queue, then executeQueued after `delay`;
 ///             the owner may cancel) or carries co-signatures of the runner
 ///             committee (CosignCommittee, set by governance) that ran Neuro
-///             checks on it (executeCosigned). Caps still apply to both;
+///             checks on it: k-of-n ECDSA (executeCosigned) or one FROST
+///             threshold signature (executeCosignedFrost). Caps apply to all;
 ///           - emergency freeze: the owner's account, the owner's passkey
 ///             (WebAuthn, P-256 precompile via WebAuthnVerifier) or the
 ///             owner's ML-DSA-44 key (precompile 0x…0900) stops the agent at
@@ -269,6 +407,25 @@ contract AgentPolicyWallet {
         cosignNonce++;
         (address token, uint256 amount) = _classify(to, value, data);
         return _run(to, value, data, token, amount, modelHash, promptHash, 2);
+    }
+
+    /// Path 2 with ONE FROST threshold signature of the same digest (any t of the committee's DKG
+    /// group signed it in two rounds) instead of k separate ECDSA signatures.
+    function executeCosignedFrost(
+        address to,
+        uint256 value,
+        bytes calldata data,
+        bytes32 modelHash,
+        bytes32 promptHash,
+        bytes32 reportHash,
+        uint256 deadline,
+        bytes calldata sig
+    ) external onlyAgent returns (bytes memory) {
+        if (block.timestamp > deadline) revert Expired();
+        if (address(committee) == address(0) || !committee.isValidFrost(cosignDigest(to, value, data, reportHash, deadline), sig)) revert BadCosign();
+        cosignNonce++;
+        (address token, uint256 amount) = _classify(to, value, data);
+        return _run(to, value, data, token, amount, modelHash, promptHash, 3);
     }
 
     // ------------------------------------------------------------- emergency freeze

@@ -1,0 +1,13 @@
+{
+  "note": "What ModelRegistry must hold for this pack. Until a registry is deployed and this release published there through the timelock, a page may only use it as a release PINNED in its own code (same trust as the page).",
+  "registryId": "0xf888a3a9301995fdc1dc9dc78adf6721f33bec1d022cc34123c8ce51fea071f7",
+  "kind": "model",
+  "name": "zetaphy-docs-tiny",
+  "version": 1,
+  "manifestHash": "0x4cf41414f2f963269ad8f3f41ef96a1e54e58917f4e02a475a188ea1ffba73ad",
+  "chunkRoot": "0x886a2e732863cdf9d5a7db3bb91572145e7f638fa8dec5bc9cbaff7eb968c320",
+  "size": 1365824,
+  "chunkSize": 65536,
+  "license": "BUSL-1.1",
+  "runtime": "zllm/1"
+}

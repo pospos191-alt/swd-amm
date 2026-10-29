@@ -26,10 +26,15 @@
 | | | `launch-testnet` → `launch` | manual | ไม่ | `testnet-deploy` |
 | | | `rewards` → `deploy` | PR, sched, manual | ไม่ (เฉพาะ manual `deploy`) | `testnet-deploy` |
 | | | `saphan-route` → `deploy` | PR, manual | ไม่ (เฉพาะ manual `deploy`) | `testnet-deploy` |
+| | | `neuro-oracle` → `deploy` | PR, manual | ไม่ (เฉพาะ manual `deploy`) | `testnet-deploy` |
 | | | `timelock` → `execute` | manual | ไม่ | `testnet-deploy` |
+| | | `neuro-fl` → `deploy` (FederatedRounds ปิดไว้ก่อน เป็นของ timelock; เฉพาะ `mode: deploy`) | sched, PR, manual | ไม่ (เฉพาะ `deploy` ที่สั่งเอง; งาน `aggregate` รายสัปดาห์และ `propose` ไม่ใช้ secret ที่เก็บไว้) | `testnet-deploy` |
 | | | `rewards` → `award` | PR, sched, manual | ไม่ (ตาม schedule รายวัน และ manual `award`) | `testnet-automation` |
 | | | `hyperlane-relayer` → `relay` (signer สำรอง) | sched, manual | ไม่ | `testnet-automation` |
 | `ZETAPHY_RELAYER_KEY` (ใหม่ ไม่บังคับ) | key เฉพาะของ relayer ถ้าตั้งไว้จะใช้แทน deployer key | `hyperlane-relayer` → `relay` | sched, manual | ไม่ | `testnet-automation` |
+| `USEFUL_WORK_FEEDER_KEY` (ใหม่ ไม่บังคับ) | feeder ของงานที่มีประโยชน์ (โพสต์งานสแกนและนกขมิ้น เปิดเผย settle เป็น feeder ที่ governance ตั้ง มี ZETAPHY ทดสอบเล็กน้อย ไม่ใช่ deployer) | `useful-work` → `feed` | sched, manual | ไม่ | `testnet-automation` |
+| | | `useful-work` → `deploy` ใช้ `ZETAPHY_DEPLOYER_KEY` (ด้านบน) | manual | ไม่ | `testnet-deploy` |
+| `MARKETS_KEY` (ไม่บังคับ) | key เทสต์เน็ตที่เป็นเจ้าของ organism ตัวตรวจจับ (commit / เปิดเผยคำพยากรณ์ ลงทะเบียนลูก) | `markets` → `detectors` | sched, manual | ไม่ | `testnet-automation` |
 | `ZETAPHY_VALIDATOR_KEY` | key ของ Hyperlane validator ของเรา (เซ็น checkpoint ของ ZETAPHY) | `hyperlane-relayer` → `relay` | sched, manual | ไม่ | `testnet-automation` |
 | | | `saphan-route` → `validator-address` (แสดงแค่ address) | PR, manual | ไม่ (manual `check` / `deploy`) | `testnet-automation` |
 | `BRIDGE_MARKER_KEY` | private key ของ *marker* ของ airlock (ทำเครื่องหมายผู้เรียก ไม่ย้ายเงิน) | `bridge-monitor` → `monitor` | manual (schedule ยัง comment ไว้ จะเปิดภายหลัง) | ไม่ | `monitoring` |
@@ -53,7 +58,7 @@
 | Environment | Secrets | Deployment branches | Required reviewers | เหตุผล |
 |---|---|---|---|---|
 | `testnet-deploy` | `ZETAPHY_DEPLOYER_KEY` | `main` เท่านั้น | **เจ้าของ** | deploy ด้วยมือ และ timelock execute: ต้องมีคนอนุมัติทุกครั้ง |
-| `testnet-automation` | `ZETAPHY_VALIDATOR_KEY`, `ZETAPHY_DEPLOYER_KEY` (minter ของ BZTPHY และ signer สำรองของ relayer), `ZETAPHY_RELAYER_KEY` (ไม่บังคับ) | `main` เท่านั้น | **ไม่มี** | รันตาม schedule (relayer ทุก 15 นาที, award รายวัน) ถ้ามี reviewer ทุก run จะค้างรออนุมัติ |
+| `testnet-automation` | `ZETAPHY_VALIDATOR_KEY`, `ZETAPHY_DEPLOYER_KEY` (minter ของ BZTPHY และ signer สำรองของ relayer), `ZETAPHY_RELAYER_KEY` (ไม่บังคับ), `USEFUL_WORK_FEEDER_KEY` (ไม่บังคับ), `MARKETS_KEY` (ไม่บังคับ) | `main` เท่านั้น | **ไม่มี** | รันตาม schedule (relayer ทุก 15 นาที, award รายวัน) ถ้ามี reviewer ทุก run จะค้างรออนุมัติ |
 | `monitoring` | `BRIDGE_*`, `TELEGRAM_*`, `DISCORD_WEBHOOK_URL`, `PRIVATE_ALERTS_TOKEN` | `main` เท่านั้น | **ไม่มี** | จะรันตาม schedule |
 | `explorer-verify` | `ETHERSCAN_API_KEY` | `main` เท่านั้น | **ไม่มี** | schedule รายวัน |
 | `devnet` | `DEVNET_DEPLOYER_KEYPAIR`, `PROGRAM_KEYPAIR` | `main` เท่านั้น | **เจ้าของ** | deploy Solana devnet ด้วยมือ |
@@ -142,13 +147,13 @@ MetaMask "Show private key", หน้า dashboard ของผู้ให้�
 - **แยก job** เพื่อให้ pull request, `check` และ `dry_run` ไม่แตะ key หรือ environment เลย และ CI บน PR ทำงานต่อได้โดยไม่ต้องอนุมัติ
   (รวม PR จาก fork ซึ่งไม่ได้ secret อยู่แล้ว): `bridge-testnet` (`bridge` | `deploy`), `rewards` (`dry-run` | `deploy` | `award`),
   `saphan-route` (`route` | `validator-address` | `deploy`), `hyperlane-core` (`dry-run` | `deploy`),
-  `timelock` (`timelock` สำหรับ status/schedule/cancel | `execute`)
+  `timelock` (`timelock` สำหรับ status/schedule/cancel | `execute`), `neuro-oracle` (`oracle` สำหรับ check/dry_run/verify | `deploy`)
 - เพิ่ม `environment:` เฉพาะ job ที่อ่าน key (หัวข้อ 1) ทุก job มีเงื่อนไขเป็น `workflow_dispatch` หรือ `schedule` ไม่เคยเป็น `pull_request`
 - `launch-testnet`: dry run ก็อ่าน key ด้วย (ตรวจ address และยอดเงินของ deployer) ทั้ง job จึงอยู่หลัง `testnet-deploy`: dry run ก็ต้องกดอนุมัติ
 - **สิทธิ์น้อยที่สุด**: `permissions:` ระดับบนสุดของทุก workflow เป็น `contents: read` ส่วน `contents: write` / `pull-requests: write`
   ให้เฉพาะ job ที่ push branch หรือเปิด PR (job deploy และ job release)
 - `actions/checkout` ใส่ `persist-credentials: false` ทุกที่ ยกเว้น job ที่ `git push` หรือ `git fetch` ภายหลัง
-  (job deploy ของ `bridge-testnet`, `rewards`, `saphan-route`, `hyperlane-core`, `launch-testnet` และทั้งสอง job ของ `timelock`)
+  (job deploy ของ `bridge-testnet`, `rewards`, `saphan-route`, `neuro-oracle`, `hyperlane-core`, `launch-testnet` และทั้งสอง job ของ `timelock`)
 - `hyperlane-relayer` เซ็นด้วย `ZETAPHY_RELAYER_KEY` ถ้าตั้งไว้ ไม่อย่างนั้นใช้ `ZETAPHY_DEPLOYER_KEY`
 - action ของบุคคลที่สามถูก pin ด้วย commit SHA อยู่แล้ว (`foundry-rs/foundry-toolchain`, `hashicorp/setup-terraform`,
   `dtolnay/rust-toolchain`, `Swatinem/rust-cache`, `taiki-e/install-action`, `actions/attest-build-provenance`)

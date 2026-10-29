@@ -99,6 +99,10 @@ contract UsefulWork {
     mapping(bytes32 => bool) public usedStamp;
     mapping(address => mapping(uint256 => uint256)) public seatsOnDay;
     mapping(address => uint256) public owed;
+    /// Stamps, new jobs and new seats stop while paused (reveals, canaries, settling and withdrawals go
+    /// on, so no deposit is stuck). `zetaphy deploy-useful-work` deploys it paused; governance opens it.
+    bool public paused;
+    address public guardian;             // may pause (never unpause): a fast brake for governance
 
     Job[] private _jobs;
     mapping(uint256 => address[]) private _seats;
@@ -116,7 +120,11 @@ contract UsefulWork {
     event ParamsSet();
     event FeederSet(address indexed feeder, bool on);
     event Withdrawn(address indexed to, uint256 amount);
+    event PausedSet(bool paused);
+    event GuardianSet(address guardian);
+    event GovernanceSet(address governance);
 
+    error Paused();
     error NotGovernance();
     error NotFeeder();
     error BadParams();
@@ -172,6 +180,7 @@ contract UsefulWork {
     }
 
     function stamp(uint256 height, uint64 nonce) external {
+        if (paused) revert Paused();
         if (height >= block.number || block.number - height > 256 || stampSeed(height) == bytes32(0)) revert StampTooOld();
         bytes32 h = stampHash(msg.sender, height, nonce);
         if (usedStamp[h]) revert StampUsed();
@@ -203,6 +212,7 @@ contract UsefulWork {
     function _post(bytes32 chain, string calldata target, bytes32 codeHash, uint16 minScore, bool subsidized, bytes32 canary)
         internal returns (uint256 id)
     {
+        if (paused) revert Paused();
         if (chain == bytes32(0) || codeHash == bytes32(0) || bytes(target).length == 0 || bytes(target).length > 128) revert BadJob();
         Params memory p = params;
         id = _jobs.length;
@@ -247,6 +257,7 @@ contract UsefulWork {
     }
 
     function _commit(uint256 id, bytes32 commitment) internal {
+        if (paused) revert Paused();
         Job storage j = _jobs[id];
         if (j.settled || j.taken >= j.seats || block.timestamp >= _closeTime(j)) revert Closed();
         if (commitments[id][msg.sender] != bytes32(0)) revert AlreadyIn();
@@ -382,6 +393,19 @@ contract UsefulWork {
 
     function setGovernance(address next) external onlyGovernance {
         governance = next;
+        emit GovernanceSet(next);
+    }
+
+    /// Governance pauses or unpauses; the guardian may only pause.
+    function setPaused(bool p) external {
+        if (msg.sender != governance && !(p && msg.sender == guardian && guardian != address(0))) revert NotGovernance();
+        paused = p;
+        emit PausedSet(p);
+    }
+
+    function setGuardian(address g) external onlyGovernance {
+        guardian = g;
+        emit GuardianSet(g);
     }
 
     function _setParams(Params memory p) internal {

@@ -6,9 +6,6 @@ description = "ZETAPHY Neuro oracle mirror for Osmosis (osmo-test-5): written by
 license = "MIT"
 publish = false
 
-# Not part of the repo's Anchor workspace (Cargo.toml at the root): build it on its own.
-[workspace]
-
 [lib]
 crate-type = ["cdylib", "rlib"]
 

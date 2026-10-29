@@ -10,7 +10,8 @@ import { AbiCoder, keccak256 as ethKeccak, toUtf8Bytes } from 'ethers';
 import { LANG_CODES } from '../i18n.js';
 import { WORK } from '../work-i18n.js';
 import { encodeArgs, decodeArgs, calldata, jobCommitment, findingCommitment, codeVerdict, bytes32String, keccakHex } from '../work-core.js';
-import { fuzz, replay, ACTORS, specHash } from '../fuzz-core.js';
+import { fuzz, replay, ACTORS, specHash, reproducer, INVARIANTS } from '../fuzz-core.js';
+import { hubConfig } from '../build.mjs';
 import { keccak256 } from '../../zetaphy-neuro/src/keccak.js';
 import { readContract } from '../../zetaphy-neuro/src/reader.js';
 import { verdictOf } from '../../zetaphy-neuro/src/verdict.js';
@@ -25,11 +26,12 @@ test('every language has every word of the useful-work page, with its placeholde
   const en = shape(WORK.en);
   for (const l of LANG_CODES) {
     assert.deepEqual(shape(WORK[l]), en, l);
-    for (const [k, ph] of [['scanning', '{n}'], ['doneScan', '{n}'], ['committing', '{d}'], ['waitingReveal', '{m}'], ['found', '{p}'], ['notFound', '{n}']]) {
+    for (const [k, ph] of [['scanning', '{n}'], ['doneScan', '{n}'], ['committing', '{d}'], ['waitingReveal', '{m}'], ['found', '{p}'], ['notFound', '{n}'], ['foundKinds', '{k}'], ['atRun', '{n}'], ['hunting', '{n}']]) {
       assert.ok(WORK[l][k].includes(ph), `${l}.${k} keeps ${ph}`);
     }
     assert.match(WORK[l].vulnNote, /VulnerableVault/);
     assert.match(WORK[l].committing, /ZTPHY/);
+    assert.deepEqual(Object.keys(WORK[l].kinds).sort(), [...INVARIANTS, 'reentrancy'].sort(), `${l}: a name for every invariant`);
   }
 });
 
@@ -60,25 +62,48 @@ test('the practice scan job is the vault\'s code, and the code-only verdict is s
   await assert.rejects(codeVerdict(neuro, { ...job, codeHash: '0x' + '00'.repeat(32) }), /changed/);
 });
 
-test('the fuzzer finds the vulnerable vault\'s bug (initialize + sweep) and replay confirms it', async () => {
+test('the fuzzer finds the vulnerable vault\'s bugs (takeover, then initialize + sweep) and replay confirms them', { timeout: 240_000 }, async () => {
   const [{ EVM }, { Common, Chain, Hardfork }, { Address, Account, hexToBytes }] = await Promise.all([import('@ethereumjs/evm'), import('@ethereumjs/common'), import('@ethereumjs/util')]);
   const lib = { EVM, Common, Chain, Hardfork, Address, Account, hexToBytes, keccak256 };
   const text = readFileSync(join(HERE, 'bounties/vulnerable-vault.json'), 'utf8');
   assert.equal(specHash(keccak256, text), ethKeccak(toUtf8Bytes(text)));
   const spec = JSON.parse(text);
-  const r = await fuzz(lib, spec, { seed: 123, runs: 3000 });
-  assert.ok(r.finding);
-  assert.deepEqual(r.finding.steps, [{ sig: 'initialize()', args: [], value: '0' }, { sig: 'sweep(address)', args: [ACTORS.attacker], value: '0' }]);
-  assert.equal((await replay(lib, spec, JSON.stringify(r.finding))).valid, true);
+  assert.equal(spec.version, 2);
+  const seen = [];
+  const r = await fuzz(lib, spec, { seed: 123, runs: 3000, stopOnFirst: false, want: ['attacker-profit', 'privileged-unchanged'], onFinding: (f) => seen.push(f.kinds) });
+  const theft = r.findings.find((f) => f.kinds.includes('attacker-profit'));
+  assert.deepEqual(theft.finding.steps.map((s) => s.sig), ['initialize()', 'sweep(address)']);
+  assert.equal(theft.profit, 5n * 10n ** 18n);
+  assert.ok(theft.kinds.includes('victim-can-exit') && theft.kinds.includes('balance-conservation'));
+  assert.ok(r.findings.some((f) => f.kinds.includes('privileged-unchanged')));
+  assert.equal(seen.length, r.findings.length, 'onFinding reports each one as it is found');
+  assert.equal((await replay(lib, spec, JSON.stringify(theft.finding))).valid, true);
+  assert.ok(r.coverage.pct > 50 && r.coverage.edges > 10);
+  const repro = await reproducer(lib, spec, text, { finding: theft.finding, seed: 123 });
+  assert.equal(repro.spec.specHash, specHash(keccak256, text));
+  assert.deepEqual(repro.trace.map((s) => s.ok), [true, true]);
   // honest use is not a finding; steps outside the spec are refused
-  assert.equal((await replay(lib, spec, { v: 1, steps: [{ sig: 'deposit()', args: [], value: '5' }, { sig: 'withdraw(uint256)', args: ['5'], value: '0' }] })).valid, false);
-  await assert.rejects(replay(lib, spec, { v: 1, steps: [{ sig: 'selfdestruct()', args: [], value: '0' }] }), /not in the spec/);
-  await assert.rejects(replay(lib, spec, { v: 1, steps: [{ sig: 'withdraw(uint256)', args: [], value: '1' }] }), /not payable/);
+  assert.equal((await replay(lib, spec, { v: 2, steps: [{ sig: 'deposit()', args: [], value: '5' }, { sig: 'withdraw(uint256)', args: ['5'], value: '0' }] })).valid, false);
+  await assert.rejects(replay(lib, spec, { v: 2, steps: [{ sig: 'selfdestruct()', args: [], value: '0' }] }), /not in the spec/);
+  await assert.rejects(replay(lib, spec, { v: 2, steps: [{ sig: 'withdraw(uint256)', args: [], value: '1' }] }), /not payable/);
+});
+
+test('hub-config: the useful-work addresses come from zetaphy-network/deployments/useful-work-77390.json (testnet only)', () => {
+  const a = (n) => '0x' + String(n).repeat(40);
+  const dep = { chainId: 77390, contracts: { usefulWork: a(1), bugBounty: a(2), workerReputation: a(3), usefulIssuance: a(4) } };
+  const c = hubConfig({}, { 'zetaphy-network/deployments/useful-work-77390.json': dep });
+  assert.equal(c.contracts.usefulWork, a(1));
+  assert.equal(c.contracts.bugBounty, a(2));
+  assert.equal(c.contracts.usefulIssuance, a(4));
+  const other = hubConfig({}, { 'zetaphy-network/deployments/useful-work-77390.json': { ...dep, chainId: 1 } });
+  assert.equal(other.contracts.usefulWork, undefined, 'another chain is ignored');
+  const none = hubConfig({}, { 'zetaphy-network/deployments/useful-work-77390.json': null });
+  assert.equal(none.contracts.usefulWork, undefined, 'not deployed: the page runs as practice');
 });
 
 test('dist/ ships the useful-work page, its worker, the bounty files and the EVM bundle (no eval, no wasm)', () => {
   const out = build();
-  for (const f of ['work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'neuro/src/reader.js']) {
+  for (const f of ['work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'neuro/src/reader.js']) {
     assert.ok(existsSync(join(out, f)), f);
   }
   for (const f of ['work.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'vendor/evm.js']) {

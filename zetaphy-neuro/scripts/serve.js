@@ -15,7 +15,7 @@ import { createRpc } from '../src/rpc.js';
 import { CHAINS } from '../src/chains.js';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.svg': 'image/svg+xml' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.svg': 'image/svg+xml', '.json': 'application/json' };
 const port = Number(process.argv[2] ?? 8080);
 const store = memoryStore();
 const DEV_SECRET = 'local-dev-secret-not-for-production';

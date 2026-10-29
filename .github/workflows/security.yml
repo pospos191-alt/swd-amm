@@ -315,6 +315,11 @@ jobs:
           npm run build
           git diff --exit-code -- artifacts/
 
+      # the detector loop (test/detectorloop.test.js) breeds organisms with zetaphy-neuro/ml/detectors (needs its packages)
+      - name: Install zetaphy-neuro (used by the detector-loop test)
+        working-directory: zetaphy-neuro
+        run: npm ci --no-audit --no-fund
+
       - name: Unit tests (NeuroJobs on an in-memory EVM, runner loop, native PQ txs)
         run: npm test
 
@@ -488,6 +493,11 @@ jobs:
 
       - name: Install Chromium
         run: npx playwright-core install --with-deps chromium
+
+      # the Agents browser test runs a signed intent through zetaphy-network/src/intent.js (needs its ethers)
+      - name: Install zetaphy-network (used by the Agents browser test)
+        working-directory: zetaphy-network
+        run: npm ci --no-audit --no-fund
 
       - name: Browser test (every tab, mocked node)
         run: npm run test:e2e

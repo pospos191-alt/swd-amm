@@ -18,7 +18,7 @@ export function mockArtifacts() {
 /** zetaphy-dex's committed artifacts (the real pair, factory and test token). */
 export const dexArt = (n) => JSON.parse(readFileSync(new URL(`../../../zetaphy-dex/artifacts/${n}.json`, import.meta.url), 'utf8'));
 
-/** helpers/AgentKit.sol (ShareVault, Drainer, Sink), each { abi, bytecode }. */
+/** helpers/AgentKit.sol (ShareVault, Drainer, Sink, MockBridge), each { abi, bytecode }. */
 let kit = null;
 export function agentKit() {
   if (kit) return kit;

@@ -6,8 +6,8 @@ Workstream `fut-federated`. Two items:
 
 | # | item | status |
 |---|---|---|
-| 6 | Federated learning for Neuro's learned score (`zetaphy-neuro/ml/`) | **prototype**: client, privacy, wire format, commit-reveal contract, signed envelopes, robust aggregation, canary gate, aggregator script + weekly workflow, simulated honest and poisoned clients. No browser UI yet, no real labels yet, contracts not deployed. |
-| 35 | Consensus-synchronized model (version bound to chain height) | **done on the contract and JS side**: `ModelEpochs` contract, deterministic version-by-height selection in JS (browsers, runners) checked against the contract, manifest hashing, gov proposal builder. **Node side: specification only** (below), for the chain-protocol workstream. |
+| 6 | Federated learning for Neuro's learned score (`zetaphy-neuro/ml/`) | **testnet-ready, not deployed**: opt-in browser panel on the Neuro page (8 languages, Web Worker training, wallet commit + reveal), user and automatic on-chain outcome labels, client, privacy, wire format, commit-reveal contract (closed by default), signed envelopes, robust aggregation, canary gate, `zetaphy fl` deploy/propose/status, aggregator + weekly workflow that reads the committed deployment record. Tested with five real Chromium browsers on an in-memory EVM. **Not deployed yet; no real-world accuracy claim** (no labels collected yet). |
+| 35 | Consensus-synchronized model (version bound to chain height) | **done on the contract, JS and node side**: `ModelEpochs` contract, deterministic version-by-height selection in JS (browsers, runners) checked against the contract, manifest hashing, gov proposal builder; in the chain patch, the registry address set by governance (`gov.sh model-epochs`), the keeper lookup `ModelVersionAt`, `zetaphyd q neuro model-at`, JSON-RPC `zetaphy_modelAt` and a `modelEpochs()` view on `0x…0902`. Nothing in consensus uses the model yet; no sidecar daemon (below). |
 
 Everything is testnet only, free, and has no always-on server: browsers compute updates, the chain or a runner
 carries them, a scheduled GitHub Actions job aggregates, a governance vote decides.
@@ -65,6 +65,75 @@ p      = sigmoid(calib.a * z + calib.b)                                       (t
 The whole client runs in Chromium as plain ES modules under a strict CSP (`ml/test/fl.browser.e2e.js`), including
 WebCrypto hashing that matches Node's byte for byte.
 
+### The browser panel (`zetaphy-neuro/web/fl-panel.js`)
+
+A section of the Neuro page (and of the hub, which serves the same page under `/neuro/web/` with `ml/` next to it).
+**Off by default**; nothing is stored or sent until the user ticks "Take part". Then it shows:
+
+- **The privacy budget**: epsilon used of 16, epsilon per round (5.30 at z = 2), rounds left. The ledger
+  (`PrivacyLedger`) lives in `localStorage` with the stored checks; "Delete my stored checks" keeps it, so deleting
+  cannot buy a fresh budget. A round is counted **before** anything is committed, as soon as the noised update exists;
+  a failed or rejected commit reuses that same update and salt, so a retry never spends twice.
+- **What leaves the browser**: one update of `dim` numbers (30 with the default head), clipped to length 1, Gaussian
+  noise of size 2 per number, the round number and the head hash, in a commit and a reveal transaction from the
+  user's own wallet. Never sent: the tokens checked, the answers, their features. A note in the page footer says
+  this panel is the only part of Neuro that connects a wallet or sends a transaction.
+- **The user's checks** (the last 200 EVM tokens checked, kept in this browser): for each, "It was a scam" / "It was not"
+  / "Clear", the automatic outcome (below) or why there is none yet, and which label training will use. When the
+  user's answer and the automatic one disagree, the example is not used.
+- **The round**: "not deployed yet" (the committed `ml/fl/deployment.json` has `rounds: null`; no buttons, no round
+  reads), "closed" (deployed but paused by governance), "before the first round", or "round r, commit/reveal phase,
+  n blocks left, c commits, v reveals", and the user's part in it.
+- **Connect**: the wallets found in the browser (EIP-6963 + an injected `window.ethereum`), the same pattern as the
+  hub's wallet bar; the choice is stored under the hub's shared key `zetaphy:wallet` (an id, never a key), so inside
+  the hub the panel follows the wallet bar silently (`eth_accounts`) and the wallet is asked for the ZETAPHY testnet
+  (`wallet_switchEthereumChain`, else `wallet_addEthereumChain`).
+- **Train here and commit**: labelled checks -> `roundUpdate` (`ml/fl/client.js`) **in a Web Worker** (`web/fl-worker.js`:
+  local training, clip, noise from `crypto.getRandomValues`, NFL1 encoding) -> a fresh 32-byte salt ->
+  `commit(round, keccak256(abi.encode(keccak256(payload), salt, sender)))` through the wallet (`ml/fl/rounds.js`, a
+  dependency-free FederatedRounds client checked against ethers and the compiled contract).
+- **Reveal my update** in the reveal phase: `reveal(round, salt, payload)`; afterwards the salt and payload are
+  deleted from storage. A round that ends before the reveal is shown as missed (not used; its privacy cost stays).
+
+Reads of round state go to the deployment's public RPC (`eth_call`, `eth_blockNumber`); the wallet is used only to
+send and to wait for receipts. All text is set with `textContent`; no inline script or style (the page's strict CSP
+holds, the Worker is `script-src 'self'`).
+
+### Where labels come from (`zetaphy-neuro/ml/fl/labels.js`)
+
+1. **The user, after the fact**: "it was a scam" (1) or "it was not" (0).
+2. **Automatic outcomes observed on chain later.** At scan time the panel keeps the feature vector, the trade
+   simulation's pool and stage, the pool's native-coin reserve, and whether the ZETAPHY ThreatRegistry flags the
+   token (address key or Neuro fingerprint). Later, while the page is open (a few due tokens automatically, more with
+   "Re-check outcomes now"; at most every 12 hours per token, for 60 days), it re-reads the token with the same reader
+   and trade simulation as a scan, the pool's reserve, and the registry. Checking the same token again on the page
+   also adds a reading. Signals:
+   - `sell-failed`: the simulation buys but cannot sell any more -> 1;
+   - `liquidity-pulled`: the pool's native side fell by 90% or more since the scan, or the pool has no liquidity left
+     although it had some at scan time -> 1;
+   - `threat-flagged`: the registry flags it now and did **not** at scan time -> 1 (a flag present at scan time is not
+     an outcome);
+   - `traded-normally`: only after **30 days**, the latest two readings (12 h+ apart) sell with a tax of at most 10%,
+     keep at least half of the scan-time pool, no flag, and **no positive signal was ever seen** -> 0.
+
+   A positive signal counts only when seen in **two readings at least 12 hours apart and still seen in the latest**
+   (a flaky RPC or a briefly empty pool makes no label); a positive followed by a recovery is "mixed" and not used. No
+   label is used before **3 days** after the scan. Combined with the user's answer: both present and different -> not
+   used.
+
+**Label noise, honestly.** Automatic labels are not ground truth and their real error rate is unknown until real
+data exists. Known ways they are wrong: an honest team migrating its pool looks like "liquidity pulled" (false 1); a
+slow rug or a trap that fires after 30 days looks like "traded normally" (false 0); the simulator's own blind spots
+(traps aimed at particular callers, amounts or times) carry over; a registry flag can be wrong and cleared on appeal
+(the next reading then drops the label). The re-reads go to the same public RPCs a check uses (and the ZETAPHY node
+for the registry), which see which token is read, as with any check; the panel says so. Simulated effect (same
+drifted world as below, 30 rounds, trimmed mean, gate on): symmetric noise of 10% costs nothing measurable (AUC 0.805),
+5% false scam / 10% missed scam costs a little (0.788), but **10% false scam / 30% missed scam undoes the gain and
+lowers accuracy below the untouched model** (AUC 0.746, accuracy 0.607 vs 0.641) **without the canary gate noticing**
+(it refused only 4 rounds): missed scams push scores down in exactly the new families the canaries do not cover yet.
+That is why the automatic 0 waits 30 days and needs a clean history, and why fresh, drifted canaries are listed below
+as remaining work.
+
 ### Privacy: what epsilon means here
 
 **Local** differential privacy at **user level**: the noise is added on the device, so neither the aggregator, the
@@ -107,7 +176,7 @@ fresh address per round.
 Synthetic, and labelled as such. A 30-tree model is trained on a "source" world; browsers live in a **drifted**
 world (a new time-bomb family where a time gate means a trap, and fake renounces so "renounced" no longer means
 safe). 3,000 browsers with 1-8 labels each; 300 updates per round; 30 rounds; z = 2; trust region 4. Test set: 1,500
-rows of the drifted world. Reproduce with `npm run ml:fl:simulate` (about 6 s).
+rows of the drifted world. Reproduce with `npm run ml:fl:simulate` (about 15 s).
 
 | scenario | AUC before | AUC after | accuracy before | accuracy after | rounds refused by gate |
 |---|---:|---:|---:|---:|---:|
@@ -118,6 +187,8 @@ rows of the drifted world. Reproduce with `npm run ml:fl:simulate` (about 6 s).
 | honest, trimmed mean, gate off | 0.741 | 0.801 | 0.641 | 0.743 | 0 |
 | honest, no noise (no privacy; reference) | 0.741 | 0.764 | 0.641 | 0.720 | 27 |
 | honest, no noise, gate off (reference) | 0.741 | 0.795 | 0.641 | 0.730 | 0 |
+| honest, trimmed mean, automatic-label noise 5% false scam / 10% missed scam | 0.741 | 0.788 | 0.641 | 0.737 | 4 |
+| honest, trimmed mean, automatic-label noise 10% false scam / 30% missed scam | 0.741 | **0.746** | 0.641 | **0.607** | 4 |
 | 20% label flippers, plain mean | 0.741 | 0.770 | 0.641 | 0.717 | 3 |
 | 20% label flippers, trimmed mean | 0.741 | 0.780 | 0.641 | 0.714 | 4 |
 | 15% colluding push-down, plain mean, gate off | 0.741 | **0.357** | 0.641 | 0.381 | 0 |
@@ -127,7 +198,8 @@ rows of the drifted world. Reproduce with `npm run ml:fl:simulate` (about 6 s).
 
 What this shows, and what it does not:
 - Honest browsers fix most of the drift (AUC +0.06, accuracy +0.10) with the privacy noise on.
-- Label flipping by 20% of each round only slows learning.
+- Label flipping by 20% of each round only slows learning. Label noise that is one-sided (many scams labelled 0, as a
+  wrong automatic "traded normally" would) is worse than adversarial flipping and passes the gate (above).
 - The strong attack (colluding clients, each coordinate at the largest value the shape checks accept, aimed at
   lowering scam scores) **wrecks the plain mean**; the trimmed mean and median only **bound** it (the trimmed mean
   of noisy updates is biased by the attackers' share times the noise spread, and that bias adds up over rounds).
@@ -141,6 +213,31 @@ What this shows, and what it does not:
 - Users in the simulation join up to 9 rounds (epsilon 18.9); a real browser stops at its budget (6 rounds at
   z = 2, epsilon 16).
 
+### Deployment (`zetaphy fl`, `zetaphy-neuro/ml/fl/deployment.json`)
+
+`FederatedRounds` is **closed by default**: the constructor leaves it paused, so nobody can commit until governance
+opens it (reveals of commitments already made stay possible while paused). The deployment path:
+
+```bash
+cd zetaphy-network
+# 1. deploy (this machine's key pays gas and never holds a role; governance = the ZetaphyTimelock or gov)
+node cli.js fl deploy --governance 0x731db92410B3b15Ae4b6b41E47fc3c9a66390340 \
+  [--start-in 14400 --commit-blocks 72000 --reveal-blocks 28800 --max-per-round 1000] --out ../zetaphy-neuro/ml/fl/deployment.json
+# 2. commit deployment.json in a pull request: the Neuro page and the weekly aggregator read it
+# 3. open it through the timelock (prints the call, the timelock schedule/execute data and the operation id;
+#    --proposal-out writes a MsgEVMCall gov proposal for zetaphyd tx gov submit-proposal)
+node cli.js fl propose open --timelock 0x731db92410B3b15Ae4b6b41E47fc3c9a66390340 [--proposal-out open.json]
+node cli.js fl status          # open/closed, round, phase, commits, reveals (read only)
+```
+
+`fl deploy` refuses a governance that is a single key (an EOA) or the deployer itself (allowed only with `--devnet` on
+a local RPC), checks the new contract reads back as closed, and prints the record. Defaults: one round a week at ~6 s
+blocks (5 days commit + 2 days reveal), first round a day after the deploy, at most 1,000 commits a round.
+`fl propose close | max <n> | governance <0x…>` print the other governance calls; `fl config` writes the record for a
+contract deployed another way. The same deploy runs from the workflow (`mode: deploy`, below), which pushes the record
+to the branch `neuro-fl/deployment` for a pull request. The committed record today has `rounds: null`, and the page
+says "not deployed yet".
+
 ### Aggregator and governance
 
 ```bash
@@ -150,10 +247,17 @@ node zetaphy-network/scripts/fl-aggregate.js --round 3 --inbox zetaphy-neuro/ml/
   [--registry 0xModelEpochs --gov-bech32 zetaphy1… --activation 1234000 --uri https://…/manifest.json]
 ```
 
-writes `head.json`, `manifest.json`, `decision.json`, `body.md` and, with `--registry`, `proposal.json` (a
+Without `--rounds`/`--rpc` it uses `zetaphy-neuro/ml/fl/deployment.json` (`--deployment` for another file), and without
+`--round` the last finished round. `--min-updates` (default 20) may be lowered only on a devnet or in tests.
+
+It writes `head.json`, `manifest.json`, `decision.json`, `body.md` and, with `--registry`, `proposal.json` (a
 `MsgEVMCall` from the gov module to `ModelEpochs.schedule`, for `zetaphyd tx gov submit-proposal`). The weekly job
 `.github/workflows/neuro-fl.yml` (Thursdays 05:43 UTC, `contents: read`; only the PR job may write) runs it on the
-last finished round and opens a pull request when the gate passes. The pull request is not the decision: the
+last finished round and opens a pull request when the gate passes. It needs **no secret and no setting** once a
+deployed `deployment.json` is committed (repository variables `ZETAPHY_RPC`, `FL_ROUNDS_ADDRESS`, `MODEL_EPOCHS_ADDRESS`,
+`GOV_BECH32`, `FL_ACTIVATION` still override or add the proposal); until then it does nothing. The manual `mode: deploy`
+run is the only job with a key: the existing secret `ZETAPHY_DEPLOYER_KEY`, which lives only in the `testnet-deploy`
+environment (main only, the owner approves each run; `docs/SECRETS-HARDENING.md`). No new secret is needed. The pull request is not the decision: the
 manifest takes effect only when a vote schedules its hash in the ModelEpochs (item 35). Voters can rerun the
 script and compare the hash.
 
@@ -162,18 +266,27 @@ A new tree model from the weekly training (`neuro-ml.yml`) resets the head to th
 
 ### Limits and what remains (item 6)
 
-- **No browser UI yet.** Nothing in the Neuro page or the hub asks users for outcome labels or submits updates.
-  The client library is ready and runs in Chromium; the UI (label buttons after a scan, "share a private update"
-  with the epsilon shown, all 8 languages, strict CSP) is the next step.
+- **Not deployed yet.** `FederatedRounds` is tested on the in-memory EVM (unit tests and a five-browser Chromium
+  round); the deploy, the record and the open proposal are one manual workflow run + two pull requests + a timelock
+  operation away. Until then the panel stores answers locally and sends nothing.
 - **No real labels yet**, so no claim about real-world accuracy. All numbers above are a synthetic drift scenario.
+  The automatic labels' real error rates are unknown; the simulation shows one-sided noise (missed scams) can undo the
+  gain without the gate noticing. Before a head trained on real labels is proposed, governance should see the rejected
+  rounds and add **fresh canaries from the drifted world** (recent, independently confirmed scams and clean tokens),
+  so the gate measures what the labels claim to teach.
 - **Sybil resistance is not provided.** One address = one update per round; anyone can make many addresses. Robust
   aggregation assumes attackers are a minority of a round's updates. Options: require a NeuroIdentity registration
   or a small refundable bond to commit, or weight by runner stake.
-- **No secure aggregation.** Each update is public (on chain) or visible to the aggregator, which is why the noise
-  must be local and large. Secure aggregation (or a trusted shuffler) would allow far less noise; it needs an
-  interactive protocol between clients that this no-server design does not have.
-- **Contracts not deployed.** `FederatedRounds` and `ModelEpochs` are compiled and tested on the in-memory EVM
-  only. The workflow does nothing until the repository variables are set.
+- **No secure aggregation.** Each update is public on chain, which is why the noise must be local and large. Secure
+  aggregation (or a trusted shuffler) would allow far less noise; it needs an interactive protocol between clients that
+  this no-server design does not have.
+- **Participation is public.** The commit and reveal transactions show that an address took part (not what it
+  labelled); use a fresh address for unlinkability. The re-reads for automatic labels reveal the token to public RPCs,
+  as a check does.
+- **Re-checks need the page open.** There is no background job in the browser; outcomes are read when the user visits
+  (a few automatically) or presses "Re-check". Tokens checked once and never revisited get user labels only.
+- **Off-chain envelopes are not in the panel.** The signed-envelope path (`src/fl.js`, `ml/fl/inbox/`) stays for
+  runners and tools; the browser uses commit-reveal only.
 - Label quality: a user's "outcome" can be wrong or malicious; the gate and trust region bound the damage, they do
   not make labels true.
 
@@ -226,66 +339,108 @@ latest block it reads; for a network job, the block of its request transaction (
 `NeuroJobs` also keeps a round's `startBlock`), so every runner of that job selects the same version however late it runs; for re-checking an old report, the height
 stored with it.
 
-### Node-side specification (for the chain-protocol workstream; not implemented here)
+### Node side (in the chain patch: `zetaphy-chain/setup-node.sh`, file `evmd/zetaphy_modelat.go`)
 
-The registry is an EVM contract, so nodes need no new state: they read it. What a node implementation must do if
-Neuro's model output ever enters consensus (e.g. an ML score in a vote extension or in a reportHash that validators
-attest to):
+The registry is an EVM contract, so nodes need no new state beyond its address: they read it.
 
-1. **Where the registry is.** Add a module param `neuro.model_epochs` (EVM address, 20 bytes, default empty =
-   no model in consensus), changeable only by gov (`MsgUpdateParams`). Recommended deployment: a preinstall at a
-   fixed address with `governance` = the gov module's EVM address
-   `0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2`, `epochLength = 14400` (one day at 6 s blocks) and
-   `minDelay >= epochLength`.
-2. **Lookup.** `ModelVersionAt(ctx sdk.Context, h int64) (found bool, index uint64, hash [32]byte, activation int64,
-   uri string, err error)`: a read-only EVM call (no state commit, fixed gas cap e.g. 200,000, `from` = the neuro
-   module address) of `versionAt(uint256)` (selector `0x` + first 4 bytes of `keccak256("versionAt(uint256)")`,
-   ABI in `zetaphy-network/artifacts/ModelEpochs.json`) on the param address. Any error, an empty param, or no code
-   at the address is `found = false`. Called while processing block `h` (PrepareProposal / ProcessProposal /
-   ExtendVote / VerifyVoteExtension / FinalizeBlock of `h`), the context's state is the committed state after `h-1`,
-   which is exactly the state whose answer is final (finality argument above).
+1. **Where the registry is.** One 20-byte value in the `zetaphypq` store (key `0x30`, with the other v5 settings),
+   set only by governance through `MsgSetFuture{kind: "model-epochs", data: {"address":"0x…"}}`:
+   ```bash
+   bash zetaphy-chain/gov.sh model-epochs 0xModelEpochs   # - removes it (no model in consensus)
+   ```
+   The chain refuses an address with no contract, and refuses the setting before the v5 height like every v5
+   setting. The value is kept in genesis exports. (The spec's `neuro.model_epochs` "module param" is this value:
+   the chain has no neuro module, and v5 keeps every setting in the `zetaphypq` store.) Recommended deployment:
+   `governance` = the gov module's EVM address `0x7b5Fe22B5446f7C62Ea27B8BD71CeF94e03f3dF2`, `epochLength = 14400`
+   (one day at 6 s blocks) and `minDelay >= epochLength`.
+2. **Lookup.** `app.ModelVersionAt(ctx sdk.Context, h int64) (ModelVersion{Found, Index, Hash, Activation, URI}, error)`:
+   a read-only EVM call of `versionAt(h)` on a cache context that is never written back (no commit, 200,000 gas,
+   `from` = the `neuro` module address `authtypes.NewModuleAddress("neuro")`, free gas meter, no events). Not found,
+   with the reason in `error`, when: no registry is set, no code at it, the call reverts or runs out of gas, the
+   answer is not the ABI shape or longer than 4 KiB, or the registry breaks its own rules (a zero hash, an
+   activation above `h`, an empty uri or one above 256 bytes). Called while processing block `h`, the context's
+   state is the committed state after `h-1`, whose answer is final (finality argument above).
 3. **Determinism rules.** Consensus code compares **hashes only**. It never downloads the manifest or files in the
    consensus path. A validator that has not fetched and verified the files for the selected hash, or whose local
    files hash differently, **abstains** (puts no ML score in its vote extension) rather than use another version.
-   VerifyVoteExtension must reject an extension whose stated model hash differs from `ModelVersionAt(h).hash`.
-4. **Query and CLI.** gRPC `zetaphy.neuro.v1.Query/ModelAt { height }` -> `{ found, index, hash, activation, uri }`
-   and `zetaphyd q neuro model-at <height>`, both wrapping the same lookup on the state at `height - 1` (needs a node
-   that keeps that state; archive nodes for old heights). Browsers and runners use `eth_call` with
-   `blockTag = height - 1` instead, which gives the same answer.
-5. **Off-chain fetch (node side, outside consensus).** A sidecar or the runner fetches `uri`, verifies the manifest
-   sha256 and each file's sha256 (`loadForHeight`), and keeps the last few versions, starting at least one epoch
-   before activation (minDelay guarantees the notice).
-6. **Tests the node workstream should add.** On a 3-validator devnet: schedule a version at `H`; all validators
-   return the old version for `H-1` and the new one for `H`; a validator restarted and replayed from genesis returns
-   the same; a vote extension carrying the wrong hash at `H` is rejected; `cancelLast` before `H` restores the old
-   answer for every height; a guardian cannot schedule.
+   VerifyVoteExtension must reject an extension whose stated model hash differs from `ModelVersionAt(h).Hash`. These
+   rules bind whatever first puts a model output into consensus; today nothing does.
+4. **Queries.** All read the state after `height - 1` (an archive node for old heights) and give
+   `{height, stateHeight, registry, found, index, hash, activation, uri, error}`:
+   - `zetaphyd q neuro model-at <height>` (`gov.sh model-at <height>`);
+   - JSON-RPC `zetaphy_modelAt(height)` on the public EVM endpoint (8545), next to `zetaphy_faucet` and the other
+     `zetaphy_*` methods;
+   - `modelEpochs()` on the AI precompile `0x…0902` returns the registry address, so contracts can call
+     `versionAt` on it directly.
 
-Today nothing in consensus uses the model (`combine.js` keeps it out of the verdict and reportHash on purpose), so
-this spec is the contract the node side must meet when that changes. Until then, the registry is already useful
-off chain: every browser and runner selects the same model for the same height.
+   The queries read the registry address with a store query and run `versionAt` through the EVM module's `EthCall`
+   at that height; the tests check this path against the keeper lookup. Browsers and runners can still use
+   `eth_call` with `blockTag = height - 1`, which gives the same answer. A separate gRPC service
+   `zetaphy.neuro.v1.Query/ModelAt` was not added: the chain's other ZETAPHY queries are JSON-RPC and CLI, and the
+   EVM module's `EthCall` query is already there for gRPC clients.
+5. **Off-chain fetch (outside consensus).** Not a daemon: the runner or browser calls `zetaphy_modelAt` (or
+   `eth_call`) and `loadForHeight` (`zetaphy-neuro/ml/fl/registry.js`) fetches the manifest and files and checks
+   every sha256, starting at least one epoch before activation (minDelay guarantees the notice).
+6. **Tests** (`zetaphy-chain/fork-tests/evmd/zetaphy_modelat_test.go`, `TestFutureModelAt`, on the real
+   `ModelEpochs` bytecode from `artifacts/ModelEpochs.json`):
+   - no registry set; a non-contract, a non-governance sender and unknown JSON fields refused; the `modelEpochs()`
+     view;
+   - an empty registry (no version, no error);
+   - versions at 20 and 30: not found at 11 and 19, the first at 20 and 29, the second at 30 and 1,000,000;
+     the query path (`EthCall`) agrees at every height;
+   - determinism: 20 repeated lookups agree, with no account, nonce or event change; a second app that replays the
+     same txs gives the same answer at every height;
+   - finality: at height 21, `cancelLast` drops only the version at 30, the version in force cannot be cancelled
+     or replaced, and every answer for heights <= 21 stays;
+   - a registry that loops (out of gas), one that answers junk, and decoded answers that break the rules (an
+     activation above `h`, a zero hash) are "not found"; height 0 is refused;
+   - removal by governance; the genesis export keeps the address; the `security-proposal model-epochs` command.
+
+**What remains (item 35, node side).**
+
+- Nothing in consensus uses the model (`combine.js` keeps it out of the verdict and reportHash on purpose), so the
+  abstain / VerifyVoteExtension rule of point 3 has no caller yet; it applies when an ML score enters a vote
+  extension.
+- The multi-validator devnet test of the spec (3 validators, a version scheduled at `H`, replay from genesis, a
+  wrong-hash vote extension rejected) is not done: the fork tests run the real keeper, EVM and contract inside one
+  app, and `TestFutureModelAt` compares two apps. `zetaphy_modelAt` and `q neuro model-at` were run once by
+  hand against a single-node devnet (`zetaphy-network/scripts/devnet.sh`) with a stand-in registry put in genesis
+  (both answered from the state after `height - 1`; height 1 is refused); not yet against the real `ModelEpochs`
+  on a live chain, and there is no devnet test in CI for it.
+- No sidecar process that pre-fetches files; `loadForHeight` does it on demand.
+- Running v5 chains get the new store key, the `modelEpochs()` view and the queries with the new binary; the
+  registry stays unset (nothing changes) until a governance vote sets it.
 
 ---
 
 ## Files
 
-- `zetaphy-neuro/ml/fl/`: `head.js` (head, trust region, hashing), `client.js`, `dp.js` (clip, noise, zCDP
-  accounting, ledger), `codec.js` (wire format), `aggregate.js` (shape checks, trimmed mean, median), `gate.js`,
-  `registry.js` (version by height, manifests), `manifest.js` (writes/checks `ml/manifest.json`), `simulate.js`,
-  `head.json` (committed zero head), `inbox/`.
+- `zetaphy-neuro/ml/fl/`: `head.js` (head, trust region, hashing), `client.js` (+ `roundUpdate`), `dp.js` (clip, noise,
+  zCDP accounting, ledger), `codec.js` (wire format), `aggregate.js` (shape checks, trimmed mean, median), `gate.js`,
+  `labels.js` (user + automatic outcome labels), `rounds.js` (browser FederatedRounds client), `deployment.js` +
+  `deployment.json` (where the contract is; `rounds: null` today), `registry.js` (version by height, manifests),
+  `manifest.js` (writes/checks `ml/manifest.json`), `simulate.js` (+ label noise), `head.json` (committed zero head), `inbox/`.
+- `zetaphy-neuro/web/`: `fl-panel.js` (the panel), `fl-worker.js` (training in a Web Worker), `fl-wallet.js` (EIP-6963 +
+  the hub's shared wallet id), `fl-i18n.js` (en zh es ko ja ru vi th), `fl.css`; `zetaphy-hub/build.mjs` ships `ml/` as
+  `neuro/ml/` (runtime files only).
 - `zetaphy-neuro/ml/manifest.json`; `zetaphy-neuro/ml/combine.js` (optional `head`).
-- `zetaphy-neuro/ml/test/fl.test.js`, `registry.test.js`, `fl.browser.e2e.js`.
+- `zetaphy-neuro/ml/test/fl.test.js`, `registry.test.js`, `flbrowser.test.js`, `fl.browser.e2e.js`;
+  `zetaphy-neuro/test/fl.e2e.js` (five Chromium browsers, a whole round on the real contract in an in-memory EVM,
+  then `fl-aggregate.js` over JSON-RPC), `test/helpers/fl-chain.js`.
 - `zetaphy-network/contracts/ModelEpochs.sol`, `FederatedRounds.sol` (+ `artifacts/`), `src/modelepochs.js`,
-  `src/fl.js`, `scripts/fl-aggregate.js`, `test/modelepochs.test.js`, `test/federated.test.js`.
+  `src/fl.js`, `src/flcli.js` (`zetaphy fl …`), `scripts/fl-aggregate.js`, `test/modelepochs.test.js`,
+  `test/federated.test.js`, `test/flcli.test.js`.
 - `.github/workflows/neuro-fl.yml`; `.github/workflows/neuro-ml.yml` (regenerates the manifest with a new model).
 
 ## Commands
 
 ```bash
 cd zetaphy-neuro
-node --test ml/test/fl.test.js ml/test/registry.test.js   # ~4 s
-node --test ml/test/fl.browser.e2e.js                     # the client in Chromium
+node --test ml/test/fl.test.js ml/test/registry.test.js ml/test/flbrowser.test.js
+node --test ml/test/fl.browser.e2e.js test/fl.e2e.js      # the client and the panel in Chromium (~70 s)
 npm run ml:fl:simulate                                    # the table above
 node ml/fl/manifest.js [--check]
 cd ../zetaphy-network
-node --test test/modelepochs.test.js test/federated.test.js
+node --test test/modelepochs.test.js test/federated.test.js test/flcli.test.js
+node cli.js fl status | fl propose open --timelock 0x… | fl deploy --governance 0x… (see Deployment)
 ```

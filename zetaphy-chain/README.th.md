@@ -461,12 +461,15 @@ handler `zetaphy-v4`) และบนเชนจริง `npm run test:devnet:
 ## ขั้นที่ 8 (v5 งานวิจัยบน testnet): ระบบภูมิคุ้มกัน, AI precompile, ตัวตัดวงจรสะพาน, ตัวป้องกันบัญชี
 
 การออกแบบ วิธีใช้ และข้อจำกัดอยู่ใน [`docs/future/chain-protocol.th.md`](../docs/future/chain-protocol.th.md) patch อยู่ใน `setup-node.sh` ไฟล์เดียวกัน
-ทุกอย่าง **ปิดอยู่จนกว่าจะมีการโหวต** (`gov.sh ai-model | immune | breaker | breaker-rearm`) หรือจนกว่าบัญชีจะสมัครใช้เอง:
+ทุกอย่าง **ปิดอยู่จนกว่าจะมีการโหวต** (`gov.sh ai-model | immune | breaker | breaker-rearm | model-epochs`) หรือจนกว่าบัญชีจะสมัครใช้เอง:
 - `0x…0902` AI precompile: โมเดล GBDT แบบจำนวนเต็มที่เก็บใน state (`tools/gbdt-export.mjs` แปลงโมเดลของ Neuro)
 - vote extension มีคะแนน bytecode ของสัญญาใหม่และธงการไหลออกของสะพาน ต่อท้ายลายเซ็น ML-DSA
   ใบรับรอง PQ ไม่เปลี่ยน ค่ามัธยฐานถ่วงด้วย power อ่านได้ที่ `0x…0903` ซึ่งเข้ากันได้กับ ThreatRegistry
 - ตัวตัดวงจรสะพาน: เมื่อ validator เกิน 2/3 ติดธง เชนจะเรียก `pause()` ส่วนการเปิดสะพานอีกครั้งเป็นหน้าที่ของ governance
 - `0x…0904` ตัวป้องกันบัญชี: โหมดป้องกันบัญชี และการกักธุรกรรมผิดปกติ (ปล่อยด้วยกุญแจที่สองหรือเมื่อครบเวลา) สำหรับบัญชีที่สมัครใช้
+  การกักครอบคลุมเหรียญหลัก และ ERC-20 แยกรายโทเคน (`holdToken`) รวมถึงการ approve
+- โมเดล Neuro ตามความสูงบล็อก (ข้อ 35, [`docs/future/federated.th.md`](../docs/future/federated.th.md)): `gov.sh model-epochs <ModelEpochs 0x…>`
+  ชี้เชนไปที่ registry ส่วน `zetaphyd q neuro model-at <h>` / JSON-RPC `zetaphy_modelAt` ตอบจากสถานะหลัง h-1
 
 เชนใหม่มี v5 ตั้งแต่บล็อก 1 ส่วนเชนที่รันอยู่ใช้ `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`
 ทดสอบ: `fork-tests/evmd/zetaphy_future_test.go` และ `node --test zetaphy-chain/tools/gbdt-export.test.mjs`

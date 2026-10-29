@@ -26,3 +26,7 @@
 #ai-browser textarea { width: 100%; box-sizing: border-box; font: .75rem ui-monospace, SFMono-Regular, Menlo, monospace; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); padding: 6px; overflow-wrap: anywhere; }
 #ai-load-status, #ai-p2p-status { color: var(--muted); font-size: .82rem; min-height: 1.1em; overflow-wrap: anywhere; }
 #ai-load-status.error, #ai-p2p-status.error { color: var(--high); }
+#ai-p2p-auto-status, #ai-llm-status { color: var(--muted); font-size: .82rem; min-height: 1.1em; overflow-wrap: anywhere; }
+#ai-p2p-auto-status.error, #ai-llm-status.error { color: var(--high); }
+#ai-llm-out { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .88rem; border-left: 3px solid var(--line); padding-left: 8px; min-height: 1.2em; }
+#ai-llm .ai-row { display: flex; flex-wrap: wrap; gap: 6px; }

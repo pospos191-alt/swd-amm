@@ -22,7 +22,7 @@
 | 1 สัญญา = 1 ตัวตน (ERC-8004) + ข้อความข้ามเชนที่มีลายเซ็น | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: ข้อความจาก Neuro ตัวอื่นเป็นข้อมูล ไม่ใช่คำสั่ง |
 | 5 · ต้านควอนตัม | precompile ML-DSA (FIPS 204) ในเชน + `QuantumWallet` + `zetaphy pq` + บัญชี PQ แท้ (`zetaphy pq native`) |
 | อนาคต · งานที่มีประโยชน์ (ต้นแบบ ยังไม่ deploy) | `UsefulWork` (งานสแกนในเบราว์เซอร์: ตราประทับ PoW, commit-reveal 2 ใน 3, นกขมิ้น) + `WorkerReputation` (แบบ ERC-8004) + `BugBounty` (fuzzing ในเบราว์เซอร์ รันเนอร์ตรวจ; `VulnerableVault` ตั้งใจให้มีช่องโหว่) + `UsefulIssuance` (ส่วนแบ่งจาก RewardVault หลัง timelock สำหรับงานที่ผ่านการตรวจ) + `zetaphy work` / `zetaphy bounty`: [docs/future/useful-work.th.md](../docs/future/useful-work.th.md) |
-| ความปลอดภัยข้ามเชน (testnet, docs/future/crosschain-assist.th.md) | `NeuroOracleSender` + `NeuroOracle`: ส่งต่อธงของ Neuro ไปยัง EVM testnet อื่นผ่าน Hyperlane (`zetaphy immune push/coverage`, `scripts/neuro-oracle.js`) และไป Osmosis ผ่าน IBC (`cosmwasm/neuro-oracle-osmo`) · `NeuroAttest`: ใบรับรอง "Neuro-checked" (`zetaphy certify`) · `NeuroAnchor` + `zetaphy attest-pq`: ไฟล์รายงานที่ลงนามด้วย ML-DSA-44 · `HackInsurance`: ต้นแบบประกันการถูกแฮ็กแบบพาราเมตริก (testnet เท่านั้น) |
+| ความปลอดภัยข้ามเชน (testnet, docs/future/crosschain-assist.th.md) | `NeuroOracleSender` + `NeuroOracle`: ส่งต่อธงของ Neuro ไปยัง EVM testnet อื่นผ่าน Hyperlane (`zetaphy immune push/coverage`, `scripts/neuro-oracle.js`) และไป Osmosis ผ่าน IBC (`cosmwasm/neuro-oracle-osmo`) · `NeuroAttest`: ใบรับรอง "Neuro-checked" (`zetaphy certify`) · `NeuroAnchor` + `zetaphy attest-pq`: ไฟล์รายงานที่ลงนามด้วย ML-DSA-44 · `HackInsurance`: ต้นแบบประกันการถูกแฮ็กแบบพาราเมตริก (testnet เท่านั้น) พร้อม replay นิติวิทยาแบบกำหนดได้ (`zetaphy insurance replay/vote`, anvil 1.2.3) |
 
 **ยังไม่มีเงินจริงในขั้นไหนเลย:** ขั้น 3 ขึ้นไปบน mainnet ต้องผ่านประตูในหัวข้อ "ก่อนเงินจริง" ท้ายไฟล์ก่อน
 
@@ -1062,6 +1062,14 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 เผยแพร่หรือเปลี่ยนสถานะได้เฉพาะ governance (timelock) guardian ทำได้แค่ระงับทันที และ revoked ถาวร
 `node scripts/model-registry.js deploy | propose | status | show` เทสต์ใน `test/modelregistry.test.js`
 เบราว์เซอร์ตรวจทุกชิ้นที่ดาวน์โหลดกับทะเบียนนี้: [docs/future/browser-ai.th.md](../docs/future/browser-ai.th.md)
+
+## SignalBoard (เบราว์เซอร์หากันเจอ)
+
+`contracts/SignalBoard.sol`: กระดานประกาศสำหรับ signaling ของ WebRTC `post(topic, to, expiresAt, payload)` แค่ปล่อย event `Signal(...)`
+(payload 1..2048 ไบต์, หมดอายุไม่เกิน 600 วินาทีข้างหน้า, ผู้ส่งหนึ่งราย 12 โพสต์ต่อ 60 วินาที) ไม่มีเจ้าของ ไม่ถือเงิน ไม่มีอะไรต้องโหวต
+เบราว์เซอร์โพสต์ข้อเสนอที่เซ็นและเข้ารหัสจาก key ชั่วคราวที่ได้เหรียญจาก faucet และอ่านด้วย `eth_getLogs`
+`KEYFILE=… node scripts/signal-board.js deploy | show --board 0x…` เทสต์ใน `test/signalboard.test.js` ยังไม่ได้ deploy
+รายละเอียดและความเป็นส่วนตัว: [docs/future/browser-ai.th.md](../docs/future/browser-ai.th.md)
 
 ## ทดสอบ
 

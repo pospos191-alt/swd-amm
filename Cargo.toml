@@ -1,5 +1,7 @@
 [workspace]
 members = ["programs/*"]
+# built on its own (cosmwasm/optimizer refuses a [workspace] table with no members)
+exclude = ["zetaphy-network/cosmwasm"]
 resolver = "2"
 
 [profile.release]

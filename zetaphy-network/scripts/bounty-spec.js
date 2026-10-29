@@ -8,11 +8,9 @@ import { keccak256, toUtf8Bytes } from 'ethers';
 export function vulnerableVaultSpec() {
   const art = JSON.parse(readFileSync(new URL('../artifacts/VulnerableVault.json', import.meta.url), 'utf8'));
   return {
-    version: 1,
+    version: 2,
     name: 'VulnerableVault (deliberately vulnerable test contract)',
-    note: 'TEST ONLY: zetaphy-network/contracts/VulnerableVault.sol. A victim deposits 5 ZETAPHY; a finding is valid when the attacker ends with at least 1 ZETAPHY more than it started.',
-    invariant: 'attacker-profit',
-    minProfit: String(10n ** 18n),
+    note: 'TEST ONLY: zetaphy-network/contracts/VulnerableVault.sol. A victim deposits 5 ZETAPHY. A finding is valid when it breaks one of the invariants: the attacker ends with at least 1 ZETAPHY more, the victim cannot take its 5 back, the vault holds less than it owes, owner() changes, or the vault self-destructs or delegatecalls the attacker.',
     initcode: art.bytecode,
     functions: [
       { sig: 'deposit()', payable: true },
@@ -24,6 +22,13 @@ export function vulnerableVaultSpec() {
     ],
     balances: { deployer: String(10n ** 18n), victim: String(10n * 10n ** 18n), attacker: String(10n ** 18n) },
     setup: [{ from: 'victim', sig: 'deposit()', value: String(5n * 10n ** 18n) }],
+    invariants: ['attacker-profit', 'victim-can-exit', 'balance-conservation', 'privileged-unchanged', 'no-selfdestruct', 'no-delegatecall-to-attacker'],
+    minProfit: String(10n ** 18n),
+    exit: [{ sig: 'withdraw(uint256)', args: [String(5n * 10n ** 18n)] }],
+    exitMin: String(5n * 10n ** 18n),
+    solvency: 'balances(address)',
+    watch: ['owner()'],
+    hook: true,
   };
 }
 

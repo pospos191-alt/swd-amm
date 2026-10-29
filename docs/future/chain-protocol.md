@@ -14,7 +14,7 @@ Each account turns on its own protection.
 | 12 | Chain immune system through vote extensions | done, with documented limits | vote extensions, `0x…0903` |
 | 13 | Protected-account mode | done | ante handler, `0x…0904` |
 | 31 | Bridge circuit breaker | done, with documented limits | vote extensions, BeginBlock |
-| 33 | Anomaly hold for opted-in accounts | done (native coin only) | ante handler, `0x…0904` |
+| 33 | Anomaly hold for opted-in accounts | done: native coin and ERC-20 tokens (per-token rules), with documented limits | ante handler, `0x…0904` |
 
 ## Activation (the `v5` height)
 
@@ -41,6 +41,7 @@ bash gov.sh ai-model model.hex          # node zetaphy-chain/tools/gbdt-export.m
 bash gov.sh immune '{"enabled":true,"enforce_bps":9000,"hold_bps":8000,"protect_bps":7000}'
 bash gov.sh breaker '{"bridge":"0x…","topic":"0x<topic0>","recipient_topic":2,"amount_word":0,"min_volume":"1000000000000000000000","vol_mult_bps":50000,"new_ratio_bps":5000,"baseline_shift":7,"enabled":true}'
 bash gov.sh breaker-rearm 0x…
+bash gov.sh model-epochs 0x…            # the Neuro ModelEpochs registry (item 35, ../future/federated.md)
 ```
 
 The chain decodes the JSON strictly and refuses unknown fields.
@@ -359,6 +360,7 @@ Governance re-arms it with `breaker-rearm`.
 ## (33) Anomaly hold for opted-in accounts: `0x…0904`
 
 ```solidity
+// the account and its native-coin rule
 function holdOptIn(address guardian, uint64 timeoutSeconds, uint256 minAmount, uint32 multBps);
 function requestRelease(uint256 amount) returns (uint64 readyAt);
 function confirmRelease(address account);      // the guardian only
@@ -366,22 +368,34 @@ function cancelRelease(address account);       // the guardian or the account
 function holdOptOut() returns (uint64 at);     // takes effect after the timeout
 function cancelOptOut(address account);        // the guardian only
 function holdState(address) view returns (...);
+
+// ERC-20 rules: one per token, up to 16 per account, same guardian and timeout
+function holdToken(address token, uint256 minAmount, uint32 multBps);
+function requestTokenRelease(address token, uint256 amount) returns (uint64 readyAt);
+function confirmTokenRelease(address account, address token);   // the guardian only
+function cancelTokenRelease(address account, address token);    // the guardian or the account
+function holdTokenOptOut(address token) returns (uint64 at);    // takes effect after the timeout
+function cancelTokenOptOut(address account, address token);     // the guardian only
+function holdTokenState(address account, address token) view returns (...);
+function holdTokens(address account) view returns (address[]);
 ```
 
 **What it does.** For an account that opted in, the chain keeps cheap
-statistics: the number of native-coin outflows and their moving average
-(alpha 1/8). Two fields of state, updated in the ante handler of block txs.
+statistics per rule: the number of outflows and their moving average
+(alpha 1/8). Two fields of state per rule, updated in the ante handler of
+block txs. The native coin has one rule (`holdOptIn`); each ERC-20 the
+account adds with `holdToken` has its own, with its own threshold in that
+token's units (token units and prices differ, so one profile per token).
 
-An outflow is the tx's total value in the native coin: Ethereum tx value,
-`MsgEVMCall` value, and bank `MsgSend`/`MsgMultiSend`. It is **held** when it
-is above `minAmount` and either:
+An outflow is **held** when it is above the rule's `minAmount` and either:
 
-- among the account's first 5 outflows (warm-up), or
+- among the rule's first 5 outflows (warm-up), or
 - above `average × multBps / 10000`.
 
-A held outflow is refused until the account has a **release** that covers it:
+A held outflow is refused until the rule has a **release** that covers it:
 
-1. The account calls `requestRelease(amount)`.
+1. The account calls `requestRelease(amount)` (native) or
+   `requestTokenRelease(token, amount)`.
 2. The release becomes usable either:
    - after the timeout (1 h to 30 days), or
    - **at once when the guardian confirms it**. The guardian is the second
@@ -390,11 +404,39 @@ A held outflow is refused until the account has a **release** that covers it:
      that is not the account itself.
 
 A release lasts one day, and its amount is used up by the outflows it covers.
-The guardian can cancel a release. Opting out waits the timeout, and the
-guardian can cancel the opt-out. Accounts that did not opt in are never
-checked.
+The guardian (or the account) can cancel a release. Opting out waits the
+timeout, and the guardian can cancel the opt-out; that holds for the whole
+account (`holdOptOut`, which also ends every token rule) and for one token
+(`holdTokenOptOut`). Adding a token rule is immediate (it only makes the
+account stricter). A new opt-in after an opt-out starts with an empty profile
+and no token rules. Accounts that did not opt in are never checked.
 
-**Tests.** `TestAnomalyHold` covers:
+**What counts as an outflow.** Only what the signer's own messages state,
+summed per rule over the whole tx:
+
+| | counted under | teaches the profile |
+|---|---|---|
+| Ethereum tx value, `MsgEVMCall` value | native | yes |
+| bank `MsgSend` / `MsgMultiSend`, IBC `MsgTransfer`, ICS-20 precompile `transfer` (`0x…0802`) | native for the EVM denom; the token for a coin with a token pair (`erc20/0x…`, IBC denoms with an ERC-20 interface) | yes |
+| `transfer(to, amount)`, `transferFrom(signer, to, amount)` on a token | the token; **native** on the native coin's ERC-20 interface (`0xEeee…EEeE`, or any token pair of the EVM denom) | yes |
+| `approve`, `increaseAllowance` on a token, Permit2 `approve(token, spender, amount, expiration)` | as above | **no** |
+| `MsgConvertERC20` / `MsgConvertCoin` to *another* address | the token / the coin's rule | yes |
+
+Approvals are checked as if the approved amount left the account, because
+"approve, then the attacker pulls" is how most token drains work. They do
+not teach the profile (an approval is not a payment), so an **unlimited
+approval is always held** until a release covers it (`requestTokenRelease`
+takes amounts up to `2^256 - 1`). A user who approves a DEX router asks the
+guardian to confirm once, or waits the timeout.
+
+**Cost in consensus.** Accounts that did not opt in: the two existing store
+reads. An opted-in account: one read per rule touched, a 4-byte selector
+switch, and for coins a token-pair lookup; the hold's lookups run on a free
+gas meter, so they never change a tx's gas. ICS-20 calldata is ABI-decoded
+only when the target is `0x…0802`. Everything is integer math on `big.Int`
+in the order the tx states the outflows.
+
+**Tests.** `TestAnomalyHold` (native rule):
 
 - not opted in;
 - the guardian must be another key;
@@ -408,15 +450,58 @@ checked.
 - opt-out with cancel and the timeout;
 - the `holdState` view.
 
+`TestAnomalyHoldERC20` (token rules):
+
+- a token rule needs the opt-in first; the native coin's interface cannot be
+  added as a token; no duplicate rule;
+- warm-up and the learned profile per token; token outflows do not touch the
+  native profile; a token without a rule and other accounts are unaffected;
+- a drain-sized amount is held, in CheckTx and in a block, through each of:
+  `transfer`, `transferFrom(self)`, `approve`, an unlimited `approve`,
+  `increaseAllowance`, Permit2 `approve`, bank send, multi-send, IBC
+  `MsgTransfer`, the ICS-20 precompile, `MsgConvertERC20` and
+  `MsgConvertCoin` to another address;
+- held outflows teach nothing; pulling someone else's tokens, Permit2's
+  selector on another contract and converting to oneself are not counted;
+- approvals are checked but do not teach; two transfers in one tx add up;
+- guardian confirmation (not a stranger, not the account), more than
+  released, CheckTx does not use the release up, used up;
+- the account's own cancel, release by timeout (not before), releases expire;
+- an unlimited approval released by the guardian;
+- token opt-out: only the guardian cancels it, and it takes effect after the
+  timeout;
+- an ordinary contract call by an enrolled account (this found and fixed an
+  out-of-range slice in `guardTargets` that made such calls panic).
+
+`TestAnomalyHoldNativeERC20`: `transfer` and `approve` on `0xEeee…EEeE`, IBC
+and `MsgConvertCoin` of the native coin are held under the native rule and
+teach it; the account's opt-out ends its token rules; a new opt-in starts
+with no rules and an empty profile.
+
 **Limits.**
 
-- Native coin only. ERC-20 amounts have different units and prices per token,
-  and a per-token profile was left out.
-- Only the signer's own txs are seen, as in (13).
+- Only the signer's own messages are seen, as in (13). Not seen:
+  - a contract that moves tokens internally: a DEX router or aggregator
+    spending an approval, a smart-contract wallet, `multicall`, a vault
+    withdraw-to;
+  - an EIP-2612 `permit` or Permit2 signature signed off chain and submitted
+    by someone else (the signature is the approval; it never passes through
+    the account's own tx);
+  - approvals given **before** opting in (revoke them after opting in);
+  - ERC-721 / ERC-1155 (no amounts to profile), fee-on-transfer and rebasing
+    tokens are counted at the stated amount.
+- `transferFrom` signed by a spender is not counted for the owner: the hold
+  meters the owner's `approve` instead. An approval to a spender that later
+  pulls in several steps is checked once, at approval time.
+- Calldata inside multicalls or batch calls is not decoded.
 - A thief with the account key can still drain after the timeout if the
   guardian does nothing. The hold buys time; it is not a veto.
 - The profile is a moving average, not a learned model. "Profile-breaking"
   means a large jump compared with the account's past.
+- Running v5 chains: the new rules change which txs of **opted-in** accounts
+  are accepted, so every validator must switch to this binary at the same
+  height (no store migration; nothing changes for accounts that did not opt
+  in).
 
 ---
 
@@ -460,7 +545,9 @@ fits on 1 GB validators.
   tracer).
 - A post-quantum signature over the payload (or merging it into the
   certificate message, which changes the light-client format).
-- ERC-20 and per-token profiles for the anomaly hold.
+- The anomaly hold sees only what the signer's own messages state (see its
+  limits): token movements inside contracts would need a consensus-safe
+  tracer over the EVM's transfer logs.
 - Decoding multicall and router calldata in protected mode.
 - Pruning the breaker's "seen recipients" set.
 - More live devnet coverage. `zetaphy-chain/test-vote-keys.sh` step 9 runs on a

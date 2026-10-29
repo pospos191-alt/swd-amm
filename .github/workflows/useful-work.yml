@@ -1,0 +1,155 @@
+# Useful work on the testnet (docs/future/useful-work.md, item 5). TESTNET ONLY. Free: GitHub-hosted runners,
+# no server. Keys only from GitHub Environments (docs/SECRETS-HARDENING.md); nothing here contains a secret.
+#
+#   deploy  (manual, mode = deploy): `zetaphy deploy-useful-work` deploys WorkerReputation, UsefulIssuance,
+#           UsefulWork and BugBounty PAUSED, hands every admin role to the ZetaphyTimelock, and opens a pull
+#           request with zetaphy-network/deployments/useful-work-77390.json (the hub reads it) and the timelock
+#           proposals that open the markets. Environment `testnet-deploy` (owner approves), secret
+#           ZETAPHY_DEPLOYER_KEY. The feeder's ADDRESS comes from the repository variable USEFUL_WORK_FEEDER.
+#   feed    (every 3 hours, or manual): the job feeder, `zetaphy work feed`: reveals due canaries, settles
+#           finished jobs and posts new scan jobs (a share of them canaries) while UsefulWork is open.
+#           Environment `testnet-automation` (main only, no reviewer: scheduled), secret
+#           USEFUL_WORK_FEEDER_KEY: a dedicated testnet key that governance named feeder and that holds a little
+#           testnet ZETAPHY for gas and job fees. Without the secret (or before the deployment file exists) it is
+#           a dry run that sends nothing.
+# Actions pinned by SHA; the key goes to a 0600 file outside the checkout, is masked, and is removed at the end.
+
+name: Useful work
+
+on:
+  schedule:
+    - cron: '17 */3 * * *'   # feed, every 3 hours at :17
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'feed (post / reveal / settle scan jobs) or deploy (one-time, paused, needs approval)'
+        required: true
+        default: 'feed'
+        type: choice
+        options: [feed, deploy]
+
+permissions: {}
+
+concurrency:
+  group: useful-work-${{ inputs.mode || 'feed' }}
+  cancel-in-progress: false
+
+env:
+  ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+
+jobs:
+  feed:
+    if: github.event_name == 'schedule' || inputs.mode == 'feed'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: testnet-automation
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: zetaphy-network
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - name: Deployed yet?
+        id: dep
+        run: |
+          if [ -f deployments/useful-work-77390.json ]; then echo "ok=1" >> "$GITHUB_OUTPUT"; else echo "UsefulWork is not deployed yet (no deployments/useful-work-77390.json): nothing to feed"; fi
+      - if: steps.dep.outputs.ok == '1'
+        run: npm ci --no-audit --no-fund
+        working-directory: zetaphy-neuro
+      - if: steps.dep.outputs.ok == '1'
+        run: npm ci --no-audit --no-fund
+      - name: Load the feeder key (if set)
+        if: steps.dep.outputs.ok == '1'
+        env:
+          KEY: ${{ secrets.USEFUL_WORK_FEEDER_KEY }}
+        run: |
+          H="$RUNNER_TEMP/uwf"; mkdir -p "$H"; chmod 700 "$H"; echo "ZETAPHY_HOME=$H" >> "$GITHUB_ENV"
+          if [ -z "$KEY" ]; then echo "no USEFUL_WORK_FEEDER_KEY in this environment: dry run"; echo "DRY=--dry-run" >> "$GITHUB_ENV"; exit 0; fi
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          echo "DRY=" >> "$GITHUB_ENV"
+      - name: Feed
+        if: steps.dep.outputs.ok == '1'
+        run: |
+          set -o pipefail
+          node cli.js work feed --new-blocks 300 --max-jobs 5 --fee 0.01 --canary-every 3 --subsidized $DRY 2>&1 | tee "$RUNNER_TEMP/feed.log"
+          { echo "### Useful-work feeder"; echo '```'; tail -40 "$RUNNER_TEMP/feed.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Forget the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/uwf"
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: testnet-deploy
+    permissions:
+      contents: write        # pushes the branch useful-work/testnet
+      pull-requests: write   # opens its pull request
+    defaults:
+      run:
+        working-directory: zetaphy-network
+    env:
+      BRANCH: useful-work/testnet
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: true   # pushes the branch (GITHUB_TOKEN; scoped by `permissions`)
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - name: Refuse a second deployment
+        run: |
+          if [ -f deployments/useful-work-77390.json ]; then echo "::error::already deployed (deployments/useful-work-77390.json): remove it in a pull request first if a redeploy is really wanted"; exit 1; fi
+      - name: Load the deployer key
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in the testnet-deploy environment (docs/SECRETS-HARDENING.md)"; exit 1; }
+          H="$RUNNER_TEMP/uwd"; mkdir -p "$H"; chmod 700 "$H"; echo "ZETAPHY_HOME=$H" >> "$GITHUB_ENV"
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/worker.key")" = "$DEPLOYER" ] \
+            || { rm -f "$H/worker.key"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+      - name: Deploy (paused, owned by the timelock)
+        env:
+          FEEDER: ${{ vars.USEFUL_WORK_FEEDER }}
+        run: |
+          set -o pipefail
+          node cli.js deploy-useful-work ${FEEDER:+--feeder "$FEEDER"} 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          { echo "### Useful work deployed (paused)"; echo '```'; cat "$RUNNER_TEMP/deploy.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Forget the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/uwd"
+      - name: Push useful-work/testnet and open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          [ -f deployments/useful-work-77390.json ] || { echo "nothing deployed"; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B "$BRANCH"
+          git add -- deployments/useful-work-77390.json
+          if git diff --cached --name-only | grep -Eiq '(\.key|keystore|secret)'; then echo "::error::refusing to commit a key-like file"; exit 1; fi
+          git commit -q -m "useful work: testnet deployment (paused, timelock-owned)" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin "$BRANCH"
+          body=$(mktemp)
+          {
+            echo "Written by the **useful-work** workflow ([run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))."
+            echo
+            echo "The contracts are **paused** and owned by the timelock. Merging shows them on the hub as \"deployed, paused\"."
+            echo "To open them, the timelock's proposers schedule the operations listed in \`proposals\` (then execute them after the delay)."
+            echo
+            echo '```'; tail -30 "$RUNNER_TEMP/deploy.log"; echo '```'
+          } > "$body"
+          gh pr create --base "$BASE" --head "$BRANCH" --title "Useful work: testnet deployment (paused)" --body-file "$body" \
+            || echo "::warning::could not open the pull request; open it by hand: ${{ github.server_url }}/${{ github.repository }}/compare/$BASE...$BRANCH"

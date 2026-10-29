@@ -1,4 +1,7 @@
-// Pipeline-parallel inference across browsers: a PROTOTYPE on a toy model.
+// Pipeline-parallel inference across browsers.
+//   - createPipeline / serveStage: the batch (GPipe-style) prototype on the toy MLP (toymodel.js);
+//   - serveLlmStage / remoteLlmStage: a real Llama-architecture language model (llama.js) cut into
+//     layer ranges, token by token with a KV cache on every stage (end of this file).
 //
 // A model too big for one browser is cut into contiguous layer ranges; each
 // peer holds one range ("stage") and runs only those layers. A coordinator
@@ -39,7 +42,7 @@ export function planStages(model, n) {
 }
 
 // Message: u32 header length | header JSON {from, to, batch} | float32 LE activations
-function pack(h, x) {
+export function pack(h, x) {
   const head = new TextEncoder().encode(JSON.stringify(h));
   const out = new Uint8Array(4 + head.length + x.byteLength);
   new DataView(out.buffer).setUint32(0, head.length, true);
@@ -47,7 +50,7 @@ function pack(h, x) {
   out.set(new Uint8Array(x.buffer, x.byteOffset, x.byteLength), 4 + head.length);
   return out;
 }
-function unpack(b) {
+export function unpack(b) {
   const hl = new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(0, true);
   if (hl > 4096) throw new Error('bad header');
   const h = JSON.parse(new TextDecoder().decode(b.subarray(4, 4 + hl)));
@@ -121,4 +124,75 @@ export function createPipeline(stages, { timeoutMs = 30_000 } = {}) {
     },
     close() { for (const s of rpcs) s.rpc.close(); },
   };
+}
+
+// ---------------------------------------------------------------- the language model (llama.js)
+//
+// Each request carries the hidden states of n consecutive tokens of one
+// generation ("session") at position pos; the stage runs its layers, keeps the
+// keys/values in that session's KV cache and answers with the hidden states.
+// The coordinator holds the embedding and the output layer (llama.js createHead)
+// and chains local and remote stages (llama.js chainStages): the bits are the
+// same as running every layer in one place (test/llm.test.js, test/browserai.e2e.js).
+// Sessions of different peers never mix: a stage keys them per channel.
+
+const SESSION = /^[0-9a-f]{8,64}$/;
+
+/**
+ * Serves one stage (llama.js createStage) to the peer on `channel`.
+ * model: an id both sides agree on (e.g. the manifest hash); requests for another model or range are refused.
+ */
+export function serveLlmStage(channel, stage, { model = null, maxTokens = 1024 } = {}) {
+  const prefix = Math.random().toString(36).slice(2) + ':';
+  const open = new Set();
+  let runs = 0;
+  const rpc = rpcChannel(channel, {
+    [METHOD.llm]: async (payload) => {
+      const { h, x } = unpack(payload);
+      if (h.from !== stage.from || h.to !== stage.to) throw new Error(`this peer serves layers ${stage.from}-${stage.to}`);
+      if (model && h.model !== model) throw new Error('this peer serves another model');
+      if (typeof h.s !== 'string' || !SESSION.test(h.s)) throw new Error('bad session');
+      if (!Number.isInteger(h.n) || h.n < 1 || h.n > maxTokens || x.length !== h.n * stage.dim) throw new Error('bad token count');
+      runs += h.n;
+      open.add(h.s);
+      const y = await stage.forward(prefix + h.s, h.pos, x, h.n);
+      return pack({ pos: h.pos, n: h.n }, y);
+    },
+    [METHOD.llmEnd]: async (payload) => {
+      const s = new TextDecoder().decode(payload);
+      if (open.delete(s)) await stage.end(prefix + s);
+      return new Uint8Array([1]);
+    },
+  });
+  return {
+    rpc,
+    get tokens() { return runs; },
+    close() { rpc.close(); for (const s of open) stage.end(prefix + s); open.clear(); },
+  };
+}
+
+/** A stage on another browser, with createStage's shape: {from, to, forward(session, pos, xs, n), end(session)}. */
+export function remoteLlmStage(channel, { from, to, model = null, timeoutMs = 30_000 }) {
+  const rpc = rpcChannel(channel);
+  let hops = 0, ms = 0;
+  return {
+    from, to, rpc,
+    get hops() { return hops; },
+    get ms() { return ms; },
+    async forward(s, pos, xs, n) {
+      const t0 = Date.now();
+      const out = unpack(await rpc.request(METHOD.llm, pack({ s, pos, n, from, to, model }, xs), { timeoutMs }));
+      if (out.h.pos !== pos || out.h.n !== n || out.x.length !== xs.length) throw new Error('the stage answered for other tokens');
+      hops++; ms += Date.now() - t0;
+      return out.x;
+    },
+    async end(s) { await rpc.request(METHOD.llmEnd, new TextEncoder().encode(s), { timeoutMs: 5000 }).catch(() => {}); },
+    close() { rpc.close(); },
+  };
+}
+
+/** Layer ranges for n stages of a language model with L layers (about equal; the head stays with the coordinator). */
+export function planLlmStages(nLayers, n) {
+  if (!(n >= 1 && n <= nLayers)) throw new Error(`stages: 1..${nLayers}`);
+  return Array.from({ length: n }, (_, i) => ({ from: Math.round((i * nLayers) / n), to: Math.round(((i + 1) * nLayers) / n) }));
 }

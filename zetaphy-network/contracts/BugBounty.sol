@@ -78,6 +78,10 @@ contract BugBounty {
     uint128 public findingDeposit;
     uint32 public revealWindow;
     uint32 public judgeWindow;
+    /// New bounties and new findings stop while paused (reveals, votes, claims, refunds go on, so
+    /// nothing is stuck). `zetaphy deploy-useful-work` deploys it paused; governance opens it.
+    bool public paused;
+    address public guardian;           // may pause (never unpause): a fast brake for governance
 
     Bounty[] private _bounties;
     Finding[] private _findings;
@@ -93,7 +97,11 @@ contract BugBounty {
     event BountyPaid(uint256 indexed id, uint256 indexed findingId, address indexed finder, uint256 amount);
     event BountyRefunded(uint256 indexed id, uint256 amount);
     event Withdrawn(address indexed to, uint256 amount);
+    event PausedSet(bool paused);
+    event GuardianSet(address guardian);
+    event GovernanceSet(address governance);
 
+    error Paused();
     error NotGovernance();
     error NotRunner();
     error BadValue();
@@ -132,6 +140,7 @@ contract BugBounty {
     // ---------------------------------------------------------------- bounties
 
     function post(bytes32 specHash, string calldata specURI, uint64 duration) external payable returns (uint256 id) {
+        if (paused) revert Paused();
         if (msg.value == 0 || specHash == bytes32(0) || duration == 0 || bytes(specURI).length > 256) revert BadValue();
         id = _bounties.length;
         Bounty storage b = _bounties.push();
@@ -154,6 +163,19 @@ contract BugBounty {
 
     function setGovernance(address next) external onlyGovernance {
         governance = next;
+        emit GovernanceSet(next);
+    }
+
+    /// Governance pauses or unpauses; the guardian may only pause.
+    function setPaused(bool p) external {
+        if (msg.sender != governance && !(p && msg.sender == guardian && guardian != address(0))) revert NotGovernance();
+        paused = p;
+        emit PausedSet(p);
+    }
+
+    function setGuardian(address g) external onlyGovernance {
+        guardian = g;
+        emit GuardianSet(g);
     }
 
     // ---------------------------------------------------------------- findings
@@ -164,6 +186,7 @@ contract BugBounty {
     }
 
     function commitFinding(uint256 bountyId, bytes32 commitment) external payable returns (uint256 fid) {
+        if (paused) revert Paused();
         Bounty storage b = _bounty(bountyId);
         if (b.paid || b.refunded || block.timestamp > b.deadline) revert Closed();
         if (msg.value != findingDeposit || commitment == bytes32(0)) revert BadValue();

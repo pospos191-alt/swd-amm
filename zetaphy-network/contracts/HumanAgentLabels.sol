@@ -212,6 +212,305 @@ contract LabelRegistry is ILabels {
     }
 }
 
+/// @title VouchRegistry: an optional "vouched unique human" level on top of LabelRegistry (testnet)
+/// @notice Levels (levelOf):
+///           0 NONE           no HUMAN label (no label, or an AI agent);
+///           1 PASSKEY_HUMAN  LabelRegistry's HUMAN: a person used a passkey. Says nothing about
+///                            uniqueness: one person can make many passkeys;
+///           2 VOUCHED_UNIQUE a passkey human that at least `vouchesNeeded` vouched-unique humans
+///                            vouched for, each saying "I know this is one real person with one
+///                            account here", and not suspended or banned.
+///         A web of trust, free and without a server: no stake, no fee, no oracle. What
+///         makes it Sybil-RESISTANT (not Sybil-proof):
+///           - every vouch is rate-limited (one per `vouchCooldown` per voucher, at most
+///             `maxActiveVouches` open at once) and only from accounts that have been unique
+///             for `voucherMinAge`: a ring of k colluding real people can add at most
+///             k·maxActiveVouches / vouchesNeeded fake identities, and those can vouch only
+///             after voucherMinAge, so growth is slow and visible on chain;
+///           - a vouch binds the vouchee's passkey (credential hash): moving the label to
+///             another passkey voids it;
+///           - accountability: `flagsToSuspend` distinct unique humans flagging an account
+///             suspend it (level 1) until they withdraw or governance clears the flags;
+///             governance bans an account it finds to be a duplicate (evidence hash on chain)
+///             and every voucher of it gets a strike; `strikesToBan` strikes ban the voucher;
+///           - the count is live: a vouch from an account that is banned, suspended, lost its
+///             HUMAN label or its own unique status no longer counts.
+///         Limits (docs/future/agents.md §25): a vouched account's own vouchers are read from
+///         their stored status (one level deep; anyone can refresh() a stale one); the
+///         bootstrap set is chosen by governance; collusion and bought vouches are not
+///         prevented, only bounded and traceable. Full Sybil resistance is not solved here.
+contract VouchRegistry {
+    uint8 public constant NONE = 0;
+    uint8 public constant PASSKEY_HUMAN = 1;
+    uint8 public constant VOUCHED_UNIQUE = 2;
+    uint256 public constant MAX_VOUCHERS = 32; // open vouches one account can hold (bounds the live count)
+
+    LabelRegistry public immutable labels;
+    address public governance;
+
+    uint8 public vouchesNeeded;
+    uint8 public maxActiveVouches;
+    uint8 public flagsToSuspend;
+    uint8 public strikesToBan;
+    uint32 public vouchCooldown;
+    uint32 public voucherMinAge;
+
+    struct Person {
+        bool genesis;       // the bootstrap set (governance)
+        bool banned;
+        uint8 activeGiven;  // open vouches this account gave
+        uint8 strikes;      // vouched for accounts later banned
+        uint64 uniqueSince; // 0 = not counted unique (refresh() sets and clears it)
+        uint64 lastVouchAt;
+        uint32 flagEpoch;   // clearFlags() starts a new epoch
+        uint16 flags;       // distinct flaggers in this epoch
+    }
+
+    mapping(address => Person) public people;
+    mapping(address => address[]) private vouchersOf_;                // vouchee -> its open vouchers
+    mapping(address => mapping(address => bytes32)) public vouchCredential; // voucher => vouchee => passkey hash (0 = no vouch)
+    mapping(address => mapping(uint256 => mapping(address => bool))) public flaggedBy; // account => epoch => flagger
+
+    event Vouched(address indexed voucher, address indexed vouchee, bytes32 credentialHash);
+    event Unvouched(address indexed voucher, address indexed vouchee);
+    event Refreshed(address indexed account, uint8 level, uint256 vouches);
+    event Flagged(address indexed account, address indexed by, uint256 flags);
+    event Unflagged(address indexed account, address indexed by, uint256 flags);
+    event FlagsCleared(address indexed account);
+    event Banned(address indexed account, bytes32 evidenceHash);
+    event Unbanned(address indexed account);
+    event Struck(address indexed voucher, address indexed banned, uint256 strikes);
+    event GenesisSet(address indexed account, bool on);
+    event ParamsSet(uint8 vouchesNeeded, uint8 maxActiveVouches, uint32 vouchCooldown, uint32 voucherMinAge, uint8 flagsToSuspend, uint8 strikesToBan);
+    event GovernanceChanged(address governance);
+
+    error NotGovernance();
+    error NotUnique();
+    error NotPasskeyHuman(address who);
+    error TooSoon(uint256 next);
+    error TooManyVouches();
+    error AlreadyVouched();
+    error NoVouch();
+    error AlreadyFlagged();
+    error NotFlagged();
+    error Self();
+    error IsBanned(address who);
+    error BadParams();
+
+    modifier onlyGovernance() {
+        if (msg.sender != governance) revert NotGovernance();
+        _;
+    }
+
+    constructor(LabelRegistry labels_, address governance_) {
+        labels = labels_;
+        governance = governance_;
+        _params(3, 5, 7 days, 30 days, 5, 2);
+    }
+
+    // ------------------------------------------------------------- reading
+
+    /// 0 none (or an agent), 1 passkey human (not proven unique), 2 vouched unique human.
+    function levelOf(address a) public view returns (uint8) {
+        if (labels.labelOf(a) != 1) return NONE;
+        Person storage p = people[a];
+        if (p.banned || p.flags >= flagsToSuspend) return PASSKEY_HUMAN;
+        if (p.genesis) return VOUCHED_UNIQUE;
+        if (p.uniqueSince != 0 && validVouches(a) >= vouchesNeeded) return VOUCHED_UNIQUE;
+        return PASSKEY_HUMAN;
+    }
+
+    /// Open vouches for `a` that count now: the voucher is not banned or suspended, still a passkey
+    /// human, counted unique (stored status), and `a` still has the passkey it was vouched with.
+    function validVouches(address a) public view returns (uint256 n) {
+        (, , bytes32 cred,) = labels.humans(a);
+        address[] storage vs = vouchersOf_[a];
+        for (uint256 i = 0; i < vs.length; i++) {
+            address v = vs[i];
+            if (vouchCredential[v][a] != cred || !_countsAsVoucher(v)) continue;
+            n++;
+        }
+    }
+
+    function vouchersOf(address a) external view returns (address[] memory) {
+        return vouchersOf_[a];
+    }
+
+    /// Everything the hub shows: level, valid vouches, vouches needed, unique since, flags, flags to
+    /// suspend, banned, genesis, open vouches given, when this account may vouch next (0 = cannot).
+    function status(address a) external view returns (uint256[10] memory s) {
+        Person storage p = people[a];
+        s[0] = levelOf(a);
+        s[1] = validVouches(a);
+        s[2] = vouchesNeeded;
+        s[3] = p.uniqueSince;
+        s[4] = p.flags;
+        s[5] = flagsToSuspend;
+        s[6] = p.banned ? 1 : 0;
+        s[7] = p.genesis ? 1 : 0;
+        s[8] = p.activeGiven;
+        if (s[0] == VOUCHED_UNIQUE && p.activeGiven < maxActiveVouches) {
+            uint256 next = _nextVouchAt(p);
+            uint256 aged = p.genesis ? 0 : uint256(p.uniqueSince) + voucherMinAge;
+            s[9] = next > aged ? next : aged;
+        }
+    }
+
+    // ------------------------------------------------------------- vouching
+
+    /// msg.sender, a vouched-unique human, vouches that `who` (a passkey human) is one real person
+    /// with one account. Rate-limited; withdrawable with unvouch().
+    function vouch(address who) external {
+        if (who == msg.sender) revert Self();
+        if (levelOf(msg.sender) != VOUCHED_UNIQUE) revert NotUnique();
+        Person storage me = people[msg.sender];
+        if (!me.genesis && block.timestamp < uint256(me.uniqueSince) + voucherMinAge) revert TooSoon(uint256(me.uniqueSince) + voucherMinAge);
+        uint256 next = _nextVouchAt(me);
+        if (block.timestamp < next) revert TooSoon(next);
+        if (me.activeGiven >= maxActiveVouches) revert TooManyVouches();
+        if (labels.labelOf(who) != 1) revert NotPasskeyHuman(who);
+        if (people[who].banned) revert IsBanned(who);
+        if (vouchCredential[msg.sender][who] != bytes32(0)) revert AlreadyVouched();
+        if (vouchersOf_[who].length >= MAX_VOUCHERS) revert TooManyVouches();
+        (, , bytes32 cred,) = labels.humans(who);
+        vouchCredential[msg.sender][who] = cred;
+        vouchersOf_[who].push(msg.sender);
+        me.activeGiven++;
+        me.lastVouchAt = uint64(block.timestamp);
+        emit Vouched(msg.sender, who, cred);
+    }
+
+    function unvouch(address who) external {
+        if (vouchCredential[msg.sender][who] == bytes32(0)) revert NoVouch();
+        _dropVouch(msg.sender, who);
+    }
+
+    /// Recomputes `a`'s stored unique status from its live vouches (anyone may call; the vouchee calls
+    /// it once it has enough vouches). Returns the level.
+    function refresh(address a) public returns (uint8 level) {
+        Person storage p = people[a];
+        uint256 n = validVouches(a);
+        bool unique = labels.labelOf(a) == 1 && !p.banned && (p.genesis || n >= vouchesNeeded);
+        if (unique && p.uniqueSince == 0) p.uniqueSince = uint64(block.timestamp);
+        if (!unique && !p.genesis) p.uniqueSince = 0;
+        level = levelOf(a);
+        emit Refreshed(a, level, n);
+    }
+
+    // ------------------------------------------------------------- accountability
+
+    /// A vouched-unique human says `a` is not one real person with one account (a duplicate, a bot).
+    function flag(address a) external {
+        if (a == msg.sender) revert Self();
+        if (levelOf(msg.sender) != VOUCHED_UNIQUE) revert NotUnique();
+        Person storage p = people[a];
+        if (flaggedBy[a][p.flagEpoch][msg.sender]) revert AlreadyFlagged();
+        flaggedBy[a][p.flagEpoch][msg.sender] = true;
+        p.flags++;
+        emit Flagged(a, msg.sender, p.flags);
+    }
+
+    function unflag(address a) external {
+        Person storage p = people[a];
+        if (!flaggedBy[a][p.flagEpoch][msg.sender]) revert NotFlagged();
+        flaggedBy[a][p.flagEpoch][msg.sender] = false;
+        p.flags--;
+        emit Unflagged(a, msg.sender, p.flags);
+    }
+
+    // ------------------------------------------------------------- governance
+
+    /// The bootstrap set: accounts governance knows to be distinct people (a ceremony, a meetup).
+    function setGenesis(address[] calldata accounts, bool on) external onlyGovernance {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            Person storage p = people[accounts[i]];
+            p.genesis = on;
+            p.uniqueSince = on ? uint64(block.timestamp) : 0;
+            emit GenesisSet(accounts[i], on);
+        }
+    }
+
+    /// `a` was shown to be a duplicate or a bot (evidence published, its hash here): banned, and each
+    /// of its open vouchers gets a strike (banned at strikesToBan).
+    function ban(address a, bytes32 evidenceHash) external onlyGovernance {
+        Person storage p = people[a];
+        p.banned = true;
+        p.uniqueSince = 0;
+        address[] storage vs = vouchersOf_[a];
+        for (uint256 i = 0; i < vs.length; i++) {
+            Person storage v = people[vs[i]];
+            if (v.strikes < type(uint8).max) v.strikes++;
+            emit Struck(vs[i], a, v.strikes);
+            if (v.strikes >= strikesToBan && !v.banned) {
+                v.banned = true;
+                v.uniqueSince = 0;
+                emit Banned(vs[i], evidenceHash);
+            }
+        }
+        emit Banned(a, evidenceHash);
+    }
+
+    function unban(address a) external onlyGovernance {
+        people[a].banned = false;
+        people[a].strikes = 0;
+        emit Unbanned(a);
+    }
+
+    /// Ends a flagging campaign that governance found unfounded (a new epoch: old flags no longer count).
+    function clearFlags(address a) external onlyGovernance {
+        Person storage p = people[a];
+        p.flagEpoch++;
+        p.flags = 0;
+        emit FlagsCleared(a);
+    }
+
+    function setParams(uint8 needed, uint8 maxActive, uint32 cooldown, uint32 minAge, uint8 suspendAt, uint8 banAt) external onlyGovernance {
+        _params(needed, maxActive, cooldown, minAge, suspendAt, banAt);
+    }
+
+    function setGovernance(address g) external onlyGovernance {
+        governance = g;
+        emit GovernanceChanged(g);
+    }
+
+    // ------------------------------------------------------------- internals
+
+    function _params(uint8 needed, uint8 maxActive, uint32 cooldown, uint32 minAge, uint8 suspendAt, uint8 banAt) private {
+        if (needed < 2 || needed > 16 || maxActive == 0 || maxActive > 16 || suspendAt < 2 || banAt == 0 || minAge > 365 days || cooldown > 90 days) revert BadParams();
+        vouchesNeeded = needed;
+        maxActiveVouches = maxActive;
+        vouchCooldown = cooldown;
+        voucherMinAge = minAge;
+        flagsToSuspend = suspendAt;
+        strikesToBan = banAt;
+        emit ParamsSet(needed, maxActive, cooldown, minAge, suspendAt, banAt);
+    }
+
+    function _countsAsVoucher(address v) private view returns (bool) {
+        Person storage p = people[v];
+        if (p.banned || p.flags >= flagsToSuspend || labels.labelOf(v) != 1) return false;
+        return p.genesis || p.uniqueSince != 0;
+    }
+
+    function _nextVouchAt(Person storage p) private view returns (uint256) {
+        return p.lastVouchAt == 0 ? block.timestamp : uint256(p.lastVouchAt) + vouchCooldown;
+    }
+
+    function _dropVouch(address voucher, address who) private {
+        delete vouchCredential[voucher][who];
+        address[] storage vs = vouchersOf_[who];
+        for (uint256 i = 0; i < vs.length; i++) {
+            if (vs[i] == voucher) {
+                vs[i] = vs[vs.length - 1];
+                vs.pop();
+                break;
+            }
+        }
+        if (people[voucher].activeGiven > 0) people[voucher].activeGiven--;
+        emit Unvouched(voucher, who);
+    }
+}
+
 /// @title LabelFaucet: a testnet faucet hook that reads labels
 /// @notice Pays each label its own amount (e.g. humans 10, agents 1,
 ///         unlabelled 0) at most once per cooldown per account, and, for
