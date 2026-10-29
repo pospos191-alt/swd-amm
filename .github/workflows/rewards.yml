@@ -3,7 +3,7 @@
 # mode = dry_run  on a local copy (anvil fork) of the ZETAPHY testnet with a throwaway key: deploy,
 #                 award yesterday from the real validator and runner data, re-run (must pay nothing
 #                 twice), snapshot. Runs on every pull request that touches the points code.
-# mode = deploy   deploys BZTPHY on the testnet (key: the repository secret ZETAPHY_DEPLOYER_KEY,
+# mode = deploy   deploys BZTPHY on the testnet (key: ZETAPHY_DEPLOYER_KEY, environment testnet-deploy;
 #                 the minter; owner: the ZETAPHY timelock = governance) and pushes the address to
 #                 the branch rewards/testnet
 # mode = award    awards one day (default yesterday, UTC); the daily schedule does this
@@ -33,18 +33,23 @@ on:
         required: false
         default: ''
 
+# Least privilege: read-only by default. The key (ZETAPHY_DEPLOYER_KEY, the BZTPHY minter) is only
+# in environments (docs/SECRETS-HARDENING.md): deploy -> testnet-deploy (required reviewer, main only);
+# the daily award -> testnet-automation (main only, no reviewer, or the schedule would wait for a click).
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: rewards
   cancel-in-progress: false
 
 jobs:
-  rewards:
-    name: BZTPHY rewards (testnet)
+  dry-run:
+    name: BZTPHY rewards (testnet) dry run
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'dry_run')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # no secret, no environment: works on pull requests (fork PRs too)
     defaults:
       run:
         shell: bash
@@ -61,6 +66,8 @@ jobs:
       DEV_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
@@ -99,12 +106,39 @@ jobs:
           jq -e '[.holders[] | select(.to == "0x000000000000000000000000000000000000dEaD")] | length == 1' "$H/s.json" >/dev/null
           echo "dry run OK: nothing was sent to the ZETAPHY testnet"
 
+  deploy:
+    name: BZTPHY rewards (testnet) deploy
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: testnet-deploy
+    permissions:
+      contents: write   # pushes the address to rewards/testnet
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      MODE: ${{ github.event_name == 'pull_request' && 'dry_run' || github.event_name == 'schedule' && 'award' || inputs.mode }}
+      ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+      ZETAPHY_REST: https://rpc.sawasdeecoin.com/rest
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+      TIMELOCK: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+      NEURO_JOBS: "0x698dC17df6a34b02263b295d101BE39F3F3B433B"
+      EPOCH_CAP: "5000"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
       - name: Load the deployer key
         if: env.MODE != 'dry_run'
         env:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
         run: |
-          [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in this job's environment (docs/SECRETS-HARDENING.md)"; exit 1; }
           k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
           H="$RUNNER_TEMP/zh"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/k"; unset k KEY
           [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/k")" = "$DEPLOYER" ] \
@@ -130,6 +164,50 @@ jobs:
           git commit -q -m "BZTPHY reward points on the testnet: address" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
           git push -q --force origin rewards/testnet
           echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...rewards/testnet"
+
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/zh/k"
+
+  award:
+    name: BZTPHY rewards (testnet) award one day
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'award')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # scheduled: an environment without required reviewers (main only)
+    environment: testnet-automation
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      MODE: ${{ github.event_name == 'pull_request' && 'dry_run' || github.event_name == 'schedule' && 'award' || inputs.mode }}
+      ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+      ZETAPHY_REST: https://rpc.sawasdeecoin.com/rest
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+      TIMELOCK: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+      NEURO_JOBS: "0x698dC17df6a34b02263b295d101BE39F3F3B433B"
+      EPOCH_CAP: "5000"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Load the deployer key
+        if: env.MODE != 'dry_run'
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in this job's environment (docs/SECRETS-HARDENING.md)"; exit 1; }
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          H="$RUNNER_TEMP/zh"; mkdir -p "$H"; umask 077; printf '0x%s' "$k" > "$H/k"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/k")" = "$DEPLOYER" ] \
+            || { rm -f "$H/k"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          echo "KEYFILE=$H/k" >> "$GITHUB_ENV"
 
       - name: Award one day
         if: env.MODE == 'award'

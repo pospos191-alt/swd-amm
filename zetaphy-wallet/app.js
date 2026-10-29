@@ -4,6 +4,9 @@
 // typed in: addresses, balances and signed transactions. Never the seed.
 // Or the key lives in MetaMask (the ZETAPHY Snap, zetaphy-snap/): this page then
 // knows only the public key, and the snap builds, shows and signs each tx.
+// security.js: the passphrase blob, an optional second blob under a passkey's WebAuthn
+// PRF output (HKDF-SHA256 + AES-256-GCM), and the passphrase strength estimate. The
+// unlocked key is wiped on Lock and after an idle time (auto-lock).
 import {
   ml_dsa44, keccak_256, pqAddress, pqClient, normalizeAddress, validatorAddress, parseZeta, formatZeta, bytesToHex, hexToBytes,
   DEFAULT_GAS_LIMIT, DEFAULT_STAKING_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT, EVM_CALL_GAS_OVERHEAD, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT,
@@ -15,14 +18,19 @@ import {
   CHAIN_ID, CHAIN_NAME, EVM_CHAIN_ID_HEX, EVM_SYMBOL, DECIMALS, nodeEndpoints, evmChainParams, keplrChainInfo,
   discoverWallets, mayRunSnaps, openInAppLinks,
 } from './wallets.js';
+import {
+  seal, unseal, passwordStrength, MIN_PASSWORD_LENGTH, wrapSeed, unwrapSeed, isPasskeyBlob, newPrfSalt, toB64url, fromB64url,
+} from './security.js';
 
 const KEYS = { seed: 'zetaphy-wallet:seed:v1', rpc: 'zetaphy-wallet:rpc', lang: 'zetaphy-wallet:lang', token: 'zetaphy-wallet:token',
   owners: 'zetaphy-wallet:owners:v1:', // + this wallet's zetaphy1… address
   snap: 'zetaphy-wallet:snap:v1', // the snap ID last connected (no key: MetaMask holds it)
   evmWallet: 'zetaphy-wallet:evm-wallet', // the EVM wallet picked (its EIP-6963 rdns, or which injected object)
   wcId: 'zetaphy-wallet:walletconnect-project-id',
-  threats: 'zetaphy-wallet:threat-registry' }; // ThreatRegistry address (the vaccine), else the page's meta tag
-const KDF_ITERATIONS = 600000;
+  threats: 'zetaphy-wallet:threat-registry', // ThreatRegistry address (the vaccine), else the page's meta tag
+  autolock: 'zetaphy-wallet:autolock-minutes', // 30, 60, 120 or 240
+  passkey: 'zetaphy-wallet:passkey:v1', // the seed wrapped under a passkey's PRF output (security.js wrapSeed); never the PRF output
+  bigHidden: 'zetaphy-wallet:big-balance-hidden-until:' }; // + address: the large-balance banner hidden until (ms)
 const EVM_CHAIN_ID = 77390n;
 
 const T = {
@@ -39,7 +47,7 @@ const T = {
     modeNew: 'สร้างกุญแจใหม่',
     modeImport: 'นำเข้า seed',
     seedLabel: 'seed (hex 64 ตัว, ขึ้นต้น 0x หรือไม่ก็ได้)',
-    pass1: 'ตั้งรหัสผ่าน (อย่างน้อย 8 ตัวอักษร)',
+    pass1: 'ตั้งรหัสผ่าน (อย่างน้อย 12 ตัวอักษร ระดับ "แข็งแรง" ขึ้นไป)',
     pass2: 'พิมพ์รหัสผ่านอีกครั้ง',
     saveKey: 'สร้างกระเป๋า',
     lockedTitle: 'กระเป๋าถูกล็อก',
@@ -80,7 +88,7 @@ const T = {
     unlocked: 'ปลดล็อกแล้ว',
     lockedMsg: 'ล็อกแล้ว',
     badPass: 'รหัสผ่านไม่ถูกต้อง',
-    passShort: 'รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร',
+    passShort: 'รหัสผ่านต้องยาวอย่างน้อย {n} ตัวอักษร',
     passMismatch: 'รหัสผ่านสองช่องไม่ตรงกัน',
     badSeed: 'seed ต้องเป็น hex 64 ตัว',
     storeFailed: 'เบราว์เซอร์นี้บันทึกข้อมูลไม่ได้ (โหมดส่วนตัว?) กระเป๋าจะหายเมื่อปิดหน้า ดาวน์โหลดไฟล์สำรองไว้',
@@ -329,6 +337,74 @@ const T = {
     threatResponseAssigned: 'คำชี้แจงจากผู้ชี้แจงที่ governance แต่งตั้ง ({by}): "{text}"',
     threatNoResponse: 'ยังไม่มีคำชี้แจง',
     threatDisclaimer: DISCLAIMER.th,
+    // security: auto-lock, passphrase strength, passkey (WebAuthn PRF) unlock, large-balance advice
+    pwTip: 'เคล็ดลับ: คำสุ่มที่ไม่เกี่ยวกัน 4–5 คำ ทำเป็นรหัสผ่านที่ทั้งแข็งแรงและจำง่าย',
+    passWeak: 'รหัสผ่านนี้เดาง่ายเกินไป (ระดับ {label}) ต้องได้ระดับ "แข็งแรง" ขึ้นไป',
+    pwStrength: 'ความแข็งแรง: {label}',
+    pwVeryWeak: 'อ่อนมาก',
+    pwWeak: 'อ่อน',
+    pwFair: 'พอใช้',
+    pwStrong: 'แข็งแรง',
+    pwVeryStrong: 'แข็งแรงมาก',
+    pwLength: 'ใช้อย่างน้อย {n} ตัวอักษร ยิ่งยาวยิ่งดี',
+    pwCommon: 'เป็นรหัสผ่านที่คนใช้กันมากที่สุดตัวหนึ่ง',
+    pwDictionary: 'มีรหัสผ่านหรือคำที่คนใช้กันบ่อยอยู่ข้างใน',
+    pwSequence: 'มีลำดับอย่าง abc, 321 หรือ qwerty',
+    pwRepeat: 'มีตัวอักษรหรือรูปแบบซ้ำกัน',
+    pwContext: 'มีคำว่า "zetaphy", "wallet" หรือส่วนหนึ่งของที่อยู่กระเป๋าคุณ',
+    pwYear: 'มีปี ค.ศ. อยู่ข้างใน',
+    pwVariety: 'เพิ่มคำ หรือผสมตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และสัญลักษณ์',
+    weakNudge: 'รหัสผ่านของคุณอ่อน (ระดับ {label}) ใครที่คัดลอกข้อมูลของเบราว์เซอร์นี้ไปได้อาจเดาได้ ควรเปลี่ยนเป็นรหัสที่แข็งแรงกว่านี้',
+    weakNudgeGo: 'เปลี่ยนตอนนี้',
+    secTitle: 'ความปลอดภัย',
+    autoLockLabel: 'ล็อกอัตโนมัติเมื่อไม่มีการใช้งาน หรืออยู่ในแท็บเบื้องหลัง นานเท่านี้',
+    nMinutes: '{n} นาที',
+    autoLockIn: 'ล็อกอัตโนมัติใน {time} ถ้าไม่มีการใช้งาน',
+    autoLocked: 'ล็อกอัตโนมัติแล้ว เพราะไม่มีการใช้งาน {n} นาที ลบกุญแจออกจากหน่วยความจำแล้ว',
+    autoLockSaved: 'ตั้งล็อกอัตโนมัติเป็น {n} นาทีแล้ว',
+    lockedErr: 'กระเป๋าถูกล็อกอยู่ ปลดล็อกก่อน ยังไม่ได้เซ็นอะไร',
+    chpwTitle: 'เปลี่ยนรหัสผ่าน',
+    chpwOld: 'รหัสผ่านปัจจุบัน',
+    chpwNew: 'รหัสผ่านใหม่ (อย่างน้อย 12 ตัวอักษร ระดับ "แข็งแรง" ขึ้นไป)',
+    chpwSave: 'เปลี่ยนรหัสผ่าน',
+    chpwDone: 'เปลี่ยนรหัสผ่านแล้ว',
+    pkTitle: 'ปลดล็อกด้วยลายนิ้วมือ / Face ID (passkey)',
+    pkIntro: 'สร้าง passkey ของเว็บนี้ในอุปกรณ์นี้ ความลับ PRF ของมันจะออกมาก็ต่อเมื่อสแกนนิ้ว ใบหน้า หรือใส่ PIN ของเครื่อง แล้วใช้เข้ารหัสสำเนาที่สองของ seed ในเบราว์เซอร์นี้ รหัสผ่านยังใช้ได้เป็นทางสำรอง',
+    pkSyncNote: 'passkey อาจซิงก์ผ่าน iCloud Keychain, Google Password Manager หรือโปรแกรมจัดการ passkey อื่น จึงอาจมี passkey นี้อยู่ในอุปกรณ์อื่นของคุณด้วย ดูแลบัญชีนั้นให้ดี',
+    pkEnable: 'เปิดการปลดล็อกด้วยลายนิ้วมือ / Face ID',
+    pkDisable: 'ปิดการปลดล็อกด้วยลายนิ้วมือ / Face ID',
+    pkUnlock: 'ปลดล็อกด้วยลายนิ้วมือ / Face ID',
+    pkOn: 'เปิดการปลดล็อกด้วยลายนิ้วมือ / Face ID อยู่ รหัสผ่านยังใช้ได้',
+    pkOff: 'ปิดการปลดล็อกด้วยลายนิ้วมือ / Face ID อยู่',
+    pkOtherSite: 'passkey นี้สร้างไว้สำหรับ {host} ที่นี่ให้ใช้รหัสผ่าน',
+    pkUnsupported: 'เบราว์เซอร์นี้ใช้ passkey ในหน้านี้ไม่ได้ ใช้รหัสผ่านต่อไป',
+    pkNoPlatform: 'ไม่พบตัวยืนยันตัวตนด้วยลายนิ้วมือ ใบหน้า หรือ PIN ในอุปกรณ์นี้ ใช้รหัสผ่านต่อไป',
+    pkNoPrf: 'เบราว์เซอร์หรือโปรแกรมจัดการ passkey นี้ไม่รองรับส่วนขยาย PRF ที่ต้องใช้ จึงปลดล็อกกระเป๋าด้วย passkey ที่นี่ไม่ได้ ใช้รหัสผ่านต่อไป',
+    pkCancelled: 'ยกเลิกหรือหมดเวลา ไม่มีอะไรเปลี่ยน',
+    pkFailed: 'passkey ปลดล็อกกระเป๋านี้ไม่ได้ ใช้รหัสผ่านแทน',
+    pkWorking: 'รอสแกนลายนิ้วมือ / Face ID…',
+    pkEnabled: 'สร้าง passkey แล้ว ปลดล็อกด้วยลายนิ้วมือ / Face ID ได้แล้ว รหัสผ่านยังใช้ได้',
+    pkDisabled: 'ปิดการปลดล็อกด้วย passkey และลบสำเนาที่เข้ารหัสแล้ว ลบ passkey "ZETAPHY PQ Wallet" ในการตั้งค่า passkey ของเครื่องได้ด้วย',
+    pkDisableConfirm: 'ปิดการปลดล็อกด้วยลายนิ้วมือ / Face ID? หลังจากนี้ปลดล็อกได้ด้วยรหัสผ่านเท่านั้น',
+    bigTitle: 'ยอดเงินสูง: ควรเก็บกุญแจไว้ในที่ที่ปลอดภัยกว่านี้',
+    bigLocal: 'บัญชีนี้มี {amount} ZETAPHY กุญแจในหน้าเว็บปลอดภัยได้เท่ากับเบราว์เซอร์และคอมพิวเตอร์เครื่องนี้เท่านั้น ถ้ายอดสูง ควรย้ายเงินไปที่ ZETAPHY Snap ซึ่งกุญแจอยู่ใน MetaMask',
+    bigEvm: 'บัญชี EVM ที่เชื่อมอยู่มี {amount} ZETAPHY ถ้ายอดสูง ควรใช้ฮาร์ดแวร์วอลเล็ต (Ledger หรือ Trezor) ผ่าน MetaMask หรือ Rabby',
+    bigHow: 'วิธีทำ',
+    bigLater: 'ซ่อนไว้ 7 วัน',
+    helpOpen: 'เก็บเงินจำนวนมากให้ปลอดภัย',
+    helpTitle: 'เก็บเงินจำนวนมากให้ปลอดภัย',
+    helpIntro: 'กุญแจในหน้าเว็บปลอดภัยได้เท่ากับเบราว์เซอร์และคอมพิวเตอร์ที่ใช้เท่านั้น ส่วนขยายที่ไม่ดีหรือมัลแวร์อ่านกุญแจได้ขณะกระเป๋าปลดล็อกอยู่ เก็บไว้ที่นี่แค่จำนวนน้อย',
+    helpSnapTitle: 'บัญชี PQ แบบเนทีฟ: ย้ายไป ZETAPHY Snap (กุญแจอยู่ใน MetaMask)',
+    helpSnap1: 'ติดตั้ง MetaMask (ใช้ MetaMask Flask จนกว่า snap จะเผยแพร่) และสำรอง Secret Recovery Phrase ของมันไว้',
+    helpSnap2: 'ล็อกกระเป๋านี้ แล้วกด "เชื่อม MetaMask" และอนุมัติ ZETAPHY Snap',
+    helpSnap3: 'คัดลอกที่อยู่ zetaphy1… ที่แสดง นั่นคือบัญชีใหม่ที่สร้างใน MetaMask',
+    helpSnap4: 'ปลดล็อกกระเป๋านี้อีกครั้งด้วยรหัสผ่าน แล้วโอนเงินไปที่อยู่นั้น ตรวจที่อยู่ในหน้าต่างของ MetaMask ด้วย',
+    helpHwTitle: 'บัญชี EVM: ฮาร์ดแวร์วอลเล็ต',
+    helpHw1: 'เชื่อม Ledger หรือ Trezor กับ MetaMask หรือ Rabby (เพิ่มบัญชีฮาร์ดแวร์วอลเล็ตในนั้น)',
+    helpHw2: 'เพิ่มเครือข่าย ZETAPHY Testnet ด้วยปุ่มในส่วน "ใช้ ZETAPHY กับกระเป๋าอื่น" ของหน้านี้',
+    helpHw3: 'โอนเงินไปที่อยู่ 0x… ของบัญชีฮาร์ดแวร์ และยืนยันทุกธุรกรรมบนหน้าจอของอุปกรณ์เอง',
+    helpMore: 'รายละเอียดอยู่ในส่วนความปลอดภัยของ README นี่คือ testnet ไม่ใช่เงินจริง',
+    helpClose: 'ปิด',
   },
   en: {
     subtitle: 'Quantum-safe wallet (ML-DSA-44) · no ECDSA key',
@@ -343,7 +419,7 @@ const T = {
     modeNew: 'Create a new key',
     modeImport: 'Import a seed',
     seedLabel: 'Seed (64 hex digits, 0x optional)',
-    pass1: 'Choose a passphrase (at least 8 characters)',
+    pass1: 'Choose a passphrase (at least 12 characters, rated Strong)',
     pass2: 'Type the passphrase again',
     saveKey: 'Create wallet',
     lockedTitle: 'Wallet locked',
@@ -383,7 +459,7 @@ const T = {
     unlocked: 'Unlocked.',
     lockedMsg: 'Locked.',
     badPass: 'Wrong passphrase.',
-    passShort: 'The passphrase must be at least 8 characters.',
+    passShort: 'The passphrase must be at least {n} characters.',
     passMismatch: 'The two passphrases differ.',
     badSeed: 'The seed must be 64 hex digits.',
     storeFailed: 'This browser cannot save data (private mode?). The wallet disappears when the page closes: download the backup.',
@@ -624,6 +700,74 @@ const T = {
     threatResponseAssigned: 'Response from the governance-assigned responder ({by}): "{text}"',
     threatNoResponse: 'No response yet',
     threatDisclaimer: DISCLAIMER.en,
+    // security: auto-lock, passphrase strength, passkey (WebAuthn PRF) unlock, large-balance advice
+    pwTip: 'Tip: four or five random, unrelated words make a passphrase that is both strong and easy to remember.',
+    passWeak: 'This passphrase is too easy to guess (rated {label}). It must be rated at least Strong',
+    pwStrength: 'Strength: {label}',
+    pwVeryWeak: 'very weak',
+    pwWeak: 'weak',
+    pwFair: 'fair',
+    pwStrong: 'strong',
+    pwVeryStrong: 'very strong',
+    pwLength: 'Use at least {n} characters; longer is better.',
+    pwCommon: 'It is one of the most common passwords.',
+    pwDictionary: 'It contains a common password or word.',
+    pwSequence: 'It contains a sequence such as abc, 321 or qwerty.',
+    pwRepeat: 'It contains repeated characters or patterns.',
+    pwContext: 'It contains "zetaphy", "wallet" or part of your address.',
+    pwYear: 'It contains a year.',
+    pwVariety: 'Add more words, or mix upper and lower case, digits and symbols.',
+    weakNudge: 'Your passphrase is weak (rated {label}). Anyone who copies this browser\'s data could try to guess it. Please change it to a stronger one.',
+    weakNudgeGo: 'Change it now',
+    secTitle: 'Security',
+    autoLockLabel: 'Lock automatically after this long without activity, or in a background tab',
+    nMinutes: '{n} min',
+    autoLockIn: 'Locks automatically in {time} without activity.',
+    autoLocked: 'Locked automatically after {n} min without activity. The key was wiped from memory.',
+    autoLockSaved: 'Auto-lock set to {n} min.',
+    lockedErr: 'The wallet is locked. Unlock it first; nothing was signed.',
+    chpwTitle: 'Change the passphrase',
+    chpwOld: 'Current passphrase',
+    chpwNew: 'New passphrase (at least 12 characters, rated Strong)',
+    chpwSave: 'Change passphrase',
+    chpwDone: 'Passphrase changed.',
+    pkTitle: 'Unlock with fingerprint / Face ID (passkey)',
+    pkIntro: 'Creates a passkey for this site on this device. Its PRF secret, released only after your fingerprint, face or device PIN, encrypts a second copy of the seed in this browser. The passphrase keeps working as a fallback.',
+    pkSyncNote: 'Passkeys may sync through iCloud Keychain, Google Password Manager or another passkey manager, so this passkey can exist on your other devices too. Protect that account well.',
+    pkEnable: 'Turn on fingerprint / Face ID unlock',
+    pkDisable: 'Turn off fingerprint / Face ID unlock',
+    pkUnlock: 'Unlock with fingerprint / Face ID',
+    pkOn: 'Fingerprint / Face ID unlock is on. The passphrase still works.',
+    pkOff: 'Fingerprint / Face ID unlock is off.',
+    pkOtherSite: 'The passkey was made for {host}. Here, use your passphrase.',
+    pkUnsupported: 'This browser cannot use passkeys on this page. Keep using your passphrase.',
+    pkNoPlatform: 'No fingerprint, face or device-PIN authenticator was found on this device. Keep using your passphrase.',
+    pkNoPrf: 'This browser or passkey manager does not support the PRF extension this needs, so a passkey cannot unlock the wallet here. Keep using your passphrase.',
+    pkCancelled: 'Cancelled or timed out. Nothing changed.',
+    pkFailed: 'The passkey did not unlock this wallet. Use your passphrase.',
+    pkWorking: 'Waiting for your fingerprint / Face ID…',
+    pkEnabled: 'Passkey created: you can now unlock with fingerprint / Face ID. The passphrase still works.',
+    pkDisabled: 'Passkey unlock turned off and its encrypted copy deleted. You can also delete the passkey "ZETAPHY PQ Wallet" in your device\'s passkey settings.',
+    pkDisableConfirm: 'Turn off fingerprint / Face ID unlock? You will unlock with the passphrase only.',
+    bigTitle: 'Large balance: consider a safer place for the key',
+    bigLocal: 'This account holds {amount} ZETAPHY. A key in a web page is only as safe as this browser and computer. For larger amounts, move the funds to the ZETAPHY Snap, where the key stays inside MetaMask.',
+    bigEvm: 'The connected EVM account holds {amount} ZETAPHY. For larger amounts, use a hardware wallet (Ledger or Trezor) through MetaMask or Rabby.',
+    bigHow: 'How to',
+    bigLater: 'Hide for 7 days',
+    helpOpen: 'Keeping a larger balance safe',
+    helpTitle: 'Keeping a larger balance safe',
+    helpIntro: 'A key in a web page is only as safe as the browser and the computer it runs on: a bad extension or malware can read it while the wallet is unlocked. Keep only small amounts here.',
+    helpSnapTitle: 'Native PQ account: move to the ZETAPHY Snap (key inside MetaMask)',
+    helpSnap1: 'Install MetaMask (MetaMask Flask until the snap is published) and back up its Secret Recovery Phrase.',
+    helpSnap2: 'Lock this wallet, then click "Connect MetaMask" and approve the ZETAPHY Snap.',
+    helpSnap3: 'Copy the zetaphy1… address it shows: that is the new account, made inside MetaMask.',
+    helpSnap4: 'Unlock this wallet again with its passphrase and send the funds to that address. Check the address in MetaMask\'s dialog too.',
+    helpHwTitle: 'EVM accounts: a hardware wallet',
+    helpHw1: 'Connect a Ledger or Trezor to MetaMask or Rabby (add a hardware wallet account there).',
+    helpHw2: 'Add the ZETAPHY Testnet network to it with the "Use ZETAPHY in other wallets" buttons on this page.',
+    helpHw3: 'Send the funds to the hardware account\'s 0x… address, and confirm every transaction on the device\'s own screen.',
+    helpMore: 'The README\'s security section has the details. This is testnet: none of it is real money.',
+    helpClose: 'Close',
   },
   // Translated from en (th only to resolve meaning). reason1..7, threatEvidence and
   // threatDisclaimer mirror zetaphy-network/src/vaccine.js, which has only th and en.
@@ -640,7 +784,7 @@ const T = {
     modeNew: '创建新密钥',
     modeImport: '导入种子',
     seedLabel: '种子（64 位十六进制，0x 可选）',
-    pass1: '设置密码（至少 8 个字符）',
+    pass1: '设置密码（至少 12 个字符，强度达到“强”）',
     pass2: '再次输入密码',
     saveKey: '创建钱包',
     lockedTitle: '钱包已锁定',
@@ -680,7 +824,7 @@ const T = {
     unlocked: '已解锁。',
     lockedMsg: '已锁定。',
     badPass: '密码错误。',
-    passShort: '密码至少需要 8 个字符。',
+    passShort: '密码至少需要 {n} 个字符。',
     passMismatch: '两次输入的密码不一致。',
     badSeed: '种子必须是 64 位十六进制。',
     storeFailed: '此浏览器无法保存数据（无痕模式？）。关闭页面后钱包就会消失：请下载备份。',
@@ -925,6 +1069,74 @@ const T = {
     threatResponseAssigned: '来自治理指定回应人（{by}）的回应：“{text}”',
     threatNoResponse: '暂无回应',
     threatDisclaimer: '自动代码分析结果，并非指控',
+    // security: auto-lock, passphrase strength, passkey (WebAuthn PRF) unlock, large-balance advice
+    pwTip: '提示：四五个随机、互不相关的词，组成的密码既强又好记。',
+    passWeak: '这个密码太容易被猜到（强度：{label}）。强度必须至少为“强”',
+    pwStrength: '强度：{label}',
+    pwVeryWeak: '很弱',
+    pwWeak: '弱',
+    pwFair: '一般',
+    pwStrong: '强',
+    pwVeryStrong: '很强',
+    pwLength: '至少使用 {n} 个字符，越长越好。',
+    pwCommon: '这是最常见的密码之一。',
+    pwDictionary: '包含常见的密码或单词。',
+    pwSequence: '包含 abc、321 或 qwerty 这样的序列。',
+    pwRepeat: '包含重复的字符或模式。',
+    pwContext: '包含“zetaphy”“wallet”或你的地址的一部分。',
+    pwYear: '包含年份。',
+    pwVariety: '多加几个词，或混用大小写字母、数字和符号。',
+    weakNudge: '你的密码较弱（强度：{label}）。复制了本浏览器数据的人可能猜出它。请换一个更强的密码。',
+    weakNudgeGo: '立即修改',
+    secTitle: '安全',
+    autoLockLabel: '无操作或处于后台标签页达到此时长后自动锁定',
+    nMinutes: '{n} 分钟',
+    autoLockIn: '无操作时将在 {time} 后自动锁定。',
+    autoLocked: '已因 {n} 分钟无操作自动锁定，密钥已从内存中清除。',
+    autoLockSaved: '自动锁定已设为 {n} 分钟。',
+    lockedErr: '钱包已锁定。请先解锁；没有签署任何内容。',
+    chpwTitle: '修改密码',
+    chpwOld: '当前密码',
+    chpwNew: '新密码（至少 12 个字符，强度达到“强”）',
+    chpwSave: '修改密码',
+    chpwDone: '密码已修改。',
+    pkTitle: '用指纹 / 面容 ID 解锁（通行密钥）',
+    pkIntro: '在本设备上为本网站创建一个通行密钥。只有验证指纹、面容或设备 PIN 后，它的 PRF 密值才会给出，用来加密本浏览器中种子的第二份副本。密码仍可作为备用。',
+    pkSyncNote: '通行密钥可能通过 iCloud 钥匙串、Google 密码管理器或其他通行密钥管理器同步，因此它也可能存在于你的其他设备上。请保护好该账户。',
+    pkEnable: '开启指纹 / 面容 ID 解锁',
+    pkDisable: '关闭指纹 / 面容 ID 解锁',
+    pkUnlock: '用指纹 / 面容 ID 解锁',
+    pkOn: '指纹 / 面容 ID 解锁已开启。密码仍然可用。',
+    pkOff: '指纹 / 面容 ID 解锁未开启。',
+    pkOtherSite: '该通行密钥是为 {host} 创建的。在这里请使用密码。',
+    pkUnsupported: '此浏览器无法在本页面使用通行密钥。请继续使用密码。',
+    pkNoPlatform: '本设备上没有找到指纹、面容或设备 PIN 验证器。请继续使用密码。',
+    pkNoPrf: '此浏览器或通行密钥管理器不支持所需的 PRF 扩展，因此无法在这里用通行密钥解锁钱包。请继续使用密码。',
+    pkCancelled: '已取消或超时，没有任何更改。',
+    pkFailed: '通行密钥无法解锁此钱包。请使用密码。',
+    pkWorking: '等待指纹 / 面容 ID…',
+    pkEnabled: '通行密钥已创建：现在可以用指纹 / 面容 ID 解锁。密码仍然可用。',
+    pkDisabled: '已关闭通行密钥解锁并删除其加密副本。你也可以在设备的通行密钥设置中删除“ZETAPHY PQ Wallet”通行密钥。',
+    pkDisableConfirm: '关闭指纹 / 面容 ID 解锁？之后只能用密码解锁。',
+    bigTitle: '余额较大：建议把密钥放在更安全的地方',
+    bigLocal: '此账户持有 {amount} ZETAPHY。网页中的密钥只和这个浏览器及电脑一样安全。金额较大时，请把资金转到 ZETAPHY Snap，密钥保存在 MetaMask 内。',
+    bigEvm: '已连接的 EVM 账户持有 {amount} ZETAPHY。金额较大时，请通过 MetaMask 或 Rabby 使用硬件钱包（Ledger 或 Trezor）。',
+    bigHow: '怎么做',
+    bigLater: '7 天内不再显示',
+    helpOpen: '如何安全保管较大余额',
+    helpTitle: '如何安全保管较大余额',
+    helpIntro: '网页中的密钥只和所运行的浏览器及电脑一样安全：钱包解锁时，恶意扩展或恶意软件可以读取它。这里只放少量资金。',
+    helpSnapTitle: '原生 PQ 账户：迁移到 ZETAPHY Snap（密钥在 MetaMask 内）',
+    helpSnap1: '安装 MetaMask（snap 发布前请用 MetaMask Flask），并备份它的私钥助记词。',
+    helpSnap2: '锁定本钱包，然后点击“连接 MetaMask”并批准 ZETAPHY Snap。',
+    helpSnap3: '复制显示的 zetaphy1… 地址：这就是在 MetaMask 内生成的新账户。',
+    helpSnap4: '用密码再次解锁本钱包，把资金转到该地址。也请在 MetaMask 的对话框中核对地址。',
+    helpHwTitle: 'EVM 账户：硬件钱包',
+    helpHw1: '将 Ledger 或 Trezor 连接到 MetaMask 或 Rabby（在其中添加硬件钱包账户）。',
+    helpHw2: '用本页“在其他钱包中使用 ZETAPHY”部分的按钮添加 ZETAPHY Testnet 网络。',
+    helpHw3: '把资金转到硬件账户的 0x… 地址，并在设备自己的屏幕上确认每笔交易。',
+    helpMore: '详情见 README 的安全部分。这是测试网，都不是真钱。',
+    helpClose: '关闭',
   },
   es: {
     subtitle: 'Billetera resistente a la computación cuántica (ML-DSA-44) · sin clave ECDSA',
@@ -939,7 +1151,7 @@ const T = {
     modeNew: 'Crear una clave nueva',
     modeImport: 'Importar una semilla',
     seedLabel: 'Semilla (64 dígitos hex, 0x opcional)',
-    pass1: 'Elige una contraseña (al menos 8 caracteres)',
+    pass1: 'Elige una contraseña (al menos 12 caracteres, nivel Fuerte)',
     pass2: 'Escribe la contraseña otra vez',
     saveKey: 'Crear billetera',
     lockedTitle: 'Billetera bloqueada',
@@ -979,7 +1191,7 @@ const T = {
     unlocked: 'Desbloqueada.',
     lockedMsg: 'Bloqueada.',
     badPass: 'Contraseña incorrecta.',
-    passShort: 'La contraseña debe tener al menos 8 caracteres.',
+    passShort: 'La contraseña debe tener al menos {n} caracteres.',
     passMismatch: 'Las dos contraseñas no coinciden.',
     badSeed: 'La semilla debe tener 64 dígitos hex.',
     storeFailed: 'Este navegador no puede guardar datos (¿modo privado?). La billetera desaparecerá al cerrar la página: descarga el respaldo.',
@@ -1224,6 +1436,74 @@ const T = {
     threatResponseAssigned: 'Respuesta del respondedor asignado por la gobernanza ({by}): "{text}"',
     threatNoResponse: 'Aún no hay respuesta',
     threatDisclaimer: 'Análisis automático de código, no una acusación',
+    // security: auto-lock, passphrase strength, passkey (WebAuthn PRF) unlock, large-balance advice
+    pwTip: 'Consejo: cuatro o cinco palabras al azar y sin relación forman una contraseña fuerte y fácil de recordar.',
+    passWeak: 'Esta contraseña es demasiado fácil de adivinar (nivel {label}). Debe tener al menos nivel Fuerte',
+    pwStrength: 'Seguridad: {label}',
+    pwVeryWeak: 'muy débil',
+    pwWeak: 'débil',
+    pwFair: 'aceptable',
+    pwStrong: 'fuerte',
+    pwVeryStrong: 'muy fuerte',
+    pwLength: 'Usa al menos {n} caracteres; cuanto más larga, mejor.',
+    pwCommon: 'Es una de las contraseñas más comunes.',
+    pwDictionary: 'Contiene una contraseña o palabra común.',
+    pwSequence: 'Contiene una secuencia como abc, 321 o qwerty.',
+    pwRepeat: 'Contiene caracteres o patrones repetidos.',
+    pwContext: 'Contiene «zetaphy», «wallet» o parte de tu dirección.',
+    pwYear: 'Contiene un año.',
+    pwVariety: 'Añade más palabras, o mezcla mayúsculas, minúsculas, números y símbolos.',
+    weakNudge: 'Tu contraseña es débil (nivel {label}). Quien copie los datos de este navegador podría adivinarla. Cámbiala por una más fuerte.',
+    weakNudgeGo: 'Cambiarla ahora',
+    secTitle: 'Seguridad',
+    autoLockLabel: 'Bloquear automáticamente tras este tiempo sin actividad, o en una pestaña en segundo plano',
+    nMinutes: '{n} min',
+    autoLockIn: 'Se bloquea automáticamente en {time} sin actividad.',
+    autoLocked: 'Bloqueada automáticamente tras {n} min sin actividad. La clave se borró de la memoria.',
+    autoLockSaved: 'Bloqueo automático: {n} min.',
+    lockedErr: 'La billetera está bloqueada. Desbloquéala primero; no se firmó nada.',
+    chpwTitle: 'Cambiar la contraseña',
+    chpwOld: 'Contraseña actual',
+    chpwNew: 'Nueva contraseña (al menos 12 caracteres, nivel Fuerte)',
+    chpwSave: 'Cambiar contraseña',
+    chpwDone: 'Contraseña cambiada.',
+    pkTitle: 'Desbloquear con huella / Face ID (llave de acceso)',
+    pkIntro: 'Crea una llave de acceso (passkey) para este sitio en este dispositivo. Su secreto PRF, que solo se entrega tras tu huella, tu cara o el PIN del dispositivo, cifra una segunda copia de la semilla en este navegador. La contraseña sigue sirviendo como respaldo.',
+    pkSyncNote: 'Las llaves de acceso pueden sincronizarse con el Llavero de iCloud, el Gestor de contraseñas de Google u otro gestor, así que esta llave puede estar también en tus otros dispositivos. Protege bien esa cuenta.',
+    pkEnable: 'Activar desbloqueo con huella / Face ID',
+    pkDisable: 'Desactivar desbloqueo con huella / Face ID',
+    pkUnlock: 'Desbloquear con huella / Face ID',
+    pkOn: 'El desbloqueo con huella / Face ID está activado. La contraseña sigue funcionando.',
+    pkOff: 'El desbloqueo con huella / Face ID está desactivado.',
+    pkOtherSite: 'La llave de acceso se creó para {host}. Aquí usa tu contraseña.',
+    pkUnsupported: 'Este navegador no puede usar llaves de acceso en esta página. Sigue usando tu contraseña.',
+    pkNoPlatform: 'No se encontró en este dispositivo un autenticador con huella, cara o PIN. Sigue usando tu contraseña.',
+    pkNoPrf: 'Este navegador o gestor de llaves de acceso no admite la extensión PRF necesaria, así que aquí una llave de acceso no puede desbloquear la billetera. Sigue usando tu contraseña.',
+    pkCancelled: 'Cancelado o tiempo agotado. No cambió nada.',
+    pkFailed: 'La llave de acceso no desbloqueó esta billetera. Usa tu contraseña.',
+    pkWorking: 'Esperando tu huella / Face ID…',
+    pkEnabled: 'Llave de acceso creada: ya puedes desbloquear con huella / Face ID. La contraseña sigue funcionando.',
+    pkDisabled: 'Desbloqueo con llave de acceso desactivado y su copia cifrada borrada. También puedes borrar la llave «ZETAPHY PQ Wallet» en los ajustes de llaves de acceso del dispositivo.',
+    pkDisableConfirm: '¿Desactivar el desbloqueo con huella / Face ID? Solo podrás desbloquear con la contraseña.',
+    bigTitle: 'Saldo alto: considera un lugar más seguro para la clave',
+    bigLocal: 'Esta cuenta tiene {amount} ZETAPHY. Una clave en una página web es tan segura como este navegador y este equipo. Para montos grandes, mueve los fondos a la ZETAPHY Snap, donde la clave queda dentro de MetaMask.',
+    bigEvm: 'La cuenta EVM conectada tiene {amount} ZETAPHY. Para montos grandes, usa una billetera de hardware (Ledger o Trezor) a través de MetaMask o Rabby.',
+    bigHow: 'Cómo hacerlo',
+    bigLater: 'Ocultar 7 días',
+    helpOpen: 'Cómo proteger un saldo alto',
+    helpTitle: 'Cómo proteger un saldo alto',
+    helpIntro: 'Una clave en una página web es tan segura como el navegador y el equipo donde se ejecuta: una extensión maliciosa o un malware puede leerla mientras la billetera está desbloqueada. Guarda aquí solo montos pequeños.',
+    helpSnapTitle: 'Cuenta PQ nativa: pásate a la ZETAPHY Snap (clave dentro de MetaMask)',
+    helpSnap1: 'Instala MetaMask (MetaMask Flask hasta que se publique la snap) y respalda su frase secreta de recuperación.',
+    helpSnap2: 'Bloquea esta billetera, pulsa «Conectar MetaMask» y aprueba la ZETAPHY Snap.',
+    helpSnap3: 'Copia la dirección zetaphy1… que aparece: es la cuenta nueva, creada dentro de MetaMask.',
+    helpSnap4: 'Desbloquea de nuevo esta billetera con su contraseña y envía los fondos a esa dirección. Comprueba la dirección también en el cuadro de MetaMask.',
+    helpHwTitle: 'Cuentas EVM: una billetera de hardware',
+    helpHw1: 'Conecta un Ledger o Trezor a MetaMask o Rabby (añade allí una cuenta de billetera de hardware).',
+    helpHw2: 'Añade la red ZETAPHY Testnet con los botones de «Usar ZETAPHY en otras billeteras» de esta página.',
+    helpHw3: 'Envía los fondos a la dirección 0x… de la cuenta de hardware y confirma cada transacción en la propia pantalla del dispositivo.',
+    helpMore: 'La sección de seguridad del README tiene los detalles. Esto es testnet: nada es dinero real.',
+    helpClose: 'Cerrar',
   },
   ko: {
     subtitle: '양자 내성 지갑 (ML-DSA-44) · ECDSA 키 없음',
@@ -1238,7 +1518,7 @@ const T = {
     modeNew: '새 키 만들기',
     modeImport: '시드 가져오기',
     seedLabel: '시드 (16진수 64자리, 0x는 선택)',
-    pass1: '비밀번호 설정 (8자 이상)',
+    pass1: '비밀번호 설정 (12자 이상, "강함" 등급 이상)',
     pass2: '비밀번호 다시 입력',
     saveKey: '지갑 만들기',
     lockedTitle: '지갑 잠김',
@@ -1278,7 +1558,7 @@ const T = {
     unlocked: '잠금 해제됨.',
     lockedMsg: '잠김.',
     badPass: '비밀번호가 틀렸습니다.',
-    passShort: '비밀번호는 8자 이상이어야 합니다.',
+    passShort: '비밀번호는 {n}자 이상이어야 합니다.',
     passMismatch: '두 비밀번호가 일치하지 않습니다.',
     badSeed: '시드는 16진수 64자리여야 합니다.',
     storeFailed: '이 브라우저는 데이터를 저장할 수 없습니다 (시크릿 모드?). 페이지를 닫으면 지갑이 사라지니 백업을 다운로드하세요.',
@@ -1523,6 +1803,74 @@ const T = {
     threatResponseAssigned: '거버넌스가 지정한 응답자 ({by})의 응답: "{text}"',
     threatNoResponse: '아직 응답 없음',
     threatDisclaimer: '자동 코드 분석 결과이며, 비난이 아닙니다',
+    // security: auto-lock, passphrase strength, passkey (WebAuthn PRF) unlock, large-balance advice
+    pwTip: '팁: 서로 관련 없는 무작위 단어 4~5개로 만들면 강하면서도 기억하기 쉬운 비밀번호가 됩니다.',
+    passWeak: '이 비밀번호는 너무 쉽게 추측됩니다 (등급: {label}). 최소 "강함" 등급이어야 합니다',
+    pwStrength: '강도: {label}',
+    pwVeryWeak: '매우 약함',
+    pwWeak: '약함',
+    pwFair: '보통',
+    pwStrong: '강함',
+    pwVeryStrong: '매우 강함',
+    pwLength: '{n}자 이상 사용하세요. 길수록 좋습니다.',
+    pwCommon: '가장 흔한 비밀번호 중 하나입니다.',
+    pwDictionary: '흔한 비밀번호나 단어가 들어 있습니다.',
+    pwSequence: 'abc, 321, qwerty 같은 연속 문자가 들어 있습니다.',
+    pwRepeat: '반복되는 문자나 패턴이 들어 있습니다.',
+    pwContext: '"zetaphy", "wallet" 또는 주소의 일부가 들어 있습니다.',
+    pwYear: '연도가 들어 있습니다.',
+    pwVariety: '단어를 더 넣거나 대문자, 소문자, 숫자, 기호를 섞으세요.',
+    weakNudge: '비밀번호가 약합니다 (등급: {label}). 이 브라우저의 데이터를 복사한 사람이 추측할 수 있습니다. 더 강한 비밀번호로 바꾸세요.',
+    weakNudgeGo: '지금 변경',
+    secTitle: '보안',
+    autoLockLabel: '활동이 없거나 백그라운드 탭에 있는 시간이 이만큼 지나면 자동 잠금',
+    nMinutes: '{n}분',
+    autoLockIn: '활동이 없으면 {time} 후 자동으로 잠깁니다.',
+    autoLocked: '{n}분 동안 활동이 없어 자동으로 잠겼습니다. 키를 메모리에서 지웠습니다.',
+    autoLockSaved: '자동 잠금을 {n}분으로 설정했습니다.',
+    lockedErr: '지갑이 잠겨 있습니다. 먼저 잠금 해제하세요. 아무것도 서명하지 않았습니다.',
+    chpwTitle: '비밀번호 변경',
+    chpwOld: '현재 비밀번호',
+    chpwNew: '새 비밀번호 (12자 이상, "강함" 등급 이상)',
+    chpwSave: '비밀번호 변경',
+    chpwDone: '비밀번호를 변경했습니다.',
+    pkTitle: '지문 / Face ID로 잠금 해제 (패스키)',
+    pkIntro: '이 기기에 이 사이트용 패스키를 만듭니다. 지문, 얼굴 또는 기기 PIN 인증 후에만 나오는 PRF 비밀 값으로 이 브라우저에 시드의 두 번째 사본을 암호화합니다. 비밀번호는 예비 수단으로 계속 쓸 수 있습니다.',
+    pkSyncNote: '패스키는 iCloud 키체인, Google 비밀번호 관리자 등으로 동기화될 수 있어 다른 기기에도 이 패스키가 있을 수 있습니다. 해당 계정을 잘 보호하세요.',
+    pkEnable: '지문 / Face ID 잠금 해제 켜기',
+    pkDisable: '지문 / Face ID 잠금 해제 끄기',
+    pkUnlock: '지문 / Face ID로 잠금 해제',
+    pkOn: '지문 / Face ID 잠금 해제가 켜져 있습니다. 비밀번호도 계속 쓸 수 있습니다.',
+    pkOff: '지문 / Face ID 잠금 해제가 꺼져 있습니다.',
+    pkOtherSite: '이 패스키는 {host}용으로 만들어졌습니다. 여기서는 비밀번호를 사용하세요.',
+    pkUnsupported: '이 브라우저는 이 페이지에서 패스키를 쓸 수 없습니다. 비밀번호를 계속 사용하세요.',
+    pkNoPlatform: '이 기기에서 지문, 얼굴 또는 PIN 인증기를 찾지 못했습니다. 비밀번호를 계속 사용하세요.',
+    pkNoPrf: '이 브라우저나 패스키 관리자는 필요한 PRF 확장을 지원하지 않아 여기서는 패스키로 지갑을 잠금 해제할 수 없습니다. 비밀번호를 계속 사용하세요.',
+    pkCancelled: '취소되었거나 시간이 초과되었습니다. 바뀐 것은 없습니다.',
+    pkFailed: '패스키로 이 지갑을 잠금 해제하지 못했습니다. 비밀번호를 사용하세요.',
+    pkWorking: '지문 / Face ID를 기다리는 중…',
+    pkEnabled: '패스키를 만들었습니다. 이제 지문 / Face ID로 잠금 해제할 수 있습니다. 비밀번호도 계속 쓸 수 있습니다.',
+    pkDisabled: '패스키 잠금 해제를 끄고 암호화된 사본을 삭제했습니다. 기기의 패스키 설정에서 "ZETAPHY PQ Wallet" 패스키도 삭제할 수 있습니다.',
+    pkDisableConfirm: '지문 / Face ID 잠금 해제를 끌까요? 이후에는 비밀번호로만 잠금 해제할 수 있습니다.',
+    bigTitle: '잔액이 큽니다: 키를 더 안전한 곳에 두는 것을 고려하세요',
+    bigLocal: '이 계정에는 {amount} ZETAPHY가 있습니다. 웹 페이지의 키는 이 브라우저와 컴퓨터만큼만 안전합니다. 금액이 크면 키가 MetaMask 안에 있는 ZETAPHY Snap으로 자금을 옮기세요.',
+    bigEvm: '연결된 EVM 계정에 {amount} ZETAPHY가 있습니다. 금액이 크면 MetaMask나 Rabby를 통해 하드웨어 지갑(Ledger 또는 Trezor)을 사용하세요.',
+    bigHow: '방법 보기',
+    bigLater: '7일 동안 숨기기',
+    helpOpen: '큰 잔액을 안전하게 보관하기',
+    helpTitle: '큰 잔액을 안전하게 보관하기',
+    helpIntro: '웹 페이지의 키는 실행되는 브라우저와 컴퓨터만큼만 안전합니다. 지갑이 잠금 해제된 동안 악성 확장 프로그램이나 악성 코드가 키를 읽을 수 있습니다. 여기에는 소액만 두세요.',
+    helpSnapTitle: '네이티브 PQ 계정: ZETAPHY Snap으로 옮기기 (키는 MetaMask 안에)',
+    helpSnap1: 'MetaMask를 설치하고(snap이 게시되기 전에는 MetaMask Flask) 비밀 복구 구문을 백업하세요.',
+    helpSnap2: '이 지갑을 잠근 다음 "MetaMask 연결"을 누르고 ZETAPHY Snap을 승인하세요.',
+    helpSnap3: '표시되는 zetaphy1… 주소를 복사하세요. MetaMask 안에서 만들어진 새 계정입니다.',
+    helpSnap4: '비밀번호로 이 지갑을 다시 잠금 해제하고 그 주소로 자금을 보내세요. MetaMask 창에서도 주소를 확인하세요.',
+    helpHwTitle: 'EVM 계정: 하드웨어 지갑',
+    helpHw1: 'Ledger 또는 Trezor를 MetaMask나 Rabby에 연결하세요 (하드웨어 지갑 계정 추가).',
+    helpHw2: '이 페이지의 "다른 지갑에서 ZETAPHY 사용" 버튼으로 ZETAPHY Testnet 네트워크를 추가하세요.',
+    helpHw3: '하드웨어 계정의 0x… 주소로 자금을 보내고, 모든 거래를 기기 자체 화면에서 확인하세요.',
+    helpMore: '자세한 내용은 README의 보안 섹션에 있습니다. 테스트넷이므로 실제 돈이 아닙니다.',
+    helpClose: '닫기',
   },
   ja: {
     subtitle: '耐量子ウォレット（ML-DSA-44）· ECDSA 鍵なし',
@@ -1537,7 +1885,7 @@ const T = {
     modeNew: '新しい鍵を作成',
     modeImport: 'シードをインポート',
     seedLabel: 'シード（16 進数 64 桁、0x は任意）',
-    pass1: 'パスフレーズを設定（8 文字以上）',
+    pass1: 'パスフレーズを設定（12 文字以上、強度「強い」以上）',
     pass2: 'パスフレーズをもう一度入力',
     saveKey: 'ウォレットを作成',
     lockedTitle: 'ウォレットはロック中',
@@ -1577,7 +1925,7 @@ const T = {
     unlocked: 'ロックを解除しました。',
     lockedMsg: 'ロックしました。',
     badPass: 'パスフレーズが違います。',
-    passShort: 'パスフレーズは 8 文字以上にしてください。',
+    passShort: 'パスフレーズは {n} 文字以上にしてください。',
     passMismatch: '2 つのパスフレーズが一致しません。',
     badSeed: 'シードは 16 進数 64 桁である必要があります。',
     storeFailed: 'このブラウザはデータを保存できません（プライベートモード？）。ページを閉じるとウォレットが消えます：バックアップをダウンロードしてください。',
@@ -1822,6 +2170,74 @@ const T = {
     threatResponseAssigned: 'ガバナンスが指名した回答者（{by}）からの回答：「{text}」',
     threatNoResponse: 'まだ回答はありません',
     threatDisclaimer: '自動コード解析の結果であり、告発ではありません',
+    // security: auto-lock, passphrase strength, passkey (WebAuthn PRF) unlock, large-balance advice
+    pwTip: 'ヒント：無関係なランダムな単語を 4～5 個並べると、強くて覚えやすいパスフレーズになります。',
+    passWeak: 'このパスフレーズは推測されやすすぎます（強度：{label}）。「強い」以上が必要です',
+    pwStrength: '強度：{label}',
+    pwVeryWeak: 'とても弱い',
+    pwWeak: '弱い',
+    pwFair: 'ふつう',
+    pwStrong: '強い',
+    pwVeryStrong: 'とても強い',
+    pwLength: '{n} 文字以上にしてください。長いほど安全です。',
+    pwCommon: '最もよく使われるパスワードの一つです。',
+    pwDictionary: 'よく使われるパスワードや単語が含まれています。',
+    pwSequence: 'abc、321、qwerty のような並びが含まれています。',
+    pwRepeat: '繰り返しの文字やパターンが含まれています。',
+    pwContext: '「zetaphy」「wallet」やアドレスの一部が含まれています。',
+    pwYear: '年が含まれています。',
+    pwVariety: '単語を増やすか、大文字・小文字・数字・記号を混ぜてください。',
+    weakNudge: 'パスフレーズが弱いです（強度：{label}）。このブラウザのデータをコピーした人に推測されるおそれがあります。より強いものに変更してください。',
+    weakNudgeGo: '今すぐ変更',
+    secTitle: 'セキュリティ',
+    autoLockLabel: '操作がない、またはバックグラウンドのタブにある状態がこの時間続いたら自動ロック',
+    nMinutes: '{n} 分',
+    autoLockIn: '操作がなければ {time} 後に自動ロックします。',
+    autoLocked: '{n} 分間操作がなかったため自動ロックしました。鍵はメモリから消去しました。',
+    autoLockSaved: '自動ロックを {n} 分に設定しました。',
+    lockedErr: 'ウォレットはロックされています。先にロックを解除してください。何も署名していません。',
+    chpwTitle: 'パスフレーズを変更',
+    chpwOld: '現在のパスフレーズ',
+    chpwNew: '新しいパスフレーズ（12 文字以上、強度「強い」以上）',
+    chpwSave: 'パスフレーズを変更',
+    chpwDone: 'パスフレーズを変更しました。',
+    pkTitle: '指紋 / Face ID でロック解除（パスキー）',
+    pkIntro: 'この端末にこのサイト用のパスキーを作成します。指紋・顔・端末の PIN で確認したときだけ得られる PRF の秘密値で、このブラウザ内にシードの 2 つ目のコピーを暗号化します。パスフレーズは予備として引き続き使えます。',
+    pkSyncNote: 'パスキーは iCloud キーチェーンや Google パスワード マネージャーなどで同期されることがあり、このパスキーがほかの端末にも存在しうるということです。そのアカウントをしっかり守ってください。',
+    pkEnable: '指紋 / Face ID でのロック解除をオン',
+    pkDisable: '指紋 / Face ID でのロック解除をオフ',
+    pkUnlock: '指紋 / Face ID でロック解除',
+    pkOn: '指紋 / Face ID でのロック解除はオンです。パスフレーズも使えます。',
+    pkOff: '指紋 / Face ID でのロック解除はオフです。',
+    pkOtherSite: 'このパスキーは {host} 用に作成されました。ここではパスフレーズを使ってください。',
+    pkUnsupported: 'このブラウザはこのページでパスキーを使えません。パスフレーズを使い続けてください。',
+    pkNoPlatform: 'この端末に指紋・顔・PIN の認証器が見つかりません。パスフレーズを使い続けてください。',
+    pkNoPrf: 'このブラウザまたはパスキー マネージャーは必要な PRF 拡張に対応していないため、ここではパスキーでウォレットを解除できません。パスフレーズを使い続けてください。',
+    pkCancelled: 'キャンセルまたはタイムアウトしました。何も変わっていません。',
+    pkFailed: 'パスキーでこのウォレットを解除できませんでした。パスフレーズを使ってください。',
+    pkWorking: '指紋 / Face ID を待っています…',
+    pkEnabled: 'パスキーを作成しました。指紋 / Face ID でロック解除できます。パスフレーズも使えます。',
+    pkDisabled: 'パスキーでのロック解除をオフにし、暗号化したコピーを削除しました。端末のパスキー設定で「ZETAPHY PQ Wallet」のパスキーも削除できます。',
+    pkDisableConfirm: '指紋 / Face ID でのロック解除をオフにしますか？以後はパスフレーズでのみ解除できます。',
+    bigTitle: '残高が大きくなっています：鍵をより安全な場所に置くことを検討してください',
+    bigLocal: 'このアカウントには {amount} ZETAPHY あります。ウェブページ内の鍵は、このブラウザとパソコンと同じ程度にしか安全ではありません。大きな金額は、鍵が MetaMask の中にある ZETAPHY Snap に移してください。',
+    bigEvm: '接続中の EVM アカウントには {amount} ZETAPHY あります。大きな金額は MetaMask や Rabby 経由でハードウェアウォレット（Ledger または Trezor）を使ってください。',
+    bigHow: '方法',
+    bigLater: '7 日間表示しない',
+    helpOpen: '大きな残高を安全に保つ',
+    helpTitle: '大きな残高を安全に保つ',
+    helpIntro: 'ウェブページ内の鍵は、動いているブラウザとパソコンと同じ程度にしか安全ではありません。ウォレットのロック解除中は、悪意ある拡張機能やマルウェアに読まれるおそれがあります。ここには少額だけを置いてください。',
+    helpSnapTitle: 'ネイティブ PQ アカウント：ZETAPHY Snap に移す（鍵は MetaMask の中）',
+    helpSnap1: 'MetaMask をインストールし（snap の公開までは MetaMask Flask）、シークレットリカバリーフレーズをバックアップします。',
+    helpSnap2: 'このウォレットをロックし、「MetaMask に接続」を押して ZETAPHY Snap を承認します。',
+    helpSnap3: '表示された zetaphy1… アドレスをコピーします。これが MetaMask の中で作られた新しいアカウントです。',
+    helpSnap4: 'パスフレーズでこのウォレットを再び解除し、そのアドレスに資金を送ります。MetaMask のダイアログでもアドレスを確認してください。',
+    helpHwTitle: 'EVM アカウント：ハードウェアウォレット',
+    helpHw1: 'Ledger または Trezor を MetaMask や Rabby に接続します（ハードウェアウォレットのアカウントを追加）。',
+    helpHw2: 'このページの「他のウォレットで ZETAPHY を使う」のボタンで ZETAPHY Testnet ネットワークを追加します。',
+    helpHw3: 'ハードウェアアカウントの 0x… アドレスに資金を送り、すべての取引を端末自身の画面で確認します。',
+    helpMore: '詳しくは README のセキュリティの節にあります。これはテストネットで、本物のお金ではありません。',
+    helpClose: '閉じる',
   },
   ru: {
     subtitle: 'Квантово-устойчивый кошелёк (ML-DSA-44) · без ключа ECDSA',
@@ -1836,7 +2252,7 @@ const T = {
     modeNew: 'Создать новый ключ',
     modeImport: 'Импортировать сид',
     seedLabel: 'Сид (64 hex-цифры, 0x необязательно)',
-    pass1: 'Придумайте пароль (не менее 8 символов)',
+    pass1: 'Придумайте пароль (не менее 12 символов, уровень «надёжный»)',
     pass2: 'Введите пароль ещё раз',
     saveKey: 'Создать кошелёк',
     lockedTitle: 'Кошелёк заблокирован',
@@ -1876,7 +2292,7 @@ const T = {
     unlocked: 'Разблокирован.',
     lockedMsg: 'Заблокирован.',
     badPass: 'Неверный пароль.',
-    passShort: 'Пароль должен содержать не менее 8 символов.',
+    passShort: 'Пароль должен содержать не менее {n} символов.',
     passMismatch: 'Пароли не совпадают.',
     badSeed: 'Сид должен состоять из 64 hex-цифр.',
     storeFailed: 'Этот браузер не может сохранять данные (режим инкогнито?). Кошелёк исчезнет после закрытия страницы: скачайте резервную копию.',
@@ -2121,6 +2537,74 @@ const T = {
     threatResponseAssigned: 'Ответ назначенного управлением ответчика ({by}): «{text}»',
     threatNoResponse: 'Ответа пока нет',
     threatDisclaimer: 'Автоматический анализ кода, а не обвинение',
+    // security: auto-lock, passphrase strength, passkey (WebAuthn PRF) unlock, large-balance advice
+    pwTip: 'Совет: четыре-пять случайных несвязанных слов дают пароль, надёжный и лёгкий для запоминания.',
+    passWeak: 'Этот пароль слишком легко подобрать (уровень: {label}). Нужен уровень не ниже «надёжный»',
+    pwStrength: 'Надёжность: {label}',
+    pwVeryWeak: 'очень слабый',
+    pwWeak: 'слабый',
+    pwFair: 'средний',
+    pwStrong: 'надёжный',
+    pwVeryStrong: 'очень надёжный',
+    pwLength: 'Используйте не менее {n} символов; чем длиннее, тем лучше.',
+    pwCommon: 'Это один из самых распространённых паролей.',
+    pwDictionary: 'Содержит распространённый пароль или слово.',
+    pwSequence: 'Содержит последовательность вроде abc, 321 или qwerty.',
+    pwRepeat: 'Содержит повторяющиеся символы или шаблоны.',
+    pwContext: 'Содержит «zetaphy», «wallet» или часть вашего адреса.',
+    pwYear: 'Содержит год.',
+    pwVariety: 'Добавьте слов или смешайте заглавные и строчные буквы, цифры и символы.',
+    weakNudge: 'Ваш пароль слабый (уровень: {label}). Тот, кто скопирует данные этого браузера, может его подобрать. Смените его на более надёжный.',
+    weakNudgeGo: 'Сменить сейчас',
+    secTitle: 'Безопасность',
+    autoLockLabel: 'Блокировать автоматически после такого времени без действий или в фоновой вкладке',
+    nMinutes: '{n} мин',
+    autoLockIn: 'Автоблокировка через {time} без действий.',
+    autoLocked: 'Заблокирован автоматически после {n} мин без действий. Ключ стёрт из памяти.',
+    autoLockSaved: 'Автоблокировка: {n} мин.',
+    lockedErr: 'Кошелёк заблокирован. Сначала разблокируйте его; ничего не подписано.',
+    chpwTitle: 'Сменить пароль',
+    chpwOld: 'Текущий пароль',
+    chpwNew: 'Новый пароль (не менее 12 символов, уровень «надёжный»)',
+    chpwSave: 'Сменить пароль',
+    chpwDone: 'Пароль изменён.',
+    pkTitle: 'Разблокировка отпечатком / Face ID (ключ доступа)',
+    pkIntro: 'Создаёт ключ доступа (passkey) для этого сайта на этом устройстве. Его секрет PRF, который выдаётся только после отпечатка, лица или PIN-кода устройства, шифрует вторую копию сида в этом браузере. Пароль остаётся запасным способом.',
+    pkSyncNote: 'Ключи доступа могут синхронизироваться через Связку ключей iCloud, Диспетчер паролей Google или другой менеджер, поэтому этот ключ может оказаться и на других ваших устройствах. Хорошо защитите эту учётную запись.',
+    pkEnable: 'Включить разблокировку отпечатком / Face ID',
+    pkDisable: 'Выключить разблокировку отпечатком / Face ID',
+    pkUnlock: 'Разблокировать отпечатком / Face ID',
+    pkOn: 'Разблокировка отпечатком / Face ID включена. Пароль тоже работает.',
+    pkOff: 'Разблокировка отпечатком / Face ID выключена.',
+    pkOtherSite: 'Ключ доступа создан для {host}. Здесь используйте пароль.',
+    pkUnsupported: 'Этот браузер не может использовать ключи доступа на этой странице. Продолжайте пользоваться паролем.',
+    pkNoPlatform: 'На этом устройстве не найден аутентификатор с отпечатком, лицом или PIN-кодом. Продолжайте пользоваться паролем.',
+    pkNoPrf: 'Этот браузер или менеджер ключей доступа не поддерживает нужное расширение PRF, поэтому здесь ключ доступа не может разблокировать кошелёк. Продолжайте пользоваться паролем.',
+    pkCancelled: 'Отменено или истекло время. Ничего не изменилось.',
+    pkFailed: 'Ключ доступа не разблокировал этот кошелёк. Используйте пароль.',
+    pkWorking: 'Ожидание отпечатка / Face ID…',
+    pkEnabled: 'Ключ доступа создан: теперь можно разблокировать отпечатком / Face ID. Пароль тоже работает.',
+    pkDisabled: 'Разблокировка ключом доступа выключена, его зашифрованная копия удалена. Ключ «ZETAPHY PQ Wallet» можно также удалить в настройках ключей доступа устройства.',
+    pkDisableConfirm: 'Выключить разблокировку отпечатком / Face ID? Разблокировать можно будет только паролем.',
+    bigTitle: 'Крупный баланс: подумайте о более надёжном месте для ключа',
+    bigLocal: 'На этом счёте {amount} ZETAPHY. Ключ на веб-странице защищён не лучше, чем этот браузер и компьютер. Крупные суммы переведите в ZETAPHY Snap, где ключ остаётся внутри MetaMask.',
+    bigEvm: 'На подключённом EVM-счёте {amount} ZETAPHY. Для крупных сумм используйте аппаратный кошелёк (Ledger или Trezor) через MetaMask или Rabby.',
+    bigHow: 'Как это сделать',
+    bigLater: 'Скрыть на 7 дней',
+    helpOpen: 'Как хранить крупный баланс безопасно',
+    helpTitle: 'Как хранить крупный баланс безопасно',
+    helpIntro: 'Ключ на веб-странице защищён не лучше, чем браузер и компьютер, на которых она открыта: вредоносное расширение или программа может прочитать его, пока кошелёк разблокирован. Держите здесь только небольшие суммы.',
+    helpSnapTitle: 'Собственный PQ-счёт: переход на ZETAPHY Snap (ключ внутри MetaMask)',
+    helpSnap1: 'Установите MetaMask (MetaMask Flask, пока snap не опубликован) и сохраните его секретную фразу восстановления.',
+    helpSnap2: 'Заблокируйте этот кошелёк, нажмите «Подключить MetaMask» и подтвердите ZETAPHY Snap.',
+    helpSnap3: 'Скопируйте показанный адрес zetaphy1…: это новый счёт, созданный внутри MetaMask.',
+    helpSnap4: 'Снова разблокируйте этот кошелёк паролем и переведите средства на этот адрес. Сверьте адрес и в окне MetaMask.',
+    helpHwTitle: 'EVM-счета: аппаратный кошелёк',
+    helpHw1: 'Подключите Ledger или Trezor к MetaMask или Rabby (добавьте там счёт аппаратного кошелька).',
+    helpHw2: 'Добавьте сеть ZETAPHY Testnet кнопками раздела «ZETAPHY в других кошельках» на этой странице.',
+    helpHw3: 'Переведите средства на адрес 0x… аппаратного счёта и подтверждайте каждую транзакцию на экране самого устройства.',
+    helpMore: 'Подробности — в разделе безопасности README. Это тестовая сеть: всё это не настоящие деньги.',
+    helpClose: 'Закрыть',
   },
   vi: {
     subtitle: 'Ví kháng lượng tử (ML-DSA-44) · không có khóa ECDSA',
@@ -2135,7 +2619,7 @@ const T = {
     modeNew: 'Tạo khóa mới',
     modeImport: 'Nhập seed',
     seedLabel: 'Seed (64 chữ số hex, 0x tùy chọn)',
-    pass1: 'Đặt mật khẩu (ít nhất 8 ký tự)',
+    pass1: 'Đặt mật khẩu (ít nhất 12 ký tự, mức Mạnh trở lên)',
     pass2: 'Nhập lại mật khẩu',
     saveKey: 'Tạo ví',
     lockedTitle: 'Ví đã khóa',
@@ -2175,7 +2659,7 @@ const T = {
     unlocked: 'Đã mở khóa.',
     lockedMsg: 'Đã khóa.',
     badPass: 'Sai mật khẩu.',
-    passShort: 'Mật khẩu phải có ít nhất 8 ký tự.',
+    passShort: 'Mật khẩu phải có ít nhất {n} ký tự.',
     passMismatch: 'Hai mật khẩu không khớp.',
     badSeed: 'Seed phải gồm 64 chữ số hex.',
     storeFailed: 'Trình duyệt này không lưu được dữ liệu (chế độ ẩn danh?). Ví sẽ biến mất khi đóng trang: hãy tải bản sao lưu.',
@@ -2420,6 +2904,74 @@ const T = {
     threatResponseAssigned: 'Phản hồi từ người phản hồi do quản trị chỉ định ({by}): "{text}"',
     threatNoResponse: 'Chưa có phản hồi',
     threatDisclaimer: 'Phân tích mã tự động, không phải lời buộc tội',
+    // security: auto-lock, passphrase strength, passkey (WebAuthn PRF) unlock, large-balance advice
+    pwTip: 'Mẹo: bốn hoặc năm từ ngẫu nhiên, không liên quan nhau tạo thành mật khẩu vừa mạnh vừa dễ nhớ.',
+    passWeak: 'Mật khẩu này quá dễ đoán (mức {label}). Mật khẩu phải đạt ít nhất mức Mạnh',
+    pwStrength: 'Độ mạnh: {label}',
+    pwVeryWeak: 'rất yếu',
+    pwWeak: 'yếu',
+    pwFair: 'trung bình',
+    pwStrong: 'mạnh',
+    pwVeryStrong: 'rất mạnh',
+    pwLength: 'Dùng ít nhất {n} ký tự; càng dài càng tốt.',
+    pwCommon: 'Đây là một trong những mật khẩu phổ biến nhất.',
+    pwDictionary: 'Có chứa một mật khẩu hoặc từ phổ biến.',
+    pwSequence: 'Có chứa chuỗi liên tiếp như abc, 321 hoặc qwerty.',
+    pwRepeat: 'Có chứa ký tự hoặc mẫu lặp lại.',
+    pwContext: 'Có chứa "zetaphy", "wallet" hoặc một phần địa chỉ của bạn.',
+    pwYear: 'Có chứa một năm.',
+    pwVariety: 'Thêm từ, hoặc trộn chữ hoa, chữ thường, chữ số và ký hiệu.',
+    weakNudge: 'Mật khẩu của bạn yếu (mức {label}). Ai sao chép được dữ liệu của trình duyệt này có thể đoán ra. Hãy đổi sang mật khẩu mạnh hơn.',
+    weakNudgeGo: 'Đổi ngay',
+    secTitle: 'Bảo mật',
+    autoLockLabel: 'Tự khóa sau khoảng thời gian này không hoạt động, hoặc khi ở thẻ nền',
+    nMinutes: '{n} phút',
+    autoLockIn: 'Tự khóa sau {time} nếu không hoạt động.',
+    autoLocked: 'Đã tự khóa sau {n} phút không hoạt động. Khóa đã được xóa khỏi bộ nhớ.',
+    autoLockSaved: 'Đã đặt tự khóa {n} phút.',
+    lockedErr: 'Ví đang khóa. Hãy mở khóa trước; chưa ký gì cả.',
+    chpwTitle: 'Đổi mật khẩu',
+    chpwOld: 'Mật khẩu hiện tại',
+    chpwNew: 'Mật khẩu mới (ít nhất 12 ký tự, mức Mạnh trở lên)',
+    chpwSave: 'Đổi mật khẩu',
+    chpwDone: 'Đã đổi mật khẩu.',
+    pkTitle: 'Mở khóa bằng vân tay / Face ID (passkey)',
+    pkIntro: 'Tạo một passkey cho trang này trên thiết bị này. Giá trị bí mật PRF của nó, chỉ được trả về sau khi xác thực vân tay, khuôn mặt hoặc PIN thiết bị, dùng để mã hóa bản sao thứ hai của seed trong trình duyệt này. Mật khẩu vẫn dùng được để dự phòng.',
+    pkSyncNote: 'Passkey có thể đồng bộ qua iCloud Keychain, Trình quản lý mật khẩu của Google hoặc trình quản lý passkey khác, nên passkey này có thể có trên các thiết bị khác của bạn. Hãy bảo vệ kỹ tài khoản đó.',
+    pkEnable: 'Bật mở khóa bằng vân tay / Face ID',
+    pkDisable: 'Tắt mở khóa bằng vân tay / Face ID',
+    pkUnlock: 'Mở khóa bằng vân tay / Face ID',
+    pkOn: 'Mở khóa bằng vân tay / Face ID đang bật. Mật khẩu vẫn dùng được.',
+    pkOff: 'Mở khóa bằng vân tay / Face ID đang tắt.',
+    pkOtherSite: 'Passkey này được tạo cho {host}. Ở đây hãy dùng mật khẩu.',
+    pkUnsupported: 'Trình duyệt này không dùng được passkey trên trang này. Hãy tiếp tục dùng mật khẩu.',
+    pkNoPlatform: 'Không tìm thấy trình xác thực vân tay, khuôn mặt hoặc PIN trên thiết bị này. Hãy tiếp tục dùng mật khẩu.',
+    pkNoPrf: 'Trình duyệt hoặc trình quản lý passkey này không hỗ trợ phần mở rộng PRF cần thiết, nên ở đây passkey không mở khóa được ví. Hãy tiếp tục dùng mật khẩu.',
+    pkCancelled: 'Đã hủy hoặc hết thời gian. Không có gì thay đổi.',
+    pkFailed: 'Passkey không mở khóa được ví này. Hãy dùng mật khẩu.',
+    pkWorking: 'Đang chờ vân tay / Face ID…',
+    pkEnabled: 'Đã tạo passkey: giờ có thể mở khóa bằng vân tay / Face ID. Mật khẩu vẫn dùng được.',
+    pkDisabled: 'Đã tắt mở khóa bằng passkey và xóa bản sao đã mã hóa. Bạn cũng có thể xóa passkey "ZETAPHY PQ Wallet" trong phần cài đặt passkey của thiết bị.',
+    pkDisableConfirm: 'Tắt mở khóa bằng vân tay / Face ID? Sau đó chỉ mở khóa được bằng mật khẩu.',
+    bigTitle: 'Số dư lớn: hãy cân nhắc chỗ an toàn hơn cho khóa',
+    bigLocal: 'Tài khoản này có {amount} ZETAPHY. Khóa trong một trang web chỉ an toàn bằng trình duyệt và máy tính này. Với số tiền lớn, hãy chuyển sang ZETAPHY Snap, nơi khóa nằm trong MetaMask.',
+    bigEvm: 'Tài khoản EVM đang kết nối có {amount} ZETAPHY. Với số tiền lớn, hãy dùng ví phần cứng (Ledger hoặc Trezor) qua MetaMask hoặc Rabby.',
+    bigHow: 'Cách làm',
+    bigLater: 'Ẩn trong 7 ngày',
+    helpOpen: 'Giữ an toàn cho số dư lớn',
+    helpTitle: 'Giữ an toàn cho số dư lớn',
+    helpIntro: 'Khóa trong một trang web chỉ an toàn bằng trình duyệt và máy tính đang chạy nó: tiện ích xấu hoặc phần mềm độc hại có thể đọc khóa khi ví đang mở. Chỉ để số tiền nhỏ ở đây.',
+    helpSnapTitle: 'Tài khoản PQ gốc: chuyển sang ZETAPHY Snap (khóa nằm trong MetaMask)',
+    helpSnap1: 'Cài MetaMask (MetaMask Flask cho đến khi snap được phát hành) và sao lưu Cụm từ khôi phục bí mật của nó.',
+    helpSnap2: 'Khóa ví này, rồi bấm "Kết nối MetaMask" và chấp thuận ZETAPHY Snap.',
+    helpSnap3: 'Sao chép địa chỉ zetaphy1… hiện ra: đó là tài khoản mới, được tạo trong MetaMask.',
+    helpSnap4: 'Mở khóa lại ví này bằng mật khẩu và gửi tiền đến địa chỉ đó. Kiểm tra địa chỉ cả trong hộp thoại của MetaMask.',
+    helpHwTitle: 'Tài khoản EVM: ví phần cứng',
+    helpHw1: 'Kết nối Ledger hoặc Trezor với MetaMask hoặc Rabby (thêm tài khoản ví phần cứng ở đó).',
+    helpHw2: 'Thêm mạng ZETAPHY Testnet bằng các nút ở mục "Dùng ZETAPHY trong các ví khác" của trang này.',
+    helpHw3: 'Gửi tiền đến địa chỉ 0x… của tài khoản phần cứng, và xác nhận mọi giao dịch trên màn hình của chính thiết bị.',
+    helpMore: 'Chi tiết có trong phần bảo mật của README. Đây là testnet: không có gì là tiền thật.',
+    helpClose: 'Đóng',
   },
 };
 
@@ -2453,8 +3005,13 @@ function applyLang() {
   }
   menu.value = lang;
   if (lastStatus) status(...lastStatus);
-  if (wallet) { showAccount(); showToken(); showOwned(); }
+  if (wallet) { showAccount(); showToken(); showOwned(); autoLockTick(); }
   if (discovery) { renderWallets(); showManual(); showEvmAccount(); }
+  showAutoLockChoices();
+  showMeter('pass1'); showMeter('chpw-new1');
+  showNudge();
+  showPasskey();
+  showBigBalance();
 }
 
 /** status(key, vars, isError, extra): extra is raw text (e.g. a node's log). */
@@ -2465,33 +3022,7 @@ function status(key, vars = {}, isError = false, extra = '') {
 }
 const fail = (key, vars, extra) => status(key, vars, true, extra);
 
-// ---- encrypted seed: PBKDF2-SHA256 (600k) -> AES-256-GCM ----
-const aad = (address) => enc.encode(`zetaphy-wallet v1 ${address}`);
-
-async function aesKey(pass, salt, iterations) {
-  const base = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']);
-  return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-}
-
-async function seal(seed, pass, address) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await aesKey(pass, salt, KDF_ITERATIONS);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad(address) }, key, seed));
-  return JSON.stringify({ v: 1, kdf: 'PBKDF2-SHA256', iterations: KDF_ITERATIONS, cipher: 'AES-256-GCM', salt: bytesToHex(salt), iv: bytesToHex(iv), ct: bytesToHex(ct), address });
-}
-
-async function unseal(json, pass) {
-  const b = JSON.parse(json);
-  if (b.v !== 1 || b.kdf !== 'PBKDF2-SHA256' || !(Number.isSafeInteger(b.iterations) && b.iterations >= KDF_ITERATIONS && b.iterations <= 5_000_000)) throw new Error('unknown wallet format');
-  const key = await aesKey(pass, hexToBytes(b.salt), b.iterations);
-  let seed;
-  try {
-    seed = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: hexToBytes(b.iv), additionalData: aad(b.address) }, key, hexToBytes(b.ct)));
-  } catch { throw new Error('badPass'); }
-  return seed;
-}
-
+// ---- encrypted seed: PBKDF2-SHA256 (600k) -> AES-256-GCM (security.js seal / unseal) ----
 const sealedBlob = () => { try { return JSON.parse(store.get(KEYS.seed)); } catch { return null; } };
 
 // ---- the unlocked key, in memory only ----
@@ -2503,8 +3034,16 @@ function openSeed(seed) {
   wallet = { kind: 'local', seed, publicKey, secretKey, addr: pqAddress(publicKey) };
 }
 
+/**
+ * Forgets the unlocked key: the seed and the ML-DSA secret key are overwritten with zeros
+ * and every reference this page holds is dropped, then the unlock screen is shown.
+ */
 function lock() {
-  if (wallet?.kind === 'local') { wallet.seed.fill(0); wallet.secretKey.fill(0); }
+  if (wallet?.kind === 'local') {
+    wallet.seed?.fill(0); wallet.secretKey?.fill(0);
+    wallet.seed = null; wallet.secretKey = null;
+  }
+  if (wallet) wallet.locked = true;
   wallet = null;
   pending = null; tokenPending = null; stakePending = null; deployPending = null;
   account = null;
@@ -2515,9 +3054,13 @@ function lock() {
 }
 
 /** What pqClient signs with: the key in this page, or the snap (it gets the messages, never bytes). */
+/** Signing needs the unlocked wallet, checked again at the moment of signing (an auto-lock may come in between). */
 function signer() {
-  if (wallet.kind === 'snap') return { signTx: snapSignTx };
-  return { sign: (bytes) => ml_dsa44.sign(bytes, wallet.secretKey) };
+  const w = wallet;
+  if (!w || w.locked || (w.kind === 'local' && !w.secretKey)) throw new Error('lockedErr');
+  const live = () => { if (wallet !== w || w.locked) throw new Error('lockedErr'); };
+  if (w.kind === 'snap') return { publicKey: w.publicKey, signTx: (request) => { live(); return snapSignTx(request); } };
+  return { publicKey: w.publicKey, sign: (bytes) => { live(); return ml_dsa44.sign(bytes, w.secretKey); } };
 }
 const signingStatus = () => status(wallet.kind === 'snap' ? 'snapConfirm' : 'signing');
 
@@ -2593,7 +3136,12 @@ function render() {
   $('snap-mode').hidden = $('snap-disconnect').hidden = !snapMode;
   $('backup-card').hidden = snapMode;
   setI18n($('mm-warn-seed'), snapMode ? 'mmWarnSeedSnap' : 'mmWarnSeed');
+  $('chpw-box').hidden = $('pk-box').hidden = snapMode;
   if (wallet) { if (!owned.length) loadOwned(); showAccount(); showToken(); showOwned(); }
+  if (wallet) { if (!autoLockTimer) startAutoLock(); } else stopAutoLock();
+  if (!wallet) $('weak-nudge').hidden = true;
+  showPasskey();
+  showBigBalance();
 }
 
 let account = null;
@@ -2602,6 +3150,7 @@ function showAccount() {
   $('addr-hex').textContent = wallet.addr.hex;
   if (!account) { $('acct-status').textContent = ''; return; }
   $('balance').textContent = `${formatZeta(account.balance)} ZETAPHY`;
+  showBigBalance();
   $('acct-status').textContent = (account.exists ? t('onChain', { n: account.accountNumber, s: account.sequence }) : t('notFunded'))
     + (account.quantumLockedTo ? ' · ' + t('ownedOther', { to: account.quantumLockedTo }) : '');
 }
@@ -2640,20 +3189,28 @@ function setMode(m) {
 
 async function setupWallet() {
   const p1 = $('pass1').value; const p2 = $('pass2').value;
-  if (p1.length < 8) return fail('passShort');
-  if (p1 !== p2) return fail('passMismatch');
   let seed;
   if (mode === 'import') {
     const s = $('seed-in').value.trim();
     if (!/^(0x)?[0-9a-fA-F]{64}$/.test(s)) return fail('badSeed');
     seed = hexToBytes(s);
-  } else {
-    seed = crypto.getRandomValues(new Uint8Array(32));
   }
+  // An imported seed's address counts as text to keep out of the passphrase.
+  let context = [];
+  if (seed) {
+    const kp = ml_dsa44.keygen(seed);
+    kp.secretKey.fill(0);
+    context = addressWords(pqAddress(kp.publicKey));
+  }
+  if (!checkNewPass(p1, p2, context)) { seed?.fill(0); return; }
+  seed ??= crypto.getRandomValues(new Uint8Array(32));
   status('deriving');
   openSeed(seed);
   const blob = await seal(seed, p1, wallet.addr.bech32);
   for (const id of ['pass1', 'pass2', 'seed-in']) $(id).value = '';
+  showMeter('pass1');
+  // A passkey blob left from a wallet removed earlier is not this wallet's.
+  if (passkeyBlob() && passkeyBlob().address !== wallet.addr.bech32) store.del(KEYS.passkey);
   account = null;
   render();
   if (!store.set(KEYS.seed, blob)) return fail('storeFailed');
@@ -2665,14 +3222,299 @@ async function unlock() {
   const sealed = store.get(KEYS.seed);
   if (!sealed) return render();
   status('deriving');
-  const seed = await unseal(sealed, $('unlock-pass').value);
+  const pass = $('unlock-pass').value;
+  const seed = await unseal(sealed, pass);
   openSeed(seed);
   if (wallet.addr.bech32 !== sealedBlob().address) { lock(); throw new Error('unknown wallet format'); }
   $('unlock-pass').value = '';
   account = null;
   render();
   status('unlocked');
+  nudgeWeak(pass);
   if ($('rpc').value.trim()) refresh();
+}
+
+/** After the seed is open by a passkey: the same screens as a passphrase unlock. */
+function opened(msg) {
+  account = null;
+  render();
+  status(msg);
+  if ($('rpc').value.trim()) refresh();
+}
+
+// ---- passphrase strength (security.js passwordStrength) ----
+const addressWords = (addr) => [addr.bech32, addr.hex];
+const STRENGTH_KEY = { veryWeak: 'pwVeryWeak', weak: 'pwWeak', fair: 'pwFair', strong: 'pwStrong', veryStrong: 'pwVeryStrong' };
+const reasonText = (r) => r.reasons.map((k) => t(k, { n: MIN_PASSWORD_LENGTH }));
+
+/** Fills the meter under input `id` (pass1 or chpw-new1) for what is typed now. */
+function showMeter(id) {
+  const box = $(id === 'pass1' ? 'pass1-meter' : 'chpw-meter');
+  const pw = $(id).value;
+  box.hidden = !pw;
+  if (!pw) return;
+  const r = passwordStrength(pw, { context: wallet?.addr ? addressWords(wallet.addr) : [] });
+  box.querySelector('meter').value = r.score;
+  const label = box.querySelector('.pw-label');
+  label.textContent = t('pwStrength', { label: t(STRENGTH_KEY[r.label]) }) + (r.ok ? ' ✓' : '');
+  label.classList.toggle('ok', r.ok);
+  label.classList.toggle('bad', !r.ok);
+  box.querySelector('.pw-reasons').replaceChildren(...reasonText(r).map((text) => Object.assign(document.createElement('li'), { textContent: text })));
+}
+
+/** A new passphrase: at least MIN_PASSWORD_LENGTH characters, rated at least "strong", typed the same twice. */
+function checkNewPass(p1, p2, context) {
+  if (Array.from(p1).length < MIN_PASSWORD_LENGTH) { fail('passShort', { n: MIN_PASSWORD_LENGTH }); return false; }
+  const r = passwordStrength(p1, { context });
+  if (!r.ok) { fail('passWeak', { label: t(STRENGTH_KEY[r.label]) }, reasonText(r).join(' ')); return false; }
+  if (p1 !== p2) { fail('passMismatch'); return false; }
+  return true;
+}
+
+/** A wallet unlocked with a weak passphrase: a nudge to change it (the old one keeps working). */
+function nudgeWeak(pass) {
+  const r = passwordStrength(pass, { context: wallet ? addressWords(wallet.addr) : [] });
+  $('weak-nudge').hidden = r.ok;
+  $('weak-nudge').dataset.label = r.label;
+  showNudge();
+}
+const showNudge = () => { $('weak-nudge-text').textContent = t('weakNudge', { label: t(STRENGTH_KEY[$('weak-nudge').dataset.label] ?? 'pwWeak') }); };
+
+/** Changes the passphrase: the current one is checked against the stored blob, then the seed in memory is sealed again. */
+async function changePassword() {
+  if (wallet?.kind !== 'local') throw new Error('lockedErr');
+  const w = wallet;
+  const p1 = $('chpw-new1').value;
+  if (!checkNewPass(p1, $('chpw-new2').value, addressWords(w.addr))) return;
+  status('deriving');
+  const old = await unseal(store.get(KEYS.seed), $('chpw-old').value); // throws badPass
+  const same = !!w.seed && old.length === w.seed.length && old.every((b, i) => b === w.seed[i]);
+  old.fill(0);
+  if (!same || wallet !== w) throw new Error('lockedErr');
+  const blob = await seal(w.seed, p1, w.addr.bech32);
+  if (wallet !== w) throw new Error('lockedErr');
+  if (!store.set(KEYS.seed, blob)) throw new Error('storeFailed');
+  for (const id of ['chpw-old', 'chpw-new1', 'chpw-new2']) $(id).value = '';
+  showMeter('chpw-new1');
+  $('weak-nudge').hidden = true;
+  status('chpwDone');
+}
+
+// ---- auto-lock ----
+// While unlocked, the key is forgotten (lock(): zeroed, references dropped) after
+// autoLockMin minutes with no keyboard / pointer activity, or when the tab comes back
+// after being hidden that long. A timer shows the time left and checks every second
+// (browsers slow timers down in background tabs, so coming back also checks at once).
+const AUTOLOCK_CHOICES = [30, 60, 120, 240];
+const AUTOLOCK_DEFAULT = 30;
+let autoLockMin = (() => { const n = Number(store.get(KEYS.autolock)); return AUTOLOCK_CHOICES.includes(n) ? n : AUTOLOCK_DEFAULT; })();
+let lastActive = Date.now();
+let hiddenAt = null;
+let autoLockTimer = null;
+const autoLockMs = () => autoLockMin * 60_000;
+
+function startAutoLock() {
+  lastActive = Date.now();
+  hiddenAt = document.hidden ? Date.now() : null;
+  clearInterval(autoLockTimer);
+  autoLockTimer = setInterval(autoLockTick, 1000);
+  autoLockTick();
+}
+
+function stopAutoLock() {
+  clearInterval(autoLockTimer);
+  autoLockTimer = null;
+  $('autolock-hint').textContent = '';
+}
+
+function autoLockTick() {
+  if (!wallet) return stopAutoLock();
+  const now = Date.now();
+  if (now - lastActive >= autoLockMs() || (hiddenAt != null && now - hiddenAt >= autoLockMs())) return autoLock();
+  const left = Math.ceil((autoLockMs() - (now - lastActive)) / 1000);
+  $('autolock-hint').textContent = t('autoLockIn', { time: (left >= 3600 ? `${Math.floor(left / 3600)}:${String(Math.floor(left / 60) % 60).padStart(2, '0')}` : `${Math.floor(left / 60)}`) + `:${String(left % 60).padStart(2, '0')}` });
+}
+
+function autoLock() {
+  if (!wallet) return;
+  lock();
+  status('autoLocked', { n: autoLockMin });
+}
+
+function onActivity() { if (!document.hidden) lastActive = Date.now(); }
+
+function onVisibility() {
+  if (document.hidden) { hiddenAt ??= Date.now(); return; }
+  const away = hiddenAt == null ? 0 : Date.now() - hiddenAt;
+  hiddenAt = null;
+  if (wallet && away >= autoLockMs()) autoLock(); else if (wallet) autoLockTick();
+}
+
+function setAutoLock(n) {
+  if (!AUTOLOCK_CHOICES.includes(n)) return;
+  autoLockMin = n;
+  store.set(KEYS.autolock, String(n));
+  lastActive = Date.now();
+  if (wallet) autoLockTick();
+}
+
+function showAutoLockChoices() {
+  for (const o of $('autolock-min').options) o.textContent = t('nMinutes', { n: o.value });
+  $('autolock-min').value = String(autoLockMin);
+}
+
+// ---- passkey unlock: WebAuthn PRF (security.js wrapSeed / unwrapSeed) ----
+// Turning it on creates a platform passkey for this hostname (user verification required)
+// with the prf extension. The PRF output for a random input (stored) goes through
+// HKDF-SHA256 to an AES-256-GCM key that wraps the same seed into a second blob; the
+// passphrase blob stays as the fallback. The PRF output itself is never stored: it is
+// zeroed once the key is derived. There is no server, so no signature is checked; what
+// protects the seed is that only the authenticator, after user verification, can compute
+// the PRF output.
+const passkeyBlob = () => { try { const b = JSON.parse(store.get(KEYS.passkey)); return isPasskeyBlob(b) ? b : null; } catch { return null; } };
+const pkUsable = (b) => !!b && b.address === sealedBlob()?.address && b.rpId === location.hostname;
+
+function showPasskey() {
+  const b = passkeyBlob();
+  $('pk-unlock').hidden = !!wallet || !pkUsable(b);
+  if (wallet?.kind !== 'local') return;
+  const on = !!b && b.address === wallet.addr.bech32;
+  $('pk-enable').hidden = on;
+  $('pk-disable').hidden = !on;
+  $('pk-state').textContent = !on ? t('pkOff') : b.rpId === location.hostname ? t('pkOn') : t('pkOtherSite', { host: b.rpId });
+}
+
+/** Why passkeys cannot be used here (a message key), or null. */
+async function passkeyUnsupported() {
+  if (!window.isSecureContext || !window.PublicKeyCredential || !navigator.credentials?.create) return 'pkUnsupported';
+  try {
+    const caps = await PublicKeyCredential.getClientCapabilities?.();
+    if (caps && caps['extension:prf'] === false) return 'pkNoPrf';
+    if (caps && caps.userVerifyingPlatformAuthenticator === false) return 'pkNoPlatform';
+  } catch { /* not known: try */ }
+  try {
+    if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable && !(await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())) return 'pkNoPlatform';
+  } catch { /* not known: try */ }
+  return null;
+}
+
+/** A WebAuthn refusal or cancel as one of our message keys. */
+const webauthnError = (e) => new Error(e?.name === 'NotAllowedError' || e?.name === 'AbortError' ? 'pkCancelled'
+  : e?.name === 'SecurityError' || e?.name === 'NotSupportedError' ? 'pkUnsupported' : 'pkFailed');
+
+/** credentials.get with prf.eval: the 32-byte PRF output (the caller zeroes it). */
+async function prfOutput(credentialId, rpId, prfSalt) {
+  let cred;
+  try {
+    cred = await navigator.credentials.get({ publicKey: {
+      rpId, challenge: crypto.getRandomValues(new Uint8Array(32)), timeout: 120000, userVerification: 'required',
+      allowCredentials: [{ type: 'public-key', id: fromB64url(credentialId) }],
+      extensions: { prf: { eval: { first: prfSalt } } },
+    } });
+  } catch (e) { throw webauthnError(e); }
+  const first = cred?.getClientExtensionResults?.().prf?.results?.first;
+  if (!first) throw new Error('pkNoPrf');
+  return new Uint8Array(first);
+}
+
+async function enablePasskey() {
+  if (wallet?.kind !== 'local') throw new Error('lockedErr');
+  const w = wallet;
+  const why = await passkeyUnsupported();
+  if (why) throw new Error(why);
+  status('pkWorking');
+  const rpId = location.hostname;
+  const prfSalt = newPrfSalt();
+  const short = `${w.addr.bech32.slice(0, 12)}…${w.addr.bech32.slice(-6)}`;
+  let cred;
+  try {
+    cred = await navigator.credentials.create({ publicKey: {
+      rp: { id: rpId, name: 'ZETAPHY PQ Wallet' },
+      user: { id: crypto.getRandomValues(new Uint8Array(16)), name: `ZETAPHY ${short}`, displayName: `ZETAPHY PQ Wallet ${short}` },
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      pubKeyCredParams: [{ type: 'public-key', alg: -8 }, { type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+      timeout: 120000,
+      extensions: { prf: { eval: { first: prfSalt } } },
+    } });
+  } catch (e) { throw webauthnError(e); }
+  const credentialId = toB64url(new Uint8Array(cred.rawId));
+  const prf = cred.getClientExtensionResults?.().prf;
+  // A passkey made without PRF is no use here: ask the provider to forget it (where supported).
+  const useless = () => {
+    PublicKeyCredential.signalUnknownCredential?.({ rpId, credentialId })?.catch?.(() => {});
+    return new Error('pkNoPrf');
+  };
+  if (!prf || (!prf.enabled && !prf.results?.first)) throw useless();
+  // Some providers give the PRF output only on get(), not at creation.
+  let out;
+  try {
+    out = prf.results?.first ? new Uint8Array(prf.results.first) : await prfOutput(credentialId, rpId, prfSalt);
+  } catch (e) { if (e.message === 'pkNoPrf') throw useless(); throw e; }
+  try {
+    if (wallet !== w || !w.seed) throw new Error('lockedErr');
+    const blob = await wrapSeed(w.seed, out, { address: w.addr.bech32, credentialId, rpId, prfSalt });
+    if (!store.set(KEYS.passkey, JSON.stringify(blob))) throw new Error('storeFailed');
+  } finally { out.fill(0); }
+  showPasskey();
+  status('pkEnabled');
+}
+
+function disablePasskey() {
+  const b = passkeyBlob();
+  store.del(KEYS.passkey);
+  if (b) window.PublicKeyCredential?.signalUnknownCredential?.({ rpId: b.rpId, credentialId: b.credentialId })?.catch?.(() => {});
+  showPasskey();
+  status('pkDisabled');
+}
+
+async function unlockPasskey() {
+  const b = passkeyBlob();
+  if (!b) throw new Error('pkFailed');
+  if (!pkUsable(b)) throw Object.assign(new Error('pkOtherSite'), { vars: { host: b.rpId } });
+  if (!window.PublicKeyCredential || !navigator.credentials?.get) throw new Error('pkUnsupported');
+  status('pkWorking');
+  const out = await prfOutput(b.credentialId, b.rpId, hexToBytes(b.prfSalt));
+  let seed;
+  try { seed = await unwrapSeed(b, out); } finally { out.fill(0); }
+  openSeed(seed);
+  if (wallet.addr.bech32 !== sealedBlob()?.address || wallet.addr.bech32 !== b.address) { lock(); throw new Error('pkFailed'); }
+  $('unlock-pass').value = '';
+  opened('unlocked');
+}
+
+// ---- large balance: suggest a safer place for the key ----
+// Above LARGE_BALANCE (native ZETAPHY; staked coins are not counted, this page does not read
+// delegations) a banner suggests the ZETAPHY Snap (key inside MetaMask) for this page's own
+// account, or a hardware wallet for a connected EVM account. "Hide for 7 days" is
+// remembered per address in this browser.
+const LARGE_BALANCE = 1000n * 10n ** 18n; // 1,000 ZETAPHY
+const BIG_HIDE_MS = 7 * 24 * 60 * 60 * 1000;
+let bigShown = null; // the address the banner is about
+
+function bigCandidate() {
+  if (wallet?.kind === 'local' && account?.balance != null && account.balance >= LARGE_BALANCE) return { key: 'bigLocal', address: wallet.addr.bech32, amount: account.balance };
+  if (wallet && evmAccount?.balance != null && evmAccount.balance >= LARGE_BALANCE) return { key: 'bigEvm', address: evmAccount.address.bech32, amount: evmAccount.balance };
+  return null;
+}
+
+function showBigBalance() {
+  const c = bigCandidate();
+  const until = c ? Number(store.get(KEYS.bigHidden + c.address)) || 0 : 0;
+  const show = !!c && Date.now() >= until;
+  $('big-balance').hidden = !show;
+  bigShown = show ? c.address : null;
+  if (show) $('big-balance-text').textContent = t(c.key, { amount: formatZeta(c.amount) });
+}
+
+function hideBigBalance() {
+  if (bigShown) store.set(KEYS.bigHidden + bigShown, String(Date.now() + BIG_HIDE_MS));
+  showBigBalance();
+}
+
+function openHelp() {
+  const d = $('help-dialog');
+  if (typeof d.showModal === 'function') { if (!d.open) d.showModal(); } else d.setAttribute('open', '');
 }
 
 // ---- send: review, then confirm ----
@@ -2723,7 +3565,7 @@ async function confirmSend() {
   noNewWarnings(p.checked, await vaccinate([p.to.hex])); // again, just before signing: a flag may have landed meanwhile
   signingStatus();
   const r = await client.send({
-    publicKey: wallet.publicKey, ...signer(),
+    ...signer(),
     to: p.to.bech32, amount: p.amount, gasLimit: p.gasLimit, gasPrice: p.gasPrice,
     ...(p.asOwner ? { asOwner: p.asOwner.bech32, evmGasLimit: DEFAULT_EVM_GAS_LIMIT } : {}),
   });
@@ -2904,7 +3746,7 @@ async function tokenConfirm() {
   noNewWarnings(p.checked, await vaccinate([p.token, p.to.hex]));
   signingStatus();
   const r = await client.callEVM({
-    publicKey: wallet.publicKey, ...signer(),
+    ...signer(),
     to: p.token, data: p.data, evmGasLimit: p.evmGas, gasLimit: p.txGas, gasPrice: p.gasPrice, checkResult: checkTransfer,
     ...(p.asOwner ? { asOwner: p.asOwner.bech32 } : {}),
   });
@@ -2972,7 +3814,7 @@ async function stakeConfirm() {
   $('stake-confirm').hidden = true;
   signingStatus();
   const r = await STAKE[p.action].run({
-    publicKey: wallet.publicKey, ...signer(),
+    ...signer(),
     validator: p.validator, amount: p.action === 'claim' ? undefined : p.amount, gasLimit: p.gasLimit, gasPrice: p.gasPrice,
     ...(p.asOwner ? { asOwner: p.asOwner.bech32, evmGasLimit: DEFAULT_PRECOMPILE_GAS_LIMIT } : {}),
   });
@@ -3027,7 +3869,7 @@ async function deployConfirm() {
   $('deploy-confirm').hidden = true;
   signingStatus();
   const r = await client.deploy({
-    publicKey: wallet.publicKey, ...signer(),
+    ...signer(),
     initCode: p.code, evmGasLimit: p.evmGas, gasLimit: p.txGas, gasPrice: p.gasPrice,
     ...(p.asOwner ? { asOwner: p.asOwner.bech32 } : {}),
   });
@@ -3393,7 +4235,7 @@ async function qdayCommitStep() {
   const c = await client.commitmentHeight(mig.commitment);
   if (c.found) return status('qdAlready', { h: c.height, r: Number(c.height) + Number(st.revealDelay) });
   signingStatus();
-  await client.qdayCommit({ publicKey: wallet.publicKey, ...signer(), commitment: mig.commitment });
+  await client.qdayCommit({ ...signer(), commitment: mig.commitment });
   status('qdCommitted', { h: Number(st.latestHeight) + 1 + Number(st.revealDelay) });
 }
 
@@ -3406,7 +4248,7 @@ async function qdayRevealStep() {
   const ready = Number(c.height) + Number(st.revealDelay);
   if (Number(st.latestHeight) + 1 < ready) throw Object.assign(new Error('qdTooEarly'), { vars: { h: ready, now: st.latestHeight } });
   signingStatus();
-  await client.qdayReveal({ publicKey: wallet.publicKey, ...signer(), owner: qdayOwner.hex, controller: wallet.addr.hex, salt: mig.salt, signature: mig.signature });
+  await client.qdayReveal({ ...signer(), owner: qdayOwner.hex, controller: wallet.addr.hex, salt: mig.salt, signature: mig.signature });
   rememberOwner(qdayOwner);
   status('qdRevealed');
 }
@@ -3423,7 +4265,7 @@ async function consentSend() {
   if (!wallet || !$('cs-ok').checked) return;
   const { target, seconds } = consentArgs();
   signingStatus();
-  const r = await client.consent({ publicKey: wallet.publicKey, ...signer(), target, seconds, ...(acting ? { asOwner: acting.address.bech32 } : {}) });
+  const r = await client.consent({ ...signer(), target, seconds, ...(acting ? { asOwner: acting.address.bech32 } : {}) });
   $('cs-hash').textContent = r.txHash; $('cs-result').hidden = false; $('cs-ok').checked = false;
   status('csSent');
 }
@@ -3686,6 +4528,7 @@ function showEvmAccount() {
   if (a.chain != null) parts.push(a.chain === EVM_CHAIN_ID ? t('evmOnZetaphy') : t('evmOtherChain', { id: a.chain }));
   if (a.balance != null) parts.push(t('evmBalance', { amount: formatZeta(a.balance) }));
   $('evm-chain').textContent = parts.join(' · ');
+  showBigBalance();
 }
 
 // Keplr's interface: experimentalSuggestChain, enable, getKey. Cosmostation offers it too.
@@ -3756,6 +4599,7 @@ function init() {
   $('forget').addEventListener('click', () => {
     if (!window.confirm(t('forgetConfirm'))) return;
     store.del(KEYS.seed);
+    store.del(KEYS.passkey);
     lock();
     status('forgotten');
   });
@@ -3795,6 +4639,21 @@ function init() {
   $('backup-ok').addEventListener('change', () => { $('backup').disabled = !$('backup-ok').checked; });
   $('backup').addEventListener('click', downloadBackup);
   $('lock').addEventListener('click', () => { lock(); status('lockedMsg'); });
+  // Security: auto-lock, passphrase strength and change, passkey unlock, large-balance advice.
+  for (const ev of ['pointerdown', 'keydown', 'input', 'wheel', 'touchstart']) document.addEventListener(ev, onActivity, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', onVisibility);
+  $('autolock-min').addEventListener('change', (e) => { setAutoLock(Number(e.target.value)); status('autoLockSaved', { n: autoLockMin }); });
+  $('pass1').addEventListener('input', () => showMeter('pass1'));
+  $('chpw-new1').addEventListener('input', () => showMeter('chpw-new1'));
+  $('chpw-form').addEventListener('submit', (e) => { e.preventDefault(); busy($('chpw-save'), changePassword); });
+  $('weak-nudge-go').addEventListener('click', () => { $('chpw-box').scrollIntoView({ block: 'center' }); $('chpw-old').focus(); });
+  $('pk-enable').addEventListener('click', () => busy($('pk-enable'), enablePasskey));
+  $('pk-disable').addEventListener('click', () => { if (window.confirm(t('pkDisableConfirm'))) disablePasskey(); });
+  $('pk-unlock').addEventListener('click', () => busy([$('pk-unlock'), $('unlock')], unlockPasskey));
+  $('big-help').addEventListener('click', openHelp);
+  $('help-open').addEventListener('click', openHelp);
+  $('big-later').addEventListener('click', hideBigBalance);
+  $('help-close').addEventListener('click', () => { const d = $('help-dialog'); if (d.close) d.close(); else d.removeAttribute('open'); });
   for (const b of document.querySelectorAll('[data-copy]')) {
     b.addEventListener('click', async () => {
       try { await navigator.clipboard.writeText($(b.dataset.copy).textContent); status('copied'); } catch { /* clipboard not allowed */ }

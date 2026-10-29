@@ -349,6 +349,24 @@ test('a first visit (no stored language) is in English; a Thai choice is remembe
   await ctx.close();
 });
 
+test('"Use a hardware wallet" help in the footer: in the page language, fits a phone, under the CSP', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'th', viewport: { width: 360, height: 740 } });
+  await go(page, '#/');
+  await waitText(page, 'บล็อกล่าสุด');
+  assert.equal(await page.locator('#footer-help [data-ws="help"]').innerText(), 'ใช้กระเป๋าฮาร์ดแวร์');
+  await page.click('#footer-help [data-ws="help"]');
+  await page.waitForSelector('#ws-help[open]');
+  const help = await page.locator('#ws-help').innerText();
+  assert.match(help, /MetaMask[\s\S]*Rabby[\s\S]*connect\.trezor\.io[\s\S]*Keplr/);
+  assert.ok(!/Ledger \(USB\)/.test(help), 'the explorer connects no Ledger itself');
+  assert.ok(await page.evaluate(() => { const r = document.getElementById('ws-help').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth; }), 'fits at 360px');
+  await page.keyboard.press('Escape');
+  await page.selectOption('#lang', 'en');
+  assert.equal(await page.locator('#footer-help [data-ws="help"]').innerText(), 'Use a hardware wallet');
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
 test('every UI language renders the home page with its own texts and no raw keys', async () => {
   const camelKeys = Object.keys(T.en).filter((k) => /[A-Z_]/.test(k));
   for (const [code] of LANGS) {

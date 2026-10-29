@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -207,4 +207,123 @@ test('MONIKER: letters, digits, . _ - only (it goes into commands and a systemd 
     assert.notEqual(r.code, 0, bad);
     assert.match(r.out, /MONIKER: use only/);
   }
+});
+
+// "secure": after the backup, the plaintext words go, SSH takes keys only (never locking the owner out),
+// security updates and fail2ban come on, key files get tight permissions, open ports are reported.
+function secureBox({ keyUser = true, sudo = true, oslogin = false, sshdOk = true, keyring = true, include = true, listen = '' } = {}) {
+  const d = mkdtempSync(join(tmpdir(), 'zsec-'));
+  const p = (...x) => join(d, ...x);
+  const exe = (name, body) => { writeFileSync(p('bin', name), `#!/bin/bash\n${body}\n`); chmodSync(p('bin', name), 0o755); };
+  for (const x of ['bin', 'node/config', 'node/data', 'keys/keyring-test', 'home/ubuntu/.ssh', 'home/ubuntu/zbackup', 'root', 'ssh/sshd_config.d', 'apt', 'f2b', 'sudoers', 'run']) mkdirSync(p(x), { recursive: true });
+  writeFileSync(p('keys', 'MNEMONICS-KEEP-SECRET.txt'), 'validator abandon abandon about\n', { mode: 0o644 });
+  writeFileSync(p('keys', 'keyring-test', 'validator.info'), 'k', { mode: 0o644 });
+  writeFileSync(p('home/ubuntu/zbackup/MNEMONICS-KEEP-SECRET.txt'), 'validator abandon abandon about\n');
+  writeFileSync(p('home/ubuntu/zbackup/priv_validator_key.json'), '{}');
+  for (const f of ['priv_validator_key.json', 'node_key.json', 'pq_vote_key.seed']) writeFileSync(p('node/config', f), 'x', { mode: 0o644 });
+  writeFileSync(p('node/data/priv_validator_state.json'), '{}', { mode: 0o644 });
+  writeFileSync(p('ssh/sshd_config'), include ? 'Include /etc/ssh/sshd_config.d/*.conf\nPort 22\n' : 'Port 22\n');
+  if (keyUser) writeFileSync(p('home/ubuntu/.ssh/authorized_keys'), 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA user@pc\n');
+  writeFileSync(p('passwd'), `root:x:0:0:root:${p('root')}:/bin/bash\nubuntu:x:1000:1000::${p('home/ubuntu')}:/bin/bash\nnobody:x:65534:65534::/nonexistent:/usr/sbin/nologin\n`);
+  writeFileSync(p('nsswitch.conf'), oslogin ? 'passwd: files cache_oslogin oslogin\n' : 'passwd: files systemd\n');
+  exe('id', `if [ "$1" = -nG ]; then [ "$2" = ubuntu ] && echo "ubuntu adm ${sudo ? 'sudo' : 'users'}"; exit 0; fi\nif [ "$1" = zetaphy-no-user ]; then exit 1; fi\nexec /usr/bin/id "$@"`);
+  exe('sshd', `echo "sshd $*" >> ${p('calls.log')}\n[ "$1" = -T ] && { echo "passwordauthentication no"; exit 0; }\nexit ${sshdOk ? 0 : 1}`);
+  exe('zetaphyd', `[ "$1 $2 $3" = "keys show validator" ] && { ${keyring ? 'echo zetaphy1abc; exit 0' : 'exit 1'}; }\nexit 1`);
+  exe('systemctl', `echo "systemctl $*" >> ${p('calls.log')}\n[ "$1" = is-active ] && exit 3\nexit 0`);
+  exe('apt-get', `echo "apt-get $*" >> ${p('calls.log')}`);
+  exe('apt-cache', 'exit 0');
+  exe('dpkg', 'exit 1');
+  exe('ss', `printf '%s' '${listen}'`);
+  const env = {
+    SECURE_TEST: '1', SECURE_TTY: p('no-tty'), NODE_USER: 'zetaphy-no-user', NODE_HOME: p('node'), KEYS_DIR: p('keys'),
+    ZETAPHYD: p('bin', 'zetaphyd'), SYSTEMCTL: p('bin', 'systemctl'), SSHD: p('bin', 'sshd'), SSHD_DIR: p('ssh'), RUN_SSHD: p('run', 'sshd'),
+    NSSWITCH: p('nsswitch.conf'), SUDOERS_DIR: p('sudoers'), PASSWD_FILE: p('passwd'), HOME_BASE: p('home'), ROOT_HOME: p('root'),
+    APT_CONF_DIR: p('apt'), F2B_DIR: p('f2b'), PATH: `${p('bin')}:${process.env.PATH}`,
+  };
+  const run = (args, input = '') => {
+    const r = spawnSync('bash', [JOIN_SH, 'secure', ...args], { input, encoding: 'utf8', env: { ...process.env, ...env } });
+    return { code: r.status, out: (r.stdout || '') + (r.stderr || '') };
+  };
+  const has = (...x) => existsSync(p(...x));
+  const read = (...x) => (has(...x) ? readFileSync(p(...x), 'utf8') : '');
+  const mode = (...x) => (statSync(p(...x)).mode & 0o777).toString(8);
+  return { run, has, read, mode };
+}
+
+test('secure words: shreds the plaintext words and zbackup copies only after "y"; the node keys stay', () => {
+  const no = secureBox();
+  const r0 = no.run(['--only', 'words'], 'n\n');
+  assert.equal(r0.code, 0, r0.out);
+  assert.match(r0.out, /kept\. Run secure again/);
+  assert.ok(no.has('keys', 'MNEMONICS-KEEP-SECRET.txt'));
+  assert.doesNotMatch(r0.out, /abandon/, 'the words are never printed');
+
+  const b = secureBox();
+  const r = b.run(['--only', 'words'], 'y\n');
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /shredded: .*keys\/MNEMONICS-KEEP-SECRET\.txt/);
+  assert.match(r.out, /shredded: .*zbackup\/priv_validator_key\.json/);
+  assert.ok(!b.has('keys', 'MNEMONICS-KEEP-SECRET.txt') && !b.has('home', 'ubuntu', 'zbackup'));
+  for (const f of ['priv_validator_key.json', 'node_key.json', 'pq_vote_key.seed']) assert.ok(b.has('node', 'config', f), f);
+  assert.ok(b.has('keys', 'keyring-test', 'validator.info'), 'the keyring stays');
+  assert.match(r.out, /What stays on this machine/);
+  assert.match(b.run(['--only', 'words']).out, /no plaintext recovery words left/, 'idempotent');
+});
+
+test('secure words: --yes alone keeps them (needs --words-saved); a keyring without the key keeps them', () => {
+  const y = secureBox();
+  assert.match(y.run(['--yes', '--only', 'words']).out, /only when --words-saved is given too/);
+  assert.ok(y.has('keys', 'MNEMONICS-KEEP-SECRET.txt'));
+  y.run(['--yes', '--words-saved', '--only', 'words']);
+  assert.ok(!y.has('keys', 'MNEMONICS-KEEP-SECRET.txt'));
+  const k = secureBox({ keyring: false });
+  assert.match(k.run(['--only', 'words'], 'y\n').out, /not in this node's keyring/);
+  assert.ok(k.has('keys', 'MNEMONICS-KEEP-SECRET.txt'));
+});
+
+test('secure ssh: keys only and no root login, via a drop-in checked with sshd -t; never without a key user', () => {
+  const b = secureBox();
+  const r = b.run(['--only', 'ssh'], 'y\n');
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /accounts log in with an SSH key and can use sudo: ubuntu/);
+  const conf = b.read('ssh', 'sshd_config.d', '60-zetaphy.conf');
+  for (const l of ['PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'PermitRootLogin no']) assert.match(conf, new RegExp(`^${l}$`, 'm'));
+  assert.match(b.read('calls.log'), /sshd -t\n[\s\S]*systemctl reload ssh/);
+  assert.match(b.run(['--only', 'ssh']).out, /already set/);
+
+  for (const opts of [{ keyUser: false }, { sudo: false }]) {
+    const n = secureBox(opts);
+    assert.match(n.run(['--only', 'ssh'], 'y\n').out, /WARNING: skipped/, JSON.stringify(opts));
+    assert.ok(!n.has('ssh', 'sshd_config.d', '60-zetaphy.conf'));
+  }
+  const g = secureBox({ keyUser: false, oslogin: true });
+  assert.match(g.run(['--only', 'ssh'], 'y\n').out, /OS Login is on/);
+  assert.ok(g.has('ssh', 'sshd_config.d', '60-zetaphy.conf'));
+
+  const bad = secureBox({ sshdOk: false });
+  assert.match(bad.run(['--only', 'ssh'], 'y\n').out, /rolled back/);
+  assert.ok(!bad.has('ssh', 'sshd_config.d', '60-zetaphy.conf'));
+  assert.doesNotMatch(bad.read('calls.log'), /reload/);
+  const old = secureBox({ include: false });
+  assert.match(old.run(['--only', 'ssh'], 'y\n').out, /does not read sshd_config\.d/);
+  const no = secureBox();
+  assert.match(no.run(['--only', 'ssh'], 'n\n').out, /skipped/);
+  assert.ok(!no.has('ssh', 'sshd_config.d', '60-zetaphy.conf'));
+});
+
+test('secure perms, updates, fail2ban and ports', () => {
+  const b = secureBox({ listen: 'tcp LISTEN 0 4096 0.0.0.0:26656 0.0.0.0:* users:(("zetaphyd",pid=1,fd=3))\ntcp LISTEN 0 128 [::]:22 [::]:*\ntcp LISTEN 0 4096 127.0.0.1:26657 0.0.0.0:*\ntcp LISTEN 0 4096 0.0.0.0:9090 0.0.0.0:* users:(("zetaphyd",pid=1,fd=9))\nudp UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:*\n' });
+  const r = b.run(['--yes', '--only', 'perms,updates,fail2ban,ports']);
+  assert.equal(r.code, 0, r.out);
+  assert.equal(b.mode('keys'), '700');
+  assert.equal(b.mode('keys', 'keyring-test', 'validator.info'), '600');
+  assert.equal(b.mode('node', 'config'), '700');
+  for (const f of ['priv_validator_key.json', 'node_key.json', 'pq_vote_key.seed']) assert.equal(b.mode('node', 'config', f), '600', f);
+  assert.equal(b.mode('node', 'data', 'priv_validator_state.json'), '600');
+  assert.match(b.read('calls.log'), /apt-get .*install -y -qq unattended-upgrades/);
+  assert.match(b.read('apt', '20auto-upgrades'), /Unattended-Upgrade "1"/);
+  assert.match(b.read('f2b', 'zetaphy-sshd.local'), /\[sshd\]\nenabled = true/);
+  assert.match(r.out, /tcp 0\.0\.0\.0:9090 \(zetaphyd\)/);
+  assert.doesNotMatch(r.out, /:26657|:26656 \(|\[::\]:22 /);
+  assert.match(b.run(['--only', 'perms']).out, /done \(0 changed\)/);
 });

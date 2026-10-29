@@ -23,6 +23,8 @@ jobs:
       SRC: ${{ github.workspace }}/../cosmos-evm
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.9'
@@ -47,6 +49,8 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - name: Latest release
         id: rel
         run: |

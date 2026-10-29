@@ -1,0 +1,62 @@
+/* Money flow (graph/), the investigator and the watch list (agent/): web/flow.js */
+.flow, .watch { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.watch { background: var(--card); border-radius: 14px; padding: 14px 16px; margin-top: 16px; }
+.flow h2, .watch h2 { font-size: 1rem; margin: 0 0 6px; }
+.flow-intro, .watch-note { color: var(--muted); font-size: .85rem; margin: 0 0 8px; }
+.flow-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+.flow-actions button, .watch button { font: inherit; font-size: .9rem; font-weight: 600; border-radius: 9px; padding: 7px 12px; cursor: pointer;
+  color: var(--on-accent); background: var(--accent); border: 1px solid var(--accent); }
+.flow-actions button.secondary, .watch button { color: var(--accent); background: none; }
+.flow-actions button:disabled, .watch button:disabled { opacity: .6; cursor: progress; }
+.flow-status { color: var(--muted); font-size: .85rem; min-height: 1.2em; margin: 4px 0; }
+.flow-status.error { color: var(--high); }
+.flow-signals { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
+.flow-signals li { position: relative; padding-left: 20px; overflow-wrap: anywhere; }
+.flow-signals li::before { content: ""; position: absolute; left: 2px; top: .55em; width: 8px; height: 8px; border-radius: 50%; background: var(--info); }
+.flow-signals li.high::before { background: var(--high); }
+.flow-signals li.medium::before { background: var(--medium); }
+.flow-signals li.low::before { background: var(--low); }
+.flow-signals li.good::before { background: var(--good); }
+.flow-signals small { display: block; color: var(--muted); font-size: .78rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.flow-graph { overflow-x: auto; max-width: 100%; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+.flow-graph:empty { display: none; }
+.flow-svg { display: block; width: 100%; height: auto; min-width: 560px; }
+.flow-edge { fill: none; stroke: var(--line); stroke-width: 1.6; }
+.flow-edge.k-funded { stroke: var(--muted); }
+.flow-edge.k-lp-remove { stroke: var(--high); stroke-dasharray: 4 3; }
+.flow-edge.k-lp-add { stroke: var(--good); }
+.flow-edge.k-deployed, .flow-edge.k-called { stroke: var(--accent); }
+.flow-svg.has-sel .flow-edge { opacity: .25; }
+.flow-svg.has-sel .flow-edge.on { opacity: 1; stroke-width: 2.4; }
+.flow-arrowhead { fill: var(--muted); }
+.flow-node { cursor: pointer; outline: none; }
+.flow-dot { fill: var(--card); stroke: var(--muted); stroke-width: 2; }
+.r-token .flow-dot { fill: var(--accent); stroke: var(--accent); }
+.r-deployer .flow-dot, .r-factory .flow-dot { stroke: var(--accent); stroke-width: 3; }
+.r-pool .flow-dot, .r-lp-provider .flow-dot { stroke: var(--good); }
+.r-lp-receiver .flow-dot { stroke: var(--high); }
+.r-hub .flow-dot { stroke: var(--info); stroke-dasharray: 3 2; }
+.r-cluster-source .flow-dot { stroke: var(--medium); stroke-width: 3; }
+.r-prior .flow-dot { stroke: var(--low); }
+.flow-ring { fill: none; stroke: var(--high); stroke-width: 2.5; }
+.flow-node.sel .flow-dot, .flow-node:focus-visible .flow-dot { stroke: var(--text); stroke-width: 3.5; }
+.flow-label { fill: var(--muted); font-size: 9px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.flow-detail { margin-top: 8px; }
+.flow-detail[hidden] { display: none; }
+.flow-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0; margin: 8px 0 0; color: var(--muted); font-size: .75rem; }
+.flow-legend li::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--muted); margin-right: 5px; vertical-align: -1px; }
+.flow-legend li.r-token::before { background: var(--accent); border-color: var(--accent); }
+.flow-legend li.r-deployer::before { border-color: var(--accent); }
+.flow-legend li.r-pool::before { border-color: var(--good); }
+.flow-legend li.r-lp-receiver::before, .flow-legend li.flagged::before { border-color: var(--high); }
+.flow-legend li.r-cluster-source::before { border-color: var(--medium); }
+.flow-legend li.r-hub::before { border-style: dashed; }
+.flow-steps { list-style: none; padding: 0; margin: 6px 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .8rem; color: var(--muted); }
+.watch-list { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+.watch-list li { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; border-top: 1px solid var(--line); padding-top: 8px; overflow-wrap: anywhere; }
+.watch-list .addr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
+.watch-list .meta { grid-column: 1 / -1; color: var(--muted); font-size: .78rem; }
+.watch-list .worse { color: var(--high); font-weight: 600; }
+.watch-list .lvl-high { color: var(--high); } .watch-list .lvl-medium { color: var(--medium); } .watch-list .lvl-low { color: var(--low); }
+.watch-buttons { display: flex; gap: 6px; }
+.watch[hidden], .flow[hidden] { display: none; }

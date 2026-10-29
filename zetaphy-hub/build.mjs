@@ -20,12 +20,15 @@ export const APPS = {
   explorer: 'zetaphy-explorer',
   'neuro/web': 'zetaphy-neuro/web',
   'neuro/src': 'zetaphy-neuro/src', // the Neuro page imports ../src/*.js
+  'neuro/ai': 'zetaphy-neuro/ai', // and ../ai/*.js (AI analyst, bring your own model)
+  'neuro/graph': 'zetaphy-neuro/graph', // money-flow graph (web/flow.js imports ../graph/*.js)
+  'neuro/agent': 'zetaphy-neuro/agent', // investigator + watch list (../agent/*.js)
 };
 // per app: folders that are build inputs, not served (the wallet serves vendor/pqwallet.js, built from src/)
 const SKIP_IN = { wallet: new Set(['src']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
-const HUB_FILES = ['index.html', 'walletbar.js', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js', 'embed.css', 'logo.svg', 'favicon.svg'];
+const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js', 'embed.css', 'logo.svg', 'favicon.svg'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. */
 export function hubConfig(cfg) {

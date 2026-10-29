@@ -1,0 +1,61 @@
+# Neuro alerts: every hour, scan pools created on the ZETAPHY DEX and DLMM
+# factories (PairCreated) in the last ~2 hours, investigate each new token
+# (zetaphy-neuro/agent/pipeline.js: rules, trade test, money-flow graph) and
+# open a GitHub issue labelled `neuro-alert` for a high result.
+#
+# No server, no secrets: only the workflow's own GITHUB_TOKEN with
+# `issues: write`. Deduped against existing neuro-alert issues (open or
+# closed), at most 3 issues a run and 10 a day. Quiet by design: until
+# NEURO_ALERTS_FROM (the ZETAPHY RPC is paused until 2026-11-01), or while
+# the RPC cannot be reached, it prints one line and succeeds.
+# Cost: under a minute per run of the free Actions allowance.
+
+name: Neuro alerts
+
+on:
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only print what would be opened'
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: neuro-alerts
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    name: Scan new ZETAPHY pools
+    if: github.repository == 'pospos191-alt/swd-amm'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    defaults:
+      run:
+        working-directory: zetaphy-neuro
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: zetaphy-neuro
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "20"
+      # No install: the reader, the graph and the investigator have no runtime dependencies.
+      - name: Scan and alert
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          NEURO_ALERTS_FROM: '2026-11-01T00:00:00Z'
+          NEURO_LOOKBACK_SECONDS: '7200'
+          NEURO_MAX_POOLS: '10'
+          NEURO_MAX_ALERTS: '3'
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
+        run: node agent/scan-pools.js $DRY_RUN

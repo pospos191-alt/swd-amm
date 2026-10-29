@@ -9,6 +9,7 @@ import { chainApi } from './chain.js';
 import { TOPICS, decodeTransfer, readTokenInfo, callData, decodeUint } from './evm.js';
 import { TYPES, VOTE_OPTIONS, logsFromEvents, decodeTx } from './cosmos.js';
 import { checkThreats } from './threat.js';
+import { safety } from './wallet-safety.js';
 import {
   safeText, tokenText, formatUnits, formatZtphy, formatCoin, short, percent, ago, utcTime, toAddress, toValoper, parseQuery,
   heightParam, hexPreview, toBig, groupDigits, DEAD_ADDRESS, anyAddressLower, fromBase64,
@@ -21,6 +22,10 @@ const store = (() => { try { const s = window.localStorage; s.getItem('x'); retu
 const pref = (k, v) => { try { if (v === undefined) return store?.getItem(`zetaphy-explorer:${k}`); store?.setItem(`zetaphy-explorer:${k}`, v); } catch { /* blocked */ } return null; };
 
 let lang = pickLang(pref('lang')); // English unless a known language was chosen
+// "Use a hardware wallet" help (wallet-safety.js, shared with the hub). The explorer connects no wallet;
+// it records activity so the hub's 15-minute idle check counts reading here (same origin, in a frame).
+const sf = safety({ win: window, lang: () => lang });
+sf.track();
 let t = makeT(lang);
 let cfg = sanitizeConfig();
 let siteCfg = sanitizeConfig();
@@ -99,6 +104,7 @@ function applyStatic() {
   for (const el of document.querySelectorAll('[data-i18n-title]')) { el.setAttribute('title', t(el.dataset.i18nTitle)); el.setAttribute('aria-label', t(el.dataset.i18nTitle)); }
   $('lang').value = lang;
   document.title = t('title');
+  $('footer-help')?.replaceChildren(sf.helpLink({ chains: ['evm', 'cosmos'], ledger: false }));
 }
 
 function applyTheme(theme) {

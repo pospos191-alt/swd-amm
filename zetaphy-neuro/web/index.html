@@ -3,11 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https:; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https: http://localhost:11434 http://127.0.0.1:11434; img-src 'self' data:; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <title>Neuro ZETAPHY</title>
 <link rel="icon" href="./favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="./ai.css">
+<link rel="stylesheet" href="./flow.css">
 </head>
 <body>
 <main>
@@ -78,8 +80,11 @@
   <footer>
     <p data-i18n="footer">Never asks to connect a wallet and never sends a transaction. Reads public chain data; for an early-warning check it sends only the chain and contract address to the server of this site, which stores nothing. Not investment advice.</p>
     <p><a href="./stats.html" data-i18n="stats">Usage stats</a></p>
+    <p id="footer-help"></p>
   </footer>
 </main>
 <script type="module" src="./app.js"></script>
+<script type="module" src="./ai-panel.js"></script>
+<script type="module" src="./flow.js"></script>
 </body>
 </html>

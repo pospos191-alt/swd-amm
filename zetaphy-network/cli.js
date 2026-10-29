@@ -6,6 +6,10 @@
 //                                      a defender sends a heartbeat about every defenderTimeout/4)
 //   zetaphy node start --watch-verdicts [--max-challenge-spend 10]   also re-run finalized verdicts and challenge
 //                                      one that differs from ours (at most that many ZETAPHY of bonds a day)
+//   zetaphy node start --llm-review [--llm-model qwen2.5-coder:7b --llm-url http://localhost:11434/v1 --llm-lang en]
+//                                      opt-in: a local model (Ollama) writes an advisory "AI opinion" review of each
+//                                      job we commit to, signed with the runner key (~/.zetaphy/reviews/job-N.json)
+//   zetaphy review verify <job-N.json> check a signed LLM review: unedited, and which runner wrote it
 //   zetaphy node register [--bond N]   put up the runner bond (ZETAPHY)
 //   zetaphy node status                address, bond, earnings
 //   zetaphy node withdraw              move earnings to the runner's wallet
@@ -185,6 +189,7 @@ import { JsonRpcProvider, Contract, ContractFactory, Interface, formatEther, par
 import { HOME, loadOrCreateKey, sealWorkerKey } from './src/keys.js';
 import { detectHardware, pickProfile } from './src/hardware.js';
 import { createWorker, SUPPORTED_CHAINS, send as padded } from './src/worker.js';
+import { createLlmReviewer, verifyReview } from './src/llmreview.js';
 import { skillId, skillFiles } from './src/skill.js';
 import { createRelay } from './src/relay.js';
 import { gate1 } from './src/gate.js';
@@ -414,6 +419,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   const { pos, opt } = parse(argv);
   const [group, cmd, ...rest] = pos;
   if (group === 'pq' && (cmd === 'verify-block' || cmd === 'export-vote-keys')) return pqBlockCommand(cmd, rest, opt, env, write);
+  if (group === 'review' && cmd === 'verify') {
+    // A runner's signed LLM review (node start --llm-review): who wrote it, and is it unedited?
+    if (!rest[0]) throw new Error('usage: zetaphy review verify <job-N.json>');
+    const rec = JSON.parse(readFileSync(rest[0], 'utf8'));
+    const r = verifyReview(rec);
+    write(r.ok ? `valid: signed by runner ${r.signer} (job ${rec.body.jobId}, ${rec.body.model}); AI opinion, not part of the verdict` : `NOT valid: ${r.reason}`);
+    return r.ok ? 0 : 1;
+  }
   const s = settings(opt, env);
 
   if (group === 'node' && cmd === 'start') {
@@ -453,7 +466,17 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     }
     const watch = opt['watch-verdicts'] ? { maxPerDay: parseEther(String(opt['max-challenge-spend'] ?? 10)) } : null;
     if (watch) write(`watching verdicts: challenge one that differs from ours, at most ${formatEther(watch.maxPerDay)} ZETAPHY of bonds a day`);
+    // Opt-in: a local model (Ollama) writes a signed, advisory review of each job we commit to.
+    const reviewer = opt['llm-review'] ? createLlmReviewer({
+      wallet: c.signer, dir: join(HOME, 'reviews'),
+      ...(typeof opt['llm-model'] === 'string' ? { model: opt['llm-model'] } : {}),
+      ...(typeof opt['llm-url'] === 'string' ? { baseUrl: opt['llm-url'] } : {}),
+      ...(typeof opt['llm-lang'] === 'string' ? { lang: opt['llm-lang'] } : {}),
+      log: (l) => write(`${new Date().toISOString()} ${l}`),
+    }) : null;
+    if (reviewer) write(`LLM review: on (local model; AI opinion saved and signed in ${join(HOME, 'reviews')}; never part of the verdict)`);
     const worker = createWorker({
+      onReport: reviewer ? (job) => reviewer.queue(job) : null,
       skill: mySkill, paused: control ? () => control.paused() : null, watch,
       defenderTimeout: control ? () => control.defenderTimeout() : null,
       onRoster: control ? () => control.defenderApproved(c.me) : null,

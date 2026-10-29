@@ -45,6 +45,7 @@
 
 <main>
   <div id="banner" class="banner" role="status" hidden></div>
+  <div id="ws-host"></div>
 
   <section id="tab-swap" class="panel" role="tabpanel">
     <div class="card">
@@ -148,7 +149,9 @@
   <h2 data-i18n="walletsTitle">Choose a wallet</h2>
   <div id="wallet-list" class="list"></div>
   <div id="wallet-none" hidden><p data-i18n="noWallet"></p><div id="wallet-links" class="list"></div></div>
+  <div id="wallet-hw" class="list"></div>
   <p class="status" id="wallet-status" role="status"></p>
+  <p class="hint" id="wallet-help"></p>
   <div class="actions"><button type="button" class="ghost" id="wallet-close" data-i18n="close">Close</button></div>
 </dialog>
 
@@ -166,6 +169,7 @@
 
 <footer class="footer">
   <p data-i18n="footer"></p>
+  <p class="hint" id="footer-help"></p>
   <p class="hint"><span id="footer-contracts"></span></p>
 </footer>
 </body>

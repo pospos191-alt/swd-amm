@@ -3,8 +3,8 @@
 # request with them. Run by hand only (Actions → launch-testnet → Run workflow);
 # never on push or pull request.
 #
-# The deployer key is the repository secret ZETAPHY_DEPLOYER_KEY (added by the owner,
-# Settings → Secrets and variables → Actions). It goes into a 0600 file under
+# The deployer key is the secret ZETAPHY_DEPLOYER_KEY of the environment testnet-deploy (added by
+# the owner, Settings → Environments → testnet-deploy; docs/SECRETS-HARDENING.md). It goes into a 0600 file under
 # $RUNNER_TEMP, is passed to launch.js as --key-file, never as an argument or an
 # environment variable of launch.js, and the file is removed at the end. GitHub masks
 # the secret in logs; the step also masks its 0x / no-0x spellings.
@@ -69,9 +69,11 @@ on:
         type: string
         default: ''
 
+# Least privilege: read-only by default; the one job gets write access and the key through the
+# environment testnet-deploy (required reviewer + main only, docs/SECRETS-HARDENING.md). The dry
+# run also reads the key (it checks the deployer's address and balance), so it waits for approval too.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: launch-testnet
@@ -82,6 +84,10 @@ jobs:
     name: Launch the ZETAPHY testnet contracts
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    environment: testnet-deploy
+    permissions:
+      contents: write        # pushes launch/testnet
+      pull-requests: write   # opens its pull request
     defaults:
       run:
         shell: bash   # bash -eo pipefail: a failed launch is not hidden by | tee
@@ -147,7 +153,7 @@ jobs:
           KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
         run: |
           if [ -z "$KEY" ]; then
-            echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set (Settings → Secrets and variables → Actions; docs/LAUNCH.md step 4)"
+            echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in the environment testnet-deploy (Settings → Environments; docs/SECRETS-HARDENING.md)"
             exit 1
           fi
           k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}

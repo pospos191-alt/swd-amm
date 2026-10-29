@@ -7,10 +7,15 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test test/chainlib.test.mjs test/build.test.mjs test/i18n.test.mjs test/walletbar.test.mjs test/mine.test.mjs",
-    "test:e2e": "node build.mjs && node --test test/hub.e2e.mjs test/mine.e2e.mjs"
+    "test": "node --test test/chainlib.test.mjs test/build.test.mjs test/i18n.test.mjs test/walletbar.test.mjs test/mine.test.mjs test/safety.test.mjs test/ledger.test.mjs",
+    "test:e2e": "node build.mjs && node --test test/hub.e2e.mjs test/mine.e2e.mjs test/safety.e2e.mjs",
+    "build:ledger": "node tools/build-ledger.mjs",
+    "sync:shared": "node tools/sync-shared.mjs"
   },
   "devDependencies": {
+    "@ledgerhq/hw-transport-webhid": "6.36.0",
+    "buffer": "6.0.3",
+    "esbuild": "0.25.11",
     "ethers": "6.17.0",
     "playwright-core": "1.56.1"
   },

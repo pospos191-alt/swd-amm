@@ -11,7 +11,7 @@
   "scripts": {
     "build": "node scripts/build.js",
     "test": "node --test test/*.test.js",
-    "test:web": "node --test test/web.e2e.js test/web.dlmm.e2e.js",
+    "test:web": "node --test test/web.e2e.js test/web.dlmm.e2e.js test/web.safety.e2e.js",
     "test:devnet": "node --test test/devnet.integration.js",
     "test:devnet:dlmm": "node --test test/devnet.dlmm.integration.js",
     "test:web:devnet": "node --test test/web.devnet.e2e.js"

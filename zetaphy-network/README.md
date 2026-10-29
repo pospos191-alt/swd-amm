@@ -85,6 +85,10 @@ zetaphy node start --rpc http://<ZETAPHY node>:8545 --jobs 0x<NeuroJobs>
   - Draws the lottery (`draw`) for jobs nobody has drawn yet, then checks whether it is eligible
   - Also takes round-2 seats for challenged jobs (if it did not sit in round 1)
   - If it is a defender (or on the list), sends a `heartbeat` about every 1/4 of `defenderTimeout` (costs only gas)
+- `zetaphy node start --llm-review [--llm-model qwen2.5-coder:7b --llm-url http://localhost:11434/v1 --llm-lang en]`: LLM review (opt-in, free, local)
+  - After each commit, the runner's own Ollama writes an advisory "AI opinion" review of the report (zetaphy-neuro `ai/`, see its README "AI analyst")
+  - Saved to `~/.zetaphy/reviews/job-<id>.json`, signed with the runner key; `zetaphy review verify <file>` checks it is unedited and who wrote it
+  - Never part of the verdict: the commit is the same with or without it, and the review runs afterwards so it never delays a reveal
 - `zetaphy node start --watch-verdicts --max-challenge-spend 10`: verdict-watching mode (opt-in)
   - Re-runs Neuro on jobs that have a result and are still within the challenge window. If its own machine's answer does not match, it challenges automatically
   - Spends at most `--max-challenge-spend` ZETAPHY per day on challenge stakes (default 10)

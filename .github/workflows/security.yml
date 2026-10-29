@@ -46,7 +46,7 @@
 #   audit         every push / PR — cargo audit against the RustSec database.
 #   deploy-devnet ONLY when started by hand (Actions → CI → Run workflow →
 #                 tick "deploy to Devnet") AND both jobs above passed. Needs
-#                 the two repository secrets described on that job. Never
+#                 the two secrets of the environment devnet described on that job. Never
 #                 touches mainnet — there is no mainnet deploy in this file
 #                 on purpose (see SECURITY.md: no mainnet before an audit).
 #
@@ -119,6 +119,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Pick the jobs this change needs
@@ -150,7 +151,7 @@ jobs:
           out ui '^test-ui/'
           out neuro '^zetaphy-neuro/'
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
-          out network '^(zetaphy-network/|zetaphy-neuro/src/)'
+          out network '^(zetaphy-network/|zetaphy-neuro/src/|zetaphy-chain/horcrux/|zetaphy-chain/join-validator\.sh$)'
           out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$|zetaphy-neuro/src/(fingerprint|bytecode)\.js$|zetaphy-chain/wallets/)'
           out explorer '^(zetaphy-explorer/|zetaphy-network/src/(pqcert|pqtx|vaccine)\.js$)'
           out dex '^(zetaphy-dex/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
@@ -172,6 +173,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -191,6 +194,12 @@ jobs:
         working-directory: test-ui/tests
         run: node smoke.mjs
 
+      - name: Wallet safety (hardware help, balance banner, idle disconnect, summary before signing)
+        working-directory: test-ui/tests
+        run: |
+          node --test sol-safety.test.mjs
+          node safety.mjs
+
       - name: Faucet attack tests (rate limits, spoofed IPs, secret leaks)
         run: node test-ui/tests/faucet-attacks.mjs
 
@@ -206,6 +215,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -236,6 +247,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -260,6 +273,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -284,6 +299,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -313,6 +330,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -347,6 +366,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -379,6 +400,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -414,6 +437,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -447,6 +472,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -477,6 +504,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -512,6 +541,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: cloud-init.sh pins this setup-node.sh (SHA-256)
         run: zetaphy-chain/pack-cloud-init.sh --check
@@ -619,6 +650,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Set up Go (the version setup-node.sh pins)
         uses: actions/setup-go@v5
@@ -670,6 +703,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
@@ -803,6 +838,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install cargo-audit
         uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2
@@ -821,13 +858,14 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.deploy_devnet
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # Create an Environment named "devnet" in Settings → Environments and add
-    # yourself as a required reviewer if you want a second "Approve" click
-    # before anything is deployed.
+    # DEVNET_DEPLOYER_KEYPAIR and PROGRAM_KEYPAIR are secrets of the environment
+    # devnet only (required reviewer + main only: docs/SECRETS-HARDENING.md).
     environment: devnet
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
@@ -873,7 +911,7 @@ jobs:
           avm use "${ANCHOR_VERSION}"
           anchor --version | grep -q "${ANCHOR_VERSION}" || { echo "::error::anchor ${ANCHOR_VERSION} did not install"; exit 1; }
 
-      # Two repository secrets, each the full contents of a Solana keypair
+      # Two secrets of the environment devnet, each the full contents of a Solana keypair
       # JSON file (the [12,34,...] array):
       #   DEVNET_DEPLOYER_KEYPAIR  a Devnet-only wallet with a few SOL that is
       #                            (or will become) the program's upgrade
@@ -887,7 +925,7 @@ jobs:
           PROGRAM_KEYPAIR: ${{ secrets.PROGRAM_KEYPAIR }}
         run: |
           if [ -z "$DEVNET_DEPLOYER_KEYPAIR" ] || [ -z "$PROGRAM_KEYPAIR" ]; then
-            echo "::error::Set both DEVNET_DEPLOYER_KEYPAIR and PROGRAM_KEYPAIR repository secrets before deploying."
+            echo "::error::Set both DEVNET_DEPLOYER_KEYPAIR and PROGRAM_KEYPAIR as secrets of the environment devnet before deploying."
             exit 1
           fi
           mkdir -p ~/.config/solana target/deploy

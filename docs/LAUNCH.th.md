@@ -88,7 +88,9 @@ zetaphyd tx bank send liquidity zetaphy1… 1000000000000000000000azetaphy --key
 ## 4. ใส่ key ใน GitHub secret `ZETAPHY_DEPLOYER_KEY`
 
 1. MetaMask → บัญชี `ZETAPHY deployer` → ⋮ → **Account details → Show private key** → ใส่รหัสผ่าน MetaMask → กดค้างเพื่อแสดง → **Copy**
-2. GitHub → repo `swd-amm` → **Settings → Secrets and variables → Actions → New repository secret**
+2. GitHub → repo `swd-amm` → **Settings → Environments → `testnet-deploy` → Environment secrets → Add environment secret**
+   (สร้าง environment ก่อน โดยให้คุณเป็น required reviewer และจำกัดเฉพาะ `main`: [SECRETS-HARDENING.th.md](SECRETS-HARDENING.th.md);
+   ไม่ใช่ repository secret ซึ่งทุก workflow และทุก branch อ่านได้)
    - Name: `ZETAPHY_DEPLOYER_KEY`
    - Secret: วาง key (มีหรือไม่มี `0x` ก็ได้) → **Add secret**
 3. ล้างคลิปบอร์ด (คัดลอกข้อความอื่นทับ)

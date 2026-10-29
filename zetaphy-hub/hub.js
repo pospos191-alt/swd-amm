@@ -357,7 +357,11 @@ const wb = walletBar({
   tokens: () => HUB.tokens ?? [],
   nativeSaphan: () => (HUB.saphanTokens.find((r) => r?.native)?.destinations ?? []).map((d) => ({ chain: d.displayName, symbol: HUB.saphanTokens.find((r) => r?.native).synthetic, state: d.state })),
   onChange: (a) => { account = a; if (current === 'stake') loadMine(); },
+  lang: () => lang,
+  bannerHost: () => $('stage'),
 });
+// What each precompile is, for the summary shown before the wallet.
+const TO_LABEL = { [PRECOMPILES.staking]: 'Staking', [PRECOMPILES.distribution]: 'Distribution', [PRECOMPILES.gov]: 'Governance', [PRECOMPILES.ics20]: 'ICS-20 (ZETAPHY Saphan)' };
 /** The wallet the user connected (any EVM wallet), switched to ZETAPHY. */
 async function addNetwork() {
   if (!wb.provider()) { wb.open(); throw new Error(T('wbConnectFirst')); }
@@ -381,12 +385,16 @@ function connect() {
     dlg.addEventListener('close', onClose);
   });
 }
-async function send(to, data) {
+/** Sends a call through the connected wallet after an in-page summary (`action`: what it does, in words). */
+async function send(to, data, action = '') {
   if (!account) await connect();
   await addNetwork();
   const p = wb.provider();
   const cid = await p.request({ method: 'eth_chainId' }).catch(() => null);
   if (cid == null || Number(BigInt(cid)) !== EVM_CHAIN_ID) throw new Error(T('wbWrongChain'));
+  const ok = await wb.safety.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: account, to, toLabel: TO_LABEL[to], data, action });
+  if (ok == null) throw Object.assign(new Error(wb.safety.t('cfCancelled')), { code: 4001 });
+  data = ok;
   const hash = await p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: '0x0', chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
   if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error(T('failed'));
   for (let i = 0; i < 60; i++) {
@@ -442,7 +450,7 @@ async function loadMine() {
       el('div', { class: 'row' }, el('button', { type: 'button', class: 'btn', text: T('claim'), disabled: reward === '0' || !dels.delegation_responses.length, onclick: async (e) => {
         const out = $('mine-msg');
         e.target.disabled = true;
-        try { msg(out, T('sent')); await send(PRECOMPILES.distribution, encodeClaimRewards(account, 50)); msg(out, T('done'), 'ok'); loadMine(); }
+        try { msg(out, T('sent')); await send(PRECOMPILES.distribution, encodeClaimRewards(account, 50), T('claim')); msg(out, T('done'), 'ok'); loadMine(); }
         catch (err) { msg(out, err.message, 'bad'); e.target.disabled = false; }
       } })),
       el('p', { class: 'msg', id: 'mine-msg', role: 'status' }));
@@ -459,7 +467,7 @@ async function loadProposals() {
       const voting = status === 'voting_period';
       const out = el('p', { class: 'msg', role: 'status' });
       const vote = (opt) => async () => {
-        try { if (!account) await connect(); msg(out, T('sent')); await send(PRECOMPILES.gov, encodeVote(account, BigInt(p.id), opt, '')); msg(out, T('voted'), 'ok'); }
+        try { if (!account) await connect(); msg(out, T('sent')); await send(PRECOMPILES.gov, encodeVote(account, BigInt(p.id), opt, ''), `#${p.id} · ${T({ 1: 'yes', 2: 'abstain', 3: 'no', 4: 'veto' }[opt])}`); msg(out, T('voted'), 'ok'); }
         catch (err) { msg(out, err.message, 'bad'); }
       };
       return el('li', {},
@@ -496,7 +504,7 @@ function stakeDialog(v, kind) {
       if (!account) await connect();
       msg(out, T('sent'));
       const data = kind === 'delegate' ? encodeDelegate(account, v.operator_address, amt) : encodeUndelegate(account, v.operator_address, amt);
-      await send(PRECOMPILES.staking, data);
+      await send(PRECOMPILES.staking, data, `${$('amount-title').textContent} · ${formatZeta(amt)} ZTPHY`);
       msg(out, T('done'), 'ok');
       setTimeout(() => dlg.close(), 900);
       loadMine();

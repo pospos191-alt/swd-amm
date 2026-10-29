@@ -1,0 +1,54 @@
+{
+  "_comment": "Key watch (.github/workflows/key-watch.yml, scripts/key-watch.js, docs/KEY-WATCH.md): public addresses we watch so a stolen key is noticed while the timelock delay still allows a veto. Public values only: this file is committed. RPCs and explorers come from chainsFile (ZETAPHY: its `zetaphy` entry; the others: `chains`); deployed Saphan routes in routesFile are added automatically. kind: eoa (any new outgoing tx = nonce increase, and balance drops), timelock, multisig, bridge, contract (events + balance drops). expectNonceUpTo: an EOA's nonce you expect to reach (raise it before planned txs; null = every new tx alerts). allowOutgoing: true = only balance drops alert. Testnets only.",
+  "chainsFile": "../zetaphy-chain/hyperlane/saphan-chains.json",
+  "routesFile": "../zetaphy-chain/hyperlane/saphan-routes.json",
+  "defaults": {
+    "balanceDropPct": 10,
+    "balanceDropMin": "0.05",
+    "confirmations": 2,
+    "logChunk": 2000,
+    "maxBlocksPerRun": 20000,
+    "maxLagBlocks": 200000,
+    "rpcDownNoticeHours": 24,
+    "rpcDownGraceMinutes": 60,
+    "rpcTimeoutMs": 15000
+  },
+  "everyChain": [
+    { "address": "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245", "label": "deployer", "kind": "eoa" },
+    { "address": "0x80b654fdB439348D2A3DC7bbF0eC398e165019Bc", "label": "ZETAPHY Hyperlane validator", "kind": "eoa" },
+    { "address": "0xeBc7EAcfFE5Fdd6261f40E4aE0bDFa62F1299d1b", "label": "guardian multisig owner 1", "kind": "eoa" },
+    { "address": "0x6138233a3DF6f2714E598346Fda7566Fd3f3b5ec", "label": "guardian multisig owner 2", "kind": "eoa" }
+  ],
+  "chains": {
+    "zetaphy": {
+      "quietUntil": "2026-11-01T00:00:00Z",
+      "rest": null,
+      "validators": [],
+      "watch": [
+        { "address": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340", "label": "ZetaphyTimelock (governance of every contract)", "kind": "timelock" },
+        { "address": "0x5bcC8290fff6f1410d7a04c5f6839b6AfD917Eb5", "label": "guardian multisig", "kind": "multisig" },
+        { "address": "0xE8850D63aacE38a306BCd0D132dA07AaD0B63eC3", "label": "BridgeGuard", "kind": "bridge" },
+        { "address": "0xa381502c65a2b3F2a9CB9083D98Fa3C75355EE5B", "label": "BridgeAirlock", "kind": "bridge" },
+        { "address": "0x8196058291DE1EDa290e22187f4CAa16b2Ca8CBE", "label": "HyperlaneLane (Sepolia v1)", "kind": "bridge" },
+        { "address": "0xafdeb23316697BEF4420934100979c9F67BD6e96", "label": "NeuroLane", "kind": "bridge" },
+        { "address": "0xc0081832ABf11BF68Df37cbA1A3E6805e10b23c6", "label": "NeuroControl", "kind": "contract" },
+        { "address": "0xaB5745b61f83975E68F6546be9F83651df12417f", "label": "ThreatRegistry", "kind": "contract" },
+        { "address": "0x6a26055803556ff891CAB11CF47aB363aC1D0Ed8", "label": "RewardVault", "kind": "contract" },
+        { "address": "0x20Eaf743cD495258aD9F36F97206e59fC6ef2AE4", "label": "StableGateway", "kind": "contract" },
+        { "address": "0x58ad8D3B083B91eD4e91e363A8C147142436098E", "label": "NeuroIdentity", "kind": "contract" },
+        { "address": "0x4364966aE86ffE475011f9A8E2853006233Ae30c", "label": "ZetaphyOracle", "kind": "contract" },
+        { "address": "0xEF8F222d866C177058DCf2989ad76A935dCc31Ef", "label": "ZetaphyPythRelay", "kind": "contract" },
+        { "address": "0x8a19cE6E8DE30515F0434F8dC07a8Dc9bae64134", "label": "DEX factory", "kind": "contract" },
+        { "address": "0x69292d823d3E7ac66B7a84342aB3d46F968042Ae", "label": "DLMM factory", "kind": "contract" },
+        { "address": "0x8fB5B0ea6bC0840060c148028d74a846b80fbEc3", "label": "NFT marketplace", "kind": "contract" }
+      ]
+    },
+    "sepolia": {
+      "watch": [
+        { "address": "0xc0081832ABf11BF68Df37cbA1A3E6805e10b23c6", "label": "HyperlaneLockBox v1 (route closed)", "kind": "bridge" }
+      ]
+    },
+    "basesepolia": { "watch": [] },
+    "arbitrumsepolia": { "watch": [] }
+  }
+}

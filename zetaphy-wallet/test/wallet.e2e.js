@@ -9,6 +9,9 @@
 // Keplr / Leap / Cosmostation, WalletConnect off without a projectId, and the
 // network settings checked against zetaphy-chain/wallets/*.json. Vaccine: calls and transfers to
 // code flagged in a mock ThreatRegistry are refused before anything is signed.
+// Security: passphrase strength, auto-lock (Playwright's fake clock; the decrypted seed is
+// checked to be zeros), passkey unlock with Chromium's virtual authenticator (CDP WebAuthn,
+// hasPrf) and without PRF, and the large-balance banner.
 //   npm test            (uses Playwright's Chromium)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -24,6 +27,7 @@ import { MsgWithdrawDelegatorReward } from 'cosmjs-types/cosmos/distribution/v1b
 import { BinaryReader } from 'cosmjs-types/binary';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 // The fake snap builds and signs with the same code the real one bundles.
+import { passwordStrength, seal, unseal, wrapSeed, unwrapSeed, isPasskeyBlob, MIN_PASSWORD_LENGTH } from '../security.js';
 import { buildTx, messageFromIntent, pqAddress, bytesToHex, createAddress, codeFingerprint, addressKey, REASON_TEXT, DISCLAIMER, REPRODUCE } from '../vendor/pqwallet.js';
 
 const PORT = 18090;
@@ -144,9 +148,31 @@ async function addFakeWallets(page, cfg) {
 }
 
 /** A page whose node RPC is answered by `node` (mutable state). snap: a fake ZETAPHY Snap's state. wallets: fake wallets. */
-async function openPage(node = {}, { ethereum, snap, wallets } = {}) {
+async function openPage(node = {}, { ethereum, snap, wallets, clock, watchKeys } = {}) {
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
+  // Fake timers (Playwright's clock): time runs on its own, and a test can jump it forward.
+  if (clock) await page.clock.install();
+  // Every 32-byte plaintext WebCrypto decrypts (the seed, unwrapped by a passphrase or a
+  // passkey) is kept in window.__plain, so a test can check lock() zeroed it.
+  if (watchKeys) {
+    await page.addInitScript(() => {
+      window.__plain = [];
+      const decrypt = SubtleCrypto.prototype.decrypt;
+      SubtleCrypto.prototype.decrypt = async function (...args) {
+        const out = await decrypt.apply(this, args);
+        if (out.byteLength === 32) window.__plain.push(out);
+        return out;
+      };
+      // HKDF input key material: the passkey's PRF output (the reference, and its value when used).
+      window.__prf = [];
+      const importKey = SubtleCrypto.prototype.importKey;
+      SubtleCrypto.prototype.importKey = function (format, data, alg, ...rest) {
+        if (alg === 'HKDF' || alg?.name === 'HKDF') window.__prf.push({ ref: data, hex: Array.from(new Uint8Array(data.buffer ?? data, data.byteOffset ?? 0, data.byteLength), (x) => x.toString(16).padStart(2, '0')).join('') });
+        return importKey.call(this, format, data, alg, ...rest);
+      };
+    });
+  }
   if (wallets) await addFakeWallets(page, wallets);
   if (snap) {
     const handle = fakeSnap(snap);
@@ -1726,6 +1752,363 @@ test('vaccine + consent: an enforced flag is refused (and the consent card is fi
   await page.click('#confirm-token');
   await visible(page, '#token-result');
   assert.equal(sent.length, 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+// ---- security: passphrase strength, passkey (WebAuthn PRF) unlock, auto-lock, large-balance advice ----
+const STRONG = 'Tamarind-Glacier-58-Orbit';
+const SEED_KEY = 'zetaphy-wallet:seed:v1';
+const PASSKEY_KEY = 'zetaphy-wallet:passkey:v1';
+/** True when every 32-byte plaintext WebCrypto decrypted (watchKeys) is all zeros again. */
+const plainWiped = (page) => page.evaluate(() => window.__plain.length > 0 && window.__plain.every((b) => new Uint8Array(b).every((x) => x === 0)));
+const storageText = (page) => page.evaluate(() => JSON.stringify(Object.entries(localStorage)));
+const prfSeen = (page) => page.evaluate(() => window.__prf.map((p) => ({ hex: p.hex, zero: p.ref.every((x) => x === 0) })));
+
+/** Chromium's virtual authenticator (CDP WebAuthn): a platform authenticator with user verification. */
+async function virtualAuthenticator(context, page, options) {
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('WebAuthn.enable', { enableUI: false });
+  const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: {
+    protocol: 'ctap2', ctap2Version: 'ctap2_1', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+    isUserVerified: true, automaticPresenceSimulation: true, ...options } });
+  return { cdp, authenticatorId };
+}
+
+async function unlockWith(page, pass) {
+  await visible(page, '#locked');
+  await page.fill('#unlock-pass', pass);
+  await page.click('#unlock');
+  await visible(page, '#wallet');
+}
+
+test('passphrase strength (security.js): short, common, sequences, repeats, years and wallet words are refused; long random or many-word ones pass', () => {
+  assert.equal(MIN_PASSWORD_LENGTH, 12);
+  const ctx = { context: [SEED_BECH32, SEED_HEX_ADDR] };
+  const refused = { password: ['pwCommon', 'pwLength'], Password1234: ['pwCommon'], 'P@ssw0rd123456': ['pwCommon'], qwertyuiop12: ['pwDictionary'],
+    abcabcabcabc: ['pwRepeat'], 'Kv8#mnopqrst': ['pwSequence'], aaaaaaaaaaaaaaaa: ['pwCommon'], 'iloveyou2024!': ['pwCommon'],
+    'Zetaphy2024!!': ['pwContext', 'pwYear'], 'Summer2024!Summer': ['pwDictionary', 'pwYear'], 'xq-dksnf6lukq6jw058j48': ['pwContext'],
+    '6DA134EbFcb035273E87': ['pwContext'], 'x7#Kp9!vQ2m': ['pwLength'] };
+  for (const [pw, why] of Object.entries(refused)) {
+    const r = passwordStrength(pw, ctx);
+    assert.equal(r.ok, false, `${pw} refused`);
+    for (const k of why) assert.ok(r.reasons.includes(k), `${pw}: ${k} in ${r.reasons}`);
+  }
+  for (const pw of [STRONG, PASS, 'x7#Kp9!vQ2mL', 'ช้างเผือกบินได้สูงมาก', 'Kx9!2019-mango-river']) {
+    const r = passwordStrength(pw, ctx);
+    assert.ok(r.ok && r.score >= 3, `${pw} accepted (${r.label}, ${r.bits} bits)`);
+  }
+  assert.equal(passwordStrength('').ok, false);
+});
+
+test('passkey crypto (security.js): the seed wrapped under a PRF output unwraps only with that output and that blob; nothing secret is in the blob', async () => {
+  const seed = Uint8Array.from(Buffer.from(SEED_HEX, 'hex'));
+  const prf = crypto.getRandomValues(new Uint8Array(32));
+  const prfSalt = crypto.getRandomValues(new Uint8Array(32));
+  const meta = { address: SEED_BECH32, credentialId: 'AQIDBAUG', rpId: 'localhost', prfSalt };
+  const blob = await wrapSeed(seed, prf, meta);
+  assert.ok(isPasskeyBlob(blob));
+  assert.equal(blob.kdf, 'HKDF-SHA256');
+  assert.equal(blob.cipher, 'AES-256-GCM');
+  assert.equal(blob.prfSalt, Buffer.from(prfSalt).toString('hex'));
+  const text = JSON.stringify(blob);
+  assert.ok(!text.includes(SEED_HEX), 'no plain seed');
+  assert.ok(!text.includes(Buffer.from(prf).toString('hex')), 'no PRF output');
+  assert.deepEqual(await unwrapSeed(blob, prf), seed);
+  assert.deepEqual(await unwrapSeed(blob, prf.slice().buffer), seed, 'an ArrayBuffer works too');
+  const other = prf.slice(); other[0] ^= 1;
+  await assert.rejects(unwrapSeed(blob, other), /pkFailed/, 'another PRF output');
+  for (const k of ['address', 'credentialId', 'rpId']) await assert.rejects(unwrapSeed({ ...blob, [k]: blob[k] + 'x' }, prf), /pkFailed/, `bound to ${k}`);
+  const flip = (h) => (parseInt(h.slice(0, 2), 16) ^ 1).toString(16).padStart(2, '0') + h.slice(2);
+  await assert.rejects(unwrapSeed({ ...blob, ct: flip(blob.ct) }, prf), /pkFailed/, 'tampered ciphertext');
+  await assert.rejects(unwrapSeed({ ...blob, hkdfSalt: flip(blob.hkdfSalt) }, prf), /pkFailed/, 'another HKDF salt');
+  await assert.rejects(unwrapSeed({ ...blob, kind: 'other' }, prf), /pkFailed/);
+  await assert.rejects(wrapSeed(seed, new Uint8Array(16), meta), /pkNoPrf/, 'a PRF output is 32 bytes');
+  const again = await wrapSeed(seed, prf, meta);
+  assert.notEqual(again.ct, blob.ct, 'fresh HKDF salt and IV each time');
+  // The passphrase blob, moved to security.js, still round-trips.
+  const sealed = await seal(seed, STRONG, SEED_BECH32);
+  assert.deepEqual(await unseal(sealed, STRONG), seed);
+  await assert.rejects(unseal(sealed, PASS), /badPass/);
+});
+
+test('create: a short or weak passphrase is refused with the meter\'s reasons; a strong one is accepted', async () => {
+  const { page, context, errors } = await openPage();
+  await setLang(page, 'en');
+  assert.ok(await page.isHidden('#pass1-meter'));
+  await page.fill('#pass1', 'password1234');
+  await visible(page, '#pass1-meter');
+  assert.equal(await page.textContent('#pass1-meter .pw-label'), 'Strength: very weak');
+  assert.match(await page.textContent('#pass1-meter .pw-reasons'), /one of the most common passwords/);
+  await page.fill('#pass2', 'password1234');
+  await page.click('#save-key');
+  await statusMatches(page, /too easy to guess \(rated very weak\)/);
+  assert.ok(await page.isHidden('#wallet'));
+  assert.equal(await page.evaluate((k) => localStorage.getItem(k), SEED_KEY), null, 'nothing stored');
+  await page.fill('#pass1', 'Ab1!xyz');
+  await page.fill('#pass2', 'Ab1!xyz');
+  await page.click('#save-key');
+  await statusMatches(page, /at least 12 characters/);
+  await page.fill('#pass1', 'Summer2024!Summer');
+  assert.match(await page.textContent('#pass1-meter .pw-reasons'), /a year/);
+  await page.fill('#pass2', 'Summer2024!Summer');
+  await page.click('#save-key');
+  await statusMatches(page, /too easy to guess/);
+  await setLang(page, 'th');
+  assert.match(await page.textContent('#pass1-meter .pw-label'), /^ความแข็งแรง: /);
+  assert.match(await page.textContent('[data-i18n="pass1"]'), /12/);
+  await setLang(page, 'en');
+  await page.fill('#pass1', STRONG);
+  assert.equal(await page.textContent('#pass1-meter .pw-label'), 'Strength: very strong ✓');
+  assert.equal(await page.textContent('#pass1-meter .pw-reasons'), '');
+  await page.fill('#pass2', STRONG);
+  await page.click('#save-key');
+  await visible(page, '#wallet');
+  await statusMatches(page, /Wallet created/);
+  assert.ok(await page.isHidden('#weak-nudge'));
+  assert.ok(await page.isHidden('#pass1-meter'), 'meter cleared with the fields');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('an old wallet with a weak passphrase still unlocks, with a nudge; changing it checks the old one and the new one\'s strength; Lock zeroes the seed', async () => {
+  const WEAK = 'zetaphy12345';
+  const blob = await seal(Buffer.from(SEED_HEX, 'hex'), WEAK, SEED_BECH32);
+  const { page, context, errors } = await openPage({}, { watchKeys: true });
+  await setLang(page, 'en');
+  await page.evaluate(([k, b]) => localStorage.setItem(k, b), [SEED_KEY, blob]);
+  await page.reload();
+  await unlockWith(page, WEAK);
+  assert.equal(await page.textContent('#addr-bech32'), SEED_BECH32);
+  await visible(page, '#weak-nudge');
+  assert.match(await page.textContent('#weak-nudge-text'), /Your passphrase is weak \(rated very weak\)/);
+  await setLang(page, 'ja');
+  assert.match(await page.textContent('#weak-nudge-text'), /パスフレーズが弱いです（強度：とても弱い）/);
+  await setLang(page, 'en');
+  await page.click('#weak-nudge-go');
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'chpw-old');
+
+  await page.fill('#chpw-old', 'not the passphrase');
+  await page.fill('#chpw-new1', STRONG);
+  await page.fill('#chpw-new2', STRONG);
+  await page.click('#chpw-save');
+  await statusMatches(page, /Wrong passphrase/);
+  await page.fill('#chpw-old', WEAK);
+  await page.fill('#chpw-new1', 'qwertyuiop12');
+  await visible(page, '#chpw-meter');
+  await page.fill('#chpw-new2', 'qwertyuiop12');
+  await page.click('#chpw-save');
+  await statusMatches(page, /too easy to guess/);
+  await page.fill('#chpw-new1', 'zetaphy1dksnf6lukq6jw058j48');
+  assert.match(await page.textContent('#chpw-meter .pw-reasons'), /part of your address/);
+  await page.fill('#chpw-new1', STRONG);
+  await page.fill('#chpw-new2', STRONG + 'x');
+  await page.click('#chpw-save');
+  await statusMatches(page, /differ/);
+  assert.equal(await page.evaluate((k) => localStorage.getItem(k), SEED_KEY), blob, 'unchanged so far');
+  await page.fill('#chpw-new2', STRONG);
+  await page.click('#chpw-save');
+  await statusMatches(page, /Passphrase changed/);
+  assert.ok(await page.isHidden('#weak-nudge'));
+  for (const id of ['#chpw-old', '#chpw-new1', '#chpw-new2']) assert.equal(await page.inputValue(id), '');
+  const now = await page.evaluate((k) => localStorage.getItem(k), SEED_KEY);
+  assert.deepEqual(await unseal(now, STRONG), Uint8Array.from(Buffer.from(SEED_HEX, 'hex')));
+  await assert.rejects(unseal(now, WEAK), /badPass/);
+
+  await page.click('#lock');
+  await visible(page, '#locked');
+  assert.ok(await plainWiped(page), 'every decrypted seed copy is zeros after Lock');
+  await page.fill('#unlock-pass', WEAK);
+  await page.click('#unlock');
+  await statusMatches(page, /Wrong passphrase/);
+  await unlockWith(page, STRONG);
+  assert.ok(await page.isHidden('#weak-nudge'), 'no nudge for a strong passphrase');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('auto-lock: after the chosen idle time the seed is zeroed and the unlock screen returns; activity resets it; a pending transfer is dropped; a long-hidden tab locks on return', async () => {
+  const node = { exists: true };
+  const { page, context, errors, sent } = await importedPage(node, { clock: true, watchKeys: true });
+  await page.click('#lock');
+  await unlockWith(page, PASS); // the seed now comes from decrypt (watched)
+  assert.equal(await page.inputValue('#autolock-min'), '30', 'default 30 minutes');
+  assert.deepEqual(await page.$$eval('#autolock-min option', (os) => os.map((o) => o.textContent)), ['30 min', '60 min', '120 min', '240 min']);
+  assert.match(await page.textContent('#autolock-hint'), /^Locks automatically in (29|30):\d\d without activity\.$/);
+  await page.selectOption('#autolock-min', '60');
+  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-wallet:autolock-minutes')), '60');
+  assert.match(await page.textContent('#autolock-hint'), /in (1:00|59):\d\d/);
+  await page.selectOption('#autolock-min', '30');
+  assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy-wallet:autolock-minutes')), '30');
+  await page.clock.fastForward('29:50');
+  assert.match(await page.textContent('#autolock-hint'), /in 0:(0\d|1\d) /);
+  await page.click('h1'); // activity
+  await page.clock.fastForward('00:30');
+  assert.ok(await page.isVisible('#wallet'), 'still unlocked: the click reset the countdown');
+  assert.match(await page.textContent('#autolock-hint'), /in 29:[2-3]\d /);
+
+  // A transfer waiting for confirmation is dropped by the lock; nothing is signed or sent.
+  await page.fill('#to', TO);
+  await page.fill('#amount', '1');
+  await page.click('#review');
+  await visible(page, '#confirm');
+  await page.clock.fastForward('30:01');
+  await visible(page, '#locked');
+  await statusMatches(page, /Locked automatically after 30 min without activity/);
+  assert.ok(await page.isHidden('#wallet'));
+  assert.ok(await plainWiped(page), 'the seed in memory is zeros');
+  assert.equal(sent.length, 0);
+  await unlockWith(page, PASS);
+  assert.ok(await page.isHidden('#confirm'), 'the reviewed transfer is gone');
+
+  // Hidden for longer than the limit: locked the moment the tab is shown again, even if no timer ran.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now()));
+  const setHidden = (h) => page.evaluate((hidden) => {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, h);
+  await setHidden(true);
+  await page.clock.setSystemTime(await page.evaluate(() => Date.now() + 31 * 60_000)); // no timer fires
+  assert.ok(await page.isVisible('#wallet'));
+  await setHidden(false);
+  assert.ok(await page.isVisible('#locked'), 'locked on return');
+  assert.match(await page.textContent('#status'), /Locked automatically/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('passkey (virtual authenticator with PRF): turn on, lock, unlock with it; the PRF output is never stored and is zeroed; the passphrase still works; turn off', async (t) => {
+  const { page, context, errors } = await importedPage({ exists: true }, { watchKeys: true });
+  let auth;
+  try { auth = await virtualAuthenticator(context, page, { hasPrf: true }); } catch (e) {
+    t.skip(`this Chromium's virtual authenticator has no PRF (${e.message}); the crypto is covered by the security.js test`);
+    await context.close();
+    return;
+  }
+  assert.match(await page.textContent('#pk-state'), /is off/);
+  assert.ok(await page.isHidden('#pk-disable'));
+  await page.click('#pk-enable');
+  await statusMatches(page, /Passkey created/);
+  assert.ok(await page.isHidden('#pk-enable'));
+  assert.ok(await page.isVisible('#pk-disable'));
+  assert.match(await page.textContent('#pk-state'), /is on\. The passphrase still works/);
+  const blob = JSON.parse(await page.evaluate((k) => localStorage.getItem(k), PASSKEY_KEY));
+  assert.ok(isPasskeyBlob(blob));
+  assert.equal(blob.rpId, 'localhost');
+  assert.equal(blob.address, SEED_BECH32);
+  const { credentials } = await auth.cdp.send('WebAuthn.getCredentials', { authenticatorId: auth.authenticatorId });
+  assert.equal(credentials.length, 1);
+  assert.equal(Buffer.from(credentials[0].credentialId, 'base64').toString('base64url'), blob.credentialId);
+  assert.equal(credentials[0].rpId, 'localhost');
+  assert.ok(credentials[0].isResidentCredential, 'a discoverable passkey (residentKey preferred)');
+  assert.ok(await page.evaluate((k) => localStorage.getItem(k), SEED_KEY), 'the passphrase blob stays');
+  const prfUsed = await prfSeen(page);
+  assert.ok(prfUsed.length >= 1 && prfUsed.every((p) => p.zero && p.hex.length === 64), 'the PRF output went into HKDF and was zeroed');
+  let stored = await storageText(page);
+  for (const p of prfUsed) assert.ok(!stored.includes(p.hex), 'the PRF output is not stored');
+  assert.ok(!stored.includes(SEED_HEX), 'no plain seed stored');
+
+  await page.click('#lock');
+  await visible(page, '#pk-unlock');
+  await page.click('#pk-unlock');
+  await visible(page, '#wallet');
+  await statusMatches(page, /Unlocked/);
+  assert.equal(await page.textContent('#addr-bech32'), SEED_BECH32);
+  const again = await prfSeen(page);
+  assert.ok(again.length > prfUsed.length && again.every((p) => p.zero), 'zeroed after the passkey unlock too');
+  assert.equal(again.at(-1).hex, prfUsed.at(-1).hex, 'the same PRF output for the stored input');
+  stored = await storageText(page);
+  for (const p of again) assert.ok(!stored.includes(p.hex));
+  await page.click('#lock');
+  await visible(page, '#locked');
+  assert.ok(await plainWiped(page), 'the seed the passkey unwrapped is zeros after Lock');
+
+  // The passphrase is still the fallback.
+  await unlockWith(page, PASS);
+  // Turn it off: the blob goes, and the locked screen no longer offers it.
+  page.once('dialog', (d) => d.accept());
+  await page.click('#pk-disable');
+  await statusMatches(page, /Passkey unlock turned off/);
+  assert.equal(await page.evaluate((k) => localStorage.getItem(k), PASSKEY_KEY), null);
+  assert.ok(await page.isVisible('#pk-enable'));
+  await page.click('#lock');
+  await visible(page, '#locked');
+  assert.ok(await page.isHidden('#pk-unlock'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('passkey: no platform authenticator, or one without PRF: a clear message, nothing stored, the passphrase stays; a blob for another site is not offered', async () => {
+  const { page, context, errors } = await importedPage({ exists: true });
+  await page.click('#pk-enable');
+  await statusMatches(page, /No fingerprint, face or device-PIN authenticator|does not support the PRF extension|cannot use passkeys/);
+  assert.equal(await page.evaluate((k) => localStorage.getItem(k), PASSKEY_KEY), null);
+  const auth = await virtualAuthenticator(context, page, { hasPrf: false });
+  await page.click('#pk-enable');
+  await statusMatches(page, /does not support the PRF extension this needs/);
+  assert.equal(await page.evaluate((k) => localStorage.getItem(k), PASSKEY_KEY), null, 'no blob without PRF');
+  assert.ok(await page.isVisible('#pk-enable'));
+  assert.match(await page.textContent('#pk-state'), /is off/);
+  await setLang(page, 'th');
+  await page.click('#pk-enable');
+  await statusMatches(page, /ไม่รองรับส่วนขยาย PRF/);
+  await setLang(page, 'en');
+  await auth.cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: auth.authenticatorId });
+
+  // A blob made on another hostname (rpId) is not offered here.
+  const other = await wrapSeed(Buffer.from(SEED_HEX, 'hex'), new Uint8Array(32).fill(9), { address: SEED_BECH32, credentialId: 'AQID', rpId: 'wallet.example', prfSalt: new Uint8Array(32) });
+  await page.evaluate(([k, b]) => localStorage.setItem(k, b), [PASSKEY_KEY, JSON.stringify(other)]);
+  await page.click('#lock');
+  await visible(page, '#locked');
+  assert.ok(await page.isHidden('#pk-unlock'));
+  await unlockWith(page, PASS);
+  assert.match(await page.textContent('#pk-state'), /made for wallet\.example/);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('large balance: a banner suggests the Snap (or a hardware wallet for an EVM account), opens the help dialog, and hides for 7 days', async () => {
+  const EVM = '0x4444444444444444444444444444444444444444';
+  const node = { exists: true, balance: 2500n * 10n ** 18n, balances: {} };
+  const { page, context, errors } = await importedPage(node, { wallets: { eip6963: [RABBY] } });
+  await visible(page, '#big-balance');
+  assert.match(await page.textContent('#big-balance-text'), /holds 2500 ZETAPHY\..*ZETAPHY Snap, where the key stays inside MetaMask/);
+  await page.click('#big-help');
+  await page.waitForSelector('#help-dialog[open]');
+  assert.match(await page.textContent('#help-dialog'), /Connect MetaMask.*Ledger or Trezor/s);
+  await page.click('#help-close');
+  assert.equal(await page.$eval('#help-dialog', (d) => d.open), false);
+  await page.click('#help-open'); // also from the security card
+  await page.waitForSelector('#help-dialog[open]');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.$eval('#help-dialog', (d) => d.open), false);
+
+  const before = Date.now();
+  await page.click('#big-later');
+  assert.ok(await page.isHidden('#big-balance'));
+  const until = Number(await page.evaluate((a) => localStorage.getItem('zetaphy-wallet:big-balance-hidden-until:' + a), SEED_BECH32));
+  assert.ok(until >= before + 7 * 864e5 - 5000 && until <= Date.now() + 7 * 864e5, '7 days');
+  await page.click('#refresh');
+  await page.waitForTimeout(300);
+  assert.ok(await page.isHidden('#big-balance'), 'still hidden after a refresh');
+  await page.evaluate((a) => localStorage.setItem('zetaphy-wallet:big-balance-hidden-until:' + a, String(Date.now() - 1)), SEED_BECH32);
+  await page.click('#refresh');
+  await visible(page, '#big-balance');
+
+  // A small balance: no banner.
+  node.balance = 10n ** 19n;
+  await page.click('#refresh');
+  await page.waitForFunction(() => document.getElementById('balance').textContent === '10 ZETAPHY');
+  assert.ok(await page.isHidden('#big-balance'));
+
+  // A connected EVM account with a large balance: hardware-wallet advice.
+  node.balances[EVM] = 5000n * 10n ** 18n;
+  await page.click('#evm-connect');
+  await visible(page, '#big-balance');
+  assert.match(await page.textContent('#big-balance-text'), /connected EVM account holds 5000 ZETAPHY.*hardware wallet \(Ledger or Trezor\) through MetaMask or Rabby/);
+  await setLang(page, 'th');
+  assert.match(await page.textContent('#big-balance-text'), /ฮาร์ดแวร์วอลเล็ต/);
   assert.deepEqual(errors, []);
   await context.close();
 });

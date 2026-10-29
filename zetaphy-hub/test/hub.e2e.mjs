@@ -137,7 +137,19 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     assert.equal(await page.evaluate(() => localStorage.getItem('zetaphy:wallet')), '"injected:ethereum"', 'the choice is kept for the whole site (the id only)');
     await page.waitForFunction(() => /1,000 ZETAPHY/.test(document.getElementById('wb-btn').textContent), null, { timeout: 10000 });
     assert.match(await page.textContent('#wb-body'), /On the ZETAPHY chain[\s\S]*ZETAPHY[\s\S]*1,000/, 'balances on the ZETAPHY chain');
+    assert.ok(await page.isVisible('#wb-body [data-ws="help"]'), 'the hardware-wallet help is one click away');
     await page.click('#wb-close');
+    // 1,000 ZETAPHY: the hardware-wallet banner, hidden for 7 days on request
+    await page.waitForSelector('#stage > .ws-banner');
+    assert.match(await page.textContent('.ws-banner'), /1,000 ZETAPHY[\s\S]*hardware wallet/);
+    await page.click('.ws-banner [data-ws="banner-how"]');
+    await page.waitForSelector('#ws-help[open]');
+    assert.match(await page.textContent('#ws-help'), /MetaMask[\s\S]*Ledger \(USB\)[\s\S]*connect\.trezor\.io[\s\S]*Keplr[\s\S]*cannot lock your wallet extension/);
+    await page.click('#ws-help .ws-x');
+    await page.click('.ws-banner [data-ws="banner-hide"]');
+    assert.equal(await page.locator('.ws-banner').count(), 0);
+    const until = Number(await page.evaluate(() => localStorage.getItem('zetaphy:safety:bannerHiddenUntil')));
+    assert.ok(until > Date.now() + 6.9 * 86400_000 && until < Date.now() + 7.1 * 86400_000, 'hidden for 7 days');
     await page.waitForFunction(() => /USDC · 2\.5/.test(document.getElementById('sp-asset')?.textContent ?? ''));
     assert.match(await page.textContent('#sp-recv'), /zetaphy1dt6hlsmr8/, 'own zetaphy1… address to receive');
     assert.match(await page.textContent('#sp-recv'), /channel-123/, 'which channel to use on the other side');
@@ -150,6 +162,11 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await page.fill('#sp-to', 'noble1dt6hlsmr8hg00yrl0yqdh49zsgh58gj9v4lt7z');
     await page.fill('#sp-amount', '1.5');
     await page.click('#sp-go');
+    // the summary before the wallet: network, from, the contract, what it does
+    await page.waitForSelector('#ws-confirm[open]');
+    assert.match(await page.textContent('#ws-confirm'), /ZETAPHY \(77390\)[\s\S]*0x6af57fC3633dD0F7907f7900dbd4A2822F43a245[\s\S]*ICS-20[\s\S]*0x0000000000000000000000000000000000000802[\s\S]*1\.5[\s\S]*noble1/);
+    assert.equal(await page.evaluate(() => window.__sent.length), 0, 'nothing reaches the wallet before the summary is confirmed');
+    await page.click('#ws-confirm [data-ws="go"]');
     await page.waitForFunction(() => document.getElementById('sp-msg').classList.contains('ok'));
     const [tx] = await page.evaluate(() => window.__sent);
     assert.equal(tx.to, '0x0000000000000000000000000000000000000802');

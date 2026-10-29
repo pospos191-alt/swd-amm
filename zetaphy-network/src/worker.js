@@ -127,9 +127,11 @@ export async function send(fn, ...args) {
  * @param {() => Promise<bigint>} [p.defenderTimeout]  NeuroControl.defenderTimeout(); omitted = no heartbeats
  * @param {() => Promise<boolean>} [p.onRoster]  NeuroControl.defenderApproved(me): heartbeat even while not seated
  * @param {{maxPerDay: bigint}|null} [p.watch]   watcher mode: challenge verdicts that differ from ours
+ * @param {(job: {id:number, chain:string, target:string, report:object, verdict:string, round:number}) => void} [p.onReport]
+ *   called after each successful commit (opt-in LLM review, src/llmreview.js); never awaited, never changes the verdict
  */
 export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readContract, chainTime, log = () => {}, skill = null, paused = null,
-  defenderTimeout = null, onRoster = null, watch = null }) {
+  defenderTimeout = null, onRoster = null, watch = null, onReport = null }) {
   const state = loadState(stateFile);
   let commitWindow = null;
   const foreign = new Set(); // jobs of another skill: never ours
@@ -151,7 +153,7 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
     if (!base) return { skip: `skip: chain ${chainKey} not supported here` };
     const opts = simSeed ? { ...base, simSeed } : base;
     const report = await read(chainKey, job.target, opts);
-    return { verdict: await verdictOf(report), report };
+    return { verdict: await verdictOf(report), report, chainKey };
   }
 
   /** Is this job of another skill? (remembers it, and says so once) */
@@ -193,6 +195,8 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
       saveState(stateFile, state);
       throw e;
     }
+    // Advisory add-ons (an LLM review) see the report only after the commit is in.
+    if (onReport) { try { onReport({ id, chain: v.chainKey, target: job.target, report: v.report, verdict: v.verdict, round: second ? 2 : 1 }); } catch { /* advisory */ } }
     return `${second ? 'committed in round 2 (challenge)' : 'committed'} (level ${v.report.analysis?.level}, ${now - (second ? job.chStart : job.created)}s after ${second ? 'the challenge' : 'request'})`;
   }
 

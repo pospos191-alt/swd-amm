@@ -74,7 +74,7 @@ export function parseImported(text, chainId) {
 }
 
 /** The id of the wallet used last time (EIP-6963 rdns or an injected name), or null. */
-export const cleanWalletId = (v) => (typeof v === 'string' && /^(6963|injected):[A-Za-z0-9._:-]{1,100}$/.test(v) ? v : null);
+export const cleanWalletId = (v) => (typeof v === 'string' && /^((6963|injected):[A-Za-z0-9._:-]{1,100}|ledger:\d{1,3})$/.test(v) ? v : null);
 
 /** True while the page reads the chain through an RPC other than the deployment's. */
 export const rpcIsCustom = (settingsRpc, defaultRpc) => !!settingsRpc && settingsRpc !== defaultRpc;

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json' };
-const PUBLIC = /^\/(index\.html|style\.css|favicon\.svg|config\.json|src\/[a-z0-9]+\.js|vendor\/zetaphy-lib\.js)$/;
+const PUBLIC = /^\/(index\.html|style\.css|favicon\.svg|config\.json|src\/[a-z0-9-]+\.js|src\/wallet-safety\.css|vendor\/zetaphy-lib\.js)$/;
 const vercel = JSON.parse(await readFile(join(ROOT, 'vercel.json'), 'utf8'));
 const csp = vercel.headers[0].headers.filter((h) => h.key !== 'Strict-Transport-Security')
   // upgrade-insecure-requests would turn http://localhost into https:// here

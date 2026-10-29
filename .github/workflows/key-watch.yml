@@ -1,0 +1,83 @@
+# Key watch: every 15 minutes, read (only) the public RPCs of ZETAPHY, Sepolia, Base Sepolia and Arbitrum
+# Sepolia and raise a GitHub issue (label security-alert) when a watched key signs a transaction, a balance
+# drops, or a watched contract emits a timelock / role / ownership / pause / veto / guardian event.
+# GitHub emails / app-notifies the repository owner about new issues and comments: that is the alert.
+# Free: no secrets, no paid service; public repository minutes are free (a private one: ~2,900 min/month
+# at */15, over GitHub Free's 2,000 — use '7,37 * * * *' there, or run it public).
+# What is watched: zetaphy-network/key-watch.json (+ deployed routes in saphan-routes.json).
+# What to do when it fires: docs/KEY-WATCH.md (docs/KEY-WATCH.th.md).
+#
+# The data is public chain data about public addresses (the same ones committed in this repository),
+# so the alerts go to issues in this repository. State (last scanned block, nonces, balances, what was
+# reported) is kept in the Actions cache under a rolling key; if it is evicted the next run takes a fresh
+# baseline, and markers in the open issue keep anything from being reported twice.
+# Scheduled workflows run on the default branch only.
+
+name: key-watch
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      lookback:
+        description: "Chains with no saved state: also scan this many blocks back (empty: 0, baseline only)"
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: key-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Watch keys, timelocks and bridges
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            zetaphy-network
+            zetaphy-chain/hyperlane
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: zetaphy-network/package-lock.json
+
+      - name: Install (runtime dependencies only)
+        run: npm ci --omit=dev --no-audit --no-fund --prefix zetaphy-network
+
+      - name: Restore the watcher state
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .key-watch
+          key: key-watch-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: key-watch-state-
+
+      - name: Watch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          KEY_WATCH_LOOKBACK: ${{ inputs.lookback }}
+        run: |
+          [[ -z "$KEY_WATCH_LOOKBACK" || "$KEY_WATCH_LOOKBACK" =~ ^[0-9]+$ ]] || { echo "::error::lookback must be a number of blocks"; exit 1; }
+          node zetaphy-network/scripts/key-watch.js --state .key-watch/state.json
+
+      # Only after a successful run: alerts that could not be posted are found again next run.
+      - name: Save the watcher state
+        if: success()
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .key-watch
+          key: key-watch-state-${{ github.run_id }}-${{ github.run_attempt }}

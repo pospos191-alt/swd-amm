@@ -1,0 +1,170 @@
+# Neuro ML: weekly training + red team (zetaphy-neuro/ml, see its README).
+#
+# Not a server: a scheduled job on the free Actions allowance (~15-25 min a
+# week). It builds the synthetic corpus, imports the permissively licensed
+# public lists, runs the red team against the committed model, trains a
+# candidate, and evaluates both models on the same held-out rows. Only when
+# the candidate is better (ml/train/train.js `isBetter`) does it open a pull
+# request with the model and its metrics. It never pushes to the default
+# branch and never deploys: a person reviews and merges.
+#
+# No secrets: the only token is the job's own GITHUB_TOKEN, and only the
+# `propose` job may write (contents + pull-requests). Actions pinned by SHA.
+# One-time repo setting for the PR step: Settings -> Actions -> General ->
+# "Allow GitHub Actions to create and approve pull requests".
+
+name: Neuro ML
+
+on:
+  schedule:
+    - cron: '17 4 * * 1' # Mondays 04:17 UTC
+  workflow_dispatch:
+    inputs:
+      redteam:
+        description: 'Red-team variants per run'
+        required: false
+        default: '160'
+      public_max:
+        description: 'Max contracts read per public list (0 = skip public data)'
+        required: false
+        default: '200'
+  pull_request:
+    paths: ['zetaphy-neuro/ml/**', 'zetaphy-neuro/src/**', '.github/workflows/neuro-ml.yml']
+
+permissions: {}
+
+concurrency:
+  group: neuro-ml-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ML tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: zetaphy-neuro
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - name: Unit tests (features, training determinism, JS parity, never-lower, red-team smoke + regression)
+        run: npm run test:ml
+
+  train:
+    name: Train + red team
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    outputs:
+      better: ${{ steps.decide.outputs.better }}
+      model: ${{ steps.decide.outputs.model }}
+    defaults:
+      run:
+        working-directory: zetaphy-neuro
+    env:
+      REDTEAM_N: ${{ github.event.inputs.redteam || '160' }}
+      PUBLIC_MAX: ${{ github.event.inputs.public_max || '200' }}
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - run: npm ci --no-audit --no-fund
+      - name: Synthetic corpus (generated tokens read by Neuro on an in-memory EVM + tests-10k)
+        run: node ml/data/build-corpus.js --per-family 60 --dispatch 600
+      - name: Public labelled lists (MIT; read with Neuro through free public RPCs)
+        if: env.PUBLIC_MAX != '0'
+        continue-on-error: true
+        run: node ml/data/import-public.js --max "$PUBLIC_MAX"
+      - name: Runner votes (none exported yet)
+        run: node ml/data/votes.js
+      - name: Red team against the committed model (new evasions join the training data)
+        run: |
+          SEED="rt-$(date -u +%G-W%V)"
+          echo "SEED=$SEED" >> "$GITHUB_ENV"
+          node ml/redteam/run.js --n "$REDTEAM_N" --seed "$SEED" --out ml/out/redteam
+      - name: Train candidate, evaluate both models on the same held-out rows
+        run: node ml/train/train.js --out ml/out/candidate
+      - name: Fresh red team against the candidate (variants it was not trained on)
+        run: node ml/redteam/run.js --n "$REDTEAM_N" --seed "$SEED-fresh" --no-record --model ml/out/candidate/model.json --out ml/out/redteam-fresh
+      - name: Candidate must pass the ML tests (gaps recorded for it)
+        run: |
+          cp ml/model.json ml/out/current-model.json
+          cp ml/data/redteam/known-gaps.json ml/out/current-known-gaps.json
+          cp ml/out/candidate/model.json ml/model.json
+          node ml/redteam/run.js --gaps
+          npm run test:ml
+      - name: Pull request payload
+        id: decide
+        run: |
+          mkdir -p ml/out/pr
+          cp ml/out/candidate/model.json ml/out/candidate/metrics.json ml/out/pr/
+          cp ml/data/redteam/evasions.jsonl ml/data/redteam/known-gaps.json ml/out/pr/
+          cp ml/out/redteam/report.md ml/out/pr/report-redteam.md
+          cp ml/out/redteam-fresh/report.md ml/out/pr/report-fresh.md
+          node ml/train/pr-body.js ml/out/candidate/metrics.json ml/out/redteam/report.json ml/out/redteam-fresh/report.json ml/data/out/public-sources.json > ml/out/pr/body.md
+          echo "better=$(node -p "require('./ml/out/candidate/decision.json').better")" >> "$GITHUB_OUTPUT"
+          echo "model=$(node -p "require('./ml/out/candidate/decision.json').modelId")" >> "$GITHUB_OUTPUT"
+          cat ml/out/pr/body.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: neuro-ml-${{ github.run_id }}
+          path: |
+            zetaphy-neuro/ml/out/
+            zetaphy-neuro/ml/data/out/public-sources.json
+            zetaphy-neuro/ml/data/out/build.log
+          retention-days: 30
+          if-no-files-found: warn
+
+  propose:
+    name: Open PR with the better model
+    needs: train
+    if: needs.train.outputs.better == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: neuro-ml-${{ github.run_id }}
+          path: artifact
+      - name: Commit to a new branch and open a pull request (never the default branch)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODEL: ${{ needs.train.outputs.model }}
+          BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          BRANCH="neuro-ml/model-$MODEL"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then echo "branch $BRANCH exists already"; exit 0; fi
+          # upload-artifact strips the common prefix (zetaphy-neuro/ml/)
+          PR=artifact/out/pr
+          cp "$PR/model.json" zetaphy-neuro/ml/model.json
+          cp "$PR/metrics.json" zetaphy-neuro/ml/metrics.json
+          cp "$PR/evasions.jsonl" "$PR/known-gaps.json" zetaphy-neuro/ml/data/redteam/
+          cp "$PR/report-redteam.md" zetaphy-neuro/ml/data/redteam/report-A-vs-first-model.md
+          cp "$PR/report-fresh.md" zetaphy-neuro/ml/data/redteam/report-B-fresh-vs-current.md
+          git config user.name "neuro-ml[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          git add zetaphy-neuro/ml/model.json zetaphy-neuro/ml/metrics.json zetaphy-neuro/ml/data/redteam/
+          git commit -m "neuro-ml: candidate model $MODEL" -m "Weekly training run ${{ github.run_id }}. Review the metrics in the PR before merging."
+          git push origin "$BRANCH"
+          gh pr create --base "$BASE" --head "$BRANCH" --title "Neuro ML: candidate model $MODEL" --body-file "$PR/body.md"

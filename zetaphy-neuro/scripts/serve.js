@@ -1,5 +1,5 @@
 // Local server for the web page: node scripts/serve.js [port]
-// Serves web/ and src/ (the page imports ../src/*.js), a local /api/usage
+// Serves web/, src/, ai/, graph/ and agent/ (the page imports ../src/*.js, ../ai/*.js, ../graph/*.js, ../agent/*.js), a local /api/usage
 // backed by memory and /api/early-warning (rule pack from the same env vars
 // as on Vercel: NEURO_PRIVATE_RULES or NEURO_RULES_TOKEN), so the whole page
 // works without Vercel. Dev only: NEURO_DEV_RPC=<url> reads every EVM chain
@@ -94,7 +94,7 @@ createServer(async (req, res) => {
   }
   const rel = path === '/web/' ? '/web/index.html' : path;
   const file = normalize(join(ROOT, rel));
-  if (!file.startsWith(ROOT) || !(rel.startsWith('/web/') || rel.startsWith('/src/'))) {
+  if (!file.startsWith(ROOT) || !['/web/', '/src/', '/ai/', '/graph/', '/agent/'].some((d) => rel.startsWith(d))) {
     res.writeHead(404).end('not found');
     return;
   }

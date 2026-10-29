@@ -39,7 +39,7 @@ for these two chains. This does not count as a failed run. You don't need to buy
 1. Copy the launcher project's build-info files into `zetaphy-verify/build-info/`
    - Hardhat: `artifacts/build-info/*.json` (Hardhat 3 also needs the matching `*.output.json` files next to them)
    - Foundry: `out/build-info/*.json`
-2. (Optional) Sign up for a free API key at etherscan.io, then add it as `ETHERSCAN_API_KEY` under GitHub → Settings → Secrets and variables → Actions
+2. (Optional) Sign up for a free API key at etherscan.io, then add it as `ETHERSCAN_API_KEY` under GitHub → Settings → Environments → `explorer-verify` → Environment secrets (docs/SECRETS-HARDENING.md)
    - Never paste the key into code or into chat
 3. If the launcher is also on other chains, add the factory address in `src/config.js` under that chain
    - The system already tries the same factory address on every chain, but uses it only when the code matches build-info

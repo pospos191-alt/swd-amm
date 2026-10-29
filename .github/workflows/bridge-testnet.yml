@@ -8,7 +8,7 @@
 # mode = check    read only: both chains, which Sepolia hook to use, the deployer's balance/nonce
 # mode = dry_run  the whole deploy on local copies (anvil forks) of both chains with a throwaway key,
 #                 then a lock on Sepolia delivered on ZETAPHY: nothing is sent to either testnet
-# mode = deploy   the real deploy (manual run only; key = the repository secret ZETAPHY_DEPLOYER_KEY,
+# mode = deploy   the real deploy (manual run only; key = ZETAPHY_DEPLOYER_KEY of the environment testnet-deploy,
 #                 the same deployer on both chains); pushes the addresses to the branch bridge/testnet
 # On pull requests it runs check + dry_run. Cost: free (GitHub-hosted runner, public repository).
 
@@ -29,12 +29,16 @@ on:
         type: choice
         options: ['check', 'dry_run', 'deploy']
 
+# Least privilege: read-only by default; only the deploy job (environment testnet-deploy:
+# required reviewer + main only, docs/SECRETS-HARDENING.md) gets the key and contents: write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   bridge:
-    name: Bridge Sepolia -> ZETAPHY (testnet)
+    name: Bridge Sepolia -> ZETAPHY (testnet) check / dry run
+    # pull requests, check and dry_run: no secret, no environment (works on fork PRs too)
+    if: github.event_name == 'pull_request' || inputs.mode != 'deploy'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
@@ -57,6 +61,8 @@ jobs:
       DEV_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
     steps:
       - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
@@ -130,6 +136,53 @@ jobs:
             })().catch((e) => { console.error(e.shortMessage || e.message); process.exit(1); });'
           echo "dry run OK: nothing was sent to Sepolia or the ZETAPHY testnet"
 
+  deploy:
+    name: Bridge Sepolia -> ZETAPHY (testnet) deploy
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'deploy'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # ZETAPHY_DEPLOYER_KEY lives in this environment only (required reviewer, main only)
+    environment: testnet-deploy
+    permissions:
+      contents: write   # pushes the addresses to bridge/testnet
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      MODE: ${{ github.event_name == 'pull_request' && 'dry_run' || inputs.mode }}
+      ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+      SEPOLIA_RPC: https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.drpc.org,https://1rpc.io/sepolia
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+      # ZETAPHY testnet (zetaphy-launch/state/77390.json, zetaphy-chain/hyperlane)
+      NEURO_JOBS: "0x698dC17df6a34b02263b295d101BE39F3F3B433B"
+      NEURO_CONTROL: "0xc0081832ABf11BF68Df37cbA1A3E6805e10b23c6"
+      THREATS: "0xaB5745b61f83975E68F6546be9F83651df12417f"
+      TIMELOCK: "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340"
+      GUARDIAN: "0x5bcC8290fff6f1410d7a04c5f6839b6AfD917Eb5"
+      ZETAPHY_MAILBOX: "0x0f1C59C6e98c88E1ddc2Ff98Bee11dadA07fEaCe"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Check both chains (read only)
+        id: check
+        run: |
+          zc=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$ZETAPHY_RPC" | jq -r .result)
+          [ "$zc" = "0x12e4e" ] || { echo "::error::ZETAPHY RPC answers chain $zc"; exit 1; }
+          for a in $NEURO_JOBS $NEURO_CONTROL $THREATS $TIMELOCK $GUARDIAN $ZETAPHY_MAILBOX; do
+            code=$(curl -fsS --max-time 30 -H 'content-type: application/json' --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_getCode\",\"params\":[\"$a\",\"latest\"]}" "$ZETAPHY_RPC" | jq -r .result)
+            [ ${#code} -gt 4 ] || { echo "::error::no contract at $a on ZETAPHY"; exit 1; }
+          done
+          out=$(node scripts/bridge-sepolia.js check | tail -1); echo "$out" | jq .
+          echo "hook=$(jq -r .hook <<<"$out")" >> "$GITHUB_OUTPUT"
+          echo "lockbox=$(jq -r .lockbox <<<"$out")" >> "$GITHUB_OUTPUT"
+          echo "pending=$(jq -r .pendingTxs <<<"$out")" >> "$GITHUB_OUTPUT"
+          echo "balance=$(jq -r .balance <<<"$out")" >> "$GITHUB_OUTPUT"
+
       - name: Deploy on the testnets
         if: env.MODE == 'deploy' && github.event_name == 'workflow_dispatch'
         env:
@@ -140,7 +193,7 @@ jobs:
           BALANCE: ${{ steps.check.outputs.balance }}
         run: |
           set -o pipefail
-          [ -n "$KEY" ] || { echo "::error::the repository secret ZETAPHY_DEPLOYER_KEY is not set"; exit 1; }
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in this job's environment (docs/SECRETS-HARDENING.md)"; exit 1; }
           [ "$PENDING" = 0 ] || { echo "::error::the deployer has pending Sepolia transactions: the lockbox address is not fixed; nothing deployed"; exit 1; }
           awk -v b="$BALANCE" 'BEGIN{exit !(b>=0.01)}' || { echo "::error::the deployer has $BALANCE Sepolia ETH (0.01 needed)"; exit 1; }
           k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"

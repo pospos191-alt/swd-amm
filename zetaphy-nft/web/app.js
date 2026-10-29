@@ -11,6 +11,8 @@ import { loadMetadata, normalizeTokenUri, normalizeGateway, substituteId, cleanT
 import { discoverWallets, ensureChain, assertChain, EVM_CHAIN_ID, EVM_CHAIN_ID_HEX, EVM_SYMBOL, openInAppLinks } from './lib/wallet.js';
 import { t, LANGS, LANG_NAMES, pickLang, errorText } from './lib/i18n.js';
 import { threatQueries, readThreat, reasonText, DISCLAIMER, REPRODUCE } from './vendor/zetaphy-lib.js';
+import { safety, ledgerReason } from './lib/wallet-safety.js';
+import { LEDGER_ID_RE, ledgerId, ledgerProvider, hidSupported, preloadTransport } from './lib/ledger.js';
 
 // ---------------------------------------------------------------- state
 
@@ -18,7 +20,7 @@ const store = (() => { try { const s = window.localStorage; s.setItem('__t', '1'
 const load = (k, d) => { try { return JSON.parse(store?.getItem(k)) ?? d; } catch { return d; } };
 // One wallet connection for the whole site (zetaphy-hub/walletbar.js): the wallet's id as JSON text.
 const SHARED_WALLET = 'zetaphy:wallet';
-const WALLET_ID = /^(6963|injected):[A-Za-z0-9._:-]{1,120}$/;
+const WALLET_ID = /^((6963|injected):[A-Za-z0-9._:-]{1,120}|ledger:\d{1,3})$/;
 const walletId = (k) => { const v = load(k, null); return typeof v === 'string' && WALLET_ID.test(v) ? v : null; };
 const save = (k, v) => { try { store?.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 
@@ -34,6 +36,13 @@ const S = {
   wallets: null,
 };
 const T = (k, v) => t(S.lang, k, v);
+// Wallet safety (lib/wallet-safety.js, shared with the hub): hardware-wallet help, a banner at or above
+// BIG_BALANCE ZETAPHY, the account forgotten after 30 idle minutes (or 60 / 120 / 240, chosen in the help), a summary before every transaction.
+const sf = safety({ win: window, lang: () => S.lang });
+const BIG_BALANCE = 1000n * 10n ** 18n;
+const HELP = { chains: ['evm', 'cosmos'], ledger: true };
+// Inside the hub (same origin, a frame): the hub shows the banner and runs the idle check.
+const IN_HUB = (() => { try { return window.top !== window && !!window.top.document; } catch { return false; } })();
 const gateway = () => normalizeGateway(S.settings.gateway) ?? DEFAULT_GATEWAY;
 const scanWindow = () => Math.min(Math.max(Number(S.settings.scanBlocks) || 50_000, 2_000), 2_000_000);
 // "Scan older blocks" (?older=N): at most MAX_OLDER windows and MAX_SCAN blocks per scan.
@@ -210,19 +219,62 @@ function pickWallet() {
     body.append(h('button', { type: 'button', class: 'btn wallet-choice', on: { click: () => { dlg.close(); connect(w).catch(showError); } } },
       w.icon ? h('img', { src: w.icon, alt: '', width: 24, height: 24 }) : null, w.name));
   }
+  // A Ledger over USB (Chrome, Edge, Brave on a computer); elsewhere through MetaMask / Rabby (the help says how).
+  if (hidSupported(window)) {
+    preloadTransport();
+    body.append(h('button', { type: 'button', class: 'btn wallet-choice', id: 'wallet-ledger', on: { click: () => { dlg.close(); connect(ledgerWallet()).catch(showError); } } }, sf.t('ldBtn')));
+  } else body.append(h('p', { class: 'muted small', text: sf.t('ldNoHid') }));
+  body.append(h('p', { class: 'small' }, sf.helpLink(HELP)));
   dlg.showModal();
+}
+
+let ledgerW = null;
+/** The Ledger as a wallet entry: lib/ledger.js speaks EIP-1193, so connect / send work as for any wallet. */
+function ledgerWallet(index = null) {
+  if (ledgerW && (index == null || ledgerW.provider.index() === index)) return ledgerW;
+  const w = { id: index == null ? 'ledger:new' : ledgerId(index), name: 'Ledger', hardware: true };
+  const nodeRpc = (m, p) => (S.rpc ? S.rpc.call(m, p) : Promise.reject(new Error(T('noRpc'))));
+  w.provider = ledgerProvider({ win: window, rpc: nodeRpc, chainId: EVM_CHAIN_ID, index, chooseAccount: sf.chooseAccount, onDevice: sf.deviceToast, onIndex: (i) => { w.id = ledgerId(i); } });
+  ledgerW = w;
+  return w;
+}
+const isHardware = () => !!(S.wallet?.hardware || S.wallet?.provider?.isHardware);
+
+/** The large-balance banner (ZETAPHY on the connected account; none for a hardware account or inside the hub). */
+let bannerSeq = 0;
+async function renderSafetyBanner() {
+  if (IN_HUB) return;
+  const seq = ++bannerSeq;
+  let amount = null;
+  if (S.wallet?.account && S.rpc) amount = await S.rpc.call('eth_getBalance', [S.wallet.account, 'latest']).then(BigInt).catch(() => null);
+  if (seq !== bannerSeq) return;
+  sf.balanceBanner({ host: $('#ws-host'), amount, threshold: BIG_BALANCE, symbol: 'ZETAPHY', hardware: isHardware(), help: HELP });
+}
+
+/** Forgets the account here and on every page of the site (idle). */
+function forgetWallet() {
+  const p = S.wallet?.provider;
+  p?.forget?.();
+  if (S.wallet && S.wallet.provider === ledgerW?.provider) ledgerW = null;
+  S.wallet = null;
+  try { store?.removeItem('zn.wallet'); store?.removeItem(SHARED_WALLET); } catch { /* private mode */ }
+  p?.request?.({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] })?.catch?.(() => {});
+  for (const d of document.querySelectorAll('dialog[open]')) d.close();
+  walletLabel();
+  route();
 }
 
 async function connect(w) {
   const accounts = await w.provider.request({ method: 'eth_requestAccounts' });
   if (!accounts?.[0] || !isAddress(accounts[0])) throw new Error(T('noAccount'));
-  S.wallet = { name: w.name, id: w.id, provider: w.provider, account: checksum(accounts[0]) };
+  S.wallet = { name: w.name, id: w.id, provider: w.provider, account: checksum(accounts[0]), hardware: !!w.hardware };
   save('zn.wallet', w.id);
   if (walletId(SHARED_WALLET) !== w.id) save(SHARED_WALLET, w.id);
   try { w.provider.on?.('accountsChanged', (a) => { if (S.wallet) { S.wallet.account = a?.[0] ? checksum(a[0]) : null; if (!S.wallet.account) S.wallet = null; walletLabel(); route(); } }); } catch { /* optional */ }
   try { await ensureChain(w.provider, rpcUrl()); } catch (e) { status(T('switchNetwork'), 'error'); }
   walletLabel();
   route();
+  renderSafetyBanner();
 }
 
 async function needWallet() {
@@ -245,6 +297,11 @@ async function sendTx(to, data, value = 0n, what = '') {
     throw new Error(`${T('wouldFail')}: ${errorText(S.lang, e)}`);
   }
   await assertChain(w.provider).catch(() => { throw new Error(T('wrongChain')); });
+  // What is about to be signed, in the page (the wallet or device shows it next).
+  const label = to.toLowerCase() === String(market()).toLowerCase() ? 'Marketplace' : to.toLowerCase() === String(factory()).toLowerCase() ? 'Factory' : 'Collection';
+  const sent = await sf.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: w.account, to, toLabel: label, value: BigInt(value), symbol: EVM_SYMBOL, data, action: what });
+  if (sent == null) throw new Error(sf.t('cfCancelled'));
+  data = sent;
   status(`${what}${T('confirmInWallet')}`, 'pending');
   const hash = await w.provider.request({ method: 'eth_sendTransaction', params: [{ from: w.account, to, data, value: v, chainId: EVM_CHAIN_ID_HEX }] });
   status(`${what}${T('pending')} ${String(hash).slice(0, 12)}…`, 'pending');
@@ -256,6 +313,7 @@ async function sendTx(to, data, value = 0n, what = '') {
 }
 
 function showError(e) {
+  if (typeof e?.statusCode === 'number') { status(sf.t('ldErr', { msg: ledgerReason(e, sf.t) }), 'error'); return; } // a Ledger status word
   status(e?.code === 4001 ? T('rejected') : cleanText(e?.message ?? String(e), 300), 'error');
 }
 
@@ -847,6 +905,7 @@ function applyChrome() {
   document.documentElement.lang = S.lang;
   if (S.theme) document.documentElement.setAttribute('data-theme', S.theme); else document.documentElement.removeAttribute('data-theme');
   for (const n of document.querySelectorAll('[data-i18n]')) n.textContent = T(n.getAttribute('data-i18n'));
+  $('#footer-help')?.replaceChildren(sf.helpLink(HELP));
   const sel = $('#lang');
   if (sel.options.length !== LANGS.length) sel.replaceChildren(...LANGS.map((c) => h('option', { value: c, lang: c, text: LANG_NAMES[c] })));
   sel.value = S.lang;
@@ -884,17 +943,21 @@ async function start() {
     const last = walletId(SHARED_WALLET) ?? walletId('zn.wallet');
     if (!last || S.wallet?.id === last) return;
     await new Promise((r) => setTimeout(r, 60)); // EIP-6963 wallets answer the request event at once
-    const w = S.wallets.list().find((x) => x.id === last);
+    const m = LEDGER_ID_RE.exec(last);
+    const w = m ? ledgerWallet(Number(m[1])) : S.wallets.list().find((x) => x.id === last);
     const acc = w ? await Promise.race([w.provider.request({ method: 'eth_accounts' }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 1500))]) : [];
-    if (acc?.[0] && isAddress(acc[0])) { S.wallet = { name: w.name, id: w.id, provider: w.provider, account: checksum(acc[0]) }; walletLabel(); }
+    if (acc?.[0] && isAddress(acc[0])) { S.wallet = { name: w.name, id: w.id, provider: w.provider, account: checksum(acc[0]), hardware: !!w.hardware }; walletLabel(); renderSafetyBanner(); }
   };
   await restore();
   // Connected or disconnected on another page of this site (the hub, another app, another tab).
   window.addEventListener('storage', (e) => {
     if (e.key !== SHARED_WALLET) return;
     if (walletId(SHARED_WALLET)) restore().then(route).catch(() => {});
-    else if (S.wallet) { S.wallet = null; try { store?.removeItem('zn.wallet'); } catch { /* private mode */ } walletLabel(); route(); }
+    else if (S.wallet) { S.wallet = null; try { store?.removeItem('zn.wallet'); } catch { /* private mode */ } walletLabel(); route(); renderSafetyBanner(); }
   });
+  // 30 minutes (or the 60 / 120 / 240 chosen in the help) without activity anywhere on the site: forget the account (the hub does it for the apps in its frames).
+  if (IN_HUB) sf.track();
+  else sf.idleGuard({ active: () => !!S.wallet, onIdle: () => { forgetWallet(); renderSafetyBanner(); sf.idleNotice(); } });
   await route();
 }
 
