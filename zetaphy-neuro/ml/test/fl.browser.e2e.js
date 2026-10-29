@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 
 const ML = fileURLToPath(new URL('../', import.meta.url));
-const PORT = 18090;
+const PORT = 18094;
 let server; let browser;
 
 async function launch() {

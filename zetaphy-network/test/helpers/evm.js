@@ -106,7 +106,7 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
       return out.length === 1 ? out[0] : out;
     },
     /** eth_call-like: raw 0x return data of a call (reverts throw), for readers that decode ABI themselves. */
-    async rawCall(toHex, dataHex) {
+    async rawCallHex(toHex, dataHex) {
       const res = await exec(acct[names[0]], Address.fromString(toHex), dataHex);
       if (res.execResult.exceptionError) throw new Error('call reverted');
       return bytesToHex(res.execResult.returnValue);

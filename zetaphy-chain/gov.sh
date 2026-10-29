@@ -482,5 +482,5 @@ case "${1:-}" in
     $ZETAPHYD q wasm list-code $QF | jq -c '.code_infos[]? | {code_id, creator, data_hash, instantiate_permission}' ;;
 
   *)
-    sed -n '8,51p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,56p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

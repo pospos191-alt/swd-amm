@@ -34,7 +34,7 @@ async function setup() {
   return { c, A, tl, reg, govern };
 }
 /** eth_call for the browser reader, answered by the in-memory EVM. */
-const readerOf = (c) => ({ call: async (method, params) => { assert.equal(method, 'eth_call'); return c.rawCall(params[0].to, params[0].data); } });
+const readerOf = (c) => ({ call: async (method, params) => { assert.equal(method, 'eth_call'); return c.rawCallHex(params[0].to, params[0].data); } });
 
 test('ids: on-chain idOf = src/modelregistry.js = the browser reader', async () => {
   const { reg } = await setup();
