@@ -3,7 +3,7 @@
 // hub shows them in same-origin frames (one look, shared wallet storage).
 //   node build.mjs            -> dist/
 //   node build.mjs --check    -> also verify every page's local scripts/styles exist
-import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, readdirSync, statSync, renameSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -28,7 +28,7 @@ export const APPS = {
 const SKIP_IN = { wallet: new Set(['src']) };
 // never shipped: tooling, tests, docs, per-site Vercel files
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data']);
-const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
+const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'ceremony.html', 'ceremony.css', 'ceremony.js', 'ceremony-i18n.js', 'ceremony-core.js', 'vendor/snarkjs.min.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
   'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. */
@@ -157,16 +157,23 @@ export function releaseTag(root = ROOT) {
 export const withRelease = (html, tag) => html.replace(/\/releases\/download\/zetaphyd-[0-9a-f]{12}\//g, `/releases/download/${tag}/`);
 
 export function build() {
-  rmSync(OUT, { recursive: true, force: true });
-  mkdirSync(OUT, { recursive: true });
-  for (const f of HUB_FILES) cpSync(join(HERE, f), join(OUT, f));
-  writeFileSync(join(OUT, 'validators.html'), withRelease(readFileSync(join(HERE, 'validators.html'), 'utf8'), releaseTag()));
+  // built in a private folder, then swapped in with renames: test files that build at the same time never see a
+  // half-copied dist/ (node --test runs files in parallel)
+  const dir = `${OUT}.tmp-${process.pid}-${Date.now()}`;
+  mkdirSync(dir, { recursive: true });
+  for (const f of HUB_FILES) cpSync(join(HERE, f), join(dir, f));
+  writeFileSync(join(dir, 'validators.html'), withRelease(readFileSync(join(HERE, 'validators.html'), 'utf8'), releaseTag()));
   const cfg = JSON.parse(readFileSync(join(ROOT, 'zetaphy-explorer/config.json'), 'utf8'));
-  writeFileSync(join(OUT, 'hub-config.json'), `${JSON.stringify(hubConfig(cfg), null, 2)}\n`);
+  writeFileSync(join(dir, 'hub-config.json'), `${JSON.stringify(hubConfig(cfg), null, 2)}\n`);
   for (const [path, src] of Object.entries(APPS)) {
     const from = join(ROOT, src);
     const top = (p) => p.slice(from.length + 1).split(/[\\/]/)[0];
-    cpSync(from, join(OUT, path), { recursive: true, filter: (p) => !SKIP.has(top(p)) && !SKIP_IN[path]?.has(top(p)) });
+    cpSync(from, join(dir, path), { recursive: true, filter: (p) => !SKIP.has(top(p)) && !SKIP_IN[path]?.has(top(p)) });
+  }
+  for (let i = 0; ; i++) {
+    const old = `${OUT}.old-${process.pid}-${Date.now()}-${i}`;
+    try { renameSync(OUT, old); } catch { /* no dist/ yet */ }
+    try { renameSync(dir, OUT); rmSync(old, { recursive: true, force: true }); break; } catch (e) { rmSync(old, { recursive: true, force: true }); if (i > 20) throw e; }
   }
   return OUT;
 }

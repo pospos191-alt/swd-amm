@@ -1,10 +1,14 @@
-# Neuro zkML prototype (zetaphy-neuro/ml/onchain/zk, docs/future/onchain-ml.md).
+# Neuro zkML (zetaphy-neuro/ml/onchain/zk, docs/future/onchain-ml.md).
 #
-# Rebuilds the circuit for the committed model, makes a throwaway Groth16 setup on
-# the runner (TESTNET ONLY: one machine's randomness), proves a few held-out rows,
-# verifies them, exports the Solidity verifier, and publishes sizes and timings in
-# the job summary + an artifact. Then the on-chain test runs against that fresh
-# verifier and proof. Nothing is committed, pushed or deployed. No secrets.
+# Rebuilds the circuit for the committed model, takes phase 1 from the public Perpetual Powers of Tau file pinned in
+# ceremony/phase1.json (sha256 + blake2b), and phase 2 from the multi-party ceremony (ceremony/transcript.json):
+#   - when that ceremony is final: downloads its zkeys, verifies the whole chain, proves with the FINAL zkey and
+#     checks that the committed NeuroScoreVerifier.sol is exactly the one exported from it;
+#   - until then: a REHEARSAL of the same ceremony on the runner (2 contributions + beacon, same verification),
+#     testnet only.
+# Proves a few held-out rows, verifies them, checks that proofs from the non-final and from a forged zkey are refused,
+# publishes sizes and timings in the job summary + an artifact, then runs the on-chain test against the fresh
+# verifier. Nothing is committed, pushed or deployed. No secrets.
 # On demand, and on pull requests that touch the model or the zk code.
 
 name: Neuro zkML
@@ -17,7 +21,8 @@ on:
         required: false
         default: '5'
   pull_request:
-    paths: ['zetaphy-neuro/ml/model.json', 'zetaphy-neuro/ml/onchain/**', 'zetaphy-network/contracts/NeuroScore*.sol', '.github/workflows/neuro-zk.yml']
+    paths: ['zetaphy-neuro/ml/model.json', 'zetaphy-neuro/ml/onchain/**', 'zetaphy-network/contracts/NeuroScore*.sol', 'zetaphy-network/test/neuroscore-zk.test.js',
+      'zetaphy-hub/ceremony*', 'zetaphy-hub/vendor/snarkjs*', '.github/workflows/neuro-zk.yml', '.github/workflows/neuro-zk-ceremony.yml']
 
 permissions: {}
 
@@ -29,7 +34,7 @@ jobs:
   prove:
     name: Circuit, setup, prove, verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
@@ -44,17 +49,28 @@ jobs:
       - name: Install circom2 (WASM) + snarkjs + circomlib, pinned
         working-directory: zetaphy-neuro/ml/onchain/zk
         run: npm ci --no-audit --no-fund
-      - name: Build, set up, prove and verify
+      - name: Ceremony tool tests (tiny circuit; every cheating case refused)
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        run: npm test
+      - name: Build, set up (ceremony), prove and verify
         working-directory: zetaphy-neuro/ml/onchain/zk
         run: |
-          node run.js --rows "$ROWS" --install
+          if node -e 'const t=require("./ceremony/transcript.json");process.exit(t.contributions.at(-1)?.type==="beacon"?0:1)'; then
+            node run.js --rows "$ROWS" --final
+            node ceremony/ceremony.js export --check
+            cp out/fixture.json ../../../../zetaphy-network/test/fixtures/neuroscore-zk.json
+            title='public ceremony, final zkey'
+          else
+            node run.js --rows "$ROWS" --install
+            title='REHEARSAL of the ceremony on this runner: testnet only'
+          fi
           {
-            echo '## Neuro zkML (testnet-only setup made on this runner)'
+            echo "## Neuro zkML ($title)"
             echo '```json'
             cat out/report.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: On-chain verifier test against the fresh verifier and proof
+      - name: On-chain verifier test against the fresh verifier and proofs (final, non-final, forged)
         working-directory: zetaphy-network
         run: |
           npm ci --no-audit --no-fund
@@ -69,5 +85,6 @@ jobs:
             zetaphy-neuro/ml/onchain/zk/out/fixture.json
             zetaphy-neuro/ml/onchain/zk/out/verification_key.json
             zetaphy-neuro/ml/onchain/zk/out/NeuroScoreVerifier.sol
+            zetaphy-neuro/ml/onchain/zk/out/rehearsal/transcript.json
           retention-days: 30
           if-no-files-found: warn

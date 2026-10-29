@@ -3,38 +3,120 @@
  "hash": "0x7c420111bec7912ea5aeea2cc23cf1cb61e5d1379aa36eb825e241eab81a4132",
  "row": "antiwhale-1",
  "marginOffset": "1099511627776",
+ "ceremony": {
+  "kind": "rehearsal (one machine: testnet only)",
+  "zkeySha256": "c6d6cc426870421e5d7f5d274f2e7012f6e9ecc708efc09d387fad8fab6e7487",
+  "link": "1fde3b7dc59c5f6ac092e1fe766d57de0f3eb85f17fc50e800cda3851e1c9570",
+  "steps": [
+   {
+    "index": 1,
+    "type": "contribution",
+    "name": "rehearsal 1",
+    "contributionHash": "82ba9f4b293283374e170c2bb1b3371c86b62720f4d85bcbbba2c2e082d2de02fb8d5ee38aebebe3ba73e4a602c1bd68f6934ce8adcb940e69c68897b0d5a98d"
+   },
+   {
+    "index": 2,
+    "type": "contribution",
+    "name": "rehearsal 2",
+    "contributionHash": "972e4c679a7a86e51060a9880d5d08c2c0bd6a8efd577fa1284304178a0aef2ae8e721f03e3523ee2b199c1862ec101a19137130ffe16d4e439c3b81d261f322"
+   },
+   {
+    "index": 3,
+    "type": "beacon",
+    "name": "Final beacon",
+    "contributionHash": "135e2cdc7a2f771821e797a35cab4ab76f861721279c3558e554b80d9bcd09d8a0fc8abecd407c7d4b30b221b4d9865809f0eb7bf50bd5ec420ac476fccb4533"
+   }
+  ]
+ },
  "a": [
-  "0x15d43712ea0efc4473a42e6b304e064425b9d398ebe44ec599d7bcd1895e9cac",
-  "0x2ed4f8a1343a7c5e7a3510a490faeb36d659ee0f873893ccaf941f70290dcbb5"
+  "0x2fa7c7b7972ac7c5f5fa3459933e797a4016ecfda19045f915eca33a7d703c91",
+  "0x040b075210cc9e607fa4905d1671dd1e314ebd323b8a02752666f9107e46591b"
  ],
  "b": [
   [
-   "0x1cbfde0b55f5be73604fa9bfb9a421b6b55658670f794bf50113305f35e90ae4",
-   "0x130d0b509d8af22ee116d0b808631ac79ae90743c8fa9fd9646ab00bbcb6bb28"
+   "0x065bd9e820bda192cdd3eab66b7417277feeffcc9d71b13a7dc5919ed5008a52",
+   "0x23d2371abe5187fef72efde68c2aaee9b75b07fd765977722cff49759a3e8f1c"
   ],
   [
-   "0x0d27fbc9c1b6c6e428b44c3101484e78449b1f36de95f49e037f4c1a96852624",
-   "0x0a400ca6f0668911ab5a7a662f63adf44821d6ef8884290632d2efaeb267240d"
+   "0x13b64547a1a4e3adc665a18ca513f82ef5f0e1ea6e7bdfa3e385e1e490b9b63b",
+   "0x108abb44152eb951e1dda3c9af9c091c4cc62d1d2b6b44e74e0f8b167cff9b4b"
   ]
  ],
  "c": [
-  "0x2806457ecab05f1db88dfdb760df64e75ba191ef413c72bdbdab98669139eac7",
-  "0x10fe74caa2b52e68c348c0f4037b331f4a13987b907ddc3fc1133ab921d98a60"
+  "0x1ce930ad363aec45778b29121ef0593a1df1a983c692be93554388faa4de4bc6",
+  "0x1eb336f654c6e098b5b0cc84af7e21ed84eecd7e44371b0ab2f176ae39fcc3b1"
  ],
  "publicSignals": [
-  "0x2d9a08e47c0228f60bc978e6fdab6b7603051ab63719939a3069dad73b67ca31",
+  "0x026c1216ad5438d101859be1dee202ae8b09734b13e0d4a411ad584a53483762",
   "0x000000000000000000000000000000000000000000000000000000fffc92b6ac",
   "0x000000000000000000000000000000007c420111bec7912ea5aeea2cc23cf1cb",
   "0x0000000000000000000000000000000061e5d1379aa36eb825e241eab81a4132"
  ],
+ "nonFinal": {
+  "about": "the same row proved with the zkey before the beacon (a valid proof under THAT key)",
+  "a": [
+   "0x1cc1780614c9f4a159dd6b230ff6f79ef8ce6f53e8b77045fcc87ad685098949",
+   "0x027a7b46d97197a93f129f68ae3aba17297325c3b74858b4c069dcb7cc36e344"
+  ],
+  "b": [
+   [
+    "0x2ca8f7a4dd9c75353d0b3fa7fd42fc213e2e045269e59cd57272fb5bbc5c8cbe",
+    "0x09a535280d6da83d2551cd277b025c47518fc6df9454c78a156a5db2a2195a90"
+   ],
+   [
+    "0x269fed8e9c1287cf9c9e49885d0a2ef0dd10f67ad0a19ad2cda9a97851d5260b",
+    "0x267acaafd51750bb4964c99184ddfc4b962d2c91eb68649e989abe3cda2fc0a4"
+   ]
+  ],
+  "c": [
+   "0x213d8fecfb7853f2454ae4e66d1dc95db46f37d058d3f83e43d263dc3c43f35b",
+   "0x05ab8221459fc9b89b59156a2999ecda8a7b4605cc119d2e86ac55b4c4fcf785"
+  ],
+  "publicSignals": [
+   "0x026c1216ad5438d101859be1dee202ae8b09734b13e0d4a411ad584a53483762",
+   "0x000000000000000000000000000000000000000000000000000000fffc92b6ac",
+   "0x000000000000000000000000000000007c420111bec7912ea5aeea2cc23cf1cb",
+   "0x0000000000000000000000000000000061e5d1379aa36eb825e241eab81a4132"
+  ]
+ },
+ "forged": {
+  "about": "the same row proved with an independent single-party setup of the same circuit (a valid proof under THAT key)",
+  "a": [
+   "0x00276d6694c6d44775d5098cfe4e63ef3b3cd3f4103fad54cc35f5aacb8eeda3",
+   "0x00f47ae807ef96dbd0a6c6e8b76fcad761e7b446d345501948b2f3150b776a9d"
+  ],
+  "b": [
+   [
+    "0x24218ed17690d0561da937717922bf211f0dd9b8278d581110a8ec075e7da5e5",
+    "0x0707bfaf05617d532712d6e467a2ee08289e305f0b75ebbba8cd5ecad686435c"
+   ],
+   [
+    "0x17df141143486ed9ee525e545b227077bda8fd42c90aae76953c94275f6c5825",
+    "0x0fc83c5a80bd185c1f88aabb6ad3d00c8af06feb1c4fab273dd36fc6ea631963"
+   ]
+  ],
+  "c": [
+   "0x2d1e36a3ec6765437d9bc06fee9ebf36759f1b8eda45d7793d177bf3ff43a955",
+   "0x2f0ef40c1cec42256acc6d6c3d36b5fb49247e76376e9e041e6d05d3f09abd9c"
+  ],
+  "publicSignals": [
+   "0x026c1216ad5438d101859be1dee202ae8b09734b13e0d4a411ad584a53483762",
+   "0x000000000000000000000000000000000000000000000000000000fffc92b6ac",
+   "0x000000000000000000000000000000007c420111bec7912ea5aeea2cc23cf1cb",
+   "0x0000000000000000000000000000000061e5d1379aa36eb825e241eab81a4132"
+  ]
+ },
  "report": {
-  "when": "2026-10-28T20:43:04.480Z",
+  "when": "2026-10-29T07:07:20.403Z",
   "node": "v22.22.0",
-  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+  "cores": 4,
+  "snarkjs": "0.7.6",
   "steps": {
-   "groth16Setup": {
-    "seconds": 19.855,
-    "zkeyBytes": 11338859
+   "zkey": {
+    "bytes": 11339712,
+    "sha256": "c6d6cc426870421e5d7f5d274f2e7012f6e9ecc708efc09d387fad8fab6e7487",
+    "transcriptLink": "1fde3b7dc59c5f6ac092e1fe766d57de0f3eb85f17fc50e800cda3851e1c9570"
    }
   },
   "model": {
@@ -48,18 +130,34 @@
    "wires": 21318,
    "publicOutputs": 4,
    "privateInputs": 134,
-   "compileSeconds": 9.105
+   "compileSeconds": 19.589
+  },
+  "phase1": {
+   "name": "Perpetual Powers of Tau, contribution 0080 (PSE), prepared for phase 2, power 15",
+   "sha256": "4a8eb5a754ed4710d6ad603c2e1a89c72325a448e4474f8694d2c71c7c272f3d",
+   "power": 15
+  },
+  "ceremony": {
+   "kind": "rehearsal (one machine: testnet only)",
+   "contributions": 2,
+   "initSeconds": 22.992,
+   "contributeSeconds": [
+    39.25,
+    46.287
+   ],
+   "beaconSeconds": 37.072,
+   "verifySeconds": 74.618
   },
   "proofs": {
    "rows": 5,
    "proveSeconds": {
-    "min": 1.114,
-    "max": 1.528,
-    "mean": 1.299
+    "min": 6.2,
+    "max": 9.067,
+    "mean": 7.89
    },
-   "verifySecondsJs": 0.086,
+   "verifySecondsJs": 0.279,
    "proofBytesOnChain": 256,
-   "proofBytesJson": 722,
+   "proofBytesJson": 723,
    "publicSignals": 4
   }
  }

@@ -1,0 +1,145 @@
+# Neuro zkML phase-2 ceremony (zetaphy-neuro/ml/onchain/zk/ceremony/, docs/future/onchain-ml.md "zkML ceremony").
+#
+# Coordination with no server: a contribution is a pull request that changes ONLY
+# zetaphy-neuro/ml/onchain/zk/ceremony/transcript.json (one appended entry), with the new zkey uploaded as a release
+# asset (the contributor's fork is fine). This workflow refuses the PR unless:
+#   - the PR changes that one file, and appends exactly one entry, changing nothing else;
+#   - a contribution's entry names the PR author's GitHub login;
+#   - the zkey downloaded from the entry's URL has the entry's sha256 and size, and passes snarkjs' full verification
+#     against the circuit (rebuilt here from the committed model) and the pinned public phase-1 file, with its
+#     contribution list = the transcript's, and the transcript's hash chain holds;
+#   - naming the beacon block: only by the repository owner, for a block still far enough in the future;
+#   - the beacon step: its hash is the named block's (asked of public RPCs), mined after the declaration was merged.
+# The PR's code is never run: the tools come from the target branch, the PR only supplies transcript.json as data.
+# After a merge to main, the new zkey is mirrored to this repository's "zk-ceremony" release so it stays available.
+# Free GitHub Actions; no secrets (GITHUB_TOKEN only).
+
+name: Neuro zkML ceremony
+
+on:
+  pull_request:
+    paths: ['zetaphy-neuro/ml/onchain/zk/ceremony/transcript.json']
+  push:
+    branches: [main]
+    paths: ['zetaphy-neuro/ml/onchain/zk/ceremony/transcript.json']
+  workflow_dispatch:
+    inputs:
+      verify_phase1:
+        description: 'Also run snarkjs powersoftau verify on the pinned phase-1 file (slow: hours)'
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: neuro-zk-ceremony-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TRANSCRIPT: zetaphy-neuro/ml/onchain/zk/ceremony/transcript.json
+
+jobs:
+  check:
+    name: Check the contribution
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Tools from the TARGET branch (never the PR's code)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - name: The PR changes only transcript.json; take it as data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename')
+          echo "changed: $files"
+          if [ "$files" != "$TRANSCRIPT" ]; then
+            echo "::error::a ceremony PR changes only $TRANSCRIPT"; exit 1
+          fi
+          gh api "repos/$HEAD_REPO/contents/$TRANSCRIPT?ref=$HEAD_SHA" -H 'Accept: application/vnd.github.raw' > "$RUNNER_TEMP/head.json"
+          node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$RUNNER_TEMP/head.json"
+      - name: Install circom2 (WASM) + snarkjs + circomlib, pinned
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        run: npm ci --no-audit --no-fund
+      - name: Verify (download the zkey, snarkjs zkey verify, hash chain, author, beacon)
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -o pipefail # a failing check must fail the step, not be hidden by tee
+          node ceremony/ceremony.js check-pr --base "$GITHUB_WORKSPACE/$TRANSCRIPT" --head "$RUNNER_TEMP/head.json" \
+            --author "$AUTHOR" --owner "$OWNER" --repo-dir "$GITHUB_WORKSPACE" | tee "$RUNNER_TEMP/result.txt"
+          { echo '## Neuro zkML ceremony check'; echo '```'; cat "$RUNNER_TEMP/result.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  mirror:
+    name: Verify the whole ceremony and mirror its zkeys
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write # only to upload the zkeys to this repository's zk-ceremony release
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - name: Install, pinned
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        run: npm ci --no-audit --no-fund
+      - name: Verify everything (downloads the latest zkey from its URL)
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        run: |
+          set -o pipefail # a failing check must fail the step, not be hidden by tee
+          node ceremony/ceremony.js status
+          node ceremony/ceremony.js verify --download | tee "$RUNNER_TEMP/verify.txt"
+          { echo '## Neuro zkML ceremony'; echo '```'; node ceremony/ceremony.js status; cat "$RUNNER_TEMP/verify.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Mirror the initial and the latest zkey to the zk-ceremony release
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=zk-ceremony
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$GITHUB_SHA" --title 'Neuro zkML phase-2 ceremony keys' \
+              --notes 'zkeys of the Neuro zkML phase-2 ceremony, mirrored by the neuro-zk-ceremony workflow after each verified contribution. Check them against zetaphy-neuro/ml/onchain/zk/ceremony/transcript.json (sha256) and docs/future/onchain-ml.md.'
+          fi
+          gh release upload "$tag" out/ceremony/neuro_score_*.zkey --clobber
+
+  phase1:
+    name: Verify the pinned phase-1 file (powers of tau)
+    if: github.event_name == 'workflow_dispatch' && inputs.verify_phase1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+      - name: Download (sha256 + blake2b pinned) and verify every contribution and the beacon in it
+        working-directory: zetaphy-neuro/ml/onchain/zk
+        run: |
+          set -o pipefail # a failing check must fail the step, not be hidden by tee
+          npm ci --no-audit --no-fund
+          node --input-type=module -e "import { getPtau } from './lib.js'; console.log(await getPtau())"
+          node node_modules/snarkjs/build/cli.cjs powersoftau verify out/ppot_0080_15.ptau | tee "$RUNNER_TEMP/ptau.txt"
+          { echo '## Phase 1 (pinned Perpetual Powers of Tau file)'; echo '```'; tail -60 "$RUNNER_TEMP/ptau.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
