@@ -153,13 +153,22 @@ export function chainOf(t, name) {
 
 export const bytes32 = (a) => zeroPadValue(getAddress(a), 32).toLowerCase();
 
+/** The chains of the table with a deployed NeuroOracle mirror in neuro-oracle.json (none without a sender). */
+export function oracleChains(t, oracles) {
+  const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
+  if (!isAddr(oracles?.sender)) return [];
+  return Object.entries(oracles.receivers ?? {}).filter(([name, r]) => t.chains[name] && isAddr(r?.oracle)).map(([name]) => name).sort();
+}
+
 /**
  * The relayer's whitelist (HYP_WHITELIST) for the deployed routes: source lockbox -> its HyperlaneLane on
  * ZETAPHY, and (two-way routes) the HyperlaneOutbox on ZETAPHY -> that lockbox. Plus `extra` entries
  * (e.g. the v1 Sepolia lockbox). Nothing else is relayed, so nobody can spend the relayer's gas.
  */
-export function relayerWhitelist(t, routes, extra = [], tokenRoutes = {}) {
+export function relayerWhitelist(t, routes, extra = [], tokenRoutes = {}, oracles = null) {
   const out = [...extra];
+  // the Neuro oracle (neuro-oracle.json, item 18): its sender on ZETAPHY to each chain with a deployed mirror
+  for (const name of oracleChains(t, oracles)) out.push({ originDomain: t.zetaphy.domain, senderAddress: bytes32(oracles.sender), destinationDomain: t.chains[name].domain });
   for (const [name, r] of Object.entries(routes)) {
     const c = t.chains[name];
     if (!c || !r?.origin?.lockbox) continue;

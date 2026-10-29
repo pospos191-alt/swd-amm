@@ -1,0 +1,6 @@
+{
+  "about": "Neuro cross-chain security oracle (docs/future/crosschain-assist.md, item 18): NeuroOracleSender on ZETAPHY and the NeuroOracle mirror per chain. Written by .github/workflows/neuro-oracle.yml (mode deploy); read by the hub (Immunity tab), neuro-oracle.js coverage and the relayer whitelist. Testnets only.",
+  "sender": null,
+  "zetaphy": null,
+  "receivers": {}
+}
