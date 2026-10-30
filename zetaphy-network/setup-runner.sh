@@ -59,8 +59,11 @@ fetch_code() {
   # the browser code the CLI shares with the hub (useful work, intents, PQ attestations, the audit network;
   # docs/future/useful-work.md, audit-network.md): every ../../zetaphy-hub/*.js that zetaphy-network imports
   mkdir -p "$CODE.new/zetaphy-hub"
-  for f in work-core.js fuzz-core.js fuzz-hook.js mine-core.js intent-core.js pqattest.js audit-core.js chainlib.js; do
-    cp "$src/zetaphy-hub/$f" "$CODE.new/zetaphy-hub/"
+  # (test/runner-hub-files.test.js keeps this list equal to what the code imports)
+  mkdir -p "$CODE.new/zetaphy-hub/vendor"
+  for f in aas-core.js audit-core.js cash-core.js chainlib.js fuzz-core.js fuzz-hook.js intent-core.js mesh-frames.js mine-core.js \
+           offline-core.js pqattest.js train-core.js vendor/zkverify.js work-core.js zkid-core.js zkid-poseidon.js zkverdict-core.js; do
+    cp "$src/zetaphy-hub/$f" "$CODE.new/zetaphy-hub/$f"
   done
   (cd "$CODE.new/zetaphy-network" && npm ci --omit=dev --no-audit --no-fund --silent)
   (cd "$CODE.new/zetaphy-neuro" && npm ci --omit=dev --no-audit --no-fund --silent)
