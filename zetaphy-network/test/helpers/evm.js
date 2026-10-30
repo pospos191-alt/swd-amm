@@ -13,7 +13,7 @@ export const ZETA = 10n ** 18n;
  * @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds
  * @param opts.precompiles  {'0x…address': (input: Uint8Array) => Uint8Array} precompiles written in JS
  *   (a function's optional `gas` property is the gas it charges; 3000 otherwise)
- * @param opts.chainId  another EVM chain id (block.chainid; Ethereum mainnet's 1 otherwise)
+ * @param opts.chainId  another EVM chain id (block.chainid; Ethereum mainnet's 1 otherwise): several chains side by side in one test
  * @param opts.txGasLimit  the gas of each transaction (15 M otherwise; blocks carry 30 M or this, if higher)
  *   (e.g. helpers/precompiles.js: the real ML-DSA check at 0x…0900, P-256 at 0x…0100)
  */
@@ -35,7 +35,7 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
     address: Address.fromString(addr),
     function: ({ data }) => ({ executionGasUsed: BigInt(fn.gas ?? 3000n), returnValue: fn(data) ?? new Uint8Array(0) }),
   }));
-  const common = opts.chainId
+  const common = opts.chainId != null && Number(opts.chainId) !== 1
     ? Common.custom({ chainId: Number(opts.chainId), networkId: Number(opts.chainId), name: `chain-${opts.chainId}` }, { baseChain: Chain.Mainnet, hardfork: Hardfork.Cancun })
     : new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun });
   const txGasLimit = BigInt(opts.txGasLimit ?? 15_000_000n);
@@ -112,7 +112,7 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
     async rawTx(from, toHex, dataHex, value = 0n) {
       const res = await exec(acct[from] ?? Address.fromString(from), toHex ? Address.fromString(toHex) : undefined, dataHex, value);
       const logs = (res.execResult.logs ?? []).map(([address, topics, data]) => ({ address: bytesToHex(address), topics: topics.map(bytesToHex), data: bytesToHex(data) }));
-      return { ok: !res.execResult.exceptionError, logs: res.execResult.exceptionError ? [] : logs };
+      return { ok: !res.execResult.exceptionError, logs: res.execResult.exceptionError ? [] : logs, gas: Number(res.execResult.executionGasUsed), returnHex: bytesToHex(res.execResult.returnValue) };
     },
     async callAt(toHex, iface, fn, args = []) {
       const res = await exec(acct[names[0]], Address.fromString(toHex), iface.encodeFunctionData(fn, args));
@@ -127,6 +127,8 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
       return bytesToHex(res.execResult.returnValue);
     },
     now: () => time,
+    /** The runtime code at an address (eth_getCode). */
+    getCode: async (addressHex) => bytesToHex(await sm.getContractCode(Address.fromString(addressHex))),
     /** An account's nonce (the next CREATE address is getCreateAddress({ from, nonce })). */
     nonce: async (who) => (await sm.getAccount(acct[who] ?? who))?.nonce ?? 0n,
     balance: async (who) => (await sm.getAccount(acct[who] ?? who))?.balance ?? 0n,

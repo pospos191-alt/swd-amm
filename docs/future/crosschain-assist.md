@@ -6,6 +6,9 @@ Workstream `fut-crosschain`. Eight items: the Neuro cross-chain security oracle 
 "Neuro-checked" certificates (19), quantum-safe AI attestations (30), parametric hack insurance (32), the pre-sign
 assistant (20), the governance assistant (21) and the validator assistant (22).
 
+The immune network ([immune-network.md](immune-network.md)) builds on items 18 and 28: flags agreed by k-of-n
+bonded runners, mirrored to every chain, with vaccines and an open signed feed.
+
 Everything here is **testnet only**. Nothing holds real money. Nothing needs an always-on server: the work happens in
 contracts, in the browser (the hub), on runners and validators people already run, or in GitHub Actions.
 

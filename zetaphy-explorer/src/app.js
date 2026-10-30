@@ -815,7 +815,7 @@ function setup(c) {
       chain = chainApi(api);
     } catch { ready = false; }
   }
-  setRisk(ready ? createRisk({ batch: (calls) => api.evmBatch(calls), single: (m, p) => api.evm(m, p, TTL.short), registry: cfg.threatRegistry, chainId: cfg.evmChainId }) : null);
+  setRisk(ready ? createRisk({ batch: (calls) => api.evmBatch(calls), single: (m, p) => api.evm(m, p, TTL.short), registry: cfg.threatRegistry, chainId: cfg.evmChainId, immune: cfg.immuneFeed }) : null);
   setAudit(ready && cfg.auditCertificate ? createAudit({ single: (m, p) => api.evm(m, p, TTL.short), contract: cfg.auditCertificate, chainId: cfg.evmChainId }) : null);
   validatorCache = { at: 0, rows: null, height: null, promise: null };
   tokenCache.clear();

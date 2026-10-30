@@ -15,7 +15,7 @@ import { buildLabels, buildCrossChain, labelsJson, moduleAddress, parseAddresses
 import { setLabels, labelOf } from '../src/labels.js';
 import { decodeMessage, hyperlaneMessages, ibcPackets, HL_TOPICS, DELIVERED_SEL, setCrossChain, chainByDomain, checkDelivery, bytes32Address } from '../src/crosschain.js';
 import { parseQuestion, parseWindow, windowBlocks, largestNative, seenAddresses } from '../src/ask.js';
-import { createRisk } from '../src/risk.js';
+import { createRisk, readImmune, IMMUNE_IS_FLAGGED } from '../src/risk.js';
 import { createApi } from '../src/rpc.js';
 import { T_INSIGHT, makeT } from '../src/i18n.js';
 import { TOPICS } from '../src/evm.js';
@@ -465,6 +465,24 @@ test('risk badges: no registry = nothing claimed; node without batches = one cal
   const broken = createRisk({ batch: async (l) => l.map(() => '0x'), single: async () => '0x', registry: REG, chainId: 77390, wait: 1 });
   assert.equal((await broken.lookup(A(1))).state, 'error');
   assert.equal((await broken.lookup('nope')).state, 'error');
+});
+
+test('risk badges: the immune network flag (ImmuneRegistry.isFlagged) rides in the same batch; alone it works too', async () => {
+  const IMM = A(0x8888);
+  const HIT = A(0x4444);
+  const n = fakeNode();
+  const inner = n.batch;
+  const sev = (to, data) => (to === IMM && data.slice(0, 10) === IMMUNE_IS_FLAGGED ? ('0x' + data.slice(-40) === HIT ? '0x' + word(1) + word(4) + word(1_800_000_000) + '11'.repeat(32) : '0x' + word(0).repeat(4)) : null);
+  const batch = async (list) => { const base = await inner(list); return list.map((c, i) => (c.method === 'eth_call' && sev(c.params[0].to, c.params[0].data)) || base[i]); };
+  const risk = createRisk({ batch, single: n.single, registry: REG, chainId: 77390, immune: IMM, wait: 2 });
+  const [clean, hit] = await Promise.all([risk.lookup(A(1)), risk.lookup(HIT)]);
+  assert.equal(clean.state, 'clean');
+  assert.deepEqual(hit.flags.map((f) => [f.what, f.severity, f.enforced, f.reasonName]), [['immune', 4, true, 'critical']]);
+  assert.equal(n.calls.sizes[0], 8, '4 calls per address: code, 2 ThreatRegistry, 1 immune');
+  const only = createRisk({ batch, single: n.single, registry: '', chainId: 77390, immune: IMM, wait: 2 });
+  assert.equal((await only.lookup(HIT)).state, 'flagged');
+  assert.equal(readImmune('0x' + word(2) + word(4) + word(0) + word(0)), null, 'not a bool: not an answer');
+  assert.equal(readImmune('0x12'), null);
 });
 
 test('rpc.js evmBatch: one HTTP request per batch, per-call results and errors, shared cache', async () => {

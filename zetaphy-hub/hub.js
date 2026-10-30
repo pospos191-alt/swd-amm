@@ -14,7 +14,7 @@ import { FLOW } from './flow-i18n.js';
 import { LANGS, TEXT, TAB_TEXT, pickLang, locale } from './i18n.js';
 import { walletBar } from './walletbar.js';
 import * as walletLib from './wallet/wallets.js';
-import { A as assistText, badgeOf, presignHooks } from './assist.js';
+import { A as assistText, badgeOf, presignHooks, immuneWarnings } from './assist.js';
 
 const EVM_CHAIN_ID = 77390;
 const DEFAULT_NODE = 'https://rpc.sawasdeecoin.com';
@@ -463,7 +463,9 @@ async function send(to, data, action = '', value = 0n) {
   if (cid == null || Number(BigInt(cid)) !== EVM_CHAIN_ID) throw new Error(T('wbWrongChain'));
   // pre-sign assistant (assist.js / presign.js): a simulation on the latest block and, if set up in Neuro, an AI explanation
   const hooks = presignHooks({ lang, url: ep().evm, from: account, to, data, tokens: HUB.tokens ?? [] });
-  const ok = await wb.safety.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: account, to, toLabel: TO_LABEL[to], data, action, simulate: hooks.simulate, explain: hooks.explain ?? undefined });
+  // immune network (docs/future/immune-network.md): a destination flagged by the runners' quorum is a warning before signing
+  const warnings = await immuneWarnings({ lang, url: ep().evm, to, net: HUB.immuneNet });
+  const ok = await wb.safety.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: account, to, toLabel: TO_LABEL[to], data, action, warnings, simulate: hooks.simulate, explain: hooks.explain ?? undefined });
   if (ok == null) throw Object.assign(new Error(wb.safety.t('cfCancelled')), { code: 4001 });
   data = ok;
   const hash = await p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: `0x${BigInt(value).toString(16)}`, chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
@@ -604,7 +606,7 @@ async function start() {
   $('lang').value = lang;
   try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {}, tokens: Array.isArray(c.tokens) ? c.tokens.filter((x) => isEvmAddress(x?.address)) : [], saphan: Array.isArray(c.saphan) ? c.saphan : [], saphanTokens: Array.isArray(c.saphanTokens) ? c.saphanTokens.filter((x) => x && typeof x === 'object' && Array.isArray(x.destinations)) : [],
     // the Neuro oracle's sender and mirrors (Immunity tab, item 18)
-    immune: c.immune && typeof c.immune === 'object' ? c.immune : null }; } catch { /* default */ }
+    immune: c.immune && typeof c.immune === 'object' ? c.immune : null, immuneNet: c.immuneNet && typeof c.immuneNet === 'object' ? c.immuneNet : null }; } catch { /* default */ }
   syncApps();
   bindTips(document, $('tip'));
   document.addEventListener('click', (e) => {
