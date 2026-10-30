@@ -8,6 +8,7 @@
 // Everything shown goes in with textContent; no inline styles (CSP style-src 'self').
 import { withFallback } from './i18n.js';
 import { AUDIT } from './audit-i18n.js';
+import { AAS } from './aas-i18n.js';
 import { keccak256 } from './neuro/src/keccak.js';
 import { parseZeta } from './chainlib.js';
 import * as core from './audit-core.js';
@@ -278,6 +279,8 @@ const page = {
     root.replaceChildren(
       el('p', { class: 'small', id: 'au-intro', text: L.intro }),
       el('p', { class: 'small dim', text: `${L.meaning} ${L.testnet}` }),
+      // Audit-as-a-Service (docs/future/audit-as-a-service.md): the live check for any chain and the public directory
+      el('p', { class: 'small', id: 'au-aas' }, el('a', { href: 'audit.html', text: withFallback(AAS, ctx.lang).vTitle }), ' · ', el('a', { href: 'audits.html', text: withFallback(AAS, ctx.lang).dTitle })),
       el('div', { class: 'au-grid' },
         card('au-cert', L.certTitle, L.certTip, deployed ? certForm : notDeployed(), certOut),
         card('au-reqs', L.reqTitle, L.reqTip, reqBox, detail),

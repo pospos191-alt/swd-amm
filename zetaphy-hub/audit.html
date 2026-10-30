@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ZETAPHY audit certificate check</title>
+<meta name="description" content="Check a ZETAPHY audit certificate for a contract on Ethereum, BNB, Base, Arbitrum, Optimism, Polygon, Avalanche, Osmosis or Solana: VALID, EXPIRED, REVOKED or CODE CHANGED, read live from ZETAPHY and the contract's own chain. Testnet only.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="aas.css">
+<script type="module" src="aas-verify.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top">
+      <a class="eyebrow" href="./" data-t="eyebrow"></a>
+      <select id="lang" aria-label="Language">
+        <option value="en">English</option><option value="zh">中文</option><option value="es">Español</option>
+        <option value="ko">한국어</option><option value="ja">日本語</option><option value="ru">Русский</option>
+        <option value="vi">Tiếng Việt</option><option value="th">ไทย</option>
+      </select>
+    </div>
+    <h1 data-t="vTitle"></h1>
+    <p class="lede" data-t="vLede"></p>
+    <p class="note" data-t="testnet"></p>
+    <nav class="links"><a href="audits.html" id="to-dir" data-t="dirLink"></a></nav>
+  </header>
+
+  <form class="lookup" id="form">
+    <label><span data-t="chain"></span> <select id="chain"></select></label>
+    <label class="grow"><span data-t="address"></span> <input id="address" autocomplete="off" spellcheck="false" placeholder="0x…"></label>
+    <button type="submit" id="go" data-t="check"></button>
+  </form>
+
+  <section id="result" aria-live="polite"></section>
+
+  <section class="card" id="badge" hidden>
+    <h2 data-t="badgeTitle"></h2>
+    <p class="muted" data-t="badgeTip"></p>
+    <div id="badge-body"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-t="meaningTitle"></h2>
+    <p data-t="meaning"></p>
+    <h2 data-t="howTitle"></h2>
+    <ul class="how"><li data-t="howEvm"></li><li data-t="howCosm"></li><li data-t="howSol"></li></ul>
+  </section>
+  <p class="status" id="status" role="status"></p>
+</div>
+</body>
+</html>
