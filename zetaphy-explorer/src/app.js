@@ -10,11 +10,29 @@ import { TOPICS, decodeTransfer, readTokenInfo, callData, decodeUint } from './e
 import { TYPES, VOTE_OPTIONS, logsFromEvents, decodeTx } from './cosmos.js';
 import { checkThreats } from './threat.js';
 import { safety } from './wallet-safety.js';
+import { contractResolver } from './contract.js';
+import { evmTxDeep } from './txview.js';
+import { contractCard } from './contractview.js';
+import { registerServiceWorker } from './pwa.js';
 import {
   safeText, tokenText, formatUnits, formatZtphy, formatCoin, short, percent, ago, utcTime, toAddress, toValoper, parseQuery,
   heightParam, hexPreview, toBig, groupDigits, DEAD_ADDRESS, anyAddressLower, fromBase64,
 } from './format.js';
 import { DISCLAIMER, REPRODUCE, keccak_256, bytesToHex, hexToBytes, PQ_LOCK_ADDRESS } from '../vendor/zetaphy-lib.js';
+// Insight features (own modules; app.js only hooks them in): labels, Neuro risk badges,
+// quantum exposure, fund-flow graph, cross-chain trace, plain-question search.
+import { loadLabels, labelTag } from './labels.js';
+import { createRisk, setRisk, getRisk, riskBadge, riskSummaryCard } from './risk.js';
+import { quantumCard, pageQuantum } from './quantum.js';
+import { pageFlow } from './flow.js';
+import { loadCrossChain, crossChainCard } from './crosschain.js';
+import { parseQuestion, pageAsk } from './ask.js';
+// History, live view, watch list and analytics (no indexer): own modules, hooked in below.
+import { addressHistory } from './history.js';
+import { LiveFeed, socketHost, liveIndicator, markNewRows, pageLive, txLanded } from './live.js';
+import { createWatchStore, createTxWatch, watchControls, watchedCard, toast } from './watch.js';
+import { analyticsView, ANALYTICS_MAX_BLOCKS } from './charts.js';
+import { cometTxHash } from './cosmos.js';
 
 // ---- state ----
 
@@ -33,6 +51,9 @@ let localCfg = {};
 let api = null; let chain = null; let ready = false;
 let validatorCache = { at: 0, rows: null, height: null, promise: null };
 let refreshTimer = null;
+let resolver = null; // contract.js: Sourcify / known ABIs / proxies, per node connection
+const watch = createWatchStore(store);
+let live = null; let txWatch = null; let leaveFns = [];
 
 // ---- small view helpers ----
 
@@ -42,14 +63,19 @@ const routeLink = (route, text, attrs = {}) => h('a', { href: `#/${route}`, ...a
 function addrLink(addr, { full = false, label } = {}) {
   const a = toAddress(addr);
   if (!a) return h('span', { class: 'mono' }, safeText(addr, 90));
-  return routeLink(`address/${a.hex}`, label ?? (full ? a.hex : short(a.hex, 8, 6)), { class: 'mono', title: `${a.hex}\n${a.bech32}` });
+  // every address the explorer shows gets its known label and its Neuro risk badge here; the watch
+  // list's nickname (this browser only) replaces the short form
+  const nick = label == null && !full ? watch.nameOf(a.hex) : '';
+  const link = nick ? routeLink(`address/${a.hex}`, nick, { class: 'nick', title: `${nick}\n${a.hex}\n${a.bech32}` })
+    : routeLink(`address/${a.hex}`, label ?? (full ? a.hex : short(a.hex, 8, 6)), { class: 'mono', title: `${a.hex}\n${a.bech32}` });
+  return h('span', { class: 'addr' }, link, labelTag(a.lower), riskBadge(a.lower, { t, lang }));
 }
 const valoperView = (v) => {
   const x = toValoper(v);
   if (!x) return h('span', { class: 'mono' }, safeText(v, 90));
   const mon = validatorCache.rows?.find((r) => r.operator === x.valoper)?.moniker;
   return h('span', null, mon ? h('span', { class: 'moniker' }, safeText(mon, 40), ' ') : null,
-    routeLink(`validators/${x.valoper}`, short(x.valoper, 18, 6), { class: 'mono', title: x.valoper }));
+    routeLink(`validator/${x.valoper}`, short(x.valoper, 18, 6), { class: 'mono', title: x.valoper }));
 };
 const hashLink = (hash, { full = false } = {}) => routeLink(`tx/${hash}`, full ? hash : short(hash, 10, 6), { class: 'mono', title: hash });
 const blockLink = (height) => routeLink(`block/${height}`, groupDigits(height), { class: 'mono' });
@@ -82,6 +108,14 @@ function copyBtn(text) {
   } } }, '⧉');
 }
 
+/** The context the tx and contract views (txview.js, contractview.js) build with. */
+const uiDeep = () => ({
+  t, lang, cfg, sf, h, fill, append, addrLink, hashLink, blockLink, routeLink, badge, card, note, kv, table, slot, loading, errorBox, copyBtn,
+  tokenInfo, transferView, evm: (m, p, ttl) => api.evm(m, p, ttl), disclaimer: () => DISCLAIMER[lang] ?? DISCLAIMER.en,
+  resolver: () => (resolver ??= contractResolver({ evm: (m, p) => api.evm(m, p, TTL.short), chainId: cfg.evmChainId })),
+  wallet: () => window.ethereum ?? null,
+});
+
 const statusBadge = (ok) => (ok == null ? badge(t('pending'), 'warn') : ok ? badge(t('success'), 'ok') : badge(t('failed'), 'bad'));
 
 /** A slot that fills itself when its promise settles (errors shown in place). */
@@ -90,6 +124,9 @@ function slot(promise, render, { inline = false } = {}) {
   Promise.resolve(promise).then((v) => fill(el, render(v))).catch((e) => fill(el, inline ? h('span', { class: 'error' }, '?') : errorBox(e)));
   return el;
 }
+
+const anyLink = (x) => (String(x).startsWith('zetaphyvaloper') ? valoperView(x) : addrLink(x));
+
 
 function windowNote(r) {
   return note(t('noIndexer', { n: groupDigits(Number(r.to) - Number(r.from) + 1), from: groupDigits(r.from), to: groupDigits(r.to) }), 'info');
@@ -128,19 +165,26 @@ async function pageHome(view) {
   const activity = h('section', { class: 'activity', hidden: '' });
   const blocks = h('div', null, loading());
   const txs = h('div', null, loading());
+  const watched = h('div', null);
+  const analytics = h('div', null, loading());
   append(view, [
     h('h1', null, t('homeTitle')),
+    liveIndicator(ctx()),
     stats,
     activity,
+    watched,
     h('div', { class: 'grid2' }, card(t('latestBlocks'), blocks), card(t('latestTxs'), txs)),
+    card(t('chartTitle'), analytics),
   ]);
+  let top = 0;
   loadActivity(activity).catch(() => { activity.hidden = true; });
 
   const stat = (label, value, sub) => h('div', { class: 'stat' }, h('div', { class: 'stat-label' }, label), h('div', { class: 'stat-value' }, value), sub ? h('div', { class: 'stat-sub' }, sub) : null);
 
-  async function refresh(first) {
+  async function refresh(first, known) {
     const st = await chain.status();
-    const H = st.height;
+    // a block the live feed just announced may be newer than the (4 s cached) status
+    const H = known && BigInt(known) > BigInt(st.height) ? String(known) : st.height;
     if (first) {
       fill(stats,
         stat(t('chainId'), h('span', { class: 'mono' }, safeText(st.chainId, 60)), `EVM ${cfg.evmChainId}`),
@@ -164,13 +208,40 @@ async function pageHome(view) {
     const r = await chain.recentTxs(H, cfg.scanBlocks);
     const list = r.txs.slice(0, 15);
     fill(txs, txTable(list, { empty: t('noRecentTxs') }), windowNote(r), r.complete ? null : note(t('scanIncomplete'), 'warn'));
+    markNewRows(blocks, top); markNewRows(txs, top); // new rows fade in
+    top = Number(H);
+    fill(watched, watchedCard(ctx(), r));
+    if (first) loadAnalytics(analytics, H, r).catch((e) => fill(analytics, errorBox(e)));
   }
-  await refresh(true);
-  clearInterval(refreshTimer);
-  refreshTimer = setInterval(() => {
-    if (document.hidden || !view.isConnected) return;
-    refresh(false).catch(() => { /* next tick */ });
-  }, 6000);
+  // New blocks from the live feed (websocket, or polling when no socket is allowed); one refresh at a
+  // time, and a block that arrives during one is shown right after it.
+  let busy = true; let again = null;
+  const run = (known) => {
+    busy = true;
+    refresh(false, known).catch(() => { /* next block */ }).finally(() => { busy = false; if (again && view.isConnected) { const k = again; again = null; run(k); } });
+  };
+  const off = live?.on((b) => {
+    if (!view.isConnected) { off(); return; }
+    if (document.hidden) return;
+    if (busy) { again = b.height; return; }
+    run(b.height);
+  });
+  if (off) leaveFns.push(off);
+  try { await refresh(true); } finally {
+    busy = false;
+    if (again && view.isConnected) { const k = again; again = null; run(k); }
+  }
+}
+
+/** Charts of the scanned blocks: metas (tx counts, times), the scan, and one eth_feeHistory call. */
+async function loadAnalytics(box, H, r) {
+  const n = Math.min(cfg.scanBlocks, ANALYTICS_MAX_BLOCKS, Number(H));
+  const lo = Math.max(1, Number(H) - n + 1);
+  const [metas, fh] = await Promise.all([
+    chain.blockMetas(lo, H, H),
+    chain.evmCall('eth_feeHistory', ['0x' + n.toString(16), '0x' + Number(H).toString(16), []]).catch(() => null),
+  ]);
+  if (box.isConnected) fill(box, analyticsView(ctx(), { metas, r, fh }));
 }
 
 // Chain activity this month, from Neuro's daily counts (cfg.chainStatsUrl), read once per visit.
@@ -349,7 +420,8 @@ function transferView(tr) {
     badge(tr.standard.toUpperCase().replace('ERC', 'ERC-'), 'token'), ' ',
     tr.mint ? badge(t('mint'), 'ok') : tr.burn ? badge(t('burn'), 'warn') : null, ' ',
     addrLink(tr.from), ' → ', addrLink(tr.to), ' · ', amount, ' · ',
-    routeLink(`token/${tr.token}`, slot(tokenInfo(tr.token), (i) => tokenText(i.name ?? i.symbol, 32, short(tr.token, 8, 4)), { inline: true }), { title: tr.token }));
+    routeLink(`token/${tr.token}`, slot(tokenInfo(tr.token), (i) => tokenText(i.name ?? i.symbol, 32, short(tr.token, 8, 4)), { inline: true }), { title: tr.token }),
+    labelTag(tr.token), riskBadge(tr.token, { t, lang }));
 }
 
 function logsView(logs) {
@@ -372,8 +444,10 @@ async function renderEvmTx(view, tx) {
   let special = null;
   if (tx.to && tx.to.toLowerCase() === PQ_LOCK_ADDRESS.toLowerCase() && input.length === 42) special = note(t('quantumLockTx', { c: toAddress(input)?.bech32 ?? input }), 'info');
   if (tx.to && tx.to.toLowerCase() === DEAD_ADDRESS.toLowerCase()) special = note(t('deadTx'), 'info');
+  const deep = evmTxDeep(ui(), tx, rc);
   append(view, [
     h('h1', null, t('transaction'), ' ', badge('EVM', 'evm')),
+    deep.summary,
     card(t('overview'), kv([
       [t('txHash'), h('span', { class: 'mono break' }, tx.hash, ' ', copyBtn(tx.hash))],
       [t('status'), statusBadge(status)],
@@ -388,7 +462,10 @@ async function renderEvmTx(view, tx) {
       [t('txType'), String(toBig(tx.type) ?? 0n)],
       [t('input'), input === '0x' ? t('noInput') : h('details', null, h('summary', null, `${input.slice(0, 10)} · ${groupDigits((input.length - 2) / 2)} bytes`), h('div', { class: 'mono small break' }, input.slice(0, 20000)))],
     ]), special),
-    card(t('logs'), rc ? logsView(rc.logs ?? []) : note(t('pending'))),
+    input === '0x' ? null : card(t('xtInputTitle'), deep.input),
+    ...deep.cards,
+    card(t('logs'), rc ? deep.logs(rc.logs ?? []) : note(t('pending'))),
+    crossChainCard(ui(), { logs: rc?.logs ?? [] }),
   ]);
 }
 
@@ -463,6 +540,7 @@ async function renderCosmosTx(view, r) {
     d.error ? errorBox(t('undecodable') + ': ' + d.error) : null,
     card(t('messages'), d.messages.map(messageView)),
     evLogs.length ? card(t('logs'), logsView(evLogs)) : null,
+    crossChainCard(ui(), { logs: evLogs, events: res.events }),
     card(t('events'), h('details', null, h('summary', null, t('showEvents', { n: res.events.length })),
       h('div', null, res.events.map((e) => h('div', { class: 'event' }, h('strong', null, safeText(e.type, 80)),
         kv(e.attributes.map((a) => [safeText(a.key, 80), h('span', { class: 'mono small break' }, safeText(a.value, 600))]))))))),
@@ -483,11 +561,13 @@ async function pageAddress(view, param) {
     pq?.pubKeyType === 'mldsa44' ? badge(t('mldsaAccount'), 'pq') : null,
     pq?.quantumLockedTo ? badge(t('quantumLocked'), 'pq') : null,
     a.lower === DEAD_ADDRESS.toLowerCase() ? badge(t('deadAddress'), 'warn') : null,
+    labelTag(a.lower), riskBadge(a.lower, { t, lang }),
   ];
   const tokenSlot = isContract ? slot(tokenInfo(a.hex), (i) => (i.standard ? h('p', null, badge(i.standard.toUpperCase().replace('ERC', 'ERC-'), 'token'), ' ', routeLink(`token/${a.hex}`, `${tokenText(i.name, 40)} (${tokenText(i.symbol, 16)}) · ${t('tokenPage')}`)) : '')) : null;
   append(view, [
-    h('h1', null, isContract ? t('contract') : t('address')),
+    h('h1', null, isContract ? t('contract') : t('address'), watch.nameOf(a.hex) ? h('span', { class: 'nick-title' }, ` · ${watch.nameOf(a.hex)}`) : null),
     h('p', null, badges),
+    watchControls(ctx(), a),
     card(t('overview'), kv([
       ['0x', h('span', { class: 'mono break' }, a.hex, ' ', copyBtn(a.hex))],
       ['zetaphy1', h('span', { class: 'mono break' }, a.bech32, ' ', copyBtn(a.bech32))],
@@ -499,13 +579,16 @@ async function pageAddress(view, param) {
       isContract ? [t('codeSize'), `${groupDigits((acc.code.length - 2) / 2)} bytes · keccak ${short('0x' + bytesToHex(keccak_256(hexToBytes(acc.code))), 12, 8)}`] : null,
       [t('otherBalances'), slot(chain.bankBalances(a.bech32), (bs) => bs.filter((b) => b.denom !== 'azetaphy').map(formatCoin).join(', ') || t('none'), { inline: true })],
       [t('delegated'), slot(chain.delegations(a.bech32), (ds) => (ds.length ? formatZtphy(ds.reduce((n, d) => n + (toBig(d.balance?.amount) ?? 0n), 0n), { maxFrac: 4 }) + ` · ${ds.length} ${t('validatorsLower')}` : t('none')), { inline: true })],
-    ]), tokenSlot, pq?.quantumLockedTo ? note(t('quantumLockedHelp'), 'info') : null),
+    ]), tokenSlot, pq?.quantumLockedTo ? note(t('quantumLockedHelp'), 'info') : null,
+    h('p', { class: 'insight-links' }, routeLink(`flow/${a.hex}`, t('flowLink')), ' · ', routeLink(`quantum/${a.hex}`, t('qLink')))),
+    quantumCard(ui(), a, acc),
+    riskSummaryCard(ui(), a, { counterparties: chain.recentTxs(st.height, cfg.scanBlocks).then((r) => r.txs
+      .filter((x) => x.addresses.has(a.lower) || anyAddressLower(x.from) === a.lower || anyAddressLower(x.to) === a.lower)
+      .flatMap((x) => [anyAddressLower(x.from), anyAddressLower(x.to), ...x.addresses]).filter(Boolean)) }),
+    isContract ? contractCard(ui(), a.hex) : null,
     threatCard(a, acc.code),
     card(t('tokenBalances'), slot(tokenBalances(a, st.height), (x) => x)),
-    card(t('recentTxs'), slot(chain.recentTxs(st.height, cfg.scanBlocks), (r) => {
-      const mine = r.txs.filter((x) => x.addresses.has(a.lower) || anyAddressLower(x.from) === a.lower || anyAddressLower(x.to) === a.lower);
-      return h('div', null, txTable(mine.slice(0, 50), { empty: t('noTxsForAddress') }), windowNote(r));
-    })),
+    addressHistory(ctx(), a, st.height), // full history from the node's tx index (src/history.js)
   ]);
 }
 
@@ -519,7 +602,7 @@ async function tokenBalances(a, latest) {
     let bal = null;
     try { bal = decodeUint(await chain.ethCall(tok, callData.balanceOf(a.hex))); } catch { bal = null; }
     const shown = bal == null ? '?' : info.standard === 'erc20' && info.decimals != null ? formatUnits(bal, info.decimals, { maxFrac: 8 }) : groupDigits(bal.toString());
-    return [routeLink(`token/${tok}`, tokenText(info.name, 32, short(tok, 8, 4)), { title: tok }), tokenText(info.symbol, 16), info.standard ? info.standard.toUpperCase().replace('ERC', 'ERC-') : '?', shown];
+    return [h('span', null, routeLink(`token/${tok}`, tokenText(info.name, 32, short(tok, 8, 4)), { title: tok }), labelTag(tok), riskBadge(tok, { t, lang })), tokenText(info.symbol, 16), info.standard ? info.standard.toUpperCase().replace('ERC', 'ERC-') : '?', shown];
   }));
   return h('div', null,
     table([t('token'), t('symbol'), t('standard'), t('balance')], rows, { empty: t('noTokens') }),
@@ -577,7 +660,12 @@ async function pageToken(view, param) {
       [t('decimals'), info.decimals != null ? String(info.decimals) : '—'],
       [t('totalSupply'), supply],
       [t('neuroReport'), link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, t('openNeuro')) : t('neuroUnset')],
+      info.standard === 'erc20' ? [t('holdTitle'), routeLink(`token/${a.hex}/holders`, t('holdOpen'))]
+        : info.standard ? [t('nftTitle'), routeLink(`nft/${a.hex}`, t('nftOpenGallery'))] : null,
     ]), note(t('tokenTextNote'))),
+    isContract ? contractCard(ui(), a.hex) : null,
+    riskSummaryCard(ui(), a, { isToken: true, counterparties: chain.tokenLogs(a.hex, Math.max(1, Number(st.height) - cfg.scanBlocks + 1), Number(st.height), TOPICS)
+      .then((logs) => logs.map(decodeTransfer).filter(Boolean).flatMap((x) => [x.from, x.to]).filter((x) => !/^0x0{40}$/.test(x))) }),
     threatCard(a, acc.code),
     card(t('recentTransfers', { n: '' }).trim(), slot((async () => {
       const from = Math.max(1, Number(st.height) - cfg.scanBlocks + 1);
@@ -586,36 +674,6 @@ async function pageToken(view, param) {
       return h('div', null, trs.length ? trs.map(({ l, tr }) => h('div', { class: 'transfer-row' }, blockLink(BigInt(l.blockNumber).toString()), ' · ', hashLink(l.transactionHash), ' · ', transferView(tr))) : note(t('noTransfers')),
         note(t('tokenWindowNote', { n: groupDigits(Number(st.height) - from + 1) }), 'info'));
     })(), (x) => x)),
-  ]);
-}
-
-// -- validators --
-
-async function pageValidators(view, param) {
-  const st = await chain.status();
-  const rows = await getValidators(st.height);
-  const active = rows.filter((r) => r.active);
-  const total = active.reduce((n, r) => n + r.power, 0n);
-  const keyed = active.filter((r) => r.voteKey?.registered).reduce((n, r) => n + r.power, 0n);
-  const focus = param ? toValoper(decodeURIComponent(param))?.valoper : null;
-  append(view, [
-    h('h1', null, t('validators')),
-    card(null, kv([
-      [t('activeValidators'), String(active.length)],
-      [t('totalPower'), groupDigits(total.toString())],
-      [t('pqKeyPower'), `${groupDigits(keyed.toString())} (${percent(keyed, total || 1n)})`],
-      [t('atHeight'), blockLink(st.height)],
-    ]), note(t('pqKeyExplain'))),
-    card(null, table(['#', t('validator'), t('operator'), t('power'), t('status'), t('commission'), t('voteKey')], rows.map((r, i) => [
-      String(i + 1),
-      h('span', { class: focus && r.operator === focus ? 'focus' : '' }, safeText(r.moniker || '—', 40)),
-      r.operator ? h('span', null, h('span', { class: 'mono small', title: r.operator }, short(r.operator, 18, 6)), ' ', toValoper(r.operator)?.account ? routeLink(`address/${toValoper(r.operator).account.hex}`, t('accountLink')) : null) : '—',
-      r.active ? `${groupDigits(r.power.toString())} (${percent(r.power, total || 1n)})` : '0',
-      r.jailed ? badge(t('jailed'), 'bad') : r.active ? badge(t('active'), 'ok') : badge(t('inactive'), ''),
-      r.commission ? percent(BigInt(Math.round(Number(r.commission) * 1e6)), 1000000n) : '—',
-      r.voteKey?.registered ? h('span', null, badge(t('registered'), 'ok'), r.voteKey.since ? h('span', { class: 'small dim' }, ` ${t('sinceBlock', { h: groupDigits(r.voteKey.since) })}`) : null)
-        : r.voteKey?.registered === false ? badge(t('notRegistered'), 'warn') : badge('?', ''),
-    ]))),
   ]);
 }
 
@@ -635,6 +693,7 @@ function pageSettings(view) {
     field('s-threat', t('sThreat'), localCfg.threatRegistry ?? '', siteCfg.threatRegistry || '0x…', t('sThreatHelp')),
     field('s-neuro', t('sNeuro'), localCfg.neuroReportUrl ?? '', siteCfg.neuroReportUrl || 'https://…?address={address}', t('sNeuroHelp')),
     field('s-scan', t('sScan'), localCfg.scanBlocks ?? '', String(siteCfg.scanBlocks), t('sScanHelp', { max: cfg.maxScanBlocks })),
+    field('s-ipfs', t('sIpfs'), localCfg.ipfsGateway ?? '', siteCfg.ipfsGateway, t('sIpfsHelp')),
     h('div', { class: 'row' }, h('button', { type: 'submit' }, t('save')), h('button', { type: 'button', class: 'secondary', on: { click: reset } }, t('resetDefaults')),
       h('button', { type: 'button', class: 'secondary', on: { click: test } }, t('testConnection'))),
     msg);
@@ -651,6 +710,7 @@ function pageSettings(view) {
     for (const [id, key, slash] of urls) if (v(id)) out[key] = checkUrl(v(id), { trailingSlash: slash });
     if (v('s-threat')) { if (!/^0x[0-9a-fA-F]{40}$/.test(v('s-threat'))) throw new Error(t('sThreatBad')); out.threatRegistry = v('s-threat'); }
     if (v('s-neuro')) { const u = checkUrl(v('s-neuro').replaceAll('{address}', 'x').replaceAll('{chainId}', '1').split('?')[0]); if (!u) throw new Error('URL'); out.neuroReportUrl = v('s-neuro'); }
+    if (v('s-ipfs')) out.ipfsGateway = checkUrl(v('s-ipfs')).replace(/\/+$/, '');
     if (v('s-scan')) { const n = Number(v('s-scan')); if (!Number.isInteger(n) || n < 1 || n > cfg.maxScanBlocks) throw new Error(t('sScanBad', { max: cfg.maxScanBlocks })); out.scanBlocks = n; }
     return out;
   }
@@ -680,10 +740,45 @@ function pageSettings(view) {
 
 // ---- routing ----
 
-const ROUTES = { '': pageHome, block: pageBlock, tx: pageTx, address: pageAddress, token: pageToken, validators: pageValidators, settings: pageSettings };
+// ---- view kits and page modules ----
+
+/** The view kit the page modules get (validators2, gov, holders, nft, gas, tools): helpers, the node, the config and the language. */
+const kit = () => ({
+  t, lang, cfg, chain, api, h, fill, append, $, card, kv, table, note, badge, loading, errorBox, slot, copyBtn, statusBadge,
+  routeLink, addrLink, blockLink, hashLink, valoperView, messageView, transferView, tokenInfo, getValidators,
+});
+
+/** What the history, live, watch and chart modules need from the app (read fresh on every call): the page kit plus the live feed and watch list. */
+const ctx = () => ({ ...kit(), live, watch, txWatch, anyLink, onLeave: (fn) => leaveFns.push(fn) });
+
+/** The view kit the insight modules use (flow, quantum, risk, cross-chain, ask): ctx() plus the deep tx/contract kit. */
+function ui() {
+  return {
+    ...ctx(), ...uiDeep(),
+    risk: getRisk(), txTable, neuroLink: (addr) => neuroLink(cfg, addr),
+    quantumCard: (a, acc) => quantumCard(ui(), a, acc), riskSummary: (a, acc) => riskSummaryCard(ui(), a),
+  };
+}
+
+// Page modules loaded when first opened.
+const lazy = (load, fn) => async (view, param) => (await load())[fn](kit(), view, param);
+const pageValidatorList = lazy(() => import('./validators2.js'), 'pageValidatorList');
+const pageValidator = lazy(() => import('./validators2.js'), 'pageValidator');
+const pageHolders = lazy(() => import('./holders.js'), 'pageHolders');
+const pageTokenOrHolders = (view, param) => (/\/holders$/.test(String(param ?? '')) ? pageHolders(view, String(param).replace(/\/holders$/, '')) : pageToken(view, param));
+
+const ROUTES = {
+  '': pageHome, block: pageBlock, tx: pageTx, address: pageAddress, token: pageTokenOrHolders, settings: pageSettings,
+  validators: (view, param) => (param ? pageValidator(view, param) : pageValidatorList(view)), validator: pageValidator,
+  gov: lazy(() => import('./gov.js'), 'pageGov'), nft: lazy(() => import('./nft.js'), 'pageNft'),
+  gas: lazy(() => import('./gas.js'), 'pageGas'), tools: lazy(() => import('./tools.js'), 'pageTools'),
+  live: (view) => pageLive(view, ctx()),
+  flow: (v, p) => pageFlow(v, p, ui()), quantum: (v, p) => pageQuantum(v, p, ui()), ask: (v, p) => pageAsk(v, p, ui()),
+};
 
 async function route() {
   clearInterval(refreshTimer);
+  for (const f of leaveFns.splice(0)) { try { f(); } catch { /* gone */ } }
   const [, name = '', param] = /^#\/?([a-z]*)\/?(.*)$/.exec(location.hash) ?? [];
   const page = ROUTES[name] ?? null;
   const view = h('div', { class: 'view' });
@@ -703,8 +798,9 @@ function search(e) {
   const go = (r) => { location.hash = `#/${r}`; $('search').value = ''; };
   if (q.type === 'block') go(`block/${q.height}`);
   else if (q.type === 'address') go(`address/${q.address.hex}`);
-  else if (q.type === 'valoper') go(`validators/${q.valoper}`);
+  else if (q.type === 'valoper') go(`validator/${q.valoper}`);
   else if (q.type === 'hash') go(`tx/${q.evm ? '0x' : ''}${q.hash}`);
+  else if (parseQuestion($('search').value)) go(parseQuestion($('search').value).route); // a plain question (ask.js)
   else { $('search').setCustomValidity(t('badSearch')); $('search').reportValidity(); setTimeout(() => $('search').setCustomValidity(''), 2500); }
 }
 
@@ -718,10 +814,51 @@ function setup(c) {
       chain = chainApi(api);
     } catch { ready = false; }
   }
+  setRisk(ready ? createRisk({ batch: (calls) => api.evmBatch(calls), single: (m, p) => api.evm(m, p, TTL.short), registry: cfg.threatRegistry, chainId: cfg.evmChainId }) : null);
   validatorCache = { at: 0, rows: null, height: null, promise: null };
   tokenCache.clear();
+  resolver = null;
+  startLive();
   banner();
   window.__explorer = { stats: () => ({ ...(api?.stats ?? {}) }), config: () => ({ ...cfg }) }; // for the tests and curious users
+}
+
+// One live feed for the whole app: pages subscribe to it; watched addresses and txs are checked on every block.
+function startLive() {
+  live?.stop(); live = null; txWatch = null;
+  if (!ready) return;
+  const c = chain;
+  // Sockets only to config.json's node: its wss:// origin is the one in the CSP (vercel.json connect-src).
+  live = new LiveFeed({ endpoints: endpoints(cfg), host: socketHost(siteCfg), poll: () => c.status() });
+  txWatch = createTxWatch(store, (e) => txLanded(c, e));
+  txWatch.onChange((landed) => { for (const e of landed) toast(t(e.status === 'failed' ? 'toastTxFailed' : 'toastTxConfirmed', { h: e.height }), { href: `#/tx/${e.evmHash ?? e.hash}`, text: short(e.evmHash ?? e.hash, 10, 6) }); });
+  live.on((b) => {
+    if (c !== chain) return;
+    if (txWatch.list().some((e) => e.status === 'pending')) txWatch.checkAll();
+    notifyWatched(c, b).catch(() => { /* next block */ });
+  });
+  live.start();
+}
+
+/** A toast when a watched address is in a new block (and the up to 3 blocks before it the feed skipped). */
+async function notifyWatched(c, b) {
+  const list = watch.list();
+  if (!list.length) return;
+  const want = new Map(list.map((e) => [e.address.toLowerCase(), e]));
+  const lo = b.previous ? Math.max(Number(b.previous) + 1, Number(b.height) - 3) : Number(b.height);
+  for (let H = lo; H <= Number(b.height); H++) {
+    const txs = H === Number(b.height) && Array.isArray(b.txs) ? b.txs : (await c.block(H))?.block?.data?.txs ?? [];
+    txs.forEach((tx, i) => {
+      let s;
+      try { s = c.summarize({ hash: cometTxHash(fromBase64(tx)), tx, height: String(H), index: i, tx_result: {} }); } catch { return; }
+      if (s.certificate) return;
+      const hits = new Set([...s.addresses, anyAddressLower(s.from), anyAddressLower(s.to)].filter((x) => x && want.has(x)));
+      for (const a of hits) {
+        const e = want.get(a);
+        toast(t('toastWatched', { a: e.name || short(e.address, 8, 6), h: groupDigits(H) }), { href: `#/tx/${s.hash}`, text: short(s.hash, 10, 6) });
+      }
+    });
+  }
 }
 
 async function start() {
@@ -734,8 +871,10 @@ async function start() {
   const loaded = await loadConfig({ storage: store });
   siteCfg = loaded.site; localCfg = loaded.local;
   setup(loaded.config);
+  await Promise.all([loadLabels(), loadCrossChain()]); // labels.json, crosschain.json (built by npm run build)
   window.addEventListener('hashchange', route);
   route();
+  registerServiceWorker();
 }
 
 export { T };
