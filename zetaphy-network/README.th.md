@@ -1081,6 +1081,15 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 `deployments/offline-77390.json` ให้ฮับอ่าน ส่วน `… offline-deploy.js check` อ่านกลับมาตรวจ เทสต์ใน `test/offline.test.js`
 การออกแบบ ภัยที่คิดไว้ และข้อจำกัด: [docs/future/offline-trading.th.md](../docs/future/offline-trading.th.md)
 
+## ไลต์ไคลเอนต์ STARK (ต้นแบบ)
+
+`src/starklc/`: STARK แบบใช้แฮช (SHA-256, FRI) พิสูจน์ว่าผู้ลงนามที่มีพลังถึงเกณฑ์ของชุดผู้ตรวจสอบที่ผูกมัดด้วย Merkle
+ได้ลงนามบล็อกแล้ว (บิตแมปผู้ลงนาม ผลรวมพลัง กฎของเชน 3S > 2T − 3U และการผูกมัดใบรับรอง) โดยลายเซ็น ML-DSA-44
+เปิดเผยครบ สุ่มตรวจ หรือเชื่อผู้สร้าง (ระบุไว้ในหลักฐานแต่ละชิ้น) และส่งต่อชุดผู้ตรวจสอบข้ามยุคจากราก genesis ที่ปักหมุดไว้
+ตรวจในเบราว์เซอร์ได้ที่ `zetaphy-explorer/lightclient.html` ทดสอบใน `test/starklc.test.js` เบนช์มาร์กด้วย `npm run bench:starklc`
+อะไรพิสูจน์แล้ว อะไรต้องเชื่อ ระดับความปลอดภัย ผลวัด และแผนตรวจ ML-DSA ในวงจรและสะพานข้ามเชน:
+[docs/future/stark-light-client.th.md](../docs/future/stark-light-client.th.md)
+
 ## ทดสอบ
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)

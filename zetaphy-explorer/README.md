@@ -86,6 +86,15 @@ Limitation: voting power and vote keys are read from the same node (not pinned),
 So the result label says "Certificate is valid according to this node's validator keys" (not just "Certificate is valid"), and a trust note (`pqTrust`)
 is always shown next to the result label. To verify without trusting any node, use `zetaphy pq verify-block --pin` in zetaphy-network
 
+### STARK light client (prototype, `lightclient.html`)
+
+A separate page that verifies, in the browser, a hash-based STARK proof that validators holding the required power of
+a pinned validator set (32-byte root) signed a block, without an RPC node or the full list of signatures
+(`vendor/starklc-lib.js`, the verifier of `zetaphy-network/src/starklc`, loaded on that page only). It runs a demo
+(genesis set → handoff to epoch 1 → three blocks → a forged copy) from `lightclient/demo/` (test keys) and verifies any
+`.bin` proof opened from disk. Browser benchmark: `npm run bench:starklc`. Details and limits:
+[docs/future/stark-light-client.md](../docs/future/stark-light-client.md)
+
 ### ThreatRegistry (Neuro)
 
 Uses the same logic as the wallet and snap (`zetaphy-network/src/vaccine.js`): checks the address itself (`isAddressFlagged/Enforced`),
@@ -330,6 +339,8 @@ src/validators2.js  validators list + #/validator/<valoper>   src/gov.js  govern
 src/nft.js       NFT gallery   src/gas.js  gas & fees   src/tools.js  tools   src/pwa.js  service worker registration
 sw.js  manifest.webmanifest  offline.html  icon-192.png  icon-512.png   (installable app shell)
 vendor/zetaphy-tools-lib.js  secp256k1 (@noble/curves) for the Tools page (npm run build)
+lightclient.html  src/lightclient-page.js  src/lightclient.css  lightclient/demo/  STARK light-client page
+vendor/starklc-lib.js  the STARK light-client verifier (zetaphy-network/src/starklc, npm run build)
 ```
 
 ---

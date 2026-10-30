@@ -86,6 +86,14 @@ rpc-guard ของโหนดสาธารณะปิด websocket ขอ�
 ป้ายผลจึงเขียนว่า "ใบรับรองถูกต้องตามกุญแจ validator ของโหนดนี้" (ไม่ใช่ "ใบรับรองถูกต้อง" เฉย ๆ) และแสดงหมายเหตุความน่าเชื่อถือ (`pqTrust`)
 ไว้ติดกับป้ายผลเสมอ ถ้าต้องการตรวจโดยไม่เชื่อโหนดใด ใช้ `zetaphy pq verify-block --pin` ใน zetaphy-network
 
+### ไลต์ไคลเอนต์ STARK (ต้นแบบ, `lightclient.html`)
+
+หน้าแยกที่ตรวจหลักฐาน STARK แบบใช้แฮชในเบราว์เซอร์ ว่าผู้ตรวจสอบที่มีพลังถึงเกณฑ์ของชุดที่ปักหมุดไว้ (ราก 32 ไบต์)
+ได้ลงนามบล็อกแล้ว โดยไม่ต้องใช้โหนด RPC และไม่ต้องโหลดลายเซ็นทั้งหมด (`vendor/starklc-lib.js` คือตัวตรวจจาก
+`zetaphy-network/src/starklc` โหลดเฉพาะหน้านี้) มีเดโม (ชุด genesis → handoff ไปยุค 1 → สามบล็อก → สำเนาที่ถูกปลอม)
+จาก `lightclient/demo/` (กุญแจทดสอบ) และตรวจไฟล์ `.bin` ที่เปิดจากเครื่องได้ เบนช์มาร์กในเบราว์เซอร์: `npm run bench:starklc`
+รายละเอียดและข้อจำกัด: [docs/future/stark-light-client.th.md](../docs/future/stark-light-client.th.md)
+
 ### ThreatRegistry (Neuro)
 
 ใช้ตรรกะเดียวกับกระเป๋าและ snap (`zetaphy-network/src/vaccine.js`): ตรวจตัวที่อยู่ (`isAddressFlagged/Enforced`),
@@ -329,6 +337,8 @@ src/validators2.js  รายการ validator + #/validator/<valoper>   src/g
 src/nft.js       NFT gallery   src/gas.js  ค่าแก๊ส   src/tools.js  เครื่องมือ   src/pwa.js  service worker registration
 sw.js  manifest.webmanifest  offline.html  icon-192.png  icon-512.png   (โครงแอปที่ติดตั้งได้)
 vendor/zetaphy-tools-lib.js  secp256k1 (@noble/curves) สำหรับหน้าเครื่องมือ (npm run build)
+lightclient.html  src/lightclient-page.js  src/lightclient.css  lightclient/demo/  หน้าไลต์ไคลเอนต์ STARK
+vendor/starklc-lib.js  ตัวตรวจไลต์ไคลเอนต์ STARK (zetaphy-network/src/starklc, npm run build)
 ```
 
 ---

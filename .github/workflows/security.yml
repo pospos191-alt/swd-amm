@@ -153,7 +153,7 @@ jobs:
           out verify '^(zetaphy-verify/|zetaphy-neuro/src/)'
           out network '^(zetaphy-network/|zetaphy-neuro/src/|zetaphy-chain/horcrux/|zetaphy-chain/join-validator\.sh$)'
           out wallet '^(zetaphy-wallet/|zetaphy-network/src/pqtx\.js$|zetaphy-neuro/src/(fingerprint|bytecode)\.js$|zetaphy-chain/wallets/)'
-          out explorer '^(zetaphy-explorer/|zetaphy-network/src/(pqcert|pqtx|vaccine)\.js$)'
+          out explorer '^(zetaphy-explorer/|zetaphy-network/src/((pqcert|pqtx|vaccine)\.js|starklc/.*)$)'
           out dex '^(zetaphy-dex/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out hub '^(zetaphy-hub/|zetaphy-wallet/|zetaphy-dex/web/|zetaphy-nft/web/|zetaphy-explorer/|zetaphy-neuro/(web|src)/|zetaphy-chain/hyperlane/saphan-(chains|routes)\.json$)'

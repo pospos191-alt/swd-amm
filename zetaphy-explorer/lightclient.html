@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0b0d14">
+<title>ZETAPHY STARK light client</title>
+<meta name="description" content="Prototype: verify in the browser, from one small hash-based (post-quantum) STARK proof, that a ZETAPHY block was certified by validators holding more than 2/3 of the power.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="src/lightclient.css">
+<script type="module" src="src/lightclient-page.js"></script>
+</head>
+<body>
+<header class="app-header">
+  <div class="hdr-row">
+    <a class="hdr-brand" href="./#/"><img src="logo.svg" alt="" width="28" height="28"><span class="hdr-brand-text">ZETAPHY</span><span class="hdr-brand-sub">STARK light client</span></a>
+  </div>
+</header>
+<main class="lc-main">
+  <section class="card lc-card">
+    <h1>STARK light client <span class="lc-tag">prototype · testnet</span></h1>
+    <p>This page checks, <strong>in your browser</strong>, a hash-based STARK proof (SHA-256 + FRI, post-quantum) that validators holding the required power of a pinned validator set signed a block. It needs no RPC node and no validator list: only the 32-byte root of the set it started from.</p>
+    <p>หน้านี้ตรวจหลักฐาน STARK (ใช้แฮช SHA-256 ทนควอนตัม) ในเบราว์เซอร์ ว่าบล็อกได้รับลายเซ็นจากผู้ตรวจสอบที่มีพลังโหวตเกิน 2/3 โดยไม่ต้องเชื่อโหนด RPC และไม่ต้องโหลดลายเซ็นทั้งหมด</p>
+    <details class="lc-details">
+      <summary>What is proven, what is trusted</summary>
+      <ul>
+        <li><strong>Proven by the STARK</strong> (128-bit conjectured, 72-bit provable): the signer bitmap over the committed set adds up to signed power S, total T, keyless U and signer count C, and the chain's rule 3S &gt; 2T − 3U is checked on them.</li>
+        <li><strong>Signature validity</strong> depends on the proof's mode: <em>all</em> reveals and checks every signer's ML-DSA-44 signature (complete); <em>sample</em> checks power-weighted samples (k·log2(3S/(2T−3U)) bits); <em>none</em> trusts the prover for ML-DSA validity.</li>
+        <li><strong>Trusted</strong>: the pinned genesis set root; that validators sign set handoffs (needs a chain change, see docs/future/stark-light-client.md); SHA-256.</li>
+        <li>Demo data is generated with public <strong>test keys</strong>. It is not a real chain.</li>
+      </ul>
+    </details>
+  </section>
+
+  <section class="card lc-card">
+    <h2>Demo: genesis → handoff → blocks</h2>
+    <p class="lc-dim">Pinned genesis set (epoch 0): <code id="lc-genesis">loading…</code></p>
+    <button id="lc-run" class="lc-btn" type="button" disabled>Run the demo</button>
+    <div class="lc-scroll">
+      <table class="lc-table" id="lc-results">
+        <thead><tr><th>file</th><th>statement</th><th>result</th><th>S / T (U)</th><th>signers</th><th>signature check</th><th>size</th><th>verify</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="lc-dim" id="lc-pin">Current pin: –</p>
+  </section>
+
+  <section class="card lc-card">
+    <h2>Verify a proof file</h2>
+    <p class="lc-dim">A <code>.bin</code> proof from <code>zetaphy-network/src/starklc</code>. It is checked against the current pin (after the demo: epoch 1), or against the pin you enter.</p>
+    <div class="lc-form">
+      <label>chain id <input id="lc-chain" type="text" spellcheck="false"></label>
+      <label>set root (hex) <input id="lc-root" type="text" spellcheck="false" class="lc-mono"></label>
+      <label>log2 rows <input id="lc-logn" type="number" min="3" max="20"></label>
+      <label>min. signature bits <input id="lc-minsig" type="number" min="0" value="128"></label>
+      <label class="lc-file">proof file <input id="lc-file" type="file" accept=".bin,application/octet-stream"></label>
+    </div>
+    <pre id="lc-out" class="lc-out" aria-live="polite"></pre>
+  </section>
+</main>
+</body>
+</html>

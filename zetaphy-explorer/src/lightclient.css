@@ -1,0 +1,24 @@
+/* lightclient.html: the STARK light-client demo page (style.css provides the tokens). */
+.lc-main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+.lc-card { padding: 20px; }
+.lc-card h1 { font-size: 1.5rem; margin: 0 0 12px; }
+.lc-card h2 { font-size: 1.15rem; margin: 0 0 10px; }
+.lc-tag { font-size: 0.75rem; font-weight: 500; color: var(--warn-text, #f8d57e); background: var(--warn-bg, #241e0a); border-radius: 6px; padding: 2px 8px; vertical-align: middle; }
+.lc-dim { color: var(--text-dim); }
+.lc-details summary { cursor: pointer; color: var(--link); }
+.lc-details li { margin: 6px 0; }
+.lc-btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 9px 16px; font: inherit; cursor: pointer; }
+.lc-btn:disabled { opacity: 0.5; cursor: default; }
+.lc-scroll { overflow-x: auto; margin-top: 12px; }
+.lc-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.lc-table th, .lc-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--panel-border); white-space: nowrap; }
+.lc-table th { color: var(--text-dim); font-weight: 500; }
+.lc-ok { color: var(--up); }
+.lc-bad { color: var(--down); }
+.lc-warn { color: var(--warn); }
+.lc-mono, .lc-out, code { font-family: var(--mono); }
+code { word-break: break-all; }
+.lc-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 10px 0; }
+.lc-form label { display: grid; gap: 4px; color: var(--text-dim); font-size: 0.85rem; }
+.lc-form input { background: var(--field-bg); color: var(--text); border: 1px solid var(--panel-border); border-radius: 8px; padding: 7px 9px; font: inherit; min-width: 0; }
+.lc-out { background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: 12px; white-space: pre-wrap; word-break: break-all; min-height: 3em; margin: 0; }
