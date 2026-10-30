@@ -1,6 +1,6 @@
 # ZETAPHY in-house audit report
 
-> Automated audit of commit `a54308231969d56318e5569c5a03d104f3618919`, fast tier, 2026-10-30T11:57:24Z.
+> Automated audit of commit `6829beeb21bae9f1563e4b9de03551983ec5a71b`, fast tier, 2026-10-30T12:42:20Z.
 > This is a machine-generated report from free open-source tools and our own scripts. It is **not** an independent audit and does not replace one (see [What this does NOT prove](#what-this-does-not-prove-as-of-2026-10-30)).
 
 ## Summary
@@ -8,28 +8,28 @@
 | Severity | All | Open | Open & new (not in baseline) | Triaged (confirmed) | Triaged, pending owner confirmation |
 |---|---:|---:|---:|---:|---:|
 | Critical | 0 | 0 | 0 | 0 | 0 |
-| High | 205 | 72 | 0 | 0 | 133 |
-| Medium | 370 | 370 | - | 0 | 0 |
-| Low | 1381 | 1381 | - | 0 | 0 |
-| Info | 301 | 301 | - | 0 | 0 |
+| High | 204 | 0 | 0 | 0 | 204 |
+| Medium | 250 | 250 | - | 0 | 0 |
+| Low | 1382 | 1382 | - | 0 | 0 |
+| Info | 428 | 428 | - | 0 | 0 |
 
 - **Gate (PR tier):** passes: no new untriaged High/Critical finding.
-- **Pending owner confirmation:** 133 triage decision(s) in `triage.yml` are provisional ("owner to confirm"), 133 of them High/Critical. They count as decided for the gate and `--json`, exactly like confirmed ones, and are labelled **PENDING OWNER CONFIRMATION** below. The owner confirms one by putting their own name in `decided_by`, or rejects it by deleting the entry (the finding is then open again).
+- **Pending owner confirmation:** 204 triage decision(s) in `triage.yml` are provisional ("owner to confirm"), 204 of them High/Critical. They count as decided for the gate and `--json`, exactly like confirmed ones, and are labelled **PENDING OWNER CONFIRMATION** below. The owner confirms one by putting their own name in `decided_by`, or rejects it by deleting the entry (the finding is then open again).
 - **Invariant / property suites:** 96 passed, 0 failed, 0 not run.
 - **Mutation score:** not measured in this run (deep tier).
 - **Contracts compiled:** 89 audited contracts with code (89 committed artifacts match the source exactly, 0 do not).
-- **Run time:** 9 min 55 s.
+- **Run time:** 9 min 20 s.
 
 ## Scope
 
-Commit `a54308231969d56318e5569c5a03d104f3618919` · target `this repository (audit/scope.json)` · compiler 0.8.26+commit.8a97fa7a.Linux.g++
+Commit `6829beeb21bae9f1563e4b9de03551983ec5a71b` · target `this repository (audit/scope.json)` · compiler 0.8.26+commit.8a97fa7a.Linux.g++
 
 | Project | Files in scope | Code lines (no comments/blank) | Excluded (why) |
 |---|---:|---:|---|
-| zetaphy-network | 55 | 12593 | `contracts/VulnerableVault.sol`: deliberately vulnerable target of the testnet bug-bounty demo (see its header); never holds value<br>`contracts/MockMailbox.sol`: TEST ONLY stand-in for a Hyperlane Mailbox (see its header)<br>`contracts/VaultTestRecipients.sol`: test-only recipients for RewardVault tests<br>`contracts/TestStable.sol`: worthless testnet faucet stablecoin (see its header) |
+| zetaphy-network | 55 | 12599 | `contracts/VulnerableVault.sol`: deliberately vulnerable target of the testnet bug-bounty demo (see its header); never holds value<br>`contracts/MockMailbox.sol`: TEST ONLY stand-in for a Hyperlane Mailbox (see its header)<br>`contracts/VaultTestRecipients.sol`: test-only recipients for RewardVault tests<br>`contracts/TestStable.sol`: worthless testnet faucet stablecoin (see its header) |
 | zetaphy-dex | 8 | 1942 | `contracts/test/DexTestHelpers.sol`: test-only helpers<br>`contracts/test/DlmmTestHelpers.sol`: test-only helpers<br>`contracts/TestToken.sol`: testnet-only token with an owner mint (see its header) |
 | zetaphy-nft | 6 | 934 | - |
-| **Total** | 69 | 15469 | |
+| **Total** | 69 | 15475 | |
 
 Chain code: the ZETAPHY patches in `zetaphy-chain/setup-node.sh`, applied to the pinned Cosmos EVM source; only lines those patches add are reported. JS/TS web apps: covered by CodeQL, not here (their npm dependencies are).
 
@@ -37,16 +37,17 @@ Chain code: the ZETAPHY patches in `zetaphy-chain/setup-node.sh`, applied to the
 
 | Step | Tool | Status | Time | Version / note |
 |---|---|---|---:|---|
-| compile every contract; runtime code hash; committed artifacts = source? | compile | ran | 28s | 0.8.26+commit.8a97fa7a.Linux.g++ |
-| static analysis, all ~100 detectors (Trail of Bits) | slither | ran | 137s | 0.11.6 |
-| static analysis, AST detectors (Cyfrin) | aderyn | ran | 13s | aderyn 0.6.8 |
-| pattern rules from real exploits (Decurity smart-contract rules) | semgrep | ran | 37s | 1.183.0 rules 2e878a8 |
-| formal checks built into solc: assert, overflow, division by zero, bounds | smtchecker | ran | 117s | solc 0.8.26+commit.8a97fa7a.Linux.g++ · 4 contracts done; 0 not |
-| invariant / property suites: forge (fuzz), halmos (symbolic), medusa / echidna | invariants | ran | 71s | forge Version: 1.2.3-v1.2.3 · passed 96, failed 0, not run 0 |
+| compile every contract; runtime code hash; committed artifacts = source? | compile | ran | 30s | 0.8.26+commit.8a97fa7a.Linux.g++ |
+| static analysis, all ~100 detectors (Trail of Bits) | slither | ran | 144s | 0.11.6 |
+| static analysis, AST detectors (Cyfrin) | aderyn | ran | 10s | aderyn 0.6.8 |
+| pattern rules from real exploits (Decurity smart-contract rules) | semgrep | ran | 14s | 1.183.0 rules 2e878a8 |
+| formal checks built into solc: assert, overflow, division by zero, bounds | smtchecker | ran | 133s | solc 0.8.26+commit.8a97fa7a.Linux.g++ · 4 contracts done; 0 not |
+| invariant / property suites: forge (fuzz), halmos (symbolic), medusa / echidna | invariants | ran | 76s | forge Version: 1.2.3-v1.2.3 · passed 96, failed 0, not run 0 |
 | plant small bugs, see if the tests notice (score) | mutation | skipped | 0s |  · deep tier only |
 | our own Neuro scanner on our own bytecode (dogfooding) | neuro | ran | 1s | zetaphy-neuro 14954dd · neuro: 89 contracts read; verdicts {"low":70,"info":3,"high":14,"medium":2} |
-| known vulnerabilities in every lockfile (OSV database) | osv-scanner | failed | 30s | 2.7.0 · could not reach the OSV database: request failed: Post "https://api.osv.dev/v1/querybatch": Forbidden |
-| known vulnerabilities in production npm dependencies | npm-audit | ran | 0s | npm 10.9.4 · production dependencies (--omit=dev) |
+| known vulnerabilities in every lockfile (OSV database) | osv-scanner | ran | 51s | 2.7.0 · offline database (OSV_OFFLINE_DB) |
+| known vulnerabilities in production npm dependencies | npm-audit | failed | 0s | npm 10.9.4 · no audit answer for: npm-zetaphy-dex.json  |
+| chain patches: staticcheck, gosec, govulncheck, go test -race | go | skipped | 0s |  · not run in this sandbox (no disk room to build the patched chain; zetaphy-chain/ is unchanged since the last full run); the G115 entries below are listed as unmatched for that reason only |
 
 Severity scale (README.md): **Critical** funds can be stolen or frozen now; **High** a likely path to loss or a broken core guarantee; **Medium** loss under specific conditions, or a guarantee weakened; **Low** best practice / defence in depth; **Info** style, gas, notes. Tools' own levels are mapped to this scale (lib/findings.js); a High-impact detector with low confidence is reported as Medium.
 
@@ -60,597 +61,30 @@ Hand-written review notes on the open High findings (dated; they may be older th
 
 None.
 
-### High (205: 72 open, 133 triaged)
+### High (204: 0 open, 204 triaged)
 
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:90694f24e172`
-- where: [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:135`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol#L135) — `pair = ZetaphyDlmmPairDeployer(pairDeployer).deploy(keccak256(abi.encodePacked(tokenX, tokenY, binStep)), params);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `getPair[tokenX][tokenY][binStep] = pair`, `getPair[tokenY][tokenX][binStep] = pair`, `allPairs.push(pair)`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:a05e81fab0e0`
-- where: [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:184`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L184) — `DlmmPairParameters memory p = IDlmmPairDeployer(msg.sender).pairParameters();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `factory = p.factory`, `tokenX = p.tokenX`, `tokenY = p.tokenY`, `binStep = p.binStep`, `baseFeeBps = p.baseFeeBps`, `maxDynamicFeeBps = p.maxDynamicFeeBps`, `variableFeeControl = p.variableFeeControl`, `filterPeriod = p.filterPeriod`, `decayPeriod = p.decayPeriod`, `reductionFactor = p.reductionFactor`, `maxVolatilityAccumulator = p.maxVolatilityAccumulator`, `_state = State({activeId: p.activeId, idReference: p.activeId, volatilityAccumulator: 0, volatilityReference: 0, lastUpdate: uint40(block.timestamp), protocolShareBps: p
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:8769c5ef1b3d`
-- where: [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:602`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L602) — `address to = IDlmmFactoryForPair(factory).feeTo();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `protocolFeesX = 0`, `protocolFeesY = 0`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:a5f803434df8`
-- where: [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:131`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L131) — `pairCodeHash = IDlmmFactoryR(factory_).PAIR_CODE_HASH();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `pairDeployer = IDlmmFactoryR(factory_).pairDeployer()`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentPolicyWallet.sol:fdd324aa9a3b`
-- where: [`zetaphy-network/contracts/AgentPolicyWallet.sol:415`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L415) — `if (address(committee) == address(0) \|\| !committee.isValid(cosignDigest(to, value, data, reportHash, deadline), sigs)) revert BadCosign();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `cosignNonce++`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentPolicyWallet.sol:c4d27826f961`
-- where: [`zetaphy-network/contracts/AgentPolicyWallet.sol:434`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L434) — `if (address(committee) == address(0) \|\| !committee.isValidFrost(cosignDigest(to, value, data, reportHash, deadline), sig)) revert BadCosign();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `cosignNonce++`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentRegistry.sol:71496f0f2b20`
-- where: [`zetaphy-network/contracts/AgentRegistry.sol:295`](../zetaphy-network/contracts/AgentRegistry.sol#L295) — `(bool violated, address victim, uint256 damage) = IPolicyChecker(act.checker).check(v, constitution, evidence);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `act.slashed = true`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AgentRegistry.sol:24a8d2ef837d`
-- where: [`zetaphy-network/contracts/AgentRegistry.sol:313`](../zetaphy-network/contracts/AgentRegistry.sol#L313) — `function vote(uint256 claimId, bool uphold) external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AgentRegistry.sol:8f7ed6746973`
-- where: [`zetaphy-network/contracts/AgentRegistry.sol:326`](../zetaphy-network/contracts/AgentRegistry.sol#L326) — `function expireClaim(uint256 claimId) external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/BridgeAirlock.sol:44135552b910`
-- where: [`zetaphy-network/contracts/BridgeAirlock.sol:447`](../zetaphy-network/contracts/BridgeAirlock.sol#L447) — `if (address(control) != address(0) && control.paused()) revert NeuroPaused();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `votedBy[key][msg.sender] = true`, `uint8 v = ++votes[key]`, `done[key] = true`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/BridgeAirlock.sol:fccfbb9d2469`
-- where: [`zetaphy-network/contracts/BridgeAirlock.sol:448`](../zetaphy-network/contracts/BridgeAirlock.sol#L448) — `bytes32 id = airlock.transferId(srcChainId, srcContract, srcNonce, sender, to, amount);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `votedBy[key][msg.sender] = true`, `uint8 v = ++votes[key]`, `done[key] = true`
-
-#### Contract locks Ether without a withdraw function
-
-- id: `aderyn:contract-locks-ether:zetaphy-network/contracts/BridgeAirlock.sol:d68ff4299dbc`
-- where: [`zetaphy-network/contracts/BridgeAirlock.sol:477`](../zetaphy-network/contracts/BridgeAirlock.sol#L477) — `contract LockBox {`
-- tool: aderyn (contract-locks-ether)
-- status: open (known: in baseline, awaiting triage)
-- detail: Contract locks Ether without a withdraw function.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/BugBounty.sol:7a2aeb935365`
-- where: [`zetaphy-network/contracts/BugBounty.sol:279`](../zetaphy-network/contracts/BugBounty.sol#L279) — `try issuance.draw(b.subsidy) returns (uint256) {} catch {}`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `owed[f.finder] += amount + f.deposit`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:99f52b427f59`
-- where: [`zetaphy-network/contracts/BugBounty.sol:320`](../zetaphy-network/contracts/BugBounty.sol#L320) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ComputeMarket.sol:da98dfc4f428`
-- where: [`zetaphy-network/contracts/ComputeMarket.sol:76`](../zetaphy-network/contracts/ComputeMarket.sol#L76) — `(, , bool active, uint32 agreed, uint32 rejected) = runners.workers(msg.sender);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `t.runner = msg.sender`, `t.status = Status.Taken`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ComputeMarket.sol:ee45839a615c`
-- where: [`zetaphy-network/contracts/ComputeMarket.sol:128`](../zetaphy-network/contracts/ComputeMarket.sol#L128) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/DataDAO.sol:a41374451ef7`
-- where: [`zetaphy-network/contracts/DataDAO.sol:151`](../zetaphy-network/contracts/DataDAO.sol#L151) — `function claim(uint256 round, address account, uint256 amount, bytes32[] calldata proof) external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/DetectorPool.sol:c136631d98f3`
-- where: [`zetaphy-network/contracts/DetectorPool.sol:117`](../zetaphy-network/contracts/DetectorPool.sol#L117) — `if (foresight.modelOwner(modelId) != msg.sender) revert NotModelOwner();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `_orgs.push(Organism(msg.sender, parent, 0, 0, 0, true, false, uint64(block.timestamp), uint128(msg.value), modelId, specHash, n, sum, 0, uri))`, `organismOfModel[modelId] = id`, `aliveIds.push(id)`, `totalStake += msg.value`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/DetectorPool.sol:d886404a1939`
-- where: [`zetaphy-network/contracts/DetectorPool.sol:120`](../zetaphy-network/contracts/DetectorPool.sol#L120) — `(uint32 n,, uint64 sum) = foresight.tracks(modelId);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `_orgs.push(Organism(msg.sender, parent, 0, 0, 0, true, false, uint64(block.timestamp), uint128(msg.value), modelId, specHash, n, sum, 0, uri))`, `organismOfModel[modelId] = id`, `aliveIds.push(id)`, `totalStake += msg.value`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/DetectorPool.sol:a2d7aad084d2`
-- where: [`zetaphy-network/contracts/DetectorPool.sol:228`](../zetaphy-network/contracts/DetectorPool.sol#L228) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:3e51299f8f84`
-- where: [`zetaphy-network/contracts/HackInsurance.sol:187`](../zetaphy-network/contracts/HackInsurance.sol#L187) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:48e465db72cd`
-- where: [`zetaphy-network/contracts/HackInsurance.sol:211`](../zetaphy-network/contracts/HackInsurance.sol#L211) — `function buyCover(bytes32 target, uint128 amount, uint64 duration) external payable returns (uint256 id) {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:7813ea08ae90`
-- where: [`zetaphy-network/contracts/HackInsurance.sol:292`](../zetaphy-network/contracts/HackInsurance.sol#L292) — `function expire(uint256 id) external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:bb6c35f65a54`
-- where: [`zetaphy-network/contracts/HumanAgentLabels.sol:371`](../zetaphy-network/contracts/HumanAgentLabels.sol#L371) — `if (labels.labelOf(who) != 1) revert NotPasskeyHuman(who);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `vouchCredential[msg.sender][who] = cred`, `vouchersOf_[who].push(msg.sender)`, `me.activeGiven++`, `me.lastVouchAt = uint64(block.timestamp)`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:1533ef55e154`
-- where: [`zetaphy-network/contracts/HumanAgentLabels.sol:375`](../zetaphy-network/contracts/HumanAgentLabels.sol#L375) — `(, , bytes32 cred,) = labels.humans(who);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `vouchCredential[msg.sender][who] = cred`, `vouchersOf_[who].push(msg.sender)`, `me.activeGiven++`, `me.lastVouchAt = uint64(block.timestamp)`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:4524c31345e1`
-- where: [`zetaphy-network/contracts/HumanAgentLabels.sol:393`](../zetaphy-network/contracts/HumanAgentLabels.sol#L393) — `bool unique = labels.labelOf(a) == 1 && !p.banned && (p.genesis \|\| n >= vouchesNeeded);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `p.uniqueSince = uint64(block.timestamp)`, `p.uniqueSince = 0`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:3316bf660feb`
-- where: [`zetaphy-network/contracts/HumanAgentLabels.sol:553`](../zetaphy-network/contracts/HumanAgentLabels.sol#L553) — `uint8 label = labels.labelOf(msg.sender);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `lastDrip[msg.sender] = block.timestamp`, `lastDripCredential[cred] = block.timestamp`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:1a4a6be2c98c`
-- where: [`zetaphy-network/contracts/HumanAgentLabels.sol:559`](../zetaphy-network/contracts/HumanAgentLabels.sol#L559) — `(,, bytes32 cred,) = labels.humans(msg.sender);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `lastDripCredential[cred] = block.timestamp`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:2075a0403a54`
-- where: [`zetaphy-network/contracts/HumanAgentLabels.sol:613`](../zetaphy-network/contracts/HumanAgentLabels.sol#L613) — `label = labels.labelOf(trader);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `usedInWindow[trader] = used`, `windowStart[trader] = block.timestamp`, `usedInWindow[trader] = 0`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/HyperlaneLane.sol:4417665c3c47`
-- where: [`zetaphy-network/contracts/HyperlaneLane.sol:121`](../zetaphy-network/contracts/HyperlaneLane.sol#L121) — `bytes32 id = airlock.transferId(chain, src, nonce, from, to, amount);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `delivered[id] = true`
-
-#### Contract locks Ether without a withdraw function
-
-- id: `aderyn:contract-locks-ether:zetaphy-network/contracts/HyperlaneLane.sol:8d254d24e64c`
-- where: [`zetaphy-network/contracts/HyperlaneLane.sol:149`](../zetaphy-network/contracts/HyperlaneLane.sol#L149) — `contract HyperlaneLockBox {`
-- tool: aderyn (contract-locks-ether)
-- status: open (known: in baseline, awaiting triage)
-- detail: Contract locks Ether without a withdraw function.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:8754a20c991f`
-- where: [`zetaphy-network/contracts/NeuroAttest.sol:93`](../zetaphy-network/contracts/NeuroAttest.sol#L93) — `(, , , bool settled) = jobs.assurance(jobId);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `jobUsed[jobId] = true`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:2b15d737e4a5`
-- where: [`zetaphy-network/contracts/NeuroAttest.sol:95`](../zetaphy-network/contracts/NeuroAttest.sol#L95) — `(, , , bytes32 chain, string memory target, , bytes32 result, , , ) = jobs.getJob(jobId);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `jobUsed[jobId] = true`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:62ad0686eab9`
-- where: [`zetaphy-network/contracts/NeuroAttest.sol:97`](../zetaphy-network/contracts/NeuroAttest.sol#L97) — `(bytes32 skill, , , , ) = jobs.jobInfo(jobId);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `jobUsed[jobId] = true`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/NeuroJobs.sol:6bb46df40e5a`
-- where: [`zetaphy-network/contracts/NeuroJobs.sol:830`](../zetaphy-network/contracts/NeuroJobs.sol#L830) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Weak Randomness
-
-- id: `aderyn:weak-randomness:zetaphy-network/contracts/NeuroJobs.sol:6e5cf1246faa`
-- where: [`zetaphy-network/contracts/NeuroJobs.sol:867`](../zetaphy-network/contracts/NeuroJobs.sol#L867) — `j.seed = keccak256(abi.encode(requester, chain, target, block.timestamp, requestCount[requester]++));`
-- tool: aderyn (weak-randomness)
-- status: open (known: in baseline, awaiting triage)
-- detail: Weak Randomness.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroJobs.sol:bd0b6673df32`
-- where: [`zetaphy-network/contracts/NeuroJobs.sol:1105`](../zetaphy-network/contracts/NeuroJobs.sol#L1105) — `uint256 cap = control.maxRegrowPerHour();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `defender[i] = cand`, `regrownThisHour += 1`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroJobs.sol:2de7e3e7c899`
-- where: [`zetaphy-network/contracts/NeuroJobs.sol:1106`](../zetaphy-network/contracts/NeuroJobs.sol#L1106) — `address[] memory r = control.roster();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `defender[i] = cand`, `regrownThisHour += 1`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/NeuroOracle.sol:1caaf8480004`
-- where: [`zetaphy-network/contracts/NeuroOracle.sol:253`](../zetaphy-network/contracts/NeuroOracle.sol#L253) — `function push(uint32 domain, bytes32[] calldata keys) external payable returns (bytes32 id) {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Unsafe Casting of integers
-
-- id: `aderyn:unsafe-casting:zetaphy-network/contracts/NeuroScore.sol:4e47b7e79173`
-- where: [`zetaphy-network/contracts/NeuroScore.sol:188`](../zetaphy-network/contracts/NeuroScore.sol#L188) — `_scores[token] = Score(int64(score), v, level, uint64(block.timestamp), fh);`
-- tool: aderyn (unsafe-casting)
-- status: open (known: in baseline, awaiting triage)
-- detail: Unsafe Casting of integers.
-
-#### Unsafe Casting of integers
-
-- id: `aderyn:unsafe-casting:zetaphy-network/contracts/NeuroScore.sol:17b11df7e29a`
-- where: [`zetaphy-network/contracts/NeuroScore.sol:189`](../zetaphy-network/contracts/NeuroScore.sol#L189) — `emit Scored(token, v, int64(score), level, fh, features);`
-- tool: aderyn (unsafe-casting)
-- status: open (known: in baseline, awaiting triage)
-- detail: Unsafe Casting of integers.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RedBlueArena.sol:b3b22c324606`
-- where: [`zetaphy-network/contracts/RedBlueArena.sol:212`](../zetaphy-network/contracts/RedBlueArena.sol#L212) — `function withdrawBond() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RedBlueArena.sol:89756e82c0f6`
-- where: [`zetaphy-network/contracts/RedBlueArena.sol:497`](../zetaphy-network/contracts/RedBlueArena.sol#L497) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RewardVault.sol:09024c8ab54d`
-- where: [`zetaphy-network/contracts/RewardVault.sol:93`](../zetaphy-network/contracts/RewardVault.sol#L93) — `function release() public returns (uint256 amount) {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RewardVault.sol:9ee49ec2404b`
-- where: [`zetaphy-network/contracts/RewardVault.sol:147`](../zetaphy-network/contracts/RewardVault.sol#L147) — `function applyShares() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/RiskForecasts.sol:065a092e6e42`
-- where: [`zetaphy-network/contracts/RiskForecasts.sol:195`](../zetaphy-network/contracts/RiskForecasts.sol#L195) — `if (s.foresightId != 0 && nowT < q.closeAt) foresight.closeCommits(s.foresightId);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `s.confirmed = true`, `q.closeAt = nowT`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RiskForecasts.sol:7e27372cfe7b`
-- where: [`zetaphy-network/contracts/RiskForecasts.sol:280`](../zetaphy-network/contracts/RiskForecasts.sol#L280) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatRegistry.sol:8ba55f9bdcb9`
-- where: [`zetaphy-network/contracts/ThreatRegistry.sol:701`](../zetaphy-network/contracts/ThreatRegistry.sol#L701) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:b98279c34116`
-- where: [`zetaphy-network/contracts/ThreatReports.sol:96`](../zetaphy-network/contracts/ThreatReports.sol#L96) — `(bool flagged, , , , , , , ) = registry.entries(key);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `reports.push(Report(key, chainKey, target, msg.sender, uint64(block.timestamp), 0, 0, uint128(msg.value), 0, 0))`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatReports.sol:cf43cca96e36`
-- where: [`zetaphy-network/contracts/ThreatReports.sol:105`](../zetaphy-network/contracts/ThreatReports.sol#L105) — `function settle(uint256 id) external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:6e0a74e63019`
-- where: [`zetaphy-network/contracts/ThreatReports.sol:108`](../zetaphy-network/contracts/ThreatReports.sol#L108) — `(bool flagged, , uint64 updatedAt, uint32 round, , , , ) = registry.entries(r.key);`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `r.state = 1`, `r.flagRound = round - 1`, `r.share = uint128(r.fee / q)`, `r.state = 2`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:9ca6b87cd9a9`
-- where: [`zetaphy-network/contracts/ThreatReports.sol:110`](../zetaphy-network/contracts/ThreatReports.sol#L110) — `uint256 q = registry.quorum();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `r.state = 1`, `r.flagRound = round - 1`, `r.share = uint128(r.fee / q)`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatReports.sol:deac0b0c8e00`
-- where: [`zetaphy-network/contracts/ThreatReports.sol:125`](../zetaphy-network/contracts/ThreatReports.sol#L125) — `function claim(uint256 id) external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:5c0e6b3d4a40`
-- where: [`zetaphy-network/contracts/ThreatReports.sol:129`](../zetaphy-network/contracts/ThreatReports.sol#L129) — `if (!registry.voted(r.key, r.flagRound, msg.sender)) revert NotVoter();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `r.claims += 1`, `claimed[id][msg.sender] = true`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:b6f5936e67b2`
-- where: [`zetaphy-network/contracts/ThreatReports.sol:130`](../zetaphy-network/contracts/ThreatReports.sol#L130) — `if (r.claims >= registry.quorum()) revert AlreadySettled(); // never more than the fee`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `r.claims += 1`, `claimed[id][msg.sender] = true`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/UsefulIssuance.sol:fd1f9bc87c9e`
-- where: [`zetaphy-network/contracts/UsefulIssuance.sol:111`](../zetaphy-network/contracts/UsefulIssuance.sol#L111) — `function sweepOverflow() external returns (uint256 amount) {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/UsefulIssuance.sol:0f4b07f15a88`
-- where: [`zetaphy-network/contracts/UsefulIssuance.sol:115`](../zetaphy-network/contracts/UsefulIssuance.sol#L115) — `(bool ok, ) = overflow.call{value: amount}("");`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `pendingOverflow = amount`
-
-#### ETH transferred without address checks
-
-- id: `aderyn:eth-send-unchecked-address:zetaphy-network/contracts/UsefulWork.sol:a2ae25d4261d`
-- where: [`zetaphy-network/contracts/UsefulWork.sol:374`](../zetaphy-network/contracts/UsefulWork.sol#L374) — `function withdraw() external {`
-- tool: aderyn (eth-send-unchecked-address)
-- status: open (known: in baseline, awaiting triage)
-- detail: ETH transferred without address checks.
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/WorkerReputation.sol:74f77558f70a`
-- where: [`zetaphy-network/contracts/WorkerReputation.sol:126`](../zetaphy-network/contracts/WorkerReputation.sol#L126) — `if (address(identity) == address(0) \|\| identity.ownerOf(agentId) != msg.sender) revert NotAgentOwner();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `workerOfAgent[agentId] = msg.sender`, `agentOfWorker[msg.sender] = agentId`, `delete workerOfAgent[old]`, `delete agentOfWorker[prev]`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyFarm.sol:ffb2067e19f9`
-- where: [`zetaphy-network/contracts/ZetaphyEarlyFarm.sol:124`](../zetaphy-network/contracts/ZetaphyEarlyFarm.sol#L124) — `if (rewardsToken.balanceOf(address(this)) < streamed + total) revert Underfunded();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `rewardRate = total / duration`, `owed = streamed + rewardRate * duration`, `lastUpdate = block.timestamp`, `periodFinish = block.timestamp + duration`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPass.sol:25ec15001519`
-- where: [`zetaphy-network/contracts/ZetaphyEarlyPass.sol:62`](../zetaphy-network/contracts/ZetaphyEarlyPass.sol#L62) — `if (block.timestamp < earlyUntil && zearly.balanceOf(msg.sender) < minHold) revert EarlyHoldersOnly();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `minted[msg.sender] = true`, `id = ++totalSupply`, `_owner[id] = msg.sender`, `balanceOf[msg.sender] += 1`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPass.sol:7b246722d74e`
-- where: [`zetaphy-network/contracts/ZetaphyEarlyPass.sol:65`](../zetaphy-network/contracts/ZetaphyEarlyPass.sol#L65) — `if (price != 0 && !zearly.transferFrom(msg.sender, BURN, price)) revert PaymentFailed();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `_owner[id] = msg.sender`, `balanceOf[msg.sender] += 1`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPolls.sol:e315b91c5c79`
-- where: [`zetaphy-network/contracts/ZetaphyEarlyPolls.sol:54`](../zetaphy-network/contracts/ZetaphyEarlyPolls.sol#L54) — `if (deposit != 0 && !token.transferFrom(msg.sender, address(this), deposit)) revert TransferFailed();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `Poll storage p = polls.push()`, `p.creator = msg.sender`, `p.end = uint64(block.timestamp) + duration`, `p.question = question`, `p.options.push(options[i])`, `p.tally.push(0)`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:17b0ee330e5b`
-- where: [`zetaphy-network/contracts/ZetaphyOracle.sol:179`](../zetaphy-network/contracts/ZetaphyOracle.sol#L179) — `address t0 = IPairTokens(pair).token0();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `twapOf[asset] = c`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:fb12769dd4a8`
-- where: [`zetaphy-network/contracts/ZetaphyOracle.sol:180`](../zetaphy-network/contracts/ZetaphyOracle.sol#L180) — `address t1 = IPairTokens(pair).token1();`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `twapOf[asset] = c`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:ebc0f2e7dfd4`
-- where: [`zetaphy-network/contracts/ZetaphyOracle.sol:183`](../zetaphy-network/contracts/ZetaphyOracle.sol#L183) — `c = TwapConfig(pair, asset == t0, IDecimals(asset).decimals(), IDecimals(asset == t0 ? t1 : t0).decimals(),`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `twapOf[asset] = c`
-
-#### Reentrancy: State change after external call
-
-- id: `aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:045d8518076e`
-- where: [`zetaphy-network/contracts/ZetaphyOracle.sol:263`](../zetaphy-network/contracts/ZetaphyOracle.sol#L263) — `if (pair != address(0)) { try recorder.record(pair) {} catch {} }`
-- tool: aderyn (reentrancy-state-change)
-- status: open (known: in baseline, awaiting triage)
-- detail: Reentrancy: State change after external call. State is changed at: `s.lastPrice = uint128(value)`, `s.lastAt = uint64(at)`, `s.windowPrice = uint128(value)`, `s.windowStart = uint64(block.timestamp)`, `s.windowPrice = s.lastPrice`, `s.windowStart = uint64(block.timestamp)`, `s.tripped = true`
-
-#### arbitrary-send-eth
-
-- id: `slither:arbitrary-send-eth:zetaphy-network/contracts/AgentPolicyWallet.sol:cb31352524b9`
-- where: [`zetaphy-network/contracts/AgentPolicyWallet.sol:601`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L601) — `function _run(address to, uint256 value, bytes calldata data, address token, uint256 amount, bytes32 modelHash, bytes32 promptHash, uint8 path)`
-- tool: slither (arbitrary-send-eth, confidence medium)
-- status: open (known: in baseline, awaiting triage)
-- detail: AgentPolicyWallet._run(address,uint256,bytes,address,uint256,bytes32,bytes32,uint8) (contracts/AgentPolicyWallet.sol#601-619) sends eth to arbitrary user Dangerous calls: - (ok,ret) = to.call{value: value}(data) (contracts/AgentPolicyWallet.sol#616)
-
-#### arbitrary-send-eth
-
-- id: `slither:arbitrary-send-eth:zetaphy-network/contracts/AgentRegistry.sol:73db96ca6d23`
-- where: [`zetaphy-network/contracts/AgentRegistry.sol:403`](../zetaphy-network/contracts/AgentRegistry.sol#L403) — `function _pay(address to, uint256 amount) private {`
-- tool: slither (arbitrary-send-eth, confidence medium)
-- status: open (known: in baseline, awaiting triage)
-- detail: AgentRegistry._pay(address,uint256) (contracts/AgentRegistry.sol#403-407) sends eth to arbitrary user Dangerous calls: - (ok,None) = to.call{value: amount}() (contracts/AgentRegistry.sol#405)
-
-#### weak-prng
-
-- id: `slither:weak-prng:zetaphy-network/contracts/NeuroJobs.sol:7bcac6f4961b`
-- where: [`zetaphy-network/contracts/NeuroJobs.sol:301`](../zetaphy-network/contracts/NeuroJobs.sol#L301) — `function _eligible(uint256 id, Round storage r, address w, uint8 round) internal view returns (bool, bool) {`
-- tool: slither (weak-prng, confidence medium)
-- status: open (known: in baseline, awaiting triage)
-- detail: NeuroJobsBase._eligible(uint256,NeuroJobsBase.Round,address,uint8) (contracts/NeuroJobs.sol#301-325) uses a weak PRNG: "x2 = uint256(keccak256(bytes)(abi.encode(_rand(j.seed,r,round),w))) % 1e18 (contracts/NeuroJobs.sol#323)"
-
-#### arbitrary-send-eth
-
-- id: `slither:arbitrary-send-eth:zetaphy-network/contracts/ThreatReports.sol:0ec044eea415`
-- where: [`zetaphy-network/contracts/ThreatReports.sol:141`](../zetaphy-network/contracts/ThreatReports.sol#L141) — `function _pay(address to, uint256 amount) private {`
-- tool: slither (arbitrary-send-eth, confidence medium)
-- status: open (known: in baseline, awaiting triage)
-- detail: ThreatReports._pay(address,uint256) (contracts/ThreatReports.sol#141-145) sends eth to arbitrary user Dangerous calls: - (ok,None) = to.call{value: amount}() (contracts/ThreatReports.sol#143)
-
-#### arbitrary-send-eth
-
-- id: `slither:arbitrary-send-eth:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:779f0ca40dd5`
-- where: [`zetaphy-network/contracts/ZetaphyOfflineOrders.sol:237`](../zetaphy-network/contracts/ZetaphyOfflineOrders.sol#L237) — `function _sendNative(address to, uint256 amount) private {`
-- tool: slither (arbitrary-send-eth, confidence medium)
-- status: open (known: in baseline, awaiting triage)
-- detail: ZetaphyOfflineOrders._sendNative(address,uint256) (contracts/ZetaphyOfflineOrders.sol#237-240) sends eth to arbitrary user Dangerous calls: - (ok,None) = to.call{value: amount}() (contracts/ZetaphyOfflineOrders.sol#238)
-
-<details><summary>133 triaged high finding(s)</summary>
+<details><summary>204 triaged high finding(s)</summary>
 
 | Where | Tool / rule | Decision |
 |---|---|---|
 | [`zetaphy-dex/contracts/dlmm/DlmmMath.sol:131`](../zetaphy-dex/contracts/dlmm/DlmmMath.sol#L131) | aderyn / incorrect-caret-operator | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six "inv *= 2 - d * inv" steps that follow double that to 256. <br>`aderyn:incorrect-caret-operator:zetaphy-dex/contracts/dlmm/DlmmMath.sol:3f59e3ab82c8` |
+| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:135`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol#L135) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): createPair: pairDeployer is immutable, created by this factory's constructor (`new ZetaphyDlmmPairDeployer()`), and its deploy() only CREATE2s a ZetaphyDlmmPair (whose constructor makes one view call back for its parameters); no token or user code runs. getPair is checked empty before, and the CREATE2 salt (tokenX, tokenY, binStep) makes a second pair for the same key impossible. <br>`aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:90694f24e172` |
+| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:184`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L184) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): pair constructor: IDlmmPairDeployer.pairParameters() is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. msg.sender is the deployer that is CREATE2-ing this pair. <br>`aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:a05e81fab0e0` |
 | [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:375`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L375) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): `out` comes from _binSwap, which returns at most binOut (the bin's uint128 reserve) and reverts if out >= binOut on the partial path; the subtraction is checked arithmetic anyway. <br>`aderyn:unsafe-casting:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:30a395f5832a` |
 | [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:378`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L378) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): `out` comes from _binSwap, which returns at most binOut (the bin's uint128 reserve) and reverts if out >= binOut on the partial path; the subtraction is checked arithmetic anyway. <br>`aderyn:unsafe-casting:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:82843ee8f22d` |
+| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:602`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L602) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): collectProtocolFees has the pair's lock modifier; IDlmmFactoryForPair.feeTo() is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. The fees are zeroed before the token transfers. <br>`aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:8769c5ef1b3d` |
+| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:131`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L131) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): router constructor: IDlmmFactoryR.PAIR_CODE_HASH() / pairDeployer() is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. It runs once, at deploy, on the factory given by the deployer. <br>`aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:a5f803434df8` |
 | [`zetaphy-dex/contracts/WZETAPHY.sol:36`](../zetaphy-dex/contracts/WZETAPHY.sol#L36) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): withdraw() burns the caller's own WZETAPHY balance (checked arithmetic) and sends the same amount to msg.sender. <br>`aderyn:eth-send-unchecked-address:zetaphy-dex/contracts/WZETAPHY.sol:1ab53a06be60` |
 | [`zetaphy-dex/contracts/ZetaphyPair.sol:167`](../zetaphy-dex/contracts/ZetaphyPair.sol#L167) | aderyn / weak-randomness | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): block.timestamp % 2**32 is the Uniswap V2 TWAP timestamp (wraps by design), not randomness. <br>`aderyn:weak-randomness:zetaphy-dex/contracts/ZetaphyPair.sol:7248a7a7744f` |
 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:51`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L51) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): RFC 9380 expand_message_xmd / RFC 9591 FROST challenge: the byte layout is fixed by the standards (fixed-width fields around one message, DST suffixed with its length), it must be packed exactly like this to interoperate. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/AgentPolicyWallet.sol:2f84fab07ccc` |
 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:60`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L60) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): RFC 9380 expand_message_xmd / RFC 9591 FROST challenge: the byte layout is fixed by the standards (fixed-width fields around one message, DST suffixed with its length), it must be packed exactly like this to interoperate. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/AgentPolicyWallet.sol:20b5033cc2ca` |
+| [`zetaphy-network/contracts/AgentPolicyWallet.sol:415`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L415) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): executeCosigned (onlyAgent): ICosignCommittee.isValid is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. The committee is set only by the owner (_config). cosignNonce++ after it is the replay counter of the digest just checked. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentPolicyWallet.sol:fdd324aa9a3b` |
+| [`zetaphy-network/contracts/AgentPolicyWallet.sol:434`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L434) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): executeCosignedFrost (onlyAgent): ICosignCommittee.isValidFrost is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. The committee is set only by the owner (_config). cosignNonce++ after it is the replay counter of the digest just checked. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentPolicyWallet.sol:c4d27826f961` |
 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:459`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L459) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/AgentPolicyWallet.sol:1051b8e85ee5` |
 | [`zetaphy-network/contracts/AgentRegistry.sol:265`](../zetaphy-network/contracts/AgentRegistry.sol#L265) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/AgentRegistry.sol:9157f2cf1eb8` |
+| [`zetaphy-network/contracts/AgentRegistry.sol:295`](../zetaphy-network/contracts/AgentRegistry.sol#L295) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): claimByChecker: IPolicyChecker.check is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. So a malicious checker cannot re-enter to pay twice; act.slashed is then set before _slash pays (one payout per action), and _slash caps the payout at the bond. (Separate design note, not this finding: the checker is the operator's choice; see review-notes.md.) <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentRegistry.sol:71496f0f2b20` |
+| [`zetaphy-network/contracts/AgentRegistry.sol:313`](../zetaphy-network/contracts/AgentRegistry.sol#L313) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): vote -> _close pays only recorded addresses: c.claimant (msg.sender of fileClaim) its deposit and the slashed damage, or a.operator (who registered the agent) the deposit. Claim state, openClaims and the bond are updated before each payment (_slash subtracts before _pay). <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AgentRegistry.sol:24a8d2ef837d` |
+| [`zetaphy-network/contracts/AgentRegistry.sol:326`](../zetaphy-network/contracts/AgentRegistry.sol#L326) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): expireClaim -> _close(claimId, false) pays the claim deposit to a.operator, the address stored at register(); state (Rejected, openClaims--) is written before the payment. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AgentRegistry.sol:8f7ed6746973` |
 | [`zetaphy-network/contracts/AuditCertificate.sol:192`](../zetaphy-network/contracts/AuditCertificate.sol#L192) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): the external call before the state change is a view into AuditNetwork.getRequest (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. certify() then writes the certificate and calls network.markCertified, which only updates AuditNetwork's storage. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:74e48a7c35f4` |
 | [`zetaphy-network/contracts/AuditCertificate.sol:193`](../zetaphy-network/contracts/AuditCertificate.sol#L193) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): the external call before the state change is a view into AuditRunners.result (runners), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:3dc81b7de171` |
 | [`zetaphy-network/contracts/AuditCertificate.sol:227`](../zetaphy-network/contracts/AuditCertificate.sol#L227) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): revokeFor is callable only by AuditNetwork (msg.sender check on line 226); the call is the view AuditNetwork.getRequest (immutable network). No user code runs. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:b8040491c9a4` |
@@ -671,45 +105,102 @@ None.
 | [`zetaphy-network/contracts/AuditRunners.sol:137`](../zetaphy-network/contracts/AuditRunners.sol#L137) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. The later reputation.record calls come after every state write of settle(). <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:3624572d3b55` |
 | [`zetaphy-network/contracts/AuditRunners.sol:164`](../zetaphy-network/contracts/AuditRunners.sol#L164) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own credit: owed is zeroed before the call and the _lock guard refuses re-entry; the recipient is the caller. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditRunners.sol:066ae4f1b6fb` |
 | [`zetaphy-network/contracts/AuditRunners.sol:170`](../zetaphy-network/contracts/AuditRunners.sol#L170) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): the state change after the call is `_lock = 1`, the release of the re-entrancy guard set before it (owed already zeroed); re-entry during the call reverts with Reentrant(). <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:ca551f4df3b9` |
+| [`zetaphy-network/contracts/BridgeAirlock.sol:447`](../zetaphy-network/contracts/BridgeAirlock.sol#L447) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): attest (registered runners only, _runner()): control is immutable; INeuroControl.paused() is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/BridgeAirlock.sol:44135552b910` |
+| [`zetaphy-network/contracts/BridgeAirlock.sol:448`](../zetaphy-network/contracts/BridgeAirlock.sol#L448) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): attest: airlock is immutable and BridgeAirlock.transferId is `public pure`, a STATICCALL that hashes its arguments. The airlock's state-changing attest() is called last, after votedBy/votes/done are written. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/BridgeAirlock.sol:fccfbb9d2469` |
+| [`zetaphy-network/contracts/BridgeAirlock.sol:477`](../zetaphy-network/contracts/BridgeAirlock.sol#L477) | aderyn / contract-locks-ether | **accepted-risk, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): LockBox is the source-chain side of the testnet Neuro bridge lane: lock() takes native coin and emits Locked; by design it has no withdraw/refund path (documented in the contract: a vetoed or held transfer stays locked). Accepted for testnet; users must be told before the lane holds real value, and a release/refund path is needed before mainnet. <br>`aderyn:contract-locks-ether:zetaphy-network/contracts/BridgeAirlock.sol:d68ff4299dbc` |
 | [`zetaphy-network/contracts/BridgeGuard.sol:353`](../zetaphy-network/contracts/BridgeGuard.sol#L353) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): _use() already reverted unless used + amount <= _limit(r), and _limit returns a uint128, so amount fits in uint128. <br>`aderyn:unsafe-casting:zetaphy-network/contracts/BridgeGuard.sol:f7604e43a592` |
 | [`zetaphy-network/contracts/BridgeGuard.sol:394`](../zetaphy-network/contracts/BridgeGuard.sol#L394) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): _use() already reverted unless used + amount <= _limit(r), and _limit returns a uint128, so amount fits in uint128. <br>`aderyn:unsafe-casting:zetaphy-network/contracts/BridgeGuard.sol:3c93e5498278` |
 | [`zetaphy-network/contracts/BugBounty.sol:241`](../zetaphy-network/contracts/BugBounty.sol#L241) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): the external call before the state change is a view into NeuroJobs.workers (runners, a view), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. The only other call, _burn, sends to the constant 0x...dEaD (no code) after the state is final. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/BugBounty.sol:1989e9c77c8b` |
+| [`zetaphy-network/contracts/BugBounty.sol:279`](../zetaphy-network/contracts/BugBounty.sol#L279) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): claim: f.state = Paid and b.paid = true are written before issuance.draw; issuance is set only in the constructor (no setter) and is our UsefulIssuance, whose draw() pays the caller from its bucket after updating its own accounting. owed[] is only credited afterwards (pull payment via withdraw). <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/BugBounty.sol:7a2aeb935365` |
 | [`zetaphy-network/contracts/BugBounty.sol:288`](../zetaphy-network/contracts/BugBounty.sol#L288) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): close() sends ETH only through _burn, to the constant BURN address 0x000000000000000000000000000000000000dEaD (no code; BB-1/BB-2 fix), after the finding's state is set; no user-chosen address. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:65b72ec11fdd` |
 | [`zetaphy-network/contracts/BugBounty.sol:305`](../zetaphy-network/contracts/BugBounty.sol#L305) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): refund() sends ETH only through _burn, to the constant BURN address 0x...dEaD (no code), after refunded and the sponsor's credit are written; the sponsor is paid by pull (withdraw). <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:7e49afbd7cc2` |
+| [`zetaphy-network/contracts/BugBounty.sol:320`](../zetaphy-network/contracts/BugBounty.sol#L320) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own owed[msg.sender], zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:99f52b427f59` |
+| [`zetaphy-network/contracts/ComputeMarket.sol:76`](../zetaphy-network/contracts/ComputeMarket.sol#L76) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): take: runners is immutable; IRunnersView.workers is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ComputeMarket.sol:da98dfc4f428` |
+| [`zetaphy-network/contracts/ComputeMarket.sol:128`](../zetaphy-network/contracts/ComputeMarket.sol#L128) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own credit[msg.sender], zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ComputeMarket.sol:ee45839a615c` |
+| [`zetaphy-network/contracts/DataDAO.sol:151`](../zetaphy-network/contracts/DataDAO.sol#L151) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): claim pays `account` exactly the amount in a Merkle leaf (round, account, amount) proven against the round root; claimed[round][account], r.claimed and reserved are written before the call. Anyone may submit, but the coins only go to the proven account. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/DataDAO.sol:a41374451ef7` |
+| [`zetaphy-network/contracts/DetectorPool.sol:117`](../zetaphy-network/contracts/DetectorPool.sol#L117) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): register: IForesightTracks.modelOwner is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. foresight is set only in the constructor. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/DetectorPool.sol:c136631d98f3` |
+| [`zetaphy-network/contracts/DetectorPool.sol:120`](../zetaphy-network/contracts/DetectorPool.sol#L120) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): register: IForesightTracks.tracks is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. foresight is set only in the constructor. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/DetectorPool.sol:d886404a1939` |
 | [`zetaphy-network/contracts/DetectorPool.sol:202`](../zetaphy-network/contracts/DetectorPool.sol#L202) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): cut = stake * slashBps / BPS with stake a uint128 and slashBps <= BPS, so cut <= stake fits in uint128. <br>`aderyn:unsafe-casting:zetaphy-network/contracts/DetectorPool.sol:5472502779b9` |
+| [`zetaphy-network/contracts/DetectorPool.sol:228`](../zetaphy-network/contracts/DetectorPool.sol#L228) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own owed[msg.sender], zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/DetectorPool.sol:a2d7aad084d2` |
 | [`zetaphy-network/contracts/ForesightRegistry.sol:200`](../zetaphy-network/contracts/ForesightRegistry.sol#L200) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): brier <= MAX_LOSS = ONE * ONE = 1e8 (p is basis points, ONE = 10_000), far below 2^64. <br>`aderyn:unsafe-casting:zetaphy-network/contracts/ForesightRegistry.sol:7d5c7d72d961` |
+| [`zetaphy-network/contracts/HackInsurance.sol:187`](../zetaphy-network/contracts/HackInsurance.sol#L187) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender for its own shares (after the request delay, no open claims); pendingShares, shares and totalShares are reduced before _send. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:3e51299f8f84` |
+| [`zetaphy-network/contracts/HackInsurance.sol:211`](../zetaphy-network/contracts/HackInsurance.sol#L211) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): buyCover refunds msg.sender only its own overpayment (msg.value - premium), after the cover is recorded. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:48e465db72cd` |
+| [`zetaphy-network/contracts/HackInsurance.sol:292`](../zetaphy-network/contracts/HackInsurance.sol#L292) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): expire -> _close refunds the claim bond to k.claimant (msg.sender of the claim, stored); state, claimOfCover, openClaims, bondsHeld and k.bond are written before _send. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:7813ea08ae90` |
 | [`zetaphy-network/contracts/HackInsurance.sol:363`](../zetaphy-network/contracts/HackInsurance.sol#L363) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): payout(id) pays the claimant recorded on an Approved claim after the dispute window, once (state set to Paid before sending). <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:eff01a1d1256` |
+| [`zetaphy-network/contracts/HumanAgentLabels.sol:371`](../zetaphy-network/contracts/HumanAgentLabels.sol#L371) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): vouch: labels is an immutable LabelRegistry; LabelRegistry.labelOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:bb6c35f65a54` |
+| [`zetaphy-network/contracts/HumanAgentLabels.sol:375`](../zetaphy-network/contracts/HumanAgentLabels.sol#L375) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): vouch: labels is an immutable LabelRegistry; the public getter LabelRegistry.humans is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:1533ef55e154` |
+| [`zetaphy-network/contracts/HumanAgentLabels.sol:393`](../zetaphy-network/contracts/HumanAgentLabels.sol#L393) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): refresh: labels is an immutable LabelRegistry; LabelRegistry.labelOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:4524c31345e1` |
 | [`zetaphy-network/contracts/HumanAgentLabels.sol:552`](../zetaphy-network/contracts/HumanAgentLabels.sol#L552) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): drip() pays msg.sender the amount for its own label, rate-limited per account and per credential, state written before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HumanAgentLabels.sol:f18a77547d41` |
+| [`zetaphy-network/contracts/HumanAgentLabels.sol:553`](../zetaphy-network/contracts/HumanAgentLabels.sol#L553) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): faucet drip: labels is an immutable LabelRegistry; LabelRegistry.labelOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. lastDrip is written before the payment to msg.sender. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:3316bf660feb` |
+| [`zetaphy-network/contracts/HumanAgentLabels.sol:559`](../zetaphy-network/contracts/HumanAgentLabels.sol#L559) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): faucet drip: labels is an immutable LabelRegistry; the public getter LabelRegistry.humans is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. lastDripCredential is written before the payment. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:1a4a6be2c98c` |
+| [`zetaphy-network/contracts/HumanAgentLabels.sol:613`](../zetaphy-network/contracts/HumanAgentLabels.sol#L613) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): trade gate check (isCaller only): labels is immutable; ILabels.labelOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:2075a0403a54` |
 | [`zetaphy-network/contracts/HyperlaneLane.sol:54`](../zetaphy-network/contracts/HyperlaneLane.sol#L54) | aderyn / contract-locks-ether | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): the only payable functions (IMessageRecipient.handle / Pyth updatePriceFeeds, payable because the interface says so) revert when msg.value != 0, so no ether can enter. <br>`aderyn:contract-locks-ether:zetaphy-network/contracts/HyperlaneLane.sol:876eebe6c3d7` |
+| [`zetaphy-network/contracts/HyperlaneLane.sol:121`](../zetaphy-network/contracts/HyperlaneLane.sol#L121) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): handle: only the Mailbox (msg.sender check), only the configured origin/sender; airlock is immutable and transferId is `pure` (STATICCALL). delivered[id] is set before the airlock's attest() is called. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/HyperlaneLane.sol:4417665c3c47` |
+| [`zetaphy-network/contracts/HyperlaneLane.sol:149`](../zetaphy-network/contracts/HyperlaneLane.sol#L149) | aderyn / contract-locks-ether | **accepted-risk, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): HyperlaneLockBox, like LockBox, locks native coin with no refund path by design (documented: "Like LockBox it has no refund path: a vetoed or held transfer stays locked here"); only the Mailbox fee leaves it. Accepted for testnet; a release/refund path is needed before mainnet and users must be told. <br>`aderyn:contract-locks-ether:zetaphy-network/contracts/HyperlaneLane.sol:8d254d24e64c` |
 | [`zetaphy-network/contracts/HyperlaneLockBoxV2.sol:224`](../zetaphy-network/contracts/HyperlaneLockBoxV2.sol#L224) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): claim(id) pays the recipient recorded for that release (r.to), once, after its delay, within the daily limit and the locked backing; anyone may trigger it, the money can only go to r.to. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HyperlaneLockBoxV2.sol:825d4067ce4a` |
 | [`zetaphy-network/contracts/IntentExecutor.sol:406`](../zetaphy-network/contracts/IntentExecutor.sol#L406) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/IntentExecutor.sol:3a6d0fdcae1b` |
 | [`zetaphy-network/contracts/ModelRegistry.sol:95`](../zetaphy-network/contracts/ModelRegistry.sol#L95) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): only one dynamic argument (name), last, after a constant string and a uint8: the packing is unambiguous. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ModelRegistry.sol:acd91d26214d` |
+| [`zetaphy-network/contracts/NeuroAttest.sol:93`](../zetaphy-network/contracts/NeuroAttest.sol#L93) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): attestFromJob: jobs is immutable; INAJobs.assurance is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:8754a20c991f` |
+| [`zetaphy-network/contracts/NeuroAttest.sol:95`](../zetaphy-network/contracts/NeuroAttest.sol#L95) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): attestFromJob: jobs is immutable; INAJobs.getJob is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:2b15d737e4a5` |
+| [`zetaphy-network/contracts/NeuroAttest.sol:97`](../zetaphy-network/contracts/NeuroAttest.sol#L97) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): attestFromJob: jobs is immutable; INAJobs.jobInfo is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:62ad0686eab9` |
 | [`zetaphy-network/contracts/NeuroIdentity.sol:4`](../zetaphy-network/contracts/NeuroIdentity.sol#L4) | aderyn / reused-contract-name | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): both files declare the identical one-function ERC-721 receiver interface (same signature); they never end up in one contract, so the duplicate name changes no behaviour. <br>`aderyn:reused-contract-name:zetaphy-network/contracts/NeuroIdentity.sol:37669c344db5` |
 | [`zetaphy-network/contracts/NeuroJobs.sol:475`](../zetaphy-network/contracts/NeuroJobs.sol#L475) | aderyn / contract-locks-ether | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): NeuroJobsChallenges is the delegatecall logic of NeuroJobs: its payable entry points carry `delegated`, which reverts when called directly, so ether only ever lands in NeuroJobs (which has withdraw()). <br>`aderyn:contract-locks-ether:zetaphy-network/contracts/NeuroJobs.sol:e2c7087665c1` |
+| [`zetaphy-network/contracts/NeuroJobs.sol:830`](../zetaphy-network/contracts/NeuroJobs.sol#L830) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own credit[msg.sender], zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/NeuroJobs.sol:6bb46df40e5a` |
+| [`zetaphy-network/contracts/NeuroJobs.sol:867`](../zetaphy-network/contracts/NeuroJobs.sol#L867) | aderyn / weak-randomness | **accepted-risk, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): j.seed (requester, chain, target, timestamp, counter) is only a per-job salt, not the randomness: runner selection uses keccak256(seed, blockhash(startBlock + 1), round), a block after the request/round opening, so neither the requester nor a runner retrying can pick it (contract docs, "Lottery bound to a block nobody picks"). Remaining, documented weakness: the proposer of block startBlock + 1 can grind that block's hash (validator-level bias), and on a chain whose BLOCKHASH is 0 the fallback is as predictable as the request. The chain's own randomness (PREVRANDAO from the PQ vote certificate, zetaphy-chain README item 8) is also proposer-biasable, so it would not remove the bias. Accepted for testnet; mainnet stakes on the lottery need commit-reveal or a VRF/beacon. <br>`aderyn:weak-randomness:zetaphy-network/contracts/NeuroJobs.sol:6e5cf1246faa` |
 | [`zetaphy-network/contracts/NeuroJobs.sol:979`](../zetaphy-network/contracts/NeuroJobs.sol#L979) | aderyn / yul-return | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): _delegate() is a proxy forwarder (delegatecall to NeuroJobsChallenges, then return or revert the returndata); ending execution with return() is the intent. <br>`aderyn:yul-return:zetaphy-network/contracts/NeuroJobs.sol:56997fc16170` |
+| [`zetaphy-network/contracts/NeuroJobs.sol:1105`](../zetaphy-network/contracts/NeuroJobs.sol#L1105) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): regrow: control is wired once by the deployer (setControl, then fixed); INeuroKnobs.maxRegrowPerHour is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroJobs.sol:bd0b6673df32` |
+| [`zetaphy-network/contracts/NeuroJobs.sol:1106`](../zetaphy-network/contracts/NeuroJobs.sol#L1106) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): regrow: control is wired once by the deployer (setControl, then fixed); INeuroKnobs.roster is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroJobs.sol:2de7e3e7c899` |
+| [`zetaphy-network/contracts/NeuroOracle.sol:253`](../zetaphy-network/contracts/NeuroOracle.sol#L253) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): push -> _dispatch pays the Mailbox fee to the immutable mailbox and refunds the excess only to msg.sender; sentRound/sentEnforcedFrom are written before the dispatch. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/NeuroOracle.sol:1caaf8480004` |
 | [`zetaphy-network/contracts/NeuroOracle.sol:302`](../zetaphy-network/contracts/NeuroOracle.sol#L302) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroOracle.sol:cf0665efa0ef` |
 | [`zetaphy-network/contracts/NeuroOracle.sol:305`](../zetaphy-network/contracts/NeuroOracle.sol#L305) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroOracle.sol:b04a1e0e90b9` |
 | [`zetaphy-network/contracts/NeuroOracle.sol:308`](../zetaphy-network/contracts/NeuroOracle.sol#L308) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroOracle.sol:d1db06a8132e` |
 | [`zetaphy-network/contracts/NeuroOracle.sol:363`](../zetaphy-network/contracts/NeuroOracle.sol#L363) | aderyn / contract-locks-ether | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): the only payable functions (IMessageRecipient.handle / Pyth updatePriceFeeds, payable because the interface says so) revert when msg.value != 0, so no ether can enter. <br>`aderyn:contract-locks-ether:zetaphy-network/contracts/NeuroOracle.sol:fc02dce4041e` |
-| [`zetaphy-network/contracts/NeuroScore.sol:265`](../zetaphy-network/contracts/NeuroScore.sol#L265) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): builds the creation code of a data contract (fixed header + data), not a hash key. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroScore.sol:13a02d8bdc94` |
+| [`zetaphy-network/contracts/NeuroScore.sol:274`](../zetaphy-network/contracts/NeuroScore.sol#L274) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): builds the creation code of a data contract (fixed header + data), not a hash key. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroScore.sol:13a02d8bdc94` |
 | [`zetaphy-network/contracts/NeuroScoreVerifier.sol:76`](../zetaphy-network/contracts/NeuroScoreVerifier.sol#L76) | aderyn / yul-return | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template. <br>`aderyn:yul-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4f53abf6f46c` |
 | [`zetaphy-network/contracts/NeuroScoreVerifier.sol:92`](../zetaphy-network/contracts/NeuroScoreVerifier.sol#L92) | aderyn / yul-return | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template. <br>`aderyn:yul-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4f53abf6f46c#2` |
 | [`zetaphy-network/contracts/NeuroScoreVerifier.sol:102`](../zetaphy-network/contracts/NeuroScoreVerifier.sol#L102) | aderyn / yul-return | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template. <br>`aderyn:yul-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4f53abf6f46c#3` |
 | [`zetaphy-network/contracts/NeuroScoreVerifier.sol:189`](../zetaphy-network/contracts/NeuroScoreVerifier.sol#L189) | aderyn / yul-return | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template. <br>`aderyn:yul-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4f53abf6f46c#4` |
 | [`zetaphy-network/contracts/QuantumWallet.sol:84`](../zetaphy-network/contracts/QuantumWallet.sol#L84) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/QuantumWallet.sol:141f63d7fec9` |
 | [`zetaphy-network/contracts/QuantumWallet.sol:111`](../zetaphy-network/contracts/QuantumWallet.sol#L111) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): CREATE2 init code hash: creationCode followed by abi.encode(constructor args), the standard way to predict a CREATE2 address. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/QuantumWallet.sol:dcc8a6fbc7e1` |
+| [`zetaphy-network/contracts/RedBlueArena.sol:212`](../zetaphy-network/contracts/RedBlueArena.sol#L212) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdrawBond pays msg.sender its own bond after the unbonding delay and with no active seats; s.bond and s.unbondAt are zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RedBlueArena.sol:b3b22c324606` |
+| [`zetaphy-network/contracts/RedBlueArena.sol:497`](../zetaphy-network/contracts/RedBlueArena.sol#L497) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own owed[msg.sender], zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RedBlueArena.sol:89756e82c0f6` |
+| [`zetaphy-network/contracts/RewardVault.sol:93`](../zetaphy-network/contracts/RewardVault.sol#L93) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): release pays the governance-set _shares (set through proposeShares with a 7-day DELAY; _check refuses address(0)); _due is zeroed and _paying set before the calls, and _paying makes a re-entering recipient's release() return 0 and applyShares() revert. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RewardVault.sol:09024c8ab54d` |
 | [`zetaphy-network/contracts/RewardVault.sol:108`](../zetaphy-network/contracts/RewardVault.sol#L108) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): release() sets _paying = true before calling the recipients (governance-chosen, 7-day delay); while it is set, release() returns 0, receive() does not checkpoint, releasable() is 0 and applyShares() reverts, so a recipient re-entering cannot read or change _due/_vesting/_shares. The writes after the loop (_paying = false, _vesting = balance) only close that window. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/RewardVault.sol:6a8540746ace` |
 | [`zetaphy-network/contracts/RewardVault.sol:110`](../zetaphy-network/contracts/RewardVault.sol#L110) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): same as the callFund branch: plain recipient call made with _paying = true; every function that reads the vault's accounting is inert or reverts until the loop ends. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/RewardVault.sol:0720ebdb803c` |
+| [`zetaphy-network/contracts/RewardVault.sol:147`](../zetaphy-network/contracts/RewardVault.sol#L147) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): applyShares -> release pays the current governance-set shares (7-day DELAY); _pending and pendingAt are cleared before release(), and applyShares refuses to run while _paying. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RewardVault.sol:9ee49ec2404b` |
+| [`zetaphy-network/contracts/RiskForecasts.sol:195`](../zetaphy-network/contracts/RiskForecasts.sol#L195) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): poke: foresight is set only in the constructor (our ForesightRegistry); its closeCommits() only checks msg.sender == the event resolver and moves the commit/reveal deadlines, calling nothing. s.seenAt is written before it; q.closeAt after it cannot be raced by anything that call can run. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/RiskForecasts.sol:065a092e6e42` |
+| [`zetaphy-network/contracts/RiskForecasts.sol:280`](../zetaphy-network/contracts/RiskForecasts.sol#L280) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own owed[msg.sender], zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RiskForecasts.sol:7e27372cfe7b` |
 | [`zetaphy-network/contracts/ThreatRegistry.sol:515`](../zetaphy-network/contracts/ThreatRegistry.sol#L515) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ThreatRegistry.sol:c8a75fc38cbb` |
+| [`zetaphy-network/contracts/ThreatRegistry.sol:701`](../zetaphy-network/contracts/ThreatRegistry.sol#L701) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own owed[msg.sender], zeroed before _pay. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatRegistry.sol:8ba55f9bdcb9` |
+| [`zetaphy-network/contracts/ThreatReports.sol:96`](../zetaphy-network/contracts/ThreatReports.sol#L96) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): report: registry is immutable (ThreatRegistry); IThreatRegistryView.entries is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:b98279c34116` |
+| [`zetaphy-network/contracts/ThreatReports.sol:105`](../zetaphy-network/contracts/ThreatReports.sol#L105) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): settle pays only communityFund (set by governance, never address(0)) the dust or the expired fee; r.state is written before. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatReports.sol:cf43cca96e36` |
+| [`zetaphy-network/contracts/ThreatReports.sol:108`](../zetaphy-network/contracts/ThreatReports.sol#L108) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): settle: registry is immutable; IThreatRegistryView.entries is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. r.state is written before any payment. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:6e0a74e63019` |
+| [`zetaphy-network/contracts/ThreatReports.sol:110`](../zetaphy-network/contracts/ThreatReports.sol#L110) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): settle: registry is immutable; IThreatRegistryView.quorum is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:9ca6b87cd9a9` |
+| [`zetaphy-network/contracts/ThreatReports.sol:125`](../zetaphy-network/contracts/ThreatReports.sol#L125) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): claim pays msg.sender (a voter of the settling flag, checked) its share; claimed and r.claims are written before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatReports.sol:deac0b0c8e00` |
+| [`zetaphy-network/contracts/ThreatReports.sol:129`](../zetaphy-network/contracts/ThreatReports.sol#L129) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): claim: registry is immutable; IThreatRegistryView.voted is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. claimed[id][msg.sender] and r.claims are written before the payment. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:5c0e6b3d4a40` |
+| [`zetaphy-network/contracts/ThreatReports.sol:130`](../zetaphy-network/contracts/ThreatReports.sol#L130) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): claim: registry is immutable; IThreatRegistryView.quorum is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:b6f5936e67b2` |
 | [`zetaphy-network/contracts/TwapRecorder.sol:184`](../zetaphy-network/contracts/TwapRecorder.sol#L184) | aderyn / incorrect-caret-operator | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six "inv *= 2 - d * inv" steps that follow double that to 256. <br>`aderyn:incorrect-caret-operator:zetaphy-network/contracts/TwapRecorder.sol:d52424546788` |
+| [`zetaphy-network/contracts/UsefulIssuance.sol:111`](../zetaphy-network/contracts/UsefulIssuance.sol#L111) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): sweepOverflow pays only `overflow` (set by governance, non-zero) the pending overflow, zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/UsefulIssuance.sol:fd1f9bc87c9e` |
+| [`zetaphy-network/contracts/UsefulIssuance.sol:115`](../zetaphy-network/contracts/UsefulIssuance.sol#L115) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): sweepOverflow: pendingOverflow is zeroed before the call; the write after it (pendingOverflow = amount) runs only when the call FAILED, and a failed call reverts everything the callee did, including any re-entrant change; on success nothing is written after the call. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/UsefulIssuance.sol:0f4b07f15a88` |
+| [`zetaphy-network/contracts/UsefulWork.sol:374`](../zetaphy-network/contracts/UsefulWork.sol#L374) | aderyn / eth-send-unchecked-address | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): withdraw pays msg.sender its own owed[msg.sender], zeroed before the call. <br>`aderyn:eth-send-unchecked-address:zetaphy-network/contracts/UsefulWork.sol:a2ae25d4261d` |
 | [`zetaphy-network/contracts/WebAuthnVerifier.sol:44`](../zetaphy-network/contracts/WebAuthnVerifier.sol#L44) | aderyn / abi-encode-packed-hash-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with. <br>`aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/WebAuthnVerifier.sol:bda2ed80364b` |
+| [`zetaphy-network/contracts/WorkerReputation.sol:126`](../zetaphy-network/contracts/WorkerReputation.sol#L126) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): linkAgent: identity is immutable; IRepIdentity.ownerOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/WorkerReputation.sol:74f77558f70a` |
+| [`zetaphy-network/contracts/ZetaphyEarlyFarm.sol:124`](../zetaphy-network/contracts/ZetaphyEarlyFarm.sol#L124) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): notifyReward (onlyOperator): rewardsToken is immutable; IERC20F.balanceOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyFarm.sol:ffb2067e19f9` |
 | [`zetaphy-network/contracts/ZetaphyEarlyPass.sol:9`](../zetaphy-network/contracts/ZetaphyEarlyPass.sol#L9) | aderyn / reused-contract-name | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): both files declare the identical one-function ERC-721 receiver interface (same signature); they never end up in one contract, so the duplicate name changes no behaviour. <br>`aderyn:reused-contract-name:zetaphy-network/contracts/ZetaphyEarlyPass.sol:7def0c39fec1` |
+| [`zetaphy-network/contracts/ZetaphyEarlyPass.sol:62`](../zetaphy-network/contracts/ZetaphyEarlyPass.sol#L62) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): mint: zearly is immutable; IZearly.balanceOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPass.sol:25ec15001519` |
+| [`zetaphy-network/contracts/ZetaphyEarlyPass.sol:65`](../zetaphy-network/contracts/ZetaphyEarlyPass.sol#L65) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): mint: zearly is the immutable ZETAPHY Early token (contracts/ZetaphyEarly.sol), a plain ERC-20 whose transferFrom has no hooks or callbacks, so it cannot re-enter; minted[msg.sender] and totalSupply are written before it anyway, so a re-entrant mint would revert AlreadyMinted. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPass.sol:7b246722d74e` |
+| [`zetaphy-network/contracts/ZetaphyEarlyPolls.sol:54`](../zetaphy-network/contracts/ZetaphyEarlyPolls.sol#L54) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): create: token is the immutable ZEARLY (contracts/ZetaphyEarly.sol), a plain ERC-20 whose transferFrom has no hooks or callbacks, so the deposit pull cannot re-enter; the poll is written after it with a fresh id (polls.length). <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPolls.sol:e315b91c5c79` |
+| [`zetaphy-network/contracts/ZetaphyOracle.sol:179`](../zetaphy-network/contracts/ZetaphyOracle.sol#L179) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): setTwap (onlyGov): IPairTokens.token0 is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:17b0ee330e5b` |
+| [`zetaphy-network/contracts/ZetaphyOracle.sol:180`](../zetaphy-network/contracts/ZetaphyOracle.sol#L180) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): setTwap (onlyGov): IPairTokens.token1 is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:fb12769dd4a8` |
+| [`zetaphy-network/contracts/ZetaphyOracle.sol:183`](../zetaphy-network/contracts/ZetaphyOracle.sol#L183) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): setTwap (onlyGov): IDecimals.decimals is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:ebc0f2e7dfd4` |
+| [`zetaphy-network/contracts/ZetaphyOracle.sol:263`](../zetaphy-network/contracts/ZetaphyOracle.sol#L263) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): poke: recorder is immutable (our TwapRecorder); record() only reads the pair through view functions (current(): price*CumulativeLast, getReserves) and writes its own observation, calling nothing that can re-enter; the call is in try/catch. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:045d8518076e` |
 | [`zetaphy-network/contracts/ZetaphyOracle.sol:286`](../zetaphy-network/contracts/ZetaphyOracle.sol#L286) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): value is rejected unless 0 < value <= type(uint128).max where the source is read (TWAP and Pyth paths), and `at` is a timestamp. <br>`aderyn:unsafe-casting:zetaphy-network/contracts/ZetaphyOracle.sol:662e4e128e0b` |
 | [`zetaphy-network/contracts/ZetaphyOracle.sol:289`](../zetaphy-network/contracts/ZetaphyOracle.sol#L289) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): value is rejected unless 0 < value <= type(uint128).max where the source is read (TWAP and Pyth paths), and `at` is a timestamp. <br>`aderyn:unsafe-casting:zetaphy-network/contracts/ZetaphyOracle.sol:975848702b62` |
 | [`zetaphy-network/contracts/ZetaphyOracle.sol:290`](../zetaphy-network/contracts/ZetaphyOracle.sol#L290) | aderyn / unsafe-casting | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): value is rejected unless 0 < value <= type(uint128).max where the source is read (TWAP and Pyth paths), and `at` is a timestamp. <br>`aderyn:unsafe-casting:zetaphy-network/contracts/ZetaphyOracle.sol:2c7d6dfbc04d` |
 | [`zetaphy-network/contracts/ZetaphyOracle.sol:417`](../zetaphy-network/contracts/ZetaphyOracle.sol#L417) | aderyn / incorrect-caret-operator | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six "inv *= 2 - d * inv" steps that follow double that to 256. <br>`aderyn:incorrect-caret-operator:zetaphy-network/contracts/ZetaphyOracle.sol:e6c2a0037feb` |
 | [`zetaphy-network/contracts/ZetaphyPythRelay.sol:48`](../zetaphy-network/contracts/ZetaphyPythRelay.sol#L48) | aderyn / contract-locks-ether | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): the only payable functions (IMessageRecipient.handle / Pyth updatePriceFeeds, payable because the interface says so) revert when msg.value != 0, so no ether can enter. <br>`aderyn:contract-locks-ether:zetaphy-network/contracts/ZetaphyPythRelay.sol:b450c6c65624` |
 | [`zetaphy-network/contracts/ZetaphyQuests.sol:72`](../zetaphy-network/contracts/ZetaphyQuests.sol#L72) | aderyn / reentrancy-state-change | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): paid[q][a], s.count and earned[a] are written BEFORE token.transfer in the same loop iteration (lines 68-72); the "after" state is the next iteration's. token is the immutable ZEARLY token and pay() is onlyOperator. <br>`aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyQuests.sol:3d425537bde6` |
+| [`yarn.lock`](../yarn.lock) | osv-scanner / GHSA-3gc7-fjrx-p6mg | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): OSV matches by name and version only: the yarn.lock entry is bigint-buffer@1.1.5-pure-js.1, the in-repo pure-JS replacement scripts/vendor/bigint-buffer (root package.json resolutions, 6829bee). The advisory is about the native addon's toBigInt (src/bigint-buffer.c, crash on a bad buffer); the replacement has no native code, checks its input (TypeError) and is tested in scripts/vendor/bigint-buffer/test.js. Used only by the Anchor test tooling (@solana/spl-token -> @solana/buffer-layout-utils), never shipped. <br>`osv-scanner:GHSA-3gc7-fjrx-p6mg:yarn.lock:33a6ef4d35fd` |
 | [`zetaphy-dex/contracts/dlmm/DlmmMath.sol:108`](../zetaphy-dex/contracts/dlmm/DlmmMath.sol#L108) | slither / incorrect-exp | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six "inv *= 2 - d * inv" steps that follow double that to 256. <br>`slither:incorrect-exp:zetaphy-dex/contracts/dlmm/DlmmMath.sol:9096fa23eb2a` |
 | [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:441`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L441) | slither / reentrancy-balance | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): _pay compares the pair's balance before/after one transferFrom to reject fee-on-transfer tokens; the router keeps no state or funds, and the pair does its own reserve accounting under its lock. <br>`slither:reentrancy-balance:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:8a43173e3ccc` |
 | [`zetaphy-dex/contracts/ZetaphyPair.sol:165`](../zetaphy-dex/contracts/ZetaphyPair.sol#L165) | slither / weak-prng | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): block.timestamp % 2**32 is the Uniswap V2 TWAP timestamp (wraps by design), not randomness. <br>`slither:weak-prng:zetaphy-dex/contracts/ZetaphyPair.sol:f98c1d2343a6` |
@@ -717,7 +208,9 @@ None.
 | [`zetaphy-dex/contracts/ZetaphyRouter.sol:474`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L474) | slither / reentrancy-balance | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): the Uniswap V2 Router02 fee-on-transfer pattern: the router holds no funds between calls and the balance checked is the caller's own recipient; a token that re-enters can only distort the output of the swap its own caller chose. <br>`slither:reentrancy-balance:zetaphy-dex/contracts/ZetaphyRouter.sol:1feac58c8c01` |
 | [`zetaphy-dex/contracts/ZetaphyRouter.sol:486`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L486) | slither / reentrancy-balance | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): the Uniswap V2 Router02 fee-on-transfer pattern: the router holds no funds between calls and the balance checked is the caller's own recipient; a token that re-enters can only distort the output of the swap its own caller chose. <br>`slither:reentrancy-balance:zetaphy-dex/contracts/ZetaphyRouter.sol:c344d8733607` |
 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:457`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L457) | slither / encode-packed-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused. <br>`slither:encode-packed-collision:zetaphy-network/contracts/AgentPolicyWallet.sol:cf5a290425f8` |
+| [`zetaphy-network/contracts/AgentPolicyWallet.sol:601`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L601) | slither / arbitrary-send-eth | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): _run is the wallet's execution path, reached only from the onlyAgent/onlyOwner execute functions: `to` and `value` pass _classify first (allow-listed recipient/target, allow-listed selector, transfer-like selectors refused) and the per-token spending cap in _run itself. Sending value to a chosen address is the wallet's purpose, inside the owner's policy. <br>`slither:arbitrary-send-eth:zetaphy-network/contracts/AgentPolicyWallet.sol:cb31352524b9` |
 | [`zetaphy-network/contracts/AgentRegistry.sol:258`](../zetaphy-network/contracts/AgentRegistry.sol#L258) | slither / encode-packed-collision | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused. <br>`slither:encode-packed-collision:zetaphy-network/contracts/AgentRegistry.sol:2c451a576d40` |
+| [`zetaphy-network/contracts/AgentRegistry.sol:403`](../zetaphy-network/contracts/AgentRegistry.sol#L403) | slither / arbitrary-send-eth | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): _pay recipients are only: the claimant stored by fileClaim, the operator stored by register, or the victim named by the agent's own checker (a STATICCALL, recorded for the action); amounts are the claim deposit or the slashed bond (capped at the bond, subtracted before the call). <br>`slither:arbitrary-send-eth:zetaphy-network/contracts/AgentRegistry.sol:73db96ca6d23` |
 | [`zetaphy-network/contracts/AuditJudges.sol:355`](../zetaphy-network/contracts/AuditJudges.sol#L355) | slither / arbitrary-send-eth | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): _send is called only from withdrawBond and withdraw, both with to = msg.sender and its own (already zeroed) balance; no caller can choose another recipient. <br>`slither:arbitrary-send-eth:zetaphy-network/contracts/AuditJudges.sol:a5e69e4a79dd` |
 | [`zetaphy-network/contracts/AuditNetwork.sol:664`](../zetaphy-network/contracts/AuditNetwork.sol#L664) | slither / arbitrary-send-eth | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): _send is called only from withdrawBond and withdraw with to = msg.sender and its own (already zeroed) balance; no caller chooses the recipient. <br>`slither:arbitrary-send-eth:zetaphy-network/contracts/AuditNetwork.sol:2c542cad2bed` |
 | [`zetaphy-network/contracts/AuditRunners.sol:164`](../zetaphy-network/contracts/AuditRunners.sol#L164) | slither / reentrancy-eth | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (audit-fixes review by reading the code; owner to confirm), 2026-10-30): withdraw: owed[msg.sender] is zeroed and _lock set to 2 before the call; the only write after it is _lock = 1, the re-entrancy guard's own release. A re-entering caller gets Reentrant(). <br>`slither:reentrancy-eth:zetaphy-network/contracts/AuditRunners.sol:deb8e882f464` |
@@ -749,6 +242,7 @@ None.
 | [`zetaphy-network/contracts/NeuroJobs.sol:138`](../zetaphy-network/contracts/NeuroJobs.sol#L138) | slither / uninitialized-state | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): written outside the base contract that declares it: jobs.push() in NeuroJobs.request, control in the NeuroJobs constructor, challenges[id][k] (storage pointer) and challenged.push(id) in NeuroJobsChallenges.challenge (run by delegatecall on NeuroJobs storage). <br>`slither:uninitialized-state:zetaphy-network/contracts/NeuroJobs.sol:0d3f81935010` |
 | [`zetaphy-network/contracts/NeuroJobs.sol:140`](../zetaphy-network/contracts/NeuroJobs.sol#L140) | slither / uninitialized-state | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): written outside the base contract that declares it: jobs.push() in NeuroJobs.request, control in the NeuroJobs constructor, challenges[id][k] (storage pointer) and challenged.push(id) in NeuroJobsChallenges.challenge (run by delegatecall on NeuroJobs storage). <br>`slither:uninitialized-state:zetaphy-network/contracts/NeuroJobs.sol:c3f7bd65a279` |
 | [`zetaphy-network/contracts/NeuroJobs.sol:142`](../zetaphy-network/contracts/NeuroJobs.sol#L142) | slither / uninitialized-state | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): written outside the base contract that declares it: jobs.push() in NeuroJobs.request, control in the NeuroJobs constructor, challenges[id][k] (storage pointer) and challenged.push(id) in NeuroJobsChallenges.challenge (run by delegatecall on NeuroJobs storage). <br>`slither:uninitialized-state:zetaphy-network/contracts/NeuroJobs.sol:91dbf281f4c9` |
+| [`zetaphy-network/contracts/NeuroJobs.sol:301`](../zetaphy-network/contracts/NeuroJobs.sol#L301) | slither / weak-prng | **accepted-risk, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): _eligible draws with keccak256(_rand(seed, round), runner) % 1e18, where _rand is keccak256(seed, blockhash(startBlock + 1), round): bound to a future block, stored on first use, unchanged by retries. The residual bias is the proposer of startBlock + 1 (and the zero-BLOCKHASH fallback), documented in the contract; same decision as the aderyn weak-randomness entry on j.seed. Accepted for testnet; commit-reveal or a VRF/beacon before mainnet stakes. <br>`slither:weak-prng:zetaphy-network/contracts/NeuroJobs.sol:7bcac6f4961b` |
 | [`zetaphy-network/contracts/NeuroJobs.sol:888`](../zetaphy-network/contracts/NeuroJobs.sol#L888) | slither / uninitialized-storage | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): `Round storage r;` in draw() is assigned on both branches of the if/else-if (j.r or ch.r) and the else branch reverts, so it is never used unassigned. <br>`slither:uninitialized-storage:zetaphy-network/contracts/NeuroJobs.sol:7d6408636bea` |
 | [`zetaphy-network/contracts/NeuroScore.sol:58`](../zetaphy-network/contracts/NeuroScore.sol#L58) | slither / uninitialized-state | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): _chunks[hash] is filled through the storage pointer `address[] storage list = _chunks[hash]; list.push(...)` in publishModel. <br>`slither:uninitialized-state:zetaphy-network/contracts/NeuroScore.sol:5971cc5e7f8e` |
 | [`zetaphy-network/contracts/NeuroScoreVerifier.sol:71`](../zetaphy-network/contracts/NeuroScoreVerifier.sol#L71) | slither / incorrect-return | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template. <br>`slither:incorrect-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:b56fe4b60e94` |
@@ -761,6 +255,7 @@ None.
 | [`zetaphy-network/contracts/RewardVault.sol:195`](../zetaphy-network/contracts/RewardVault.sol#L195) | slither / weak-prng | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): n % 2 in _rpow is exponentiation by squaring (odd-exponent test), not randomness. <br>`slither:weak-prng:zetaphy-network/contracts/RewardVault.sol:fae92282b792` |
 | [`zetaphy-network/contracts/StableGateway.sol:240`](../zetaphy-network/contracts/StableGateway.sol#L240) | slither / arbitrary-send-erc20 | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): q.user is authenticated: _request requires an EIP-712 signature of q (user, token, fee, tip, maxCost, nonce, deadline) recovered to q.user, with a per-user nonce and deadline, before either transferFrom. <br>`slither:arbitrary-send-erc20:zetaphy-network/contracts/StableGateway.sol:7d0ae06aff07` |
 | [`zetaphy-network/contracts/StableGateway.sol:240`](../zetaphy-network/contracts/StableGateway.sol#L240) | slither / arbitrary-send-erc20 | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): q.user is authenticated: _request requires an EIP-712 signature of q (user, token, fee, tip, maxCost, nonce, deadline) recovered to q.user, with a per-user nonce and deadline, before either transferFrom. <br>`slither:arbitrary-send-erc20:zetaphy-network/contracts/StableGateway.sol:0fa417499fb6` |
+| [`zetaphy-network/contracts/ThreatReports.sol:141`](../zetaphy-network/contracts/ThreatReports.sol#L141) | slither / arbitrary-send-eth | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): _pay recipients are only communityFund (governance-set, non-zero) and msg.sender in claim() after the voter check; amounts are the report fee or its per-voter share, accounted before the call. <br>`slither:arbitrary-send-eth:zetaphy-network/contracts/ThreatReports.sol:0ec044eea415` |
 | [`zetaphy-network/contracts/TwapRecorder.sol:160`](../zetaphy-network/contracts/TwapRecorder.sol#L160) | slither / incorrect-exp | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six "inv *= 2 - d * inv" steps that follow double that to 256. <br>`slither:incorrect-exp:zetaphy-network/contracts/TwapRecorder.sol:d03bd35b7388` |
 | [`zetaphy-network/contracts/UsefulIssuance.sol:111`](../zetaphy-network/contracts/UsefulIssuance.sol#L111) | slither / reentrancy-eth | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): pendingOverflow is zeroed before the call; it is restored only if the call failed, in which case everything the callee did (any re-entry included) was reverted with it. <br>`slither:reentrancy-eth:zetaphy-network/contracts/UsefulIssuance.sol:8e07beda46a5` |
 | [`zetaphy-network/contracts/ZetaphyCheques.sol:205`](../zetaphy-network/contracts/ZetaphyCheques.sol#L205) | slither / reentrancy-balance | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract. <br>`slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyCheques.sol:4c54afa8742b` |
@@ -773,147 +268,28 @@ None.
 | [`zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182`](../zetaphy-network/contracts/ZetaphyOfflineOrders.sol#L182) | slither / reentrancy-balance | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract. <br>`slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:abaea1ce16f9` |
 | [`zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182`](../zetaphy-network/contracts/ZetaphyOfflineOrders.sol#L182) | slither / reentrancy-balance | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract. <br>`slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:6693bb172968` |
 | [`zetaphy-network/contracts/ZetaphyOfflineOrders.sol:209`](../zetaphy-network/contracts/ZetaphyOfflineOrders.sol#L209) | slither / reentrancy-balance | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract. <br>`slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:b3e311fb7f61` |
+| [`zetaphy-network/contracts/ZetaphyOfflineOrders.sol:237`](../zetaphy-network/contracts/ZetaphyOfflineOrders.sol#L237) | slither / arbitrary-send-eth | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30): _sendNative pays only o.maker (the EIP-712 signer of the order, recovered and checked in _fill) and msg.sender (the relayer fee the maker signed); fill/fillWithPermit are nonReentrant and the order nonce is used before any transfer. <br>`slither:arbitrary-send-eth:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:779f0ca40dd5` |
 | [`zetaphy-network/contracts/ZetaphyOracle.sol:393`](../zetaphy-network/contracts/ZetaphyOracle.sol#L393) | slither / incorrect-exp | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six "inv *= 2 - d * inv" steps that follow double that to 256. <br>`slither:incorrect-exp:zetaphy-network/contracts/ZetaphyOracle.sol:313aa7184c39` |
 | [`zetaphy-nft/contracts/CollectionBase.sol:193`](../zetaphy-nft/contracts/CollectionBase.sol#L193) | slither / msg-value-in-nonpayable | **false-positive, PENDING OWNER CONFIRMATION** (proposed by claude-agent (initial review by reading the code; owner to confirm), 2026-10-30): _checkPublicPayment is internal and is called only from publicMintTo in ZetaphyERC721 and ZetaphyERC1155, both payable. Slither analysed CollectionBase.sol on its own, where no caller exists. <br>`slither:msg-value-in-nonpayable:zetaphy-nft/contracts/CollectionBase.sol:3e2149dbf4fe` |
 
 </details>
 
-### Medium (370)
+### Medium (250)
 
 | Where | Tool / rule | Finding | Status |
 |---|---|---|---|
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:264`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L264) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:f7aef71205a9` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:265`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L265) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:f4e21df163e7` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:306`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L306) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:37c2a0ca781d` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:309`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L309) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:ef40ac7910ae` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:313`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L313) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:eadcdd78f342` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:176`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L176) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:aed882acf45d` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:178`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L178) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:e77d143191f4` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:180`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L180) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:ad68eb26dc33` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:316`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L316) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:cc391a00cd01` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:322`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L322) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:07c2a6ed7fc0` | open |
-| [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:335`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol#L335) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:07c2a6ed7fc0#2` | open |
-| [`zetaphy-dex/contracts/ZetaphyPair.sol:276`](../zetaphy-dex/contracts/ZetaphyPair.sol#L276) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyPair.sol:9558be9c7bdf` | open |
-| [`zetaphy-dex/contracts/ZetaphyPair.sol:277`](../zetaphy-dex/contracts/ZetaphyPair.sol#L277) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyPair.sol:df8bad9cc285` | open |
-| [`zetaphy-dex/contracts/ZetaphyPair.sol:280`](../zetaphy-dex/contracts/ZetaphyPair.sol#L280) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyPair.sol:69b6a7458624` | open |
-| [`zetaphy-dex/contracts/ZetaphyPair.sol:281`](../zetaphy-dex/contracts/ZetaphyPair.sol#L281) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyPair.sol:3f3bf9739643` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:229`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L229) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:dfdb8964d232` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:236`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L236) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:7a71bbbccdbd` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:245`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L245) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:5ec0fa28efe8` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:246`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L246) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:7ec76b90da90` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:247`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L247) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:a9edf3994e4a` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:248`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L248) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:080d3eaae102` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:322`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L322) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:1121e6cb4d50` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:377`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L377) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:f901b6df5baf` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:398`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L398) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:f901b6df5baf#2` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:406`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L406) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:28412fceb99d` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:412`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L412) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:743d1ac448f8` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:413`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L413) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:e9a0d977ab50` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:419`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L419) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:28412fceb99d#2` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:422`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L422) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:f901b6df5baf#3` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:425`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L425) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:743d1ac448f8#2` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:426`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L426) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:e9a0d977ab50#2` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:439`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L439) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:f0884bc6b4f3` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:468`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L468) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:413385c84dcd` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:471`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L471) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:41c60809dcb5` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:480`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L480) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:413385c84dcd#2` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:483`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L483) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:41c60809dcb5#2` | open |
-| [`zetaphy-dex/contracts/ZetaphyRouter.sol:489`](../zetaphy-dex/contracts/ZetaphyRouter.sol#L489) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-dex/contracts/ZetaphyRouter.sol:567786bda528` | open |
+| [`Cargo.lock`](../Cargo.lock) | osv-scanner / RUSTSEC-2025-0141 | bincode@1.3.3: Bincode is unmaintained — crates.io bincode@1.3.3 <br>`osv-scanner:RUSTSEC-2025-0141:Cargo.lock:ebbd368f4765` | open |
+| [`Cargo.lock`](../Cargo.lock) | osv-scanner / GHSA-fjx5-qpf4-xjf2 | borsh@0.10.4: Parsing borsh messages with ZST which are not-copy/clone is unsoun — crates.io borsh@0.10.4 <br>`osv-scanner:GHSA-fjx5-qpf4-xjf2:Cargo.lock:789f3fd52d5e` | open |
+| [`Cargo.lock`](../Cargo.lock) | osv-scanner / RUSTSEC-2025-0161 | libsecp256k1@0.6.0: libsecp256k1 is unmaintained — crates.io libsecp256k1@0.6.0 <br>`osv-scanner:RUSTSEC-2025-0161:Cargo.lock:16153886437c` | open |
+| [`Cargo.lock`](../Cargo.lock) | osv-scanner / RUSTSEC-2026-0097 | rand@0.7.3: Rand is unsound with a custom logger using `rand::rng()` — crates.io rand@0.7.3 <br>`osv-scanner:RUSTSEC-2026-0097:Cargo.lock:da7b752934b0` | open |
+| [`zetaphy-snap/package-lock.json`](../zetaphy-snap/package-lock.json) | osv-scanner / GHSA-gcqx-w48m-w2h4 | deepmerge@4.3.1: deepmerge mergeObject() allows prototype poisoning of returned  — npm deepmerge@4.3.1 <br>`osv-scanner:GHSA-gcqx-w48m-w2h4:zetaphy-snap/package-lock.json:960a2ab062ed` | open |
+| [`zetaphy-snap/package-lock.json`](../zetaphy-snap/package-lock.json) | osv-scanner / GHSA-848j-6mx2-7j84 | elliptic@6.6.1: Elliptic Uses a Cryptographic Primitive with a Risky Implementat — npm elliptic@6.6.1 <br>`osv-scanner:GHSA-848j-6mx2-7j84:zetaphy-snap/package-lock.json:dbbf873ce235` | open |
 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:473`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L473) | semgrep / arbitrary-low-level-call | arbitrary-low-level-call — An attacker may perform call() to an arbitrary address with controlled calldata <br>`semgrep:arbitrary-low-level-call:zetaphy-network/contracts/AgentPolicyWallet.sol:85998eb458cd` | open |
-| [`zetaphy-network/contracts/AgentPolicyWallet.sol:561`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L561) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AgentPolicyWallet.sol:651d71249958` | open |
-| [`zetaphy-network/contracts/AgentRegistry.sol:426`](../zetaphy-network/contracts/AgentRegistry.sol#L426) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AgentRegistry.sol:0e39dbb339ef` | open |
-| [`zetaphy-network/contracts/AuditCertificate.sol:175`](../zetaphy-network/contracts/AuditCertificate.sol#L175) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditCertificate.sol:28126006330b` | open |
-| [`zetaphy-network/contracts/AuditCertificate.sol:177`](../zetaphy-network/contracts/AuditCertificate.sol#L177) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditCertificate.sol:d96e4246796c` | open |
-| [`zetaphy-network/contracts/AuditCertificate.sol:194`](../zetaphy-network/contracts/AuditCertificate.sol#L194) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditCertificate.sol:967130bc1a38` | open |
-| [`zetaphy-network/contracts/AuditCertificate.sol:195`](../zetaphy-network/contracts/AuditCertificate.sol#L195) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditCertificate.sol:305b0494709a` | open |
-| [`zetaphy-network/contracts/AuditJudges.sol:297`](../zetaphy-network/contracts/AuditJudges.sol#L297) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditJudges.sol:ae7df07c8453` | open |
-| [`zetaphy-network/contracts/AuditJudges.sol:384`](../zetaphy-network/contracts/AuditJudges.sol#L384) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditJudges.sol:203ba2276e6a` | open |
-| [`zetaphy-network/contracts/AuditNetwork.sol:274`](../zetaphy-network/contracts/AuditNetwork.sol#L274) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditNetwork.sol:202daf60359e` | open |
-| [`zetaphy-network/contracts/AuditNetwork.sol:278`](../zetaphy-network/contracts/AuditNetwork.sol#L278) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditNetwork.sol:464ed7952973` | open |
-| [`zetaphy-network/contracts/AuditNetwork.sol:581`](../zetaphy-network/contracts/AuditNetwork.sol#L581) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditNetwork.sol:90b843734165` | open |
-| [`zetaphy-network/contracts/AuditNetwork.sol:611`](../zetaphy-network/contracts/AuditNetwork.sol#L611) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditNetwork.sol:824d8be4c364` | open |
-| [`zetaphy-network/contracts/AuditNetwork.sol:639`](../zetaphy-network/contracts/AuditNetwork.sol#L639) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/AuditNetwork.sol:e24cc29b3669` | open |
-| [`zetaphy-network/contracts/BridgeGuard.sol:39`](../zetaphy-network/contracts/BridgeGuard.sol#L39) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/BridgeGuard.sol:2b28d5ba9954` | open |
-| [`zetaphy-network/contracts/BridgeGuard.sol:45`](../zetaphy-network/contracts/BridgeGuard.sol#L45) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/BridgeGuard.sol:0290f3966e05` | open |
-| [`zetaphy-network/contracts/BridgeGuard.sol:370`](../zetaphy-network/contracts/BridgeGuard.sol#L370) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/BridgeGuard.sol:5e6d56c46483` | open |
-| [`zetaphy-network/contracts/BridgeGuard.sol:405`](../zetaphy-network/contracts/BridgeGuard.sol#L405) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/BridgeGuard.sol:56bb955e2513` | open |
-| [`zetaphy-network/contracts/BridgeGuard.sol:406`](../zetaphy-network/contracts/BridgeGuard.sol#L406) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/BridgeGuard.sol:55e8ecc03c99` | open |
-| [`zetaphy-network/contracts/BugBounty.sol:315`](../zetaphy-network/contracts/BugBounty.sol#L315) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/BugBounty.sol:d9ae5eda6a42` | open |
-| [`zetaphy-network/contracts/DataDAO.sol:109`](../zetaphy-network/contracts/DataDAO.sol#L109) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/DataDAO.sol:a69ce1ec1636` | open |
-| [`zetaphy-network/contracts/DataDAO.sol:116`](../zetaphy-network/contracts/DataDAO.sol#L116) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/DataDAO.sol:b4c01c2a2c73` | open |
-| [`zetaphy-network/contracts/DataDAO.sol:141`](../zetaphy-network/contracts/DataDAO.sol#L141) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/DataDAO.sol:d7570d69621d` | open |
-| [`zetaphy-network/contracts/DataDAO.sol:164`](../zetaphy-network/contracts/DataDAO.sol#L164) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/DataDAO.sol:85a43a68c297` | open |
 | [`zetaphy-network/contracts/DataDAO.sol:165`](../zetaphy-network/contracts/DataDAO.sol#L165) | semgrep / arbitrary-low-level-call | arbitrary-low-level-call — An attacker may perform call() to an arbitrary address with controlled calldata <br>`semgrep:arbitrary-low-level-call:zetaphy-network/contracts/DataDAO.sol:c394542a3fc2` | open |
-| [`zetaphy-network/contracts/DataDAO.sol:175`](../zetaphy-network/contracts/DataDAO.sol#L175) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/DataDAO.sol:073427736b19` | open |
-| [`zetaphy-network/contracts/DataDAO.sol:176`](../zetaphy-network/contracts/DataDAO.sol#L176) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/DataDAO.sol:8b60f412a04b` | open |
-| [`zetaphy-network/contracts/FederatedRounds.sol:98`](../zetaphy-network/contracts/FederatedRounds.sol#L98) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/FederatedRounds.sol:ccc81d6e646b` | open |
-| [`zetaphy-network/contracts/ForesightRegistry.sol:130`](../zetaphy-network/contracts/ForesightRegistry.sol#L130) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ForesightRegistry.sol:60eefce0d93d` | open |
-| [`zetaphy-network/contracts/ForesightRegistry.sol:132`](../zetaphy-network/contracts/ForesightRegistry.sol#L132) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ForesightRegistry.sol:f3bf36f19761` | open |
-| [`zetaphy-network/contracts/ForesightRegistry.sol:144`](../zetaphy-network/contracts/ForesightRegistry.sol#L144) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ForesightRegistry.sol:60eefce0d93d#2` | open |
-| [`zetaphy-network/contracts/ForesightRegistry.sol:146`](../zetaphy-network/contracts/ForesightRegistry.sol#L146) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ForesightRegistry.sol:314feffeb7bc` | open |
-| [`zetaphy-network/contracts/ForesightRegistry.sol:191`](../zetaphy-network/contracts/ForesightRegistry.sol#L191) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ForesightRegistry.sol:9c8d1365328a` | open |
-| [`zetaphy-network/contracts/ForesightRegistry.sol:227`](../zetaphy-network/contracts/ForesightRegistry.sol#L227) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ForesightRegistry.sol:cf22412afe35` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:217`](../zetaphy-network/contracts/HackInsurance.sol#L217) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:5cd95226fb78` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:222`](../zetaphy-network/contracts/HackInsurance.sol#L222) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:452e944d7e13` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:230`](../zetaphy-network/contracts/HackInsurance.sol#L230) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:950ec78598dd` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:318`](../zetaphy-network/contracts/HackInsurance.sol#L318) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:2d601c91beaf` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:326`](../zetaphy-network/contracts/HackInsurance.sol#L326) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:07b04c6e1eb0` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:352`](../zetaphy-network/contracts/HackInsurance.sol#L352) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:b82084c92a4c` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:368`](../zetaphy-network/contracts/HackInsurance.sol#L368) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:81933f8ccace` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:378`](../zetaphy-network/contracts/HackInsurance.sol#L378) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:694d295bdb84` | open |
-| [`zetaphy-network/contracts/HackInsurance.sol:382`](../zetaphy-network/contracts/HackInsurance.sol#L382) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HackInsurance.sol:371e7c6a1398` | open |
-| [`zetaphy-network/contracts/HyperlaneLane.sol:184`](../zetaphy-network/contracts/HyperlaneLane.sol#L184) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HyperlaneLane.sol:b2906b23beb0` | open |
-| [`zetaphy-network/contracts/HyperlaneLane.sol:185`](../zetaphy-network/contracts/HyperlaneLane.sol#L185) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HyperlaneLane.sol:d958757ba24e` | open |
-| [`zetaphy-network/contracts/HyperlaneLockBoxV2.sol:188`](../zetaphy-network/contracts/HyperlaneLockBoxV2.sol#L188) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HyperlaneLockBoxV2.sol:2520407786f3` | open |
-| [`zetaphy-network/contracts/HyperlaneLockBoxV2.sol:238`](../zetaphy-network/contracts/HyperlaneLockBoxV2.sol#L238) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HyperlaneLockBoxV2.sol:70f1860643ec` | open |
-| [`zetaphy-network/contracts/HyperlaneLockBoxV2.sol:368`](../zetaphy-network/contracts/HyperlaneLockBoxV2.sol#L368) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/HyperlaneLockBoxV2.sol:31a7015b833a` | open |
-| [`zetaphy-network/contracts/IntentExecutor.sol:172`](../zetaphy-network/contracts/IntentExecutor.sol#L172) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/IntentExecutor.sol:eefd23fd3497` | open |
-| [`zetaphy-network/contracts/IntentExecutor.sol:221`](../zetaphy-network/contracts/IntentExecutor.sol#L221) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/IntentExecutor.sol:2641e5561b89` | open |
-| [`zetaphy-network/contracts/IntentExecutor.sol:225`](../zetaphy-network/contracts/IntentExecutor.sol#L225) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/IntentExecutor.sol:78920f39b0a2` | open |
-| [`zetaphy-network/contracts/IntentExecutor.sol:232`](../zetaphy-network/contracts/IntentExecutor.sol#L232) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/IntentExecutor.sol:dfdd4519bdb3` | open |
-| [`zetaphy-network/contracts/NeuroAttest.sol:135`](../zetaphy-network/contracts/NeuroAttest.sol#L135) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/NeuroAttest.sol:94f6aef05eba` | open |
 | [`zetaphy-network/contracts/NeuroIdentity.sol:833`](../zetaphy-network/contracts/NeuroIdentity.sol#L833) | semgrep / missing-assignment | missing-assignment — Meaningless statement that does not change any values could be a sign of missed security checks or other important changes. <br>`semgrep:missing-assignment:zetaphy-network/contracts/NeuroIdentity.sol:a89792fd764d` | open |
-| [`zetaphy-network/contracts/NeuroOracle.sol:221`](../zetaphy-network/contracts/NeuroOracle.sol#L221) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/NeuroOracle.sol:ceb58f9d20d4` | open |
-| [`zetaphy-network/contracts/NeuroScore.sol:220`](../zetaphy-network/contracts/NeuroScore.sol#L220) | semgrep / missing-assignment | missing-assignment — Meaningless statement that does not change any values could be a sign of missed security checks or other important changes. <br>`semgrep:missing-assignment:zetaphy-network/contracts/NeuroScore.sol:4ff253c30cbf` | open |
+| [`zetaphy-network/contracts/NeuroScore.sol:229`](../zetaphy-network/contracts/NeuroScore.sol#L229) | semgrep / missing-assignment | missing-assignment — Meaningless statement that does not change any values could be a sign of missed security checks or other important changes. <br>`semgrep:missing-assignment:zetaphy-network/contracts/NeuroScore.sol:4ff253c30cbf` | open |
 | [`zetaphy-network/contracts/NeuroScoreVerifier.sol:82`](../zetaphy-network/contracts/NeuroScoreVerifier.sol#L82) | semgrep / missing-assignment | missing-assignment — Meaningless statement that does not change any values could be a sign of missed security checks or other important changes. <br>`semgrep:missing-assignment:zetaphy-network/contracts/NeuroScoreVerifier.sol:eaf0b3355354` | open |
 | [`zetaphy-network/contracts/QuantumWallet.sol:57`](../zetaphy-network/contracts/QuantumWallet.sol#L57) | semgrep / arbitrary-low-level-call | arbitrary-low-level-call — An attacker may perform call() to an arbitrary address with controlled calldata <br>`semgrep:arbitrary-low-level-call:zetaphy-network/contracts/QuantumWallet.sol:751d62195806` | open |
-| [`zetaphy-network/contracts/RedBlueArena.sol:190`](../zetaphy-network/contracts/RedBlueArena.sol#L190) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/RedBlueArena.sol:a31d22fb0f67` | open |
-| [`zetaphy-network/contracts/RedBlueArena.sol:237`](../zetaphy-network/contracts/RedBlueArena.sol#L237) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/RedBlueArena.sol:a180c18e8820` | open |
-| [`zetaphy-network/contracts/RedBlueArena.sol:398`](../zetaphy-network/contracts/RedBlueArena.sol#L398) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/RedBlueArena.sol:b27eac13f7df` | open |
-| [`zetaphy-network/contracts/RedBlueArena.sol:399`](../zetaphy-network/contracts/RedBlueArena.sol#L399) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/RedBlueArena.sol:c9f4e96b9851` | open |
-| [`zetaphy-network/contracts/RedBlueArena.sol:437`](../zetaphy-network/contracts/RedBlueArena.sol#L437) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/RedBlueArena.sol:0d9a09c6ef53` | open |
-| [`zetaphy-network/contracts/RedBlueArena.sol:438`](../zetaphy-network/contracts/RedBlueArena.sol#L438) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/RedBlueArena.sol:32e2ba25ac4b` | open |
-| [`zetaphy-network/contracts/RedBlueArena.sol:440`](../zetaphy-network/contracts/RedBlueArena.sol#L440) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/RedBlueArena.sol:6c4d171fe796` | open |
-| [`zetaphy-network/contracts/RedBlueArena.sol:442`](../zetaphy-network/contracts/RedBlueArena.sol#L442) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/RedBlueArena.sol:b8a3edd3f366` | open |
-| [`zetaphy-network/contracts/SaphanTokens.sol:486`](../zetaphy-network/contracts/SaphanTokens.sol#L486) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/SaphanTokens.sol:02f6a09d596d` | open |
-| [`zetaphy-network/contracts/SignalBoard.sol:67`](../zetaphy-network/contracts/SignalBoard.sol#L67) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/SignalBoard.sol:91772e5b0a52` | open |
-| [`zetaphy-network/contracts/SimpleMultisig.sol:67`](../zetaphy-network/contracts/SimpleMultisig.sol#L67) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/SimpleMultisig.sol:0c5c89c944be` | open |
-| [`zetaphy-network/contracts/StableGateway.sol:203`](../zetaphy-network/contracts/StableGateway.sol#L203) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/StableGateway.sol:74855a2a6ae7` | open |
-| [`zetaphy-network/contracts/StableGateway.sol:211`](../zetaphy-network/contracts/StableGateway.sol#L211) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/StableGateway.sol:9c7d2610dfd8` | open |
-| [`zetaphy-network/contracts/ThreatRegistry.sol:607`](../zetaphy-network/contracts/ThreatRegistry.sol#L607) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ThreatRegistry.sol:6d5e08cb1fd2` | open |
-| [`zetaphy-network/contracts/ThreatRegistry.sol:609`](../zetaphy-network/contracts/ThreatRegistry.sol#L609) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ThreatRegistry.sol:32bbffd11509` | open |
-| [`zetaphy-network/contracts/ThreatRegistry.sol:610`](../zetaphy-network/contracts/ThreatRegistry.sol#L610) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ThreatRegistry.sol:8bbd724baed7` | open |
-| [`zetaphy-network/contracts/ThreatRegistry.sol:649`](../zetaphy-network/contracts/ThreatRegistry.sol#L649) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ThreatRegistry.sol:6bf0c33bb482` | open |
-| [`zetaphy-network/contracts/ThreatReports.sol:114`](../zetaphy-network/contracts/ThreatReports.sol#L114) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ThreatReports.sol:90461aa775ab` | open |
-| [`zetaphy-network/contracts/TwapRecorder.sol:62`](../zetaphy-network/contracts/TwapRecorder.sol#L62) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/TwapRecorder.sol:12b0a31e00cd` | open |
-| [`zetaphy-network/contracts/TwapRecorder.sol:94`](../zetaphy-network/contracts/TwapRecorder.sol#L94) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/TwapRecorder.sol:f251a6c948e4` | open |
-| [`zetaphy-network/contracts/TwapRecorder.sol:120`](../zetaphy-network/contracts/TwapRecorder.sol#L120) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/TwapRecorder.sol:aee6bb02e28a` | open |
-| [`zetaphy-network/contracts/UsefulIssuance.sol:98`](../zetaphy-network/contracts/UsefulIssuance.sol#L98) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/UsefulIssuance.sol:a598311195ac` | open |
-| [`zetaphy-network/contracts/UsefulIssuance.sol:146`](../zetaphy-network/contracts/UsefulIssuance.sol#L146) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/UsefulIssuance.sol:4ba34a1f78e2` | open |
-| [`zetaphy-network/contracts/UsefulWork.sol:184`](../zetaphy-network/contracts/UsefulWork.sol#L184) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/UsefulWork.sol:3e7b5cbf2c2f` | open |
-| [`zetaphy-network/contracts/UsefulWork.sol:346`](../zetaphy-network/contracts/UsefulWork.sol#L346) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/UsefulWork.sol:d61eed734a28` | open |
-| [`zetaphy-network/contracts/ZetaphyCheques.sol:153`](../zetaphy-network/contracts/ZetaphyCheques.sol#L153) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyCheques.sol:8d26f57b971c` | open |
-| [`zetaphy-network/contracts/ZetaphyCheques.sol:170`](../zetaphy-network/contracts/ZetaphyCheques.sol#L170) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyCheques.sol:4dc08b789df1` | open |
-| [`zetaphy-network/contracts/ZetaphyCheques.sol:191`](../zetaphy-network/contracts/ZetaphyCheques.sol#L191) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyCheques.sol:0bdf04ff4814` | open |
-| [`zetaphy-network/contracts/ZetaphyEarlyFarm.sol:95`](../zetaphy-network/contracts/ZetaphyEarlyFarm.sol#L95) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyEarlyFarm.sol:d7ba2bdb5b2c` | open |
-| [`zetaphy-network/contracts/ZetaphyEarlyFarm.sol:96`](../zetaphy-network/contracts/ZetaphyEarlyFarm.sol#L96) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyEarlyFarm.sol:48e0d712cddc` | open |
-| [`zetaphy-network/contracts/ZetaphyPoints.sol:84`](../zetaphy-network/contracts/ZetaphyPoints.sol#L84) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyPoints.sol:b505c63185d3` | open |
-| [`zetaphy-network/contracts/ZetaphyPoints.sol:91`](../zetaphy-network/contracts/ZetaphyPoints.sol#L91) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyPoints.sol:bfec7d54fd24` | open |
-| [`zetaphy-network/contracts/ZetaphyPoints.sol:92`](../zetaphy-network/contracts/ZetaphyPoints.sol#L92) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyPoints.sol:75e19439659b` | open |
-| [`zetaphy-network/contracts/ZetaphyPythRelay.sol:144`](../zetaphy-network/contracts/ZetaphyPythRelay.sol#L144) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-network/contracts/ZetaphyPythRelay.sol:e5d694ade16e` | open |
-| [`zetaphy-nft/contracts/NFTFactory.sol:65`](../zetaphy-nft/contracts/NFTFactory.sol#L65) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-nft/contracts/NFTFactory.sol:4ee5fffcf016` | open |
-| [`zetaphy-nft/contracts/NFTMarketplace.sol:274`](../zetaphy-nft/contracts/NFTMarketplace.sol#L274) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-nft/contracts/NFTMarketplace.sol:83e839fec262` | open |
-| [`zetaphy-nft/contracts/NFTMarketplace.sol:402`](../zetaphy-nft/contracts/NFTMarketplace.sol#L402) | semgrep / basic-arithmetic-underflow | basic-arithmetic-underflow — Possible arithmetic underflow <br>`semgrep:basic-arithmetic-underflow:zetaphy-nft/contracts/NFTMarketplace.sol:33f6509e5bfa` | open |
 | [`zetaphy-dex/contracts/dlmm/DlmmMath.sol:52`](../zetaphy-dex/contracts/dlmm/DlmmMath.sol#L52) | slither / divide-before-multiply | divide-before-multiply — DlmmMath.getPriceX128(int256,uint256) (contracts/dlmm/DlmmMath.sol#52-76) performs a multiplication on the result of a division: - base = (O <br>`slither:divide-before-multiply:zetaphy-dex/contracts/dlmm/DlmmMath.sol:fc0973ec12f0` | open |
 | [`zetaphy-dex/contracts/dlmm/DlmmMath.sol:108`](../zetaphy-dex/contracts/dlmm/DlmmMath.sol#L108) | slither / divide-before-multiply | divide-before-multiply — DlmmMath.mulDiv(uint256,uint256,uint256) (contracts/dlmm/DlmmMath.sol#108-140) performs a multiplication on the result of a division: - d /= <br>`slither:divide-before-multiply:zetaphy-dex/contracts/dlmm/DlmmMath.sol:bb69a0e175f4` | open |
 | [`zetaphy-dex/contracts/dlmm/DlmmMath.sol:108`](../zetaphy-dex/contracts/dlmm/DlmmMath.sol#L108) | slither / divide-before-multiply | divide-before-multiply — DlmmMath.mulDiv(uint256,uint256,uint256) (contracts/dlmm/DlmmMath.sol#108-140) performs a multiplication on the result of a division: - p0 / <br>`slither:divide-before-multiply:zetaphy-dex/contracts/dlmm/DlmmMath.sol:d631247a84a7` | open |
@@ -1053,7 +429,7 @@ None.
 | [`zetaphy-network/contracts/NeuroOracle.sol:275`](../zetaphy-network/contracts/NeuroOracle.sol#L275) | slither / unused-return | unused-return — NeuroOracleSender.verdictBody(uint256) (contracts/NeuroOracle.sol#275-282) ignores return value by (agreedBy,None,None,settled) = jobs.assur <br>`slither:unused-return:zetaphy-network/contracts/NeuroOracle.sol:addf6dbf227a` | open |
 | [`zetaphy-network/contracts/NeuroOracle.sol:334`](../zetaphy-network/contracts/NeuroOracle.sol#L334) | slither / uninitialized-local | uninitialized-local — NeuroOracleSender._u(uint256).n (contracts/NeuroOracle.sol#334) is a local variable never initialized <br>`slither:uninitialized-local:zetaphy-network/contracts/NeuroOracle.sol:4141de79ee9b` | open |
 | [`zetaphy-network/contracts/NeuroOracle.sol:363`](../zetaphy-network/contracts/NeuroOracle.sol#L363) | slither / locked-ether | locked-ether — Contract locking ether found: Contract NeuroOracle (contracts/NeuroOracle.sol#363-542) has payable functions: - NeuroOracle.handle(uint32,by <br>`slither:locked-ether:zetaphy-network/contracts/NeuroOracle.sol:0064094dc8f8` | open |
-| [`zetaphy-network/contracts/NeuroScore.sol:166`](../zetaphy-network/contracts/NeuroScore.sol#L166) | slither / incorrect-equality | incorrect-equality — NeuroScore.rescore(address,bytes) (contracts/NeuroScore.sol#166-169) uses a dangerous strict equality: - _scores[token].featuresHash == byte <br>`slither:incorrect-equality:zetaphy-network/contracts/NeuroScore.sol:d39238a530f7` | open |
+| [`zetaphy-network/contracts/NeuroScore.sol:167`](../zetaphy-network/contracts/NeuroScore.sol#L167) | slither / incorrect-equality | incorrect-equality — NeuroScore.rescore(address,bytes) (contracts/NeuroScore.sol#167-170) uses a dangerous strict equality: - _scores[token].featuresHash == byte <br>`slither:incorrect-equality:zetaphy-network/contracts/NeuroScore.sol:d39238a530f7` | open |
 | [`zetaphy-network/contracts/NeuroValidation.sol:96`](../zetaphy-network/contracts/NeuroValidation.sol#L96) | slither / unused-return | unused-return — NeuroValidation.isRunner(address) (contracts/NeuroValidation.sol#96-99) ignores return value by (None,None,active,agreed,rejected) = runners <br>`slither:unused-return:zetaphy-network/contracts/NeuroValidation.sol:2ba377dc6a1e` | open |
 | [`zetaphy-network/contracts/NeuroValidation.sol:127`](../zetaphy-network/contracts/NeuroValidation.sol#L127) | slither / unused-return | unused-return — NeuroValidation.postVerdict(uint256,bytes32,uint8,string,string) (contracts/NeuroValidation.sol#127-143) ignores return value by IIdentityRe <br>`slither:unused-return:zetaphy-network/contracts/NeuroValidation.sol:4fecea519533` | open |
 | [`zetaphy-network/contracts/NeuroValidation.sol:136`](../zetaphy-network/contracts/NeuroValidation.sol#L136) | slither / uninitialized-local | uninitialized-local — NeuroValidation.postVerdict(uint256,bytes32,uint8,string,string).uri (contracts/NeuroValidation.sol#136) is a local variable never initializ <br>`slither:uninitialized-local:zetaphy-network/contracts/NeuroValidation.sol:e5882ab461dd` | open |
@@ -1153,7 +529,7 @@ None.
 | [`zetaphy-network/contracts/ZetaphyQuests.sol:61`](../zetaphy-network/contracts/ZetaphyQuests.sol#L61) | slither / reentrancy-no-eth | reentrancy-no-eth — Reentrancy in ZetaphyQuests.pay(uint8,address[]) (contracts/ZetaphyQuests.sol#61-75): External calls: - ! token.transfer(a,s.reward) (contra <br>`slither:reentrancy-no-eth:zetaphy-network/contracts/ZetaphyQuests.sol:6aa15c21c8fc` | open |
 | [`zetaphy-nft/contracts/CollectionBase.sol:215`](../zetaphy-nft/contracts/CollectionBase.sol#L215) | slither / uninitialized-local | uninitialized-local — CollectionBase._toString(uint256).len (contracts/CollectionBase.sol#215) is a local variable never initialized <br>`slither:uninitialized-local:zetaphy-nft/contracts/CollectionBase.sol:a6e3fd225a41` | open |
 
-### Low (1381)
+### Low (1382)
 
 Grouped by rule; every instance with its id is in `findings.json` of the workflow artifact.
 
@@ -1192,18 +568,20 @@ Grouped by rule; every instance with its id is in `findings.json` of the workflo
 | aderyn / builtin-symbol-shadowing | 1 | [`zetaphy-network/contracts/BridgeGuard.sol:145`](../zetaphy-network/contracts/BridgeGuard.sol#L145) Builtin Symbol Shadowing |
 | aderyn / dead-code | 1 | [`zetaphy-network/contracts/NeuroIdentity.sol:723`](../zetaphy-network/contracts/NeuroIdentity.sol#L723) Dead Code |
 | aderyn / state-variable-could-be-constant | 1 | [`zetaphy-network/contracts/RedBlueArena.sol:106`](../zetaphy-network/contracts/RedBlueArena.sol#L106) State Variable Could Be Constant |
+| osv-scanner / GHSA-cq8v-f236-94qc | 1 | [`Cargo.lock`](../Cargo.lock) rand@0.7.3: Rand is unsound with a custom logger using rand::rng() |
 
-### Info (301)
+### Info (428)
 
 Grouped by rule; every instance with its id is in `findings.json` of the workflow artifact.
 
 | Tool / rule | Count | Example |
 |---|---:|---|
+| semgrep / basic-arithmetic-underflow | 126 | [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:264`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol#L264) basic-arithmetic-underflow (checked arithmetic: solc >= 0.8 and outside unchecked, an unde |
 | slither / unindexed-event-address | 83 | [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:75`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol#L75) unindexed-event-address |
 | slither / low-level-calls | 71 | [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:199`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol#L199) low-level-calls |
 | slither / naming-convention | 46 | [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:70`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol#L70) naming-convention |
 | slither / costly-loop | 20 | [`zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:163`](../zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol#L163) costly-loop |
-| slither / assembly | 19 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:65`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L65) assembly |
+| slither / assembly | 20 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:65`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L65) assembly |
 | slither / immutable-states | 12 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:289`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L289) immutable-states |
 | slither / cache-array-length | 11 | [`zetaphy-network/contracts/AgentPolicyWallet.sol:210`](../zetaphy-network/contracts/AgentPolicyWallet.sol#L210) cache-array-length |
 | slither / constable-states | 11 | [`zetaphy-network/contracts/NeuroJobs.sol:127`](../zetaphy-network/contracts/NeuroJobs.sol#L127) constable-states |
@@ -1216,6 +594,14 @@ Grouped by rule; every instance with its id is in `findings.json` of the workflo
 | slither / var-read-using-this | 1 | [`zetaphy-network/contracts/NeuroScoreVerifier.sol:202`](../zetaphy-network/contracts/NeuroScoreVerifier.sol#L202) var-read-using-this |
 | slither / unimplemented-functions | 1 | [`zetaphy-nft/contracts/CollectionBase.sol:32`](../zetaphy-nft/contracts/CollectionBase.sol#L32) unimplemented-functions |
 | smtchecker / underflow | 1 | [`zetaphy-network/contracts/ZetaphyCheques.sol:170`](../zetaphy-network/contracts/ZetaphyCheques.sol#L170) Underflow might happen |
+
+### Fixed (no longer detected)
+
+Findings `triage.yml` records as fixed whose tool no longer reports them: the record of the fix. A fixed finding that comes back shows as open again.
+
+- `aderyn:unsafe-casting:zetaphy-network/contracts/NeuroScore.sol:4e47b7e79173` — NeuroScore._score stored int64(score) unchecked. Fixed in 6829bee: _toInt64 reverts ScoreOutOfRange outside int64 instead of storing a truncated score (the event uses the same value); regression test "a score outside int64 is refused" in zetaphy-network/test/neuroscore.test.js. (claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30)
+- `aderyn:unsafe-casting:zetaphy-network/contracts/NeuroScore.sol:17b11df7e29a` — NeuroScore._score emitted int64(score) unchecked. Fixed in 6829bee: the event now carries the range-checked value from _toInt64 (reverts ScoreOutOfRange); regression test in zetaphy-network/test/neuroscore.test.js. (claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30)
+- `osv-scanner:GHSA-3gc7-fjrx-p6mg:yarn.lock:035bd1566304` — bigint-buffer@1.1.5 (native toBigInt buffer overflow, no fixed release) is replaced in 6829bee by scripts/vendor/bigint-buffer, a pure-JS drop-in with the same four functions, through the root package.json resolutions; yarn.lock no longer has bigint-buffer@1.1.5, bindings or file-uri-to-path. Tests: scripts/vendor/bigint-buffer/test.js; @solana/spl-token layouts decode/encode through it. (claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm), 2026-10-30)
 
 ### Triage entries that matched nothing
 
@@ -1246,10 +632,10 @@ The finding is gone (fixed, or the flagged line changed so its id changed). Remo
 
 | Contract file | Engine | Result | Counterexamples | Unproved targets | Time |
 |---|---|---|---:|---:|---:|
-| `zetaphy-network/contracts/ZetaphyCheques.sol` | bmc | done | 6 | 1 | 63s |
-| `zetaphy-network/contracts/RewardVault.sol` | bmc | done | 12 | 0 | 43s |
+| `zetaphy-network/contracts/ZetaphyCheques.sol` | bmc | done | 6 | 1 | 72s |
+| `zetaphy-network/contracts/RewardVault.sol` | bmc | done | 12 | 0 | 53s |
 | `zetaphy-dex/contracts/WZETAPHY.sol` | bmc | done | 1 | 0 | 0s |
-| `zetaphy-dex/contracts/ZetaphyPair.sol` | bmc | done | 20 | 4 | 117s |
+| `zetaphy-dex/contracts/ZetaphyPair.sol` | bmc | done | 20 | 4 | 133s |
 
 A counterexample is a concrete input the solver found (BMC checks each function alone, without the contract's state invariants, so its arithmetic ones are often unreachable; they are Low findings). An unproved target means the solver ran out of time: NOT a pass and NOT a bug (Info). A contract that hit the time or memory cap reports nothing.
 
@@ -1356,7 +742,7 @@ keccak-256 of each audited contract's runtime bytecode, as compiled here. A depl
 | NeuroJobsChallenges | `0x564361955d4e47db2497b8f502c8d1549228a0add47e51c093081beea174cfe8` |
 | NeuroOracle | `0x129495deb2224bda299097627df86197687058262a4ec0d2d7d45fab91e2d5c7` |
 | NeuroOracleSender | `0xaf7f452623e50ad4ee5a24577b4b3c8086bbceefb413b7af1a3a470c1f3c4d48` |
-| NeuroScore | `0xdeeb869bf8d07bbc7ab9d347c97e1cb1921165d7db06d2938a47c64877238918` |
+| NeuroScore | `0x58afeb103e4521f5ce17a8d69c68f3335b7b3f72e92cd9127a5204d2655be907` |
 | NeuroScoreVerifier | `0x1c34f1f76eb298800b2d6d38ae04ef6358f337cff1eab618172007be05e7d205` |
 | NeuroValidation | `0xf6c3c6bef6dd4a0e9d682d5de8da13b48c5a51a8373739dcf8279179f2a3e808` |
 | QuantumWallet | `0x3713d060b6a56f7d86edd78f952f4c06792c187bd183ddbd281adbfa5174bd9b` |
