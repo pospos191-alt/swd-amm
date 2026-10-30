@@ -12,6 +12,7 @@
 | 23 | ตัวตนและความรับผิดของ agent | **เสร็จ (ต้นแบบ)** | `AgentRegistry.sol` (+ `ConstitutionChecker`), `test/agents.test.js` |
 | 24 | Proof of Intent | **เสร็จ (ต้นแบบ)**: ตัวสร้างแบบมีโครงสร้าง (5 แบบ, schema เข้มงวด), จำลองก่อนเซ็น, วันหมดอายุ + เพดานต่อ intent และเพดานรายวันบนเชน การแปลภาษาธรรมชาติยังเป็นเพียงคำแนะนำโดยตั้งใจ | `IntentExecutor.sol`, `zetaphy-hub/intent-core.js`, `src/intent.js`, หน้า Agent ใน hub |
 | 25 | ป้ายคน/agent | **เสร็จ (ต้นแบบ)** + ระดับ "ไม่ซ้ำ" แบบเลือกได้ (เครือข่ายการรับรอง) "คน" ≠ คนเดียวไม่ซ้ำ และปัญหา Sybil **ยังแก้ไม่หมด** | `WebAuthnVerifier.sol`, `HumanAgentLabels.sol` (`LabelRegistry`, `VouchRegistry`), `test/vouch.test.js` |
+| 25+ | ตัวตนแบบส่วนตัว (zero-knowledge) บนป้าย: พิสูจน์ "เป็นคนที่มีป้าย" "ระดับ ≥ X" "ครั้งเดียวต่อ scope" โดยไม่เปิดเผยบัญชี; trusted setup แบบ DEV และไม่ทนควอนตัม | **เสร็จ (ต้นแบบ)** ดู [zk-identity.th.md](zk-identity.th.md) | `ZkIdentityRegistry.sol`, `ZkIdentityVerifier.sol`, `PrivateAirdrop.sol`, `PrivatePoll.sol`, `zkid/`, hub `zkid.js`, `test/zkid.test.js` |
 | 9 | รั้วกั้นกระเป๋าที่ AI ใช้ | **เสร็จ (ต้นแบบ)** | `AgentPolicyWallet.sol` |
 | 14 | AI ผู้ร่วมเซ็น | **เสร็จ (ต้นแบบ)**: ลายเซ็น threshold แบบ FROST (RFC 9591, secp256k1) พร้อม DKG ที่ไม่มีผู้แจกกุญแจ และตัวตรวจบนเชน ยังเก็บ k-of-n ECDSA ไว้เป็นทางสำรอง | `CosignCommittee` + `FrostSecp256k1`, `src/frost.js`, `src/cosign.js`, `zetaphy cosign`, `test/frost.test.js` |
 

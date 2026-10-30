@@ -1,0 +1,33 @@
+{
+ "when": "2026-10-30T19:29:40.067Z",
+ "node": "v22.22.0",
+ "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+ "cores": 4,
+ "snarkjs": "0.7.6",
+ "depth": 20,
+ "circuit": {
+  "constraints": 5585,
+  "compileSeconds": 3.118
+ },
+ "phase1": {
+  "name": "Perpetual Powers of Tau, contribution 0080 (PSE), prepared for phase 2, power 15",
+  "sha256": "4a8eb5a754ed4710d6ad603c2e1a89c72325a448e4474f8694d2c71c7c272f3d"
+ },
+ "setupSeconds": 35.424,
+ "files": {
+  "wasmBytes": 1791360,
+  "zkeyBytes": 3301982
+ },
+ "proveSingleThreadSeconds": {
+  "median": 2.088,
+  "min": 1.996,
+  "max": 2.228,
+  "n": 10
+ },
+ "proveMultiThreadSeconds": 0.771,
+ "verifyJsSeconds": 0.021,
+ "proofBytes": {
+  "groth16": 256,
+  "calldataWithPublicSignals": 416
+ }
+}
