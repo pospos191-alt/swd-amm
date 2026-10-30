@@ -286,7 +286,7 @@ test('chain table: https RPCs only; the CSP gets their origins only when connect
   const bad = buildCrossChain(() => ({ zetaphy: {}, chains: { x: { domain: 5, mailbox: A(1), rpc: ['http://a.example', 'javascript:1', 'https://ok.example'], explorer: 'http://e' } } }));
   assert.deepEqual(bad.chains.x.rpc, ['https://ok.example']); assert.equal(bad.chains.x.explorer, '');
   const origins = crossChainOrigins(cc);
-  assert.ok(origins.includes('https://ethereum-sepolia-rpc.publicnode.com'));
+  assert.ok(new Set(origins).has('https://ethereum-sepolia-rpc.publicnode.com'));
   const open = "default-src 'none'; connect-src 'self' https:; object-src 'none'";
   assert.equal(cspWithOrigins(open, origins), open);
   const locked = cspWithOrigins("default-src 'none'; connect-src 'self' https://node.example; object-src 'none'", origins);

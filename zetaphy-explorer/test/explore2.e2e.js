@@ -236,7 +236,7 @@ test('NFT gallery and items: metadata as text only, ipfs via the gateway, SVG on
   let t = await text(page);
   assert.match(t, /Owner\s+0x6DA134EbFcb035273E87954f0641bD920ED073Ba/);
   assert.match(t, /Colour\s+Gold/); assert.match(t, /Rarity\s+Rare/);
-  assert.ok(!/<script|<b>|<i>/.test(t), 'tags never shown or parsed');
+  assert.ok(!/<script|<b>|<i>/i.test(t), 'tags never shown or parsed');
   const img = page.locator('.nft-hero img');
   assert.equal(await img.getAttribute('src'), 'https://ipfs.io/ipfs/bafyimg7/7.png');
   await page.waitForFunction(() => document.querySelector('.nft-hero img')?.naturalWidth > 0);
