@@ -56,9 +56,12 @@ fetch_code() {
   local src; src=$(find "$t" -maxdepth 1 -mindepth 1 -type d | head -1)
   rm -rf "$CODE.new"; mkdir -p "$CODE.new"
   cp -a "$src/zetaphy-network" "$src/zetaphy-neuro" "$CODE.new/"
-  # the browser's useful-work code, which runners re-run (zetaphy work / bounty; docs/future/useful-work.md)
+  # the browser code the CLI shares with the hub (useful work, intents, PQ attestations, the audit network;
+  # docs/future/useful-work.md, audit-network.md): every ../../zetaphy-hub/*.js that zetaphy-network imports
   mkdir -p "$CODE.new/zetaphy-hub"
-  cp "$src/zetaphy-hub/work-core.js" "$src/zetaphy-hub/fuzz-core.js" "$src/zetaphy-hub/fuzz-hook.js" "$src/zetaphy-hub/mine-core.js" "$CODE.new/zetaphy-hub/"
+  for f in work-core.js fuzz-core.js fuzz-hook.js mine-core.js intent-core.js pqattest.js audit-core.js chainlib.js; do
+    cp "$src/zetaphy-hub/$f" "$CODE.new/zetaphy-hub/"
+  done
   (cd "$CODE.new/zetaphy-network" && npm ci --omit=dev --no-audit --no-fund --silent)
   (cd "$CODE.new/zetaphy-neuro" && npm ci --omit=dev --no-audit --no-fund --silent)
   rm -rf "$CODE.old"; [ -d "$CODE" ] && mv "$CODE" "$CODE.old"; mv "$CODE.new" "$CODE"; rm -rf "$CODE.old" "$t"
