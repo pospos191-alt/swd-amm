@@ -45,10 +45,18 @@ export function hubConfig(cfg, files = null) {
   // useful work (docs/future/useful-work.md): `zetaphy deploy-useful-work` writes its own deployment file (testnet only)
   const uw = read('zetaphy-network/deployments/useful-work-77390.json');
   if (uw?.chainId === 77390) for (const [k, v] of Object.entries(uw.contracts ?? {})) out[k] ??= v;
+  // the AI-map contracts (.github/workflows/ai-deploy.yml, zetaphy-network/src/aideploy.js)
+  const ai = read('zetaphy-network/deployments/ai-77390.json');
+  if (ai?.chainId === 77390) for (const [k, v] of Object.entries(ai.contracts ?? {})) out[k] ??= v;
+  const fl = read('zetaphy-neuro/ml/fl/deployment.json');
+  if (fl?.chainId === 77390 && fl.rounds) out.federatedRounds ??= fl.rounds;
+  const oracle = read('zetaphy-chain/hyperlane/neuro-oracle.json');
+  if (oracle?.sender) out.neuroOracleSender ??= oracle.sender;
   const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
   const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity',
     'usefulWork', 'bugBounty', 'workerReputation', 'usefulIssuance', 'riskForecasts', 'foresight', 'detectorPool', 'dataDao', 'arena', 'intentExecutor', 'labelRegistry', 'vouchRegistry', 'agentRegistry', 'agentPolicyWallet',
-    'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance']
+    'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance',
+    'modelRegistry', 'neuroScore', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds']
     .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
   if (Number.isInteger(out.timelockBlock) && contracts.timelock) contracts.timelockBlock = out.timelockBlock;
   const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};

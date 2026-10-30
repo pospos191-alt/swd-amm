@@ -110,6 +110,14 @@ export const GROUPS = [
   ['markets', 'chart', [15, 16, 26, 27, 29]],
   ['crosschain', 'globe', [18, 19, 20, 21, 22, 28, 30, 32]],
 ];
+/**
+ * The status shown: a "not deployed" item becomes "works now" once hub-config.json has every contract it
+ * `needs` (written at build time from the deployments; .github/workflows/ai-deploy.yml).
+ */
+export function statusOf(it, contracts = {}) {
+  if (it.s === 'notDeployed' && it.needs?.length && it.needs.every((k) => /^0x[0-9a-fA-F]{40}$/.test(String(contracts?.[k] ?? '')))) return 'live';
+  return it.s;
+}
 export const STATUS_ICON = { live: 'check', practice: 'play', notDeployed: 'clock', chain: 'cube', cli: 'terminal' };
 
 /**
@@ -117,35 +125,35 @@ export const STATUS_ICON = { live: 'check', practice: 'play', notDeployed: 'cloc
  * this site) or nothing (no page: the doc says how it works).
  */
 export const ITEMS = {
-  1: { s: 'notDeployed', i: 'layers', doc: 'browser-ai', tab: 'neuro', hint: 'neuroAi' },
+  1: { s: 'notDeployed', i: 'layers', doc: 'browser-ai', tab: 'neuro', hint: 'neuroAi', needs: ['modelRegistry'] },
   2: { s: 'practice', i: 'network', doc: 'browser-ai', tab: 'neuro', hint: 'neuroAi' },
   3: { s: 'cli', i: 'cube', doc: 'onchain-ml' },
   4: { s: 'practice', i: 'eyeLock', doc: 'onchain-ml', page: 'ceremony.html' },
   5: { s: 'practice', i: 'cpu', doc: 'useful-work', tab: 'mine', mode: 'work', hint: 'mineWork' },
-  6: { s: 'notDeployed', i: 'users', doc: 'federated', tab: 'neuro', hint: 'neuroFl' },
+  6: { s: 'notDeployed', i: 'users', doc: 'federated', tab: 'neuro', hint: 'neuroFl', needs: ['federatedRounds'] },
   7: { s: 'practice', i: 'brain', doc: 'browser-ai', tab: 'neuro', hint: 'neuroAi' },
   8: { s: 'live', i: 'doc', doc: 'browser-ai', tab: 'neuro', hint: 'neuroAi' },
-  9: { s: 'notDeployed', i: 'fence', doc: 'agents', tab: 'agents' },
-  10: { s: 'notDeployed', i: 'trophy', doc: 'useful-work', tab: 'mine', mode: 'work', hint: 'mineWork' },
+  9: { s: 'notDeployed', i: 'fence', doc: 'agents', tab: 'agents', needs: ['cosignCommittee', 'webauthn'] },
+  10: { s: 'notDeployed', i: 'trophy', doc: 'useful-work', tab: 'mine', mode: 'work', hint: 'mineWork', needs: ['workerReputation'] },
   11: { s: 'chain', i: 'cpu', doc: 'chain-protocol' },
   12: { s: 'chain', i: 'shield', doc: 'chain-protocol' },
   13: { s: 'chain', i: 'lock', doc: 'chain-protocol' },
   14: { s: 'cli', i: 'pen', doc: 'agents' },
-  15: { s: 'notDeployed', i: 'chart', doc: 'markets', page: 'forecasts.html#forecasts' },
-  16: { s: 'notDeployed', i: 'pie', doc: 'markets', page: 'forecasts.html#data' },
+  15: { s: 'notDeployed', i: 'chart', doc: 'markets', page: 'forecasts.html#forecasts', needs: ['riskForecasts'] },
+  16: { s: 'notDeployed', i: 'pie', doc: 'markets', page: 'forecasts.html#data', needs: ['dataDao'] },
   17: { s: 'practice', i: 'bug', doc: 'useful-work', tab: 'mine', mode: 'work', hint: 'mineWork' },
   18: { s: 'cli', i: 'globe', doc: 'crosschain-assist', tab: 'immune' },
-  19: { s: 'notDeployed', i: 'check', doc: 'crosschain-assist', tab: 'immune' },
+  19: { s: 'notDeployed', i: 'check', doc: 'crosschain-assist', tab: 'immune', needs: ['neuroAttest'] },
   20: { s: 'live', i: 'eye', doc: 'crosschain-assist', tab: 'wallet', hint: 'everyTx' },
   21: { s: 'live', i: 'gavel', doc: 'crosschain-assist', tab: 'gov' },
   22: { s: 'live', i: 'terminal', doc: 'crosschain-assist', page: 'validators.html' },
-  23: { s: 'notDeployed', i: 'robot', doc: 'agents', tab: 'agents' },
-  24: { s: 'notDeployed', i: 'target', doc: 'agents', tab: 'agents' },
-  25: { s: 'notDeployed', i: 'tag', doc: 'agents', tab: 'agents' },
-  26: { s: 'notDeployed', i: 'dna', doc: 'markets', page: 'forecasts.html#detectors' },
-  27: { s: 'notDeployed', i: 'swords', doc: 'markets', page: 'forecasts.html#arena' },
-  28: { s: 'notDeployed', i: 'network', doc: 'crosschain-assist', tab: 'immune' },
-  29: { s: 'notDeployed', i: 'eye', doc: 'markets', page: 'forecasts.html#foresight' },
+  23: { s: 'notDeployed', i: 'robot', doc: 'agents', tab: 'agents', needs: ['agentRegistry'] },
+  24: { s: 'notDeployed', i: 'target', doc: 'agents', tab: 'agents', needs: ['intentExecutor'] },
+  25: { s: 'notDeployed', i: 'tag', doc: 'agents', tab: 'agents', needs: ['labelRegistry', 'vouchRegistry'] },
+  26: { s: 'notDeployed', i: 'dna', doc: 'markets', page: 'forecasts.html#detectors', needs: ['detectorPool'] },
+  27: { s: 'notDeployed', i: 'swords', doc: 'markets', page: 'forecasts.html#arena', needs: ['arena'] },
+  28: { s: 'notDeployed', i: 'network', doc: 'crosschain-assist', tab: 'immune', needs: ['neuroOracleSender'] },
+  29: { s: 'notDeployed', i: 'eye', doc: 'markets', page: 'forecasts.html#foresight', needs: ['foresight'] },
   30: { s: 'practice', i: 'key', doc: 'crosschain-assist', tab: 'immune' },
   31: { s: 'chain', i: 'bridge', doc: 'chain-protocol' },
   32: { s: 'cli', i: 'umbrella', doc: 'crosschain-assist' },

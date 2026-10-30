@@ -3,15 +3,15 @@
 // top counts them and filters the cards.
 import { withFallback, TAB_TEXT } from './i18n.js';
 import { AIMAP } from './flow-i18n.js';
-import { GROUPS, ITEMS, STATUS_ICON, icon, docUrl } from './flow.js';
+import { GROUPS, ITEMS, STATUS_ICON, icon, docUrl, statusOf } from './flow.js';
 
 const ORDER = ['live', 'practice', 'notDeployed', 'chain', 'cli'];
 let filter = 'all';
 
-/** Counts per status (a test checks they add up to 35). */
-export function statusCounts() {
+/** Counts per status, with what is deployed (`contracts`: hub-config.json); a test checks they add up to 35. */
+export function statusCounts(contracts = {}) {
   const n = Object.fromEntries(ORDER.map((s) => [s, 0]));
-  for (const it of Object.values(ITEMS)) n[it.s]++;
+  for (const it of Object.values(ITEMS)) n[statusOf(it, contracts)]++;
   return n;
 }
 
@@ -34,7 +34,8 @@ const aimap = {
   render(root, ctx) {
     const L = withFallback(AIMAP, ctx.lang);
     const el = ctx.el;
-    const counts = statusCounts();
+    const deployed = ctx.cfg?.contracts ?? {};
+    const counts = statusCounts(deployed);
     const cards = [];
     const chip = (s, n) => el('button', { type: 'button', class: `am-chip st-${s}${filter === s ? ' on' : ''}`, 'data-s': s, onclick: () => setFilter(s) },
       s === 'all' ? icon('grid', 'fl-ic sm') : icon(STATUS_ICON[s], 'fl-ic sm'), el('span', { text: s === 'all' ? L.all : L.status[s] }), el('b', { text: String(n) }));
@@ -46,15 +47,16 @@ const aimap = {
     };
     const card = (n) => {
       const it = ITEMS[n];
+      const st = statusOf(it, deployed);
       const [name, what] = L.items[n];
       const where = whereText(it, ctx.lang, L);
-      const c = el('article', { class: `am-card st-${it.s}`, 'data-s': it.s, id: `ai-${n}` },
+      const c = el('article', { class: `am-card st-${st}`, 'data-s': st, id: `ai-${n}` },
         el('div', { class: 'am-top' },
           el('span', { class: 'am-pic' }, icon(it.i, 'fl-ic big')),
           el('span', { class: 'am-num mono', text: `#${n}` })),
         el('h3', { text: name }),
         el('p', { class: 'small', text: what }),
-        el('span', { class: `am-st st-${it.s}` }, icon(STATUS_ICON[it.s], 'fl-ic sm'), el('span', { text: L.status[it.s] })),
+        el('span', { class: `am-st st-${st}` }, icon(STATUS_ICON[st], 'fl-ic sm'), el('span', { text: L.status[st] })),
         where ? el('p', { class: 'am-where small dim' }, icon('map', 'fl-ic sm'), el('span', { text: where })) : null,
         el('div', { class: 'am-actions' },
           it.tab || it.page ? el('button', { type: 'button', class: 'btn sm', text: L.open, onclick: () => open(ctx, it) }) : null,
