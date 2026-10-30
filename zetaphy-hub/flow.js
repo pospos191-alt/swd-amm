@@ -90,6 +90,7 @@ export const FLOWS = {
   gov: { icons: ['doc', 'play', 'vote', 'gavel'], next: ['stake', 'immune', 'ai'] },
   immune: { icons: ['brain', 'shield', 'globe', 'lock'], next: ['neuro', 'gov', 'aichain'] },
   aichain: { icons: ['cube', 'eye', 'search', 'wallet'], next: ['ai', 'immune', 'gov'] },
+  offline: { icons: ['link', 'pen', 'paste', 'coin'], next: ['swap', 'wallet', 'agents'] },
   dev: { icons: ['terminal', 'link', 'code', 'doc'], next: ['explorer', 'ai'] },
   ai: { icons: ['map', 'check', 'link', 'cube'], next: ['neuro', 'agents', 'aichain'] },
 };

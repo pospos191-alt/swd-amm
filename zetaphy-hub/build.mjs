@@ -35,7 +35,7 @@ const SKIP_IN = { wallet: new Set(['src']),
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data',
   'robots.txt', 'sitemap.xml', `${INDEXNOW_KEY}.txt`]);
 const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'ceremony.html', 'ceremony.css', 'ceremony.js', 'ceremony-i18n.js', 'ceremony-core.js', 'vendor/snarkjs.min.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
-  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'aichain.js', 'aichain-i18n.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
+  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'aichain.js', 'aichain-i18n.js', 'offline.js', 'offline-core.js', 'offline-i18n.js', 'vendor/qrcode.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. `files`: {path: json} in place of the repo's (tests). */
 export function hubConfig(cfg, files = null) {
@@ -48,6 +48,9 @@ export function hubConfig(cfg, files = null) {
   // the AI-map contracts (.github/workflows/ai-deploy.yml, zetaphy-network/src/aideploy.js)
   const ai = read('zetaphy-network/deployments/ai-77390.json');
   if (ai?.chainId === 77390) for (const [k, v] of Object.entries(ai.contracts ?? {})) out[k] ??= v;
+  // offline trading (docs/future/offline-trading.md): zetaphy-network/scripts/offline-deploy.js writes its record (testnet only)
+  const off = read('zetaphy-network/deployments/offline-77390.json');
+  if (off?.chainId === 77390) for (const [k, v] of Object.entries(off.contracts ?? {})) out[k] ??= v;
   const fl = read('zetaphy-neuro/ml/fl/deployment.json');
   if (fl?.chainId === 77390 && fl.rounds) out.federatedRounds ??= fl.rounds;
   const oracle = read('zetaphy-chain/hyperlane/neuro-oracle.json');
@@ -56,7 +59,7 @@ export function hubConfig(cfg, files = null) {
   const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity',
     'usefulWork', 'bugBounty', 'workerReputation', 'usefulIssuance', 'riskForecasts', 'foresight', 'detectorPool', 'dataDao', 'arena', 'intentExecutor', 'labelRegistry', 'vouchRegistry', 'agentRegistry', 'agentPolicyWallet',
     'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance',
-    'modelRegistry', 'neuroScore', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds']
+    'modelRegistry', 'neuroScore', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds', 'zetaphyCheques', 'offlineOrders']
     .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
   if (Number.isInteger(out.timelockBlock) && contracts.timelock) contracts.timelockBlock = out.timelockBlock;
   const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};
@@ -210,12 +213,49 @@ export function build() {
     const top = (p) => p.slice(from.length + 1).split(/[\\/]/)[0];
     cpSync(from, join(dir, path), { recursive: true, filter: (p) => !SKIP.has(top(p)) && !SKIP_IN[path]?.has(top(p)) });
   }
+  writeServiceWorker(dir);
   for (let i = 0; ; i++) {
     const old = `${OUT}.old-${process.pid}-${Date.now()}-${i}`;
     try { renameSync(OUT, old); } catch { /* no dist/ yet */ }
     try { renameSync(dir, OUT); rmSync(old, { recursive: true, force: true }); break; } catch (e) { rmSync(old, { recursive: true, force: true }); if (i > 20) throw e; }
   }
   return OUT;
+}
+
+// ------------------------------------------------------------------ the offline app shell (sw.js)
+// What the service worker keeps: the hub page, its own scripts, styles and icons, hub-config.json, and every module
+// they import statically (e.g. wallet/wallets.js), plus what the Offline tab loads on demand (the QR encoder;
+// keccak-256 and secp256k1 from the wallet's bundle). Never the big vendor bundles of other pages, never anything from the network.
+const SHELL_SKIP = new Set(['vendor/snarkjs.min.js', 'vendor/evm.js', 'vendor/ledger-hid.js', 'og.png', 'zearly-256.png', 'zetaphy-256.png']);
+const SHELL_EXTRA = ['wallet/vendor/pqwallet.js', 'hub-config.json'];
+export function shellFiles(dir) {
+  const own = HUB_FILES.filter((f) => /\.(js|css|svg)$/.test(f) && !SHELL_SKIP.has(f) && !/^(validators|forecasts|ceremony)/.test(f) && !/-worker\.js$/.test(f));
+  const out = new Set([...own, ...SHELL_EXTRA]);
+  const queue = [...out].filter((f) => f.endsWith('.js'));
+  while (queue.length) {
+    const f = queue.pop();
+    let src;
+    try { src = readFileSync(join(dir, f), 'utf8'); } catch { continue; }
+    for (const [, ref] of src.matchAll(/(?:^|[;\s}])(?:import|export)\s[^'"`;]*?from\s*['"](\.{1,2}\/[^'"]+)['"]|(?:^|[;\s])import\s*['"](\.{1,2}\/[^'"]+)['"]/gm)) {
+      if (!ref) continue;
+      const p = join(dirname(f), ref).replace(/\\/g, '/');
+      if (p.startsWith('..') || out.has(p) || !existsSync(join(dir, p))) continue;
+      out.add(p);
+      queue.push(p);
+    }
+  }
+  return ['./', ...[...out].sort()];
+}
+/** dist/sw.js from sw.js: the shell list and a version (hash of every shell file), so a new deploy replaces the old copy. */
+export function writeServiceWorker(dir) {
+  const files = shellFiles(dir);
+  const h = createHash('sha256');
+  for (const f of files) h.update(f).update(f === './' ? readFileSync(join(dir, 'index.html')) : readFileSync(join(dir, f)));
+  const src = readFileSync(join(HERE, 'sw.js'), 'utf8')
+    .replace("'__VERSION__'", JSON.stringify(h.digest('hex').slice(0, 16)))
+    .replace("['__SHELL__']", JSON.stringify(files));
+  writeFileSync(join(dir, 'sw.js'), src);
+  return files;
 }
 
 /** Every local <script src> / <link href> in the built pages exists. */

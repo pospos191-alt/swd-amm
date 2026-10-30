@@ -1071,6 +1071,16 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 `KEYFILE=… node scripts/signal-board.js deploy | show --board 0x…` เทสต์ใน `test/signalboard.test.js` ยังไม่ได้ deploy
 รายละเอียดและความเป็นส่วนตัว: [docs/future/browser-ai.th.md](../docs/future/browser-ai.th.md)
 
+## เทรดแบบออฟไลน์: เช็ค และคำสั่งสวอปแบบออฟไลน์ (เทสต์เน็ต)
+
+`contracts/ZetaphyCheques.sol`: ช่องทางจ่ายเงินทางเดียว เช็ค (ยอดรวมสะสมแบบ EIP-712) เซ็นด้วยกุญแจออฟไลน์ที่แยกไว้ต่างหาก
+ใครก็ขึ้นเงินแทนผู้รับได้ แต่ไม่เกินเงินมัดจำ ผู้จ่ายปิดได้หลังหมดอายุและผ่านช่วงคัดค้าน 24 ชั่วโมง
+`contracts/ZetaphyOfflineOrders.sol`: คำสั่งสวอปที่เซ็นตอนออฟไลน์ ใครก็ส่งขึ้นเชนผ่านเราเตอร์ของ ZETAPHY Swap แล้วได้ค่าธรรมเนียม
+(nonce แบบบิตแมป มีเส้นตาย ทำทั้งหมดหรือไม่ทำเลย) ทั้งสองตัวไม่มีเจ้าของ
+`ZETAPHY_RPC=… KEYFILE=… node scripts/offline-deploy.js [--router 0x…]` deploy ทั้งสองตัว (เทสต์เน็ตเท่านั้น) และเขียน
+`deployments/offline-77390.json` ให้ฮับอ่าน ส่วน `… offline-deploy.js check` อ่านกลับมาตรวจ เทสต์ใน `test/offline.test.js`
+การออกแบบ ภัยที่คิดไว้ และข้อจำกัด: [docs/future/offline-trading.th.md](../docs/future/offline-trading.th.md)
+
 ## ทดสอบ
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)

@@ -71,6 +71,7 @@ export const TEXT = {
     devApi: 'API ของเครือข่าย', devApiSub: 'ใช้ได้ฟรี ไม่ต้องมี API key คัดลอกคำสั่งไปวางในเทอร์มินัลได้เลย', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'ไฟล์ตั้งค่าเชน (Keplr / EVM)', devCli: 'เครื่องมือบรรทัดคำสั่ง zetaphy',
     devContracts: 'ที่อยู่สัญญา', tipDevContracts: 'สัญญาที่ deploy บน testnet และ precompile ของเชน กดที่อยู่เพื่อเปิดใน Explorer',
     wbAddToken: 'เพิ่มในกระเป๋า', wbConnect: "เชื่อมต่อกระเป๋า", wbConnectFirst: "เชื่อมต่อกระเป๋าก่อน (มุมขวาบน)", wbNoAccount: "กระเป๋าไม่ส่งบัญชีมา", wbHoldings: "บนเชน ZETAPHY", wbNoNode: "ดูยอดไม่ได้: โหนดยังไม่ตอบในตอนนี้", wbShared: "เชื่อมครั้งเดียวใช้ได้ทั้งเว็บ: Swap, NFT และ Stake & โหวต ใช้กระเป๋านี้ด้วย ส่วนกระเป๋าต้านควอนตัมใช้กุญแจของตัวเอง", wbRefresh: "รีเฟรช", wbDisconnect: "ยกเลิกการเชื่อมต่อ", wbRejected: "ยกเลิกในกระเป๋าแล้ว", wbNone: "ไม่พบกระเป๋าในเบราว์เซอร์นี้ เปิดหน้านี้ในแอปกระเป๋า:", wbPq: "อ่านแค่ที่อยู่ของคุณ ไม่มีการเซ็นอะไรจนกว่าคุณจะยืนยันในกระเป๋า", wbWrongChain: "สลับกระเป๋าไปที่ ZETAPHY (เชน 77390) แล้วลองใหม่",
+    netOffline: "ออฟไลน์", tipNetOffline: "ไม่มีเน็ต: แท็บออฟไลน์ยังใช้ได้ (เช็คและคำสั่งสวอป) ส่วนอื่นรอจนกว่าจะมีเน็ต",
     wbSaphan: "Saphan ออก", wbSaphanTip: "โทเคนนี้ออกไปเชนอื่นผ่าน ZETAPHY Saphan (Hyperlane) ได้ที่ไหน: ล็อกบน ZETAPHY แล้วมีตัวแทนบนเชนปลายทาง", wbStPlanned: "วางแผนไว้", wbStClosed: "ปิด", wbStOpen: "เปิด",
   },
   en: {
@@ -120,6 +121,7 @@ export const TEXT = {
     devApi: 'Network API', devApiSub: 'Free, no API key. Copy a command into a terminal.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'Chain registry files (Keplr / EVM)', devCli: 'The zetaphy command-line tool',
     devContracts: 'Contract addresses', tipDevContracts: 'Contracts deployed on the testnet and the chain\'s precompiles; click an address to open it in the Explorer',
     wbAddToken: 'Add to wallet', wbConnect: "Connect wallet", wbConnectFirst: "Connect a wallet first (top right)", wbNoAccount: "The wallet gave no account", wbHoldings: "On the ZETAPHY chain", wbNoNode: "Balances unavailable: the node is not answering right now", wbShared: "Connected for the whole site: Swap, NFT and Stake & vote use this wallet too. The quantum-resistant wallet keeps its own keys.", wbRefresh: "Refresh", wbDisconnect: "Disconnect", wbRejected: "Cancelled in the wallet", wbNone: "No wallet found in this browser. Open this page in a wallet app:", wbPq: "Only your address is read. Nothing is signed until you confirm it in your wallet.", wbWrongChain: "Switch your wallet to ZETAPHY (chain 77390) and try again",
+    netOffline: "Offline", tipNetOffline: "No network: the Offline tab still works (cheques and swap orders); everything else waits for the network",
     wbSaphan: "Saphan out", wbSaphanTip: "Where this token can go out through ZETAPHY Saphan (Hyperlane): locked on ZETAPHY, a copy on the other chain", wbStPlanned: "planned", wbStClosed: "closed", wbStOpen: "open",
   },
   zh: {
@@ -169,6 +171,7 @@ export const TEXT = {
     devApi: '网络 API', devApiSub: '免费，无需 API 密钥。把命令复制到终端即可。', devFaucet: '水龙头（JSON-RPC）', devRegistry: '链注册文件（Keplr / EVM）', devCli: 'zetaphy 命令行工具',
     devContracts: '合约地址', tipDevContracts: '部署在测试网上的合约和链的预编译合约；点击地址即可在 Explorer 中打开',
     wbAddToken: '添加到钱包', wbConnect: "连接钱包", wbConnectFirst: "请先连接钱包（右上角）", wbNoAccount: "钱包没有返回账户", wbHoldings: "在 ZETAPHY 链上", wbNoNode: "暂时无法显示余额：节点目前没有响应", wbShared: "整个网站只需连接一次：兑换、NFT 和质押与投票也使用这个钱包。抗量子钱包使用自己的密钥。", wbRefresh: "刷新", wbDisconnect: "断开连接", wbRejected: "已在钱包中取消", wbNone: "此浏览器中没有钱包。请在钱包应用中打开本页：", wbPq: "只读取你的地址。在你于钱包中确认之前不会签署任何内容。", wbWrongChain: "请将钱包切换到 ZETAPHY（链 77390）后重试",
+    netOffline: "离线", tipNetOffline: "没有网络：离线页面仍可使用（支票和兑换订单）；其他功能等待网络恢复",
     wbSaphan: "Saphan 转出", wbSaphanTip: "此代币可通过 ZETAPHY Saphan（Hyperlane）转出到哪里：在 ZETAPHY 上锁定，在另一条链上得到副本", wbStPlanned: "计划中", wbStClosed: "已关闭", wbStOpen: "开放",
   },
   es: {
@@ -218,6 +221,7 @@ export const TEXT = {
     devApi: 'API de la red', devApiSub: 'Gratis, sin API key. Copia un comando en una terminal.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'Archivos de registro de la cadena (Keplr / EVM)', devCli: 'La herramienta de línea de comandos zetaphy',
     devContracts: 'Direcciones de contratos', tipDevContracts: 'Contratos desplegados en la testnet y precompiladas de la cadena; haz clic en una dirección para abrirla en el Explorer',
     wbAddToken: 'Añadir a la billetera', wbConnect: "Conectar wallet", wbConnectFirst: "Conecta primero una wallet (arriba a la derecha)", wbNoAccount: "La wallet no dio ninguna cuenta", wbHoldings: "En la cadena ZETAPHY", wbNoNode: "Saldos no disponibles: el nodo no responde ahora mismo", wbShared: "Conectada para todo el sitio: Swap, NFT y Stake y voto también usan esta wallet. La wallet resistente a la computación cuántica usa sus propias claves.", wbRefresh: "Actualizar", wbDisconnect: "Desconectar", wbRejected: "Cancelado en la wallet", wbNone: "No hay ninguna wallet en este navegador. Abre esta página en una app de wallet:", wbPq: "Solo se lee tu dirección. No se firma nada hasta que lo confirmes en tu wallet.", wbWrongChain: "Cambia tu wallet a ZETAPHY (cadena 77390) e inténtalo de nuevo",
+    netOffline: "Sin conexión", tipNetOffline: "Sin red: la pestaña Sin conexión sigue funcionando (cheques y órdenes de swap); lo demás espera a la red",
     wbSaphan: "Saphan salida", wbSaphanTip: "Adónde puede salir este token con ZETAPHY Saphan (Hyperlane): se bloquea en ZETAPHY y hay una copia en la otra cadena", wbStPlanned: "planeada", wbStClosed: "cerrada", wbStOpen: "abierta",
   },
   ko: {
@@ -267,6 +271,7 @@ export const TEXT = {
     devApi: '네트워크 API', devApiSub: '무료, API 키 불필요. 명령어를 터미널에 복사하세요.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: '체인 레지스트리 파일 (Keplr / EVM)', devCli: 'zetaphy 명령줄 도구',
     devContracts: '컨트랙트 주소', tipDevContracts: '테스트넷에 배포된 컨트랙트와 체인의 프리컴파일; 주소를 클릭하면 Explorer에서 열립니다',
     wbAddToken: '지갑에 추가', wbConnect: "지갑 연결", wbConnectFirst: "먼저 지갑을 연결하세요(오른쪽 위)", wbNoAccount: "지갑에서 계정을 받지 못했어요", wbHoldings: "ZETAPHY 체인에서", wbNoNode: "잔액을 볼 수 없어요: 지금 노드가 응답하지 않아요", wbShared: "한 번 연결하면 사이트 전체에서 써요: 스왑, NFT, 스테이킹 & 투표도 이 지갑을 사용해요. 양자 내성 지갑은 자체 키를 사용해요.", wbRefresh: "새로고침", wbDisconnect: "연결 해제", wbRejected: "지갑에서 취소했어요", wbNone: "이 브라우저에 지갑이 없어요. 지갑 앱에서 이 페이지를 여세요:", wbPq: "주소만 읽어요. 지갑에서 확인하기 전에는 아무것도 서명하지 않아요.", wbWrongChain: "지갑을 ZETAPHY(체인 77390)로 바꾸고 다시 시도하세요",
+    netOffline: "오프라인", tipNetOffline: "네트워크 없음: 오프라인 탭은 계속 작동합니다(수표와 스왑 주문). 나머지는 네트워크를 기다립니다",
     wbSaphan: "Saphan 출금", wbSaphanTip: "이 토큰이 ZETAPHY Saphan(Hyperlane)으로 나갈 수 있는 곳: ZETAPHY에 잠기고 다른 체인에 사본이 생깁니다", wbStPlanned: "예정", wbStClosed: "닫힘", wbStOpen: "열림",
   },
   ja: {
@@ -316,6 +321,7 @@ export const TEXT = {
     devApi: 'ネットワーク API', devApiSub: '無料、API キー不要。コマンドをターミナルにコピーしてください。', devFaucet: 'Faucet（JSON-RPC）', devRegistry: 'チェーンレジストリファイル（Keplr / EVM）', devCli: 'zetaphy コマンドラインツール',
     devContracts: 'コントラクトアドレス', tipDevContracts: 'テストネットにデプロイされたコントラクトとチェーンのプリコンパイル。アドレスをクリックすると Explorer で開きます',
     wbAddToken: 'ウォレットに追加', wbConnect: "ウォレットを接続", wbConnectFirst: "先にウォレットを接続してください（右上）", wbNoAccount: "ウォレットからアカウントが返されませんでした", wbHoldings: "ZETAPHY チェーン上", wbNoNode: "残高を表示できません：ノードが今応答していません", wbShared: "一度の接続でサイト全体に有効です：スワップ、NFT、ステーク＆投票もこのウォレットを使います。耐量子ウォレットは独自の鍵を使います。", wbRefresh: "更新", wbDisconnect: "接続を解除", wbRejected: "ウォレットでキャンセルされました", wbNone: "このブラウザにウォレットがありません。ウォレットアプリでこのページを開いてください：", wbPq: "読み取るのはアドレスだけです。ウォレットで確認するまで何も署名されません。", wbWrongChain: "ウォレットを ZETAPHY（チェーン 77390）に切り替えて、もう一度試してください",
+    netOffline: "オフライン", tipNetOffline: "ネットワークなし：オフラインタブは引き続き使えます（小切手とスワップ注文）。それ以外はネットワークを待ちます",
     wbSaphan: "Saphan 送出", wbSaphanTip: "このトークンが ZETAPHY Saphan（Hyperlane）で出ていける先: ZETAPHY でロックされ、相手チェーンにコピーができます", wbStPlanned: "予定", wbStClosed: "閉鎖中", wbStOpen: "開通",
   },
   ru: {
@@ -365,6 +371,7 @@ export const TEXT = {
     devApi: 'API сети', devApiSub: 'Бесплатно, без API-ключа. Скопируйте команду в терминал.', devFaucet: 'Кран (JSON-RPC)', devRegistry: 'Файлы реестра сети (Keplr / EVM)', devCli: 'Утилита командной строки zetaphy',
     devContracts: 'Адреса контрактов', tipDevContracts: 'Контракты, развёрнутые в тестнете, и прекомпайлы сети; нажмите на адрес, чтобы открыть его в Explorer',
     wbAddToken: 'Добавить в кошелёк', wbConnect: "Подключить кошелёк", wbConnectFirst: "Сначала подключите кошелёк (вверху справа)", wbNoAccount: "Кошелёк не вернул аккаунт", wbHoldings: "В сети ZETAPHY", wbNoNode: "Балансы недоступны: узел сейчас не отвечает", wbShared: "Подключение для всего сайта: обмен, NFT и стейкинг с голосованием тоже используют этот кошелёк. Квантово-устойчивый кошелёк использует свои ключи.", wbRefresh: "Обновить", wbDisconnect: "Отключить", wbRejected: "Отменено в кошельке", wbNone: "В этом браузере нет кошелька. Откройте страницу в приложении кошелька:", wbPq: "Читается только ваш адрес. Ничего не подписывается, пока вы не подтвердите это в кошельке.", wbWrongChain: "Переключите кошелёк на ZETAPHY (сеть 77390) и попробуйте снова",
+    netOffline: "Офлайн", tipNetOffline: "Нет сети: вкладка «Офлайн» работает (чеки и заявки на обмен); остальное ждёт сети",
     wbSaphan: "Saphan наружу", wbSaphanTip: "Куда этот токен может выйти через ZETAPHY Saphan (Hyperlane): блокируется в ZETAPHY, копия появляется в другой сети", wbStPlanned: "в планах", wbStClosed: "закрыт", wbStOpen: "открыт",
   },
   vi: {
@@ -414,6 +421,7 @@ export const TEXT = {
     devApi: 'API mạng', devApiSub: 'Miễn phí, không cần API key. Sao chép lệnh vào terminal.', devFaucet: 'Faucet (JSON-RPC)', devRegistry: 'Tệp đăng ký chuỗi (Keplr / EVM)', devCli: 'Công cụ dòng lệnh zetaphy',
     devContracts: 'Địa chỉ hợp đồng', tipDevContracts: 'Các hợp đồng đã triển khai trên testnet và precompile của chuỗi; nhấp vào địa chỉ để mở trong Explorer',
     wbAddToken: 'Thêm vào ví', wbConnect: "Kết nối ví", wbConnectFirst: "Hãy kết nối ví trước (góc trên bên phải)", wbNoAccount: "Ví không trả về tài khoản", wbHoldings: "Trên chuỗi ZETAPHY", wbNoNode: "Không xem được số dư: node hiện không phản hồi", wbShared: "Kết nối một lần cho cả trang: Swap, NFT và Stake & bỏ phiếu cũng dùng ví này. Ví kháng lượng tử dùng khóa riêng của nó.", wbRefresh: "Làm mới", wbDisconnect: "Ngắt kết nối", wbRejected: "Đã hủy trong ví", wbNone: "Không có ví trong trình duyệt này. Mở trang này trong ứng dụng ví:", wbPq: "Chỉ đọc địa chỉ của bạn. Không ký gì cho đến khi bạn xác nhận trong ví.", wbWrongChain: "Chuyển ví sang ZETAPHY (chuỗi 77390) rồi thử lại",
+    netOffline: "Ngoại tuyến", tipNetOffline: "Không có mạng: thẻ Ngoại tuyến vẫn hoạt động (séc và lệnh swap); phần khác chờ có mạng",
     wbSaphan: "Saphan ra ngoài", wbSaphanTip: "Token này có thể ra ngoài qua ZETAPHY Saphan (Hyperlane) tới đâu: khóa trên ZETAPHY, có bản sao trên chuỗi kia", wbStPlanned: "dự kiến", wbStClosed: "đóng", wbStOpen: "mở",
   },
 };
@@ -439,6 +447,7 @@ export const TAB_TEXT = {
     gov: ['Governance', 'Governance assistant', 'Open proposals and the timelock queue in plain words, simulated on the current state, with flags on risky changes'],
     immune: ['Immunity', 'Neuro immunity', 'Herd immunity across chains (coverage of Neuro\'s flags), Neuro-checked certificates and quantum-safe attestations'],
     aichain: ['On-chain AI', 'On-chain AI contracts', 'Risk scores, the AI co-signer committee, hack insurance, security-backed issuance and the model in force at each block, read live from the chain'],
+    offline: ["Offline", "Pay and trade offline", "Signed cheques and swap orders that work with no internet: pay from a payment channel, check cheques offline, make swap orders anyone can relay"],
   },
   th: {
     home: ['ภาพรวม', 'ภาพรวมเครือข่าย ZETAPHY', 'สถานะเชน บล็อกล่าสุด และขั้นตอนเริ่มต้น'],
@@ -459,6 +468,7 @@ export const TAB_TEXT = {
     gov: ['ธรรมาภิบาล', 'ผู้ช่วยธรรมาภิบาล', 'ข้อเสนอที่เปิดอยู่และคิว timelock เป็นภาษาง่าย จำลองบนสถานะปัจจุบัน พร้อมธงบนการเปลี่ยนแปลงที่เสี่ยง'],
     immune: ['ภูมิคุ้มกัน', 'ภูมิคุ้มกัน Neuro', 'ภูมิคุ้มกันหมู่ข้ามเชน (ความครอบคลุมของธง Neuro) ใบรับรอง Neuro-checked และการรับรองที่ทนควอนตัม'],
     aichain: ['AI บนเชน', 'สัญญา AI บนเชน', 'คะแนนความเสี่ยง คณะกรรมการ AI ร่วมลงนาม ประกันการถูกแฮก การออกเหรียญที่หนุนด้วยงานความปลอดภัย และโมเดลที่ใช้ในแต่ละบล็อก อ่านสดจากเชน'],
+    offline: ["ออฟไลน์", "จ่ายเงินและเทรดแบบออฟไลน์", "เช็คและคำสั่งสวอปที่เซ็นแล้ว ใช้ได้แม้ไม่มีอินเทอร์เน็ต: จ่ายจากช่องทางจ่ายเงิน ตรวจเช็คแบบออฟไลน์ สร้างคำสั่งสวอปที่ใครก็ส่งขึ้นเชนได้"],
   },
   zh: {
     home: ['概览', 'ZETAPHY 网络概览', '链的状态、最新区块和入门步骤'],
@@ -479,6 +489,7 @@ export const TAB_TEXT = {
     gov: ['治理', '治理助手', '用通俗的话说明开放的提案和 timelock 队列，在当前状态上模拟，并标记有风险的更改'],
     immune: ['免疫', 'Neuro 免疫', '跨链群体免疫（Neuro 标记的覆盖率）、Neuro-checked 证书和抗量子证明'],
     aichain: ['链上 AI', '链上 AI 合约', '风险评分、AI 联署委员会、黑客保险、安全支撑的发行，以及每个区块生效的模型，均从链上实时读取'],
+    offline: ["离线", "离线付款与交易", "无需网络也能用的签名支票和兑换订单：从支付通道付款、离线检查支票、创建任何人都能中继的兑换订单"],
   },
   es: {
     home: ['Resumen', 'Resumen de la red ZETAPHY', 'Estado de la cadena, últimos bloques y cómo empezar'],
@@ -499,6 +510,7 @@ export const TAB_TEXT = {
     gov: ['Gobernanza', 'Asistente de gobernanza', 'Propuestas abiertas y la cola del timelock en palabras sencillas, simuladas sobre el estado actual, con marcas en los cambios arriesgados'],
     immune: ['Inmunidad', 'Inmunidad Neuro', 'Inmunidad de grupo entre cadenas (cobertura de las marcas de Neuro), certificados Neuro-checked y atestaciones resistentes a la computación cuántica'],
     aichain: ['IA en cadena', 'Contratos de IA en cadena', 'Puntuaciones de riesgo, el comité cofirmante de IA, el seguro contra hackeos, la emisión respaldada por seguridad y el modelo vigente en cada bloque, leídos en vivo de la cadena'],
+    offline: ["Sin conexión", "Pagar y operar sin conexión", "Cheques y órdenes de swap firmados que funcionan sin internet: paga desde un canal de pago, verifica cheques sin conexión, crea órdenes que cualquiera puede retransmitir"],
   },
   ko: {
     home: ['개요', 'ZETAPHY 네트워크 개요', '체인 상태, 최신 블록, 시작 방법'],
@@ -519,6 +531,7 @@ export const TAB_TEXT = {
     gov: ['거버넌스', '거버넌스 도우미', '열린 제안과 timelock 대기열을 쉬운 말로, 현재 상태에서 시뮬레이션하고 위험한 변경에 표시해요'],
     immune: ['면역', 'Neuro 면역', '체인 간 집단 면역 (Neuro 표시 커버리지), Neuro-checked 인증서, 양자 내성 증명'],
     aichain: ['온체인 AI', '온체인 AI 컨트랙트', '위험 점수, AI 공동 서명 위원회, 해킹 보험, 보안 기반 발행, 블록마다 적용되는 모델을 체인에서 실시간으로 읽어요'],
+    offline: ["오프라인", "오프라인 결제와 거래", "인터넷 없이 작동하는 서명된 수표와 스왑 주문: 결제 채널에서 지불하고, 수표를 오프라인으로 확인하고, 누구나 중계할 수 있는 스왑 주문을 만드세요"],
   },
   ja: {
     home: ['概要', 'ZETAPHY ネットワーク概要', 'チェーンの状態、最新ブロック、始め方'],
@@ -539,6 +552,7 @@ export const TAB_TEXT = {
     gov: ['ガバナンス', 'ガバナンス・アシスタント', '公開中の提案と timelock の待ち行列をわかりやすく、現在の状態でシミュレーションし、危険な変更にフラグを付けます'],
     immune: ['免疫', 'Neuro 免疫', 'チェーン間の集団免疫（Neuro のフラグのカバー率）、Neuro-checked 証明書、耐量子の証明'],
     aichain: ['オンチェーン AI', 'オンチェーン AI コントラクト', 'リスクスコア、AI 共同署名委員会、ハック保険、セキュリティに裏付けられた発行、各ブロックで有効なモデルをチェーンからライブで読み取ります'],
+    offline: ["オフライン", "オフラインで支払い・取引", "インターネットなしで使える署名付き小切手とスワップ注文：支払いチャネルから支払い、小切手をオフラインで確認し、誰でも中継できるスワップ注文を作成"],
   },
   ru: {
     home: ['Обзор', 'Обзор сети ZETAPHY', 'Состояние сети, последние блоки и как начать'],
@@ -559,6 +573,7 @@ export const TAB_TEXT = {
     gov: ['Управление', 'Помощник по управлению', 'Открытые предложения и очередь timelock простыми словами, с симуляцией на текущем состоянии и флажками на рискованных изменениях'],
     immune: ['Иммунитет', 'Иммунитет Neuro', 'Коллективный иммунитет между сетями (покрытие флажков Neuro), сертификаты Neuro-checked и квантово-устойчивые аттестации'],
     aichain: ['ИИ в сети', 'ИИ-контракты в сети', 'Оценки риска, ИИ-комитет соподписантов, страхование от взломов, эмиссия под обеспечение безопасностью и модель, действующая на каждом блоке, — прямо из сети'],
+    offline: ["Офлайн", "Платежи и торговля офлайн", "Подписанные чеки и заявки на обмен без интернета: платите из платёжного канала, проверяйте чеки офлайн, создавайте заявки, которые может передать в сеть любой"],
   },
   vi: {
     home: ['Tổng quan', 'Tổng quan mạng ZETAPHY', 'Trạng thái chuỗi, khối mới nhất và cách bắt đầu'],
@@ -579,6 +594,7 @@ export const TAB_TEXT = {
     gov: ['Quản trị', 'Trợ lý quản trị', 'Đề xuất đang mở và hàng đợi timelock bằng lời dễ hiểu, mô phỏng trên trạng thái hiện tại, gắn cờ các thay đổi rủi ro'],
     immune: ['Miễn dịch', 'Miễn dịch Neuro', 'Miễn dịch cộng đồng xuyên chuỗi (độ phủ cờ của Neuro), chứng nhận Neuro-checked và chứng thực kháng lượng tử'],
     aichain: ['AI trên chuỗi', 'Hợp đồng AI trên chuỗi', 'Điểm rủi ro, ủy ban AI đồng ký, bảo hiểm bị hack, phát hành dựa trên bảo mật và mô hình có hiệu lực ở mỗi khối, đọc trực tiếp từ chuỗi'],
+    offline: ["Ngoại tuyến", "Thanh toán và giao dịch ngoại tuyến", "Séc và lệnh swap đã ký hoạt động không cần internet: trả từ kênh thanh toán, kiểm tra séc ngoại tuyến, tạo lệnh swap mà ai cũng chuyển tiếp được"],
   },
 };
 

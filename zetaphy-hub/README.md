@@ -70,6 +70,14 @@ An operator can change it without a new release (`<home>/config/faucet-pow-bits`
   Mine modes stay alive when you switch between them. The tab gets a green dot and the top bar a "Running"
   pill that leads back. Pause and Stop still work as before; a new language redraws the page and stops them.
 
+## Offline tab: pay and trade with no internet (testnet)
+
+`offline.js` (logic in `offline-core.js`, words in `offline-i18n.js`): a dedicated offline key kept encrypted in the browser
+(AES-GCM, PBKDF2-SHA256 600,000 rounds), cheques signed and checked with no network, swap orders made offline and relayed
+by anyone for a fee, QR codes from `vendor/qrcode.js` (MIT, pinned in `vendor/qrcode.json`). Opening the tab registers
+`sw.js`, which caches only the static app shell (never RPC data), so the hub loads offline; a top-bar pill says when the
+browser is offline. Contracts and threat model: [docs/future/offline-trading.md](../docs/future/offline-trading.md).
+
 ## Search engines (`seo.mjs`)
 
 - **What is ZETAPHY?** `/about/` and `/about/<lang>.html` in all 8 languages: plain HTML built from
