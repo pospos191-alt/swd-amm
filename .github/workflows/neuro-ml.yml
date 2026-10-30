@@ -106,7 +106,8 @@ jobs:
           cp ml/data/redteam/known-gaps.json ml/out/current-known-gaps.json
           cp ml/out/candidate/model.json ml/model.json
           node ml/redteam/run.js --gaps
-          node ml/onchain/export.js --heldout
+          # the on-chain model (ml/onchain/) is pinned on its own: the zk circuit and its public ceremony hard-wire
+          # it, so a weekly candidate never changes it (a new on-chain model needs a new ceremony: onchain-ml.md)
           # a new tree model starts a fresh federated head (theta = 0) and a new manifest
           node ml/fl/manifest.js
           npm run test:ml
@@ -118,7 +119,6 @@ jobs:
           cp ml/fl/head.json ml/out/pr/head.json
           cp ml/manifest.json ml/out/pr/manifest.json
           cp ml/data/redteam/evasions.jsonl ml/data/redteam/known-gaps.json ml/out/pr/
-          cp ml/onchain/model.fixed.json ml/onchain/heldout.json ml/out/pr/
           cp ml/out/redteam/report.md ml/out/pr/report-redteam.md
           cp ml/out/redteam-fresh/report.md ml/out/pr/report-fresh.md
           node ml/train/pr-body.js ml/out/candidate/metrics.json ml/out/redteam/report.json ml/out/redteam-fresh/report.json ml/data/out/public-sources.json > ml/out/pr/body.md
@@ -169,13 +169,12 @@ jobs:
           cp "$PR/evasions.jsonl" "$PR/known-gaps.json" zetaphy-neuro/ml/data/redteam/
           cp "$PR/report-redteam.md" zetaphy-neuro/ml/data/redteam/report-A-vs-first-model.md
           cp "$PR/report-fresh.md" zetaphy-neuro/ml/data/redteam/report-B-fresh-vs-current.md
-          # the fixed-point export NeuroScore runs on-chain; activating it on-chain is a separate
-          # governance (timelock) step after merge (docs/future/onchain-ml.md)
-          cp "$PR/model.fixed.json" "$PR/heldout.json" zetaphy-neuro/ml/onchain/
+          # ml/onchain/ (the on-chain model, its zk circuit and ceremony) is not touched: it moves only with a new
+          # public ceremony (docs/future/onchain-ml.md)
           git config user.name "neuro-ml[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"
-          git add zetaphy-neuro/ml/model.json zetaphy-neuro/ml/metrics.json zetaphy-neuro/ml/data/redteam/ zetaphy-neuro/ml/onchain/ zetaphy-neuro/ml/fl/head.json zetaphy-neuro/ml/manifest.json
+          git add zetaphy-neuro/ml/model.json zetaphy-neuro/ml/metrics.json zetaphy-neuro/ml/data/redteam/ zetaphy-neuro/ml/fl/head.json zetaphy-neuro/ml/manifest.json
           git commit -m "neuro-ml: candidate model $MODEL" -m "Weekly training run ${{ github.run_id }}. Review the metrics in the PR before merging."
           git push origin "$BRANCH"
           gh pr create --base "$BASE" --head "$BRANCH" --title "Neuro ML: candidate model $MODEL" --body-file "$PR/body.md"

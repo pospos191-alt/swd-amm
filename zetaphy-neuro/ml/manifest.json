@@ -1,13 +1,13 @@
 {
  "format": "neuro-model-manifest/1",
  "model": {
-  "id": "nml-b4c35477f7b1",
-  "sha256": "3ec693f33ea613abc7549655f6be64c7c50aaecf4cee3ee968a6c49b985f8d49",
+  "id": "nml-3ab3cd303911",
+  "sha256": "8d2c1329a8847bde02a9f24f11b33f9674df5e5754cc7e443b97e177fc3d3e60",
   "path": "ml/model.json"
  },
  "head": {
-  "id": "nfh-ec54f839dc2d",
-  "sha256": "2bad42f3716a3c675aa539756f88d03048851f0efc6c3aa3efd847573144d3e6",
+  "id": "nfh-543c87aea110",
+  "sha256": "c98391b63ec06889bf5c4722501e35de617828858255c10ec02b18dee33b324e",
   "path": "ml/fl/head.json"
  }
 }

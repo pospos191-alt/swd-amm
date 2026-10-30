@@ -210,8 +210,8 @@ node zetaphy-network/scripts/fl-aggregate.js --round 3 --inbox zetaphy-neuro/ml/
 | `current()` | ทุกคน | `versionAt(block.number)` |
 
 `hash` คือ sha256 ของไบต์ไฟล์ manifest (`zetaphy-neuro/ml/manifest.json`) ซึ่งระบุ sha256 ของไฟล์โมเดลและหัว
-manifest ที่ commit อยู่ (โมเดล `nml-b4c35477f7b1`, หัวศูนย์ `nfh-ec54f839dc2d`) มี sha256
-`0xc8e6eb9ced9494e6773d0850d434c8dd436a5d76ba67f59ff0d29a8e8c1d9549`
+manifest ที่ commit อยู่ (โมเดล `nml-3ab3cd303911`, หัวศูนย์ `nfh-543c87aea110`) มี sha256
+`0x15997221ce73b6007a45ee8d47f491c4ce83c895dcfae37195028506f59f57a7`
 
 **เหตุผลว่าคำตอบเป็นที่สุด**: ที่บล็อก `b`, `schedule` ต้องการ `activation > b` และ `cancelLast` ต้องการ `activation > b`
 ดังนั้นไม่มีธุรกรรมในบล็อก `h` หรือหลังจากนั้นเปลี่ยนเวอร์ชันที่ `activation <= h` ได้ `versionAt(h)` บนสถานะหลังบล็อก `h-1`

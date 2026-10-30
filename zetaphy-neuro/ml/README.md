@@ -4,7 +4,7 @@
 
 Neuro's fixed rules say what a contract's code **can** do. This folder adds two things on top, all free, with no server:
 
-- **Stage 2, a learned model** (`model.json`, 87 KB): gradient-boosted trees that turn what Neuro already computes into a
+- **Stage 2, a learned model** (`model.json`, 75 KB): gradient-boosted trees that turn what Neuro already computes into a
   calibrated probability that a token is a trap, plus the features that pushed the score up or down.
 - **Stage 5, a red team** (`redteam/`): rewrites scam tokens to slip past Neuro, runs them through Neuro + the model,
   and feeds every evasion back into training and into a regression test.
@@ -37,7 +37,7 @@ const out = withModel(model, report, { code, logicCode, market, lang: 'th' });
 `node ml/cli.js bsc 0x...` does the same for a real token (read-only public RPC). Inference is plain JS with no
 dependencies (`model.js`, `features.js`, `combine.js`), so the web page, a runner and Node all get the same number.
 
-## Features (`features.js`, 133 numbers)
+## Features (`features.js`, 158 numbers)
 
 From what Neuro already computes, nothing new is fetched:
 
@@ -47,12 +47,14 @@ From what Neuro already computes, nothing new is fetched:
 | functions (`s_*`) | how many functions, how many unnamed, share of ERC-20, count per kind: mint, blacklist, pause, fee setters, trading switch, limits, upgrade, roles... |
 | code (`o_*`, `p_*`, `g3_*`) | code size; SELFDESTRUCT / DELEGATECALL / CREATE2 / CALL present; share of SSTORE, CALLER, ORIGIN, TIMESTAMP, NUMBER, GASPRICE, EXTCODEHASH...; patterns: caller-equals-stored-address checks, hashed or XOR-masked caller checks (hidden owners), tx.origin checks, time/block-number conditions, gas-price conditions, "is it a contract" checks; 32 hashed opcode 3-gram buckets |
 | simulation (`m_*`) | buy/sell ran, ok / tax 10-50% / tax > 50% / cannot sell / skipped, buy and sell tax |
+| paths (`x_*`, `flow.js`) | per function: owner-only (incl. hashed / XOR / tx.origin owners), moves or creates tokens, bounded by a fixed cap, unnamed; owner sets the fee rate (capped or not); `owner()` constant while owner-only functions remain; what `transfer()` checks: owner exemption, time / block, gas price, tx.origin, contract sender, ETH balance, coinbase, gas left, branches, stored values read, percentage |
 | market (`k_*`, optional) | largest holder share, top-10 share, liquidity locked, liquidity, contract age, verified source, holders; each with a `_known` flag (missing = 0 and unknown, never guessed) |
 
 ## Model
 
 Gradient-boosted decision trees (logistic loss, 160 trees of depth 4, learning rate 0.15) written from scratch in
-`train/gbdt.js`, then Platt-calibrated on a separate calibration split. Training is deterministic: sorted thresholds, a
+`train/gbdt.js`, then Platt-calibrated (with a weak prior around the identity, so a perfectly separated calibration split still gives
+finite probabilities) on a separate calibration split. Training is deterministic: sorted thresholds, a
 seeded PRNG for row/column sampling, fixed tie-breaks, and every number rounded to 7 significant digits **before** it is
 used, so the exported JSON reproduces the trainer's scores bit for bit (`model.check` holds rows the tests replay).
 Each tree node stores its subtree's value, so a score splits exactly into bias + one contribution per feature
@@ -83,29 +85,55 @@ an exported list of decided jobs once there is one.
 
 Market facts for synthetic tokens (`data/market.js`) are drawn from made-up distributions that differ by label.
 
-## Results (committed model `nml-b4c35477f7b1`)
+## Results (committed model `nml-3ab3cd303911`; before it `nml-b4c35477f7b1`)
 
 **Read this first: these are synthetic numbers.** Train and test rows come from the same generators, and the market
-facts are made up, so they overstate how the model will do on real contracts. The harder estimates are the
-leave-one-family-out and fresh red-team rows.
+facts are made up, so they overstate how the model will do on real contracts (a held-out AUC of 1.0 says the test set
+is too easy, not that the model is perfect). The harder estimates are the leave-one-family-out and fresh red-team rows.
 
-Held-out split (390 rows, 201 scam, never trained on):
+Same held-out split (390 rows, 201 scam, never trained on), same corpus, before -> after:
 
-| | AUC | recall @ 1% FPR | recall @ 5% FPR | Brier | ECE |
-|---|---:|---:|---:|---:|---:|
-| model | 0.9975 | 0.950 | 0.985 | 0.020 | 0.026 |
-| model, market facts removed | 0.9963 | 0.950 | 0.975 | 0.026 | 0.037 |
-| model, generated Solidity rows only | 0.9949 | 0.923 | 0.977 | 0.029 | 0.035 |
-| rules alone (levels as a ranking) | 0.7966 | | | | |
+| | before (`nml-b4c35477f7b1`) | after (`nml-3ab3cd303911`) |
+|---|---:|---:|
+| AUC / recall @ 1% FPR / recall @ 5% FPR | 0.9975 / 0.950 / 0.985 | **1.000 / 1.000 / 1.000** |
+| Brier / log loss / ECE (calibration) | 0.020 / 0.073 / 0.026 | **0.002 / 0.014 / 0.010** |
+| market facts removed: AUC / recall @ 1% FPR | 0.9963 / 0.950 | **1.000 / 1.000** |
+| generated Solidity rows only: AUC / recall @ 1% FPR | 0.9949 / 0.923 | **1.000 / 1.000** |
+| what users see (medium+): scams caught / benign alarmed | 95.0% / 22.8% | **99.5%** / 22.8% (model alone: 99.0%) |
+| leave one family out, recall @ 1% FPR: blacklist / dormant fee / drain / hidden mint / seize | 0.68 / 0.31 / 0.86 / 0.37 / 0.92 | **0.99 / 0.66 / 1.0 / 1.0 / 1.0** |
+| leave one family out, alarmed (medium+): blacklist / dormant fee / drain / hidden mint / seize | 0.68 / 0.69 / 0.80 / 0.62 / 0.85 | **0.71 / 1.0 / 1.0 / 1.0 / 1.0** |
+| fresh red team (never trained on), seeds B / C, caught at medium+ | 84% / 83% | **97% / 97%** |
+| recorded evasions still missed (`known-gaps.json`) | 14 of 67 | **2** of 67 |
+| model file / trees / on-chain bytes / zk constraints | 87 KB / 160 / 18,616 / 21,689 | **75 KB** / 160 / **15,544 / 15,518** (measured, not on-chain yet) |
 
-What a user sees ("medium" or higher): rules + simulation catch 71.1% of scams with 22.8% of benign tokens also at
-medium+ (benign tokens whose owner can mint or pause are medium/high by design); with the model 95.0% of scams, and the
-benign rate stays 22.8% (model adds no false alarm on this split; 0 rows lowered).
+**Where each model runs.** `nml-3ab3cd303911` is the model of the browser (the pinned pack in `web/models/neuro-ml-gbdt/1/`)
+and the runners. The on-chain score (`NeuroScore`) and the zk circuit stay on the previous model `nml-b4c35477f7b1`
+(`onchain/model.json`, 133 features, no path features) until a new public zk ceremony is run; see "On-chain score and zkML"
+below. The last row's "after" figures are what the new model would take on-chain.
 
-Leave one scam family out of training entirely (recall at the 1%-FPR threshold / share alarmed by rules / by rules + model):
-blacklist trap 0.68 / 0.38 / 0.68, dormant fee 0.31 / 0.39 / 0.69, drain 0.86 / 0.00 / 0.80, hidden mint 0.37 / 0.45 /
-0.62, seize 0.92 / 0.00 / 0.85; honeypot, max-sell, high tax 1.0 (the simulation already catches them). A brand-new
-kind of trap is caught much less often than one the model has seen.
+Rules alone (levels as a ranking) stay at AUC 0.7966 and catch 71.1% of scams with 22.8% of benign tokens at medium+
+(benign tokens whose owner can mint or pause are medium/high by design); 0 rows lowered. Honeypot, max-sell and high tax
+stay at 1.0 in every run (the simulation already catches them).
+
+What changed:
+
+- **Per-function path features** (`flow.js`, 25 `x_*` features, feature version 2): the dispatcher gives each
+  function's entry; a bounded abstract interpreter follows its jumps and marks owner checks (`require(msg.sender ==
+  owner)` and the hidden forms: hashed, XOR-masked, tx.origin), Transfer emission, fixed caps, storage writes, and what
+  `transfer()` reads (time, gas price, origin, "is a contract", coinbase, gas left). That gives "an owner-only function
+  moves or creates tokens with no cap" (drain, seize, hidden mint), "the owner can set the fee transfers charge to any
+  value" (dormant fee), "`owner()` returns a constant while owner-only functions remain" (fake renounce) and owner
+  exemptions inside `transfer()` (honeypots), however the functions are named. Plain JS, ~1 ms per corpus contract,
+  ~0.2 s for a 24 KB contract.
+- **Calibration** (`train/gbdt.js fitPlatt`): a weak prior around the identity and damped Newton steps. With the new
+  features the calibration rows are perfectly separated and the old fit ran the slope off to ~1e8, rounding every
+  probability to 0 or 1 (AUC fell to 0.988 in a first try); the prior keeps it finite.
+- **Path checks next to the model** (`checks.js`): the three plain facts above raise the shown level to medium on
+  their own (never lower it; at most "low" for an official issuer or template), because a learned model cannot flag a
+  trap it never saw: with the dormant-fee family left out of training the model alone raised none of it, the check
+  raises all of it. They add no false alarm on the held-out split.
+- **Plain-words reasons** (`combine.js`): `ml.reasons` lists the checks that fired, then only what pushed the score
+  UP (`top` mixes both directions); the in-browser analyst shows them.
 
 ## Red team (`redteam/run.js`)
 
@@ -120,7 +148,9 @@ use an in-memory `@ethereumjs/evm`, and so does this.
 | run | variants | rules + simulation caught | with the model |
 |---|---:|---:|---:|
 | A, against the first model (`data/redteam/report-A-vs-first-model.md`) | 160 | 51% | 58% (67 evasions recorded) |
-| B, fresh seed, against the committed model trained on A's evasions (`report-B-fresh-vs-current.md`) | 160 | 56% | 84% (26 evasions) |
+| B, fresh seed, against `nml-b4c35477f7b1` (trained on A's evasions) | 160 | 56% | 84% (26 evasions) |
+| B again, against `nml-3ab3cd303911` + path checks (`report-B-fresh-vs-current.md`) | 160 | 56% | 97% (5 evasions, all time-bomb / block-ramp / coinbase stealth traps) |
+| C, fresh seed, against `nml-3ab3cd303911` + path checks | 160 | 55% | 97% (5 evasions) |
 
 Findings:
 - The first model leaned on "an owner is active": hiding the owner (fake renounce, hash, XOR, tx.origin) pushed it
@@ -131,7 +161,7 @@ Findings:
 - "Seller is a contract" sim detection (the simulation sells from a contract, real users from wallets) passes the
   simulation; caught 0 of 1 in B. Worth fixing in `src/honeypot.js` (sell from an address with no code), not just in ML.
 - A custom proxy hides the whole token interface, but the DELEGATECALL rule already flags it medium (100%).
-- The 14 recorded evasions the committed model still misses are listed in `data/redteam/known-gaps.json`;
+- The 2 recorded evasions the committed model still misses (14 for `nml-b4c35477f7b1`) are listed in `data/redteam/known-gaps.json`;
   `ml/test/redteam.test.js` fails if any other recorded evasion slips back below medium.
 
 ## Weekly training (`.github/workflows/neuro-ml.yml`)
@@ -147,10 +177,19 @@ Pull requests also run the ML tests when `zetaphy-neuro/ml/**` or `src/**` chang
 
 ## On-chain score and zkML (`onchain/`)
 
-`node ml/onchain/export.js` turns `model.json` into integers (scale 1e7) packed 6 bytes per node (`onchain/model.fixed.json`,
+The on-chain model is a separate, older model version: **`nml-b4c35477f7b1`** (`onchain/model.json`, feature version 1,
+133 features), not `model.json`. The zk circuit hard-wires the model and the public phase-2 ceremony
+(`onchain/zk/ceremony/transcript.json`) is for exactly that circuit, so the on-chain model moves only together with a new
+ceremony. Until then the chain is fed only that model's own 133 features (feature versions only append, so they are
+computed exactly as before; the new `x_*` path features never reach it), and a token may get a different level in the
+browser than on-chain.
+
+`node ml/onchain/export.js` turns `onchain/model.json` into integers (scale 1e7) packed 6 bytes per node (`onchain/model.fixed.json`,
 18,616 bytes, its keccak256 is the model hash H). `zetaphy-network/contracts/NeuroScore.sol` runs exactly those bytes on-chain;
 the DEX router can optionally refuse buys above a score. `onchain/zk/` is a Groth16 prototype proving "a committed feature
-vector yields this margin under H". Parity, gas, proof size/time and limits: `docs/future/onchain-ml.md`.
+vector yields this margin under H". After a new ceremony, `node ml/onchain/export.js --promote --heldout` moves the on-chain
+model to the current `model.json`; the weekly training never does. Parity, gas, proof size/time and limits:
+`docs/future/onchain-ml.md`.
 
 ## Commands
 

@@ -11,7 +11,7 @@ Nothing here moves money. Each part says what is built, how to use it, its limit
 | (2) Chunked, verified distribution + P2P | **Done**: mirrors, manual codes, and **automatic peer discovery through the ZETAPHY chain** (SignalBoard contract, tested end to end in Chromium). Not live yet: SignalBoard must be deployed (one command, no owner) and its address set in `config.js`. Optional WebTorrent-tracker board built but off |
 | (7) Model split across browsers | **Done for a real (tiny) language model**: a 0.34M-parameter Llama-architecture model trained here, split layer-wise across two browsers that found each other on chain, **same tokens as one browser** (bit-exact, any JS engine). Small and slow by design: not a useful assistant; big models still need WebGPU |
 | (8) On-chain knowledge for RAG | **Done** (reader, local index, context integration, panel option) |
-| In-browser provider | **Done, with a tiny model**: Neuro's learned risk score (87 KB) + templates; no LLM runtime vendored |
+| In-browser provider | **Done, with a tiny model**: Neuro's learned risk score (75 KB) + path checks + templates; no LLM runtime vendored |
 
 ## (1) ModelRegistry — `zetaphy-network/contracts/ModelRegistry.sol`
 
@@ -217,13 +217,34 @@ runtime is vendored later, the only CSP addition allowed is `'wasm-unsafe-eval'`
 meta tag and `vercel.json`); nothing from a CDN.
 
 What it is, said plainly: **not a language model.** The shipped pack `web/models/neuro-ml-gbdt/1/` is a frozen copy of
-Neuro's learned risk score (`ml/model.json`, gradient-boosted trees, 87 KB, 6 chunks of 16 KiB for the demo). The engine
+Neuro's learned risk score (`ml/model.json`, gradient-boosted trees, 75 KB, 5 chunks of 16 KiB for the demo). The engine
 scores the report with it and writes the analyst JSON from fixed templates in all 9 languages, citing only `F<n>`,
 `CHAIN<n>` and `ML`; it never answers "less concerned". Follow-up questions get the closest context records, not
 generated text. The output passes the same validator as Anthropic/OpenAI/Ollama answers.
 Why no real LLM: transformers.js / WebLLM plus even a 0.5B model is tens to hundreds of MB of runtime and weights —
 too big for this repo. The path for it is ready: add a runtime to `engine.js`, pack the weights with the builder (4 MiB
 chunks), publish in the registry, list GitHub Release / IPFS mirrors.
+
+What the shipped model catches (`nml-3ab3cd303911`, replacing `nml-b4c35477f7b1`; synthetic held-out split of 390 rows
+and fresh red-team runs never trained on; details in `zetaphy-neuro/ml/README.md`):
+
+| | before | after |
+|---|---:|---:|
+| AUC / recall at 1% false alarms | 0.9975 / 0.950 | 1.000 / 1.000 |
+| calibration error (ECE) / Brier | 0.026 / 0.020 | 0.010 / 0.002 |
+| scams shown at medium+ (benign at medium+) | 95.0% (22.8%) | 99.5% (22.8%) |
+| fresh red team caught, seeds B / C | 84% / 83% | 97% / 97% |
+| unseen scam family (leave one out), worst alarmed share | 0.62 (hidden mint) | 0.71 (blacklist) |
+| pack size | 87 KB, 6 chunks | 75 KB, 5 chunks |
+
+New in it: per-function path features (`ml/flow.js`: who can call each function, does it move or create tokens, is there a
+fixed cap, what `transfer()` depends on), three fixed path checks that raise the level by themselves (`ml/checks.js`: the
+owner can move/create tokens with no limit, can set any fee, or hides behind `owner() = 0`), and the panel's "strongest
+signals" now lists only what raised the risk, in plain words. The numbers are synthetic and optimistic for real contracts.
+
+This is the **browser** model. The on-chain score (`NeuroScore`) and the zk circuit stay on the previous model
+`nml-b4c35477f7b1` until a new public zk ceremony is run (`onchain-ml.md`), so the same token can show a different level here
+than on-chain.
 
 The pinned release: until ModelRegistry is deployed, `ai/browser/config.js` holds the release record (a test keeps it
 equal to `release.json`) and the panel says "pinned in this page … the page itself vouches for the hashes".

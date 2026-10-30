@@ -59,7 +59,7 @@ test('two browsers: WebRTC with manual codes; the model travels peer to peer and
     const out = await loadVerified({ release: PINNED, mirrors: BROWSER_AI.mirrors, store: window.t.store });
     return out.stats.mirror;
   });
-  assert.equal(loadedA, 6);
+  assert.equal(loadedA, 5);
   // Manual signaling: A's offer code -> B, B's answer code -> A (the test carries them, as a person would).
   const offer = await A.page.evaluate(async () => {
     const p2p = await import('../ai/browser/p2p.js');
@@ -94,7 +94,7 @@ test('two browsers: WebRTC with manual codes; the model travels peer to peer and
     try { await loadVerified({ release: { ...PINNED, chunkRoot: '0x' + '11'.repeat(32) }, peers: [peerSource(ch, 'A')] }); } catch { refused = true; }
     return { peer: out.stats.peer, manifestFrom: out.stats.manifestFrom, id: e.id, refused };
   });
-  assert.deepEqual(fromPeer, { peer: 6, manifestFrom: 'peer:A', id: 'neuro-ml-gbdt@1 (neuro-ml-gbdt/1, in this browser)', refused: true });
+  assert.deepEqual(fromPeer, { peer: 5, manifestFrom: 'peer:A', id: 'neuro-ml-gbdt@1 (neuro-ml-gbdt/1, in this browser)', refused: true });
   assert.ok(await A.page.evaluate(() => window.t.server.served) >= 7);
 
   // Pipeline: B serves layers [2, 5) of the toy model over the same data channel; A runs [0, 2) itself (a local in-memory stage).
@@ -167,7 +167,7 @@ test('AI panel, provider "in this browser": verified model from this site, on-ch
   await page.waitForSelector('#ai-out:not([hidden])', { timeout: 30_000 });
   const status = await page.textContent('#ai-load-status');
   assert.match(status, /pinned in this page/);
-  assert.match(status, /loaded and verified: 6 chunks \(0 from this browser's cache, 0 from peers, 6 from servers\)/);
+  assert.match(status, /loaded and verified: 5 chunks \(0 from this browser's cache, 0 from peers, 5 from servers\)/);
   const out = await page.textContent('#ai-out');
   assert.match(out, /ThreatRegistry has a standing flag on this address/);
   assert.match(out, /evidence: CHAIN1/);

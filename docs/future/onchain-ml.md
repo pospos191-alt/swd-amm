@@ -3,7 +3,16 @@
 # On-chain ML scoring and a zkML prototype (testnet)
 
 Two items of the "future" workstream, built on Neuro's learned risk model (`zetaphy-neuro/ml/`, gradient-boosted
-trees, 160 trees of depth <= 4 over 133 features, committed model `nml-b4c35477f7b1`):
+trees, 160 trees of depth <= 4 over 133 features, on-chain model `nml-b4c35477f7b1`):
+
+> **Two model versions.** The browser and the runners now use the newer model **`nml-3ab3cd303911`** (`ml/model.json`,
+> 158 features: the 133 below + 25 per-function path features; see `browser-ai.md` and `ml/README.md`). The on-chain
+> scorer and the zk circuit stay on the **previous model `nml-b4c35477f7b1`** (`ml/onchain/model.json`, 133 features,
+> hash H `0x7c420111…a4132`) until a new public phase-2 ceremony is run for a new circuit: the circuit hard-wires the
+> model, and the ceremony transcript is for exactly that circuit. Everything in this document (bytes, gas, parity,
+> circuit, ceremony) is about `nml-b4c35477f7b1`. The chain is fed only that model's 133 features (its own feature list;
+> feature versions only append, so they are computed exactly as before), never the new path features. A token can
+> therefore get a different level in the browser than on-chain.
 
 | item | status |
 |---|---|
@@ -15,7 +24,8 @@ Everything here is testnet-only. A score is a statistical estimate from syntheti
 
 ## 1. Fixed-point export (`zetaphy-neuro/ml/onchain/`)
 
-`node ml/onchain/export.js` turns `ml/model.json` into integers and packs them (`fixed.js` documents the format):
+`node ml/onchain/export.js` turns the on-chain model `ml/onchain/model.json` (pinned apart from `ml/model.json`, see
+above) into integers and packs them (`fixed.js` documents the format):
 
 - one scale S = 1e7. Feature `X = round(x*S)` as a u32 (Neuro's features are all >= 0; max 429.49 before clamping),
   threshold `T = round(t*S)` (a row goes left when `X <= T`), leaf / base `round(v*S)` as int32.
@@ -91,8 +101,12 @@ vector (as `src/verdict.js` does for verdicts) or a proof of the feature extract
 
 ## 4. Model updates
 
-1. The weekly `neuro-ml.yml` run trains a candidate; the "candidate must pass the ML tests" step now also runs
-   `node ml/onchain/export.js --heldout`, and the PR it opens includes `ml/onchain/model.fixed.json` + `heldout.json`.
+1. The weekly `neuro-ml.yml` run trains a candidate for `ml/model.json` (browser and runners) only. It does **not**
+   touch `ml/onchain/`: the on-chain model is pinned on its own, because each on-chain model needs its own circuit and
+   its own public ceremony (a PR that changes the ceremony transcript may change nothing else).
+   To move the chain to a newer model: run a new ceremony for the new circuit first, then
+   `node ml/onchain/export.js --promote --heldout` (copies `ml/model.json` to `ml/onchain/model.json` and re-exports),
+   and the verifier from that ceremony. `ml/test/onchain.test.js` refuses an export whose hash is not the transcript's.
 2. After a human merges: anyone calls `NeuroScore.publishModel(bytes)` with `bytes` from `model.fixed.json`.
 3. Governance schedules the activation through the timelock; `export.js` prints the exact command:
    `zetaphy timelock schedule --to <NeuroScore> --sig "activateModel(bytes32,bytes32,int64,int64,int64)" --args <H>,<id>,<low>,<medium>,<high>`,
@@ -243,7 +257,8 @@ with a forged key** (an independent setup of the same circuit), each valid under
 
 ## Files
 
-- `zetaphy-neuro/ml/onchain/fixed.js`, `export.js`, `model.fixed.json`, `heldout.json`, `ml/test/onchain.test.js`
+- `zetaphy-neuro/ml/onchain/fixed.js`, `export.js`, `model.json` (the on-chain float model, `nml-b4c35477f7b1`),
+  `model.fixed.json`, `heldout.json`, `ml/test/onchain.test.js`
 - `zetaphy-neuro/ml/onchain/zk/gen-circuit.js`, `lib.js`, `run.js`, `package.json` (+ lock), `ceremony/ceremony.js`,
   `ceremony/phase1.json`, `ceremony/transcript.json`, `test/ceremony.test.js`, `test/tiny.js`
 - `zetaphy-hub/ceremony.html`, `ceremony.js`, `ceremony-core.js` (transcript format, shared with the CLI), `ceremony-i18n.js`,
@@ -253,4 +268,4 @@ with a forged key** (an independent setup of the same circuit), each valid under
   `test/neuroscore-zk.test.js`, `test/fixtures/neuroscore-zk.json`
 - `zetaphy-dex/contracts/ZetaphyFactory.sol`, `ZetaphyRouter.sol`, `contracts/test/DexTestHelpers.sol` (`GasHogScorer`),
   `cli.js` (`set-neuro-score`), `web/i18n.js`, `test/neuroscore.test.js`
-- `.github/workflows/neuro-ml.yml` (exports with each candidate), `.github/workflows/neuro-zk.yml`, `.github/workflows/neuro-zk-ceremony.yml`
+- `.github/workflows/neuro-ml.yml` (trains the browser model; leaves `ml/onchain/` alone), `.github/workflows/neuro-zk.yml`, `.github/workflows/neuro-zk-ceremony.yml`

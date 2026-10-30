@@ -55,8 +55,8 @@ export const PINNED_LLM = {
 export const PINNED = {
   version: 1,
   status: 'active',
-  manifestHash: '0x5b4896cc85d32a230a05099ffb3855f39a03ac61895af4760edbe0d0517c2302',
-  chunkRoot: '0xfa1b039d506793c52e004260d82657279543fc143cf992919adb67d8589265db',
-  size: 87087,
+  manifestHash: '0xea2b241a562c00eb1b5ef3e910728bb1cb0fa0450eb89c28d80a36cf4cf391b5',
+  chunkRoot: '0x642f93596ff33eb0bff10388505efc4aba05030bb8019949a3c510010a46a8f9',
+  size: 75510,
   chunkSize: 16384,
 };

@@ -1,48 +1,7 @@
 {
- "modelId": "nml-b4c35477f7b1",
+ "modelId": "nml-3ab3cd303911",
  "note": "Recorded red-team evasions this model still misses (see ml/README.md). ml/test/redteam.test.js fails if any other recorded evasion slips back below medium.",
  "gaps": [
-  {
-   "id": "rt-neuro_redteam_A_106",
-   "family": "drain",
-   "mutations": [
-    "fake-renounce",
-    "rename"
-   ],
-   "tell": null,
-   "p": 0.4787
-  },
-  {
-   "id": "rt-neuro_redteam_A_107",
-   "family": "dormant-fee",
-   "mutations": [
-    "rename",
-    "xor-owner"
-   ],
-   "tell": null,
-   "p": 0.6528
-  },
-  {
-   "id": "rt-neuro_redteam_A_122",
-   "family": "stealth",
-   "mutations": [
-    "fake-renounce",
-    "split-guard",
-    "timebomb"
-   ],
-   "tell": null,
-   "p": 0.0153
-  },
-  {
-   "id": "rt-neuro_redteam_A_138",
-   "family": "blacklist-trap",
-   "mutations": [
-    "fake-renounce",
-    "rename"
-   ],
-   "tell": null,
-   "p": 0.1889
-  },
   {
    "id": "rt-neuro_redteam_A_142",
    "family": "stealth",
@@ -54,48 +13,7 @@
     "xor-owner"
    ],
    "tell": null,
-   "p": 0.4012
-  },
-  {
-   "id": "rt-neuro_redteam_A_15",
-   "family": "stealth",
-   "mutations": [
-    "block-ramp",
-    "hashed-owner",
-    "rename"
-   ],
-   "tell": null,
-   "p": 0.1166
-  },
-  {
-   "id": "rt-neuro_redteam_A_24",
-   "family": "blacklist-trap",
-   "mutations": [
-    "rename",
-    "xor-owner"
-   ],
-   "tell": null,
-   "p": 0.281
-  },
-  {
-   "id": "rt-neuro_redteam_A_44",
-   "family": "drain",
-   "mutations": [
-    "fake-renounce",
-    "noise",
-    "rename"
-   ],
-   "tell": null,
-   "p": 0.2292
-  },
-  {
-   "id": "rt-neuro_redteam_A_49",
-   "family": "drain",
-   "mutations": [
-    "origin-owner"
-   ],
-   "tell": null,
-   "p": 0.755
+   "p": 0.7391
   },
   {
    "id": "rt-neuro_redteam_A_54",
@@ -106,51 +24,7 @@
     "rename"
    ],
    "tell": null,
-   "p": 0.1289
-  },
-  {
-   "id": "rt-neuro_redteam_A_57",
-   "family": "stealth",
-   "mutations": [
-    "hashed-owner",
-    "noise",
-    "rename",
-    "split-guard",
-    "timebomb"
-   ],
-   "tell": null,
-   "p": 0.5591
-  },
-  {
-   "id": "rt-neuro_redteam_A_62",
-   "family": "drain",
-   "mutations": [
-    "hashed-owner",
-    "rename"
-   ],
-   "tell": null,
-   "p": 0.4041
-  },
-  {
-   "id": "rt-neuro_redteam_A_77",
-   "family": "seize",
-   "mutations": [
-    "noise",
-    "origin-owner",
-    "rename"
-   ],
-   "tell": null,
-   "p": 0.5811
-  },
-  {
-   "id": "rt-neuro_redteam_A_96",
-   "family": "hidden-mint",
-   "mutations": [
-    "origin-owner",
-    "rename"
-   ],
-   "tell": null,
-   "p": 0.7583
+   "p": 0.7201
   }
  ]
 }

@@ -21,7 +21,7 @@ on:
         required: false
         default: '5'
   pull_request:
-    paths: ['zetaphy-neuro/ml/model.json', 'zetaphy-neuro/ml/onchain/**', 'zetaphy-network/contracts/NeuroScore*.sol', 'zetaphy-network/test/neuroscore-zk.test.js',
+    paths: ['zetaphy-neuro/ml/onchain/**', 'zetaphy-network/contracts/NeuroScore*.sol', 'zetaphy-network/test/neuroscore-zk.test.js',
       'zetaphy-hub/ceremony*', 'zetaphy-hub/vendor/snarkjs*', '.github/workflows/neuro-zk.yml', '.github/workflows/neuro-zk-ceremony.yml']
 
 permissions: {}

@@ -1,24 +1,50 @@
 #!/usr/bin/env node
-// Exports ml/model.json to the fixed-point bytes NeuroScore runs on-chain
-// (format in ml/onchain/fixed.js) and, when the training corpus is present,
-// the held-out rows the parity tests replay.
+// Exports the ON-CHAIN model (ml/onchain/model.json) to the fixed-point bytes
+// NeuroScore runs on-chain (format in ml/onchain/fixed.js) and, when the training
+// corpus is present, the held-out rows the parity tests replay.
 //
-//   node ml/onchain/export.js            -> ml/onchain/model.fixed.json
+// The on-chain model is its own, separately pinned model version. It is NOT
+// ml/model.json (the model the browser and runners use): the zk circuit and its
+// public phase-2 ceremony (ml/onchain/zk/ceremony/transcript.json) hard-wire the
+// exported bytes, so the on-chain model only moves together with a new circuit
+// and a new public ceremony. Until then it keeps its own model id, hash and
+// (older) feature list, and the chain is fed exactly those features.
+//
+//   node ml/onchain/export.js            -> ml/onchain/model.fixed.json (from ml/onchain/model.json)
 //   node ml/onchain/export.js --heldout  -> also ml/onchain/heldout.json (needs ml/data/out/corpus.jsonl:
 //                                           `npm run ml:corpus`, ~4 min)
+//   node ml/onchain/export.js --promote  -> first copies ml/model.json to ml/onchain/model.json. Only together
+//                                           with a new circuit and a new public ceremony (docs/future/onchain-ml.md).
 //
 // model.fixed.json: { modelId, hash (keccak256 of the bytes = the model hash H
 // governance activates), bytes (hex), levels (fixed calibrated logits), ... }.
-// Deterministic: the same model.json gives the same bytes and hash.
+// Deterministic: the same model gives the same bytes and hash.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { keccak_256 } from '@noble/hashes/sha3';
 import { exportFixed, toHex, SCALE, HEADER, NODE_BYTES } from './fixed.js';
+import { FEATURES } from '../features.js';
 
 const ML = new URL('../', import.meta.url);
+/** The float model the on-chain export is made from (pinned apart from ml/model.json, see above). */
+export const ONCHAIN_MODEL = new URL('onchain/model.json', ML);
 export const keccakHex = (bytes) => toHex(keccak_256(bytes));
 
+/**
+ * Throws unless every feature the model reads is still computed by ml/features.js under the same name.
+ * Feature versions only append features (version 2 added the x_* path features after the version-1 list), so an
+ * older model keeps receiving exactly the values it was trained on, and nothing else: its vector is built from its
+ * own feature list.
+ */
+export function checkFeatureNames(model) {
+  const known = new Set(FEATURES);
+  const missing = model.features.filter((n) => !known.has(n));
+  if (missing.length) throw new Error(`model ${model.id} reads features ml/features.js no longer computes: ${missing.join(', ')}`);
+  return model;
+}
+
 export function fixedArtifact(model) {
+  checkFeatureNames(model);
   const { bytes, nodes, levels } = exportFixed(model);
   return {
     format: 'neuro-score-nsm1',
@@ -39,6 +65,7 @@ export function fixedArtifact(model) {
 
 /** Held-out rows (the trainer's own split), features sparse as [index, value]. */
 export async function heldOutRows(model) {
+  checkFeatureNames(model);
   const { loadRows, split } = await import('../train/train.js');
   const corpus = new URL('data/out/corpus.jsonl', ML).pathname;
   if (!existsSync(corpus)) throw new Error(`${corpus} missing: run npm run ml:corpus first`);
@@ -53,7 +80,8 @@ export async function heldOutRows(model) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const model = JSON.parse(readFileSync(new URL('model.json', ML), 'utf8'));
+  if (process.argv.includes('--promote')) writeFileSync(ONCHAIN_MODEL, readFileSync(new URL('model.json', ML)));
+  const model = JSON.parse(readFileSync(ONCHAIN_MODEL, 'utf8'));
   const art = fixedArtifact(model);
   writeFileSync(new URL('onchain/model.fixed.json', ML), JSON.stringify(art, null, 1) + '\n');
   console.log(`model ${art.modelId}: ${art.trees} trees, ${art.nodes} nodes, ${art.size} bytes, hash ${art.hash}`);

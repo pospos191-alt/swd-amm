@@ -315,8 +315,8 @@ A new tree model from the weekly training (`neuro-ml.yml`) resets the head to th
 }
 ```
 
-The committed manifest (model `nml-b4c35477f7b1`, zero head `nfh-ec54f839dc2d`) has sha256
-`0xc8e6eb9ced9494e6773d0850d434c8dd436a5d76ba67f59ff0d29a8e8c1d9549`.
+The committed manifest (model `nml-3ab3cd303911`, zero head `nfh-543c87aea110`) has sha256
+`0x15997221ce73b6007a45ee8d47f491c4ce83c895dcfae37195028506f59f57a7`.
 
 **Finality argument.** At block `b`, `schedule` needs `activation >= b + minDelay > b` and `cancelLast` needs the
 version's `activation > b`. So no transaction in block `h` or later can add, remove or change a version with
