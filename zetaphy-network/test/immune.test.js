@@ -52,7 +52,8 @@ test('rpc: rotates to the next free endpoint on 429 / 5xx and falls back from ba
 
 // ---------------------------------------------------------------- detectors on the mock multi-chain + recorded fixture
 
-const byDetector = (reports) => Object.groupBy(reports, (r) => r.bundle.detector);
+// (Object.groupBy is Node 21+; CI runs Node 20)
+const byDetector = (reports) => reports.reduce((g, r) => ((g[r.bundle.detector] ??= []).push(r), g), Object.create(null));
 
 test('sentinel (mock EVM): flash-loan exploit + attacker, drainer + its sink, one-block outflow; honest activity is quiet', async () => {
   const sc = evmAttacks({ exploitCode: kit.FlashExploit.runtime });
