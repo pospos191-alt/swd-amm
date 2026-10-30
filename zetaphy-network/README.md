@@ -1080,6 +1080,26 @@ Swap router for a relayer fee (nonce bitmap, deadline, all-or-nothing). Neither 
 `deployments/offline-77390.json`, which the hub reads; `… offline-deploy.js check` reads it back. Tests in `test/offline.test.js`.
 Design, threat model and limits: [docs/future/offline-trading.md](../docs/future/offline-trading.md).
 
+## STARK light client (prototype)
+
+`src/starklc/`: a hash-based (SHA-256, FRI) STARK proving that signers holding the required power of a Merkle-committed
+validator set signed a block (signer bitmap, power sums, the chain rule 3S > 2T − 3U, certificate commitment), with
+ML-DSA-44 signatures revealed in full, sampled, or trusted (stated per proof), and validator-set epochs chained from a
+pinned genesis root. Verified in the browser on `zetaphy-explorer/lightclient.html`. Tests in `test/starklc.test.js`,
+benchmarks with `npm run bench:starklc`.
+What is proven vs trusted, security bits, benchmarks, in-circuit ML-DSA and bridge roadmap:
+[docs/future/stark-light-client.md](../docs/future/stark-light-client.md).
+
+### Trustless bridge (prototype)
+
+ZETAPHY → Ethereum without a multisig: `contracts/StarkVerifier.sol` verifies the STARK on chain (≈ 1.4–3 M gas in mode
+none, 2–6 M with revealed signatures for n ≤ 21), `StarkLightClient.sol` keeps finalized headers and app hashes (signatures
+disputable during a window, or checked at once), `ZetaphyOutbox.sol` commits outgoing messages in storage slot 0 and
+`ZetaphyBridgeInbox.sol` releases tokens on IAVL + multistore + outbox proofs (≈ 0.21 M gas) with replay protection, a daily
+limit and a pause. `BtcLightClient.sol`: Bitcoin headers and SPV on ZETAPHY, tested with real mainnet headers. Tests in
+`test/starkbridge.test.js` and `test/btclc.test.js`; trust model per mode, gas and Bitcoin options:
+[docs/future/trustless-bridge.md](../docs/future/trustless-bridge.md).
+
 ## Testing
 
 - `npm test`: tests the contracts on an in-memory EVM and tests the runner program (CI runs it every time)

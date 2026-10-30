@@ -1,0 +1,54 @@
+{
+ "note": "Demo data made with TEST keys (public seeds) by zetaphy-network/scripts/starklc-bench.js --demo. Not a real chain.",
+ "chainId": "zetaphy_77390-1",
+ "genesis": {
+  "epoch": 0,
+  "root": "1af71946cf4607c4413ba7a6d8a790dfd4c577e39807ce1a8d654ed9efd90bef",
+  "logN": 3,
+  "logBlowup": 4,
+  "validators": [
+   {
+    "address": "FA772B6C969F5B3F901946E6D1492345EA3C163C",
+    "power": "100"
+   },
+   {
+    "address": "35975B669CD9ACA933B7E533D59DB8D6D2D46850",
+    "power": "137"
+   },
+   {
+    "address": "98EFABD0A9AE75C3F79E61D1D41D92FE931B9125",
+    "power": "174"
+   },
+   {
+    "address": "568A098360BCE009BF584B524CE2475CB1AE1336",
+    "power": "211"
+   }
+  ]
+ },
+ "handoffs": [
+  {
+   "epoch": 1,
+   "file": "handoff-1.bin"
+  }
+ ],
+ "blocks": [
+  {
+   "file": "block-501-all.bin",
+   "height": 501,
+   "reveal": "all",
+   "note": "21 of 21 validators signed"
+  },
+  {
+   "file": "block-502-trusted.bin",
+   "height": 502,
+   "reveal": "none",
+   "note": "21 of 21 validators signed"
+  },
+  {
+   "file": "block-503-minority.bin",
+   "height": 503,
+   "reveal": "all",
+   "note": "11 of 21 validators signed"
+  }
+ ]
+}

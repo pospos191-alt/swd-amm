@@ -9,9 +9,10 @@
     "build": "node scripts/build.js",
     "icons": "node scripts/icons.js",
     "serve": "node scripts/serve.js",
-    "test": "node --test test/unit.test.js test/deep.test.js test/insight.test.js test/explore2.unit.test.js test/explorer.e2e.js test/explore2.e2e.js",
+    "bench:starklc": "node scripts/starklc-browser-bench.js",
+    "test": "node --test test/unit.test.js test/deep.test.js test/insight.test.js test/explore2.unit.test.js test/explorer.e2e.js test/explore2.e2e.js test/lightclient.e2e.js",
     "test:unit": "node --test test/unit.test.js test/deep.test.js test/insight.test.js test/explore2.unit.test.js",
-    "test:e2e": "node --test test/explorer.e2e.js test/explore2.e2e.js",
+    "test:e2e": "node --test test/explorer.e2e.js test/explore2.e2e.js test/lightclient.e2e.js",
     "test:devnet": "node --test test/devnet.integration.js"
   },
   "engines": {

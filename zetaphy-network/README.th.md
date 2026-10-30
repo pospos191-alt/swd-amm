@@ -1081,6 +1081,24 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 `deployments/offline-77390.json` ให้ฮับอ่าน ส่วน `… offline-deploy.js check` อ่านกลับมาตรวจ เทสต์ใน `test/offline.test.js`
 การออกแบบ ภัยที่คิดไว้ และข้อจำกัด: [docs/future/offline-trading.th.md](../docs/future/offline-trading.th.md)
 
+## ไลต์ไคลเอนต์ STARK (ต้นแบบ)
+
+`src/starklc/`: STARK แบบใช้แฮช (SHA-256, FRI) พิสูจน์ว่าผู้ลงนามที่มีพลังถึงเกณฑ์ของชุดผู้ตรวจสอบที่ผูกมัดด้วย Merkle
+ได้ลงนามบล็อกแล้ว (บิตแมปผู้ลงนาม ผลรวมพลัง กฎของเชน 3S > 2T − 3U และการผูกมัดใบรับรอง) โดยลายเซ็น ML-DSA-44
+เปิดเผยครบ สุ่มตรวจ หรือเชื่อผู้สร้าง (ระบุไว้ในหลักฐานแต่ละชิ้น) และส่งต่อชุดผู้ตรวจสอบข้ามยุคจากราก genesis ที่ปักหมุดไว้
+ตรวจในเบราว์เซอร์ได้ที่ `zetaphy-explorer/lightclient.html` ทดสอบใน `test/starklc.test.js` เบนช์มาร์กด้วย `npm run bench:starklc`
+อะไรพิสูจน์แล้ว อะไรต้องเชื่อ ระดับความปลอดภัย ผลวัด และแผนตรวจ ML-DSA ในวงจรและสะพานข้ามเชน:
+[docs/future/stark-light-client.th.md](../docs/future/stark-light-client.th.md)
+
+### สะพานแบบไม่ต้องเชื่อใจใคร (ต้นแบบ)
+
+ZETAPHY → Ethereum โดยไม่ต้องมี multisig: `contracts/StarkVerifier.sol` ตรวจ STARK บนเชน (ราว 1.4–3 M แก๊สในโหมด none และ 2–6 M
+เมื่อเปิดเผยลายเซ็น สำหรับ n ≤ 21), `StarkLightClient.sol` เก็บ header และ app hash ที่สิ้นสุดแล้ว (ลายเซ็นโต้แย้งได้ในหน้าต่างเวลา หรือตรวจทันที),
+`ZetaphyOutbox.sol` ผูกมัดข้อความขาออกไว้ใน storage slot 0 และ `ZetaphyBridgeInbox.sol` ปล่อยโทเคนเมื่อมีหลักฐาน IAVL + multistore + outbox
+(ราว 0.21 M แก๊ส) พร้อมกันส่งซ้ำ จำกัดยอดรายวัน และปุ่มหยุด `BtcLightClient.sol`: header และ SPV ของ Bitcoin บน ZETAPHY ทดสอบด้วย header
+mainnet จริง ทดสอบใน `test/starkbridge.test.js` และ `test/btclc.test.js` ความเชื่อใจแต่ละโหมด ค่าแก๊ส และทางเลือกของ Bitcoin:
+[docs/future/trustless-bridge.th.md](../docs/future/trustless-bridge.th.md)
+
 ## ทดสอบ
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)
