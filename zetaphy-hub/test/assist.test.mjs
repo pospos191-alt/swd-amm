@@ -163,3 +163,13 @@ test('hub-config: the oracle mirrors only once deployed, public data only; new c
   const cfg = hubConfig({ node: '' });
   assert.ok('immune' in cfg);
 });
+
+test('PQ attestation: anchor(bytes32) call data, and the archive with its anchor written in', async () => {
+  const { anchorData, withAnchor, ANCHOR } = await import('../pqattest.js');
+  const h = '0x' + 'ab'.repeat(32);
+  assert.equal(anchorData(h), new Interface(['function anchor(bytes32)']).encodeFunctionData('anchor', [h]));
+  assert.equal(ANCHOR, '0xeecdf927');
+  const a = withAnchor({ format: 'f', payload: { x: 1 } }, { contract: '0x' + '11'.repeat(20), hash: h, time: 5n });
+  assert.deepEqual(a.anchor, { chainId: 77390, contract: '0x' + '11'.repeat(20), hash: h, time: 5 });
+  assert.deepEqual(a.payload, { x: 1 });
+});

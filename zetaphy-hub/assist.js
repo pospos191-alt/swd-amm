@@ -7,7 +7,7 @@
 import { withFallback } from './i18n.js';
 import { ASSIST } from './assist-i18n.js';
 import { reviewProposals, reviewTimelock } from './govassist.js';
-import { verifyArchive, anchoredAtData, readAnchoredAt } from './pqattest.js';
+import { verifyArchive, anchoredAtData, readAnchoredAt, anchorData, withAnchor } from './pqattest.js';
 import { simulateTx, simulationRows, explainTx, neuroAiSettings } from './presign.js';
 
 export const A = (lang) => withFallback(ASSIST, lang);
@@ -158,6 +158,30 @@ const gov = {
   },
 };
 
+/**
+ * A valid archive with no anchor yet: anchor its hash on ZETAPHY (NeuroAnchor, anyone may) with the connected
+ * wallet, then offer the archive with the anchor written in. null when there is nothing to do.
+ */
+function anchorButton(ctx, L, archive, r) {
+  const contract = ctx.cfg.contracts?.neuroAnchor;
+  if (!r.ok || archive.anchor != null || !ADDR.test(contract ?? '') || !/^0x[0-9a-fA-F]{64}$/.test(r.archiveHash ?? '')) return null;
+  const out = ctx.el('p', { class: 'small', role: 'status' });
+  const btn = ctx.el('button', { type: 'button', class: 'btn sm', 'data-pq-anchor': '', text: L.imPqAnchorBtn });
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      out.textContent = '…';
+      await ctx.send(contract, anchorData(r.archiveHash), L.imPqAnchorBtn);
+      const got = readAnchoredAt(await ctx.evmCall('eth_call', [{ to: contract, data: anchoredAtData(r.archiveHash) }, 'latest']));
+      const json = `${JSON.stringify(withAnchor(archive, { contract, hash: r.archiveHash, time: got.time }), null, 2)}\n`;
+      const a = ctx.el('a', { class: 'btn ghost sm', download: 'attestation.anchored.pq.json', text: L.imPqSave });
+      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      out.replaceChildren(ctx.el('span', { class: 'msg ok', text: L.imPqAnchored(when(ctx, Number(got.time))) }), ' ', a);
+    } catch (e) { btn.disabled = false; out.textContent = String(e?.message ?? e).slice(0, 160); }
+  });
+  return ctx.el('div', {}, btn, out);
+}
+
 /** The PQ archive check in this browser: ML-DSA-44 + keccak-256 from the wallet's bundle, SHA-256 from WebCrypto. */
 export async function browserVerify(archive, { evmCall, pqwallet, verdict }) {
   const { ml_dsa44, keccak_256 } = pqwallet;
@@ -203,7 +227,8 @@ const immune = {
         pqOut.replaceChildren(ctx.el('p', { class: r.ok ? 'msg ok' : 'warnline', 'data-pq': r.ok ? 'valid' : 'invalid', text: r.ok ? L.imPqOk : L.imPqBad }),
           ...r.problems.map((p) => ctx.el('p', { class: 'warnline', text: `– ${p}` })),
           r.keyHash ? ctx.el('p', { class: 'mono', text: `${L.imPqKey}: ${r.keyHash}` }) : null,
-          ctx.el('p', { class: 'dim', text: r.anchored ? L.imPqAnchored(when(ctx, r.anchored.time)) : L.imPqNotAnchored }));
+          ctx.el('p', { class: 'dim', text: r.anchored ? L.imPqAnchored(when(ctx, r.anchored.time)) : L.imPqNotAnchored }),
+          anchorButton(ctx, L, archive, r));
       } catch (e) { pqOut.replaceChildren(ctx.el('p', { class: 'warnline', 'data-pq': 'invalid', text: `${L.imPqBad}: ${String(e.message).slice(0, 160)}` })); }
     });
     root.replaceChildren(ctx.el('p', { class: 'dim small sp-intro', text: L.imIntro }),

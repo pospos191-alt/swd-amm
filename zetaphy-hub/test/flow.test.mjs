@@ -69,6 +69,8 @@ test('the AI map: a "not deployed" card turns into "works now" once hub-config.j
   const all = Object.fromEntries(Object.values(ITEMS).flatMap((it) => it.needs ?? []).map((k) => [k, A]));
   const c = statusCounts(all);
   assert.equal(c.notDeployed, 0);
+  assert.equal(c.practice, 1, 'only the key ceremony stays practice (by design: nothing is sent)');
+  assert.equal(statusOf(ITEMS[30], { neuroAnchor: A }), 'live');
   assert.equal(Object.values(c).reduce((a, b) => a + b, 0), 35);
 });
 
