@@ -68,7 +68,7 @@ const aimap = {
       el('div', { class: 'am-head' },
         el('span', { class: 'am-hero' }, icon('brain', 'fl-ic hero')),
         el('div', {}, el('h2', { text: L.title }), el('p', { class: 'small', text: L.intro }))),
-      el('div', { class: 'am-chips', role: 'toolbar' }, chip('all', 35), ...ORDER.map((s) => chip(s, counts[s]))),
+      el('div', { class: 'am-chips', role: 'toolbar' }, chip('all', 35), ...ORDER.filter((s) => counts[s] || filter === s).map((s) => chip(s, counts[s]))),
       ...GROUPS.map(([g, gi, nums]) => el('section', { class: 'am-group' },
         el('h2', { class: 'am-gh' }, icon(gi, 'fl-ic'), el('span', { text: L.groups[g] }), el('b', { class: 'mono', text: String(nums.length) })),
         el('div', { class: 'am-grid' }, ...nums.map(card)))));

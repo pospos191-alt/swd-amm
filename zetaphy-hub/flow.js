@@ -88,9 +88,10 @@ export const FLOWS = {
   defi: { icons: ['pool', 'coin', 'grid', 'swap'], next: ['swap', 'analytics', 'neuro'] },
   leaderboard: { icons: ['trophy', 'server', 'clock', 'users'], next: ['stake', 'analytics'] },
   gov: { icons: ['doc', 'play', 'vote', 'gavel'], next: ['stake', 'immune', 'ai'] },
-  immune: { icons: ['brain', 'shield', 'globe', 'lock'], next: ['neuro', 'gov', 'ai'] },
+  immune: { icons: ['brain', 'shield', 'globe', 'lock'], next: ['neuro', 'gov', 'aichain'] },
+  aichain: { icons: ['cube', 'eye', 'search', 'wallet'], next: ['ai', 'immune', 'gov'] },
   dev: { icons: ['terminal', 'link', 'code', 'doc'], next: ['explorer', 'ai'] },
-  ai: { icons: ['map', 'check', 'link', 'cube'], next: ['neuro', 'agents', 'immune'] },
+  ai: { icons: ['map', 'check', 'link', 'cube'], next: ['neuro', 'agents', 'aichain'] },
 };
 export const flowText = (lang, tab) => withFallback(FLOW, lang).steps[tab];
 export { LANG_CODES };
@@ -127,7 +128,7 @@ export const STATUS_ICON = { live: 'check', practice: 'play', notDeployed: 'cloc
 export const ITEMS = {
   1: { s: 'notDeployed', i: 'layers', doc: 'browser-ai', tab: 'neuro', hint: 'neuroAi', needs: ['modelRegistry'] },
   2: { s: 'practice', i: 'network', doc: 'browser-ai', tab: 'neuro', hint: 'neuroAi' },
-  3: { s: 'cli', i: 'cube', doc: 'onchain-ml' },
+  3: { s: 'notDeployed', i: 'cube', doc: 'onchain-ml', tab: 'aichain', needs: ['neuroScore'] },
   4: { s: 'practice', i: 'eyeLock', doc: 'onchain-ml', page: 'ceremony.html' },
   5: { s: 'practice', i: 'cpu', doc: 'useful-work', tab: 'mine', mode: 'work', hint: 'mineWork' },
   6: { s: 'notDeployed', i: 'users', doc: 'federated', tab: 'neuro', hint: 'neuroFl', needs: ['federatedRounds'] },
@@ -138,11 +139,11 @@ export const ITEMS = {
   11: { s: 'chain', i: 'cpu', doc: 'chain-protocol' },
   12: { s: 'chain', i: 'shield', doc: 'chain-protocol' },
   13: { s: 'chain', i: 'lock', doc: 'chain-protocol' },
-  14: { s: 'cli', i: 'pen', doc: 'agents' },
+  14: { s: 'notDeployed', i: 'pen', doc: 'agents', tab: 'aichain', needs: ['cosignCommittee'] },
   15: { s: 'notDeployed', i: 'chart', doc: 'markets', page: 'forecasts.html#forecasts', needs: ['riskForecasts'] },
   16: { s: 'notDeployed', i: 'pie', doc: 'markets', page: 'forecasts.html#data', needs: ['dataDao'] },
   17: { s: 'practice', i: 'bug', doc: 'useful-work', tab: 'mine', mode: 'work', hint: 'mineWork' },
-  18: { s: 'cli', i: 'globe', doc: 'crosschain-assist', tab: 'immune' },
+  18: { s: 'notDeployed', i: 'globe', doc: 'crosschain-assist', tab: 'immune', needs: ['neuroOracleSender'] },
   19: { s: 'notDeployed', i: 'check', doc: 'crosschain-assist', tab: 'immune', needs: ['neuroAttest'] },
   20: { s: 'live', i: 'eye', doc: 'crosschain-assist', tab: 'wallet', hint: 'everyTx' },
   21: { s: 'live', i: 'gavel', doc: 'crosschain-assist', tab: 'gov' },
@@ -156,8 +157,8 @@ export const ITEMS = {
   29: { s: 'notDeployed', i: 'eye', doc: 'markets', page: 'forecasts.html#foresight', needs: ['foresight'] },
   30: { s: 'practice', i: 'key', doc: 'crosschain-assist', tab: 'immune' },
   31: { s: 'chain', i: 'bridge', doc: 'chain-protocol' },
-  32: { s: 'cli', i: 'umbrella', doc: 'crosschain-assist' },
+  32: { s: 'notDeployed', i: 'umbrella', doc: 'crosschain-assist', tab: 'aichain', needs: ['hackInsurance'] },
   33: { s: 'chain', i: 'pause', doc: 'chain-protocol' },
-  34: { s: 'cli', i: 'coin', doc: 'useful-work' },
-  35: { s: 'cli', i: 'clock', doc: 'federated' },
+  34: { s: 'notDeployed', i: 'coin', doc: 'useful-work', tab: 'aichain', needs: ['usefulIssuance'] },
+  35: { s: 'notDeployed', i: 'clock', doc: 'federated', tab: 'aichain', needs: ['modelEpochs'] },
 };
