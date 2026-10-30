@@ -189,12 +189,12 @@ findings:
   it open again ("marked fixed but still detected").
 
 **In GitHub code scanning** (the SARIF upload): open findings of Medium and above are
-alerts at their severity. Triaged ones (false-positive, accepted-risk, including those
-pending owner confirmation) are uploaded too, with a SARIF `suppressions` entry (kind
-`external`, status `accepted`, justification = the status, the reason and who decided),
-so code scanning shows them as dismissed with that justification rather than as new
-alerts; deleting the entry makes the alert open again on the next upload. A finding
-marked fixed but still detected is an alert again (no suppression).
+alerts at their severity. Decided ones (false-positive, accepted-risk, including those
+pending owner confirmation) are not uploaded, because GitHub code scanning ignores SARIF
+`suppressions` and would open them as alerts anyway. They stay in REPORT.md, findings.json
+and `triage.yml` with their reasons; deleting a triage entry puts the finding back into the
+next upload. A finding marked fixed but still detected is open again and uploaded.
+(`toSarif(r, { includeTriaged: true })` keeps them, with `suppressions`, for other SARIF tools.)
 
 **Semgrep `basic-arithmetic-underflow`** (Decurity) flags any `a - b` where a function
 parameter flows in. Solidity >= 0.8 reverts on underflow outside `unchecked { }`, so

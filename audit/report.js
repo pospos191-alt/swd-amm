@@ -420,12 +420,14 @@ export function toThai(r) {
 
 /**
  * SARIF for GitHub code scanning. Open findings are results at their severity (error / warning).
- * Triaged ones (fixed but still detected stay open; false-positive, accepted-risk, including the
- * "owner to confirm" ones) are results too, with a SARIF `suppressions` entry (kind "external",
- * status "accepted", justification = the triage reason): code scanning shows them as dismissed with
- * that justification instead of as new alerts, and a deleted triage entry makes them errors again.
+ * Decided findings (false-positive, accepted-risk, fixed-and-gone, including the "owner to confirm"
+ * ones) are NOT uploaded: GitHub code scanning ignores SARIF `suppressions`, so a suppressed result
+ * would still open an alert. They stay in REPORT.md, findings.json and audit/triage.yml with the reason;
+ * deleting a triage entry puts the finding back into the upload. A finding marked "fixed" but still
+ * detected is open again and uploaded. `includeTriaged: true` keeps them, with a `suppressions` entry
+ * (kind "external", status "accepted", justification = the triage reason), for other SARIF consumers.
  */
-export function toSarif(r, { repoRelative = true } = {}) {
+export function toSarif(r, { repoRelative = true, includeTriaged = false } = {}) {
   const runs = new Map();
   // Medium and above: Low / Info stay in the report and findings.json, not in the code-scanning UI.
   for (const f of r.findings.filter((x) => rank(x.severity) <= rank('medium') && x.file && !x.file.startsWith('zetaphy-chain:'))) {
@@ -442,6 +444,7 @@ export function toSarif(r, { repoRelative = true } = {}) {
       properties: { severity: f.severity, tool: f.tool },
     };
     if (f.status !== 'open' && f.triage) {
+      if (!includeTriaged) continue;
       const pending = f.triage.pending ? ' (PENDING OWNER CONFIRMATION)' : '';
       result.suppressions = [{
         kind: 'external',

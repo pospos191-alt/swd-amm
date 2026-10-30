@@ -269,7 +269,7 @@ test('gate: blocks new untriaged High; triage or the baseline unblock it; accept
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('SARIF: triaged findings carry suppressions (dismissed with the triage reason); untriaged stay errors', () => {
+test('SARIF: decided findings are left out of the code-scanning upload (GitHub ignores suppressions); with includeTriaged they carry suppressions', () => {
   const { root, out } = fakeOut();
   try {
     const ids = collect(out).findings.map((f) => f.id);
@@ -277,7 +277,8 @@ test('SARIF: triaged findings carry suppressions (dismissed with the triage reas
     const inv = ids.find((i) => i.startsWith('forge:'));
     const reason = 'pays only the caller from its own credit, verified by reading f()';
     const triageText = `findings:\n  - id: ${send}\n    status: false-positive\n    reason: ${reason}\n    decided_by: auditor (owner to confirm)\n    date: 2026-10-30\n`;
-    const results = (r) => toSarif(r).runs.flatMap((run) => run.results);
+    const results = (r) => toSarif(r, { includeTriaged: true }).runs.flatMap((run) => run.results);
+    const uploaded = (r) => toSarif(r).runs.flatMap((run) => run.results).map((y) => y.partialFingerprints['zetaphyAuditId/v1']);
     const byId = (r, id) => results(r).find((x) => x.partialFingerprints['zetaphyAuditId/v1'] === id);
     // untriaged: an error, no suppression
     const before = collect(out);
@@ -285,6 +286,8 @@ test('SARIF: triaged findings carry suppressions (dismissed with the triage reas
     assert.equal(byId(before, send).suppressions, undefined);
     // triaged: still present (same fingerprint, so code scanning can dismiss the existing alert), suppressed
     const r = collect(out, { triageText, baselineIds: [inv] });
+    assert.ok(uploaded(before).includes(send), 'untriaged: uploaded');
+    assert.ok(!uploaded(r).includes(send), 'decided: not uploaded to code scanning');
     const x = byId(r, send);
     assert.ok(x, 'a triaged finding is still in the SARIF');
     assert.equal(x.level, 'error', 'the level stays the finding severity');
@@ -299,6 +302,7 @@ test('SARIF: triaged findings carry suppressions (dismissed with the triage reas
     assert.match(byId(acc, send).suppressions[0].justification, /^accepted-risk: /);
     const fixed = collect(out, { triageText: triageText.replace('false-positive', 'fixed') });
     assert.equal(byId(fixed, send).suppressions, undefined, 'marked fixed but still detected: an alert again');
+    assert.ok(uploaded(fixed).includes(send), 'marked fixed but still detected: uploaded again');
     // the untriaged invariant failure (baseline is not triage) stays unsuppressed
     const other = results(r).filter((y) => y.partialFingerprints['zetaphyAuditId/v1'] !== send);
     assert.ok(other.every((y) => !y.suppressions));
