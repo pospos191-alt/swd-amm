@@ -1080,6 +1080,16 @@ Swap router for a relayer fee (nonce bitmap, deadline, all-or-nothing). Neither 
 `deployments/offline-77390.json`, which the hub reads; `… offline-deploy.js check` reads it back. Tests in `test/offline.test.js`.
 Design, threat model and limits: [docs/future/offline-trading.md](../docs/future/offline-trading.md).
 
+## Self-healing: an opt-in circuit breaker (testnet prototype)
+
+`contracts/CircuitBreaker.sol` + `contracts/CircuitBreakable.sol`: a protocol registers a policy (pausable selectors,
+outflow caps per window, maximum pause, quorum, its own governance). A trip needs k of n bonded Neuro runners signing
+the same evidence, or the on-chain outflow cap breaking. It pauses only the listed selectors and always expires.
+A false trip, once the timelock judges it, slashes the signers and compensates the protocol. There is no admin key.
+`src/selfheal/` holds the detectors and the k-of-n detector loop. `node scripts/selfheal-demo.js [blocks] [seed]`
+drains a vulnerable vault with self-healing off and on. Tests in `test/selfheal*.test.js`.
+Not deployed. Design, threat model and limits: [docs/future/self-healing.md](../docs/future/self-healing.md).
+
 ## Testing
 
 - `npm test`: tests the contracts on an in-memory EVM and tests the runner program (CI runs it every time)

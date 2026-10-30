@@ -84,6 +84,8 @@ test('On-chain AI tab: live cards, not-deployed cards, a token score, 8 language
     assert.match(await page.textContent('#ac-score'), /v1 · nml-e2e/);
     for (const k of ['cosignCommittee', 'hackInsurance', 'usefulIssuance']) assert.ok(await page.$(`.ac-state[data-for="${k}"] [data-state="not-deployed"]`), `${k}: not deployed`);
     assert.ok(await page.$('#ac-oracle [data-state="not-deployed"]'));
+    assert.ok(await page.$('.ac-state[data-for="circuitBreaker"] [data-state="not-deployed"]'), 'self-healing: not deployed');
+    assert.match(await page.textContent('#ac-heal h2'), /^Self-healing$/);
     // a token's score: a free read
     await page.fill('#ac-token', '0x' + '12'.repeat(20));
     await page.click('#ac-score-form button');

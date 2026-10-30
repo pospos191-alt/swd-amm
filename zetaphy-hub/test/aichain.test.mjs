@@ -14,6 +14,7 @@ import {
   SEL, SCORED_TOPIC, LEVELS, CLAIM_STATES, words, ascii32, readModel, readScoreOf, readScoreRecord, probOf, readScoredLog, rescoreData, scoreOfData,
   readNeuroScore, readTokenScore, findFeatures, readAddresses, frostKey, isValidFrostData, readCommittee, checkFrost,
   readClaim, claimAction, readInsurance, readBuckets, readIssuance, readCurrent, readVersion, readEpochs,
+  readBreakerPolicy, readBreakerTrip, readBreaker, readBreakerProtocol,
 } from '../aichain.js';
 
 const HERE = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,6 +31,8 @@ const SIGS = {
   deposit: 'deposit()', requestWithdraw: 'requestWithdraw(uint256)', withdraw: 'withdraw()', payout: 'payout(uint256)', expire: 'expire(uint256)',
   buckets: 'buckets()', pendingOverflow: 'pendingOverflow()', overflow: 'overflow()', sweepOverflow: 'sweepOverflow()',
   current: 'current()', count: 'count()', versionByIndex: 'versionByIndex(uint256)', epochLength: 'epochLength()', minDelay: 'minDelay()',
+  protocolCount: 'protocolCount()', tripCount: 'tripCount()', guardianBond: 'guardianBond()', minQuorum: 'minQuorum()',
+  isTripped: 'isTripped(address)', lastTrip: 'lastTrip(address)', tripOf: 'tripOf(uint256)', policyOf: 'policyOf(address)',
 };
 
 /** A fake node: eth_call answers by selector (`calls[sel](argsHex, to)` -> hex), plus block, balance and logs. */
@@ -56,7 +59,7 @@ test('AICHAIN words: every language has every key, translated, placeholders fill
   const en = shape(AICHAIN.en);
   for (const l of LANG_CODES) {
     assert.deepEqual(shape(AICHAIN[l]), en, l);
-    if (l !== 'en') for (const k of ['intro', 'notDeployed', 'scoreTip', 'cosignTip', 'insTip', 'issTip', 'epTip', 'insTestnet']) assert.notEqual(AICHAIN[l][k], AICHAIN.en[k], `${l}.${k} translated`);
+    if (l !== 'en') for (const k of ['intro', 'notDeployed', 'scoreTip', 'cosignTip', 'insTip', 'issTip', 'epTip', 'insTestnet', 'healTitle', 'healTip', 'healTestnet', 'healNotOptedIn']) assert.notEqual(AICHAIN[l][k], AICHAIN.en[k], `${l}.${k} translated`);
     const L = AICHAIN[l];
     for (const lv of LEVELS) assert.ok(L.level[lv]?.trim(), `${l}.level.${lv}`);
     for (const s of CLAIM_STATES) assert.ok(L.claimState[s]?.trim(), `${l}.claimState.${s}`);
@@ -68,6 +71,12 @@ test('AICHAIN words: every language has every key, translated, placeholders fill
     assert.match(L.insDepositAction('5'), /5/);
     assert.match(L.rescoreAction('0xabc'), /0xabc/);
     assert.match(L.insWithdrawAt('T1'), /T1/);
+    assert.match(L.healTripped('T9'), /T9/);
+    const pol = L.healPolicyIs(3, 5, 6);
+    assert.ok(['3', '5', '6'].every((x) => pol.includes(x)), `${l}.healPolicyIs`);
+    const trip = L.healTripIs(7, 'KIND', 4, 'T2');
+    assert.ok(['7', 'KIND', '4', 'T2'].every((x) => trip.includes(x)), `${l}.healTripIs`);
+    for (const k of ['runners', 'invariant']) assert.ok(L.healKind[k]?.trim(), `${l}.healKind.${k}`);
     assert.equal(TAB_TEXT[l].aichain?.length, 3, `${l}: tab words`);
   }
   assert.match(AICHAIN.th.insTestnet, /เทสต์เน็ต/);
@@ -270,4 +279,36 @@ test('the hub: an On-chain AI tab with its page, and the AI map items point at i
     assert.equal(statusOf(it, { [key]: A('12') }), 'live', `#${n} live once ${key} is deployed`);
   }
   assert.equal(Object.values(ITEMS).filter((it) => it.s === 'cli').length, 0, 'nothing is command-line only any more');
+});
+
+test('self-healing card: CircuitBreaker policy and trip decoders (structs with dynamic arrays) and readers', async () => {
+  const POLICY = 'tuple(address governance,uint32 window,uint32 maxPause,uint8 quorum,bool active,uint16 invariantMask,uint16 tripCapBps,uint32 holdReview,uint256 holdAbove,bytes4[] selectors,address[] assets)';
+  const TRIP = 'tuple(address protocol,uint8 kind,uint8 claim,uint16 mask,uint64 start,uint64 until,uint64 fromBlock,uint64 toBlock,uint64 claimedAt,bytes32 evidenceHash,bytes32 detectorId,uint256 claimBond,address[] runners)';
+  const pol = enc([POLICY], [[A('11'), 600, 21600, 3, true, 4, 1000, 3600, 50n, ['0xd0e30db0', '0x2e1a7d4d', '0x853828b6'], [A('00')]]]);
+  assert.deepEqual(readBreakerPolicy(pol), { governance: A('11'), window: 600, maxPause: 21600, quorum: 3, active: true, selectors: 3 });
+  const empty = enc([POLICY], [[A('00'), 0, 0, 0, false, 0, 0, 0, 0n, [], []]]);
+  assert.equal(readBreakerPolicy(empty).active, false);
+  const trip = enc([TRIP], [[A('22'), 0, 0, 4, 1000, 22600, 50, 50, 0, '0x' + '33'.repeat(32), '0x' + '44'.repeat(32), 0n, [A('aa'), A('bb'), A('cc')]]]);
+  assert.deepEqual(readBreakerTrip(trip), { protocol: A('22'), kind: 'runners', mask: 4, start: 1000, until: 22600, fromBlock: 50, toBlock: 50, runners: 3 });
+  assert.equal(readBreakerTrip(enc([TRIP], [[A('22'), 1, 0, 4, 1, 2, 3, 3, 0, '0x' + '33'.repeat(32), '0x' + '44'.repeat(32), 0n, []]])).kind, 'invariant');
+  const B = A('cb');
+  const P = A('22');
+  const node = fakeNode({
+    protocolCount: () => enc(['uint256'], [2]), tripCount: () => enc(['uint256'], [5]), guardianBond: () => enc(['uint256'], [10n ** 19n]), minQuorum: () => enc(['uint256'], [3]),
+    policyOf: (args) => (args.endsWith('22'.repeat(20)) ? pol : empty), isTripped: () => enc(['bool'], [true]), lastTrip: () => enc(['uint256'], [5]),
+    tripOf: (args) => { assert.equal(BigInt(args), 4n); return trip; },
+  });
+  assert.deepEqual(await readBreaker(node.evmCall, B), { protocols: 2, trips: 5, guardianBond: 10n ** 19n, minQuorum: 3 });
+  const r = await readBreakerProtocol(node.evmCall, B, P);
+  assert.equal(r.tripped, true);
+  assert.equal(r.policy.quorum, 3);
+  assert.equal(r.last.id, 4);
+  assert.equal(r.last.runners, 3);
+  assert.deepEqual(await readBreakerProtocol(node.evmCall, B, A('99')), { policy: null, tripped: false, last: null });
+  // the selectors match the contract's ABI
+  const abi = JSON.parse(readFileSync(join(HERE, '..', 'zetaphy-network', 'artifacts', 'CircuitBreaker.json'), 'utf8')).abi;
+  const iface = new Interface(abi);
+  for (const k of ['protocolCount', 'tripCount', 'guardianBond', 'minQuorum', 'isTripped', 'lastTrip', 'tripOf', 'policyOf']) assert.equal(iface.getFunction(k).selector, SEL[k], k);
+  assert.equal(iface.getFunction('policyOf').outputs[0].format('full').replace(/ /g, ''), POLICY.replace(/ /g, '').replace(/^tuple/, ''));
+  assert.equal(iface.getFunction('tripOf').outputs[0].format('full').replace(/ /g, ''), TRIP.replace(/ /g, '').replace(/^tuple/, ''));
 });

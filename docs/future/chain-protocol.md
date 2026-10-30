@@ -358,6 +358,10 @@ Governance re-arms it with `breaker-rearm`.
 - Detection happens one block after the drain and the pause one block after
   that (N → N+2), so the drain block itself is not stopped.
 
+**See also** [self-healing.md](self-healing.md): the same idea for any protocol that opts in, at the contract
+level. Bonded Neuro runners (k of n) or an on-chain outflow cap pause only the selectors the protocol listed, for
+a limited time, and a false trip costs the runners their bond.
+
 ---
 
 ## (33) Anomaly hold for opted-in accounts: `0x…0904`
