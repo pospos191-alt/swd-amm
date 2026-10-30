@@ -47,6 +47,7 @@ const ICONS = {
   aichain: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
   offline: '<path d="M3 8.5a14 14 0 0 1 18 0M6.5 12a9 9 0 0 1 11 0M10 15.5a4 4 0 0 1 4 0"/><circle cx="12" cy="19" r="1"/><path d="M3 3l18 18"/>',
   audit: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+  quantum: '<circle cx="12" cy="12" r="2"/><ellipse cx="12" cy="12" rx="10" ry="4"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)"/>',
   neuro: '<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-6 0"/>',
 };
 // Their words (label, title, hover text) are in i18n.js TAB_TEXT.
@@ -61,6 +62,7 @@ const TABS = [
   { id: 'agents', page: true, fresh: true },
   { id: 'offline', page: true, fresh: true },
   { id: 'audit', page: true, fresh: true },
+  { id: 'quantum', page: true, fresh: true },
   { id: 'nft', src: 'nft/' },
   { id: 'explorer', src: 'explorer/', group: 'data' },
   { id: 'neuro', src: 'neuro/web/' },
@@ -604,7 +606,9 @@ async function start() {
   $('lang').value = lang;
   try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {}, tokens: Array.isArray(c.tokens) ? c.tokens.filter((x) => isEvmAddress(x?.address)) : [], saphan: Array.isArray(c.saphan) ? c.saphan : [], saphanTokens: Array.isArray(c.saphanTokens) ? c.saphanTokens.filter((x) => x && typeof x === 'object' && Array.isArray(x.destinations)) : [],
     // the Neuro oracle's sender and mirrors (Immunity tab, item 18)
-    immune: c.immune && typeof c.immune === 'object' ? c.immune : null }; } catch { /* default */ }
+    immune: c.immune && typeof c.immune === 'object' ? c.immune : null,
+    // the quantum-exposure inventory's summary (Quantum tab; quantum-core.js readiness() checks it)
+    qsafe: c.qsafe && typeof c.qsafe === 'object' ? c.qsafe : null }; } catch { /* default */ }
   syncApps();
   bindTips(document, $('tip'));
   document.addEventListener('click', (e) => {

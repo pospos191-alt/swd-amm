@@ -449,6 +449,7 @@ export const TAB_TEXT = {
     aichain: ['On-chain AI', 'On-chain AI contracts', 'Risk scores, the AI co-signer committee, hack insurance, security-backed issuance and the model in force at each block, read live from the chain'],
     offline: ["Offline", "Pay and trade offline", "Signed cheques and swap orders that work with no internet: pay from a payment channel, check cheques offline, make swap orders anyone can relay"],
     audit: ["Audit","Open audit network","Anyone asks for an audit, anyone bonded audits, bonded judges decide, runners run the tools; passing code gets an on-chain certificate bound to its code hash"],
+    quantum: ["Quantum", "Quantum safety", "Q-day readiness of the network, check if your address is exposed, lock to an ML-DSA-44 key, or make a rescue pre-commitment"],
   },
   th: {
     home: ['ภาพรวม', 'ภาพรวมเครือข่าย ZETAPHY', 'สถานะเชน บล็อกล่าสุด และขั้นตอนเริ่มต้น'],
@@ -471,6 +472,7 @@ export const TAB_TEXT = {
     aichain: ['AI บนเชน', 'สัญญา AI บนเชน', 'คะแนนความเสี่ยง คณะกรรมการ AI ร่วมลงนาม ประกันการถูกแฮก การออกเหรียญที่หนุนด้วยงานความปลอดภัย และโมเดลที่ใช้ในแต่ละบล็อก อ่านสดจากเชน'],
     offline: ["ออฟไลน์", "จ่ายเงินและเทรดแบบออฟไลน์", "เช็คและคำสั่งสวอปที่เซ็นแล้ว ใช้ได้แม้ไม่มีอินเทอร์เน็ต: จ่ายจากช่องทางจ่ายเงิน ตรวจเช็คแบบออฟไลน์ สร้างคำสั่งสวอปที่ใครก็ส่งขึ้นเชนได้"],
     audit: ["ตรวจสอบ","เครือข่ายตรวจสอบแบบเปิด","ใครก็ขอตรวจได้ ผู้วางเงินประกันตรวจ กรรมการที่วางเงินประกันตัดสิน รันเนอร์รันเครื่องมือ โค้ดที่ผ่านได้ใบรับรองบนเชนที่ผูกกับแฮชโค้ด"],
+    quantum: ["ควอนตัม", "ความปลอดภัยจากควอนตัม", "ความพร้อมรับ Q-day ของเครือข่าย ตรวจว่าที่อยู่ของคุณเปิดเผยกุญแจหรือยัง ล็อกเข้ากับกุญแจ ML-DSA-44 หรือทำคำมั่นกู้คืนล่วงหน้า"],
   },
   zh: {
     home: ['概览', 'ZETAPHY 网络概览', '链的状态、最新区块和入门步骤'],
@@ -493,6 +495,7 @@ export const TAB_TEXT = {
     aichain: ['链上 AI', '链上 AI 合约', '风险评分、AI 联署委员会、黑客保险、安全支撑的发行，以及每个区块生效的模型，均从链上实时读取'],
     offline: ["离线", "离线付款与交易", "无需网络也能用的签名支票和兑换订单：从支付通道付款、离线检查支票、创建任何人都能中继的兑换订单"],
     audit: ["审计","开放审计网络","任何人可申请审计，缴纳保证金者审计，有保证金的评审裁决，运行者运行工具；通过的代码获得与代码哈希绑定的链上证书"],
+    quantum: ["量子", "量子安全", "网络的 Q-day 就绪度，检查你的地址是否暴露，锁定到 ML-DSA-44 密钥，或做救援预承诺"],
   },
   es: {
     home: ['Resumen', 'Resumen de la red ZETAPHY', 'Estado de la cadena, últimos bloques y cómo empezar'],
@@ -515,6 +518,7 @@ export const TAB_TEXT = {
     aichain: ['IA en cadena', 'Contratos de IA en cadena', 'Puntuaciones de riesgo, el comité cofirmante de IA, el seguro contra hackeos, la emisión respaldada por seguridad y el modelo vigente en cada bloque, leídos en vivo de la cadena'],
     offline: ["Sin conexión", "Pagar y operar sin conexión", "Cheques y órdenes de swap firmados que funcionan sin internet: paga desde un canal de pago, verifica cheques sin conexión, crea órdenes que cualquiera puede retransmitir"],
     audit: ["Auditoría","Red de auditoría abierta","Cualquiera pide una auditoría, cualquiera con fianza audita, jueces con fianza deciden y runners ejecutan las herramientas; el código que aprueba obtiene un certificado on-chain ligado a su hash"],
+    quantum: ["Cuántica", "Seguridad cuántica", "Preparación de la red para el Q-day: comprueba si tu dirección está expuesta, bloquéala a una clave ML-DSA-44 o haz un precompromiso de rescate"],
   },
   ko: {
     home: ['개요', 'ZETAPHY 네트워크 개요', '체인 상태, 최신 블록, 시작 방법'],
@@ -537,6 +541,7 @@ export const TAB_TEXT = {
     aichain: ['온체인 AI', '온체인 AI 컨트랙트', '위험 점수, AI 공동 서명 위원회, 해킹 보험, 보안 기반 발행, 블록마다 적용되는 모델을 체인에서 실시간으로 읽어요'],
     offline: ["오프라인", "오프라인 결제와 거래", "인터넷 없이 작동하는 서명된 수표와 스왑 주문: 결제 채널에서 지불하고, 수표를 오프라인으로 확인하고, 누구나 중계할 수 있는 스왑 주문을 만드세요"],
     audit: ["감사","공개 감사 네트워크","누구나 감사를 요청하고, 보증금을 낸 누구나 감사하며, 보증금을 낸 심사위원이 판정하고, 러너가 도구를 실행합니다. 통과한 코드는 코드 해시에 묶인 온체인 인증서를 받습니다"],
+    quantum: ["양자", "양자 안전", "네트워크의 Q-day 준비도, 주소 노출 여부 확인, ML-DSA-44 키에 잠그기, 구조 사전 약정 만들기"],
   },
   ja: {
     home: ['概要', 'ZETAPHY ネットワーク概要', 'チェーンの状態、最新ブロック、始め方'],
@@ -559,6 +564,7 @@ export const TAB_TEXT = {
     aichain: ['オンチェーン AI', 'オンチェーン AI コントラクト', 'リスクスコア、AI 共同署名委員会、ハック保険、セキュリティに裏付けられた発行、各ブロックで有効なモデルをチェーンからライブで読み取ります'],
     offline: ["オフライン", "オフラインで支払い・取引", "インターネットなしで使える署名付き小切手とスワップ注文：支払いチャネルから支払い、小切手をオフラインで確認し、誰でも中継できるスワップ注文を作成"],
     audit: ["監査","オープン監査ネットワーク","誰でも監査を依頼でき、保証金を預けた人が監査し、保証金を預けた審査員が判定し、ランナーがツールを実行。合格したコードはコードハッシュに結び付いたオンチェーン証明書を得ます"],
+    quantum: ["量子", "量子安全性", "ネットワークの Q-day 準備度、アドレスの露出チェック、ML-DSA-44 鍵へのロック、救済の事前コミット"],
   },
   ru: {
     home: ['Обзор', 'Обзор сети ZETAPHY', 'Состояние сети, последние блоки и как начать'],
@@ -581,6 +587,7 @@ export const TAB_TEXT = {
     aichain: ['ИИ в сети', 'ИИ-контракты в сети', 'Оценки риска, ИИ-комитет соподписантов, страхование от взломов, эмиссия под обеспечение безопасностью и модель, действующая на каждом блоке, — прямо из сети'],
     offline: ["Офлайн", "Платежи и торговля офлайн", "Подписанные чеки и заявки на обмен без интернета: платите из платёжного канала, проверяйте чеки офлайн, создавайте заявки, которые может передать в сеть любой"],
     audit: ["Аудит","Открытая сеть аудита","Любой заказывает аудит, любой с залогом проверяет, судьи с залогом решают, раннеры запускают инструменты; прошедший код получает ончейн-сертификат, привязанный к хешу кода"],
+    quantum: ["Квант", "Квантовая безопасность", "Готовность сети к Q-day: проверьте, раскрыт ли ваш адрес, заблокируйте его на ключ ML-DSA-44 или сделайте обязательство спасения"],
   },
   vi: {
     home: ['Tổng quan', 'Tổng quan mạng ZETAPHY', 'Trạng thái chuỗi, khối mới nhất và cách bắt đầu'],
@@ -603,6 +610,7 @@ export const TAB_TEXT = {
     aichain: ['AI trên chuỗi', 'Hợp đồng AI trên chuỗi', 'Điểm rủi ro, ủy ban AI đồng ký, bảo hiểm bị hack, phát hành dựa trên bảo mật và mô hình có hiệu lực ở mỗi khối, đọc trực tiếp từ chuỗi'],
     offline: ["Ngoại tuyến", "Thanh toán và giao dịch ngoại tuyến", "Séc và lệnh swap đã ký hoạt động không cần internet: trả từ kênh thanh toán, kiểm tra séc ngoại tuyến, tạo lệnh swap mà ai cũng chuyển tiếp được"],
     audit: ["Kiểm toán","Mạng kiểm toán mở","Ai cũng yêu cầu kiểm toán, ai có ký quỹ cũng kiểm toán, giám khảo có ký quỹ phân xử, runner chạy công cụ; mã đạt nhận chứng chỉ on-chain gắn với mã băm"],
+    quantum: ["Lượng tử", "An toàn lượng tử", "Mức sẵn sàng Q-day của mạng, kiểm tra địa chỉ có bị lộ, khóa vào khóa ML-DSA-44 hoặc tạo cam kết cứu hộ trước"],
   },
 };
 

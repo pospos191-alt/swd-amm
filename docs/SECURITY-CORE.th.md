@@ -65,6 +65,9 @@ CLI: `zetaphy security qday-commit` แล้ว `zetaphy security qday-reveal`
 - governance ควรกำหนด Q-day เมื่อ validator ส่วนใหญ่ล็อกบัญชีแล้วเท่านั้น ไม่อย่างนั้นการโหวตหลัง Q-day จะทำไม่ได้
   (`gov.sh qday` ไม่ยอมตั้งความสูงที่ใกล้เกินไป)
 
+แผนที่กว้างกว่านี้ (บัญชีรายการจุดเสี่ยงและคะแนนความพร้อม, คำมั่นกู้คืนล่วงหน้า `QuantumRescue` สำหรับกุญแจที่เคยใช้แล้ว,
+การชำระราคาด้วย ML-DSA ล้วน, ISM ของสะพานแบบ PQ และการออกแบบ `MsgQDayRescue` กับการกู้คืนด้วยหลักฐานของ seed): [future/quantum-safe-settlement.th.md](future/quantum-safe-settlement.th.md)
+
 ---
 
 ## 2. Threat gate: ความยินยอม ไม่ใช่การเซ็นเซอร์

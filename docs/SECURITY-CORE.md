@@ -65,6 +65,9 @@ CLI: `zetaphy security qday-commit`, then `zetaphy security qday-reveal`
 - governance should set Q-day only once most validators have locked their accounts; otherwise voting after Q-day will not be possible
   (`gov.sh qday` refuses to set a height that is too close)
 
+The wider plan (exposure inventory and readiness score, `QuantumRescue` pre-commitments for keys that were already used,
+ML-DSA-only settlement, a PQ bridge ISM, and designs for `MsgQDayRescue` and seed-proof recovery): [future/quantum-safe-settlement.md](future/quantum-safe-settlement.md)
+
 ---
 
 ## 2. Threat gate: consent, not censorship
