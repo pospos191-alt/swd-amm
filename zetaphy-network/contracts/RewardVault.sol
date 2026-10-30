@@ -145,7 +145,8 @@ contract RewardVault {
     /// After the delay, anyone may switch to the announced recipients.
     /// What vested before the switch is paid to the old ones first.
     function applyShares() external {
-        if (pendingAt == 0 || block.timestamp < pendingAt) revert TooEarly();
+        // not from inside release() (a recipient): the list being paid never changes under it
+        if (_paying || pendingAt == 0 || block.timestamp < pendingAt) revert TooEarly();
         // Take the pending list first: a recipient called during release()
         // must not be able to apply it a second time.
         Share[] memory next = _pending;

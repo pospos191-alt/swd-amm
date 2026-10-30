@@ -597,12 +597,32 @@ jobs:
       # Static security checks on the code ZETAPHY added. G115 (int
       # conversions) is excluded only for the upstream rate-limit module,
       # where it flags generated and range-checked code.
+      # evmd is its OWN Go module (evmd/go.mod): `gosec ./evmd` run from the
+      # root module does not load it (it exited 0 with nothing scanned), so it
+      # is scanned inside evmd/, the same packages as audit/tools/go-scan.sh
+      # (the app package with the zetaphy_*.go files, its command and config;
+      # evmd/... needs >15 GB of memory). Every issue is listed in the job
+      # summary; the step fails on any issue in a ZETAPHY file (zetaphy_*.go)
+      # except G115: the 19 G115 reports there are on lines annotated
+      # "#nosec G115" (block heights, rounds, unix seconds, struct field
+      # indexes) that gosec 2.22.8 does not attach to multi-line statements,
+      # triaged in audit/triage.yml. Issues in upstream evmd files are listed,
+      # not failed on (the audit pipeline's Go step reports the lines the
+      # ZETAPHY patches add to them).
       - name: gosec (ZETAPHY code)
         working-directory: ${{ env.SRC }}
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8
-          gosec -quiet -exclude-generated ./crypto/mldsa44/... ./precompiles/mldsa/... ./evmd
+          gosec -quiet -exclude-generated ./crypto/mldsa44/... ./precompiles/mldsa/...
           gosec -quiet -exclude-generated -exclude=G115 ./x/ratelimit/...
+          (cd evmd && gosec -quiet -no-fail -exclude-generated -fmt json -out "$RUNNER_TEMP/gosec-evmd.json" . ./cmd/evmd/cmd ./config)
+          n=$(jq '.Issues | length' "$RUNNER_TEMP/gosec-evmd.json")
+          [ -n "$n" ] && [ "$(jq '.Stats.files' "$RUNNER_TEMP/gosec-evmd.json")" -gt 0 ] || { echo "::error::gosec scanned nothing in evmd"; exit 1; }
+          { echo "### gosec in evmd/ (its own module): $n issue(s)"; echo
+            jq -r '.Issues[] | "- \(.rule_id) `\(.file | sub(".*/evmd/"; "evmd/")):\(.line)` \(.details)"' "$RUNNER_TEMP/gosec-evmd.json"; } >> "$GITHUB_STEP_SUMMARY"
+          bad=$(jq '[.Issues[] | select((.file | test("/evmd/zetaphy_[^/]*\\.go$")) and .rule_id != "G115")] | length' "$RUNNER_TEMP/gosec-evmd.json")
+          jq -r '.Issues[] | select((.file | test("/evmd/zetaphy_[^/]*\\.go$")) and .rule_id != "G115") | "::error file=\(.file | sub(".*/evmd/"; "evmd/")),line=\(.line)::gosec \(.rule_id): \(.details)"' "$RUNNER_TEMP/gosec-evmd.json"
+          [ "$bad" = 0 ]
 
       - name: Build zetaphyd
         working-directory: ${{ env.SRC }}/evmd

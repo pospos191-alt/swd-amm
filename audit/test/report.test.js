@@ -269,6 +269,44 @@ test('gate: blocks new untriaged High; triage or the baseline unblock it; accept
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('pending owner confirmation: counts as decided for the gate and --json, labelled pending everywhere it is shown', () => {
+  const { root, out } = fakeOut();
+  try {
+    const ids = collect(out).findings.map((f) => f.id);
+    const send = ids.find((i) => i.startsWith('slither:arbitrary-send-eth:'));
+    const inv = ids.find((i) => i.startsWith('forge:'));
+    const triageText = `findings:\n  - id: ${send}\n    status: false-positive\n    reason: pays only the caller, verified by reading f()\n    decided_by: claude-agent (initial review by reading the code; owner to confirm)\n`;
+    const r = collect(out, { triageText, baselineIds: [inv] });
+    assert.equal(r.blocking.length, 0, 'the gate treats it as decided');
+    assert.equal(toJson(r).findings.find((f) => f.id === send).status, 'false-positive');
+    const md = toMarkdown(r);
+    assert.match(md, /false-positive, PENDING OWNER CONFIRMATION\*\* \(proposed by claude-agent/);
+    assert.match(md, /\*\*Pending owner confirmation:\*\* 1 triage decision\(s\)/);
+    assert.match(md, /\| High \| 2 \| 1 \| 0 \| 0 \| 1 \|/, 'counted apart from confirmed decisions');
+    // the same entry confirmed by the owner: same effect, no pending label
+    const c = collect(out, { triageText: triageText.replace(/claude-agent.*$/m, 'pospos191'), baselineIds: [inv] });
+    assert.equal(c.blocking.length, 0);
+    assert.doesNotMatch(toMarkdown(c), /PENDING OWNER CONFIRMATION/);
+    assert.match(toMarkdown(c), /\| High \| 2 \| 1 \| 0 \| 1 \| 0 \|/);
+    // the gate says so on the CLI
+    writeFileSync(join(root, 'triage.yml'), triageText);
+    writeFileSync(join(root, 'baseline.json'), JSON.stringify({ ids: [inv] }));
+    const g = spawnSync(process.execPath, [REPORT, out, '--md', join(root, 'R.md'), '--triage', join(root, 'triage.yml'), '--baseline', join(root, 'baseline.json'), '--gate'], { encoding: 'utf8' });
+    assert.equal(g.status, 0);
+    assert.match(g.stderr, /::warning file=audit\/triage.yml::1 triage decision\(s\) \(1 High\/Critical\) are pending owner confirmation/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('--json: findings without a line or file (invariants, deps) come out as line 0 and "" (the adapter needs whole numbers)', () => {
+  const { root, out } = fakeOut();
+  try {
+    const j = toJson(collect(out));
+    const inv = j.findings.find((f) => f.tool === 'forge');
+    assert.equal(inv.line, 0);
+    for (const f of j.findings) assert.ok(Number.isInteger(f.line) && typeof f.file === 'string');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('CLI: --json prints exactly one JSON object; --gate exits 1 on a new High and 0 once triaged', () => {
   const { root, out } = fakeOut();
   try {

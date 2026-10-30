@@ -12,7 +12,9 @@
 #                    or containing echidna.yaml / medusa.json (outside node_modules and lib)
 #
 # What runs in a suite directory (conventions in audit/README.md):
-#   foundry.toml   forge test: invariant_* (stateful fuzzing) and test*/testFuzz*
+#   foundry.toml   (in the suite directory, or <project>/foundry.toml with test = "audit/invariants"
+#                  for <project>/audit/invariants)
+#                  forge test: invariant_* (stateful fuzzing) and test*/testFuzz*
 #                  fast: 32 runs x depth 15 (a smoke test); deep: 1000 x 100
 #   foundry.toml   halmos (deep only): symbolic proofs of every check_* function
 #   medusa.json    medusa fuzz (deep only), its own config (targetContracts)
@@ -39,9 +41,17 @@ for d in $dirs; do
   abs="$TARGET/$d"
   if [ ! -d "$abs" ]; then add "$d" none 0 0 1 "directory not there yet"; continue; fi
   name=$(echo "$d" | tr '/' '_')
-  if [ -f "$abs/foundry.toml" ]; then
+  # The Foundry project of a suite: a foundry.toml in the suite directory itself, or the project's
+  # own foundry.toml two levels up (<project>/foundry.toml with test = "audit/invariants", which is
+  # how zetaphy-network / zetaphy-dex / zetaphy-nft keep src = "contracts" next to the suites).
+  fdir=""
+  if [ -f "$abs/foundry.toml" ]; then fdir=$abs
+  elif [ "$(basename "$d")" = invariants ] && [ "$(basename "$(dirname "$d")")" = audit ] && [ -f "$abs/../../foundry.toml" ] \
+    && grep -qE '^\s*test\s*=\s*"audit/invariants"' "$abs/../../foundry.toml"; then fdir=$(cd "$abs/../.." && pwd)
+  fi
+  if [ -n "$fdir" ]; then
     if have forge; then
-      (cd "$abs" && FOUNDRY_INVARIANT_RUNS=$RUNS FOUNDRY_INVARIANT_DEPTH=$DEPTH FOUNDRY_FUZZ_RUNS=$FUZZ \
+      (cd "$fdir" && FOUNDRY_INVARIANT_RUNS=$RUNS FOUNDRY_INVARIANT_DEPTH=$DEPTH FOUNDRY_FUZZ_RUNS=$FUZZ \
         timeout "${FORGE_TIMEOUT:-3600}" forge test --json > "$R/$name.forge.json" 2> "$R/$name.forge.err")
       counts=$(node -e '
         let d; try { d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); } catch { console.log("0 0 1 no-json-output"); process.exit(); }
@@ -54,7 +64,7 @@ for d in $dirs; do
     else add "$d" forge 0 0 1 "forge not installed"; fi
     if [ "$TIER" = deep ]; then
       if have halmos; then
-        (cd "$abs" && timeout "${HALMOS_TIMEOUT:-3600}" halmos --json-output "$R/$name.halmos.json" > "$R/$name.halmos.log" 2>&1)
+        (cd "$fdir" && timeout "${HALMOS_TIMEOUT:-3600}" halmos --json-output "$R/$name.halmos.json" > "$R/$name.halmos.log" 2>&1)
         counts=$(node -e '
           let d; try { d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); } catch { console.log("0 0 1 no-json-output(no check_ functions?)"); process.exit(); }
           let p = 0, f = 0, n = 0; const failed = [];
@@ -66,27 +76,31 @@ for d in $dirs; do
       else add "$d" halmos 0 0 1 "halmos not installed"; fi
     fi
   fi
-  if [ -f "$abs/medusa.json" ] && [ "$TIER" = deep ]; then
+  # medusa.json / echidna.yaml: in the suite directory, or in its echidna/ subdirectory (zetaphy-network
+  # keeps them in audit/invariants/echidna/ and runs them from the project root, where foundry.toml is).
+  fz=""; for c in "$abs" "$abs/echidna"; do [ -f "$c/medusa.json" ] || [ -f "$c/echidna.yaml" ] && { fz=$c; break; }; done
+  run_in=${fdir:-$abs}
+  rel=${fz#"$run_in"/}; [ "$fz" = "$run_in" ] && rel=.
+  if [ -n "$fz" ] && [ -f "$fz/medusa.json" ] && [ "$TIER" = deep ]; then
     if have medusa; then
-      (cd "$abs" && timeout "${MEDUSA_TIMEOUT:-3600}" medusa fuzz --config medusa.json --timeout "${MEDUSA_SECONDS:-1800}" --no-color > "$R/$name.medusa.log" 2>&1)
+      (cd "$run_in" && timeout "${MEDUSA_TIMEOUT:-3600}" medusa fuzz --config "$rel/medusa.json" --timeout "${MEDUSA_SECONDS:-1800}" --no-color > "$R/$name.medusa.log" 2>&1)
       p=$(grep -oE '[0-9]+ test\(s\) passed' "$R/$name.medusa.log" | tail -1 | grep -oE '^[0-9]+' || echo 0)
       f=$(grep -oE '[0-9]+ test\(s\) failed' "$R/$name.medusa.log" | tail -1 | grep -oE '^[0-9]+' || echo 0)
       add "$d" medusa "${p:-0}" "${f:-0}" 0 "-"
     else add "$d" medusa 0 0 1 "medusa not installed"; fi
   fi
-  if [ -f "$abs/echidna.yaml" ] && [ "$TIER" = deep ]; then
+  if [ -n "$fz" ] && [ -f "$fz/echidna.yaml" ] && [ "$TIER" = deep ]; then
     if have echidna; then
-      contracts=$(grep -rhoE '^\s*contract\s+\w*Echidna\w*' "$abs" --include='*.sol' | awk '{print $2}' | sort -u)
+      contracts=$(grep -rhoE '^\s*contract\s+\w*Echidna\w*' "$fz" --include='*.sol' | awk '{print $2}' | grep -v Smoke | sort -u)
       p=0; f=0
       for c in $contracts; do
-        src=$(grep -rlE "^\s*contract\s+$c\b" "$abs" --include='*.sol' | head -1)
-        (cd "$abs" && timeout "${ECHIDNA_TIMEOUT:-3600}" echidna "$src" --contract "$c" --config echidna.yaml --format text > "$R/$name.$c.echidna.log" 2>&1)
+        (cd "$run_in" && timeout "${ECHIDNA_TIMEOUT:-3600}" echidna . --contract "$c" --config "$rel/echidna.yaml" --format text > "$R/$name.$c.echidna.log" 2>&1)
         p=$((p + $(grep -cE ': (passing|passed)' "$R/$name.$c.echidna.log"))); f=$((f + $(grep -cE ': failed' "$R/$name.$c.echidna.log")))
       done
       add "$d" echidna $p $f 0 "${contracts:-no *Echidna* contract}"
     else add "$d" echidna 0 0 1 "echidna not installed"; fi
   fi
-  if [ ! -f "$abs/foundry.toml" ] && [ ! -f "$abs/medusa.json" ] && [ ! -f "$abs/echidna.yaml" ]; then
+  if [ -z "$fdir" ] && [ -z "$fz" ]; then
     add "$d" none 0 0 1 "no foundry.toml / medusa.json / echidna.yaml"
   fi
 done

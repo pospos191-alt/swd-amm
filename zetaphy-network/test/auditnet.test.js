@@ -3,13 +3,15 @@
 // hub's and the CLI's code), so the JS and the contracts are checked against each other too.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getCreateAddress, keccak256, ZeroAddress, AbiCoder, Interface } from 'ethers';
 import solc from 'solc';
 import { Address } from '@ethereumjs/util';
 import { createChain, ZETA } from './helpers/evm.js';
 import { workMocks } from './helpers/workmocks.js';
-import { k, core, codeHashOf, automatedResult } from '../src/auditnet.js';
+import { k, core, codeHashOf, automatedResult, runPipeline } from '../src/auditnet.js';
 
 const DAY = 86400;
 const abi = AbiCoder.defaultAbiCoder();
@@ -518,6 +520,45 @@ test('automated result: the pipeline fixture and Neuro findings hash the same fo
   // the runner commitment of this tuple opens in the contract's terms (checked against AuditRunners above)
   assert.match(core.runCommitment(k, a.tuple, TARGET, salt(1), 0n), /^0x[0-9a-f]{64}$/);
   void abi;
+});
+
+test('pipeline adapter against the REAL audit/report.js --json on a small output dir: the schema matches, the result hashes', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'auditnet-pipeline-'));
+  try {
+    // what audit/run.sh leaves in <out>/raw/ for a one-contract project: compile, Slither, an invariant suite
+    const target = join(root, 'repo');
+    mkdirSync(join(target, 'p', 'contracts'), { recursive: true });
+    writeFileSync(join(target, 'p', 'contracts', 'Vault.sol'), 'contract Vault {\n  function f() external {\n    (bool ok,) = msg.sender.call{value: 1}("");\n  }\n}\n');
+    const raw = join(root, 'out', 'raw');
+    for (const d of ['compile', 'slither', 'invariants']) mkdirSync(join(raw, d), { recursive: true });
+    writeFileSync(join(raw, 'meta.json'), JSON.stringify({ commit: 'd07b980aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab', tier: 'fast', mode: 'target', target, started: '2026-10-30T00:00:00Z' }));
+    writeFileSync(join(raw, 'scope.json'), JSON.stringify({ solc: '0.8.26', projects: [{ name: 'p', root: 'p', files: ['contracts/Vault.sol'], excluded: {}, loc: { 'contracts/Vault.sol': 5 } }] }));
+    writeFileSync(join(raw, 'compile', 'p.json'), JSON.stringify({ project: 'p', root: 'p', contracts: [{ file: 'contracts/Vault.sol', name: 'Vault', runtimeHash: codeHashOf(CODE1), artifactMatch: null }] }));
+    writeFileSync(join(raw, 'slither', 'p__contracts_Vault.sol.json'), JSON.stringify({ success: true, results: { detectors: [
+      { check: 'arbitrary-send-eth', impact: 'High', confidence: 'Medium', description: 'Vault.f() (contracts/Vault.sol#2-4) sends eth to an arbitrary user', elements: [{ source_mapping: { filename_relative: 'contracts/Vault.sol', lines: [3] } }] },
+      { check: 'low-level-calls', impact: 'Informational', confidence: 'High', description: 'low level call in Vault.f() (contracts/Vault.sol#3)', elements: [{ source_mapping: { filename_relative: 'contracts/Vault.sol', lines: [3] } }] },
+    ] } }));
+    // a failed property: a finding with no line (the adapter needs whole numbers)
+    writeFileSync(join(raw, 'invariants', 'summary.json'), JSON.stringify({ passed: 3, failed: 1, notRun: 1, suites: [{ dir: 'p/audit/invariants', tool: 'forge', passed: 3, failed: 1, notRun: 1, note: 'VaultInvariants.invariant_solvent()' }] }));
+    writeFileSync(join(raw, 'tools.tsv'), 'tool\tstatus\tseconds\tversion\tnote\nslither\tran\t2\t0.11.3\t\n');
+    const repoDir = new URL('../../', import.meta.url).pathname; // this repository: audit/report.js
+    const pipeline = await runPipeline({ repoDir, outDir: join(root, 'out'), timeoutMs: 60_000 });
+    assert.equal(pipeline.commit, 'd07b980aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab');
+    assert.deepEqual(pipeline.codeHashes, { Vault: codeHashOf(CODE1).toLowerCase() });
+    assert.deepEqual(pipeline.invariants, { passed: 3, failed: 1, notRun: 1 });
+    assert.equal(pipeline.mutationBps, 0, 'no mutation run: 0');
+    assert.deepEqual(pipeline.findings.map((f) => [f.tool, f.rule, f.severity, f.status]).sort(),
+      [['forge', 'property-violated', 'high', 'open'], ['slither', 'arbitrary-send-eth', 'high', 'open'], ['slither', 'low-level-calls', 'info', 'open']]);
+    assert.ok(pipeline.findings.every((f) => Number.isInteger(f.line) && f.line >= 0 && typeof f.file === 'string'));
+    assert.equal(pipeline.findings.find((f) => f.tool === 'forge').line, 0);
+    const req = { chainId: 77390, target: TARGET, codeHash: codeHashOf(CODE1), sourceHash: SRC };
+    const a = automatedResult(req, { pipeline });
+    const b = automatedResult(req, { pipeline: await runPipeline({ repoDir, outDir: join(root, 'out'), timeoutMs: 60_000 }) });
+    assert.equal(a.tuple.resultHash, b.tuple.resultHash, 'a second run of the same output: the same hash');
+    assert.equal(a.tuple.critHigh, 2);
+    assert.equal(a.tuple.invFailed, 1);
+    assert.equal(a.tuple.invNotRun, 1);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('cross-chain: NeuroOracleSender broadcasts a certificate (and its revocation) to NeuroOracle, which re-checks EXTCODEHASH there', async () => {

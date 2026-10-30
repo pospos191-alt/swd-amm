@@ -760,3 +760,185 @@ findings:
     decided_by: claude-agent (initial review by reading the code; owner to confirm)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqcert.go:203
+  # ---- audit-fixes branch: new High findings of the fast tier after the manual-review fixes and in the
+  # Audit Network contracts (b215a8c), each verified by reading the code; owner to confirm.
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:74e48a7c35f4
+    status: false-positive
+    reason: "the external call before the state change is a view into AuditNetwork.getRequest (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. certify() then writes the certificate and calls network.markCertified, which only updates AuditNetwork's storage."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditCertificate.sol:192
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:3dc81b7de171
+    status: false-positive
+    reason: "the external call before the state change is a view into AuditRunners.result (runners), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditCertificate.sol:193
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:b8040491c9a4
+    status: false-positive
+    reason: "revokeFor is callable only by AuditNetwork (msg.sender check on line 226); the call is the view AuditNetwork.getRequest (immutable network). No user code runs."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditCertificate.sol:227
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:10813079d168
+    status: false-positive
+    reason: "the external call before the state change is a view into the reputation contract's scoreOf (immutable reputation, a view), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditJudges.sol:157
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditJudges.sol:7bb13847c3db
+    status: false-positive
+    reason: "withdrawBond pays msg.sender its own bond: bond and unbondAt are zeroed before _send, the function is nonReentrant, and the recipient is the caller, not a chosen address."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditJudges.sol:173
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:389e0d6738c3
+    status: false-positive
+    reason: "appeal() calls AuditNetwork.setAppeal (immutable network, onlyJudging), which only updates AuditNetwork's own storage (and reverts unless the finding is decided, in time and not appealed); it calls nothing else, so no user code runs before appeals[fid] is written."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditJudges.sol:279
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:5061dee9c0e8
+    status: false-positive
+    reason: "resolveAppeal is governance-only (the timelock). network.decide (immutable AuditNetwork, onlyJudging) updates AuditNetwork's storage and may call AuditCertificate.revokeFor, which only reads AuditNetwork.getRequest; no path reaches user code before decided[item] / credits are written."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditJudges.sol:294
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:1d4a7e40d918
+    status: false-positive
+    reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditJudges.sol:322
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:22a6875b098a
+    status: false-positive
+    reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditJudges.sol:340
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditJudges.sol:94919a440e6c
+    status: false-positive
+    reason: "withdraw pays msg.sender its own credit (owed zeroed before _send), nonReentrant; the recipient is the caller."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditJudges.sol:347
+  - id: aderyn:unsafe-casting:zetaphy-network/contracts/AuditNetwork.sol:eb08501df168
+    status: false-positive
+    reason: "uint64(fid): fid is an index into the _findings array (or an already-uint64 carried id); 2^64 findings cannot exist (each costs a storage push), so the cast never truncates."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditNetwork.sol:315
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditNetwork.sol:9d997c78e2ff
+    status: false-positive
+    reason: "withdrawBond pays msg.sender its own auditor bond: bond and unbondAt zeroed before _send, nonReentrant; the recipient is the caller."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditNetwork.sol:348
+  - id: aderyn:unsafe-casting:zetaphy-network/contracts/AuditNetwork.sol:253e49960185
+    status: false-positive
+    reason: "uint64(fid): fid = _findings.length before the push, an array index that cannot reach 2^64."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditNetwork.sol:431
+  - id: aderyn:unsafe-casting:zetaphy-network/contracts/AuditNetwork.sol:88da76c728e4
+    status: false-positive
+    reason: "uint128(reserve): reserve is at most part + (pool - part) = r.pool, and r.pool is a uint128, so the cast never truncates."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditNetwork.sol:582
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditNetwork.sol:1e29c7fac544
+    status: false-positive
+    reason: "withdraw pays msg.sender its own credit (owed zeroed before _send), nonReentrant; the recipient is the caller."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditNetwork.sol:656
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:99e9a264c707
+    status: false-positive
+    reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditRunners.sol:109
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:c67e8020911c
+    status: false-positive
+    reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditRunners.sol:121
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:3624572d3b55
+    status: false-positive
+    reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. The later reputation.record calls come after every state write of settle()."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditRunners.sol:137
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditRunners.sol:066ae4f1b6fb
+    status: false-positive
+    reason: "withdraw pays msg.sender its own credit: owed is zeroed before the call and the _lock guard refuses re-entry; the recipient is the caller."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditRunners.sol:164
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:ca551f4df3b9
+    status: false-positive
+    reason: "the state change after the call is `_lock = 1`, the release of the re-entrancy guard set before it (owed already zeroed); re-entry during the call reverts with Reentrant()."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditRunners.sol:170
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/BugBounty.sol:1989e9c77c8b
+    status: false-positive
+    reason: "the external call before the state change is a view into NeuroJobs.workers (runners, a view), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. The only other call, _burn, sends to the constant 0x...dEaD (no code) after the state is final."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/BugBounty.sol:241
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:65b72ec11fdd
+    status: false-positive
+    reason: "close() sends ETH only through _burn, to the constant BURN address 0x000000000000000000000000000000000000dEaD (no code; BB-1/BB-2 fix), after the finding's state is set; no user-chosen address."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/BugBounty.sol:288
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:7e49afbd7cc2
+    status: false-positive
+    reason: "refund() sends ETH only through _burn, to the constant BURN address 0x...dEaD (no code), after refunded and the sponsor's credit are written; the sponsor is paid by pull (withdraw)."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/BugBounty.sol:305
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/RewardVault.sol:6a8540746ace
+    status: false-positive
+    reason: "release() sets _paying = true before calling the recipients (governance-chosen, 7-day delay); while it is set, release() returns 0, receive() does not checkpoint, releasable() is 0 and applyShares() reverts, so a recipient re-entering cannot read or change _due/_vesting/_shares. The writes after the loop (_paying = false, _vesting = balance) only close that window."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/RewardVault.sol:108
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/RewardVault.sol:0720ebdb803c
+    status: false-positive
+    reason: "same as the callFund branch: plain recipient call made with _paying = true; every function that reads the vault's accounting is inert or reverts until the loop ends."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/RewardVault.sol:110
+  - id: slither:arbitrary-send-eth:zetaphy-network/contracts/AuditJudges.sol:a5e69e4a79dd
+    status: false-positive
+    reason: "_send is called only from withdrawBond and withdraw, both with to = msg.sender and its own (already zeroed) balance; no caller can choose another recipient."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditJudges.sol:355
+  - id: slither:arbitrary-send-eth:zetaphy-network/contracts/AuditNetwork.sol:2c542cad2bed
+    status: false-positive
+    reason: "_send is called only from withdrawBond and withdraw with to = msg.sender and its own (already zeroed) balance; no caller chooses the recipient."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditNetwork.sol:664
+  - id: slither:reentrancy-eth:zetaphy-network/contracts/AuditRunners.sol:deb8e882f464
+    status: false-positive
+    reason: "withdraw: owed[msg.sender] is zeroed and _lock set to 2 before the call; the only write after it is _lock = 1, the re-entrancy guard's own release. A re-entering caller gets Reentrant()."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/AuditRunners.sol:164
+  - id: slither:reentrancy-eth:zetaphy-network/contracts/RewardVault.sol:68f5add48920
+    status: false-positive
+    reason: "cross-function re-entrancy into release/receive/releasable/applyShares is closed by _paying (set before the recipient calls): release returns 0, receive skips the checkpoint, releasable returns 0, applyShares reverts. _due is zeroed before the calls; _vesting and _paying are written after them only to close the window."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/RewardVault.sol:93
+  - id: slither:reentrancy-eth:zetaphy-network/contracts/RewardVault.sol:cd559ca8ec49
+    status: false-positive
+    reason: "applyShares clears _pending and pendingAt before calling release(), and refuses to run while release() is paying (_paying), so a recipient cannot apply a list twice or swap the list being paid; the writes after release() only install the already-taken list."
+    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    date: 2026-10-30
+    # zetaphy-network/contracts/RewardVault.sol:147

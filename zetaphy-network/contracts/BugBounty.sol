@@ -364,12 +364,12 @@ contract BugBounty {
 
     /// A forfeited deposit: grows the reward of a bounty that can still be won; burned if it is
     /// already paid or refunded (BB-2).
-    function _forfeit(uint256 bountyId, uint256 amount) internal {
+    function _forfeit(uint256 bountyId, uint128 amount) internal {
         Bounty storage b = _bounties[bountyId];
         if (b.paid || b.refunded) {
             _burn(bountyId, amount);
         } else {
-            b.reward += uint128(amount);
+            b.reward += amount;
             forfeitedOf[bountyId] += amount;
         }
     }

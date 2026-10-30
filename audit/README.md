@@ -113,9 +113,16 @@ The pipeline runs whatever exists in `zetaphy-network/audit/invariants/`,
 `scope.json`). In each directory:
 
 - `foundry.toml` → `forge test` runs `invariant_*` (stateful fuzzing) and `test*`
-  functions; in the deep tier `halmos` proves every `check_*` function.
+  functions; in the deep tier `halmos` proves every `check_*` function. The
+  `foundry.toml` may also be the package's own, two levels up
+  (`<package>/foundry.toml` with `test = "audit/invariants"`, `src = "contracts"`), as
+  in the three packages here; forge then runs from the package root. Those configs
+  set `offline = true`: `tools/install.sh` puts its SHA-256-checked solc 0.8.26 at
+  `~/.svm/0.8.26/solc-0.8.26`, where forge looks for it.
 - `medusa.json` → `medusa fuzz` with that config (its `targetContracts`), deep tier.
 - `echidna.yaml` → `echidna` on every contract whose name contains `Echidna`, deep tier.
+  (Both may sit in an `echidna/` subdirectory of the suite; they then run from the
+  package root, as `zetaphy-network/audit/invariants/echidna/` expects.)
 
 A missing directory, or one with none of these files, is "not run". A failed
 property is a **High** finding (`<tool>:property-violated:<dir>:…`).
@@ -182,6 +189,17 @@ in its own PR; (3) otherwise add an entry in a PR that a second person (or the o
 reviews; (4) entries whose finding disappeared are listed in the report — delete them.
 The initial `triage.yml` holds only false positives verified by reading the code
 during the pipeline's first run, each with its reason; the owner should confirm them.
+
+**Pending owner confirmation.** An entry whose `decided_by` says "owner to confirm"
+(or that has `pending: true`) is a provisional decision, proposed by a reviewer who
+read the code. It has the same effect as a confirmed one everywhere it has an effect
+(the PR gate, `--json`, SARIF), so the same finding is never blocking in one place
+and decided in another; and it is labelled **PENDING OWNER CONFIRMATION** everywhere
+it is shown: its own column in the REPORT summary, the finding's status line, the
+Thai summary, and a `::warning::` of the gate with the count. The owner confirms by
+writing their own name in `decided_by`, or rejects by deleting the entry (the
+finding is open again, and blocks the gate if it is High/Critical and not in the
+baseline).
 
 **Baseline** ([`baseline.json`](baseline.json)): the open High/Critical findings a
 person has already seen in a reviewed report. The PR gate fails only on High/Critical

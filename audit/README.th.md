@@ -51,7 +51,7 @@ node --test audit/test/*.test.js                   # เทสต์ของร
 ## วางชุด invariant ไว้ที่ไหน
 
 `zetaphy-network/audit/invariants/`, `zetaphy-dex/audit/invariants/`, `zetaphy-nft/audit/invariants/`
-- มี `foundry.toml` → `forge test` (ฟังก์ชัน `invariant_*` และ `test*`) และในรอบ deep `halmos` พิสูจน์ฟังก์ชัน `check_*`
+- มี `foundry.toml` → `forge test` (ฟังก์ชัน `invariant_*` และ `test*`) และในรอบ deep `halmos` พิสูจน์ฟังก์ชัน `check_*` (`foundry.toml` อาจเป็นของแพ็กเกจเอง สองระดับขึ้นไป: `<package>/foundry.toml` ที่มี `test = "audit/invariants"` แล้ว forge รันจากรากของแพ็กเกจ; ค่า `offline = true` ใช้ solc 0.8.26 ที่ `tools/install.sh` วางไว้ที่ `~/.svm/0.8.26/solc-0.8.26` หลังตรวจ SHA-256)
 - มี `medusa.json` → medusa (รอบ deep)
 - มี `echidna.yaml` → echidna กับทุกสัญญาที่ชื่อมีคำว่า `Echidna` (รอบ deep)
 
@@ -92,6 +92,8 @@ node --test audit/test/*.test.js                   # เทสต์ของร
 ขั้นตอน: (1) อ่านสิ่งที่พบและโค้ดรอบ ๆ (2) ถ้าจริง แก้ใน PR แยก (3) ถ้าไม่จริงหรือยอมรับ เพิ่มรายการใน PR ให้อีกคน (หรือเจ้าของ) ตรวจ
 (4) รายการที่ไม่ตรงกับสิ่งที่พบแล้วจะถูกแสดงในรายงาน ให้ลบออก
 `triage.yml` เริ่มต้นมีเฉพาะ false positive ที่ตรวจโดยอ่านโค้ดจริงในการรันครั้งแรก พร้อมเหตุผลทุกข้อ เจ้าของควรตรวจยืนยัน
+
+**รอเจ้าของยืนยัน:** รายการที่ `decided_by` มีคำว่า "owner to confirm" (หรือมี `pending: true`) เป็นการตัดสินชั่วคราวของผู้รีวิวที่อ่านโค้ดแล้ว มีผลเหมือนการตัดสินที่ยืนยันแล้วทุกที่ที่มีผล (ด่านตรวจ PR, `--json`, SARIF) แต่ทุกที่ที่แสดงจะติดป้าย **PENDING OWNER CONFIRMATION** (คอลัมน์แยกในสรุปของ REPORT, บรรทัดสถานะ, สรุปภาษาไทย และ `::warning::` ของด่านตรวจ) เจ้าของยืนยันโดยใส่ชื่อตัวเองใน `decided_by` หรือปฏิเสธโดยลบรายการ
 
 **Baseline** ([`baseline.json`](baseline.json)): รายการ High/Critical ที่ยังเปิดอยู่และมีคนเห็นแล้วในรายงานที่ผ่านการรีวิว ด่าน PR จะล้มเฉพาะเมื่อพบ
 High/Critical ที่ไม่อยู่ทั้งใน triage และ baseline — ของเก่าไม่ขวางงานอื่น ของใหม่เล็ดลอดไม่ได้ baseline **ไม่ใช่** การตัดสิน รายการเหล่านั้นยังแสดงเป็น

@@ -15,6 +15,16 @@
 
 export const STATUSES = ['fixed', 'false-positive', 'accepted-risk'];
 
+/**
+ * A provisional decision: proposed (e.g. by a reviewing agent) and waiting for the owner's confirmation.
+ * Marked by "owner to confirm" in decided_by (or `pending: true`). It is treated EXACTLY like a decision
+ * everywhere it has an effect (the gate, --json, SARIF): the reviewer verified it by reading the code, and
+ * the owner asked to keep it. Everywhere it is shown (REPORT.md, REPORT.th.md, the gate's output) it is
+ * labelled "pending owner confirmation", and counted apart, so nobody mistakes it for a confirmed one.
+ * The owner confirms by replacing decided_by with their own name (or rejects by deleting the entry).
+ */
+export const isPending = (e) => /owner to confirm/i.test(String(e?.decided_by ?? '')) || String(e?.pending ?? '') === 'true';
+
 function scalar(v) {
   v = v.trim();
   if (v.startsWith('"')) { const m = v.match(/^"((?:[^"\\]|\\.)*)"/); if (!m) throw new Error('quote'); return JSON.parse(`"${m[1]}"`); }
@@ -75,7 +85,7 @@ export function applyTriage(findings, entries) {
     const e = byId.get(f.id);
     if (!e) { f.status = 'open'; continue; }
     used.add(e.id);
-    f.triage = { status: e.status, reason: e.reason, decided_by: e.decided_by, date: e.date ?? '' };
+    f.triage = { status: e.status, reason: e.reason, decided_by: e.decided_by, date: e.date ?? '', pending: isPending(e) };
     if (e.status === 'fixed') { f.status = 'open'; f.note = `marked fixed by ${e.decided_by} but still detected`; } else f.status = e.status;
   }
   return entries.filter((e) => !used.has(e.id));

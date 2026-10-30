@@ -262,9 +262,9 @@ contract StableGateway {
     function refund(uint256 jobId) external returns (uint256 amount) {
         PaidJob storage p = paidJobs[jobId];
         if (p.user == address(0) || p.refunded) revert NotRefundable();
+        p.refunded = true; // before any call (a revert below undoes it)
         (address requester, , uint8 status, , , , , , , ) = jobs.getJob(jobId);
         if (requester != address(this) || status != JOB_FAILED) revert NotRefundable();
-        p.refunded = true;
         amount = (uint256(p.cost) * (10_000 - jobs.FAIL_BURN_BPS())) / 10_000;
         if (jobs.credit(address(this)) != 0) jobs.withdraw();
         emit Refunded(jobId, p.user, p.token, amount);

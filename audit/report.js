@@ -22,6 +22,9 @@ import {
 } from './lib/findings.js';
 import { parseTriage, applyTriage, jsonStatus } from './lib/triage.js';
 
+/** Findings whose decision is provisional (triage.yml "owner to confirm"): decided for the gate, shown as pending. */
+export const pendingOf = (r) => r.findings.filter((f) => f.status !== 'open' && f.triage?.pending);
+
 const HERE = dirname(new URL(import.meta.url).pathname);
 const readJson = (p, d = null) => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return d; } };
 const readText = (p, d = '') => { try { return readFileSync(p, 'utf8'); } catch { return d; } };
@@ -146,12 +149,14 @@ export function collect(out, { triageText = '', baselineIds = [] } = {}) {
   };
 }
 
-/** The machine-readable summary (--json). */
+/** The machine-readable summary (--json). The shape the Audit Network adapter checks strictly
+ *  (zetaphy-hub/audit-core.js validatePipeline): strings are strings and lines whole numbers (0 = none). */
 export function toJson(r) {
   return {
     commit: r.meta.commit ?? 'unknown',
     codeHashes: r.codeHashes,
-    findings: r.findings.map((f) => ({ id: f.id, tool: f.tool, rule: f.rule, severity: f.severity, file: f.file, line: f.line, title: f.title, status: jsonStatus(f.status) })),
+    findings: r.findings.map((f) => ({ id: f.id, tool: f.tool, rule: String(f.rule ?? ''), severity: f.severity, file: String(f.file ?? ''),
+      line: Number.isInteger(f.line) && f.line > 0 ? f.line : 0, title: String(f.title ?? '').slice(0, 2000), status: jsonStatus(f.status) })),
     invariants: { passed: r.invariants.passed ?? 0, failed: r.invariants.failed ?? 0, notRun: r.invariants.notRun ?? 0 },
     mutationScore: r.mutation?.score ?? null,
   };
@@ -170,6 +175,7 @@ function link(f, linkBase) {
 }
 
 function statusText(f) {
+  if (f.triage && f.status !== 'open' && f.triage.pending) return `**${f.status}, PENDING OWNER CONFIRMATION** (proposed by ${esc(f.triage.decided_by)}${f.triage.date ? `, ${f.triage.date}` : ''}): ${esc(f.triage.reason)}`;
   if (f.triage && f.status !== 'open') return `**${f.status}** (${esc(f.triage.decided_by)}${f.triage.date ? `, ${f.triage.date}` : ''}): ${esc(f.triage.reason)}`;
   if (f.note) return `open (${esc(f.note)})`;
   return f.known ? 'open (known: in baseline, awaiting triage)' : 'open (NEW)';
@@ -185,14 +191,20 @@ export function toMarkdown(r, { linkBase = '../' } = {}) {
     `> This is a machine-generated report from free open-source tools and our own scripts. It is **not** an independent audit and does not replace one (see [What this does NOT prove](#what-this-does-not-prove-as-of-${date})).`, '');
 
   p('## Summary', '');
-  p('| Severity | All | Open | Open & new (not in baseline) | Triaged |', '|---|---:|---:|---:|---:|');
+  const pending = pendingOf(r);
+  p('| Severity | All | Open | Open & new (not in baseline) | Triaged (confirmed) | Triaged, pending owner confirmation |', '|---|---:|---:|---:|---:|---:|');
   for (const s of SEVERITIES) {
     const all = r.findings.filter((f) => f.severity === s);
     const fresh = rank(s) <= rank('high') ? all.filter((f) => f.status === 'open' && !f.known).length : '-';
-    p(`| ${s[0].toUpperCase() + s.slice(1)} | ${all.length} | ${count(open, s)} | ${fresh} | ${all.filter((f) => f.status !== 'open').length} |`);
+    const pend = count(pending, s);
+    p(`| ${s[0].toUpperCase() + s.slice(1)} | ${all.length} | ${count(open, s)} | ${fresh} | ${all.filter((f) => f.status !== 'open').length - pend} | ${pend} |`);
   }
   p('');
   p(`- **Gate (PR tier):** ${r.blocking.length ? `FAILS: ${r.blocking.length} new untriaged High/Critical finding(s)` : 'passes: no new untriaged High/Critical finding'}${r.triageErrors.length ? `; triage.yml has ${r.triageErrors.length} error(s)` : ''}.`);
+  if (pending.length) {
+    const ph = pending.filter((f) => rank(f.severity) <= rank('high')).length;
+    p(`- **Pending owner confirmation:** ${pending.length} triage decision(s) in \`triage.yml\` are provisional ("owner to confirm"), ${ph} of them High/Critical. They count as decided for the gate and \`--json\`, exactly like confirmed ones, and are labelled **PENDING OWNER CONFIRMATION** below. The owner confirms one by putting their own name in \`decided_by\`, or rejects it by deleting the entry (the finding is then open again).`);
+  }
   p(`- **Invariant / property suites:** ${r.invariants.passed} passed, ${r.invariants.failed} failed, ${r.invariants.notRun} not run.`);
   const mk = (r.mutation?.results ?? []).reduce((a, m) => a + m.killed + m.survived, 0);
   p(`- **Mutation score:** ${r.mutation?.score != null ? `${(r.mutation.score * 100).toFixed(1)}% of ${mk} non-equivalent mutants (${r.mutation.results.length} contract${r.mutation.results.length === 1 ? '' : 's'}) caught by the tests` : 'not measured in this run (deep tier)'}.`);
@@ -355,12 +367,15 @@ export function toThai(r) {
     L.push(`| ${th[s]} | ${all.length} | ${count(open, s)} | ${rank(s) <= rank('high') ? all.filter((f) => f.status === 'open' && !f.known).length : '-'} |`);
   }
   L.push('', `- **ด่านตรวจ PR:** ${r.blocking.length ? `ไม่ผ่าน — มีสิ่งที่พบระดับสูง/วิกฤตใหม่ที่ยังไม่ได้ตัดสิน ${r.blocking.length} รายการ` : 'ผ่าน — ไม่มีสิ่งที่พบระดับสูง/วิกฤตใหม่ที่ยังไม่ได้ตัดสิน'}`);
+  const pend = pendingOf(r);
+  if (pend.length) L.push(`- **รอเจ้าของยืนยัน:** การตัดสินใน triage.yml ${pend.length} รายการ (ระดับสูง/วิกฤต ${pend.filter((f) => rank(f.severity) <= rank('high')).length}) เป็นการตัดสินชั่วคราว ("owner to confirm") — ด่านตรวจ PR และ --json นับเหมือนตัดสินแล้ว แต่ในรายงานติดป้าย "รอเจ้าของยืนยัน" เจ้าของยืนยันโดยใส่ชื่อตัวเองใน decided_by หรือปฏิเสธโดยลบรายการ`);
   L.push(`- **ชุดทดสอบ invariant / property:** ผ่าน ${r.invariants.passed} · ไม่ผ่าน ${r.invariants.failed} · ยังไม่ได้รัน ${r.invariants.notRun}`);
   L.push(`- **คะแนน mutation testing:** ${r.mutation?.score != null ? `${(r.mutation.score * 100).toFixed(1)}%` : 'ไม่ได้วัดในรอบนี้ (วัดในรอบ deep รายสัปดาห์)'}`);
   L.push(`- **สัญญาที่คอมไพล์:** ${r.contracts.filter((c) => !c.excluded).length} ตัว · artifacts ที่ commit ไว้ตรงกับซอร์ส ${r.contracts.filter((c) => c.artifactMatch === true).length} ตัว ไม่ตรง ${r.contracts.filter((c) => c.artifactMatch === false).length} ตัว`, '');
   const hi = r.findings.filter((f) => rank(f.severity) <= rank('high') && f.status === 'open');
   const hiDone = r.findings.filter((f) => rank(f.severity) <= rank('high') && f.status !== 'open').length;
-  L.push('## รายการระดับสูง/วิกฤตที่ยังเปิดอยู่', '', `(ตัดสินแล้ว ${hiDone} รายการ — ดูเหตุผลใน REPORT.md / triage.yml)`, '');
+  const hiPend = pend.filter((f) => rank(f.severity) <= rank('high')).length;
+  L.push('## รายการระดับสูง/วิกฤตที่ยังเปิดอยู่', '', `(ตัดสินแล้ว ${hiDone} รายการ ในจำนวนนี้รอเจ้าของยืนยัน ${hiPend} รายการ — ดูเหตุผลใน REPORT.md / triage.yml)`, '');
   if (!hi.length) L.push('ไม่มี', '');
   for (const f of hi) L.push(`- \`${f.file}${f.line ? `:${f.line}` : ''}\` — ${f.tool}/${f.rule}: ${esc(f.title)} — สถานะ: ${f.status === 'open' ? (f.known ? 'เปิดอยู่ (รู้แล้ว รอตัดสิน)' : '**เปิดอยู่ (ใหม่)**') : f.status}`);
   L.push('', '## วิธีอ่านและจัดการ', '',
@@ -441,6 +456,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   if (args.includes('--gate')) {
     for (const e of r.triageErrors) console.error(`::error file=audit/triage.yml::${e}`);
+    const pend = pendingOf(r);
+    if (pend.length) console.error(`::warning file=audit/triage.yml::${pend.length} triage decision(s) (${pend.filter((f) => rank(f.severity) <= rank('high')).length} High/Critical) are pending owner confirmation ("owner to confirm"); the gate counts them as decided, like confirmed ones`);
     for (const f of r.blocking) console.error(`::error${f.file && !f.file.includes(':') ? ` file=${f.file},line=${f.line ?? 1}` : ''}::[${f.severity}] ${f.title} (id ${f.id}): new and untriaged; fix it, or record a decision in audit/triage.yml`);
     if (r.blocking.length || r.triageErrors.length) process.exit(1);
   }

@@ -45,6 +45,12 @@ untar() { # url sha256 [tar flags]
 }
 
 [ -x "$DIR/bin/solc" ] || { fetch "https://github.com/ethereum/solidity/releases/download/v$SOLC_VERSION/solc-static-linux" "$SOLC_SHA256" "$DIR/bin/solc"; chmod +x "$DIR/bin/solc"; }
+# forge reads solc from ~/.svm/<v>/solc-<v>, and the suites' foundry.toml set `offline = true` (no
+# download at test time): put the SAME verified binary there (replacing anything that does not match).
+SVM_DIR="${SVM_HOME:-$HOME/.svm}/$SOLC_VERSION"
+if ! echo "$SOLC_SHA256  $SVM_DIR/solc-$SOLC_VERSION" | sha256sum -c --quiet - 2>/dev/null; then
+  mkdir -p "$SVM_DIR"; cp "$DIR/bin/solc" "$SVM_DIR/solc-$SOLC_VERSION"; chmod +x "$SVM_DIR/solc-$SOLC_VERSION"
+fi
 [ -x "$DIR/bin/aderyn" ] || untar "https://github.com/cyfrin/aderyn/releases/download/aderyn-v$ADERYN_VERSION/aderyn-x86_64-unknown-linux-gnu.tar.xz" "$ADERYN_SHA256" xJf
 [ -x "$DIR/bin/osv-scanner" ] || { fetch "https://github.com/google/osv-scanner/releases/download/v$OSV_VERSION/osv-scanner_linux_amd64" "$OSV_SHA256" "$DIR/bin/osv-scanner"; chmod +x "$DIR/bin/osv-scanner"; }
 # forge: the invariant suites (a smoke run in the fast tier, the full run in deep)

@@ -5,9 +5,12 @@ runs done on 2026-10-30 (commit `d07b980` + this change). Manual review: [`manua
 
 ## How to run (free tools only)
 
-Foundry `forge` 1.3.5 (release binary), solc 0.8.26 (`~/.svm/0.8.26/solc-0.8.26`; the configs set
-`offline = true`, so put the static solc binary from the Solidity GitHub release there if forge
-cannot download it). forge-std v1.9.7 is vendored at `audit/lib/forge-std` (src only, MIT/Apache).
+Foundry `forge` (1.3.5 for the first runs; the pipeline pins 1.2.3 in `audit/tools/install.sh`, and the
+re-run after the fixes used it), solc 0.8.26 (`~/.svm/0.8.26/solc-0.8.26`; the configs set
+`offline = true`: `audit/tools/install.sh` puts the SHA-256-checked static solc from the Solidity
+GitHub release there, so CI needs no download at test time). The pipeline's invariant step
+(`audit/tools/invariants.sh`) runs these suites from each package root (`<package>/foundry.toml` has
+`test = "audit/invariants"`). forge-std v1.9.7 is vendored at `audit/lib/forge-std` (src only, MIT/Apache).
 
 ```sh
 cd zetaphy-network && forge test            # 256 runs x depth 50 (local default)
@@ -30,14 +33,12 @@ Build output goes to `audit/out` and `audit/cache` (git-ignored). The contracts 
 they are (`src = "contracts"`); `zetaphy-network` imports the DEX through the `zetaphy-dex/` remapping
 for the offline-orders suite.
 
-**Expected failures.** Three properties fail, because they are true statements of what the contract
-should guarantee and the contract does not: `SimpleMultisigInvariants.invariant_executeNeedsCurrentOwnersQuorum`
-(SM-1, fails every run), `BugBountyInvariants.invariant_noStrandedFunds` (BB-2) and
-`NeuroJobsInvariants.invariant_bondHeldWhileSlashable` (NJ-1); the last two depend on the random seed
-at 256×50 (forge replays a found counterexample from `audit/cache/invariant/failures/` on later runs). A CI job should treat these two as
-known failures until the findings are fixed, then as regressions. Every finding also has a
-deterministic `test_finding_*` that passes while the bug exists (it asserts the bad outcome); after a
-fix, flip each one into a regression test that asserts the good outcome.
+**No expected failures any more.** Three properties used to fail (true statements the contracts did
+not meet): `invariant_executeNeedsCurrentOwnersQuorum` (SM-1), `invariant_noStrandedFunds` (BB-2) and
+`invariant_bondHeldWhileSlashable` (NJ-1). All findings are fixed in `3867da9` and these now pass; every
+`test_finding_*` reproduction became a `test_regression_*` test that asserts the good outcome (the
+same scenario, now refused or paid correctly), and new properties were added for the fixes (rows marked
+*new* below). Any failure is now a regression.
 
 Status legend: **pass** (held for the whole budget), **FAIL** (counterexample found; see the
 finding), **not run** (with the reason), **timeout** (the tool did not finish within its budget).
@@ -59,18 +60,18 @@ finding), **not run** (with the reason), **timeout** (the tool did not finish wi
 | RewardVault | with no deposit in between, ≤ 10% of the balance leaves in any 365 days | Foundry `invariant_scheduleAtMost10PercentPerYear` | pass |
 | RewardVault | releasedDays never ahead of daysElapsed | Foundry `invariant_releasedDaysNotAhead` | pass |
 | RewardVault | for ANY balance ≤ 1e30 wei: one release after n ∈ {1,7,30,91,182,364,365} days pays ≤ 10% (+ bal/1e20 + 2 wei) and grows with n | Halmos `RewardVaultSymbolic::check_releaseAtMost10PercentPerYear` | timeout (default solver: TIMEOUT after 991 s; bitwuzla, 600 s per query: no result after 28 min, stopped). The 256-bit `bal * z / RAY` products are the bottleneck. Covered by the Foundry schedule invariant above |
-| RewardVault | a deposit arriving after N idle days is released retroactively (RV-1) | Foundry `test_finding_depositIsReleasedRetroactively` | demonstrates RV-1 |
-| SimpleMultisig | a proposal executes only with `threshold` confirmations of the CURRENT owners | Foundry `invariant_executeNeedsCurrentOwnersQuorum` | **FAIL** (SM-1), every run; shrunk to 12 calls |
+| RewardVault | a deposit vests from its arrival, never retroactively (RV-1, fixed) | Foundry `test_regression_RV1_depositNotReleasedRetroactively`, `test_regression_RV1_mixedDeposits`, fuzz `testFuzz_RV1_depositNeverVestsRetroactively` | pass |
+| SimpleMultisig | a proposal executes only with `threshold` confirmations of the CURRENT owners | Foundry `invariant_executeNeedsCurrentOwnersQuorum` | pass after the SM-1 fix (was **FAIL** every run, shrunk to 12 calls) |
 | SimpleMultisig | same property | Echidna `EchidnaMultisig` (20,000 calls); Medusa (shared 201,565-call run) | pass / pass — neither found the sequence in this budget (Foundry did in every run, and the unit reproduction proves it): a pass here is not evidence of safety |
 | SimpleMultisig | threshold ∈ [2, owners]; owners distinct, non-zero | Foundry `invariant_config` | pass |
-| SimpleMultisig | removed owner's confirmation still executes a proposal (SM-1) | Foundry `test_finding_removedOwnerConfirmationStillCounts` | demonstrates SM-1 |
+| SimpleMultisig | a removed owner's confirmation never counts; a lowered threshold is not retroactive (SM-1, fixed) | Foundry `test_regression_SM1_removedOwnerConfirmationDoesNotCount`, `test_regression_SM1_loweredThresholdNotRetroactive` | pass |
 | ZetaphyTimelock | no operation before its delay; only proposers schedule; executions = effects | Foundry `invariant_delayRespected` | pass |
 | ZetaphyTimelock | the timelock is its own and only admin | Foundry `invariant_selfAdministered` | pass |
 | BridgeGuard + BridgeAirlock | bridged supply = released − burned | Foundry `Bridge.inv.t.sol::invariant_supplyMatchesFlows` | pass |
 | BridgeAirlock | release only with ≥ threshold independent attestations, after quarantine, not vetoed, not marked, once | Foundry `invariant_releaseRules` (includes lying lanes) | pass |
 | BridgeGuard | per UTC day, minted ≤ the highest hard cap in force at a mint that day | Foundry `invariant_dailyCap` | pass |
 | BridgeGuard | paused ⇒ nothing mints or burns | Foundry `invariant_pauseStopsEverything` | pass |
-| BridgeAirlock | removed lane's attestation still counts (BA-1) | Foundry `test_finding_removedLaneAttestationCounts` | demonstrates BA-1 |
+| BridgeAirlock | a removed (or removed and re-added) lane's attestation does not count; dropping below the threshold restarts the quarantine (BA-1, fixed) | Foundry `test_regression_BA1_*` (3) | pass |
 | HyperlaneLockBoxV2 | balance = locked = locks − claims | Foundry `invariant_backing` | pass |
 | HyperlaneLockBoxV2 | claim once, only when ready, unvetoed, unpaused, within the daily limit | Foundry `invariant_claimRules` | pass |
 | HyperlaneLockBoxV2 | messages from another sender / naming another source never queued | Foundry `invariant_noForgedQueue` | pass |
@@ -78,35 +79,38 @@ finding), **not run** (with the reason), **timeout** (the tool did not finish wi
 | HyperlaneLockBoxV2 | a re-entering receiver cannot double-claim | Foundry `test_lockbox_receiverCannotDoubleClaim` | pass |
 | HackInsurance | balance ≥ bondsHeld and bondsHeld = exactly the live bonds | Foundry `HackInsurance.inv.t.sol::invariant_bondsBacked` | pass |
 | HackInsurance | activeCover = Σ amounts of covers not ended | Foundry `invariant_activeCover` | pass |
-| HackInsurance | Σ LP shares = totalShares; one payout per cover | Foundry `invariant_sharesAndSinglePayout` | pass |
-| HackInsurance | approved claim paid 0 by a stranger once the daily cap is used (HI-1) | Foundry `test_finding_payoutGriefedToZeroByDailyCap` | demonstrates HI-1 |
-| HackInsurance | standing withdrawal flees a pending claim (HI-2) | Foundry `test_finding_standingWithdrawalFleesKnownIncident` | demonstrates HI-2 |
+| HackInsurance | Σ LP shares = totalShares; one full payout per cover; *new:* no claim paid above its entitlement / loss / cover, no payout of 0 while something is owed (HI-1) | Foundry `invariant_sharesAndSinglePayout` | pass |
+| HackInsurance | *new:* openClaims = claims Voting/Approved/Disputed; no LP withdraws while one is open (HI-2) | Foundry `invariant_noFleeingOpenClaims` | pass |
+| HackInsurance | an approved claim is never closed short by the daily cap; a large one is paid over days (HI-1, fixed) | Foundry `test_regression_HI1_payoutNotGriefedByDailyCap`, `test_regression_HI1_largeClaimPaidOverDays` | pass |
+| HackInsurance | no standing withdrawal; frozen while a claim is open (HI-2, fixed) | Foundry `test_regression_HI2_noStandingWithdrawal` | pass |
+| HackInsurance | share price: an emptied pool does not dilute a new deposit; donation inflation unprofitable; any round trip pays ≤ pool and ≤ deposit (HI-3, fixed) | Foundry `test_HI3_*` (2), fuzz `testFuzz_HI3_roundTripNeverPaysMoreThanPool` | pass |
 | UsefulIssuance | balance = Σ accrued + pendingOverflow; accrued ≤ cap; in = held + out | Foundry `Rewards.inv.t.sol::invariant_accounting`, Echidna `EchidnaIssuance`, Medusa | pass / pass / pass |
 | UsefulWork (+ UsefulIssuance) | balance = reserve + Σ credits + (fee + deposits) of unsettled jobs | Foundry `invariant_conservation` | pass |
 | UsefulWork | an accepted result has ≥ quorum matching reveals | Foundry `invariant_resultHasQuorum` | pass |
 | BugBounty | solvent: balance ≥ credits + open rewards + open deposits | Foundry `invariant_solvent` | pass |
-| BugBounty | no money stranded (balance = liabilities) | Foundry `invariant_noStrandedFunds` | **FAIL** (BB-2) in the first full run (stranded 0.5 ether after 13 calls); passed in the second run (seed-dependent at 256×50) |
-| BugBounty | deposit stranded after payout (BB-2) | Foundry `test_finding_depositStrandedAfterPayout` | demonstrates BB-2 |
-| BugBounty | sponsor fills the 32 slots, gets everything back (BB-1) | Foundry `test_finding_sponsorFillsFindingSlots` | demonstrates BB-1 |
+| BugBounty | no money stranded (balance = liabilities) | Foundry `invariant_noStrandedFunds` | pass after the BB-2 fix (was **FAIL** in the first full run, stranded 0.5 ether after 13 calls) |
+| BugBounty | *new:* the sponsor never holds a slot of its own bounty and is never refunded forfeited deposits (BB-1) | Foundry `invariant_sponsorCannotBlockOrProfit` | pass |
+| BugBounty | no deposit stranded after a payout or a refund (BB-2, fixed) | Foundry `test_regression_BB2_noDepositStrandedAfterPayout`, `test_regression_BB2_noDepositStrandedAfterRefund` | pass |
+| BugBounty | the sponsor cannot commit; a sock-puppet flood is capped per address, frees its slots after the reveal window and is burned, not refunded (BB-1, fixed) | Foundry `test_regression_BB1_sponsorCannotCommit`, `test_regression_BB1_sybilFloodCostsAndExpires` | pass |
 | ComputeMarket | balance = Σ credits + prices of unsettled tasks; one settlement per task | Foundry `invariant_escrow`, Echidna `EchidnaCompute`, Medusa | pass / pass / pass |
 | ComputeMarket | a re-entering withdrawer gets nothing more | Foundry `test_compute_withdrawReentryGetsNothing` | pass |
 | DataDAO | reserved = what live rounds owe; balance ≥ reserved; claims pay their leaf | Foundry `invariant_reserved` | pass |
 | AgentPolicyWallet | per token ≤ 2× perPeriod in any sliding period; no unlimited token; nothing while frozen; allowed recipients only; cosign threshold respected | Foundry `Wallets.inv.t.sol::invariant_agentWithinCaps` | pass |
-| AgentPolicyWallet | agent moves an NFT of an allowed target uncapped (APW-1) | Foundry `test_finding_agentMovesNftOfAllowedTarget` | demonstrates APW-1 |
+| AgentPolicyWallet | transfer-like selectors refused and never allow-listable; any other call needs its (target, selector) pair; value capped (APW-1, fixed) | Foundry `test_regression_APW1_*` (2), fuzz `testFuzz_APW1_contractCallsNeedAllowedSelector` | pass |
 | QuantumWallet | nonce = authorised actions; no replay; both keys needed (precompile mocked) | Foundry `invariant_noReplay` | pass |
-| AgentRegistry | balance = Σ bonds + open-claim deposits; openClaims counter exact; no bond out while a claim is open | Foundry `invariant_accounting` | pass |
-| AgentRegistry | bond withdrawn inside the 30-day claim window (AR-1) | Foundry `test_finding_bondWithdrawnInsideClaimWindow` | demonstrates AR-1 |
+| AgentRegistry | balance = Σ bonds + open-claim deposits; openClaims counter exact; no bond out while a claim is open; *new:* no bond out inside the claim window of the last action (AR-1) | Foundry `invariant_accounting` | pass |
+| AgentRegistry | the bond stays for the whole 30-day claim window (AR-1, fixed) | Foundry `test_regression_AR1_bondStaysForTheClaimWindow`, `test_regression_AR1_noActionsSevenDays` | pass |
 | StableGateway | one request per nonce; user pays ≤ maxCost; reserve pays exactly fee | Foundry `invariant_requests` | pass |
-| StableGateway + NeuroJobs | unanswered job refunds 95% in native to the user (SG-1) | Foundry `test_finding_userGetsNativeRefundForStablecoin` | demonstrates SG-1 |
+| StableGateway + NeuroJobs | an unanswered job is refunded in the stablecoin paid, the ZETAPHY returns to the reserve; never an exchange (SG-1, fixed) | Foundry `test_regression_SG1_refundStaysInStablecoin`, fuzz `testFuzz_SG1_noExchange` | pass |
 | ZetaphyEarly | balances sum to the fixed supply | Foundry `Early.inv.t.sol::invariant_supplyConserved` | pass |
-| ZetaphyEarlyFarm | owed ≤ ZEARLY held; Σ earned ≤ owed; staked = LP held | Foundry `invariant_farmFunded` | pass |
-| ZetaphyEarlyFarm | idle-period rewards locked (EF-1) | Foundry `test_finding_idleRewardsLocked` | demonstrates EF-1 |
+| ZetaphyEarlyFarm | owed ≤ ZEARLY held; Σ earned ≤ owed; staked = LP held; *new:* owed = claimable + stream to come + unsettled idle stream (nothing owed to nobody, EF-1) | Foundry `invariant_farmFunded` | pass |
+| ZetaphyEarlyFarm | idle-period rewards recoverable (EF-1, fixed) | Foundry `test_regression_EF1_idleRewardsRecoverable`, `test_regression_EF1_idleAfterExit` | pass |
 | ZetaphyEarlyFarm | LP-token hook cannot re-enter `withdraw` | Foundry `test_farm_lpHookCannotReenterWithdraw` | pass |
 | ZetaphyEarlyPolls / Pass / Quests | release once; polls hold locked votes; one pass per wallet ≤ maxSupply; one quest payment per wallet ≤ cap | Foundry `invariant_pollsPassQuests` | pass |
 | NeuroJobs | balance = reward pool + Σ credits + Σ bonds + open fees + open challenge bonds | Foundry `NeuroJobs.inv.t.sol::invariant_solvency` | pass |
 | NeuroJobs | totalActiveBond / activeWorkers match the runners | Foundry `invariant_activeBond` | pass |
-| NeuroJobs | no bond withdrawn while its runner can still be slashed (open round, grace, challengeable or challenged round 1) | Foundry `invariant_bondHeldWhileSlashable` | **FAIL** (NJ-1) in 1 of 3 full runs (5-call counterexample); passed in the other two (seed-dependent) |
-| NeuroJobs | unrevealed seat withdraws its bond before anyone calls expire (NJ-1) | Foundry `test_finding_unrevealedSeatWithdrawsBondBeforeExpire` | demonstrates NJ-1 |
+| NeuroJobs | no bond withdrawn while its runner can still be slashed (open round, grace, challengeable or challenged round 1) | Foundry `invariant_bondHeldWhileSlashable` | pass after the NJ-1 fix (was **FAIL** in 1 of 3 full runs, 5-call counterexample) |
+| NeuroJobs | an unrevealed seat holds the bond until its penalty lands, whoever calls expire and whenever; a reveal resolves the seat (NJ-1, fixed) | Foundry `test_regression_NJ1_unrevealedSeatHoldsBondUntilPenalised`, `test_regression_NJ1_revealResolvesSeat` | pass |
 
 Harness checks (not properties): `test_handlerReaches*` and `EchidnaHarnessesSmoke` assert that each
 handler actually reaches the money-moving paths, so a passing invariant is not vacuous.
@@ -156,6 +160,14 @@ BugBounty 4, ComputeMarket 2, DataDAO 1, AgentPolicyWallet 2, QuantumWallet 1, A
 StableGateway 2 (one with NeuroJobs), ZetaphyEarly 1, ZetaphyEarlyFarm 3, Polls/Pass/Quests 1
 (combined), NeuroJobs 4, ZetaphyPair/Router 5, ZetaphyDlmmPair 4, DlmmMath/DlmmBinTree 7,
 NFTMarketplace 2.
+
+### Re-run after the fixes (commit `3867da9`, forge 1.2.3)
+
+`forge test` at 256 × 50 in each package: zetaphy-network 82 of 82 (33 suites), zetaphy-dex 12 of 12,
+zetaphy-nft 2 of 2; the pipeline's fast tier (`audit/run.sh --tier fast`, 32 × 15) found the three
+packages through their `foundry.toml` and reported 96 passed, 0 failed, 0 not run. Halmos, Echidna and
+Medusa were not re-run (deep tier); `RewardVaultSymbolic` now checkpoints the balance first (coins put
+there with `vm.deal` bypass `receive()` and only start vesting at a checkpoint after RV-1).
 
 ## What did not run here, and why
 
