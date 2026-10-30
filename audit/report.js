@@ -164,7 +164,8 @@ export function toJson(r) {
 
 // ---------------------------------------------------------------- Markdown
 
-const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+// Markdown table cell: backslashes first, then pipes; newlines become spaces
+const esc = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
 const count = (list, sev) => list.filter((f) => f.severity === sev).length;
 
 function link(f, linkBase) {
