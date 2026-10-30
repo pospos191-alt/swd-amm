@@ -1090,6 +1090,16 @@ benchmarks with `npm run bench:starklc`.
 What is proven vs trusted, security bits, benchmarks, in-circuit ML-DSA and bridge roadmap:
 [docs/future/stark-light-client.md](../docs/future/stark-light-client.md).
 
+### Trustless bridge (prototype)
+
+ZETAPHY → Ethereum without a multisig: `contracts/StarkVerifier.sol` verifies the STARK on chain (≈ 1.4–3 M gas in mode
+none, 2–6 M with revealed signatures for n ≤ 21), `StarkLightClient.sol` keeps finalized headers and app hashes (signatures
+disputable during a window, or checked at once), `ZetaphyOutbox.sol` commits outgoing messages in storage slot 0 and
+`ZetaphyBridgeInbox.sol` releases tokens on IAVL + multistore + outbox proofs (≈ 0.21 M gas) with replay protection, a daily
+limit and a pause. `BtcLightClient.sol`: Bitcoin headers and SPV on ZETAPHY, tested with real mainnet headers. Tests in
+`test/starkbridge.test.js` and `test/btclc.test.js`; trust model per mode, gas and Bitcoin options:
+[docs/future/trustless-bridge.md](../docs/future/trustless-bridge.md).
+
 ## Testing
 
 - `npm test`: tests the contracts on an in-memory EVM and tests the runner program (CI runs it every time)

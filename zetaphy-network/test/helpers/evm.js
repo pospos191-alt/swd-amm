@@ -12,6 +12,9 @@ export const ZETA = 10n ** 18n;
 /**
  * @param names  plain test accounts; @param fundAddresses  {name: '0x…'} accounts whose keys the test holds
  * @param opts.precompiles  {'0x…address': (input: Uint8Array) => Uint8Array} precompiles written in JS
+ *   (a function's optional `gas` property is the gas it charges; 3000 otherwise)
+ * @param opts.chainId  another EVM chain id (block.chainid; Ethereum mainnet's 1 otherwise)
+ * @param opts.txGasLimit  the gas of each transaction (15 M otherwise; blocks carry 30 M or this, if higher)
  *   (e.g. helpers/precompiles.js: the real ML-DSA check at 0x…0900, P-256 at 0x…0100)
  */
 export async function createChain(names = [], fundAddresses = {}, opts = {}) {
@@ -30,9 +33,13 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
   };
   const customPrecompiles = Object.entries(opts.precompiles ?? {}).map(([addr, fn]) => ({
     address: Address.fromString(addr),
-    function: ({ data }) => ({ executionGasUsed: 3000n, returnValue: fn(data) ?? new Uint8Array(0) }),
+    function: ({ data }) => ({ executionGasUsed: BigInt(fn.gas ?? 3000n), returnValue: fn(data) ?? new Uint8Array(0) }),
   }));
-  const evm = await EVM.create({ common: new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun }), blockchain, customPrecompiles });
+  const common = opts.chainId
+    ? Common.custom({ chainId: Number(opts.chainId), networkId: Number(opts.chainId), name: `chain-${opts.chainId}` }, { baseChain: Chain.Mainnet, hardfork: Hardfork.Cancun })
+    : new Common({ chain: Chain.Mainnet, hardfork: Hardfork.Cancun });
+  const txGasLimit = BigInt(opts.txGasLimit ?? 15_000_000n);
+  const evm = await EVM.create({ common, blockchain, customPrecompiles });
   const sm = evm.stateManager;
   let time = 1_800_000_000n;
   let number = 1n;
@@ -51,12 +58,12 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
   const block = () => ({
     header: {
       number, timestamp: time, coinbase: Address.zero(), difficulty: 0n, prevRandao,
-      gasLimit: 30_000_000n, baseFeePerGas: 0n, cliqueSigner: () => Address.zero(), getBlobGasPrice: () => 0n,
+      gasLimit: txGasLimit > 30_000_000n ? txGasLimit : 30_000_000n, baseFeePerGas: 0n, cliqueSigner: () => Address.zero(), getBlobGasPrice: () => 0n,
     },
   });
 
   async function exec(from, to, data, value = 0n) {
-    const r = await evm.runCall({ caller: acct[from] ?? from, to, data: hexToBytes(data), value, gasLimit: 15_000_000n, block: block() });
+    const r = await evm.runCall({ caller: acct[from] ?? from, to, data: hexToBytes(data), value, gasLimit: txGasLimit, block: block() });
     // Every transaction (and call) gets its own block, with an empty block
     // after it, so the next one can already read the block hash NeuroJobs'
     // lottery uses (blockhash(start block + 1)), as two blocks later on a chain.
@@ -143,9 +150,9 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
           return (res.execResult.logs ?? []).map(([, topics, data]) => { try { return iface.parseLog({ topics: topics.map(bytesToHex), data: bytesToHex(data) }); } catch { return null; } });
         },
         /** Execution gas of a call/tx (without the 21000 base and calldata cost), and the calldata. */
-        async gas(from, fn, args = []) {
+        async gas(from, fn, args = [], value = 0n) {
           const data = iface.encodeFunctionData(fn, args);
-          const res = await exec(from, address, data);
+          const res = await exec(from, address, data, value);
           if (res.execResult.exceptionError) throw new Error(decodeError(res.execResult.returnValue));
           return { exec: Number(res.execResult.executionGasUsed), data };
         },

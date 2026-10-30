@@ -1090,6 +1090,15 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 อะไรพิสูจน์แล้ว อะไรต้องเชื่อ ระดับความปลอดภัย ผลวัด และแผนตรวจ ML-DSA ในวงจรและสะพานข้ามเชน:
 [docs/future/stark-light-client.th.md](../docs/future/stark-light-client.th.md)
 
+### สะพานแบบไม่ต้องเชื่อใจใคร (ต้นแบบ)
+
+ZETAPHY → Ethereum โดยไม่ต้องมี multisig: `contracts/StarkVerifier.sol` ตรวจ STARK บนเชน (ราว 1.4–3 M แก๊สในโหมด none และ 2–6 M
+เมื่อเปิดเผยลายเซ็น สำหรับ n ≤ 21), `StarkLightClient.sol` เก็บ header และ app hash ที่สิ้นสุดแล้ว (ลายเซ็นโต้แย้งได้ในหน้าต่างเวลา หรือตรวจทันที),
+`ZetaphyOutbox.sol` ผูกมัดข้อความขาออกไว้ใน storage slot 0 และ `ZetaphyBridgeInbox.sol` ปล่อยโทเคนเมื่อมีหลักฐาน IAVL + multistore + outbox
+(ราว 0.21 M แก๊ส) พร้อมกันส่งซ้ำ จำกัดยอดรายวัน และปุ่มหยุด `BtcLightClient.sol`: header และ SPV ของ Bitcoin บน ZETAPHY ทดสอบด้วย header
+mainnet จริง ทดสอบใน `test/starkbridge.test.js` และ `test/btclc.test.js` ความเชื่อใจแต่ละโหมด ค่าแก๊ส และทางเลือกของ Bitcoin:
+[docs/future/trustless-bridge.th.md](../docs/future/trustless-bridge.th.md)
+
 ## ทดสอบ
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)
