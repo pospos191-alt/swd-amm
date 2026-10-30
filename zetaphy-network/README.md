@@ -1070,6 +1070,16 @@ nothing to govern. Browsers post signed, encrypted offers from a throwaway fauce
 `KEYFILE=… node scripts/signal-board.js deploy | show --board 0x…`; tests in `test/signalboard.test.js`.
 Not deployed yet. Design and privacy: [docs/future/browser-ai.md](../docs/future/browser-ai.md).
 
+## Offline trading: cheques and offline swap orders (testnet)
+
+`contracts/ZetaphyCheques.sol`: one-way payment channels whose cheques (EIP-712 running totals) are signed by a dedicated
+offline key; anyone may cash for the payee, never more than the deposit; the payer closes after expiry plus a 24-hour
+challenge window. `contracts/ZetaphyOfflineOrders.sol`: swap orders signed offline, filled by anyone through the ZETAPHY
+Swap router for a relayer fee (nonce bitmap, deadline, all-or-nothing). Neither has an owner.
+`ZETAPHY_RPC=… KEYFILE=… node scripts/offline-deploy.js [--router 0x…]` deploys both (testnet only) and writes
+`deployments/offline-77390.json`, which the hub reads; `… offline-deploy.js check` reads it back. Tests in `test/offline.test.js`.
+Design, threat model and limits: [docs/future/offline-trading.md](../docs/future/offline-trading.md).
+
 ## Testing
 
 - `npm test`: tests the contracts on an in-memory EVM and tests the runner program (CI runs it every time)

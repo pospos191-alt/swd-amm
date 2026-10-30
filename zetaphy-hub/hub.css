@@ -542,3 +542,35 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 .ac-list { margin: 0 0 8px; padding-left: 18px; max-height: 9em; overflow: auto; overflow-wrap: anywhere; }
 .ac-level.lv-minimal, .ac-level.lv-low { color: var(--ok); }
 .ac-level.lv-medium, .ac-level.lv-high { color: var(--warn); }
+
+/* the network pill (hub.js): shown while the browser is offline */
+.net-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid rgba(255, 176, 32, .4); border-radius: 99px; background: rgba(255, 176, 32, .1); color: var(--warn); font-size: 12px; }
+.net-pill[hidden] { display: none; }
+.net-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+
+/* Offline tab (offline.js) */
+.off-card .kv3 dd { overflow-wrap: anywhere; }
+.off-card h3 { margin: 10px 0 6px; font-size: 13px; font-weight: 600; }
+.off-form { display: grid; gap: 8px; }
+.off-form input, .off-form select { width: 100%; box-sizing: border-box; }
+.off-field { display: grid; gap: 4px; min-width: 0; }
+.off-2 { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.off-text { width: 100%; box-sizing: border-box; resize: vertical; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 12px; color: inherit; font-size: 12px; outline: none; overflow-wrap: anywhere; }
+.off-text:focus { border-color: var(--accent); }
+.off-in { display: grid; gap: 6px; }
+.off-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.off-pick { cursor: pointer; }
+.row.wrap { flex-wrap: wrap; }
+.off-share { display: grid; gap: 10px; grid-template-columns: 180px minmax(0, 1fr); align-items: start; margin-top: 8px; }
+.off-share-side { display: grid; gap: 6px; }
+.off-qr { width: 180px; height: 180px; border-radius: 8px; }
+.off-qr-bg { fill: #fff; }
+.off-qr-fg { fill: #000; }
+.off-risks { margin: 0 0 8px; padding-left: 18px; display: grid; gap: 6px; }
+.off-problems { margin: 4px 0 8px; padding-left: 18px; }
+.off-problems .bad { color: var(--bad); }
+.off-net { margin: 0 0 10px; font-size: 12px; }
+.off-net[data-online="0"] { color: var(--warn); }
+.off-net[data-online="1"] { color: var(--ok); }
+.off-ch td { white-space: normal; vertical-align: top; }
+@media (max-width: 700px) { .off-share { grid-template-columns: minmax(0, 1fr); } .off-2 { grid-template-columns: minmax(0, 1fr); } }

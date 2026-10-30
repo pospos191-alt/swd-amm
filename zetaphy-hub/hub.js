@@ -45,6 +45,7 @@ const ICONS = {
   gov: '<path d="M3 21h18M5 21V10M19 21V10M9 21v-7M15 21v-7M12 3l9 6H3z"/>',
   immune: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M12 8v8M8 12h8"/>',
   aichain: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
+  offline: '<path d="M3 8.5a14 14 0 0 1 18 0M6.5 12a9 9 0 0 1 11 0M10 15.5a4 4 0 0 1 4 0"/><circle cx="12" cy="19" r="1"/><path d="M3 3l18 18"/>',
   neuro: '<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-6 0"/>',
 };
 // Their words (label, title, hover text) are in i18n.js TAB_TEXT.
@@ -57,6 +58,7 @@ const TABS = [
   { id: 'mine', page: true, fresh: true },
   { id: 'saphan', page: true, fresh: true },
   { id: 'agents', page: true, fresh: true },
+  { id: 'offline', page: true, fresh: true },
   { id: 'nft', src: 'nft/' },
   { id: 'explorer', src: 'explorer/', group: 'data' },
   { id: 'neuro', src: 'neuro/web/' },
@@ -626,6 +628,11 @@ async function start() {
   $('faucet-form').addEventListener('submit', faucet);
   $('connect').addEventListener('click', () => connect().then(loadMine).catch((e) => msg($('mine-body').querySelector('.msg') ?? $('mine-body').appendChild(el('p', { class: 'msg' })), e.message, 'bad')));
   wb.mount();
+  // the network pill: shown while the browser is offline (the Offline tab keeps working; sw.js serves the app shell)
+  const net = () => { $('net-pill').hidden = navigator.onLine !== false; };
+  net();
+  window.addEventListener('online', net);
+  window.addEventListener('offline', net);
   current = new URL(location.href).searchParams.get('tab') ?? 'home';
   applyLang();
   refresh();
