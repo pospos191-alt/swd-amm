@@ -9,13 +9,30 @@ import { h } from './dom.js';
 import { threatQueries, readThreat, REASONS, reasonText, DISCLAIMER } from '../vendor/zetaphy-lib.js';
 
 const ADDR = /^0x[0-9a-f]{40}$/;
+/** isFlagged(uint256,address) of an IImmuneFeed (zetaphy-network/contracts/ImmuneGuard.sol). */
+export const IMMUNE_IS_FLAGGED = '0x3f68ab60';
+export const IMMUNE_SEVERITY = { 1: 'info', 2: 'suspicious', 3: 'high', 4: 'critical' };
+/** isFlagged's answer -> { flagged, severity, evidenceHash } | null (not an answer). */
+export function readImmune(hex) {
+  const b = typeof hex === 'string' ? hex.replace(/^0x/, '') : '';
+  if (b.length < 256 || /[^0-9a-f]/i.test(b)) return null;
+  const w = (i) => BigInt(`0x${b.slice(64 * i, 64 * (i + 1))}`);
+  if (w(0) > 1n || w(1) > 4n) return null;
+  return { flagged: w(0) === 1n, severity: Number(w(1)), evidenceHash: `0x${b.slice(192, 256)}` };
+}
+/** The words a flag is shown with: an immune flag (a quorum of bonded runners) or a ThreatRegistry category. */
+const flagWords = (f, t, lang) => {
+  if (f.what === 'immune') return { label: t('riskImmune'), why: `${t('riskImmuneTip')} (${f.reasonName})` };
+  const why = reasonText(f.reason);
+  return { label: t(f.enforced ? 'riskEnforced' : 'riskFlagged'), why: `${why[lang] ?? why.en} (${f.reasonName})` };
+};
 
 /**
  * batch(calls) -> [result | Error] (rpc.js evmBatch) or null; single(method, params) -> result.
  * Returns { lookup(address) -> Promise<Result>, peek(address), flushes }, where Result is
  *   { state: 'unset' } | { state: 'error' } | { state: 'clean' | 'flagged', flags: [{ what, enforced, reason, reasonName }] }
  */
-export function createRisk({ batch = null, single, registry, chainId, wait = 30, maxBatch = 30 } = {}) {
+export function createRisk({ batch = null, single, registry, chainId, immune = '', wait = 30, maxBatch = 30 } = {}) {
   const cache = new Map(); const done = new Map();
   let pending = new Map(); let timer = null;
   const counters = { flushes: 0, requests: 0 };
@@ -31,16 +48,23 @@ export function createRisk({ batch = null, single, registry, chainId, wait = 30,
   }
   const ethCall = (data) => ({ method: 'eth_call', params: [{ to: registry, data }, 'latest'] });
 
+  // The immune network (docs/future/immune-network.md): ImmuneRegistry.isFlagged(chainId, address) on ZETAPHY, a
+  // 4th call per address in the same batch; an unreadable answer adds nothing (the ThreatRegistry result stands).
+  const immuneCall = (a) => ({ method: 'eth_call', params: [{ to: immune, data: IMMUNE_IS_FLAGGED + BigInt(chainId).toString(16).padStart(64, '0') + a.slice(2).padStart(64, '0') }, 'latest'] });
+  const II = registry ? 3 : 1;                                   // where the immune answer sits per address
+  const P = 1 + (registry ? 2 : 0) + (immune ? 1 : 0);           // calls per address in the first batch
+
   async function run(items) {
     const addrs = items.map(([a]) => a);
     let first; let second = []; let ans2 = [];
     try {
       first = await callMany(addrs.flatMap((a) => {
         const q = threatQueries(chainId, a, '0x')[0];
-        return [{ method: 'eth_getCode', params: [a, 'latest'] }, ethCall(q.warn), ethCall(q.enforced)];
+        const own = registry ? [{ method: 'eth_getCode', params: [a, 'latest'] }, ethCall(q.warn), ethCall(q.enforced)] : [{ method: 'eth_getCode', params: [a, 'latest'] }];
+        return immune ? [...own, immuneCall(a)] : own;
       }));
-      addrs.forEach((a, i) => {
-        const code = first[3 * i];
+      if (registry) addrs.forEach((a, i) => {
+        const code = first[P * i];
         if (typeof code !== 'string' || !/^0x([0-9a-fA-F]{2})+$/.test(code)) return;
         for (const q of threatQueries(chainId, a, code).slice(1)) second.push({ i, what: q.what, warn: q.warn, enforced: q.enforced });
       });
@@ -53,14 +77,20 @@ export function createRisk({ batch = null, single, registry, chainId, wait = 30,
       let r;
       try {
         const flags = [];
-        const own = readThreat(first[3 * i + 1], first[3 * i + 2]);
-        if (own.flagged) flags.push({ what: 'address', ...own });
+        if (registry) {
+          const own = readThreat(first[P * i + 1], first[P * i + 2]);
+          if (own.flagged) flags.push({ what: 'address', ...own });
+        }
+        if (immune) {
+          const im = readImmune(first[P * i + II]);
+          if (im?.flagged) flags.push({ what: 'immune', enforced: im.severity >= 3, reason: null, severity: im.severity, evidenceHash: im.evidenceHash });
+        }
         second.forEach((s, j) => {
           if (s.i !== i) return;
           const x = readThreat(ans2[2 * j], ans2[2 * j + 1]);
           if (x.flagged) flags.push({ what: s.what, ...x });
         });
-        for (const f of flags) f.reasonName = REASONS[f.reason] ?? `#${f.reason}`;
+        for (const f of flags) f.reasonName = f.what === 'immune' ? IMMUNE_SEVERITY[f.severity] ?? `#${f.severity}` : REASONS[f.reason] ?? `#${f.reason}`;
         r = { state: flags.length ? 'flagged' : 'clean', flags };
       } catch { r = { state: 'error' }; cache.delete(a); }
       done.set(a, r);
@@ -77,7 +107,7 @@ export function createRisk({ batch = null, single, registry, chainId, wait = 30,
 
   function lookup(address) {
     const a = String(address ?? '').toLowerCase();
-    if (!registry) return Promise.resolve({ state: 'unset' });
+    if (!registry && !immune) return Promise.resolve({ state: 'unset' });
     if (!ADDR.test(a)) return Promise.resolve({ state: 'error' });
     if (cache.has(a)) return cache.get(a);
     let resolve;
@@ -95,8 +125,8 @@ let current = null;
 export const setRisk = (r) => { current = r; };
 export const getRisk = () => current;
 
-/** The worst flag first: enforced before warnings, then the address flag. */
-export const topFlag = (r) => (r?.flags ?? []).slice().sort((x, y) => Number(y.enforced) - Number(x.enforced))[0] ?? null;
+/** The worst flag first: enforced before warnings, an immune flag before a ThreatRegistry one, then the address flag. */
+export const topFlag = (r) => (r?.flags ?? []).slice().sort((x, y) => Number(y.enforced) - Number(x.enforced) || Number(y.what === 'immune') - Number(x.what === 'immune'))[0] ?? null;
 
 /**
  * An inline badge after an address or token: empty while loading, when clean or
@@ -109,9 +139,9 @@ export function riskBadge(address, { t, lang }) {
   current.lookup(address).then((r) => {
     if (r.state !== 'flagged') return;
     const f = topFlag(r);
-    const why = reasonText(f.reason);
-    el.append(h('span', { class: ['badge', 'badge-warn', 'risk-badge'], title: `${t(f.enforced ? 'riskEnforced' : 'riskFlagged')}: ${why[lang] ?? why.en} (${f.reasonName}) · ${DISCLAIMER[lang] ?? DISCLAIMER.en}` },
-      `⚠ ${t(f.enforced ? 'riskEnforced' : 'riskFlagged')} · ${f.reasonName}`));
+    const w = flagWords(f, t, lang);
+    el.append(h('span', { class: ['badge', 'badge-warn', 'risk-badge'], 'data-flag': f.what, title: `${w.label}: ${w.why} · ${DISCLAIMER[lang] ?? DISCLAIMER.en}` },
+      `⚠ ${w.label} · ${f.reasonName}`));
   });
   return el;
 }
@@ -128,8 +158,8 @@ export function riskSummaryCard(ui, a, { counterparties = Promise.resolve([]), i
     if (r.state === 'unset') return t('threatUnset');
     if (r.state === 'error') return t('riskUnreadable');
     if (r.state === 'clean') return badge(t('threatClean'), 'ok');
-    const f = topFlag(r); const why = reasonText(f.reason);
-    return h('span', null, badge(t(f.enforced ? 'riskEnforced' : 'riskFlagged'), 'warn'), ' ', `${why[lang] ?? why.en} (${f.reasonName})`,
+    const f = topFlag(r); const w = flagWords(f, t, lang);
+    return h('span', null, badge(w.label, 'warn'), ' ', w.why,
       h('span', { class: 'disclaimer' }, ' · ', DISCLAIMER[lang] ?? DISCLAIMER.en));
   }, { inline: true });
   const others = slot(Promise.resolve(counterparties).then(async (list) => {

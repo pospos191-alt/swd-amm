@@ -1,6 +1,7 @@
 // The hub's assistant pages (docs/future/crosschain-assist.md):
 //   gov:    governance assistant (item 21): open proposals and the timelock queue, decoded, simulated, flagged (govassist.js)
-//   immune: herd immunity (item 28: coverage of NeuroOracle mirrors per chain), the Neuro-checked certificate lookup
+//   immune: the immune network dashboard (docs/future/immune-network.md: chains watched, mirrors live, flags in 24 h,
+//           median propagation, the open feed), herd immunity (item 28: coverage of NeuroOracle mirrors per chain), the Neuro-checked certificate lookup
 //           (item 19, NeuroAttest.badge) and the quantum-safe attestation verifier (item 30, pqattest.js), all in the browser
 // Plus the pre-sign simulation rows and the AI explanation for hub.js send() (item 20, presign.js).
 // Everything shown goes in with textContent; no inline styles (CSP style-src 'self').
@@ -71,6 +72,84 @@ export async function measureCoverage({ immune, zSend, chainSend }) {
     } catch (e) { mirrors.push({ name: m.displayName ?? m.name, error: String(e.message).slice(0, 120) }); }
   }
   return { flagged: keys.length, mirrors };
+}
+
+// ---------------------------------------------------------------- immune network (docs/future/immune-network.md)
+
+/** ImmuneRegistry / ImmuneMirror views (IImmuneFeed). */
+export const IMMUNE_SEL = { isFlagged: '0x3f68ab60', live: '0x957aa58c' };
+export const isFlaggedData = (chainId, address) => IMMUNE_SEL.isFlagged + word(chainId) + body(address).toLowerCase().padStart(64, '0');
+/** isFlagged's answer -> { flagged, severity, since, evidenceHash }. */
+export function readFlag(hex) {
+  const h = body(hex);
+  if (h.length < 4 * 64) throw new Error('not an isFlagged answer');
+  const w = (i) => h.slice(i * 64, (i + 1) * 64);
+  return { flagged: BigInt(`0x${w(0)}`) !== 0n, severity: Number(BigInt(`0x${w(1)}`)), since: Number(BigInt(`0x${w(2)}`)), evidenceHash: `0x${w(3)}` };
+}
+const KIND_NAME = { 1: 'exploit contract', 2: 'attacker', 3: 'drainer', 4: 'malicious spender', 5: 'clone of flagged code', 6: 'compromised' };
+
+/** feed.json of the open feed (null when it cannot be read). The hub shows it; the SDK verifies its ML-DSA snapshot. */
+export async function loadImmuneFeed(url, fetchImpl = fetch) {
+  if (!/^https:\/\/[^\s"<>]+$/.test(url ?? '')) return null;
+  try {
+    const r = await fetchImpl(url.replace(/\/?$/, '/') + 'feed.json', { cache: 'no-store', credentials: 'omit' });
+    const j = r.ok ? await r.json() : null;
+    return j && Array.isArray(j.items) ? j : null;
+  } catch { return null; }
+}
+
+/**
+ * Is `address` flagged for ZETAPHY? The ImmuneRegistry first (an eth_call on ZETAPHY), else the feed (its entries for
+ * this chain or every EVM chain). -> { flagged, severity, kind, source: 'registry' | 'feed' | 'none' }.
+ */
+export async function immuneCheck({ send, registry, feed = null, chainId = 77390, address, now = Math.floor(Date.now() / 1000) }) {
+  if (!ADDR.test(address ?? '')) return { flagged: false, severity: 0, source: 'none' };
+  if (ADDR.test(registry ?? '')) {
+    try {
+      const r = await send('eth_call', [{ to: registry, data: isFlaggedData(chainId, address) }, 'latest']);
+      if (!r.error) return { ...readFlag(r.result), kind: null, source: 'registry' };
+    } catch { /* the feed answers */ }
+  }
+  if (feed) {
+    const a = address.toLowerCase();
+    let best = null;
+    for (const e of feed.items) {
+      if (!e.flagged || e.address !== a || (e.chainId !== chainId && e.chainId !== 0) || now >= e.expiresAt) continue;
+      if (!best || e.severity > best.severity) best = e;
+    }
+    return best ? { flagged: true, severity: best.severity, kind: KIND_NAME[best.kind] ?? null, since: best.since, source: 'feed' } : { flagged: false, severity: 0, source: 'feed' };
+  }
+  return { flagged: false, severity: 0, source: 'none' };
+}
+
+/** The pre-sign warning for hub.js send(): [] when not flagged or nothing could be read (never waits more than `ms`). */
+export async function immuneWarnings({ lang, url, to, net, fetchImpl = fetch, ms = 2500 }) {
+  if (!net || !ADDR.test(to ?? '')) return [];
+  const L = A(lang);
+  const work = (async () => {
+    const feed = ADDR.test(net.registry ?? '') ? null : await loadImmuneFeed(net.feedUrl, fetchImpl);
+    const r = await immuneCheck({ send: rawSender(url, fetchImpl), registry: net.registry, feed, address: to });
+    return r.flagged ? [L.inWarn(L.inSev[r.severity] ?? String(r.severity), r.kind)] : [];
+  })();
+  return Promise.race([work.catch(() => []), new Promise((r) => setTimeout(() => r([]), ms))]);
+}
+
+/**
+ * The Immunity tab's numbers: chains watched, mirrors live (each mirror's live()), flags in the last 24 h (feed),
+ * median propagation (measured by the feed builder when mirrors are live, else the simulation's).
+ */
+export async function immuneDashboard({ net, chainSend, fetchImpl = fetch }) {
+  const mirrors = net?.mirrors ?? [];
+  const live = await Promise.all(mirrors.map(async (m) => {
+    try { const r = await chainSend(m)('eth_call', [{ to: m.mirror, data: IMMUNE_SEL.live }, 'latest']); return !r.error && BigInt(r.result || '0x0') !== 0n; } catch { return false; }
+  }));
+  const feed = await loadImmuneFeed(net?.feedUrl, fetchImpl);
+  const measured = Number(feed?.stats?.coverage?.medianSeconds);
+  return {
+    deployed: ADDR.test(net?.registry ?? ''), chains: Number(net?.chains ?? 0), mirrorsTotal: mirrors.length, mirrorsLive: live.filter(Boolean).length,
+    flags24h: feed ? Number(feed.stats?.flagged24h ?? 0) : null, latency: Number.isFinite(measured) && measured > 0 ? { seconds: measured, measured: true } : { seconds: Number(net?.simMedian ?? 0) || null, measured: false },
+    feedUrl: net?.feedUrl ?? null, feedOk: !!feed,
+  };
 }
 
 // ---------------------------------------------------------------- Neuro-checked badge (NeuroAttest.badge)
@@ -231,7 +310,9 @@ const immune = {
           anchorButton(ctx, L, archive, r));
       } catch (e) { pqOut.replaceChildren(ctx.el('p', { class: 'warnline', 'data-pq': 'invalid', text: `${L.imPqBad}: ${String(e.message).slice(0, 160)}` })); }
     });
-    root.replaceChildren(ctx.el('p', { class: 'dim small sp-intro', text: L.imIntro }),
+    root.replaceChildren(ctx.el('p', { class: 'dim small sp-intro', text: L.inIntro }),
+      card(ctx, L.inNet, null, ctx.el('div', { id: 'im-net' }, ctx.el('p', { class: 'dim', text: '…' }))),
+      ctx.el('p', { class: 'dim small sp-intro', text: L.imIntro }),
       ctx.el('div', { class: 'grid3' },
         card(ctx, L.imCoverage, null, ctx.el('div', { id: 'im-cov' }, ctx.el('p', { class: 'dim', text: '…' }))),
         card(ctx, L.imCert, L.imCertHint, certForm, certOut),
@@ -239,6 +320,21 @@ const immune = {
   },
   async refresh(root, ctx) {
     const L = A(ctx.lang);
+    const netBox = root.querySelector('#im-net');
+    const net = ctx.cfg.immuneNet;
+    if (netBox && net) {
+      const d = await immuneDashboard({ net, chainSend: (x) => rawSender(x.rpc) }).catch(() => null);
+      if (d) {
+        const lat = d.latency.seconds == null ? '–' : d.latency.measured ? L.inLatencyLive(d.latency.seconds) : L.inLatencySim(d.latency.seconds);
+        const rows = [[L.inChains, String(d.chains)], [L.inMirrors, `${d.mirrorsLive} / ${d.mirrorsTotal}`], [L.inFlags24, d.flags24h == null ? '–' : String(d.flags24h)], [L.inLatency, lat]];
+        const links = /^https:\/\//.test(d.feedUrl ?? '') ? ctx.el('p', { class: 'small' }, ...['feed.json', 'rss.xml', 'atom.xml', 'snapshot.pq.json'].flatMap((f, i) => {
+          const a = ctx.el('a', { href: d.feedUrl.replace(/\/?$/, '/') + f, target: '_blank', rel: 'noopener noreferrer', text: i ? f : `${L.inFeed}: ${f}` });
+          return i ? [' · ', a] : [a];
+        })) : null;
+        netBox.replaceChildren(ctx.el('dl', { class: 'kv3', 'data-immune': d.deployed ? 'live' : 'planned' }, rows.flatMap(([k, v]) => [ctx.el('dt', { text: k }), ctx.el('dd', { class: 'mono', text: v })])),
+          links, d.deployed ? null : ctx.el('p', { class: 'dim small', text: L.inNotDeployed }));
+      }
+    }
     const box = root.querySelector('#im-cov');
     const im = ctx.cfg.immune;
     if (!ADDR.test(im?.sender ?? '') || !(im.mirrors ?? []).length) { box?.replaceChildren(ctx.el('p', { class: 'dim', text: L.imNotDeployed })); return; }

@@ -8,6 +8,8 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { hubSeoFiles, INDEXNOW_KEY } from './seo.mjs';
+import { ALL as IMMUNE_CHAINS } from '../zetaphy-network/src/immune/chains.js';
+import { simulate as immuneSimulate } from '../zetaphy-network/src/immune/propagate.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -76,7 +78,26 @@ export function hubConfig(cfg, files = null) {
     saphan: saphanRoutes(read),
     saphanTokens: saphanTokenRoutes(read),
     immune: immuneMirrors(read),
+    immuneNet: immuneNetwork(read),
   };
+}
+
+/**
+ * The immune network (docs/future/immune-network.md) for the Immunity tab and the pre-sign check: ImmuneRegistry on
+ * ZETAPHY, the ImmuneMirror per chain (with the chain's first https RPC, from saphan-chains.json), the open feed's URL,
+ * how many chains the sentinels watch, and the simulated median propagation (shown until mirrors measure it).
+ * From zetaphy-chain/hyperlane/immune-network.json. Public data only; anything malformed is left out.
+ */
+export function immuneNetwork(read) {
+  const d = read('zetaphy-chain/hyperlane/immune-network.json') ?? {};
+  const t = read('zetaphy-chain/hyperlane/saphan-chains.json');
+  const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
+  const mirrors = Object.entries(d.mirrors ?? {}).filter(([name, m]) => /^[a-z0-9]{1,31}$/.test(name) && isAddr(m?.mirror) && t?.chains?.[name]).map(([name, m]) => {
+    const c = t.chains[name];
+    return { name, displayName: String(c.displayName).slice(0, 40), chainId: c.chainId, mirror: m.mirror, rpc: (c.rpc ?? []).find((u) => /^https:\/\/[^\s"<>]+$/.test(u)) ?? '' };
+  }).filter((m) => m.rpc);
+  const feedUrl = /^https:\/\/[^\s"<>]+$/.test(d.feed?.url ?? '') ? d.feed.url : null;
+  return { registry: isAddr(d.registry) ? d.registry : null, mirrors, feedUrl, chains: IMMUNE_CHAINS.length, simMedian: immuneSimulate({ trials: 200, seed: 7 }).median };
 }
 
 /**
