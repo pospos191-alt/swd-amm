@@ -1,0 +1,14 @@
+{
+  "commit": "d07b98000000000000000000000000000000abcd",
+  "codeHashes": {
+    "contracts/VaultTestRecipients.sol:Receiver": "0x1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "findings": [
+    { "id": "slither:reentrancy-eth:0f1e2d", "tool": "slither", "rule": "reentrancy-eth", "severity": "high", "file": "contracts/Vault.sol", "line": 42, "title": "Reentrancy in withdraw()", "status": "fixed" },
+    { "id": "aderyn:centralization-risk:9a8b7c", "tool": "aderyn", "rule": "centralization-risk", "severity": "low", "file": "contracts/Vault.sol", "line": 10, "title": "Centralization risk", "status": "accepted" },
+    { "id": "semgrep:tx-origin:5d6e", "tool": "semgrep", "rule": "tx-origin", "severity": "medium", "file": "contracts/Vault.sol", "line": 77, "title": "tx.origin used", "status": "false-positive" },
+    { "id": "smtchecker:overflow:3c4d", "tool": "smtchecker", "rule": "overflow", "severity": "info", "file": "contracts/Vault.sol", "line": 90, "title": "Possible overflow (unchecked block)", "status": "open" }
+  ],
+  "invariants": { "passed": 4, "failed": 0, "notRun": 0 },
+  "mutationScore": 0.83
+}

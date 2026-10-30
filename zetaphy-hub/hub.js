@@ -46,6 +46,7 @@ const ICONS = {
   immune: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M12 8v8M8 12h8"/>',
   aichain: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
   offline: '<path d="M3 8.5a14 14 0 0 1 18 0M6.5 12a9 9 0 0 1 11 0M10 15.5a4 4 0 0 1 4 0"/><circle cx="12" cy="19" r="1"/><path d="M3 3l18 18"/>',
+  audit: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
   neuro: '<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-6 0"/>',
 };
 // Their words (label, title, hover text) are in i18n.js TAB_TEXT.
@@ -59,6 +60,7 @@ const TABS = [
   { id: 'saphan', page: true, fresh: true },
   { id: 'agents', page: true, fresh: true },
   { id: 'offline', page: true, fresh: true },
+  { id: 'audit', page: true, fresh: true },
   { id: 'nft', src: 'nft/' },
   { id: 'explorer', src: 'explorer/', group: 'data' },
   { id: 'neuro', src: 'neuro/web/' },

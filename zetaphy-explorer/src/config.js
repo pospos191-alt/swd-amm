@@ -15,6 +15,8 @@ export const DEFAULTS = Object.freeze({
   evmChainId: 77390,
   // ThreatRegistry (zetaphy-network/contracts/ThreatRegistry.sol) on ZETAPHY: 0x… or empty (not checked).
   threatRegistry: '',
+  // AuditCertificate (zetaphy-network/contracts/AuditCertificate.sol) on ZETAPHY: 0x… or empty (no audit badges).
+  auditCertificate: '',
   // Neuro web report of a contract; {address} and {chainId} are filled in. Empty: no link.
   neuroReportUrl: '',
   // Chain activity counts (Neuro's /api/chain-stats, any origin may read it). Empty: not shown.
@@ -84,7 +86,7 @@ export function sanitizeConfig(...layers) {
       if (!(k in DEFAULTS) || v == null) continue;
       if (typeof DEFAULTS[k] === 'number') { const n = Number(v); if (Number.isFinite(n) && n > 0) out[k] = n; continue; }
       if (typeof v !== 'string') continue;
-      if (k === 'threatRegistry' && v && !ADDR.test(v.trim())) continue;
+      if ((k === 'threatRegistry' || k === 'auditCertificate') && v && !ADDR.test(v.trim())) continue;
       if (k === 'chainStatsUrl' && v.trim()) { try { checkUrl(v); } catch { continue; } }
       if (k === 'ipfsGateway') { try { out[k] = checkUrl(v).replace(/\/+$/, ''); } catch { /* keep the default */ } continue; }
       if (k === 'hubGovUrl' && v.trim()) { try { const u = new URL(v.trim()); if (u.protocol !== 'https:' || u.username) continue; } catch { continue; } }

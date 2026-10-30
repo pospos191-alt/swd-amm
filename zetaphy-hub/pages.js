@@ -10,6 +10,13 @@ import aimap from './aimap.js';
 import { ASSIST_PAGES } from './assist.js';
 import aichain from './aichain.js';
 import offline from './offline.js';
+// the Audit tab (audit.js) loads Neuro's Keccak from this site: fetched only when the tab opens
+const audit = {
+  render(root, ctx) {
+    import('./audit.js').then((m) => m.default.render(root, ctx))
+      .catch((e) => root.replaceChildren(ctx.el('p', { class: 'msg small bad', text: String(e?.message ?? e) })));
+  },
+};
 
 /** The Earn words in ctx.lang (English underneath), with each method's commands, icon and tab. */
 const earnText = (ctx) => {
@@ -578,4 +585,4 @@ const saphan = {
   },
 };
 
-export const PAGES = { earn, mine, saphan, agents, offline, ai: aimap, analytics, defi, leaderboard, dev, aichain, ...ASSIST_PAGES };
+export const PAGES = { earn, mine, saphan, agents, offline, audit, ai: aimap, analytics, defi, leaderboard, dev, aichain, ...ASSIST_PAGES };

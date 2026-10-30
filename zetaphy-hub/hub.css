@@ -574,3 +574,13 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 .off-net[data-online="1"] { color: var(--ok); }
 .off-ch td { white-space: normal; vertical-align: top; }
 @media (max-width: 700px) { .off-share { grid-template-columns: minmax(0, 1fr); } .off-2 { grid-template-columns: minmax(0, 1fr); } }
+
+/* Audit tab (audit.js) */
+.au-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+#au-reqs { grid-column: 1 / -1; }
+.au-card .kv3 dd { overflow-wrap: anywhere; }
+.au-card .tbl td { white-space: normal; }
+.au-card .msg.ok { color: var(--ok); }
+.au-card .msg.bad { color: var(--bad); }
+.au-card .msg.warn { color: var(--warn); }
+@media (max-width: 900px) { .au-grid { grid-template-columns: minmax(0, 1fr); } }

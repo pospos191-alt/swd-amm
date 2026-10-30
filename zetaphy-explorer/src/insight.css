@@ -9,7 +9,7 @@
 .label-burn, .label-zero { color: var(--warn); border-color: rgba(var(--warn-rgb),0.45); }
 .label-bridge, .label-neuro, .label-governance { color: var(--up); border-color: rgba(var(--up-rgb),0.4); }
 .risk-slot:empty { display: none; }
-.risk-badge { margin-left: 6px; vertical-align: middle; font-size: 11.5px; }
+.risk-badge, .audit-badge { margin-left: 6px; vertical-align: middle; font-size: 11.5px; }
 .insight-links { margin: 10px 0 0; font-size: 14px; }
 
 .q-verdict { font-size: 15px; line-height: 1.55; }

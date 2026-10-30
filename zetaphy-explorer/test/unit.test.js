@@ -521,7 +521,7 @@ test('i18n: the 8 languages, each with exactly the English keys and placeholders
 });
 
 test('i18n: every key the app uses exists', () => {
-  const src = ['src/app.js', 'index.html', 'src/flow.js', 'src/quantum.js', 'src/risk.js', 'src/crosschain.js', 'src/ask.js', ...['validators2', 'gov', 'holders', 'nft', 'gas', 'tools'].map((m) => `src/${m}.js`)].map(read).join('\n');
+  const src = ['src/app.js', 'index.html', 'src/flow.js', 'src/quantum.js', 'src/risk.js', 'src/audit.js', 'src/crosschain.js', 'src/ask.js', ...['validators2', 'gov', 'holders', 'nft', 'gas', 'tools'].map((m) => `src/${m}.js`)].map(read).join('\n');
   const used = new Set([...src.matchAll(/\bt\('([A-Za-z0-9_]+)'/g), ...src.matchAll(/data-i18n(?:-placeholder|-title)?="([A-Za-z_]+)"/g)].map((m) => m[1]));
   // keys built at run time in the page modules
   for (const k of ['gas_slow', 'gas_normal', 'gas_fast', 'gasActTransfer', 'gasActErc20', 'gasActSwap', 'gasActNftMint', 'gasActApprove',
@@ -865,5 +865,43 @@ test('i18n: every key the history, live, watch and chart modules use exists', ()
   for (const d of ['in', 'out', 'self', 'other']) used.add(`dir_${d}`);
   assert.ok(used.size > 60);
   for (const k of used) assert.ok(k in T.en, `missing key ${k}`);
+  for (const n of [1, 2, 3]) assert.ok(`auditLevel${n}` in T.en, 'audit levels (built at run time)');
   assert.equal(makeT('th')('histTotal', { n: '57' }), 'ทั้งหมด 57 ธุรกรรม');
+});
+
+test('audit certificate badge: the selector, the decoder and the lookup (one eth_call per address, cached)', async () => {
+  const { SEL_CERTIFICATE, certificateCall, decodeCertificate, createAudit } = await import('../src/audit.js');
+  assert.equal(SEL_CERTIFICATE, ethId('certificate(uint64,address)').slice(0, 10));
+  const abi = AbiCoder.defaultAbiCoder();
+  const A = '0x' + 'be'.repeat(20), CH = '0x' + '11'.repeat(32), RH = '0x' + '22'.repeat(32);
+  const enc = (valid, issuedAt = 1_800_000_000n, revokedAt = 0n) => abi.encode(['(uint256,uint64,address,bytes32,bytes32,bytes32,uint8,uint16,uint16,uint64,uint64,uint64,uint256)', 'bool'],
+    [[7n, 77390n, A, CH, RH, '0x' + '33'.repeat(32), 3, 6, 9000, issuedAt, issuedAt + 180n * 86400n, revokedAt, revokedAt ? 9n : 0n], valid]);
+  assert.equal(certificateCall(77390, A), SEL_CERTIFICATE + abi.encode(['uint64', 'address'], [77390n, A]).slice(2));
+  const ok = decodeCertificate(enc(true));
+  assert.deepEqual([ok.state, ok.level, ok.auditors, ok.mutationBps, ok.codeHash, ok.reportHash, ok.requestId, ok.revoked], ['valid', 3, 6, 9000, CH, RH, 7n, false]);
+  assert.equal(decodeCertificate(enc(false, 1_800_000_000n, 1_800_000_100n)).revoked, true);
+  assert.equal(decodeCertificate(enc(false)).state, 'invalid');
+  assert.equal(decodeCertificate(enc(false, 0n)).state, 'none');
+  assert.throws(() => decodeCertificate('0x1234'));
+  let calls = 0;
+  const audit = createAudit({ contract: '0x' + 'ce'.repeat(20), chainId: 77390, single: async (m, p) => {
+    if (m === 'eth_getStorageAt') return '0x' + '00'.repeat(32);
+    calls++; assert.equal(m, 'eth_call'); assert.equal(p[0].data, certificateCall(77390, A)); return enc(true);
+  } });
+  assert.equal((await audit.lookup(A.toUpperCase().replace('0X', '0x'))).state, 'valid');
+  assert.equal((await audit.lookup(A)).state, 'valid');
+  assert.equal(calls, 1, 'cached for the visit');
+  // an EIP-1967 proxy: valid only while its current implementation is certified too
+  const IMPL = '0x' + 'f0'.repeat(20);
+  const proxied = (implCertified) => createAudit({ contract: '0x' + 'ce'.repeat(20), chainId: 77390, single: async (m, p) => {
+    if (m === 'eth_getStorageAt') return p[0].toLowerCase() === A ? '0x' + IMPL.slice(2).padStart(64, '0') : '0x0';
+    return p[0].data === certificateCall(77390, IMPL) ? (implCertified ? enc(true) : enc(false, 0n)) : enc(true);
+  } });
+  const up = await proxied(false).lookup(A);
+  assert.deepEqual([up.state, up.implementation, up.implState], ['invalid', IMPL, 'none'], 'upgraded to unaudited code: no badge');
+  assert.equal((await proxied(true).lookup(A)).state, 'valid');
+  assert.equal((await createAudit({ contract: '', chainId: 1, single: async () => '0x' }).lookup(A)).state, 'unset');
+  assert.equal((await createAudit({ contract: A, chainId: 1, single: async () => { throw new Error('down'); } }).lookup(A)).state, 'error', 'nothing is claimed when the node fails');
+  assert.equal(sanitizeConfig({ auditCertificate: 'nope' }).auditCertificate, '');
+  assert.equal(sanitizeConfig({ auditCertificate: A }).auditCertificate, A);
 });

@@ -52,6 +52,24 @@ interface INOIcs20 {
         string calldata receiver, Height calldata timeoutHeight, uint64 timeoutTimestamp, string calldata memo) external returns (uint64 nextSequence);
 }
 
+/// AuditCertificate's message body (kind 3): see AuditCertificate.certificateBody.
+interface INOAudit {
+    function certificateBody(uint64 chainId, address target) external view returns (bytes memory);
+}
+
+/// One audit certificate as mirrored (AuditCertificate.certificateBody after kind and source chain).
+struct NOCert {
+    uint64 chainId;
+    address target;
+    bytes32 codeHash;
+    bytes32 reportHash;
+    uint8 level;
+    uint64 issuedAt;
+    uint64 expiresAt;
+    bool revoked;
+    uint256 requestId;
+}
+
 /// One registry key as mirrored: the registry's own numbers at the time of the push.
 struct NOItem {
     bytes32 key;
@@ -92,6 +110,9 @@ contract NeuroOracleSender {
     /// the enforcedFrom last pushed (a fast-lane enforcement keeps the round but moves it)
     mapping(uint32 => mapping(bytes32 => uint64)) public sentEnforcedFrom;
 
+    /// AuditCertificate (docs/future/audit-network.md); zero: certificates off
+    INOAudit public audit;
+
     // IBC (osmo-test-5): a channel and the CosmWasm contract there; empty: off
     string public ibcChannel;
     string public ibcContract;
@@ -100,6 +121,8 @@ contract NeuroOracleSender {
     event Pushed(uint32 indexed domain, bytes32 messageId, uint256 items);
     event VerdictPushed(uint32 indexed domain, uint256 indexed jobId, bytes32 messageId);
     event PushedIbc(string channel, uint64 sequence, uint256 items);
+    event CertificatePushed(uint32 indexed domain, uint64 indexed chainId, address indexed target, bytes32 messageId);
+    event AuditSet(address audit);
     event ReceiverSet(uint32 indexed domain, bytes32 receiver);
     event IbcRouteSet(string channel, string contractAddr, uint64 timeout);
     event GovernanceSet(address governance);
@@ -137,6 +160,21 @@ contract NeuroOracleSender {
     }
 
     function domainCount() external view returns (uint256) { return domains.length; }
+
+    /// The AuditCertificate whose certificates pushCertificate sends (zero: off).
+    function setAudit(INOAudit a) external onlyGov {
+        audit = a;
+        emit AuditSet(address(a));
+    }
+
+    /// An audit certificate (or its revocation), exactly as AuditCertificate states it now, to `domain`.
+    function pushCertificate(uint32 domain, uint64 chainId, address target) external payable returns (bytes32 id) {
+        bytes32 r = receivers[domain];
+        if (r == bytes32(0)) revert NoRoute(domain);
+        if (address(audit) == address(0)) revert NothingToSend();
+        id = _dispatch(domain, r, audit.certificateBody(chainId, target));
+        emit CertificatePushed(domain, chainId, target, id);
+    }
 
     /// The IBC route: our channel to osmo-test-5 and the CosmWasm oracle's address (ibc-hooks calls it).
     function setIbcRoute(string calldata channel, string calldata contractAddr, uint64 timeout) external onlyGov {
@@ -352,6 +390,7 @@ contract NeuroOracle {
 
     mapping(bytes32 => Mirror) public mirror;
     mapping(bytes32 => Verdict) public verdicts; // by keccak256(abi.encode(chain, targetHash))
+    mapping(bytes32 => NOCert) public certs;     // audit certificates by keccak256(abi.encode(chainId, target))
     bytes32[] public keys;                       // every key ever mirrored, in first-seen order
     uint256 public flaggedNow;                   // keys whose mirrored state is flagged
     uint256 public messages;                     // messages handled
@@ -360,6 +399,7 @@ contract NeuroOracle {
     event Mirrored(bytes32 indexed key, uint32 round, bool flagged, uint8 reason, uint64 enforcedFrom);
     event Stale(bytes32 indexed key, uint32 round, uint32 have);
     event VerdictMirrored(uint256 indexed jobId, bytes32 indexed chain, bytes32 indexed target, bytes32 result);
+    event CertificateMirrored(uint64 indexed chainId, address indexed target, bytes32 codeHash, uint8 level, bool revoked);
     event Paused(address by);
     event Unpaused();
     event IsmSet(address ism);
@@ -416,6 +456,15 @@ contract NeuroOracle {
             ( , , NOVerdict memory v) = abi.decode(b, (uint8, uint256, NOVerdict));
             verdicts[keccak256(abi.encode(v.chain, v.target))] = Verdict(v.jobId, v.result, v.skill, v.agreedBy, uint64(block.timestamp));
             emit VerdictMirrored(v.jobId, v.chain, v.target, v.result);
+        } else if (kind == 3) {
+            ( , , NOCert memory c) = abi.decode(b, (uint8, uint256, NOCert));
+            bytes32 k = keccak256(abi.encode(c.chainId, c.target));
+            NOCert storage have = certs[k];
+            // newest certificate wins; a revocation of the same one always applies; never un-revoke
+            if (c.issuedAt > have.issuedAt || (c.issuedAt == have.issuedAt && c.revoked && !have.revoked)) {
+                certs[k] = c;
+                emit CertificateMirrored(c.chainId, c.target, c.codeHash, c.level, c.revoked);
+            }
         } else revert BadKind(kind);
     }
 
@@ -472,6 +521,15 @@ contract NeuroOracle {
     function verdictOf(bytes32 chain, string calldata target) external view returns (uint256, bytes32, bytes32, uint8) {
         Verdict storage v = verdicts[keccak256(abi.encode(chain, keccak256(bytes(target))))];
         return (v.jobId, v.result, v.skill, v.agreedBy);
+    }
+
+    /// A ZETAPHY audit certificate as mirrored: unexpired, not revoked, and for a contract on THIS chain its
+    /// EXTCODEHASH is still the certified codeHash (an upgrade or redeploy fails at once). Paused: false.
+    function isCertified(uint64 chainId, address target) external view returns (bool) {
+        NOCert storage c = certs[keccak256(abi.encode(chainId, target))];
+        if (paused || c.issuedAt == 0 || c.revoked || block.timestamp >= c.expiresAt) return false;
+        if (chainId == block.chainid && target.codehash != c.codeHash) return false;
+        return true;
     }
 
     function keyCount() external view returns (uint256) { return keys.length; }
