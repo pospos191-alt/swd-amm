@@ -14,6 +14,13 @@
 //       swaps, staking), oldest first, from the transactions themselves (CometBFT tx_search, 100 a page: light on
 //       the node). Left out: contracts, module accounts, the airdrop wallet, and funds holding over 1,000,000
 //       ZETAPHY (the genesis accounts). The file is a list for `airdrop`.
+//   node scripts/early.js pool [--zearly 10000000] [--ztphy 1000]
+//       the ZEARLY/ZETAPHY pool on the ZETAPHY Swap, first liquidity from the airdrop wallet (KEYFILE)
+//   node scripts/early.js extras
+//       deploys the Early Pass, quests (funded), the farm (on the pool's LP, funded) and polls (src/earlyops.js)
+//   node scripts/early.js quests [--send]
+//       who did each quest (swaps, liquidity, Early Pass, staking: read from the chain) and pays the unpaid ones
+//   pool and extras print the addresses as JSON on the last line (the workflow adds them to early-testnet.json).
 //
 // env: ZETAPHY_RPC (EVM JSON-RPC), ZETAPHY_COMET (CometBFT RPC, default <ZETAPHY_RPC>/rpc),
 // ZETAPHY_REST (default <ZETAPHY_RPC>/rest), KEYFILE, EARLY and FROM_BLOCK (else zetaphy-chain/rewards/early-testnet.json).
@@ -21,6 +28,9 @@ import { readFileSync, existsSync } from 'node:fs';
 import { JsonRpcProvider, Wallet, Contract, ContractFactory, Interface, getAddress, hexlify, parseEther, formatEther } from 'ethers';
 import { writeFileSync } from 'node:fs';
 import { fromBech32 } from '../src/pqtx.js';
+import { createPool, deployExtras, minters, swappers, stakers, payQuests } from '../src/earlyops.js';
+
+const dexFile = () => JSON.parse(readFileSync(new URL('../../zetaphy-dex/web/deployments.json', import.meta.url), 'utf8')).contracts;
 
 const CHAIN_ID = 77390n;
 const STEP = 500;   // the public node answers at most 500 blocks per eth_getLogs
@@ -108,8 +118,8 @@ async function provider() {
 const signer = (p) => new Wallet(readFileSync(process.env.KEYFILE || die('KEYFILE is not set'), 'utf8').trim(), p);
 
 function config() {
-  const file = existsSync(deployed) ? JSON.parse(readFileSync(deployed, 'utf8')) : {};
-  return { token: process.env.EARLY || file.token, holder: file.holder, fromBlock: Number(process.env.FROM_BLOCK ?? file.fromBlock ?? 0) };
+  const file = process.env.EARLY_FILE ? JSON.parse(process.env.EARLY_FILE) : existsSync(deployed) ? JSON.parse(readFileSync(deployed, 'utf8')) : {};
+  return { ...file, token: process.env.EARLY || file.token, holder: file.holder, fromBlock: Number(process.env.FROM_BLOCK ?? file.fromBlock ?? 0) };
 }
 
 /** Wallets the holder already sent ZEARLY to (its Transfer events). */
@@ -134,6 +144,40 @@ async function main() {
     const r = await ct.deploymentTransaction().wait();
     console.log(`ZetaphyEarly ${await ct.getAddress()}`);
     console.log(JSON.stringify({ chainId: 77390, token: await ct.getAddress(), symbol: 'ZEARLY', holder: w.address, fromBlock: r.blockNumber, deployTx: r.hash }));
+  } else if (cmd === 'pool') {
+    const c = config();
+    if (!c.token) die('no ZEARLY address yet (deploy first)');
+    const p = await provider();
+    const out = await createPool({ signer: signer(p), token: c.token, dex: process.env.DEX ? JSON.parse(process.env.DEX) : dexFile(),
+      zearly: Number(opt('zearly', '10000000')), ztphy: Number(opt('ztphy', '1000')), log: (m) => console.error(m) });
+    console.log(JSON.stringify(out));
+  } else if (cmd === 'extras') {
+    const c = config();
+    if (!c.token) die('no ZEARLY address yet (deploy first)');
+    const p = await provider();
+    const now = (await p.getBlock('latest')).timestamp;
+    const out = await deployExtras({ signer: signer(p), token: c.token, pair: c.pair ?? null, now, log: (m) => console.error(m) });
+    console.log(JSON.stringify(out));
+  } else if (cmd === 'quests') {
+    const c = config();
+    if (!c.quests) die('no quests contract yet (run extras first)');
+    const base = (process.env.ZETAPHY_RPC || die('ZETAPHY_RPC is not set')).replace(/\/+$/, '');
+    const comet = (process.env.ZETAPHY_COMET || `${base}/rpc`).replace(/\/+$/, '');
+    const p = await provider();
+    const head = await p.getBlockNumber();
+    const dex = process.env.DEX ? JSON.parse(process.env.DEX) : dexFile();
+    const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); };
+    const found = {
+      swap: await swappers(p, dex.factory, c.fromBlock, head),
+      liquidity: c.pair ? await minters(p, c.pair, c.fromBlock, head) : [],
+      pass: c.pass ? await minters(p, c.pass, c.fromBlock, head) : [],
+      stake: await stakers(fetchJson, comet).catch(() => []),
+    };
+    const send = flag('send');
+    const w = send ? signer(p) : null;
+    const skip = new Set([c.holder].filter(Boolean).map((a) => getAddress(a)));
+    const report = await payQuests({ quests: c.quests, signer: w, provider: p, found, skip, send, log: (m) => console.error(m) });
+    console.log(JSON.stringify({ sent: send, report }));
   } else if (cmd === 'collect') {
     const base = (process.env.ZETAPHY_RPC || die('ZETAPHY_RPC is not set')).replace(/\/+$/, '');
     const comet = (process.env.ZETAPHY_COMET || `${base}/rpc`).replace(/\/+$/, '');
@@ -174,7 +218,7 @@ async function main() {
     }
     console.log(JSON.stringify({ paid: todo.length, each: formatEther(each), total: formatEther(need) }));
   } else {
-    die('usage: early.js deploy | airdrop --list <file> [--each 10000] [--send] | collect [--max 1000] [--out <file>] (see the top of this file)');
+    die('usage: early.js deploy | airdrop --list <file> [--each 10000] [--send] | collect [--max 1000] [--out <file>] | pool | extras | quests [--send] (see the top of this file)');
   }
 }
 
