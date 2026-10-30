@@ -1,6 +1,7 @@
 // Browser test: "Do useful work" on the Mine page, on a built dist/ served with the site's own CSP.
 //  1. practice mode (no contracts in hub-config): Neuro's code-only scan in a Web Worker gives the same
-//     verdict as Node, and the bug hunt (vendor/evm.js in a worker) finds the vulnerable vault's bug;
+//     verdict as Node, the bug hunt (vendor/evm.js in a worker) finds the vulnerable vault's bug, and the
+//     practice training job (train-worker.js) gives Node's checkpoint root bit for bit;
 //  2. on-chain: the real UsefulWork / BugBounty / WorkerReputation contracts run in an in-memory EVM
 //     behind a fake node (chain id 77390) and a stand-in wallet. The browser stamps (PoW), scans,
 //     commits, reveals and settles a scan job with two other workers, and submits a finding (commit,
@@ -23,6 +24,7 @@ import { verdictOf } from '../../zetaphy-neuro/src/verdict.js';
 import { CHAINS } from '../../zetaphy-neuro/src/chains.js';
 import { codeVerdict, jobCommitment } from '../work-core.js';
 import { powPrefix, search } from '../mine-core.js';
+import { practiceJob } from '../train-core.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = join(HERE, '..', 'dist');
@@ -144,6 +146,15 @@ test('useful work, practice mode: the browser scan matches Node; the hunt finds 
     assert.equal(repro.valid, true);
     assert.deepEqual(repro.finding.steps.map((x) => x.sig), ['initialize()', 'sweep(address)']);
     if (await page.textContent('#wk-hunt-go') === 'Stop') await page.click('#wk-hunt-go');
+    // training work (practice): Chromium's checkpoint root is Node's, bit for bit (train-core.js: + - * / only)
+    assert.equal(await page.textContent('#wk-train-go'), 'Practice training job');
+    await page.click('#wk-train-go');
+    await page.waitForFunction(() => /^Done in/.test(document.getElementById('wk-train-msg').textContent), null, { timeout: 120_000 });
+    const node = practiceJob(keccak256, { seed: 'practice', checks: 2 });
+    assert.equal(await page.getAttribute('#wk-tr-root', 'data-tip'), node.root, 'the browser trained exactly what Node trains');
+    assert.equal(await page.textContent('#wk-tr-auc'), `${(node.metrics.baseAuc / 1e4).toFixed(4)} → ${(node.metrics.candAuc / 1e4).toFixed(4)}`);
+    assert.match(await page.textContent('#wk-tr-check'), /^#\d, #\d: matches$/);
+    assert.ok(node.metrics.candAuc > node.metrics.baseAuc);
     // a phone: one column, no sideways scroll
     await page.setViewportSize({ width: 375, height: 800 });
     await page.waitForTimeout(300);
