@@ -44,6 +44,7 @@ const ICONS = {
   saphan: '<path d="M2 18h20"/><path d="M4 18v-3a8 8 0 0 1 16 0v3"/><path d="M8 18v-6M12 18v-7M16 18v-6"/>',
   gov: '<path d="M3 21h18M5 21V10M19 21V10M9 21v-7M15 21v-7M12 3l9 6H3z"/>',
   immune: '<path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M12 8v8M8 12h8"/>',
+  aichain: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12v9M12 12L4 7.5"/>',
   neuro: '<path d="M9 3a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5v1a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z"/><path d="M15 3a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5v1a3 3 0 0 1-6 0"/>',
 };
 // Their words (label, title, hover text) are in i18n.js TAB_TEXT.
@@ -65,6 +66,7 @@ const TABS = [
   { id: 'leaderboard', page: true, group: 'data', fresh: true },
   { id: 'gov', page: true, group: 'data', fresh: true },
   { id: 'immune', page: true, group: 'data', fresh: true },
+  { id: 'aichain', page: true, group: 'data', fresh: true },
   { id: 'dev', page: true, group: 'build', fresh: true },
 ];
 const APP_HOSTS = { 'wallet.sawasdeecoin.com': 'wallet', 'swap.sawasdeecoin.com': 'swap', 'nft.sawasdeecoin.com': 'nft', 'explorer.sawasdeecoin.com': 'explorer', 'neuro.sawasdeecoin.com': 'neuro' };
@@ -596,7 +598,9 @@ function stakeDialog(v, kind) {
 async function start() {
   $('lang').replaceChildren(...LANGS.map(([code, name]) => el('option', { value: code, lang: code, text: name })));
   $('lang').value = lang;
-  try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {}, tokens: Array.isArray(c.tokens) ? c.tokens.filter((x) => isEvmAddress(x?.address)) : [], saphan: Array.isArray(c.saphan) ? c.saphan : [], saphanTokens: Array.isArray(c.saphanTokens) ? c.saphanTokens.filter((x) => x && typeof x === 'object' && Array.isArray(x.destinations)) : [] }; } catch { /* default */ }
+  try { const c = await getJson('./hub-config.json'); if (/^https:\/\/[^/]+$/.test(c.node ?? '')) NODE = c.node; HUB = { contracts: c.contracts ?? {}, dex: c.dex ?? {}, nft: c.nft ?? {}, tokens: Array.isArray(c.tokens) ? c.tokens.filter((x) => isEvmAddress(x?.address)) : [], saphan: Array.isArray(c.saphan) ? c.saphan : [], saphanTokens: Array.isArray(c.saphanTokens) ? c.saphanTokens.filter((x) => x && typeof x === 'object' && Array.isArray(x.destinations)) : [],
+    // the Neuro oracle's sender and mirrors (Immunity tab, item 18)
+    immune: c.immune && typeof c.immune === 'object' ? c.immune : null }; } catch { /* default */ }
   syncApps();
   bindTips(document, $('tip'));
   document.addEventListener('click', (e) => {

@@ -1,0 +1,133 @@
+# One button for the AI map (zetaphy-hub/flow.js, docs/future/*.md): deploys on the ZETAPHY testnet every
+# AI contract that is still missing, each owned by the ZetaphyTimelock from the launch state (the deploy key
+# keeps no role), then useful work (paused) and FederatedRounds (closed) if they are not deployed yet.
+# A re-run resumes where a stopped run ended. The addresses go to the branch ai/testnet for a pull request;
+# merging it turns the AI map's "not deployed" cards into working ones (the hub reads hub-config.json).
+#
+# Environment testnet-deploy (main only; the owner approves each run), secret ZETAPHY_DEPLOYER_KEY.
+# Needs the public RPC up (https://rpc.sawasdeecoin.com).
+name: ai-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      committee:
+        description: "AI co-signer committee: members 0x…,0x… (empty = the timelock alone until governance sets members)"
+        default: ""
+      threshold:
+        description: "co-signer threshold (with members)"
+        default: "1"
+      poster:
+        description: "Data DAO root poster 0x… (empty = the timelock)"
+        default: ""
+      useful_work:
+        description: "also deploy useful work (paused) if missing"
+        type: boolean
+        default: true
+      federated:
+        description: "also deploy FederatedRounds (closed) if missing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: testnet-deploy
+    permissions:
+      contents: write   # pushes the branch ai/testnet (never the default branch)
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Check the inputs and the launch state
+        env:
+          COMMITTEE: ${{ inputs.committee }}
+          THRESHOLD: ${{ inputs.threshold }}
+          POSTER: ${{ inputs.poster }}
+        run: |
+          [[ -z "$COMMITTEE" || "$COMMITTEE" =~ ^0x[0-9a-fA-F]{40}(,0x[0-9a-fA-F]{40}){0,31}$ ]] || { echo "::error::committee: 0x… addresses, comma separated"; exit 1; }
+          [[ "$THRESHOLD" =~ ^[1-9][0-9]?$ ]] || { echo "::error::threshold: a number"; exit 1; }
+          [[ -z "$POSTER" || "$POSTER" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "::error::poster: one 0x… address"; exit 1; }
+          TL=$(jq -r '[.steps[].out.timelock // empty][0] // ""' ../zetaphy-launch/state/77390.json)
+          [[ "$TL" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "::error::the launch state has no timelock (run launch-testnet first)"; exit 1; }
+          echo "TIMELOCK=$TL" >> "$GITHUB_ENV"
+          r=$(curl -sS -m 20 -X POST -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$ZETAPHY_RPC" | jq -r .result)
+          [ "$r" = "0x12e4e" ] || { echo "::error::the RPC $ZETAPHY_RPC is not answering as ZETAPHY (got $r)"; exit 1; }
+
+      - name: Load the deployer key
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in the testnet-deploy environment"; exit 1; }
+          H="$RUNNER_TEMP/aid"; mkdir -p "$H"; chmod 700 "$H"
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/worker.key")" = "$DEPLOYER" ] \
+            || { rm -rf "$H"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          echo "KEYFILE=$H/worker.key" >> "$GITHUB_ENV"
+          echo "ZETAPHY_HOME=$H" >> "$GITHUB_ENV"
+
+      - name: AI contracts (each owned by the timelock)
+        env:
+          COMMITTEE: ${{ inputs.committee }}
+          THRESHOLD: ${{ inputs.threshold }}
+          POSTER: ${{ inputs.poster }}
+        run: |
+          set -o pipefail
+          node scripts/ai-deploy.js ${COMMITTEE:+--committee "$COMMITTEE" --threshold "$THRESHOLD"} ${POSTER:+--poster "$POSTER"} | tee "$RUNNER_TEMP/ai.log"
+          node scripts/ai-deploy.js check | tee -a "$RUNNER_TEMP/ai.log"
+
+      - name: Useful work (paused, owned by the timelock)
+        if: inputs.useful_work && hashFiles('zetaphy-network/deployments/useful-work-77390.json') == ''
+        run: node cli.js deploy-useful-work 2>&1 | tee -a "$RUNNER_TEMP/ai.log"
+
+      - name: FederatedRounds (closed, owned by the timelock)
+        if: inputs.federated
+        run: |
+          set -o pipefail
+          if node -e 'process.exit(require("../zetaphy-neuro/ml/fl/deployment.json").rounds ? 0 : 1)'; then echo "FederatedRounds: already deployed"; exit 0; fi
+          node cli.js fl deploy --rpc "$ZETAPHY_RPC" --governance "$TIMELOCK" --out ../zetaphy-neuro/ml/fl/deployment.json 2>&1 | tee -a "$RUNNER_TEMP/ai.log"
+
+      - name: Point the Neuro page at the SignalBoard (automatic peer discovery)
+        run: |
+          SB=$(jq -r '.contracts.signalBoard // ""' deployments/ai-77390.json)
+          [[ "$SB" =~ ^0x[0-9a-fA-F]{40}$ ]] || exit 0
+          sed -i -E "s/^  signalBoard: (null|'0x[0-9a-fA-F]{40}'),/  signalBoard: '$SB',/" ../zetaphy-neuro/ai/browser/config.js
+          grep -n "signalBoard: '" ../zetaphy-neuro/ai/browser/config.js
+
+      - name: Forget the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/aid"
+
+      - name: Summary and the branch ai/testnet
+        if: always()
+        run: |
+          { echo "### AI contracts on the testnet"; echo '```'; cat "$RUNNER_TEMP/ai.log" 2>/dev/null | tail -80; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B ai/testnet
+          git add -- zetaphy-network/deployments zetaphy-neuro/ml/fl/deployment.json zetaphy-neuro/ai/browser/config.js
+          if git diff --cached --name-only | grep -Eiq '(\.key|keystore|secret)'; then echo "::error::refusing to commit a key-like file"; exit 1; fi
+          git diff --cached --quiet && { echo "nothing new to commit"; exit 0; }
+          git commit -q -m "AI contracts on the testnet (owned by the timelock)" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin ai/testnet
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...ai/testnet" | tee -a "$GITHUB_STEP_SUMMARY"

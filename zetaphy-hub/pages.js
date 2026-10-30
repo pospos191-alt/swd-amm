@@ -8,6 +8,7 @@ import mine, { mineAddress } from './mine.js';
 import agents from './agents.js';
 import aimap from './aimap.js';
 import { ASSIST_PAGES } from './assist.js';
+import aichain from './aichain.js';
 
 /** The Earn words in ctx.lang (English underneath), with each method's commands, icon and tab. */
 const earnText = (ctx) => {
@@ -576,4 +577,4 @@ const saphan = {
   },
 };
 
-export const PAGES = { earn, mine, saphan, agents, ai: aimap, analytics, defi, leaderboard, dev, ...ASSIST_PAGES };
+export const PAGES = { earn, mine, saphan, agents, ai: aimap, analytics, defi, leaderboard, dev, aichain, ...ASSIST_PAGES };

@@ -24,6 +24,7 @@ export const ASSIST = {
     imCertNone: 'NeuroAttest is not deployed yet', imReport: 'report hash', imSkill: 'Neuro code (skill)', imModel: 'AI model',
     imPq: 'Verify a quantum-safe attestation', imPqHint: 'Open an archive (.pq.json): its ML-DSA-44 signature, its hashes and its on-chain anchor are checked in this browser.',
     imPqOk: 'VALID: unchanged and signed with ML-DSA-44', imPqBad: 'NOT VALID', imPqKey: 'signing key (keccak-256)', imPqAnchored: (t) => `anchored on ZETAPHY at ${t}`, imPqNotAnchored: 'not anchored on chain',
+    imPqAnchorBtn: 'Anchor on ZETAPHY', imPqSave: 'Save the anchored archive',
     badge: 'Neuro-checked', badgeTip: 'This token has a Neuro-checked certificate (NeuroAttest): Neuro checked its code. A check, not a guarantee.',
   },
   th: {
@@ -49,6 +50,7 @@ export const ASSIST = {
     imCertNone: 'ยังไม่ได้ติดตั้ง NeuroAttest', imReport: 'แฮชรายงาน', imSkill: 'โค้ด Neuro (skill)', imModel: 'โมเดล AI',
     imPq: 'ตรวจการรับรองที่ทนควอนตัม', imPqHint: 'เปิดไฟล์ (.pq.json): ตรวจลายเซ็น ML-DSA-44 แฮช และการยึดบนเชนในเบราว์เซอร์นี้',
     imPqOk: 'ถูกต้อง: ไม่ถูกแก้ไขและลงนามด้วย ML-DSA-44', imPqBad: 'ไม่ถูกต้อง', imPqKey: 'กุญแจที่ลงนาม (keccak-256)', imPqAnchored: (t) => `ยึดบน ZETAPHY เมื่อ ${t}`, imPqNotAnchored: 'ไม่ได้ยึดบนเชน',
+    imPqAnchorBtn: 'ยึดไว้บน ZETAPHY', imPqSave: 'บันทึกไฟล์ที่ยึดแล้ว',
     badge: 'Neuro-checked', badgeTip: 'โทเคนนี้มีใบรับรอง Neuro-checked (NeuroAttest): Neuro ตรวจโค้ดแล้ว เป็นการตรวจ ไม่ใช่การรับประกัน',
   },
   zh: {
@@ -74,6 +76,7 @@ export const ASSIST = {
     imCertNone: 'NeuroAttest 尚未部署', imReport: '报告哈希', imSkill: 'Neuro 代码（skill）', imModel: 'AI 模型',
     imPq: '验证抗量子证明', imPqHint: '打开存档（.pq.json）：在本浏览器中检查其 ML-DSA-44 签名、哈希和链上锚定。',
     imPqOk: '有效：未被修改，且以 ML-DSA-44 签名', imPqBad: '无效', imPqKey: '签名密钥（keccak-256）', imPqAnchored: (t) => `已于 ${t} 锚定在 ZETAPHY`, imPqNotAnchored: '未在链上锚定',
+    imPqAnchorBtn: '锚定到 ZETAPHY', imPqSave: '保存已锚定的存档',
     badge: 'Neuro-checked', badgeTip: '此代币有 Neuro-checked 证书（NeuroAttest）：Neuro 检查过其代码。这是检查，不是保证。',
   },
   es: {
@@ -99,6 +102,7 @@ export const ASSIST = {
     imCertNone: 'NeuroAttest aún no está desplegado', imReport: 'hash del informe', imSkill: 'código de Neuro (skill)', imModel: 'modelo de IA',
     imPq: 'Verificar una atestación resistente a la computación cuántica', imPqHint: 'Abre un archivo (.pq.json): su firma ML-DSA-44, sus hashes y su anclaje en la cadena se comprueban en este navegador.',
     imPqOk: 'VÁLIDO: sin cambios y firmado con ML-DSA-44', imPqBad: 'NO VÁLIDO', imPqKey: 'clave de firma (keccak-256)', imPqAnchored: (t) => `anclado en ZETAPHY el ${t}`, imPqNotAnchored: 'no anclado en la cadena',
+    imPqAnchorBtn: 'Anclar en ZETAPHY', imPqSave: 'Guardar el archivo anclado',
     badge: 'Neuro-checked', badgeTip: 'Este token tiene un certificado Neuro-checked (NeuroAttest): Neuro revisó su código. Una revisión, no una garantía.',
   },
   ko: {
@@ -124,6 +128,7 @@ export const ASSIST = {
     imCertNone: 'NeuroAttest가 아직 배포되지 않았어요', imReport: '보고서 해시', imSkill: 'Neuro 코드 (skill)', imModel: 'AI 모델',
     imPq: '양자 내성 증명 검증', imPqHint: '아카이브(.pq.json)를 열면 ML-DSA-44 서명, 해시, 온체인 앵커를 이 브라우저에서 확인해요.',
     imPqOk: '유효: 변경되지 않았고 ML-DSA-44로 서명됨', imPqBad: '유효하지 않음', imPqKey: '서명 키 (keccak-256)', imPqAnchored: (t) => `${t}에 ZETAPHY에 앵커됨`, imPqNotAnchored: '온체인 앵커 없음',
+    imPqAnchorBtn: 'ZETAPHY에 앵커하기', imPqSave: '앵커된 아카이브 저장',
     badge: 'Neuro-checked', badgeTip: '이 토큰은 Neuro-checked 인증서(NeuroAttest)가 있어요: Neuro가 코드를 검사했어요. 검사일 뿐 보증이 아니에요.',
   },
   ja: {
@@ -149,6 +154,7 @@ export const ASSIST = {
     imCertNone: 'NeuroAttest はまだデプロイされていません', imReport: 'レポートのハッシュ', imSkill: 'Neuro のコード（skill）', imModel: 'AI モデル',
     imPq: '耐量子の証明を検証', imPqHint: 'アーカイブ（.pq.json）を開くと、ML-DSA-44 署名、ハッシュ、オンチェーンのアンカーをこのブラウザで確認します。',
     imPqOk: '有効：改ざんなし、ML-DSA-44 で署名済み', imPqBad: '無効', imPqKey: '署名鍵（keccak-256）', imPqAnchored: (t) => `${t} に ZETAPHY にアンカー済み`, imPqNotAnchored: 'オンチェーンのアンカーなし',
+    imPqAnchorBtn: 'ZETAPHY にアンカーする', imPqSave: 'アンカー済みのアーカイブを保存',
     badge: 'Neuro-checked', badgeTip: 'このトークンには Neuro-checked 証明書（NeuroAttest）があります：Neuro がコードをチェックしました。チェックであって保証ではありません。',
   },
   ru: {
@@ -174,6 +180,7 @@ export const ASSIST = {
     imCertNone: 'NeuroAttest ещё не развёрнут', imReport: 'хеш отчёта', imSkill: 'код Neuro (skill)', imModel: 'модель ИИ',
     imPq: 'Проверить квантово-устойчивую аттестацию', imPqHint: 'Откройте архив (.pq.json): его подпись ML-DSA-44, хеши и якорь в сети проверяются в этом браузере.',
     imPqOk: 'ДЕЙСТВИТЕЛЕН: не изменён и подписан ML-DSA-44', imPqBad: 'НЕДЕЙСТВИТЕЛЕН', imPqKey: 'ключ подписи (keccak-256)', imPqAnchored: (t) => `закреплён в ZETAPHY ${t}`, imPqNotAnchored: 'не закреплён в сети',
+    imPqAnchorBtn: 'Закрепить в ZETAPHY', imPqSave: 'Сохранить закреплённый архив',
     badge: 'Neuro-checked', badgeTip: 'У этого токена есть сертификат Neuro-checked (NeuroAttest): Neuro проверил его код. Это проверка, а не гарантия.',
   },
   vi: {
@@ -199,6 +206,7 @@ export const ASSIST = {
     imCertNone: 'NeuroAttest chưa được triển khai', imReport: 'mã băm báo cáo', imSkill: 'mã Neuro (skill)', imModel: 'mô hình AI',
     imPq: 'Xác minh chứng thực kháng lượng tử', imPqHint: 'Mở tệp lưu trữ (.pq.json): chữ ký ML-DSA-44, các mã băm và neo trên chuỗi được kiểm tra ngay trong trình duyệt này.',
     imPqOk: 'HỢP LỆ: không bị sửa và được ký bằng ML-DSA-44', imPqBad: 'KHÔNG HỢP LỆ', imPqKey: 'khóa ký (keccak-256)', imPqAnchored: (t) => `đã neo trên ZETAPHY lúc ${t}`, imPqNotAnchored: 'chưa neo trên chuỗi',
+    imPqAnchorBtn: 'Neo trên ZETAPHY', imPqSave: 'Lưu tệp đã neo',
     badge: 'Neuro-checked', badgeTip: 'Token này có chứng nhận Neuro-checked (NeuroAttest): Neuro đã kiểm tra mã của nó. Là kiểm tra, không phải bảo đảm.',
   },
 };

@@ -115,6 +115,11 @@ export async function verifyArchive(a, crypto, { anchorOf = null, checkReport = 
 
 /** NeuroAnchor.anchoredAt(bytes32) call data and its answer (time, block, by). */
 export const ANCHORED_AT = '0x9591a610'; // anchoredAt(bytes32)
+export const ANCHOR = '0xeecdf927'; // anchor(bytes32)
+/** NeuroAnchor.anchor(bytes32) call data. */
+export const anchorData = (hash) => ANCHOR + hash.slice(2);
+/** The archive with its anchor written in (what `zetaphy attest-pq anchor` writes), for saving. */
+export const withAnchor = (a, { contract, hash, time }) => ({ ...a, anchor: { chainId: 77390, contract, hash, time: Number(time) } });
 export const anchoredAtData = (hash) => ANCHORED_AT + hash.slice(2);
 export function readAnchoredAt(hex) {
   const h = String(hex).replace(/^0x/, '');

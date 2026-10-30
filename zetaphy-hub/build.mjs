@@ -35,7 +35,7 @@ const SKIP_IN = { wallet: new Set(['src']),
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data',
   'robots.txt', 'sitemap.xml', `${INDEXNOW_KEY}.txt`]);
 const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'ceremony.html', 'ceremony.css', 'ceremony.js', 'ceremony-i18n.js', 'ceremony-core.js', 'vendor/snarkjs.min.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
-  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
+  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'aichain.js', 'aichain-i18n.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
 
 /** The node and the contract addresses (public data only) the hub's pages read. `files`: {path: json} in place of the repo's (tests). */
 export function hubConfig(cfg, files = null) {
@@ -45,10 +45,18 @@ export function hubConfig(cfg, files = null) {
   // useful work (docs/future/useful-work.md): `zetaphy deploy-useful-work` writes its own deployment file (testnet only)
   const uw = read('zetaphy-network/deployments/useful-work-77390.json');
   if (uw?.chainId === 77390) for (const [k, v] of Object.entries(uw.contracts ?? {})) out[k] ??= v;
+  // the AI-map contracts (.github/workflows/ai-deploy.yml, zetaphy-network/src/aideploy.js)
+  const ai = read('zetaphy-network/deployments/ai-77390.json');
+  if (ai?.chainId === 77390) for (const [k, v] of Object.entries(ai.contracts ?? {})) out[k] ??= v;
+  const fl = read('zetaphy-neuro/ml/fl/deployment.json');
+  if (fl?.chainId === 77390 && fl.rounds) out.federatedRounds ??= fl.rounds;
+  const oracle = read('zetaphy-chain/hyperlane/neuro-oracle.json');
+  if (oracle?.sender) out.neuroOracleSender ??= oracle.sender;
   const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
   const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity',
     'usefulWork', 'bugBounty', 'workerReputation', 'usefulIssuance', 'riskForecasts', 'foresight', 'detectorPool', 'dataDao', 'arena', 'intentExecutor', 'labelRegistry', 'vouchRegistry', 'agentRegistry', 'agentPolicyWallet',
-    'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance']
+    'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance',
+    'modelRegistry', 'neuroScore', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds']
     .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
   if (Number.isInteger(out.timelockBlock) && contracts.timelock) contracts.timelockBlock = out.timelockBlock;
   const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};

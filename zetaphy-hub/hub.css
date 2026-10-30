@@ -533,3 +533,12 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
   .am-head { align-items: flex-start; }
   .am-hero { width: 52px; height: 52px; border-radius: 16px; }
 }
+
+/* On-chain AI tab (aichain.js) */
+.ac-form { display: grid; gap: 6px; }
+.ac-form input { min-width: 0; }
+.ac-card .kv3 dd { overflow-wrap: anywhere; }
+.ac-card .tbl td { white-space: normal; }
+.ac-list { margin: 0 0 8px; padding-left: 18px; max-height: 9em; overflow: auto; overflow-wrap: anywhere; }
+.ac-level.lv-minimal, .ac-level.lv-low { color: var(--ok); }
+.ac-level.lv-medium, .ac-level.lv-high { color: var(--warn); }
