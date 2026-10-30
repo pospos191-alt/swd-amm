@@ -1,0 +1,56 @@
+# Foundry config for the audit suites only (audit/invariants). The contracts stay where they are;
+# the JS build (scripts/build.js: solc 0.8.26, optimizer 200 runs, cancun) is unchanged.
+#   forge test                         # 256 runs x depth 50 (local default)
+#   FOUNDRY_PROFILE=deep forge test    # 1000 x 100 (CI / nightly)
+[profile.default]
+src = "contracts"
+test = "audit/invariants"
+out = "audit/out"
+cache_path = "audit/cache"
+libs = ["../audit/lib"]
+remappings = ["forge-std/=../audit/lib/forge-std/src/"]
+allow_paths = ["../audit/lib"]
+solc_version = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+offline = true
+auto_detect_remappings = false
+
+[profile.default.fuzz]
+runs = 256
+failure_persist_dir = "audit/cache/fuzz"
+
+[profile.default.invariant]
+runs = 256
+depth = 50
+fail_on_revert = false
+failure_persist_dir = "audit/cache/invariant"
+
+[profile.deep]
+src = "contracts"
+test = "audit/invariants"
+out = "audit/out"
+cache_path = "audit/cache"
+libs = ["../audit/lib"]
+remappings = ["forge-std/=../audit/lib/forge-std/src/"]
+allow_paths = ["../audit/lib"]
+solc_version = "0.8.26"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 200
+offline = true
+auto_detect_remappings = false
+
+[profile.deep.fuzz]
+runs = 5000
+failure_persist_dir = "audit/cache/fuzz"
+
+[profile.deep.invariant]
+runs = 1000
+depth = 100
+fail_on_revert = false
+failure_persist_dir = "audit/cache/invariant"
+
+[lint]
+lint_on_build = false

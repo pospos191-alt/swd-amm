@@ -1,0 +1,13 @@
+# Echidna config for the harnesses in EchidnaHarnesses.sol (run from zetaphy-network/):
+#   echidna . --contract EchidnaCheques --config audit/invariants/echidna/echidna.yaml
+# crytic-compile builds the project with forge (foundry.toml: out = audit/out).
+testMode: property
+prefix: "echidna_"
+testLimit: 20000
+seqLen: 50
+shrinkLimit: 2000
+deployer: "0x30000"
+sender: ["0x10000", "0x20000", "0x30000"]
+balanceContract: 0
+corpusDir: "audit/invariants/echidna/corpus"
+cryticArgs: ["--foundry-out-directory", "audit/out", "--foundry-compile-all"]
