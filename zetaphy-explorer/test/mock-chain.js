@@ -29,6 +29,8 @@ export const TOKEN = '0x3333333333333333333333333333333333333333';
 export const NFT = '0x4444444444444444444444444444444444444444';
 export const MULTI = '0x5555555555555555555555555555555555555555';
 export const REGISTRY = '0x7777777777777777777777777777777777777777';
+/** AuditCertificate: TOKEN holds a valid Gold certificate; every other address none. */
+export const AUDIT_CERT = '0xa0d1a0d1a0d1a0d1a0d1a0d1a0d1a0d1a0d1a0d1';
 export const TOKEN_NAME = '<img src=x onerror="window.__pwned=1">Sawasdee‮txt.exe';
 export const REPORT = '0x' + 'e7'.repeat(32);
 // An address with a long history (57 MsgSends to LOCKED) that only the node's tx index
@@ -520,6 +522,14 @@ export function buildChain() {
           if (s === DETAIL_SEL.evidence) return evidence['0x' + arg] ?? '0x' + word(0) + word(128) + word(0) + word(0) + word(0);
           if (s === DETAIL_SEL.responseAt) { const r = responses['0x' + arg.slice(0, 64)]?.[Number(BigInt('0x' + arg.slice(64)))]; return r ?? '0x' + word(160) + word(0) + word(0) + word(0) + word(0) + word(0); }
           throw Object.assign(new Error('execution reverted'), { code: 3 });
+        }
+        if (t === AUDIT_CERT.toLowerCase()) {
+          // certificate(uint64,address) -> (requestId, chainId, target, codeHash, reportHash, sourceHash, level, auditors, mutationBps, issuedAt, expiresAt, revokedAt, revokedBy), valid
+          if (s !== sel4('certificate(uint64,address)')) throw Object.assign(new Error('execution reverted'), { code: 3 });
+          const target = '0x' + arg.slice(88, 128);
+          if (target !== TOKEN.toLowerCase()) return '0x' + word(0).repeat(14);
+          const issued = 1_780_000_000n;
+          return '0x' + [4n, 77390n, BigInt(TOKEN), 0x11n, 0x22n, 0x33n, 3n, 6n, 9000n, issued, issued + 3650n * 86400n, 0n, 0n, 1n].map(word).join('');
         }
         if (t === ROUTER.toLowerCase() || t === PROXY.toLowerCase()) {
           const r = { [sel4('factory()')]: '0x' + word(BigInt(FACTORY)), [sel4('WETH()')]: '0x' + word(BigInt(WNATIVE)), [sel4('REGISTRY_GAS()')]: '0x' + word(50000), [sel4('SCORE_GAS()')]: '0x' + word(60000),

@@ -23,6 +23,7 @@ import { DISCLAIMER, REPRODUCE, keccak_256, bytesToHex, hexToBytes, PQ_LOCK_ADDR
 // quantum exposure, fund-flow graph, cross-chain trace, plain-question search.
 import { loadLabels, labelTag } from './labels.js';
 import { createRisk, setRisk, getRisk, riskBadge, riskSummaryCard } from './risk.js';
+import { createAudit, setAudit, auditBadge } from './audit.js';
 import { quantumCard, pageQuantum } from './quantum.js';
 import { pageFlow } from './flow.js';
 import { loadCrossChain, crossChainCard } from './crosschain.js';
@@ -561,7 +562,7 @@ async function pageAddress(view, param) {
     pq?.pubKeyType === 'mldsa44' ? badge(t('mldsaAccount'), 'pq') : null,
     pq?.quantumLockedTo ? badge(t('quantumLocked'), 'pq') : null,
     a.lower === DEAD_ADDRESS.toLowerCase() ? badge(t('deadAddress'), 'warn') : null,
-    labelTag(a.lower), riskBadge(a.lower, { t, lang }),
+    labelTag(a.lower), riskBadge(a.lower, { t, lang }), isContract ? auditBadge(a.lower, { t, lang }) : null,
   ];
   const tokenSlot = isContract ? slot(tokenInfo(a.hex), (i) => (i.standard ? h('p', null, badge(i.standard.toUpperCase().replace('ERC', 'ERC-'), 'token'), ' ', routeLink(`token/${a.hex}`, `${tokenText(i.name, 40)} (${tokenText(i.symbol, 16)}) · ${t('tokenPage')}`)) : '')) : null;
   append(view, [
@@ -650,7 +651,7 @@ async function pageToken(view, param) {
   const link = neuroLink(cfg, a.hex);
   const supply = info.totalSupply == null ? '—' : info.standard === 'erc20' && info.decimals != null ? `${formatUnits(info.totalSupply, info.decimals, { maxFrac: 8 })} ${tokenText(info.symbol, 16)}` : groupDigits(info.totalSupply.toString());
   append(view, [
-    h('h1', null, t('token'), ': ', h('span', { class: 'token-name' }, tokenText(info.name, 48)), ' ', h('span', { class: 'dim' }, `(${tokenText(info.symbol, 16)})`)),
+    h('h1', null, t('token'), ': ', h('span', { class: 'token-name' }, tokenText(info.name, 48)), ' ', h('span', { class: 'dim' }, `(${tokenText(info.symbol, 16)})`), isContract ? auditBadge(a.lower, { t, lang }) : null),
     !isContract ? note(t('notAContract'), 'warn') : null,
     card(t('overview'), kv([
       [t('contract'), addrLink(a.hex, { full: true })],
@@ -815,6 +816,7 @@ function setup(c) {
     } catch { ready = false; }
   }
   setRisk(ready ? createRisk({ batch: (calls) => api.evmBatch(calls), single: (m, p) => api.evm(m, p, TTL.short), registry: cfg.threatRegistry, chainId: cfg.evmChainId }) : null);
+  setAudit(ready && cfg.auditCertificate ? createAudit({ single: (m, p) => api.evm(m, p, TTL.short), contract: cfg.auditCertificate, chainId: cfg.evmChainId }) : null);
   validatorCache = { at: 0, rows: null, height: null, promise: null };
   tokenCache.clear();
   resolver = null;

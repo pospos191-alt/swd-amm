@@ -51,6 +51,8 @@ export function parseType(t) {
   throw new Error(`abi: unsupported type ${t}`);
 }
 const dynamic = (t) => t.kind === 'string' || t.kind === 'bytes' || t.kind === 'array' || (t.kind === 'tuple' && t.of.some(dynamic));
+/** Bytes a type takes in the head: a static tuple sits inline (all its words), anything else is one word. */
+const headSize = (t) => (t.kind === 'tuple' && !dynamic(t) ? t.of.reduce((s, x) => s + headSize(x), 0) : 32);
 
 function encodeOne(t, v) {
   switch (t.kind) {
@@ -72,7 +74,7 @@ function encodeOne(t, v) {
 function encodeSeq(types, values) {
   if (types.length !== values.length) throw new Error('abi: wrong number of values');
   let head = '', tail = '';
-  const headLen = types.length * 32;
+  const headLen = types.reduce((s, t) => s + headSize(t), 0);
   types.forEach((t, i) => {
     const enc = encodeOne(t, values[i]);
     if (dynamic(t)) { head += pad32((headLen + tail.length / 2).toString(16)); tail += enc; } else head += enc;
@@ -120,9 +122,11 @@ function decodeOne(t, d, at) {
   }
 }
 function decodeSeq(types, d, base) {
-  return types.map((t, i) => {
-    const slot = base + i * 32;
-    return dynamic(t) ? decodeOne(t, d, base + Number(BigInt(`0x${d.slice(slot * 2, slot * 2 + 64)}`))) : decodeOne(t, d, slot);
+  let slot = base;
+  return types.map((t) => {
+    const at = slot;
+    slot += headSize(t);
+    return dynamic(t) ? decodeOne(t, d, base + Number(BigInt(`0x${d.slice(at * 2, at * 2 + 64)}`))) : decodeOne(t, d, at);
   });
 }
 /** Decodes return data for these types: an array of values (tuples as arrays). */

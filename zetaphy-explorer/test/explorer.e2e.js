@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 import { getAddress } from 'ethers';
 import { T, LANGS } from '../src/i18n.js';
-import { buildChain, CHAIN_ID, LATEST, ME, ME_HEX, LOCKED, LOCKED_HEX, TOKEN, NFT, REGISTRY, REPORT, RESPONSE_TEXT, ROUTER, PROXY, FACTORY, DEPLOYER, MAILBOX, SEPOLIA_DELIVERY_TX,
+import { buildChain, CHAIN_ID, LATEST, ME, ME_HEX, LOCKED, LOCKED_HEX, TOKEN, NFT, REGISTRY, AUDIT_CERT, REPORT, RESPONSE_TEXT, ROUTER, PROXY, FACTORY, DEPLOYER, MAILBOX, SEPOLIA_DELIVERY_TX,
   BUSY, BUSY_HEX, BUSY_TXS, FLOW_HEX } from './mock-chain.js';
 
 // Free ports (other checkouts may run these tests at the same time), or E2E_PORT and E2E_PORT + 1
@@ -49,7 +49,7 @@ async function launch() {
 
 before(async () => {
   const cfg = join(dir, 'config.json');
-  writeFileSync(cfg, JSON.stringify({ node: NODE, threatRegistry: REGISTRY, neuroReportUrl: NEURO, chainStatsUrl: 'https://stats.zetaphy.test/api/chain-stats', scanBlocks: 100 }));
+  writeFileSync(cfg, JSON.stringify({ node: NODE, threatRegistry: REGISTRY, auditCertificate: AUDIT_CERT, neuroReportUrl: NEURO, chainStatsUrl: 'https://stats.zetaphy.test/api/chain-stats', scanBlocks: 100 }));
   // The placeholder a fresh checkout ships (the launch replaces config.json with the live node).
   const placeholder = join(dir, 'placeholder.json');
   writeFileSync(placeholder, JSON.stringify({ node: 'https://<node-host>', evmRpc: '', cometRpc: '', rest: '', threatRegistry: '', neuroReportUrl: '', scanBlocks: 100 }));
@@ -348,6 +348,15 @@ test('contract page: Sourcify source and creator, Read contract, proxy to its im
   // a token that is not verified: said so
   await go(page, `#/token/${TOKEN}`);
   await waitText(page, 'Not verified');
+  // its ZETAPHY audit certificate (AuditCertificate.certificate): a badge with the level, and the limits in the hover text
+  await page.waitForSelector('h1 .audit-badge');
+  assert.match(await page.locator('h1 .audit-badge').innerText(), /Audited \(ZETAPHY\) · Gold · until/);
+  assert.match(await page.locator('h1 .audit-badge').getAttribute('title'), /Not a guarantee/);
+  await go(page, `#/address/${TOKEN}`);
+  await page.waitForSelector('.audit-badge');
+  await go(page, `#/address/${ROUTER}`);
+  await waitText(page, 'Contract');
+  assert.equal(await page.locator('.audit-badge').count(), 0, 'no certificate: no badge');
   assert.deepEqual(problems, []);
   await ctx.close();
 });

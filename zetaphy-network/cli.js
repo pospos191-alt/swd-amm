@@ -191,6 +191,12 @@
 //                                      UsefulWork + BugBounty + WorkerReputation (+ UsefulIssuance), PAUSED, owned by the timelock;
 //                                      writes deployments/useful-work-77390.json (the hub reads it) and the proposals that open them
 //   zetaphy bounty check <findingId> --bounty 0x… --spec <spec.json> [--attest]   runners: verify a revealed finding, then vote
+//   zetaphy audit request|status|cert|bond|commit-report|reveal-report|submit|reveal|judge|appeal|settle|certify|claim|run …
+//                                      the open audit network (docs/future/audit-network.md): anyone asks for an audit,
+//                                      anyone bonded audits, bonded judges decide, runners run audit/report.js + Neuro;
+//                                      `zetaphy audit` alone prints every command
+//   zetaphy deploy-audit --timelock 0x… --treasury 0x… --jobs 0x… [--reputation 0x…]   AuditNetwork + AuditRunners +
+//                                      AuditJudges + AuditCertificate, governed by the timelock (no key keeps a role)
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
 //   zetaphy identity get <chain> <address> | <agentId>   who controls it, its Neuro report link, runner verdicts
 //   zetaphy identity claim <agentId>                      the contract (or its owner()) takes control of its identity
@@ -1699,6 +1705,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (group === 'work' || group === 'bounty' || group === 'deploy-useful-work') {
     const { usefulWorkCommand } = await import('./src/usefulworkcli.js');
     return usefulWorkCommand({ group, cmd, rest, opt, write, s, connect, connectRpc });
+  }
+
+  // the open audit network: requests, auditors, judges, runners, certificates (src/auditnetcli.js)
+  if (group === 'audit' || group === 'deploy-audit') {
+    const { auditCommand } = await import('./src/auditnetcli.js');
+    return auditCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, home: HOME });
   }
 
   // Neuro-checked certificates, ML-DSA-44 attestations, the herd-immunity pusher (src/assistcli.js)
