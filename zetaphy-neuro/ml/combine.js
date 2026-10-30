@@ -13,6 +13,7 @@ import { explainPrediction, modelLevel } from './model.js';
 import { headProbability, checkHead } from './fl/head.js';
 import { extractFeatures } from './features.js';
 import { featureLabel } from './features.js';
+import { runChecks } from './checks.js';
 
 export const RANK = { info: 0, good: 0, low: 1, medium: 2, high: 3 };
 const LEVELS = ['info', 'low', 'medium', 'high'];
@@ -58,7 +59,15 @@ export function scoreReport(model, report, opts = {}) {
     value: Math.round(c.value * 1000) / 1000,
     effect: Math.round(c.logit * 1000) / 1000, // + raises the risk, - lowers it (calibrated logit units)
   }));
-  const out = { model: model.id, p: Math.round(p * 10000) / 10000, level: modelLevel(model, p), top };
+  // Fixed path checks (ml/checks.js) next to the model: what the owner can do, found by following the code.
+  const checks = runChecks(features, lang);
+  // Plain-words reasons: the checks that fired, then what pushed the model's risk UP (top mixes both
+  // directions), strongest first.
+  const reasons = [...checks.map((c) => c.label), ...e.contributions.filter((c) => c.logit > 0).map((c) => featureLabel(c.feature)[lang])]
+    .slice(0, opts.reasons ?? 3);
+  const learned = modelLevel(model, p);
+  const level = checks.reduce((lv, c) => ((RANK[c.level] ?? 0) > (RANK[lv] ?? 0) ? c.level : lv), learned);
+  const out = { model: model.id, p: Math.round(p * 10000) / 10000, level, modelLevel: learned, checks, top, reasons };
   if (head) out.head = head.id;
   return out;
 }

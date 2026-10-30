@@ -1,9 +1,9 @@
 {
- "modelId": "nml-b4c35477f7b1",
- "bytes": 87086,
+ "modelId": "nml-3ab3cd303911",
+ "bytes": 75509,
  "trees": 160,
- "features": 133,
- "seconds": 8,
+ "features": 158,
+ "seconds": 12,
  "data": {
   "rows": 1867,
   "positives": 979,
@@ -28,48 +28,48 @@
   "high": 0.95
  },
  "calib": {
-  "a": 0.8262107,
-  "b": 0.3170766
+  "a": 0.642174,
+  "b": 0.04799963
  },
  "heldOut": {
   "model": {
    "n": 390,
    "positives": 201,
    "negatives": 189,
-   "auc": 0.9975,
-   "recallAt1Fpr": 0.9502,
-   "thresholdAt1Fpr": 0.7878,
-   "recallAt5Fpr": 0.9851,
-   "thresholdAt5Fpr": 0.3652,
-   "brier": 0.0202,
-   "logloss": 0.0726,
-   "ece": 0.0263
+   "auc": 1,
+   "recallAt1Fpr": 1,
+   "thresholdAt1Fpr": 0.0789,
+   "recallAt5Fpr": 1,
+   "thresholdAt5Fpr": 0.0177,
+   "brier": 0.0022,
+   "logloss": 0.0135,
+   "ece": 0.0101
   },
   "codeOnly": {
    "n": 390,
    "positives": 201,
    "negatives": 189,
-   "auc": 0.9963,
-   "recallAt1Fpr": 0.9502,
-   "thresholdAt1Fpr": 0.7878,
-   "recallAt5Fpr": 0.9751,
-   "thresholdAt5Fpr": 0.5116,
-   "brier": 0.026,
-   "logloss": 0.0922,
-   "ece": 0.0371
+   "auc": 1,
+   "recallAt1Fpr": 1,
+   "thresholdAt1Fpr": 0.1452,
+   "recallAt5Fpr": 1,
+   "thresholdAt5Fpr": 0.0227,
+   "brier": 0.0023,
+   "logloss": 0.0142,
+   "ece": 0.0099
   },
   "solidityOnly": {
    "n": 274,
    "positives": 130,
    "negatives": 144,
-   "auc": 0.9949,
-   "recallAt1Fpr": 0.9231,
-   "thresholdAt1Fpr": 0.7878,
-   "recallAt5Fpr": 0.9769,
-   "thresholdAt5Fpr": 0.3773,
-   "brier": 0.0287,
-   "logloss": 0.1011,
-   "ece": 0.0352
+   "auc": 1,
+   "recallAt1Fpr": 1,
+   "thresholdAt1Fpr": 0.0789,
+   "recallAt5Fpr": 1,
+   "thresholdAt5Fpr": 0.0227,
+   "brier": 0.0031,
+   "logloss": 0.0172,
+   "ece": 0.0124
   },
   "rulesOnly": {
    "auc": 0.7966
@@ -80,12 +80,16 @@
     "fpr": 0.2275
    },
    "combined": {
-    "recall": 0.9502,
+    "recall": 0.995,
     "fpr": 0.2275
    },
    "combinedCodeOnly": {
-    "recall": 0.9502,
-    "fpr": 0.2328
+    "recall": 0.995,
+    "fpr": 0.2275
+   },
+   "combinedNoChecks": {
+    "recall": 0.99,
+    "fpr": 0.2275
    }
   },
   "loweredByModel": 0,
@@ -148,19 +152,19 @@
     "n": 14,
     "label": 1,
     "flaggedRules": 7,
-    "flaggedCombined": 13
+    "flaggedCombined": 14
    },
    "drain": {
     "n": 16,
     "label": 1,
     "flaggedRules": 0,
-    "flaggedCombined": 11
+    "flaggedCombined": 16
    },
    "hidden-mint": {
     "n": 18,
     "label": 1,
     "flaggedRules": 9,
-    "flaggedCombined": 17
+    "flaggedCombined": 18
    },
    "high-tax": {
     "n": 12,
@@ -220,7 +224,7 @@
     "n": 3,
     "label": 1,
     "flaggedRules": 0,
-    "flaggedCombined": 0
+    "flaggedCombined": 2
    },
    "seize": {
     "n": 14,
@@ -249,46 +253,46 @@
   }
  },
  "current": {
-  "modelId": "nml-5b00bf3c9e1d",
+  "modelId": "nml-b4c35477f7b1",
   "heldOut": {
    "model": {
     "n": 390,
     "positives": 201,
     "negatives": 189,
-    "auc": 0.9938,
+    "auc": 0.9975,
     "recallAt1Fpr": 0.9502,
-    "thresholdAt1Fpr": 0.7451,
-    "recallAt5Fpr": 0.9801,
-    "thresholdAt5Fpr": 0.3021,
-    "brier": 0.0239,
-    "logloss": 0.0919,
-    "ece": 0.023
+    "thresholdAt1Fpr": 0.7878,
+    "recallAt5Fpr": 0.9851,
+    "thresholdAt5Fpr": 0.3652,
+    "brier": 0.0202,
+    "logloss": 0.0726,
+    "ece": 0.0263
    },
    "codeOnly": {
     "n": 390,
     "positives": 201,
     "negatives": 189,
-    "auc": 0.9903,
-    "recallAt1Fpr": 0.9005,
-    "thresholdAt1Fpr": 0.8808,
-    "recallAt5Fpr": 0.9602,
-    "thresholdAt5Fpr": 0.5248,
-    "brier": 0.0326,
-    "logloss": 0.1213,
-    "ece": 0.0322
+    "auc": 0.9963,
+    "recallAt1Fpr": 0.9502,
+    "thresholdAt1Fpr": 0.7878,
+    "recallAt5Fpr": 0.9751,
+    "thresholdAt5Fpr": 0.5116,
+    "brier": 0.026,
+    "logloss": 0.0922,
+    "ece": 0.0371
    },
    "solidityOnly": {
     "n": 274,
     "positives": 130,
     "negatives": 144,
-    "auc": 0.9891,
+    "auc": 0.9949,
     "recallAt1Fpr": 0.9231,
-    "thresholdAt1Fpr": 0.7451,
-    "recallAt5Fpr": 0.9538,
-    "thresholdAt5Fpr": 0.3632,
-    "brier": 0.034,
-    "logloss": 0.1267,
-    "ece": 0.0286
+    "thresholdAt1Fpr": 0.7878,
+    "recallAt5Fpr": 0.9769,
+    "thresholdAt5Fpr": 0.3773,
+    "brier": 0.0287,
+    "logloss": 0.1011,
+    "ece": 0.0352
    },
    "rulesOnly": {
     "auc": 0.7966
@@ -299,12 +303,16 @@
      "fpr": 0.2275
     },
     "combined": {
-     "recall": 0.9403,
-     "fpr": 0.2328
+     "recall": 0.9851,
+     "fpr": 0.2275
     },
     "combinedCodeOnly": {
-     "recall": 0.9403,
-     "fpr": 0.2381
+     "recall": 0.9851,
+     "fpr": 0.2328
+    },
+    "combinedNoChecks": {
+     "recall": 0.9502,
+     "fpr": 0.2275
     }
    },
    "loweredByModel": 0,
@@ -319,7 +327,7 @@
      "n": 14,
      "label": 1,
      "flaggedRules": 5,
-     "flaggedCombined": 13
+     "flaggedCombined": 14
     },
     "burnable": {
      "n": 14,
@@ -367,19 +375,19 @@
      "n": 14,
      "label": 1,
      "flaggedRules": 7,
-     "flaggedCombined": 13
+     "flaggedCombined": 14
     },
     "drain": {
      "n": 16,
      "label": 1,
      "flaggedRules": 0,
-     "flaggedCombined": 12
+     "flaggedCombined": 16
     },
     "hidden-mint": {
      "n": 18,
      "label": 1,
      "flaggedRules": 9,
-     "flaggedCombined": 15
+     "flaggedCombined": 18
     },
     "high-tax": {
      "n": 12,
@@ -421,7 +429,7 @@
      "n": 18,
      "label": 0,
      "flaggedRules": 0,
-     "flaggedCombined": 1
+     "flaggedCombined": 0
     },
     "plain-renounced": {
      "n": 18,
@@ -470,32 +478,32 @@
  },
  "decision": {
   "better": true,
-  "why": "AUC 0.9938 -> 0.9975 (+0.0037), recall@1%FPR 0.9502 -> 0.9502 (+0.0000)"
+  "why": "AUC 0.9975 -> 1 (+0.0025), recall@1%FPR 0.9502 -> 1 (+0.0498)"
  },
  "leaveFamilyOut": {
   "blacklist-trap": {
    "n": 66,
-   "recallAt1Fpr": 0.682,
+   "recallAt1Fpr": 0.985,
    "rulesAlarm": 0.379,
-   "combinedAlarm": 0.682
+   "combinedAlarm": 0.712
   },
   "dormant-fee": {
    "n": 71,
-   "recallAt1Fpr": 0.31,
+   "recallAt1Fpr": 0.662,
    "rulesAlarm": 0.394,
-   "combinedAlarm": 0.69
+   "combinedAlarm": 1
   },
   "drain": {
    "n": 73,
-   "recallAt1Fpr": 0.863,
+   "recallAt1Fpr": 1,
    "rulesAlarm": 0,
-   "combinedAlarm": 0.795
+   "combinedAlarm": 1
   },
   "hidden-mint": {
    "n": 73,
-   "recallAt1Fpr": 0.37,
+   "recallAt1Fpr": 1,
    "rulesAlarm": 0.452,
-   "combinedAlarm": 0.616
+   "combinedAlarm": 1
   },
   "high-tax": {
    "n": 60,
@@ -517,15 +525,15 @@
   },
   "phish-link": {
    "n": 60,
-   "recallAt1Fpr": 0.8,
+   "recallAt1Fpr": 1,
    "rulesAlarm": 1,
    "combinedAlarm": 1
   },
   "seize": {
    "n": 72,
-   "recallAt1Fpr": 0.917,
+   "recallAt1Fpr": 1,
    "rulesAlarm": 0,
-   "combinedAlarm": 0.847
+   "combinedAlarm": 1
   }
  },
  "caveat": "Held-out rows come from the same synthetic generators as the training rows (and synthetic market facts), so these numbers are optimistic for real contracts. See leaveFamilyOut and codeOnly for harder estimates."

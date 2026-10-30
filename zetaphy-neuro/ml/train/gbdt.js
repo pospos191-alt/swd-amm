@@ -148,19 +148,31 @@ export function trainerMargin(m, x) {
 }
 
 /**
- * Platt scaling: fits p = sigmoid(a*z + b) on held-out margins by Newton's
- * method with the usual target smoothing. Deterministic.
+ * Platt scaling: fits p = sigmoid(a*z + b) on held-out margins with the usual target smoothing and a weak
+ * Gaussian prior around the identity (a = 1, b = 0, strength `prior`), by damped Newton steps. The prior keeps
+ * the fit finite when the calibration rows are perfectly separated: without it the slope runs off to ~1e8 and
+ * every probability rounds to exactly 0 or 1, which destroys the ranking (AUC) and the explanations. Deterministic.
  */
-export function fitPlatt(z, y, iters = 50) {
+export function fitPlatt(z, y, iters = 100, prior = 1) {
   let pos = 0;
   for (const v of y) pos += v;
   const neg = y.length - pos;
   const tp = (pos + 1) / (pos + 2);
   const tn = 1 / (neg + 2);
   const t = y.map((v) => (v ? tp : tn));
+  const loss = (a, b) => {
+    let l = (prior / 2) * ((a - 1) ** 2 + b * b);
+    for (let i = 0; i < z.length; i++) {
+      const u = a * z[i] + b;
+      // cross-entropy with soft targets, written stably: log(1 + e^u) - t*u
+      l += (u > 0 ? u + Math.log1p(Math.exp(-u)) : Math.log1p(Math.exp(u))) - t[i] * u;
+    }
+    return l;
+  };
   let a = 1; let b = 0;
+  let cur = loss(a, b);
   for (let k = 0; k < iters; k++) {
-    let ga = 0; let gb = 0; let haa = 1e-9; let hab = 0; let hbb = 1e-9;
+    let ga = prior * (a - 1); let gb = prior * b; let haa = prior; let hab = 0; let hbb = prior;
     for (let i = 0; i < z.length; i++) {
       const p = sigmoid(a * z[i] + b);
       const r = p - t[i];
@@ -172,8 +184,12 @@ export function fitPlatt(z, y, iters = 50) {
     if (Math.abs(det) < 1e-12) break;
     const da = (hbb * ga - hab * gb) / det;
     const db = (haa * gb - hab * ga) / det;
-    a -= da; b -= db;
-    if (Math.abs(da) < 1e-10 && Math.abs(db) < 1e-10) break;
+    let step = 1;
+    let next = loss(a - da, b - db);
+    while (next > cur && step > 1e-6) { step /= 2; next = loss(a - step * da, b - step * db); }
+    if (next > cur) break;
+    a -= step * da; b -= step * db; cur = next;
+    if (Math.abs(step * da) < 1e-10 && Math.abs(step * db) < 1e-10) break;
   }
   return { a: round7(a), b: round7(b) };
 }

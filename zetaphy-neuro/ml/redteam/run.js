@@ -15,6 +15,7 @@
 //
 //   node ml/redteam/run.js [--n 120] [--seed <text>] [--model ml/model.json] [--out ml/out/redteam] [--no-record]
 //   node ml/redteam/run.js --gaps [--model path]   # rewrite known-gaps.json for a model
+//   node ml/redteam/run.js --refeature              # rebuild every recorded evasion from its recipe (new features)
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { makeSample, SIM_TELLS } from '../data/solgen.js';
@@ -22,6 +23,7 @@ import { runSamples, freshChain } from '../lib/pipeline.js';
 import { checkModel, probability } from '../model.js';
 import { scoreReport, combine, RANK } from '../combine.js';
 import { FEATURES } from '../features.js';
+import { checksRank } from '../checks.js';
 import { rng } from '../lib/rng.js';
 
 const ML = new URL('../', import.meta.url).pathname;
@@ -133,10 +135,10 @@ export function readEvasions(path = EVASIONS) {
 export function gapsFor(model, rows = readEvasions()) {
   const out = [];
   for (const r of rows) {
-    const pr = model ? probability(model, FEATURES.map((n) => r.f?.[n] ?? 0)) : 0;
+    const pr = model ? probability(model, model.features.map((n) => r.f?.[n] ?? 0)) : 0;
     const th = model?.thresholds ?? {};
     const ml = pr >= th.high ? 3 : pr >= th.medium ? 2 : pr >= th.low ? 1 : 0;
-    if (Math.max(RANK[r.level] ?? 0, ml) < RANK.medium) out.push({ id: r.id, family: r.family, mutations: r.mutations, tell: r.tell ?? null, p: Math.round(pr * 10000) / 10000 });
+    if (Math.max(RANK[r.level] ?? 0, ml, model ? checksRank(r.f) : 0) < RANK.medium) out.push({ id: r.id, family: r.family, mutations: r.mutations, tell: r.tell ?? null, p: Math.round(pr * 10000) / 10000 });
   }
   return out;
 }
@@ -148,6 +150,20 @@ function arg(name, def) {
 
 async function main() {
   const model = loadModel(arg('model', `${ML}model.json`));
+  if (process.argv.includes('--refeature')) {
+    // After a feature change: same recipes, same ids, rows read again with the current ml/features.js.
+    const old = readEvasions();
+    const { results, errors } = await attack(old.map((r) => r.recipe), null);
+    if (errors.length || results.length !== old.length) throw new Error(`refeature: ${errors.length} build errors, ${results.length}/${old.length} rows`);
+    const rows = results.map((r) => r.row).sort((a, b) => (a.id < b.id ? -1 : 1));
+    for (const r of rows) {
+      const was = old.find((o) => o.id === r.id);
+      if (!was || was.level !== r.level || was.rulesLevel !== r.rulesLevel) throw new Error(`refeature: ${r.id} no longer reads the same`);
+    }
+    writeFileSync(EVASIONS, rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
+    console.log(`${rows.length} recorded evasions re-read with the current features`);
+    return;
+  }
   if (process.argv.includes('--gaps')) {
     const gaps = gapsFor(model);
     writeFileSync(GAPS, JSON.stringify({ modelId: model?.id ?? null, note: 'Recorded red-team evasions this model still misses (see ml/README.md). ml/test/redteam.test.js fails if any other recorded evasion slips back below medium.', gaps }, null, 1) + '\n');

@@ -18,6 +18,7 @@ import { FEATURES, FEATURE_VERSION } from '../features.js';
 import { probability, checkModel } from '../model.js';
 import { trainGBDT, fitPlatt, trainerMargin, round7, DEFAULTS } from './gbdt.js';
 import { evaluate, recallAtFpr } from './metrics.js';
+import { checksRank } from '../checks.js';
 
 const ML = new URL('../', import.meta.url).pathname;
 const RANK = { info: 0, good: 0, low: 1, medium: 2, high: 3 };
@@ -96,11 +97,13 @@ export function trainModel(trainRows, calibRows, params = {}) {
 
 /** Rules-only score: the level the fixed rules (+ simulation) gave, as 0..3 (+ a tiny tie-break on the rules-only level). */
 const rulesScore = (r) => (RANK[r.level] ?? 0) + (RANK[r.rulesLevel] ?? 0) / 10;
-const combinedLevel = (model, r, mask) => {
+// What a user sees: rules + simulation, raised by the model and by the fixed path checks (ml/checks.js;
+// `checks: false` leaves them out, to show what the model alone adds).
+const combinedLevel = (model, r, mask, { checks = true } = {}) => {
   const pr = probability(model, vec(r, model.features, mask));
   const th = model.thresholds;
   const ml = pr >= th.high ? 3 : pr >= th.medium ? 2 : pr >= th.low ? 1 : 0;
-  return Math.max(RANK[r.level] ?? 0, ml);
+  return Math.max(RANK[r.level] ?? 0, ml, checks ? checksRank(r.f) : 0);
 };
 
 /** Full evaluation of a model on held-out rows. */
@@ -139,6 +142,7 @@ export function evaluateModel(model, rows) {
       rules: levelHits(2, (r) => RANK[r.level] ?? 0),
       combined: levelHits(2, (r) => combinedLevel(model, r, null)),
       combinedCodeOnly: levelHits(2, (r) => combinedLevel(model, r, mask)),
+      combinedNoChecks: levelHits(2, (r) => combinedLevel(model, r, null, { checks: false })),
     },
     loweredByModel: lowered,
     byFamily,

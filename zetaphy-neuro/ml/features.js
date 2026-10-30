@@ -11,8 +11,10 @@
 
 import { codeLengthWithoutMetadata, hexToBytes } from '../src/bytecode.js';
 import { SELECTORS } from '../src/selectors.generated.js';
+import { flowFeatures, FLOW_FEATURES } from './flow.js';
 
-export const FEATURE_VERSION = 1;
+// 2: + per-function path features (x_*, ml/flow.js)
+export const FEATURE_VERSION = 2;
 
 const RANK = { high: 3, medium: 2, low: 1, info: 0, good: 0 };
 const CATS = ['mint', 'blacklist', 'pause', 'fee', 'trading', 'limit', 'upgrade', 'roles', 'ownership', 'feeExempt', 'taxWallet', 'holder', 'burn', 'view'];
@@ -80,6 +82,31 @@ const INFO = {
   k_age: L('contract age (days, log)', 'อายุสัญญา (วัน, log)'),
   k_verified: L('verified source published', 'เผยแพร่ซอร์สที่ยืนยันแล้ว'),
   k_holders: L('number of holders (log)', 'จำนวนผู้ถือ (log)'),
+  x_fn_found: L('functions could be traced one by one', 'ติดตามโค้ดของแต่ละฟังก์ชันได้'),
+  x_fn_xfer: L('functions that can move tokens', 'จำนวนฟังก์ชันที่ย้ายเหรียญได้'),
+  x_priv_fns: L('functions only the owner can call', 'ฟังก์ชันที่เจ้าของเท่านั้นเรียกได้'),
+  x_priv_unknown: L('unnamed functions only the owner can call', 'ฟังก์ชันไม่รู้จักชื่อที่เจ้าของเท่านั้นเรียกได้'),
+  x_priv_xfer: L('the owner can move or create tokens', 'เจ้าของย้ายหรือสร้างเหรียญได้เอง'),
+  x_priv_xfer_unknown: L('an unnamed owner-only function moves or creates tokens', 'มีฟังก์ชันไม่รู้จักชื่อของเจ้าของที่ย้ายหรือสร้างเหรียญได้'),
+  x_priv_xfer_free: L('the owner can move or create tokens with no fixed limit', 'เจ้าของย้ายหรือสร้างเหรียญได้โดยไม่มีเพดานตายตัว'),
+  x_priv_capped: L('owner-only functions bounded by a fixed limit', 'ฟังก์ชันเฉพาะเจ้าของที่มีเพดานตายตัว'),
+  x_priv_sstore: L('owner-only functions that change settings', 'ฟังก์ชันเฉพาะเจ้าของที่เปลี่ยนค่าตั้งได้'),
+  x_owner_const: L('owner() always returns the same value', 'owner() คืนค่าเดิมเสมอ'),
+  x_fake_renounce: L('says it has no owner, yet owner-only functions remain', 'อ้างว่าไม่มีเจ้าของ แต่ยังมีฟังก์ชันที่เจ้าของเท่านั้นเรียกได้'),
+  x_fee_owner_set: L('the owner sets the rate transfers charge', 'เจ้าของตั้งอัตราที่หักตอนโอนได้'),
+  x_fee_owner_free: L('the owner can set the transfer fee to any value (no cap)', 'เจ้าของตั้งค่าธรรมเนียมการโอนเป็นค่าใดก็ได้ (ไม่มีเพดาน)'),
+  x_tx_found: L('transfer code could be traced', 'ติดตามโค้ดการโอนได้'),
+  x_tx_guard: L('transfers check for one special address (owner exemption)', 'การโอนตรวจหาที่อยู่พิเศษ (เจ้าของได้รับยกเว้น)'),
+  x_tx_time: L('transfers depend on the time or block number', 'การโอนขึ้นกับเวลาหรือหมายเลขบล็อก'),
+  x_tx_gasprice: L('transfers depend on the gas price', 'การโอนขึ้นกับราคา gas'),
+  x_tx_origin: L('transfers read tx.origin', 'การโอนอ่าน tx.origin'),
+  x_tx_codesize: L('transfers check whether the sender is a contract', 'การโอนตรวจว่าผู้ส่งเป็นสัญญาหรือไม่'),
+  x_tx_balance: L('transfers read an ETH balance', 'การโอนอ่านยอด ETH'),
+  x_tx_coinbase: L('transfers read the block producer', 'การโอนอ่านผู้ผลิตบล็อก'),
+  x_tx_gas: L('transfers depend on the gas left', 'การโอนขึ้นกับ gas ที่เหลือ'),
+  x_tx_branches: L('how many conditions transfers check', 'จำนวนเงื่อนไขที่การโอนตรวจ'),
+  x_tx_sloads: L('how many stored values transfers read', 'จำนวนค่าที่เก็บไว้ที่การโอนอ่าน'),
+  x_tx_div: L('transfers take a percentage (a fee)', 'การโอนหักเป็นเปอร์เซ็นต์ (ค่าธรรมเนียม)'),
 };
 
 function buildNames() {
@@ -97,6 +124,7 @@ function buildNames() {
     'm_sim_run', 'm_sim_ok', 'm_sim_tax_medium', 'm_sim_tax_high', 'm_sim_cannot_sell', 'm_sim_skipped', 'm_buy_tax', 'm_sell_tax',
   ];
   for (const k of ['k_top_holder', 'k_top10', 'k_lp_locked', 'k_liquidity', 'k_age', 'k_verified', 'k_holders']) names.push(k, `${k}_known`);
+  names.push(...FLOW_FEATURES);
   return names;
 }
 /** Feature names, in the order of the vector. */
@@ -253,7 +281,9 @@ export function extractFeatures({ report = {}, code = null, logicCode = null, ma
   out.s_erc20 = clamp01((catCount.erc20 ?? 0) / ERC20_COUNT);
   for (const c of CATS) out[`s_cat_${c}`] = Math.log1p(catCount[c] ?? 0);
 
-  Object.assign(out, codeFeatures(logicCode && logicCode !== '0x' ? logicCode : code));
+  const body = logicCode && logicCode !== '0x' ? logicCode : code;
+  Object.assign(out, codeFeatures(body));
+  Object.assign(out, flowFeatures(body, { known: (sel) => SELECTORS[sel] != null }));
 
   const simF = (a.findings ?? []).filter((f) => f.id.startsWith('sim-'));
   if (simF.length) {

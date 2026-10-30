@@ -215,7 +215,8 @@ test('gate: refuses a head that lowers recorded evasions or real scams; accepts 
   assert.equal(g.ok, false);
   assert.match(g.reasons.join(' '), /recorded evasion/);
   const benign = MODEL.check.map((r) => ({ f: r.f, label: 0 }));
-  const up = { ...zero, theta: zero.theta.map((w, i) => (i === 0 ? 8 : w)) };
+  // +20 on the raw margin (before calibration): decisive whatever the model's calibration slope is
+  const up = { ...zero, theta: zero.theta.map((w, i) => (i === 0 ? 20 : w)) };
   const g2 = gateHead(MODEL, zero, up, benign, { maxFprRise: 0 });
   assert.equal(g2.ok, false);
   assert.match(g2.reasons.join(' '), /false alarms/);

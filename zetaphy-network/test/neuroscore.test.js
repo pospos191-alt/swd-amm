@@ -13,7 +13,9 @@ import { evalFixed, fromHex, quantizeVector, packFeatures, levelOf, scoreToProba
 import { probability, modelLevel, checkModel } from '../../zetaphy-neuro/ml/model.js';
 
 const NEURO_ML = new URL('../../zetaphy-neuro/ml/', import.meta.url);
-const MODEL = checkModel(JSON.parse(readFileSync(new URL('model.json', NEURO_ML), 'utf8')));
+// The on-chain model is pinned on its own (ml/onchain/model.json): the zk circuit and its public ceremony hard-wire
+// its bytes, so it may lag ml/model.json (the browser / runner model) until a new ceremony is run.
+const MODEL = checkModel(JSON.parse(readFileSync(new URL('onchain/model.json', NEURO_ML), 'utf8')));
 const FIXED = JSON.parse(readFileSync(new URL('onchain/model.fixed.json', NEURO_ML), 'utf8'));
 const HELD = JSON.parse(readFileSync(new URL('onchain/heldout.json', NEURO_ML), 'utf8'));
 const BYTES = fromHex(FIXED.bytes);
@@ -44,7 +46,7 @@ async function setup() {
 
 test('exporter: hash = keccak256(bytes); JS fixed-point replays the model\'s own check rows', () => {
   assert.equal(keccak256(FIXED.bytes), FIXED.hash);
-  assert.equal(FIXED.modelId, MODEL.id, 'model.fixed.json is the export of the committed model.json (rerun node ml/onchain/export.js)');
+  assert.equal(FIXED.modelId, MODEL.id, 'model.fixed.json is the export of the committed ml/onchain/model.json (rerun node ml/onchain/export.js)');
   for (const row of Object.values(MODEL.check)) {
     const v = MODEL.features.map((n) => row.f[n] ?? 0);
     const r = evalFixed(BYTES, quantizeVector(v));

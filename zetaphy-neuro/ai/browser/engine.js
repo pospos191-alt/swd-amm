@@ -63,7 +63,7 @@ export function loadEngine(bytes, manifest) {
       const p = Math.round(s.p * 1000) / 10;
       summary.push(fill(t.ml, { p }));
       if (s.level && RANK[s.level] > RANK[rulesLevel]) agreement = 'more-concerned';
-      secondLook.push({ title: t.mlTitle, detail: fill(t.mlDetail, { p, f: s.top.map((x) => x.label).join('; ') }), confidence: p >= 70 ? 'medium' : 'low', evidence: ['ML'] });
+      secondLook.push({ title: t.mlTitle, detail: fill(t.mlDetail, { p, f: (s.reasons?.length ? s.reasons : s.top.map((x) => x.label)).join('; ') }), confidence: p >= 70 ? 'medium' : 'low', evidence: ['ML'] });
     }
     const oc = ctx.facts.onchain;
     for (const x of oc?.threatRegistry ?? []) {
