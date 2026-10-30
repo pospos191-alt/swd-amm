@@ -34,6 +34,7 @@ beforeEach(async () => {
   await w.send('owner', 'setLimit', [tok.address, 1000n * ZETA, 300n * ZETA]);
   await w.send('owner', 'setAllowed', [addr('bob'), false, true]);
   await w.send('owner', 'setAllowed', [sink.address, true, false]);
+  await w.send('owner', 'setAllowedCall', [sink.address, sink.iface.getFunction('poke').selector, true]); // APW-1: per (target, selector)
   key = passkey('app.sawasdeecoin.com');
   pq = mldsaKey();
   await w.send('owner', 'setEmergencyKeys', [pq.keyHash, key.x, key.y, key.rpIdHash]);
@@ -76,6 +77,17 @@ test('ERC-20: capped tokens only, transfers to listed recipients, approvals to l
   await exec(sink.address, 1n * ZETA, sink.iface.encodeFunctionData('poke', ['0x01']));
   assert.equal(await sink.call('calls'), 1n);
   await assert.rejects(exec(addr('thief'), 0n, sink.iface.encodeFunctionData('poke', ['0x01'])), /NotAllowed/);
+  // APW-1: a function of an allowed contract runs only if that (target, selector) pair is allowed, and
+  // transfer-like functions (ERC-721/1155 safeTransferFrom, ERC-777 send, transferAndCall, DAI move/pull, ...)
+  // can never be allowed
+  const NFT = new Interface(['function safeTransferFrom(address,address,uint256)', 'function transferAndCall(address,uint256,bytes)', 'function pull(address,uint256)']);
+  await w.send('owner', 'setAllowed', [tok.address, true, false]);
+  for (const d of [NFT.encodeFunctionData('safeTransferFrom', [w.address, addr('thief'), 1n]), NFT.encodeFunctionData('transferAndCall', [addr('thief'), 1n, '0x']),
+    NFT.encodeFunctionData('pull', [w.address, 1n])]) {
+    await assert.rejects(exec(tok.address, 0n, d), /Forbidden/);
+    await assert.rejects(w.send('owner', 'setAllowedCall', [tok.address, d.slice(0, 10), true]), /Forbidden/);
+  }
+  await assert.rejects(exec(tok.address, 0n, TOKEN.encodeFunctionData('setApprovalForAll', [sink.address, true]).replace(/^0xa22cb465/, '0x12345678')), /SelectorNotAllowed/);
   assert.equal(await w.call('remaining', [tok.address]), 700n * ZETA);
 });
 
@@ -190,7 +202,11 @@ test('only the owner changes the policy', async () => {
   await assert.rejects(w.send('agent', 'setEmergencyKeys', [ZeroHash, 0n, 0n, ZeroHash]), /NotOwner/);
   // the agent cannot reach the wallet's own admin through execute either (it is not an allowed target, and calls come from the wallet, not the owner)
   await w.send('owner', 'setAllowed', [w.address, true, false]);
-  await assert.rejects(exec(w.address, 0n, w.iface.encodeFunctionData('setLimit', [NATIVE, 10n ** 30n, 10n ** 30n])), /CallFailed/);
+  const setLimit = w.iface.encodeFunctionData('setLimit', [NATIVE, 10n ** 30n, 10n ** 30n]);
+  await assert.rejects(exec(w.address, 0n, setLimit), /SelectorNotAllowed/, 'an allowed target alone runs no function (APW-1)');
+  await assert.rejects(w.send('agent', 'setAllowedCall', [w.address, setLimit.slice(0, 10), true]), /NotOwner/);
+  await w.send('owner', 'setAllowedCall', [w.address, setLimit.slice(0, 10), true]);
+  await assert.rejects(exec(w.address, 0n, setLimit), /CallFailed/);
   await assert.rejects(w.send('owner', 'setConfig', [addr('agent'), committee.address, 0n, 0n]), /BadConfig/);
 });
 

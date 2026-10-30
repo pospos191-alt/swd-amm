@@ -17,6 +17,15 @@ interface IFundable {
 ///         rewards contract), and a change only takes effect DELAY after it
 ///         is announced, so everyone can see it coming. Nobody can make the
 ///         vault pay faster than the schedule.
+///
+///         Money vests from when it arrives (RV-1): the vault keeps the balance
+///         that has been vesting since the last checkpoint (`_vesting`) and what
+///         has vested but is not paid yet (`_due`). Every deposit through
+///         `receive()` and every release first moves what vested since the last
+///         checkpoint into `_due`, then counts the new balance as vesting from
+///         today. Coins that arrive without `receive()` (selfdestruct) start
+///         vesting at the next checkpoint. Fund the vault with a call that
+///         forwards gas (receive() does a checkpoint), not a 2300-gas transfer.
 contract RewardVault {
     uint256 private constant RAY = 1e27;
     /// 0.9^(1/365) in RAY: keep^365 = 0.9 (to 1e-25)
@@ -36,6 +45,9 @@ contract RewardVault {
     Share[] private _shares;
     Share[] private _pending;
     uint64 public pendingAt; // 0 = nothing pending
+    uint256 private _vesting; // balance vesting since day `releasedDays` (excludes _due)
+    uint256 private _due;     // vested, not paid out yet
+    bool private _paying;     // inside release(): recipients are being called
 
     event Released(uint256 day, uint256 amount);
     event Paid(address indexed to, uint256 amount, bool ok);
@@ -54,7 +66,10 @@ contract RewardVault {
         for (uint256 i = 0; i < shares_.length; i++) _shares.push(shares_[i]);
     }
 
-    receive() external payable {}
+    /// Deposits start vesting today, not at the last release (RV-1).
+    receive() external payable {
+        if (!_paying) _checkpoint();
+    }
 
     modifier onlyGovernance() {
         if (msg.sender != governance) revert NotGovernance();
@@ -69,17 +84,19 @@ contract RewardVault {
 
     /// What `release()` would pay right now.
     function releasable() public view returns (uint256) {
+        if (_paying) return 0;
         uint256 n = daysElapsed() - releasedDays;
-        if (n == 0) return 0;
-        uint256 bal = address(this).balance;
-        return bal - (bal * _rpow(DAILY_KEEP, n)) / RAY;
+        return _due + (n == 0 ? 0 : _vested(_vesting, n));
     }
 
     /// Pays out everything vested since the last release. Anyone may call it.
     function release() public returns (uint256 amount) {
-        amount = releasable();
-        releasedDays = uint64(daysElapsed()); // before any external call
+        if (_paying) return 0; // a recipient re-entering: nothing more
+        _checkpoint();         // before any external call
+        amount = _due;
         if (amount == 0) return 0;
+        _due = 0;
+        _paying = true;
         emit Released(releasedDays, amount);
         uint256 left = amount;
         for (uint256 i = 0; i < _shares.length; i++) {
@@ -96,6 +113,9 @@ contract RewardVault {
             // vault (and keeps vesting); a broken recipient cannot block others.
             emit Paid(s.to, ok ? part : 0, ok);
         }
+        _paying = false;
+        // what a recipient refused (or sent back) is still here: it vests again from today
+        _vesting = address(this).balance;
     }
 
     // ---- recipients ----
@@ -125,7 +145,8 @@ contract RewardVault {
     /// After the delay, anyone may switch to the announced recipients.
     /// What vested before the switch is paid to the old ones first.
     function applyShares() external {
-        if (pendingAt == 0 || block.timestamp < pendingAt) revert TooEarly();
+        // not from inside release() (a recipient): the list being paid never changes under it
+        if (_paying || pendingAt == 0 || block.timestamp < pendingAt) revert TooEarly();
         // Take the pending list first: a recipient called during release()
         // must not be able to apply it a second time.
         Share[] memory next = _pending;
@@ -143,6 +164,22 @@ contract RewardVault {
     }
 
     // ---- internals ----
+
+    function _vested(uint256 bal, uint256 n) private pure returns (uint256) {
+        return bal - (bal * _rpow(DAILY_KEEP, n)) / RAY;
+    }
+
+    /// Moves what vested since the last checkpoint into _due; everything else held (including money that
+    /// just arrived) vests from today.
+    function _checkpoint() private {
+        uint256 today = daysElapsed();
+        uint256 n = today - releasedDays;
+        if (n != 0) {
+            _due += _vested(_vesting, n);
+            releasedDays = uint64(today);
+        }
+        _vesting = address(this).balance - _due;
+    }
 
     function _check(Share[] memory s) private pure {
         if (s.length == 0 || s.length > MAX_SHARES) revert BadShares();

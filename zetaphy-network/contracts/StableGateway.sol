@@ -9,6 +9,11 @@ interface IERC20Permit {
 
 interface INeuroJobs {
     function requestFor(address refundTo, bytes32 chain, string calldata target) external payable returns (uint256);
+    function getJob(uint256 id) external view returns (address requester, uint64 created, uint8 status, bytes32 chain,
+        string memory target, uint256 fee, bytes32 result, uint8 commits, uint8 reveals, address[3] memory seat);
+    function FAIL_BURN_BPS() external view returns (uint16);
+    function credit(address) external view returns (uint256);
+    function withdraw() external;
 }
 
 /// ZetaphyOracle's consumer surface: a USD price (18 decimals) or a revert.
@@ -32,6 +37,12 @@ interface IPriceOracle {
 ///         (TestnetFixedPricesSet event; priceSource() says so). It is not a
 ///         market price; it exists for testnet bring-up before the oracle has a
 ///         TWAP window, and is off by default.
+///         Refunds stay in the paying currency (SG-1): the gateway is the job's
+///         requester, so when a job fails or expires NeuroJobs credits the
+///         ZETAPHY refund to the gateway (back into the reserve), and
+///         `refund(jobId)` pays the user the same share of the stablecoin it
+///         paid (cost x (1 - NeuroJobs' fail burn)). The reserve is never a
+///         stablecoin -> ZETAPHY exchange.
 ///         Roles: the owner (the ZetaphyTimelock) sets everything and moves funds;
 ///         guardians (named by the owner) may pause requests at once.
 contract StableGateway {
@@ -55,6 +66,11 @@ contract StableGateway {
     bool public testnetFixedPrices;
     mapping(address => uint256) public testnetFixedPrice;
     mapping(address => uint256) public nonces;
+
+    /// What each gateway-paid job cost its user, for the stablecoin refund of a failed job.
+    struct PaidJob { address user; address token; uint128 cost; bool refunded; }
+    mapping(uint256 => PaidJob) public paidJobs;
+    uint8 private constant JOB_FAILED = 3; // NeuroJobs.Status.Failed
 
     bytes32 public constant REQUEST_TYPEHASH = keccak256(
         "JobRequest(address user,address token,bytes32 chain,string target,uint256 fee,uint256 tip,uint256 maxCost,uint256 nonce,uint256 deadline)");
@@ -84,6 +100,7 @@ contract StableGateway {
     event GuardianSet(address indexed who, bool on);
     event Paused(address indexed by);
     event Unpaused();
+    event Refunded(uint256 indexed jobId, address indexed user, address indexed token, uint256 amount);
 
     error NotOwner();
     error NotGuardian();
@@ -96,6 +113,7 @@ contract StableGateway {
     error ReserveLow();
     error NoPriceSource();
     error PriceUnavailable(bytes reason);
+    error NotRefundable();
 
     constructor(INeuroJobs jobs_) {
         jobs = jobs_;
@@ -232,8 +250,25 @@ contract StableGateway {
 
         require(IERC20Permit(q.token).transferFrom(q.user, address(this), cost), "payment failed");
         if (q.tip > 0) require(IERC20Permit(q.token).transferFrom(q.user, msg.sender, q.tip), "tip failed");
-        jobId = jobs.requestFor{value: q.fee}(q.user, q.chain, q.target);
+        // the gateway is the requester: a failed job's ZETAPHY refund comes back to the reserve (SG-1)
+        jobId = jobs.requestFor{value: q.fee}(address(this), q.chain, q.target);
+        paidJobs[jobId] = PaidJob(q.user, q.token, uint128(cost), false);
         emit Paid(jobId, q.user, q.token, cost, q.tip, msg.sender);
+    }
+
+    /// A gateway-paid job failed (or expired unanswered): anyone may refund its user in the stablecoin it
+    /// paid, the same share NeuroJobs refunds (cost minus the fail burn). The ZETAPHY NeuroJobs credited
+    /// to the gateway is pulled back into the reserve.
+    function refund(uint256 jobId) external returns (uint256 amount) {
+        PaidJob storage p = paidJobs[jobId];
+        if (p.user == address(0) || p.refunded) revert NotRefundable();
+        p.refunded = true; // before any call (a revert below undoes it)
+        (address requester, , uint8 status, , , , , , , ) = jobs.getJob(jobId);
+        if (requester != address(this) || status != JOB_FAILED) revert NotRefundable();
+        amount = (uint256(p.cost) * (10_000 - jobs.FAIL_BURN_BPS())) / 10_000;
+        if (jobs.credit(address(this)) != 0) jobs.withdraw();
+        emit Refunded(jobId, p.user, p.token, amount);
+        if (amount > 0) require(IERC20Permit(p.token).transfer(p.user, amount), "refund failed");
     }
 
     function _recover(bytes32 digest, bytes calldata sig) private pure returns (address) {

@@ -1,0 +1,6 @@
+{
+ "_comment": "Open High/Critical findings a person has seen in a reviewed report (audit/README.md \"Baseline\"). NOT triage: they stay open in every report until triage.yml decides them. Only the weekly report PR (merged by a person) updates this file.",
+ "commit": "6829beeb21bae9f1563e4b9de03551983ec5a71b",
+ "generated": "2026-10-30T12:42:20Z",
+ "ids": []
+}

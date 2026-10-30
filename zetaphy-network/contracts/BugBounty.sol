@@ -32,14 +32,23 @@ interface IBBIssuance {
 ///           4. `claim`: the earliest accepted finding (every earlier one rejected or never
 ///              revealed) gets the reward, plus the bounty's subsidy from UsefulIssuance, plus
 ///              its deposit back. Later accepted duplicates get their deposit back.
-///         A rejected finding's deposit goes to the bounty's reward. Outcomes feed
+///         A rejected (or never revealed) finding's deposit grows the bounty's reward for its
+///         winner; if nobody wins, it is burned at the refund rather than given to the sponsor,
+///         and once the bounty is paid or refunded it is burned at once (BB-1, BB-2).
+///         Finding slots: the sponsor cannot commit to its own bounty, one address holds at most
+///         MAX_PER_FINDER commitments per bounty, and only findings still in play (not rejected,
+///         closed or past their reveal window unrevealed) count against MAX_FINDINGS, so junk
+///         commitments free their slot when their reveal window ends (BB-1). Outcomes feed
 ///         WorkerReputation (bugValid / bugInvalid). Governance only sets the subsidy of a
 ///         bounty and the deposit; it cannot take a bounty's reward, which only goes to a
 ///         verified finding or back to the sponsor after the bounty ended.
 contract BugBounty {
     uint8 internal constant BUG_VALID = 4;
     uint8 internal constant BUG_INVALID = 5;
-    uint256 public constant MAX_FINDINGS = 32;
+    uint256 public constant MAX_FINDINGS = 32;      // findings in play at once, per bounty
+    uint256 public constant MAX_COMMITS = 256;      // all commitments ever, per bounty (bounds the loops)
+    uint256 public constant MAX_PER_FINDER = 4;     // commitments per address, per bounty
+    address public constant BURN = 0x000000000000000000000000000000000000dEaD;
 
     enum State { None, Committed, Revealed, Accepted, Rejected, Paid, Closed }
 
@@ -87,6 +96,10 @@ contract BugBounty {
     Finding[] private _findings;
     mapping(uint256 => mapping(address => bool)) public attested;
     mapping(address => uint256) public owed;
+    /// Part of a bounty's reward that came from forfeited deposits: never refunded to the sponsor.
+    mapping(uint256 => uint256) public forfeitedOf;
+    mapping(uint256 => mapping(address => uint256)) public commitsBy;
+    uint256 public burned;
 
     event BountyPosted(uint256 indexed id, address indexed sponsor, bytes32 specHash, string specURI, uint256 reward, uint64 deadline);
     event SubsidySet(uint256 indexed id, uint256 subsidy);
@@ -100,6 +113,7 @@ contract BugBounty {
     event PausedSet(bool paused);
     event GuardianSet(address guardian);
     event GovernanceSet(address governance);
+    event Burned(uint256 indexed bountyId, uint256 amount);
 
     error Paused();
     error NotGovernance();
@@ -190,7 +204,12 @@ contract BugBounty {
         Bounty storage b = _bounty(bountyId);
         if (b.paid || b.refunded || block.timestamp > b.deadline) revert Closed();
         if (msg.value != findingDeposit || commitment == bytes32(0)) revert BadValue();
-        if (b.findings.length >= MAX_FINDINGS) revert TooMany();
+        if (msg.sender == b.sponsor) revert BadFinding();
+        if (b.findings.length >= MAX_COMMITS || commitsBy[bountyId][msg.sender] >= MAX_PER_FINDER) revert TooMany();
+        uint256 inPlay;
+        for (uint256 i = 0; i < b.findings.length; i++) if (!_settledOut(_findings[b.findings[i]])) inPlay++;
+        if (inPlay >= MAX_FINDINGS) revert TooMany();
+        commitsBy[bountyId][msg.sender] += 1;
         fid = _findings.length;
         _findings.push(Finding({
             bounty: bountyId, finder: msg.sender, committedAt: uint64(block.timestamp), commitBlock: uint64(block.number),
@@ -232,7 +251,7 @@ contract BugBounty {
             _rep(f.finder, BUG_VALID, fid);
         } else if (f.no >= quorum) {
             f.state = State.Rejected;
-            _bounties[f.bounty].reward += f.deposit; // the deposit of a wrong finding grows the reward
+            _forfeit(f.bounty, f.deposit); // the deposit of a wrong finding grows the reward
             emit FindingJudged(fid, false);
             _rep(f.finder, BUG_INVALID, fid);
         }
@@ -270,7 +289,9 @@ contract BugBounty {
         Finding storage f = _finding(fid);
         if (f.state == State.Committed) {
             if (block.timestamp <= f.committedAt + revealWindow) revert TooEarly();
-            _bounties[f.bounty].reward += f.deposit;
+            f.state = State.Closed;
+            _forfeit(f.bounty, f.deposit);
+            return;
         } else if (f.state == State.Revealed) {
             if (block.timestamp <= f.revealedAt + judgeWindow) revert TooEarly();
             owed[f.finder] += f.deposit;
@@ -290,8 +311,10 @@ contract BugBounty {
             if (s == State.Accepted) revert TooEarly(); // a winner can still claim
         }
         b.refunded = true;
-        owed[b.sponsor] += b.reward;
-        emit BountyRefunded(bountyId, b.reward);
+        uint256 forfeited = forfeitedOf[bountyId];
+        owed[b.sponsor] += b.reward - forfeited;
+        emit BountyRefunded(bountyId, b.reward - forfeited);
+        _burn(bountyId, forfeited); // forfeited deposits never go to the sponsor (BB-1)
     }
 
     function withdraw() external {
@@ -337,6 +360,26 @@ contract BugBounty {
         if (f.state == State.Rejected || f.state == State.Closed) return true;
         // committed and never revealed in time: out, even before anyone calls close()
         return f.state == State.Committed && block.timestamp > f.committedAt + revealWindow;
+    }
+
+    /// A forfeited deposit: grows the reward of a bounty that can still be won; burned if it is
+    /// already paid or refunded (BB-2).
+    function _forfeit(uint256 bountyId, uint128 amount) internal {
+        Bounty storage b = _bounties[bountyId];
+        if (b.paid || b.refunded) {
+            _burn(bountyId, amount);
+        } else {
+            b.reward += amount;
+            forfeitedOf[bountyId] += amount;
+        }
+    }
+
+    function _burn(uint256 bountyId, uint256 amount) internal {
+        if (amount == 0) return;
+        burned += amount;
+        emit Burned(bountyId, amount);
+        (bool ok, ) = BURN.call{value: amount}("");
+        if (!ok) revert Nothing();
     }
 
     function _rep(address w, uint8 kind, uint256 fid) internal {

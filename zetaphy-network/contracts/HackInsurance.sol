@@ -6,7 +6,11 @@ pragma solidity 0.8.26;
 //
 //   pool:    anyone deposits testnet ZETAPHY for shares; a withdrawal is requested and paid after
 //            `withdrawDelay` (longer than a claim's whole life, so a known incident cannot be fled), at the
-//            share price of that time (requested shares still carry losses until then).
+//            share price of that time (requested shares still carry losses until then). A request can be
+//            executed only within WITHDRAW_WINDOW after it is ready (no standing exit), and no withdrawal
+//            runs while any claim is open (voting, approved and not fully paid, or disputed). Shares are
+//            priced with a virtual share and a virtual wei (ERC-4626-style offset): a pool emptied by payouts
+//            does not hand new deposits to old share holders, and a donation cannot inflate the price.
 //   targets: governance lists the covered contracts (a target key, as ThreatRegistry.addressKey(chainid, a))
 //            with a cap per claim.
 //   covers:  anyone buys cover on a listed target: amount, duration; premium = amount x premiumBps x
@@ -21,8 +25,10 @@ pragma solidity 0.8.26;
 //            neither within `voteWindow`: expired (bond refunded).
 //   dispute: during `disputeWindow` after approval anyone may dispute with a bond; governance (the chain's
 //            gov module or the timelock) then upholds or overturns. Undisputed, anyone triggers the payout.
-//   payout:  min(loss, the cover's amount, the target's cap, maxClaimBps of the pool, what is left of the
-//            daily cap), never more than the pool holds; one payout per cover.
+//   payout:  the entitlement min(loss, the cover's amount, the target's cap, maxClaimBps of the pool) is fixed
+//            when the claim is approved; each payout pays what is left of it, at most what is left of the
+//            day's cap and what the pool holds. The claim stays Approved (and the cover taken) until the whole
+//            entitlement is paid, on later days if the cap is used; a payout that would pay 0 reverts.
 // What this does not do (the doc says it plainly): prove the loss on chain (the runners' replays are the
 // evidence), cover chains other than this one, price risk, or protect LPs from a governance mistake.
 
@@ -53,6 +59,7 @@ contract HackInsurance {
 
     uint256 public constant MAX_TXS = 16;
     uint256 public constant YEAR = 365 days;
+    uint64 public constant WITHDRAW_WINDOW = 2 days; // a ready withdrawal request must be used within this
 
     IHIRunners public immutable runners;
     uint8 public immutable quorum;
@@ -85,6 +92,9 @@ contract HackInsurance {
     Claim[] public claims;
     mapping(uint256 => mapping(address => bool)) public voted;
     mapping(uint256 => uint256) public claimOfCover;   // cover id -> claim id + 1 of its open/approved claim
+    mapping(uint256 => uint256) public entitlement;    // claim id -> what it is owed in total (set at approval)
+    mapping(uint256 => uint256) public paidOut;        // claim id -> paid so far
+    uint256 public openClaims;                         // claims Voting, Approved (not fully paid) or Disputed
 
     event Deposited(address indexed lp, uint256 amount, uint256 shares);
     event WithdrawRequested(address indexed lp, uint256 shares, uint64 readyAt);
@@ -117,6 +127,9 @@ contract HackInsurance {
     error NoShares();
     error PayFailed();
     error BadParams();
+    error ClaimsOpen();
+    error RequestExpired(uint64 at);
+    error NothingToPay();
 
     constructor(IHIRunners runners_, uint8 quorum_, uint32 minAgreed_, address governance_) {
         require(quorum_ >= 2 && governance_ != address(0), "params");
@@ -155,7 +168,9 @@ contract HackInsurance {
 
     function deposit() external payable {
         uint256 before = assets() - msg.value;
-        uint256 s = totalShares == 0 || before == 0 ? msg.value : (msg.value * totalShares) / before;
+        // +1 virtual share and +1 virtual wei: 1:1 for the first deposit, and when the pool is empty but
+        // shares exist the old shares are worth < 1 wei of the new money (HI-3).
+        uint256 s = (msg.value * (totalShares + 1)) / (before + 1);
         if (s == 0) revert NoShares();
         shares[msg.sender] += s;
         totalShares += s;
@@ -172,9 +187,14 @@ contract HackInsurance {
     function withdraw() external {
         uint256 s = pendingShares[msg.sender];
         if (s == 0) revert NoShares();
-        if (block.timestamp < withdrawReadyAt[msg.sender]) revert NotYet(withdrawReadyAt[msg.sender]);
+        uint64 readyAt = withdrawReadyAt[msg.sender];
+        if (block.timestamp < readyAt) revert NotYet(readyAt);
+        if (block.timestamp > readyAt + WITHDRAW_WINDOW) revert RequestExpired(readyAt + WITHDRAW_WINDOW);  // HI-2
+        if (openClaims != 0) revert ClaimsOpen();                                                            // HI-2
         if (s > shares[msg.sender]) s = shares[msg.sender];
-        uint256 amount = (s * assets()) / totalShares;
+        uint256 pool = assets();
+        uint256 amount = (s * (pool + 1)) / (totalShares + 1);
+        if (amount > pool) amount = pool;
         pendingShares[msg.sender] = 0;
         shares[msg.sender] -= s;
         totalShares -= s;
@@ -227,6 +247,7 @@ contract HackInsurance {
         claims.push(Claim(coverId, msg.sender, ClaimState.Voting, 0, 0, uint64(block.timestamp), 0, loss, uint128(msg.value), ev, reportHash, address(0), 0));
         id = claims.length - 1;
         claimOfCover[coverId] = id + 1;
+        openClaims += 1;
         emit ClaimFiled(id, coverId, ev, reportHash, loss);
         emit ClaimEvidence(id, txHashes, fromBlock, toBlock, uri);
     }
@@ -260,6 +281,7 @@ contract HackInsurance {
         if (k.approvals >= quorum) {
             k.state = ClaimState.Approved;
             k.decidedAt = uint64(block.timestamp);
+            entitlement[id] = _entitlement(id);
             emit ClaimStateChanged(id, ClaimState.Approved);
         } else if (k.rejections >= quorum) {
             _close(id, ClaimState.Rejected, false);
@@ -305,45 +327,63 @@ contract HackInsurance {
             k.bond = 0;
             k.state = ClaimState.Overturned;
             claimOfCover[k.coverId] = 0;
+            openClaims -= 1;
             emit ClaimStateChanged(id, ClaimState.Overturned);
             _send(k.disputer, db + cb);
         }
     }
 
-    /// What payout(id) would pay now.
-    function payoutOf(uint256 id) public view returns (uint256 amount) {
+    /// The claim's total entitlement: min(loss, the cover's amount, the target's cap, maxClaimBps of the pool).
+    /// Fixed when the claim is approved (vote quorum); an upheld dispute keeps it.
+    function _entitlement(uint256 id) private view returns (uint256 amount) {
         Claim storage k = claims[id];
         Cover storage c = covers[k.coverId];
         amount = k.loss;
         if (c.amount < amount) amount = c.amount;
         uint128 cap = targets[c.target].capPerClaim;
         if (cap < amount) amount = cap;
-        uint256 pool = assets();
-        uint256 byPool = (pool * maxClaimBps) / 10000;
+        uint256 byPool = (assets() * maxClaimBps) / 10000;
         if (byPool < amount) amount = byPool;
+    }
+
+    /// What payout(id) would pay now: what is left of the entitlement, at most what is left of today's cap
+    /// and what the pool holds.
+    function payoutOf(uint256 id) public view returns (uint256 amount) {
+        amount = entitlement[id] - paidOut[id];
+        uint256 pool = assets();
+        if (pool < amount) amount = pool;
         uint128 today = uint64(block.timestamp / 1 days) == payDay ? paidToday : 0;
         uint256 dayLeft = dailyCap > today ? dailyCap - today : 0;
         if (dayLeft < amount) amount = dayLeft;
     }
 
-    /// Anyone, after the dispute window of an approved claim: pays the holder and returns the bond.
+    /// Anyone, after the dispute window of an approved claim: pays the holder what payoutOf says. The claim is
+    /// closed (Paid, bond returned, cover used) only once the whole entitlement is paid; until then it stays
+    /// Approved and later calls (e.g. on the next day, when the daily cap is used) pay the rest (HI-1).
     function payout(uint256 id) external {
         Claim storage k = claims[id];
         if (k.state != ClaimState.Approved) revert WrongState(k.state);
         if (block.timestamp < k.decidedAt + disputeWindow) revert NotYet(k.decidedAt + disputeWindow);
         uint256 amount = payoutOf(id);
-        Cover storage c = covers[k.coverId];
+        uint256 left = entitlement[id] - paidOut[id];
+        if (amount == 0 && left != 0) revert NothingToPay();
         uint64 today = uint64(block.timestamp / 1 days);
         if (payDay != today) { payDay = today; paidToday = 0; }
         paidToday += uint128(amount);
-        c.claimed = true;
-        if (c.endBlock == type(uint64).max) { c.endBlock = uint64(block.number); activeCover -= c.amount; }
-        k.state = ClaimState.Paid;
-        uint256 bond = k.bond;
-        bondsHeld -= bond;
-        k.bond = 0;
+        paidOut[id] += amount;
+        uint256 bond;
+        if (amount == left) {
+            Cover storage c = covers[k.coverId];
+            c.claimed = true;
+            if (c.endBlock == type(uint64).max) { c.endBlock = uint64(block.number); activeCover -= c.amount; }
+            k.state = ClaimState.Paid;
+            openClaims -= 1;
+            bond = k.bond;
+            bondsHeld -= bond;
+            k.bond = 0;
+            emit ClaimStateChanged(id, ClaimState.Paid);
+        }
         emit PaidOut(id, k.claimant, amount);
-        emit ClaimStateChanged(id, ClaimState.Paid);
         _send(k.claimant, amount + bond);
     }
 
@@ -351,6 +391,7 @@ contract HackInsurance {
         Claim storage k = claims[id];
         k.state = s;
         claimOfCover[k.coverId] = 0;
+        openClaims -= 1;
         uint256 b = k.bond;
         bondsHeld -= b;     // refunded, or (rejected) left in the contract as pool money
         k.bond = 0;

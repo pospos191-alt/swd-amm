@@ -11,7 +11,9 @@ interface IERC20F {
 /// @notice The classic StakingRewards design: the operator funds a reward period (ZEARLY sent here first, then
 ///         `notifyReward`), rewards stream per second to stakers by their share of the stake. Stakers can withdraw
 ///         their LP and claim at any time; nobody else can touch the staked LP. The operator can only take back
-///         ZEARLY that no reward period promised. Testnet; no value (zetaphy-chain/rewards/EARLY.md).
+///         ZEARLY that no reward period promised; what streams while nothing is staked is owed to nobody and
+///         stops being promised at the next update, so the operator can recover it (EF-1). Testnet; no value
+///         (zetaphy-chain/rewards/EARLY.md).
 contract ZetaphyEarlyFarm {
     IERC20F public immutable stakingToken; // the ZEARLY/ZETAPHY pair (LP)
     IERC20F public immutable rewardsToken; // ZEARLY
@@ -47,8 +49,15 @@ contract ZetaphyEarlyFarm {
     modifier onlyOperator() { if (msg.sender != operator) revert NotOperator(); _; }
     modifier nonReentrant() { if (locked != 1) revert Reentrancy(); locked = 2; _; locked = 1; }
     modifier update(address a) {
-        rewardPerTokenStored = rewardPerToken();
-        lastUpdate = lastTime();
+        uint256 t = lastTime();
+        if (totalSupply == 0 && t > lastUpdate) {
+            // nobody staked: what streamed since lastUpdate is owed to nobody; it is no longer promised, so
+            // recover() can take it back (EF-1)
+            owed -= (t - lastUpdate) * rewardRate;
+        } else {
+            rewardPerTokenStored = rewardPerToken();
+        }
+        lastUpdate = t;
         if (a != address(0)) { rewards[a] = earned(a); userPaid[a] = rewardPerTokenStored; }
         _;
     }

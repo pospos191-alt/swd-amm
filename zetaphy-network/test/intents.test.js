@@ -87,6 +87,18 @@ test('calls only to the targets the user signed; never to the tokens; never tran
   await assert.rejects(run(intent, auth, { ...good, calls: [{ target: addr('thief'), data: '0x' }] }), /TargetNotAllowed/);
   await assert.rejects(run(intent, auth, { ...good, calls: [{ target: router.address, data: ROUTER.encodeFunctionData('transferFrom', [user.address, addr('thief'), 1n]) }] }), /ForbiddenCall/);
   await assert.rejects(run(intent, auth, { ...good, calls: [{ target: router.address, data: tA.iface.encodeFunctionData('approve', [addr('thief'), 1n]) }] }), /ForbiddenCall/);
+  // other ways a listed target could use what a user approved to the executor (ERC-721/1155 safeTransferFrom,
+  // DAI move/pull, ERC-777 send, transferAndCall, Permit2 transferFrom) are refused too
+  const PULLS = new Interface(['function safeTransferFrom(address,address,uint256)', 'function safeTransferFrom(address,address,uint256,uint256,bytes)',
+    'function move(address,address,uint256)', 'function pull(address,uint256)', 'function send(address,uint256,bytes)',
+    'function transferAndCall(address,uint256,bytes)', 'function transferFrom(address,address,uint160,address)']);
+  for (const d of [PULLS.encodeFunctionData('safeTransferFrom(address,address,uint256)', [user.address, addr('thief'), 1n]),
+    PULLS.encodeFunctionData('safeTransferFrom(address,address,uint256,uint256,bytes)', [user.address, addr('thief'), 1n, 1n, '0x']),
+    PULLS.encodeFunctionData('move', [user.address, addr('thief'), 1n]), PULLS.encodeFunctionData('pull', [user.address, 1n]),
+    PULLS.encodeFunctionData('send', [addr('thief'), 1n, '0x']), PULLS.encodeFunctionData('transferAndCall', [addr('thief'), 1n, '0x']),
+    PULLS.encodeFunctionData('transferFrom(address,address,uint160,address)', [user.address, addr('thief'), 1n, tA.address])]) {
+    await assert.rejects(run(intent, auth, { ...good, calls: [{ target: router.address, data: d }] }), /ForbiddenCall/);
+  }
   // a list that names the token itself is still refused
   const sneaky = await swapIntent({ targets: [router.address, tA.address], nonce: 2n });
   const sAuth = await signIntent(user, sneaky, exe.address, chainId);

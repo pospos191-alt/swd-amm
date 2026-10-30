@@ -1,0 +1,294 @@
+# In-house audit pipeline (audit/README.md). Free tools only, pinned.
+#
+#   fast tier  every PR that touches contracts, the chain patches, lockfiles
+#              or audit/ itself. <= 15 min. Slither, Aderyn, Semgrep, solc
+#              SMTChecker (BMC), invariant suites (smoke), Neuro on our
+#              bytecode, npm audit + OSV-Scanner; gosec + go test -race when
+#              zetaphy-chain/ changed. FAILS on a new High/Critical finding
+#              that audit/triage.yml does not decide (Medium and below never
+#              block). The report is a workflow artifact.
+#   deep tier  Sundays, and Actions -> audit -> Run workflow. Adds the CHC
+#              SMTChecker, full invariant fuzzing (forge, halmos, medusa,
+#              echidna), mutation testing, staticcheck + govulncheck. Then
+#              opens / updates the PR from branch audit/report with the
+#              refreshed REPORT.md (a person reviews and merges it).
+#
+# Free-tier budget: a PR costs ~12 min (contracts) + ~12 min only when the
+# chain changed; the weekly deep run ~1.5-2.5 h with budget "normal".
+# "long" (up to 6 h) is for a manual run before a release / an audit.
+#
+# Code scanning: the merged SARIF is uploaded when the repository has code
+# scanning (public repos, or GitHub Advanced Security); otherwise that step
+# warns and the report artifact is the record.
+
+name: audit
+
+on:
+  pull_request:
+    paths:
+      - 'zetaphy-network/contracts/**'
+      - 'zetaphy-network/vendor/**'
+      - 'zetaphy-network/audit/**'
+      - 'zetaphy-dex/contracts/**'
+      - 'zetaphy-dex/audit/**'
+      - 'zetaphy-nft/contracts/**'
+      - 'zetaphy-nft/audit/**'
+      - 'zetaphy-chain/setup-node.sh'
+      - 'zetaphy-chain/fork-tests/**'
+      - '**/package-lock.json'
+      - 'audit/**'
+      - '.github/workflows/audit.yml'
+  schedule:
+    - cron: '37 2 * * 0' # Sundays 02:37 UTC: deep tier
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'fast or deep'
+        type: choice
+        options: [deep, fast]
+        default: deep
+      budget:
+        description: 'deep tier time budget: normal (~2 h) or long (up to 6 h)'
+        type: choice
+        options: [normal, long]
+        default: normal
+
+permissions: {}
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TIER: ${{ github.event_name == 'pull_request' && 'fast' || (github.event_name == 'schedule' && 'deep' || inputs.tier) }}
+  BUDGET: ${{ inputs.budget || 'normal' }}
+  NODE_VERSION: '20'
+
+jobs:
+  contracts:
+    name: contracts (${{ github.event_name == 'pull_request' && 'fast' || (github.event_name == 'schedule' && 'deep' || inputs.tier) }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 15 || 360 }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Install the audit tools (pinned versions, SHA-256 / pip hashes checked)
+        run: |
+          bash audit/tools/install.sh "$RUNNER_TEMP/audit-tools" "$TIER" > "$RUNNER_TEMP/audit-env"
+          cat "$RUNNER_TEMP/audit-env"
+          grep '^PATH=' "$RUNNER_TEMP/audit-env" | sed 's/^PATH=//; s/:\$PATH$//' | tr ':' '\n' >> "$GITHUB_PATH"
+          grep -v '^PATH=' "$RUNNER_TEMP/audit-env" >> "$GITHUB_ENV"
+
+      - name: Test the pipeline itself (report.js, triage matching)
+        run: node --test audit/test/*.test.js
+
+      - name: Project dependencies (mutation testing runs the projects' own tests)
+        if: env.TIER == 'deep'
+        run: |
+          for p in zetaphy-network zetaphy-dex zetaphy-nft; do (cd "$p" && npm ci --no-audit --no-fund); done
+
+      - name: Run the ${{ env.TIER }} tier
+        env:
+          SOLC: solc
+          # deep-tier budgets (normal / long)
+          SMT_WALL: ${{ env.BUDGET == 'long' && '1800' || '900' }}
+          MUTANTS_PER_FILE: ${{ env.BUDGET == 'long' && '40' || '15' }}
+          FORGE_TIMEOUT: ${{ env.BUDGET == 'long' && '3600' || '1200' }}
+          HALMOS_TIMEOUT: ${{ env.BUDGET == 'long' && '3600' || '1200' }}
+          MEDUSA_SECONDS: ${{ env.BUDGET == 'long' && '3000' || '900' }}
+          ECHIDNA_TIMEOUT: ${{ env.BUDGET == 'long' && '3600' || '1200' }}
+        run: bash audit/run.sh --tier "$TIER" --skip go --out "$RUNNER_TEMP/audit-out" --no-report
+
+      - name: Keep the raw output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: audit-raw-contracts
+          path: ${{ runner.temp }}/audit-out/raw
+          retention-days: 30
+
+  chain:
+    name: chain patches (Go)
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ github.event_name == 'pull_request' && 15 || 60 }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Did the chain code change?
+        id: c
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if git diff --name-only "$BASE...HEAD" | grep -qE '^(zetaphy-chain/(setup-node\.sh|fork-tests/)|audit/tools/(go-scan\.sh|zetaphy-lines\.js)|\.github/workflows/audit\.yml$)'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false" >> "$GITHUB_OUTPUT"; echo "No chain change: the Go step is skipped."
+          fi
+
+      - name: Set up Go (the version setup-node.sh pins)
+        if: steps.c.outputs.go == 'true'
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version: '1.25.9'
+          cache: false
+
+      - name: Patched Cosmos EVM + staticcheck / gosec / govulncheck / go test -race
+        if: steps.c.outputs.go == 'true'
+        env:
+          AUDIT_GO: '1'
+        run: bash audit/run.sh --tier "$TIER" --only go --out "$RUNNER_TEMP/audit-go" --no-report
+
+      - name: Keep the raw output
+        if: always() && steps.c.outputs.go == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: audit-raw-chain
+          path: ${{ runner.temp }}/audit-go/raw
+          retention-days: 30
+
+  report:
+    name: report + gate
+    needs: [contracts, chain]
+    if: always() && needs.contracts.result != 'cancelled'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write # SARIF upload to code scanning
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fetch the raw output of both jobs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: audit-raw-*
+          path: ${{ runner.temp }}/parts
+
+      - name: Merge
+        run: |
+          mkdir -p "$RUNNER_TEMP/out/raw" "$RUNNER_TEMP/chain/raw"
+          [ -d "$RUNNER_TEMP/parts/audit-raw-contracts" ] && cp -r "$RUNNER_TEMP/parts/audit-raw-contracts/." "$RUNNER_TEMP/out/raw/"
+          [ -d "$RUNNER_TEMP/parts/audit-raw-chain" ] && cp -r "$RUNNER_TEMP/parts/audit-raw-chain/." "$RUNNER_TEMP/chain/raw/" \
+            && bash audit/tools/merge.sh "$RUNNER_TEMP/out" "$RUNNER_TEMP/chain"
+          [ -f "$RUNNER_TEMP/out/raw/meta.json" ] || { echo "::error::the contracts job produced no output"; exit 1; }
+
+      - name: Report (audit/REPORT.md, REPORT.th.md, findings.json, audit.sarif)
+        run: |
+          node audit/report.js "$RUNNER_TEMP/out"
+          node audit/report.js --json "$RUNNER_TEMP/out" > "$RUNNER_TEMP/out/summary.json"
+          cp audit/REPORT.md audit/REPORT.th.md "$RUNNER_TEMP/out/"
+          sed -n '/^## Summary/,/^## Scope/p' audit/REPORT.md | sed '$d' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: audit-report
+          path: |
+            ${{ runner.temp }}/out/REPORT.md
+            ${{ runner.temp }}/out/REPORT.th.md
+            ${{ runner.temp }}/out/findings.json
+            ${{ runner.temp }}/out/summary.json
+            ${{ runner.temp }}/out/audit.sarif
+          retention-days: 90
+
+      - name: Upload to code scanning
+        continue-on-error: true # private repos without code scanning: the artifact above is the record
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: ${{ runner.temp }}/out/audit.sarif
+          category: zetaphy-audit
+
+      - name: Gate (new untriaged High / Critical fails)
+        if: github.event_name == 'pull_request'
+        run: node audit/report.js "$RUNNER_TEMP/out" --md "$RUNNER_TEMP/gate.md" --gate
+
+  publish:
+    name: weekly report PR (branch audit/report)
+    needs: report
+    if: always() && needs.report.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write      # push branch audit/report (only that branch)
+      pull-requests: write # open / update its PR
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: true # pushes branch audit/report below
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fetch the raw output
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: audit-raw-*
+          path: ${{ runner.temp }}/parts
+
+      - name: Refresh REPORT.md, REPORT.th.md and baseline.json
+        run: |
+          mkdir -p "$RUNNER_TEMP/out/raw" "$RUNNER_TEMP/chain/raw"
+          cp -r "$RUNNER_TEMP/parts/audit-raw-contracts/." "$RUNNER_TEMP/out/raw/"
+          [ -d "$RUNNER_TEMP/parts/audit-raw-chain" ] && cp -r "$RUNNER_TEMP/parts/audit-raw-chain/." "$RUNNER_TEMP/chain/raw/" \
+            && bash audit/tools/merge.sh "$RUNNER_TEMP/out" "$RUNNER_TEMP/chain"
+          # baseline = the open High/Critical findings of this report; merging the PR is the
+          # person's acknowledgement that they have seen them (they stay open until triaged).
+          node audit/report.js "$RUNNER_TEMP/out" --write-baseline audit/baseline.json
+
+      - name: Push branch audit/report and open / update its PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C audit/report
+          git add audit/REPORT.md audit/REPORT.th.md audit/baseline.json
+          if git diff --cached --quiet; then echo "Report unchanged."; exit 0; fi
+          git commit -q -m "audit: weekly report $(date -u +%F)" -m "Generated by $RUN_URL"
+          git push -f origin audit/report
+          body="Weekly in-house audit report ($TIER tier, run $RUN_URL).
+
+          Review the open High/Critical findings in audit/REPORT.md; record decisions in audit/triage.yml (in a separate PR, by a person). Merging this PR refreshes the report and the baseline (the open findings the PR gate already knows about); it decides nothing.
+
+          This is an automated report, not an independent audit."
+          if [ -n "$(gh pr list --head audit/report --state open --json number --jq '.[0].number')" ]; then
+            gh pr edit audit/report --body "$body"
+          else
+            gh pr create --head audit/report --base main --title "audit: weekly report" --body "$body"
+          fi

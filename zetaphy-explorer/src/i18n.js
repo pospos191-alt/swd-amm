@@ -765,6 +765,8 @@ export const T = {
  */
 export const T_INSIGHT = {
   en: {
+    // audit certificate badge (src/audit.js)
+    auditCertified: "Audited (ZETAPHY)", auditLevel1: "Bronze", auditLevel2: "Silver", auditLevel3: "Gold", auditUntil: "until {date}", auditTip: "{level} certificate: this exact code ({code}…) passed the ZETAPHY open audit process on {date} (automated tools, a public contest, judged findings). Valid until {until}. Not a guarantee that the code is safe.", auditRevoked: "Audit certificate revoked", auditRevokedTip: "A critical or high finding against this code was judged valid after the certificate: it no longer counts.", auditInvalid: "Audit certificate not valid", auditInvalidTip: "The certificate expired, or the code at this address is no longer the audited code (upgraded or redeployed).",
     // risk
     riskFlagged: 'Flagged by Neuro', riskEnforced: 'Flagged by Neuro (enforced)', riskTitle: 'Risk summary (Neuro)',
     riskOwn: 'This address', riskOwnToken: 'This token', riskUnreadable: 'the ThreatRegistry could not be read; nothing is claimed',
@@ -843,6 +845,8 @@ export const T_INSIGHT = {
     askShare: 'Share of listed', askHoldersNote: 'Only the {n} addresses seen in these blocks are compared (live balances); this is not a full rich list.',
   },
   zh: {
+    // audit certificate badge (src/audit.js)
+    auditCertified: "已审计（ZETAPHY）", auditLevel1: "铜级", auditLevel2: "银级", auditLevel3: "金级", auditUntil: "有效至 {date}", auditTip: "{level}证书：这份确切的代码（{code}…）于 {date} 通过了 ZETAPHY 开放审计流程（自动化工具、公开竞赛、经裁决的发现）。有效期至 {until}。这不保证代码安全。", auditRevoked: "审计证书已撤销", auditRevokedTip: "证书颁发后，针对此代码的严重或高危发现被裁定有效：证书不再有效。", auditInvalid: "审计证书无效", auditInvalidTip: "证书已过期，或此地址上的代码已不是被审计的代码（已升级或重新部署）。",
     riskFlagged: '被 Neuro 标记', riskEnforced: '被 Neuro 标记（已执行）', riskTitle: '风险概要（Neuro）', riskOwn: '此地址', riskOwnToken: '此代币',
     riskUnreadable: '无法读取 ThreatRegistry，因此不作任何结论', riskCounterpartiesLabel: '近期交易对手', riskNoCounterparties: '扫描的区块中没有',
     riskCounterparties: '{n} 个中有 {f} 个在 ThreatRegistry 中被标记', riskSummaryNote: '标记来自 ThreatRegistry（地址、代码和 Neuro 指纹）。交易对手仅指在扫描的区块中出现过的地址。下方是完整检查，包括证据和所有者的回应。',
@@ -886,6 +890,8 @@ export const T_INSIGHT = {
     askHoldersNote: '只比较在这些区块中出现过的 {n} 个地址（实时余额）；这不是完整的富豪榜。',
   },
   es: {
+    // audit certificate badge (src/audit.js)
+    auditCertified: "Auditado (ZETAPHY)", auditLevel1: "Bronce", auditLevel2: "Plata", auditLevel3: "Oro", auditUntil: "hasta {date}", auditTip: "Certificado {level}: este código exacto ({code}…) pasó el proceso de auditoría abierta de ZETAPHY el {date} (herramientas automáticas, un concurso público, hallazgos juzgados). Válido hasta {until}. No garantiza que el código sea seguro.", auditRevoked: "Certificado de auditoría revocado", auditRevokedTip: "Después del certificado se juzgó válido un hallazgo crítico o alto contra este código: ya no cuenta.", auditInvalid: "Certificado de auditoría no válido", auditInvalidTip: "El certificado caducó, o el código de esta dirección ya no es el auditado (actualizado o redesplegado).",
     riskFlagged: 'Marcado por Neuro', riskEnforced: 'Marcado por Neuro (aplicado)', riskTitle: 'Resumen de riesgo (Neuro)', riskOwn: 'Esta dirección',
     riskOwnToken: 'Este token', riskUnreadable: 'no se pudo leer el ThreatRegistry; no se afirma nada', riskCounterpartiesLabel: 'Contrapartes recientes',
     riskNoCounterparties: 'ninguna en los bloques escaneados', riskCounterparties: '{f} de {n} marcadas en el ThreatRegistry',
@@ -963,6 +969,8 @@ export const T_INSIGHT = {
     askHoldersNote: 'Solo se comparan las {n} direcciones vistas en estos bloques (saldos actuales); no es una lista completa de mayores titulares.',
   },
   ko: {
+    // audit certificate badge (src/audit.js)
+    auditCertified: "감사 완료 (ZETAPHY)", auditLevel1: "브론즈", auditLevel2: "실버", auditLevel3: "골드", auditUntil: "{date}까지", auditTip: "{level} 인증서: 바로 이 코드({code}…)가 {date}에 ZETAPHY 공개 감사 절차(자동화 도구, 공개 경연, 심사된 발견)를 통과했습니다. {until}까지 유효합니다. 코드가 안전하다는 보장은 아닙니다.", auditRevoked: "감사 인증서 취소됨", auditRevokedTip: "인증 후 이 코드에 대한 치명적 또는 높은 등급의 발견이 유효로 판정되어 더 이상 인정되지 않습니다.", auditInvalid: "감사 인증서 무효", auditInvalidTip: "인증서가 만료되었거나, 이 주소의 코드가 더 이상 감사받은 코드가 아닙니다(업그레이드 또는 재배포).",
     riskFlagged: 'Neuro 경고', riskEnforced: 'Neuro 경고 (적용 중)', riskTitle: '위험 요약 (Neuro)', riskOwn: '이 주소', riskOwnToken: '이 토큰',
     riskUnreadable: 'ThreatRegistry를 읽을 수 없어 아무것도 판단하지 않습니다', riskCounterpartiesLabel: '최근 거래 상대', riskNoCounterparties: '스캔한 블록에는 없음',
     riskCounterparties: '{n}개 중 {f}개가 ThreatRegistry에서 경고됨',
@@ -1012,6 +1020,8 @@ export const T_INSIGHT = {
     askShare: '목록 내 비중', askHoldersNote: '이 블록들에 나온 주소 {n}개만 비교합니다 (현재 잔액). 전체 보유자 순위가 아닙니다.',
   },
   ja: {
+    // audit certificate badge (src/audit.js)
+    auditCertified: "監査済み（ZETAPHY）", auditLevel1: "ブロンズ", auditLevel2: "シルバー", auditLevel3: "ゴールド", auditUntil: "{date} まで", auditTip: "{level}証明書：このコードそのもの（{code}…）が {date} に ZETAPHY のオープン監査プロセス（自動ツール、公開コンテスト、審査済みの指摘）を通過しました。{until} まで有効。コードの安全を保証するものではありません。", auditRevoked: "監査証明書は取り消されました", auditRevokedTip: "証明書の発行後、このコードに対する重大または高の指摘が有効と判定されたため、もう有効ではありません。", auditInvalid: "監査証明書は無効です", auditInvalidTip: "証明書の期限が切れたか、このアドレスのコードが監査済みのコードではなくなりました（アップグレードまたは再デプロイ）。",
     riskFlagged: 'Neuro が警告', riskEnforced: 'Neuro が警告（適用中）', riskTitle: 'リスク概要（Neuro）', riskOwn: 'このアドレス', riskOwnToken: 'このトークン',
     riskUnreadable: 'ThreatRegistry を読み取れないため、何も判断していません', riskCounterpartiesLabel: '最近の取引相手', riskNoCounterparties: 'スキャンしたブロックにはなし',
     riskCounterparties: '{n} 件中 {f} 件が ThreatRegistry で警告されています',
@@ -1062,6 +1072,8 @@ export const T_INSIGHT = {
     askShare: '一覧内の割合', askHoldersNote: 'これらのブロックに現れた {n} アドレスだけを比較しています（現在の残高）。完全な保有者ランキングではありません。',
   },
   ru: {
+    // audit certificate badge (src/audit.js)
+    auditCertified: "Проверен аудитом (ZETAPHY)", auditLevel1: "Бронза", auditLevel2: "Серебро", auditLevel3: "Золото", auditUntil: "до {date}", auditTip: "Сертификат {level}: именно этот код ({code}…) прошёл открытый аудит ZETAPHY {date} (автоматические инструменты, публичный конкурс, рассмотренные находки). Действует до {until}. Это не гарантия безопасности кода.", auditRevoked: "Сертификат аудита отозван", auditRevokedTip: "После выдачи сертификата критическая или высокая находка против этого кода признана верной: сертификат больше не действует.", auditInvalid: "Сертификат аудита недействителен", auditInvalidTip: "Срок сертификата истёк или код по этому адресу уже не тот, что проверялся (обновлён или развёрнут заново).",
     riskFlagged: 'Помечено Neuro', riskEnforced: 'Помечено Neuro (применяется)', riskTitle: 'Сводка рисков (Neuro)', riskOwn: 'Этот адрес', riskOwnToken: 'Этот токен',
     riskUnreadable: 'не удалось прочитать ThreatRegistry; ничего не утверждается', riskCounterpartiesLabel: 'Недавние контрагенты',
     riskNoCounterparties: 'нет в просмотренных блоках', riskCounterparties: '{f} из {n} помечены в ThreatRegistry',
@@ -1135,6 +1147,8 @@ export const T_INSIGHT = {
     askHoldersNote: 'Сравниваются только {n} адресов, встреченных в этих блоках (текущие балансы); это не полный список крупнейших держателей.',
   },
   vi: {
+    // audit certificate badge (src/audit.js)
+    auditCertified: "Đã kiểm toán (ZETAPHY)", auditLevel1: "Đồng", auditLevel2: "Bạc", auditLevel3: "Vàng", auditUntil: "đến {date}", auditTip: "Chứng chỉ {level}: chính mã này ({code}…) đã qua quy trình kiểm toán mở của ZETAPHY ngày {date} (công cụ tự động, cuộc thi công khai, phát hiện đã được phân xử). Hiệu lực đến {until}. Không bảo đảm mã an toàn.", auditRevoked: "Chứng chỉ kiểm toán đã bị thu hồi", auditRevokedTip: "Sau khi cấp chứng chỉ, một phát hiện nghiêm trọng hoặc cao đối với mã này được phân xử là đúng: chứng chỉ không còn giá trị.", auditInvalid: "Chứng chỉ kiểm toán không hợp lệ", auditInvalidTip: "Chứng chỉ đã hết hạn, hoặc mã tại địa chỉ này không còn là mã đã được kiểm toán (đã nâng cấp hoặc triển khai lại).",
     riskFlagged: 'Bị Neuro gắn cờ', riskEnforced: 'Bị Neuro gắn cờ (đang áp dụng)', riskTitle: 'Tóm tắt rủi ro (Neuro)', riskOwn: 'Địa chỉ này',
     riskOwnToken: 'Token này', riskUnreadable: 'không đọc được ThreatRegistry; không kết luận gì', riskCounterpartiesLabel: 'Đối tác gần đây',
     riskNoCounterparties: 'không có trong các khối đã quét', riskCounterparties: '{f} trên {n} bị gắn cờ trong ThreatRegistry',
@@ -1207,6 +1221,8 @@ export const T_INSIGHT = {
     askHoldersNote: 'Chỉ so sánh {n} địa chỉ xuất hiện trong các khối này (số dư hiện tại); đây không phải danh sách đầy đủ người nắm giữ lớn nhất.',
   },
   th: {
+    // audit certificate badge (src/audit.js)
+    auditCertified: "ผ่านการตรวจสอบ (ZETAPHY)", auditLevel1: "ทองแดง", auditLevel2: "เงิน", auditLevel3: "ทอง", auditUntil: "ถึง {date}", auditTip: "ใบรับรองระดับ{level}: โค้ดนี้ตรงตัว ({code}…) ผ่านกระบวนการตรวจสอบแบบเปิดของ ZETAPHY เมื่อ {date} (เครื่องมืออัตโนมัติ การแข่งขันสาธารณะ ข้อค้นพบที่ผ่านการตัดสิน) ใช้ได้ถึง {until} ไม่ใช่การรับประกันว่าโค้ดปลอดภัย", auditRevoked: "ใบรับรองการตรวจสอบถูกเพิกถอน", auditRevokedTip: "หลังออกใบรับรอง มีข้อค้นพบระดับวิกฤตหรือสูงต่อโค้ดนี้ที่ถูกตัดสินว่าจริง ใบรับรองจึงไม่มีผลแล้ว", auditInvalid: "ใบรับรองการตรวจสอบใช้ไม่ได้", auditInvalidTip: "ใบรับรองหมดอายุ หรือโค้ดที่ที่อยู่นี้ไม่ใช่โค้ดที่ตรวจสอบแล้ว (อัปเกรดหรือดีพลอยใหม่)",
     riskFlagged: 'Neuro ติดธง', riskEnforced: 'Neuro ติดธง (บังคับใช้)', riskTitle: 'สรุปความเสี่ยง (Neuro)',
     riskOwn: 'ที่อยู่นี้', riskOwnToken: 'โทเคนนี้', riskUnreadable: 'อ่าน ThreatRegistry ไม่ได้ จึงไม่แสดงผลใด ๆ',
     riskCounterpartiesLabel: 'คู่ธุรกรรมล่าสุด', riskNoCounterparties: 'ไม่มีในบล็อกที่สแกน',

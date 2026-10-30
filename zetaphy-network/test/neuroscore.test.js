@@ -187,3 +187,29 @@ test('feeders post features (scored on-chain); a model change makes scores unkno
   await assert.rejects(ns.send('feeder', 'postFeatures', [token, feats]), /NotFeeder/);
   assert.ok(c);
 });
+
+test('a score outside int64 is refused, not stored truncated (audit: aderyn unsafe-casting in _score)', async () => {
+  const { A, ns, govern } = await setup();
+  // A valid NSM1 model whose calibration overflows int64: scale 1, calibA and every leaf = int32 max.
+  const b = BYTES.slice();
+  const h = new DataView(b.buffer, b.byteOffset);
+  const nt = h.getUint16(6);
+  h.setUint32(8, 1);            // scale
+  h.setInt32(16, 0x7fffffff);   // calibA
+  let o = 24 + nt;
+  for (let k = 0; k < nt; k++) {
+    const n = b[24 + k];
+    for (let i = 0; i < n; i++) if (b[o + i * 6] === 0xff) h.setInt32(o + i * 6 + 1, 0x7fffffff);
+    o += n * 6;
+  }
+  const hex = '0x' + Buffer.from(b).toString('hex');
+  await ns.send('anyone', 'publishModel', [hex]);
+  await govern('activateModel', [keccak256(hex), ZeroHash, 0, 1, 2]);
+  await govern('setFeeder', [A('feeder'), true], '0x' + '03'.repeat(32));
+  const feats = packFeatures(quantizeVector(vecOf(HELD.rows[0])));
+  const [score] = await ns.call('evaluate', [feats]);
+  assert.ok(score > 2n ** 63n - 1n, `the model's score leaves int64: ${score}`);
+  await assert.rejects(ns.send('feeder', 'postFeatures', ['0x' + '7b'.repeat(20), feats]), /ScoreOutOfRange/);
+  const [known] = await ns.call('scoreOf', ['0x' + '7b'.repeat(20)]);
+  assert.equal(known, false, 'nothing stored');
+});

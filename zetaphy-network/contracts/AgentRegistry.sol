@@ -42,7 +42,9 @@ interface IPolicyChecker {
 ///             returns the deposit; threshold "no", or no decision within
 ///             VOTE_PERIOD, rejects it and the deposit goes to the operator.
 ///         The operator can take the bond back only UNBOND_DELAY after asking,
-///         with no open claim; claims on an action are open for CLAIM_WINDOW.
+///         with no open claim, and only once the CLAIM_WINDOW of its last
+///         action is over (AR-1): claims on an action are open for CLAIM_WINDOW
+///         and the bond must still be there for all of it.
 contract AgentRegistry {
     address public constant MLDSA = 0x0000000000000000000000000000000000000900;
     uint8 public constant PQ_VARIANT = 44;
@@ -62,6 +64,9 @@ contract AgentRegistry {
         uint64 actions;    // per-agent sequence, in every action digest (no replay)
         uint32 openClaims;
     }
+
+    /// agent id -> time of its last recorded action (the bond stays until its claim window is over)
+    mapping(uint256 => uint64) public lastActionAt;
 
     struct Action {
         uint256 agentId;
@@ -199,9 +204,18 @@ contract AgentRegistry {
         emit UnbondRequested(id, a.unbondAt);
     }
 
+    /// When withdrawBond may run (0 = not unbonding): UNBOND_DELAY after the request, and after the claim
+    /// window of the agent's last action.
+    function withdrawableAt(uint256 id) public view returns (uint256) {
+        Agent storage a = agents[id];
+        if (a.unbondAt == 0) return 0;
+        uint256 claimsOver = lastActionAt[id] == 0 ? 0 : uint256(lastActionAt[id]) + CLAIM_WINDOW + 1;
+        return claimsOver > a.unbondAt ? claimsOver : a.unbondAt;
+    }
+
     function withdrawBond(uint256 id) external {
         Agent storage a = _operated(id);
-        if (a.unbondAt == 0 || block.timestamp < a.unbondAt) revert NotYet();
+        if (a.unbondAt == 0 || block.timestamp < withdrawableAt(id)) revert NotYet();
         if (a.openClaims != 0) revert OpenClaims();
         uint256 amount = a.bond;
         a.bond = 0;
@@ -262,6 +276,7 @@ contract AgentRegistry {
         r.constitution = a.constitution;
         r.checker = a.checker;
         r.time = uint64(block.timestamp);
+        lastActionAt[id] = uint64(block.timestamp);
         emit ActionRecorded(id, actionId, x);
     }
 

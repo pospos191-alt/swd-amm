@@ -117,9 +117,9 @@ test('committee claim: governance sets the committee; threshold yes pays the cla
   await assert.rejects(reg.send('m1', 'vote', [1n, true]), /AlreadyVoted/);
   // an open claim blocks the bond's withdrawal
   await reg.send('operator', 'requestUnbond', [A]);
-  c.advance(8 * DAY);
+  c.advance(31 * DAY); // past the action's claim window too (AR-1)
   await assert.rejects(reg.send('operator', 'withdrawBond', [A]), /OpenClaims/);
-  c.advance(-8 * DAY);
+  c.advance(-31 * DAY);
   const before = await c.balance('claimant');
   await reg.send('m2', 'vote', [1n, true]);
   assert.equal(await c.balance('claimant') - before, 5n * ZETA); // 4 claimed + 1 deposit back
@@ -145,17 +145,20 @@ test('committee claim: threshold no, or no decision in time, rejects it and the 
   assert.equal((await reg.call('claims', [2n])).state, 3n); // Rejected
 });
 
-test('unbond: no new actions, bond back only after the delay; claims only within the claim window', async () => {
+test('unbond: no new actions, bond back only after the delay and the last action\'s claim window; claims only within it', async () => {
   const id = await act(addr('thief'), 1n);
   await reg.send('operator', 'requestUnbond', [A]);
   await assert.rejects(act(addr('router'), 1n), /Inactive/);
   await assert.rejects(reg.send('operator', 'withdrawBond', [A]), /NotYet/);
   c.advance(7 * DAY);
+  // AR-1: the bond stays for the whole 30-day claim window of the last action
+  await assert.rejects(reg.send('operator', 'withdrawBond', [A]), /NotYet/);
+  c.advance(23 * DAY + 1);
   const before = await c.balance('operator');
   await reg.send('operator', 'withdrawBond', [A]);
   assert.equal(await c.balance('operator') - before, 20n * ZETA);
   assert.equal(await reg.call('agentOfAccount', [addr('agentAcct')]), 0n);
-  await assert.rejects(reg.send('claimant', 'claimByChecker', [id, constitution(), '0x']), /Inactive/);
+  await assert.rejects(reg.send('claimant', 'claimByChecker', [id, constitution(), '0x']), /ClaimWindowOver/, 'the bond left only after the window');
 
   // a fresh agent: an action older than the claim window cannot be claimed
   const k2 = mldsaKey();

@@ -1,6 +1,7 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Wallet, Signature, encodeBytes32String } from 'ethers';
+import { Address } from '@ethereumjs/util';
 import { createChain, ZETA } from './helpers/evm.js';
 import { mockArtifacts } from './helpers/mocks.js';
 
@@ -62,7 +63,7 @@ test('a user with no ZETAPHY gets a Neuro job, paying only test USDC, with no tr
   assert.equal(await usdc.call('balanceOf', [c.acct.relayer.toString()]), q.tip);
   assert.equal(await usdc.call('balanceOf', [gw.address]), cost);
   const job = await jobs.call('getJob', [0]);
-  assert.equal(job.requester, alice.address); // refunds go to the user
+  assert.equal(job.requester.toLowerCase(), gw.address.toLowerCase()); // a refund comes back to the gateway (SG-1), which refunds alice in tUSDC
   assert.equal(job.fee, ZETA);
   assert.equal(job.target, TARGET);
 });
@@ -154,4 +155,21 @@ test('permit rejects a wrong signer and an expired deadline', async () => {
   await assert.rejects(usdc.send('owner', 'permit', [c.acct.owner.toString(), gw.address, 5n, p.deadline, p.v, p.r, p.s]));
   c.advance(601);
   await assert.rejects(usdc.send('owner', 'permit', [alice.address, gw.address, 5n, p.deadline, p.v, p.r, p.s]));
+});
+
+test('SG-1: a job nobody answers refunds the user in the stablecoin it paid, never in ZETAPHY; the reserve gets its ZETAPHY back', async () => {
+  await usdc.send('alice', 'approve', [gw.address, 10n ** 30n]);
+  const { q, sig } = await signed({ fee: 10n * ZETA, tip: 0n, maxCost: USDC }); // 10 ZETAPHY = 0.10 tUSDC
+  await gw.send('relayer', 'request', [asTuple(q), sig]);
+  const cost = 10n * PRICE;
+  const before = await usdc.call('balanceOf', [alice.address]);
+  await assert.rejects(gw.send('relayer', 'refund', [0n]), /NotRefundable/, 'the job is still open');
+  c.advance(601);
+  await jobs.send('relayer', 'expire', [0n]);
+  assert.equal(await jobs.call('credit', [alice.address]), 0n, 'no ZETAPHY credit for the user');
+  const reserve = await c.balance(Address.fromString(gw.address));
+  await gw.send('relayer', 'refund', [0n]); // anyone
+  assert.equal(await usdc.call('balanceOf', [alice.address]) - before, cost * 95n / 100n, '95% of the stablecoin back (NeuroJobs burns 5% of a failed job)');
+  assert.equal(await c.balance(Address.fromString(gw.address)) - reserve, 10n * ZETA * 95n / 100n, 'the ZETAPHY refund is back in the reserve');
+  await assert.rejects(gw.send('relayer', 'refund', [0n]), /NotRefundable/, 'once');
 });
