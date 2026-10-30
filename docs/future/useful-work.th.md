@@ -224,6 +224,6 @@ cd zetaphy-hub && npm ci && npm test && npm run test:e2e           # รวม w
   สัญญาเป้าหมายต่อ spec บวก hook ของผู้โจมตี (ยังไม่รองรับระบบหลายสัญญา หรือ callback ของโทเคนอย่าง ERC-721/1155/777) เวลาไม่เดิน (บั๊กที่ล็อกด้วยเวลา
   ต้องตั้งใน setup ของ spec) ทุก invariant ต้องให้ผู้เขียน spec ระบุ view (`watch`, `solvency`, `exit`, `tokens`) และ view ใน `watch` ที่เปลี่ยนได้อย่างชอบธรรม
   จะถูกรายงาน array และ tuple ลึกได้ไม่มาก ความเร็ว: ราว 10–25 ms ต่อลำดับ (ต้นทุนของ event `step` ต่อ opcode) คือไม่กี่พันลำดับต่อนาที
-- **ตลาดประเมินโมเดล** (sink ของถัง "การปรับปรุงโมเดล")
+- **ตลาดประเมินโมเดล** (sink ของถัง "การปรับปรุงโมเดล"): ตอนนี้คือ `TrainingMarket` ดู [useful-work-training.th.md](useful-work-training.th.md) (ฝึก + สุ่มตรวจ + ประเมินบนข้อมูลกันไว้; ยังไม่ได้ deploy)
 - การติดตั้งรันเนอร์ (`setup-runner.sh`) ตอนนี้คัดลอกไฟล์แกนกลางสามไฟล์ของเบราว์เซอร์แล้ว แต่การตรวจสิ่งที่พบต้องใช้ EthereumJS EVM ด้วย
   (devDependency ของ zetaphy-network: `npm i` แบบรวม dev dependencies)
