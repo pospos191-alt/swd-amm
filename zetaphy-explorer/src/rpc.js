@@ -113,5 +113,33 @@ export function createApi(endpoints, { maxConcurrent = 4, maxRps = 8, timeoutMs 
     });
   };
 
-  return { evm: jsonRpc(endpoints.evm, 'EVM RPC'), comet: jsonRpc(endpoints.comet, 'CometBFT RPC'), rest, stats, endpoints, clear: () => cache.clear() };
+  /**
+   * Several EVM calls in one JSON-RPC batch request (one HTTP request through the queue per
+   * `maxBatch` calls), sharing the single calls' cache. Returns one entry per call: the result,
+   * or an RpcError for that call. Throws when the node does not answer batches.
+   */
+  async function evmBatch(calls, ttl = TTL.short, { maxBatch = 100 } = {}) {
+    const kind = 'EVM RPC'; const url = endpoints.evm;
+    const keys = calls.map((c) => `${kind}|${url}|${c.method}|${JSON.stringify(c.params ?? [])}`);
+    const out = new Array(calls.length); const miss = [];
+    keys.forEach((k, i) => { const hit = cache.get(k); if (hit !== undefined) { stats.cached++; out[i] = hit; } else miss.push(i); });
+    for (let s = 0; s < miss.length; s += maxBatch) {
+      const part = miss.slice(s, s + maxBatch);
+      const ids = part.map(() => ++id);
+      const body = await limiter.run(async () => {
+        const r = await request(url, { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(part.map((i, j) => ({ jsonrpc: '2.0', id: ids[j], method: calls[i].method, params: calls[i].params ?? [] }))) }, kind);
+        if (!r.res.ok || !Array.isArray(r.body)) { stats.errors++; throw new RpcError(`batch: ${kind} answered HTTP ${r.res.status} without a batch`, { code: r.res.status, kind: 'batch' }); }
+        return r.body;
+      });
+      const byId = new Map(body.map((r) => [r?.id, r]));
+      part.forEach((i, j) => {
+        const r = byId.get(ids[j]);
+        if (r && !r.error && 'result' in r) { out[i] = r.result; cache.set(keys[i], r.result, ttl); } else out[i] = new RpcError(`${calls[i].method}: ${clip(r?.error?.message ?? 'no answer')}`, { code: r?.error?.code, kind: 'rpc' });
+      });
+    }
+    return out;
+  }
+
+  return { evm: jsonRpc(endpoints.evm, 'EVM RPC'), comet: jsonRpc(endpoints.comet, 'CometBFT RPC'), rest, evmBatch, stats, endpoints, clear: () => cache.clear() };
 }

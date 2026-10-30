@@ -1,0 +1,74 @@
+/* Insight features: address labels, Neuro risk badges, quantum exposure, fund-flow graph,
+   cross-chain trace, "ask the explorer". Uses style.css's colour tokens (light and dark). */
+.addr { display: inline; }
+.addr-label { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 6px; font-size: 11.5px; font-weight: 600; line-height: 18px;
+  color: var(--text-dim); background: var(--panel-alt); border: 1px solid var(--panel-border); max-width: 22em; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; vertical-align: middle; }
+.label-precompile, .label-module { color: var(--accent); border-color: rgba(var(--accent-rgb),0.4); }
+.label-token { color: var(--link); }
+.label-burn, .label-zero { color: var(--warn); border-color: rgba(var(--warn-rgb),0.45); }
+.label-bridge, .label-neuro, .label-governance { color: var(--up); border-color: rgba(var(--up-rgb),0.4); }
+.risk-slot:empty { display: none; }
+.risk-badge { margin-left: 6px; vertical-align: middle; font-size: 11.5px; }
+.insight-links { margin: 10px 0 0; font-size: 14px; }
+
+.q-verdict { font-size: 15px; line-height: 1.55; }
+.q-actions ul { margin: 6px 0 0; padding-left: 20px; }
+.q-form { display: flex; gap: 8px; flex-wrap: wrap; }
+.q-form input { flex: 1 1 260px; min-width: 0; }
+.q-bar { height: 10px; border-radius: 999px; background: var(--panel-alt); border: 1px solid var(--panel-border); overflow: hidden; margin: 8px 0; }
+.q-bar-fill { height: 100%; background: var(--brand-grad); }
+
+.flow-head h1 { margin-bottom: 4px; }
+.flow-wrap { overflow: auto; max-width: 100%; border: 1px solid var(--panel-border); border-radius: 10px; background: var(--panel-alt); margin: 10px 0; }
+.flow-svg { display: block; font-family: var(--font); }
+.flow-edge path { fill: none; stroke: var(--text-dim); stroke-width: 1.6; opacity: 0.75; }
+.flow-native path { stroke: var(--accent); }
+.flow-token path { stroke: var(--link); stroke-dasharray: 5 3; }
+.flow-arrowhead { fill: var(--text-dim); }
+.flow-amount { font-size: 11px; fill: var(--text); paint-order: stroke; stroke: var(--panel); stroke-width: 3px; }
+.flow-node { cursor: pointer; }
+.flow-node rect { fill: var(--panel); stroke: var(--panel-border); stroke-width: 1.5; }
+.flow-node:hover rect, .flow-node:focus rect { stroke: var(--accent); }
+.flow-node:focus { outline: none; }
+.flow-node:focus-visible rect { stroke-width: 3; }
+.flow-root rect { stroke: var(--accent); stroke-width: 2.5; }
+.flow-clean rect { stroke: rgba(var(--up-rgb),0.6); }
+.flow-flagged rect { fill: rgba(var(--down-rgb),0.14); stroke: var(--down); stroke-width: 2.5; }
+.flow-node-name { font-size: 12px; font-weight: 600; fill: var(--text); }
+.flow-node-sub { font-size: 10.5px; fill: var(--text-dim); }
+.flow-legend { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; }
+.flow-key::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--text-dim); margin-right: 6px; vertical-align: middle; }
+.flow-key-native::before { border-top-color: var(--accent); }
+.flow-key-token::before { border-top: 2px dashed var(--link); }
+.flow-key-flagged::before { width: 12px; height: 12px; border: 2px solid var(--down); border-radius: 3px; background: rgba(var(--down-rgb),0.14); }
+
+.xc-msg + .xc-msg { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--panel-border); }
+.xc-msg h3 { margin: 0 0 6px; font-size: 15px; }
+.xc-status a { margin-left: 2px; }
+.ask-understood { color: var(--text-dim); }
+.ask-understood strong { color: var(--text); }
+/* fund flow: follow, pan / zoom, layers, cycles, path, tables */
+.flow-toolbar { margin: 8px 0 4px; }
+.flow-status { min-height: 1.4em; color: var(--text-dim); font-size: 14px; margin: 4px 0 0; }
+.flow-zoom { margin: 6px 0 0; align-items: center; }
+.flow-zoom button { min-width: 2.4em; }
+.flow-wrap { cursor: grab; touch-action: pan-y; }
+.flow-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.flow-svg { max-width: 100%; height: auto; }
+.flow-cycle path { stroke: var(--warn); stroke-dasharray: none; opacity: 0.95; }
+.flow-in-cycle rect { stroke: var(--warn); }
+.flow-on-path path { stroke-width: 3.2; opacity: 1; }
+.flow-on-path rect { stroke: var(--accent); stroke-width: 3; }
+.flow-sink rect { fill: var(--panel-alt); stroke-dasharray: 4 3; }
+.flow-more rect { fill: var(--panel-alt); stroke-dasharray: 6 4; }
+.flow-more text { fill: var(--link); }
+.flow-key-cycle::before { border-top-color: var(--warn); }
+.flow-layers { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }
+.flow-layer-btn { padding: 4px 10px; font-size: 12.5px; }
+.flow-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.flow-actions button { padding: 4px 10px; font-size: 12.5px; }
+.flow-range { overflow-wrap: anywhere; }
+.flow-pager { align-items: center; margin-top: 8px; }
+.flow-path-list { margin: 6px 0 0; padding-left: 22px; }
+.flow-path-list li { margin: 3px 0; overflow-wrap: anywhere; }

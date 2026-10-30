@@ -167,6 +167,47 @@ details summary { cursor: pointer; color: var(--link); }
 .msg-line { min-height: 1.5em; }
 .moniker { font-weight: 600; }
 
+/* history tabs, filters, live view, watch list, toasts, charts (src/history.js, live.js, watch.js, charts.js) */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--panel-border); margin-bottom: 12px; flex-wrap: wrap; }
+.tab { background: transparent; color: var(--text-dim); border-radius: 8px 8px 0 0; padding: 7px 14px; border: 1px solid transparent; border-bottom: 0; }
+.tab:hover { background: var(--panel-alt); }
+.tab[aria-selected="true"] { color: var(--text); border-color: var(--panel-border); background: var(--panel-alt); }
+.filters { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+.filter { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); font-weight: 600; }
+.filter-select { background: var(--field-bg); color: var(--text); border: 1px solid var(--panel-border); border-radius: 8px; padding: 5px 8px; font: inherit; }
+.hist-mode { margin: 0 0 4px; }
+.watch-controls { margin: 0 0 16px; }
+.watch-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.watch-form input { flex: 1 1 220px; width: auto; }
+.nick { font-weight: 700; }
+.nick-title { color: var(--accent); }
+.small-btn { padding: 4px 10px; font-size: 12.5px; }
+.live-indicator { margin: -8px 0 12px; color: var(--text-dim); font-size: 13px; }
+.live-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--up); vertical-align: middle; animation: live-pulse 2s ease-in-out infinite; }
+.live-dot-poll { background: var(--warn); }
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.live-blocks { list-style: none; padding: 0; margin: 0; }
+.live-block { padding: 6px 8px; border-bottom: 1px solid var(--panel-border); }
+.row-new { animation: row-in 1.6s ease-out; }
+@keyframes row-in { from { background: rgba(var(--accent-rgb),0.28); } to { background: transparent; } }
+.toasts { position: fixed; right: 16px; bottom: 16px; z-index: 50; display: flex; flex-direction: column; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+.toast { background: var(--panel); color: var(--text); border: 1px solid rgba(var(--accent-rgb),0.6); border-radius: 10px; padding: 10px 36px 10px 12px; box-shadow: var(--shadow); position: relative; font-size: 13.5px; animation: row-in 1.6s ease-out; }
+.toast-close { position: absolute; top: 4px; right: 4px; background: transparent; color: var(--text-dim); padding: 2px 8px; }
+.toast-close:hover { background: var(--panel-alt); color: var(--text); }
+.chart-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; }
+.chart { margin: 0; min-width: 0; }
+.chart figcaption { margin-bottom: 6px; }
+.chart-svg { display: block; width: 100%; height: 140px; background: var(--panel-alt); border: 1px solid var(--panel-border); border-radius: 8px; }
+.chart-hbar { height: auto; max-height: 200px; }
+.chart-bar { fill: var(--accent); }
+.chart-alt .chart-bar { fill: var(--link); }
+.chart-bar:hover { fill: var(--accent-hover); }
+.chart-axis { stroke: var(--panel-border); stroke-width: 1; }
+.chart-text { fill: var(--text-dim); font-size: 12px; font-family: var(--mono); }
+.chart-text-end { text-anchor: end; }
+.chart-data { margin-top: 6px; font-size: 13px; }
+.chart-data table { max-width: 360px; }
+
 @media (max-width: 1320px) {
   .grid2 { grid-template-columns: minmax(0, 1fr); }
 }
@@ -191,4 +232,102 @@ details summary { cursor: pointer; color: var(--link); }
   td > * { min-width: 0; }
   td::before { content: attr(data-label); color: var(--text-dim); font-weight: 600; min-width: 92px; flex: none; }
   .fromto { white-space: normal; }
+}
+
+/* ---- tx deep view (txview.js) and contract card (contractview.js) ---- */
+.summary-line { font-size: 16px; margin: 0 0 8px; overflow-wrap: anywhere; }
+.risk { color: var(--warn-text); background: var(--warn-bg); border: 1px solid rgba(var(--warn-rgb),0.45); border-radius: 8px; padding: 8px 10px; margin: 6px 0; overflow-wrap: anywhere; }
+.src-badge { white-space: nowrap; }
+.decoded-call .fn-name, .decoded-event strong { overflow-wrap: anywhere; }
+ol.vals { margin: 0; padding-left: 18px; }
+ol.vals-tuple { list-style: none; padding-left: 10px; border-left: 2px solid var(--panel-border); }
+.str { overflow-wrap: anywhere; }
+table.args td, table.changes td { overflow-wrap: anywhere; }
+.gasbar { display: inline-block; vertical-align: middle; width: 120px; max-width: 40%; height: 8px; border-radius: 4px; background: var(--panel-alt); border: 1px solid var(--panel-border); margin-left: 6px; }
+.gasbar-fill { display: block; height: 100%; border-radius: 4px; background: var(--brand-grad); width: 0; }
+ol.calltree { list-style: none; padding: 0; margin: 0; }
+.calltree .call { padding: 4px 0 4px 8px; border-left: 2px solid var(--panel-border); overflow-wrap: anywhere; }
+.calltree .call-reverted { opacity: 0.7; border-left-color: var(--down); }
+.call-value { font-weight: 600; }
+.delta-pos { color: var(--up); font-weight: 600; }
+.delta-neg { color: var(--down); font-weight: 600; }
+.decoded-event { margin: 4px 0; }
+.raw-log summary { color: var(--text-dim); }
+.revert-msg { overflow-wrap: anywhere; }
+.contract-status { margin-top: 0; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 10px; border-bottom: 1px solid var(--panel-border); }
+.tab { background: transparent; color: var(--text-dim); border-radius: 8px 8px 0 0; padding: 7px 12px; }
+.tab:hover { background: var(--panel-alt); color: var(--text); }
+.tab[aria-selected="true"] { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+.files { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.files .file { padding: 4px 10px; font-size: 12.5px; font-family: var(--mono); max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.files .file.active { border-color: var(--accent); color: var(--accent); }
+pre.source { max-height: 560px; overflow: auto; background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: 10px; padding: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; white-space: pre; tab-size: 4; }
+.bytecode { max-height: 240px; overflow: auto; }
+details.fn { border: 1px solid var(--panel-border); border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+details.fn summary { overflow-wrap: anywhere; }
+.fn-form { display: grid; gap: 8px; margin-top: 8px; }
+.fn-field { display: grid; gap: 2px; }
+.fn-form button { justify-self: start; }
+.fn-out { min-width: 0; overflow-wrap: anywhere; }
+.wallet-line { min-height: 1.4em; }
+@media (max-width: 640px) {
+  .calltree .call { padding-left: 4px; }
+  pre.source { max-height: 420px; }
+}
+/* validators (deep), governance, holders, NFT gallery, gas, tools (src/validators2.js, gov.js, holders.js, nft.js, gas.js, tools.js) */
+.v2-tools { margin: 0 0 12px; align-items: center; }
+.nav a { white-space: nowrap; flex-shrink: 0; }
+.lang-select.win-select { max-width: none; }
+.v2-filter { flex: 1 1 220px; width: auto; }
+button.th-sort { background: none; color: var(--text-dim); padding: 0; font-size: 12.5px; font-weight: 600; border-radius: 4px; }
+button.th-sort:hover { color: var(--text); background: none; }
+.warn-text { color: var(--warn); font-weight: 600; }
+.heat-strip { display: block; width: 100%; height: 22px; margin: 10px 0 6px; }
+.hs-signed { fill: var(--up); background: var(--up); }
+.hs-missed { fill: var(--down); background: var(--down); }
+.hs-nil { fill: var(--warn); background: var(--warn); }
+.hs-out { fill: var(--panel-border); background: var(--panel-border); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; }
+.heat-legend > span { margin-right: 8px; white-space: nowrap; }
+.tally-bar, .dist-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--panel-alt); border: 1px solid var(--panel-border); margin: 10px 0; }
+.tally-seg, .dist-seg { height: 100%; min-width: 0; }
+.tally-yes { background: var(--up); }
+.tally-no { background: var(--down); }
+.tally-veto { background: #a3245a; }
+.tally-abstain { background: var(--text-dim); }
+.tally-legend li { display: inline-block; margin-right: 14px; }
+.dist-0 { background: var(--accent); }
+.dist-1 { background: var(--link); }
+.dist-2 { background: var(--up); }
+.dist-3 { background: var(--warn); }
+.dist-4 { background: #c06cff; }
+.dist-seg + .dist-seg { border-left: 1px solid var(--panel); }
+.gov-summary, .nft-desc { white-space: pre-wrap; overflow-wrap: anywhere; }
+.countdown { font-variant-numeric: tabular-nums; }
+.nft-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.nft-link { color: var(--text); text-decoration: none; }
+.nft-link:hover { text-decoration: none; }
+.nft-card { display: block; border: 1px solid var(--panel-border); border-radius: 10px; overflow: hidden; background: var(--panel-alt); }
+.nft-card:hover { border-color: var(--accent); }
+.nft-img { aspect-ratio: 1 / 1; display: grid; place-items: center; background: var(--field-bg); overflow: hidden; }
+.nft-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.nft-noimg { color: var(--text-dim); font-size: 12.5px; text-align: center; padding: 8px; }
+.nft-img-remote { padding: 10px; gap: 8px; }
+.nft-name { display: block; padding: 8px 10px; font-weight: 600; overflow-wrap: anywhere; }
+.nft-item { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.nft-hero .nft-img { border-radius: var(--radius); border: 1px solid var(--panel-border); }
+textarea.tl-area { display: block; width: 100%; min-height: 64px; margin: 6px 0; background: var(--field-bg); color: var(--text); border: 1px solid var(--panel-border); border-radius: 10px; padding: 9px 12px; font-family: var(--mono); font-size: 13px; resize: vertical; }
+.card > input.mono { margin: 6px 0; }
+input.tl-check { width: auto; vertical-align: middle; }
+.tl-out { margin-top: 10px; }
+button.danger { background: var(--down); }
+button.danger:hover { background: var(--down); filter: brightness(1.1); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.row input:not([type="checkbox"]) { flex: 1 1 160px; width: auto; }
+.offline-card { max-width: 640px; margin: 40px auto; }
+@media (max-width: 640px) {
+  .nft-item { grid-template-columns: minmax(0, 1fr); }
+  .nft-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tally-legend li { display: block; }
 }

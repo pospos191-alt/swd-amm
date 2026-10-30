@@ -19,6 +19,13 @@ export const DEFAULTS = Object.freeze({
   neuroReportUrl: '',
   // Chain activity counts (Neuro's /api/chain-stats, any origin may read it). Empty: not shown.
   chainStatsUrl: 'https://neuro.sawasdeecoin.com/api/chain-stats',
+  // Where the quantum-exposure advice sends people to move to an ML-DSA-44 account or set a quantum lock.
+  hubWalletUrl: 'https://app.sawasdeecoin.com/?tab=wallet',
+  // Public IPFS gateway for NFT metadata and images (ipfs:// URIs). Only https://ipfs.io is in the
+  // CSP's img-src: images through another gateway are fetched and shown from a blob: URL.
+  ipfsGateway: 'https://ipfs.io',
+  // The hub's governance assistant (proposal simulation); empty: no link.
+  hubGovUrl: 'https://app.sawasdeecoin.com/?tab=gov',
   // How many recent blocks the explorer scans for "latest transactions" (no indexer).
   scanBlocks: 100,
   maxScanBlocks: 1000,
@@ -79,6 +86,8 @@ export function sanitizeConfig(...layers) {
       if (typeof v !== 'string') continue;
       if (k === 'threatRegistry' && v && !ADDR.test(v.trim())) continue;
       if (k === 'chainStatsUrl' && v.trim()) { try { checkUrl(v); } catch { continue; } }
+      if (k === 'ipfsGateway') { try { out[k] = checkUrl(v).replace(/\/+$/, ''); } catch { /* keep the default */ } continue; }
+      if (k === 'hubGovUrl' && v.trim()) { try { const u = new URL(v.trim()); if (u.protocol !== 'https:' || u.username) continue; } catch { continue; } }
       out[k] = v.trim();
     }
   }

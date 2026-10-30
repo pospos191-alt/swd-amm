@@ -295,6 +295,7 @@ export function chainApi(api) {
   return {
     status, block, blockResults, blockMetas, validators, cometValidators, stakingValidators, supply, supplyAt, stakingPool,
     cosmosTx, evmTx, evmReceipt, ethCall, account, bankBalances, delegations, recentTxs, transferLogs, tokenLogs, verifyPQ, blockByHash,
+    summarize, // tx_search item -> list row (history.js, live.js)
     evmCall: (m, p) => evm(m, p, TTL.short),
     consToHex: (a) => toChecksumHex(hexToBytes(a)),
   };

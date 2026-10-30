@@ -10,14 +10,22 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { writeFileSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium } from 'playwright-core';
+import { getAddress } from 'ethers';
 import { T, LANGS } from '../src/i18n.js';
-import { buildChain, CHAIN_ID, LATEST, ME, ME_HEX, LOCKED, LOCKED_HEX, TOKEN, NFT, REGISTRY, REPORT, RESPONSE_TEXT } from './mock-chain.js';
+import { buildChain, CHAIN_ID, LATEST, ME, ME_HEX, LOCKED, LOCKED_HEX, TOKEN, NFT, REGISTRY, REPORT, RESPONSE_TEXT, ROUTER, PROXY, FACTORY, DEPLOYER, MAILBOX, SEPOLIA_DELIVERY_TX,
+  BUSY, BUSY_HEX, BUSY_TXS, FLOW_HEX } from './mock-chain.js';
 
-const PORT = 18195; const PORT_DEFAULT = 18196;
+// Free ports (other checkouts may run these tests at the same time), or E2E_PORT and E2E_PORT + 1
+// (EXPLORER_E2E_PORT is read too, as an older name of E2E_PORT).
+const freePort = () => new Promise((r) => { const sv = createServer().listen(0, '127.0.0.1', () => { const { port } = sv.address(); sv.close(() => r(port)); }); });
+const FIXED_PORT = Number(process.env.E2E_PORT ?? process.env.EXPLORER_E2E_PORT);
+const PORT = FIXED_PORT || await freePort();
+const PORT_DEFAULT = FIXED_PORT ? PORT + 1 : await freePort();
 const ORIGIN = `http://localhost:${PORT}`;
 const NODE = 'https://node.zetaphy.test';
 const OTHER_NODE = 'https://other.zetaphy.test';
@@ -53,18 +61,41 @@ after(async () => { await browser?.close(); for (const s of servers) s.kill(); r
 const CHAIN_STATS = { enabled: true, month: '2026-10', height: 30, updatedAt: new Date(Date.now() - 2 * 3600_000).toISOString(), stale: false,
   total: { all: 98765, transfers: 4000, staking: 300, crossChain: 20, evm: 90000, governance: 7 },
   thisMonth: { all: 4321, transfers: 120, staking: 15, crossChain: 2, evm: 4100, governance: 3 } };
+const XC_HOSTS = new Set(Object.values(JSON.parse(readFileSync(new URL('../crosschain.json', import.meta.url), 'utf8')).chains).flatMap((c) => c.rpc.map((u) => new URL(u).host)));
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'Content-Type', 'access-control-allow-methods': 'GET, POST, OPTIONS' };
 
 /** A page with the mock node behind https://node.zetaphy.test (and other.zetaphy.test); records problems. */
 /** lang: the stored language preference ('th' unless set; null for none). */
-async function openPage({ viewport, lang = 'th', origin = ORIGIN } = {}) {
-  const ctx = await browser.newContext({ viewport: viewport ?? { width: 1280, height: 900 } });
+/** ws: 'comet' answers the CometBFT websocket (NewBlock pushed by the test with push(H)); 'refuse' closes every socket (polling). */
+async function openPage({ viewport, lang = 'th', origin = ORIGIN, ws = 'comet' } = {}) {
+  // service workers blocked: the PWA has its own test (explore2.e2e.js)
+  const ctx = await browser.newContext({ viewport: viewport ?? { width: 1280, height: 900 }, acceptDownloads: true, serviceWorkers: 'block' });
   const page = await ctx.newPage();
   const problems = []; const mine = {};
+  // The node's websockets (wss://<node>/rpc/websocket and /ws), mocked: no network.
+  const sockets = []; const wsUrls = [];
+  await ctx.routeWebSocket(/^wss:\/\/(node|other)\.zetaphy\.test\//, (sock) => {
+    wsUrls.push(sock.url());
+    if (ws === 'refuse' || !sock.url().endsWith('/rpc/websocket')) { sock.close(); return; }
+    sock.onMessage((m) => {
+      let j; try { j = JSON.parse(String(m)); } catch { return; }
+      if (j.method === 'subscribe' && j.params?.query === "tm.event='NewBlock'") { sock.send(JSON.stringify({ jsonrpc: '2.0', id: j.id, result: {} })); sockets.push({ sock, id: j.id }); }
+    });
+  });
+  const push = (H) => { for (const s of sockets) s.sock.send(JSON.stringify(chain.newBlockEvent(H, s.id))); return sockets.length; };
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) problems.push(`console: ${m.text()}`); });
   page.on('requestfailed', (r) => { if (!/node\.zetaphy\.test|other\.zetaphy\.test/.test(r.url())) problems.push(`requestfailed: ${r.url()}`); });
+  // Other chains' public RPCs (crosschain.json): never reached from the tests; a test that needs one routes it itself
+  await ctx.route((url) => XC_HOSTS.has(url.host), (route) => route.fulfill({ status: 503, headers: CORS, body: 'offline in tests' }));
   // Neuro's chain activity counts (/api/chain-stats)
+  // Sourcify's v2 API (the router is verified there; anything else: 404)
+  await ctx.route((url) => url.host === 'sourcify.dev', (route) => {
+    const m = /^\/server\/v2\/contract\/77390\/(0x[0-9a-fA-F]{40})$/.exec(new URL(route.request().url()).pathname);
+    const body = m ? chain.sourcify(m[1]) : null;
+    mine.sourcify = (mine.sourcify ?? 0) + 1;
+    return route.fulfill({ status: body ? 200 : 404, contentType: 'application/json', headers: CORS, body: JSON.stringify(body ?? { customCode: 'not_found', message: 'Contract not found' }) });
+  });
   await ctx.route((url) => url.host === 'stats.zetaphy.test', (route) => route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify(CHAIN_STATS) }));
   await ctx.route((url) => url.host === 'node.zetaphy.test' || url.host === 'other.zetaphy.test', async (route) => {
     const req = route.request();
@@ -77,16 +108,21 @@ async function openPage({ viewport, lang = 'th', origin = ORIGIN } = {}) {
       const body = chain.rest(url.pathname.slice(5) + url.search);
       return body ? json(200, body) : json(501, { code: 12, message: 'Not Implemented' });
     }
-    const { id, method, params } = JSON.parse(req.postData() ?? '{}');
+    const body = JSON.parse(req.postData() ?? '{}');
+    for (const c of [body].flat()) mine[`${url.pathname.startsWith('/rpc/') ? 'comet' : 'evm'}:${c?.method}`] = (mine[`${url.pathname.startsWith('/rpc/') ? 'comet' : 'evm'}:${c?.method}`] ?? 0) + 1; // per method
     const handler = url.pathname.startsWith('/rpc/') ? chain.comet : url.pathname === '/' ? chain.evmRpc : null;
     if (!handler) return json(404, { error: 'not found' });
-    try { return json(200, { jsonrpc: '2.0', id, result: handler(method, params) }); } catch (e) {
-      return json(200, { jsonrpc: '2.0', id, error: { code: e.code ?? -32603, message: e.message, data: url.pathname.startsWith('/rpc/') ? e.message : undefined } });
-    }
+    const answer = ({ id, method, params }) => {
+      try { return { jsonrpc: '2.0', id, result: handler(method, params) }; } catch (e) {
+        return { jsonrpc: '2.0', id, error: { code: e.code ?? -32603, message: e.message, data: url.pathname.startsWith('/rpc/') ? e.message : e.data } };
+      }
+    };
+    // JSON-RPC batches (the risk badges ask many addresses in one request)
+    return json(200, Array.isArray(body) ? body.map(answer) : answer(body));
   });
   // lang: null leaves storage empty (a first visit: English by default).
   if (lang) await page.addInitScript((l) => { try { localStorage.setItem('zetaphy-explorer:lang', l); } catch { /* none */ } }, lang);
-  return { page, ctx, problems, counts: mine };
+  return { page, ctx, problems, counts: mine, push, sockets, wsUrls };
 }
 
 const text = (page) => page.locator('main').innerText();
@@ -197,10 +233,121 @@ test('EVM tx: from/to/value/gas/status and ERC-20 / ERC-721 / ERC-1155 transfers
   assert.match(t, /1\.5 gwei/);
   assert.match(t, /0\.000091851 ZETAPHY/); // 61234 × 1.5 gwei
   assert.match(t, /ERC-20/); assert.match(t, /ERC-721/); assert.match(t, /NFT #7/); assert.match(t, /#3 ×10/); assert.match(t, /mint/);
+  // the deep view: summary, guessed decode of the input, ThreatRegistry flag on the callee, gas and the burned half
+  await waitText(page, 'sent 1.5 SWD to');
+  await waitText(page, 'is flagged in ThreatRegistry');
+  await waitText(page, 'Burned');
+  const d = await text(page);
+  assert.match(d, /transfer\(address to, uint256 \w+\)/); assert.match(d, /Guessed/);
+  assert.match(d, /Automated code analysis, not an accusation/);
+  assert.match(d, /61,234 \/ 150,000 \(40\.82%\)/);
+  assert.match(d, /0\.0000459255 ZETAPHY/); // half of 61,234 × 1.5 gwei
+  assert.match(d, /0\.5 gwei/); // the block's base fee
+  assert.match(d, /Internal calls/);
   // the block's list links the EVM hash (keccak of the raw tx), not the CometBFT hash
   await go(page, '#/block/22');
   await waitText(page, 'MsgEthereumTx');
   assert.ok(await page.locator(`main a[href="#/tx/${chain.evmTxHash}"]`).count() === 1);
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('EVM tx deep view: swap summary, verified decode, call tree, who gained / who lost; custom error; no traces said plainly', async () => {
+  const { page, ctx, problems, counts: mine } = await openPage({ lang: 'en' });
+  await go(page, `#/tx/${chain.deep.swapHash}`);
+  await waitText(page, 'swapped 10 ZETAPHY for 1,234 SWD on ZetaphyRouter');
+  await waitText(page, 'Internal ZETAPHY transfers');
+  await waitText(page, '+1,234');
+  const t = await text(page);
+  assert.match(t, /swapExactETHForTokens\(uint256 amountOutMin, address\[\] path, address to, uint256 deadline\)/);
+  assert.match(t, /Verified/);
+  assert.match(t, /STATICCALL/); assert.match(t, /execution reverted/); // the reverted inner call
+  assert.match(t, /−10\.00018 ZETAPHY/); // the sender's ZETAPHY (value + fee), from the prestate diff
+  assert.match(t, /prestate trace/);
+  assert.ok(await page.locator('.calltree .call').count() >= 6, 'one row per call');
+  assert.ok(await page.locator('.calltree .call[data-depth="2"]').count() >= 2, 'nested calls');
+  assert.ok(mine.sourcify >= 1, 'Sourcify asked');
+  // a failed swap: the router's custom error from the trace
+  await go(page, `#/tx/${chain.deep.failHash}`);
+  await waitText(page, 'Why it failed');
+  await waitText(page, 'Expired');
+  await waitText(page, 'and it failed');
+  const f = await text(page);
+  assert.match(f, /called swapExactETHForTokens on/); assert.match(f, /Custom error/); assert.match(f, /From the node's trace/);
+  // an unlimited approval on a node without traces: flagged, and the missing traces said plainly
+  await go(page, `#/tx/${chain.deep.approveHash}`);
+  await waitText(page, 'Unlimited approval');
+  await waitText(page, 'This node does not expose traces');
+  const a = await text(page);
+  assert.match(a, /approved .* to spend an UNLIMITED amount of SWD/);
+  assert.match(a, /approve\(address spender, uint256 value\)/);
+  assert.match(a, /Approval/); // the log decoded too
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('contract page: Sourcify source and creator, Read contract, proxy to its implementation, Write through the wallet', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'en' });
+  // a stand-in for MetaMask: records what it is asked to send
+  await page.addInitScript(([from]) => {
+    window.__sent = [];
+    window.ethereum = { request: async ({ method, params }) => {
+      if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [from];
+      if (method === 'eth_chainId') return '0x12e4e';
+      if (method === 'eth_sendTransaction') { window.__sent.push(params[0]); return '0x' + 'ab'.repeat(32); }
+      throw new Error(`unsupported ${method}`);
+    } };
+  }, [chain.evmWallet.address]);
+  await go(page, `#/address/${ROUTER}`);
+  await waitText(page, 'Verified · full match');
+  await waitText(page, 'contracts/ZetaphyRouter.sol');
+  let t = await text(page);
+  assert.match(t, /ZetaphyRouter/); assert.match(t, /0\.8\.28\+commit\.7893614a/);
+  assert.ok(await page.locator(`main a[href="#/address/${getAddress(DEPLOYER)}"]`).count() >= 1, 'creator linked');
+  assert.ok(await page.locator(`main a[href="#/tx/0x${'de'.repeat(32)}"]`).count() >= 1, 'creation tx linked');
+  assert.match(await page.locator('pre.source').innerText(), /<script>window\.__pwned=2<\/script>/); // shown as text
+  assert.equal(await page.evaluate(() => window.__pwned), undefined);
+  // Read: zero-argument views are read at once, others on demand
+  await page.click('.tabs [data-tab="read"]');
+  await page.waitForSelector(`details.fn[data-fn="factory"] .fn-out a[href="#/address/${getAddress(FACTORY)}"]`);
+  const amountOut = page.locator('details.fn[data-fn="getAmountOut"]');
+  await amountOut.locator('summary').click();
+  await amountOut.locator('input[name="a0"]').fill('1000');
+  await amountOut.locator('input[name="a1"]').fill('5000');
+  await amountOut.locator('input[name="a2"]').fill('7000');
+  await amountOut.locator('button[type="submit"]').click();
+  await page.waitForFunction(() => document.querySelector('details.fn[data-fn="getAmountOut"] .fn-out')?.innerText.includes('997'));
+  // a bad input is refused before anything is sent
+  await amountOut.locator('input[name="a0"]').fill('-1');
+  await amountOut.locator('button[type="submit"]').click();
+  await page.waitForFunction(() => /out of range|whole number/.test(document.querySelector('details.fn[data-fn="getAmountOut"] .fn-out')?.innerText ?? ''));
+  // Write: through the injected wallet, after the chain check and the wallet-safety summary
+  await page.click('.tabs [data-tab="write"]');
+  const sweep = page.locator('details.fn[data-fn="sweep"]');
+  await sweep.locator('summary').click();
+  await sweep.locator('input[name="a0"]').fill(ME);
+  await sweep.locator('button[type="submit"]').click();
+  await page.waitForSelector('#ws-confirm[open]');
+  assert.match(await page.locator('#ws-confirm').innerText(), /ZETAPHY \(77390\)/);
+  await page.click('#ws-confirm [data-ws="go"]');
+  await page.waitForFunction(() => document.querySelector('details.fn[data-fn="sweep"] .fn-out')?.innerText.includes('Sent'));
+  const sent = await page.evaluate(() => window.__sent);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, ROUTER.toLowerCase());
+  assert.equal(sent[0].data, '0x01681a62' + ME_HEX.slice(2).toLowerCase().padStart(64, '0')); // sweep(address)
+  assert.equal(sent[0].chainId, '0x12e4e');
+  // an EIP-1967 proxy: its implementation linked, its ABI used
+  await go(page, `#/address/${PROXY}`);
+  await waitText(page, 'EIP-1967 proxy');
+  t = await text(page);
+  assert.match(t, /This proxy itself is not verified/);
+  assert.ok(await page.locator(`main .contract a[href="#/address/${ROUTER}"]`).count() >= 1, 'implementation linked');
+  await page.click('.tabs [data-tab="read"]');
+  await page.waitForSelector(`details.fn[data-fn="factory"] .fn-out a[href="#/address/${getAddress(FACTORY)}"]`);
+  assert.match(await text(page), /via the proxy's implementation/);
+  // a token that is not verified: said so
+  await go(page, `#/token/${TOKEN}`);
+  await waitText(page, 'Not verified');
   assert.deepEqual(problems, []);
   await ctx.close();
 });
@@ -219,8 +366,9 @@ test('address: 0x and zetaphy1 forms, balance, sequence, ML-DSA-44, tokens, rece
   assert.match(t, /1,000 ZETAPHY · 1 validators/); // staked
   assert.match(t, /1\.5\b/); // ERC-20 balance
   assert.match(t, /ERC-721/);
-  assert.match(t, /MsgSend/); // recent txs of this address from the scan
-  assert.match(t, /No indexer/);
+  assert.match(t, /MsgSend/); // this address's history from the node's tx index (all heights)
+  assert.match(t, /Full history · node transaction index/);
+  assert.match(t, /2 transactions total/); // blocks 20 and 24 (message.sender); the EVM tx is from another address
   await go(page, `#/address/${LOCKED_HEX}`);
   await waitText(page, 'locked to controller');
   const t2 = await text(page);
@@ -236,6 +384,7 @@ test('address: 0x and zetaphy1 forms, balance, sequence, ML-DSA-44, tokens, rece
 test('token page: hostile name shown as plain text, supply, Neuro link, ThreatRegistry flag with the disclaimer', async () => {
   const { page, ctx, problems } = await openPage();
   await go(page, `#/token/${TOKEN}`);
+  await waitText(page, 'ติดธงโดยผู้รัน Neuro'); // the full ThreatRegistry card (the risk summary may show the disclaimer first)
   await waitText(page, 'ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา');
   const t = await text(page);
   assert.match(t, /<img src=x onerror="window\.__pwned=1">Sawasdeetx/); // as text, bidi override removed
@@ -244,7 +393,8 @@ test('token page: hostile name shown as plain text, supply, Neuro link, ThreatRe
   assert.equal(await page.evaluate(() => window.__pwned), undefined);
   assert.match(t, /1,000,000 SWD/);
   assert.match(t, /ERC-20/);
-  assert.equal(await page.locator('main a[target="_blank"]').getAttribute('href'), NEURO.replace('{address}', TOKEN));
+  // the overview and the risk summary both link the Neuro report
+  for (const href of await page.locator('main a[target="_blank"]').evaluateAll((as) => as.map((x) => x.getAttribute('href')))) assert.equal(href, NEURO.replace('{address}', TOKEN));
   // the flag: neutral facts, evidence, the owner's response, the disclaimer
   assert.match(t, /ติดธงโดยผู้รัน Neuro/);
   assert.match(t, /มีที่อยู่ที่สร้างเหรียญเพิ่มได้ไม่จำกัด \(unlimited-mint\)/);
@@ -320,7 +470,7 @@ test('search, language and theme toggles, settings (another node), phone width',
   await ctx.close();
   // phone: no sideways scrolling on the busiest pages
   const phone = await openPage({ viewport: { width: 375, height: 800 } });
-  for (const h of ['#/', '#/block/20', `#/tx/${chain.evmTxHash}`, `#/address/${ME}`, '#/validators']) {
+  for (const h of ['#/', '#/block/20', `#/tx/${chain.evmTxHash}`, `#/tx/${chain.deep.swapHash}`, `#/address/${ME}`, `#/address/${ROUTER}`, '#/validators']) {
     await go(phone.page, h);
     await phone.page.waitForSelector('main .card');
     await phone.page.waitForTimeout(800);
@@ -402,6 +552,380 @@ test('placeholder config: the site says how to set the node and sends nothing', 
   // the CSP in force is vercel.json's
   const res = await page.request.get(`http://localhost:${PORT_DEFAULT}/`);
   assert.match(res.headers()['content-security-policy'], /script-src 'self';/);
+  // no node in that config: no wss:// source either
+  assert.match(res.headers()['content-security-policy'], /connect-src 'self' https: https:\/\/ipfs\.io;/);
+  const live = await page.request.get(`${ORIGIN}/`);
+  assert.match(live.headers()['content-security-policy'], /connect-src 'self' https: https:\/\/ipfs\.io wss:\/\/node\.zetaphy\.test;/);
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+// ---- history, live view, watch list, analytics (src/history.js, live.js, watch.js, charts.js) ----
+
+test('address history: tx_search over all heights, paged and merged, load more, filters, CSV; token transfers tab', async () => {
+  const { page, ctx, problems, counts: mine } = await openPage({ lang: 'en' });
+  await go(page, `#/address/${BUSY}`);
+  await waitText(page, 'Full history · node transaction index');
+  await page.waitForFunction(() => document.querySelectorAll('.hist-list tbody tr').length === 25);
+  const rows = () => page.locator('.hist-list tbody tr').count();
+  assert.match(await page.locator('#hist-total').innerText(), /57–114 transactions total/); // two queries see the same 57 txs
+  const before = mine[NODE]; const snap = { ...mine };
+  await page.click('#hist-more');
+  await page.waitForFunction(() => document.querySelectorAll('.hist-list tbody tr').length === 50);
+  await page.click('#hist-more');
+  await page.waitForFunction(() => document.querySelectorAll('.hist-list tbody tr').length === 57);
+  // the history's own requests (CometBFT tx_search pages) stay at most 6; the rest are the Neuro risk
+  // badges of the new rows' addresses, batched: at most 2 requests (code, flags) per load
+  const delta = Object.fromEntries(Object.entries(mine).map(([k, v]) => [k, v - (snap[k] ?? 0)]).filter(([, v]) => v));
+  const cometReq = Object.entries(delta).filter(([k]) => k.startsWith('comet:')).reduce((n, [, v]) => n + v, 0);
+  assert.ok(cometReq <= 6, `load more used ${cometReq} history requests ${JSON.stringify(delta)}`);
+  assert.ok(Object.keys(delta).every((k) => k === NODE || k.startsWith('comet:') || k === 'evm:eth_getCode' || k === 'evm:eth_call'), JSON.stringify(delta));
+  assert.ok(mine[NODE] - before - cometReq <= 4, `load more used ${mine[NODE] - before} requests ${JSON.stringify(delta)}`);
+  assert.equal(await page.locator('#hist-total').innerText(), `${BUSY_TXS} transactions total`);
+  assert.ok(await page.locator('#hist-more').isHidden(), 'nothing more to load');
+  // newest first, no duplicates
+  const heights = await page.locator('.hist-list tbody tr td:nth-child(3)').allInnerTexts();
+  assert.deepEqual(heights, [...heights].sort((a, b) => Number(b) - Number(a)));
+  const hashes = await page.locator('.hist-list tbody tr').evaluateAll((trs) => trs.map((tr) => tr.dataset.hash));
+  assert.equal(new Set(hashes).size, BUSY_TXS);
+  const txt = await text(page);
+  assert.match(txt, /MsgSend/); assert.match(txt, /\bout\b/); assert.match(txt, /Showing 57 of 57 loaded/);
+  // filters work on what is loaded
+  await page.selectOption('#hist-dir', 'in');
+  await waitText(page, 'No loaded transaction matches these filters.');
+  await page.selectOption('#hist-dir', 'out');
+  await page.selectOption('#hist-kind', 'transfer');
+  assert.equal(await rows(), 57);
+  await page.selectOption('#hist-kind', 'staking');
+  assert.equal(await rows(), 0);
+  await page.selectOption('#hist-kind', 'all');
+  // CSV of what is loaded, made in the browser (Blob download)
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#hist-csv')]);
+  assert.match(dl.suggestedFilename(), /^zetaphy-0xb5b5.*-transactions\.csv$/i);
+  const csv = readFileSync(await dl.path(), 'utf8').replace(/^﻿/, '');
+  const lines = csv.trim().split('\r\n');
+  assert.equal(lines[0], 'tx_hash,cometbft_hash,height,index,kind,direction,type,from,to,value_ZETAPHY,status,code');
+  assert.equal(lines.length, 1 + BUSY_TXS);
+  assert.match(lines[1], new RegExp(`,19,3,transfer,out,MsgSend,${BUSY},${LOCKED},0\\.000000000000001002,success,0$`));
+  // token transfers tab: eth_getLogs (topic 1 / topic 2, ERC-1155) in 500-block windows
+  await go(page, `#/address/${ME}`);
+  await waitText(page, '2 transactions total');
+  await page.click('#hist-tab-tokens');
+  await page.waitForSelector('#hist-panel-tokens:not([hidden])');
+  await waitText(page, 'Every block scanned: 3 token transfers.');
+  const tok = await page.locator('#hist-panel-tokens').innerText();
+  assert.match(tok, /ERC-20/); assert.match(tok, /ERC-721/); assert.match(tok, /ERC-1155/); assert.match(tok, /\bin\b/);
+  const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#tok-csv')]);
+  assert.equal(readFileSync(await dl2.path(), 'utf8').replace(/^﻿/, '').trim().split('\r\n').length, 4);
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('address history: a node that refuses event queries falls back to the block scan and says so', async () => {
+  chain.state.noEventIndex = true;
+  try {
+    const { page, ctx, problems } = await openPage({ lang: 'en' });
+    await go(page, `#/address/${ME}`);
+    await waitText(page, 'Recent blocks only · scan');
+    await waitText(page, 'MsgSetPQEvidence');
+    assert.match(await text(page), /refused event queries/);
+    assert.ok(await page.locator('#hist-more').isHidden());
+    assert.deepEqual(problems, []);
+    await ctx.close();
+  } finally { chain.state.noEventIndex = false; }
+});
+
+test('analytics on the home page: inline SVG charts with labels and data tables, under the CSP', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'en' });
+  await go(page, '#/');
+  await page.waitForSelector('#chart-txs svg rect', { state: 'attached' });
+  for (const id of ['chart-txs', 'chart-time', 'chart-gas', 'chart-fee', 'chart-top']) {
+    assert.equal(await page.locator(`#${id} svg[role="img"]`).count(), 1, id);
+  }
+  assert.match(await page.locator('#chart-txs svg > title').textContent(), /^Transactions per block, blocks 1 to 30: min 0, max 1/);
+  assert.match(await page.locator('#chart-time svg > title').textContent(), /average 5 s$/);
+  assert.equal(await page.locator('#chart-txs svg > rect').count(), 30);
+  await page.click('#chart-fee summary');
+  assert.match(await page.locator('#chart-fee table').innerText(), /^Block\s+Base fee \(gwei\)/);
+  assert.match(await page.locator('#chart-top').innerText(), /Most active addresses/);
+  assert.equal(await page.evaluate(() => document.querySelectorAll('main [style]').length), 0, 'no inline style attributes from the charts');
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('watch list: nickname per browser, kept after a reload, shown on the home page and as the address label', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'en' });
+  await go(page, `#/address/${ME}`);
+  await page.waitForSelector('#watch-name');
+  await page.fill('#watch-name', 'My  wallet‮');
+  await page.click('.watch-form button[type=submit]');
+  await page.waitForSelector('.toast');
+  assert.match(await page.locator('.toast').first().innerText(), /Watching My wallet/);
+  const stored = JSON.parse(await page.evaluate(() => localStorage.getItem('zetaphy-explorer:watch')));
+  assert.deepEqual(stored, [{ address: ME_HEX, name: 'My wallet' }]); // bidi override and double space removed
+  await page.reload();
+  await waitText(page, 'My wallet');
+  assert.equal(await page.locator('.watch-form button[type=submit]').innerText(), 'Save nickname');
+  await go(page, '#/');
+  await waitText(page, 'Watched addresses');
+  const card = await page.locator('section.card', { hasText: 'Watched addresses' }).innerText();
+  assert.match(card, /My wallet/); assert.match(card, /MsgSetPQEvidence/);
+  // a hand-edited value in storage cannot put anything odd on the page
+  await page.evaluate(() => localStorage.setItem('zetaphy-explorer:watch', JSON.stringify([{ address: 'javascript:alert(1)', name: 'x' }, { address: '0x' + '11'.repeat(20), name: '<b>pal</b>' }, 7])));
+  await page.reload();
+  await waitText(page, '<b>pal</b>');
+  assert.equal(await page.locator('main b').count(), 0);
+  // a broken stored value: the page still works
+  await page.evaluate(() => localStorage.setItem('zetaphy-explorer:watch', '{not json'));
+  await page.reload();
+  await waitText(page, 'Latest blocks');
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+// These two make new blocks (31, 32, 33): they run last.
+test('live: CometBFT websocket NewBlock, new rows animated, pending txs, watch a tx until it is confirmed, watched-address toast', async () => {
+  const { page, ctx, problems, push, wsUrls } = await openPage({ lang: 'en' });
+  await page.addInitScript((me) => { try { localStorage.setItem('zetaphy-explorer:watch', JSON.stringify([{ address: me, name: 'Mine' }])); } catch { /* none */ } }, ME_HEX);
+  const pendingHash = chain.addPending();
+  await go(page, '#/live');
+  await page.waitForFunction(() => /CometBFT websocket/.test(document.getElementById('live-mode')?.innerText ?? ''));
+  assert.deepEqual(wsUrls, ['wss://node.zetaphy.test/rpc/websocket']);
+  await waitText(page, '1 transactions waiting');
+  await waitText(page, 'MsgSend');
+  await page.locator('section.card', { hasText: 'Pending transactions' }).locator('button').click();
+  await page.waitForFunction(() => /Pending/.test([...document.querySelectorAll('section.card')].pop()?.innerText ?? ''));
+  assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('zetaphy-explorer:watch-txs'))).map((e) => e.hash), [pendingHash]);
+  // the block lands: pushed on the socket
+  const H = chain.addBlock();
+  assert.equal(push(H), 1);
+  await page.waitForSelector(`.live-blocks li.row-new a[href="#/block/${H}"]`);
+  await waitText(page, 'Confirmed');
+  await waitText(page, '0 transactions waiting');
+  await page.waitForFunction((h) => [...document.querySelectorAll('.toast')].some((x) => x.innerText.includes(`Mine is in block ${h}`)), H);
+  assert.ok(await page.locator('.toast', { hasText: `Transaction confirmed in block ${H}` }).count() >= 1);
+  // the home page follows the socket too: the new block row fades in
+  await go(page, '#/');
+  await waitText(page, 'Latest blocks');
+  chain.addPending();
+  const H2 = chain.addBlock();
+  push(H2);
+  await page.waitForSelector(`.card tr.row-new a[href="#/block/${H2}"]`);
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('live: when the sockets fail, polling every 6 s still brings new blocks', async () => {
+  const { page, ctx, problems, wsUrls } = await openPage({ lang: 'en', ws: 'refuse' });
+  await go(page, '#/');
+  await page.waitForFunction(() => /checking every 6 s/.test(document.getElementById('live-mode')?.innerText ?? ''), null, { timeout: 15000 });
+  assert.deepEqual(wsUrls, ['wss://node.zetaphy.test/rpc/websocket', 'wss://node.zetaphy.test/ws']); // CometBFT, then EVM newHeads
+  await waitText(page, 'Latest blocks');
+  const H = chain.addBlock();
+  await page.waitForSelector(`.card tr.row-new a[href="#/block/${H}"]`, { timeout: 15000 });
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+// ---------------- insight features: fund flow, labels, cross-chain, ask, quantum, risk ----------------
+
+test('fund flow: the graph renders from the mock node, says its scope, expands a node, and has a table', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'en' });
+  await go(page, `#/flow/${ME_HEX}`);
+  await page.waitForSelector('svg.flow-svg');
+  const t = await text(page);
+  // (the live-feed tests above add blocks to the shared mock chain: the scan ends at its head)
+  assert.ok(t.includes(`native ZETAPHY transfers from the scanned blocks 1–${chain.latest()}`), t);
+  assert.ok(t.includes('token Transfer events in 500-block windows'), t);
+  // each address says exactly what was read for it
+  assert.ok(t.includes(`tokens: blocks 1–${chain.latest()} · native: scanned blocks 1–${chain.latest()} · tx index: all heights`), t);
+  const nodes = () => page.locator('svg.flow-svg g.flow-node[data-address]').evaluateAll((gs) => gs.map((g) => g.dataset.address));
+  const before = await nodes();
+  assert.ok(before.includes(ME_HEX.toLowerCase()) && before.includes(LOCKED_HEX), JSON.stringify(before)); // ME -> LOCKED (MsgSend)
+  const sender = chain.evmWallet.address.toLowerCase();
+  assert.ok(before.includes(sender), 'the ERC-20 sender, one hop in');
+  assert.ok(!before.includes(MAILBOX.toLowerCase()));
+  // edges are labelled with amounts; the table fallback lists the same transfers
+  assert.match(await page.locator('svg.flow-svg').textContent(), /2\.5 ZETAPHY/);
+  assert.match(await page.locator('table.flow-table').innerText(), /2\.5 ZETAPHY/);
+  // click the sender: its outflow to the Hyperlane Mailbox appears, labelled
+  await page.click(`svg.flow-svg g.flow-node[data-address="${sender}"]`);
+  await page.waitForSelector(`svg.flow-svg g.flow-node[data-address="${MAILBOX.toLowerCase()}"]`);
+  assert.match(await page.locator('svg.flow-svg').textContent(), /Hyperlane Mailbox/);
+  // the same layout every time
+  const layout = () => page.locator('svg.flow-svg g.flow-node').evaluateAll((gs) => gs.map((g) => `${g.dataset.address} ${g.getAttribute('transform')}`));
+  const pos1 = await layout();
+  await page.reload(); await page.waitForSelector('svg.flow-svg');
+  await page.click(`svg.flow-svg g.flow-node[data-address="${sender}"]`);
+  await page.waitForSelector(`svg.flow-svg g.flow-node[data-address="${MAILBOX.toLowerCase()}"]`);
+  assert.deepEqual(await layout(), pos1);
+  // pan / zoom from the keyboard: the view box changes, no inline styles anywhere in the graph
+  const vb = () => page.locator('svg.flow-svg').getAttribute('viewBox');
+  const v0 = await vb();
+  await page.focus('.flow-wrap'); await page.keyboard.press('+');
+  assert.notEqual(await vb(), v0);
+  await page.keyboard.press('ArrowRight');
+  const v1 = await vb();
+  await page.keyboard.press('0');
+  assert.equal(await vb(), v0); assert.notEqual(v1, v0);
+  assert.equal(await page.locator('main [style]').count(), 0);
+  // phone width: the page itself never scrolls sideways
+  await page.setViewportSize({ width: 360, height: 740 });
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('fund flow: "Follow" goes past 3 hops to where the money stops, Stop stops it, cycles are drawn, the path view', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'en' });
+  const F = FLOW_HEX.map((x) => x.toLowerCase());
+  // slow node answers, so that Stop lands in the middle
+  const slow = async (route) => { await new Promise((r) => setTimeout(r, 250)); return route.fallback(); };
+  await go(page, `#/flow/${F[0]}`);
+  await page.waitForSelector(`svg.flow-svg g.flow-node[data-address="${F[1]}"]`); // hop 1 from the node's tx index (not in any scanned block)
+  await waitText(page, 'tx index: all heights (1 txs)');
+  await ctx.route((url) => url.host === 'node.zetaphy.test', slow);
+  await page.click('#flow-follow');
+  await page.waitForSelector(`svg.flow-svg g.flow-node[data-address="${F[2]}"]`);
+  await page.click('#flow-stop');
+  await page.waitForFunction(() => /Stopped at hop \d+/.test(document.querySelector('.flow-status')?.textContent ?? ''));
+  assert.equal(await page.locator(`svg.flow-svg g.flow-node[data-address="${F[6]}"]`).count(), 0, 'stopped before the end');
+  assert.ok(await page.locator('#flow-follow').isEnabled());
+  // go on: past hop 3, to hop 6, where the money stops
+  await ctx.unroute((url) => url.host === 'node.zetaphy.test', slow);
+  await page.click('#flow-follow');
+  await page.waitForFunction(() => /Followed to the end: 6 hop\(s\)/.test(document.querySelector('.flow-status')?.textContent ?? ''), null, { timeout: 30000 });
+  for (let i = 1; i <= 6; i++) assert.equal(await page.locator(`svg.flow-svg g.flow-node[data-address="${F[i]}"]`).getAttribute('data-hop'), String(i), `hop ${i}`);
+  assert.match(await page.locator('svg.flow-svg').textContent(), /6 hop\(s\) out/);
+  assert.match(await page.locator('svg.flow-svg').textContent(), /50 ZETAPHY/);
+  const t = await text(page);
+  assert.match(t, /no further outflow in the data read/);
+  // the cycle F2 -> F3 -> F4 -> F2: found, drawn, followed once
+  assert.match(t, /1 cycle\(s\)/);
+  assert.ok(await page.locator('svg.flow-svg g.flow-edge.flow-cycle').count() >= 3);
+  assert.equal(await page.locator('svg.flow-svg g.flow-node[data-address]').count(), 7);
+  // the path from the start to hop 6
+  await page.selectOption('#flow-path-to', F[6]);
+  await page.click('#flow-path-show');
+  await waitText(page, '6 step(s)');
+  assert.equal(await page.locator('.flow-path-list li').count(), 6);
+  assert.match(await page.locator('.flow-path-list li').first().innerText(), /100 ZETAPHY/);
+  assert.equal(await page.locator('svg.flow-svg g.flow-edge.flow-on-path').count(), 6);
+  // a hop collapses into "+N more" (a node on the path stays drawn) and comes back
+  await page.click('button.flow-layer-btn[data-layer="6"]');
+  assert.equal(await page.locator(`svg.flow-svg g.flow-node[data-address="${F[6]}"]`).count(), 1, 'on the path: kept');
+  await page.click('#flow-path-clear');
+  assert.equal(await page.locator(`svg.flow-svg g.flow-node[data-address="${F[6]}"]`).count(), 0);
+  assert.match(await page.locator('svg.flow-svg g.flow-node[data-more="6"]').textContent(), /\+1 more/);
+  await page.click('svg.flow-svg g.flow-node[data-more="6"]');
+  assert.equal(await page.locator(`svg.flow-svg g.flow-node[data-address="${F[6]}"]`).count(), 1);
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('labels: a known address shows its label (Hyperlane Mailbox, burn address) wherever it is rendered', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'en' });
+  await go(page, `#/tx/${chain.hlTxHash}`);
+  await waitText(page, 'Hyperlane Mailbox');
+  const to = page.locator('dl.kv dd', { has: page.locator(`a[href="#/address/${MAILBOX}"]`) }).first();
+  assert.match(await to.innerText(), /Hyperlane Mailbox/);
+  await go(page, `#/address/${MAILBOX}`);
+  await waitText(page, 'Hyperlane Mailbox');
+  await go(page, '#/address/0x000000000000000000000000000000000000dEaD');
+  await waitText(page, 'Burn address (0x…dEaD)');
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('cross-chain: a Hyperlane dispatch shows its message id, Sepolia, and the delivery read from Sepolia\'s RPC', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'en' });
+  const asked = [];
+  // Sepolia's public RPC (from crosschain.json), mocked: delivered(id) is true, ProcessId found in a recent block
+  await ctx.route((url) => url.host === 'ethereum-sepolia-rpc.publicnode.com', async (route) => {
+    const req = route.request();
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+    const { id, method, params } = JSON.parse(req.postData());
+    asked.push(method);
+    const result = {
+      eth_call: String(params?.[0]?.to).toLowerCase() === '0xffaef09b3cd11d9b20d1a19becca54eec2884766' && params[0].data.endsWith(chain.hlMessageId.slice(2)) ? '0x' + '0'.repeat(63) + '1' : '0x' + '0'.repeat(64),
+      eth_blockNumber: '0x100000',
+      eth_getLogs: [{ address: '0xfFAEF09B3cd11D9b20d1a19bECca54EEC2884766', transactionHash: SEPOLIA_DELIVERY_TX, blockNumber: '0xfffff0', topics: params?.[0]?.topics ?? [], data: '0x' }],
+      eth_getBlockByNumber: { number: '0xfffff0', timestamp: '0x6720f000' },
+    }[method];
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify({ jsonrpc: '2.0', id, result }) });
+  });
+  await go(page, `#/tx/${chain.hlTxHash}`);
+  await waitText(page, 'Message sent to Sepolia');
+  await waitText(page, 'Delivered');
+  const t = await text(page);
+  assert.ok(t.includes(chain.hlMessageId), 'message id shown');
+  assert.ok(t.includes('Cross-chain'), 'the card has its own title (not the contract card\'s)');
+  assert.match(t, /ZETAPHY Testnet → Sepolia/);
+  assert.equal(await page.locator(`a[href="https://sepolia.etherscan.io/tx/${SEPOLIA_DELIVERY_TX}"]`).count(), 1);
+  assert.ok(asked.includes('eth_call') && asked.includes('eth_getLogs'));
+  // a tx without messages has no cross-chain card
+  await go(page, `#/tx/${chain.evmTxHash}`);
+  await waitText(page, 'ERC-1155');
+  assert.ok(!(await text(page)).includes('Cross-chain'));
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('ask: a Thai question in the search box routes to the risk view of that address', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'th' });
+  await go(page, '#/');
+  await waitText(page, 'บล็อกล่าสุด');
+  await page.fill('#search', `ที่อยู่นี้ปลอดภัยไหม ${TOKEN}`);
+  await page.press('#search', 'Enter');
+  await page.waitForFunction((a) => location.hash === `#/ask/risk?address=${a}`, TOKEN);
+  await waitText(page, 'สรุปความเสี่ยง (Neuro)');
+  await waitText(page, 'Neuro ติดธง');
+  const t = await text(page);
+  assert.match(t, /ข้อมูลวิเคราะห์โค้ดอัตโนมัติ ไม่ใช่คำกล่าวหา/);
+  assert.match(t, /ความเสี่ยงต่อคอมพิวเตอร์ควอนตัม/);
+  // English: failed txs in the scanned blocks
+  await page.selectOption('#lang', 'en');
+  await page.fill('#search', 'failed txs');
+  await page.press('#search', 'Enter');
+  await waitText(page, 'Understood as:');
+  await waitText(page, 'MsgPQVoteKey');
+  assert.ok(!(await text(page)).includes('MsgSend'), 'only the failed one');
+  // not a question: the normal search keeps the page and says what it accepts
+  await page.fill('#search', 'hello there');
+  await page.press('#search', 'Enter');
+  assert.match(await page.evaluate(() => location.hash), /#\/ask\/failed/);
+  assert.deepEqual(problems, []);
+  await ctx.close();
+});
+
+test('quantum exposure and risk badges: address sections, the dashboard, and Neuro badges in tables', async () => {
+  const { page, ctx, problems } = await openPage({ lang: 'en' });
+  await go(page, `#/address/${ME_HEX}`);
+  await waitText(page, 'Quantum exposure');
+  await waitText(page, 'Post-quantum account');
+  await waitText(page, 'Risk summary (Neuro)');
+  await go(page, `#/address/${LOCKED_HEX}`);
+  await waitText(page, 'A quantum lock is set');
+  await go(page, `#/address/${chain.evmWallet.address}`);
+  await waitText(page, 'Public key exposed');
+  assert.equal(await page.locator('a[href="https://app.sawasdeecoin.com/?tab=wallet"]').count(), 1);
+  // the flagged token gets its badge next to its link in the EVM tx's transfers
+  const s0 = await page.evaluate(() => window.__explorer.stats());
+  await go(page, `#/tx/${chain.evmTxHash}`);
+  await page.waitForSelector('.risk-badge');
+  assert.match(await page.locator('.risk-badge').first().innerText(), /Flagged by Neuro · unlimited-mint/);
+  // the badge lookups were batched: a handful of requests for the whole tx page
+  const s = await page.evaluate(() => window.__explorer.stats());
+  // (counted from the tx page's own start: the address pages before it now also load their full history)
+  assert.ok(s.requests - s0.requests < 40, JSON.stringify({ before: s0, after: s }));
+  // the dashboard: PQ vote keys of the validators and the senders of the scanned blocks
+  await go(page, '#/quantum');
+  await waitText(page, 'Senders checked');
+  await waitText(page, 'Share of the voting power');
+  const t = await text(page);
+  assert.match(t, /Active validators with a key\s+1 \/ 2/);
+  assert.match(t, /Share of the voting power\s+60\.0%/);
+  assert.match(t, /Post-quantum \(ML-DSA-44 or quantum-locked\)\s+1 \(/);
   assert.deepEqual(problems, []);
   await ctx.close();
 });

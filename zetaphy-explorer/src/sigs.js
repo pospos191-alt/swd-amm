@@ -1,0 +1,97 @@
+// A small table of widely used signatures (compact form, see abi.js parseCompact):
+// ERC-20 / 721 / 1155, EIP-2612 permit, Permit2, wrapped native, Uniswap-v2 style
+// routers and pairs, multicall, Ownable / AccessControl, proxies. A call decoded with
+// one of these is marked "guessed": the selector matches, the contract is not verified.
+export const COMMON = {
+  functions: [
+    // ERC-20 (+ common extensions)
+    'v|name()|(string)', 'v|symbol()|(string)', 'v|decimals()|(uint8)', 'v|totalSupply()|(uint256)',
+    'v|balanceOf(address account)|(uint256)', 'v|allowance(address owner,address spender)|(uint256)',
+    'n|transfer(address to,uint256 value)|(bool)', 'n|transferFrom(address from,address to,uint256 value)|(bool)',
+    'n|approve(address spender,uint256 value)|(bool)', 'n|increaseAllowance(address spender,uint256 addedValue)|(bool)',
+    'n|decreaseAllowance(address spender,uint256 subtractedValue)|(bool)',
+    'n|mint(address to,uint256 amount)|()', 'n|burn(uint256 amount)|()', 'n|burnFrom(address account,uint256 amount)|()',
+    // EIP-2612 / Permit2
+    'n|permit(address owner,address spender,uint256 value,uint256 deadline,uint8 v,bytes32 r,bytes32 s)|()',
+    'v|nonces(address owner)|(uint256)', 'v|DOMAIN_SEPARATOR()|(bytes32)',
+    'n|permit(address owner,((address token,uint160 amount,uint48 expiration,uint48 nonce) details,address spender,uint256 sigDeadline) permitSingle,bytes signature)|()',
+    'n|approve(address token,address spender,uint160 amount,uint48 expiration)|()',
+    // ERC-721
+    'v|ownerOf(uint256 tokenId)|(address)', 'v|tokenURI(uint256 tokenId)|(string)', 'v|getApproved(uint256 tokenId)|(address)',
+    'v|isApprovedForAll(address owner,address operator)|(bool)', 'n|setApprovalForAll(address operator,bool approved)|()',
+    'n|safeTransferFrom(address from,address to,uint256 tokenId)|()', 'n|safeTransferFrom(address from,address to,uint256 tokenId,bytes data)|()',
+    'v|supportsInterface(bytes4 interfaceId)|(bool)',
+    // ERC-1155
+    'v|balanceOf(address account,uint256 id)|(uint256)', 'v|balanceOfBatch(address[] accounts,uint256[] ids)|(uint256[])', 'v|uri(uint256 id)|(string)',
+    'n|safeTransferFrom(address from,address to,uint256 id,uint256 value,bytes data)|()',
+    'n|safeBatchTransferFrom(address from,address to,uint256[] ids,uint256[] values,bytes data)|()',
+    // wrapped native
+    '$|deposit()|()', 'n|withdraw(uint256 wad)|()',
+    // Uniswap-v2 style router
+    'v|factory()|(address)', 'v|WETH()|(address)',
+    'n|swapExactTokensForTokens(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)|(uint256[] amounts)',
+    'n|swapTokensForExactTokens(uint256 amountOut,uint256 amountInMax,address[] path,address to,uint256 deadline)|(uint256[] amounts)',
+    '$|swapExactETHForTokens(uint256 amountOutMin,address[] path,address to,uint256 deadline)|(uint256[] amounts)',
+    'n|swapTokensForExactETH(uint256 amountOut,uint256 amountInMax,address[] path,address to,uint256 deadline)|(uint256[] amounts)',
+    'n|swapExactTokensForETH(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)|(uint256[] amounts)',
+    '$|swapETHForExactTokens(uint256 amountOut,address[] path,address to,uint256 deadline)|(uint256[] amounts)',
+    'n|swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)|()',
+    '$|swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin,address[] path,address to,uint256 deadline)|()',
+    'n|swapExactTokensForETHSupportingFeeOnTransferTokens(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)|()',
+    'n|addLiquidity(address tokenA,address tokenB,uint256 amountADesired,uint256 amountBDesired,uint256 amountAMin,uint256 amountBMin,address to,uint256 deadline)|(uint256 amountA,uint256 amountB,uint256 liquidity)',
+    '$|addLiquidityETH(address token,uint256 amountTokenDesired,uint256 amountTokenMin,uint256 amountETHMin,address to,uint256 deadline)|(uint256 amountToken,uint256 amountETH,uint256 liquidity)',
+    'n|removeLiquidity(address tokenA,address tokenB,uint256 liquidity,uint256 amountAMin,uint256 amountBMin,address to,uint256 deadline)|(uint256 amountA,uint256 amountB)',
+    'n|removeLiquidityETH(address token,uint256 liquidity,uint256 amountTokenMin,uint256 amountETHMin,address to,uint256 deadline)|(uint256 amountToken,uint256 amountETH)',
+    'v|getAmountsOut(uint256 amountIn,address[] path)|(uint256[] amounts)', 'v|getAmountsIn(uint256 amountOut,address[] path)|(uint256[] amounts)',
+    // pairs / factories
+    'v|getReserves()|(uint112 reserve0,uint112 reserve1,uint32 blockTimestampLast)', 'v|token0()|(address)', 'v|token1()|(address)',
+    'n|swap(uint256 amount0Out,uint256 amount1Out,address to,bytes data)|()', 'n|sync()|()', 'n|skim(address to)|()',
+    'v|getPair(address tokenA,address tokenB)|(address pair)', 'n|createPair(address tokenA,address tokenB)|(address pair)',
+    // multicall
+    'n|multicall(bytes[] data)|(bytes[] results)', '$|multicall(uint256 deadline,bytes[] data)|(bytes[] results)',
+    '$|aggregate((address target,bytes callData)[] calls)|(uint256 blockNumber,bytes[] returnData)',
+    '$|aggregate3((address target,bool allowFailure,bytes callData)[] calls)|((bool success,bytes returnData)[] returnData)',
+    '$|tryAggregate(bool requireSuccess,(address target,bytes callData)[] calls)|((bool success,bytes returnData)[] returnData)',
+    // ownership, roles, pausing, proxies
+    'v|owner()|(address)', 'n|transferOwnership(address newOwner)|()', 'n|renounceOwnership()|()', 'n|acceptOwnership()|()',
+    'v|hasRole(bytes32 role,address account)|(bool)', 'n|grantRole(bytes32 role,address account)|()', 'n|revokeRole(bytes32 role,address account)|()',
+    'n|renounceRole(bytes32 role,address callerConfirmation)|()', 'v|paused()|(bool)', 'n|pause()|()', 'n|unpause()|()',
+    'v|implementation()|(address)', 'n|upgradeTo(address newImplementation)|()', '$|upgradeToAndCall(address newImplementation,bytes data)|()',
+    'n|changeAdmin(address newAdmin)|()',
+  ],
+  events: [
+    'Transfer(address indexed from,address indexed to,uint256 value)',
+    'Transfer(address indexed from,address indexed to,uint256 indexed tokenId)',
+    'Approval(address indexed owner,address indexed spender,uint256 value)',
+    'Approval(address indexed owner,address indexed approved,uint256 indexed tokenId)',
+    'ApprovalForAll(address indexed owner,address indexed operator,bool approved)',
+    'TransferSingle(address indexed operator,address indexed from,address indexed to,uint256 id,uint256 value)',
+    'TransferBatch(address indexed operator,address indexed from,address indexed to,uint256[] ids,uint256[] values)',
+    'URI(string value,uint256 indexed id)',
+    'Deposit(address indexed dst,uint256 wad)', 'Withdrawal(address indexed src,uint256 wad)',
+    'Swap(address indexed sender,uint256 amount0In,uint256 amount1In,uint256 amount0Out,uint256 amount1Out,address indexed to)',
+    'Sync(uint112 reserve0,uint112 reserve1)',
+    'Mint(address indexed sender,uint256 amount0,uint256 amount1)',
+    'Burn(address indexed sender,uint256 amount0,uint256 amount1,address indexed to)',
+    'PairCreated(address indexed token0,address indexed token1,address pair,uint256)',
+    'OwnershipTransferred(address indexed previousOwner,address indexed newOwner)',
+    'RoleGranted(bytes32 indexed role,address indexed account,address indexed sender)',
+    'RoleRevoked(bytes32 indexed role,address indexed account,address indexed sender)',
+    'Paused(address account)', 'Unpaused(address account)',
+    'Upgraded(address indexed implementation)', 'AdminChanged(address previousAdmin,address newAdmin)', 'BeaconUpgraded(address indexed beacon)',
+    'Initialized(uint64 version)', 'Initialized(uint8 version)',
+  ],
+  errors: [
+    'ERC20InsufficientBalance(address sender,uint256 balance,uint256 needed)',
+    'ERC20InsufficientAllowance(address spender,uint256 allowance,uint256 needed)',
+    'ERC20InvalidSender(address sender)', 'ERC20InvalidReceiver(address receiver)', 'ERC20InvalidApprover(address approver)', 'ERC20InvalidSpender(address spender)',
+    'ERC721NonexistentToken(uint256 tokenId)', 'ERC721IncorrectOwner(address sender,uint256 tokenId,address owner)',
+    'ERC721InsufficientApproval(address operator,uint256 tokenId)', 'ERC721InvalidReceiver(address receiver)',
+    'ERC1155InsufficientBalance(address sender,uint256 balance,uint256 needed,uint256 tokenId)', 'ERC1155MissingApprovalForAll(address operator,address owner)',
+    'OwnableUnauthorizedAccount(address account)', 'OwnableInvalidOwner(address owner)',
+    'AccessControlUnauthorizedAccount(address account,bytes32 neededRole)',
+    'ReentrancyGuardReentrantCall()', 'EnforcedPause()', 'ExpectedPause()', 'SafeERC20FailedOperation(address token)',
+    'AddressEmptyCode(address target)', 'FailedInnerCall()', 'FailedCall()', 'InvalidInitialization()', 'NotInitializing()',
+    'ERC2612ExpiredSignature(uint256 deadline)', 'ERC2612InvalidSigner(address signer,address owner)',
+  ],
+};

@@ -1,0 +1,18 @@
+{
+  "name": "ZETAPHY Explorer",
+  "short_name": "ZETAPHY",
+  "description": "ZETAPHY block explorer: blocks, transactions, validators, governance, tokens and post-quantum (ML-DSA-44) block certificates. Reads the node directly.",
+  "id": "./",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0d14",
+  "theme_color": "#0b0d14",
+  "categories": ["finance", "utilities"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
