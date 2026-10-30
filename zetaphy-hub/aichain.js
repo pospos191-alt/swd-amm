@@ -109,10 +109,16 @@ export async function readTokenScore(evmCall, addr, token, version) {
   return { current, record, stale: !current.known && record.version !== 0 && record.version !== version };
 }
 /** The feature vector last posted for `token` (from its Scored logs) with the stored hash; null when not found. */
-export async function findFeatures(evmCall, addr, token, featuresHash) {
-  const logs = await evmCall('eth_getLogs', [{ address: addr, fromBlock: '0x0', toBlock: 'latest', topics: [SCORED_TOPIC, `0x${addrWord(token)}`] }]);
-  for (const l of [...(logs ?? [])].reverse()) {
-    try { const s = readScoredLog(l); if (s.featuresHash.toLowerCase() === String(featuresHash).toLowerCase()) return s.features; } catch { /* not ours */ }
+// newest first, in windows of 500 blocks (the public node's eth_getLogs limit), at most `windows` of them
+export async function findFeatures(evmCall, addr, token, featuresHash, windows = 40) {
+  const STEP = 500;
+  let to = Number(BigInt(await evmCall('eth_blockNumber', [])));
+  for (let w = 0; w < windows && to >= 0; w++, to -= STEP) {
+    const from = Math.max(0, to - STEP + 1);
+    const logs = await evmCall('eth_getLogs', [{ address: addr, fromBlock: `0x${from.toString(16)}`, toBlock: `0x${to.toString(16)}`, topics: [SCORED_TOPIC, `0x${addrWord(token)}`] }]);
+    for (const l of [...(logs ?? [])].reverse()) {
+      try { const s = readScoredLog(l); if (s.featuresHash.toLowerCase() === String(featuresHash).toLowerCase()) return s.features; } catch { /* not ours */ }
+    }
   }
   return null;
 }

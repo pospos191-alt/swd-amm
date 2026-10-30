@@ -163,6 +163,8 @@ test('NeuroScore reader: the active model, a token\'s score, a stale score and i
   const q = seen.find(([m]) => m === 'eth_getLogs')[1][0];
   assert.deepEqual(q.topics, [SCORED_TOPIC, '0x' + TOK.slice(2).padStart(64, '0')]);
   assert.equal(q.address, NS);
+  const spans = seen.filter(([m]) => m === 'eth_getLogs').map(([, [f]]) => Number(BigInt(f.toBlock)) - Number(BigInt(f.fromBlock)) + 1);
+  assert.ok(spans.every((n) => n <= 500), 'windows of at most 500 blocks (the public node limit)');
 
   const none = fakeNode({ version: () => enc(['uint32'], [0]) });
   assert.deepEqual(await readNeuroScore(none.evmCall, NS), { version: 0, model: null });
