@@ -62,7 +62,7 @@ export function hubConfig(cfg, files = null) {
   const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity',
     'usefulWork', 'bugBounty', 'workerReputation', 'usefulIssuance', 'riskForecasts', 'foresight', 'detectorPool', 'dataDao', 'arena', 'intentExecutor', 'labelRegistry', 'vouchRegistry', 'agentRegistry', 'agentPolicyWallet',
     'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance',
-    'modelRegistry', 'neuroScore', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds', 'zetaphyCheques', 'offlineOrders', 'auditNetwork', 'auditRunners', 'auditJudges', 'auditCertificate']
+    'modelRegistry', 'neuroScore', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds', 'zetaphyCheques', 'offlineOrders', 'auditNetwork', 'auditRunners', 'auditJudges', 'auditCertificate', 'circuitBreaker']
     .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
   if (Number.isInteger(out.timelockBlock) && contracts.timelock) contracts.timelockBlock = out.timelockBlock;
   const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};

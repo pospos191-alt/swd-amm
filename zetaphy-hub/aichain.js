@@ -7,6 +7,8 @@
 //       anyone may take on a claim (payout after the dispute window, expire after the vote window)
 //   #34 UsefulIssuance: the buckets, what each holds, the overflow; "Pay out overflow" (anyone)
 //   #35 ModelEpochs: the model version in force at the current block and the next scheduled one
+//   Self-healing (CircuitBreaker, docs/future/self-healing.md; next to #31/#33): opted-in protocols, trips, the
+//       guardian bond and quorum floor; check whether a protocol is protected and whether a trip is live (read-only)
 // Raw eth_call with hand-encoded selectors (like assist.js); everything shown goes in with textContent; no inline
 // styles (CSP style-src 'self'). Each card says plainly when its contract is not deployed yet (hub-config.json).
 import { withFallback } from './i18n.js';
@@ -35,6 +37,9 @@ export const SEL = {
   buckets: '0x37ea2b91', pendingOverflow: '0xd394c845', overflow: '0x004264c3', sweepOverflow: '0x4a937427',
   // ModelEpochs
   current: '0x9fa6a6e3', count: '0x06661abd', versionByIndex: '0xb4187e81', epochLength: '0x57d775f8', minDelay: '0xc63c4e9b',
+  // CircuitBreaker (self-healing)
+  protocolCount: '0xe2eed04f', tripCount: '0x69fc6cbe', guardianBond: '0x47dd2126', minQuorum: '0xb5a127e5',
+  isTripped: '0xf3a46c7b', lastTrip: '0x8042c4b5', tripOf: '0x435f2813', policyOf: '0xf514d6e5',
 };
 /** topic0 of NeuroScore.Scored(address indexed token, uint32 indexed version, int64 score, uint8 level, bytes32 featuresHash, bytes features). */
 export const SCORED_TOPIC = '0xcb4fd71c048521cdee0bc7cb6becf95dfc54b8e1d0ca2dce01abbc3b1120e117';
@@ -209,10 +214,39 @@ export async function readEpochs(evmCall, addr) {
   return { block, count, epochLength: Number(BigInt(el)), minDelay: Number(BigInt(md)), current: current.found ? current : null, next };
 }
 
+// ---------------------------------------------------------------- self-healing (CircuitBreaker)
+
+/** policyOf(p)'s answer (a struct with dynamic arrays: an offset word first) -> the parts the card shows. */
+export function readBreakerPolicy(hex) {
+  const a = words(hex);
+  const t = a.num(0) / 32;
+  return { governance: a.addr(t), window: a.num(t + 1), maxPause: a.num(t + 2), quorum: a.num(t + 3), active: a.bool(t + 4), selectors: a.num(t + a.num(t + 9) / 32) };
+}
+/** tripOf(id)'s answer -> { kind, mask, start, until, fromBlock, toBlock, runners }. */
+export function readBreakerTrip(hex) {
+  const a = words(hex);
+  const t = a.num(0) / 32;
+  return { protocol: a.addr(t), kind: a.num(t + 1) === 0 ? 'runners' : 'invariant', mask: a.num(t + 3), start: a.num(t + 4), until: a.num(t + 5),
+    fromBlock: a.num(t + 6), toBlock: a.num(t + 7), runners: a.num(t + a.num(t + 12) / 32) };
+}
+/** The breaker's totals. */
+export async function readBreaker(evmCall, addr) {
+  const [p, t, b, q] = await Promise.all([SEL.protocolCount, SEL.tripCount, SEL.guardianBond, SEL.minQuorum].map(async (s) => BigInt(await call(evmCall, addr, s))));
+  return { protocols: Number(p), trips: Number(t), guardianBond: b, minQuorum: Number(q) };
+}
+/** One protocol: its policy (null: not opted in), whether a trip is live, and its last trip. */
+export async function readBreakerProtocol(evmCall, addr, protocol) {
+  const policy = readBreakerPolicy(await call(evmCall, addr, SEL.policyOf + addrWord(protocol)));
+  if (!policy.active) return { policy: null, tripped: false, last: null };
+  const [tripped, last] = await Promise.all([call(evmCall, addr, SEL.isTripped + addrWord(protocol)), call(evmCall, addr, SEL.lastTrip + addrWord(protocol))]);
+  const n = Number(BigInt(last));
+  return { policy, tripped: BigInt(tripped) !== 0n, last: n ? { id: n - 1, ...readBreakerTrip(await call(evmCall, addr, SEL.tripOf + word(n - 1))) } : null };
+}
+
 // ---------------------------------------------------------------- the page
 
-const card = (ctx, id, n, title, tip, ...kids) => ctx.el('div', { class: 'card ac-card', id, 'data-item': n },
-  ctx.el('div', { class: 'card-head' }, ctx.el('h2', { text: `#${n} · ${title}` }), tip ? ctx.el('span', { class: 'info', 'data-tip': tip, tabindex: 0, text: 'i' }) : null), ...kids);
+const card = (ctx, id, n, title, tip, ...kids) => ctx.el('div', { class: 'card ac-card', id, 'data-item': n ?? null },
+  ctx.el('div', { class: 'card-head' }, ctx.el('h2', { text: n ? `#${n} · ${title}` : title }), tip ? ctx.el('span', { class: 'info', 'data-tip': tip, tabindex: 0, text: 'i' }) : null), ...kids);
 const kv = (ctx, rows) => ctx.el('dl', { class: 'kv3' }, rows.filter(Boolean).flatMap(([k, v, mono]) => [ctx.el('dt', { text: k }), ctx.el('dd', { class: mono ? 'mono' : null, text: String(v) })]));
 const when = (ctx, t) => { const d = new Date(t * 1000); return t && Number.isFinite(d.getTime()) ? d.toLocaleString(ctx.lang === 'en' ? 'en-GB' : ctx.lang) : '–'; };
 const say = (ctx, box, text, cls = 'dim') => box?.replaceChildren(ctx.el('p', { class: cls, text }));
@@ -286,6 +320,26 @@ const page = {
       try { v = parseZeta(amtIn.value); if (v === 0n) throw new Error('amount'); } catch { return say(ctx, depOut, L.badAmount, 'warnline'); }
       act(ctx, root, depOut, c.hackInsurance, SEL.deposit, L.insDepositAction(ctx.formatZeta(v)), v);
     });
+    // self-healing: is a protocol protected, is a trip live
+    const pIn = el('input', { id: 'ac-heal-protocol', class: 'mono', spellcheck: 'false', autocomplete: 'off', placeholder: '0x…', 'aria-label': L.healProtocol });
+    const pOut = el('div', { id: 'ac-heal-out', class: 'small', role: 'status' });
+    const pForm = el('form', { class: 'row', id: 'ac-heal-form', autocomplete: 'off' }, pIn, el('button', { type: 'submit', class: 'btn sm', text: L.healCheck }));
+    pForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!isAddr(c.circuitBreaker)) return say(ctx, pOut, L.notDeployed);
+      const p = pIn.value.trim();
+      if (!isAddr(p)) return say(ctx, pOut, L.badAddress, 'warnline');
+      say(ctx, pOut, '…');
+      try {
+        const r = await readBreakerProtocol(ctx.evmCall, c.circuitBreaker, p);
+        if (!r.policy) return pOut.replaceChildren(el('p', { class: 'dim', 'data-heal': 'none', text: L.healNotOptedIn }));
+        const t = r.last;
+        pOut.replaceChildren(
+          el('p', { class: r.tripped ? 'warnline' : 'msg ok', 'data-heal': r.tripped ? 'tripped' : 'armed', text: r.tripped ? L.healTripped(when(ctx, t.until)) : L.healArmed }),
+          kv(ctx, [[L.healPolicy, L.healPolicyIs(r.policy.selectors, r.policy.quorum, Math.round(r.policy.maxPause / 3600 * 10) / 10)],
+            t ? [L.healLast, L.healTripIs(t.id, L.healKind[t.kind], t.kind === 'runners' ? t.runners : 0, when(ctx, t.start))] : null]));
+      } catch (err) { say(ctx, pOut, errText(err), 'warnline'); }
+    });
     const oracle = c.neuroOracleSender ?? ctx.cfg.immune?.sender;
     root.replaceChildren(el('p', { class: 'dim small sp-intro', text: L.intro }),
       el('div', { class: 'grid3 ac-grid' },
@@ -300,7 +354,10 @@ const page = {
           el('div', { class: 'ac-state', 'data-for': 'hackInsurance' }, el('p', { class: 'dim', text: '…' })),
           el('h3', { text: L.insDepositTitle }), depForm, depOut),
         card(ctx, 'ac-iss', 34, L.issTitle, L.issTip, el('div', { class: 'ac-state', 'data-for': 'usefulIssuance' }, el('p', { class: 'dim', text: '…' }))),
-        card(ctx, 'ac-epochs', 35, L.epTitle, L.epTip, el('div', { class: 'ac-state', 'data-for': 'modelEpochs' }, el('p', { class: 'dim', text: '…' })))));
+        card(ctx, 'ac-epochs', 35, L.epTitle, L.epTip, el('div', { class: 'ac-state', 'data-for': 'modelEpochs' }, el('p', { class: 'dim', text: '…' }))),
+        card(ctx, 'ac-heal', null, L.healTitle, L.healTip, el('p', { class: 'warnline small', text: L.healTestnet }),
+          el('div', { class: 'ac-state', 'data-for': 'circuitBreaker' }, el('p', { class: 'dim', text: '…' })),
+          el('h3', { text: L.healCheckTitle }), pForm, pOut)));
   },
 
   async refresh(root, ctx) {
@@ -364,6 +421,11 @@ const page = {
             : el('p', { class: 'dim small', text: L.issNoBuckets }),
           el('p', { class: 'dim small', text: L.issNote }),
           s.pendingOverflow > 0n ? el('div', { class: 'row' }, el('button', { type: 'button', class: 'btn ghost sm', id: 'ac-sweep', text: L.issSweep, onclick: () => act(ctx, root, out, a, SEL.sweepOverflow, L.issSweep) })) : null, out];
+      }),
+      draw('circuitBreaker', async (a) => {
+        const b = await readBreaker(ctx.evmCall, a);
+        return [kv(ctx, [[L.contract, a, true], [L.healProtocols, String(b.protocols)], [L.healTrips, String(b.trips)],
+          [L.healBond, zeta(ctx, b.guardianBond)], [L.healQuorum, String(b.minQuorum)]]), el('p', { class: 'dim small', text: L.healNote })];
       }),
       draw('modelEpochs', async (a) => {
         const s = await readEpochs(ctx.evmCall, a);

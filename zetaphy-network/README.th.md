@@ -1100,6 +1100,16 @@ ZETAPHY → Ethereum โดยไม่ต้องมี multisig: `contracts/S
 mainnet จริง ทดสอบใน `test/starkbridge.test.js` และ `test/btclc.test.js` ความเชื่อใจแต่ละโหมด ค่าแก๊ส และทางเลือกของ Bitcoin:
 [docs/future/trustless-bridge.th.md](../docs/future/trustless-bridge.th.md)
 
+## ระบบซ่อมตัวเอง: ตัวตัดวงจรแบบสมัครใจ (ต้นแบบบนเทสต์เน็ต)
+
+`contracts/CircuitBreaker.sol` กับ `contracts/CircuitBreakable.sol`: โปรโตคอลลงทะเบียนนโยบายของตัวเอง
+(ฟังก์ชันที่หยุดได้ เพดานเงินไหลออกต่อช่วงเวลา เวลาหยุดนานสุด องค์ประชุม และธรรมาภิบาลของตัวเอง)
+การตัดวงจรต้องมีผู้รัน Neuro ที่วางเงินค้ำประกัน k จาก n คนลงนามหลักฐานเดียวกัน หรือเงินไหลออกเกินเพดานบนเชน
+หยุดเฉพาะฟังก์ชันที่ระบุไว้และหมดอายุเองเสมอ ถ้า timelock ตัดสินว่าตัดผิด ผู้ลงนามถูกริบเงินค้ำประกันและโปรโตคอลได้รับการชดเชย
+ไม่มีกุญแจแอดมิน ตัวตรวจจับและลูปรวบรวมลายเซ็น k จาก n อยู่ใน `src/selfheal/`
+`node scripts/selfheal-demo.js [blocks] [seed]` จำลองการดูดเงินจาก vault ที่มีช่องโหว่ เทียบปิดกับเปิดระบบ เทสต์ใน `test/selfheal*.test.js`
+ยังไม่ได้ deploy การออกแบบ ภัยที่คิดไว้ และข้อจำกัด: [docs/future/self-healing.th.md](../docs/future/self-healing.th.md)
+
 ## ทดสอบ
 
 - `npm test`: ทดสอบสัญญาบน EVM ในหน่วยความจำ และทดสอบโปรแกรมคนรันร่าง (CI รันให้ทุกครั้ง)
