@@ -18,6 +18,7 @@ ZETAPHY มี**แพลตฟอร์มตรวจสอบสัญญา�
 | CLI `zetaphy audit …` และ `zetaphy deploy-audit` | `zetaphy-network/src/auditnetcli.js`, `src/auditnetops.js` |
 | แท็บ "ตรวจสอบ" ใน hub (8 ภาษา) | `zetaphy-hub/audit.js`, `audit-i18n.js` |
 | ป้ายใบรับรองใน explorer (8 ภาษา) | `zetaphy-explorer/src/audit.js` |
+| สั่งตรวจจากทุกเชน (EVM, CosmWasm, Solana), ป้าย, หน้าตรวจ, สมุดรายชื่อ, GitHub Action | [audit-as-a-service.th.md](audit-as-a-service.th.md) |
 
 ## ขั้นตอน
 

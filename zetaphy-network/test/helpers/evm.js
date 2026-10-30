@@ -127,8 +127,13 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
       return bytesToHex(res.execResult.returnValue);
     },
     now: () => time,
-    /** The runtime code at an address (eth_getCode). */
-    getCode: async (addressHex) => bytesToHex(await sm.getContractCode(Address.fromString(addressHex))),
+    /** The runtime code at an address (0x… hex, "0x" when none), like eth_getCode. */
+    async getCode(addressHex) { return bytesToHex(await sm.getContractCode(Address.fromString(addressHex))); },
+    /** One storage word (0x… 32 bytes), like eth_getStorageAt. */
+    async getStorage(addressHex, slotHex) {
+      const v = await sm.getContractStorage(Address.fromString(addressHex), hexToBytes(toBeHex(BigInt(slotHex), 32)));
+      return toBeHex(v.length ? BigInt(bytesToHex(v)) : 0n, 32);
+    },
     /** An account's nonce (the next CREATE address is getCreateAddress({ from, nonce })). */
     nonce: async (who) => (await sm.getAccount(acct[who] ?? who))?.nonce ?? 0n,
     balance: async (who) => (await sm.getAccount(acct[who] ?? who))?.balance ?? 0n,

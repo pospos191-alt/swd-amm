@@ -1,0 +1,195 @@
+# ZETAPHY audit, as a reusable GitHub Action for ANY repository (docs/future/audit-as-a-service.md).
+#
+#   - uses: pospos191-alt/swd-amm/.github/actions/zetaphy-audit@<full commit sha>
+#     with:
+#       path: contracts        # the Solidity project in YOUR repository (default: the repo root)
+#
+# Runs ZETAPHY's free audit pipeline (audit/run.sh --target) on the caller's checkout: solc, Slither, Aderyn,
+# Semgrep (Decurity rules), forge invariant suites where the project has */audit/invariants/, npm audit +
+# OSV-Scanner (the SMTChecker, mutation testing and Neuro run only on ZETAPHY's own repo / an order's runners).
+# Each tool at a pinned version and SHA-256 (audit/tools/install.sh). Writes a report, findings JSON, SARIF (uploaded to code scanning when the repo has it) and a "ZETAPHY scan" SVG badge.
+#
+# Needs NO secrets and no ZETAPHY account: nothing leaves the runner except the SARIF upload to the caller's own
+# code scanning. Permissions the caller's job needs: contents: read (+ security-events: write for the SARIF upload).
+# This is the free automated tier: it never issues a certificate. A certificate is an AuditNetwork order
+# (`zetaphy aas order`), audited by bonded auditors and judges on the ZETAPHY testnet.
+name: ZETAPHY audit
+description: Free, pinned smart-contract audit pipeline (Slither, Aderyn, Semgrep, forge invariants, OSV) with SARIF and a badge. No secrets.
+author: ZETAPHY
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  path:
+    description: Directory of the project to audit, relative to the workspace (the caller's checkout).
+    required: false
+    default: '.'
+  tier:
+    description: 'fast (~15 min: static analysis, SMT, invariant smoke) or deep (adds fuzzers, Halmos, mutation testing; hours).'
+    required: false
+    default: fast
+  fail-on:
+    description: 'Fail the step when open findings reach this severity: critical, high or none.'
+    required: false
+    default: high
+  triage:
+    description: Your triage file (audit/triage.yml format), relative to `path`. Missing file = nothing triaged.
+    required: false
+    default: audit/triage.yml
+  upload-sarif:
+    description: Upload the SARIF to GitHub code scanning (public repos, or GitHub Advanced Security).
+    required: false
+    default: 'true'
+  sarif-category:
+    description: Code scanning category.
+    required: false
+    default: zetaphy-audit
+  artifact-name:
+    description: Name of the uploaded workflow artifact (report, findings, SARIF, badge). Empty to skip.
+    required: false
+    default: zetaphy-audit
+
+outputs:
+  status:
+    description: '"scanned" (no open critical/high) or "issues".'
+    value: ${{ steps.badge.outputs.status }}
+  critical:
+    description: Open critical findings.
+    value: ${{ steps.badge.outputs.critical }}
+  high:
+    description: Open high findings.
+    value: ${{ steps.badge.outputs.high }}
+  gate:
+    description: '"passed" or "failed" (per fail-on).'
+    value: ${{ steps.badge.outputs.gate }}
+  summary-json:
+    description: Path of the machine-readable summary (report.js --json).
+    value: ${{ steps.paths.outputs.out }}/summary.json
+  findings-json:
+    description: Path of every finding (findings.json).
+    value: ${{ steps.paths.outputs.out }}/findings.json
+  sarif:
+    description: Path of the SARIF file.
+    value: ${{ steps.paths.outputs.out }}/audit.sarif
+  report:
+    description: Path of the Markdown report (and REPORT.th.md next to it).
+    value: ${{ steps.paths.outputs.out }}/REPORT.md
+  badge:
+    description: Path of the SVG badge.
+    value: ${{ steps.paths.outputs.out }}/zetaphy-scan.svg
+
+runs:
+  using: composite
+  steps:
+    - name: Paths and inputs
+      id: paths
+      shell: bash
+      env:
+        IN_PATH: ${{ inputs.path }}
+        IN_TIER: ${{ inputs.tier }}
+        IN_FAIL: ${{ inputs.fail-on }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        case "$IN_TIER" in fast|deep) ;; *) echo "::error::tier: fast or deep"; exit 2 ;; esac
+        case "$IN_FAIL" in critical|high|none) ;; *) echo "::error::fail-on: critical, high or none"; exit 2 ;; esac
+        case "$IN_PATH" in /*|*..*) echo "::error::path: a directory inside the workspace"; exit 2 ;; esac
+        target="$GITHUB_WORKSPACE/$IN_PATH"
+        [ -d "$target" ] || { echo "::error::path $IN_PATH: no such directory (check out your repository first)"; exit 2; }
+        root=$(cd "$ACTION_PATH/../../.." && pwd)
+        {
+          echo "root=$root"
+          echo "target=$(cd "$target" && pwd)"
+          echo "out=$RUNNER_TEMP/zetaphy-audit-out"
+          echo "tools=$RUNNER_TEMP/zetaphy-audit-tools"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Set up Node
+      uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      with:
+        node-version: '20'
+
+    - name: Set up Python
+      uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+      with:
+        python-version: '3.13'
+
+    - name: Install the audit tools (pinned versions, SHA-256 / pip hashes checked)
+      shell: bash
+      env:
+        ROOT: ${{ steps.paths.outputs.root }}
+        TOOLS: ${{ steps.paths.outputs.tools }}
+        IN_TIER: ${{ inputs.tier }}
+      run: |
+        set -euo pipefail
+        bash "$ROOT/audit/tools/install.sh" "$TOOLS" "$IN_TIER" > "$RUNNER_TEMP/zetaphy-audit-env"
+        grep '^PATH=' "$RUNNER_TEMP/zetaphy-audit-env" | sed 's/^PATH=//; s/:\$PATH$//' | tr ':' '\n' >> "$GITHUB_PATH"
+        grep -v '^PATH=' "$RUNNER_TEMP/zetaphy-audit-env" >> "$GITHUB_ENV"
+
+    - name: Run the pipeline on your code
+      shell: bash
+      env:
+        ROOT: ${{ steps.paths.outputs.root }}
+        TARGET: ${{ steps.paths.outputs.target }}
+        OUT: ${{ steps.paths.outputs.out }}
+        IN_TIER: ${{ inputs.tier }}
+        SOLC: solc
+      run: |
+        set -uo pipefail
+        bash "$ROOT/audit/run.sh" --target "$TARGET" --tier "$IN_TIER" --skip go,neuro --out "$OUT" --commit "$GITHUB_SHA" --no-report
+
+    - name: Report (REPORT.md, REPORT.th.md, findings.json, audit.sarif, summary.json)
+      shell: bash
+      env:
+        ROOT: ${{ steps.paths.outputs.root }}
+        TARGET: ${{ steps.paths.outputs.target }}
+        OUT: ${{ steps.paths.outputs.out }}
+        IN_TRIAGE: ${{ inputs.triage }}
+      run: |
+        set -euo pipefail
+        case "$IN_TRIAGE" in /*|*..*) echo "::error::triage: a path inside your project"; exit 2 ;; esac
+        node "$ROOT/audit/report.js" "$OUT" --md "$OUT/REPORT.md" --triage "$TARGET/$IN_TRIAGE" --baseline "$OUT/no-baseline.json"
+        node "$ROOT/audit/report.js" --json "$OUT" --triage "$TARGET/$IN_TRIAGE" --baseline "$OUT/no-baseline.json" > "$OUT/summary.json"
+        sed -n '/^## Summary/,/^## Scope/p' "$OUT/REPORT.md" | sed '$d' >> "$GITHUB_STEP_SUMMARY" || true
+
+    - name: Badge and outputs
+      id: badge
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        OUT: ${{ steps.paths.outputs.out }}
+      run: |
+        set -uo pipefail
+        node "$ACTION_PATH/badge.mjs" "$OUT/summary.json" "$OUT/zetaphy-scan.svg" none >> "$GITHUB_OUTPUT"
+
+    - name: Keep the report
+      if: always() && inputs.artifact-name != ''
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          ${{ steps.paths.outputs.out }}/REPORT.md
+          ${{ steps.paths.outputs.out }}/REPORT.th.md
+          ${{ steps.paths.outputs.out }}/findings.json
+          ${{ steps.paths.outputs.out }}/summary.json
+          ${{ steps.paths.outputs.out }}/audit.sarif
+          ${{ steps.paths.outputs.out }}/zetaphy-scan.svg
+        retention-days: 30
+        if-no-files-found: warn
+
+    - name: Upload to code scanning
+      if: always() && inputs.upload-sarif == 'true'
+      continue-on-error: true # private repos without code scanning: the artifact above is the record
+      uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      with:
+        sarif_file: ${{ steps.paths.outputs.out }}/audit.sarif
+        category: ${{ inputs.sarif-category }}
+
+    - name: Gate
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        OUT: ${{ steps.paths.outputs.out }}
+        IN_FAIL: ${{ inputs.fail-on }}
+      run: node "$ACTION_PATH/badge.mjs" "$OUT/summary.json" "$OUT/zetaphy-scan.svg" "$IN_FAIL" > /dev/null

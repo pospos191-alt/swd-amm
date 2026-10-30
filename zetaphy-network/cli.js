@@ -195,6 +195,9 @@
 //                                      the open audit network (docs/future/audit-network.md): anyone asks for an audit,
 //                                      anyone bonded audits, bonded judges decide, runners run audit/report.js + Neuro;
 //                                      `zetaphy audit` alone prints every command
+//   zetaphy aas chains|intake|order|pay|verify|badge|registry …   Audit-as-a-Service for any chain (EVM, CosmWasm, Solana):
+//                                      what would be audited (code hash now, verified source, proxy + implementation),
+//                                      the AuditNetwork order, VALID / EXPIRED / REVOKED / CODE CHANGED (docs/future/audit-as-a-service.md)
 //   zetaphy deploy-audit --timelock 0x… --treasury 0x… --jobs 0x… [--reputation 0x…]   AuditNetwork + AuditRunners +
 //                                      AuditJudges + AuditCertificate, governed by the timelock (no key keeps a role)
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
@@ -1711,6 +1714,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   if (group === 'audit' || group === 'deploy-audit') {
     const { auditCommand } = await import('./src/auditnetcli.js');
     return auditCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, home: HOME });
+  }
+
+  // Audit-as-a-Service from any chain: intake, order, verify, badge, registry (src/aascli.js)
+  if (group === 'aas') {
+    const { aasCommand } = await import('./src/aascli.js');
+    return aasCommand({ cmd, rest, opt, write, s, connect, connectRpc });
   }
 
   // Neuro-checked certificates, ML-DSA-44 attestations, the herd-immunity pusher (src/assistcli.js)

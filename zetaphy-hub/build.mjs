@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { hubSeoFiles, INDEXNOW_KEY } from './seo.mjs';
 import { ALL as IMMUNE_CHAINS } from '../zetaphy-network/src/immune/chains.js';
 import { simulate as immuneSimulate } from '../zetaphy-network/src/immune/propagate.js';
+import { cleanRegistry } from './aas-core.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -37,7 +38,18 @@ const SKIP_IN = { wallet: new Set(['src']),
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data',
   'robots.txt', 'sitemap.xml', `${INDEXNOW_KEY}.txt`]);
 const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'ceremony.html', 'ceremony.css', 'ceremony.js', 'ceremony-i18n.js', 'ceremony-core.js', 'vendor/snarkjs.min.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
-  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'aichain.js', 'aichain-i18n.js', 'offline.js', 'offline-core.js', 'offline-i18n.js', 'audit.js', 'audit-core.js', 'audit-i18n.js', 'vendor/qrcode.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
+  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'aichain.js', 'aichain-i18n.js', 'offline.js', 'offline-core.js', 'offline-i18n.js', 'audit.js', 'audit-core.js', 'audit-i18n.js', 'audit.html', 'audits.html', 'aas.css', 'aas-core.js', 'aas-i18n.js', 'aas-page.js', 'aas-verify.js', 'aas-directory.js', 'vendor/qrcode.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
+
+/**
+ * The Audit Directory's fallback copy of the public certificate registry (docs/future/audit-as-a-service.md): the
+ * branch `audit-registry` (written by .github/workflows/audit-registry.yml) is what the pages read first; this copy is
+ * zetaphy-hub/registry/audit-registry.json when a person committed one, else an empty registry. Cleaned like any input.
+ */
+export function aasRegistry(file = join(HERE, 'registry', 'audit-registry.json')) {
+  let j = null;
+  try { j = JSON.parse(readFileSync(file, 'utf8')); } catch { /* none yet */ }
+  return cleanRegistry(j ?? { entries: [] });
+}
 
 /** The node and the contract addresses (public data only) the hub's pages read. `files`: {path: json} in place of the repo's (tests). */
 export function hubConfig(cfg, files = null) {
@@ -231,6 +243,7 @@ export function build() {
   const cfg = JSON.parse(readFileSync(join(ROOT, 'zetaphy-explorer/config.json'), 'utf8'));
   const hc = hubConfig(cfg);
   writeFileSync(join(dir, 'hub-config.json'), `${JSON.stringify(hc, null, 2)}\n`);
+  writeFileSync(join(dir, 'aas-registry.json'), `${JSON.stringify(aasRegistry(), null, 1)}\n`);
   writeFileSync(join(dir, 'tokenlist.json'), `${JSON.stringify({ ...tokenList(hc.tokens ?? []), timestamp: '2026-10-29T00:00:00.000Z' }, null, 2)}\n`);
   for (const [path, src] of Object.entries(APPS)) {
     const from = join(ROOT, src);
@@ -253,7 +266,7 @@ export function build() {
 const SHELL_SKIP = new Set(['vendor/snarkjs.min.js', 'vendor/evm.js', 'vendor/ledger-hid.js', 'og.png', 'zearly-256.png', 'zetaphy-256.png']);
 const SHELL_EXTRA = ['wallet/vendor/pqwallet.js', 'hub-config.json'];
 export function shellFiles(dir) {
-  const own = HUB_FILES.filter((f) => /\.(js|css|svg)$/.test(f) && !SHELL_SKIP.has(f) && !/^(validators|forecasts|ceremony)/.test(f) && !/-worker\.js$/.test(f));
+  const own = HUB_FILES.filter((f) => /\.(js|css|svg)$/.test(f) && !SHELL_SKIP.has(f) && !/^(validators|forecasts|ceremony|aas[-.]|audits?\.html)/.test(f) && !/-worker\.js$/.test(f));
   const out = new Set([...own, ...SHELL_EXTRA]);
   const queue = [...out].filter((f) => f.endsWith('.js'));
   while (queue.length) {

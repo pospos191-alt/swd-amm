@@ -23,6 +23,7 @@ and other projects audit ZETAPHY under the same rules. No owner key controls it:
 | CLI `zetaphy audit …`, `zetaphy deploy-audit` | `zetaphy-network/src/auditnetcli.js`, `src/auditnetops.js` |
 | Hub "Audit" tab (8 languages) | `zetaphy-hub/audit.js`, `audit-i18n.js` |
 | Explorer certificate badge (8 languages) | `zetaphy-explorer/src/audit.js` |
+| Orders from any chain (EVM, CosmWasm, Solana), badge, check page, directory, GitHub Action | [audit-as-a-service.md](audit-as-a-service.md) |
 | Tests | `zetaphy-network/test/auditnet.test.js` (strictness and abuse), `test/auditnet-e2e.test.js` (end to end through the CLI); `zetaphy-hub/test/audit.test.mjs`, `audit.e2e.mjs`; `zetaphy-explorer/test/unit.test.js`, `explorer.e2e.js` |
 
 ## The flow

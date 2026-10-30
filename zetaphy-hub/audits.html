@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ZETAPHY Audit Directory</title>
+<meta name="description" content="Every audit certificate the ZETAPHY testnet audit network has issued, on Ethereum, BNB, Base, Arbitrum, Optimism, Polygon, Avalanche, Osmosis and Solana, with a live check for each. Testnet only.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="aas.css">
+<script type="module" src="aas-directory.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="top">
+      <a class="eyebrow" href="./" data-t="eyebrow"></a>
+      <select id="lang" aria-label="Language">
+        <option value="en">English</option><option value="zh">中文</option><option value="es">Español</option>
+        <option value="ko">한국어</option><option value="ja">日本語</option><option value="ru">Русский</option>
+        <option value="vi">Tiếng Việt</option><option value="th">ไทย</option>
+      </select>
+    </div>
+    <h1 data-t="dTitle"></h1>
+    <p class="lede" data-t="dLede"></p>
+    <p class="note" data-t="testnet"></p>
+    <nav class="links"><a href="audit.html" data-t="vTitle"></a></nav>
+  </header>
+  <div class="filters">
+    <input id="q" type="search" autocomplete="off" spellcheck="false">
+    <select id="f-chain"></select>
+    <select id="f-state"></select>
+  </div>
+  <section id="list" aria-live="polite"></section>
+  <p class="status" id="status" role="status"></p>
+</div>
+</body>
+</html>
