@@ -22,11 +22,27 @@ Other observations while verifying (not tool findings):
   signer chooses the targets. Allowance-moving functions under other selectors
   (`safeTransferFrom` of ERC-721/1155, DAI-style `move`/`pull`) are not blocked; they
   matter only if users give IntentExecutor approvals on such tokens. Worth a look.
+  **Resolved (3867da9):** `_call` now refuses approve and the whole transfer-like list
+  (`_transferLike`, the same list as AgentPolicyWallet: ERC-721/1155 `safeTransferFrom` /
+  batch, ERC-777 `send`/`operatorSend`/`authorizeOperator`, ERC-677/1363 `*AndCall`, DAI
+  `move`/`pull`/`push`/`permit`, Permit2 `permit`/`approve`/`transferFrom`, `burn*`);
+  `test/intents.test.js` checks them.
 - **Chain gosec in CI**: `security.yml` runs `gosec ./evmd` from the root module, but
   `evmd` is its own Go module; run that way here, gosec exited 0 with no findings,
   while running it inside `evmd/` (as `tools/go-scan.sh` does) reports 22 issues
   (19 G115, now triaged: `#nosec` comments that gosec does not attach to multi-line
   statements). The CI step may not be scanning `evmd` at all; worth checking.
+  **Resolved (a543082):** confirmed: from the root module, `./evmd` is outside the module and
+  gosec loads nothing there. `security.yml` now runs gosec inside `evmd/` (the app package,
+  `./cmd/evmd/cmd`, `./config`, as `tools/go-scan.sh`), lists every issue in the job summary and
+  fails on any non-G115 issue in a ZETAPHY file (`zetaphy_*.go`). The 22 issues of that run: the
+  19 G115 on ZETAPHY lines, all triaged false-positive in `triage.yml` (owner to confirm; the
+  author's `#nosec G115` is not attached to multi-line statements by gosec 2.22.8):
+  `evmd/zetaphy_guard.go:230`, `evmd/zetaphy_immune.go:558`, `evmd/zetaphy_immune.go:574`, `evmd/zetaphy_immune.go:596`, `evmd/zetaphy_immune.go:638`, `evmd/zetaphy_modelat.go:140`, `evmd/zetaphy_pqcall.go:264`, `evmd/zetaphy_pqcall.go:276`, `evmd/zetaphy_pqcert.go:113`, `evmd/zetaphy_pqcert.go:139`, `evmd/zetaphy_pqcert.go:173`, `evmd/zetaphy_pqcert.go:203`, `evmd/zetaphy_pqguard.go:72`, `evmd/zetaphy_pqguard.go:295`, `evmd/zetaphy_qday.go:90`, `evmd/zetaphy_qday.go:244`, `evmd/zetaphy_random.go:86`, `evmd/zetaphy_random.go:102`, `evmd/zetaphy_threatgate.go:128`;
+  the other 3 are on upstream evmd lines that the ZETAPHY patches did not add (report.js keeps
+  only patched lines, so they never reached the report, and this sandbox has neither the patched
+  source nor the room to rebuild it: the first CI run of the new step lists them in its summary;
+  they do not fail it). No Go code was changed.
 - **Mutation sample** (ZetaphyPair, 12 mutants): 5 survived. No test notices removing
   the uint112 overflow check in `_update`, the `MINIMUM_LIQUIDITY` and zero-liquidity
   checks in `mint`, or deleting `balance0 = _balance(_token0)` in `burn`.

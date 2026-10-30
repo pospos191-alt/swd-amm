@@ -71,6 +71,14 @@ deployed testnet copies keep the old code until they are redeployed (see
 The original "reproduced by" tests were renamed `test_regression_*` / extended; the text of each
 finding below is kept as written, with a **Resolution** line added.
 
+Follow-ups in `a543082`, from the in-house pipeline's fast tier run on the fixed code (no behaviour
+change): `StableGateway.refund` marks the job refunded before any external call (CEI);
+`BugBounty._forfeit` takes the deposit as `uint128` (no narrowing cast); `RewardVault.applyShares`
+refuses to run while `release()` is paying recipients (the list being paid can never change under
+it). The same commit makes the pipeline run these suites (see `invariants.md`), and the gate passes:
+the 30 High tool findings on the new code and on the Audit Network contracts were each read in the
+code and are recorded in `triage.yml` (false positives, owner to confirm), none of them real.
+
 ---
 
 ## zetaphy-network

@@ -40,6 +40,8 @@ export function chainKeyOf(chainId) {
  * `run` (tests) replaces the process: (cmd, args, {cwd}) => Promise<stdout string>.
  */
 export async function runPipeline({ repoDir, outDir, run = runProcess, timeoutMs = 6 * 3600_000 }) {
+  repoDir = resolve(repoDir); // the process runs with cwd = repoDir: relative paths must not resolve twice
+  outDir = resolve(outDir);
   const script = join(repoDir, 'audit', 'report.js');
   if (run === runProcess && !existsSync(script)) throw new Error(`no audit pipeline at ${script} (audit/report.js): the automated tier needs it`);
   mkdirSync(outDir, { recursive: true });

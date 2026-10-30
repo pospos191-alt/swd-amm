@@ -169,6 +169,13 @@ packages through their `foundry.toml` and reported 96 passed, 0 failed, 0 not ru
 Medusa were not re-run (deep tier); `RewardVaultSymbolic` now checkpoints the balance first (coins put
 there with `vm.deal` bypass `receive()` and only start vesting at a checkpoint after RV-1).
 
+JS suites on the fixed code (`a543082`): zetaphy-network `npm test` 680/680 (after `npm ci` in
+zetaphy-neuro), zetaphy-dex 117/117, zetaphy-nft 54/54, zetaphy-hub 119/119, zetaphy-explorer unit
+91/91 and e2e 35/35, `node --test audit/test/*.test.js` 22/22. Existing JS tests that asserted the old
+behaviour were updated to the fixed one (agents unbond window, gateway refund path, policy-wallet
+selector allow-list, bug-bounty refund), and new ones added (intent executor transfer-like selectors,
+the stablecoin refund, the Audit Network adapter on the real `audit/report.js --json`).
+
 ## What did not run here, and why
 
 - **Halmos on the AMM and DLMM math** (`PairSymbolic`, `DlmmMathSymbolic`): written and run, all four
