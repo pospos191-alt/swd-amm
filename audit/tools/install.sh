@@ -11,6 +11,8 @@
 # Updating a tool: change its version AND its sha256 here in the same commit,
 # taking the hash from the project's release page / SHA256SUMS file.
 set -euo pipefail
+# stdout is the env file CI reads (PATH=…, LD_LIBRARY_PATH=…, SEMGREP_RULES=…): everything else goes to stderr
+exec 3>&1 1>&2
 DIR=$(mkdir -p "$1" && cd "$1" && pwd); TIER=${2:-fast}
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p "$DIR/bin"
@@ -33,7 +35,7 @@ SEMGREP_RULES_COMMIT=2e878a89ac7bba1f8435e8a68e3ecb7700096cd5
 fetch() { # url sha256 dest
   local tmp; tmp=$(mktemp -d)
   curl -fsSL --retry 3 -o "$tmp/f" "$1"
-  echo "$2  $tmp/f" | sha256sum -c --quiet - || { echo "SHA-256 mismatch for $1"; exit 1; }
+  echo "$2  $tmp/f" | sha256sum -c --quiet - >&2 || { echo "SHA-256 mismatch for $1" >&2; exit 1; }
   mv "$tmp/f" "$3"; rmdir "$tmp"
 }
 untar() { # url sha256 [tar flags]
@@ -48,7 +50,7 @@ untar() { # url sha256 [tar flags]
 # forge reads solc from ~/.svm/<v>/solc-<v>, and the suites' foundry.toml set `offline = true` (no
 # download at test time): put the SAME verified binary there (replacing anything that does not match).
 SVM_DIR="${SVM_HOME:-$HOME/.svm}/$SOLC_VERSION"
-if ! echo "$SOLC_SHA256  $SVM_DIR/solc-$SOLC_VERSION" | sha256sum -c --quiet - 2>/dev/null; then
+if ! echo "$SOLC_SHA256  $SVM_DIR/solc-$SOLC_VERSION" | sha256sum -c --quiet - >/dev/null 2>&1; then
   mkdir -p "$SVM_DIR"; cp "$DIR/bin/solc" "$SVM_DIR/solc-$SOLC_VERSION"; chmod +x "$SVM_DIR/solc-$SOLC_VERSION"
 fi
 [ -x "$DIR/bin/aderyn" ] || untar "https://github.com/cyfrin/aderyn/releases/download/aderyn-v$ADERYN_VERSION/aderyn-x86_64-unknown-linux-gnu.tar.xz" "$ADERYN_SHA256" xJf
@@ -72,6 +74,6 @@ if [ ! -d "$DIR/semgrep-rules/solidity" ]; then
 fi
 
 Z3LIB=$(echo "$DIR"/venv/lib/python3*/site-packages/z3/lib)
-echo "PATH=$DIR/bin:$DIR/venv/bin:\$PATH"
-echo "LD_LIBRARY_PATH=$Z3LIB"
-echo "SEMGREP_RULES=$DIR/semgrep-rules"
+echo "PATH=$DIR/bin:$DIR/venv/bin:\$PATH" >&3
+echo "LD_LIBRARY_PATH=$Z3LIB" >&3
+echo "SEMGREP_RULES=$DIR/semgrep-rules" >&3
