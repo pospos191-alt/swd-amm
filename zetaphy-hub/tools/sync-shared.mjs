@@ -12,11 +12,14 @@ const HUB = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = resolve(HUB, '..');
 const SAFETY = ['wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css'];
 const LEDGER = ['ledger.js', 'vendor/ledger-hid.js'];
+/** proven Neuro verdicts, checked in the browser (zkverdict-core.js: pure JS BN254 pairing from vendor/zkverify.js) */
+const ZKVERDICT = ['zkverdict-core.js', 'zkverdict-vkey.json'];
 /** site folder (from the repo root) -> the files it gets */
 export const SHARED = {
   'zetaphy-dex/web/lib': [...SAFETY, ...LEDGER],
   'zetaphy-nft/web/lib': [...SAFETY, ...LEDGER],
-  'zetaphy-explorer/src': SAFETY,
+  'zetaphy-explorer/src': [...SAFETY, ...ZKVERDICT],
+  'zetaphy-explorer': ['vendor/zkverify.js'],
   'zetaphy-neuro/web': SAFETY,
   'test-ui': SAFETY,
 };

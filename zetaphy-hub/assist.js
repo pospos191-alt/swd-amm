@@ -90,6 +90,42 @@ export async function badgeOf(evmCall, attest, token) {
   try { return readBadge(await evmCall('eth_call', [{ to: attest, data: badgeData(token) }, 'latest'])); } catch { return null; }
 }
 
+// ---------------------------------------------------------------- proven verdict (ProvenVerdicts + zkverdict-core.js)
+
+/**
+ * The newest Neuro verdict of `token` in ProvenVerdicts, its Groth16 proof checked in this browser (pure JS, no
+ * WebAssembly: vendor/zkverify.js) against the committed verifier's key (zkverdict-vkey.json), its score and its
+ * posted features re-checked on the model bytes read from NeuroScore. null when ProvenVerdicts is not deployed.
+ */
+export async function provenOf(evmCall, contract, token, { load = loadZk } = {}) {
+  if (!ADDR.test(contract ?? '') || !ADDR.test(token ?? '')) return null;
+  const { core, lib, vk } = await load();
+  return core.checkProvenVerdict(evmCall, { contract, token, lib, vk });
+}
+let zk = null;
+const loadZk = () => (zk ??= Promise.all([import('./zkverdict-core.js'), import('./vendor/zkverify.js'), fetch('./zkverdict-vkey.json').then((r) => r.json())])
+  .then(([core, lib, vk]) => ({ core, lib, vk })).catch((e) => { zk = null; throw e; }));
+
+async function provenInto(ctx, L, token, out) {
+  const pv = ctx.cfg.contracts?.provenVerdicts;
+  if (!ADDR.test(pv ?? '')) return;
+  out.replaceChildren(ctx.el('h4', { text: L.pvTitle }), ctx.el('p', { class: 'dim', 'data-proven': 'checking', text: L.pvChecking }));
+  let r;
+  try { r = await provenOf(ctx.evmCall, pv, token); } catch { r = { state: 'error' }; }
+  const line = (cls, state, text) => ctx.el('p', { class: cls, 'data-proven': state, text });
+  const pct = (p) => `${(p * 100).toFixed(p < 0.01 ? 2 : 1)}%`;
+  const body = {
+    proven: () => [line('msg ok', 'proven', L.pvProven(String(r.id), r.modelId ?? r.modelHash, pct(r.probability), String(Math.round(r.ms)))),
+      r.rehearsal ? line('warnline small', 'rehearsal', L.pvRehearsal) : null],
+    unproven: () => [line('warnline', 'unproven', L.pvUnproven)],
+    none: () => [line('dim', 'none', L.pvNone)],
+    overturned: () => [line('warnline', 'overturned', L.pvOverturned)],
+    invalid: () => [line('warnline', 'invalid', L.pvInvalid(String(r.problem ?? '').slice(0, 160)))],
+    error: () => [line('warnline', 'error', L.pvError)],
+  }[r?.state ?? 'error']?.() ?? [line('warnline', 'error', L.pvError)];
+  out.replaceChildren(ctx.el('h4', { text: L.pvTitle }), ...body.filter(Boolean), ctx.el('p', { class: 'dim small', text: L.pvNote }));
+}
+
 // ---------------------------------------------------------------- pre-sign (hub.js send)
 
 /** The confirmTx hooks for one transaction: simulate (rows in the page's words) and, if a model is set up in Neuro, explain. */
@@ -206,12 +242,15 @@ const immune = {
     const certForm = ctx.el('form', { class: 'row', id: 'im-cert-form', autocomplete: 'off' }, certIn, ctx.el('button', { type: 'submit', class: 'btn', text: L.imCheck }));
     certForm.addEventListener('submit', async (e) => {
       e.preventDefault();
+      const token = certIn.value.trim();
+      const proven = ctx.el('div', { id: 'im-proven', role: 'status' });
+      const done = (...nodes) => { certOut.replaceChildren(...nodes, proven); if (ADDR.test(token)) provenInto(ctx, L, token, proven); };
       const attest = ctx.cfg.contracts?.neuroAttest;
-      if (!ADDR.test(attest ?? '')) { certOut.textContent = L.imCertNone; return; }
-      if (!ADDR.test(certIn.value.trim())) { certOut.textContent = L.imCertNo; return; }
-      const b = await badgeOf(ctx.evmCall, attest, certIn.value.trim());
-      if (!b || b.uid === 0n) { certOut.replaceChildren(ctx.el('p', { text: L.imCertNo })); return; }
-      certOut.replaceChildren(ctx.el('p', { class: b.checked ? 'msg ok' : 'warnline', 'data-badge': b.checked ? 'checked' : 'revoked', text: b.checked ? L.imCertYes(String(b.uid), ctx.short(b.by)) : L.imCertRevoked }),
+      if (!ADDR.test(attest ?? '')) { done(ctx.el('p', { text: L.imCertNone })); return; }
+      if (!ADDR.test(token)) { certOut.textContent = L.imCertNo; return; }
+      const b = await badgeOf(ctx.evmCall, attest, token);
+      if (!b || b.uid === 0n) { done(ctx.el('p', { text: L.imCertNo })); return; }
+      done(ctx.el('p', { class: b.checked ? 'msg ok' : 'warnline', 'data-badge': b.checked ? 'checked' : 'revoked', text: b.checked ? L.imCertYes(String(b.uid), ctx.short(b.by)) : L.imCertRevoked }),
         ctx.el('dl', { class: 'kv3' }, [[L.imReport, b.reportHash], [L.imSkill, b.skill], [L.imModel, b.model || '–']].flatMap(([k, v]) => [ctx.el('dt', { text: k }), ctx.el('dd', { class: 'mono', text: v })])));
     });
     const file = ctx.el('input', { type: 'file', id: 'im-pq-file', accept: '.json,application/json', 'aria-label': L.imPq });
