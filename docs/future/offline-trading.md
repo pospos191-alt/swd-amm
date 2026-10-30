@@ -11,7 +11,8 @@ QR code or text, and checking.
 | **Cheques** (`ZetaphyCheques`) | payer opens a channel: deposit + a dedicated offline signer key | payer signs cheques; payee checks them | payee cashes the best cheque; payer takes the rest back after expiry |
 | **Swap orders** (`ZetaphyOfflineOrders`) | maker approves the orders contract for the token | maker signs an order; anyone checks it | anyone relays it (fills it on ZETAPHY Swap) and earns the fee |
 
-In the hub, all of this is on the **Offline** tab (`zetaphy-hub/offline.js`).
+In the hub, all of this is on the **Offline** tab (`zetaphy-hub/offline.js`). Bonded bearer notes passed hand to hand, and
+frames for SMS / LoRa / QR, are in [Offline Cash and Mesh](offline-cash.md).
 
 ## 1. Cheques: one-way payment channels
 

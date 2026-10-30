@@ -1,4 +1,4 @@
-// Offline trading (docs/future/offline-trading.md): deploys ZetaphyCheques and ZetaphyOfflineOrders. Neither has an
+// Offline trading (docs/future/offline-trading.md): deploys ZetaphyCheques, ZetaphyOfflineOrders and ZetaphyOfflineCash. None has an
 // owner or any setting: the deploy key keeps no role, there is nothing to hand over. ZetaphyOfflineOrders takes the
 // ZETAPHY Swap router in its constructor (and reads the router's wrapped coin once). A run that stops half way
 // resumes: contracts already in the record are skipped.
@@ -11,6 +11,7 @@ const ADDR = /^0x[0-9a-fA-F]{40}$/;
 export const OFFLINE_STEPS = [
   { key: 'zetaphyCheques', contract: 'ZetaphyCheques', args: () => [] },
   { key: 'offlineOrders', contract: 'ZetaphyOfflineOrders', args: (x) => [x.router] },
+  { key: 'offlineCash', contract: 'ZetaphyOfflineCash', args: () => [] }, // docs/future/offline-cash.md
 ];
 
 /**
