@@ -156,7 +156,7 @@ jobs:
           out explorer '^(zetaphy-explorer/|zetaphy-network/src/((pqcert|pqtx|vaccine)\.js|starklc/.*)$)'
           out dex '^(zetaphy-dex/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
           out nft '^(zetaphy-nft/|zetaphy-network/(src/vaccine\.js|artifacts/ThreatRegistry\.json)$)'
-          out hub '^(zetaphy-hub/|zetaphy-wallet/|zetaphy-dex/web/|zetaphy-nft/web/|zetaphy-explorer/|zetaphy-neuro/(web|src)/|zetaphy-chain/hyperlane/saphan-(chains|routes)\.json$)'
+          out hub '^(zetaphy-hub/|zetaphy-wallet/|zetaphy-dex/web/|zetaphy-nft/web/|zetaphy-explorer/|zetaphy-neuro/(web|src)/|zetaphy-network/src/(immune|qsafe)/|zetaphy-network/artifacts/(ProvenVerdicts|QuantumRescue)\.json$|zetaphy-network/test/fixtures/(neuroscore-zk|audit-report)\.json$|zetaphy-chain/hyperlane/(saphan-(chains|routes)|immune-network)\.json$)'
           out snap '^(zetaphy-snap/|zetaphy-network/src/pqtx\.js$)'
           out launch '^(zetaphy-launch/|zetaphy-(dex|nft)/web/deployments\.json$|zetaphy-explorer/config\.json$|zetaphy-wallet/index\.html$|zetaphy-snap/snap\.config\.js$)'
           # the DLMM devnet test (in the zetaphy-chain job, which builds zetaphyd): when the DLMM contracts, their CLI or test change
