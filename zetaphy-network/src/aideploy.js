@@ -1,7 +1,8 @@
 // The AI-map contracts that had no deploy step (docs/future/*.md; the hub's AI map, zetaphy-hub/flow.js):
 // one run deploys every one still missing, in order, and hands each to governance (the ZetaphyTimelock). The
-// deploy key keeps no role: contracts take the timelock in the constructor, except ForesightRegistry, which is
-// deployed with the key as governance only long enough to accept RiskForecasts as a resolver, then handed over.
+// deploy key keeps no role: contracts take the timelock in the constructor, except two that are deployed with the
+// key as governance only long enough to wire them, then handed over: ForesightRegistry (accepts RiskForecasts as a
+// resolver) and AgentRegistry (approves the ConstitutionChecker, AR-2: only governance-approved checkers).
 // A run that stops half way resumes: the record keeps what is already deployed and those are skipped.
 import { readFileSync } from 'node:fs';
 import { Contract, ContractFactory, getAddress, parseEther, sha256, toUtf8Bytes } from 'ethers';
@@ -27,11 +28,12 @@ export const AI_STEPS = [
   { key: 'signalBoard', items: [2, 7], contract: 'SignalBoard', args: () => [] },
   { key: 'webauthn', items: [9, 25], contract: 'WebAuthnVerifier', args: () => [] },
   { key: 'cosignCommittee', items: [9, 14], contract: 'CosignCommittee', args: (x) => [x.gov, x.o.committee?.length ? x.o.committee : [x.gov], BigInt(x.o.committee?.length ? (x.o.threshold ?? 1) : 1)] },
-  { key: 'agentRegistry', items: [23], contract: 'AgentRegistry', args: (x) => [x.gov, parseEther(String(x.o.agentBond)), parseEther(String(x.o.claimDeposit))] },
+  { key: 'constitutionChecker', items: [23], contract: 'ConstitutionChecker', args: () => [] },
+  { key: 'agentRegistry', items: [23], contract: 'AgentRegistry', args: (x) => [x.me, parseEther(String(x.o.agentBond)), parseEther(String(x.o.claimDeposit))] },
   { key: 'labelRegistry', items: [25], contract: 'LabelRegistry', args: (x) => [x.gov, x.r.agentRegistry, x.r.webauthn, sha256(toUtf8Bytes(x.o.hubHost)), BigInt(x.o.humanTtlDays * DAY)] },
   { key: 'vouchRegistry', items: [25], contract: 'VouchRegistry', args: (x) => [x.r.labelRegistry, x.gov] },
   { key: 'intentExecutor', items: [24], contract: 'IntentExecutor', args: () => [] },
-  { key: 'foresight', items: [29], contract: 'ForesightRegistry', args: (x) => [x.me], handover: true },
+  { key: 'foresight', items: [29], contract: 'ForesightRegistry', args: (x) => [x.me] },
   { key: 'riskForecasts', items: [15], contract: 'RiskForecasts', args: (x) => [x.gov, x.threats, x.r.foresight], needs: ['threats'] },
   { key: 'detectorPool', items: [26], contract: 'DetectorPool', args: (x) => [x.gov, x.r.foresight] },
   { key: 'dataDao', items: [16], contract: 'DataDAO', args: (x) => [x.gov, x.o.poster ?? x.gov] },
@@ -77,7 +79,10 @@ export async function deployAi({ signer, gov, jobs = null, threats = null, recor
     log(`${step.key}: ${step.contract} ${addr} (block ${rc.blockNumber})`);
     if (step.key === 'riskForecasts') await wireForesight(signer, rec, gov, log);
     save(rec);
+    if (step.key === 'agentRegistry') { await wireAgentRegistry(signer, rec, gov, log); save(rec); }
   }
+  // A run that stopped between deploying AgentRegistry and handing it over finishes the job here
+  if (rec.contracts.agentRegistry) await wireAgentRegistry(signer, rec, gov, log);
   // Foresight with no RiskForecasts this run (no ThreatRegistry): still hand it over, governance can add the resolver
   if (rec.contracts.foresight) await handOverForesight(signer, rec, gov, log);
   save(rec);
@@ -89,6 +94,21 @@ async function wireForesight(signer, rec, gov, log) {
   if ((await fs.governance()).toLowerCase() !== (await signer.getAddress()).toLowerCase()) return;
   await (await fs.setResolver(rec.contracts.riskForecasts, true)).wait();
   log('foresight: RiskForecasts accepted as a resolver');
+}
+
+/** Approves the ConstitutionChecker (when deployed) while the key is governance, then hands AgentRegistry over. */
+async function wireAgentRegistry(signer, rec, gov, log) {
+  const reg = new Contract(rec.contracts.agentRegistry, art('AgentRegistry').abi, signer);
+  const g = getAddress(await reg.governance());
+  if (g === gov) return;
+  if (g !== getAddress(await signer.getAddress())) throw new Error(`AgentRegistry governance is ${g}: neither the key nor the timelock`);
+  const chk = rec.contracts.constitutionChecker;
+  if (chk && !(await reg.approvedChecker(chk))) {
+    await (await reg.setChecker(chk, true)).wait();
+    log(`agentRegistry: ConstitutionChecker ${chk} approved`);
+  }
+  await (await reg.setGovernance(gov)).wait();
+  log(`agentRegistry: governance handed to ${gov}`);
 }
 
 async function handOverForesight(signer, rec, gov, log) {

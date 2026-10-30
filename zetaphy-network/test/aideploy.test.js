@@ -32,6 +32,8 @@ test('deploys all, hands every contract to the timelock, wires RiskForecasts int
   assert.equal(await fs.resolvers(rec.contracts.riskForecasts), true);
   const labels = c.at('LabelRegistry', rec.contracts.labelRegistry);
   assert.equal(getAddress(await labels.agents()), rec.contracts.agentRegistry);
+  const reg = c.at('AgentRegistry', rec.contracts.agentRegistry);
+  assert.equal(await reg.approvedChecker(rec.contracts.constitutionChecker), true, 'AR-2: the checker is approved before the handover');
 });
 
 test('a second run deploys nothing; refuses the key as governance and a record for another governance', async () => {

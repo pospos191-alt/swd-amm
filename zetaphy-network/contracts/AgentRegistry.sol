@@ -28,7 +28,9 @@ interface IPolicyChecker {
 ///             it records, checked by ZETAPHY's precompile at 0x…0900,
 ///           - a bond in testnet ZETAPHY (at least minBond),
 ///           - a constitution: the keccak256 of its policy document, and an
-///             optional deterministic checker contract for that policy.
+///             optional deterministic checker contract for that policy, one
+///             that governance approved (AR-2: an operator cannot pick a checker
+///             that pays itself).
 ///         Each recorded action carries provenance: the hash of the model
 ///         (weights or model id + version) and of the prompt that produced it.
 ///
@@ -110,6 +112,10 @@ contract AgentRegistry {
     mapping(uint256 => Claim) public claims;
     mapping(uint256 => mapping(address => bool)) public voted;
 
+    /// Checkers governance approved (AR-2). register/update take only these (or none), and a checker claim
+    /// pays only while the action's checker is still approved: revoking a bad checker stops its payouts.
+    mapping(address => bool) public approvedChecker;
+
     mapping(address => bool) public isCommittee;
     address[] private committee;
     uint256 public committeeThreshold;
@@ -127,6 +133,7 @@ contract AgentRegistry {
     event CommitteeSet(address[] members, uint256 threshold);
     event ParamsSet(uint256 minBond, uint256 claimDeposit);
     event GovernanceChanged(address governance);
+    event CheckerApproved(address indexed checker, bool approved);
 
     error NotGovernance();
     error NotOperator();
@@ -152,6 +159,7 @@ contract AgentRegistry {
     error ClaimNotOpen();
     error BadCommittee();
     error TransferFailed();
+    error CheckerNotApproved();
 
     modifier onlyGovernance() {
         if (msg.sender != governance) revert NotGovernance();
@@ -171,6 +179,7 @@ contract AgentRegistry {
         if (msg.value < minBond) revert BondTooLow();
         if (account == address(0) || pqKeyHash == bytes32(0)) revert BadAccount();
         if (agentOfAccount[account] != 0) revert AccountTaken();
+        _checkerOk(checker);
         id = ++agentCount;
         agents[id] = Agent({operator: msg.sender, account: account, pqKeyHash: pqKeyHash, constitution: constitution,
             checker: checker, bond: msg.value, unbondAt: 0, actions: 0, openClaims: 0});
@@ -183,6 +192,7 @@ contract AgentRegistry {
     function update(uint256 id, bytes32 pqKeyHash, bytes32 constitution, address checker) external {
         Agent storage a = _operated(id);
         if (pqKeyHash == bytes32(0)) revert BadAccount();
+        _checkerOk(checker);
         a.pqKeyHash = pqKeyHash;
         a.constitution = constitution;
         a.checker = checker;
@@ -288,6 +298,7 @@ contract AgentRegistry {
     function claimByChecker(uint256 actionId, bytes calldata constitution, bytes calldata evidence) external returns (uint256 paid) {
         Action storage act = _claimable(actionId);
         if (act.checker == address(0)) revert NoChecker();
+        if (!approvedChecker[act.checker]) revert CheckerNotApproved();
         if (act.slashed) revert AlreadySlashed();
         if (keccak256(constitution) != act.constitution) revert BadConstitution();
         IPolicyChecker.ActionView memory v = IPolicyChecker.ActionView({agentId: act.agentId, target: act.target,
@@ -355,6 +366,14 @@ contract AgentRegistry {
         emit ParamsSet(minBond_, claimDeposit_);
     }
 
+    /// Approves (or revokes) a deterministic checker. Revoking stops checker claims on every action recorded
+    /// under it; the committee path stays open for those actions.
+    function setChecker(address checker, bool approved) external onlyGovernance {
+        if (checker == address(0)) revert NoChecker();
+        approvedChecker[checker] = approved;
+        emit CheckerApproved(checker, approved);
+    }
+
     function setGovernance(address g) external onlyGovernance {
         governance = g;
         emit GovernanceChanged(g);
@@ -366,6 +385,10 @@ contract AgentRegistry {
         a = agents[id];
         if (a.operator == address(0)) revert NoAgent();
         if (a.operator != msg.sender) revert NotOperator();
+    }
+
+    function _checkerOk(address checker) private view {
+        if (checker != address(0) && !approvedChecker[checker]) revert CheckerNotApproved();
     }
 
     function _claimable(uint256 actionId) private view returns (Action storage act) {
