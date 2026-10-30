@@ -1,0 +1,22 @@
+{
+  "packages": [
+    {
+      "package": "@noble/curves",
+      "version": "1.9.7",
+      "integrity": "sha512-gbKGcRUYIjA3/zCCNaWDciTMFI0dCkvou3TL8Zmy5Nc7sJ47a0jtOeZoTaMxkuqRo9cRhjOdZJXegxYE5FN/xw==",
+      "resolved": "https://registry.npmjs.org/@noble/curves/-/curves-1.9.7.tgz"
+    },
+    {
+      "package": "@noble/hashes",
+      "version": "1.8.0",
+      "integrity": "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==",
+      "resolved": "https://registry.npmjs.org/@noble/hashes/-/hashes-1.8.0.tgz"
+    }
+  ],
+  "exports": [
+    "bn254",
+    "keccak_256"
+  ],
+  "license": "MIT",
+  "sha256": "68f9ced0441301e039158b27d3b1fa76ff5adbeb71ddc5ce8a1c05c7d832dff1"
+}
