@@ -59,6 +59,10 @@
 //                                      certify show <token> (src/assistcli.js)
 //   zetaphy attest-pq sign <report.json> | verify <archive.json> | anchor <archive.json> --anchor 0x<NeuroAnchor>
 //                                      ML-DSA-44-signed Neuro report archives, tamper check, hash anchored on ZETAPHY
+//   zetaphy cash key | check <note.txt> [--pin pinned.json] | pass <note.txt> <key> | cashout <note.txt> <payout> [--fee wei]
+//        | proof <note.txt> --comet <CometBFT RPC> --height H   ZETAPHY Offline Cash: bonded notes passed hand to hand offline
+//   zetaphy mesh send <type> <file> [--profile sms-text|sms-binary|lora|lora-text|qr|file] | relay [--in file] [--submit] | sizes
+//                                      store-and-forward frames for SMS / LoRa / QR (docs/future/offline-cash.md)
 //   zetaphy immune push --sender 0x<NeuroOracleSender> [--once --interval 30 --max-fee 0.1]   relay new flags to every chain's NeuroOracle
 //   zetaphy immune coverage --sender 0x… --mirror <name>=<rpc>@0x<NeuroOracle> …   share of flags each chain mirrors
 //   zetaphy deploy-assist attest|anchor|insurance [--governance 0x… --jobs 0x…]   NeuroAttest, NeuroAnchor, HackInsurance (testnet only)
@@ -1732,6 +1736,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   // ERC-8004 identity and signed Neuro messages (src/identitycli.js)
   if (group === 'identity' || group === 'deploy-identity' || group === 'msg') {
     return identityCommand({ group, cmd, rest, opt, env, write, s, connect, connectRpc });
+  }
+
+  // ZETAPHY Offline Cash and Mesh (docs/future/offline-cash.md): bonded notes passed hand to hand, frames over SMS / LoRa / QR
+  if (group === 'mesh' || group === 'cash') {
+    const { meshCommand, cashCommand } = await import('./src/mesh/cli.js');
+    return group === 'mesh' ? meshCommand({ cmd, rest, opt, write, s, connect, home: HOME }) : cashCommand({ cmd, rest, opt, write });
   }
 
   // Proof of Intent (solver side) and the AI co-signer (runner side): src/agentscli.js, docs/future/agents.md
