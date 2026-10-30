@@ -86,6 +86,38 @@ export function parseAderyn(json, projectRoot, isExcluded) {
   return out;
 }
 
+/**
+ * Is `line` (1-based) of this Solidity source checked arithmetic? True when the file's pragma
+ * requires solc >= 0.8 (the lowest version it allows is 0.8.x or later, so a subtraction that
+ * underflows reverts) and the line is outside every `unchecked { ... }` block. False whenever
+ * unsure: no pragma, a range that allows < 0.8, a line inside or on an unchecked block.
+ * Comments and strings are blanked before braces are matched.
+ */
+export function checkedArithmetic(source, line) {
+  const blank = (m) => m.replace(/[^\n]/g, ' ');
+  const code = String(source)
+    .replace(/\/\*[\s\S]*?\*\//g, blank)
+    .replace(/\/\/[^\n]*/g, blank)
+    .replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, blank);
+  const pragma = code.match(/pragma\s+solidity\s+([^;]+);/);
+  // the lower bound must come first: "^0.8.x", ">=0.8.x <0.9.0", "=0.8.x", "0.8.x" (not "<0.9.0", not "||")
+  const v = pragma && !/\|\|/.test(pragma[1]) && pragma[1].trim().match(/^(?:\^|>=|=)?\s*(\d+)\.(\d+)/);
+  if (!v || !(Number(v[1]) > 0 || Number(v[2]) >= 8)) return false;
+  const lineAt = (i) => code.slice(0, i).split('\n').length;
+  for (const m of code.matchAll(/\bunchecked\s*\{/g)) {
+    let depth = 0; let end = code.length;
+    for (let i = m.index + m[0].length - 1; i < code.length; i++) {
+      if (code[i] === '{') depth++;
+      else if (code[i] === '}' && --depth === 0) { end = i; break; }
+    }
+    if (line >= lineAt(m.index) && line <= lineAt(end)) return false;
+  }
+  return true;
+}
+
+/** Semgrep rules about wrapping arithmetic: they matter only in unchecked code (or solc < 0.8). */
+export const WRAP_RULES = /^basic-arithmetic-(underflow|overflow)$/;
+
 /** Semgrep --json (Decurity rules). Paths relative to the target root. */
 export function parseSemgrep(json, isExcludedPath) {
   const out = [];

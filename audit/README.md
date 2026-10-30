@@ -81,7 +81,9 @@ node --test audit/test/*.test.js                   # tests of the pipeline itsel
 
 Options: `--tier fast|deep`, `--only slither,aderyn,...` / `--skip go,deps,...`
 (steps: compile slither aderyn semgrep smtchecker invariants mutation neuro go deps),
-`--out <dir>`, `--report <path>`. A tool that is not installed is recorded as
+`--out <dir>`, `--report <path>`. `OSV_OFFLINE_DB=<dir>` makes OSV-Scanner match against
+OSV's downloadable database (kept in `<dir>`) instead of the api.osv.dev query API, for
+networks that block the API. A tool that is not installed is recorded as
 "not installed"; it never counts as passed. Mutation testing rewrites files in
 place and restores them: run it on a clean tree.
 
@@ -181,12 +183,34 @@ findings:
   reviewer can check.
 - **accepted-risk**: the issue is real but we keep it (a deliberate power, a
   documented trade-off). Say why and where users are told.
-- **fixed**: fixed in code. If the tool still reports it, the report shows it open
-  again ("marked fixed but still detected").
+- **fixed**: fixed in code (name the commit and the regression test in the reason).
+  Once the tool no longer reports it, the report lists it under "Fixed (no longer
+  detected)", the record of the fix; if the tool still reports it, the report shows
+  it open again ("marked fixed but still detected").
+
+**In GitHub code scanning** (the SARIF upload): open findings of Medium and above are
+alerts at their severity. Triaged ones (false-positive, accepted-risk, including those
+pending owner confirmation) are uploaded too, with a SARIF `suppressions` entry (kind
+`external`, status `accepted`, justification = the status, the reason and who decided),
+so code scanning shows them as dismissed with that justification rather than as new
+alerts; deleting the entry makes the alert open again on the next upload. A finding
+marked fixed but still detected is an alert again (no suppression).
+
+**Semgrep `basic-arithmetic-underflow`** (Decurity) flags any `a - b` where a function
+parameter flows in. Solidity >= 0.8 reverts on underflow outside `unchecked { }`, so
+there the result is a revert, not a wrap. `report.js` (`checkedArithmetic` in
+`lib/findings.js`) therefore reports the rule as **Info** (in the report, not in code
+scanning) when the file's pragma requires solc >= 0.8 (its lower bound is 0.8.x or
+later) and the flagged line is outside every `unchecked` block; inside an `unchecked`
+block, or in a file that allows solc < 0.8, it keeps the rule's severity (Medium) and
+stays an alert. The rule is not switched off: a real wrap in unchecked code still
+reaches the report and code scanning. (A revert on bad input can still matter, e.g.
+a denial of service; that is what the other detectors and the reviews look at.)
 
 The process: (1) read the finding and the code around it; (2) if it is real, fix it
 in its own PR; (3) otherwise add an entry in a PR that a second person (or the owner)
-reviews; (4) entries whose finding disappeared are listed in the report — delete them.
+reviews; (4) entries whose finding disappeared are listed in the report — delete them
+(except `fixed` ones, which stay as the record of the fix).
 The initial `triage.yml` holds only false positives verified by reading the code
 during the pipeline's first run, each with its reason; the owner should confirm them.
 

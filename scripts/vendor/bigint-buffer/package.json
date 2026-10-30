@@ -1,0 +1,9 @@
+{
+  "name": "bigint-buffer",
+  "version": "1.1.5-pure-js.1",
+  "description": "Pure-JS drop-in for bigint-buffer 1.1.5 (same four functions, no native addon). Replaces the npm package through the root package.json `resolutions`: bigint-buffer's native toBigInt has a buffer overflow (GHSA-3gc7-fjrx-p6mg) and no fixed release exists.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "Apache-2.0",
+  "private": true
+}

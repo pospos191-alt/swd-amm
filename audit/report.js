@@ -17,7 +17,7 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from 'node:fs';
 import { join, resolve, dirname, relative } from 'node:path';
 import {
-  SEVERITIES, rank, assignIds, dedupe, makeLineReader, parseSlither, parseAderyn, parseSemgrep, parseSmt,
+  SEVERITIES, rank, assignIds, checkedArithmetic, WRAP_RULES, dedupe, makeLineReader, parseSlither, parseAderyn, parseSemgrep, parseSmt,
   parseGosec, parseStaticcheck, parseGovulncheck, parseNpmAudit, parseOsv,
 } from './lib/findings.js';
 import { parseTriage, applyTriage, jsonStatus } from './lib/triage.js';
@@ -69,7 +69,24 @@ export function collect(out, { triageText = '', baselineIds = [] } = {}) {
     findings.push(...parseAderyn(readJson(f), prefix(p.root), (rel) => !!p.excluded?.[rel]).map((x) => ({ ...x, file: strip(x.file) })));
   }
   const sg = readJson(join(raw, 'semgrep', 'results.json'));
-  if (sg) findings.push(...parseSemgrep(sg, excludedPath));
+  if (sg) {
+    // basic-arithmetic-underflow flags any `a - b` with a parameter in it. Under solc >= 0.8 and
+    // outside `unchecked {}` that reverts instead of wrapping: Info there. Inside unchecked blocks,
+    // and in files that allow solc < 0.8, it keeps the rule's severity (audit/README.md "Triage").
+    const srcOf = new Map();
+    for (const x of parseSemgrep(sg, excludedPath)) {
+      if (WRAP_RULES.test(x.rule) && x.line && /\.sol$/.test(x.file)) {
+        if (!srcOf.has(x.file)) srcOf.set(x.file, readText(join(target, x.file), null));
+        const text = srcOf.get(x.file);
+        if (text != null && checkedArithmetic(text, x.line)) {
+          x.severity = 'info';
+          // the title, not the detail: the detail is part of the finding id
+          x.title = `${x.title} (checked arithmetic: solc >= 0.8 and outside unchecked, an underflow reverts instead of wrapping)`;
+        }
+      }
+      findings.push(x);
+    }
+  }
   const smt = parseSmt(readJson(join(raw, 'smtchecker', 'results.json'), {}));
   findings.push(...smt.findings);
 
@@ -286,9 +303,16 @@ export function toMarkdown(r, { linkBase = '../' } = {}) {
     for (const [k, g] of [...groups].sort((a, b) => b[1].length - a[1].length)) p(`| ${esc(k)} | ${g.length} | ${link(g[0], linkBase)} ${esc(g[0].title).slice(0, 90)} |`);
     p('');
   }
-  if (r.stale.length) {
+  const gone = r.stale.filter((e) => e.status === 'fixed');
+  const stale = r.stale.filter((e) => e.status !== 'fixed');
+  if (gone.length) {
+    p('### Fixed (no longer detected)', '', 'Findings `triage.yml` records as fixed whose tool no longer reports them: the record of the fix. A fixed finding that comes back shows as open again.', '');
+    for (const e of gone) p(`- \`${e.id}\` — ${esc(e.reason)} (${esc(e.decided_by)}${e.date ? `, ${e.date}` : ''})`);
+    p('');
+  }
+  if (stale.length) {
     p('### Triage entries that matched nothing', '', 'The finding is gone (fixed, or the flagged line changed so its id changed). Remove the entry, or re-triage the new id.', '');
-    for (const e of r.stale) p(`- \`${e.id}\` (${e.status}, ${e.decided_by})`);
+    for (const e of stale) p(`- \`${e.id}\` (${e.status}, ${e.decided_by})`);
     p('');
   }
   if (r.triageErrors.length) { p('### triage.yml errors', ''); for (const e of r.triageErrors) p(`- ${esc(e)}`); p(''); }
@@ -394,22 +418,40 @@ export function toThai(r) {
   return L.join('\n');
 }
 
+/**
+ * SARIF for GitHub code scanning. Open findings are results at their severity (error / warning).
+ * Triaged ones (fixed but still detected stay open; false-positive, accepted-risk, including the
+ * "owner to confirm" ones) are results too, with a SARIF `suppressions` entry (kind "external",
+ * status "accepted", justification = the triage reason): code scanning shows them as dismissed with
+ * that justification instead of as new alerts, and a deleted triage entry makes them errors again.
+ */
 export function toSarif(r, { repoRelative = true } = {}) {
   const runs = new Map();
   // Medium and above: Low / Info stay in the report and findings.json, not in the code-scanning UI.
-  for (const f of r.findings.filter((x) => x.status === 'open' && rank(x.severity) <= rank('medium') && x.file && !x.file.startsWith('zetaphy-chain:'))) {
+  for (const f of r.findings.filter((x) => rank(x.severity) <= rank('medium') && x.file && !x.file.startsWith('zetaphy-chain:'))) {
     if (!runs.has(f.tool)) runs.set(f.tool, { rules: new Map(), results: [] });
     const run = runs.get(f.tool);
     const ruleId = `${f.tool}/${f.rule}`;
     if (!run.rules.has(ruleId)) run.rules.set(ruleId, { id: ruleId, name: f.rule, shortDescription: { text: String(f.title).slice(0, 200) } });
-    run.results.push({
+    const result = {
       ruleId,
       level: rank(f.severity) <= rank('high') ? 'error' : f.severity === 'medium' ? 'warning' : 'note',
       message: { text: `[${f.severity}] ${f.title}${f.detail ? `: ${f.detail}` : ''} (audit id ${f.id})`.slice(0, 1000) },
       locations: [{ physicalLocation: { artifactLocation: { uri: f.file, uriBaseId: repoRelative ? '%SRCROOT%' : undefined }, region: f.line ? { startLine: f.line } : undefined } }],
       partialFingerprints: { 'zetaphyAuditId/v1': f.id },
       properties: { severity: f.severity, tool: f.tool },
-    });
+    };
+    if (f.status !== 'open' && f.triage) {
+      const pending = f.triage.pending ? ' (PENDING OWNER CONFIRMATION)' : '';
+      result.suppressions = [{
+        kind: 'external',
+        status: 'accepted',
+        justification: `${f.status}${pending}: ${f.triage.reason} (decided by ${f.triage.decided_by}${f.triage.date ? `, ${f.triage.date}` : ''}; audit/triage.yml)`.slice(0, 1000),
+      }];
+      result.properties.triage = f.status;
+      if (f.triage.pending) result.properties.pendingOwnerConfirmation = true;
+    }
+    run.results.push(result);
   }
   return {
     $schema: 'https://json.schemastore.org/sarif-2.1.0.json',

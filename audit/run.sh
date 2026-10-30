@@ -207,14 +207,22 @@ if want deps; then
       (cd "$TARGET/$d" && npm audit --package-lock-only --omit=dev --json > "$OUT/raw/deps/npm-$(echo "$d" | tr '/' '_').json" 2>/dev/null)
     fi
   done
+  # OSV_OFFLINE_DB=<dir>: match against OSV's downloadable per-ecosystem database kept in <dir>
+  # (fetched from osv-vulnerabilities.storage.googleapis.com) instead of the api.osv.dev query API,
+  # for networks that reach the one and not the other. CI leaves it unset.
+  osv_mode=(); osv_note=""
+  if [ -n "${OSV_OFFLINE_DB:-}" ]; then
+    mkdir -p "$OSV_OFFLINE_DB"; export OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY=$OSV_OFFLINE_DB
+    osv_mode=(--offline-vulnerabilities --download-offline-databases); osv_note="offline database (OSV_OFFLINE_DB)"
+  fi
   if have osv-scanner && [ ${#osv_args[@]} -gt 0 ]; then
-    osv-scanner scan source "${osv_args[@]}" --format json --output-file "$OUT/raw/deps/osv.json" > "$OUT/raw/deps/osv.log" 2>&1
+    osv-scanner scan source "${osv_args[@]}" "${osv_mode[@]}" --format json --output-file "$OUT/raw/deps/osv.json" > "$OUT/raw/deps/osv.log" 2>&1
     # osv-scanner exits non-zero when it FINDS something; a database it could not reach is a failure
     if grep -qE 'Error during extraction|request failed' "$OUT/raw/deps/osv.log"; then
       rm -f "$OUT/raw/deps/osv.json"
       record osv-scanner failed $(( $(date +%s) - t0 )) "$(osv-scanner --version | head -1 | awk '{print $NF}')" "could not reach the OSV database: $(grep -oE 'request failed[^"]*"[^"]*"[^:]*: [A-Za-z ]+' "$OUT/raw/deps/osv.log" | head -1)"
     else
-      record osv-scanner ran $(( $(date +%s) - t0 )) "$(osv-scanner --version | head -1 | awk '{print $NF}')"
+      record osv-scanner ran $(( $(date +%s) - t0 )) "$(osv-scanner --version | head -1 | awk '{print $NF}')" "$osv_note"
     fi
   else record osv-scanner "not installed" 0 ""; fi
   if have npm; then

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { parseTriage, applyTriage } from '../lib/triage.js';
 import {
   fingerprint, assignIds, dedupe, parseSlither, parseAderyn, parseSemgrep, parseSmt, parseGosec, parseStaticcheck,
-  parseGovulncheck, parseNpmAudit, parseOsv, stripLines,
+  parseGovulncheck, parseNpmAudit, parseOsv, stripLines, checkedArithmetic,
 } from '../lib/findings.js';
 import { collect, toJson, toMarkdown, toSarif } from '../report.js';
 import { patchedLines } from '../tools/zetaphy-lines.js';
@@ -269,6 +269,42 @@ test('gate: blocks new untriaged High; triage or the baseline unblock it; accept
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test('SARIF: triaged findings carry suppressions (dismissed with the triage reason); untriaged stay errors', () => {
+  const { root, out } = fakeOut();
+  try {
+    const ids = collect(out).findings.map((f) => f.id);
+    const send = ids.find((i) => i.startsWith('slither:arbitrary-send-eth:'));
+    const inv = ids.find((i) => i.startsWith('forge:'));
+    const reason = 'pays only the caller from its own credit, verified by reading f()';
+    const triageText = `findings:\n  - id: ${send}\n    status: false-positive\n    reason: ${reason}\n    decided_by: auditor (owner to confirm)\n    date: 2026-10-30\n`;
+    const results = (r) => toSarif(r).runs.flatMap((run) => run.results);
+    const byId = (r, id) => results(r).find((x) => x.partialFingerprints['zetaphyAuditId/v1'] === id);
+    // untriaged: an error, no suppression
+    const before = collect(out);
+    assert.equal(byId(before, send).level, 'error');
+    assert.equal(byId(before, send).suppressions, undefined);
+    // triaged: still present (same fingerprint, so code scanning can dismiss the existing alert), suppressed
+    const r = collect(out, { triageText, baselineIds: [inv] });
+    const x = byId(r, send);
+    assert.ok(x, 'a triaged finding is still in the SARIF');
+    assert.equal(x.level, 'error', 'the level stays the finding severity');
+    assert.equal(x.suppressions.length, 1);
+    assert.equal(x.suppressions[0].kind, 'external');
+    assert.equal(x.suppressions[0].status, 'accepted');
+    assert.match(x.suppressions[0].justification, /^false-positive \(PENDING OWNER CONFIRMATION\): pays only the caller/);
+    assert.match(x.suppressions[0].justification, /decided by auditor \(owner to confirm\), 2026-10-30/);
+    assert.equal(x.properties.pendingOwnerConfirmation, true);
+    // accepted-risk and fixed: accepted-risk is suppressed; "fixed" but still detected is open again, so not
+    const acc = collect(out, { triageText: triageText.replace('false-positive', 'accepted-risk').replace(' (owner to confirm)', '') });
+    assert.match(byId(acc, send).suppressions[0].justification, /^accepted-risk: /);
+    const fixed = collect(out, { triageText: triageText.replace('false-positive', 'fixed') });
+    assert.equal(byId(fixed, send).suppressions, undefined, 'marked fixed but still detected: an alert again');
+    // the untriaged invariant failure (baseline is not triage) stays unsuppressed
+    const other = results(r).filter((y) => y.partialFingerprints['zetaphyAuditId/v1'] !== send);
+    assert.ok(other.every((y) => !y.suppressions));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('pending owner confirmation: counts as decided for the gate and --json, labelled pending everywhere it is shown', () => {
   const { root, out } = fakeOut();
   try {
@@ -368,4 +404,61 @@ test('scope helpers: comment-free line count; import resolution with remappings'
   assert.equal(countLoc('// x\n/* a\n b */\ncontract A {\n\n  uint x; // y\n}\n'), 3);
   assert.equal(resolveImport('/nonexistent', 'contracts/A.sol', './B.sol', []), 'contracts/B.sol');
   assert.equal(resolveImport('/nonexistent', '', '@openzeppelin/contracts/x.sol', ['@openzeppelin/contracts/=vendor/@openzeppelin/contracts/']), 'vendor/@openzeppelin/contracts/x.sol');
+});
+
+test('a fixed entry whose finding is gone is the record of the fix, not a stale entry', () => {
+  const { root, out } = fakeOut();
+  try {
+    const triageText = 'findings:\n'
+      + '  - id: aderyn:unsafe-casting:p/contracts/Gone.sol:0123456789ab\n    status: fixed\n    reason: bound check added in abc1234, regression test t.js\n    decided_by: auditor (owner to confirm)\n    date: 2026-10-30\n'
+      + '  - id: aderyn:x:p/contracts/Gone.sol:abcdefabcdef\n    status: false-positive\n    reason: the line was rewritten since then\n    decided_by: owner\n';
+    const md = toMarkdown(collect(out, { triageText }));
+    assert.match(md, /### Fixed \(no longer detected\)\n\n[^\n]+\n\n- `aderyn:unsafe-casting:p\/contracts\/Gone\.sol:0123456789ab` — bound check added in abc1234/);
+    assert.match(md, /### Triage entries that matched nothing[\s\S]*aderyn:x:p\/contracts\/Gone\.sol:abcdefabcdef/);
+    assert.doesNotMatch(md.split('### Triage entries that matched nothing')[1], /0123456789ab/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('semgrep basic-arithmetic-underflow: Info only for checked arithmetic (solc >= 0.8, outside unchecked)', () => {
+  const src = [
+    '// SPDX-License-Identifier: MIT', // 1
+    'pragma solidity ^0.8.26;', // 2
+    'contract C {', // 3
+    '  function f(uint a, uint b) external pure returns (uint) {', // 4
+    '    uint x = a - b; // "unchecked {" in a comment', // 5
+    '    unchecked {', // 6
+    '      x = a - b;', // 7
+    '      if (x > 0) { x -= b; }', // 8
+    '    }', // 9
+    '    return x - b;', // 10
+    '  }', // 11
+    '}', // 12
+  ].join('\n');
+  assert.equal(checkedArithmetic(src, 5), true);
+  assert.equal(checkedArithmetic(src, 7), false, 'inside unchecked: a real wrap');
+  assert.equal(checkedArithmetic(src, 8), false, 'nested braces inside unchecked');
+  assert.equal(checkedArithmetic(src, 10), true, 'after the unchecked block');
+  for (const p of ['>=0.8.0 <0.9.0', '0.8.26', '=0.8.20']) assert.equal(checkedArithmetic(src.replace('^0.8.26', p), 5), true, p);
+  for (const p of ['^0.7.6', '>=0.6.0 <0.9.0', '<0.9.0', '>0.7.0', '^0.7.0 || ^0.8.0']) assert.equal(checkedArithmetic(src.replace('^0.8.26', p), 5), false, p);
+  assert.equal(checkedArithmetic(src.replace('pragma solidity ^0.8.26;', ''), 5), false, 'no pragma: unsure');
+});
+
+test('collect: the underflow rule is Info on checked lines and keeps its severity in unchecked blocks', () => {
+  const root = mkdtempSync(join(tmpdir(), 'audit-sg-'));
+  try {
+    const out = join(root, 'out');
+    mkdirSync(join(out, 'raw', 'semgrep'), { recursive: true });
+    mkdirSync(join(root, 'src'));
+    writeFileSync(join(root, 'src', 'A.sol'), 'pragma solidity ^0.8.26;\ncontract A {\n  function f(uint a) external pure returns (uint r) {\n    r = 10 - a;\n    unchecked { r = 10 - a; }\n  }\n}\n');
+    writeFileSync(join(out, 'raw', 'meta.json'), JSON.stringify({ target: root, mode: 'target' }));
+    const hit = (line) => ({ check_id: 'solidity.security.basic-arithmetic-underflow', path: 'src/A.sol', start: { line },
+      extra: { message: 'Possible arithmetic underflow', severity: 'INFO', metadata: { impact: 'HIGH', confidence: 'LOW' } } });
+    writeFileSync(join(out, 'raw', 'semgrep', 'results.json'), JSON.stringify({ results: [hit(4), hit(5)] }));
+    const r = collect(out);
+    const at = (l) => r.findings.find((f) => f.line === l);
+    assert.equal(at(4).severity, 'info');
+    assert.match(at(4).title, /checked arithmetic/);
+    assert.equal(at(5).severity, 'medium', 'inside unchecked: a possible wrap, kept');
+    assert.deepEqual(toSarif(r).runs.flatMap((x) => x.results).map((x) => x.locations[0].physicalLocation.region.startLine), [5]);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -77,6 +77,7 @@ contract NeuroScore {
     error BadFeatures();
     error UnknownFeatures();
     error BadLevels();
+    error ScoreOutOfRange(int256 score);
 
     modifier onlyGov() {
         if (msg.sender != governance) revert NotGovernance();
@@ -185,8 +186,16 @@ contract NeuroScore {
         uint32 v = version;
         (score, level) = evaluateAt(v, features);
         bytes32 fh = keccak256(features);
-        _scores[token] = Score(int64(score), v, level, uint64(block.timestamp), fh);
-        emit Scored(token, v, int64(score), level, fh, features);
+        int64 stored = _toInt64(score);
+        _scores[token] = Score(stored, v, level, uint64(block.timestamp), fh);
+        emit Scored(token, v, stored, level, fh, features);
+    }
+
+    /// The score as stored (int64). A model whose calibration (a * z / scale + b) leaves the int64
+    /// range would otherwise be stored truncated while evaluate() returns the full value: refuse it.
+    function _toInt64(int256 x) private pure returns (int64 y) {
+        if (x > type(int64).max || x < type(int64).min) revert ScoreOutOfRange(x);
+        assembly { y := x } // in range: checked on the line above
     }
 
     function _level(Model storage md, int256 s) private view returns (uint8) {
