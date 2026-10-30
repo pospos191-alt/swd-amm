@@ -27,3 +27,10 @@ audit/out/
 
 # zetaphy-chain/pack-cloud-init.sh output, published to github.com/pospos191-alt/zetaphy-chain
 zetaphy-chain/public/
+
+# forge build output of the audit suites (zetaphy-*/audit/invariants)
+zetaphy-*/audit/out/
+zetaphy-*/audit/cache/
+**/crytic-export/
+zetaphy-*/audit/invariants/echidna/corpus/
+zetaphy-*/audit/invariants/echidna/corpus-medusa/
