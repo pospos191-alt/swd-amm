@@ -57,6 +57,9 @@
 //   zetaphy certify <token 0x…> --attest 0x<NeuroAttest> [--model rules --uri …]   run Neuro on a ZETAPHY token and attest it
 //                                      "Neuro-checked" (approved attesters); certify from-job <jobId> <token> (anyone, settled verdict);
 //                                      certify show <token> (src/assistcli.js)
+//   zetaphy qsafe inventory [--json] | rescue-kit <account 0x…> --contract <QuantumRescue 0x…> [--chain-id N] | rescue-reveal <kit.json>
+//                                      the quantum-safe settlement layer, offline (docs/future/quantum-safe-settlement.md): Q-day readiness
+//                                      from the exposure inventory; a QuantumRescue pre-commitment kit and, after Q-day, its reveal calldata
 //   zetaphy attest-pq sign <report.json> | verify <archive.json> | anchor <archive.json> --anchor 0x<NeuroAnchor>
 //                                      ML-DSA-44-signed Neuro report archives, tamper check, hash anchored on ZETAPHY
 //   zetaphy immune push --sender 0x<NeuroOracleSender> [--once --interval 30 --max-fee 0.1]   relay new flags to every chain's NeuroOracle
@@ -253,6 +256,7 @@ import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, for
 import { createLaneWatcher, laneControl } from './src/lane.js';
 import { verifyBlock, exportVoteKeys } from './src/pqcert.js';
 import { securityCommand } from './src/securitycli.js';
+import { qsafeCommand } from './src/qsafe/cli.js';
 import { identityCommand } from './src/identitycli.js';
 import { bridgeCommand } from './src/bridgecli.js';
 import { timelockCommand, timelockHint } from './src/timelockcli.js';
@@ -476,6 +480,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   const { pos, opt } = parse(argv);
   const [group, cmd, ...rest] = pos;
   if (group === 'pq' && (cmd === 'verify-block' || cmd === 'export-vote-keys')) return pqBlockCommand(cmd, rest, opt, env, write);
+  if (group === 'qsafe') return qsafeCommand({ cmd, rest, opt, env, write });
   if (group === 'review' && cmd === 'verify') {
     // A runner's signed LLM review (node start --llm-review): who wrote it, and is it unedited?
     if (!rest[0]) throw new Error('usage: zetaphy review verify <job-N.json>');

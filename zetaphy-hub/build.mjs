@@ -11,6 +11,7 @@ import { hubSeoFiles, INDEXNOW_KEY } from './seo.mjs';
 import { ALL as IMMUNE_CHAINS } from '../zetaphy-network/src/immune/chains.js';
 import { simulate as immuneSimulate } from '../zetaphy-network/src/immune/propagate.js';
 import { cleanRegistry } from './aas-core.js';
+import { summary as qsafeSummary } from '../zetaphy-network/src/qsafe/inventory.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -38,7 +39,7 @@ const SKIP_IN = { wallet: new Set(['src']),
 const SKIP = new Set(['node_modules', 'test', 'scripts', 'package.json', 'package-lock.json', 'vercel.json', 'README.md', 'README.th.md', '.gitignore', 'data',
   'robots.txt', 'sitemap.xml', `${INDEXNOW_KEY}.txt`]);
 const HUB_FILES = ['index.html', 'walletbar.js', 'wallet-safety.js', 'wallet-safety-i18n.js', 'wallet-safety.css', 'ledger.js', 'vendor/ledger-hid.js', 'validators.html', 'validators.css', 'validators.js', 'forecasts.html', 'forecasts.css', 'forecasts.js', 'forecasts-i18n.js', 'ceremony.html', 'ceremony.css', 'ceremony.js', 'ceremony-i18n.js', 'ceremony-core.js', 'vendor/snarkjs.min.js', 'hub.css', 'hub.js', 'i18n.js', 'chainlib.js', 'pages.js', 'pages-i18n.js', 'mine.js', 'mine-core.js', 'mine-worker.js',
-  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'aichain.js', 'aichain-i18n.js', 'offline.js', 'offline-core.js', 'offline-i18n.js', 'audit.js', 'audit-core.js', 'audit-i18n.js', 'audit.html', 'audits.html', 'aas.css', 'aas-core.js', 'aas-i18n.js', 'aas-page.js', 'aas-verify.js', 'aas-directory.js', 'vendor/qrcode.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
+  'work.js', 'work-i18n.js', 'work-core.js', 'work-worker.js', 'fuzz-core.js', 'fuzz-hook.js', 'vendor/evm.js', 'bounties/vulnerable-vault.json', 'bounties/sample-scan.json', 'agents.js', 'agents-lib.js', 'agents-i18n.js', 'intent-core.js', 'assist.js', 'assist-i18n.js', 'govassist.js', 'presign.js', 'presign-probe.js', 'pqattest.js', 'embed.css', 'logo.svg', 'favicon.svg', 'og.png', 'about/about.css', 'flow.js', 'flow-i18n.js', 'aimap.js', 'aichain.js', 'aichain-i18n.js', 'offline.js', 'offline-core.js', 'offline-i18n.js', 'audit.js', 'audit-core.js', 'audit-i18n.js', 'audit.html', 'audits.html', 'aas.css', 'aas-core.js', 'aas-i18n.js', 'aas-page.js', 'aas-verify.js', 'aas-directory.js', 'quantum.js', 'quantum-core.js', 'quantum-i18n.js', 'vendor/qrcode.js', 'zearly.svg', 'zearly-256.png', 'zetaphy-256.png'];
 
 /**
  * The Audit Directory's fallback copy of the public certificate registry (docs/future/audit-as-a-service.md): the
@@ -68,6 +69,9 @@ export function hubConfig(cfg, files = null) {
   // the open audit network (docs/future/audit-network.md): `zetaphy deploy-audit` writes its record (testnet only)
   const au = read('zetaphy-network/deployments/audit-77390.json');
   if (au?.chainId === 77390) for (const [k, v] of Object.entries(au.contracts ?? {})) out[k] ??= v;
+  // the quantum-safe settlement layer (docs/future/quantum-safe-settlement.md): its deployment record, once deployed (testnet only)
+  const qs = read('zetaphy-network/deployments/qsafe-77390.json');
+  if (qs?.chainId === 77390) for (const [k, v] of Object.entries(qs.contracts ?? {})) out[k] ??= v;
   const fl = read('zetaphy-neuro/ml/fl/deployment.json');
   if (fl?.chainId === 77390 && fl.rounds) out.federatedRounds ??= fl.rounds;
   const oracle = read('zetaphy-chain/hyperlane/neuro-oracle.json');
@@ -76,7 +80,7 @@ export function hubConfig(cfg, files = null) {
   const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity',
     'usefulWork', 'bugBounty', 'workerReputation', 'usefulIssuance', 'riskForecasts', 'foresight', 'detectorPool', 'dataDao', 'arena', 'intentExecutor', 'labelRegistry', 'vouchRegistry', 'agentRegistry', 'agentPolicyWallet',
     'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance',
-    'modelRegistry', 'neuroScore', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds', 'zetaphyCheques', 'offlineOrders', 'auditNetwork', 'auditRunners', 'auditJudges', 'auditCertificate', 'circuitBreaker']
+    'modelRegistry', 'neuroScore', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds', 'zetaphyCheques', 'offlineOrders', 'auditNetwork', 'auditRunners', 'auditJudges', 'auditCertificate', 'circuitBreaker', 'quantumRescue', 'pqSettlement', 'pqMultisigIsm']
     .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
   if (Number.isInteger(out.timelockBlock) && contracts.timelock) contracts.timelockBlock = out.timelockBlock;
   const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};
@@ -91,7 +95,14 @@ export function hubConfig(cfg, files = null) {
     saphanTokens: saphanTokenRoutes(read),
     immune: immuneMirrors(read),
     immuneNet: immuneNetwork(read),
+    qsafe: qsafeHub(),
   };
+}
+
+/** The Q-day readiness the Quantum tab shows: the inventory's score, counts and the open rows (public data only). */
+export function qsafeHub() {
+  const s = qsafeSummary();
+  return { score: s.score, total: s.total, byStatus: s.byStatus, open: s.open.slice(0, 8).map(({ id, component, status, impact }) => ({ id, component, status, impact })) };
 }
 
 /**
