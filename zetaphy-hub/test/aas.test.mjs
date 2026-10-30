@@ -88,7 +88,7 @@ test('the badge is a static, script-free SVG with the state (and escapes what it
   assert.match(aas.badgeSvg({ status: 'code_changed', level: 3 }), /CODE CHANGED</);
   assert.doesNotMatch(aas.badgeSvg({ status: 'expired', level: 3 }), /GOLD/, 'a level only on a valid badge');
   const evil = aas.badgeSvg({ status: 'valid', detail: '<script>"x"</script>' });
-  assert.doesNotMatch(evil, /<script>/);
+  assert.doesNotMatch(evil, /<script/i);
   assert.match(evil, /&lt;script&gt;&quot;x&quot;/);
   assert.equal(aas.badgeSvg({ status: 'nope' }).includes('NOT CERTIFIED'), true);
   const s = aas.embedSnippets(aas.chainOf('base'), '0x' + 'ab'.repeat(20));
