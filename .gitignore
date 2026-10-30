@@ -22,5 +22,8 @@ test-ui/_scratch_*
 test-ui/tests/node_modules/
 test-ui/tests/test-results/
 
+# audit/run.sh output (raw tool results; the report itself is audit/REPORT.md)
+audit/out/
+
 # zetaphy-chain/pack-cloud-init.sh output, published to github.com/pospos191-alt/zetaphy-chain
 zetaphy-chain/public/

@@ -1,0 +1,80 @@
+{
+  "_comment": "What the audit covers in THIS repository. Paths are relative to each project's root. Another repository is audited with `audit/run.sh --target <dir>`, which finds its contracts by itself (lib/scope.js). Excluded files are still compiled (others import them) but their findings are not reported; each exclusion says why.",
+  "solc": "0.8.26",
+  "projects": [
+    {
+      "name": "zetaphy-network",
+      "root": "zetaphy-network",
+      "src": ["contracts"],
+      "remappings": ["@openzeppelin/contracts/=vendor/@openzeppelin/contracts/"],
+      "settings": { "optimizer": { "enabled": true, "runs": 200 }, "evmVersion": "cancun" },
+      "exclude": {
+        "contracts/VulnerableVault.sol": "deliberately vulnerable target of the testnet bug-bounty demo (see its header); never holds value",
+        "contracts/MockMailbox.sol": "TEST ONLY stand-in for a Hyperlane Mailbox (see its header)",
+        "contracts/VaultTestRecipients.sol": "test-only recipients for RewardVault tests",
+        "contracts/TestStable.sol": "worthless testnet faucet stablecoin (see its header)"
+      }
+    },
+    {
+      "name": "zetaphy-dex",
+      "root": "zetaphy-dex",
+      "src": ["contracts"],
+      "remappings": [],
+      "settings": { "optimizer": { "enabled": true, "runs": 200 }, "evmVersion": "cancun" },
+      "exclude": {
+        "contracts/test/DexTestHelpers.sol": "test-only helpers",
+        "contracts/test/DlmmTestHelpers.sol": "test-only helpers",
+        "contracts/TestToken.sol": "testnet-only token with an owner mint (see its header)"
+      }
+    },
+    {
+      "name": "zetaphy-nft",
+      "root": "zetaphy-nft",
+      "src": ["contracts"],
+      "remappings": [],
+      "settings": { "optimizer": { "enabled": true, "runs": 200 }, "evmVersion": "cancun" },
+      "exclude": {}
+    }
+  ],
+  "core": {
+    "_comment": "Money-holding contracts: SMTChecker targets (fast tier: the first 4, deep tier: all) and mutation-testing targets (deep tier). Each entry: project/path.",
+    "smtchecker": [
+      "zetaphy-network/contracts/ZetaphyCheques.sol",
+      "zetaphy-network/contracts/RewardVault.sol",
+      "zetaphy-dex/contracts/WZETAPHY.sol",
+      "zetaphy-dex/contracts/ZetaphyPair.sol",
+      "zetaphy-dex/contracts/dlmm/DlmmMath.sol",
+      "zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol",
+      "zetaphy-network/contracts/HyperlaneLockBoxV2.sol",
+      "zetaphy-network/contracts/HackInsurance.sol",
+      "zetaphy-network/contracts/StableGateway.sol",
+      "zetaphy-network/contracts/ZetaphyOfflineOrders.sol",
+      "zetaphy-nft/contracts/NFTMarketplace.sol"
+    ],
+    "mutation": [
+      { "file": "zetaphy-dex/contracts/ZetaphyPair.sol", "test": "npm test" },
+      { "file": "zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol", "test": "npm test" },
+      { "file": "zetaphy-network/contracts/ZetaphyCheques.sol", "test": "npm test" },
+      { "file": "zetaphy-network/contracts/RewardVault.sol", "test": "npm test" },
+      { "file": "zetaphy-nft/contracts/NFTMarketplace.sol", "test": "npm test" }
+    ]
+  },
+  "invariants": {
+    "_comment": "Invariant / property suites, written separately (one directory per project). The pipeline runs whatever is there: foundry.toml -> forge test (invariant_* and test*), halmos (check_* functions), echidna.yaml -> echidna, medusa.json -> medusa. A missing directory counts as notRun, never as passed.",
+    "dirs": ["zetaphy-network/audit/invariants", "zetaphy-dex/audit/invariants", "zetaphy-nft/audit/invariants"]
+  },
+  "lockfiles": [
+    "zetaphy-network/package-lock.json",
+    "zetaphy-dex/package-lock.json",
+    "zetaphy-nft/package-lock.json",
+    "zetaphy-neuro/package-lock.json",
+    "zetaphy-verify/package-lock.json",
+    "zetaphy-wallet/package-lock.json",
+    "zetaphy-explorer/package-lock.json",
+    "zetaphy-hub/package-lock.json",
+    "zetaphy-launch/package-lock.json",
+    "zetaphy-snap/package-lock.json",
+    "yarn.lock",
+    "Cargo.lock"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "zetaphy-audit",
+  "private": true,
+  "type": "module",
+  "description": "In-house automated audit pipeline (see README.md). No dependencies: Node's standard library only.",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}
