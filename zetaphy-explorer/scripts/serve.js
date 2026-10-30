@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json',
-  '.webmanifest': 'application/manifest+json', '.png': 'image/png' };
-const PUBLIC = /^\/(index\.html|offline\.html|style\.css|favicon\.svg|logo\.svg|config\.json|labels\.json|crosschain\.json|manifest\.webmanifest|sw\.js|icon-\d+\.png|src\/insight\.css|src\/[a-z0-9-]+\.js|src\/wallet-safety\.css|vendor\/zetaphy(-tools)?-lib\.js)$/;
+  '.webmanifest': 'application/manifest+json', '.png': 'image/png', '.bin': 'application/octet-stream' };
+const PUBLIC = /^\/(index\.html|offline\.html|style\.css|favicon\.svg|logo\.svg|config\.json|labels\.json|crosschain\.json|manifest\.webmanifest|sw\.js|icon-\d+\.png|src\/insight\.css|src\/[a-z0-9-]+\.js|src\/wallet-safety\.css|vendor\/zetaphy(-tools)?-lib\.js|lightclient\.html|src\/lightclient\.css|vendor\/starklc-lib\.js|lightclient\/demo\/[a-z0-9-]+\.(bin|json))$/;
 const vercel = JSON.parse(await readFile(join(ROOT, 'vercel.json'), 'utf8'));
 const csp = vercel.headers[0].headers.filter((h) => h.key !== 'Strict-Transport-Security')
   // upgrade-insecure-requests would turn http://localhost into https:// here

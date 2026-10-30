@@ -1,0 +1,14 @@
+{
+  "about": "Web3 immune network (docs/future/immune-network.md): ImmuneRegistry + ImmuneBroadcaster on ZETAPHY and the ImmuneMirror per chain. Nothing is deployed yet (testnet prototype): fill in after deploying, then the feed workflow (.github/workflows/immune-feed.yml), the hub's Immunity tab and the SDK pick it up. Testnets only.",
+  "registry": null,
+  "broadcaster": null,
+  "jobs": null,
+  "minAgreed": 2,
+  "mirrors": {},
+  "ibc": { "channel": null, "contract": null },
+  "feed": {
+    "url": "https://cdn.jsdelivr.net/gh/pospos191-alt/swd-amm@immune-feed/",
+    "raw": "https://raw.githubusercontent.com/pospos191-alt/swd-amm/immune-feed/",
+    "keyHash": null
+  }
+}

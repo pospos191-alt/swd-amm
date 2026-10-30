@@ -57,8 +57,15 @@
 //   zetaphy certify <token 0x…> --attest 0x<NeuroAttest> [--model rules --uri …]   run Neuro on a ZETAPHY token and attest it
 //                                      "Neuro-checked" (approved attesters); certify from-job <jobId> <token> (anyone, settled verdict);
 //                                      certify show <token> (src/assistcli.js)
+//   zetaphy qsafe inventory [--json] | rescue-kit <account 0x…> --contract <QuantumRescue 0x…> [--chain-id N] | rescue-reveal <kit.json>
+//                                      the quantum-safe settlement layer, offline (docs/future/quantum-safe-settlement.md): Q-day readiness
+//                                      from the exposure inventory; a QuantumRescue pre-commitment kit and, after Q-day, its reveal calldata
 //   zetaphy attest-pq sign <report.json> | verify <archive.json> | anchor <archive.json> --anchor 0x<NeuroAnchor>
 //                                      ML-DSA-44-signed Neuro report archives, tamper check, hash anchored on ZETAPHY
+//   zetaphy cash key | check <note.txt> [--pin pinned.json] | pass <note.txt> <key> | cashout <note.txt> <payout> [--fee wei]
+//        | proof <note.txt> --comet <CometBFT RPC> --height H   ZETAPHY Offline Cash: bonded notes passed hand to hand offline
+//   zetaphy mesh send <type> <file> [--profile sms-text|sms-binary|lora|lora-text|qr|file] | relay [--in file] [--submit] | sizes
+//                                      store-and-forward frames for SMS / LoRa / QR (docs/future/offline-cash.md)
 //   zetaphy immune push --sender 0x<NeuroOracleSender> [--once --interval 30 --max-fee 0.1]   relay new flags to every chain's NeuroOracle
 //   zetaphy immune coverage --sender 0x… --mirror <name>=<rpc>@0x<NeuroOracle> …   share of flags each chain mirrors
 //   zetaphy deploy-assist attest|anchor|insurance [--governance 0x… --jobs 0x…]   NeuroAttest, NeuroAnchor, HackInsurance (testnet only)
@@ -195,6 +202,9 @@
 //                                      the open audit network (docs/future/audit-network.md): anyone asks for an audit,
 //                                      anyone bonded audits, bonded judges decide, runners run audit/report.js + Neuro;
 //                                      `zetaphy audit` alone prints every command
+//   zetaphy aas chains|intake|order|pay|verify|badge|registry …   Audit-as-a-Service for any chain (EVM, CosmWasm, Solana):
+//                                      what would be audited (code hash now, verified source, proxy + implementation),
+//                                      the AuditNetwork order, VALID / EXPIRED / REVOKED / CODE CHANGED (docs/future/audit-as-a-service.md)
 //   zetaphy deploy-audit --timelock 0x… --treasury 0x… --jobs 0x… [--reputation 0x…]   AuditNetwork + AuditRunners +
 //                                      AuditJudges + AuditCertificate, governed by the timelock (no key keeps a role)
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
@@ -250,6 +260,7 @@ import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, for
 import { createLaneWatcher, laneControl } from './src/lane.js';
 import { verifyBlock, exportVoteKeys } from './src/pqcert.js';
 import { securityCommand } from './src/securitycli.js';
+import { qsafeCommand } from './src/qsafe/cli.js';
 import { identityCommand } from './src/identitycli.js';
 import { bridgeCommand } from './src/bridgecli.js';
 import { timelockCommand, timelockHint } from './src/timelockcli.js';
@@ -473,6 +484,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   const { pos, opt } = parse(argv);
   const [group, cmd, ...rest] = pos;
   if (group === 'pq' && (cmd === 'verify-block' || cmd === 'export-vote-keys')) return pqBlockCommand(cmd, rest, opt, env, write);
+  if (group === 'qsafe') return qsafeCommand({ cmd, rest, opt, env, write });
   if (group === 'review' && cmd === 'verify') {
     // A runner's signed LLM review (node start --llm-review): who wrote it, and is it unedited?
     if (!rest[0]) throw new Error('usage: zetaphy review verify <job-N.json>');
@@ -1713,6 +1725,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
     return auditCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, home: HOME });
   }
 
+  // Audit-as-a-Service from any chain: intake, order, verify, badge, registry (src/aascli.js)
+  if (group === 'aas') {
+    const { aasCommand } = await import('./src/aascli.js');
+    return aasCommand({ cmd, rest, opt, write, s, connect, connectRpc });
+  }
+
   // Neuro-checked certificates, ML-DSA-44 attestations, the herd-immunity pusher (src/assistcli.js)
   if (group === 'certify' || group === 'attest-pq' || group === 'immune' || group === 'deploy-assist') {
     return assistCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, argv });
@@ -1732,6 +1750,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   // ERC-8004 identity and signed Neuro messages (src/identitycli.js)
   if (group === 'identity' || group === 'deploy-identity' || group === 'msg') {
     return identityCommand({ group, cmd, rest, opt, env, write, s, connect, connectRpc });
+  }
+
+  // ZETAPHY Offline Cash and Mesh (docs/future/offline-cash.md): bonded notes passed hand to hand, frames over SMS / LoRa / QR
+  if (group === 'mesh' || group === 'cash') {
+    const { meshCommand, cashCommand } = await import('./src/mesh/cli.js');
+    return group === 'mesh' ? meshCommand({ cmd, rest, opt, write, s, connect, home: HOME }) : cashCommand({ cmd, rest, opt, write });
   }
 
   // Proof of Intent (solver side) and the AI co-signer (runner side): src/agentscli.js, docs/future/agents.md

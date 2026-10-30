@@ -1,0 +1,21 @@
+{
+  "name": "zetaphy-zkid",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZETAPHY private identity: a Semaphore-style Groth16 membership + nullifier circuit over the labelled-human registry (circom 2 via circom2 WASM + snarkjs, no native tools). DEV single-party phase 2: testnet only.",
+  "license": "BUSL-1.1",
+  "type": "module",
+  "scripts": {
+    "setup": "node setup.js",
+    "poseidon": "node gen-poseidon.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "circom2": "0.2.23",
+    "circomlib": "2.0.5",
+    "snarkjs": "0.7.6"
+  }
+}

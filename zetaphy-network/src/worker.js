@@ -50,6 +50,8 @@ import { CHAINS } from '../../zetaphy-neuro/src/chains.js';
 import { readContract } from '../../zetaphy-neuro/src/reader.js';
 import { verdictOf } from '../../zetaphy-neuro/src/verdict.js';
 import { jobSimSeed } from '../../zetaphy-neuro/src/honeypot.js';
+import { createRpc } from '../../zetaphy-neuro/src/rpc.js';
+import { featureVerdict, parseFeatureTarget } from './zkverdict/features.js';
 
 export const OPEN = 1n;
 export const DONE = 2n;
@@ -129,9 +131,11 @@ export async function send(fn, ...args) {
  * @param {{maxPerDay: bigint}|null} [p.watch]   watcher mode: challenge verdicts that differ from ours
  * @param {(job: {id:number, chain:string, target:string, report:object, verdict:string, round:number}) => void} [p.onReport]
  *   called after each successful commit (opt-in LLM review, src/llmreview.js); never awaited, never changes the verdict
+ * @param {(method: string, params: any[]) => Promise<any>} [p.featureCall]  EVM JSON-RPC of ZETAPHY for feature jobs
+ *   (target "zfeat/1:<token>:<codehash>" on chain "zetaphy", src/zkverdict/features.js); default: zetaphyChain's RPCs
  */
 export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readContract, chainTime, log = () => {}, skill = null, paused = null,
-  defenderTimeout = null, onRoster = null, watch = null, onReport = null }) {
+  defenderTimeout = null, onRoster = null, watch = null, onReport = null, featureCall = null }) {
   const state = loadState(stateFile);
   let commitWindow = null;
   const foreign = new Set(); // jobs of another skill: never ours
@@ -149,6 +153,14 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
   async function ourVerdict(job, simSeed = null) {
     let chainKey;
     try { chainKey = decodeBytes32String(job.chain); } catch { return { skip: 'skip: bad chain name' }; }
+    if (chainKey === 'zetaphy' && parseFeatureTarget(job.target)) {
+      // a feature job (settles a ProvenVerdicts contest): keccak256 of the token's zfeat/1 features, from its code
+      let call = featureCall;
+      if (!call && zetaphyChain) { const rpc = createRpc(zetaphyChain.rpcs, zetaphyChain.id); call = (m, p) => rpc.call(m, p); }
+      if (!call) return { skip: 'skip: no ZETAPHY RPC for a feature job' };
+      const { verdict, features } = await featureVerdict(call, job.target);
+      return { verdict, report: { featureJob: true, profile: 'zfeat/1', codeHash: features.codeHash, score: features.score }, chainKey, featureJob: true };
+    }
     const base = readerFor(chainKey);
     if (!base) return { skip: `skip: chain ${chainKey} not supported here` };
     const opts = simSeed ? { ...base, simSeed } : base;
@@ -196,7 +208,7 @@ export function createWorker({ jobs, me, stateFile, zetaphyChain, read = readCon
       throw e;
     }
     // Advisory add-ons (an LLM review) see the report only after the commit is in.
-    if (onReport) { try { onReport({ id, chain: v.chainKey, target: job.target, report: v.report, verdict: v.verdict, round: second ? 2 : 1 }); } catch { /* advisory */ } }
+    if (onReport && !v.featureJob) { try { onReport({ id, chain: v.chainKey, target: job.target, report: v.report, verdict: v.verdict, round: second ? 2 : 1 }); } catch { /* advisory */ } }
     return `${second ? 'committed in round 2 (challenge)' : 'committed'} (level ${v.report.analysis?.level}, ${now - (second ? job.chStart : job.created)}s after ${second ? 'the challenge' : 'request'})`;
   }
 

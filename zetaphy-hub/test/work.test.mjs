@@ -112,3 +112,32 @@ test('dist/ ships the useful-work page, its worker, the bounty files and the EVM
   // the worker imports Neuro from dist's ./neuro/src/
   assert.match(readFileSync(join(HERE, 'work-worker.js'), 'utf8'), /from '\.\/neuro\/src\/reader\.js'/);
 });
+
+test('training work (train-core.js, train-worker.js): words in every language, shipped in dist/, CSP-safe, deterministic', async () => {
+  const { practiceJob, dexp } = await import('../train-core.js');
+  for (const l of LANG_CODES) {
+    const t = WORK[l].train;
+    assert.equal(t.how.length, 4, `${l}: 4 steps`);
+    for (const [key, ph] of [['training', '{n}'], ['training', '{m}'], ['checking', '{n}'], ['done', '{s}'], ['done', '{n}'], ['done', '{c}']]) assert.ok(t[key].includes(ph), `${l}.train.${key} keeps ${ph}`);
+    assert.match(t.note, /TrainingMarket/);
+    if (l !== 'en') assert.notEqual(t.intro, WORK.en.train.intro, `${l}: translated`);
+  }
+  const out = build();
+  for (const f of ['train-core.js', 'train-worker.js']) {
+    assert.ok(existsSync(join(out, f)), f);
+    assert.doesNotMatch(readFileSync(join(HERE, f), 'utf8'), /\beval\(|new Function\(|WebAssembly|importScripts/, f);
+  }
+  // the worker imports only same-origin modules that dist/ has
+  const imports = [...readFileSync(join(HERE, 'train-worker.js'), 'utf8').matchAll(/from '(\.[^']+)'/g)].map((m) => m[1]);
+  assert.deepEqual(imports, ['./neuro/src/keccak.js', './train-core.js']);
+  for (const f of imports) assert.ok(existsSync(join(out, f)), f);
+  assert.deepEqual([...readFileSync(join(HERE, 'train-core.js'), 'utf8').matchAll(/from '([^']+)'/g)].map((m) => m[1]), ['./work-core.js']);
+  // the practice job: same root twice, its spot-checks pass, and it improves the held-out AUC
+  const a = practiceJob(keccak256, {});
+  const b = practiceJob(keccak256, {});
+  assert.equal(a.root, b.root);
+  assert.equal(a.verified.length, 2);
+  assert.ok(a.verified.every((v) => v.ok));
+  assert.ok(a.metrics.candAuc > a.metrics.baseAuc);
+  assert.ok(Math.abs(dexp(1) - Math.E) < 1e-15);
+});

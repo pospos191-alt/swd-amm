@@ -22,6 +22,8 @@
 | 1 สัญญา = 1 ตัวตน (ERC-8004) + ข้อความข้ามเชนที่มีลายเซ็น | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: ข้อความจาก Neuro ตัวอื่นเป็นข้อมูล ไม่ใช่คำสั่ง |
 | 5 · ต้านควอนตัม | precompile ML-DSA (FIPS 204) ในเชน + `QuantumWallet` + `zetaphy pq` + บัญชี PQ แท้ (`zetaphy pq native`) |
 | อนาคต · งานที่มีประโยชน์ (ต้นแบบ ยังไม่ deploy) | `UsefulWork` (งานสแกนในเบราว์เซอร์: ตราประทับ PoW, commit-reveal 2 ใน 3, นกขมิ้น) + `WorkerReputation` (แบบ ERC-8004) + `BugBounty` (fuzzing ในเบราว์เซอร์ รันเนอร์ตรวจ; `VulnerableVault` ตั้งใจให้มีช่องโหว่) + `UsefulIssuance` (ส่วนแบ่งจาก RewardVault หลัง timelock สำหรับงานที่ผ่านการตรวจ) + `zetaphy work` / `zetaphy bounty`: [docs/future/useful-work.th.md](../docs/future/useful-work.th.md) |
+| อนาคต · mempool เข้ารหัสแบบ threshold ที่ทนควอนตัม (ต้นแบบงานวิจัย ยังไม่อยู่ในเชน) | `src/encmempool/` (ซองเข้ารหัส X-Wing = ML-KEM-768 + X25519, กุญแจต่อความสูงแบ่งด้วย Shamir t-of-n, ปล่อยส่วนแบ่งที่เซ็น ML-DSA-44 หลังล็อกลำดับแล้ว) + `scripts/encmempool-sim.js` (จำลอง sandwich: mempool ปกติเทียบกับแบบเข้ารหัส, การสมรู้ร่วมคิด, การกักส่วนแบ่ง) + `scripts/encmempool-bench.js`: [docs/future/encrypted-mempool.th.md](../docs/future/encrypted-mempool.th.md) |
+| อนาคต · งานที่มีประโยชน์สำหรับการฝึก AI (ต้นแบบ ยังไม่ deploy) | `TrainingMarket` + `TrainingPool`: เครือข่ายช่วยฝึก Neuro ฝึกเป็น checkpoint ด้วย JS ที่ได้ผลตรงกันทุกบิต (`zetaphy-hub/train-core.js`) ผู้ตรวจที่วางเงินค้ำสุ่มรันซ้ำ (โกงโดนยึดเงินค้ำ) จ่ายเงินเฉพาะเมื่อการประเมินบนข้อมูลกันไว้ด้วย seed ที่เปิดทีหลังแสดงว่าดีขึ้น เวอร์ชันใหม่ผ่าน `ModelEpochs` (timelock) `node src/trainwork/cli.js simulate`: [docs/future/useful-work-training.th.md](../docs/future/useful-work-training.th.md) |
 | ความปลอดภัยข้ามเชน (testnet, docs/future/crosschain-assist.th.md) | `NeuroOracleSender` + `NeuroOracle`: ส่งต่อธงของ Neuro ไปยัง EVM testnet อื่นผ่าน Hyperlane (`zetaphy immune push/coverage`, `scripts/neuro-oracle.js`) และไป Osmosis ผ่าน IBC (`cosmwasm/neuro-oracle-osmo`) · `NeuroAttest`: ใบรับรอง "Neuro-checked" (`zetaphy certify`) · `NeuroAnchor` + `zetaphy attest-pq`: ไฟล์รายงานที่ลงนามด้วย ML-DSA-44 · `HackInsurance`: ต้นแบบประกันการถูกแฮ็กแบบพาราเมตริก (testnet เท่านั้น) พร้อม replay นิติวิทยาแบบกำหนดได้ (`zetaphy insurance replay/vote`, anvil 1.2.3) |
 
 **ยังไม่มีเงินจริงในขั้นไหนเลย:** ขั้น 3 ขึ้นไปบน mainnet ต้องผ่านประตูในหัวข้อ "ก่อนเงินจริง" ท้ายไฟล์ก่อน
@@ -1080,6 +1082,34 @@ launch tool (`zetaphy-launch`) ทำทั้งหมดนี้ให้ แ
 `ZETAPHY_RPC=… KEYFILE=… node scripts/offline-deploy.js [--router 0x…]` deploy ทั้งสองตัว (เทสต์เน็ตเท่านั้น) และเขียน
 `deployments/offline-77390.json` ให้ฮับอ่าน ส่วน `… offline-deploy.js check` อ่านกลับมาตรวจ เทสต์ใน `test/offline.test.js`
 การออกแบบ ภัยที่คิดไว้ และข้อจำกัด: [docs/future/offline-trading.th.md](../docs/future/offline-trading.th.md)
+
+## ไลต์ไคลเอนต์ STARK (ต้นแบบ)
+
+`src/starklc/`: STARK แบบใช้แฮช (SHA-256, FRI) พิสูจน์ว่าผู้ลงนามที่มีพลังถึงเกณฑ์ของชุดผู้ตรวจสอบที่ผูกมัดด้วย Merkle
+ได้ลงนามบล็อกแล้ว (บิตแมปผู้ลงนาม ผลรวมพลัง กฎของเชน 3S > 2T − 3U และการผูกมัดใบรับรอง) โดยลายเซ็น ML-DSA-44
+เปิดเผยครบ สุ่มตรวจ หรือเชื่อผู้สร้าง (ระบุไว้ในหลักฐานแต่ละชิ้น) และส่งต่อชุดผู้ตรวจสอบข้ามยุคจากราก genesis ที่ปักหมุดไว้
+ตรวจในเบราว์เซอร์ได้ที่ `zetaphy-explorer/lightclient.html` ทดสอบใน `test/starklc.test.js` เบนช์มาร์กด้วย `npm run bench:starklc`
+อะไรพิสูจน์แล้ว อะไรต้องเชื่อ ระดับความปลอดภัย ผลวัด และแผนตรวจ ML-DSA ในวงจรและสะพานข้ามเชน:
+[docs/future/stark-light-client.th.md](../docs/future/stark-light-client.th.md)
+
+### สะพานแบบไม่ต้องเชื่อใจใคร (ต้นแบบ)
+
+ZETAPHY → Ethereum โดยไม่ต้องมี multisig: `contracts/StarkVerifier.sol` ตรวจ STARK บนเชน (ราว 1.4–3 M แก๊สในโหมด none และ 2–6 M
+เมื่อเปิดเผยลายเซ็น สำหรับ n ≤ 21), `StarkLightClient.sol` เก็บ header และ app hash ที่สิ้นสุดแล้ว (ลายเซ็นโต้แย้งได้ในหน้าต่างเวลา หรือตรวจทันที),
+`ZetaphyOutbox.sol` ผูกมัดข้อความขาออกไว้ใน storage slot 0 และ `ZetaphyBridgeInbox.sol` ปล่อยโทเคนเมื่อมีหลักฐาน IAVL + multistore + outbox
+(ราว 0.21 M แก๊ส) พร้อมกันส่งซ้ำ จำกัดยอดรายวัน และปุ่มหยุด `BtcLightClient.sol`: header และ SPV ของ Bitcoin บน ZETAPHY ทดสอบด้วย header
+mainnet จริง ทดสอบใน `test/starkbridge.test.js` และ `test/btclc.test.js` ความเชื่อใจแต่ละโหมด ค่าแก๊ส และทางเลือกของ Bitcoin:
+[docs/future/trustless-bridge.th.md](../docs/future/trustless-bridge.th.md)
+
+## ระบบซ่อมตัวเอง: ตัวตัดวงจรแบบสมัครใจ (ต้นแบบบนเทสต์เน็ต)
+
+`contracts/CircuitBreaker.sol` กับ `contracts/CircuitBreakable.sol`: โปรโตคอลลงทะเบียนนโยบายของตัวเอง
+(ฟังก์ชันที่หยุดได้ เพดานเงินไหลออกต่อช่วงเวลา เวลาหยุดนานสุด องค์ประชุม และธรรมาภิบาลของตัวเอง)
+การตัดวงจรต้องมีผู้รัน Neuro ที่วางเงินค้ำประกัน k จาก n คนลงนามหลักฐานเดียวกัน หรือเงินไหลออกเกินเพดานบนเชน
+หยุดเฉพาะฟังก์ชันที่ระบุไว้และหมดอายุเองเสมอ ถ้า timelock ตัดสินว่าตัดผิด ผู้ลงนามถูกริบเงินค้ำประกันและโปรโตคอลได้รับการชดเชย
+ไม่มีกุญแจแอดมิน ตัวตรวจจับและลูปรวบรวมลายเซ็น k จาก n อยู่ใน `src/selfheal/`
+`node scripts/selfheal-demo.js [blocks] [seed]` จำลองการดูดเงินจาก vault ที่มีช่องโหว่ เทียบปิดกับเปิดระบบ เทสต์ใน `test/selfheal*.test.js`
+ยังไม่ได้ deploy การออกแบบ ภัยที่คิดไว้ และข้อจำกัด: [docs/future/self-healing.th.md](../docs/future/self-healing.th.md)
 
 ## ทดสอบ
 

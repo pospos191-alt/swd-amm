@@ -588,6 +588,7 @@ async function pageAddress(view, param) {
       .flatMap((x) => [anyAddressLower(x.from), anyAddressLower(x.to), ...x.addresses]).filter(Boolean)) }),
     isContract ? contractCard(ui(), a.hex) : null,
     threatCard(a, acc.code),
+    isContract ? provenCard(a) : null,
     card(t('tokenBalances'), slot(tokenBalances(a, st.height), (x) => x)),
     addressHistory(ctx(), a, st.height), // full history from the node's tx index (src/history.js)
   ]);
@@ -640,6 +641,34 @@ function threatCard(a, code) {
 }
 const registryLine = () => h('p', { class: 'small dim' }, 'ThreatRegistry ', addrLink(cfg.threatRegistry));
 
+// Proven Neuro verdict (ProvenVerdicts): the Groth16 proof of the pinned on-chain model's score is checked HERE, in
+// pure JS (src/zkverdict-core.js + vendor/zkverify.js, copies of the hub's), with the committed verifier's key;
+// the posted features are re-run on the model bytes read from NeuroScore. No card when no address is configured.
+let zkLoad = null;
+const loadZk = () => (zkLoad ??= Promise.all([import('./zkverdict-core.js'), import('../vendor/zkverify.js'),
+  fetch(new URL('./zkverdict-vkey.json', import.meta.url)).then((r) => r.json())]).catch((e) => { zkLoad = null; throw e; }));
+function provenCard(a) {
+  if (!cfg.provenVerdicts) return null;
+  const body = h('div', { 'data-proven': 'checking' }, note(t('pvChecking')));
+  const box = card(t('pvTitle'), body);
+  loadZk().then(([core, lib, vk]) => core.checkProvenVerdict((m, p) => chain.evmCall(m, p), { contract: cfg.provenVerdicts, token: a.lower, lib, vk }))
+    .catch(() => ({ state: 'error' }))
+    .then((r) => {
+      body.dataset.proven = r.state;
+      const pct = (p) => `${(p * 100).toFixed(p < 0.01 ? 2 : 1)}%`;
+      const main = {
+        proven: () => h('p', null, badge(t('pvTitle'), 'ok'), ' ', t('pvProven', { id: String(r.id), model: r.modelId ?? r.modelHash, p: pct(r.probability), ms: String(Math.round(r.ms)) })),
+        unproven: () => note(t('pvUnproven'), 'warn'),
+        none: () => note(t('pvNone')),
+        overturned: () => note(t('pvOverturned'), 'warn'),
+        invalid: () => note(t('pvInvalid', { why: safeText(r.problem ?? '', 160) }), 'warn'),
+      }[r.state]?.() ?? note(t('pvError'), 'warn');
+      fill(body, main, r.state === 'proven' && r.rehearsal ? note(t('pvRehearsal'), 'warn') : null, note(t('pvNote'), 'info'),
+        h('p', { class: 'small dim' }, 'ProvenVerdicts ', addrLink(cfg.provenVerdicts)));
+    });
+  return box;
+}
+
 // -- token --
 
 async function pageToken(view, param) {
@@ -668,6 +697,7 @@ async function pageToken(view, param) {
     riskSummaryCard(ui(), a, { isToken: true, counterparties: chain.tokenLogs(a.hex, Math.max(1, Number(st.height) - cfg.scanBlocks + 1), Number(st.height), TOPICS)
       .then((logs) => logs.map(decodeTransfer).filter(Boolean).flatMap((x) => [x.from, x.to]).filter((x) => !/^0x0{40}$/.test(x))) }),
     threatCard(a, acc.code),
+    isContract ? provenCard(a) : null,
     card(t('recentTransfers', { n: '' }).trim(), slot((async () => {
       const from = Math.max(1, Number(st.height) - cfg.scanBlocks + 1);
       const logs = await chain.tokenLogs(a.hex, from, Number(st.height), TOPICS);
@@ -815,7 +845,7 @@ function setup(c) {
       chain = chainApi(api);
     } catch { ready = false; }
   }
-  setRisk(ready ? createRisk({ batch: (calls) => api.evmBatch(calls), single: (m, p) => api.evm(m, p, TTL.short), registry: cfg.threatRegistry, chainId: cfg.evmChainId }) : null);
+  setRisk(ready ? createRisk({ batch: (calls) => api.evmBatch(calls), single: (m, p) => api.evm(m, p, TTL.short), registry: cfg.threatRegistry, chainId: cfg.evmChainId, immune: cfg.immuneFeed }) : null);
   setAudit(ready && cfg.auditCertificate ? createAudit({ single: (m, p) => api.evm(m, p, TTL.short), contract: cfg.auditCertificate, chainId: cfg.evmChainId }) : null);
   validatorCache = { at: 0, rows: null, height: null, promise: null };
   tokenCache.clear();

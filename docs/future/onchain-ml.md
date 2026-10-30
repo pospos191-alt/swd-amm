@@ -233,7 +233,7 @@ with a forged key** (an independent setup of the same circuit), each valid under
   private witness with a commitment would avoid that at a much larger circuit; not attempted.
 - **Same trust gap as NeuroScore**: the proof shows the model was applied correctly to a committed vector, not that the
   vector is the token's real features.
-- Not wired into `NeuroScore` or the router yet: `verifyModelProof` is the hook a scorer contract would call.
+- Not wired into `NeuroScore` or the router: `verifyModelProof` is called by `ProvenVerdicts` (proven runner verdicts with a features binding and slashing, checked in the browser too): see [proven-verdicts.md](proven-verdicts.md).
 - Browser **proving** was not measured (only browser contributing).
 
 ## 6. Running the ceremony with N participants (owner's procedure)

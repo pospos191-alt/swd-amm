@@ -22,6 +22,8 @@
 | 1 contract = 1 identity (ERC-8004) + signed cross-chain messages | `NeuroIdentity` + `NeuroValidation` + `zetaphy identity` / `zetaphy msg`: messages from other Neuro instances are data, not commands |
 | 5 · Quantum resistance | ML-DSA precompile (FIPS 204) in the chain + `QuantumWallet` + `zetaphy pq` + true PQ accounts (`zetaphy pq native`) |
 | Future · Useful work (prototype, not deployed) | `UsefulWork` (browser scan jobs: PoW stamp, 2-of-3 commit-reveal, canaries) + `WorkerReputation` (ERC-8004-style) + `BugBounty` (browser fuzzing, runner-verified; `VulnerableVault` is deliberately vulnerable) + `UsefulIssuance` (a timelocked RewardVault share for verified work) + `zetaphy work` / `zetaphy bounty`: [docs/future/useful-work.md](../docs/future/useful-work.md) |
+| Future · PQ threshold-encrypted mempool (research prototype, not in the chain) | `src/encmempool/` (X-Wing = ML-KEM-768 + X25519 envelopes, Shamir t-of-n per-height keys, ML-DSA-44 signed share release after the order is committed) + `scripts/encmempool-sim.js` (sandwich MEV: plaintext vs encrypted, collusion, withholding) + `scripts/encmempool-bench.js`: [docs/future/encrypted-mempool.md](../docs/future/encrypted-mempool.md) |
+| Future · Useful work for AI training (prototype, not deployed) | `TrainingMarket` + `TrainingPool`: the network trains Neuro. Bit-reproducible JS training in checkpoints (`zetaphy-hub/train-core.js`), random spot-check re-runs by staked verifiers (slashing), payment only when a held-out evaluation with a late-revealed seed shows a gain; new versions via `ModelEpochs` (timelock). `node src/trainwork/cli.js simulate`: [docs/future/useful-work-training.md](../docs/future/useful-work-training.md) |
 | Cross-chain security (testnet, docs/future/crosschain-assist.md) | `NeuroOracleSender` + `NeuroOracle`: Neuro's flags mirrored to other EVM testnets over Hyperlane (`zetaphy immune push/coverage`, `scripts/neuro-oracle.js`) and to Osmosis over IBC (`cosmwasm/neuro-oracle-osmo`) · `NeuroAttest`: "Neuro-checked" certificates (`zetaphy certify`) · `NeuroAnchor` + `zetaphy attest-pq`: ML-DSA-44-signed report archives · `HackInsurance`: parametric hack insurance prototype (testnet only), with the deterministic forensic replay (`zetaphy insurance replay/vote`, anvil 1.2.3) |
 
 **No stage holds real money yet:** stage 3 and above on mainnet must first pass the gates in the "Before real money" section at the end of this file
@@ -1079,6 +1081,36 @@ Swap router for a relayer fee (nonce bitmap, deadline, all-or-nothing). Neither 
 `ZETAPHY_RPC=… KEYFILE=… node scripts/offline-deploy.js [--router 0x…]` deploys both (testnet only) and writes
 `deployments/offline-77390.json`, which the hub reads; `… offline-deploy.js check` reads it back. Tests in `test/offline.test.js`.
 Design, threat model and limits: [docs/future/offline-trading.md](../docs/future/offline-trading.md).
+
+## STARK light client (prototype)
+
+`src/starklc/`: a hash-based (SHA-256, FRI) STARK proving that signers holding the required power of a Merkle-committed
+validator set signed a block (signer bitmap, power sums, the chain rule 3S > 2T − 3U, certificate commitment), with
+ML-DSA-44 signatures revealed in full, sampled, or trusted (stated per proof), and validator-set epochs chained from a
+pinned genesis root. Verified in the browser on `zetaphy-explorer/lightclient.html`. Tests in `test/starklc.test.js`,
+benchmarks with `npm run bench:starklc`.
+What is proven vs trusted, security bits, benchmarks, in-circuit ML-DSA and bridge roadmap:
+[docs/future/stark-light-client.md](../docs/future/stark-light-client.md).
+
+### Trustless bridge (prototype)
+
+ZETAPHY → Ethereum without a multisig: `contracts/StarkVerifier.sol` verifies the STARK on chain (≈ 1.4–3 M gas in mode
+none, 2–6 M with revealed signatures for n ≤ 21), `StarkLightClient.sol` keeps finalized headers and app hashes (signatures
+disputable during a window, or checked at once), `ZetaphyOutbox.sol` commits outgoing messages in storage slot 0 and
+`ZetaphyBridgeInbox.sol` releases tokens on IAVL + multistore + outbox proofs (≈ 0.21 M gas) with replay protection, a daily
+limit and a pause. `BtcLightClient.sol`: Bitcoin headers and SPV on ZETAPHY, tested with real mainnet headers. Tests in
+`test/starkbridge.test.js` and `test/btclc.test.js`; trust model per mode, gas and Bitcoin options:
+[docs/future/trustless-bridge.md](../docs/future/trustless-bridge.md).
+
+## Self-healing: an opt-in circuit breaker (testnet prototype)
+
+`contracts/CircuitBreaker.sol` + `contracts/CircuitBreakable.sol`: a protocol registers a policy (pausable selectors,
+outflow caps per window, maximum pause, quorum, its own governance). A trip needs k of n bonded Neuro runners signing
+the same evidence, or the on-chain outflow cap breaking. It pauses only the listed selectors and always expires.
+A false trip, once the timelock judges it, slashes the signers and compensates the protocol. There is no admin key.
+`src/selfheal/` holds the detectors and the k-of-n detector loop. `node scripts/selfheal-demo.js [blocks] [seed]`
+drains a vulnerable vault with self-healing off and on. Tests in `test/selfheal*.test.js`.
+Not deployed. Design, threat model and limits: [docs/future/self-healing.md](../docs/future/self-healing.md).
 
 ## Testing
 

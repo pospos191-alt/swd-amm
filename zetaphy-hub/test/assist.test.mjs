@@ -8,8 +8,8 @@ import { readFileSync } from 'node:fs';
 import { ASSIST } from '../assist-i18n.js';
 import { LANG_CODES } from '../i18n.js';
 import { EVM_SELECTORS, TOPIC, SEL_TIMESTAMP, moduleOf, paramDiff, readMessage, describeCall, reviewProposals, reviewTimelock, readScheduled } from '../govassist.js';
-import { SEL, readSnapshot, roundsOfData, readRounds, currentFlags, coverageOf, pct, measureCoverage, readBadge, badgeData, browserVerify } from '../assist.js';
-import { immuneMirrors, hubConfig } from '../build.mjs';
+import { SEL, readSnapshot, roundsOfData, readRounds, currentFlags, coverageOf, pct, measureCoverage, readBadge, badgeData, browserVerify, IMMUNE_SEL, isFlaggedData, readFlag, immuneCheck, immuneWarnings, immuneDashboard } from '../assist.js';
+import { immuneMirrors, immuneNetwork, hubConfig } from '../build.mjs';
 import { buildArchive } from '../pqattest.js';
 
 const shape = (v, at = '') => (v && typeof v === 'object' ? Object.entries(v).flatMap(([k, x]) => shape(x, `${at}/${k}`)) : [`${at}:${typeof v}`]);
@@ -172,4 +172,60 @@ test('PQ attestation: anchor(bytes32) call data, and the archive with its anchor
   const a = withAnchor({ format: 'f', payload: { x: 1 } }, { contract: '0x' + '11'.repeat(20), hash: h, time: 5n });
   assert.deepEqual(a.anchor, { chainId: 77390, contract: '0x' + '11'.repeat(20), hash: h, time: 5 });
   assert.deepEqual(a.payload, { x: 1 });
+});
+
+// ---- the immune network (docs/future/immune-network.md): pre-sign check, dashboard, hub-config
+
+test('immune: selectors, isFlagged call data and answer; registry first, the feed when there is no registry', async () => {
+  const iface = new Interface(['function isFlagged(uint256 chainId, address subject) view returns (bool, uint8, uint64, bytes32)', 'function live() view returns (bool)']);
+  assert.equal(IMMUNE_SEL.isFlagged, id('isFlagged(uint256,address)').slice(0, 10));
+  assert.equal(IMMUNE_SEL.live, id('live()').slice(0, 10));
+  const who = '0x' + 'ab'.repeat(20);
+  assert.equal(isFlaggedData(77390, who), iface.encodeFunctionData('isFlagged', [77390, who]));
+  const ans = iface.encodeFunctionResult('isFlagged', [true, 4, 1_800_000_000, '0x' + '11'.repeat(32)]);
+  assert.deepEqual(readFlag(ans), { flagged: true, severity: 4, since: 1_800_000_000, evidenceHash: '0x' + '11'.repeat(32) });
+  const send = async (m, p) => (p[0].data === isFlaggedData(77390, who) ? { result: ans } : { error: { message: 'x' } });
+  assert.deepEqual(await immuneCheck({ send, registry: '0x' + '99'.repeat(20), address: who }), { flagged: true, severity: 4, since: 1_800_000_000, evidenceHash: '0x' + '11'.repeat(32), kind: null, source: 'registry' });
+  const feed = { items: [{ address: who, chainId: 0, flagged: true, severity: 3, kind: 3, since: 1, expiresAt: 2_000_000_000 }, { address: '0x' + 'cd'.repeat(20), chainId: 56, flagged: true, severity: 4, kind: 2, since: 1, expiresAt: 2_000_000_000 }] };
+  assert.deepEqual(await immuneCheck({ send, registry: null, feed, address: who, now: 1_900_000_000 }), { flagged: true, severity: 3, kind: 'drainer', since: 1, source: 'feed' });
+  assert.equal((await immuneCheck({ send, feed, address: '0x' + 'cd'.repeat(20), now: 1_900_000_000 })).flagged, false, 'flagged on another chain only');
+  assert.equal((await immuneCheck({ send, feed, address: who, now: 2_000_000_001 })).flagged, false, 'expired');
+});
+
+test('immune: the pre-sign warning in every language; nothing when clean or unreadable, never a long wait', async () => {
+  const who = '0x' + 'ab'.repeat(20);
+  const feed = { stats: {}, items: [{ address: who, chainId: 77390, flagged: true, severity: 4, kind: 2, since: 1, expiresAt: 4_000_000_000 }] };
+  const fetchImpl = async () => ({ ok: true, json: async () => feed });
+  const net = { registry: null, feedUrl: 'https://feed.example/' };
+  for (const l of LANG_CODES) {
+    const [w] = await immuneWarnings({ lang: l, url: 'https://rpc.example', to: who, net, fetchImpl });
+    assert.ok(w && w.includes(ASSIST[l].inSev[4]), l);
+  }
+  assert.deepEqual(await immuneWarnings({ lang: 'en', url: 'https://rpc.example', to: '0x' + '01'.repeat(20), net, fetchImpl }), []);
+  assert.deepEqual(await immuneWarnings({ lang: 'en', url: 'https://rpc.example', to: who, net: null, fetchImpl }), []);
+  const slow = () => new Promise(() => {});
+  const t0 = Date.now();
+  assert.deepEqual(await immuneWarnings({ lang: 'en', url: 'https://rpc.example', to: who, net, fetchImpl: slow, ms: 50 }), []);
+  assert.ok(Date.now() - t0 < 1000);
+});
+
+test('immune: dashboard numbers (mirrors live, 24 h flags, measured or simulated latency) and the hub-config', async () => {
+  const live = new Interface(['function live() view returns (bool)']);
+  const chainSend = (m) => async () => (m.name === 'down' ? { error: { message: 'x' } } : { result: live.encodeFunctionResult('live', [m.name === 'base']) });
+  const feed = { stats: { flagged24h: 3, coverage: { medianSeconds: 47 } }, items: [] };
+  const net = { registry: '0x' + '11'.repeat(20), feedUrl: 'https://feed.example', chains: 19, simMedian: 54, mirrors: [{ name: 'base', mirror: '0x' + '22'.repeat(20) }, { name: 'arb', mirror: '0x' + '33'.repeat(20) }, { name: 'down', mirror: '0x' + '44'.repeat(20) }] };
+  const d = await immuneDashboard({ net, chainSend, fetchImpl: async () => ({ ok: true, json: async () => feed }) });
+  assert.deepEqual(d, { deployed: true, chains: 19, mirrorsTotal: 3, mirrorsLive: 1, flags24h: 3, latency: { seconds: 47, measured: true }, feedUrl: 'https://feed.example', feedOk: true });
+  const d2 = await immuneDashboard({ net: { ...net, registry: null, mirrors: [] }, chainSend, fetchImpl: async () => ({ ok: false }) });
+  assert.deepEqual([d2.deployed, d2.flags24h, d2.latency], [false, null, { seconds: 54, measured: false }]);
+  for (const l of LANG_CODES) assert.match(ASSIST[l].inLatencySim(54), /54/);
+  const table = JSON.parse(readFileSync(new URL('../../zetaphy-chain/hyperlane/saphan-chains.json', import.meta.url), 'utf8'));
+  const read = (files) => (f) => files[f] ?? null;
+  const n = immuneNetwork(read({ 'zetaphy-chain/hyperlane/saphan-chains.json': table, 'zetaphy-chain/hyperlane/immune-network.json': { registry: '0x' + '11'.repeat(20), feed: { url: 'https://cdn.example/feed/' },
+    mirrors: { basesepolia: { mirror: '0x' + '22'.repeat(20) }, nochain: { mirror: '0x' + '33'.repeat(20) }, sepolia: { mirror: 'javascript:x' } } } }));
+  assert.equal(n.mirrors.length, 1);
+  assert.equal(n.feedUrl, 'https://cdn.example/feed/');
+  assert.ok(n.chains >= 15 && n.simMedian > 10);
+  assert.equal(immuneNetwork(read({ 'zetaphy-chain/hyperlane/immune-network.json': { feed: { url: 'http://x' } } })).feedUrl, null);
+  assert.ok('immuneNet' in hubConfig({ node: '' }));
 });

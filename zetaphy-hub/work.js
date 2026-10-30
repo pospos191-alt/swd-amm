@@ -6,7 +6,11 @@
 //   - bug hunting (BugBounty): a coverage-guided fuzz of a bounty's test contract in an in-page EVM
 //     (vendor/evm.js, fuzz-core.js) against the spec's invariants; a finding is committed sealed,
 //     revealed one block later, and paid after runners replay it. Each finding can be saved as a
-//     reproducer (JSON: the steps, the seed, a per-step trace; `zetaphy work verify-finding` replays it).
+//     reproducer (JSON: the steps, the seed, a per-step trace; `zetaphy work verify-finding` replays it);
+//   - training work (TrainingMarket, docs/future/useful-work-training.md): a practice training job in a Web
+//     Worker (train-worker.js, train-core.js): grows Neuro's trees on one data shard in checkpoints, re-runs
+//     two of them as a spot-checking verifier would, and measures the candidate on held-out rows. Practice only
+//     here (nothing sent, nothing paid): paid rounds run through the runners (zetaphy-network/src/trainwork).
 // The addresses come from hub-config.json (build.mjs: the launch state + zetaphy-network/deployments/
 // useful-work-77390.json written by `zetaphy deploy-useful-work`). Not there yet: both run as practice
 // (nothing sent, nothing paid). Deployed but paused (the deploy default, until a timelock vote opens
@@ -102,7 +106,18 @@ export function renderWork(host, ctx) {
           el('button', { type: 'button', class: 'btn ghost', id: 'wk-repro', hidden: true, text: L.saveRepro, onclick: () => saveRepro() })),
         el('p', { class: 'msg', id: 'wk-hunt-msg', role: 'status', 'aria-live': 'polite' }),
         el('ul', { class: 'small wk-kinds', id: 'wk-kinds', hidden: true }),
-        el('pre', { class: 'mono small wk-finding', id: 'wk-finding', hidden: true }))));
+        el('pre', { class: 'mono small wk-finding', id: 'wk-finding', hidden: true })),
+      el('div', { class: 'card wk-card', id: 'wk-train' },
+        el('h2', { text: L.train.h }),
+        el('p', { class: 'small', text: L.train.intro }),
+        el('ol', { class: 'howto small' }, L.train.how.map((t) => el('li', {}, el('p', { text: t })))),
+        el('p', { class: 'small notice', text: L.train.note }),
+        el('table', { class: 'mn-table' }, el('tbody', {},
+          row(L.train.segments, 'wk-tr-seg'), row(L.train.root, 'wk-tr-root', L.train.tipRoot), row(L.train.check, 'wk-tr-check'),
+          row(L.train.auc, 'wk-tr-auc'), row(L.train.recall, 'wk-tr-recall'))),
+        el('div', { class: 'row wrap' },
+          el('button', { type: 'button', class: 'btn', id: 'wk-train-go', text: L.train.go, onclick: () => trainPractice() })),
+        el('p', { class: 'msg', id: 'wk-train-msg', role: 'status', 'aria-live': 'polite' }))));
 
   const showVerdicts = (rows) => $('wk-scan-out')?.replaceChildren(el('table', { class: 'mn-table wk-results' }, el('tbody', {},
     ...rows.flatMap((r) => [
@@ -248,8 +263,9 @@ export function renderWork(host, ctx) {
 
   // ---------------------------------------------------------------- bug hunting
   let hunt = null; // { spec, bountyId, worker, finding }
+  let trainer = null; // the training practice Web Worker while it runs
   // a scan (its button is disabled while it runs) or a hunt (its worker) counts as running work
-  busyTimer = setInterval(() => announce(Boolean(hunt?.worker) || Boolean($('wk-scan-go')?.disabled)), 1000);
+  busyTimer = setInterval(() => announce(Boolean(hunt?.worker) || Boolean(trainer) || Boolean($('wk-scan-go')?.disabled)), 1000);
   async function pickBounty() {
     if (!bb) {
       const text = await (await fetch('bounties/vulnerable-vault.json')).text();
@@ -355,6 +371,39 @@ export function renderWork(host, ctx) {
       b.hidden = true;
     } catch (e) { say('wk-hunt-msg', `${L.failed}: ${e.message}`, 'bad'); }
     b.disabled = false;
+  }
+
+  // ---------------------------------------------------------------- training work (practice)
+  const set = (id, text) => { const n = $(id); if (n) n.textContent = text; };
+  const pct4 = (x) => (Number(x) / 10000).toFixed(4);
+  function trainPractice() {
+    if (trainer) return;
+    const btn = $('wk-train-go');
+    btn.disabled = true;
+    const T = L.train;
+    trainer = new Worker(new URL('./train-worker.js', import.meta.url), { type: 'module' });
+    session().workers.add(trainer);
+    const end = () => { trainer?.terminate(); live?.workers.delete(trainer); trainer = null; if ($('wk-train-go')) $('wk-train-go').disabled = false; };
+    trainer.onmessage = ({ data: d }) => {
+      if (d.phase === 'base') say('wk-train-msg', T.base);
+      else if (d.phase === 'train') { say('wk-train-msg', fill(T.training, { n: d.segment, m: d.of })); set('wk-tr-seg', `${d.segment} / ${d.of}`); }
+      else if (d.phase === 'check') say('wk-train-msg', fill(T.checking, { n: d.segment }));
+      else if (d.phase === 'eval') say('wk-train-msg', T.evaluating);
+      else if (d.done) {
+        const r = d.done;
+        const ok = r.verified.every((v) => v.ok);
+        set('wk-tr-seg', `${r.segments} / ${r.segments} · ${r.rows}`);
+        const rootEl = $('wk-tr-root');
+        if (rootEl) { rootEl.textContent = ctx.short(r.root, 10, 8); rootEl.dataset.tip = r.root; }
+        set('wk-tr-check', `${r.verified.map((v) => `#${v.segment + 1}`).join(', ')}: ${ok ? T.ok : T.bad}`);
+        set('wk-tr-auc', `${pct4(r.metrics.baseAuc)} → ${pct4(r.metrics.candAuc)}`);
+        set('wk-tr-recall', `${pct4(r.metrics.baseRecall)} → ${pct4(r.metrics.candRecall)}`);
+        say('wk-train-msg', fill(T.done, { s: (r.ms / 1000).toFixed(1), n: r.segments, c: ok ? T.ok : T.bad }), ok ? 'ok' : 'bad');
+        end();
+      } else if (d.error) { say('wk-train-msg', `${L.failed}: ${d.error}`, 'bad'); end(); }
+    };
+    trainer.onerror = (e) => { say('wk-train-msg', `${L.failed}: ${e.message ?? 'worker'}`, 'bad'); end(); };
+    trainer.postMessage({ train: { seed: 'practice', checks: 2 } });
   }
 
   // deployed but still paused (the deploy default): practice until governance opens it

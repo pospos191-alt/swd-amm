@@ -6,11 +6,14 @@
 //     kept here and cashed when back online.
 //   - Swap orders (ZetaphyOfflineOrders): signed offline, carried as a QR code / text; anyone relays them online
 //     (checked offline, simulated with eth_call, then sent from the relayer's wallet, which earns the fee).
+//   - Offline cash and Mesh (offline-cash.js, docs/future/offline-cash.md): bonded bearer notes signed over hand to hand
+//     with a post-quantum key, checked offline with a proof of funds; any of these as SMS / LoRa / QR frames.
 // The first visit registers the hub's service worker (sw.js: the static app shell only, never RPC data), so the
 // hub and this tab load with no network. Everything shown goes in with textContent; no inline styles (CSP).
 import { withFallback } from './i18n.js';
 import { OFFLINE } from './offline-i18n.js';
 import * as core from './offline-core.js';
+import { cashCards } from './offline-cash.js';
 
 export const OF = (lang) => withFallback(OFFLINE, lang);
 const STORE = 'zetaphy-offline:v1';
@@ -514,7 +517,8 @@ const page = {
         card('off-write-card', L.writeTitle, L.writeTip, wForm),
         card('off-recv-card', L.recvTitle, L.recvTip, rIn.node, el('div', { class: 'row' }, rBtn), rOut),
         card('off-orders', L.orderTitle, L.orderTip, orders ? null : el('p', { class: 'warnline small', 'data-state': 'not-deployed', text: L.notDeployed }), oForm),
-        card('off-relay', L.relayTitle, L.relayTip, relIn.node, el('div', { class: 'row' }, relBtn), relOut)));
+        card('off-relay', L.relayTitle, L.relayTip, relIn.node, el('div', { class: 'row' }, relBtn), relOut),
+        ...cashCards({ ctx, L, card, field, say, qrSvg, inputBox, fmtDur, nowSec, online, fmtTime: (t) => fmtTime(ctx, t) })));
     drawAll();
     page.refresh(root, ctx);
     if (!root.dataset.netBound) {

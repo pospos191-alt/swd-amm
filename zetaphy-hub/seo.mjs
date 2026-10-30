@@ -37,7 +37,7 @@ export const SITES = {
 
 /** about/ path of a language: English at about/, the others at about/<lang>.html. */
 export const aboutPath = (lang) => (lang === 'en' ? '/about/' : `/about/${lang}.html`);
-export const HUB_PAGES = ['/', ...LANG_CODES.map(aboutPath), '/validators.html', '/forecasts.html'];
+export const HUB_PAGES = ['/', ...LANG_CODES.map(aboutPath), '/validators.html', '/forecasts.html', '/audit.html', '/audits.html'];
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const ld = (o) => JSON.stringify(o).replace(/</g, '\\u003c');

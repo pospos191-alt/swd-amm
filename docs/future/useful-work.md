@@ -20,7 +20,7 @@ RewardVault (500M pool, 10%/yr of the remainder; shares change only after 7 days
    ▼
 UsefulIssuance ── buckets (bps, cap) ──► UsefulWork  (scan jobs)      ──┐ draw() only when work
    │                                 ──► BugBounty   (bug findings)   ──┤ is verified
-   │                                 ──► (future: model evaluation)  ──┘
+   │                                 ──► TrainingMarket (training)   ──┘
    └── overflow (unclaimed share, over-cap) ──► e.g. the PoW faucet account / validators
 
 Browser (hub Mine page → "Useful work")
@@ -278,6 +278,6 @@ canaries revealed from the derived salt; settled). `fuzz.test.js` is described i
   spec's setup); every invariant needs the spec author to name its views (`watch`, `solvency`, `exit`, `tokens`), and
   a `watch` view that legitimately changes would be reported; arrays and tuples only shallowly. Speed: about
   10–25 ms per sequence (the EVM's per-opcode `step` events cost), i.e. a few thousand sequences a minute.
-- **A model-evaluation market** (bucket sink for "model improvements").
+- **A model-evaluation market** (bucket sink for "model improvements"): now `TrainingMarket`, see [useful-work-training.md](useful-work-training.md) (training + spot-checks + held-out evaluation; not deployed).
 - Runner installs (`setup-runner.sh`) now copy the three browser core files; verifying findings also needs the
   EthereumJS EVM (a devDependency of zetaphy-network: `npm i` with dev dependencies).

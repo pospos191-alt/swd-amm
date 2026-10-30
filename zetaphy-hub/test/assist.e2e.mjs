@@ -63,6 +63,9 @@ test('assistant pages: governance flags, immunity (coverage, PQ verifier), the s
     ({ page, errors } = await open(browser, site, '?tab=immune'));
     await page.waitForSelector('#im-cov p');
     assert.match(await page.textContent('#im-cov'), /not deployed/);
+    // the immune network dashboard: planned (no registry yet), simulated latency, the open feed's links
+    await page.waitForSelector('#im-net [data-immune="planned"]');
+    assert.match(await page.textContent('#im-net'), /Chains watched[\s\S]*Mirrors live[\s\S]*0 \/ 0[\s\S]*simulated[\s\S]*rss\.xml/);
     // a quantum-safe archive signed here with the same bundle, then verified in the page; then a tampered copy
     const pq = await import('../../zetaphy-wallet/vendor/pqwallet.js');
     const k = pq.ml_dsa44.keygen(new Uint8Array(32).fill(9));

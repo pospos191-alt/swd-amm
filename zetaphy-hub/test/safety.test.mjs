@@ -60,7 +60,7 @@ test('Ledger ids are kept like any other wallet id', () => {
 });
 
 test('every site serves the same safety / Ledger files as the hub', () => {
-  assert.deepEqual(Object.keys(SHARED).sort(), ['test-ui', 'zetaphy-dex/web/lib', 'zetaphy-explorer/src', 'zetaphy-neuro/web', 'zetaphy-nft/web/lib']);
+  assert.deepEqual(Object.keys(SHARED).sort(), ['test-ui', 'zetaphy-dex/web/lib', 'zetaphy-explorer', 'zetaphy-explorer/src', 'zetaphy-neuro/web', 'zetaphy-nft/web/lib']);
   for (const [from, to] of pairs()) assert.ok(readFileSync(from).equals(readFileSync(to)), `${to} differs: run npm run sync:shared`);
 });
 

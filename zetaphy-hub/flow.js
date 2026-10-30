@@ -92,6 +92,7 @@ export const FLOWS = {
   aichain: { icons: ['cube', 'eye', 'search', 'wallet'], next: ['ai', 'immune', 'gov'] },
   offline: { icons: ['link', 'pen', 'paste', 'coin'], next: ['swap', 'wallet', 'agents'] },
   audit: { icons: ['search', 'lock', 'gavel', 'shield'], next: ['neuro', 'explorer', 'immune'] },
+  quantum: { icons: ['search', 'key', 'lock', 'shield'], next: ['wallet', 'explorer', 'saphan'] },
   dev: { icons: ['terminal', 'link', 'code', 'doc'], next: ['explorer', 'ai'] },
   ai: { icons: ['map', 'check', 'link', 'cube'], next: ['neuro', 'agents', 'aichain'] },
 };

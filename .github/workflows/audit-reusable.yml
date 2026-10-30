@@ -1,0 +1,95 @@
+# ZETAPHY audit as a reusable workflow for ANY repository (docs/future/audit-as-a-service.md). In your repo:
+#
+#   jobs:
+#     zetaphy-audit:
+#       uses: pospos191-alt/swd-amm/.github/workflows/audit-reusable.yml@<full commit sha>
+#       permissions:
+#         contents: read
+#         security-events: write   # SARIF to code scanning (optional)
+#       with:
+#         path: contracts
+#
+# Checks out YOUR repository into src/ (read only, no credentials kept), then runs the composite action
+# .github/actions/zetaphy-audit from THIS repository at exactly the commit you pinned (github.job_workflow_sha).
+# Needs none of ZETAPHY's secrets and none of yours. The free automated tier only: no certificate.
+name: zetaphy-audit (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: Directory of the project to audit (relative to your repository root).
+        type: string
+        default: '.'
+      tier:
+        description: fast or deep.
+        type: string
+        default: fast
+      fail-on:
+        description: critical, high or none.
+        type: string
+        default: high
+      triage:
+        description: Your triage file, relative to `path`.
+        type: string
+        default: audit/triage.yml
+      upload-sarif:
+        type: boolean
+        default: true
+    outputs:
+      status:
+        description: scanned or issues
+        value: ${{ jobs.audit.outputs.status }}
+      critical:
+        value: ${{ jobs.audit.outputs.critical }}
+      high:
+        value: ${{ jobs.audit.outputs.high }}
+      gate:
+        value: ${{ jobs.audit.outputs.gate }}
+
+permissions: {}
+
+jobs:
+  audit:
+    name: ZETAPHY audit (${{ inputs.tier }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: ${{ inputs.tier == 'deep' && 360 || 30 }}
+    permissions:
+      contents: read
+      security-events: write
+    outputs:
+      status: ${{ steps.audit.outputs.status }}
+      critical: ${{ steps.audit.outputs.critical }}
+      high: ${{ steps.audit.outputs.high }}
+      gate: ${{ steps.audit.outputs.gate }}
+    steps:
+      - name: Check out the repository under audit
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          path: src # the pipeline below lives next to it, never inside the audited tree
+          persist-credentials: false
+
+      - name: Check out the ZETAPHY audit pipeline at the pinned commit
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          repository: pospos191-alt/swd-amm
+          ref: ${{ github.job_workflow_sha }}
+          path: .zetaphy-audit-pipeline
+          persist-credentials: false
+          sparse-checkout: |
+            audit
+            zetaphy-hub/aas-core.js
+            zetaphy-hub/audit-core.js
+            zetaphy-hub/work-core.js
+            .github/actions/zetaphy-audit
+          sparse-checkout-cone-mode: false
+
+      - name: Audit
+        id: audit
+        uses: ./.zetaphy-audit-pipeline/.github/actions/zetaphy-audit
+        with:
+          path: src/${{ inputs.path }}
+          tier: ${{ inputs.tier }}
+          fail-on: ${{ inputs.fail-on }}
+          triage: ${{ inputs.triage }}
+          upload-sarif: ${{ inputs.upload-sarif && 'true' || 'false' }}
