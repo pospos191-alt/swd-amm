@@ -32,6 +32,7 @@ contract RewardVaultSymbolic is Test {
     function check_releaseAtMost10PercentPerYear(uint256 bal) public {
         vm.assume(bal <= 1e30);
         vm.deal(address(v), bal);
+        v.release(); // checkpoint: the balance vests from now (coins that bypass receive() wait for one, RV-1)
         uint16[7] memory grid = [uint16(1), 7, 30, 91, 182, 364, 365];
         uint256 t0 = block.timestamp;
         uint256 prev;

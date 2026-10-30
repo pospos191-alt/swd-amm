@@ -241,9 +241,19 @@ interface ICosignCommittee {
 ///             counting native value, ERC-20 transfer amounts and approvals;
 ///             a token without a cap cannot be moved by the agent at all;
 ///           - allow-listed recipients (native sends and ERC-20 transfers) and
-///             contracts (any other call, and approval spenders);
-///             transferFrom, increaseAllowance, setApprovalForAll and permit
-///             are refused outright;
+///             contracts (approval spenders, and contract calls); a contract
+///             call runs only if its (target, selector) pair is allow-listed
+///             too (setAllowedCall): deny by default, so a function that moves
+///             value without passing through transfer/approve (APW-1) cannot
+///             run just because its contract is allowed. Its native value is
+///             capped like any native send;
+///           - transfer-like functions are refused outright and cannot be
+///             allow-listed: transferFrom, increaseAllowance, setApprovalForAll,
+///             permit (EIP-2612, DAI, Permit2), ERC-721/1155 safeTransferFrom and
+///             safeBatchTransferFrom, ERC-777 send/operatorSend/authorizeOperator,
+///             ERC-677/1363 transferAndCall/transferFromAndCall/approveAndCall,
+///             DAI move/pull/push, burn/burnFrom. Only transfer and approve run,
+///             counted against the token's cap;
 ///           - above a per-token threshold ("cosignAbove"), an action either
 ///             waits in a timelock (queue, then executeQueued after `delay`;
 ///             the owner may cancel) or carries co-signatures of the runner
@@ -263,10 +273,6 @@ contract AgentPolicyWallet {
 
     bytes4 private constant TRANSFER = 0xa9059cbb;
     bytes4 private constant APPROVE = 0x095ea7b3;
-    bytes4 private constant TRANSFER_FROM = 0x23b872dd;
-    bytes4 private constant INCREASE_ALLOWANCE = 0x39509351;
-    bytes4 private constant SET_APPROVAL_FOR_ALL = 0xa22cb465;
-    bytes4 private constant PERMIT = 0xd505accf;
     uint256 public constant MAX_DELAY = 30 days;
 
     struct Limit {
@@ -298,6 +304,7 @@ contract AgentPolicyWallet {
     mapping(address => bool) public allowedTarget;
     mapping(address => bool) public allowedRecipient;
     mapping(bytes32 => uint64) public queuedAt; // id -> ready time (0 = none)
+    mapping(address => mapping(bytes4 => bool)) public allowedCall; // target -> selector -> allowed
 
     event AgentAction(address indexed to, uint256 value, bytes4 selector, address token, uint256 amount, bytes32 modelHash, bytes32 promptHash, uint8 path);
     event Queued(bytes32 indexed id, uint256 seq, address to, uint256 value, bytes data, bytes32 modelHash, bytes32 promptHash, uint64 readyAt);
@@ -306,6 +313,7 @@ contract AgentPolicyWallet {
     event Unfrozen();
     event LimitSet(address indexed token, uint256 perPeriod, uint256 cosignAbove);
     event AllowSet(address indexed who, bool target, bool recipient);
+    event CallAllowSet(address indexed target, bytes4 indexed selector, bool allowed);
     event ConfigSet(address agent, address committee, uint256 period, uint256 delay);
     event EmergencyKeysSet(bytes32 pqKeyHash, uint256 passkeyX, uint256 passkeyY, bytes32 rpIdHash);
     event OwnerChanged(address owner);
@@ -314,6 +322,7 @@ contract AgentPolicyWallet {
     error NotAgent();
     error IsFrozen();
     error NotAllowed(address who);
+    error SelectorNotAllowed(address target, bytes4 selector);
     error Forbidden(bytes4 selector);
     error NoLimit(address token);
     error OverCap(address token, uint256 spent, uint256 cap);
@@ -485,6 +494,47 @@ contract AgentPolicyWallet {
         emit AllowSet(who, target, recipient);
     }
 
+    /// Allow-lists one function of one contract for the agent's contract calls. Transfer-like
+    /// selectors can never be allowed (the agent moves tokens only through capped transfer / approve).
+    function setAllowedCall(address target, bytes4 selector, bool allowed) external onlyOwner {
+        if (allowed && (isTransferLike(selector) || selector == TRANSFER || selector == APPROVE)) revert Forbidden(selector);
+        allowedCall[target][selector] = allowed;
+        emit CallAllowSet(target, selector, allowed);
+    }
+
+    /// Selectors that move or authorise moving tokens other than transfer/approve (APW-1). The same list is in
+    /// IntentExecutor._transferLike.
+    function isTransferLike(bytes4 s) public pure returns (bool) {
+        return s == 0x23b872dd // transferFrom(address,address,uint256)               ERC-20 / ERC-721
+            || s == 0x39509351 // increaseAllowance(address,uint256)
+            || s == 0xa22cb465 // setApprovalForAll(address,bool)                      ERC-721 / ERC-1155
+            || s == 0xd505accf // permit(address,address,uint256,uint256,uint8,bytes32,bytes32) EIP-2612
+            || s == 0x42842e0e // safeTransferFrom(address,address,uint256)           ERC-721
+            || s == 0xb88d4fde // safeTransferFrom(address,address,uint256,bytes)     ERC-721
+            || s == 0xf242432a // safeTransferFrom(address,address,uint256,uint256,bytes) ERC-1155
+            || s == 0x2eb2c2d6 // safeBatchTransferFrom(address,address,uint256[],uint256[],bytes) ERC-1155
+            || s == 0x9bd9bbc6 // send(address,uint256,bytes)                         ERC-777
+            || s == 0x62ad1b83 // operatorSend(address,address,uint256,bytes,bytes)   ERC-777
+            || s == 0x959b8c3f // authorizeOperator(address)                          ERC-777
+            || s == 0x4000aea0 // transferAndCall(address,uint256,bytes)              ERC-677 / ERC-1363
+            || s == 0x1296ee62 // transferAndCall(address,uint256)                    ERC-1363
+            || s == 0xd8fbe994 // transferFromAndCall(address,address,uint256)        ERC-1363
+            || s == 0xc1d34b89 // transferFromAndCall(address,address,uint256,bytes)  ERC-1363
+            || s == 0x3177029f // approveAndCall(address,uint256)                     ERC-1363
+            || s == 0xcae9ca51 // approveAndCall(address,uint256,bytes)               ERC-1363
+            || s == 0xbb35783b // move(address,address,uint256)                      DAI
+            || s == 0xf2d5d56b // pull(address,uint256)                              DAI
+            || s == 0xb753a98c // push(address,uint256)                              DAI
+            || s == 0x8fcbaf0c // permit(address,address,uint256,uint256,bool,uint8,bytes32,bytes32) DAI
+            || s == 0x2b67b570 // permit(address,((address,uint160,uint48,uint48),address,uint256),bytes) Permit2
+            || s == 0x2a2d80d1 // permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes) Permit2
+            || s == 0x87517c45 // approve(address,address,uint160,uint48)             Permit2
+            || s == 0x36c78516 // transferFrom(address,address,uint160,address)       Permit2
+            || s == 0x42966c68 // burn(uint256)
+            || s == 0x9dc29fac // burn(address,uint256)
+            || s == 0x79cc6790; // burnFrom(address,uint256)
+    }
+
     function setConfig(address agent_, address committee_, uint256 period_, uint256 delay_) external onlyOwner {
         _config(agent_, committee_, period_, delay_);
     }
@@ -535,7 +585,7 @@ contract AgentPolicyWallet {
             return (address(0), value);
         }
         bytes4 sel = data.length >= 4 ? bytes4(data[0:4]) : bytes4(0);
-        if (sel == TRANSFER_FROM || sel == INCREASE_ALLOWANCE || sel == SET_APPROVAL_FOR_ALL || sel == PERMIT) revert Forbidden(sel);
+        if (isTransferLike(sel)) revert Forbidden(sel);
         if (sel == TRANSFER || sel == APPROVE) {
             if (value != 0 || data.length < 68) revert Forbidden(sel);
             (address who, uint256 amt) = abi.decode(data[4:68], (address, uint256));
@@ -544,6 +594,7 @@ contract AgentPolicyWallet {
             return (to, amt);
         }
         if (!allowedTarget[to]) revert NotAllowed(to);
+        if (!allowedCall[to][sel]) revert SelectorNotAllowed(to, sel); // deny by default (APW-1)
         return (address(0), value);
     }
 

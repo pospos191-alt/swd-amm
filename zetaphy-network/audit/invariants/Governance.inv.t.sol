@@ -124,25 +124,61 @@ contract RewardVaultInvariants is Test {
     }
 }
 
-/// FINDING RV-1 (Low): the release rate applies retroactively to money that arrives after the last
-/// release. A vault whose release() was not called for N days pays out (1 - 0.9^(N/365)) of a deposit
-/// made just now, at the very next release, instead of starting that deposit's schedule at deposit time.
+/// REGRESSION RV-1 (was Low): the release rate used to apply retroactively to money arriving after the
+/// last release (a vault funded 2 years after deployment paid 19% at once). Money now vests from arrival.
 contract RewardVaultRetroactiveRelease is Test {
-    function test_finding_depositIsReleasedRetroactively() public {
-        Receiver r = new Receiver();
+    Receiver r;
+    RewardVault v;
+
+    function setUp() public {
+        r = new Receiver();
         RewardVault.Share[] memory s = new RewardVault.Share[](1);
         s[0] = RewardVault.Share(address(r), 10_000, false);
-        RewardVault v = new RewardVault(address(this), s);
+        v = new RewardVault(address(this), s);
+    }
+
+    function _fund(uint256 amount) internal {
+        vm.deal(address(this), amount);
+        (bool ok,) = address(v).call{value: amount}("");
+        assertTrue(ok);
+    }
+
+    function test_regression_RV1_depositNotReleasedRetroactively() public {
         // deployed, nobody funds it or calls release() for 2 years
         vm.warp(block.timestamp + 730 days);
-        // the 500M pool arrives now
-        vm.deal(address(this), 500_000_000 ether);
-        (bool ok,) = address(v).call{value: 500_000_000 ether}("");
-        assertTrue(ok);
+        _fund(500_000_000 ether); // the 500M pool arrives now
+        assertEq(v.releasable(), 0);
         v.release();
-        // 19% of the pool leaves at once (1 - 0.9^2), although it was deposited a second ago
-        assertGt(address(r).balance, 94_000_000 ether);
-        emit log_named_decimal_uint("released immediately (ZETAPHY)", address(r).balance, 18);
+        assertEq(address(r).balance, 0, "nothing leaves the day it arrives");
+        vm.warp(block.timestamp + 365 days);
+        v.release();
+        // one year after funding: 10% (to rounding)
+        assertApproxEqRel(address(r).balance, 50_000_000 ether, 1e12);
+        assertLe(address(r).balance, 50_000_000 ether + 400);
+    }
+
+    /// Old money keeps its schedule; new money starts its own at arrival.
+    function test_regression_RV1_mixedDeposits() public {
+        _fund(1000 ether);
+        vm.warp(block.timestamp + 300 days);
+        uint256 oldVested = v.releasable();
+        _fund(1_000_000 ether); // a big deposit after 300 idle days
+        assertEq(v.releasable(), oldVested, "the deposit adds nothing vested");
+        v.release();
+        assertEq(address(r).balance, oldVested);
+    }
+
+    /// Any deposit after any idle time: the release right after it pays only what the earlier balance vested.
+    function testFuzz_RV1_depositNeverVestsRetroactively(uint96 first, uint96 second, uint16 idleDays) public {
+        uint256 a = bound(first, 0, 1e27);
+        uint256 b = bound(second, 1, 1e27);
+        if (a > 0) _fund(a);
+        vm.warp(block.timestamp + uint256(bound(idleDays, 0, 3650)) * 1 days);
+        uint256 before = v.releasable();
+        assertLe(before, a);
+        _fund(b);
+        v.release();
+        assertEq(address(r).balance, before);
     }
 }
 
@@ -239,8 +275,8 @@ contract SimpleMultisigInvariants is Test {
         targetContract(address(h));
     }
 
-    /// EXPECTED TO FAIL (finding SM-1): a proposal runs only with `threshold` confirmations of the
-    /// owners at execution time. Confirmations of removed owners keep counting.
+    /// A proposal runs only with `threshold` confirmations of the owners at execution time (SM-1, fixed:
+    /// setOwners starts a new owner epoch and older proposals can no longer run).
     function invariant_executeNeedsCurrentOwnersQuorum() public view {
         assertEq(h.executedWithoutCurrentQuorum(), 0, "executed with confirmations of removed owners");
     }
@@ -257,12 +293,11 @@ contract SimpleMultisigInvariants is Test {
     }
 }
 
-/// FINDING SM-1 (Medium), minimal reproduction: a compromised owner is removed by setOwners, but the
-/// confirmation it already gave a pending (malicious) proposal still counts. One more confirmation from
-/// a current owner (who may believe one other owner already reviewed it) runs it, and with threshold 2
-/// that single current owner suffices.
+/// REGRESSION SM-1 (was Medium): a compromised owner is removed by setOwners; the confirmation it already
+/// gave a pending (malicious) proposal used to keep counting, so ONE current owner could run it. Now the
+/// rotation voids every older proposal: it can neither be confirmed nor executed.
 contract SimpleMultisigStaleConfirmations is Test {
-    function test_finding_removedOwnerConfirmationStillCounts() public {
+    function test_regression_SM1_removedOwnerConfirmationDoesNotCount() public {
         address a = address(0xA);
         address b = address(0xB);
         address c = address(0xC);
@@ -286,12 +321,51 @@ contract SimpleMultisigStaleConfirmations is Test {
         m.execute(rot);
         assertFalse(m.isOwner(a));
 
-        // the old proposal still shows 1 confirmation (a's); ONE current owner now runs it
+        // the old proposal (a's confirmation) is void: d can neither confirm nor execute it
         vm.prank(d);
+        vm.expectRevert(SimpleMultisig.Stale.selector);
+        m.confirm(bad);
+        vm.prank(b);
+        vm.expectRevert(SimpleMultisig.Stale.selector);
         m.confirm(bad);
         vm.prank(d);
+        vm.expectRevert(SimpleMultisig.Stale.selector);
         m.execute(bad);
-        assertEq(target.n(), 1, "ran with a removed owner's confirmation");
+        assertEq(target.n(), 0, "did not run");
+
+        // re-proposed under the new owner set it needs 2 current owners as usual
+        vm.prank(d);
+        uint256 again = m.propose(address(target), 0, abi.encodeCall(Counter.bump, ()));
+        vm.prank(d);
+        vm.expectRevert(SimpleMultisig.NotEnough.selector);
+        m.execute(again);
+        vm.prank(b);
+        m.confirm(again);
+        vm.prank(d);
+        m.execute(again);
+        assertEq(target.n(), 1);
+    }
+
+    /// A threshold lowered by setOwners does not apply to proposals made before.
+    function test_regression_SM1_loweredThresholdNotRetroactive() public {
+        address[] memory o = new address[](4);
+        (o[0], o[1], o[2], o[3]) = (address(0xA), address(0xB), address(0xC), address(0xD));
+        SimpleMultisig m = new SimpleMultisig(o, 3);
+        Counter target = new Counter();
+        vm.prank(address(0xA));
+        uint256 old = m.propose(address(target), 0, abi.encodeCall(Counter.bump, ()));
+        vm.prank(address(0xA));
+        uint256 rot = m.propose(address(m), 0, abi.encodeCall(SimpleMultisig.setOwners, (o, 2)));
+        vm.prank(address(0xB));
+        m.confirm(rot);
+        vm.prank(address(0xC));
+        m.confirm(rot);
+        vm.prank(address(0xA));
+        m.execute(rot);
+        assertEq(m.threshold(), 2);
+        vm.prank(address(0xB));
+        vm.expectRevert(SimpleMultisig.Stale.selector);
+        m.confirm(old);
     }
 }
 

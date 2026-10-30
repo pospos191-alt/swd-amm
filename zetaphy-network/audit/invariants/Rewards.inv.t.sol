@@ -322,6 +322,17 @@ contract BountyHandler is Test {
         try bb.refund(b % n) {} catch {}
     }
 
+    /// The sponsor tries to take finding slots of its own bounty (must always be refused, BB-1).
+    function sponsorCommit(uint256 b) external {
+        uint256 n = bb.bountyCount();
+        if (n == 0) return;
+        uint256 dep = bb.findingDeposit();
+        vm.prank(sponsor);
+        try bb.commitFinding{value: dep}(b % n, keccak256("junk")) { sponsorCommits++; } catch {}
+    }
+
+    uint256 public sponsorCommits;
+
     function withdraw(uint256 who) external {
         address[4] memory all = [finders[0], finders[1], finders[2], sponsor];
         vm.prank(all[who % 4]);
@@ -364,52 +375,103 @@ contract BugBountyInvariants is Test {
         }
     }
 
+    /// The sponsor never holds a finding slot of its own bounty, and a refund never pays the sponsor
+    /// forfeited deposits (owed to the sponsor <= what it posted).
+    function invariant_sponsorCannotBlockOrProfit() public view {
+        assertEq(h.sponsorCommits(), 0);
+        uint256 posted;
+        uint256 nb = bb.bountyCount();
+        for (uint256 i; i < nb; i++) {
+            BugBounty.Bounty memory b = bb.getBounty(i);
+            if (b.refunded) posted += b.reward - bb.forfeitedOf(i);
+        }
+        assertLe(bb.owed(h.sponsor()), posted);
+    }
+
     /// Solvency: the contract can always pay every credit, open reward and open deposit.
     function invariant_solvent() public view {
         assertGe(address(bb).balance, _liabilities());
     }
 
-    /// EXPECTED TO FAIL (finding BB-2): no money is stranded. A rejected / unrevealed finding's
-    /// deposit is added to the bounty's reward even when the bounty was already paid or refunded,
-    /// where nobody can ever take it.
+    /// No money is stranded (BB-2, fixed): every wei held is a credit, an open reward or an open deposit.
+    /// A deposit forfeited after its bounty was paid / refunded is burned instead of being added to a
+    /// reward nobody can take.
     function invariant_noStrandedFunds() public view {
         assertEq(address(bb).balance, _liabilities(), "funds stranded in a closed bounty");
     }
 }
 
-/// FINDING BB-1 (Medium): the sponsor can make its own bounty unwinnable at no net cost. It fills all
-/// MAX_FINDINGS (32) slots with commitments it never reveals; real finders get TooMany. After the
-/// deadline it closes them (their deposits grow its reward) and refunds itself everything.
+/// REGRESSION BB-1 (was Medium): the sponsor used to fill all 32 finding slots with commitments it never
+/// revealed, block real finders (TooMany), close them (their deposits grew its own reward) and refund
+/// itself everything. Now: the sponsor cannot commit, one address holds at most MAX_PER_FINDER slots,
+/// junk frees its slot when its reveal window ends, and forfeited deposits are never refunded to the
+/// sponsor.
 contract BugBountySponsorBlocksFindings is Test {
-    function test_finding_sponsorFillsFindingSlots() public {
+    BugBounty bb;
+    MockRunners r;
+    address sponsor = address(0x5905);
+    address hunter = address(0x6001);
+
+    function setUp() public {
         vm.warp(1_700_000_000);
-        MockRunners r = new MockRunners();
-        BugBounty bb = new BugBounty(IBBRunners(address(r)), 2, 1, address(0x60F), IBBReputation(address(0)), IBBIssuance(address(0)),
+        r = new MockRunners();
+        bb = new BugBounty(IBBRunners(address(r)), 2, 1, address(0x60F), IBBReputation(address(0)), IBBIssuance(address(0)),
             0.5 ether, 1 days, 1 days);
-        address sponsor = address(0x5905);
-        address hunter = address(0x6001);
         vm.deal(sponsor, 100 ether);
         vm.deal(hunter, 1 ether);
+    }
+
+    function test_regression_BB1_sponsorCannotCommit() public {
         vm.startPrank(sponsor);
         uint256 id = bb.post{value: 10 ether}(keccak256("spec"), "spec", 7 days);
-        for (uint256 i; i < 32; i++) bb.commitFinding{value: 0.5 ether}(id, keccak256(abi.encode(i)));
+        vm.expectRevert(BugBounty.BadFinding.selector);
+        bb.commitFinding{value: 0.5 ether}(id, keccak256(abi.encode(uint256(0))));
         vm.stopPrank();
         vm.prank(hunter);
-        vm.expectRevert(BugBounty.TooMany.selector);
         bb.commitFinding{value: 0.5 ether}(id, keccak256("real bug"));
+    }
+
+    /// The same attack through 8 sock-puppet addresses (4 slots each): the slots free up when the junk's
+    /// reveal window ends, the hunter gets in, and the sponsor's junk deposits are burned, not refunded.
+    function test_regression_BB1_sybilFloodCostsAndExpires() public {
+        vm.prank(sponsor);
+        uint256 id = bb.post{value: 10 ether}(keccak256("spec"), "spec", 7 days);
+        uint256 n;
+        for (uint160 s = 1; s <= 8; s++) {
+            address puppet = address(0x9000 + s);
+            vm.deal(puppet, 10 ether);
+            for (uint256 k; k < 4; k++) {
+                vm.prank(puppet);
+                bb.commitFinding{value: 0.5 ether}(id, keccak256(abi.encode(s, k)));
+                n++;
+            }
+            vm.prank(puppet);
+            vm.expectRevert(BugBounty.TooMany.selector); // 5th slot for one address
+            bb.commitFinding{value: 0.5 ether}(id, keccak256(abi.encode(s, uint256(9))));
+        }
+        assertEq(n, 32);
+        vm.prank(hunter);
+        vm.expectRevert(BugBounty.TooMany.selector); // full right now...
+        bb.commitFinding{value: 0.5 ether}(id, keccak256("real bug"));
+        vm.warp(block.timestamp + 1 days + 1);       // ...until the junk's reveal window ends
+        vm.prank(hunter);
+        bb.commitFinding{value: 0.5 ether}(id, keccak256("real bug"));
+        // nobody wins: the sponsor gets its 10 ether back, not the 16 ether of junk deposits
         vm.warp(block.timestamp + 10 days);
-        for (uint256 i; i < 32; i++) bb.close(i);
+        for (uint256 i; i < 33; i++) bb.close(i);
         bb.refund(id);
         vm.prank(sponsor);
         bb.withdraw();
-        assertEq(sponsor.balance, 100 ether, "sponsor got everything back");
+        assertEq(sponsor.balance, 100 ether - 10 ether + 10 ether, "only its own reward back");
+        assertEq(bb.burned(), 16 ether + 0.5 ether, "forfeited deposits burned");
     }
 }
 
-/// FINDING BB-2 (Low), minimal reproduction: a finding rejected (or closed unrevealed) after its
-/// bounty was paid adds its deposit to that bounty's reward, which nothing can pay out any more.
+/// REGRESSION BB-2 (was Low): a finding rejected (or closed unrevealed) after its bounty was paid used to
+/// add its deposit to that bounty's reward, which nothing could pay out any more. Now it is burned and
+/// the contract holds exactly its liabilities.
 contract BugBountyStrandedDeposit is Test {
-    function test_finding_depositStrandedAfterPayout() public {
+    function test_regression_BB2_noDepositStrandedAfterPayout() public {
         vm.warp(1_700_000_000);
         MockRunners r = new MockRunners();
         r.set(address(0x71), true, 5, 0);
@@ -438,11 +500,40 @@ contract BugBountyStrandedDeposit is Test {
         bb.claim(fa);                                 // a wins 5 ether + its deposit back
         vm.prank(a);
         bb.withdraw();
-        bb.close(1);                                  // b's 0.5 ether deposit -> reward of a PAID bounty
-        assertEq(address(bb).balance, 0.5 ether);
-        vm.expectRevert(BugBounty.Closed.selector);
-        bb.refund(id);                                // no path takes it out: stuck for good
+        bb.close(1);                                  // b's deposit: burned, not added to a PAID bounty
+        assertEq(address(bb).balance, 0, "nothing stranded");
+        assertEq(bb.burned(), 0.5 ether);
+        assertEq(bb.getBounty(id).reward, 5 ether);
     }
+
+    /// Same after a refund: a late rejection of a revealed finding.
+    function test_regression_BB2_noDepositStrandedAfterRefund() public {
+        vm.warp(1_700_000_000);
+        MockRunners r = new MockRunners();
+        r.set(address(0x71), true, 5, 0);
+        r.set(address(0x72), true, 5, 0);
+        BugBounty bb = new BugBounty(IBBRunners(address(r)), 2, 1, address(0x60F), IBBReputation(address(0)), IBBIssuance(address(0)),
+            0.5 ether, 1 days, 1 days);
+        address a = address(0x6001);
+        vm.deal(address(this), 10 ether);
+        vm.deal(a, 1 ether);
+        uint256 id = bb.post{value: 5 ether}(keccak256("spec"), "spec", 1 days);
+        bytes32 ca = bb.commitmentOf(keccak256("A"), a, bytes32(0), id);
+        vm.prank(a);
+        uint256 fa = bb.commitFinding{value: 0.5 ether}(id, ca);
+        vm.roll(block.number + 1);
+        vm.prank(a);
+        bb.revealFinding(fa, "A", bytes32(0));
+        vm.warp(block.timestamp + 3 days + 1);        // past deadline + reveal + judge windows, unjudged
+        bb.refund(id);
+        bb.close(fa);                                 // unjudged: the deposit goes back to the finder
+        vm.prank(a);
+        bb.withdraw();
+        bb.withdraw();
+        assertEq(address(bb).balance, 0);
+    }
+
+    receive() external payable {}
 }
 
 // ============================================================================ ComputeMarket

@@ -26,7 +26,9 @@ interface IIntentBridge {
 ///           - the user's own daily spend cap for tokenIn (setSpendCap), if set,
 ///           - every call went to a contract the user listed (targetsHash),
 ///             never to tokenIn, tokenOut, the user or this contract, with no
-///             value, and never with an ERC-20 transferFrom/approve selector,
+///             value, and never with approve or a transfer-like selector
+///             (_transferLike: transferFrom, permit, safeTransferFrom of
+///             ERC-721/1155, DAI move/pull, ERC-777 send, transferAndCall...),
 ///         and reverts everything otherwise. The solver cannot take more than
 ///         the user signed for, whatever calls it sends.
 ///
@@ -62,11 +64,7 @@ contract IntentExecutor {
     uint256 public constant CAP_WINDOW = 1 days;
 
     // Selectors a solver call may never use: the executor does its own (temporary) approval of `spender`.
-    bytes4 private constant TRANSFER_FROM = 0x23b872dd;
     bytes4 private constant APPROVE_SEL = 0x095ea7b3;
-    bytes4 private constant INCREASE_ALLOWANCE = 0x39509351;
-    bytes4 private constant SET_APPROVAL_FOR_ALL = 0xa22cb465;
-    bytes4 private constant PERMIT = 0xd505accf;
 
     struct Intent {
         address user;
@@ -337,12 +335,49 @@ contract IntentExecutor {
         _allowed(c.target, targets, intent);
         if (c.data.length >= 4) {
             bytes4 sel = bytes4(c.data[0:4]);
-            if (sel == TRANSFER_FROM || sel == APPROVE_SEL || sel == INCREASE_ALLOWANCE || sel == SET_APPROVAL_FOR_ALL || sel == PERMIT) {
+            // approve, and every transfer-like selector (_transferLike: transferFrom, permit, ERC-721/1155
+            // safeTransferFrom, DAI move/pull, ERC-777 send, transferAndCall, Permit2, ...): a listed target
+            // must never pull what a user approved to this contract
+            if (sel == APPROVE_SEL || _transferLike(sel)) {
                 revert ForbiddenCall(c.target);
             }
         }
         (bool ok, bytes memory ret) = c.target.call(c.data);
         if (!ok) revert CallFailed(k, ret);
+    }
+
+    /// Selectors that move tokens out of an account, or authorise someone else to, other than a plain
+    /// ERC-20 transfer / approve (the same list as AgentPolicyWallet.isTransferLike). A target the user
+    /// listed must never use what the user approved to this contract through one of them.
+    function _transferLike(bytes4 s) private pure returns (bool) {
+        return s == 0x23b872dd // transferFrom(address,address,uint256)               ERC-20 / ERC-721
+            || s == 0x39509351 // increaseAllowance(address,uint256)
+            || s == 0xa22cb465 // setApprovalForAll(address,bool)                      ERC-721 / ERC-1155
+            || s == 0xd505accf // permit(address,address,uint256,uint256,uint8,bytes32,bytes32) EIP-2612
+            || s == 0x42842e0e // safeTransferFrom(address,address,uint256)           ERC-721
+            || s == 0xb88d4fde // safeTransferFrom(address,address,uint256,bytes)     ERC-721
+            || s == 0xf242432a // safeTransferFrom(address,address,uint256,uint256,bytes) ERC-1155
+            || s == 0x2eb2c2d6 // safeBatchTransferFrom(address,address,uint256[],uint256[],bytes) ERC-1155
+            || s == 0x9bd9bbc6 // send(address,uint256,bytes)                         ERC-777
+            || s == 0x62ad1b83 // operatorSend(address,address,uint256,bytes,bytes)   ERC-777
+            || s == 0x959b8c3f // authorizeOperator(address)                          ERC-777
+            || s == 0x4000aea0 // transferAndCall(address,uint256,bytes)              ERC-677 / ERC-1363
+            || s == 0x1296ee62 // transferAndCall(address,uint256)                    ERC-1363
+            || s == 0xd8fbe994 // transferFromAndCall(address,address,uint256)        ERC-1363
+            || s == 0xc1d34b89 // transferFromAndCall(address,address,uint256,bytes)  ERC-1363
+            || s == 0x3177029f // approveAndCall(address,uint256)                     ERC-1363
+            || s == 0xcae9ca51 // approveAndCall(address,uint256,bytes)               ERC-1363
+            || s == 0xbb35783b // move(address,address,uint256)                      DAI
+            || s == 0xf2d5d56b // pull(address,uint256)                              DAI
+            || s == 0xb753a98c // push(address,uint256)                              DAI
+            || s == 0x8fcbaf0c // permit(address,address,uint256,uint256,bool,uint8,bytes32,bytes32) DAI
+            || s == 0x2b67b570 // permit(address,((address,uint160,uint48,uint48),address,uint256),bytes) Permit2
+            || s == 0x2a2d80d1 // permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes) Permit2
+            || s == 0x87517c45 // approve(address,address,uint160,uint48)             Permit2
+            || s == 0x36c78516 // transferFrom(address,address,uint160,address)       Permit2
+            || s == 0x42966c68 // burn(uint256)
+            || s == 0x9dc29fac // burn(address,uint256)
+            || s == 0x79cc6790; // burnFrom(address,uint256)
     }
 
     /// A call target must be listed, and never tokenIn, the user, this contract or 0. tokenOut is

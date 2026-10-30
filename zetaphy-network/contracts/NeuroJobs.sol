@@ -129,6 +129,10 @@ abstract contract NeuroJobsBase {
     mapping(address => uint256) public requestCount;
     mapping(address => Worker) public workers;
     mapping(address => uint256) public credit;
+    /// Seats a runner committed to and that are not resolved yet (revealed, or missed: penalised by
+    /// expire / settle / challengeExpire). withdrawBond needs 0, so a runner that never reveals cannot
+    /// take its bond out before its penalty lands, whoever calls expire/settle and whenever (NJ-1).
+    mapping(address => uint256) public openSeats;
     Job[] internal jobs;
     /// challenges[id][k]: the k-th challenge (0-based) of job id.
     mapping(uint256 => mapping(uint256 => Challenge)) internal challenges;
@@ -264,6 +268,7 @@ abstract contract NeuroJobsBase {
         r.commitOf[r.commits] = commitment;
         r.commits += 1;
         if (asDefender) r.defenders += 1;
+        openSeats[msg.sender] += 1;
         wk.lastSeen = uint64(block.timestamp);
         // Penalties of this seat come by start + jobTimeout (+ the grace): the bond stays.
         _hold(msg.sender, uint256(r.start) + 2 * uint256(jobTimeout));
@@ -278,6 +283,7 @@ abstract contract NeuroJobsBase {
         r.revealed[s] = true;
         r.verdictOf[s] = verdict;
         r.reveals += 1;
+        openSeats[msg.sender] -= 1;
         workers[msg.sender].lastSeen = uint64(block.timestamp);
         for (uint8 i = 0; i < r.commits; i++) if (r.revealed[i] && r.verdictOf[i] == verdict) same++;
     }
@@ -368,6 +374,7 @@ abstract contract NeuroJobsBase {
 
     /// Committed, never revealed: penalty and a strike.
     function _miss(uint256 id, address w) internal {
+        openSeats[w] -= 1;
         emit Missed(id, w);
         _penalize(w, PENALTY_BPS, true);
         _record(w, true);
@@ -711,8 +718,11 @@ contract NeuroJobsChallenges is NeuroJobsBase {
 ///         2 x jobTimeout of every round it sat on, and a round-1 seat's until
 ///         challengeUntil + 2 x jobTimeout, moved on when a challenge opens or
 ///         ends Disputed. Every reveal has a hard deadline, so every slash
-///         lands before the hold ends (expire()/settle() have the second
-///         jobTimeout to be called).
+///         lands before the hold ends. A seat committed and not yet revealed
+///         or penalised also holds the bond (openSeats): withdrawBond waits
+///         until expire()/settle()/challengeExpire() resolved it, whenever
+///         they are called (the runner may call them itself), so the
+///         non-reveal penalty cannot be escaped by a quiet keeper (NJ-1).
 ///
 ///         Challenges: until challengeUntil (finalize time + challengeWindow,
 ///         or jobTimeout when 0) anyone may call challenge(id, claim) with a
@@ -809,7 +819,8 @@ contract NeuroJobs is NeuroJobsBase {
     /// After unbondDelay, and after heldUntil (see bond holds).
     function withdrawBond() external {
         Worker storage w = workers[msg.sender];
-        if (w.active || w.unbondAt == 0 || block.timestamp < w.unbondAt || block.timestamp < w.heldUntil) revert TooEarly();
+        if (w.active || w.unbondAt == 0 || block.timestamp < w.unbondAt || block.timestamp < w.heldUntil
+            || openSeats[msg.sender] != 0) revert TooEarly();
         uint256 amount = w.bond;
         w.bond = 0;
         w.unbondAt = 0;

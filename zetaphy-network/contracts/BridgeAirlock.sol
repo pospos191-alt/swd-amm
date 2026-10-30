@@ -73,9 +73,10 @@ interface ILaneInfo {
 contract BridgeAirlock {
     struct Transfer {
         uint64 readyFrom;    // when the threshold was reached; quarantine counts from here
-        uint8 attestations;
+        uint8 attestations;  // independent attestations of lanes still on, as of the last attest
         bool released;
         bool vetoed;
+        uint64 readyEpoch;   // removalEpoch when readyFrom was set
     }
 
     IGuardInbound public immutable guard;
@@ -104,6 +105,16 @@ contract BridgeAirlock {
     /// By controller (laneControllerOf at attest time): two lanes with one
     /// controller count once, so the threshold means independent lanes.
     mapping(bytes32 => mapping(address => bool)) public attestedByController;
+    /// The lanes that attested each transfer and their controller at attest time. Only lanes that are
+    /// still on count at release (BA-1): removing a lane withdraws its attestations.
+    mapping(bytes32 => address[]) private _attesters;
+    mapping(bytes32 => mapping(address => address)) private _controllerAt;
+    mapping(bytes32 => mapping(address => uint64)) private _genAt;
+    /// A lane's generation: bumped when it is removed, so a lane re-added later does not bring back
+    /// the attestations it made before its removal.
+    mapping(address => uint64) public laneGen;
+    /// Bumped by every lane removal; a transfer that became ready before a removal is recounted.
+    uint64 public removalEpoch;
     IThreatFlags public threats;        // zero: no vaccine check
 
     event LaneSet(address lane, bool on);
@@ -154,6 +165,7 @@ contract BridgeAirlock {
             for (uint256 i = 0; i < laneList.length; i++) {
                 if (laneList[i] == lane) { laneList[i] = laneList[laneList.length - 1]; laneList.pop(); break; }
             }
+            _removed(lane);
         }
         isLane[lane] = on;
         emit LaneSet(lane, on);
@@ -171,7 +183,8 @@ contract BridgeAirlock {
         markerRevoked[marker] = false;
         emit MarkerSet(marker, on);
     }
-    /// Raising the threshold later does not hold back transfers that already reached the old one.
+    /// release() compares with the threshold in force then: raising it also holds back transfers that
+    /// reached only the old one (the safer way).
     function setThreshold(uint8 t) external onlyGov { require(t >= 2, "need 2+"); threshold = t; emit ThresholdSet(t); }
     function setQuarantine(uint64 q) external onlyGov { quarantine = q; emit QuarantineSet(q); }
     function setGovernance(address g) external onlyGov { governance = g; emit GovernanceSet(g); }
@@ -197,6 +210,7 @@ contract BridgeAirlock {
             if (laneList[i] == lane) { laneList[i] = laneList[laneList.length - 1]; laneList.pop(); break; }
         }
         isLane[lane] = false;
+        _removed(lane);
         emit LaneSet(lane, false);
     }
 
@@ -277,16 +291,41 @@ contract BridgeAirlock {
     function attest(uint256 srcChainId, address srcContract, uint256 srcNonce, address sender, address to, uint256 amount) external {
         if (!isLane[msg.sender]) revert NotLane();
         bytes32 id = transferId(srcChainId, srcContract, srcNonce, sender, to, amount);
-        if (attestedBy[id][msg.sender]) revert Twice();
+        if (attestedBy[id][msg.sender] && _genAt[id][msg.sender] == laneGen[msg.sender]) revert Twice();
         attestedBy[id][msg.sender] = true;
         Transfer storage t = transfers[id];
         address c = laneControllerOf(msg.sender);
-        if (!attestedByController[id][c]) {
-            attestedByController[id][c] = true;
-            t.attestations += 1;
+        attestedByController[id][c] = true;
+        _attesters[id].push(msg.sender);
+        _controllerAt[id][msg.sender] = c;
+        _genAt[id][msg.sender] = laneGen[msg.sender];
+        uint8 live = liveAttestations(id);
+        t.attestations = live;
+        // (re)start the quarantine when the threshold is reached, or reached again after a lane removal
+        if (live >= threshold && (t.readyFrom == 0 || t.readyEpoch != removalEpoch)) {
+            t.readyFrom = uint64(block.timestamp);
+            t.readyEpoch = removalEpoch;
         }
-        if (t.readyFrom == 0 && t.attestations >= threshold) t.readyFrom = uint64(block.timestamp);
-        emit Attested(id, msg.sender, t.attestations, srcChainId, srcContract, srcNonce, sender, to, amount);
+        emit Attested(id, msg.sender, live, srcChainId, srcContract, srcNonce, sender, to, amount);
+    }
+
+    function _removed(address lane) private {
+        laneGen[lane] += 1;
+        removalEpoch += 1;
+    }
+
+    /// Independent attestations of a transfer that still count: distinct controllers (as recorded at
+    /// attest time) of the lanes that attested it and are still on.
+    function liveAttestations(bytes32 id) public view returns (uint8 n) {
+        address[] storage a = _attesters[id];
+        address[] memory seen = new address[](a.length);
+        for (uint256 i = 0; i < a.length; i++) {
+            if (!isLane[a[i]] || _genAt[id][a[i]] != laneGen[a[i]]) continue;
+            address c = _controllerAt[id][a[i]];
+            bool dup;
+            for (uint256 k = 0; k < n; k++) if (seen[k] == c) { dup = true; break; }
+            if (!dup) seen[n++] = c;
+        }
     }
 
     function veto(bytes32 id, string calldata reason) external {
@@ -318,7 +357,7 @@ contract BridgeAirlock {
         bytes32 id = transferId(srcChainId, srcContract, srcNonce, sender, to, amount);
         Transfer storage t = transfers[id];
         if (t.released || t.vetoed || tripped(sender) || tripped(to)) revert Blocked();
-        if (t.attestations < threshold || t.readyFrom == 0 || block.timestamp < t.readyFrom + quarantine) revert NotReady();
+        if (t.readyFrom == 0 || block.timestamp < t.readyFrom + quarantine || liveAttestations(id) < threshold) revert NotReady();
         uint8 what = flaggedParty(srcChainId, srcContract, sender, to);
         if (what != 0) revert ThreatFlagged(what);
         what = heldParty(srcChainId, srcContract, sender, to);
@@ -357,7 +396,7 @@ contract BridgeAirlock {
 
     function status(bytes32 id) external view returns (uint8 attestations, bool released, bool vetoed, uint64 readyAt) {
         Transfer storage t = transfers[id];
-        return (t.attestations, t.released, t.vetoed, t.readyFrom == 0 ? 0 : t.readyFrom + quarantine);
+        return (liveAttestations(id), t.released, t.vetoed, t.readyFrom == 0 ? 0 : t.readyFrom + quarantine);
     }
 }
 

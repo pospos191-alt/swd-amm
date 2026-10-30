@@ -156,23 +156,90 @@ contract MockNFT {
     function supportsInterface(bytes4) external pure returns (bool) { return true; }
 }
 
-/// FINDING APW-1 (Medium): the selector filter refuses transferFrom / setApprovalForAll / permit /
-/// increaseAllowance, but any other value-moving function of an allow-listed TARGET runs uncapped
-/// (classified as a plain call: amount = msg.value = 0). Here: ERC-721 safeTransferFrom (0x42842e0e).
-/// The same holds for ERC-1155 safeTransferFrom, ERC-777 send, ERC-677 transferAndCall, burn, etc.
+/// Any function of any contract: succeeds for every caller (stands in for value-moving functions that
+/// no deny-list knows about).
+contract AnyCall {
+    uint256 public calls;
+    fallback() external payable { calls++; }
+}
+
+/// REGRESSION APW-1 (was Medium): the selector filter refused only transferFrom / setApprovalForAll /
+/// permit / increaseAllowance; any other value-moving function of an allow-listed TARGET ran uncapped
+/// (e.g. ERC-721 safeTransferFrom). Now contract calls need an allow-listed (target, selector) pair
+/// (deny by default) and transfer-like selectors can never be allow-listed.
 contract AgentPolicyWalletSelectorBypass is Test {
-    function test_finding_agentMovesNftOfAllowedTarget() public {
-        address owner = address(0x0A0A);
-        address agent = address(0xA9E7);
-        AgentPolicyWallet w = new AgentPolicyWallet(owner, agent, address(0), address(0), 1 days, 1 hours);
+    address owner = address(0x0A0A);
+    address agent = address(0xA9E7);
+    AgentPolicyWallet w;
+
+    function setUp() public {
+        w = new AgentPolicyWallet(owner, agent, address(0), address(0), 1 days, 1 hours);
+    }
+
+    function test_regression_APW1_agentCannotMoveNftOfAllowedTarget() public {
         MockNFT nft = new MockNFT();
         nft.mint(address(w), 1);
         vm.prank(owner);
-        w.setAllowed(address(nft), true, false); // the owner allows the collection as a target (e.g. to call approve on a marketplace flow)
+        w.setAllowed(address(nft), true, false); // the owner allows the collection as a target
+        bytes memory data = abi.encodeWithSignature("safeTransferFrom(address,address,uint256)", address(w), agent, uint256(1));
         vm.prank(agent);
-        w.execute(address(nft), 0, abi.encodeWithSignature("safeTransferFrom(address,address,uint256)", address(w), agent, uint256(1)),
-            bytes32(0), bytes32(0));
-        assertEq(nft.ownerOf(1), agent, "agent took the NFT without any cap or cosign");
+        vm.expectRevert(abi.encodeWithSelector(AgentPolicyWallet.Forbidden.selector, bytes4(0x42842e0e)));
+        w.execute(address(nft), 0, data, bytes32(0), bytes32(0));
+        // and the owner cannot allow-list it either
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(AgentPolicyWallet.Forbidden.selector, bytes4(0x42842e0e)));
+        w.setAllowedCall(address(nft), 0x42842e0e, true);
+        assertEq(nft.ownerOf(1), address(w), "the NFT stays");
+    }
+
+    /// Every transfer-like selector of the list is refused on an allowed target, whatever the owner allows.
+    function test_regression_APW1_transferLikeSelectorsRefused() public {
+        AnyCall t = new AnyCall();
+        vm.prank(owner);
+        w.setAllowed(address(t), true, false);
+        bytes4[26] memory sels = [bytes4(0x23b872dd), 0x39509351, 0xa22cb465, 0xd505accf, 0x42842e0e, 0xb88d4fde, 0xf242432a,
+            0x2eb2c2d6, 0x9bd9bbc6, 0x62ad1b83, 0x959b8c3f, 0x4000aea0, 0x1296ee62, 0xd8fbe994, 0xc1d34b89, 0x3177029f,
+            0xcae9ca51, 0xbb35783b, 0xf2d5d56b, 0xb753a98c, 0x8fcbaf0c, 0x2b67b570, 0x2a2d80d1, 0x87517c45, 0x36c78516, 0x79cc6790];
+        for (uint256 i; i < sels.length; i++) {
+            assertTrue(w.isTransferLike(sels[i]));
+            vm.prank(owner);
+            vm.expectRevert(abi.encodeWithSelector(AgentPolicyWallet.Forbidden.selector, sels[i]));
+            w.setAllowedCall(address(t), sels[i], true);
+            vm.prank(agent);
+            vm.expectRevert(abi.encodeWithSelector(AgentPolicyWallet.Forbidden.selector, sels[i]));
+            w.execute(address(t), 0, abi.encodePacked(sels[i], bytes32(0), bytes32(0), bytes32(0)), bytes32(0), bytes32(0));
+        }
+        assertEq(t.calls(), 0);
+    }
+
+    /// Deny by default: on an allowed target, ANY selector runs only once the owner allowed that pair;
+    /// its native value counts against the native cap.
+    function testFuzz_APW1_contractCallsNeedAllowedSelector(bytes4 sel, uint96 value) public {
+        vm.assume(!w.isTransferLike(sel) && sel != 0xa9059cbb && sel != 0x095ea7b3);
+        AnyCall t = new AnyCall();
+        vm.deal(address(w), 1000 ether);
+        vm.startPrank(owner);
+        w.setAllowed(address(t), true, false);
+        w.setLimit(address(0), 10 ether, 10 ether);
+        vm.stopPrank();
+        bytes memory data = abi.encodePacked(sel, bytes32(uint256(1)));
+        uint256 v = bound(value, 0, 10 ether);
+        vm.prank(agent);
+        vm.expectRevert(abi.encodeWithSelector(AgentPolicyWallet.SelectorNotAllowed.selector, address(t), sel));
+        w.execute(address(t), v, data, bytes32(0), bytes32(0));
+        vm.prank(owner);
+        w.setAllowedCall(address(t), sel, true);
+        vm.prank(agent);
+        w.execute(address(t), v, data, bytes32(0), bytes32(0));
+        assertEq(t.calls(), 1);
+        assertEq(w.remaining(address(0)), 10 ether - v, "value capped as native");
+        // a pair allowed on one target does not open another
+        AnyCall t2 = new AnyCall();
+        vm.prank(owner);
+        w.setAllowed(address(t2), true, false);
+        vm.prank(agent);
+        vm.expectRevert(abi.encodeWithSelector(AgentPolicyWallet.SelectorNotAllowed.selector, address(t2), sel));
+        w.execute(address(t2), 0, data, bytes32(0), bytes32(0));
     }
 }
 
@@ -325,9 +392,15 @@ contract RegistryHandler is Test {
         if (n == 0) return;
         id = 1 + id % n;
         (address op,,,,,,,, uint32 open) = reg.agents(id);
+        uint256 last = reg.lastActionAt(id);
         vm.prank(op);
-        try reg.withdrawBond(id) { if (open != 0) bondOutWithOpenClaim++; } catch {}
+        try reg.withdrawBond(id) {
+            if (open != 0) bondOutWithOpenClaim++;
+            if (last != 0 && block.timestamp <= last + reg.CLAIM_WINDOW()) bondOutInClaimWindow++; // AR-1
+        } catch {}
     }
+
+    uint256 public bondOutInClaimWindow;
 
     function addBond(uint256 id, uint256 v) external {
         uint256 n = reg.agentCount();
@@ -376,15 +449,15 @@ contract AgentRegistryInvariants is Test {
         }
         assertEq(address(reg).balance, sum);
         assertEq(h.bondOutWithOpenClaim(), 0);
+        assertEq(h.bondOutInClaimWindow(), 0, "bond left while an action could still be claimed (AR-1)");
     }
 }
 
-/// FINDING AR-1 (Medium): CLAIM_WINDOW is 30 days but UNBOND_DELAY is 7: an operator whose agent did
-/// harm requests unbonding right after the action and takes the bond out on day 7, before anyone filed
-/// a committee claim. The documented 30-day claim window is in practice 7 days (and a claim filed in
-/// the same block as withdrawBond can be front-run).
+/// REGRESSION AR-1 (was Medium): CLAIM_WINDOW is 30 days but UNBOND_DELAY is 7: an operator used to take
+/// the bond out on day 7 after a harmful action. Now the bond stays until the claim window of the last
+/// action is over; the victim can still file on day 29.
 contract AgentRegistryBondEscapesClaimWindow is Test {
-    function test_finding_bondWithdrawnInsideClaimWindow() public {
+    function test_regression_AR1_bondStaysForTheClaimWindow() public {
         vm.etch(MLDSA_ADDR, address(new MockMLDSA()).code);
         AgentRegistry reg = new AgentRegistry(address(0x60F), 1 ether, 0.1 ether);
         address op = address(0xB001);
@@ -397,13 +470,38 @@ contract AgentRegistryBondEscapesClaimWindow is Test {
         uint256 actionId = reg.recordAction(id, x, abi.encodePacked(pk), abi.encodePacked(keccak256(abi.encodePacked(uint8(44), d, pk))));
         vm.prank(op);
         reg.requestUnbond(id);
-        vm.warp(block.timestamp + 7 days);
+        uint256 t0 = block.timestamp;
+        vm.warp(t0 + 7 days);
         vm.prank(op);
-        reg.withdrawBond(id);                                   // day 7: bond gone
+        vm.expectRevert(AgentRegistry.NotYet.selector);
+        reg.withdrawBond(id);                                   // day 7: refused now
+        vm.warp(t0 + 30 days);                                  // last moment of the claim window
+        vm.prank(op);
+        vm.expectRevert(AgentRegistry.NotYet.selector);
+        reg.withdrawBond(id);
         vm.deal(address(0xC1A1), 1 ether);
         vm.prank(address(0xC1A1));
-        vm.expectRevert(AgentRegistry.Inactive.selector);       // day 7+: the victim cannot even file
-        reg.fileClaim{value: 0.1 ether}(actionId, 40 ether, keccak256("ev"));
+        reg.fileClaim{value: 0.1 ether}(actionId, 40 ether, keccak256("ev")); // the victim can file
+        vm.warp(t0 + 30 days + 1);
+        vm.prank(op);
+        vm.expectRevert(AgentRegistry.OpenClaims.selector);     // and the open claim holds the bond
+        reg.withdrawBond(id);
+        assertEq(reg.withdrawableAt(id), t0 + 30 days + 1);
+    }
+
+    /// An agent that never acted: the 7-day delay alone applies.
+    function test_regression_AR1_noActionsSevenDays() public {
+        AgentRegistry reg = new AgentRegistry(address(0x60F), 1 ether, 0.1 ether);
+        address op = address(0xB001);
+        vm.deal(op, 100 ether);
+        vm.prank(op);
+        uint256 id = reg.register{value: 50 ether}(address(0xACC), keccak256("pk"), keccak256("c"), address(0));
+        vm.prank(op);
+        reg.requestUnbond(id);
+        vm.warp(block.timestamp + 7 days);
+        vm.prank(op);
+        reg.withdrawBond(id);
+        assertEq(op.balance, 100 ether);
     }
 }
 
@@ -511,35 +609,67 @@ contract StableGatewayInvariants is Test {
     }
 }
 
-/// FINDING SG-1 (Medium, economic): StableGateway + NeuroJobs.requestFor(refundTo = user) turn the
-/// gateway's ZETAPHY reserve into a stablecoin -> ZETAPHY exchange at the oracle price minus 5%:
-/// a request nobody answers expires and NeuroJobs credits 95% of the fee, in native ZETAPHY, to the
-/// USER. Whenever the oracle (or the testnet fixed price) is below the market price by more than 5%,
-/// anyone can drain the reserve at that discount.
+/// REGRESSION SG-1 (was Medium): a job nobody answers used to refund 95% of its fee in native ZETAPHY to
+/// the user, making the reserve a stablecoin -> ZETAPHY exchange at the oracle price (50 USD -> 95
+/// ZETAPHY at a $0.50 oracle). Now the gateway is the requester: the ZETAPHY refund returns to the
+/// reserve and the user gets 95% of its stablecoin back.
 contract StableGatewayRefundArbitrage is Test {
-    function test_finding_userGetsNativeRefundForStablecoin() public {
+    NeuroJobs nj;
+    StableGateway g;
+    MockERC20 usd;
+    uint256 k = 0xA11CE;
+    address user;
+
+    function setUp() public {
         vm.warp(1_700_000_000);
-        NeuroJobs nj = new NeuroJobs(100 ether, 0, 0.01 ether, 1 hours, 2 hours, 4 hours, 0);
-        StableGateway g = new StableGateway(INeuroJobs(address(nj)));
-        MockERC20 usd = new MockERC20("USD", "USD", 6);
+        nj = new NeuroJobs(100 ether, 0, 0.01 ether, 1 hours, 2 hours, 4 hours, 0);
+        g = new StableGateway(INeuroJobs(address(nj)));
+        usd = new MockERC20("USD", "USD", 6);
         MockOracle o = new MockOracle();
         o.set(address(0x2E7A), 0.5e18);
         g.setOracle(IPriceOracle(address(o)), address(0x2E7A));
         g.setToken(address(usd), true, false, 6);
         vm.deal(address(g), 1000 ether);
-        uint256 k = 0xA11CE;
-        address user = vm.addr(k);
+        user = vm.addr(k);
         usd.mint(user, 1000e6);
         vm.prank(user);
         usd.approve(address(g), type(uint256).max);
-        StableGateway.JobRequest memory q = StableGateway.JobRequest(user, address(usd), "zetaphy", "0xnobody", 100 ether, 0, 1000e6, 0, block.timestamp + 1);
+    }
+
+    function _request(uint256 fee, uint256 nonce) internal returns (uint256) {
+        StableGateway.JobRequest memory q = StableGateway.JobRequest(user, address(usd), "zetaphy", "0xnobody", fee, 0, 1000e6, nonce, block.timestamp + 1);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(k, g.hashRequest(q));
-        uint256 id = g.request(q, abi.encodePacked(r, s, v));    // pays 50 USD
+        return g.request(q, abi.encodePacked(r, s, v));
+    }
+
+    function test_regression_SG1_refundStaysInStablecoin() public {
+        uint256 id = _request(100 ether, 0);            // pays 50 USD, the reserve pays 100 ZETAPHY
+        (address requester,,,,,,,,,) = nj.getJob(id);
+        assertEq(requester, address(g), "the gateway is the requester");
+        vm.expectRevert(StableGateway.NotRefundable.selector);
+        g.refund(id);                                    // not failed yet
         vm.warp(block.timestamp + 2 hours);
         nj.expire(id);
+        assertEq(nj.credit(user), 0, "no native credit for the user");
         vm.prank(user);
+        vm.expectRevert();
         nj.withdraw();
-        assertEq(user.balance, 95 ether, "95 native ZETAPHY for 50 USD");
-        assertEq(usd.balanceOf(user), 950e6);
+        g.refund(id);                                    // anyone
+        assertEq(user.balance, 0, "no ZETAPHY bought");
+        assertEq(usd.balanceOf(user), 950e6 + 47.5e6, "95% of the 50 USD back");
+        assertEq(address(g).balance, 1000 ether - 5 ether, "the reserve got its ZETAPHY back (minus the 5% fail burn)");
+        vm.expectRevert(StableGateway.NotRefundable.selector);
+        g.refund(id);                                    // once
+    }
+
+    /// Round trip at any fee: the user never ends with ZETAPHY or with more stablecoin than it started.
+    function testFuzz_SG1_noExchange(uint96 fee) public {
+        uint256 f = bound(fee, 0.01 ether, 500 ether);
+        uint256 id = _request(f, 0);
+        vm.warp(block.timestamp + 2 hours);
+        nj.expire(id);
+        g.refund(id);
+        assertEq(user.balance, 0);
+        assertLe(usd.balanceOf(user), 1000e6);
     }
 }

@@ -243,40 +243,63 @@ contract NeuroJobsInvariants is Test {
     }
 }
 
-/// FINDING NJ-1 (Low): the non-reveal penalty can be escaped when nobody calls expire() (or settle())
-/// during the second jobTimeout. The bond hold ends at start + 2 x jobTimeout whatever happened to the
-/// round; a runner that committed and never revealed requests unbonding, withdraws its whole bond after
-/// the hold, and the later expire() penalises a bond of 0 (the strike is still recorded).
-/// Found by invariant_bondHeldWhileSlashable (counterexample: request, commit, requestUnbond, warp,
-/// withdrawBond). NeuroJobs' NatSpec states the assumption ("expire()/settle() have the second
-/// jobTimeout to be called"); nothing on chain enforces it.
+/// REGRESSION NJ-1 (was Low): a runner that committed and never revealed used to withdraw its whole bond
+/// after the hold if nobody called expire() in the second jobTimeout; the later expire() penalised a bond
+/// of 0. Now an unresolved seat (openSeats) holds the bond: withdrawBond waits until expire()/settle()
+/// resolved the seat, whoever calls it and whenever, so the 10% penalty always lands.
 contract NeuroJobsPenaltyEscape is Test {
-    function test_finding_unrevealedSeatWithdrawsBondBeforeExpire() public {
+    NeuroJobs nj;
+    address w = address(0x3001);
+
+    function setUp() public {
         vm.warp(1_700_000_000);
         vm.roll(1000);
-        NeuroJobs nj = new NeuroJobs(1 ether, 0, 0.01 ether, 30 minutes, 1 hours, 2 hours, 0);
-        address w = address(0x3001);
+        nj = new NeuroJobs(1 ether, 0, 0.01 ether, 30 minutes, 1 hours, 2 hours, 0);
         vm.deal(w, 10 ether);
         vm.prank(w);
         nj.register{value: 1 ether}();
         vm.warp(block.timestamp + 1);
         vm.deal(address(this), 1 ether);
-        uint256 id = nj.request{value: 0.1 ether}("zetaphy", "0xabc");
+    }
+
+    function _commitNeverReveal() internal returns (uint256 id) {
+        id = nj.request{value: 0.1 ether}("zetaphy", "0xabc");
         vm.roll(block.number + 2);
         vm.warp(block.timestamp + 21 minutes);          // last third of the commit window: every runner may sit
         vm.prank(w);
         nj.commit(id, keccak256(abi.encode(bytes32(uint256(1)), w, bytes32(0))));
+        assertEq(nj.openSeats(w), 1);
         vm.prank(w);
         nj.requestUnbond();                              // never reveals
-        vm.warp(block.timestamp + 2 hours + 1);          // past heldUntil and unbondAt; nobody called expire()
+    }
+
+    function test_regression_NJ1_unrevealedSeatHoldsBondUntilPenalised() public {
+        uint256 id = _commitNeverReveal();
+        vm.warp(block.timestamp + 30 days);              // long past heldUntil and unbondAt; nobody called expire()
+        vm.prank(w);
+        vm.expectRevert(NeuroJobsBase.TooEarly.selector);
+        nj.withdrawBond();
+        vm.prank(w);
+        nj.expire(id);                                   // the runner itself (or anyone) resolves the seat
+        assertEq(nj.openSeats(w), 0);
+        assertEq(nj.rewardPool(), 0.1 ether, "10% penalty reached the pool");
         vm.prank(w);
         nj.withdrawBond();
         vm.prank(w);
         nj.withdraw();
-        assertEq(w.balance, 10 ether, "whole bond back");
-        nj.expire(id);                                   // the penalty now lands on a bond of 0
-        (uint128 bond,,,,,,,,,) = nj.workers(w);
-        assertEq(bond, 0);
-        assertEq(nj.rewardPool(), 0, "no penalty reached the pool");
+        assertEq(w.balance, 9 ether + 0.9 ether, "bond minus the penalty");
+    }
+
+    /// A seat that reveals is resolved at once: no extra wait for honest runners.
+    function test_regression_NJ1_revealResolvesSeat() public {
+        uint256 id = nj.request{value: 0.1 ether}("zetaphy", "0xabc");
+        vm.roll(block.number + 2);
+        vm.warp(block.timestamp + 21 minutes);
+        vm.prank(w);
+        nj.commit(id, keccak256(abi.encode(bytes32(uint256(1)), w, bytes32(0))));
+        vm.warp(block.timestamp + 10 minutes);           // commit window over: reveals open
+        vm.prank(w);
+        nj.reveal(id, bytes32(uint256(1)), bytes32(0));
+        assertEq(nj.openSeats(w), 0);
     }
 }

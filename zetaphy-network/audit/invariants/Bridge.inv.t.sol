@@ -363,35 +363,90 @@ contract LockBoxInvariants is Test {
     }
 }
 
-/// FINDING BA-1 (Low): removing a lane (governance setLane(false) or a guardian's emergencyRemoveLane)
-/// does not withdraw the attestations it already gave. A lane caught lying is removed, but its vote on
-/// a pending forged transfer still counts: one more lane (e.g. a second compromised or newly added
-/// one) completes the threshold. Vetoing each pending transfer is the only remedy today.
+/// REGRESSION BA-1 (was Low): removing a lane (governance setLane(false) or a guardian's
+/// emergencyRemoveLane) did not withdraw the attestations it already gave, so one more dishonest lane
+/// completed the threshold for every forged transfer the removed lane had attested. Now only lanes that
+/// are still on (and not re-added since) count, and a transfer that drops below the threshold restarts
+/// its quarantine when it reaches it again.
 contract BridgeAirlockRemovedLaneStillCounts is Test {
-    function test_finding_removedLaneAttestationCounts() public {
+    address gov = address(0x60F);
+    BridgeGuard guard;
+    BridgeAirlock al;
+
+    function setUp() public {
         vm.warp(1_700_000_000);
-        address gov = address(0x60F);
-        BridgeGuard guard = new BridgeGuard(gov);
+        guard = new BridgeGuard(gov);
         vm.startPrank(gov);
         guard.createToken("B", "B", 18);
         guard.setAudit("https://example.org/audit.pdf", keccak256("r"));
-        BridgeAirlock al = new BridgeAirlock(IGuardInbound(address(guard)), "in", gov, 2, 1 hours);
+        al = new BridgeAirlock(IGuardInbound(address(guard)), "in", gov, 2, 1 hours);
         al.setLane(address(0x1A1), true);
         al.setLane(address(0x1A2), true);
         al.setLane(address(0x1A3), true);
         guard.setRoute("in", address(al), 500e18, true);
         vm.stopPrank();
-        // lane 1 is compromised and attests a transfer that never happened
-        vm.prank(address(0x1A1));
+    }
+
+    function _attest(address lane) internal {
+        vm.prank(lane);
         al.attest(1, address(0x50C), 99, address(0xEE), address(0xEE), 400e18);
-        // it is caught and removed
+    }
+
+    function _release() internal {
+        al.release(1, address(0x50C), 99, address(0xEE), address(0xEE), 400e18);
+    }
+
+    function test_regression_BA1_removedLaneAttestationDoesNotCount() public {
+        _attest(address(0x1A1));                       // lane 1 is compromised: a forged transfer
+        vm.prank(gov);
+        al.setLane(address(0x1A1), false);             // caught and removed
+        _attest(address(0x1A2));                       // a second dishonest lane
+        vm.warp(block.timestamp + 1 hours);
+        vm.expectRevert(BridgeAirlock.NotReady.selector);
+        _release();
+        (uint8 n,,,) = al.status(al.transferId(1, address(0x50C), 99, address(0xEE), address(0xEE), 400e18));
+        assertEq(n, 1, "only the lane still on counts");
+        assertEq(guard.token().balanceOf(address(0xEE)), 0);
+    }
+
+    /// Removed AFTER the transfer became ready: the transfer falls below the threshold; a later
+    /// attestation makes it ready again with a fresh quarantine (vetoers get their full window).
+    function test_regression_BA1_removalAfterReadyRestartsQuarantine() public {
+        _attest(address(0x1A1));
+        _attest(address(0x1A2));                        // ready at t0
+        vm.warp(block.timestamp + 50 minutes);
+        vm.prank(address(0x0AA));                       // not a guardian
+        vm.expectRevert();
+        al.emergencyRemoveLane(address(0x1A1));
         vm.prank(gov);
         al.setLane(address(0x1A1), false);
-        // a second dishonest lane attests the same forged transfer: threshold reached
-        vm.prank(address(0x1A2));
-        al.attest(1, address(0x50C), 99, address(0xEE), address(0xEE), 400e18);
+        vm.warp(block.timestamp + 20 minutes);          // t0 + 70 min: old quarantine over
+        vm.expectRevert(BridgeAirlock.NotReady.selector);
+        _release();
+        _attest(address(0x1A3));                        // back at 2: the quarantine starts now
+        vm.warp(block.timestamp + 30 minutes);
+        vm.expectRevert(BridgeAirlock.NotReady.selector);
+        _release();
+        vm.warp(block.timestamp + 31 minutes);
+        _release();
+        assertEq(guard.token().balanceOf(address(0xEE)), 400e18);
+    }
+
+    /// A removed lane re-added later does not bring back its old attestation (it may attest again).
+    function test_regression_BA1_readdedLaneStartsFresh() public {
+        _attest(address(0x1A1));
+        vm.startPrank(gov);
+        al.setLane(address(0x1A1), false);
+        al.setLane(address(0x1A1), true);
+        vm.stopPrank();
+        _attest(address(0x1A2));
+        vm.warp(block.timestamp + 2 hours);
+        vm.expectRevert(BridgeAirlock.NotReady.selector);
+        _release();
+        _attest(address(0x1A1));                        // a fresh attestation counts
+        vm.expectRevert(BridgeAirlock.Twice.selector);
+        _attest(address(0x1A1));
         vm.warp(block.timestamp + 1 hours);
-        al.release(1, address(0x50C), 99, address(0xEE), address(0xEE), 400e18);
-        assertEq(guard.token().balanceOf(address(0xEE)), 400e18, "minted on a removed lane's vote");
+        _release();
     }
 }

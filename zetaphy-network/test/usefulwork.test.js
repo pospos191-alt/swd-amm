@@ -409,7 +409,10 @@ test('bug hunt: same-block reveal, wrong reveal, a rejected finding, and the spo
   w.c.advance(DAY + 3600 + 3 * DAY + 1);
   await assert.rejects(w.bb.send('w1', 'commitFinding', [0n, salt(5)], DEPOSIT), /Closed/);
   await w.bb.send('w4', 'refund', [0n]);
-  assert.equal(await w.bb.call('owed', [w.A('poster')]), 10n * ZETA + DEPOSIT);
+  // BB-1: the wrong finding's deposit grew the reward for a winner; nobody won, so it is burned, not refunded
+  assert.equal(await w.bb.call('owed', [w.A('poster')]), 10n * ZETA);
+  assert.equal(await w.bb.call('burned'), DEPOSIT);
+  await assert.rejects(w.bb.send('poster', 'commitFinding', [0n, salt(6)], DEPOSIT), /Closed|BadFinding/);
 });
 
 test('the deliberately vulnerable vault really is vulnerable on the EVM (and honest use works)', async () => {

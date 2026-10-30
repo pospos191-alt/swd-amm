@@ -30,8 +30,12 @@ contract InsuranceHandler is Test {
     address[3] public rs = [address(0x71), address(0x72), address(0x73)];
     address public disputer = address(0xD15);
 
-    uint256 public ghostPaidOutTwice;
+    uint256 public ghostPaidOutTwice;     // a cover whose claim reached Paid twice
+    uint256 public ghostOverpaid;         // a claim paid more than its entitlement / loss / cover amount
+    uint256 public ghostZeroPayouts;      // a payout that paid nothing while something was still owed (HI-1)
+    uint256 public ghostFledOpenClaim;    // a withdrawal executed while a claim was open (HI-2)
     mapping(uint256 => bool) public coverPaid;
+    mapping(uint256 => uint256) public paidTo;
 
     constructor(HackInsurance i, MockRunners r, address g, bytes32 t) {
         ins = i;
@@ -57,8 +61,11 @@ contract InsuranceHandler is Test {
     }
 
     function withdraw(uint256 who) external {
+        uint256 open = ins.openClaims();
         vm.prank(lps[who % 3]);
-        try ins.withdraw() {} catch {}
+        try ins.withdraw() {
+            if (open != 0) ghostFledOpenClaim++;
+        } catch {}
     }
 
     function buyCover(uint256 who, uint256 amount, uint256 dur) external {
@@ -117,11 +124,25 @@ contract InsuranceHandler is Test {
         uint256 n = ins.claimCount();
         if (n == 0) return;
         uint256 id = claimSeed % n;
-        uint256 coverId = HI.claim(ins, id).coverId;
+        HackInsurance.Claim memory k = HI.claim(ins, id);
+        uint256 owed = ins.entitlement(id) - ins.paidOut(id);
+        uint256 before = k.claimant.balance;
         try ins.payout(id) {
-            if (coverPaid[coverId]) ghostPaidOutTwice++;
-            coverPaid[coverId] = true;
+            _afterPayout(id, k, owed, k.claimant.balance - before);
         } catch {}
+    }
+
+    function _afterPayout(uint256 id, HackInsurance.Claim memory k, uint256 owed, uint256 got) internal {
+        bool closed = HI.claim(ins, id).state == HackInsurance.ClaimState.Paid;
+        uint256 paid = closed ? got - k.bond : got;
+        if (paid == 0 && owed != 0) ghostZeroPayouts++;
+        paidTo[id] += paid;
+        HackInsurance.Cover memory c = HI.cover(ins, k.coverId);
+        if (paidTo[id] > ins.entitlement(id) || paidTo[id] > k.loss || paidTo[id] > c.amount) ghostOverpaid++;
+        if (closed) {
+            if (coverPaid[k.coverId]) ghostPaidOutTwice++;
+            coverPaid[k.coverId] = true;
+        }
     }
 
     function expireCover(uint256 coverSeed) external {
@@ -182,12 +203,27 @@ contract HackInsuranceInvariants is Test {
         assertEq(ins.activeCover(), sum);
     }
 
-    /// Shares: totalShares = sum of LP shares; at most one payout per cover.
+    /// Shares: totalShares = sum of LP shares; at most one claim per cover is paid in full; no claim is paid
+    /// more than its entitlement (<= loss, <= cover amount); a payout never pays 0 while something is owed (HI-1).
     function invariant_sharesAndSinglePayout() public view {
         uint256 s;
         for (uint256 i; i < 3; i++) s += ins.shares(h.lps(i));
         assertEq(ins.totalShares(), s);
         assertEq(h.ghostPaidOutTwice(), 0);
+        assertEq(h.ghostOverpaid(), 0);
+        assertEq(h.ghostZeroPayouts(), 0);
+    }
+
+    /// openClaims counts the claims Voting / Approved / Disputed, and no LP withdraws while one is open (HI-2).
+    function invariant_noFleeingOpenClaims() public view {
+        uint256 n = ins.claimCount();
+        uint256 open;
+        for (uint256 i; i < n; i++) {
+            HackInsurance.ClaimState st = HI.claim(ins, i).state;
+            if (st == HackInsurance.ClaimState.Voting || st == HackInsurance.ClaimState.Approved || st == HackInsurance.ClaimState.Disputed) open++;
+        }
+        assertEq(ins.openClaims(), open);
+        assertEq(h.ghostFledOpenClaim(), 0);
     }
 }
 
@@ -231,10 +267,10 @@ contract HackInsuranceFindings is Test {
         ins.vote(claimId, true, keccak256("r"), loss);
     }
 
-    /// FINDING HI-1 (High for an insurance product; testnet): payout() is permissionless and pays
-    /// min(..., what is left of today's dailyCap). Once the day's cap is used, ANYONE can call payout()
-    /// for another approved claim: it pays 0, marks the claim Paid and the cover claimed, for good.
-    function test_finding_payoutGriefedToZeroByDailyCap() public {
+    /// REGRESSION HI-1 (was High): once the day's cap is used, a stranger's payout() of another approved
+    /// claim used to pay 0 and close it for good. Now it reverts (nothing payable today), the claim stays
+    /// Approved, and the next day pays the whole entitlement.
+    function test_regression_HI1_payoutNotGriefedByDailyCap() public {
         vm.prank(lp);
         ins.deposit{value: 5000 ether}();
         vm.prank(gov);
@@ -245,21 +281,52 @@ contract HackInsuranceFindings is Test {
         ins.payout(a);                       // uses the whole 100 ether daily cap
         uint256 before = bob.balance;
         vm.prank(address(0xBAD));            // a stranger, same day
+        vm.expectRevert(HackInsurance.NothingToPay.selector);
         ins.payout(b);
-        assertEq(bob.balance - before, 1 ether, "bob only got his bond back");
+        assertEq(bob.balance, before);
+        assertEq(uint8(HI.claim(ins, b).state), uint8(HackInsurance.ClaimState.Approved), "still payable");
+        assertFalse(HI.cover(ins, 1).claimed, "cover not consumed");
+        vm.warp(block.timestamp + 1 days);
+        vm.prank(address(0xBAD));
+        ins.payout(b);
+        assertEq(bob.balance - before, 100 ether + 1 ether, "whole entitlement + bond, on the next day");
         assertEq(uint8(HI.claim(ins, b).state), uint8(HackInsurance.ClaimState.Paid));
-        assertTrue(HI.cover(ins, 1).claimed, "cover consumed with a 0 payout");
     }
 
-    /// FINDING HI-2 (Medium): a withdrawal request never expires. An LP requests at deposit time and,
-    /// once withdrawDelay passed, keeps a standing "ready" exit; when a claim is filed it leaves at once
-    /// (before the vote), defeating "a known incident cannot be fled".
-    function test_finding_standingWithdrawalFleesKnownIncident() public {
+    /// HI-1, partial days: a claim larger than the daily cap is paid over several days, never closed short.
+    function test_regression_HI1_largeClaimPaidOverDays() public {
+        vm.prank(lp);
+        ins.deposit{value: 5000 ether}();
+        vm.prank(gov);
+        ins.setParams(200, 30000, 2000, 100 ether, 1 ether, 5 ether, 3 days, 2 days, 7 days);
+        uint256 a = _approvedClaim(alice, 250 ether, 250 ether);
+        uint256 before = alice.balance;
+        vm.warp(block.timestamp + 2 days + 1);
+        assertEq(ins.entitlement(a), 250 ether);
+        ins.payout(a);
+        assertEq(uint8(HI.claim(ins, a).state), uint8(HackInsurance.ClaimState.Approved));
+        vm.expectRevert(HackInsurance.NothingToPay.selector);
+        ins.payout(a);
+        vm.warp(block.timestamp + 1 days);
+        ins.payout(a);
+        vm.warp(block.timestamp + 1 days);
+        assertEq(ins.payoutOf(a), 50 ether);
+        ins.payout(a);
+        assertEq(uint8(HI.claim(ins, a).state), uint8(HackInsurance.ClaimState.Paid));
+        assertEq(alice.balance - before, 250 ether + 1 ether);
+        vm.expectRevert(abi.encodeWithSelector(HackInsurance.WrongState.selector, HackInsurance.ClaimState.Paid));
+        ins.payout(a);
+    }
+
+    /// REGRESSION HI-2 (was Medium): a request made long ago can no longer be held as a standing exit, and
+    /// no withdrawal runs while a claim is open.
+    function test_regression_HI2_noStandingWithdrawal() public {
         vm.prank(lp);
         ins.deposit{value: 1000 ether}();
         uint256 sh = ins.shares(lp);
         vm.prank(lp);
         ins.requestWithdraw(sh);                       // day 0: request, then just wait
+        uint64 expiry = uint64(block.timestamp) + 7 days + 2 days;
         vm.warp(block.timestamp + 30 days);
         uint256 premium = ins.premiumOf(200 ether, 30 days);
         vm.prank(alice);
@@ -268,10 +335,104 @@ contract HackInsuranceFindings is Test {
         bytes32[] memory txs = new bytes32[](1);
         txs[0] = keccak256("hack");
         vm.prank(alice);
-        ins.fileClaim{value: 1 ether}(cover, txs, uint64(block.number - 2), uint64(block.number - 1), keccak256("r"), 200 ether, "");
-        // the incident is public; the LP exits in the same block, nothing left to pay the claim
+        uint256 id = ins.fileClaim{value: 1 ether}(cover, txs, uint64(block.number - 2), uint64(block.number - 1), keccak256("r"), 200 ether, "");
+        vm.prank(lp);
+        vm.expectRevert(abi.encodeWithSelector(HackInsurance.RequestExpired.selector, expiry));
+        ins.withdraw();
+        // a fresh request: still frozen while the claim is open
+        vm.prank(lp);
+        ins.requestWithdraw(sh);
+        vm.warp(block.timestamp + 7 days);
+        // the claim's vote window is over but nobody closed it yet: still open
+        vm.prank(lp);
+        vm.expectRevert(HackInsurance.ClaimsOpen.selector);
+        ins.withdraw();
+        ins.expire(id);
         vm.prank(lp);
         ins.withdraw();
-        assertEq(ins.assets(), 0, "pool emptied while a claim is being voted");
+        assertEq(ins.shares(lp), 0);
     }
+
+    /// HI-3: the pool emptied by a 100% payout while shares exist: a new deposit is not shared with the old
+    /// (worthless) shares.
+    function test_HI3_emptiedPoolDoesNotDiluteNewDeposit() public {
+        vm.prank(gov);
+        ins.setParams(200, 30000, 10000, 10_000 ether, 1 ether, 5 ether, 3 days, 2 days, 7 days); // 100% per claim
+        vm.prank(lp);
+        ins.deposit{value: 100 ether}();
+        uint256 a = _approvedClaim(alice, 300 ether, 300 ether);
+        vm.warp(block.timestamp + 2 days + 1);
+        ins.payout(a);
+        assertEq(ins.assets(), 0, "pool emptied");
+        assertGt(ins.totalShares(), 0, "old shares remain");
+        vm.prank(bob);
+        ins.deposit{value: 100 ether}();
+        uint256 bobShares = ins.shares(bob);
+        vm.prank(bob);
+        ins.requestWithdraw(bobShares);
+        vm.warp(block.timestamp + 7 days);
+        uint256 before = bob.balance;
+        vm.prank(bob);
+        ins.withdraw();
+        assertGe(bob.balance - before, 100 ether - 1, "the new depositor gets its deposit back (old shares worth < 1 wei)");
+    }
+
+    /// HI-3: classic first-depositor inflation: 1 wei deposit + a forced donation (selfdestruct). A victim
+    /// depositing less than the donation is refused (no 0-share mint); the attacker cannot profit.
+    function test_HI3_donationInflationUnprofitable() public {
+        address attacker = address(0xA77);
+        vm.deal(attacker, 2000 ether);
+        vm.prank(attacker);
+        ins.deposit{value: 1}();
+        vm.prank(attacker);
+        new Donor{value: 1000 ether}(payable(address(ins)));
+        vm.prank(lp);
+        vm.expectRevert(HackInsurance.NoShares.selector);
+        ins.deposit{value: 400 ether}();
+        vm.prank(lp);
+        ins.deposit{value: 1500 ether}();
+        uint256 sa = ins.shares(attacker);
+        vm.prank(attacker);
+        ins.requestWithdraw(sa);
+        vm.warp(block.timestamp + 7 days);
+        uint256 a0 = attacker.balance;
+        vm.prank(attacker);
+        ins.withdraw();
+        assertLt(attacker.balance - a0, 1000 ether + 1, "the attacker gets back less than it put in");
+    }
+
+    /// HI-3: a round trip with any three deposits: nobody gets back more than it put in, Σ out <= pool, and
+    /// the virtual share keeps at most rounding dust.
+    function testFuzz_HI3_roundTripNeverPaysMoreThanPool(uint96 d1, uint96 d2, uint96 d3) public {
+        uint256[3] memory d = [bound(d1, 1, 1e24), bound(d2, 1, 1e24), bound(d3, 1, 1e24)];
+        address[3] memory who = [address(0x5001), address(0x5002), address(0x5003)];
+        for (uint256 i; i < 3; i++) {
+            vm.deal(who[i], d[i]);
+            vm.prank(who[i]);
+            try ins.deposit{value: d[i]}() {} catch {}
+        }
+        uint256 pool = ins.assets();
+        for (uint256 i; i < 3; i++) {
+            uint256 sh = ins.shares(who[i]);
+            if (sh == 0) continue;
+            vm.prank(who[i]);
+            ins.requestWithdraw(sh);
+        }
+        vm.warp(block.timestamp + 7 days);
+        uint256 out;
+        for (uint256 i; i < 3; i++) {
+            if (ins.pendingShares(who[i]) == 0) continue;
+            uint256 b0 = who[i].balance;
+            vm.prank(who[i]);
+            ins.withdraw();
+            out += who[i].balance - b0;
+            assertLe(who[i].balance, d[i], "nobody gains from a round trip");
+        }
+        assertLe(out, pool);
+        assertLe(ins.assets(), 3, "rounding dust only");
+    }
+}
+
+contract Donor {
+    constructor(address payable to) payable { selfdestruct(to); }
 }

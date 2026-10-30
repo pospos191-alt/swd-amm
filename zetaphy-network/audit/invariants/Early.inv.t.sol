@@ -202,6 +202,12 @@ contract EarlyInvariants is Test {
             staked += farm.balanceOf(h.users(i));
         }
         assertLe(claimable, farm.owed(), "claimable > owed");
+        // nothing owed to nobody (EF-1): owed = claimable + the stream still to come + the idle stream
+        // not yet settled (nobody staked since lastUpdate), up to per-user rounding
+        uint256 t = farm.lastTime();
+        uint256 toCome = farm.periodFinish() > t ? (farm.periodFinish() - t) * farm.rewardRate() : 0;
+        uint256 idle = farm.totalSupply() == 0 && t > farm.lastUpdate() ? (t - farm.lastUpdate()) * farm.rewardRate() : 0;
+        assertApproxEqAbs(farm.owed(), claimable + toCome + idle, 1e12, "rewards owed to nobody");
         assertEq(staked, farm.totalSupply());
         assertEq(lp.balanceOf(address(farm)), farm.totalSupply(), "LP held != staked");
     }
@@ -224,32 +230,61 @@ contract EarlyInvariants is Test {
     }
 }
 
-/// FINDING EF-1 (Low): rewards streamed while nobody is staked are counted in `owed` but credited to
-/// no one; `recover` cannot take them (they are "owed"), so they are locked in the farm for good.
+/// REGRESSION EF-1 (was Low): rewards streamed while nobody is staked used to stay in `owed`, credited to
+/// no one, and `recover` could not take them. Now the idle part stops being promised at the next update
+/// and the operator recovers it; stakers still get exactly what they earned.
 contract EarlyFarmIdleRewardsStuck is Test {
-    function test_finding_idleRewardsLocked() public {
+    ZetaphyEarly z;
+    MockERC20 lp;
+    ZetaphyEarlyFarm farm;
+    address op = address(0x0909);
+    address u = address(0xE001);
+
+    function setUp() public {
         vm.warp(1_700_000_000);
-        address op = address(0x0909);
-        ZetaphyEarly z = new ZetaphyEarly(op);
-        MockERC20 lp = new MockERC20("LP", "LP", 18);
-        ZetaphyEarlyFarm farm = new ZetaphyEarlyFarm(address(lp), address(z), op);
+        z = new ZetaphyEarly(op);
+        lp = new MockERC20("LP", "LP", 18);
+        farm = new ZetaphyEarlyFarm(address(lp), address(z), op);
         vm.startPrank(op);
         z.transfer(address(farm), 1000 ether);
         farm.notifyReward(1000 ether, 10 days);
         vm.stopPrank();
-        vm.warp(block.timestamp + 5 days);            // nobody staked for half the period
-        address u = address(0xE001);
         lp.mint(u, 1 ether);
-        vm.startPrank(u);
+        vm.prank(u);
         lp.approve(address(farm), 1 ether);
+    }
+
+    function test_regression_EF1_idleRewardsRecoverable() public {
+        vm.warp(block.timestamp + 5 days);            // nobody staked for half the period
+        vm.prank(u);
         farm.stake(1 ether);
         vm.warp(block.timestamp + 6 days);
+        vm.prank(u);
         farm.exit();
-        vm.stopPrank();
         assertApproxEqAbs(z.balanceOf(u), 500 ether, 1e9);
-        assertApproxEqAbs(farm.owed(), 500 ether, 1e9, "half the rewards owed to nobody");
+        assertLe(farm.owed(), 1e9, "nothing owed to nobody");
+        uint256 spare = z.balanceOf(address(farm)) - farm.owed();
+        assertApproxEqAbs(spare, 500 ether, 1e9);
         vm.prank(op);
-        vm.expectRevert(ZetaphyEarlyFarm.Underfunded.selector);
-        farm.recover(op, 1 ether);
+        farm.recover(op, spare);
+        assertGe(z.balanceOf(address(farm)), farm.owed(), "still funded");
+    }
+
+    /// Idle at the end of the period too (everyone left early): recovered once anything updates.
+    function test_regression_EF1_idleAfterExit() public {
+        vm.prank(u);
+        farm.stake(1 ether);
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(u);
+        farm.exit();                                   // ~200 earned
+        vm.warp(block.timestamp + 20 days);            // period over, nobody staked for 8 days
+        vm.prank(op);
+        farm.notifyReward(0, 1 days);                  // any update settles the idle stream
+        assertApproxEqAbs(z.balanceOf(u), 200 ether, 1e9);
+        assertLe(farm.owed(), 1e9);
+        uint256 spare = z.balanceOf(address(farm)) - farm.owed();
+        assertApproxEqAbs(spare, 800 ether, 1e9);
+        vm.prank(op);
+        farm.recover(op, spare);
     }
 }
