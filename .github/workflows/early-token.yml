@@ -7,16 +7,24 @@
 #   mode = collect   the wallets that already used the ZETAPHY chain (at most `max`, oldest first; contracts,
 #                    module accounts and big funds left out), pushed as zetaphy-chain/rewards/early-users.txt to
 #                    the branch rewards/early-users; merge it, then airdrop with list = that file.
+#   mode = pool      the ZEARLY/ZETAPHY pool on the ZETAPHY Swap (first liquidity from the airdrop wallet); adds the
+#                    pool to early-testnet.json and ZEARLY to the Swap's token list, on the branch rewards/early.
+#   mode = extras    deploys the Early Pass, quests (funded), the farm (on the pool's LP, funded) and polls; adds
+#                    their addresses to early-testnet.json on the branch rewards/early (zetaphy-chain/rewards/EARLY.md).
+#   mode = quests    who did each quest (from the chain) and pays the unpaid ones (`send`; unticked = dry run).
+#                    Also runs every day by itself (send), once the quests are deployed.
 # The key: ZETAPHY_DEPLOYER_KEY in the environment testnet-deploy (docs/SECRETS-HARDENING.md), checked against DEPLOYER.
 name: early-token
 
 on:
+  schedule:
+    - cron: "41 4 * * *"   # quests, every day
   workflow_dispatch:
     inputs:
       mode:
         description: "deploy = ZEARLY on the testnet; airdrop = send to a list"
         type: choice
-        options: [airdrop, deploy, collect]
+        options: [airdrop, deploy, collect, pool, extras, quests]
         default: airdrop
       list:
         description: "airdrop: the list file in the repo (one 0x… or zetaphy1… per line)"
@@ -27,8 +35,14 @@ on:
       max:
         description: "collect: at most this many wallets"
         default: "1000"
+      zearly:
+        description: "pool: ZEARLY in the first liquidity"
+        default: "10000000"
+      ztphy:
+        description: "pool: ZETAPHY in the first liquidity"
+        default: "1000"
       send:
-        description: "airdrop: send (unticked = dry run)"
+        description: "airdrop / quests: send (unticked = dry run)"
         type: boolean
         default: false
 
@@ -41,7 +55,7 @@ concurrency:
 
 jobs:
   run:
-    name: ZEARLY ${{ inputs.mode }}
+    name: ZEARLY ${{ inputs.mode || 'quests' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     environment: testnet-deploy
@@ -104,6 +118,50 @@ jobs:
           [ -f ../zetaphy-chain/rewards/early-testnet.json ] || { echo "::error::ZEARLY is not deployed yet (run mode deploy, merge rewards/early)"; exit 1; }
           node scripts/early.js airdrop --list "../$LIST" --each "$EACH" $([ "$SEND" = true ] && echo --send) | tee "$RUNNER_TEMP/airdrop.log"
           { echo "### ZEARLY airdrop ($([ "$SEND" = true ] && echo sent || echo dry run))"; echo '```'; cat "$RUNNER_TEMP/airdrop.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pool, or the Early Pass / quests / farm / polls
+        if: inputs.mode == 'pool' || inputs.mode == 'extras'
+        env:
+          MODE: ${{ inputs.mode }}
+          ZEARLY: ${{ inputs.zearly }}
+          ZTPHY: ${{ inputs.ztphy }}
+        run: |
+          set -o pipefail
+          F=../zetaphy-chain/rewards/early-testnet.json
+          [ -f "$F" ] || { echo "::error::ZEARLY is not deployed yet (mode deploy first)"; exit 1; }
+          if [ "$MODE" = pool ]; then
+            jq -e '.pair == null' "$F" >/dev/null || { echo "::error::the pool already exists"; exit 1; }
+            [[ "$ZEARLY" =~ ^[1-9][0-9]{0,9}$ && "$ZTPHY" =~ ^[1-9][0-9]{0,6}$ ]] || { echo "::error::zearly / ztphy: whole numbers"; exit 1; }
+            node scripts/early.js pool --zearly "$ZEARLY" --ztphy "$ZTPHY" | tail -1 > "$RUNNER_TEMP/out.json"
+            jq -s '.[0] + {pair: .[1].pair}' "$F" "$RUNNER_TEMP/out.json" > "$RUNNER_TEMP/f.json" && mv "$RUNNER_TEMP/f.json" "$F"
+            # ZEARLY in the Swap's token list (zetaphy-dex/web/deployments.json)
+            D=../zetaphy-dex/web/deployments.json
+            jq --arg a "$(jq -r .token "$F")" '.tokens = ((.tokens // []) | map(select(.address != $a)) + [{address: $a, name: "ZETAPHY Early", symbol: "ZEARLY", decimals: 18}])' "$D" > "$RUNNER_TEMP/d.json" && mv "$RUNNER_TEMP/d.json" "$D"
+          else
+            jq -e '.quests == null' "$F" >/dev/null || { echo "::error::the extras are already deployed"; exit 1; }
+            node scripts/early.js extras | tail -1 > "$RUNNER_TEMP/out.json"
+            jq -s '.[0] + .[1]' "$F" "$RUNNER_TEMP/out.json" > "$RUNNER_TEMP/f.json" && mv "$RUNNER_TEMP/f.json" "$F"
+          fi
+          cat "$F"
+          { echo "### ZEARLY $MODE"; echo '```'; cat "$F"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B rewards/early
+          git add zetaphy-chain/rewards/early-testnet.json zetaphy-dex/web/deployments.json
+          git commit -q -m "ZETAPHY Early: $MODE on the testnet" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin rewards/early
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...rewards/early"
+
+      - name: Quests
+        if: inputs.mode == 'quests' || github.event_name == 'schedule'
+        env:
+          SEND: ${{ github.event_name == 'schedule' && 'true' || inputs.send }}
+        run: |
+          set -o pipefail
+          if ! jq -e '.quests | type == "string"' ../zetaphy-chain/rewards/early-testnet.json >/dev/null 2>&1; then echo "the quests are not deployed yet: nothing to do"; exit 0; fi
+          node scripts/early.js quests $([ "$SEND" = true ] && echo --send) | tee "$RUNNER_TEMP/quests.json"
+          { echo "### ZEARLY quests ($([ "$SEND" = true ] && echo paid || echo dry run))"; echo '```'; cat "$RUNNER_TEMP/quests.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect the chain's users
         if: inputs.mode == 'collect'

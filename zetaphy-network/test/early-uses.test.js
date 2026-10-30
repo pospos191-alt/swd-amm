@@ -115,3 +115,62 @@ test('polls: deposit to open, ZEARLY locked per vote (one option), released afte
   assert.equal(await z.call('balanceOf', [a('alice')]), 100_000n * ZETA, 'the deposit back');
   await assert.rejects(p.send('alice', 'release', [0n]), /NothingLocked/);
 });
+
+// ---------------------------------------------------------------- the operations (src/earlyops.js), real signed txs
+import { readFileSync } from 'node:fs';
+import { ContractFactory, Contract, parseEther } from 'ethers';
+import { createRpcChain } from './helpers/rpcchain.js';
+import { createPool, deployExtras, minters, swappers, payQuests, QUESTS } from '../src/earlyops.js';
+
+const dexArt = (n) => JSON.parse(readFileSync(new URL(`../../zetaphy-dex/artifacts/${n}.json`, import.meta.url), 'utf8'));
+const dexDeploy = async (n, args, s) => { const c = await new ContractFactory(dexArt(n).abi, dexArt(n).bytecode, s).deploy(...args); await c.waitForDeployment(); return c; };
+
+test('ops: pool on the Swap, extras deployed and funded, quests found from the chain and paid once', async () => {
+  const c = await createRpcChain({ accounts: 4 });
+  const [drop, bob, carol, dave] = c.signers;
+  const wz = await dexDeploy('WZETAPHY', [], drop);
+  const factory = await dexDeploy('ZetaphyFactory', [drop.address], drop);
+  const router = await dexDeploy('ZetaphyRouter', [await factory.getAddress(), await wz.getAddress()], drop);
+  const dex = { router: await router.getAddress(), factory: await factory.getAddress() };
+  const from = c.blockNumber();
+  const z = await c.deploy('ZetaphyEarly', [drop.address], drop);
+  const token = await z.getAddress();
+
+  const { pair } = await createPool({ signer: drop, token, dex, zearly: 10_000_000, ztphy: 1000 });
+  const ex = await deployExtras({ signer: drop, token, pair, now: Number(c.now()) });
+  for (const k of ['pass', 'quests', 'farm', 'polls']) assert.match(ex[k], /^0x[0-9a-fA-F]{40}$/, k);
+  assert.equal(await z.balanceOf(ex.quests), parseEther('100000000'));
+  const farm = c.at('ZetaphyEarlyFarm', ex.farm);
+  assert.ok((await farm.rewardRate()) > 0n, 'the farm streams rewards');
+
+  // bob swaps ZETAPHY for ZEARLY, then mints a pass; carol adds liquidity; dave does nothing
+  const deadline = BigInt(Number(c.now()) + 3600);
+  await (await router.connect(bob).swapExactETHForTokens(0n, [await wz.getAddress(), token], bob.address, deadline, { value: parseEther('10') })).wait();
+  await (await z.transfer(bob.address, parseEther('20000'))).wait();
+  await (await z.connect(bob).approve(ex.pass, parseEther('1000'))).wait();
+  await (await c.at('ZetaphyEarlyPass', ex.pass, bob).mint()).wait();
+  await (await z.transfer(carol.address, parseEther('5000'))).wait();
+  await (await z.connect(carol).approve(dex.router, parseEther('5000'))).wait();
+  await (await router.connect(carol).addLiquidityETH(token, parseEther('5000'), 0n, 0n, carol.address, deadline, { value: parseEther('1') })).wait();
+
+  const head = c.blockNumber();
+  const found = {
+    swap: await swappers(c.provider, dex.factory, from, head),
+    liquidity: await minters(c.provider, pair, from, head),
+    pass: await minters(c.provider, ex.pass, from, head),
+    stake: [dave.address],
+  };
+  assert.deepEqual(found.swap, [bob.address]);
+  assert.ok(found.liquidity.includes(carol.address) && found.liquidity.includes(drop.address));
+  assert.deepEqual(found.pass, [bob.address]);
+
+  const skip = new Set([drop.address]);
+  const dry = await payQuests({ quests: ex.quests, provider: c.provider, found, skip });
+  assert.deepEqual(dry.map((r) => r.toPay), [1, 1, 1, 1]);
+  const before = await z.balanceOf(bob.address);
+  await payQuests({ quests: ex.quests, signer: drop, provider: c.provider, found, skip, send: true });
+  assert.equal(await z.balanceOf(bob.address) - before, parseEther(String(QUESTS[0].reward + QUESTS[2].reward)), 'bob: swap + pass');
+  assert.equal(await z.balanceOf(dave.address), parseEther(String(QUESTS[3].reward)), 'dave: staking');
+  const again = await payQuests({ quests: ex.quests, signer: drop, provider: c.provider, found, skip, send: true });
+  assert.deepEqual(again.map((r) => r.toPay), [0, 0, 0, 0], 'nobody twice');
+});

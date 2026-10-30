@@ -15,6 +15,24 @@ ZEARLY shows who joined ZETAPHY early. Anyone can hold it, send it and trade it 
 **It has no value, it is not ZETAPHY, and it is never converted into ZETAPHY** (unlike BZTPHY, the validators' and
 runners' reward points, README.md). It is a test token on a test network; nothing here is investment advice.
 
+## What ZEARLY can do (more than a meme coin; no web page of its own)
+
+| | Contract | How people use it |
+|---|---|---|
+| Swap | ZEARLY/ZETAPHY pool on the ZETAPHY Swap | swap.sawasdeecoin.com: ZEARLY is in its token list |
+| Early Pass | `ZetaphyEarlyPass` (ZEPASS) | an NFT bought with 1,000 ZEARLY (burned); one per wallet; for the first 14 days only wallets holding 10,000 ZEARLY; picture drawn on chain; shows on the NFT market like any ERC-721 |
+| Quests | `ZetaphyQuests` | paid by themselves every day: first swap 1,000; liquidity in the pool 5,000; an Early Pass 2,000; staking ZETAPHY 2,000. Each wallet once per quest, recorded on chain |
+| Farm | `ZetaphyEarlyFarm` | stake the pool's LP, earn ZEARLY (50,000,000 over 90 days); withdraw any time |
+| Polls | `ZetaphyEarlyPolls` | opinion polls weighted by ZEARLY locked until the end (1,000 ZEARLY deposit to open one, given back) |
+| Cross-chain | Saphan token routes | to Sepolia, Base Sepolia, Arbitrum Sepolia as zZEARLY (added after deploy, opened by both timelocks) |
+
+None of this changes what ZEARLY is: a fixed supply nobody can add to, no owner, no value.
+The Early Pass, the farm and polls are contract calls (approve, then `mint` / `stake` / `vote`), for now from a tool
+that can call a contract; quests and the Swap need nothing special.
+
+**Maintainers, in order (Actions → `early-token`):** `deploy` → merge `rewards/early` → `pool` → merge → `extras`
+→ merge. Quests then run every day by themselves (`quests` by hand for a dry run).
+
 ## How people get it
 
 1. They send `/claim <their 0x… or zetaphy1…>` to the Telegram bot **@awasdeebot** (one wallet per Telegram
