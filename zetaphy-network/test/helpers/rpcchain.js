@@ -13,14 +13,18 @@ export const ZETA = 10n ** 18n;
 /** Serves a chain's JSON-RPC over HTTP on 127.0.0.1:port (for scripts run as child processes). Returns { url, close }. */
 export async function serveRpc(chain, port) {
   const { createServer } = await import('node:http');
+  let queue = Promise.resolve();
   const server = createServer((req, res) => {
     let body = '';
     req.on('data', (d) => { body += d; });
     req.on('end', async () => {
       const one = async (p) => { try { return { jsonrpc: '2.0', id: p.id, result: await chain.handle(p.method, p.params ?? []) }; } catch (e) { return { jsonrpc: '2.0', id: p.id, error: e.rpc ?? { code: -32000, message: e.message } }; } };
+      // one call at a time, like a node: a call that ran while a transaction was still executing could see (or
+      // checkpoint) half-applied EVM state, which made the airdrop test fail under CI load
+      const run = async (p) => { const r = queue.then(() => one(p)); queue = r.catch(() => {}); return r; };
       const q = JSON.parse(body);
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify(Array.isArray(q) ? await Promise.all(q.map(one)) : await one(q)));
+      res.end(JSON.stringify(Array.isArray(q) ? await Promise.all(q.map(run)) : await run(q)));
     });
   });
   await new Promise((r) => server.listen(port, '127.0.0.1', r));

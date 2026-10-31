@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Visitor count</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="count.css">
+<script type="module" src="count-page.js"></script>
+</head>
+<body>
+<main>
+  <select id="lang" aria-label="Language">
+    <option value="en">English</option><option value="zh">中文</option><option value="es">Español</option>
+    <option value="ko">한국어</option><option value="ja">日本語</option><option value="ru">Русский</option>
+    <option value="vi">Tiếng Việt</option><option value="th">ไทย</option>
+  </select>
+  <h1 data-t="title"></h1>
+  <p data-t="lede"></p>
+  <p id="state" class="state" role="status" aria-live="polite"></p>
+  <button id="toggle" type="button"></button>
+  <p class="note" data-t="note"></p>
+  <p><a href="./" data-t="back"></a></p>
+</main>
+</body>
+</html>

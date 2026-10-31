@@ -90,6 +90,13 @@ browser is offline. Contracts and threat model: [docs/future/offline-trading.md]
   *Domain* property in Google Search Console (one DNS TXT record covers every site) and submits each
   `https://<site>/sitemap.xml`.
 
+## Visitor count (`count.js`, `count.html`)
+
+Hub pages load `count.js`, which turns on Vercel Web Analytics (no cookies; Vercel keeps no IP address) only on
+`*.sawasdeecoin.com`. To keep your own devices out of the numbers, open `https://app.sawasdeecoin.com/count.html`
+once on each phone and computer and press **Don't count this device** (stored in that browser only). Web Analytics
+must be enabled once for the project: Vercel dashboard > zetaphy-hub > Analytics > Enable (free on Hobby).
+
 ## Deploy (Vercel, free)
 
 Project root `zetaphy-hub`, framework "Other". `vercel.json` sets the build, the headers (frames only from this site; scripts only from this site) and the Neuro API rewrite. Domain: `app.sawasdeecoin.com` (Cloudflare: CNAME `app` → `cname.vercel-dns.com`, DNS only).

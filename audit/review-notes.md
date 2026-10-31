@@ -67,14 +67,16 @@ caller-chosen one.
   PQ vote certificate, `zetaphy-chain/README.md` item 8) is also proposer-biasable, so using it
   would not remove the bias. Mainnet stakes on the lottery need commit-reveal or a VRF/beacon.
 
-**New lead (not a tool finding, not changed):** in **AgentRegistry**, the checker of an
+**New lead (not a tool finding), now fixed as AR-2 (`audit/manual-review.md`):** in **AgentRegistry**, the checker of an
 action is the operator's choice (`register`/`update`), and `claimByChecker` pays the victim
 the checker names, up to the whole bond, at once. An operator can therefore switch to a
 checker that names an address of its own, record an action and take the bond back
 immediately, around `UNBOND_DELAY` and around committee claims still open on earlier actions.
 Re-entrancy is not the issue (the call is a STATICCALL); the trust model is. Options: a
 governance allow-list of checkers, or a checker change that only applies after
-`UNBOND_DELAY` and while no claim is open. Owner to decide.
+`UNBOND_DELAY` and while no claim is open. The owner chose the allow-list: `setChecker`
+(governance only), `register`/`update` refuse an unapproved checker, and `claimByChecker` pays
+only while the action's checker is still approved.
 
 **Pipeline changes in the same work**
 

@@ -25,1839 +25,1839 @@ findings:
   - id: aderyn:incorrect-caret-operator:zetaphy-dex/contracts/dlmm/DlmmMath.sol:3f59e3ab82c8
     status: false-positive
     reason: "intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six \"inv *= 2 - d * inv\" steps that follow double that to 256."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/DlmmMath.sol:131
   - id: aderyn:unsafe-casting:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:30a395f5832a
     status: false-positive
     reason: "`out` comes from _binSwap, which returns at most binOut (the bin's uint128 reserve) and reverts if out >= binOut on the partial path; the subtraction is checked arithmetic anyway."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:375
   - id: aderyn:unsafe-casting:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:82843ee8f22d
     status: false-positive
     reason: "`out` comes from _binSwap, which returns at most binOut (the bin's uint128 reserve) and reverts if out >= binOut on the partial path; the subtraction is checked arithmetic anyway."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:378
   - id: aderyn:eth-send-unchecked-address:zetaphy-dex/contracts/WZETAPHY.sol:1ab53a06be60
     status: false-positive
     reason: "withdraw() burns the caller's own WZETAPHY balance (checked arithmetic) and sends the same amount to msg.sender."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/WZETAPHY.sol:36
   - id: aderyn:weak-randomness:zetaphy-dex/contracts/ZetaphyPair.sol:7248a7a7744f
     status: false-positive
     reason: "block.timestamp % 2**32 is the Uniswap V2 TWAP timestamp (wraps by design), not randomness."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/ZetaphyPair.sol:167
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/AgentPolicyWallet.sol:2f84fab07ccc
     status: false-positive
     reason: "RFC 9380 expand_message_xmd / RFC 9591 FROST challenge: the byte layout is fixed by the standards (fixed-width fields around one message, DST suffixed with its length), it must be packed exactly like this to interoperate."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentPolicyWallet.sol:51
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/AgentPolicyWallet.sol:20b5033cc2ca
     status: false-positive
     reason: "RFC 9380 expand_message_xmd / RFC 9591 FROST challenge: the byte layout is fixed by the standards (fixed-width fields around one message, DST suffixed with its length), it must be packed exactly like this to interoperate."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentPolicyWallet.sol:60
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/AgentPolicyWallet.sol:1051b8e85ee5
     status: false-positive
     reason: "input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentPolicyWallet.sol:450
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/AgentRegistry.sol:9157f2cf1eb8
     status: false-positive
     reason: "input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentRegistry.sol:251
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/BridgeGuard.sol:f7604e43a592
     status: false-positive
     reason: "_use() already reverted unless used + amount <= _limit(r), and _limit returns a uint128, so amount fits in uint128."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BridgeGuard.sol:353
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/BridgeGuard.sol:3c93e5498278
     status: false-positive
     reason: "_use() already reverted unless used + amount <= _limit(r), and _limit returns a uint128, so amount fits in uint128."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BridgeGuard.sol:394
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/DetectorPool.sol:5472502779b9
     status: false-positive
     reason: "cut = stake * slashBps / BPS with stake a uint128 and slashBps <= BPS, so cut <= stake fits in uint128."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/DetectorPool.sol:202
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/ForesightRegistry.sol:7d5c7d72d961
     status: false-positive
     reason: "brier <= MAX_LOSS = ONE * ONE = 1e8 (p is basis points, ONE = 10_000), far below 2^64."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ForesightRegistry.sol:200
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:eff01a1d1256
     status: false-positive
     reason: "payout(id) pays the claimant recorded on an Approved claim after the dispute window, once (state set to Paid before sending)."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HackInsurance.sol:330
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HumanAgentLabels.sol:f18a77547d41
     status: false-positive
     reason: "drip() pays msg.sender the amount for its own label, rate-limited per account and per credential, state written before the call."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HumanAgentLabels.sol:552
   - id: aderyn:contract-locks-ether:zetaphy-network/contracts/HyperlaneLane.sol:876eebe6c3d7
     status: false-positive
     reason: "the only payable functions (IMessageRecipient.handle / Pyth updatePriceFeeds, payable because the interface says so) revert when msg.value != 0, so no ether can enter."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HyperlaneLane.sol:54
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HyperlaneLockBoxV2.sol:825d4067ce4a
     status: false-positive
     reason: "claim(id) pays the recipient recorded for that release (r.to), once, after its delay, within the daily limit and the locked backing; anyone may trigger it, the money can only go to r.to."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HyperlaneLockBoxV2.sol:224
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/IntentExecutor.sol:3a6d0fdcae1b
     status: false-positive
     reason: "input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:371
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ModelRegistry.sol:acd91d26214d
     status: false-positive
     reason: "only one dynamic argument (name), last, after a constant string and a uint8: the packing is unambiguous."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ModelRegistry.sol:95
   - id: aderyn:reused-contract-name:zetaphy-network/contracts/NeuroIdentity.sol:37669c344db5
     status: false-positive
     reason: "both files declare the identical one-function ERC-721 receiver interface (same signature); they never end up in one contract, so the duplicate name changes no behaviour."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroIdentity.sol:4
   - id: aderyn:contract-locks-ether:zetaphy-network/contracts/NeuroJobs.sol:e2c7087665c1
     status: false-positive
     reason: "NeuroJobsChallenges is the delegatecall logic of NeuroJobs: its payable entry points carry `delegated`, which reverts when called directly, so ether only ever lands in NeuroJobs (which has withdraw())."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:468
   - id: aderyn:yul-return:zetaphy-network/contracts/NeuroJobs.sol:56997fc16170
     status: false-positive
     reason: "_delegate() is a proxy forwarder (delegatecall to NeuroJobsChallenges, then return or revert the returndata); ending execution with return() is the intent."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:968
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroOracle.sol:cf0665efa0ef
     status: false-positive
     reason: "builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroOracle.sol:264
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroOracle.sol:b04a1e0e90b9
     status: false-positive
     reason: "builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroOracle.sol:267
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroOracle.sol:d1db06a8132e
     status: false-positive
     reason: "builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroOracle.sol:270
   - id: aderyn:contract-locks-ether:zetaphy-network/contracts/NeuroOracle.sol:fc02dce4041e
     status: false-positive
     reason: "the only payable functions (IMessageRecipient.handle / Pyth updatePriceFeeds, payable because the interface says so) revert when msg.value != 0, so no ether can enter."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroOracle.sol:325
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/NeuroScore.sol:13a02d8bdc94
     status: false-positive
     reason: "builds the creation code of a data contract (fixed header + data), not a hash key."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScore.sol:265
   - id: aderyn:yul-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4f53abf6f46c
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScoreVerifier.sol:76
   - id: aderyn:yul-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4f53abf6f46c#2
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScoreVerifier.sol:92
   - id: aderyn:yul-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4f53abf6f46c#3
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScoreVerifier.sol:102
   - id: aderyn:yul-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4f53abf6f46c#4
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScoreVerifier.sol:189
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/QuantumWallet.sol:141f63d7fec9
     status: false-positive
     reason: "input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumWallet.sol:84
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/QuantumWallet.sol:dcc8a6fbc7e1
     status: false-positive
     reason: "CREATE2 init code hash: creationCode followed by abi.encode(constructor args), the standard way to predict a CREATE2 address."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumWallet.sol:111
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ThreatRegistry.sol:c8a75fc38cbb
     status: false-positive
     reason: "builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatRegistry.sol:515
   - id: aderyn:incorrect-caret-operator:zetaphy-network/contracts/TwapRecorder.sol:d52424546788
     status: false-positive
     reason: "intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six \"inv *= 2 - d * inv\" steps that follow double that to 256."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TwapRecorder.sol:184
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/WebAuthnVerifier.sol:bda2ed80364b
     status: false-positive
     reason: "builds a string (a CosmWasm JSON message / a CAIP-10 id / the expected clientDataJSON fragment), never hashed as a key, so a packing collision has nothing to collide with."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/WebAuthnVerifier.sol:44
   - id: aderyn:reused-contract-name:zetaphy-network/contracts/ZetaphyEarlyPass.sol:7def0c39fec1
     status: false-positive
     reason: "both files declare the identical one-function ERC-721 receiver interface (same signature); they never end up in one contract, so the duplicate name changes no behaviour."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyEarlyPass.sol:9
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/ZetaphyOracle.sol:662e4e128e0b
     status: false-positive
     reason: "value is rejected unless 0 < value <= type(uint128).max where the source is read (TWAP and Pyth paths), and `at` is a timestamp."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:286
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/ZetaphyOracle.sol:975848702b62
     status: false-positive
     reason: "value is rejected unless 0 < value <= type(uint128).max where the source is read (TWAP and Pyth paths), and `at` is a timestamp."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:289
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/ZetaphyOracle.sol:2c7d6dfbc04d
     status: false-positive
     reason: "value is rejected unless 0 < value <= type(uint128).max where the source is read (TWAP and Pyth paths), and `at` is a timestamp."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:290
   - id: aderyn:incorrect-caret-operator:zetaphy-network/contracts/ZetaphyOracle.sol:e6c2a0037feb
     status: false-positive
     reason: "intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six \"inv *= 2 - d * inv\" steps that follow double that to 256."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:417
   - id: aderyn:contract-locks-ether:zetaphy-network/contracts/ZetaphyPythRelay.sol:b450c6c65624
     status: false-positive
     reason: "the only payable functions (IMessageRecipient.handle / Pyth updatePriceFeeds, payable because the interface says so) revert when msg.value != 0, so no ether can enter."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyPythRelay.sol:48
   - id: slither:incorrect-exp:zetaphy-dex/contracts/dlmm/DlmmMath.sol:9096fa23eb2a
     status: false-positive
     reason: "intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six \"inv *= 2 - d * inv\" steps that follow double that to 256."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/DlmmMath.sol:108
   - id: slither:reentrancy-balance:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:8a43173e3ccc
     status: false-positive
     reason: "_pay compares the pair's balance before/after one transferFrom to reject fee-on-transfer tokens; the router keeps no state or funds, and the pair does its own reserve accounting under its lock."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:441
   - id: slither:weak-prng:zetaphy-dex/contracts/ZetaphyPair.sol:f98c1d2343a6
     status: false-positive
     reason: "block.timestamp % 2**32 is the Uniswap V2 TWAP timestamp (wraps by design), not randomness."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/ZetaphyPair.sol:165
   - id: slither:reentrancy-balance:zetaphy-dex/contracts/ZetaphyRouter.sol:fcf892f14353
     status: false-positive
     reason: "the Uniswap V2 Router02 fee-on-transfer pattern: the router holds no funds between calls and the balance checked is the caller's own recipient; a token that re-enters can only distort the output of the swap its own caller chose."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/ZetaphyRouter.sol:462
   - id: slither:reentrancy-balance:zetaphy-dex/contracts/ZetaphyRouter.sol:1feac58c8c01
     status: false-positive
     reason: "the Uniswap V2 Router02 fee-on-transfer pattern: the router holds no funds between calls and the balance checked is the caller's own recipient; a token that re-enters can only distort the output of the swap its own caller chose."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/ZetaphyRouter.sol:474
   - id: slither:reentrancy-balance:zetaphy-dex/contracts/ZetaphyRouter.sol:c344d8733607
     status: false-positive
     reason: "the Uniswap V2 Router02 fee-on-transfer pattern: the router holds no funds between calls and the balance checked is the caller's own recipient; a token that re-enters can only distort the output of the swap its own caller chose."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/ZetaphyRouter.sol:486
   - id: slither:encode-packed-collision:zetaphy-network/contracts/AgentPolicyWallet.sol:cf5a290425f8
     status: false-positive
     reason: "input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentPolicyWallet.sol:448
   - id: slither:encode-packed-collision:zetaphy-network/contracts/AgentRegistry.sol:2c451a576d40
     status: false-positive
     reason: "input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentRegistry.sol:244
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/DataDAO.sol:05739bbc9ab4
     status: false-positive
     reason: "pays `account` only the amount proven by a Merkle proof against the round root, once (claimed flag set first), within the round's total."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/DataDAO.sol:151
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:7a372b901aa7
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:239
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:4477f56d0e75
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:239
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:cdd73439ce5a
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:239
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:ac27b1f4b08e
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:239
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:a49d496b6cfd
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:239
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:68d2825a8ee1
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:239
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:f019713c6bc6
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:280
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:51143b145b83
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:280
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:0b14f4fbbe0a
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:280
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:8aa8b7d7a455
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:280
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:8c830dca428f
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:06162550cbc6
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:2ecb39d51644
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:6f81a6ff768c
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:a95c48ba4da5
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:d9fed5f8dd41
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:5302430ff041
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:082fcf79f496
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:8a0635f208da
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:acfff0f98273
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:7234ea39cfc8
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:reentrancy-balance:zetaphy-network/contracts/IntentExecutor.sol:cd2ec9a8ca4f
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:314
   - id: slither:encode-packed-collision:zetaphy-network/contracts/IntentExecutor.sol:f3aacb725392
     status: false-positive
     reason: "input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/IntentExecutor.sol:358
   - id: slither:uninitialized-state:zetaphy-network/contracts/NeuroJobs.sol:0441fc6eaf68
     status: false-positive
     reason: "written outside the base contract that declares it: jobs.push() in NeuroJobs.request, control in the NeuroJobs constructor, challenges[id][k] (storage pointer) and challenged.push(id) in NeuroJobsChallenges.challenge (run by delegatecall on NeuroJobs storage)."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:132
   - id: slither:uninitialized-state:zetaphy-network/contracts/NeuroJobs.sol:0d3f81935010
     status: false-positive
     reason: "written outside the base contract that declares it: jobs.push() in NeuroJobs.request, control in the NeuroJobs constructor, challenges[id][k] (storage pointer) and challenged.push(id) in NeuroJobsChallenges.challenge (run by delegatecall on NeuroJobs storage)."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:134
   - id: slither:uninitialized-state:zetaphy-network/contracts/NeuroJobs.sol:c3f7bd65a279
     status: false-positive
     reason: "written outside the base contract that declares it: jobs.push() in NeuroJobs.request, control in the NeuroJobs constructor, challenges[id][k] (storage pointer) and challenged.push(id) in NeuroJobsChallenges.challenge (run by delegatecall on NeuroJobs storage)."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:136
   - id: slither:uninitialized-state:zetaphy-network/contracts/NeuroJobs.sol:91dbf281f4c9
     status: false-positive
     reason: "written outside the base contract that declares it: jobs.push() in NeuroJobs.request, control in the NeuroJobs constructor, challenges[id][k] (storage pointer) and challenged.push(id) in NeuroJobsChallenges.challenge (run by delegatecall on NeuroJobs storage)."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:138
   - id: slither:uninitialized-storage:zetaphy-network/contracts/NeuroJobs.sol:7d6408636bea
     status: false-positive
     reason: "`Round storage r;` in draw() is assigned on both branches of the if/else-if (j.r or ch.r) and the else branch reverts, so it is never used unassigned."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:877
   - id: slither:uninitialized-state:zetaphy-network/contracts/NeuroScore.sol:5971cc5e7f8e
     status: false-positive
     reason: "_chunks[hash] is filled through the storage pointer `address[] storage list = _chunks[hash]; list.push(...)` in publishModel."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScore.sol:58
   - id: slither:incorrect-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:b56fe4b60e94
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScoreVerifier.sol:71
   - id: slither:incorrect-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:4cb2c34a128c
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScoreVerifier.sol:71
   - id: slither:incorrect-return:zetaphy-network/contracts/NeuroScoreVerifier.sol:c7cb5e89409e
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the inline-assembly helpers end the call with return(0, 0x20) holding false on a bad input, by design of the template."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScoreVerifier.sol:106
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/QuantumWallet.sol:87580af76d20
     status: false-positive
     reason: "a smart wallet: execute() runs only after _authorize() checks the owner's ECDSA and ML-DSA signatures over (to, value, data, deadline, nonce); sending to the signed `to` is its purpose."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumWallet.sol:51
   - id: slither:encode-packed-collision:zetaphy-network/contracts/QuantumWallet.sol:fbfc1d70d7dc
     status: false-positive
     reason: "input of the ML-DSA precompile (1 variant byte, 32-byte message, key, signature). The key must hash to the stored pqKeyHash (checked just before), so its length is fixed, and the precompile splits key and signature by the variant's fixed sizes; no two inputs can be confused."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumWallet.sol:83
   - id: slither:reentrancy-eth:zetaphy-network/contracts/RewardVault.sol:f9f3a307c2ff
     status: false-positive
     reason: "applyShares clears _pending and pendingAt before release(), and release() moves releasedDays forward before paying, so a recipient re-entering finds TooEarly / nothing releasable; the writes after the call only install the already-taken pending list."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RewardVault.sol:127
   - id: slither:weak-prng:zetaphy-network/contracts/RewardVault.sol:fae92282b792
     status: false-positive
     reason: "n % 2 in _rpow is exponentiation by squaring (odd-exponent test), not randomness."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RewardVault.sol:158
   - id: slither:arbitrary-send-erc20:zetaphy-network/contracts/StableGateway.sol:7d0ae06aff07
     status: false-positive
     reason: "q.user is authenticated: _request requires an EIP-712 signature of q (user, token, fee, tip, maxCost, nonce, deadline) recovered to q.user, with a per-user nonce and deadline, before either transferFrom."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StableGateway.sol:222
   - id: slither:arbitrary-send-erc20:zetaphy-network/contracts/StableGateway.sol:0fa417499fb6
     status: false-positive
     reason: "q.user is authenticated: _request requires an EIP-712 signature of q (user, token, fee, tip, maxCost, nonce, deadline) recovered to q.user, with a per-user nonce and deadline, before either transferFrom."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StableGateway.sol:222
   - id: slither:incorrect-exp:zetaphy-network/contracts/TwapRecorder.sol:d03bd35b7388
     status: false-positive
     reason: "intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six \"inv *= 2 - d * inv\" steps that follow double that to 256."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TwapRecorder.sol:160
   - id: slither:reentrancy-eth:zetaphy-network/contracts/UsefulIssuance.sol:8e07beda46a5
     status: false-positive
     reason: "pendingOverflow is zeroed before the call; it is restored only if the call failed, in which case everything the callee did (any re-entry included) was reverted with it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/UsefulIssuance.sol:111
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyCheques.sol:4c54afa8742b
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyCheques.sol:205
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/ZetaphyCheques.sol:803da5b49ae9
     status: false-positive
     reason: "_pay sends only to the channel's recorded payer (refund) or payee (cash), from nonReentrant entry points, after the state is updated."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyCheques.sol:217
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:406a8e84ce45
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:9669a1b27d3b
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:b841a57b52dc
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:162887959b70
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:46181161035e
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:abaea1ce16f9
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:6693bb172968
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:182
   - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:b3e311fb7f61
     status: false-positive
     reason: "every external entry point that reaches this code is nonReentrant (IntentExecutor.execute; ZetaphyOfflineOrders.fill / fillWithPermit; ZetaphyCheques.open / topUp), so the measured balance cannot be changed by re-entering this contract."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:209
   - id: slither:incorrect-exp:zetaphy-network/contracts/ZetaphyOracle.sol:313aa7184c39
     status: false-positive
     reason: "intentional XOR, not exponentiation: this is the 512-bit mulDiv (Remco Bloemen / Uniswap FullMath). (3*d)^2 seeds the Newton iteration for the inverse of the odd d mod 2^256 with 4 correct bits; the six \"inv *= 2 - d * inv\" steps that follow double that to 256."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:393
   - id: slither:msg-value-in-nonpayable:zetaphy-nft/contracts/CollectionBase.sol:3e2149dbf4fe
     status: false-positive
     reason: "_checkPublicPayment is internal and is called only from publicMintTo in ZetaphyERC721 and ZetaphyERC1155, both payable. Slither analysed CollectionBase.sol on its own, where no caller exists."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-nft/contracts/CollectionBase.sol:193
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyQuests.sol:3d425537bde6
     status: false-positive
     reason: "paid[q][a], s.count and earned[a] are written BEFORE token.transfer in the same loop iteration (lines 68-72); the \"after\" state is the next iteration's. token is the immutable ZEARLY token and pay() is onlyOperator."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyQuests.sol:72
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_guard.go:6e9974eb0dd8
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_guard.go:230
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_immune.go:891b47ca4819
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_immune.go:558
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_immune.go:027e43b6b8bd
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_immune.go:574
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_immune.go:c9488a5e479f
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_immune.go:596
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_immune.go:302831b2a3ee
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_immune.go:638
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_modelat.go:2d6fc72f5401
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_modelat.go:140
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_pqcall.go:8c3652c5226f
     status: false-positive
     reason: "n is the index of a field of a small Go struct (pqMarshal iterates v.NumField()), so n+1 always fits in int32."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqcall.go:264
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_pqcall.go:e311c68754a0
     status: false-positive
     reason: "n is the index of a field of a small Go struct (pqMarshal iterates v.NumField()), so n+1 always fits in int32."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqcall.go:276
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_pqcert.go:8fbbfef5d3e0
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqcert.go:113
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_pqcert.go:58a3b797bd13
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqcert.go:139
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_pqcert.go:0787b761e7da
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqcert.go:173
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_pqguard.go:72650affea24
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqguard.go:72
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_pqguard.go:4270fc3fa235
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqguard.go:295
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_qday.go:388e9a5efffc
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_qday.go:90
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_qday.go:f2b251fe05b7
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_qday.go:244
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_random.go:5f1ca0745033
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_random.go:86
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_random.go:13faba03b2d3
     status: false-positive
     reason: "block heights / rounds / unix seconds, always between 0 and 2^63 (written by the chain itself or taken from the block header); the author annotated the line \"#nosec G115\" with that reason, which gosec 2.22.8 does not attach to a multi-line if statement or call, so it still reports it."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_random.go:102
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_threatgate.go:59d25d627c7f
     status: false-positive
     reason: "until = block time (unix seconds, positive) + seconds, where setConsent caps seconds at one day, so the int64 is positive and the uint64 conversion is exact."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_threatgate.go:128
   - id: gosec:G115:zetaphy-chain:evmd/zetaphy_pqcert.go:90830e0ec108
     status: false-positive
     reason: "pqBuildCert returns early unless height-1 equals the block height the previous block stored under pqLastBlockKey, so height-1 is a real block height (>= 1) and exact as uint64; the author annotated the line \"#nosec G115 -- block heights\", which gosec 2.22.8 does not attach to this multi-line statement."
-    decided_by: claude-agent (initial review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, initial review by reading the code)
     date: 2026-10-30
     # zetaphy-chain:evmd/zetaphy_pqcert.go:203
   # ---- audit-fixes branch: new High findings of the fast tier after the manual-review fixes and in the
-  # Audit Network contracts (b215a8c), each verified by reading the code; owner to confirm.
+  # Audit Network contracts (b215a8c), each verified by reading the code; confirmed by the owner 2026-10-30.
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:74e48a7c35f4
     status: false-positive
     reason: "the external call before the state change is a view into AuditNetwork.getRequest (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. certify() then writes the certificate and calls network.markCertified, which only updates AuditNetwork's storage."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditCertificate.sol:192
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:3dc81b7de171
     status: false-positive
     reason: "the external call before the state change is a view into AuditRunners.result (runners), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditCertificate.sol:193
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditCertificate.sol:b8040491c9a4
     status: false-positive
     reason: "revokeFor is callable only by AuditNetwork (msg.sender check on line 226); the call is the view AuditNetwork.getRequest (immutable network). No user code runs."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditCertificate.sol:227
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:10813079d168
     status: false-positive
     reason: "the external call before the state change is a view into the reputation contract's scoreOf (immutable reputation, a view), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditJudges.sol:157
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditJudges.sol:7bb13847c3db
     status: false-positive
     reason: "withdrawBond pays msg.sender its own bond: bond and unbondAt are zeroed before _send, the function is nonReentrant, and the recipient is the caller, not a chosen address."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditJudges.sol:173
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:389e0d6738c3
     status: false-positive
     reason: "appeal() calls AuditNetwork.setAppeal (immutable network, onlyJudging), which only updates AuditNetwork's own storage (and reverts unless the finding is decided, in time and not appealed); it calls nothing else, so no user code runs before appeals[fid] is written."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditJudges.sol:279
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:5061dee9c0e8
     status: false-positive
     reason: "resolveAppeal is governance-only (the timelock). network.decide (immutable AuditNetwork, onlyJudging) updates AuditNetwork's storage and may call AuditCertificate.revokeFor, which only reads AuditNetwork.getRequest; no path reaches user code before decided[item] / credits are written."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditJudges.sol:294
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:1d4a7e40d918
     status: false-positive
     reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditJudges.sol:322
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditJudges.sol:22a6875b098a
     status: false-positive
     reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditJudges.sol:340
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditJudges.sol:94919a440e6c
     status: false-positive
     reason: "withdraw pays msg.sender its own credit (owed zeroed before _send), nonReentrant; the recipient is the caller."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditJudges.sol:347
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/AuditNetwork.sol:eb08501df168
     status: false-positive
     reason: "uint64(fid): fid is an index into the _findings array (or an already-uint64 carried id); 2^64 findings cannot exist (each costs a storage push), so the cast never truncates."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditNetwork.sol:315
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditNetwork.sol:9d997c78e2ff
     status: false-positive
     reason: "withdrawBond pays msg.sender its own auditor bond: bond and unbondAt zeroed before _send, nonReentrant; the recipient is the caller."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditNetwork.sol:348
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/AuditNetwork.sol:253e49960185
     status: false-positive
     reason: "uint64(fid): fid = _findings.length before the push, an array index that cannot reach 2^64."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditNetwork.sol:431
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/AuditNetwork.sol:88da76c728e4
     status: false-positive
     reason: "uint128(reserve): reserve is at most part + (pool - part) = r.pool, and r.pool is a uint128, so the cast never truncates."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditNetwork.sol:582
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditNetwork.sol:1e29c7fac544
     status: false-positive
     reason: "withdraw pays msg.sender its own credit (owed zeroed before _send), nonReentrant; the recipient is the caller."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditNetwork.sol:656
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:99e9a264c707
     status: false-positive
     reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditRunners.sol:109
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:c67e8020911c
     status: false-positive
     reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditRunners.sol:121
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:3624572d3b55
     status: false-positive
     reason: "the external call before the state change is a view into AuditNetwork.core (network), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. The later reputation.record calls come after every state write of settle()."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditRunners.sol:137
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AuditRunners.sol:066ae4f1b6fb
     status: false-positive
     reason: "withdraw pays msg.sender its own credit: owed is zeroed before the call and the _lock guard refuses re-entry; the recipient is the caller."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditRunners.sol:164
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AuditRunners.sol:ca551f4df3b9
     status: false-positive
     reason: "the state change after the call is `_lock = 1`, the release of the re-entrancy guard set before it (owed already zeroed); re-entry during the call reverts with Reentrant()."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditRunners.sol:170
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/BugBounty.sol:1989e9c77c8b
     status: false-positive
     reason: "the external call before the state change is a view into NeuroJobs.workers (runners, a view), an immutable address set in the constructor to our own contract (no callback to user code); nothing an attacker controls runs between the call and the write. The only other call, _burn, sends to the constant 0x...dEaD (no code) after the state is final."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BugBounty.sol:241
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:65b72ec11fdd
     status: false-positive
     reason: "close() sends ETH only through _burn, to the constant BURN address 0x000000000000000000000000000000000000dEaD (no code; BB-1/BB-2 fix), after the finding's state is set; no user-chosen address."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BugBounty.sol:288
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:7e49afbd7cc2
     status: false-positive
     reason: "refund() sends ETH only through _burn, to the constant BURN address 0x...dEaD (no code), after refunded and the sponsor's credit are written; the sponsor is paid by pull (withdraw)."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BugBounty.sol:305
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/RewardVault.sol:6a8540746ace
     status: false-positive
     reason: "release() sets _paying = true before calling the recipients (governance-chosen, 7-day delay); while it is set, release() returns 0, receive() does not checkpoint, releasable() is 0 and applyShares() reverts, so a recipient re-entering cannot read or change _due/_vesting/_shares. The writes after the loop (_paying = false, _vesting = balance) only close that window."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RewardVault.sol:108
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/RewardVault.sol:0720ebdb803c
     status: false-positive
     reason: "same as the callFund branch: plain recipient call made with _paying = true; every function that reads the vault's accounting is inert or reverts until the loop ends."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RewardVault.sol:110
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/AuditJudges.sol:a5e69e4a79dd
     status: false-positive
     reason: "_send is called only from withdrawBond and withdraw, both with to = msg.sender and its own (already zeroed) balance; no caller can choose another recipient."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditJudges.sol:355
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/AuditNetwork.sol:2c542cad2bed
     status: false-positive
     reason: "_send is called only from withdrawBond and withdraw with to = msg.sender and its own (already zeroed) balance; no caller chooses the recipient."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditNetwork.sol:664
   - id: slither:reentrancy-eth:zetaphy-network/contracts/AuditRunners.sol:deb8e882f464
     status: false-positive
     reason: "withdraw: owed[msg.sender] is zeroed and _lock set to 2 before the call; the only write after it is _lock = 1, the re-entrancy guard's own release. A re-entering caller gets Reentrant()."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AuditRunners.sol:164
   - id: slither:reentrancy-eth:zetaphy-network/contracts/RewardVault.sol:68f5add48920
     status: false-positive
     reason: "cross-function re-entrancy into release/receive/releasable/applyShares is closed by _paying (set before the recipient calls): release returns 0, receive skips the checkpoint, releasable returns 0, applyShares reverts. _due is zeroed before the calls; _vesting and _paying are written after them only to close the window."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RewardVault.sol:93
   - id: slither:reentrancy-eth:zetaphy-network/contracts/RewardVault.sol:cd559ca8ec49
     status: false-positive
     reason: "applyShares clears _pending and pendingAt before calling release(), and refuses to run while release() is paying (_paying), so a recipient cannot apply a list twice or swap the list being paid; the writes after release() only install the already-taken list."
-    decided_by: claude-agent (audit-fixes review by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, audit-fixes review by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RewardVault.sol:147
   # ---- open High findings, decided one by one (review-notes.md "Decisions on the open Highs") ----
   - id: aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:90694f24e172
     status: false-positive
     reason: "createPair: pairDeployer is immutable, created by this factory's constructor (`new ZetaphyDlmmPairDeployer()`), and its deploy() only CREATE2s a ZetaphyDlmmPair (whose constructor makes one view call back for its parameters); no token or user code runs. getPair is checked empty before, and the CREATE2 salt (tokenX, tokenY, binStep) makes a second pair for the same key impossible."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/ZetaphyDlmmFactory.sol:135
   - id: aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:a05e81fab0e0
     status: false-positive
     reason: "pair constructor: IDlmmPairDeployer.pairParameters() is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. msg.sender is the deployer that is CREATE2-ing this pair."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:184
   - id: aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:8769c5ef1b3d
     status: false-positive
     reason: "collectProtocolFees has the pair's lock modifier; IDlmmFactoryForPair.feeTo() is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. The fees are zeroed before the token transfers."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/ZetaphyDlmmPair.sol:602
   - id: aderyn:reentrancy-state-change:zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:a5f803434df8
     status: false-positive
     reason: "router constructor: IDlmmFactoryR.PAIR_CODE_HASH() / pairDeployer() is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. It runs once, at deploy, on the factory given by the deployer."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:131
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentPolicyWallet.sol:fdd324aa9a3b
     status: false-positive
     reason: "executeCosigned (onlyAgent): ICosignCommittee.isValid is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. The committee is set only by the owner (_config). cosignNonce++ after it is the replay counter of the digest just checked."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentPolicyWallet.sol:415
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentPolicyWallet.sol:c4d27826f961
     status: false-positive
     reason: "executeCosignedFrost (onlyAgent): ICosignCommittee.isValidFrost is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. The committee is set only by the owner (_config). cosignNonce++ after it is the replay counter of the digest just checked."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentPolicyWallet.sol:434
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentRegistry.sol:71496f0f2b20
     status: false-positive
     reason: "claimByChecker: IPolicyChecker.check is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. So a malicious checker cannot re-enter to pay twice; act.slashed is then set before _slash pays (one payout per action), and _slash caps the payout at the bond. (Separate design note, not this finding: the checker is the operator's choice; see review-notes.md.)"
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentRegistry.sol:295
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AgentRegistry.sol:24a8d2ef837d
     status: false-positive
     reason: "vote -> _close pays only recorded addresses: c.claimant (msg.sender of fileClaim) its deposit and the slashed damage, or a.operator (who registered the agent) the deposit. Claim state, openClaims and the bond are updated before each payment (_slash subtracts before _pay)."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentRegistry.sol:313
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/AgentRegistry.sol:8f7ed6746973
     status: false-positive
     reason: "expireClaim -> _close(claimId, false) pays the claim deposit to a.operator, the address stored at register(); state (Rejected, openClaims--) is written before the payment."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentRegistry.sol:326
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/BridgeAirlock.sol:44135552b910
     status: false-positive
     reason: "attest (registered runners only, _runner()): control is immutable; INeuroControl.paused() is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BridgeAirlock.sol:447
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/BridgeAirlock.sol:fccfbb9d2469
     status: false-positive
     reason: "attest: airlock is immutable and BridgeAirlock.transferId is `public pure`, a STATICCALL that hashes its arguments. The airlock's state-changing attest() is called last, after votedBy/votes/done are written."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BridgeAirlock.sol:448
   - id: aderyn:contract-locks-ether:zetaphy-network/contracts/BridgeAirlock.sol:d68ff4299dbc
     status: accepted-risk
     reason: "LockBox is the source-chain side of the testnet Neuro bridge lane: lock() takes native coin and emits Locked; by design it has no withdraw/refund path (documented in the contract: a vetoed or held transfer stays locked). Accepted for testnet; users must be told before the lane holds real value, and a release/refund path is needed before mainnet."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BridgeAirlock.sol:477
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/BugBounty.sol:7a2aeb935365
     status: false-positive
     reason: "claim: f.state = Paid and b.paid = true are written before issuance.draw; issuance is set only in the constructor (no setter) and is our UsefulIssuance, whose draw() pays the caller from its bucket after updating its own accounting. owed[] is only credited afterwards (pull payment via withdraw)."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BugBounty.sol:279
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/BugBounty.sol:99f52b427f59
     status: false-positive
     reason: "withdraw pays msg.sender its own owed[msg.sender], zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/BugBounty.sol:320
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ComputeMarket.sol:da98dfc4f428
     status: false-positive
     reason: "take: runners is immutable; IRunnersView.workers is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ComputeMarket.sol:76
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ComputeMarket.sol:ee45839a615c
     status: false-positive
     reason: "withdraw pays msg.sender its own credit[msg.sender], zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ComputeMarket.sol:128
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/DataDAO.sol:a41374451ef7
     status: false-positive
     reason: "claim pays `account` exactly the amount in a Merkle leaf (round, account, amount) proven against the round root; claimed[round][account], r.claimed and reserved are written before the call. Anyone may submit, but the coins only go to the proven account."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/DataDAO.sol:151
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/DetectorPool.sol:c136631d98f3
     status: false-positive
     reason: "register: IForesightTracks.modelOwner is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. foresight is set only in the constructor."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/DetectorPool.sol:117
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/DetectorPool.sol:d886404a1939
     status: false-positive
     reason: "register: IForesightTracks.tracks is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. foresight is set only in the constructor."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/DetectorPool.sol:120
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/DetectorPool.sol:a2d7aad084d2
     status: false-positive
     reason: "withdraw pays msg.sender its own owed[msg.sender], zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/DetectorPool.sol:228
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:3e51299f8f84
     status: false-positive
     reason: "withdraw pays msg.sender for its own shares (after the request delay, no open claims); pendingShares, shares and totalShares are reduced before _send."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HackInsurance.sol:187
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:48e465db72cd
     status: false-positive
     reason: "buyCover refunds msg.sender only its own overpayment (msg.value - premium), after the cover is recorded."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HackInsurance.sol:211
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HackInsurance.sol:7813ea08ae90
     status: false-positive
     reason: "expire -> _close refunds the claim bond to k.claimant (msg.sender of the claim, stored); state, claimOfCover, openClaims, bondsHeld and k.bond are written before _send."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HackInsurance.sol:292
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:bb6c35f65a54
     status: false-positive
     reason: "vouch: labels is an immutable LabelRegistry; LabelRegistry.labelOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HumanAgentLabels.sol:371
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:1533ef55e154
     status: false-positive
     reason: "vouch: labels is an immutable LabelRegistry; the public getter LabelRegistry.humans is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HumanAgentLabels.sol:375
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:4524c31345e1
     status: false-positive
     reason: "refresh: labels is an immutable LabelRegistry; LabelRegistry.labelOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HumanAgentLabels.sol:393
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:3316bf660feb
     status: false-positive
     reason: "faucet drip: labels is an immutable LabelRegistry; LabelRegistry.labelOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. lastDrip is written before the payment to msg.sender."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HumanAgentLabels.sol:553
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:1a4a6be2c98c
     status: false-positive
     reason: "faucet drip: labels is an immutable LabelRegistry; the public getter LabelRegistry.humans is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. lastDripCredential is written before the payment."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HumanAgentLabels.sol:559
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/HumanAgentLabels.sol:2075a0403a54
     status: false-positive
     reason: "trade gate check (isCaller only): labels is immutable; ILabels.labelOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HumanAgentLabels.sol:613
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/HyperlaneLane.sol:4417665c3c47
     status: false-positive
     reason: "handle: only the Mailbox (msg.sender check), only the configured origin/sender; airlock is immutable and transferId is `pure` (STATICCALL). delivered[id] is set before the airlock's attest() is called."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HyperlaneLane.sol:121
   - id: aderyn:contract-locks-ether:zetaphy-network/contracts/HyperlaneLane.sol:8d254d24e64c
     status: accepted-risk
     reason: "HyperlaneLockBox, like LockBox, locks native coin with no refund path by design (documented: \"Like LockBox it has no refund path: a vetoed or held transfer stays locked here\"); only the Mailbox fee leaves it. Accepted for testnet; a release/refund path is needed before mainnet and users must be told."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/HyperlaneLane.sol:149
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:8754a20c991f
     status: false-positive
     reason: "attestFromJob: jobs is immutable; INAJobs.assurance is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroAttest.sol:93
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:2b15d737e4a5
     status: false-positive
     reason: "attestFromJob: jobs is immutable; INAJobs.getJob is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroAttest.sol:95
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroAttest.sol:62ad0686eab9
     status: false-positive
     reason: "attestFromJob: jobs is immutable; INAJobs.jobInfo is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroAttest.sol:97
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/NeuroJobs.sol:6bb46df40e5a
     status: false-positive
     reason: "withdraw pays msg.sender its own credit[msg.sender], zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:830
   - id: aderyn:weak-randomness:zetaphy-network/contracts/NeuroJobs.sol:6e5cf1246faa
     status: accepted-risk
     reason: "j.seed (requester, chain, target, timestamp, counter) is only a per-job salt, not the randomness: runner selection uses keccak256(seed, blockhash(startBlock + 1), round), a block after the request/round opening, so neither the requester nor a runner retrying can pick it (contract docs, \"Lottery bound to a block nobody picks\"). Remaining, documented weakness: the proposer of block startBlock + 1 can grind that block's hash (validator-level bias), and on a chain whose BLOCKHASH is 0 the fallback is as predictable as the request. The chain's own randomness (PREVRANDAO from the PQ vote certificate, zetaphy-chain README item 8) is also proposer-biasable, so it would not remove the bias. Accepted for testnet; mainnet stakes on the lottery need commit-reveal or a VRF/beacon."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:867
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroJobs.sol:bd0b6673df32
     status: false-positive
     reason: "regrow: control is wired once by the deployer (setControl, then fixed); INeuroKnobs.maxRegrowPerHour is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:1105
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/NeuroJobs.sol:2de7e3e7c899
     status: false-positive
     reason: "regrow: control is wired once by the deployer (setControl, then fixed); INeuroKnobs.roster is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:1106
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/NeuroOracle.sol:1caaf8480004
     status: false-positive
     reason: "push -> _dispatch pays the Mailbox fee to the immutable mailbox and refunds the excess only to msg.sender; sentRound/sentEnforcedFrom are written before the dispatch."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroOracle.sol:253
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RedBlueArena.sol:b3b22c324606
     status: false-positive
     reason: "withdrawBond pays msg.sender its own bond after the unbonding delay and with no active seats; s.bond and s.unbondAt are zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RedBlueArena.sol:212
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RedBlueArena.sol:89756e82c0f6
     status: false-positive
     reason: "withdraw pays msg.sender its own owed[msg.sender], zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RedBlueArena.sol:497
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RewardVault.sol:09024c8ab54d
     status: false-positive
     reason: "release pays the governance-set _shares (set through proposeShares with a 7-day DELAY; _check refuses address(0)); _due is zeroed and _paying set before the calls, and _paying makes a re-entering recipient's release() return 0 and applyShares() revert."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RewardVault.sol:93
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RewardVault.sol:9ee49ec2404b
     status: false-positive
     reason: "applyShares -> release pays the current governance-set shares (7-day DELAY); _pending and pendingAt are cleared before release(), and applyShares refuses to run while _paying."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RewardVault.sol:147
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/RiskForecasts.sol:065a092e6e42
     status: false-positive
     reason: "poke: foresight is set only in the constructor (our ForesightRegistry); its closeCommits() only checks msg.sender == the event resolver and moves the commit/reveal deadlines, calling nothing. s.seenAt is written before it; q.closeAt after it cannot be raced by anything that call can run."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RiskForecasts.sol:195
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/RiskForecasts.sol:7e27372cfe7b
     status: false-positive
     reason: "withdraw pays msg.sender its own owed[msg.sender], zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/RiskForecasts.sol:280
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatRegistry.sol:8ba55f9bdcb9
     status: false-positive
     reason: "withdraw pays msg.sender its own owed[msg.sender], zeroed before _pay."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatRegistry.sol:701
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:b98279c34116
     status: false-positive
     reason: "report: registry is immutable (ThreatRegistry); IThreatRegistryView.entries is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatReports.sol:96
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatReports.sol:cf43cca96e36
     status: false-positive
     reason: "settle pays only communityFund (set by governance, never address(0)) the dust or the expired fee; r.state is written before."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatReports.sol:105
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:6e0a74e63019
     status: false-positive
     reason: "settle: registry is immutable; IThreatRegistryView.entries is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. r.state is written before any payment."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatReports.sol:108
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:9ca6b87cd9a9
     status: false-positive
     reason: "settle: registry is immutable; IThreatRegistryView.quorum is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatReports.sol:110
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ThreatReports.sol:deac0b0c8e00
     status: false-positive
     reason: "claim pays msg.sender (a voter of the settling flag, checked) its share; claimed and r.claims are written before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatReports.sol:125
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:5c0e6b3d4a40
     status: false-positive
     reason: "claim: registry is immutable; IThreatRegistryView.voted is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. claimed[id][msg.sender] and r.claims are written before the payment."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatReports.sol:129
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ThreatReports.sol:b6f5936e67b2
     status: false-positive
     reason: "claim: registry is immutable; IThreatRegistryView.quorum is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatReports.sol:130
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/UsefulIssuance.sol:fd1f9bc87c9e
     status: false-positive
     reason: "sweepOverflow pays only `overflow` (set by governance, non-zero) the pending overflow, zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/UsefulIssuance.sol:111
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/UsefulIssuance.sol:0f4b07f15a88
     status: false-positive
     reason: "sweepOverflow: pendingOverflow is zeroed before the call; the write after it (pendingOverflow = amount) runs only when the call FAILED, and a failed call reverts everything the callee did, including any re-entrant change; on success nothing is written after the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/UsefulIssuance.sol:115
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/UsefulWork.sol:a2ae25d4261d
     status: false-positive
     reason: "withdraw pays msg.sender its own owed[msg.sender], zeroed before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/UsefulWork.sol:374
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/WorkerReputation.sol:74f77558f70a
     status: false-positive
     reason: "linkAgent: identity is immutable; IRepIdentity.ownerOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/WorkerReputation.sol:126
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyFarm.sol:ffb2067e19f9
     status: false-positive
     reason: "notifyReward (onlyOperator): rewardsToken is immutable; IERC20F.balanceOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyEarlyFarm.sol:124
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPass.sol:25ec15001519
     status: false-positive
     reason: "mint: zearly is immutable; IZearly.balanceOf is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyEarlyPass.sol:62
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPass.sol:7b246722d74e
     status: false-positive
     reason: "mint: zearly is the immutable ZETAPHY Early token (contracts/ZetaphyEarly.sol), a plain ERC-20 whose transferFrom has no hooks or callbacks, so it cannot re-enter; minted[msg.sender] and totalSupply are written before it anyway, so a re-entrant mint would revert AlreadyMinted."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyEarlyPass.sol:65
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyEarlyPolls.sol:e315b91c5c79
     status: false-positive
     reason: "create: token is the immutable ZEARLY (contracts/ZetaphyEarly.sol), a plain ERC-20 whose transferFrom has no hooks or callbacks, so the deposit pull cannot re-enter; the poll is written after it with a fresh id (polls.length)."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyEarlyPolls.sol:54
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:17b0ee330e5b
     status: false-positive
     reason: "setTwap (onlyGov): IPairTokens.token0 is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:179
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:fb12769dd4a8
     status: false-positive
     reason: "setTwap (onlyGov): IPairTokens.token1 is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:180
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:ebc0f2e7dfd4
     status: false-positive
     reason: "setTwap (onlyGov): IDecimals.decimals is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:183
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyOracle.sol:045d8518076e
     status: false-positive
     reason: "poke: recorder is immutable (our TwapRecorder); record() only reads the pair through view functions (current(): price*CumulativeLast, getReserves) and writes its own observation, calling nothing that can re-enter; the call is in try/catch."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOracle.sol:263
   - id: osv-scanner:GHSA-3gc7-fjrx-p6mg:yarn.lock:33a6ef4d35fd
     status: false-positive
     reason: "OSV matches by name and version only: the yarn.lock entry is bigint-buffer@1.1.5-pure-js.1, the in-repo pure-JS replacement scripts/vendor/bigint-buffer (root package.json resolutions, 6829bee). The advisory is about the native addon's toBigInt (src/bigint-buffer.c, crash on a bad buffer); the replacement has no native code, checks its input (TypeError) and is tested in scripts/vendor/bigint-buffer/test.js. Used only by the Anchor test tooling (@solana/spl-token -> @solana/buffer-layout-utils), never shipped."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # yarn.lock (bigint-buffer@1.1.5-pure-js.1)
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/AgentPolicyWallet.sol:cb31352524b9
     status: false-positive
     reason: "_run is the wallet's execution path, reached only from the onlyAgent/onlyOwner execute functions: `to` and `value` pass _classify first (allow-listed recipient/target, allow-listed selector, transfer-like selectors refused) and the per-token spending cap in _run itself. Sending value to a chosen address is the wallet's purpose, inside the owner's policy."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentPolicyWallet.sol:601
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/AgentRegistry.sol:73db96ca6d23
     status: false-positive
     reason: "_pay recipients are only: the claimant stored by fileClaim, the operator stored by register, or the victim named by the agent's own checker (a STATICCALL, recorded for the action); amounts are the claim deposit or the slashed bond (capped at the bond, subtracted before the call)."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/AgentRegistry.sol:403
   - id: slither:weak-prng:zetaphy-network/contracts/NeuroJobs.sol:7bcac6f4961b
     status: accepted-risk
     reason: "_eligible draws with keccak256(_rand(seed, round), runner) % 1e18, where _rand is keccak256(seed, blockhash(startBlock + 1), round): bound to a future block, stored on first use, unchanged by retries. The residual bias is the proposer of startBlock + 1 (and the zero-BLOCKHASH fallback), documented in the contract; same decision as the aderyn weak-randomness entry on j.seed. Accepted for testnet; commit-reveal or a VRF/beacon before mainnet stakes."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroJobs.sol:301
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/ThreatReports.sol:0ec044eea415
     status: false-positive
     reason: "_pay recipients are only communityFund (governance-set, non-zero) and msg.sender in claim() after the voter check; amounts are the report fee or its per-voter share, accounted before the call."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ThreatReports.sol:141
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/ZetaphyOfflineOrders.sol:779f0ca40dd5
     status: false-positive
     reason: "_sendNative pays only o.maker (the EIP-712 signer of the order, recovered and checked in _fill) and msg.sender (the relayer fee the maker signed); fill/fillWithPermit are nonReentrant and the order nonce is used before any transfer."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineOrders.sol:237
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/NeuroScore.sol:4e47b7e79173
     status: fixed
     reason: "NeuroScore._score stored int64(score) unchecked. Fixed in 6829bee: _toInt64 reverts ScoreOutOfRange outside int64 instead of storing a truncated score (the event uses the same value); regression test \"a score outside int64 is refused\" in zetaphy-network/test/neuroscore.test.js."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScore.sol (_score)
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/NeuroScore.sol:17b11df7e29a
     status: fixed
     reason: "NeuroScore._score emitted int64(score) unchecked. Fixed in 6829bee: the event now carries the range-checked value from _toInt64 (reverts ScoreOutOfRange); regression test in zetaphy-network/test/neuroscore.test.js."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/NeuroScore.sol (_score)
   - id: osv-scanner:GHSA-3gc7-fjrx-p6mg:yarn.lock:035bd1566304
     status: fixed
     reason: "bigint-buffer@1.1.5 (native toBigInt buffer overflow, no fixed release) is replaced in 6829bee by scripts/vendor/bigint-buffer, a pure-JS drop-in with the same four functions, through the root package.json resolutions; yarn.lock no longer has bigint-buffer@1.1.5, bindings or file-uri-to-path. Tests: scripts/vendor/bigint-buffer/test.js; @solana/spl-token layouts decode/encode through it."
-    decided_by: claude-agent (auditor triage of the open Highs, by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # yarn.lock (was bigint-buffer@1.1.5)
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/CircuitBreakable.sol:a7c1695d05a1
     status: false-positive
     reason: "the external calls go to circuitBreaker, an immutable address fixed at construction (the protocol's own CircuitBreaker); recordOutflow only updates the caller's flow window and never calls back. h.state is set before _payOut, the only call to an untrusted party."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/CircuitBreakable.sol:75
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/CircuitBreakable.sol:a5b6729b5523
     status: false-positive
     reason: "the external calls go to circuitBreaker, an immutable address fixed at construction (the protocol's own CircuitBreaker); recordOutflow only updates the caller's flow window and never calls back. h.state is set before _payOut, the only call to an untrusted party."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/CircuitBreakable.sol:77
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/CircuitBreakable.sol:334255caee4c
     status: false-positive
     reason: "the external calls go to circuitBreaker, an immutable address fixed at construction (the protocol's own CircuitBreaker); recordOutflow only updates the caller's flow window and never calls back. h.state is set before _payOut, the only call to an untrusted party."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/CircuitBreakable.sol:84
   - id: aderyn:unsafe-casting:zetaphy-network/contracts/CircuitBreaker.sol:1c294c1a84a4
     status: false-positive
     reason: "cut = bond * slashBps / 10_000 with slashBps <= MAX_SLASH_BPS (<= 10_000, enforced by _setParams), so cut <= g.bond, which is a uint128: the cast cannot truncate."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/CircuitBreaker.sol:562
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/CircuitBreaker.sol:1469543aea43
     status: false-positive
     reason: "pull payment: msg.sender withdraws its own owed balance, zeroed before the call."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/CircuitBreaker.sol:594
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/CircuitBreaker.sol:e4bedcafdef6
     status: false-positive
     reason: "sends the burned shares to the constant BURN address (nobody holds its key), zeroed before the call."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/CircuitBreaker.sol:603
   - id: aderyn:contract-locks-ether:zetaphy-network/contracts/ImmuneMirror.sol:d099497f560f
     status: false-positive
     reason: "handle() is payable only because the Hyperlane IMessageRecipient interface requires it; it reverts with NoValue when msg.value != 0, so no ether can enter."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ImmuneMirror.sol:36
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ImmuneRegistry.sol:2c2b4540a1cf
     status: false-positive
     reason: "refunds the caller's own msg.value left after paying the quoted Hyperlane fees, to msg.sender."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ImmuneRegistry.sol:424
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ImmuneRegistry.sol:6c383e6f1e2a
     status: false-positive
     reason: "refunds the caller's own msg.value above the quoted Hyperlane fee, to msg.sender."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ImmuneRegistry.sol:443
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ImmuneRegistry.sol:7cb412893768
     status: false-positive
     reason: "not hashed: abi.encodePacked builds the JSON text of the IBC wasm message (a string payload), so packed-encoding collisions do not apply."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ImmuneRegistry.sol:475
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ImmuneRegistry.sol:38afaa5191d4
     status: false-positive
     reason: "not hashed: abi.encodePacked builds the JSON text of the IBC wasm message (a string payload), so packed-encoding collisions do not apply."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ImmuneRegistry.sol:479
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ImmuneRegistry.sol:0e6fe47d03fe
     status: false-positive
     reason: "not hashed: abi.encodePacked builds the JSON text of the IBC wasm message (a string payload), so packed-encoding collisions do not apply."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ImmuneRegistry.sol:483
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/PQMultisigIsm.sol:869c78a7eba6
     status: false-positive
     reason: "not a hash: the ML-DSA-44 precompile input; the key is a fixed PK_BYTES slice and the signature a fixed SIG_BYTES slice of the metadata (ENTRY layout), so the boundaries cannot shift."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PQMultisigIsm.sol:97
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/PQSettlement.sol:263092b41425
     status: false-positive
     reason: "balance-before/after measurement of a token transferFrom inside deposit(), which is nonReentrant; the credit uses the measured amount."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PQSettlement.sol:79
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/PQSettlement.sol:e63bfa1165ed
     status: false-positive
     reason: "balance-before/after measurement of a token transferFrom inside deposit(), which is nonReentrant; the credit uses the measured amount."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PQSettlement.sol:81
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/PQSettlement.sol:e023c17b650c
     status: false-positive
     reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature). The key is checked to be exactly PK_BYTES (1312) before this call, so the split between key and signature is fixed and cannot shift."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PQSettlement.sol:214
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/PrivateAirdrop.sol:30333f99cb9e
     status: false-positive
     reason: "the recipient and fee are bound into the Groth16 proof (signal = keccak(recipient, fee)), the nullifier is spent before paying, and the amount is the immutable per-claim amount."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PrivateAirdrop.sol:49
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/PrivateAirdrop.sol:02b1ff3fd56c
     status: false-positive
     reason: "registry is an immutable ZkIdentityRegistry and verify() is a view (pairing check); the nullifier is marked before any ether is sent."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PrivateAirdrop.sol:53
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/PrivatePoll.sol:b8b6c0c925c9
     status: false-positive
     reason: "registry is an immutable ZkIdentityRegistry: registerScope reverts if the scope is taken and does not call back; verify() is a view. No ether moves in PrivatePoll."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PrivatePoll.sol:46
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/PrivatePoll.sol:f4271cd40fa3
     status: false-positive
     reason: "registry is an immutable ZkIdentityRegistry: registerScope reverts if the scope is taken and does not call back; verify() is a view. No ether moves in PrivatePoll."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PrivatePoll.sol:61
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ProvenVerdicts.sol:733276a507a9
     status: false-positive
     reason: "constructor: view calls to the governance-supplied scorer/verifier to check the pinned model hash; nothing can re-enter a contract under construction."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ProvenVerdicts.sol:177
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ProvenVerdicts.sol:c162b30ed12a
     status: false-positive
     reason: "constructor: view calls to the governance-supplied scorer/verifier to check the pinned model hash; nothing can re-enter a contract under construction."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ProvenVerdicts.sol:178
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ProvenVerdicts.sol:44c169a6196c
     status: false-positive
     reason: "constructor: view calls to the governance-supplied scorer/verifier to check the pinned model hash; nothing can re-enter a contract under construction."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ProvenVerdicts.sol:179
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ProvenVerdicts.sol:f2a45d419991
     status: false-positive
     reason: "pull payment: a runner withdraws its own bond after the unbond delay; r.bond is zeroed before _pay."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ProvenVerdicts.sol:236
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ProvenVerdicts.sol:88be883e2c0d
     status: false-positive
     reason: "pull payment: msg.sender withdraws its own credit, zeroed before _pay."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ProvenVerdicts.sol:245
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ProvenVerdicts.sol:fe3d7a37b139
     status: false-positive
     reason: "the challenger is paid only when re-running the pinned model on the committed features (keccak must match featuresHash) gives a different score; the verdict is overturned before any payment."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ProvenVerdicts.sol:312
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ProvenVerdicts.sol:ac64e92f76bc
     status: false-positive
     reason: "jobs is an immutable NeuroJobs and assurance()/getJob() are views; the contest is deleted and counters updated before any payment."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ProvenVerdicts.sol:340
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ProvenVerdicts.sol:4f82de2e0370
     status: false-positive
     reason: "jobs is an immutable NeuroJobs and assurance()/getJob() are views; the contest is deleted and counters updated before any payment."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ProvenVerdicts.sol:342
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/QuantumRescue.sol:a19d2ea8c39b
     status: false-positive
     reason: "one constant domain tag followed by a single dynamic field (the public key): no two different inputs give the same packed bytes."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumRescue.sol:195
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/QuantumRescue.sol:8f94c6966bc2
     status: false-positive
     reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature). The key is checked to be exactly PK_BYTES (1312) before this call, so the split between key and signature is fixed and cannot shift."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumRescue.sol:222
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/QuantumRescue.sol:b6d4a6c8b073
     status: false-positive
     reason: "balance-before/after measurement of a token transferFrom inside depositTokenFor(), which is nonReentrant; the escrow is credited with the measured amount."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumRescue.sol:238
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/QuantumRescue.sol:fafabb16438a
     status: false-positive
     reason: "balance-before/after measurement of a token transferFrom inside depositTokenFor(), which is nonReentrant; the escrow is credited with the measured amount."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumRescue.sol:240
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/StarkLightClient.sol:d80070584ec7
     status: false-positive
     reason: "finalize() returns the bond to the claim's own submitter after the window; bond zeroed before the call."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkLightClient.sol:220
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/StarkLightClient.sol:9991e513581a
     status: false-positive
     reason: "not a hash: the ML-DSA precompile input; pk (1312) and sig (2420) lengths are checked by every caller (challenge() checks them, submit slices fixed lengths), and the message is the last field."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkLightClient.sol:287
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/StarkLightClient.sol:da3283e41368
     status: false-positive
     reason: "callers pass a constant domain tag (\"zetaphy/starklc/sig\\0\" / \"pk\\0\") and one dynamic field of checked fixed length; the layout must match the off-chain prover (src/starklc)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkLightClient.sol:292
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/StarkVerifier.sol:32783c0a5452
     status: false-positive
     reason: "the signed-vote bytes of the chain (fixed tag, chain id, 0x00, fixed-width fields); the chain id is checked against the pinned chainId, so every field has a fixed length here, and the layout must match what validators sign."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkVerifier.sol:191
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/StarkVerifier.sol:b0d909f6a341
     status: false-positive
     reason: "the signed-vote bytes of the chain (fixed tag, chain id, 0x00, fixed-width fields); the chain id is checked against the pinned chainId, so every field has a fixed length here, and the layout must match what validators sign."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkVerifier.sol:192
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/StarkVerifier.sol:72ac25940da7
     status: false-positive
     reason: "Fiat-Shamir transcript: fixed-width fields plus the statement, which is self-framing (kind and chain length bytes, fixed-width rest) and the message, a deterministic function of the statement; the layout mirrors the off-chain prover (src/starklc)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkVerifier.sol:199
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/TrainingMarket.sol:d46fddcc81a0
     status: false-positive
     reason: "pool is the TrainingPool fixed at construction; eligible() is a view and lock() only changes a counter, onlyMarket, without calling back."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingMarket.sol:278
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/TrainingMarket.sol:5f9361c4cdfc
     status: false-positive
     reason: "pool is the TrainingPool fixed at construction; lock() changes a counter and slash() sends the slashed stake to this market (onlyMarket) without calling back into it."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingMarket.sol:337
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/TrainingMarket.sol:b46134e301a2
     status: false-positive
     reason: "pool is the TrainingPool fixed at construction; lock() changes a counter and slash() sends the slashed stake to this market (onlyMarket) without calling back into it."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingMarket.sol:361
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/TrainingMarket.sol:1e5eb85bccef
     status: false-positive
     reason: "pull payment: msg.sender withdraws its own owed balance, zeroed (and totalOwed reduced) before the send."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingMarket.sol:640
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/TrainingPool.sol:87379f308a67
     status: false-positive
     reason: "a member withdraws its own stake after exitDelay and when not busy; the stake is cleared before the send."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingPool.sol:89
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/TrainingPool.sol:5aa48b78e213
     status: false-positive
     reason: "slash() is onlyMarket and sends the slashed stake to msg.sender, a governance-approved market; the stake is reduced before the call."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingPool.sol:127
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZetaphyBridgeInbox.sol:90bc50c51d69
     status: false-positive
     reason: "lightClient is immutable and appHashAt() is a view; consumed[nonce] is set before the token transfer, and the token is the immutable bridged token."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyBridgeInbox.sol:106
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ZetaphyBridgeInbox.sol:2e9b1660c6f2
     status: false-positive
     reason: "ICS23 IAVL / TendermintSpec encodings: lengths are varint-prefixed (key, value) and every leaf and inner prefix/suffix is validated (_checkLeafPrefix, _checkInner, the storeRoot shape check) as ics23 does, so nodes cannot be reinterpreted; the byte layout is fixed by Cosmos SDK."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyBridgeInbox.sol:143
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ZetaphyBridgeInbox.sol:c0d2e3a89ce1
     status: false-positive
     reason: "ICS23 IAVL / TendermintSpec encodings: lengths are varint-prefixed (key, value) and every leaf and inner prefix/suffix is validated (_checkLeafPrefix, _checkInner, the storeRoot shape check) as ics23 does, so nodes cannot be reinterpreted; the byte layout is fixed by Cosmos SDK."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyBridgeInbox.sol:146
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ZetaphyBridgeInbox.sol:d39a83f0b5c4
     status: false-positive
     reason: "ICS23 IAVL / TendermintSpec encodings: lengths are varint-prefixed (key, value) and every leaf and inner prefix/suffix is validated (_checkLeafPrefix, _checkInner, the storeRoot shape check) as ics23 does, so nodes cannot be reinterpreted; the byte layout is fixed by Cosmos SDK."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyBridgeInbox.sol:177
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ZetaphyBridgeInbox.sol:0980b8f4c096
     status: false-positive
     reason: "ICS23 IAVL / TendermintSpec encodings: lengths are varint-prefixed (key, value) and every leaf and inner prefix/suffix is validated (_checkLeafPrefix, _checkInner, the storeRoot shape check) as ics23 does, so nodes cannot be reinterpreted; the byte layout is fixed by Cosmos SDK."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyBridgeInbox.sol:183
   - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ZetaphyOfflineCash.sol:899c54719a63
     status: false-positive
     reason: "an issuer withdraws its own bond after `until`; the amount is zeroed before _send and the function is nonReentrant."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineCash.sol:170
   - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ZetaphyOfflineCash.sol:c83f346f8e4e
     status: false-positive
     reason: "not a hash: the ML-DSA-44 precompile input; _check requires pk.length == PK_BYTES and keccak(pk) == key first, so the key/signature split is fixed."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineCash.sol:367
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/ZkIdentityRegistry.sol:4f207f7a4ac2
     status: false-positive
     reason: "labels is an immutable LabelRegistry and humans()/levelNow() are views."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityRegistry.sol:170
   - id: aderyn:incorrect-caret-operator:zetaphy-network/contracts/ZkIdentityRegistry.sol:3ac36d54f0bb
     status: false-positive
     reason: "`i ^ 1` is intentional XOR (the sibling index in the Merkle tree), not exponentiation."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityRegistry.sol:258
   - id: aderyn:yul-return:zetaphy-network/contracts/ZkIdentityVerifier.sol:d1720cebb440
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the assembly `return` ends verifyProof with the pairing result by design (same template as the other generated verifiers)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityVerifier.sol:79
   - id: aderyn:yul-return:zetaphy-network/contracts/ZkIdentityVerifier.sol:d1720cebb440#2
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the assembly `return` ends verifyProof with the pairing result by design (same template as the other generated verifiers)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityVerifier.sol:95
   - id: aderyn:yul-return:zetaphy-network/contracts/ZkIdentityVerifier.sol:d1720cebb440#3
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the assembly `return` ends verifyProof with the pairing result by design (same template as the other generated verifiers)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityVerifier.sol:105
   - id: aderyn:yul-return:zetaphy-network/contracts/ZkIdentityVerifier.sol:d1720cebb440#4
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the assembly `return` ends verifyProof with the pairing result by design (same template as the other generated verifiers)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityVerifier.sol:196
   - id: slither:uninitialized-state:zetaphy-network/contracts/CircuitBreaker.sol:8717520b7db7
     status: false-positive
     reason: "_attesters is written through a storage pointer in attest() (`address[] storage list = _attesters[d]; list.push(msg.sender)`), which Slither does not see as initialization."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/CircuitBreaker.sol:165
   - id: slither:encode-packed-collision:zetaphy-network/contracts/PQMultisigIsm.sol:030642a3b422
     status: false-positive
     reason: "not a hash: the ML-DSA-44 precompile input; the key is a fixed PK_BYTES slice and the signature a fixed SIG_BYTES slice of the metadata (ENTRY layout), so the boundaries cannot shift."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PQMultisigIsm.sol:92
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/PQSettlement.sol:9a6543811be7
     status: false-positive
     reason: "`to` is part of the ML-DSA-signed withdrawDigest (keyId, token, amount, to, nonce, deadline); the balance and nonce are updated before the transfer and the function is nonReentrant."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PQSettlement.sol:190
   - id: slither:encode-packed-collision:zetaphy-network/contracts/PQSettlement.sol:d3606835c024
     status: false-positive
     reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature). The key is checked to be exactly PK_BYTES (1312) before this call, so the split between key and signature is fixed and cannot shift."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PQSettlement.sol:213
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/PrivateAirdrop.sol:236c667f9557
     status: false-positive
     reason: "the recipient and fee are bound into the Groth16 proof (signal = keccak(recipient, fee)), the nullifier is spent before paying, and the amount is the immutable per-claim amount."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/PrivateAirdrop.sol:49
   - id: slither:encode-packed-collision:zetaphy-network/contracts/QuantumRescue.sol:3685d756eb71
     status: false-positive
     reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature). The key is checked to be exactly PK_BYTES (1312) before this call, so the split between key and signature is fixed and cannot shift."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumRescue.sol:221
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/QuantumRescue.sol:c9c4d93a08a4
     status: false-positive
     reason: "only the rescued ML-DSA controller (or the account while its classical key is trusted) can claim, and it chooses `to`; the escrow is debited before the transfer and claim() is nonReentrant."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/QuantumRescue.sol:247
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/StarkLightClient.sol:cd833e845e09
     status: false-positive
     reason: "the bond of a claim is paid to whoever proves one of its revealed ML-DSA signatures invalid (the dispute bounty); the claim is marked Rejected and the bond zeroed before the call."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkLightClient.sol:201
   - id: slither:encode-packed-collision:zetaphy-network/contracts/StarkLightClient.sol:bfc088b466da
     status: false-positive
     reason: "not a hash: the ML-DSA precompile input; pk (1312) and sig (2420) lengths are checked by every caller (challenge() checks them, submit slices fixed lengths), and the message is the last field."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkLightClient.sol:285
   - id: slither:encode-packed-collision:zetaphy-network/contracts/StarkVerifier.sol:5e200061e53e
     status: false-positive
     reason: "the signed-vote bytes of the chain (fixed tag, chain id, 0x00, fixed-width fields); the chain id is checked against the pinned chainId, so every field has a fixed length here, and the layout must match what validators sign."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkVerifier.sol:187
   - id: slither:encode-packed-collision:zetaphy-network/contracts/StarkVerifier.sol:ba5064cd5ba4
     status: false-positive
     reason: "Fiat-Shamir transcript: fixed-width fields plus the statement, which is self-framing (kind and chain length bytes, fixed-width rest) and the message, a deterministic function of the statement; the layout mirrors the off-chain prover (src/starklc)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/StarkVerifier.sol:197
   - id: slither:weak-prng:zetaphy-network/contracts/TrainingMarket.sol:d115c421b20f
     status: accepted-risk
     reason: "the spot-check / verifier / evaluator draws use keccak256 of blockhash(drawBlock) (a block fixed by requestDraw before it exists), the task id and this address, reduced % n. The residual bias is the proposer of drawBlock (and re-requesting after 256 blocks), the same pattern and decision as NeuroJobs._eligible. Accepted for testnet; commit-reveal or a VRF/beacon before mainnet stakes."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingMarket.sol:366
   - id: slither:weak-prng:zetaphy-network/contracts/TrainingMarket.sol:27bd1a3b8c6a
     status: accepted-risk
     reason: "the spot-check / verifier / evaluator draws use keccak256 of blockhash(drawBlock) (a block fixed by requestDraw before it exists), the task id and this address, reduced % n. The residual bias is the proposer of drawBlock (and re-requesting after 256 blocks), the same pattern and decision as NeuroJobs._eligible. Accepted for testnet; commit-reveal or a VRF/beacon before mainnet stakes."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingMarket.sol:390
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/TrainingPool.sol:91e730c9168d
     status: false-positive
     reason: "slash() is onlyMarket and sends the slashed stake to msg.sender, a governance-approved market; the stake is reduced before the call."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/TrainingPool.sol:127
   - id: slither:encode-packed-collision:zetaphy-network/contracts/ZetaphyBridgeInbox.sol:f8b49ca8f1a5
     status: false-positive
     reason: "ICS23 IAVL / TendermintSpec encodings: lengths are varint-prefixed (key, value) and every leaf and inner prefix/suffix is validated (_checkLeafPrefix, _checkInner, the storeRoot shape check) as ics23 does, so nodes cannot be reinterpreted; the byte layout is fixed by Cosmos SDK."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyBridgeInbox.sol:141
   - id: slither:encode-packed-collision:zetaphy-network/contracts/ZetaphyBridgeInbox.sol:5ada838533c3
     status: false-positive
     reason: "ICS23 IAVL / TendermintSpec encodings: lengths are varint-prefixed (key, value) and every leaf and inner prefix/suffix is validated (_checkLeafPrefix, _checkInner, the storeRoot shape check) as ics23 does, so nodes cannot be reinterpreted; the byte layout is fixed by Cosmos SDK."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyBridgeInbox.sol:176
   - id: slither:encode-packed-collision:zetaphy-network/contracts/ZetaphyOfflineCash.sol:078fb707a77a
     status: false-positive
     reason: "not a hash: the ML-DSA-44 precompile input; _check requires pk.length == PK_BYTES and keccak(pk) == key first, so the key/signature split is fixed."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineCash.sol:365
   - id: slither:arbitrary-send-eth:zetaphy-network/contracts/ZetaphyOfflineCash.sol:3df9b5fd2fb1
     status: false-positive
     reason: "payouts go to the address the note's holder signed in its Terminal / Swap ticket (ML-DSA), the fee to the submitter; callers are nonReentrant and mark the note redeemed first."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZetaphyOfflineCash.sol:378
   - id: slither:incorrect-exp:zetaphy-network/contracts/ZkIdentityRegistry.sol:7cf1c3bd2107
     status: false-positive
     reason: "`i ^ 1` is intentional XOR (the sibling index in the Merkle tree), not exponentiation."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityRegistry.sol:253
   - id: slither:incorrect-return:zetaphy-network/contracts/ZkIdentityVerifier.sol:b2f10135d844
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the assembly `return` ends verifyProof with the pairing result by design (same template as the other generated verifiers)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityVerifier.sol:74
   - id: slither:incorrect-return:zetaphy-network/contracts/ZkIdentityVerifier.sol:d6d402eabddc
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the assembly `return` ends verifyProof with the pairing result by design (same template as the other generated verifiers)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityVerifier.sol:74
   - id: slither:incorrect-return:zetaphy-network/contracts/ZkIdentityVerifier.sol:f5df4a5be7c8
     status: false-positive
     reason: "generated snarkjs 0.7.6 Groth16 verifier: the assembly `return` ends verifyProof with the pairing result by design (same template as the other generated verifiers)."
-    decided_by: claude-agent (frontier integration triage by reading the code; owner to confirm)
+    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityVerifier.sol:109

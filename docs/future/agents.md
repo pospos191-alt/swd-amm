@@ -42,7 +42,8 @@ ZETAPHY. The caller becomes the **operator** (who answers for the agent). The ag
 
 - `account`: the EVM account it transacts from (one agent per account; used for the AGENT label);
 - `pqKeyHash`: keccak256 of its **ML-DSA-44** public key (the key itself rides in calldata, as in `QuantumWallet`);
-- `constitution`: keccak256 of its policy document; `checker`: an optional deterministic checker contract.
+- `constitution`: keccak256 of its policy document; `checker`: an optional deterministic checker contract,
+  one governance approved (`setChecker`; AR-2: otherwise an operator could pick a checker that pays itself).
 
 **Actions with provenance.** `recordAction(id, {target, value, dataHash, modelHash, promptHash}, pk, sig)`:
 the agent's ML-DSA-44 key signs `actionDigest` (chain id, registry, agent id, a per-agent sequence, the
@@ -69,7 +70,8 @@ checker **in force at that time**, so later policy changes cannot erase liabilit
 (`pqFromSeed(seed).sign(digest)`). The hub's Agents page shows an agent (id or account → operator,
 bond, constitution, key, actions, open claims, status).
 
-**Limits.** A checker is chosen by the operator: a lazy checker finds nothing, so the committee path
+**Limits.** The operator chooses among the approved checkers; a checker claim pays only while the
+action's checker is still approved, so governance can revoke a bad one. A lazy checker finds nothing, so the committee path
 exists; a victim must still be able to describe the harm in terms of a recorded action. Recording is
 voluntary — an agent can act without recording (then its operator answers only off chain); pair it with
 `AgentPolicyWallet` (which logs provenance for every action) or require recorded actions in the apps

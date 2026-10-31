@@ -3,7 +3,7 @@
 // (the JS precompile at 0x…0900); claims by a deterministic checker or by the claims committee.
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { AbiCoder, keccak256, id as textHash, ZeroHash } from 'ethers';
+import { AbiCoder, keccak256, id as textHash, ZeroHash, ZeroAddress } from 'ethers';
 import { createChain, ZETA } from './helpers/evm.js';
 import { PRECOMPILES, mldsaKey } from './helpers/precompiles.js';
 
@@ -21,6 +21,7 @@ beforeEach(async () => {
   c = await createChain(['gov', 'operator', 'agentAcct', 'alice', 'router', 'thief', 'relay', 'm1', 'm2', 'm3', 'claimant'], {}, { precompiles: PRECOMPILES });
   reg = await c.deploy('AgentRegistry', [addr('gov'), 10n * ZETA, 1n * ZETA], 'gov');
   checker = await c.deploy('ConstitutionChecker', [], 'gov');
+  await reg.send('gov', 'setChecker', [checker.address, true]);
   key = mldsaKey();
   await reg.send('operator', 'register', [addr('agentAcct'), key.keyHash, keccak256(constitution()), checker.address], 20n * ZETA);
   A = 1n;
@@ -166,4 +167,22 @@ test('unbond: no new actions, bond back only after the delay and the last action
   const old = await act(addr('thief'), 1n, { id: 2n, k: k2 });
   c.advance(30 * DAY + 1);
   await assert.rejects(reg.send('claimant', 'claimByChecker', [old, constitution(), '0x']), /ClaimWindowOver/);
+});
+
+test('AR-2: only checkers governance approved; revoking one stops its payouts, the committee path stays', async () => {
+  const rogue = await c.deploy('ConstitutionChecker', [], 'operator'); // e.g. one that names the operator as victim
+  await assert.rejects(reg.send('operator', 'update', [A, key.keyHash, keccak256(constitution()), rogue.address]), /CheckerNotApproved/);
+  const k2 = mldsaKey();
+  await assert.rejects(reg.send('operator', 'register', [addr('thief'), k2.keyHash, ZeroHash, rogue.address], 10n * ZETA), /CheckerNotApproved/);
+  await reg.send('operator', 'register', [addr('thief'), k2.keyHash, ZeroHash, ZeroAddress], 10n * ZETA); // no checker is fine
+  await assert.rejects(reg.send('operator', 'setChecker', [rogue.address, true]), /NotGovernance/);
+  await assert.rejects(reg.send('gov', 'setChecker', [ZeroAddress, true]), /NoChecker/);
+
+  const id = await act(addr('thief'), 1n * ZETA); // breaks the constitution
+  await reg.send('gov', 'setChecker', [checker.address, false]);
+  assert.equal(await reg.call('approvedChecker', [checker.address]), false);
+  await assert.rejects(reg.send('claimant', 'claimByChecker', [id, constitution(), '0x']), /CheckerNotApproved/);
+  await assert.rejects(reg.send('operator', 'update', [A, key.keyHash, keccak256(constitution()), checker.address]), /CheckerNotApproved/);
+  await reg.send('gov', 'setChecker', [checker.address, true]);
+  await reg.send('claimant', 'claimByChecker', [id, constitution(), '0x']);
 });

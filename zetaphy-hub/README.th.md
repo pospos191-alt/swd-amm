@@ -80,6 +80,13 @@ QR วาดด้วย `vendor/qrcode.js` (MIT ตรึงไว้ใน `ve
 - **Google:** หา sitemap ผ่าน robots.txt เอง ถ้าอยากให้เร็วขึ้น เจ้าของ sawasdeecoin.com เพิ่ม property แบบ *Domain*
   ใน Google Search Console (ระเบียน DNS TXT เดียวครอบคลุมทุกเว็บ) แล้วส่ง `https://<เว็บ>/sitemap.xml` ของแต่ละเว็บ
 
+## ตัวนับผู้เข้าชม (`count.js`, `count.html`)
+
+หน้าในฮับโหลด `count.js` ซึ่งเปิด Vercel Web Analytics (ไม่ใช้คุกกี้ Vercel ไม่เก็บ IP) เฉพาะบน `*.sawasdeecoin.com`
+ถ้าไม่ให้นับเครื่องตัวเอง ให้เปิด `https://app.sawasdeecoin.com/count.html` ครั้งเดียวในแต่ละมือถือและคอมพิวเตอร์
+แล้วกด **ไม่นับเครื่องนี้** (เก็บไว้ในเบราว์เซอร์นั้นเท่านั้น) ต้องเปิด Web Analytics ให้โปรเจกต์ครั้งเดียว:
+Vercel dashboard > zetaphy-hub > Analytics > Enable (ฟรีบนแผน Hobby)
+
 ## ขึ้นเว็บ (Vercel ฟรี)
 
 ตั้ง root ของโปรเจกต์เป็น `zetaphy-hub` framework เลือก "Other" ส่วน `vercel.json` กำหนดคำสั่ง build, header (frame ได้เฉพาะจากเว็บนี้ สคริปต์โหลดได้เฉพาะจากเว็บนี้) และการส่งต่อ Neuro API โดเมน: `app.sawasdeecoin.com` (Cloudflare: CNAME `app` → `cname.vercel-dns.com` แบบ DNS only)

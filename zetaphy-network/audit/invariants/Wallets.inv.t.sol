@@ -419,7 +419,10 @@ contract AgentRegistryInvariants is Test {
     function setUp() public {
         vm.etch(MLDSA_ADDR, address(new MockMLDSA()).code);
         reg = new AgentRegistry(address(0x60F), 1 ether, 0.1 ether);
-        h = new RegistryHandler(reg, new ConstitutionChecker());
+        ConstitutionChecker checker = new ConstitutionChecker();
+        vm.prank(address(0x60F));
+        reg.setChecker(address(checker), true);
+        h = new RegistryHandler(reg, checker);
         address[] memory c = new address[](3);
         for (uint256 i; i < 3; i++) c[i] = h.committee(i);
         vm.prank(address(0x60F));
