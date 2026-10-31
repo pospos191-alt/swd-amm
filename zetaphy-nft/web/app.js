@@ -6,13 +6,17 @@
 // inserted as HTML.
 import { isAddress, checksum, topicOf, ZERO_ADDRESS } from './lib/abi.js';
 import { F, E, KIND, STATUS, listingFrom, offerFrom, parseZtphy, formatZtphy, shortAddr } from './lib/contracts.js';
-import { makeRpc, read, waitReceipt, scanLogs, RpcError } from './lib/rpc.js';
+import { makeRpc, read, scanLogs, RpcError } from './lib/rpc.js';
 import { loadMetadata, normalizeTokenUri, normalizeGateway, substituteId, cleanText, cleanMultiline, imageSrc, safeLink, DEFAULT_GATEWAY, GATEWAYS, fetchMetadataJson, readMetadata } from './lib/meta.js';
 import { discoverWallets, ensureChain, assertChain, EVM_CHAIN_ID, EVM_CHAIN_ID_HEX, EVM_SYMBOL, openInAppLinks } from './lib/wallet.js';
 import { t, LANGS, LANG_NAMES, pickLang, errorText } from './lib/i18n.js';
 import { threatQueries, readThreat, reasonText, DISCLAIMER, REPRODUCE } from './vendor/zetaphy-lib.js';
 import { safety, ledgerReason } from './lib/wallet-safety.js';
 import { LEDGER_ID_RE, ledgerId, ledgerProvider, hidSupported, preloadTransport } from './lib/ledger.js';
+import * as txg from './lib/txguard.js';
+
+const walletLock = txg.walletLock(); // one wallet request at a time (txguard.js)
+const pageStop = txg.pageSignal(window);
 
 // ---------------------------------------------------------------- state
 
@@ -289,6 +293,20 @@ async function needWallet() {
 async function sendTx(to, data, value = 0n, what = '') {
   const w = await needWallet();
   if (!S.rpc) throw new Error(T('noRpc'));
+  // nothing reaches the wallet while the node is down or this account has a stuck transaction (txguard.js)
+  const rpcFn = (m, p) => S.rpc.call(m, p);
+  await txg.preflight({ rpc: rpcFn, chainId: EVM_CHAIN_ID, from: w.account, lang: S.lang });
+  const hash = await walletLock.run(() => walletSend(w, to, data, value, what), S.lang);
+  status(`${what}${T('pending')} ${String(hash).slice(0, 12)}…`, 'pending');
+  const res = await txg.watchTx({ rpc: rpcFn, hash, from: w.account, signal: pageStop });
+  if (res.status === 'failed') throw new RpcError('transaction reverted', 'reverted', res.receipt);
+  if (res.status === 'timeout' || res.status === 'dropped') throw Object.assign(txg.txgError(S.lang, res.status), { hash });
+  status(`${what}${T('done')}`, 'ok');
+  infoCache.clear();
+  metaCache.clear();
+  return res.receipt ?? null;
+}
+async function walletSend(w, to, data, value, what) {
   await ensureChain(w.provider, rpcUrl()).catch((e) => { throw e?.code === 'WRONG_CHAIN' ? new Error(T('wrongChain')) : e; });
   const v = '0x' + BigInt(value).toString(16);
   try {
@@ -304,12 +322,8 @@ async function sendTx(to, data, value = 0n, what = '') {
   data = sent;
   status(`${what}${T('confirmInWallet')}`, 'pending');
   const hash = await w.provider.request({ method: 'eth_sendTransaction', params: [{ from: w.account, to, data, value: v, chainId: EVM_CHAIN_ID_HEX }] });
-  status(`${what}${T('pending')} ${String(hash).slice(0, 12)}…`, 'pending');
-  const r = await waitReceipt(S.rpc, hash);
-  status(`${what}${T('done')}`, 'ok');
-  infoCache.clear();
-  metaCache.clear();
-  return r;
+  if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('wallet returned no transaction hash');
+  return hash;
 }
 
 function showError(e) {

@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node --test --test-concurrency=1 test/chainlib.test.mjs test/build.test.mjs test/i18n.test.mjs test/walletbar.test.mjs test/mine.test.mjs test/safety.test.mjs test/ledger.test.mjs test/work.test.mjs test/forecasts.test.mjs test/agents.test.mjs test/assist.test.mjs test/ceremony.test.mjs test/seo.test.mjs test/flow.test.mjs test/aichain.test.mjs test/offline.test.mjs test/cash.test.mjs test/audit.test.mjs test/aas.test.mjs test/quantum.test.mjs test/zkid.test.mjs test/zkverdict.test.mjs",
+    "test": "node --test --test-concurrency=1 test/chainlib.test.mjs test/build.test.mjs test/i18n.test.mjs test/walletbar.test.mjs test/mine.test.mjs test/safety.test.mjs test/ledger.test.mjs test/work.test.mjs test/forecasts.test.mjs test/agents.test.mjs test/assist.test.mjs test/ceremony.test.mjs test/seo.test.mjs test/flow.test.mjs test/aichain.test.mjs test/offline.test.mjs test/cash.test.mjs test/audit.test.mjs test/aas.test.mjs test/quantum.test.mjs test/zkid.test.mjs test/zkverdict.test.mjs test/txguard.test.mjs",
     "test:e2e": "node build.mjs && node --test test/hub.e2e.mjs test/mine.e2e.mjs test/safety.e2e.mjs test/work.e2e.mjs test/forecasts.e2e.mjs test/agents.e2e.mjs test/assist.e2e.mjs test/ceremony.e2e.mjs test/aichain.e2e.mjs test/offline.e2e.mjs test/cash.e2e.mjs test/audit.e2e.mjs test/aas.e2e.mjs test/quantum.e2e.mjs test/zkid.e2e.mjs test/zkverdict.e2e.mjs test/count.e2e.mjs",
     "build:ledger": "node tools/build-ledger.mjs",
     "build:evm": "node tools/build-evm.mjs",
