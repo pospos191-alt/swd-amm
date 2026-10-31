@@ -3,6 +3,7 @@
 // and sends forecast / claim / withdraw from MetaMask. Testnet only. No third-party scripts.
 import { pickLang, locale } from './i18n.js';
 import { FORECASTS } from './forecasts-i18n.js';
+import * as txg from './txguard.js';
 
 const CHAIN_HEX = '0x12e4e'; // 77390
 const DEFAULT_NODE = 'https://rpc.sawasdeecoin.com';
@@ -92,9 +93,12 @@ async function connect() {
   if ((await eth.request({ method: 'eth_chainId' })).toLowerCase() !== CHAIN_HEX) throw new Error(T('wrongChain'));
   return account;
 }
+const walletLock = txg.walletLock(); // one wallet request at a time (txguard.js)
 async function send(to, data, value = 0n) {
   const from = account ?? await connect();
-  const hash = await window.ethereum.request({ method: 'eth_sendTransaction', params: [{ from, to, data, value: `0x${value.toString(16)}` }] });
+  // nothing reaches the wallet while the node is down or this account has a stuck transaction (txguard.js)
+  const hash = await txg.guardedSend({ rpc, chainId: 77390, from, lang, lock: walletLock, signal: txg.pageSignal(window),
+    request: () => window.ethereum.request({ method: 'eth_sendTransaction', params: [{ from, to, data, value: `0x${value.toString(16)}` }] }) });
   status(`${T('sent')} ${hash}`, 'good');
   return hash;
 }

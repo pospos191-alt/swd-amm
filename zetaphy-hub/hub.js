@@ -15,6 +15,7 @@ import { LANGS, TEXT, TAB_TEXT, pickLang, locale } from './i18n.js';
 import { walletBar } from './walletbar.js';
 import * as walletLib from './wallet/wallets.js';
 import { A as assistText, badgeOf, presignHooks, immuneWarnings } from './assist.js';
+import * as txg from './txguard.js';
 
 const EVM_CHAIN_ID = 77390;
 const DEFAULT_NODE = 'https://rpc.sawasdeecoin.com';
@@ -444,6 +445,8 @@ async function addKeplr() {
   await window.keplr.experimentalSuggestChain(info);
   await window.keplr.enable(info.chainId);
 }
+const walletLock = txg.walletLock();
+const pageStop = txg.pageSignal(window);
 /** Resolves with the account once the user has connected in the wallet dialog (or rejects when it is closed). */
 function connect() {
   if (account) return Promise.resolve(account);
@@ -456,28 +459,31 @@ function connect() {
     dlg.addEventListener('close', onClose);
   });
 }
-/** Sends a call through the connected wallet after an in-page summary (`action`: what it does, in words; `value`: wei it pays). */
+/** Sends a call through the connected wallet after an in-page summary (`action`: what it does, in words; `value`: wei it pays).
+ *  txguard.js: nothing reaches the wallet while the node is down or the account has a stuck transaction, one wallet
+ *  request at a time, and the result is always one of: in a block, failed, never broadcast, or still pending (with
+ *  what to do in the wallet). Closing the page stops the watch. */
 async function send(to, data, action = '', value = 0n) {
   if (!account) await connect();
-  await addNetwork();
-  const p = wb.provider();
-  const cid = await p.request({ method: 'eth_chainId' }).catch(() => null);
-  if (cid == null || Number(BigInt(cid)) !== EVM_CHAIN_ID) throw new Error(T('wbWrongChain'));
-  // pre-sign assistant (assist.js / presign.js): a simulation on the latest block and, if set up in Neuro, an AI explanation
-  const hooks = presignHooks({ lang, url: ep().evm, from: account, to, data, tokens: HUB.tokens ?? [] });
-  // immune network (docs/future/immune-network.md): a destination flagged by the runners' quorum is a warning before signing
-  const warnings = await immuneWarnings({ lang, url: ep().evm, to, net: HUB.immuneNet });
-  const ok = await wb.safety.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: account, to, toLabel: TO_LABEL[to], data, action, warnings, simulate: hooks.simulate, explain: hooks.explain ?? undefined });
-  if (ok == null) throw Object.assign(new Error(wb.safety.t('cfCancelled')), { code: 4001 });
-  data = ok;
-  const hash = await p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value: `0x${BigInt(value).toString(16)}`, chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
+  await txg.preflight({ rpc: evmCall, chainId: EVM_CHAIN_ID, from: account, lang });
+  const hash = await walletLock.run(async () => {
+    await addNetwork();
+    const p = wb.provider();
+    const cid = await p.request({ method: 'eth_chainId' }).catch(() => null);
+    if (cid == null || Number(BigInt(cid)) !== EVM_CHAIN_ID) throw new Error(T('wbWrongChain'));
+    // pre-sign assistant (assist.js / presign.js): a simulation on the latest block and, if set up in Neuro, an AI explanation
+    const hooks = presignHooks({ lang, url: ep().evm, from: account, to, data, tokens: HUB.tokens ?? [] });
+    // immune network (docs/future/immune-network.md): a destination flagged by the runners' quorum is a warning before signing
+    const warnings = await immuneWarnings({ lang, url: ep().evm, to, net: HUB.immuneNet });
+    const ok = await wb.safety.confirmTx({ network: `ZETAPHY (${EVM_CHAIN_ID})`, from: account, to, toLabel: TO_LABEL[to], data, action, warnings, simulate: hooks.simulate, explain: hooks.explain ?? undefined });
+    if (ok == null) throw Object.assign(new Error(wb.safety.t('cfCancelled')), { code: 4001 });
+    return p.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data: ok, value: `0x${BigInt(value).toString(16)}`, chainId: `0x${EVM_CHAIN_ID.toString(16)}` }] });
+  }, lang);
   if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error(T('failed'));
-  for (let i = 0; i < 60; i++) {
-    await new Promise((r) => setTimeout(r, 2000));
-    const rc = await evmCall('eth_getTransactionReceipt', [hash]).catch(() => null);
-    if (rc) { if (rc.status !== '0x1') throw new Error(`${T('failed')} · ${short(hash, 10, 6)}`); wb.refresh(); return hash; }
-  }
-  return hash;
+  const r = await txg.watchTx({ rpc: evmCall, hash, from: account, signal: pageStop });
+  if (r.status === 'ok') { wb.refresh(); return hash; }
+  if (r.status === 'stopped') return hash;
+  throw Object.assign(txg.txgError(lang, r.status), { hash });
 }
 
 /** EIP-712 signature from the connected wallet (eth_signTypedData_v4); the page has shown the fields first. */
