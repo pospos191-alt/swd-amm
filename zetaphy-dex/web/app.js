@@ -18,6 +18,7 @@ import { parseSettings, serializeSettings, parseImported, cleanWalletId, rpcIsCu
 import { createDlmmTab } from './dlmm.js';
 import { safety, ledgerReason } from './lib/wallet-safety.js';
 import { LEDGER_ID_RE, ledgerId, ledgerProvider, hidSupported, preloadTransport } from './lib/ledger.js';
+import * as txg from './lib/txguard.js';
 
 const $ = (id) => document.getElementById(id);
 const BASE = './';
@@ -429,8 +430,26 @@ async function ensureChain() {
 }
 
 /** Simulates, sends through the wallet, waits for the receipt. Updates `statusId`. */
+const walletLock = txg.walletLock(); // one wallet request at a time (txguard.js)
+const pageStop = txg.pageSignal(window);
 async function sendTx(tx, statusId) {
   if (!state.account) throw new Error(t('connect'));
+  // nothing reaches the wallet while the node is down or this account has a stuck transaction (txguard.js)
+  await txg.preflight({ rpc, chainId: EVM_CHAIN_ID, from: state.account, lang: state.lang });
+  return sendTxLocked(tx, statusId);
+}
+async function sendTxLocked(tx, statusId) {
+  const hash = await walletLock.run(() => walletSend(tx, statusId), state.lang);
+  setStatus(statusId, t('waiting', { hash: short(hash) }));
+  const r = await txg.watchTx({ rpc, hash, from: state.account, signal: pageStop });
+  if (r.status === 'ok' || r.status === 'stopped') {
+    setStatus(statusId, t('done', { hash: short(hash) }), 'ok');
+    return hash;
+  }
+  if (r.status === 'failed') throw new Error(`transaction ${short(hash)} reverted`);
+  throw Object.assign(txg.txgError(state.lang, r.status), { hash });
+}
+async function walletSend(tx, statusId) {
   if (state.chainId !== EVM_CHAIN_ID) await ensureChain();
   const call = { from: state.account, to: tx.to, data: tx.data, ...(tx.value ? { value: '0x' + tx.value.toString(16) } : {}) };
   // A dry run first: a revert is explained before the wallet shows anything.
@@ -452,17 +471,7 @@ async function sendTx(tx, statusId) {
   setStatus(statusId, t('confirmInWallet'));
   const hash = await provider.request({ method: 'eth_sendTransaction', params: [{ ...call, chainId: EVM_CHAIN_ID_HEX }] });
   if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('wallet returned no transaction hash');
-  setStatus(statusId, t('waiting', { hash: short(hash) }));
-  for (let i = 0; i < 120; i++) {
-    const r = await rpc('eth_getTransactionReceipt', [hash]).catch(() => null);
-    if (r) {
-      if (r.status !== '0x1') throw new Error(`transaction ${short(hash)} reverted`);
-      setStatus(statusId, t('done', { hash: short(hash) }), 'ok');
-      return hash;
-    }
-    await new Promise((res) => setTimeout(res, 1000));
-  }
-  throw new Error(`no receipt for ${short(hash)} yet`);
+  return hash;
 }
 
 const deadline = () => BigInt(Math.floor(Date.now() / 1000) + state.settings.deadlineMin * 60);

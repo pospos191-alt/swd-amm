@@ -8,6 +8,10 @@ import { parseInput, encodeCall } from './abi.js';
 import { decodeRevertWith } from './txdeep.js';
 import { sourceBadge, argsTable, revertView } from './txview.js';
 import { safeText, groupDigits } from './format.js';
+import * as txg from './txguard.js';
+
+const walletLock = txg.walletLock(); // one wallet request at a time on this page (txguard.js)
+const pageStop = txg.pageSignal(globalThis.window);
 
 const AUTO_READ = 40; // zero-argument views read when the Read tab opens
 const EVM_CHAIN_HEX = (id) => '0x' + Number(id).toString(16);
@@ -191,13 +195,25 @@ function writeTab(ui, info) {
           const db = await ui.resolver().sigdb();
           return h('div', null, h('p', { class: 'error' }, t('xcWouldRevert')), revertView(ui, { r: hex ? decodeRevertWith(hex, info, db) : { kind: 'text', message: safeText(e?.message ?? e, 300) }, how: 'trace' }));
         }
+        const lang = typeof ui.lang === 'function' ? ui.lang() : ui.lang;
+        // nothing reaches the wallet while the node is down or this account has a stuck transaction (txguard.js)
+        await txg.preflight({ rpc: (m, p) => ui.evm(m, p, 0), chainId, from: account, lang });
+        const hash = await walletLock.run(async () => {
         await ensureChain(); // asked again right before signing: the wallet may have switched
         const sent = await ui.sf.confirmTx({ network: `${ui.cfg.chainName ?? 'ZETAPHY'} (${chainId})`, from: account, to: info.address, toLabel: info.label ?? info.name ?? undefined,
           value, symbol: 'ZETAPHY', data, action: `${f.name}(${f.inputs.map((p) => p.type).join(',')})` });
-        if (sent == null) return note(t('xcCancelled'));
-        const hash = await eth.request({ method: 'eth_sendTransaction', params: [{ ...call, data: sent, chainId: EVM_CHAIN_HEX(chainId) }] });
+        if (sent == null) return null;
+        return eth.request({ method: 'eth_sendTransaction', params: [{ ...call, data: sent, chainId: EVM_CHAIN_HEX(chainId) }] });
+        }, lang);
+        if (hash == null) return note(t('xcCancelled'));
         if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error('the wallet returned no transaction hash');
-        return h('p', null, ui.badge(t('xcSent'), 'ok'), ' ', ui.hashLink(hash, { full: true }));
+        // shown at once; the watch then says whether it is in a block, failed, never broadcast or still pending
+        const after = h('div', { 'aria-live': 'polite' });
+        txg.watchTx({ rpc: (m, p) => ui.evm(m, p, 0), hash, from: account, timeoutMs: 120_000, signal: pageStop }).then((r) => {
+          if (r.status === 'failed' || r.status === 'dropped') ui.fill(after, h('p', { class: 'error' }, txg.txgText(lang, r.status)));
+          else if (r.status === 'timeout') ui.fill(after, note(txg.txgText(lang, 'timeout'), 'warn'));
+        });
+        return h('div', null, h('p', null, ui.badge(t('xcSent'), 'ok'), ' ', ui.hashLink(hash, { full: true })), after);
       },
     })));
 }
