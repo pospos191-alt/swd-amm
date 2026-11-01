@@ -3,8 +3,8 @@
  "network": "zetaphy-testnet",
  "chainId": 77390,
  "rpc": "https://rpc.sawasdeecoin.com",
- "rounds": null,
- "deployBlock": null,
- "governance": null,
+ "rounds": "0xba581785ece00c3dff7bda5b9037b63f074067d6",
+ "deployBlock": 176550,
+ "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
  "threatRegistry": "0xab5745b61f83975e68f6546be9f83651df12417f"
 }
