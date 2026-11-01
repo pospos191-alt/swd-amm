@@ -1,0 +1,90 @@
+{
+  "chainId": 77390,
+  "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+  "contracts": {
+    "immuneRegistry": "0x6B088344315Df5C3042551c417462b517fA61Ab9",
+    "immuneBroadcaster": "0x35db151e7ADE670d92C8F8A3918a249ac0B84C0B",
+    "circuitBreaker": "0x6f330cb90FB9352CB4cCcC89d71FedafA97240ae",
+    "quantumRescue": "0x8382D52c206677Ae9f5e5eC19F98c4AA5980Ae33",
+    "pqSettlement": "0x4AFe1C5ab78211304a754812848edFE05AC4cC2c",
+    "zetaphyOutbox": "0xFF13B9C8E9E0c7e29e45A948195Ae91ea8E53564",
+    "poseidonT3": "0x241651a64f549add974CB6dFE220E765a3535171",
+    "zkIdentityVerifier": "0xb7Df4Def4CA23Ea5E14500E43cEF09DD58D0187b",
+    "zkIdentityRegistry": "0xaDd0f93F913b55251720Ce3299321821043A83F6",
+    "privatePoll": "0xd452E0DfEa3d7b9345B2CfCef43B7f961E3D9588",
+    "hackInsurance": "0x499d22E0b05485f85b633B693a2B93e4741b9fb1"
+  },
+  "blocks": {
+    "immuneRegistry": 177009,
+    "immuneBroadcaster": 177010,
+    "circuitBreaker": 177011,
+    "quantumRescue": 177012,
+    "pqSettlement": 177013,
+    "zetaphyOutbox": 177015,
+    "poseidonT3": 177016,
+    "zkIdentityVerifier": 177017,
+    "zkIdentityRegistry": 177018,
+    "privatePoll": 177019,
+    "hackInsurance": 177020
+  },
+  "timelockMinDelay": 0,
+  "notes": {
+    "zkIdentityVerifier": "DEV trusted setup (one party, DEV_SETUP = true): testnet only; a public phase-2 ceremony must replace it before mainnet",
+    "zkIdentityRegistry": "proofs check against the DEV-setup ZkIdentityVerifier (testnet only)",
+    "hackInsurance": "TESTNET ONLY: testnet ZETAPHY has no value; never real money (`zetaphy deploy-assist insurance`)"
+  },
+  "skipped": [
+    {
+      "what": "PQMultisigIsm (pqMultisigIsm)",
+      "reason": "needs an ML-DSA-44 validator set (none exists yet; pass --pq-validators 0x<keyHash>,…)"
+    },
+    {
+      "what": "TrainingPool, TrainingMarket (useful-work-training.md)",
+      "reason": "their constructors require governance to be a timelock with getMinDelay() >= 2 days (_checkTimelock); the testnet timelock keeps a 0 delay"
+    },
+    {
+      "what": "UsefulWork, UsefulIssuance, BugBounty, WorkerReputation (useful-work.md)",
+      "reason": "`zetaphy deploy-useful-work` and UsefulIssuance refuse a timelock with getMinDelay() < 2 days; the testnet timelock keeps a 0 delay"
+    },
+    {
+      "what": "ProvenVerdicts (proven-verdicts.md)",
+      "reason": "needs the public zkML ceremony's final key (zetaphy-neuro/ml/onchain/zk/**); the ceremony is not finished"
+    },
+    {
+      "what": "StarkLightClient, StarkVerifier (stark-light-client.md)",
+      "reason": "they verify ZETAPHY from another chain: deployed there, with a genesis pin and checkpoints of the real chain"
+    },
+    {
+      "what": "BtcLightClient",
+      "reason": "needs a real Bitcoin checkpoint header (hash, height, time, bits) and a relayer feeding headers"
+    },
+    {
+      "what": "ZetaphyBridgeInbox (trustless-bridge.md)",
+      "reason": "lives on the destination chain, behind a STARK light client of ZETAPHY"
+    },
+    {
+      "what": "ZetaphyLockbox (trustless-bridge.md)",
+      "reason": "one per token and destination receiver on another chain; deployed with that route"
+    },
+    {
+      "what": "ImmuneMirror (immune-network.md)",
+      "reason": "one per other chain (that chain's Mailbox, our ISM); deployed per chain, then ImmuneBroadcaster.setReceiver through the timelock"
+    },
+    {
+      "what": "PrivateAirdrop (zk-identity.md)",
+      "reason": "one per airdrop: funded by its sponsor, registers its own scope"
+    },
+    {
+      "what": "ImmuneGuardedRouter",
+      "reason": "an example integration of ImmuneGuard (its owner is the deployer)"
+    },
+    {
+      "what": "Encrypted mempool (encrypted-mempool.md)",
+      "reason": "a chain module, not a contract: it needs a chain upgrade"
+    },
+    {
+      "what": "NeuroJobs, StableGateway, RewardVault, BridgeAirlock and the other launch contracts",
+      "reason": "already deployed by launch-testnet; redeploying them would mean rewiring everything that points at them (out of scope)"
+    }
+  ]
+}
