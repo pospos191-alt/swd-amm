@@ -1,0 +1,12 @@
+{
+  "chainId": 77390,
+  "contracts": {
+    "auditNetwork": "0x7e99eECB771AB4F56059916ABd7D49aa590F260C",
+    "auditRunners": "0xc6458025F8061E995675B822d8C11f8a3D90c8a0",
+    "auditJudges": "0xb388E4Fa585aF96653Ea1925b3ba7778A9c801Ba",
+    "auditCertificate": "0x83071ff6c5B63d16B5c169cE3f2C5716CF2b32B6"
+  },
+  "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+  "treasury": "0x6a26055803556ff891CAB11CF47aB363aC1D0Ed8",
+  "proposals": []
+}

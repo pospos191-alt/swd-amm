@@ -1,0 +1,9 @@
+{
+  "chainId": 77390,
+  "router": "0x2d822D2D44424fBe6465Faa776822ED464A6D2a8",
+  "contracts": {
+    "zetaphyCheques": "0x0e2042bcAEa9bb64c8fce9C05C8fA17dd2460dA7",
+    "offlineOrders": "0x74ed96120BE0A30Ffac1B5019061E19a013c9816",
+    "offlineCash": "0x3471a4B2DC4CfacEcc2d15B6961c4Ccf32606354"
+  }
+}
