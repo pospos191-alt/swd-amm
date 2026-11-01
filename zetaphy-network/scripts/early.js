@@ -9,11 +9,12 @@
 //       Wallets that already got ZEARLY from the airdrop wallet (its Transfer events) are skipped, so a re-run
 //       pays only new ones. Without --send it only prints what it would do. Batches of 200 (batchTransfer).
 //
-//   node scripts/early.js collect [--max 1000] [--out early-users.txt]
+//   node scripts/early.js collect [--max 1000] [--out early-users.txt] [--minutes N]
 //       the wallets that already used the ZETAPHY chain (sent or received anything: faucet, mining, transfers,
 //       swaps, staking), oldest first, from the transactions themselves (CometBFT tx_search, 100 a page: light on
 //       the node). Left out: contracts, module accounts, the airdrop wallet, and funds holding over 1,000,000
-//       ZETAPHY (the genesis accounts). The file is a list for `airdrop`.
+//       ZETAPHY (the genesis accounts). The file is a list for `airdrop`. Scans the chain in block windows; with
+//       --minutes it stops after N minutes and writes what it found so far (the file says up to which block).
 //   node scripts/early.js pool [--zearly 10000000] [--ztphy 1000]
 //       the ZEARLY/ZETAPHY pool on the ZETAPHY Swap, first liquidity from the airdrop wallet (KEYFILE)
 //   node scripts/early.js extras
@@ -74,7 +75,7 @@ export function addressesInTx(tx) {
 }
 
 /** The chain's users, oldest first: { wallets, scanned } (see `collect` above). fetchJson(url) -> JSON. */
-export async function collectUsers({ comet, rest, fetchJson, isContract, balanceOf, skip = new Set(), max = 1000, window = 5000, minWindow = 50, big = 1_000_000n * 10n ** 18n, log = () => {} }) {
+export async function collectUsers({ comet, rest, fetchJson, isContract, balanceOf, skip = new Set(), max = 1000, window = 5000, minWindow = 50, stopAt = Infinity, now = Date.now, big = 1_000_000n * 10n ** 18n, log = () => {} }) {
   const modules = new Set();
   try {
     for (const m of (await fetchJson(`${rest}/cosmos/auth/v1beta1/module_accounts`)).accounts ?? []) {
@@ -89,7 +90,7 @@ export async function collectUsers({ comet, rest, fetchJson, isContract, balance
   const head = Number((await fetchJson(`${comet}/status`))?.result?.sync_info?.latest_block_height ?? 0);
   if (!(head > 0)) throw new Error('the node did not report its latest block');
   let from = 1, size = window;
-  while (from <= head && wallets.length < max) {
+  while (from <= head && wallets.length < max && now() < stopAt) {
     const to = Math.min(head + 1, from + size);
     const q = encodeURIComponent(`"tx.height>=${from} AND tx.height<${to}"`);
     let pages;
@@ -126,7 +127,8 @@ export async function collectUsers({ comet, rest, fetchJson, isContract, balance
     log(`blocks ${from}-${to - 1} of ${head}: ${scanned} transactions, ${wallets.length} wallets`);
     from = to;
   }
-  return { wallets, scanned };
+  // `next` > `head`: every block was scanned (or `max` was reached); else the time ran out at block `next`
+  return { wallets, scanned, head, next: wallets.length >= max ? head + 1 : from };
 }
 
 async function provider() {
@@ -223,12 +225,15 @@ async function main() {
       return r.json();
     });
     const max = Math.max(1, Math.min(100000, Number(opt('max', '1000')) || 1000));
-    const { wallets, scanned } = await collectUsers({ comet, rest, fetchJson, max, skip,
+    const minutes = Number(opt('minutes', '0')) || 0;
+    const { wallets, scanned, head, next } = await collectUsers({ comet, rest, fetchJson, max, skip,
+      stopAt: minutes > 0 ? Date.now() + minutes * 60_000 : Infinity,
       isContract: async (a) => (await retry(`getCode ${a}`, () => p.getCode(a))) !== '0x',
       balanceOf: (a) => retry(`getBalance ${a}`, () => p.getBalance(a)), log: (m) => console.error(m) });
     const out = opt('out', 'early-users.txt');
-    writeFileSync(out, `# ZETAPHY Early: wallets that used the ZETAPHY chain (${wallets.length}, from ${scanned} transactions), oldest first\n${wallets.join('\n')}\n`);
-    console.log(JSON.stringify({ wallets: wallets.length, scanned, out }));
+    const complete = next > head;
+    writeFileSync(out, `# ZETAPHY Early: wallets that used the ZETAPHY chain (${wallets.length}, from ${scanned} transactions in blocks 1-${next - 1}${complete ? '' : ` of ${head}: the time ran out`}), oldest first\n${wallets.join('\n')}\n`);
+    console.log(JSON.stringify({ wallets: wallets.length, scanned, lastBlock: next - 1, head, complete, out }));
   } else if (cmd === 'airdrop') {
     const { wallets, bad } = readList(readFileSync(opt('list') || die('--list <file>'), 'utf8'));
     const each = parseEther(String(opt('each', '10000')));
@@ -255,7 +260,7 @@ async function main() {
     }
     console.log(JSON.stringify({ paid: todo.length, each: formatEther(each), total: formatEther(need) }));
   } else {
-    die('usage: early.js deploy | airdrop --list <file> [--each 10000] [--send] | collect [--max 1000] [--out <file>] | pool | extras | quests [--send] (see the top of this file)');
+    die('usage: early.js deploy | airdrop --list <file> [--each 10000] [--send] | collect [--max 1000] [--out <file>] [--minutes N] | pool | extras | quests [--send] (see the top of this file)');
   }
 }
 

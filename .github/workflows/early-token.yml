@@ -57,7 +57,7 @@ jobs:
   run:
     name: ZEARLY ${{ inputs.mode || 'quests' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: ${{ inputs.mode == 'collect' && 300 || 60 }}
     environment: testnet-deploy
     permissions:
       contents: write   # deploy pushes the address to rewards/early
@@ -170,16 +170,18 @@ jobs:
         run: |
           set -o pipefail
           [[ "$MAX" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "::error::max: a whole number"; exit 1; }
-          node scripts/early.js collect --max "$MAX" --out ../zetaphy-chain/rewards/early-users.txt | tee "$RUNNER_TEMP/collect.json"
+          # a slow node: about 2 hours for the whole chain; stop in time to save what was found (the job ends at 300 min)
+          node scripts/early.js collect --max "$MAX" --minutes 270 --out ../zetaphy-chain/rewards/early-users.txt | tee "$RUNNER_TEMP/collect.json"
           n=$(jq -r .wallets "$RUNNER_TEMP/collect.json")
-          { echo "### ZEARLY: wallets that used the ZETAPHY chain: $n"; echo '```'; head -n 21 ../zetaphy-chain/rewards/early-users.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          upto=$(jq -r '"blocks 1-\(.lastBlock) of \(.head)\(if .complete then "" else ", the time ran out" end)"' "$RUNNER_TEMP/collect.json")
+          { echo "### ZEARLY: wallets that used the ZETAPHY chain: $n ($upto)"; echo '```'; head -n 21 ../zetaphy-chain/rewards/early-users.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           [ "$n" -gt 0 ] || { echo "no wallets found"; exit 0; }
           cd ..
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -q -B rewards/early-users
           git add zetaphy-chain/rewards/early-users.txt
-          git commit -q -m "ZETAPHY Early: $n wallets that used the ZETAPHY chain" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git commit -q -m "ZETAPHY Early: $n wallets that used the ZETAPHY chain ($upto)" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
           git push -q --force origin rewards/early-users
           echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...rewards/early-users"
 
