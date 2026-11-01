@@ -22,7 +22,7 @@ export const BROWSER_AI = {
   // Automatic peer discovery (ai/browser/discovery.js). signalBoard: the SignalBoard address on
   // ZETAPHY (zetaphy-network/scripts/signal-board.js deploy); null until deployed, and then the page
   // offers only the manual codes. Posting uses a throwaway session key paid by the testnet faucet.
-  signalBoard: null,
+  signalBoard: '0x515c7135D501B7980e84c9cFac74AD528698AF69',
   // Public WebTorrent trackers as a second board: OFF (empty). Each is a third party that sees
   // every peer's IP address and topic, and the CSP (web/index.html + vercel.json connect-src)
   // would need its exact wss:// URL added first.
