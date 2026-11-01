@@ -158,7 +158,10 @@ test('aggregator script: signed envelopes on the real model -> candidate head, m
     assert.equal(r.manifest.manifest.head.id, r.head.id);
     // the CLI gives the same, byte for byte
     const out = `${dir}/out`;
-    const stdout = execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/fl-aggregate.js', import.meta.url)), '--round', '5', '--inbox', dir, '--out', out,
+    // a record with no contract: the committed one names the live testnet contract, and this test must not reach the network
+    const dep = `${dir}/deployment.json`;
+    writeFileSync(dep, JSON.stringify({ format: 'neuro-fl-deployment/1', network: 'test', chainId: 77390, rpc: 'https://example.invalid', rounds: null, deployBlock: null, governance: null, threatRegistry: null }));
+    const stdout = execFileSync(process.execPath, [fileURLToPath(new URL('../scripts/fl-aggregate.js', import.meta.url)), '--round', '5', '--inbox', dir, '--out', out, '--deployment', dep,
       '--registry', '0x' + '22'.repeat(20), '--gov-bech32', 'zetaphy10d07y265gmmuvt4z0w9aw880jnsr700j5tzgnc', '--activation', '9000',
       '--uri', 'https://example.invalid/manifest.json'], { encoding: 'utf8' });
     assert.equal(JSON.parse(stdout).manifestHash, r.decision.manifestHash);
