@@ -84,7 +84,9 @@ test('assistant pages: governance flags, immunity (coverage, PQ verifier), the s
     await page.fill('#im-addr', '0x' + '12'.repeat(20));
     await page.click('#im-cert-form button');
     await page.waitForFunction(() => document.querySelector('#im-cert')?.textContent.length > 0);
-    assert.match(await page.textContent('#im-cert'), /not deployed/);
+    // with NeuroAttest in the hub's config (the live testnet one), an address with no certificate; without it, "not deployed"
+    const attest = JSON.parse(readFileSync(join(DIST, 'hub-config.json'), 'utf8')).contracts?.neuroAttest;
+    assert.match(await page.textContent('#im-cert'), attest ? /No certificate for this address/ : /not deployed/);
     // the signing summary with a simulation hook (what hub.js send() passes from presign.js)
     await page.evaluate(async () => {
       const m = await import('./wallet-safety.js');

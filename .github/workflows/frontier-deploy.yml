@@ -1,0 +1,103 @@
+# One button for everything still missing on the ZETAPHY testnet that can be deployed now (docs/future/deploy.md,
+# "The frontier button"): the frontier contracts (immune network, circuit breaker, quantum rescue and PQ settlement,
+# the bridge outbox, private identity, HackInsurance), then the open audit network and offline trading. One key,
+# one transaction at a time. Every governance is the ZetaphyTimelock of the launch state; the deploy key keeps no
+# role. What is left out, and why, is printed in the summary (and kept in deployments/frontier-77390.json).
+# A re-run resumes where a stopped run ended. The records go to the branch frontier/testnet for a pull request.
+#
+# Environment testnet-deploy (main only; the owner approves each run), secret ZETAPHY_DEPLOYER_KEY.
+# Needs the public RPC up (https://rpc.sawasdeecoin.com) and, for the private-identity registry, the ai-deploy
+# records merged (deployments/ai-77390.json: LabelRegistry, VouchRegistry).
+name: frontier-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      pq_validators:
+        description: "PQMultisigIsm: ML-DSA-44 validator key hashes 0x<64 hex>,… (empty = skip it: no PQ validator set exists yet)"
+        default: ""
+      pq_threshold:
+        description: "PQMultisigIsm threshold (with validators)"
+        default: "1"
+
+permissions:
+  contents: read
+
+# the same group as ai-deploy.yml: both use the one deploy key, and two runs at once would clash on its nonce
+concurrency:
+  group: ai-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    environment: testnet-deploy
+    permissions:
+      contents: write   # pushes the branch frontier/testnet (never the default branch)
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    env:
+      ZETAPHY_RPC: https://rpc.sawasdeecoin.com
+      DEPLOYER: "0x6af57fC3633dD0F7907f7900dbd4A2822F43a245"
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: Check the inputs and the launch state
+        env:
+          PQ_VALIDATORS: ${{ inputs.pq_validators }}
+          PQ_THRESHOLD: ${{ inputs.pq_threshold }}
+        run: |
+          [[ -z "$PQ_VALIDATORS" || "$PQ_VALIDATORS" =~ ^0x[0-9a-fA-F]{64}(,0x[0-9a-fA-F]{64}){0,31}$ ]] || { echo "::error::pq_validators: 0x + 64 hex key hashes, comma separated"; exit 1; }
+          [[ "$PQ_THRESHOLD" =~ ^[1-9][0-9]?$ ]] || { echo "::error::pq_threshold: a number"; exit 1; }
+          TL=$(jq -r '[.steps[].out.timelock // empty][0] // ""' ../zetaphy-launch/state/77390.json)
+          [[ "$TL" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "::error::the launch state has no timelock (run launch-testnet first)"; exit 1; }
+          r=$(curl -sS -m 30 -X POST -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_chainId","params":[]}' "$ZETAPHY_RPC" | jq -r .result)
+          [ "$r" = "0x12e4e" ] || { echo "::error::the RPC $ZETAPHY_RPC is not answering as ZETAPHY (got $r)"; exit 1; }
+
+      - name: Load the deployer key
+        env:
+          KEY: ${{ secrets.ZETAPHY_DEPLOYER_KEY }}
+        run: |
+          [ -n "$KEY" ] || { echo "::error::the secret ZETAPHY_DEPLOYER_KEY is not set in the testnet-deploy environment"; exit 1; }
+          H="$RUNNER_TEMP/fd"; mkdir -p "$H"; chmod 700 "$H"
+          k=$(printf '%s' "$KEY" | tr -d '[:space:]'); k=${k#0x}; echo "::add-mask::$k"; echo "::add-mask::0x$k"
+          umask 077; printf '0x%s' "$k" > "$H/worker.key"; unset k KEY
+          [ "$(node -e 'console.log(new (require("ethers").Wallet)(require("fs").readFileSync(process.argv[1],"utf8").trim()).address)' "$H/worker.key")" = "$DEPLOYER" ] \
+            || { rm -rf "$H"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
+          echo "KEYFILE=$H/worker.key" >> "$GITHUB_ENV"
+
+      - name: Frontier contracts, audit network, HackInsurance, offline trading (governance = the timelock)
+        env:
+          PQ_VALIDATORS: ${{ inputs.pq_validators }}
+          PQ_THRESHOLD: ${{ inputs.pq_threshold }}
+        run: |
+          set -o pipefail
+          node scripts/frontier-deploy.js ${PQ_VALIDATORS:+--pq-validators "$PQ_VALIDATORS" --pq-threshold "$PQ_THRESHOLD"} 2>&1 | tee "$RUNNER_TEMP/frontier.log"
+          node scripts/frontier-deploy.js check 2>&1 | tee -a "$RUNNER_TEMP/frontier.log"
+
+      - name: Forget the key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/fd"
+
+      - name: Summary and the branch frontier/testnet
+        if: always()
+        run: |
+          { echo "### Frontier contracts on the testnet"; echo '```'; tail -120 "$RUNNER_TEMP/frontier.log" 2>/dev/null || echo "(no log: the run stopped before the deploy step)"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B frontier/testnet
+          # only the paths that exist (a run that stopped early has written none of them)
+          for p in zetaphy-network/deployments zetaphy-chain/hyperlane/immune-network.json; do [ -e "$p" ] && git add -- "$p"; done
+          if git diff --cached --name-only | grep -Eiq '(\.key|keystore|secret)'; then echo "::error::refusing to commit a key-like file"; exit 1; fi
+          git diff --cached --quiet && { echo "nothing new to commit"; exit 0; }
+          git commit -q -m "Frontier contracts on the testnet (owned by the timelock)" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin frontier/testnet
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...frontier/testnet" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -155,10 +155,10 @@ export async function assistCommand({ group, cmd, rest, opt, write, s, connect, 
     const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
     const gov = opt.governance ? need(opt.governance, '--governance') : c.me;
     const jobs = opt.jobs ? need(opt.jobs, '--jobs') : (s.jobs ? getAddress(s.jobs) : null);
-    const args = { attest: () => ['NeuroAttest', [jobs ?? '0x' + '00'.repeat(20), gov]], anchor: () => ['NeuroAnchor', []],
-      insurance: () => { if (!jobs) throw new Error('--jobs 0x<NeuroJobs> (the committee is its runners)'); return ['HackInsurance', [jobs, Number(opt.quorum ?? 3), Number(opt['min-agreed'] ?? 1), gov]]; } }[cmd];
+    const { assistDeployArgs } = await import('./assistdeploy.js');
+    const args = ['attest', 'anchor', 'insurance'].includes(cmd) ? assistDeployArgs(cmd, { gov, jobs, quorum: opt.quorum ?? undefined, minAgreed: opt['min-agreed'] ?? undefined }) : null;
     if (!args) throw new Error('usage: zetaphy deploy-assist attest|anchor|insurance');
-    const [name, a] = args();
+    const [name, a] = args;
     const k = await new ContractFactory(art(name).abi, art(name).bytecode, c.signer).deploy(...a);
     await k.waitForDeployment();
     write(`${name} ${await k.getAddress()}${a.length ? ` (governance ${gov})` : ''}${name === 'HackInsurance' ? ' TESTNET ONLY: testnet ZETAPHY has no value; never real money' : ''}`);

@@ -270,7 +270,8 @@ The ERC-7265-style rate limit is included as the invariant mode. It fits well as
   ML. A Neuro model would have to be pinned by `ModelEpochs` to be used here.
 - The timelock judges false-trip claims. That is slow (its delay) and political. A replay-based judgment, like
   HackInsurance's runner replay, would be better.
-- `CircuitBreaker` is not deployed by `aideploy.js` yet. The hub card says "not deployed" until it is.
+- `CircuitBreaker` is deployed by the frontier button (`.github/workflows/frontier-deploy.yml`, docs/future/deploy.md).
+  The hub card says "not deployed" until its record is merged.
 - The first anomalous block is never stopped. Detection needs it to be in a block. With ≈ 5 s blocks and one
   trip tx, that is one block of loss; the invariant cap can bound even that.
 

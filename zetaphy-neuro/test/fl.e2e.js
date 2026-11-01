@@ -78,7 +78,7 @@ function seeded(i) {
 
 /**
  * One browser: its own context (storage), an injected wallet for ACCTS[i], the test deployment
- * record (or the committed one: deployed = false), RPCs answered by the test chains.
+ * record (deployed = false: a record with no contract), RPCs answered by the test chains.
  */
 async function client(i, { deployed = true, seed = true } = {}) {
   const ctx = await browser.newContext();
@@ -108,10 +108,11 @@ async function client(i, { deployed = true, seed = true } = {}) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('request', (r) => log.requests.push({ url: r.url(), method: r.method(), body: r.postData() ?? '' }));
-  if (deployed) {
-    await page.route('**/ml/fl/deployment.json', (route) => route.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ format: 'neuro-fl-deployment/1', network: 'devnet', chainId: 77390, rpc: FL_RPC, rounds, deployBlock: 1, governance: GOV, threatRegistry: null }) }));
-  }
+  // deployed: the test chain's contract; not deployed: a record with no contract (the committed file now names the
+  // live testnet contract, so the "not deployed yet" state is served explicitly)
+  await page.route('**/ml/fl/deployment.json', (route) => route.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ format: 'neuro-fl-deployment/1', network: 'devnet', chainId: 77390, rpc: FL_RPC, rounds: deployed ? rounds : null,
+      deployBlock: deployed ? 1 : null, governance: deployed ? GOV : null, threatRegistry: null }) }));
   await page.route((url) => url.protocol === 'https:', async (route) => {
     const req = route.request();
     const msg = JSON.parse(req.postData() ?? '{}');
@@ -182,7 +183,7 @@ test('off by default; turned on, a real scan is stored in this browser and label
   clients.push(c0);
 });
 
-test('the committed deployment record: "not deployed yet", nothing to send', async () => {
+test('a record with no contract: "not deployed yet", nothing to send', async () => {
   const c = await client(1, { deployed: false });
   await waitText(c.page, '#fl-round', /^Not deployed yet/);
   assert.equal(await c.page.isHidden('#fl-train'), true);
