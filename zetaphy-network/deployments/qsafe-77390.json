@@ -1,0 +1,8 @@
+{
+  "chainId": 77390,
+  "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+  "contracts": {
+    "quantumRescue": "0x8382D52c206677Ae9f5e5eC19F98c4AA5980Ae33",
+    "pqSettlement": "0x4AFe1C5ab78211304a754812848edFE05AC4cC2c"
+  }
+}

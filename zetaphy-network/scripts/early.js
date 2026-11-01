@@ -185,10 +185,26 @@ async function main() {
     const p = await provider();
     const c = config();
     const skip = new Set([c.holder, process.env.KEYFILE ? signer(p).address : null].filter(Boolean).map((a) => getAddress(a)));
-    const fetchJson = async (url) => { const r = await fetch(url); if (!r.ok) throw new Error(`${url.split('?')[0]}: HTTP ${r.status}`); return r.json(); };
+    // a long scan of a small node: every read is retried (a 30 s timeout, then 2, 4, 8, 16 s pauses) instead of one
+    // failed request ending the whole scan
+    const retry = async (what, f) => {
+      for (let i = 0; ; i++) {
+        try { return await f(); } catch (e) {
+          if (i >= 4) throw new Error(`${what}: ${e?.message ?? e}`);
+          console.error(`${what}: ${e?.message ?? e}; retrying in ${2 ** (i + 1)} s`);
+          await new Promise((r) => setTimeout(r, 2 ** (i + 1) * 1000));
+        }
+      }
+    };
+    const fetchJson = (url) => retry(url.split('?')[0], async () => {
+      const r = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    });
     const max = Math.max(1, Math.min(100000, Number(opt('max', '1000')) || 1000));
     const { wallets, scanned } = await collectUsers({ comet, rest, fetchJson, max, skip,
-      isContract: async (a) => (await p.getCode(a)) !== '0x', balanceOf: (a) => p.getBalance(a), log: (m) => console.error(m) });
+      isContract: async (a) => (await retry(`getCode ${a}`, () => p.getCode(a))) !== '0x',
+      balanceOf: (a) => retry(`getBalance ${a}`, () => p.getBalance(a)), log: (m) => console.error(m) });
     const out = opt('out', 'early-users.txt');
     writeFileSync(out, `# ZETAPHY Early: wallets that used the ZETAPHY chain (${wallets.length}, from ${scanned} transactions), oldest first\n${wallets.join('\n')}\n`);
     console.log(JSON.stringify({ wallets: wallets.length, scanned, out }));

@@ -52,7 +52,8 @@ async function open(browser, site, path) {
       if (p.pathname !== '/hub-config.json') return route.continue();
       const cfg = JSON.parse(readFileSync(join(DIST, 'hub-config.json'), 'utf8'));
       cfg.contracts = { ...cfg.contracts, neuroScore: NS, modelEpochs: ME };
-      for (const k of ['cosignCommittee', 'hackInsurance', 'usefulIssuance', 'neuroOracleSender']) delete cfg.contracts[k];
+      // the "not deployed" cards: removed even when the built config names the live testnet contracts
+      for (const k of ['cosignCommittee', 'hackInsurance', 'usefulIssuance', 'neuroOracleSender', 'circuitBreaker']) delete cfg.contracts[k];
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cfg) });
     }
     let a = null;

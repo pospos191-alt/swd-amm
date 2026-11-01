@@ -28,7 +28,15 @@ async function open(browser, site, path) {
   page.on('console', (m) => { if (/Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
   await page.route('**/*', async (route) => {
     const u = route.request().url();
-    if (new URL(u).origin === new URL(site.url).origin) return route.continue();
+    if (new URL(u).origin === new URL(site.url).origin) {
+      // the immune dashboard's "planned" state (no registry): the built config now names the live testnet registry
+      if (new URL(u).pathname === '/hub-config.json') {
+        const cfg = JSON.parse(readFileSync(join(DIST, 'hub-config.json'), 'utf8'));
+        if (cfg.immuneNet) cfg.immuneNet = { ...cfg.immuneNet, registry: null, broadcaster: null };
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(cfg) });
+      }
+      return route.continue();
+    }
     const p = new URL(u);
     let a = null;
     if (p.origin === 'https://rpc.sawasdeecoin.com') {
