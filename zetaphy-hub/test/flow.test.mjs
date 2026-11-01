@@ -116,3 +116,14 @@ test('hub-config: the AI contracts come from ai-77390.json, FederatedRounds and 
   const other = hubConfig({}, { ...files, 'zetaphy-network/deployments/ai-77390.json': { chainId: 1, contracts: { arena: A('aa') } } }).contracts;
   assert.equal(other.arena, undefined, 'another chain is ignored');
 });
+
+test('hub-config: the frontier button record (frontier-77390.json) turns on its contracts', async () => {
+  const { hubConfig } = await import('../build.mjs');
+  const A = (b) => '0x' + b.repeat(20);
+  const files = { 'zetaphy-launch/state/77390.json': { steps: {} },
+    'zetaphy-network/deployments/frontier-77390.json': { chainId: 77390, contracts: { circuitBreaker: A('a1'), hackInsurance: A('a2'), zkIdentityRegistry: A('a3'), immuneRegistry: A('a4'), poseidonT3: A('a5') } } };
+  const c = hubConfig({}, files).contracts;
+  assert.deepEqual([c.circuitBreaker, c.hackInsurance, c.zkIdentityRegistry, c.immuneRegistry], [A('a1'), A('a2'), A('a3'), A('a4')]);
+  assert.equal(c.poseidonT3, undefined, 'only the contracts the hub uses');
+  assert.equal(hubConfig({}, { ...files, 'zetaphy-network/deployments/frontier-77390.json': { chainId: 1, contracts: { circuitBreaker: A('a1') } } }).contracts.circuitBreaker, undefined);
+});

@@ -268,7 +268,7 @@ contract Vault is CircuitBreakable {
   ถ้าจะใช้โมเดลของ Neuro ต้องตรึงรุ่นไว้ด้วย `ModelEpochs`
 - timelock เป็นผู้ตัดสินการเคลมว่าตัดผิด ซึ่งช้า (ตามระยะหน่วงของ timelock) และมีเรื่องการเมือง
   การตัดสินด้วยการเล่นซ้ำแบบที่ผู้รันของ HackInsurance ทำจะดีกว่า
-- `aideploy.js` ยังไม่ได้ deploy `CircuitBreaker` การ์ดในฮับจึงขึ้นว่า "ยังไม่ได้ deploy" จนกว่าจะ deploy
+- `CircuitBreaker` deploy ผ่านปุ่ม frontier (`.github/workflows/frontier-deploy.yml`, docs/future/deploy.th.md) การ์ดในฮับจะขึ้นว่า "ยังไม่ได้ deploy" จนกว่าจะ merge record
 - บล็อกผิดปกติบล็อกแรกหยุดไม่ได้ เพราะการตรวจจับต้องเห็นมันอยู่ในบล็อกก่อน ด้วยบล็อกราว 5 วินาทีและธุรกรรมตัดวงจรหนึ่งรายการ
   จึงเสียหายหนึ่งบล็อก แต่เพดานบนเชนช่วยจำกัดแม้แต่ส่วนนั้นได้
 

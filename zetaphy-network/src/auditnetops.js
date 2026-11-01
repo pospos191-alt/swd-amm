@@ -23,15 +23,23 @@ export const LEVELS = Object.freeze({ validity: 180 * DAY, silverAuditors: 5, go
  * @param {string} p.treasury                  where post-certificate slashes and lost appeal bonds go
  * @param {string} p.jobs                      NeuroJobs (runner eligibility)
  * @param {string} [p.reputation]              WorkerReputation (then add AuditNetwork and AuditRunners as reporters, via the timelock)
+ * @param {number} [p.startNonce]              resume: the nonce an earlier, unfinished run started from (its `plan.nonce`). The four
+ *                                             addresses follow from it; those with code are kept, the rest are deployed at their nonces
+ * @param {Function} [p.onPlan]                called with { nonce, contracts } before the first transaction (save it to resume)
  */
 export async function deployAuditNetwork({ signer, governance, treasury, jobs, reputation = ZeroAddress, minAgreed = 1,
-  params = {}, judgeParams = {}, levels = {}, log = () => {} }) {
+  params = {}, judgeParams = {}, levels = {}, startNonce = null, onPlan = () => {}, log = () => {} }) {
   if (!governance || !treasury || !jobs) throw new Error('deployAuditNetwork: governance, treasury and jobs are required');
   const me = await signer.getAddress();
-  const nonce = await signer.provider.getTransactionCount(me, 'pending');
+  const nonce = startNonce ?? await signer.provider.getTransactionCount(me, 'pending');
   const at = (i) => getCreateAddress({ from: me, nonce: nonce + i });
   const [netA, runA, judA, certA] = [0, 1, 2, 3].map(at);
+  await onPlan({ nonce, contracts: { auditNetwork: netA, auditRunners: runA, auditJudges: judA, auditCertificate: certA } });
   const deploy = async (name, args, i) => {
+    if (startNonce !== null && (await signer.provider.getCode(at(i))) !== '0x') { log(`${name} ${at(i)} (already)`); return at(i); }
+    const next = await signer.provider.getTransactionCount(me, 'pending');
+    if (next !== nonce + i) throw new Error(`${name} must be deployed with nonce ${nonce + i} (to land at ${at(i)}), but the key's next nonce is ${next}: `
+      + (next < nonce + i ? 'an earlier transaction of this run was dropped' : 'it is still pending (re-run once it is mined) or another transaction used it (then the audit network cannot be finished at these addresses)'));
     const a = art(name);
     const c = await new ContractFactory(a.abi, a.bytecode, signer).deploy(...args, { nonce: nonce + i });
     await c.waitForDeployment();

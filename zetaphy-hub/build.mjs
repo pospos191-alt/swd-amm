@@ -72,6 +72,9 @@ export function hubConfig(cfg, files = null) {
   // the quantum-safe settlement layer (docs/future/quantum-safe-settlement.md): its deployment record, once deployed (testnet only)
   const qs = read('zetaphy-network/deployments/qsafe-77390.json');
   if (qs?.chainId === 77390) for (const [k, v] of Object.entries(qs.contracts ?? {})) out[k] ??= v;
+  // the frontier button (.github/workflows/frontier-deploy.yml, zetaphy-network/src/frontierdeploy.js): its record (testnet only)
+  const fr = read('zetaphy-network/deployments/frontier-77390.json');
+  if (fr?.chainId === 77390) for (const [k, v] of Object.entries(fr.contracts ?? {})) out[k] ??= v;
   const fl = read('zetaphy-neuro/ml/fl/deployment.json');
   if (fl?.chainId === 77390 && fl.rounds) out.federatedRounds ??= fl.rounds;
   const oracle = read('zetaphy-chain/hyperlane/neuro-oracle.json');
@@ -80,7 +83,8 @@ export function hubConfig(cfg, files = null) {
   const contracts = Object.fromEntries(['neuroJobs', 'neuroControl', 'threatRegistry', 'threatReports', 'rewardVault', 'stableGateway', 'computeMarket', 'oracle', 'neuroIdentity',
     'usefulWork', 'bugBounty', 'workerReputation', 'usefulIssuance', 'riskForecasts', 'foresight', 'detectorPool', 'dataDao', 'arena', 'intentExecutor', 'labelRegistry', 'vouchRegistry', 'agentRegistry', 'agentPolicyWallet',
     'timelock', 'neuroAttest', 'neuroAnchor', 'neuroOracleSender', 'hackInsurance',
-    'modelRegistry', 'neuroScore', 'provenVerdicts', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds', 'zetaphyCheques', 'offlineOrders', 'offlineCash', 'auditNetwork', 'auditRunners', 'auditJudges', 'auditCertificate', 'circuitBreaker', 'quantumRescue', 'pqSettlement', 'pqMultisigIsm']
+    'modelRegistry', 'neuroScore', 'provenVerdicts', 'modelEpochs', 'signalBoard', 'webauthn', 'cosignCommittee', 'federatedRounds', 'zetaphyCheques', 'offlineOrders', 'offlineCash', 'auditNetwork', 'auditRunners', 'auditJudges', 'auditCertificate', 'circuitBreaker', 'quantumRescue', 'pqSettlement', 'pqMultisigIsm',
+    'immuneRegistry', 'immuneBroadcaster', 'zetaphyOutbox', 'zkIdentityRegistry', 'privatePoll']
     .filter((k) => isAddr(out[k])).map((k) => [k, out[k]]));
   if (Number.isInteger(out.timelockBlock) && contracts.timelock) contracts.timelockBlock = out.timelockBlock;
   const dex = read('zetaphy-dex/web/deployments.json')?.contracts ?? {};
