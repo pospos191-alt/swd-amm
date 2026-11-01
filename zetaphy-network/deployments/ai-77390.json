@@ -1,0 +1,10 @@
+{
+  "chainId": 77390,
+  "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+  "contracts": {
+    "modelRegistry": "0x1833f71ACEB2854506cf4E3f60a37b2565B1afA6"
+  },
+  "blocks": {
+    "modelRegistry": 168201
+  }
+}

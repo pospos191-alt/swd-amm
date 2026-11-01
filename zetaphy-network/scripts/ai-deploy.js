@@ -8,7 +8,8 @@
 //       reads every contract's governance back; fails if one is not the timelock
 //
 // env: ZETAPHY_RPC (EVM JSON-RPC), KEYFILE (the deploy key, 0x… hex), AI_FILE (default deployments/ai-77390.json).
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { JsonRpcProvider, Wallet, getAddress } from 'ethers';
 import { deployAi, checkGovernance, fromLaunchState } from '../src/aideploy.js';
 
@@ -38,5 +39,5 @@ const o = {};
 if (opt('committee')) { o.committee = list(opt('committee')); o.threshold = Number(opt('threshold', '1')); }
 if (opt('poster')) o.poster = getAddress(opt('poster'));
 if (opt('host')) o.hubHost = opt('host');
-const rec = await deployAi({ signer, ...st, record, o, log: console.log, save: (r) => writeFileSync(FILE, `${JSON.stringify(r, null, 2)}\n`) });
+const rec = await deployAi({ signer, ...st, record, o, log: console.log, save: (r) => { mkdirSync(dirname(FILE), { recursive: true }); writeFileSync(FILE, `${JSON.stringify(r, null, 2)}\n`); } });
 console.log(JSON.stringify(rec));
