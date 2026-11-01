@@ -2,9 +2,43 @@
   "chainId": 77390,
   "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
   "contracts": {
-    "modelRegistry": "0x1833f71ACEB2854506cf4E3f60a37b2565B1afA6"
+    "modelRegistry": "0x1833f71ACEB2854506cf4E3f60a37b2565B1afA6",
+    "neuroScore": "0x6eF1c2c15e702C559C9882A6770F20a369Df86d6",
+    "modelEpochs": "0x9D718960b25F84EcAC40ddFe89F01E0433f9509d",
+    "signalBoard": "0x515c7135D501B7980e84c9cFac74AD528698AF69",
+    "webauthn": "0x8D8D98Cc8fa1d7C90Cd819BcEb310041FAF21eFC",
+    "cosignCommittee": "0x44428e082D3C30F5C6eAe37c1Fed581E0B974A82",
+    "constitutionChecker": "0x9F43EFF26d4d19EE7121e102B9E0F4b884bB28e6",
+    "agentRegistry": "0x480eDFD961ab10C61Dfb293692F35671D3b3E89A",
+    "labelRegistry": "0x08A09eD924d2d28ed58fDC145fc3D425e223d9D1",
+    "vouchRegistry": "0x264610BD2222a11356c7f5bf93F775AAfF388095",
+    "intentExecutor": "0x613a5e6CA6e0A22c97EF21915B56A3c532ecC4cB",
+    "foresight": "0x474B5EC2FbB46017aCa89565C26Cd97c89DbC14c",
+    "riskForecasts": "0xb20aA24e72cB42e37f4455685299f838671B23CC",
+    "detectorPool": "0x07427C3A15f6249Eb8550A58ea943A53C5Ef0e9F",
+    "dataDao": "0x8e57ceBD24B72D6287bB81bE763D3B51fAFdE783",
+    "arena": "0xBB5Cd47B078C89a78C004253d7Fece9cb4526086",
+    "neuroAttest": "0x5eb679C33B87431ae6335C5F4f3bADeD3fcfff1A",
+    "neuroAnchor": "0xA5A1fE2A4f862A7A72491a54EeBead66B81eFF01"
   },
   "blocks": {
-    "modelRegistry": 168201
+    "modelRegistry": 168201,
+    "neuroScore": 168309,
+    "modelEpochs": 168310,
+    "signalBoard": 168311,
+    "webauthn": 168312,
+    "cosignCommittee": 168313,
+    "constitutionChecker": 168314,
+    "agentRegistry": 168315,
+    "labelRegistry": 168323,
+    "vouchRegistry": 168326,
+    "intentExecutor": 168331,
+    "foresight": 168332,
+    "riskForecasts": 168333,
+    "detectorPool": 168335,
+    "dataDao": 168336,
+    "arena": 168337,
+    "neuroAttest": 168338,
+    "neuroAnchor": 168339
   }
 }
