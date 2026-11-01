@@ -120,12 +120,13 @@ jobs:
       - name: Summary and the branch ai/testnet
         if: always()
         run: |
-          { echo "### AI contracts on the testnet"; echo '```'; cat "$RUNNER_TEMP/ai.log" 2>/dev/null | tail -80; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "### AI contracts on the testnet"; echo '```'; tail -80 "$RUNNER_TEMP/ai.log" 2>/dev/null || echo "(no log: the run stopped before the deploy step)"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           cd ..
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -q -B ai/testnet
-          git add -- zetaphy-network/deployments zetaphy-neuro/ml/fl/deployment.json zetaphy-neuro/ai/browser/config.js
+          # only the paths that exist (a run that stopped early has written none of them)
+          for p in zetaphy-network/deployments zetaphy-neuro/ml/fl/deployment.json zetaphy-neuro/ai/browser/config.js; do [ -e "$p" ] && git add -- "$p"; done
           if git diff --cached --name-only | grep -Eiq '(\.key|keystore|secret)'; then echo "::error::refusing to commit a key-like file"; exit 1; fi
           git diff --cached --quiet && { echo "nothing new to commit"; exit 0; }
           git commit -q -m "AI contracts on the testnet (owned by the timelock)" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
