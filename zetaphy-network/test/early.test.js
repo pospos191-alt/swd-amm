@@ -147,6 +147,10 @@ test('collect: users oldest first; contracts, module accounts, big funds and the
   await assert.rejects(collectUsers({ ...opts, window: 100, minWindow: 50 }), /timeout/, 'gives up at the smallest window');
   const three = await collectUsers({ ...opts, max: 3, window: 20 });
   assert.deepEqual(three.wallets.map((a) => Number(BigInt(a))), [1, 2, 3]);
+  let clock = 0;
+  const early = await collectUsers({ ...opts, window: 20, stopAt: 2, now: () => clock++ });
+  assert.deepEqual([early.next, early.head], [41, txs.length + 7], 'out of time: stops after whole windows and says where');
+  assert.equal(all.next, all.head + 1, 'a full scan ends past the head');
   assert.deepEqual(addressesInTx({}), []);
   assert.deepEqual(readList(all.wallets.join('\n')).wallets, all.wallets, 'the output is a list for airdrop');
 });
