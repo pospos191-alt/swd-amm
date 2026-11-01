@@ -124,12 +124,13 @@ test('chain reads for labels: the pool\'s native side and ThreatRegistry views',
   assert.equal(LABEL_SELECTORS.IS_FLAGGED, '0x' + selectorOf('isFlagged(bytes32)'));
 });
 
-test('deployment record: the committed file says "not deployed yet"; bad records are refused', () => {
+test('deployment record: the committed file is a valid record (deployed on 77390, or "not deployed yet"); bad records are refused', () => {
   const d = checkDeployment(JSON.parse(readFileSync(new URL('../fl/deployment.json', import.meta.url), 'utf8')));
-  assert.equal(d.deployed, false);
-  assert.equal(d.rounds, null);
   assert.equal(d.chainId, 77390);
   assert.match(d.rpc, /^https:\/\//);
+  if (d.deployed) assert.match(d.rounds, /^0x[0-9a-fA-F]{40}$/);
+  else assert.equal(d.rounds, null);
+  assert.equal(checkDeployment({ ...d, rounds: null }).deployed, false);
   const ok = { ...d, rounds: '0x' + '12'.repeat(20) };
   assert.equal(checkDeployment(ok).deployed, true);
   assert.throws(() => checkDeployment({ ...ok, rounds: '0x12' }), /rounds/);

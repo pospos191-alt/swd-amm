@@ -47,7 +47,7 @@ async function pageIn(ctx, { contracts = false } = {}) {
     const url = new URL(req.url());
     if (url.pathname.endsWith('/ai/browser/config.js')) {
       const res = await route.fetch();
-      const body = (await res.text()).replace('signalBoard: null', `signalBoard: '${net.board}'`).replace('pollMs: 5000', 'pollMs: 400');
+      const body = (await res.text()).replace(/signalBoard: (null|'0x[0-9a-fA-F]{40}'),/, `signalBoard: '${net.board}',`).replace('pollMs: 5000', 'pollMs: 400');
       await route.fulfill({ response: res, body });
       return;
     }
