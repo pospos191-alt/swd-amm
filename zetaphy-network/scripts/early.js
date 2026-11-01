@@ -74,7 +74,7 @@ export function addressesInTx(tx) {
 }
 
 /** The chain's users, oldest first: { wallets, scanned } (see `collect` above). fetchJson(url) -> JSON. */
-export async function collectUsers({ comet, rest, fetchJson, isContract, balanceOf, skip = new Set(), max = 1000, big = 1_000_000n * 10n ** 18n, log = () => {} }) {
+export async function collectUsers({ comet, rest, fetchJson, isContract, balanceOf, skip = new Set(), max = 1000, window = 5000, minWindow = 50, big = 1_000_000n * 10n ** 18n, log = () => {} }) {
   const modules = new Set();
   try {
     for (const m of (await fetchJson(`${rest}/cosmos/auth/v1beta1/module_accounts`)).accounts ?? []) {
@@ -84,26 +84,47 @@ export async function collectUsers({ comet, rest, fetchJson, isContract, balance
   } catch { /* REST down: contracts and big balances still filter most of them */ }
   const seen = new Set(), wallets = [];
   let scanned = 0;
-  for (let page = 1; wallets.length < max; page++) {
-    const q = encodeURIComponent('"tx.height>=1"');
-    const r = await fetchJson(`${comet}/tx_search?query=${q}&page=${page}&per_page=100&order_by=%22asc%22`);
-    const txs = r?.result?.txs ?? [];
-    if (!txs.length) break;
-    for (const tx of txs) {
-      scanned++;
-      for (const a of addressesInTx(tx)) {
-        if (seen.has(a)) continue;
-        seen.add(a);
-        if (modules.has(a) || skip.has(a)) continue;
-        if (await isContract(a)) continue;
-        if ((await balanceOf(a)) > big) continue;
-        wallets.push(a);
+  // A query over the whole chain is too heavy for a small node (it times out), so scan it in block windows,
+  // oldest first. A window that still fails is split in half (down to `minWindow` blocks).
+  const head = Number((await fetchJson(`${comet}/status`))?.result?.sync_info?.latest_block_height ?? 0);
+  if (!(head > 0)) throw new Error('the node did not report its latest block');
+  let from = 1, size = window;
+  while (from <= head && wallets.length < max) {
+    const to = Math.min(head + 1, from + size);
+    const q = encodeURIComponent(`"tx.height>=${from} AND tx.height<${to}"`);
+    let pages;
+    try {
+      pages = [];
+      for (let page = 1; ; page++) {
+        const r = await fetchJson(`${comet}/tx_search?query=${q}&page=${page}&per_page=100&order_by=%22asc%22`);
+        const txs = r?.result?.txs ?? [];
+        pages.push(txs);
+        if (!txs.length || page * 100 >= Number(r?.result?.total_count ?? 0)) break;
+      }
+    } catch (e) {
+      if (size <= minWindow) throw e;
+      size = Math.max(minWindow, Math.floor(size / 2));
+      log(`blocks ${from}-${to - 1}: ${e?.message ?? e}; trying ${size} blocks at a time`);
+      continue;
+    }
+    for (const txs of pages) {
+      for (const tx of txs) {
+        scanned++;
+        for (const a of addressesInTx(tx)) {
+          if (seen.has(a)) continue;
+          seen.add(a);
+          if (modules.has(a) || skip.has(a)) continue;
+          if (await isContract(a)) continue;
+          if ((await balanceOf(a)) > big) continue;
+          wallets.push(a);
+          if (wallets.length >= max) break;
+        }
         if (wallets.length >= max) break;
       }
       if (wallets.length >= max) break;
     }
-    log(`page ${page}: ${scanned} transactions, ${wallets.length} wallets`);
-    if (page * 100 >= Number(r?.result?.total_count ?? 0)) break;
+    log(`blocks ${from}-${to - 1} of ${head}: ${scanned} transactions, ${wallets.length} wallets`);
+    from = to;
   }
   return { wallets, scanned };
 }

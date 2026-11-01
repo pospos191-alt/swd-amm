@@ -124,17 +124,28 @@ test('collect: users oldest first; contracts, module accounts, big funds and the
     ...Array.from({ length: 96 }, () => ev('nothing here')),
     ev(w(6), w(7)), ev(w(8)),
   ];
+  // tx i is in block i + 1; the node refuses windows wider than 30 blocks (the scan halves its window)
+  const asked = [];
   const fetchJson = async (url) => {
     if (url.includes('module_accounts')) return { accounts: [{ base_account: { address: b32(0xf00d) } }] };
-    const page = Number(new URL(url).searchParams.get('page'));
-    return { result: { txs: txs.slice((page - 1) * 100, page * 100), total_count: String(txs.length) } };
+    if (url.endsWith('/status')) return { result: { sync_info: { latest_block_height: String(txs.length + 7) } } };
+    const u = new URL(url);
+    const [, a, b] = u.searchParams.get('query').match(/^"tx\.height>=(\d+) AND tx\.height<(\d+)"$/).map(Number);
+    asked.push([a, b]);
+    if (b - a > 30) throw new Error('timeout');
+    const inside = txs.filter((_, i) => i + 1 >= a && i + 1 < b);
+    const page = Number(u.searchParams.get('page')), per = Number(u.searchParams.get('per_page'));
+    return { result: { txs: inside.slice((page - 1) * per, page * per), total_count: String(inside.length) } };
   };
   const opts = { comet: 'http://x/rpc', rest: 'http://x/rest', fetchJson, skip: new Set(readList(w(0xd0)).wallets), // the airdrop wallet (checksummed)
     isContract: async (a) => a.toLowerCase() === w(0xc0de), balanceOf: async (a) => (a.toLowerCase() === w(0xb16) ? 2_000_000n * ZETA : ZETA) };
-  const all = await collectUsers({ ...opts, max: 1000 });
+  const all = await collectUsers({ ...opts, max: 1000, window: 100, minWindow: 10 });
   assert.deepEqual(all.wallets.map((a) => Number(BigInt(a))), [1, 2, 3, 4, 5, 6, 7, 8]);
-  assert.equal(all.scanned, txs.length);
-  const three = await collectUsers({ ...opts, max: 3 });
+  assert.equal(all.scanned, txs.length, 'every block scanned once, up to the head');
+  assert.deepEqual(asked.slice(0, 4), [[1, 101], [1, 51], [1, 26], [26, 51]], 'a window that fails is halved');
+  assert.equal(asked.at(-1)[1], txs.length + 8, 'the last window ends at the head');
+  await assert.rejects(collectUsers({ ...opts, window: 100, minWindow: 50 }), /timeout/, 'gives up at the smallest window');
+  const three = await collectUsers({ ...opts, max: 3, window: 20 });
   assert.deepEqual(three.wallets.map((a) => Number(BigInt(a))), [1, 2, 3]);
   assert.deepEqual(addressesInTx({}), []);
   assert.deepEqual(readList(all.wallets.join('\n')).wallets, all.wallets, 'the output is a list for airdrop');
