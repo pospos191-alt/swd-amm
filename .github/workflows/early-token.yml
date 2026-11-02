@@ -7,6 +7,9 @@
 #   mode = collect   the wallets that already used the ZETAPHY chain (at most `max`, oldest first; contracts,
 #                    module accounts and big funds left out), pushed as zetaphy-chain/rewards/early-users.txt to
 #                    the branch rewards/early-users; merge it, then airdrop with list = that file.
+#   mode = collect-evm  wallets active right now on Ethereum and BSC (the senders in their newest blocks, free
+#                    public nodes; at most `max`; the early-users list left out), pushed as
+#                    zetaphy-chain/rewards/evm-wallets.txt to the branch rewards/evm-wallets; merge, then airdrop.
 #   mode = pool      the ZEARLY/ZETAPHY pool on the ZETAPHY Swap (first liquidity from the airdrop wallet); adds the
 #                    pool to early-testnet.json and ZEARLY to the Swap's token list, on the branch rewards/early.
 #   mode = extras    deploys the Early Pass, quests (funded), the farm (on the pool's LP, funded) and polls; adds
@@ -24,7 +27,7 @@ on:
       mode:
         description: "deploy = ZEARLY on the testnet; airdrop = send to a list"
         type: choice
-        options: [airdrop, deploy, collect, pool, extras, quests]
+        options: [airdrop, deploy, collect, collect-evm, pool, extras, quests]
         default: airdrop
       list:
         description: "airdrop: the list file in the repo (one 0x… or zetaphy1… per line)"
@@ -33,7 +36,7 @@ on:
         description: "airdrop: ZEARLY per wallet"
         default: "10000"
       max:
-        description: "collect: at most this many wallets"
+        description: "collect / collect-evm: at most this many wallets"
         default: "1000"
       zearly:
         description: "pool: ZEARLY in the first liquidity"
@@ -57,7 +60,7 @@ jobs:
   run:
     name: ZEARLY ${{ inputs.mode || 'quests' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ inputs.mode == 'collect' && 300 || 60 }}
+    timeout-minutes: ${{ (inputs.mode == 'collect' || inputs.mode == 'airdrop') && 300 || 60 }}
     environment: testnet-deploy
     permissions:
       contents: write   # deploy pushes the address to rewards/early
@@ -184,6 +187,27 @@ jobs:
           git commit -q -m "ZETAPHY Early: $n wallets that used the ZETAPHY chain ($upto)" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
           git push -q --force origin rewards/early-users
           echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...rewards/early-users"
+
+      - name: Collect wallets active on Ethereum and BSC
+        if: inputs.mode == 'collect-evm'
+        env:
+          MAX: ${{ inputs.max }}
+        run: |
+          set -o pipefail
+          [[ "$MAX" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "::error::max: a whole number"; exit 1; }
+          skips=$(ls ../zetaphy-chain/rewards/early-users.txt 2>/dev/null || true)
+          node scripts/early.js collect-evm --max "$MAX" --skip-lists "$skips" --out ../zetaphy-chain/rewards/evm-wallets.txt | tee "$RUNNER_TEMP/collect.json"
+          n=$(jq -r .wallets "$RUNNER_TEMP/collect.json")
+          { echo "### ZEARLY: wallets active on Ethereum and BSC: $n"; echo '```'; head -n 21 ../zetaphy-chain/rewards/evm-wallets.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          [ "$n" -gt 0 ] || { echo "no wallets found"; exit 0; }
+          cd ..
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -q -B rewards/evm-wallets
+          git add zetaphy-chain/rewards/evm-wallets.txt
+          git commit -q -m "ZETAPHY Early: $n wallets active on Ethereum and BSC" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git push -q --force origin rewards/evm-wallets
+          echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...rewards/evm-wallets"
 
       - name: Remove the key
         if: always()

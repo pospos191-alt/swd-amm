@@ -53,7 +53,7 @@ import { execFile } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Contract, getBytes } from 'ethers';
+import { Contract, getBytes, getAddress } from 'ethers';
 import { createRpcChain, serveRpc } from './helpers/rpcchain.js';
 import { readList } from '../scripts/early.js';
 import { toBech32 } from '../src/pqtx.js';
@@ -153,4 +153,27 @@ test('collect: users oldest first; contracts, module accounts, big funds and the
   assert.equal(all.next, all.head + 1, 'a full scan ends past the head');
   assert.deepEqual(addressesInTx({}), []);
   assert.deepEqual(readList(all.wallets.join('\n')).wallets, all.wallets, 'the output is a list for airdrop');
+});
+
+// ---------------------------------------------------------------- collect-evm: wallets active on other EVM chains
+import { collectEvm } from '../scripts/early.js';
+
+test('collect-evm: the newest blocks\' senders, taking turns between chains; repeats, bad senders and skipped wallets left out; capped', async () => {
+  const w = (n) => '0x' + n.toString(16).padStart(40, '0');
+  const chain = { eth: { 2: [1, 2, 2], 1: [3], 0: [4] }, bsc: { 1: [5, 1, 6], 0: [7] } };
+  const asked = [];
+  const rpc = async (ch, method, params) => {
+    if (method === 'eth_blockNumber') return '0x' + (Object.keys(chain[ch]).length - 1).toString(16);
+    const n = Number(params[0]);
+    asked.push(`${ch}${n}`);
+    assert.equal(params[1], true, 'with the transactions');
+    return { transactions: [...chain[ch][n].map((x) => ({ from: w(x) })), { from: null }] };
+  };
+  const all = await collectEvm({ chains: ['eth', 'bsc'], rpc, skip: new Set([getAddress(w(6))]) });
+  assert.deepEqual(all.wallets.map((a) => Number(BigInt(a))), [1, 2, 5, 3, 7, 4]);
+  assert.deepEqual(asked, ['eth2', 'bsc1', 'eth1', 'bsc0', 'eth0'], 'newest first, one block of each chain in turn, stops when every chain is done');
+  assert.equal(all.blocks, 5);
+  const three = await collectEvm({ chains: ['eth', 'bsc'], rpc, max: 3 });
+  assert.deepEqual(three.wallets.map((a) => Number(BigInt(a))), [1, 2, 5]);
+  assert.deepEqual(readList(three.wallets.join('\n')).wallets, three.wallets, 'the output is a list for airdrop');
 });
