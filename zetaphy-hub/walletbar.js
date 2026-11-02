@@ -10,13 +10,16 @@
 //    used to reconnect (no prompt). The post-quantum wallet keeps its own keys.
 // Never stores a key or a signature: only the wallet's id ("6963:io.metamask", or "ledger:<i>" for the
 // i-th account of a Ledger over USB: ledger.js, an EIP-1193 shim, so every app's code path is the same).
+// Post-quantum signing (pqsnap.js): "ZETAPHY Snap" next to MetaMask connects the snap's ML-DSA-44 account; every
+// app then signs through it (MsgEVMCall) with the same code path. Stored as the id "zetaphy-snap".
 // Safety (wallet-safety.js): "Use a hardware wallet" help, a banner above BIG_BALANCE, the account
 // forgotten after 30 minutes without activity (60 / 120 / 240 to choose in the help), and a summary before each transaction (hub.js send()).
 import { safety } from './wallet-safety.js';
 import { LEDGER_ID_RE, ledgerId, ledgerProvider, hidSupported, preloadTransport } from './ledger.js';
+import { PQSNAP_ID, snapHost, snapProvider, pqsText } from './pqsnap.js';
 
 export const SHARED_KEY = 'zetaphy:wallet';
-const ID_RE = /^(6963:[\w.:-]{1,120}|injected:[a-z0-9]{1,20}|ledger:\d{1,3})$/;
+const ID_RE = /^(6963:[\w.:-]{1,120}|injected:[a-z0-9]{1,20}|ledger:\d{1,3}|zetaphy-snap)$/;
 /** At or above this many ZETAPHY on the connected account, the hardware-wallet banner shows. */
 export const BIG_BALANCE = 1000n * 10n ** 18n;
 /** Which help sections the hub shows (EVM with Ledger over USB, Cosmos/Keplr). */
@@ -110,6 +113,17 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
     return w;
   }
   const isHardware = () => !!(wallet?.hardware || wallet?.provider?.isHardware);
+  let snapW = null;
+  /** The ZETAPHY Snap as a wallet entry (pqsnap.js speaks EIP-1193); null without MetaMask in this browser. */
+  function snapWallet() {
+    const host = snapHost(discovery.list());
+    if (!host) return null;
+    if (snapW?.host === host.provider) return snapW;
+    snapW = { id: PQSNAP_ID, name: 'ZETAPHY Snap', pq: true, host: host.provider,
+      provider: snapProvider({ host: host.provider, rpc: evmCall, comet: () => lib.nodeEndpoints(node()).rpc, chainId, lang: () => lang() }) };
+    return snapW;
+  }
+  const isPq = () => !!wallet?.provider?.isPostQuantum;
 
   async function ensureChain(p) {
     try { await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: lib.EVM_CHAIN_ID_HEX }] }); } catch (e) {
@@ -162,7 +176,7 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
     if (!id) { if (account) setAccount(null, null); return; }
     if (wallet?.id === id && account) return;
     const m = LEDGER_ID_RE.exec(id);
-    const w = m ? ledgerWallet(Number(m[1])) : discovery.list().find((x) => x.id === id);
+    const w = m ? ledgerWallet(Number(m[1])) : id === PQSNAP_ID ? snapWallet() : discovery.list().find((x) => x.id === id);
     if (w) await connect(w, { silent: true }).catch(() => {});
   }
 
@@ -206,7 +220,8 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
     body.replaceChildren();
     if (account) {
       body.append(
-        el('div', { class: 'wb-acc mono', text: account }, isHardware() ? el('span', { class: 'ws-hw', text: sf.t('hwBadge') }) : null),
+        el('div', { class: 'wb-acc mono', text: account }, isHardware() ? el('span', { class: 'ws-hw', text: sf.t('hwBadge') }) : null,
+          isPq() ? el('span', { class: 'ws-hw', 'data-pq': 'mldsa44', text: pqsText(lang(), 'badge') }) : null),
         el('h4', { text: T('wbHoldings') }),
         !balances ? el('p', { class: 'dim', text: '…' })
           : balances.error ? el('p', { class: 'dim', text: T('wbNoNode') })
@@ -237,6 +252,14 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
       } }, w.icon ? el('img', { src: w.icon, alt: '', width: 24, height: 24 }) : el('span', { class: 'wb-ico' }), el('span', { text: w.name })))));
     } else {
       body.append(el('p', { text: T('wbNone') }), el('div', { class: 'wb-list' }, lib.openInAppLinks(win.location.href).map((l) => el('a', { class: 'wb-wallet', href: l.href, rel: 'noopener noreferrer', text: l.name }))));
+    }
+    // The ZETAPHY Snap (post-quantum, ML-DSA-44 inside MetaMask): offered when MetaMask is here.
+    const sw = snapWallet();
+    if (sw) {
+      body.append(el('div', { class: 'wb-list' }, el('button', { type: 'button', class: 'wb-wallet', id: 'wb-pqsnap', onclick: async () => {
+        $('wb-msg').textContent = '';
+        try { await connect(sw); renderDialog(); } catch (e) { $('wb-msg').textContent = e?.code === 4001 ? T('wbRejected') : String(e?.message ?? e).slice(0, 200); }
+      } }, el('span', { class: 'wb-ico' }), el('span', { text: pqsText(lang(), 'btn') }))), el('p', { class: 'dim small', text: pqsText(lang(), 'note') }));
     }
     // A Ledger over USB (Chrome, Edge, Brave on a computer); elsewhere: use it through MetaMask / Rabby.
     if (hidSupported(win)) {
@@ -285,5 +308,5 @@ export function walletBar({ win, evmCall, tokens, T, lib, node, onChange = () =>
     setTimeout(restore, 400); // EIP-6963 wallets answer within a moment
   }
 
-  return { mount, render, connect, disconnect, restore, refresh: loadBalances, account: () => account, provider: () => wallet?.provider ?? null, ensureChain: () => ensureChain(wallet.provider), open: () => $('wb-btn').click(), safety: sf, isHardware };
+  return { mount, render, connect, disconnect, restore, refresh: loadBalances, account: () => account, provider: () => wallet?.provider ?? null, ensureChain: () => ensureChain(wallet.provider), open: () => $('wb-btn').click(), safety: sf, isHardware, isPq };
 }

@@ -16,10 +16,12 @@ const LEDGER = ['ledger.js', 'vendor/ledger-hid.js'];
 const ZKVERDICT = ['zkverdict-core.js', 'zkverdict-vkey.json'];
 /** no stuck transactions: node check, one wallet request at a time, honest result (txguard.js) */
 const TXGUARD = ['txguard.js'];
+/** post-quantum signing: the ZETAPHY Snap (ML-DSA-44 in MetaMask) as an EIP-1193 provider (pqsnap.js; imports ./txguard.js) */
+const PQSNAP = ['pqsnap.js'];
 /** site folder (from the repo root) -> the files it gets */
 export const SHARED = {
-  'zetaphy-dex/web/lib': [...SAFETY, ...LEDGER, ...TXGUARD],
-  'zetaphy-nft/web/lib': [...SAFETY, ...LEDGER, ...TXGUARD],
+  'zetaphy-dex/web/lib': [...SAFETY, ...LEDGER, ...TXGUARD, ...PQSNAP],
+  'zetaphy-nft/web/lib': [...SAFETY, ...LEDGER, ...TXGUARD, ...PQSNAP],
   'zetaphy-explorer/src': [...SAFETY, ...ZKVERDICT, ...TXGUARD],
   'zetaphy-explorer': ['vendor/zkverify.js'],
   'zetaphy-neuro/web': SAFETY,

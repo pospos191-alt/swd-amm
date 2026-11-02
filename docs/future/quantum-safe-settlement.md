@@ -61,7 +61,7 @@ that each referenced repo path exists) and that the table below is exactly what 
 (post-quantum only), **hybrid** (classical and PQ together, safe if either holds), **partial** (a PQ path exists but
 classical keys still guard part of it), **classical**. HNDL = recorded data could be read later.
 
-**Readiness score: 46/100** (impact-weighted: critical 5, high 3, medium 2, low 1; credit pq 1, hybrid 0.8, partial
+**Readiness score: 49/100** (impact-weighted: critical 5, high 3, medium 2, low 1; credit pq 1, hybrid 0.8, partial
 0.4, classical 0). `zetaphy qsafe inventory` prints it with the open rows; the hub's Quantum tab shows it. The score
 is meant to be uncomfortable: it moves only when a row's status honestly changes.
 
@@ -71,7 +71,7 @@ is meant to be uncomfortable: it moves only when a row's status honestly changes
 | `consensus-votes` | CometBFT block votes | Ed25519 + ML-DSA-44 vote extensions | hybrid | critical | no | Every vote carries an ML-DSA-44 signature; block H+1 carries the ML-DSA certificate of H (MsgPQCertificate), checked by every node and by `zetaphy pq verify-block`. | Keep >2/3 of voting power registered (gov.sh vote-key); refuse to run Q-day while it is lower. |
 | `double-sign-evidence` | Double-sign evidence and slashing | Ed25519 | partial | high | no | gov.sh pq-evidence on: no slashing on Ed25519 evidence alone for validators with an ML-DSA key (off by default). | Vote pq-evidence on with the Q-day proposal; ML-DSA evidence needs the round in CometBFT's PQ signing (upstream). |
 | `validator-remote-signer` | Validator key and remote signer (horcrux) | Ed25519 (threshold) | partial | medium | no | The PQ certificate rule needs the separate ML-DSA vote key (config/pq_vote_key.seed). | Back up and rotate pq_vote_key.seed with the validator key; native ML-DSA consensus keys when CometBFT supports them. |
-| `p2p-transport` | CometBFT peer-to-peer links | X25519 + Ed25519 node keys (SecretConnection) | classical | medium | yes | Sentry topology; blocks are PQ-certified, so a fake peer cannot feed a forged chain to a node. | Hybrid X25519+ML-KEM-768 handshake upstream, or validator links over WireGuard with a post-quantum pre-shared key until then. |
+| `p2p-transport` | CometBFT peer-to-peer links | X25519 + Ed25519 node keys (SecretConnection); optional WireGuard + PSK for validator–sentry links | partial | medium | yes | Sentry topology; blocks are PQ-certified, so a fake peer cannot feed a forged chain to a node. Optional (off by default): pq-link.sh puts validator–sentry links in WireGuard with a random pre-shared key sent only over ML-KEM/NTRU-hybrid SSH; SecretConnection runs inside unchanged; sentries' public peers stay classical. | Run pq-link.sh on every validator–sentry pair (rotate the PSK, or Rosenpass for a fresh one every 2 minutes); hybrid X25519+ML-KEM-768 SecretConnection upstream for public peers. |
 | `evm-accounts` | secp256k1 accounts (MetaMask, Cosmos eth_secp256k1) | secp256k1 ECDSA | partial | critical | no | Q-day rule refuses ECDSA from a voted height; quantum lock to an ML-DSA-44 account; commit–reveal for never-used keys; QuantumRescue pre-commitments for used keys; explorer exposure page. | Lock or pre-commit now (hub "Quantum safety" tab); governance schedules Q-day months ahead; MsgQDayRescue (designed) turns rescues into locks. |
 | `native-pq-accounts` | Native ML-DSA-44 accounts | ML-DSA-44 (FIPS 204) | pq | critical | no | Cosmos txs signed with ML-DSA-44 only; MsgEVMCall gives them the whole EVM. | Done. Consider ML-DSA-65 for long-lived treasuries. |
 | `validator-operators` | Validator operator accounts | secp256k1 ECDSA | partial | high | no | gov.sh quantum-lock; the controller manages the validator through MsgEVMCall as_owner and MsgPQVoteKey validator_owner. | All operators locked before the Q-day vote. |
@@ -88,8 +88,8 @@ is meant to be uncomfortable: it moves only when a row's status honestly changes
 | `oracles` | Price oracles (Pyth relay, ZetaphyOracle reporters) | secp256k1 (Wormhole guardians, reporter EOAs) | classical | high | no | TWAP and bounds where used. | Reporters as PQ accounts; guardian-signed feeds only through a PQ attestation (pqattest.js style). |
 | `pq-web-wallet` | ZETAPHY web wallet (ML-DSA-44 in the browser) | ML-DSA-44 | pq | high | no | Seeds sealed with scrypt + AES-256-GCM. | Done. |
 | `snap` | ZETAPHY Snap (ML-DSA keys inside MetaMask) | ML-DSA-44 from SIP-6 entropy | pq | high | no | Recoverable from the MetaMask recovery phrase. | Publish after MetaMask review. |
-| `injected-wallets` | MetaMask / injected EIP-1193 wallets in the dapps | secp256k1 ECDSA | classical | high | no | The hub warns per address (exposure), and offers lock / rescue. | Route signing through the Snap or the PQ web wallet; QuantumWallet for contract accounts. |
-| `tls` | HTTPS for RPC, explorer, hub (TLS) | ECDHE (X25519) + ECDSA/RSA certificates | partial | medium | yes | Modern browsers and hosts already negotiate hybrid X25519MLKEM768 key exchange where both sides support it. | Require hybrid ML-KEM at our reverse proxies; PQ certificates when the Web PKI has them; wallets verify data, not TLS. |
+| `injected-wallets` | MetaMask / injected EIP-1193 wallets in the dapps | secp256k1 ECDSA (default); ML-DSA-44 through the ZETAPHY Snap (opt-in) | partial | high | no | The hub warns per address (exposure), and offers lock / rescue. Hub, Swap and NFT offer "ZETAPHY Snap": calls go out as ML-DSA-44-signed MsgEVMCall from the snap's own PQ account (pqsnap.js). Opt-in, needs MetaMask Flask until the snap is allowlisted; ECDSA stays the default; EIP-712 / personal_sign flows and the explorer still need ECDSA. | Publish the snap; make it the default where MetaMask is present; PQ variants of the typed-data flows; QuantumWallet for contract accounts. |
+| `tls` | HTTPS for RPC, explorer, hub (TLS) | X25519MLKEM768 preferred, X25519 / P-256 fallback (node Caddy); ECDSA certificates | partial | medium | yes | Node https (setup-node.sh TLS_PQ=prefer): pinned Caddy 2.11.7 negotiates hybrid X25519MLKEM768 with every client that offers it, classical fallback for the rest; TLS_PQ=require refuses them. Hub and explorer sit on Vercel: whether it negotiates the hybrid is up to that host, not configured here. Certificates stay classical. | TLS_PQ=require once wallets and tools ship ML-KEM; PQ (ML-DSA) certificates when the Web PKI has them; wallets verify data, not TLS. |
 | `mempool-privacy` | Pending transactions (mempool) | none (public) | classical | low | yes | Threat gate and wallet checks. | The ML-KEM encrypted mempool (another workstream). |
 | `keys-at-rest` | Keys at rest (CLI seeds, wallet vaults) | scrypt + AES-256-GCM | pq | medium | yes | AES-256 (not AES-128) everywhere. | Done; keep passphrases long. |
 | `release-integrity` | Node install and release integrity | SHA-256 pins (+ GitHub SSH/TLS) | hybrid | high | no | cloud-init.sh runs setup-node.sh only when its SHA-256 matches; content-addressed files. | Hash-based (SLH-DSA) release signatures when tooling supports them. |
@@ -114,10 +114,27 @@ and audit-as-a-service work (in progress).
 - **block finality**, as long as validators holding more than 2/3 of the voting power have registered ML-DSA vote
   keys: block H+1 carries the ML-DSA certificate of block H, checked by every node and by `zetaphy pq verify-block`.
 
-**Still classical (see the inventory):** CometBFT's own Ed25519 votes and p2p links, IBC light clients in both
-directions, the Hyperlane ISM and relayer keys on the remote side, MetaMask and every other injected wallet,
-timelock and multisig signers that are EOAs, oracle reporters, TLS. Assets bridged in from Ethereum/BNB are only as
-safe as the lockbox on the origin chain.
+**Still classical (see the inventory):** CometBFT's own Ed25519 votes and SecretConnection p2p links, IBC light
+clients in both directions, the Hyperlane ISM and relayer keys on the remote side, MetaMask and every other injected
+wallet by default, timelock and multisig signers that are EOAs, oracle reporters, TLS certificates. Assets bridged in
+from Ethereum/BNB are only as safe as the lockbox on the origin chain.
+
+**Post-quantum paths next to them (opt-in, so those rows are partial, not pq):**
+- *Node https* (`tls`): `setup-node.sh` installs Caddy 2.11.7 (SHA-256 pinned; Ubuntu 24.04's Caddy 2.6 has no
+  ML-KEM) with `curves x25519mlkem768 x25519 secp256r1`: every client that offers the hybrid X25519MLKEM768 gets it
+  (tested: the server picks it even when the client lists X25519 first), the rest fall back to X25519 / P-256, so no
+  wallet or tool is cut off. `TLS_PQ=require` keeps only the hybrid (OpenSSL 3.0 clients such as older curl and Node
+  then fail); `TLS_PQ=off` keeps Ubuntu's Caddy. This protects recorded RPC traffic (harvest now, decrypt later) for
+  ML-KEM clients; certificates stay ECDSA, so an active impersonator after Q-day is not stopped.
+- *Validator–sentry links* (`p2p-transport`): `zetaphy-chain/wireguard/pq-link.sh` puts them in WireGuard with a random
+  pre-shared key that travels only over SSH restricted to ML-KEM / NTRU Prime hybrid key exchange. SecretConnection
+  runs inside unchanged. No forward secrecy if the PSK later leaks (rotate it, or Rosenpass); sentries' public peers
+  stay classical.
+- *Dapps* (`injected-wallets`): the hub, Swap and NFT list "ZETAPHY Snap" next to MetaMask (`zetaphy-hub/pqsnap.js`,
+  copied by `npm run sync:shared`). Calls are sent as `MsgEVMCall` signed with ML-DSA-44 inside MetaMask, from the
+  snap's own PQ account; the result is read from CometBFT and handed to `txguard.js`. Needs MetaMask Flask until the
+  snap is allowlisted; EIP-712 / `personal_sign` flows and the explorer still need an ECDSA wallet. The PQ web wallet
+  is a separate site with no cross-site signing API, so the dapps do not route through it.
 
 ## 4. Q-day protocol
 
@@ -322,4 +339,6 @@ is a rescue that users can prepare **today** with the wallet they already have.
 | JS | `zetaphy-network/src/qsafe/inventory.js`, `rescue.js`, `settlement.js`, `pqism.js`, `cli.js` |
 | CLI | `zetaphy qsafe inventory [--json]`, `zetaphy qsafe rescue-kit <account> --contract <0x…>`, `zetaphy qsafe rescue-reveal <kit.json>` |
 | Hub | Quantum tab: `zetaphy-hub/quantum.js`, `quantum-core.js`, `quantum-i18n.js` (8 languages); `build.mjs` writes `qsafe` into `hub-config.json`; a deployment record `zetaphy-network/deployments/qsafe-77390.json` (`quantumRescue`, `pqSettlement`, `pqMultisigIsm`) turns on sending |
-| Tests | `zetaphy-network/test/qsafe-inventory.test.js`, `qsafe-rescue.test.js`, `qsafe-settlement.test.js`, `qsafe-ism.test.js` (real ML-DSA-44 keys through a JS precompile); `zetaphy-hub/test/quantum.test.mjs`, `quantum.e2e.mjs` |
+| Transport | `zetaphy-chain/setup-node.sh` (`TLS_PQ`, pinned Caddy), `zetaphy-chain/wireguard/pq-link.sh` (WireGuard + PSK, guide in its README) |
+| Dapps | `zetaphy-hub/pqsnap.js` (ZETAPHY Snap as an EIP-1193 provider; copies in `zetaphy-dex/web/lib`, `zetaphy-nft/web/lib`), `txguard.js` `settleTx` |
+| Tests | `zetaphy-network/test/qsafe-inventory.test.js`, `pqlink.test.js`; `zetaphy-hub/test/pqsnap.test.mjs`, `qsafe-rescue.test.js`, `qsafe-settlement.test.js`, `qsafe-ism.test.js` (real ML-DSA-44 keys through a JS precompile); `zetaphy-hub/test/quantum.test.mjs`, `quantum.e2e.mjs` |

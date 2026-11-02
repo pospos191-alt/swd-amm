@@ -60,7 +60,7 @@ IBC light client), P-256 (passkey, ใบรับรอง TLS) และ BN254
 `zetaphy-network/src/qsafe/inventory.js` ส่วน `test/qsafe-inventory.test.js` ตรวจทุกแถว (ครบทุกช่อง สถานะถูกต้อง
 และไฟล์ที่อ้างถึงมีอยู่จริงในรีโป) และตรวจว่าตารางในเอกสารภาษาอังกฤษตรงกับที่ไฟล์สร้างขึ้นทุกตัวอักษร
 
-**คะแนนความพร้อม: 46/100** (ถ่วงตามผลกระทบ: วิกฤต 5 สูง 3 กลาง 2 ต่ำ 1 และให้คะแนนตามสถานะ: ทนควอนตัม 1 ไฮบริด 0.8
+**คะแนนความพร้อม: 49/100** (ถ่วงตามผลกระทบ: วิกฤต 5 สูง 3 กลาง 2 ต่ำ 1 และให้คะแนนตามสถานะ: ทนควอนตัม 1 ไฮบริด 0.8
 บางส่วน 0.4 แบบเดิม 0) ดูได้ด้วย `zetaphy qsafe inventory` หรือแท็บควอนตัมใน hub คะแนนนี้ตั้งใจให้ดูไม่สบายใจ
 มันจะขยับก็ต่อเมื่อสถานะของแถวเปลี่ยนจริงเท่านั้น
 
@@ -70,9 +70,10 @@ IBC light client), P-256 (passkey, ใบรับรอง TLS) และ BN254
   คำรับรองรายงานด้วย ML-DSA, `PQSettlement`
 - **ไฮบริด:** โหวตบล็อกของ CometBFT (Ed25519 + ML-DSA), ความถูกต้องของไฟล์ติดตั้งโหนด
 - **บางส่วน:** บัญชี secp256k1 (ล็อกได้ แต่ยังมีบัญชีที่ไม่ล็อก), บัญชีผู้ดูแล validator, หลักฐานการเซ็นซ้ำ, ผู้เซ็น timelock/multisig,
-  validator ของ Hyperlane ISM, ลายเซ็นที่สัญญาตรวจเอง (ecrecover), TLS, remote signer ของ validator
-- **แบบเดิม:** IBC light client ทั้งสองทิศทาง, relayer ของ IBC และ Hyperlane, MetaMask และกระเป๋าแบบ injected,
-  การเก็บทรัพย์สินบน Ethereum/BNB, oracle, passkey (P-256), FROST, Groth16, ลิงก์ p2p, ความเป็นส่วนตัวของ mempool
+  validator ของ Hyperlane ISM, ลายเซ็นที่สัญญาตรวจเอง (ecrecover), TLS, remote signer ของ validator,
+  ลิงก์ p2p (ลิงก์ validator–sentry ผ่าน WireGuard + PSK ได้ถ้าเลือกใช้), MetaMask และกระเป๋าแบบ injected (เซ็นผ่าน ZETAPHY Snap ได้ถ้าเลือกใช้)
+- **แบบเดิม:** IBC light client ทั้งสองทิศทาง, relayer ของ IBC และ Hyperlane,
+  การเก็บทรัพย์สินบน Ethereum/BNB, oracle, passkey (P-256), FROST, Groth16, ความเป็นส่วนตัวของ mempool
 
 **งานต้นแบบที่เกี่ยวข้องบน branch อื่น** (ไม่ทำซ้ำที่นี่): mempool เข้ารหัสแบบ PQ (`zetaphy-network/src/encmempool`, ML-KEM),
 STARK light client (`zetaphy-network/src/starklc`, ใช้ในข้อ 4.5 และ 6.2), circuit breaker ที่ซ่อมตัวเองได้ (`CircuitBreaker`
@@ -87,9 +88,23 @@ STARK light client (`zetaphy-network/src/starklc`, ใช้ในข้อ 4.5 
 - **ความเป็นที่สุดของบล็อก** ตราบใดที่ validator ที่ถือคะแนนโหวตเกิน 2/3 ลงทะเบียนกุญแจโหวต ML-DSA แล้ว
   บล็อก H+1 จะพกใบรับรอง ML-DSA ของบล็อก H ซึ่งทุกโหนดและ `zetaphy pq verify-block` ตรวจ
 
-**ยังเป็นแบบเดิม:** โหวต Ed25519 ของ CometBFT เองและลิงก์ p2p, IBC light client ทั้งสองทาง, ISM และกุญแจ relayer ฝั่งเชนต้นทาง,
-MetaMask และกระเป๋า injected ทุกตัว, ผู้เซ็น timelock/multisig ที่เป็น EOA, ผู้รายงานราคา oracle และ TLS
+**ยังเป็นแบบเดิม:** โหวต Ed25519 ของ CometBFT เองและลิงก์ p2p แบบ SecretConnection, IBC light client ทั้งสองทาง, ISM และกุญแจ relayer ฝั่งเชนต้นทาง,
+MetaMask และกระเป๋า injected ทุกตัว (ค่าเริ่มต้น), ผู้เซ็น timelock/multisig ที่เป็น EOA, ผู้รายงานราคา oracle และใบรับรอง TLS
 ทรัพย์สินที่ข้ามสะพานมาจาก Ethereum/BNB ปลอดภัยได้แค่เท่ากับ lockbox บนเชนต้นทาง
+
+**ทางเลือกทนควอนตัมที่มีอยู่ข้าง ๆ (ต้องเลือกใช้เอง แถวเหล่านี้จึงเป็น "บางส่วน" ไม่ใช่ "ทนควอนตัม"):**
+- *https ของโหนด* (`tls`): `setup-node.sh` ติดตั้ง Caddy 2.11.7 (ตรึง SHA-256 ไว้ เพราะ Caddy 2.6 ของ Ubuntu 24.04 ไม่มี ML-KEM)
+  ตั้ง `curves x25519mlkem768 x25519 secp256r1` ไคลเอนต์ที่เสนอ X25519MLKEM768 แบบไฮบริดจะได้แบบนั้นเสมอ (ทดสอบแล้ว: เซิร์ฟเวอร์เลือกไฮบริด
+  แม้ไคลเอนต์จะวาง X25519 ไว้ก่อน) ส่วนที่เหลือใช้ X25519 / P-256 ไม่มีกระเป๋าหรือเครื่องมือไหนถูกตัดออก `TLS_PQ=require` รับเฉพาะไฮบริด
+  (ไคลเอนต์ OpenSSL 3.0 เช่น curl และ Node รุ่นเก่าจะเชื่อมต่อไม่ได้) `TLS_PQ=off` ใช้ Caddy ของ Ubuntu ตามเดิม
+  สิ่งนี้ปกป้องทราฟฟิก RPC ที่ถูกอัดเก็บไว้ (เก็บวันนี้ ถอดรหัสทีหลัง) ของไคลเอนต์ที่มี ML-KEM ส่วนใบรับรองยังเป็น ECDSA จึงยังกันผู้ปลอมตัวหลัง Q-day ไม่ได้
+- *ลิงก์ validator–sentry* (`p2p-transport`): `zetaphy-chain/wireguard/pq-link.sh` ใส่ลิงก์ไว้ใน WireGuard พร้อมกุญแจร่วมล่วงหน้า (PSK) แบบสุ่ม
+  ที่ส่งผ่าน SSH ซึ่งบังคับให้แลกกุญแจแบบไฮบริด ML-KEM / NTRU Prime เท่านั้น SecretConnection ยังทำงานข้างในเหมือนเดิม
+  ไม่มี forward secrecy ถ้า PSK หลุดภายหลัง (ให้หมุน PSK หรือใช้ Rosenpass) และ peer สาธารณะของ sentry ยังเป็นแบบเดิม
+- *dapp* (`injected-wallets`): hub, Swap และ NFT มีตัวเลือก "ZETAPHY Snap" ข้าง MetaMask (`zetaphy-hub/pqsnap.js` คัดลอกด้วย `npm run sync:shared`)
+  ธุรกรรมถูกส่งเป็น `MsgEVMCall` ที่เซ็นด้วย ML-DSA-44 ภายใน MetaMask จากบัญชี PQ ของ Snap เอง ผลลัพธ์อ่านจาก CometBFT แล้วส่งต่อให้ `txguard.js`
+  ต้องใช้ MetaMask Flask จนกว่า Snap จะได้รับอนุญาต ส่วนการเซ็น EIP-712 / `personal_sign` และ explorer ยังต้องใช้กระเป๋า ECDSA
+  กระเป๋าเว็บ PQ เป็นอีกเว็บหนึ่งที่ไม่มี API ให้เว็บอื่นขอลายเซ็น dapp จึงไม่ได้เซ็นผ่านมัน
 
 ## 4. โปรโตคอล Q-day
 

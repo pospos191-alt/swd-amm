@@ -108,6 +108,17 @@ const signed = await invoke('zetaphy_signTx', {
 - หน้าเว็บคำนวณที่อยู่จาก public key เอง ไม่เชื่อที่อยู่ที่ snap บอก
 - โอน, โอนโทเคน, stake และ deploy เซ็นผ่าน `zetaphy_signTx` ส่วนโหมดกุญแจในเบราว์เซอร์ (seed เข้ารหัสด้วยรหัสผ่าน) ยังใช้ได้เหมือนเดิม
 
+## ใช้จาก hub, Swap และ NFT (`zetaphy-hub/pqsnap.js`)
+
+หน้าต่างเลือกกระเป๋าของ hub, Swap และ NFT มีตัวเลือก "ZETAPHY Snap" ข้าง MetaMask (แสดงเฉพาะเมื่อมี MetaMask หรือ Flask ในเบราว์เซอร์)
+`pqsnap.js` ทำให้ Snap เป็น provider แบบ EIP-1193 แอปจึงใช้ขั้นตอนส่งธุรกรรมเดิมได้โดยไม่ต้องแก้:
+- บัญชีคือบัญชี ML-DSA-44 ของ Snap (ที่อยู่ 0x… ของตัวเอง หน้าเว็บคำนวณจากกุญแจสาธารณะเอง)
+- `eth_sendTransaction {to, data, value}` กลายเป็นข้อความ `evmCall` หนึ่งข้อความ: gas จาก `eth_estimateGas` + 25% (บวกส่วนของ Cosmos)
+  แล้ว `zetaphy_signTx` (หน้าต่างของ Snap), `zetaphy_sendCosmosTx` แล้วอ่านผลจาก CometBFT `/rpc/tx` ส่งต่อให้ `txguard.js`
+  (ธุรกรรม Cosmos ไม่มี receipt แบบ EVM)
+- `personal_sign`, EIP-712 และ `eth_sign` ถูกปฏิเสธพร้อมเหตุผล (กุญแจ ML-DSA ทำลายเซ็นแบบนั้นไม่ได้) และไม่รองรับการสร้างสัญญาตรงนี้
+  ตัวเลือกนี้ใช้ร่วมกันทั้งเว็บด้วย id กระเป๋า `zetaphy-snap`
+
 ## วัคซีน: ตรวจทุกธุรกรรมใน MetaMask
 
 ก่อนผู้ใช้ยืนยันธุรกรรม EVM ใด ๆ ใน MetaMask (ทุกเชน ทุกเว็บ) snap แสดงผลตรวจของ ZETAPHY Neuro ในแท็บของ snap

@@ -14,6 +14,7 @@ import { threatQueries, readThreat, reasonText, DISCLAIMER, REPRODUCE } from './
 import { safety, ledgerReason } from './lib/wallet-safety.js';
 import { LEDGER_ID_RE, ledgerId, ledgerProvider, hidSupported, preloadTransport } from './lib/ledger.js';
 import * as txg from './lib/txguard.js';
+import { PQSNAP_ID, snapHost, snapProvider, pqsText } from './lib/pqsnap.js';
 
 const walletLock = txg.walletLock(); // one wallet request at a time (txguard.js)
 const pageStop = txg.pageSignal(window);
@@ -24,7 +25,7 @@ const store = (() => { try { const s = window.localStorage; s.setItem('__t', '1'
 const load = (k, d) => { try { return JSON.parse(store?.getItem(k)) ?? d; } catch { return d; } };
 // One wallet connection for the whole site (zetaphy-hub/walletbar.js): the wallet's id as JSON text.
 const SHARED_WALLET = 'zetaphy:wallet';
-const WALLET_ID = /^((6963|injected):[A-Za-z0-9._:-]{1,120}|ledger:\d{1,3})$/;
+const WALLET_ID = /^((6963|injected):[A-Za-z0-9._:-]{1,120}|ledger:\d{1,3}|zetaphy-snap)$/;
 const walletId = (k) => { const v = load(k, null); return typeof v === 'string' && WALLET_ID.test(v) ? v : null; };
 const save = (k, v) => { try { store?.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 
@@ -223,6 +224,12 @@ function pickWallet() {
     body.append(h('button', { type: 'button', class: 'btn wallet-choice', on: { click: () => { dlg.close(); connect(w).catch(showError); } } },
       w.icon ? h('img', { src: w.icon, alt: '', width: 24, height: 24 }) : null, w.name));
   }
+  // The ZETAPHY Snap (post-quantum: an ML-DSA-44 key inside MetaMask, lib/pqsnap.js), when MetaMask is here.
+  const sw = snapWallet();
+  if (sw) {
+    body.append(h('button', { type: 'button', class: 'btn wallet-choice', id: 'wallet-pqsnap', on: { click: () => { dlg.close(); connect(sw).catch(showError); } } }, pqsText(S.lang, 'btn')),
+      h('p', { class: 'muted small', text: pqsText(S.lang, 'note') }));
+  }
   // A Ledger over USB (Chrome, Edge, Brave on a computer); elsewhere through MetaMask / Rabby (the help says how).
   if (hidSupported(window)) {
     preloadTransport();
@@ -243,6 +250,18 @@ function ledgerWallet(index = null) {
   return w;
 }
 const isHardware = () => !!(S.wallet?.hardware || S.wallet?.provider?.isHardware);
+let snapW = null;
+/** The ZETAPHY Snap as a wallet entry (lib/pqsnap.js speaks EIP-1193): signs with ML-DSA-44 as its own account. */
+function snapWallet() {
+  const host = snapHost(S.wallets?.list() ?? []);
+  if (!host) return null;
+  if (snapW?.host === host.provider) return snapW;
+  const nodeRpc = (m, p) => (S.rpc ? S.rpc.call(m, p) : Promise.reject(new Error(T('noRpc'))));
+  const comet = () => { const u = new URL(rpcUrl()); return `${u.origin}/rpc`; };
+  snapW = { id: PQSNAP_ID, name: 'ZETAPHY Snap', pq: true, host: host.provider,
+    provider: snapProvider({ host: host.provider, rpc: nodeRpc, comet, chainId: EVM_CHAIN_ID, lang: () => S.lang }) };
+  return snapW;
+}
 
 /** The large-balance banner (ZETAPHY on the connected account; none for a hardware account or inside the hub). */
 let bannerSeq = 0;
@@ -958,7 +977,7 @@ async function start() {
     if (!last || S.wallet?.id === last) return;
     await new Promise((r) => setTimeout(r, 60)); // EIP-6963 wallets answer the request event at once
     const m = LEDGER_ID_RE.exec(last);
-    const w = m ? ledgerWallet(Number(m[1])) : S.wallets.list().find((x) => x.id === last);
+    const w = m ? ledgerWallet(Number(m[1])) : last === PQSNAP_ID ? snapWallet() : S.wallets.list().find((x) => x.id === last);
     const acc = w ? await Promise.race([w.provider.request({ method: 'eth_accounts' }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 1500))]) : [];
     if (acc?.[0] && isAddress(acc[0])) { S.wallet = { name: w.name, id: w.id, provider: w.provider, account: checksum(acc[0]), hardware: !!w.hardware }; walletLabel(); renderSafetyBanner(); }
   };
