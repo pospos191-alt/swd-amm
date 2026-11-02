@@ -177,3 +177,25 @@ test('collect-evm: the newest blocks\' senders, taking turns between chains; rep
   assert.deepEqual(three.wallets.map((a) => Number(BigInt(a))), [1, 2, 5]);
   assert.deepEqual(readList(three.wallets.join('\n')).wallets, three.wallets, 'the output is a list for airdrop');
 });
+
+// ---------------------------------------------------------------- airdrop: who was paid, on a node that chokes on busy ranges
+import { paidSince } from '../scripts/early.js';
+
+test('paidSince: every Transfer recipient found; a range the node fails on is split down to the blocks it can serve', async () => {
+  const w = (n) => '0x' + n.toString(16).padStart(40, '0');
+  const topic2 = (n) => '0x' + n.toString(16).padStart(64, '0');
+  const logsAt = { 3: [1, 2], 700: [3], 701: [4, 1], 1200: [5] }; // block -> recipients
+  const asked = [];
+  const getLogs = async (a, b) => {
+    asked.push([a, b]);
+    if (a <= 700 && 700 <= b && b - a > 1) throw new Error('could not coalesce error'); // the busy block 700
+    return Object.entries(logsAt).filter(([n]) => n >= a && n <= b).flatMap(([, rs]) => rs.map((r) => ({ topics: ['0x', '0x', topic2(r)] })));
+  };
+  const once = (what, f) => f();
+  const got = await paidSince({ getLogs, fromBlock: 0, head: 1300, step: 500, again: once });
+  assert.deepEqual([...got].map((a) => Number(BigInt(a))).sort((x, y) => x - y), [1, 2, 3, 4, 5]);
+  assert.ok(asked.some(([a, b]) => a === 500 && b === 999), 'the first try is a whole step');
+  assert.ok(asked.some(([a, b]) => b - a <= 1 && a <= 700 && 700 <= b), 'split down around the busy block');
+  await assert.rejects(paidSince({ getLogs: async () => { throw new Error('down'); }, fromBlock: 0, head: 3, again: once }), /down/,
+    'a node that fails even on one block ends the run (nothing is sent without knowing who was paid)');
+});

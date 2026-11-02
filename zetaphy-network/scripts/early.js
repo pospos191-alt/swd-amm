@@ -191,16 +191,35 @@ function config() {
 }
 
 /** Wallets the holder already sent ZEARLY to (its Transfer events). */
+/**
+ * Wallets the airdrop wallet already sent ZEARLY to: its Transfer events, STEP blocks at a time. A range the node
+ * fails on (a busy batch of 200 transfers can time out on the small node) is retried, then split in half, down to
+ * single blocks. getLogs({ fromBlock, toBlock }) -> logs.
+ */
+export async function paidSince({ getLogs, fromBlock, head, step = STEP, log = () => {}, again = retry }) {
+  const out = new Set();
+  const scan = async (a, b) => {
+    let logs;
+    try { logs = await again(`getLogs ${a}-${b}`, () => getLogs(a, b)); } catch (e) {
+      if (a === b) throw e;
+      const mid = Math.floor((a + b) / 2);
+      log(`getLogs ${a}-${b} failed; splitting it`);
+      await scan(a, mid);
+      await scan(mid + 1, b);
+      return;
+    }
+    for (const l of logs) out.add(getAddress('0x' + l.topics[2].slice(26)));
+  };
+  for (let b = fromBlock; b <= head; b += step) await scan(b, Math.min(head, b + step - 1));
+  return out;
+}
+
 async function paid(p, token, holder, fromBlock) {
   const topic = IFACE.getEvent('Transfer').topicHash;
   const from = '0x' + holder.slice(2).toLowerCase().padStart(64, '0');
-  const head = await p.getBlockNumber();
-  const out = new Set();
-  for (let b = fromBlock; b <= head; b += STEP) {
-    const logs = await p.getLogs({ address: token, topics: [topic, from], fromBlock: b, toBlock: Math.min(head, b + STEP - 1) });
-    for (const l of logs) out.add(getAddress('0x' + l.topics[2].slice(26)));
-  }
-  return out;
+  const head = await retry('getBlockNumber', () => p.getBlockNumber());
+  return paidSince({ fromBlock, head, log: (m) => console.error(m),
+    getLogs: (a, b) => p.getLogs({ address: token, topics: [topic, from], fromBlock: a, toBlock: b }) });
 }
 
 async function main() {
@@ -322,4 +341,4 @@ async function main() {
   }
 }
 
-if (process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]) main().catch((e) => die(e.shortMessage ?? e.message));
+if (process.argv[1] && new URL(import.meta.url).pathname === process.argv[1]) main().catch((e) => die([e.shortMessage ?? e.message, e.info ? JSON.stringify(e.info).slice(0, 500) : '', e.error?.message ?? ''].filter(Boolean).join(' | ')));
