@@ -72,7 +72,7 @@ contract PQCosignCommittee {
         uint256 n = proof.length / ENTRY;
         if (n < t || n > MAX_MEMBERS) return false;
         bytes32 d = pqDigest(digest);
-        bytes32 last;
+        bytes32 last = bytes32(0); // below every valid key hash (0 itself means refused)
         for (uint256 i = 0; i < n; ++i) {
             bytes32 h = _entry(d, proof[i * ENTRY:(i + 1) * ENTRY]);
             if (uint256(h) <= uint256(last)) return false; // ascending (and 0 = refused): no member counted twice

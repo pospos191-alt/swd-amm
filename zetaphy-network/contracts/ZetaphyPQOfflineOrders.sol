@@ -191,14 +191,18 @@ contract ZetaphyPQOfflineOrders {
     }
 
     function _swap(Order calldata o, address[] calldata path, address outToken, uint256 want) private {
+        uint256[] memory amounts;
         if (path.length != 0) {
-            IPQOrdersRouter(router).swapExactTokensForTokens(o.amountIn, want, path, address(this), o.deadline);
-            return;
+            amounts = IPQOrdersRouter(router).swapExactTokensForTokens(o.amountIn, want, path, address(this), o.deadline);
+        } else {
+            address[] memory direct = new address[](2);
+            direct[0] = o.tokenIn;
+            direct[1] = outToken;
+            amounts = IPQOrdersRouter(router).swapExactTokensForTokens(o.amountIn, want, direct, address(this), o.deadline);
         }
-        address[] memory direct = new address[](2);
-        direct[0] = o.tokenIn;
-        direct[1] = outToken;
-        IPQOrdersRouter(router).swapExactTokensForTokens(o.amountIn, want, direct, address(this), o.deadline);
+        // the router's own report must meet `want` too; _pullAndSwap then measures what actually arrived
+        uint256 reported = amounts.length == 0 ? 0 : amounts[amounts.length - 1];
+        if (reported < want) revert InsufficientOutput(reported, want);
     }
 
     function _payOut(Order calldata o, address outToken, uint256 got, uint256 toMaker) private {

@@ -411,6 +411,15 @@ contract AgentPolicyWallet {
             keccak256(data), reportHash, deadline));
     }
 
+    /// cosignDigest at the current nonce, then consumes that nonce: the replay counter moves before the
+    /// committee is called (checks-effects-interactions; a BadCosign revert undoes it).
+    function _useCosignDigest(address to, uint256 value, bytes calldata data, bytes32 reportHash, uint256 deadline)
+        private returns (bytes32 d)
+    {
+        d = cosignDigest(to, value, data, reportHash, deadline);
+        cosignNonce++;
+    }
+
     /// Above a threshold, path 2: no wait, with the committee's co-signatures
     /// (reportHash = the Neuro report the runners checked).
     function executeCosigned(
@@ -425,8 +434,7 @@ contract AgentPolicyWallet {
     ) external onlyAgent returns (bytes memory) {
         if (block.timestamp > deadline) revert Expired();
         if (pqCosignOnly) revert ClassicalCosignOff();
-        if (address(committee) == address(0) || !committee.isValid(cosignDigest(to, value, data, reportHash, deadline), sigs)) revert BadCosign();
-        cosignNonce++;
+        if (address(committee) == address(0) || !committee.isValid(_useCosignDigest(to, value, data, reportHash, deadline), sigs)) revert BadCosign();
         (address token, uint256 amount) = _classify(to, value, data);
         return _run(to, value, data, token, amount, modelHash, promptHash, 2);
     }
@@ -445,8 +453,7 @@ contract AgentPolicyWallet {
     ) external onlyAgent returns (bytes memory) {
         if (block.timestamp > deadline) revert Expired();
         if (pqCosignOnly) revert ClassicalCosignOff();
-        if (address(committee) == address(0) || !committee.isValidFrost(cosignDigest(to, value, data, reportHash, deadline), sig)) revert BadCosign();
-        cosignNonce++;
+        if (address(committee) == address(0) || !committee.isValidFrost(_useCosignDigest(to, value, data, reportHash, deadline), sig)) revert BadCosign();
         (address token, uint256 amount) = _classify(to, value, data);
         return _run(to, value, data, token, amount, modelHash, promptHash, 3);
     }
@@ -465,8 +472,7 @@ contract AgentPolicyWallet {
         bytes calldata proof
     ) external onlyAgent returns (bytes memory) {
         if (block.timestamp > deadline) revert Expired();
-        if (address(pqCommittee) == address(0) || !pqCommittee.isValid(cosignDigest(to, value, data, reportHash, deadline), proof)) revert BadCosign();
-        cosignNonce++;
+        if (address(pqCommittee) == address(0) || !pqCommittee.isValid(_useCosignDigest(to, value, data, reportHash, deadline), proof)) revert BadCosign();
         (address token, uint256 amount) = _classify(to, value, data);
         return _run(to, value, data, token, amount, modelHash, promptHash, 4);
     }

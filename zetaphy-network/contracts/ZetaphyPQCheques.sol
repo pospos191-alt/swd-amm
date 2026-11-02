@@ -222,6 +222,7 @@ contract ZetaphyPQCheques {
 
     /// ML-DSA-44 verify through the precompile (variant ‖ digest ‖ pk ‖ sig -> uint256(1)), as PQSettlement.
     function _pqValid(bytes32 d, bytes calldata pk, bytes calldata sig) private view returns (bool) {
+        if (pk.length != PK_BYTES) return false; // fixed key length: the key / signature split cannot shift
         (bool ok, bytes memory ret) = MLDSA.staticcall(abi.encodePacked(VARIANT, d, pk, sig));
         return ok && ret.length == 32 && uint256(bytes32(ret)) == 1;
     }
