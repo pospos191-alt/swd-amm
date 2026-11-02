@@ -196,6 +196,10 @@ test('paidSince: every Transfer recipient found; a range the node fails on is sp
   assert.deepEqual([...got].map((a) => Number(BigInt(a))).sort((x, y) => x - y), [1, 2, 3, 4, 5]);
   assert.ok(asked.some(([a, b]) => a === 500 && b === 999), 'the first try is a whole step');
   assert.ok(asked.some(([a, b]) => b - a <= 1 && a <= 700 && 700 <= b), 'split down around the busy block');
+  // a single block over the node's cap is read from its receipts
+  const busy = await paidSince({ getLogs: async (a, b) => { if (a <= 9 && 9 <= b) throw new Error('query returned more than 500 results'); return []; },
+    blockLogs: async (n) => (n === 9 ? [{ topics: ['0x', '0x', topic2(7)] }] : []), fromBlock: 0, head: 20, step: 20, again: once });
+  assert.deepEqual([...busy].map((a) => Number(BigInt(a))), [7]);
   await assert.rejects(paidSince({ getLogs: async () => { throw new Error('down'); }, fromBlock: 0, head: 3, again: once }), /down/,
     'a node that fails even on one block ends the run (nothing is sent without knowing who was paid)');
 });

@@ -136,10 +136,10 @@ export async function collectUsers({ comet, rest, fetchJson, isContract, balance
 
 // a long scan of a slow or rate-limited node: every read is retried (a 30 s timeout, then 2, 4, 8, 16 s pauses)
 // instead of one failed request ending the whole scan
-async function retry(what, f) {
+async function retry(what, f, final = () => false) {
   for (let i = 0; ; i++) {
     try { return await f(); } catch (e) {
-      if (i >= 4) throw new Error(`${what}: ${e?.message ?? e}`);
+      if (i >= 4 || final(e)) throw new Error(`${what}: ${e?.message ?? e}`);
       console.error(`${what}: ${e?.message ?? e}; retrying in ${2 ** (i + 1)} s`);
       await new Promise((r) => setTimeout(r, 2 ** (i + 1) * 1000));
     }
@@ -196,12 +196,16 @@ function config() {
  * fails on (a busy batch of 200 transfers can time out on the small node) is retried, then split in half, down to
  * single blocks. getLogs({ fromBlock, toBlock }) -> logs.
  */
-export async function paidSince({ getLogs, fromBlock, head, step = STEP, log = () => {}, again = retry }) {
+export async function paidSince({ getLogs, blockLogs = null, fromBlock, head, step = STEP, log = () => {}, again = retry }) {
   const out = new Set();
   const scan = async (a, b) => {
     let logs;
     try { logs = await again(`getLogs ${a}-${b}`, () => getLogs(a, b)); } catch (e) {
-      if (a === b) throw e;
+      // one block over the node's 500-log cap (two or three batches of 200 in it): read its receipts instead
+      if (a === b && blockLogs) { logs = await again(`block ${a} receipts`, () => blockLogs(a)); log(`block ${a}: read from its receipts`); }
+      else if (a === b) throw e;
+    }
+    if (!logs) {
       const mid = Math.floor((a + b) / 2);
       log(`getLogs ${a}-${b} failed; splitting it`);
       await scan(a, mid);
@@ -218,8 +222,21 @@ async function paid(p, token, holder, fromBlock) {
   const topic = IFACE.getEvent('Transfer').topicHash;
   const from = '0x' + holder.slice(2).toLowerCase().padStart(64, '0');
   const head = await retry('getBlockNumber', () => p.getBlockNumber());
-  return paidSince({ fromBlock, head, log: (m) => console.error(m),
-    getLogs: (a, b) => p.getLogs({ address: token, topics: [topic, from], fromBlock: a, toBlock: b }) });
+  // "query returned more than 500 results" will not change on a retry: split at once
+  const again = (what, f) => retry(what, f, (e) => /more than \d+ results/.test(`${e?.message ?? ''} ${e?.error?.message ?? ''}`));
+  return paidSince({ fromBlock, head, again, log: (m) => console.error(m),
+    getLogs: (a, b) => p.getLogs({ address: token, topics: [topic, from], fromBlock: a, toBlock: b }),
+    // the same logs from the receipts of the block's transactions the airdrop wallet sent to the token
+    blockLogs: async (n) => {
+      const blk = await p.getBlock(n, true);
+      const out = [];
+      for (const tx of blk?.prefetchedTransactions ?? []) {
+        if (tx.from?.toLowerCase() !== holder.toLowerCase() || tx.to?.toLowerCase() !== token.toLowerCase()) continue;
+        const rc = await p.getTransactionReceipt(tx.hash);
+        for (const l of rc?.logs ?? []) if (l.address.toLowerCase() === token.toLowerCase() && l.topics[0] === topic && l.topics[1]?.toLowerCase() === from) out.push(l);
+      }
+      return out;
+    } });
 }
 
 async function main() {
@@ -332,7 +349,15 @@ async function main() {
     if (!w) { console.log('dry run: nothing sent (--send sends)'); return; }
     for (let i = 0; i < todo.length; i += BATCH) {
       const part = todo.slice(i, i + BATCH);
-      const r = await (await t.batchTransfer(part, each)).wait();
+      const sent = await t.batchTransfer(part, each);
+      // a slow node can time out the wait: ask for the receipt again (the transaction is never sent twice; a
+      // re-run skips the wallets already paid)
+      let r;
+      try { r = await sent.wait(); } catch (e) {
+        if (e?.code === 'CALL_EXCEPTION') throw e; // mined and reverted: stop
+        r = await retry(`receipt ${sent.hash}`, async () => (await w.provider.getTransactionReceipt(sent.hash)) ?? Promise.reject(new Error('not mined yet')));
+        if (!r.status) throw new Error(`batch ${sent.hash} reverted`);
+      }
       console.log(`sent ${formatEther(each)} ZEARLY to ${part.length} wallets: ${r.hash}`);
     }
     console.log(JSON.stringify({ paid: todo.length, each: formatEther(each), total: formatEther(need) }));
