@@ -1,0 +1,19 @@
+{
+ "format": "zetaphy.immune.feed.v1",
+ "generatedAt": 1793580499,
+ "source": {
+  "chainId": 77390,
+  "registry": "0x6B088344315Df5C3042551c417462b517fA61Ab9",
+  "status": "live",
+  "mirrors": []
+ },
+ "stats": {
+  "flaggedNow": 0,
+  "flagged24h": 0,
+  "keys": 0,
+  "chains": [],
+  "vaccines": 0
+ },
+ "items": [],
+ "vaccines": []
+}
