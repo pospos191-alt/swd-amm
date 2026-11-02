@@ -15,6 +15,9 @@
 //       the node). Left out: contracts, module accounts, the airdrop wallet, and funds holding over 1,000,000
 //       ZETAPHY (the genesis accounts). The file is a list for `airdrop`. Scans the chain in block windows; with
 //       --minutes it stops after N minutes and writes what it found so far (the file says up to which block).
+//   node scripts/early.js collect-evm [--max 1000] [--out evm-wallets.txt] [--skip-lists a.txt,b.txt]
+//       wallets active right now on Ethereum and BSC (EVM_RPCS overrides the free public nodes): the senders of
+//       their newest transactions, taking turns between the chains; the lists in --skip-lists are left out
 //   node scripts/early.js pool [--zearly 10000000] [--ztphy 1000]
 //       the ZEARLY/ZETAPHY pool on the ZETAPHY Swap, first liquidity from the airdrop wallet (KEYFILE)
 //   node scripts/early.js extras
@@ -131,6 +134,48 @@ export async function collectUsers({ comet, rest, fetchJson, isContract, balance
   return { wallets, scanned, head, next: wallets.length >= max ? head + 1 : from };
 }
 
+// a long scan of a slow or rate-limited node: every read is retried (a 30 s timeout, then 2, 4, 8, 16 s pauses)
+// instead of one failed request ending the whole scan
+async function retry(what, f) {
+  for (let i = 0; ; i++) {
+    try { return await f(); } catch (e) {
+      if (i >= 4) throw new Error(`${what}: ${e?.message ?? e}`);
+      console.error(`${what}: ${e?.message ?? e}; retrying in ${2 ** (i + 1)} s`);
+      await new Promise((r) => setTimeout(r, 2 ** (i + 1) * 1000));
+    }
+  }
+}
+
+/**
+ * Wallets active right now on other EVM chains: the senders of the newest blocks' transactions (a sender is always
+ * a wallet, never a contract), newest first, taking turns between the chains. rpc(chain, method, params) -> result.
+ * Leaves out `skip` and repeats; at most `max`.
+ */
+export async function collectEvm({ chains, rpc, max = 1000, skip = new Set(), log = () => {} }) {
+  const wallets = [], seen = new Set(skip);
+  const at = {};
+  for (const ch of chains) at[ch] = Number(BigInt(await rpc(ch, 'eth_blockNumber', [])));
+  let blocks = 0;
+  while (wallets.length < max && chains.some((ch) => at[ch] >= 0)) {
+    for (const ch of chains) {
+      if (wallets.length >= max || at[ch] < 0) continue;
+      const b = await rpc(ch, 'eth_getBlockByNumber', ['0x' + at[ch].toString(16), true]);
+      at[ch]--;
+      blocks++;
+      for (const tx of b?.transactions ?? []) {
+        let a;
+        try { a = getAddress(tx.from); } catch { continue; }
+        if (seen.has(a)) continue;
+        seen.add(a);
+        wallets.push(a);
+        if (wallets.length >= max) break;
+      }
+    }
+    if (blocks % 50 < chains.length) log(`${blocks} blocks: ${wallets.length} wallets`);
+  }
+  return { wallets, blocks };
+}
+
 async function provider() {
   const url = process.env.ZETAPHY_RPC || die('ZETAPHY_RPC is not set');
   const p = new JsonRpcProvider(url, undefined, { staticNetwork: true });
@@ -208,17 +253,6 @@ async function main() {
     const p = await provider();
     const c = config();
     const skip = new Set([c.holder, process.env.KEYFILE ? signer(p).address : null].filter(Boolean).map((a) => getAddress(a)));
-    // a long scan of a small node: every read is retried (a 30 s timeout, then 2, 4, 8, 16 s pauses) instead of one
-    // failed request ending the whole scan
-    const retry = async (what, f) => {
-      for (let i = 0; ; i++) {
-        try { return await f(); } catch (e) {
-          if (i >= 4) throw new Error(`${what}: ${e?.message ?? e}`);
-          console.error(`${what}: ${e?.message ?? e}; retrying in ${2 ** (i + 1)} s`);
-          await new Promise((r) => setTimeout(r, 2 ** (i + 1) * 1000));
-        }
-      }
-    };
     const fetchJson = (url) => retry(url.split('?')[0], async () => {
       const r = await fetch(url, { signal: AbortSignal.timeout(30_000) });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -234,6 +268,30 @@ async function main() {
     const complete = next > head;
     writeFileSync(out, `# ZETAPHY Early: wallets that used the ZETAPHY chain (${wallets.length}, from ${scanned} transactions in blocks 1-${next - 1}${complete ? '' : ` of ${head}: the time ran out`}), oldest first\n${wallets.join('\n')}\n`);
     console.log(JSON.stringify({ wallets: wallets.length, scanned, lastBlock: next - 1, head, complete, out }));
+  } else if (cmd === 'collect-evm') {
+    // EVM_RPCS: name=url pairs, comma separated (free public nodes by default)
+    const urls = Object.fromEntries((process.env.EVM_RPCS || 'ethereum=https://ethereum-rpc.publicnode.com,bsc=https://bsc-rpc.publicnode.com')
+      .split(',').map((x) => x.trim().split('=')).filter((x) => x.length === 2));
+    const chains = Object.keys(urls);
+    if (!chains.length) die('EVM_RPCS: name=url,name=url');
+    let id = 0;
+    const rpc = (ch, method, params) => retry(`${ch} ${method}`, async () => {
+      const r = await fetch(urls[ch], { method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }) });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      if (j.error) throw new Error(j.error.message ?? JSON.stringify(j.error));
+      return j.result;
+    });
+    const skip = new Set();
+    for (const f of (opt('skip-lists', '') || '').split(',').filter(Boolean)) for (const a of readList(readFileSync(f, 'utf8')).wallets) skip.add(a);
+    const c = config();
+    if (c.holder) skip.add(getAddress(c.holder));
+    const max = Math.max(1, Math.min(200000, Number(opt('max', '1000')) || 1000));
+    const { wallets, blocks } = await collectEvm({ chains, rpc, max, skip, log: (m) => console.error(m) });
+    const out = opt('out', 'evm-wallets.txt');
+    writeFileSync(out, `# ZETAPHY Early: wallets active on ${chains.join(' and ')} (${wallets.length}, the senders in their newest ${blocks} blocks, ${new Date().toISOString().slice(0, 10)})\n${wallets.join('\n')}\n`);
+    console.log(JSON.stringify({ wallets: wallets.length, blocks, chains, out }));
   } else if (cmd === 'airdrop') {
     const { wallets, bad } = readList(readFileSync(opt('list') || die('--list <file>'), 'utf8'));
     const each = parseEther(String(opt('each', '10000')));
@@ -260,7 +318,7 @@ async function main() {
     }
     console.log(JSON.stringify({ paid: todo.length, each: formatEther(each), total: formatEther(need) }));
   } else {
-    die('usage: early.js deploy | airdrop --list <file> [--each 10000] [--send] | collect [--max 1000] [--out <file>] [--minutes N] | pool | extras | quests [--send] (see the top of this file)');
+    die('usage: early.js deploy | airdrop --list <file> [--each 10000] [--send] | collect [--max 1000] [--out <file>] [--minutes N] | collect-evm [--max 1000] [--out <file>] [--skip-lists <files>] | pool | extras | quests [--send] (see the top of this file)');
   }
 }
 
