@@ -63,7 +63,7 @@ that each referenced repo path exists) and that the table below is exactly what 
 (post-quantum only), **hybrid** (classical and PQ together, safe if either holds), **partial** (a PQ path exists but
 classical keys still guard part of it), **classical**. HNDL = recorded data could be read later.
 
-**Readiness score: 49/100** (impact-weighted: critical 5, high 3, medium 2, low 1; credit pq 1, hybrid 0.8, partial
+**Readiness score: 52/100** (impact-weighted: critical 5, high 3, medium 2, low 1; credit pq 1, hybrid 0.8, partial
 0.4, classical 0). `zetaphy qsafe inventory` prints it with the open rows; the hub's Quantum tab shows it. The score
 is meant to be uncomfortable: it moves only when a row's status honestly changes.
 
