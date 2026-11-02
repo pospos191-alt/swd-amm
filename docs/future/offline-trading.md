@@ -98,6 +98,39 @@ the router fixed is easier to check and easier to sign offline.
   other origins (the RPC) or `/api/`. It fetches from the network first, so online you always get the current
   files. The CSP now says `worker-src 'self'`. While the browser is offline, an "Offline" pill shows in the top bar.
 
+## 4. ML-DSA-signed cheques and orders (post-quantum twins)
+
+`ZetaphyCheques` and `ZetaphyOfflineOrders` check ECDSA signatures with `ecrecover`. On Q-day a quantum computer
+could derive those keys from public data, and the chain then makes `ecrecover` return no address, so both stop
+working (they fail safe). Two separate contracts do the same jobs with **ML-DSA-44** (FIPS 204) signatures, checked
+by ZETAPHY's precompile at `0x…0900` exactly as `PQSettlement` and `QuantumWallet` do. Neither has any `ecrecover`.
+They are separate so that the deployed contracts, and the hub code that reads them, stay as they are.
+
+- `zetaphy-network/contracts/ZetaphyPQCheques.sol`: the same channels and rules as `ZetaphyCheques` (deposit, expiry,
+  24 h challenge, top-up, extend, release, withdraw). `open(payee, token, amount, expiry, signerKey)` takes the
+  1312-byte ML-DSA-44 public key, stores its keccak-256 and emits the key (`SignerKey`), so the payee can read it from
+  the chain once. A cheque is an ML-DSA signature over
+  `keccak256(abi.encode("ZETAPHY PQCheques cheque v1", chainId, contract, channelId, cumulativeAmount))`.
+  `cash(channelId, cumulative, publicKey, sig)` checks the key's hash and the signature.
+- `zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol`: the same `Order`, fill rules, route choice, relayer fee,
+  native out and nonce bitmap as `ZetaphyOfflineOrders`. The maker first names its key once, online, with
+  `setPQKey(keccak256(publicKey))`. Orders are then signed over
+  `keccak256(abi.encode("ZETAPHY PQOfflineOrders order v1", chainId, contract, orderHash))` and filled with
+  `fill(order, publicKey, sig, path)`. Calling `setPQKey` again (or with 0) voids every unfilled order signed with the
+  old key. There is no permit path, because EIP-2612 permits are ECDSA signatures.
+- `zetaphy-network/src/qsafe/offline.js` has the digests, the signing (with a `src/pq.js` key), the offline checks
+  (`checkPQCheque`, `checkPQOrder`), the call arguments and text payloads (`ZPQC1:`, `ZPQO1:`). An ML-DSA-44
+  signature is 2420 bytes, which is too big for the hub's single QR code. Carry these as text or a file.
+
+What is still classical: the payer funds and closes a channel from its own account, the payee is paid to its
+address, and an order's maker holds the tokens and the allowance. A quantum attacker who derives an EOA's key can do
+what that account can do, but it cannot forge a cheque or an order. To make the whole path quantum-safe, use a
+`QuantumWallet` in post-quantum-only mode (it calls `setPQKey` and `approve` through `execute`) or a native ML-DSA
+account. The tests run exactly that case.
+
+**Status:** both contracts are written and tested, but **not deployed**. The hub's Offline tab still uses the
+ECDSA contracts.
+
 ## Threat model and limits
 
 | Risk | Who | What protects / what does not |
@@ -143,6 +176,12 @@ signing still work.
 
   It ends with an end-to-end run on `rpcchain`: the DEX artifacts and real signed transactions, with the hub's own
   key encryption, signing, payloads and checks.
+- `zetaphy-network/test/qsafe-offline.test.js` covers the ML-DSA twins with real ML-DSA-44 keys (the precompile runs in
+  JS, `test/helpers/precompiles.js`):
+  - the JS digests equal the contracts'; offline checks and payload round trips;
+  - another key, a forged, flipped or short signature, another channel, contract or chain;
+  - the channel life cycle; cancel, deadline, minimum out, native out, key rotation and clearing;
+  - a post-quantum-only `QuantumWallet` as the maker, so no ECDSA key is involved on the maker's side.
 - `zetaphy-hub/test/offline.test.mjs` checks:
   - EIP-712 hashes and calldata against ethers;
   - signatures and recovery, and the payload round trip;

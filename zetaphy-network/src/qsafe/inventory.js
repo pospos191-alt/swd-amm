@@ -85,9 +85,10 @@ export const INVENTORY = [
     id: 'contract-ecrecover', component: 'Signatures checked inside contracts (permit, cheques, offline orders, EIP-712)', layer: 'contracts', crypto: 'secp256k1 ecrecover',
     status: 'partial', impact: 'high', hndl: false,
     risk: 'Forged permits and off-chain orders.',
-    mitigation: 'From Q-day the chain makes ecrecover return no address (fails safe: the feature stops).',
-    migration: 'PQ variants: PQSettlement for payments, QuantumWallet for actions; ML-DSA-signed cheques/orders next.',
-    refs: ['zetaphy-network/contracts/ZetaphyCheques.sol', 'zetaphy-network/contracts/ZetaphyOfflineOrders.sol', 'zetaphy-network/contracts/PQSettlement.sol'],
+    mitigation: 'From Q-day the chain makes ecrecover return no address (fails safe: the feature stops). ML-DSA-44 twins exist and are tested: PQSettlement for payments, QuantumWallet for actions, ZetaphyPQCheques for offline cheques and ZetaphyPQOfflineOrders for relayed offline orders (precompile 0x…0900, no ecrecover).',
+    migration: 'Deploy ZetaphyPQCheques / ZetaphyPQOfflineOrders on testnet and move the hub\'s offline page to them; EIP-2612 permits and other EIP-712 signatures still use ecrecover (QuantumWallet approve instead).',
+    refs: ['zetaphy-network/contracts/ZetaphyCheques.sol', 'zetaphy-network/contracts/ZetaphyOfflineOrders.sol', 'zetaphy-network/contracts/PQSettlement.sol',
+      'zetaphy-network/contracts/ZetaphyPQCheques.sol', 'zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol', 'zetaphy-network/src/qsafe/offline.js'],
   },
   {
     id: 'passkeys-p256', component: 'Passkeys (WebAuthn, P-256 precompile 0x…0100)', layer: 'contracts', crypto: 'P-256 ECDSA',

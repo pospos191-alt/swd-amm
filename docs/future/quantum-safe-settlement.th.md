@@ -20,6 +20,7 @@ P-256 ออกมาจากกุญแจสาธารณะได้) แ
 | `PQSettlement`: หักกลบลบหนี้เป็นชุด อนุมัติด้วยลายเซ็น ML-DSA เท่านั้น | **ทำแล้ว** (สัญญา) | `contracts/PQSettlement.sol`, `src/qsafe/settlement.js` |
 | `PQMultisigIsm`: ISM ของ Hyperlane ที่ validator เซ็นด้วย ML-DSA | **ทำแล้ว** (สัญญา, ปลายทาง ZETAPHY) | `contracts/PQMultisigIsm.sol`, `src/qsafe/pqism.js` |
 | `PQCosignCommittee`: ผู้ร่วมเซ็นแบบ t-of-n ML-DSA-44 ให้ `AgentPolicyWallet` (เลือกเปิดเอง FROST ยังเป็นค่าเริ่มต้น) | **ทำแล้ว** (สัญญา, ข้อ 4.6) | `contracts/PQCosignCommittee.sol`, `src/pqcosign.js`, `zetaphy cosign pq-review` |
+| เช็คออฟไลน์และคำสั่งออฟไลน์ที่ส่งต่อได้ เซ็นด้วย ML-DSA (`ZetaphyPQCheques`, `ZetaphyPQOfflineOrders`): ไม่มี `ecrecover` | **ทำแล้ว** (สัญญา ยังไม่ deploy และฮับยังใช้ฉบับ ECDSA) | `contracts/ZetaphyPQCheques.sol`, `contracts/ZetaphyPQOfflineOrders.sol`, `src/qsafe/offline.js`, [offline-trading.th.md](offline-trading.th.md) ข้อ 4 |
 | ห่อคำรับรองด้วย STARK สำหรับปลายทางที่ตรวจ ML-DSA ไม่ได้ (Ethereum, BNB) | **ออกแบบไว้** (ข้อ 6.2) | — |
 | แท็บ "ความปลอดภัยจากควอนตัม" ใน hub (8 ภาษา) | **ทำแล้ว** | `zetaphy-hub/quantum*.js` |
 
@@ -290,8 +291,8 @@ Ethereum และ BNB ตรวจ ML-DSA ได้แพงมาก เส้
 
 | | |
 |---|---|
-| สัญญา | `zetaphy-network/contracts/QuantumRescue.sol`, `PQSettlement.sol`, `PQMultisigIsm.sol`, `PQCosignCommittee.sol` (+ `AgentPolicyWallet.executeCosignedPq`) |
-| JS | `zetaphy-network/src/qsafe/inventory.js`, `rescue.js`, `settlement.js`, `pqism.js`, `cli.js`; `zetaphy-network/src/pqcosign.js` |
+| สัญญา | `zetaphy-network/contracts/QuantumRescue.sol`, `PQSettlement.sol`, `PQMultisigIsm.sol`, `PQCosignCommittee.sol` (+ `AgentPolicyWallet.executeCosignedPq`), `ZetaphyPQCheques.sol`, `ZetaphyPQOfflineOrders.sol` |
+| JS | `zetaphy-network/src/qsafe/inventory.js`, `rescue.js`, `settlement.js`, `pqism.js`, `offline.js`, `cli.js`; `zetaphy-network/src/pqcosign.js` |
 | CLI | `zetaphy qsafe inventory [--json]`, `zetaphy qsafe rescue-kit <account> --contract <0x…>`, `zetaphy qsafe rescue-reveal <kit.json>`, `zetaphy cosign pq-review` / `pq-combine` |
 | Hub | แท็บควอนตัม: `zetaphy-hub/quantum.js`, `quantum-core.js`, `quantum-i18n.js` (8 ภาษา) ไฟล์บันทึกการติดตั้ง `zetaphy-network/deployments/qsafe-77390.json` เปิดใช้การส่ง |
 | ตัวส่งธุรกรรม PQ | `zetaphy-network/src/pqsubmit.js`; `zetaphy oracle push / relay-pyth / poke --pq`, `zetaphy bridge deliver` |
