@@ -1,19 +1,17 @@
 {
- "modelId": "nml-3ab3cd303911",
+ "modelId": "nml-d5cac5ccb830",
  "note": "Recorded red-team evasions this model still misses (see ml/README.md). ml/test/redteam.test.js fails if any other recorded evasion slips back below medium.",
  "gaps": [
   {
-   "id": "rt-neuro_redteam_A_142",
+   "id": "rt-neuro_redteam_A_15",
    "family": "stealth",
    "mutations": [
-    "noise",
-    "rename",
-    "split-guard",
-    "timebomb",
-    "xor-owner"
+    "block-ramp",
+    "hashed-owner",
+    "rename"
    ],
    "tell": null,
-   "p": 0.7391
+   "p": 0.6928
   },
   {
    "id": "rt-neuro_redteam_A_54",
@@ -24,7 +22,61 @@
     "rename"
    ],
    "tell": null,
-   "p": 0.7201
+   "p": 0.6545
+  },
+  {
+   "id": "rt-rt_2026_W45_101",
+   "family": "stealth",
+   "mutations": [
+    "block-ramp",
+    "hashed-owner",
+    "rename"
+   ],
+   "tell": null,
+   "p": 0.6167
+  },
+  {
+   "id": "rt-rt_2026_W45_122",
+   "family": "stealth",
+   "mutations": [
+    "block-ramp"
+   ],
+   "tell": null,
+   "p": 0.4071
+  },
+  {
+   "id": "rt-rt_2026_W45_130",
+   "family": "stealth",
+   "mutations": [
+    "rename",
+    "sim-aware"
+   ],
+   "tell": "iscontract",
+   "p": 0.1806
+  },
+  {
+   "id": "rt-rt_2026_W45_139",
+   "family": "stealth",
+   "mutations": [
+    "noise",
+    "origin-owner",
+    "rename",
+    "timebomb"
+   ],
+   "tell": null,
+   "p": 0.4504
+  },
+  {
+   "id": "rt-rt_2026_W45_65",
+   "family": "stealth",
+   "mutations": [
+    "block-ramp",
+    "hashed-owner",
+    "noise",
+    "rename"
+   ],
+   "tell": null,
+   "p": 0.7428
   }
  ]
 }
