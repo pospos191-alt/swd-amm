@@ -40,7 +40,7 @@ test('init, psk, peer, up: a private config with the pre-shared key; status show
   const m = machine();
   let r = m.run('init', '10.77.0.1/24');
   assert.equal(r.code, 0, r.out);
-  assert.match(r.out, new RegExp(`public key of this machine.*${KEY('p').replace(/[+/=]/g, '\\$&')}`));
+  assert.match(r.out, new RegExp(`public key of this machine.*${KEY('p').replace(/[\\^$.*+?()[\]{}|/=-]/g, '\\$&')}`));
   assert.equal(m.mode('etc-wg/zetaphy-pq.conf'), 0o600);
   assert.match(m.read('etc-wg/zetaphy-pq.conf'), /^Address = 10\.77\.0\.1\/24$/m);
   assert.notEqual(m.run('init', '10.77.0.1/24').code, 0, 'never overwrites an existing key');
