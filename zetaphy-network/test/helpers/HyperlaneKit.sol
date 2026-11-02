@@ -132,3 +132,14 @@ contract KitRefusingIsm {
 contract KitRefusingReceiver {
     receive() external payable { revert("no"); }
 }
+
+/// A recipient that records what the Mailbox handed it.
+contract KitRecorder {
+    uint32 public lastOrigin;
+    bytes32 public lastSender;
+    bytes public lastBody;
+    uint256 public count;
+    function handle(uint32 origin, bytes32 sender, bytes calldata body) external payable {
+        lastOrigin = origin; lastSender = sender; lastBody = body; count += 1;
+    }
+}

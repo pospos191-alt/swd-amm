@@ -81,11 +81,11 @@ is meant to be uncomfortable: it moves only when a row's status honestly changes
 | `zk-groth16` | Groth16 proofs (NeuroScore zk, trusted-setup ceremony) | BN254 pairings | classical | medium | no | Proofs gate scores and optional features, not custody. | Hash-based STARK proofs (the STARK light-client work), FRI verifiers on ZETAPHY. |
 | `governance-signers` | Timelock and multisig signers | secp256k1 ECDSA (EOA owners) | partial | critical | no | Owners can be QuantumWallets or native PQ accounts (msg.sender = their 0x address); locked EOAs act through their controller. | Replace every EOA owner with a PQ account before Q-day; the inventory test keeps this row partial until then. |
 | `ibc-light-clients` | IBC light clients (both directions) | Ed25519 (07-tendermint) | classical | high | no | IBC rate limits and the IBC hold (large inbound transfers wait, guardian can refund). | A client that checks ZETAPHY's ML-DSA certificates (08-wasm) or a STARK proof of them (STARK light client). |
-| `ibc-relayer` | IBC relayer (Hermes) key | secp256k1 ECDSA | classical | medium | no | Q-day should not be scheduled while IBC depends on it (docs/SECURITY-CORE.md). | A relayer that signs with ML-DSA-44 (pqtx.js buildTx). |
+| `ibc-relayer` | IBC relayer (Hermes) key | secp256k1 ECDSA | classical | medium | no | Q-day should not be scheduled while IBC depends on it (docs/SECURITY-CORE.md). | A relayer whose ZETAPHY-side txs sign with ML-DSA-44: pqsubmit.js already signs, sequences and retries any Cosmos message for a native PQ account, but nothing builds MsgUpdateClient / MsgRecvPacket for it yet (Hermes does, with its secp256k1 key), and that path is untested on chain. |
 | `hyperlane-ism` | Hyperlane ISM validators (Saphan bridge) | secp256k1 ECDSA multisig | partial | critical | no | BridgeAirlock quarantine, BridgeGuard caps, the chain's bridge breaker; PQMultisigIsm (ML-DSA validators) is ready for ZETAPHY-side delivery. | Aggregation ISM (ECDSA AND ML-DSA) inbound now, ML-DSA only at Q-day; outbound to chains without ML-DSA via a STARK-wrapped attestation. |
-| `hyperlane-relayer` | Hyperlane relayer and agents' submit keys | secp256k1 ECDSA | classical | low | no | Relayers are untrusted for safety; small gas balances. | Submit through a native PQ account (MsgEVMCall) on ZETAPHY. |
+| `hyperlane-relayer` | Hyperlane relayer and agents' submit keys | secp256k1 ECDSA (agents); ML-DSA-44 for deliveries to ZETAPHY through bridge deliver | partial | low | no | Relayers are untrusted for safety; small gas balances. Deliveries to ZETAPHY can be signed by a native ML-DSA-44 account: `zetaphy bridge deliver` sends Mailbox.process as MsgEVMCall (src/pqsubmit.js, ISM checked by eth_call first). | Feed the agent's message and metadata to the PQ delivery path and retire its ZETAPHY EOA; the agents' keys on other chains stay that chain's ECDSA. |
 | `remote-chain-custody` | Assets locked on Ethereum / BNB (lockboxes) | the remote chain's ECDSA | classical | high | no | Caps per route; inbound migration moves value to PQ accounts on ZETAPHY. | The "move to a PQ account on ZETAPHY" flow; remote admins behind PQ-signed (STARK-verified) governance. |
-| `oracles` | Price oracles (Pyth relay, ZetaphyOracle reporters) | secp256k1 (Wormhole guardians, reporter EOAs) | classical | high | no | TWAP and bounds where used. | Reporters as PQ accounts; guardian-signed feeds only through a PQ attestation (pqattest.js style). |
+| `oracles` | Price oracles (Pyth relay, ZetaphyOracle reporters) | secp256k1 (Wormhole guardians; reporter EOAs unless --pq) + ML-DSA-44 reporters | partial | high | no | TWAP and bounds where used. Reporters can be native ML-DSA-44 accounts: `zetaphy oracle push / relay-pyth / poke --pq` sign as MsgEVMCall (src/pqsubmit.js), so the relay's relayer is a PQ address. | Make every ZetaphyPythRelay relayer a PQ account (setRelayer) and remove the EOAs; guardian-signed feeds only through a PQ attestation (pqattest.js style). |
 | `pq-web-wallet` | ZETAPHY web wallet (ML-DSA-44 in the browser) | ML-DSA-44 | pq | high | no | Seeds sealed with scrypt + AES-256-GCM. | Done. |
 | `snap` | ZETAPHY Snap (ML-DSA keys inside MetaMask) | ML-DSA-44 from SIP-6 entropy | pq | high | no | Recoverable from the MetaMask recovery phrase. | Publish after MetaMask review. |
 | `injected-wallets` | MetaMask / injected EIP-1193 wallets in the dapps | secp256k1 ECDSA (default); ML-DSA-44 through the ZETAPHY Snap (opt-in) | partial | high | no | The hub warns per address (exposure), and offers lock / rescue. Hub, Swap and NFT offer "ZETAPHY Snap": calls go out as ML-DSA-44-signed MsgEVMCall from the snap's own PQ account (pqsnap.js). Opt-in, needs MetaMask Flask until the snap is allowlisted; ECDSA stays the default; EIP-712 / personal_sign flows and the explorer still need ECDSA. | Publish the snap; make it the default where MetaMask is present; PQ variants of the typed-data flows; QuantumWallet for contract accounts. |
@@ -116,7 +116,8 @@ and audit-as-a-service work (in progress).
 
 **Still classical (see the inventory):** CometBFT's own Ed25519 votes and SecretConnection p2p links, IBC light
 clients in both directions, the Hyperlane ISM and relayer keys on the remote side, MetaMask and every other injected
-wallet by default, timelock and multisig signers that are EOAs, oracle reporters, TLS certificates. Assets bridged in
+wallet by default, timelock and multisig signers that are EOAs, oracle reporters that are still EOAs, the IBC
+relayer's key, TLS certificates. Assets bridged in
 from Ethereum/BNB are only as safe as the lockbox on the origin chain.
 
 **Post-quantum paths next to them (opt-in, so those rows are partial, not pq):**
@@ -135,6 +136,20 @@ from Ethereum/BNB are only as safe as the lockbox on the origin chain.
   snap's own PQ account; the result is read from CometBFT and handed to `txguard.js`. Needs MetaMask Flask until the
   snap is allowlisted; EIP-712 / `personal_sign` flows and the explorer still need an ECDSA wallet. The PQ web wallet
   is a separate site with no cross-site signing API, so the dapps do not route through it.
+
+**Services that can already sign as PQ accounts** (`zetaphy-network/src/pqsubmit.js`, the PQ submitter): a service sends
+its EVM calls as `MsgEVMCall` from a native ML-DSA-44 account, so contracts see `msg.sender` = that account's 0x address.
+The submitter counts sequences on for back-to-back txs (the node reports the last block's sequence), signs again with
+the sequence the node expects after a mismatch, resends the same signed bytes after a lost answer (so a tx is never
+sent twice), retries a full mempool or a low fee, and refuses a call that would revert (eth_call) before signing.
+- Oracle reporters: `zetaphy oracle push / relay-pyth / poke --pq`; governance makes the PQ address the
+  `ZetaphyPythRelay` relayer (`setRelayer`). The row stays *partial*: deployed relayers are EOAs until replaced, and
+  Pyth's own feeds rest on Wormhole guardians' secp256k1 signatures.
+- Hyperlane deliveries to ZETAPHY: `zetaphy bridge deliver --mailbox … --message … --metadata …` sends
+  `Mailbox.process` signed with ML-DSA-44 (the ISM is checked by eth_call first). *Partial*: the Hyperlane agents
+  still find messages and build metadata, and sign on other chains, with ECDSA.
+- IBC relayer: still *classical*. The submitter can sign any Cosmos message, but nothing builds `MsgUpdateClient` /
+  `MsgRecvPacket` for it (Hermes does, with secp256k1), and that path has not been run against the chain.
 
 ## 4. Q-day protocol
 
@@ -341,4 +356,5 @@ is a rescue that users can prepare **today** with the wallet they already have.
 | Hub | Quantum tab: `zetaphy-hub/quantum.js`, `quantum-core.js`, `quantum-i18n.js` (8 languages); `build.mjs` writes `qsafe` into `hub-config.json`; a deployment record `zetaphy-network/deployments/qsafe-77390.json` (`quantumRescue`, `pqSettlement`, `pqMultisigIsm`) turns on sending |
 | Transport | `zetaphy-chain/setup-node.sh` (`TLS_PQ`, pinned Caddy), `zetaphy-chain/wireguard/pq-link.sh` (WireGuard + PSK, guide in its README) |
 | Dapps | `zetaphy-hub/pqsnap.js` (ZETAPHY Snap as an EIP-1193 provider; copies in `zetaphy-dex/web/lib`, `zetaphy-nft/web/lib`), `txguard.js` `settleTx` |
-| Tests | `zetaphy-network/test/qsafe-inventory.test.js`, `pqlink.test.js`; `zetaphy-hub/test/pqsnap.test.mjs`, `qsafe-rescue.test.js`, `qsafe-settlement.test.js`, `qsafe-ism.test.js` (real ML-DSA-44 keys through a JS precompile); `zetaphy-hub/test/quantum.test.mjs`, `quantum.e2e.mjs` |
+| PQ submitter | `zetaphy-network/src/pqsubmit.js`; `zetaphy oracle push / relay-pyth / poke --pq`, `zetaphy bridge deliver` |
+| Tests | `zetaphy-network/test/qsafe-inventory.test.js`, `pqlink.test.js`, `pqsubmit.test.js` (a node stand-in that checks the ML-DSA-44 signature and sequence); `zetaphy-hub/test/pqsnap.test.mjs`, `qsafe-rescue.test.js`, `qsafe-settlement.test.js`, `qsafe-ism.test.js` (real ML-DSA-44 keys through a JS precompile); `zetaphy-hub/test/quantum.test.mjs`, `quantum.e2e.mjs` |

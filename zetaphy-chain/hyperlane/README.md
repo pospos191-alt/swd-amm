@@ -34,6 +34,11 @@ addresses. The relayer starts later with `RELAYER_SENDERS=<bridge lanes>`: it re
 their messages. CI (`hyperlane-agents` workflow) runs the script on a local chain: announce,
 a signed checkpoint, the relayer whitelist, and no key in the logs.
 
+The relayer's ZETAPHY key is secp256k1. A delivery to ZETAPHY can instead be signed by a native ML-DSA-44
+account: `zetaphy bridge deliver --mailbox 0x… --message 0x…|file --metadata 0x…|file` sends `Mailbox.process`
+as a `MsgEVMCall` (zetaphy-network `src/pqsubmit.js`; the ISM is checked by eth_call first, a delivered message
+is skipped). The agent still finds the message and builds its metadata, and signs on the other chains with ECDSA.
+
 ## The bridge on top (`bridge-testnet` workflow)
 
 Sepolia ETH -> ZETAPHY, testnets only. The Sepolia `HyperlaneLockBox` locks ETH and dispatches to

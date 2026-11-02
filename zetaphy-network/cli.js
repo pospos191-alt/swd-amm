@@ -115,6 +115,9 @@
 //                                      config's thresholds), BRIDGE_WATCHLIST (JSON [{address, callerTopic?}]: every log
 //                                      of these contracts is an alert, never named in the output) and BRIDGE_MARKER_KEY
 //                                      (a marker: marks their callers). --quiet: one line of counts (for public logs)
+//   zetaphy bridge deliver --mailbox 0x<ZETAPHY Mailbox> --message 0x…|file --metadata 0x…|file [--gas 3000000 --comet-rpc URL]
+//                                      deliver a Hyperlane message to ZETAPHY (Mailbox.process) signed with this machine's
+//                                      ML-DSA-44 account instead of a relayer EOA; the ISM is checked by eth_call first
 //   zetaphy bridge watch --source-rpc URL --lockbox 0x... [--confirmations 12 --release]
 //                                      be one voice of the Neuro bridge (skips flagged sources, stops while Neuro is
 //                                      paused or its switch cannot be read)
@@ -182,6 +185,8 @@
 //                          --max-conf 100] [--max-deviation 200 --max-change 1500 --max-window-change 3000 --change-window 3600]
 //   zetaphy oracle status [asset] | poke <asset>… | pause <asset> (a guardian) | push --feed 0x… --price N --expo -8
 //   zetaphy oracle relay-pyth --feed 0x<id>[,…] [--every 30 --hermes https://hermes.pyth.network]   a relayer forwards Pyth's prices
+//                                      poke, push, relay-pyth --pq: sign as this machine's ML-DSA-44 account (MsgEVMCall; the relay's
+//                                      relayer is then its 0x address) instead of the ECDSA key; --comet-rpc URL confirms by tx result
 //   zetaphy deploy-vault [--validators 0x... --validators-share 30 --fund N --governance 0x<multisig>]
 //                                      RewardVault: releases the reward pool at 10% a year (no withdraw)
 //   zetaphy vault status | release     what has vested; pay it out (anyone may; node start does it daily)
@@ -257,6 +262,7 @@ import { gate1 } from './src/gate.js';
 import { loadOrCreatePq, sealPqSeed, VARIANT as PQ_VARIANT } from './src/pq.js';
 import { pqClient, pqAddress, normalizeAddress, validatorAddress, parseZeta, formatZeta, quantumLockTx, DEFAULT_GAS_LIMIT, DEFAULT_EVM_GAS_LIMIT,
   DEFAULT_STAKING_GAS_LIMIT, DEFAULT_DEPLOY_GAS_LIMIT, DEFAULT_PRECOMPILE_GAS_LIMIT, MIN_EVM_GAS_LIMIT, MAX_EVM_GAS_LIMIT } from './src/pqtx.js';
+import { pqSubmitter, cometTxResult, deliverHyperlane } from './src/pqsubmit.js';
 import { createLaneWatcher, laneControl } from './src/lane.js';
 import { verifyBlock, exportVoteKeys } from './src/pqcert.js';
 import { securityCommand } from './src/securitycli.js';
@@ -382,6 +388,21 @@ async function connect(s, { needJobs = true } = {}) {
     jobs = new Contract(s.jobs, ART.abi, signer);
   }
   return { provider, signer, me, created, file, jobs };
+}
+
+/**
+ * This machine's native ML-DSA-44 account as a submitter (src/pqsubmit.js): EVM calls as MsgEVMCall,
+ * msg.sender = its 0x address. --comet-rpc URL (or ZETAPHY_COMET_RPC): confirm txs by their block result.
+ */
+async function connectPq(s, opt = {}) {
+  const provider = await connectRpc(s);
+  const pq = loadOrCreatePq();
+  const rpcCall = (method, params) => provider.send(method, params);
+  const comet = opt['comet-rpc'] ?? process.env.ZETAPHY_COMET_RPC;
+  const submitter = pqSubmitter({ rpcCall, publicKey: pq.publicKeyBytes, sign: pq.signBytes,
+    ...(process.env.ZETAPHY_CHAIN_ID ? { chainId: process.env.ZETAPHY_CHAIN_ID } : {}),
+    ...(comet ? { txResult: cometTxResult(String(comet)) } : {}) });
+  return { provider, rpcCall, submitter, me: submitter.address.hex };
 }
 
 const zeta = (wei) => `${formatEther(wei)} ZETAPHY`;
@@ -1226,11 +1247,25 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   }
 
   if (group === 'deploy-oracle' || group === 'oracle') {
-    return oracleCommand({ group, cmd, rest, opt, env, write, s, connect, saveSettings: (o) => settings({ ...opt, ...o }, {}) });
+    return oracleCommand({ group, cmd, rest, opt, env, write, s, connect, connectPq, saveSettings: (o) => settings({ ...opt, ...o }, {}) });
   }
 
   if (group === 'bridge' && ['open', 'gates', 'close', 'pause', 'cap', 'marker', 'untrip', 'monitor'].includes(cmd)) {
     return bridgeCommand({ group, cmd, rest, opt, env, write, s, connect, connectRpc });
+  }
+
+  if (group === 'bridge' && cmd === 'deliver') {
+    // Hyperlane delivery to ZETAPHY signed with ML-DSA-44: Mailbox.process(metadata, message) as a MsgEVMCall.
+    const hex = (v) => (/^0x([0-9a-fA-F]{2})*$/.test(String(v ?? '')) ? String(v) : null);
+    const fileOrHex = (v) => hex(v) ?? (v && v !== true && existsSync(String(v)) ? hex(readFileSync(String(v), 'utf8').trim()) : null);
+    const message = fileOrHex(opt.message); const metadata = fileOrHex(opt.metadata);
+    const mailbox = opt.mailbox ?? s.mailbox;
+    if (!ADDR_RE.test(String(mailbox ?? '')) || !message || !metadata) throw new Error('usage: zetaphy bridge deliver --mailbox 0x<ZETAPHY Mailbox> --message 0x…|file --metadata 0x…|file [--gas 3000000 --comet-rpc URL]  (signs with the ML-DSA-44 account)');
+    const p = await connectPq(s, opt);
+    const r = await deliverHyperlane({ submitter: p.submitter, mailbox: String(mailbox), metadata, message, evmGasLimit: BigInt(opt.gas ?? 3_000_000), confirm: true });
+    write(r.alreadyDelivered ? `message ${r.messageId} is already delivered: nothing sent`
+      : `delivered message ${r.messageId}: tx ${r.txHash}, signed with ML-DSA-44 by ${p.me} (in a block${r.confirmed.code === 0 ? ', succeeded' : ''})`);
+    return 0;
   }
 
   if (group === 'bridge' && cmd === 'watch') {
