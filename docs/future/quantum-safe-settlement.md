@@ -16,6 +16,7 @@ P-256 private key from its public key), and ZETAPHY is a place users of other ch
 | ZK-of-seed recovery (prove the BIP-32 seed behind an exposed key) | **designed** (section 4.5) | builds on the STARK light-client work |
 | `PQSettlement`: batch netting authorised only by ML-DSA signatures | **implemented** (contract) | `contracts/PQSettlement.sol`, `src/qsafe/settlement.js` |
 | `PQMultisigIsm`: Hyperlane ISM with ML-DSA validator attestations | **implemented** (contract, ZETAPHY destination) | `contracts/PQMultisigIsm.sol`, `src/qsafe/pqism.js` |
+| `PQCosignCommittee`: t-of-n ML-DSA-44 co-signing for `AgentPolicyWallet` (opt-in; FROST stays the default) | **implemented** (contract, section 4.6) | `contracts/PQCosignCommittee.sol`, `src/pqcosign.js`, `zetaphy cosign pq-review` |
 | STARK-wrapped attestations for destinations without ML-DSA (Ethereum, BNB) | **designed** (section 6.2) | — |
 | Hub "Quantum safety" tab (8 languages) | **implemented** | `zetaphy-hub/quantum*.js` |
 
@@ -77,7 +78,7 @@ is meant to be uncomfortable: it moves only when a row's status honestly changes
 | `validator-operators` | Validator operator accounts | secp256k1 ECDSA | partial | high | no | gov.sh quantum-lock; the controller manages the validator through MsgEVMCall as_owner and MsgPQVoteKey validator_owner. | All operators locked before the Q-day vote. |
 | `contract-ecrecover` | Signatures checked inside contracts (permit, cheques, offline orders, EIP-712) | secp256k1 ecrecover | partial | high | no | From Q-day the chain makes ecrecover return no address (fails safe: the feature stops). | PQ variants: PQSettlement for payments, QuantumWallet for actions; ML-DSA-signed cheques/orders next. |
 | `passkeys-p256` | Passkeys (WebAuthn, P-256 precompile 0x…0100) | P-256 ECDSA | classical | medium | no | The chain disables P-256 verification at Q-day (fails safe); passkeys are second factors next to ML-DSA in AgentPolicyWallet. | Wait for PQ WebAuthn (FIDO ML-DSA); keep ML-DSA as the primary key. |
-| `frost-cosign` | FROST threshold Schnorr (agent co-signing) | secp256k1 Schnorr | classical | medium | no | Used as an extra check next to the owner's key, not alone. | ML-DSA threshold (or t-of-n ML-DSA multisig like PQMultisigIsm). |
+| `frost-cosign` | FROST threshold Schnorr (agent co-signing) | secp256k1 Schnorr / ECDSA; ML-DSA-44 t-of-n option | partial | medium | no | Used as an extra check next to the owner's key, not alone. PQCosignCommittee: t-of-n ML-DSA-44 co-signatures (precompile 0x…0900) via executeCosignedPq, opt-in per wallet; setPqCosign(…, pqOnly) refuses the secp256k1 paths. FROST / ECDSA stay the default. | Committees register ML-DSA keys and wallets set pqOnly before Q-day; a true ML-DSA threshold signature (one key, one signature) when a vetted scheme exists. |
 | `zk-groth16` | Groth16 proofs (NeuroScore zk, trusted-setup ceremony) | BN254 pairings | classical | medium | no | Proofs gate scores and optional features, not custody. | Hash-based STARK proofs (the STARK light-client work), FRI verifiers on ZETAPHY. |
 | `governance-signers` | Timelock and multisig signers | secp256k1 ECDSA (EOA owners) | partial | critical | no | Owners can be QuantumWallets or native PQ accounts (msg.sender = their 0x address); locked EOAs act through their controller. | Replace every EOA owner with a PQ account before Q-day; the inventory test keeps this row partial until then. |
 | `ibc-light-clients` | IBC light clients (both directions) | Ed25519 (07-tendermint) | classical | high | no | IBC rate limits and the IBC hold (large inbound transfers wait, guardian can refund). | A client that checks ZETAPHY's ML-DSA certificates (08-wasm) or a STARK proof of them (STARK light client). |
@@ -110,14 +111,17 @@ and audit-as-a-service work (in progress).
 - **quantum-locked** secp256k1 accounts (`MsgQuantumLock`): the chain refuses their own ECDSA key; only the ML-DSA
   controller acts for them;
 - contracts that authorise only through ML-DSA (`QuantumWallet` in PQ-only mode, `PQSettlement`, `QuantumRescue`
-  reveals, `PQMultisigIsm`);
+  reveals, `PQMultisigIsm`), and an `AgentPolicyWallet` whose owner set `setPqCosign(<PQCosignCommittee>, true)`:
+  its large actions then need t-of-n ML-DSA-44 co-signatures (section 4.6); the agent key itself is an account like
+  any other (`evm-accounts`);
 - **block finality**, as long as validators holding more than 2/3 of the voting power have registered ML-DSA vote
   keys: block H+1 carries the ML-DSA certificate of block H, checked by every node and by `zetaphy pq verify-block`.
 
 **Still classical (see the inventory):** CometBFT's own Ed25519 votes and SecretConnection p2p links, IBC light
 clients in both directions, the Hyperlane ISM and relayer keys on the remote side, MetaMask and every other injected
 wallet by default, timelock and multisig signers that are EOAs, oracle reporters that are still EOAs, the IBC
-relayer's key, TLS certificates. Assets bridged in
+relayer's key, TLS certificates, and the agent co-signing committee by default (FROST / k-of-n ECDSA, until a
+wallet opts into the ML-DSA committee). Assets bridged in
 from Ethereum/BNB are only as safe as the lockbox on the origin chain.
 
 **Post-quantum paths next to them (opt-in, so those rows are partial, not pq):**
@@ -259,6 +263,19 @@ proof is heavy (PBKDF2 with 2048 rounds of HMAC-SHA512 plus secp256k1 arithmetic
 of proving on consumer hardware, done once); the verifier precompile needs its own audit. Ethereum researchers have
 proposed the same emergency path for Ethereum.
 
+### 4.6 Agent co-signing with ML-DSA: `PQCosignCommittee.sol` (implemented)
+
+An `AgentPolicyWallet` lets its agent act above a threshold without the timelock when the runner committee
+co-signs (docs/future/agents.md). The committee's FROST group key and its members' ECDSA keys are secp256k1, so on
+Q-day they can be derived and the committee impersonated (the `frost-cosign` row). `PQCosignCommittee` is the same
+committee with **ML-DSA-44** keys: governance sets t of n members (stored as key hashes, like `PQMultisigIsm`); each
+member reviews the action as before and signs `keccak256("ZETAPHY PQ cosign v1" ‖ cosignDigest)`; the proof is
+the t (public key ‖ signature) pairs ordered by key hash, each checked by the precompile at 0x…0900
+(`src/pqcosign.js`, `zetaphy cosign pq-review | pq-combine`). The wallet's owner opts in with
+`setPqCosign(committee, pqOnly)`; `executeCosignedPq` is path 4, and with `pqOnly` the FROST and ECDSA paths are
+refused. It is a t-of-n multisig, not a threshold signature: about 3.7 KB of calldata and one precompile call per
+signer, and the signers are visible. FROST stays the default, so the row is **partial**, not pq.
+
 ## 5. PQ settlement: `PQSettlement.sol`
 
 Accounts are ML-DSA-44 keys (`keyId = keccak256(publicKey)`); no ECDSA key can move anything in it.
@@ -350,11 +367,11 @@ is a rescue that users can prepare **today** with the wallet they already have.
 
 | | |
 |---|---|
-| Contracts | `zetaphy-network/contracts/QuantumRescue.sol`, `PQSettlement.sol`, `PQMultisigIsm.sol` |
-| JS | `zetaphy-network/src/qsafe/inventory.js`, `rescue.js`, `settlement.js`, `pqism.js`, `cli.js` |
-| CLI | `zetaphy qsafe inventory [--json]`, `zetaphy qsafe rescue-kit <account> --contract <0x…>`, `zetaphy qsafe rescue-reveal <kit.json>` |
+| Contracts | `zetaphy-network/contracts/QuantumRescue.sol`, `PQSettlement.sol`, `PQMultisigIsm.sol`, `PQCosignCommittee.sol` (+ `AgentPolicyWallet.executeCosignedPq`) |
+| JS | `zetaphy-network/src/qsafe/inventory.js`, `rescue.js`, `settlement.js`, `pqism.js`, `cli.js`; `zetaphy-network/src/pqcosign.js` |
+| CLI | `zetaphy qsafe inventory [--json]`, `zetaphy qsafe rescue-kit <account> --contract <0x…>`, `zetaphy qsafe rescue-reveal <kit.json>`, `zetaphy cosign pq-review` / `pq-combine` |
 | Hub | Quantum tab: `zetaphy-hub/quantum.js`, `quantum-core.js`, `quantum-i18n.js` (8 languages); `build.mjs` writes `qsafe` into `hub-config.json`; a deployment record `zetaphy-network/deployments/qsafe-77390.json` (`quantumRescue`, `pqSettlement`, `pqMultisigIsm`) turns on sending |
 | Transport | `zetaphy-chain/setup-node.sh` (`TLS_PQ`, pinned Caddy), `zetaphy-chain/wireguard/pq-link.sh` (WireGuard + PSK, guide in its README) |
 | Dapps | `zetaphy-hub/pqsnap.js` (ZETAPHY Snap as an EIP-1193 provider; copies in `zetaphy-dex/web/lib`, `zetaphy-nft/web/lib`), `txguard.js` `settleTx` |
 | PQ submitter | `zetaphy-network/src/pqsubmit.js`; `zetaphy oracle push / relay-pyth / poke --pq`, `zetaphy bridge deliver` |
-| Tests | `zetaphy-network/test/qsafe-inventory.test.js`, `pqlink.test.js`, `pqsubmit.test.js` (a node stand-in that checks the ML-DSA-44 signature and sequence); `zetaphy-hub/test/pqsnap.test.mjs`, `qsafe-rescue.test.js`, `qsafe-settlement.test.js`, `qsafe-ism.test.js` (real ML-DSA-44 keys through a JS precompile); `zetaphy-hub/test/quantum.test.mjs`, `quantum.e2e.mjs` |
+| Tests | `zetaphy-network/test/qsafe-inventory.test.js`, `pqlink.test.js`, `pqsubmit.test.js` (a node stand-in that checks the ML-DSA-44 signature and sequence), `policywallet.test.js` (ML-DSA co-signing path), `agentscli.test.js`; `zetaphy-hub/test/pqsnap.test.mjs`, `qsafe-rescue.test.js`, `qsafe-settlement.test.js`, `qsafe-ism.test.js` (real ML-DSA-44 keys through a JS precompile); `zetaphy-hub/test/quantum.test.mjs`, `quantum.e2e.mjs` |

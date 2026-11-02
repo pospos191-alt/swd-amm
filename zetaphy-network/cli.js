@@ -234,6 +234,9 @@
 //   zetaphy cosign review --wallet 0x<AgentPolicyWallet> --to 0x… [--value wei --data 0x… --deadline unix --strict]
 //                                      AI co-signer, as a committee runner: run Neuro on what the action touches, sign if clean
 //   zetaphy cosign combine <a.json> <b.json> …   order the runners' signatures for executeCosigned (docs/future/agents.md)
+//   zetaphy cosign pq-review --wallet 0x… --to 0x… [same options]   the same review, signed with the runner's ML-DSA-44
+//                                      key (~/.zetaphy/pq.seed) for a PQCosignCommittee (post-quantum co-signing)
+//   zetaphy cosign pq-combine <a.json> <b.json> …   order the ML-DSA answers into the proof for executeCosignedPq
 //   zetaphy cosign dkg1 --id i --threshold t --participants n --session <32 hex> [--out f]
 //   zetaphy cosign dkg2 --secret <dkg secret> <every round-1 package…> [--out f]
 //   zetaphy cosign dkg3 --secret <dkg secret> --round1 a.json,b.json,… <round-2 messages…> [--key f --out group.json]

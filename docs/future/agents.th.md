@@ -14,7 +14,7 @@
 | 25 | ป้ายคน/agent | **เสร็จ (ต้นแบบ)** + ระดับ "ไม่ซ้ำ" แบบเลือกได้ (เครือข่ายการรับรอง) "คน" ≠ คนเดียวไม่ซ้ำ และปัญหา Sybil **ยังแก้ไม่หมด** | `WebAuthnVerifier.sol`, `HumanAgentLabels.sol` (`LabelRegistry`, `VouchRegistry`), `test/vouch.test.js` |
 | 25+ | ตัวตนแบบส่วนตัว (zero-knowledge) บนป้าย: พิสูจน์ "เป็นคนที่มีป้าย" "ระดับ ≥ X" "ครั้งเดียวต่อ scope" โดยไม่เปิดเผยบัญชี; trusted setup แบบ DEV และไม่ทนควอนตัม | **เสร็จ (ต้นแบบ)** ดู [zk-identity.th.md](zk-identity.th.md) | `ZkIdentityRegistry.sol`, `ZkIdentityVerifier.sol`, `PrivateAirdrop.sol`, `PrivatePoll.sol`, `zkid/`, hub `zkid.js`, `test/zkid.test.js` |
 | 9 | รั้วกั้นกระเป๋าที่ AI ใช้ | **เสร็จ (ต้นแบบ)** | `AgentPolicyWallet.sol` |
-| 14 | AI ผู้ร่วมเซ็น | **เสร็จ (ต้นแบบ)**: ลายเซ็น threshold แบบ FROST (RFC 9591, secp256k1) พร้อม DKG ที่ไม่มีผู้แจกกุญแจ และตัวตรวจบนเชน ยังเก็บ k-of-n ECDSA ไว้เป็นทางสำรอง | `CosignCommittee` + `FrostSecp256k1`, `src/frost.js`, `src/cosign.js`, `zetaphy cosign`, `test/frost.test.js` |
+| 14 | AI ผู้ร่วมเซ็น | **เสร็จ (ต้นแบบ)**: ลายเซ็น threshold แบบ FROST (RFC 9591, secp256k1) พร้อม DKG ที่ไม่มีผู้แจกกุญแจ และตัวตรวจบนเชน ยังเก็บ k-of-n ECDSA ไว้เป็นทางสำรอง และมีคณะกรรมการ ML-DSA-44 แบบ t-of-n (ทนควอนตัม) ให้เลือกเปิด | `CosignCommittee` + `FrostSecp256k1`, `PQCosignCommittee.sol`, `src/frost.js`, `src/cosign.js`, `src/pqcosign.js`, `zetaphy cosign`, `test/frost.test.js` |
 
 ไม่ได้แก้ patch ของ node (`zetaphy-chain/setup-node.sh`) ใช้สิ่งที่เชนมีอยู่แล้ว:
 - **precompile ML-DSA `0x…0900`** (FIPS 204)
@@ -176,14 +176,33 @@ Idena (เชนของตัวเอง ต้องมีบริดจ์
   `frost-secp256k1` 2.1.0 ของ Zcash Foundation, รัน DKG + การเซ็นครบ, กรณีแก้แพ็กเกจ/เล่นซ้ำ/สลับแพ็กเกจ/ส่วนแบ่งผิด/digest ผิด/
   nonce ซ้ำ และตรวจลายเซ็นของ RFC และของเรา **บนเชน** พร้อมกรณีปลอม
 
-**ข้อจำกัด**: ทั้ง k-of-n ECDSA และ FROST บน secp256k1 ไม่ใช่ PQ (คณะกรรมการแบบ ML-DSA ทำได้ภายหลัง)
+### ร่วมเซ็นแบบทนควอนตัม: ML-DSA-44 แบบ t-of-n — `PQCosignCommittee`, `src/pqcosign.js`, `executeCosignedPq`
+
+- FROST และ k-of-n ECDSA ใช้ secp256k1 ทั้งคู่ วัน Q-day กุญแจกลุ่มและกุญแจสมาชิกถูกหาได้จากข้อมูลสาธารณะ
+  `PQCosignCommittee` (สัญญาแยก governance ตั้งเหมือน `CosignCommittee`) เก็บกุญแจ **ML-DSA-44** ของสมาชิก t จาก n
+  เป็นแฮชของกุญแจ แบบ validator ของ `PQMultisigIsm`
+- **การเซ็น**: สมาชิกรันการตรวจเดิม (`zetaphy cosign pq-review` ตัวเลือกเดียวกับ `review`) แล้วเซ็น
+  `keccak256("ZETAPHY PQ cosign v1" ‖ cosignDigest)` ด้วยกุญแจ ML-DSA-44 (`~/.zetaphy/pq.seed`) จากนั้น
+  `zetaphy cosign pq-combine a.json b.json …` ตรวจทุกลายเซ็น ตัดตัวซ้ำ และเรียงคู่ (กุญแจสาธารณะ ‖ ลายเซ็น) ตามแฮชของกุญแจ
+- **บนเชน**: `isValid(digest, proof)` ต้องมีอย่างน้อย `threshold` รายการ แฮชของกุญแจเรียงจากน้อยไปมาก ทุกรายการเป็นสมาชิก
+  และลายเซ็นถูกต้อง (precompile 0x…0900) **เจ้าของ** กระเป๋าเลือกเปิดด้วย `setPqCosign(committee, pqOnly)` แล้ว
+  `executeCosignedPq(…)` คือ path 4 (digest และ nonce เดียวกัน) เมื่อตั้ง `pqOnly` ทาง `executeCosigned` และ
+  `executeCosignedFrost` จะ revert `ClassicalCosignOff` FROST / k-of-n ยังเป็นค่าเริ่มต้นสำหรับกระเป๋าที่ไม่เลือกเปิด
+- **ไม่ใช่ลายเซ็น threshold**: หลักฐานพกกุญแจ t อันและลายเซ็น t อัน (ราว 3.7 KB ต่อคน เรียก precompile คนละครั้ง)
+  และเห็นว่าใครเซ็น ลายเซ็น threshold ของ ML-DSA (กุญแจเดียว ลายเซ็นเดียว) ยังไม่มีแบบที่ผ่านการตรวจสอบ
+  กุญแจของ agent เองยังเป็นบัญชีเหมือนบัญชีอื่น (แถว `evm-accounts` ในบัญชีจุดเสี่ยงควอนตัม)
+- **การทดสอบ**: `policywallet.test.js` (กุญแจ ML-DSA-44 จริง: เปิดได้เฉพาะเจ้าของ, path 4, เล่นซ้ำ, หมดเวลา, ไม่ถึงเกณฑ์,
+  คนนอก, สมาชิกซ้ำ, ลำดับผิด, ลายเซ็นของ digest อื่น, หลักฐานถูกตัด, จำนวนถูกแก้, วงเงิน, 3 จาก 3, `pqOnly` ปฏิเสธ ECDSA
+  และ FROST, เปลี่ยนสมาชิกได้เฉพาะ governance) และ `agentscli.test.js` (`pq-review` / `pq-combine` ด้วยไฟล์)
+
+**ข้อจำกัด**: ทั้ง k-of-n ECDSA และ FROST บน secp256k1 ไม่ใช่ PQ (ทาง ML-DSA ข้างบนเป็น PQ แต่ต้องเลือกเปิดเอง)
 FROST ที่นี่เป็นโปรโตคอลสองรอบของ RFC: สมาชิกที่ส่งส่วนแบ่งผิดถูกระบุได้แต่ต้องเริ่มรอบเซ็นใหม่ เปลี่ยนสมาชิก/threshold
 ต้องทำ DKG ใหม่ (ยังไม่มี refresh/repair) คณะกรรมการยังไม่มีเงินประกัน/รางวัล กฎของ Neuro ตัดสินสัญญา ไม่ใช่เจตนา
 จึงยังต้องมีวงเงินและรายการอนุญาต
 
 ## การทดสอบ
 
-- `zetaphy-network`: `npm test` (agents 9, intents 15, labels 8, vouch 5, policywallet 8, frost 4, agentscli 3 และทุกชุดเดิม)
+- `zetaphy-network`: `npm test` (agents 9, intents 15, labels 8, vouch 5, policywallet 9, frost 4, agentscli 4 และทุกชุดเดิม)
 - `zetaphy-hub`: `npm test` (agents.test.mjs 13: schema ของตัวสร้าง, ทุกแบบ, ประโยคสรุป, calldata ของ `simulate`/เพดาน
   เทียบ ethers, selector ของ VouchRegistry, 8 ภาษา) และ `npm run test:e2e` (agents.e2e.mjs บน Chromium: ตัวสร้างกับ
   **IntentExecutor จริง** ใน EVM ในหน่วยความจำ จำลองก่อน/หลังอนุญาต, เพดานรายวัน, เซ็น, solver รันไฟล์ที่เซ็น,
@@ -192,6 +211,6 @@ FROST ที่นี่เป็นโปรโตคอลสองรอบ�
 ## สิ่งที่ยังเหลือ
 
 deploy บน testnet (รวม `VouchRegistry`), การเซ็น typed data แบบ PQ ในกระเป๋า PQ, relay ของ solver ที่ไม่ต้องมีเซิร์ฟเวอร์,
-เงินประกัน/รางวัลของคณะกรรมการ, คณะกรรมการแบบ ML-DSA, refresh/repair ของกุญแจ FROST และหน้า DKG ใน hub (ตอนนี้ CLI เท่านั้น),
+เงินประกัน/รางวัลของคณะกรรมการ, deploy `PQCosignCommittee` และย้ายกระเป๋าไปใช้ `pqOnly`, refresh/repair ของกุญแจ FROST และหน้า DKG ใน hub (ตอนนี้ CLI เท่านั้น),
 factory ของกระเป๋า, faucet ของ node อ่านป้าย (ต้องแก้ patch), hook (faucet, swap gate) ยังไม่อ่านระดับ "ไม่ซ้ำ",
 บริดจ์ที่มีค่า Mailbox, และ **ความเป็นบุคคลจริง**: เครือข่ายการรับรองต้านได้แต่หยุดการสมรู้ร่วมคิดหรือการซื้อการรับรองไม่ได้

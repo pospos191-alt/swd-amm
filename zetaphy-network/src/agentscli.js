@@ -6,6 +6,8 @@ import { Contract, getAddress } from 'ethers';
 import { compile, executeArgs, spendArgs, readSigned, intentDigest, KIND_NAMES } from './intent.js';
 import { cosignDigest, review, signCosign, combine } from './cosign.js';
 import { loadOrCreateKey, HOME, sealSecret, openSecret } from './keys.js';
+import { signCosignPq, combinePq } from './pqcosign.js';
+import { loadOrCreatePq } from './pq.js';
 import { dkgRound1, dkgRound2, dkgRound3, signRound1, signingPackage, signRound2, aggregateShares } from './frost.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -114,6 +116,26 @@ export async function agentsCommand({ group, cmd, rest, opt, write, s, connect, 
       return 0;
     }
 
+    // ---- ML-DSA-44 co-signatures (PQCosignCommittee, src/pqcosign.js): the same review, signed with the runner's
+    //      post-quantum key (~/.zetaphy/pq.seed); the agent combines t answers for executeCosignedPq.
+    if (cmd === 'pq-review') {
+      const r = await reviewed(opt);
+      for (const x of r.reports) write(`Neuro: ${x.role} ${x.address} level ${x.level}`);
+      if (!r.ok) { write(`refused: ${r.reasons.join('; ')}`); return 1; }
+      const key = (deps.pqKey ?? loadOrCreatePq)();
+      write(str({ wallet: r.wallet, to: r.to, value: r.value, data: r.data, reportHash: r.reportHash, deadline: r.deadline, nonce: r.nonce, digest: r.digest, ...signCosignPq(key, r.digest) }));
+      return 0;
+    }
+    if (cmd === 'pq-combine') {
+      if (rest.length < 1) throw new Error('usage: zetaphy cosign pq-combine <a.json> <b.json> …   (the answers of `zetaphy cosign pq-review`)');
+      const parts = rest.map((f) => JSON.parse(readFileSync(f, 'utf8')));
+      const digest = parts[0].digest;
+      if (parts.some((p) => p.digest !== digest)) throw new Error('the runners signed different digests (another nonce, deadline or Neuro report): ask again');
+      const p = parts[0];
+      write(str({ executeCosignedPq: [p.to, p.value, p.data, '<modelHash>', '<promptHash>', p.reportHash, p.deadline, combinePq(digest, parts)] }));
+      return 0;
+    }
+
     // ---- FROST threshold signatures (src/frost.js): DKG in three steps, then two signing rounds. Every message is a
     //      JSON file (or a copy-paste); secrets stay on each member's machine (mode 0600, sealed with ZETAPHY_PASSPHRASE).
     const emit = (obj, what) => {
@@ -200,6 +222,7 @@ export async function agentsCommand({ group, cmd, rest, opt, write, s, connect, 
       return 0;
     }
     throw new Error('usage: zetaphy cosign review --wallet 0x… --to 0x… [--value wei --data 0x… --deadline unix --strict] | combine <files…>\n'
+      + '       ML-DSA-44: pq-review (same options) | pq-combine <files…> (PQCosignCommittee, executeCosignedPq)\n'
       + '       FROST: dkg1 | dkg2 | dkg3 | commit | frost-package | frost-sign | frost-aggregate (docs/future/agents.md §14)');
   }
   return null;

@@ -15,7 +15,7 @@ their addresses from `hub-config.json` (`contracts.intentExecutor`, `labelRegist
 | 25 | Human-or-agent labels | **done (prototype)** + optional uniqueness level (web-of-trust vouching); "human" ≠ unique human, full Sybil resistance **not solved** | `WebAuthnVerifier.sol`, `HumanAgentLabels.sol` (`LabelRegistry`, `VouchRegistry`, `LabelFaucet`, `LabelSwapGate`), `test/labels.test.js`, `test/vouch.test.js` |
 | 25+ | Private identity (zero-knowledge) over the labels: prove "labelled person", "level ≥ X", "once per scope" without revealing the account; DEV trusted setup, not post-quantum | **done (prototype)**, see [zk-identity.md](zk-identity.md) | `ZkIdentityRegistry.sol`, `ZkIdentityVerifier.sol`, `PrivateAirdrop.sol`, `PrivatePoll.sol`, `zkid/`, hub `zkid.js`, `test/zkid.test.js` |
 | 9 | Guardrails for AI wallets | **done (prototype)** | `AgentPolicyWallet.sol`, `test/policywallet.test.js` |
-| 14 | AI co-signer | **done (prototype)**: FROST threshold Schnorr (RFC 9591, secp256k1) with a dealerless DKG and an on-chain verifier; k-of-n ECDSA kept as fallback | `CosignCommittee` + `FrostSecp256k1` (in `AgentPolicyWallet.sol`), `src/frost.js`, `src/cosign.js`, `zetaphy cosign`, `test/frost.test.js`, `test/policywallet.test.js` |
+| 14 | AI co-signer | **done (prototype)**: FROST threshold Schnorr (RFC 9591, secp256k1) with a dealerless DKG and an on-chain verifier; k-of-n ECDSA kept as fallback; opt-in post-quantum t-of-n ML-DSA-44 committee | `CosignCommittee` + `FrostSecp256k1` (in `AgentPolicyWallet.sol`), `PQCosignCommittee.sol`, `src/frost.js`, `src/cosign.js`, `src/pqcosign.js`, `zetaphy cosign`, `test/frost.test.js`, `test/policywallet.test.js` |
 
 The chain node patch (`zetaphy-chain/setup-node.sh`) is **not changed**. Everything uses what the
 chain already has:
@@ -352,9 +352,34 @@ The k-of-n path above stays as the fallback. The threshold path makes **one 65-b
   `policywallet.test.js` runs the wallet path (governance-only key, wrong amount, another group, expiry, caps,
   removal, k-of-n still working); `agentscli.test.js` runs the whole CLI flow with files.
 
+### Post-quantum co-signing: t-of-n ML-DSA-44 — `PQCosignCommittee`, `src/pqcosign.js`, `executeCosignedPq`
+
+FROST and k-of-n ECDSA both rest on secp256k1: on Q-day the group key and the member keys can be derived from
+public data and the committee impersonated. `PQCosignCommittee` (its own contract, governance-set like
+`CosignCommittee`) holds t-of-n **ML-DSA-44** member keys as key hashes, like `PQMultisigIsm`'s validators:
+
+- **Signing**: a member runs the same review (`zetaphy cosign pq-review`, same options as `review`) and signs
+  `pqDigest = keccak256("ZETAPHY PQ cosign v1" ‖ cosignDigest)` with its ML-DSA-44 key (`~/.zetaphy/pq.seed`,
+  `src/pq.js`). `zetaphy cosign pq-combine a.json b.json …` (`combinePq`) checks every signature, drops repeats and
+  orders the (public key 1312 B ‖ signature 2420 B) pairs by key hash into the proof.
+- **On chain**: `isValid(digest, proof)` needs at least `threshold` entries, key hashes strictly ascending, every
+  entry a member with a valid signature (precompile 0x…0900). The wallet's **owner** opts in with
+  `setPqCosign(committee, pqOnly)`; `executeCosignedPq(…, reportHash, deadline, proof)` is `AgentAction` path 4
+  (same digest and nonce). With `pqOnly`, `executeCosigned` and `executeCosignedFrost` revert
+  `ClassicalCosignOff`, so a quantum attacker who derives the classical committee's keys cannot co-sign for that
+  wallet. FROST / k-of-n stay the default: nothing changes for a wallet that does not opt in.
+- **Not a threshold signature**: the proof carries t keys and t signatures (~3.7 KB each in calldata, one
+  precompile call per signer) and shows who signed. A true ML-DSA threshold scheme (one key, one signature) has
+  no vetted construction yet. The agent's own key is still an account like any other (the `evm-accounts` row of
+  the quantum inventory).
+- **Tests**: `policywallet.test.js` (real ML-DSA-44 keys through the JS precompile: opt-in by the owner only,
+  path 4, replay, expiry, below threshold, an outsider, a repeated member, wrong order, a signature of another
+  digest, a truncated proof, a changed amount, caps, 3-of-3, `pqOnly` refusing ECDSA and FROST, member changes by
+  governance only, removal); `agentscli.test.js` (`pq-review` / `pq-combine` with files).
+
 **Limits.** k-of-n ECDSA (~k × 6k gas) or FROST (~15k gas, one signature); neither is post-quantum
-(FROST on secp256k1 falls to a quantum computer like ECDSA; an ML-DSA committee would cost ~k × 30k gas through
-the precompile; doable later). FROST here is the RFC's two-round protocol without identifiable-abort extras: a
+(FROST on secp256k1 falls to a quantum computer like ECDSA). The ML-DSA committee above is, at one precompile
+call per signer and ~3.7 KB of calldata each. FROST here is the RFC's two-round protocol without identifiable-abort extras: a
 member that sends a bad share is named (share verification) but the signing round must be restarted without it;
 the DKG must be re-run to change members or the threshold (no proactive refresh / repair yet). The members' signing
 shares are as sensitive as runner keys.
@@ -367,8 +392,8 @@ The committee is not paid or bonded here; tying it to NeuroJobs runner bonds is 
 ## Tests (run)
 
 - `zetaphy-network`: `npm test` — `agents.test.js` (9), `intents.test.js` (15: + approve with cap, bridge, daily caps,
-  simulate and the hub's encoders), `labels.test.js` (8), `vouch.test.js` (5), `policywallet.test.js` (8: + FROST path),
-  `frost.test.js` (4: RFC 9591 and DKG vectors, DKG + signing, on-chain verifier), `agentscli.test.js` (3: + FROST by files),
+  simulate and the hub's encoders), `labels.test.js` (8), `vouch.test.js` (5), `policywallet.test.js` (9: + FROST path, + ML-DSA path),
+  `frost.test.js` (4: RFC 9591 and DKG vectors, DKG + signing, on-chain verifier), `agentscli.test.js` (4: + FROST by files, + ML-DSA pq-review/pq-combine),
   plus all existing tests.
 - `zetaphy-hub`: `npm test` — new `agents.test.mjs` (8: selectors and calldata vs ethers, SPKI/DER vs
   node:crypto, typed data, `checkIntent`, model-draft parsing, prompt fencing, 8 languages; + strict builder schema,
@@ -384,7 +409,7 @@ The committee is not paid or bonded here; tying it to NeuroJobs runner bonds is 
 - Deploy (testnet) and add the addresses to the launch state; a `deploy-agents` CLI step.
 - PQ typed-data signing in the PQ wallet so the hub can sign intents with ML-DSA-44.
 - A solver relay (GitHub-Actions or volunteer-runner based, no always-on server) and solver fees.
-- Committee bonds/rewards; an ML-DSA committee option; a policy-wallet factory; FROST key refresh/repair and a
+- Committee bonds/rewards; deploying a `PQCosignCommittee` and moving wallets to `pqOnly`; a policy-wallet factory; FROST key refresh/repair and a
   hub page for the DKG (today CLI only).
 - The node faucet reading labels (needs a chain patch change, out of scope here).
 - Real personhood: the vouching layer resists but does not stop collusion or bought vouches; no free

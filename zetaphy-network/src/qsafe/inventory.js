@@ -98,12 +98,12 @@ export const INVENTORY = [
     refs: ['zetaphy-network/contracts/WebAuthnVerifier.sol'],
   },
   {
-    id: 'frost-cosign', component: 'FROST threshold Schnorr (agent co-signing)', layer: 'contracts', crypto: 'secp256k1 Schnorr',
-    status: 'classical', impact: 'medium', hndl: false,
-    risk: 'The group key can be derived; the co-signing committee can be impersonated.',
-    mitigation: 'Used as an extra check next to the owner\'s key, not alone.',
-    migration: 'ML-DSA threshold (or t-of-n ML-DSA multisig like PQMultisigIsm).',
-    refs: ['zetaphy-network/src/frost.js', 'zetaphy-network/src/cosign.js'],
+    id: 'frost-cosign', component: 'FROST threshold Schnorr (agent co-signing)', layer: 'contracts', crypto: 'secp256k1 Schnorr / ECDSA; ML-DSA-44 t-of-n option',
+    status: 'partial', impact: 'medium', hndl: false,
+    risk: 'The FROST group key and the k-of-n ECDSA member keys can be derived; the classical committee can be impersonated.',
+    mitigation: 'Used as an extra check next to the owner\'s key, not alone. PQCosignCommittee: t-of-n ML-DSA-44 co-signatures (precompile 0x…0900) via executeCosignedPq, opt-in per wallet; setPqCosign(…, pqOnly) refuses the secp256k1 paths. FROST / ECDSA stay the default.',
+    migration: 'Committees register ML-DSA keys and wallets set pqOnly before Q-day; a true ML-DSA threshold signature (one key, one signature) when a vetted scheme exists.',
+    refs: ['zetaphy-network/src/frost.js', 'zetaphy-network/src/cosign.js', 'zetaphy-network/contracts/PQCosignCommittee.sol', 'zetaphy-network/src/pqcosign.js'],
   },
   {
     id: 'zk-groth16', component: 'Groth16 proofs (NeuroScore zk, trusted-setup ceremony)', layer: 'contracts', crypto: 'BN254 pairings',
