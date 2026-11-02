@@ -16,15 +16,18 @@ export function makeRpc(url, { fetchImpl = (...a) => globalThis.fetch(...a), tim
   async function call(method, params = []) {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
-    let res;
+    let res, j;
+    // The timeout covers the whole answer, body included: a node that sends headers and then stalls must not hang the page.
     try {
-      res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
-        signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
-    } catch (e) {
-      throw new RpcError(`RPC unreachable: ${e?.message ?? e}`, -1);
+      try {
+        res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
+          signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+      } catch (e) {
+        throw new RpcError(`RPC unreachable: ${e?.message ?? e}`, -1);
+      }
+      if (!res.ok) throw new RpcError(`RPC HTTP ${res.status}`, res.status);
+      try { j = await res.json(); } catch (e) { throw new RpcError(`RPC unreadable answer: ${e?.message ?? e}`, -1); }
     } finally { clearTimeout(timer); }
-    if (!res.ok) throw new RpcError(`RPC HTTP ${res.status}`, res.status);
-    const j = await res.json();
     if (j.error) throw new RpcError(String(j.error.message ?? 'RPC error').slice(0, 300), j.error.code, j.error.data);
     return j.result;
   }
@@ -88,7 +91,11 @@ export async function scanLogs(rpc, filter, { floor = 0, maxBlocks = 50_000, ste
     try {
       return await rpc.getLogs({ ...filter, fromBlock: from, toBlock: to });
     } catch (e) {
-      if (to > from) { // too many blocks or logs: split
+      // Too many blocks or logs: the node refused the range (a JSON-RPC error), so split it. A transport failure
+      // (unreachable, timed out, HTTP error, unreadable answer) is not about the range: splitting it would only
+      // repeat the wait once per halving (~11 times for 2000 blocks), so it ends the scan at once.
+      const transport = e instanceof RpcError && (e.code === -1 || (typeof e.code === 'number' && e.code >= 100 && e.code < 600));
+      if (to > from && !transport) {
         const mid = Math.floor((from + to) / 2);
         return [...await range(from, mid), ...await range(mid + 1, to)];
       }
