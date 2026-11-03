@@ -164,6 +164,8 @@ export function saphanRoutes(read) {
       state: !deployed ? 'planned' : r.state === 'OPEN' ? 'open' : 'closed',
       twoWay: deployed && isAddr(r.zetaphy.hyperlaneOutbox),
       ...(deployed ? { lockbox: r.origin.lockbox, token: r.zetaphy.bridgedToken } : {}),
+      // the route's Gateway (docs/SAPHAN-GATEWAY.md; the saphan-route workflow's mode = gateway), both addresses or none
+      ...(deployed && isAddr(r.gateway?.zetaphy) && isAddr(r.gateway?.source) ? { gateway: { zetaphy: r.gateway.zetaphy, source: r.gateway.source } } : {}),
     });
   }
   return out;

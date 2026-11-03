@@ -27,6 +27,14 @@
 //   node scripts/saphan.js token-synthetic --token <key> --chain <name> --vault 0x… --expect 0x… --multisig 0x… --timelock 0x… --ism 0x… [--governance 0x…]
 //       the SaphanSyntheticToken exactly at --expect (paused: closed); refuses if the deployer's nonce moved
 //
+// Gateway (contracts/SaphanGateway.sol: depositAndCall / withdrawAndCall over a deployed v2 route; src/saphangateway.js):
+//   node scripts/saphan.js gateway-deploy --chain <name>
+//       ZetaphyGateway on ZETAPHY (the route's token, outbox, airlock, lockbox), then SaphanSourceGateway on the
+//       source chain naming it, then ZetaphyGateway.setRemote (once). JSON with both addresses and start blocks.
+//   node scripts/saphan.js gateway-execute --chain <name> [--blocks 5000] [--dry yes]
+//       the executor: reads DepositAndCall (source) and OutCallSent (ZETAPHY) of the last --blocks blocks, runs every
+//       call that is funded or due (src/saphangateway.js plan) and says why the others wait. Fees come to KEYFILE's key.
+//
 //   node scripts/saphan.js whitelist          the relayer's HYP_WHITELIST for every deployed route (+ the v1 lockbox, + token routes)
 //   node scripts/saphan.js pending            per two-way route: the outbox's sends on ZETAPHY vs releases the lockbox recorded;
 //                                             per token route: messages each way the other end has not recorded
@@ -69,6 +77,21 @@ async function step(label, fn) {
   try { return await fn(); } catch (e) { throw new Error(`${label}: ${e.shortMessage ?? e.message}`); }
 }
 
+/**
+ * A read of a contract deployed moments ago: public RPCs balance over nodes that lag, and one that has not seen the new
+ * block answers 0x ("could not decode result data", ethers BAD_DATA). Those answers are asked again (up to `tries`
+ * times, `ms` apart); any other error, and the last empty answer, are thrown as they are.
+ */
+export async function settled(label, fn, { tries = 12, ms = 5000 } = {}) {
+  for (let i = 1; ; i++) {
+    try { return await fn(); } catch (e) {
+      const empty = e?.code === 'BAD_DATA' || /could not decode result data/.test(String(e?.message));
+      if (!empty || i >= tries) throw new Error(`${label}: ${e.shortMessage ?? e.message}`);
+      await new Promise((ok) => setTimeout(ok, ms));
+    }
+  }
+}
+
 /** A multisig ISM from a Hyperlane StaticMessageIdMultisigIsmFactory: its address (CREATE2 of the sorted validators and threshold). */
 export async function factoryIsm(p, factory, validators, threshold) {
   if ((await p.getCode(factory)) === '0x') throw new Error(`no ISM factory at ${factory}`);
@@ -82,8 +105,8 @@ export async function ensureIsm(p, signer, factory, validators, threshold) {
   const x = await factoryIsm(p, factory, validators, threshold);
   if (!x.deployed) await (await new Contract(factory, FACTORY, signer).deploy(x.validators, x.threshold)).wait();
   const ism = new Contract(x.at, ISM, p);
-  const [vs, th] = await step('ism.validatorsAndThreshold', () => ism.validatorsAndThreshold('0x'));
-  const t = Number(await ism.moduleType());
+  const [vs, th] = await settled('ism.validatorsAndThreshold', () => ism.validatorsAndThreshold('0x'));
+  const t = Number(await settled('ism.moduleType', () => ism.moduleType()));
   if (t !== MESSAGE_ID_MULTISIG || Number(th) !== x.threshold || vs.map(getAddress).join() !== x.validators.join()) {
     throw new Error(`the ISM at ${x.at} reads back type ${t}, ${th} of [${vs.join(', ')}], not ${x.threshold} of [${x.validators.join(', ')}]`);
   }
@@ -145,8 +168,8 @@ export async function originPrepare(t, c, p, signer, o = {}) {
   if (multisig && (await p.getCode(multisig)) === '0x') throw new Error(`no multisig at ${multisig}`);
   if (!multisig) multisig = getAddress((await deployArt('SimpleMultisig', [owners, threshold], signer)).target);
   const ms = new Contract(multisig, art('SimpleMultisig').abi, p);
-  const got = await Promise.all(owners.map((x) => ms.isOwner(x)));
-  if (got.includes(false) || Number(await ms.threshold()) !== threshold) throw new Error(`the multisig ${multisig} is not ${threshold}-of [${owners.join(', ')}]`);
+  const got = await settled('multisig.isOwner', () => Promise.all(owners.map((x) => ms.isOwner(x))));
+  if (got.includes(false) || Number(await settled('multisig.threshold', () => ms.threshold())) !== threshold) throw new Error(`the multisig ${multisig} is not ${threshold}-of [${owners.join(', ')}]`);
   let timelock = o.timelock ? getAddress(o.timelock) : null;
   if (timelock && (await p.getCode(timelock)) === '0x') throw new Error(`no timelock at ${timelock}`);
   // proposer (and canceller): the multisig; executor: anyone; admin: the timelock itself (no admin key)
@@ -154,12 +177,13 @@ export async function originPrepare(t, c, p, signer, o = {}) {
   const tl = new Contract(timelock, art('ZetaphyTimelock').abi, p);
   const PROPOSER = keccakId('PROPOSER_ROLE');
   const ADMIN = '0x' + '00'.repeat(32);
-  if (!(await tl.hasRole(PROPOSER, multisig)) || (await tl.hasRole(ADMIN, me)) || Number(await tl.getMinDelay()) < 3600) {
+  const [isProposer, meAdmin, minDelay] = await settled('timelock roles', () => Promise.all([tl.hasRole(PROPOSER, multisig), tl.hasRole(ADMIN, me), tl.getMinDelay()]));
+  if (!isProposer || meAdmin || Number(minDelay) < 3600) {
     throw new Error(`the timelock ${timelock} does not have the multisig as proposer, or the deployer as no admin, or a delay of 1 h+`);
   }
   const { ism, created } = await ensureIsm(p, signer, c.staticMessageIdMultisigIsmFactory, ours.validators, ours.threshold);
   const nonce = await signer.getNonce('pending'); // what this signer's next transaction uses
-  return { chain: c.name, multisig, timelock, timelockDelay: Number(await tl.getMinDelay()), ism, ismCreated: created, deployer: me, nonce, lockboxAt: getCreateAddress({ from: me, nonce }) };
+  return { chain: c.name, multisig, timelock, timelockDelay: Number(minDelay), ism, ismCreated: created, deployer: me, nonce, lockboxAt: getCreateAddress({ from: me, nonce }) };
 }
 
 /** On ZETAPHY: the multisig ISM of Hyperlane's validators for this source chain (for its HyperlaneLane). */
@@ -179,10 +203,10 @@ export async function originLockbox(t, c, p, signer, o) {
   const k = await deployArt('HyperlaneLockBoxV2', args, signer);
   const addr = getAddress(k.target);
   if (addr !== getAddress(o.expect)) throw new Error(`deployed at ${addr}, expected ${o.expect}`);
-  const ok = getAddress(await k.mailbox()) === getAddress(c.mailbox) && Number(await k.zetaphyDomain()) === t.zetaphy.domain
+  const ok = await settled('lockbox read back', async () => getAddress(await k.mailbox()) === getAddress(c.mailbox) && Number(await k.zetaphyDomain()) === t.zetaphy.domain
     && (await k.recipient()).toLowerCase() === bytes32(o.lane) && (await k.remoteSender()).toLowerCase() === bytes32(o.outbox)
     && getAddress(await k.hook()) === hook && getAddress(await k.interchainSecurityModule()) === getAddress(o.ism)
-    && getAddress(await k.governance()) === getAddress(o.timelock) && (await k.guardian(o.multisig)) && (await k.dailyLimit()) === limit;
+    && getAddress(await k.governance()) === getAddress(o.timelock) && (await k.guardian(o.multisig)) && (await k.dailyLimit()) === limit);
   if (!ok) throw new Error('the deployed lockbox does not read back as configured');
   const rc = await k.deploymentTransaction()?.wait();
   return { chain: c.name, lockbox: addr, tx: rc?.hash ?? null, block: rc?.blockNumber ?? null, fee: formatEther(await k.quoteLock(me, 1n)) };
@@ -249,9 +273,9 @@ export async function tokenSynthetic(t, k, c, p, signer, o) {
   const s = await deployArt('SaphanSyntheticToken', args, signer);
   const addr = getAddress(s.target);
   if (addr !== getAddress(o.expect)) throw new Error(`deployed at ${addr}, expected ${o.expect}`);
-  const ok = (await s.paused()) && (await s.remote()).toLowerCase() === bytes32(o.vault) && Number(await s.remoteDomain()) === t.zetaphy.domain
+  const ok = await settled('synthetic read back', async () => (await s.paused()) && (await s.remote()).toLowerCase() === bytes32(o.vault) && Number(await s.remoteDomain()) === t.zetaphy.domain
     && getAddress(await s.interchainSecurityModule()) === getAddress(o.ism) && getAddress(await s.governance()) === governance && (await s.guardian(o.multisig))
-    && Number(await s.decimals()) === k.decimals && getAddress(await s.originToken()) === getAddress(k.address);
+    && Number(await s.decimals()) === k.decimals && getAddress(await s.originToken()) === getAddress(k.address));
   if (!ok) throw new Error('the deployed synthetic does not read back as configured');
   const rc = await s.deploymentTransaction()?.wait();
   return { token: k.key, chain: c.name, synthetic: addr, symbol: k.synthetic.symbol, tx: rc?.hash ?? null, block: rc?.blockNumber ?? null };
@@ -398,6 +422,91 @@ export async function relayGate({ t, routes, v1, originProvider, zetaphyProvider
   return { run: inbound || outbound, validator: outbound, reasons, state: s };
 }
 
+const ZGW = ['function setRemote(address)', 'function remote() view returns (address)'];
+
+/** The route's two Gateways (deployer = KEYFILE on both chains); the route must be deployed (saphan-routes.json). */
+export async function gatewayDeploy(t, c, routes, zp, zs, p, s) {
+  const r = routes[c.name];
+  if (!r?.zetaphy?.bridgedToken || !r?.origin?.lockbox) throw new Error(`no deployed v2 route for ${c.name} in saphan-routes.json`);
+  if (r.gateway?.zetaphy) throw new Error(`${c.name} has Gateways already: ${r.gateway.zetaphy} / ${r.gateway.source}`);
+  const zFrom = await zp.getBlockNumber(), oFrom = await p.getBlockNumber();
+  const zgw = await step('ZetaphyGateway', () => deployArt('ZetaphyGateway', [r.zetaphy.bridgedToken, r.zetaphy.hyperlaneOutbox, r.zetaphy.bridgeAirlock, r.origin.lockbox, c.chainId], zs));
+  const zAt = await zgw.getAddress();
+  const sgw = await step('SaphanSourceGateway', () => deployArt('SaphanSourceGateway', [r.origin.lockbox, zAt, r.zetaphy.bridgedToken, t.zetaphy.chainId], s));
+  const sAt = await sgw.getAddress();
+  await step('setRemote', async () => (await new Contract(zAt, ZGW, zs).setRemote(sAt)).wait());
+  const back = getAddress(await settled('ZetaphyGateway.remote', () => new Contract(zAt, ZGW, zp).remote()));
+  if (back !== getAddress(sAt)) throw new Error(`ZetaphyGateway.remote reads ${back}, not ${sAt}`);
+  return { chain: c.name, zetaphy: getAddress(zAt), source: getAddress(sAt), zetaphyFrom: zFrom, sourceFrom: oFrom };
+}
+
+/** Logs of `address` with `topic` in [from, to], in windows of `step` blocks (smaller when a node refuses). */
+async function logsOf(prov, address, topics, from, to, step = 2000) {
+  const out = [];
+  for (let a = from; a <= to; ) {
+    const b = Math.min(to, a + step - 1);
+    try { out.push(...(await prov.getLogs({ address, topics, fromBlock: a, toBlock: b }))); a = b + 1; } catch (e) {
+      if (step <= 10) throw e;
+      step = Math.floor(step / 4);
+    }
+  }
+  return out;
+}
+
+/** The executor, once: what is ready runs (unless dry), the rest is listed with why it waits. */
+export async function gatewayExecute(t, c, routes, zp, p, { zs = null, s = null, blocks = 5000, dry = false } = {}) {
+  const G = await import('../src/saphangateway.js');
+  const r = routes[c.name];
+  const gw = r?.gateway;
+  if (!gw?.zetaphy || !gw?.source) throw new Error(`no Gateways for ${c.name} in saphan-routes.json (gateway-deploy first)`);
+  const zHead = await zp.getBlockNumber(), oHead = await p.getBlockNumber();
+  const inLogs = await logsOf(p, gw.source, [G.SOURCE_GATEWAY.getEvent('DepositAndCall').topicHash], Math.max(gw.sourceFrom ?? 0, oHead - blocks), oHead);
+  const inbound = [];
+  for (const l of inLogs) {
+    const ev = G.SOURCE_GATEWAY.parseLog(l);
+    // the lock's nonce: the lockbox's Locked event in the same transaction
+    const rc = await p.getTransactionReceipt(l.transactionHash);
+    const lk = rc.logs.filter((x) => getAddress(x.address) === getAddress(r.origin.lockbox)).map((x) => { try { return G.LOCKBOX_EVENTS.parseLog(x); } catch { return null; } })
+      .find((x) => x?.name === 'Locked' && getAddress(x.args.to) === getAddress(ev.args.depositAddress));
+    inbound.push({ call: ev.args.call, lockNonce: lk ? lk.args.nonce : null });
+  }
+  const outLogs = await logsOf(zp, gw.zetaphy, [G.ZETAPHY_GATEWAY.getEvent('OutCallSent').topicHash], Math.max(gw.zetaphyFrom ?? 0, zHead - blocks), zHead, 400);
+  const outbound = [];
+  for (const l of outLogs) {
+    const ev = G.ZETAPHY_GATEWAY.parseLog(l);
+    const q = await logsOf(p, r.origin.lockbox, [G.LOCKBOX_EVENTS.getEvent('ReleaseQueued').topicHash, null, null, zeroPadValue(ev.args.depositAddress, 32)],
+      Math.max(gw.sourceFrom ?? 0, oHead - blocks), oHead);
+    outbound.push({ call: ev.args.call, releaseId: q.length ? G.LOCKBOX_EVENTS.parseLog(q[0]).args.id : null });
+  }
+  const lb = new Contract(r.origin.lockbox, G.LOCKBOX_EVENTS, p);
+  const code = art('SaphanDepositAddress').bytecode;
+  const zData = (fn, a) => G.ZETAPHY_GATEWAY.encodeFunctionData(fn, a);
+  const me = zs ? await zs.getAddress() : ZERO;
+  const read = {
+    usedOnZetaphy: async (at) => (await zp.getCode(at)) !== '0x',
+    usedOnSource: async (at) => (await p.getCode(at)) !== '0x',
+    tokenBalance: async (at) => BigInt(await zp.call({ to: r.zetaphy.bridgedToken, data: '0x70a08231' + at.slice(2).toLowerCase().padStart(64, '0') })),
+    ethBalance: (at) => p.getBalance(at),
+    release: async (id) => { const x = await lb.releases(id); return { readyAt: x.readyAt, claimed: x.claimed, vetoed: x.vetoed }; },
+    airlockReady: async (call, at, n) => zp.call({ from: me, to: gw.zetaphy, data: zData('execute', [Object.values(G.inCall(call)), true, n]) }).then(() => true, () => false),
+  };
+  const pl = await G.plan({ inbound, outbound, depositInitCode: code, zetaphyGateway: gw.zetaphy, sourceGateway: gw.source, remoteToken: r.zetaphy.bridgedToken,
+    now: (await p.getBlock('latest')).timestamp, read });
+  const done = [];
+  if (!dry) {
+    for (const x of pl.run) {
+      const k = x.side === 'zetaphy' ? new Contract(gw.zetaphy, G.ZETAPHY_GATEWAY, zs) : new Contract(gw.source, G.SOURCE_GATEWAY, s);
+      try {
+        if (x.claim) await (await new Contract(r.origin.lockbox, G.LOCKBOX_EVENTS, s).claim(x.claim)).wait(); // the lockbox pays the deposit address
+        const tx = await k.execute(...x.args);
+        await tx.wait();
+        done.push({ ...x, args: undefined, tx: tx.hash });
+      } catch (e) { done.push({ ...x, args: undefined, error: e.shortMessage ?? e.message }); }
+    }
+  }
+  return { chain: c.name, seen: { inbound: inbound.length, outbound: outbound.length }, ready: pl.run.map((x) => ({ side: x.side, at: x.at })), done, wait: pl.wait };
+}
+
 function args(argv) {
   const o = {};
   for (let i = 0; i < argv.length; i++) if (argv[i].startsWith('--')) o[argv[i].slice(2)] = argv[++i];
@@ -439,6 +548,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     } else if (cmd === 'zetaphy-ism') {
       const zp = await providerFor(process.env.ZETAPHY_RPC || t.zetaphy.rpc.join(','), t.zetaphy.chainId);
       res = await zetaphyIsm(t, chainOf(t, o.chain), zp, keySigner(zp));
+    } else if (cmd === 'gateway-deploy' || cmd === 'gateway-execute') {
+      const c = chainOf(t, o.chain);
+      const zp = await zetaphyP(), p = await originP(o.chain);
+      const dry = o.dry === 'yes';
+      const zs = dry ? null : keySigner(zp), s = dry ? null : keySigner(p);
+      res = cmd === 'gateway-deploy' ? await gatewayDeploy(t, c, loadRoutes(), zp, zs, p, s)
+        : await gatewayExecute(t, c, loadRoutes(), zp, p, { zs, s, blocks: Number(o.blocks ?? 5000), dry });
     } else if (cmd === 'token-vault') {
       needAddr(o, ['expect']);
       const zp = await zetaphyP();
@@ -458,7 +574,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       else if (cmd === 'token-synthetic') { needAddr(o, ['vault', 'expect', 'multisig', 'timelock', 'ism']); res = await tokenSynthetic(t, tokenOf(t, o.token), c, p, keySigner(p), o); }
       else if (cmd === 'origin-prepare') res = await originPrepare(t, c, p, keySigner(p), { multisig: o.multisig, timelock: o.timelock });
       else if (cmd === 'origin-lockbox') { needAddr(o, ['lane', 'outbox', 'expect', 'multisig', 'timelock', 'ism']); res = await originLockbox(t, c, p, keySigner(p), o); }
-      else throw new Error('usage: saphan.js check|origin-prepare|zetaphy-ism|origin-lockbox --chain <name> … | token-check|token-prepare|token-vault|token-synthetic --token <key> --chain <name> … | whitelist | pending');
+      else throw new Error('usage: saphan.js check|origin-prepare|zetaphy-ism|origin-lockbox --chain <name> … | token-check|token-prepare|token-vault|token-synthetic --token <key> --chain <name> … | gateway-deploy|gateway-execute --chain <name> | whitelist | pending');
     }
     console.log(JSON.stringify(res));
     process.exit(0);

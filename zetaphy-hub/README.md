@@ -33,6 +33,7 @@ Every ZETAPHY app on one page and one screen, at **https://app.sawasdeecoin.com*
 - The node comes from `zetaphy-explorer/config.json` (written by the launch), saved as `dist/hub-config.json`.
 - Saphan's EVM routes (Hyperlane) come from the chain table `zetaphy-chain/hyperlane/saphan-chains.json` and the deployed routes in `saphan-routes.json` (also in `dist/hub-config.json`): a chain added to the table appears on the Saphan page as planned, then closed or open.
 - Saphan's token routes (tokens born on ZETAPHY going out, docs/SAPHAN-TOKENS.md) come from the `tokens` of the same table and of `saphan-routes.json` (`saphanTokens` in `dist/hub-config.json`): the Saphan page lists each token per destination chain (BZTPHY as staying on ZETAPHY), and the wallet bar shows under a held token (and under ZETAPHY) where it can go out.
+- Saphan's Gateway (docs/SAPHAN-GATEWAY.md: `depositAndCall` / `withdrawAndCall` with automatic refunds) is a folded box on the Saphan page: what it does, and per EVM route its two addresses from `saphan-routes.json` `routes.<chain>.gateway` (carried into `hub-config.json` by `build.mjs` `saphanRoutes`), or "not deployed yet".
 
 ## Mine testnet ZETAPHY (the proof-of-work faucet)
 

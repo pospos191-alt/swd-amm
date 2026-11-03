@@ -41,6 +41,9 @@ test('every language has the full English key set: TEXT, TAB_TEXT, Earn, Saphan,
     assert.ok(SAPHAN[l].recvHow('channel-7', 'Noble').includes('channel-7') && SAPHAN[l].recvHow('channel-7', 'Noble').includes('Noble'), `SAPHAN.${l}.recvHow placeholders`);
     const row = SAPHAN[l].tipTokRow('ZETAPHY', 'zZETAPHY', 'Base Sepolia');
     assert.ok(row.includes('ZETAPHY') && row.includes('zZETAPHY') && row.includes('Base Sepolia'), `SAPHAN.${l}.tipTokRow placeholders`);
+    assert.ok(SAPHAN[l].gwOnSrc('Base Sepolia').includes('Base Sepolia'), `SAPHAN.${l}.gwOnSrc placeholder`);
+    for (const k of ['gwIn', 'gwOut']) assert.match(SAPHAN[l][k], k === 'gwIn' ? /^depositAndCall/ : /^withdrawAndCall/, `SAPHAN.${l}.${k}: the function's name`);
+    if (l !== 'en') for (const k of ['gwSub', 'gwIn', 'gwRefund', 'gwGas', 'gwNone']) assert.notEqual(SAPHAN[l][k], SAPHAN.en[k], `SAPHAN.${l}.${k}: translated`);
   }
 });
 

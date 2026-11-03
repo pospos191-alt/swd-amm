@@ -129,6 +129,14 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     // token routes (tokens born on ZETAPHY): the native coin to the three chains, BZTPHY staying home
     assert.match(await page.textContent('#sp-tok'), /Tokens born on ZETAPHY[\s\S]*ZETAPHY → Sepolia[\s\S]*zZETAPHY[\s\S]*BZTPHY[\s\S]*stays on ZETAPHY/);
     assert.equal(await page.locator('#sp-tok .pill').count(), 4);
+    // the Gateway (docs/SAPHAN-GATEWAY.md): folded under one line; open, it says what it does and, per route, not deployed yet
+    assert.match(await page.textContent('#sp-gw summary'), /Gateway[\s\S]*another chain in one transaction/);
+    await page.click('#sp-gw summary');
+    assert.match(await page.textContent('#sp-gw'), /depositAndCall[\s\S]*withdrawAndCall[\s\S]*go back to you automatically[\s\S]*no gas coin on the other chain/);
+    assert.equal(await page.locator('#sp-gw-routes tr').count(), 3);
+    assert.match(await page.textContent('#sp-gw-routes'), /Sepolia[\s\S]*not deployed yet[\s\S]*Base Sepolia[\s\S]*Arbitrum Sepolia/);
+    await shot('saphan-gateway');
+    await page.click('#sp-gw summary');
     await page.click('#sp-go'); // connect first: the site-wide wallet dialog
     await page.waitForSelector('#wb-dialog[open] .wb-wallet');
     assert.match(await page.textContent('#wb-dialog'), /MetaMask/, 'the wallets in this browser');

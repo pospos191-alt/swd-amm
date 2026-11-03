@@ -209,6 +209,8 @@ export function hubRoutes(t, routes) {
       state: !r ? 'planned' : r.state === 'OPEN' ? 'open' : 'closed',
       twoWay: !!r?.zetaphy?.hyperlaneOutbox,
       ...(r ? { lockbox: r.origin.lockbox, token: r.zetaphy.bridgedToken, outbox: r.zetaphy.hyperlaneOutbox ?? null } : {}),
+      // the route's Gateway (contracts/SaphanGateway.sol), once deployed (saphan-route mode = gateway)
+      ...(r?.gateway?.zetaphy && r?.gateway?.source ? { gateway: { zetaphy: r.gateway.zetaphy, source: r.gateway.source } } : {}),
     };
   });
 }

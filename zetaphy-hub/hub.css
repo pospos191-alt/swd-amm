@@ -219,6 +219,17 @@ dialog form { display: flex; flex-direction: column; gap: 10px; }
 .sp-intro { margin: 0; }
 .sp-grid { align-items: start; }
 .sp-grid .card { overflow: auto; }
+.sp-col { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.sp-gw { flex: none; }
+.sp-gw summary { cursor: pointer; list-style: none; }
+.sp-gw summary::-webkit-details-marker { display: none; }
+.sp-gw summary .card-head { margin-bottom: 4px; }
+.sp-gw summary h2::before { content: '▸'; display: inline-block; width: 1em; color: var(--dim); transition: transform .15s; }
+.sp-gw[open] summary h2::before { transform: rotate(90deg); }
+.sp-gw[open] summary { margin-bottom: 8px; }
+.sp-gw-how { margin: 0 0 8px; padding-left: 18px; }
+.sp-gw-how li { margin: 2px 0; }
+.sp-gw p { margin: 6px 0 0; }
 .sp-form { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; font-size: 13px; }
 .sp-form label { color: var(--dim); }
 .sp-form .row, .sp-form .msg { grid-column: 1 / -1; }
