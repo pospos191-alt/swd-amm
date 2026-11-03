@@ -70,7 +70,7 @@ async function route() {
   await r.guard.send('gov', 'setOutboundRoute', [ROUTE_OUT, r.outbox.address, 100n * E, true]);
   // proven releases: the Merkle outbox and the provable outbox on ZETAPHY; the light client and verifier on X
   r.merkle = await c.deploy('ZetaphyOutbox', [], 'gov');
-  r.provable = await c.deployRaw(withErrors('SaphanProvableOutbox', 'BridgeGuard', 'HyperlaneOutbox'), [r.outbox.address, r.merkle.address, r.token], 'gov');
+  r.provable = await c.deployRaw(withErrors('SaphanProvableOutbox', 'BridgeGuard', 'HyperlaneOutbox'), [r.outbox.address, r.merkle.address, r.token, r.lockbox.address, await r.outbox.call('destinationChainId', [])], 'gov');
   r.lc = await c.deployRaw(kit2().KitLightClient, [], 'gov');
   r.proofs = await c.deploy('ZetaphyBridgeInbox', [r.lc.address, CHAIN, r.merkle.address, ZERO, r.token, a('gov'), ZERO, 0n], 'gov');
   r.verifier = await c.deployRaw(withErrors('SaphanReleaseVerifier', 'HyperlaneLockBoxV2'), [r.lc.address, r.proofs.address, CHAIN, r.merkle.address, r.provable.address, r.lockbox.address], 'gov');
@@ -99,7 +99,10 @@ async function sendOut(r, to, amount) {
   assert.ok((await tok(r, 'alice', 'approve', [r.provable.address, amount])).ok);
   const n = await r.outbox.call('nonce');
   const body = await r.outbox.call('body', [n, r.provable.address, to, amount]);
-  const ev = await r.provable.send('alice', 'send', [to, amount]);
+  // exactly the Mailbox fee: any other value is refused, so no ether ever stays in the provable outbox
+  const fee = await r.provable.call('quoteSend', [to, amount]);
+  await assert.rejects(r.provable.send('alice', 'send', [to, amount], fee + 1n), /Fee/);
+  const ev = await r.provable.send('alice', 'send', [to, amount], fee);
   const ps = ev.find((e) => e?.name === 'ProvableSent').args;
   assert.equal(ps.bodyHash, keccak256(body));
   const nonce = Number(ps.merkleNonce);

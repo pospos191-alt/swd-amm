@@ -44,27 +44,32 @@ contract SaphanProvableOutbox {
     event ProvableSent(uint256 indexed outboxNonce, uint64 indexed merkleNonce, address indexed from, address to, uint256 amount, bytes32 bodyHash);
 
     error PayFailed();
+    error Fee(uint256 required);
 
-    constructor(IProofOutbox outbox_, IMerkleOutbox merkleOutbox_, IProofToken token_) {
+    /// lockbox_ and destinationChainId_ must be the outbox's own (checked last, against the outbox).
+    constructor(IProofOutbox outbox_, IMerkleOutbox merkleOutbox_, IProofToken token_, address lockbox_, uint256 destinationChainId_) {
         outbox = outbox_;
         merkleOutbox = merkleOutbox_;
         token = token_;
-        lockbox = address(uint160(uint256(outbox_.recipient())));
-        destinationChainId = outbox_.destinationChainId();
+        lockbox = lockbox_;
+        destinationChainId = destinationChainId_;
+        require(lockbox_ != address(0) && outbox_.recipient() == bytes32(uint256(uint160(lockbox_)))
+            && outbox_.destinationChainId() == destinationChainId_, "config");
     }
 
     function quoteSend(address to, uint256 amount) external view returns (uint256) { return outbox.quoteSend(to, amount); }
 
     /// Like HyperlaneOutbox.send (approve this contract for `amount` of token(X) first). msg.value: exactly the
-    /// Mailbox fee (quoteSend).
+    /// Mailbox fee (quoteSend); all of it goes on to the outbox, so this contract never holds ether.
     function send(address to, uint256 amount) external payable returns (bytes32 messageId) {
+        uint256 fee = outbox.quoteSend(to, amount);
+        if (msg.value != fee) revert Fee(fee);
         uint256 n = outbox.nonce();
         bytes memory b = outbox.body(n, address(this), to, amount); // the body the outbox is about to send
         uint64 m = merkleOutbox.send(destinationChainId, lockbox, b);
         emit ProvableSent(n, m, msg.sender, to, amount, keccak256(b));
         if (!token.transferFrom(msg.sender, address(this), amount)) revert PayFailed();
-        messageId = outbox.send{value: msg.value}(to, amount);  // burns this contract's tokens; the same nonce n (the outbox
-                                                                 // refuses a short fee and would send any extra back here)
+        messageId = outbox.send{value: fee}(to, amount);  // burns this contract's tokens; the same nonce n
     }
 }
 

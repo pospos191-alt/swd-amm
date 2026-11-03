@@ -71,7 +71,7 @@ contract BtcSpvLane {
         uint256 outs;
         (outs, p) = _varint(t, p);
         if (vout >= outs) revert BadTx(5);
-        bool paid;
+        bool paid = false;
         for (uint256 i = 0; i < outs; i++) {
             if (p + 8 > t.length) revert BadTx(1);
             uint64 value = _le64(t, p);
@@ -101,11 +101,11 @@ contract BtcSpvLane {
         if (f < 0xfd) return (f, p + 1);
         uint256 size = f == 0xfd ? 2 : f == 0xfe ? 4 : 8;
         if (p + 1 + size > t.length) revert BadTx(1);
-        for (uint256 i = 0; i < size; i++) v |= uint256(uint8(t[p + 1 + i])) << (8 * i);
+        for (uint256 i = 0; i < size; i++) v = v | (uint256(uint8(t[p + 1 + i])) << (8 * i));
         q = p + 1 + size;
     }
 
     function _le64(bytes calldata t, uint256 p) private pure returns (uint64 v) {
-        for (uint256 i = 0; i < 8; i++) v |= uint64(uint8(t[p + i])) << uint64(8 * i);
+        for (uint256 i = 0; i < 8; i++) v = v | (uint64(uint8(t[p + i])) << uint64(8 * i));
     }
 }
