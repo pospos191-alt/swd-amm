@@ -35,6 +35,17 @@
 //       the executor: reads DepositAndCall (source) and OutCallSent (ZETAPHY) of the last --blocks blocks, runs every
 //       call that is funded or due (src/saphangateway.js plan) and says why the others wait. Fees come to KEYFILE's key.
 //
+// Safety (docs/SAPHAN-SAFETY.md: the escape hatch and bonded challenges):
+//   node scripts/saphan.js safety-deploy --chain <name>
+//       on ZETAPHY: SaphanCheckpointer (heartbeats to the route's lockbox) and SaphanChallenges (the route's airlock,
+//       NeuroJobs runners). JSON with both, and the governance calls still to make (lockbox.setCheckpointer on the
+//       source chain's timelock; airlock.setChallenger + setVetoer on ZETAPHY's).
+//   node scripts/saphan.js heartbeat --chain <name>      one SaphanCheckpointer.beat() (the relayer carries it)
+//   node scripts/saphan.js exit-root --file <owed.json> [--chain <name> --sign yes]
+//       the exit root of [[address, wei], ...] (or {balances, unclaimedReleases, unmintedLocks}); with --sign, the
+//       digest the lockbox wants, signed by KEYFILE (a validator of the lockbox's ISM). Proofs: exit-proof.
+//   node scripts/saphan.js exit-proof --file <owed.json> --account 0x…
+//
 //   node scripts/saphan.js whitelist          the relayer's HYP_WHITELIST for every deployed route (+ the v1 lockbox, + token routes)
 //   node scripts/saphan.js pending            per two-way route: the outbox's sends on ZETAPHY vs releases the lockbox recorded;
 //                                             per token route: messages each way the other end has not recorded
@@ -48,7 +59,7 @@
 // KEYFILE (the deployer key file, never printed), DEPLOYER (check), SAPHAN_CHAINS / SAPHAN_ROUTES
 // (another chain table / routes file, e.g. a dry run's).
 import { readFileSync, writeFileSync } from 'node:fs';
-import { JsonRpcProvider, Wallet, Contract, ContractFactory, NonceManager, getAddress, getCreateAddress, formatEther, parseEther, parseUnits, zeroPadValue, AbiCoder, id as keccakId } from 'ethers';
+import { JsonRpcProvider, Wallet, Contract, ContractFactory, NonceManager, Interface, getAddress, getBytes, getCreateAddress, formatEther, parseEther, parseUnits, zeroPadValue, AbiCoder, id as keccakId } from 'ethers';
 import { loadChains, chainOf, sortAddresses, loadRoutes, loadTokenRoutes, tokenOf, tokenRouteList, relayerWhitelist, oracleChains, bytes32, NATIVE_ERC20 } from '../src/saphan.js';
 
 const art = (n) => JSON.parse(readFileSync(new URL(`../artifacts/${n}.json`, import.meta.url), 'utf8'));
@@ -507,6 +518,42 @@ export async function gatewayExecute(t, c, routes, zp, p, { zs = null, s = null,
   return { chain: c.name, seen: { inbound: inbound.length, outbound: outbound.length }, ready: pl.run.map((x) => ({ side: x.side, at: x.at })), done, wait: pl.wait };
 }
 
+const CHALLENGE_BOND = '10';        // ZTPHY
+const CHALLENGE_VOTING = 2 * 86400;   // seconds
+const CHALLENGE_QUORUM = 2;
+const CHALLENGE_MIN_AGREED = 3;
+
+/** The route's SaphanCheckpointer and SaphanChallenges on ZETAPHY; the governance calls that turn them on. */
+export async function safetyDeploy(t, c, routes, zp, zs) {
+  const r = routes[c.name];
+  if (!r?.zetaphy?.bridgeAirlock || !r?.origin?.lockbox) throw new Error(`no deployed v2 route for ${c.name} in saphan-routes.json`);
+  if (r.safety?.checkpointer) throw new Error(`${c.name} has its safety contracts already: ${r.safety.checkpointer} / ${r.safety.challenges}`);
+  const cp = await step('SaphanCheckpointer', () => deployArt('SaphanCheckpointer', [t.zetaphy.mailbox, c.domain, bytes32(r.origin.lockbox)], zs));
+  const ch = await step('SaphanChallenges', () => deployArt('SaphanChallenges', [r.zetaphy.bridgeAirlock, t.zetaphy.neuroJobs, t.zetaphy.timelock,
+    parseEther(CHALLENGE_BOND), CHALLENGE_VOTING, CHALLENGE_QUORUM, CHALLENGE_MIN_AGREED], zs));
+  const cpAt = getAddress(await cp.getAddress()), chAt = getAddress(await ch.getAddress());
+  const LB = new Interface(['function setCheckpointer(bytes32)']);
+  const AL = new Interface(['function setChallenger(address)', 'function setVetoer(address,bool)']);
+  return {
+    chain: c.name, checkpointer: cpAt, challenges: chAt, zetaphyFrom: await zp.getBlockNumber(),
+    governance: [
+      { chain: c.name, via: `the ${c.name} timelock (its multisig proposes)`, to: r.origin.lockbox, data: LB.encodeFunctionData('setCheckpointer', [bytes32(cpAt)]) },
+      { chain: 'zetaphy', via: 'the ZETAPHY timelock', to: r.zetaphy.bridgeAirlock, data: AL.encodeFunctionData('setChallenger', [chAt]) },
+      { chain: 'zetaphy', via: 'the ZETAPHY timelock', to: r.zetaphy.bridgeAirlock, data: AL.encodeFunctionData('setVetoer', [chAt, true]) },
+    ],
+  };
+}
+
+/** One heartbeat (the Mailbox fee from the quote). */
+export async function heartbeat(routes, c, zs) {
+  const cp = routes[c.name]?.safety?.checkpointer;
+  if (!cp) throw new Error(`no SaphanCheckpointer for ${c.name} (safety-deploy first)`);
+  const k = new Contract(cp, ['function quote() view returns (uint256)', 'function beat() payable returns (bytes32)', 'function seq() view returns (uint64)'], zs);
+  const tx = await k.beat({ value: await k.quote() });
+  await tx.wait();
+  return { chain: c.name, checkpointer: cp, seq: Number(await k.seq()), tx: tx.hash };
+}
+
 function args(argv) {
   const o = {};
   for (let i = 0; i < argv.length; i++) if (argv[i].startsWith('--')) o[argv[i].slice(2)] = argv[++i];
@@ -523,7 +570,29 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const originP = (name) => { const c = chainOf(t, name); return providerFor(process.env.ORIGIN_RPC || c.rpc.join(','), c.chainId); };
     let res;
     const zetaphyP = () => providerFor(process.env.ZETAPHY_RPC || t.zetaphy.rpc.join(','), t.zetaphy.chainId);
-    if (cmd === 'whitelist') res = relayerWhitelist(t, loadRoutes(), v1Whitelist(), loadTokenRoutes(), loadOracleFile());
+    if (cmd === 'exit-root' || cmd === 'exit-proof') {
+      const S = await import('../src/saphansafety.js');
+      const raw = JSON.parse(readFileSync(String(o.file), 'utf8'));
+      const owed = Array.isArray(raw) ? raw : S.exitEntitlements(raw);
+      if (cmd === 'exit-proof') res = { account: getAddress(o.account), owed: String(owed.find(([x]) => getAddress(x) === getAddress(o.account))?.[1] ?? 0), proof: S.exitProof(owed, o.account) };
+      else {
+        const tr = S.exitTree(owed);
+        res = { root: tr.root, total: String(tr.total), lines: tr.count };
+        if (o.sign === 'yes') {
+          const c = chainOf(t, o.chain);
+          const p = await originP(o.chain);
+          const lb = new Contract(loadRoutes()[c.name].origin.lockbox, ['function exitDigest(bytes32,uint256) view returns (bytes32)', 'function escaping() view returns (bool)'], p);
+          if (!(await lb.escaping())) throw new Error(`the ${c.name} lockbox is not escaping: nothing to sign`);
+          const d = await lb.exitDigest(tr.root, tr.total);
+          const w = new Wallet(readFileSync(String(process.env.KEYFILE), 'utf8').trim());
+          res.digest = d; res.signer = w.address; res.signature = w.signMessageSync(getBytes(d));
+        }
+      }
+    } else if (cmd === 'safety-deploy' || cmd === 'heartbeat') {
+      const c = chainOf(t, o.chain);
+      const zp = await zetaphyP();
+      res = cmd === 'safety-deploy' ? await safetyDeploy(t, c, loadRoutes(), zp, keySigner(zp)) : await heartbeat(loadRoutes(), c, keySigner(zp));
+    } else if (cmd === 'whitelist') res = relayerWhitelist(t, loadRoutes(), v1Whitelist(), loadTokenRoutes(), loadOracleFile());
     else if (cmd === 'relayer-env') {
       let zv1 = null;
       try { zv1 = JSON.parse(readFileSync(new URL('../../zetaphy-chain/hyperlane/bridge-testnet.json', import.meta.url), 'utf8'))?.zetaphy?.fromBlock ?? null; } catch { /* none */ }
@@ -574,7 +643,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       else if (cmd === 'token-synthetic') { needAddr(o, ['vault', 'expect', 'multisig', 'timelock', 'ism']); res = await tokenSynthetic(t, tokenOf(t, o.token), c, p, keySigner(p), o); }
       else if (cmd === 'origin-prepare') res = await originPrepare(t, c, p, keySigner(p), { multisig: o.multisig, timelock: o.timelock });
       else if (cmd === 'origin-lockbox') { needAddr(o, ['lane', 'outbox', 'expect', 'multisig', 'timelock', 'ism']); res = await originLockbox(t, c, p, keySigner(p), o); }
-      else throw new Error('usage: saphan.js check|origin-prepare|zetaphy-ism|origin-lockbox --chain <name> … | token-check|token-prepare|token-vault|token-synthetic --token <key> --chain <name> … | gateway-deploy|gateway-execute --chain <name> | whitelist | pending');
+      else throw new Error('usage: saphan.js check|origin-prepare|zetaphy-ism|origin-lockbox --chain <name> … | token-check|token-prepare|token-vault|token-synthetic --token <key> --chain <name> … | gateway-deploy|gateway-execute|safety-deploy|heartbeat --chain <name> | exit-root|exit-proof --file … | whitelist | pending');
     }
     console.log(JSON.stringify(res));
     process.exit(0);
