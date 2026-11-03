@@ -5,7 +5,10 @@
 // (zetaphy_faucetPow) wants a few minutes of computer work per grant, so one person cannot empty it
 // with many addresses; it pays one fixed reward per valid proof (nothing accumulates). Nothing runs until
 // Start is pressed; it keeps running while other hub tabs are open (the hub shows a "Running" pill), pauses
-// on Pause, and stops when the proof is found, on Stop, or when the page is redrawn (a new language).
+// on Pause, and stops when the coins are sent, on Stop, or when the page is redrawn (a new language).
+// It keeps going by itself until the coins arrive: a claim that does not go through (an old block, a node
+// that does not answer) mines on, and a node that does not answer is asked again. It stops on its own only
+// when mining on cannot help (the address already has coins or got some today, the day's grants are gone).
 // The two modes (faucet, useful work) live side by side: switching shows the other one and stops neither.
 import { isEvmAddress, toEvm } from './chainlib.js';
 import { withFallback } from './i18n.js';
@@ -33,14 +36,34 @@ export const rate = (hps) => (hps >= 1e6 ? `${(hps / 1e6).toFixed(2)} MH/s` : hp
 /** Workers: 1 up to the CPU cores this browser reports, at most 8. */
 export const maxThreads = () => Math.max(1, Math.min(8, navigator.hardwareConcurrency || 2));
 const UNIT = 'ZTPHY';
+const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
+/** The node could not be reached or did not answer (no reason of its own): asking again can help. */
+export const unreachable = (msg) => /^HTTP \d|fetch|network|abort|timed? ?out|load failed|no block/i.test(String(msg ?? ''));
+/**
+ * What a failed claim means. 'cooldown' / 'hasCoins' / 'noneLeft' / 'final': mining on cannot help (the address,
+ * the day, the node); 'unreachable': ask again with the same proof; 'again': mine a new proof (an old block,
+ * a proof used already, anything else the node refused).
+ */
+export function claimVerdict(msg) {
+  const m = String(msg ?? '');
+  if (/less than a day ago/i.test(m)) return 'cooldown';
+  if (/already has ZETAPHY/i.test(m)) return 'hasCoins';
+  if (/today's \d+ grants|try again tomorrow/i.test(m)) return 'noneLeft';
+  if (/faucet is off|key is unreadable|answers only through|invalid address/i.test(m)) return 'final';
+  if (unreachable(m)) return 'unreachable';
+  return 'again';
+}
 
 let run = null; // the running miner (one per page)
 let threads = 0; // the chosen number of workers (kept across redraws)
 let rewardText = `10 ${UNIT}`;
 let mode = 'mine'; // 'mine' (the faucet proof of work) or 'work' (useful work: work.js, loaded when chosen)
 let workMod = null;
+let waiting = null; // Start while the node does not answer: { cancelled }
 
 function stopRun() {
+  if (waiting) waiting.cancelled = true;
+  waiting = null;
   if (!run) return;
   announce('faucet', false);
   clearInterval(run.tick);
@@ -238,7 +261,7 @@ async function latestBlock(ctx) {
 /** The big button: Start, Stop, or (after a grant) back to the start. */
 function go(ctx, root, L) {
   const s = $('mn-status').dataset.s;
-  if (s === 'mining' || s === 'paused') { stopRun(); status(L, 'idle'); say(L.stopped); return; }
+  if (s === 'mining' || s === 'paused' || waiting) { stopRun(); status(L, 'idle'); say(L.stopped); return; }
   if (s === 'done') { status(L, 'idle'); say(''); $('mn-tx').replaceChildren(); return; }
   start(ctx, root, L);
 }
@@ -251,17 +274,34 @@ async function start(ctx, root, L) {
   $('mn-won').textContent = `0 ${UNIT}`;
   $('mn-start').disabled = true;
   say(L.asking);
-  let i, base;
-  try {
-    i = await info(ctx, L);
-    if (!i.enabled) throw new Error(L.off);
-    if (i.remainingToday < 1) throw new Error(L.noneLeft);
-    base = await latestBlock(ctx);
-  } catch (e) { say(e.message, 'bad'); status(L, 'error'); return; }
+  // a node that does not answer is asked again (Stop ends the wait)
+  const w = { cancelled: false };
+  waiting = w;
+  let i, base, balance;
+  for (;;) {
+    try {
+      i = await info(ctx, L);
+      if (!i.enabled) throw new Error(L.off);
+      if (i.remainingToday < 1) throw new Error(L.noneLeft);
+      balance = BigInt(await ctx.evmCall('eth_getBalance', [addr, 'latest']) ?? 0);
+      base = await latestBlock(ctx);
+      break;
+    } catch (e) {
+      if (w.cancelled) return;
+      if (!unreachable(e.message)) { waiting = null; say(e.message, 'bad'); status(L, 'error'); return; }
+      status(L, 'mining');
+      say(L.waitNode);
+      await sleep(10_000);
+      if (w.cancelled) return;
+    }
+  }
+  waiting = null;
+  // the node pays only an address holding less than one reward: say so now, not after minutes of work
+  if (balance >= BigInt(i.reward ?? 0) && BigInt(i.reward ?? 0) > 0n) { say(L.hasCoins, 'bad'); status(L, 'error'); return; }
   const r = {
     addr, bits: i.bits, chainId: i.chainId, maxAge: Number(i.maxAgeBlocks) || 100, threads, base,
     gen: 0, tries: 0, workers: [], paused: false, userPaused: false, window: [], checking: false, lastCheck: Date.now(),
-    started: Date.now(), anchors: 0,
+    started: Date.now(), anchors: 0, balance, reward: BigInt(i.reward ?? 0), unreached: false,
   };
   run = r;
   const t = new Date(r.started);
@@ -314,6 +354,18 @@ async function start(ctx, root, L) {
   };
   r.tickNow = tick;
   r.tick = setInterval(tick, 1000);
+  r.mineOn = async () => {
+    // a fresh proof on the newest block (asked again while the node does not answer)
+    for (;;) {
+      if (run !== r) return;
+      try { r.base = await latestBlock(ctx); break; } catch { await sleep(10_000); }
+    }
+    if (run !== r) return;
+    r.anchors++;
+    r.spawn();
+    r.tick = setInterval(tick, 1000);
+    status(L, r.userPaused ? 'paused' : 'mining');
+  };
 }
 
 function show(L, r) {
@@ -342,21 +394,47 @@ async function found(ctx, L, r, { hi, lo }) {
   $('mn-fill').style.width = '100%';
   status(L, 'claiming');
   say(L.claiming);
-  let ok = false;
-  try {
-    const res = await ctx.evmCall('zetaphy_faucetPow', [r.addr, `0x${height.toString(16)}`, nonceHex(hi, lo)]);
-    const hash = res?.txHash;
-    ok = true;
+  let res, why = '';
+  // the same proof is sent again while the node does not answer (at most 3 times; it stays valid for a while)
+  for (let n = 0; n < 4 && run === r; n++) {
+    try { res = await ctx.evmCall('zetaphy_faucetPow', [r.addr, `0x${height.toString(16)}`, nonceHex(hi, lo)]); why = ''; break; } catch (e) {
+      why = e.message;
+      if (claimVerdict(why) !== 'unreachable') break;
+      r.unreached = true;
+      if (n < 3) await sleep(5_000 * 2 ** n);
+    }
+  }
+  if (run !== r) return; // stopped meanwhile
+  let verdict = why ? claimVerdict(why) : 'ok';
+  // an answer lost on the way may have been a grant: the address's balance tells
+  if (verdict === 'cooldown' && r.unreached) {
+    try { if (BigInt(await ctx.evmCall('eth_getBalance', [r.addr, 'latest'])) >= r.balance + r.reward) verdict = 'ok'; } catch { /* stays cooldown */ }
+  }
+  if (verdict === 'ok') {
     say(L.done, 'ok');
     if ($('mn-won')) $('mn-won').textContent = rewardText;
+    const hash = res?.txHash;
     if (/^0x[0-9a-fA-F]{64}$/.test(hash ?? '')) {
       $('mn-tx').replaceChildren(document.createTextNode(`${L.tx}: `),
         ctx.el('a', { href: `explorer/#/tx/${hash}`, class: 'mono', 'data-tip': hash, text: ctx.short(hash, 10, 8), onclick: (ev) => { ev.preventDefault(); ctx.show('explorer', { hash: `#/tx/${hash}` }); } }),
         document.createTextNode(` · ${L.inExplorer}`));
     }
-  } catch (e) { say(`${L.claimFail}: ${e.message}`, 'bad'); }
-  if (run === r) run = null;
-  status(L, ok ? 'done' : 'error');
+    run = null;
+    status(L, 'done');
+    info(ctx, L).catch(() => {});
+    return;
+  }
+  if (verdict === 'unreachable' || verdict === 'again') {
+    // mining on cannot hurt: a new proof on the newest block, until the coins arrive
+    say(L.again.replace('{why}', why), 'bad');
+    status(L, 'mining');
+    await r.mineOn();
+    return;
+  }
+  const text = { cooldown: L.cooldown, hasCoins: L.hasCoins, noneLeft: L.noneLeft }[verdict] ?? `${L.claimFail}: ${why}`;
+  run = null;
+  say(text, 'bad');
+  status(L, 'error');
   info(ctx, L).catch(() => {});
 }
 
