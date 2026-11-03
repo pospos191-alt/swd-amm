@@ -10,6 +10,9 @@ workflow run.
 The reverse direction, tokens born on ZETAPHY (first the native coin) going out to these chains and back, is in
 docs/SAPHAN-TOKENS.md: the same chain table (`tokens`), workflow (`token = <key>`), validators and relayer.
 
+Calling a contract on the other side in the same transaction (`depositAndCall` / `withdrawAndCall`, with automatic
+refunds) is the Gateway on top of each route: docs/SAPHAN-GATEWAY.md ([ไทย](SAPHAN-GATEWAY.th.md)).
+
 ## Design
 
 ```

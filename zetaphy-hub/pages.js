@@ -557,6 +557,37 @@ export function tokenRows(ctx) {
     })];
 }
 
+/**
+ * The Gateway (zetaphy-network/contracts/SaphanGateway.sol, docs/SAPHAN-GATEWAY.md): what depositAndCall and
+ * withdrawAndCall do, then per EVM route its two Gateways (ZETAPHY, source chain), or "not deployed yet".
+ * From hub-config.json saphan[].gateway (build.mjs saphanRoutes).
+ */
+export function gatewayBox(ctx) {
+  const L = saphanText(ctx);
+  const isAddr = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
+  const list = (ctx.cfg.saphan ?? []).filter((r) => r && typeof r.displayName === 'string');
+  const zLink = (a) => ctx.el('a', { href: `explorer/#/address/${a}`, class: 'mono', 'data-tip': a, text: ctx.short(a, 8, 6),
+    onclick: (ev) => { ev.preventDefault(); ctx.show('explorer', { hash: `#/address/${a}` }); } });
+  const sLink = (r, a) => (/^https:\/\//.test(r.explorer ?? '')
+    ? ctx.el('a', { href: `${r.explorer}/address/${a}`, class: 'mono', target: '_blank', rel: 'noopener noreferrer', 'data-tip': a, text: ctx.short(a, 8, 6) })
+    : ctx.el('span', { class: 'mono', 'data-tip': a, text: ctx.short(a, 8, 6) }));
+  const rows = list.map((r) => {
+    const g = r.gateway;
+    const live = g && isAddr(g.zetaphy) && isAddr(g.source);
+    return ctx.el('tr', {},
+      ctx.el('td', {}, ctx.el('b', { text: r.displayName })),
+      ctx.el('td', { class: 'small' }, ...(live
+        ? [`${L.gwOnZ} `, zLink(g.zetaphy), ` · ${L.gwOnSrc(r.displayName)} `, sLink(r, g.source)]
+        : [ctx.el('span', { class: 'dim', text: L.gwNone })])));
+  });
+  return ctx.el('details', { class: 'card sp-gw', id: 'sp-gw' },
+    ctx.el('summary', {}, ctx.el('div', { class: 'card-head' }, ctx.el('h2', { text: L.gw }), ctx.el('span', { class: 'info', 'data-tip': L.tipGw, tabindex: 0, text: 'i' })),
+      ctx.el('div', { class: 'dim small', text: L.gwSub })),
+    ctx.el('ul', { class: 'small sp-gw-how' }, [L.gwIn, L.gwOut, L.gwRefund, L.gwGas].map((t) => ctx.el('li', { text: t }))),
+    rows.length ? ctx.el('table', { class: 'tbl' }, ctx.el('tbody', { id: 'sp-gw-routes' }, rows)) : null,
+    ctx.el('p', { class: 'dim small', text: L.gwTest }));
+}
+
 const saphan = {
   render(root, ctx) {
     const L = saphanText(ctx);
@@ -566,7 +597,8 @@ const saphan = {
       ctx.el('div', { class: 'grid3 sp-grid' },
         ctx.el('div', { class: 'card' }, head(L.routes, L.tipRoutes), ctx.el('div', { class: 'scroll' }, ctx.el('table', { class: 'tbl' },
           ctx.el('tbody', { id: 'sp-routes' }, ctx.el('tr', {}, ctx.el('td', { class: 'dim', text: '…' }))), ctx.el('tbody', { id: 'sp-evm' }, ...evmRows(ctx)), ctx.el('tbody', { id: 'sp-tok' }, ...tokenRows(ctx))))),
-        ctx.el('div', { class: 'card' }, head(L.send, L.tipSend), ctx.el('div', { id: 'sp-send' }, ctx.el('p', { class: 'dim', text: '…' }))),
+        ctx.el('div', { class: 'sp-col' }, ctx.el('div', { class: 'card' }, head(L.send, L.tipSend), ctx.el('div', { id: 'sp-send' }, ctx.el('p', { class: 'dim', text: '…' }))),
+          gatewayBox(ctx)),
         ctx.el('div', { class: 'card' }, head(L.recv, L.tipRecv), ctx.el('div', { id: 'sp-recv', class: 'small' }))),
       ctx.el('p', { class: 'warnline small', text: L.limits }));
   },

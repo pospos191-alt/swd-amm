@@ -45,17 +45,22 @@ test('Saphan EVM routes: every chain of the table, its state from saphan-routes.
       evil: { displayName: 'Evil', chainId: 2, token: { symbol: '<script>' } },
     } },
     'zetaphy-chain/hyperlane/saphan-routes.json': { routes: {
-      sepolia: { state: 'OPEN', origin: { lockbox: '0x' + '11'.repeat(20) }, zetaphy: { bridgedToken: '0x' + '22'.repeat(20), hyperlaneOutbox: '0x' + '33'.repeat(20) } },
-      basesepolia: { state: 'CLOSED', origin: { lockbox: 'nope' }, zetaphy: { bridgedToken: '0x' + '44'.repeat(20) } },
+      sepolia: { state: 'OPEN', origin: { lockbox: '0x' + '11'.repeat(20) }, zetaphy: { bridgedToken: '0x' + '22'.repeat(20), hyperlaneOutbox: '0x' + '33'.repeat(20) },
+        gateway: { zetaphy: '0x' + '55'.repeat(20), source: '0x' + '66'.repeat(20), zetaphyFrom: 10, sourceFrom: 20, workflowRun: '1' } },
+      basesepolia: { state: 'CLOSED', origin: { lockbox: 'nope' }, zetaphy: { bridgedToken: '0x' + '44'.repeat(20) }, gateway: { zetaphy: '0x' + '77'.repeat(20), source: '0x' + '88'.repeat(20) } },
     } },
   })[f] ?? null;
   const r = saphanRoutes(read);
   assert.deepEqual(r.map((x) => [x.name, x.state, x.twoWay, x.explorer]), [['sepolia', 'open', true, 'https://sepolia.etherscan.io'], ['basesepolia', 'planned', false, '']]);
   assert.equal(r[0].lockbox, '0x' + '11'.repeat(20));
+  // the Gateway (docs/SAPHAN-GATEWAY.md): its two addresses only, and only for a deployed route
+  assert.deepEqual(r[0].gateway, { zetaphy: '0x' + '55'.repeat(20), source: '0x' + '66'.repeat(20) });
+  assert.equal(r[1].gateway, undefined);
   assert.deepEqual(chainTokens(read), [{ address: '0x' + '22'.repeat(20), symbol: 'sepETH', decimals: 18 }]);
   // the committed table: the three test networks, planned until the saphan-route workflow deploys them
   const real = saphanRoutes((f) => { try { return JSON.parse(readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')); } catch { return null; } });
   assert.deepEqual(real.map((x) => [x.name, x.state]), [['sepolia', 'planned'], ['basesepolia', 'planned'], ['arbitrumsepolia', 'planned']]);
+  assert.ok(real.every((x) => x.gateway === undefined), 'no Gateway deployed yet');
 });
 
 test('Saphan token routes: tokens born on ZETAPHY with their destinations; held tokens carry their routes into the wallet bar', () => {
