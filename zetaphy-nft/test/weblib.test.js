@@ -217,6 +217,41 @@ test('a slow or broken node ends a log scan at once (no split per failure); the 
   assert.ok(Date.now() - t0 < 2000);
 });
 
+test('a node that just timed out is not waited for again by the next reads: the page shows its error after one timeout', async () => {
+  let clock = 1_000_000;
+  let mode = 'stall';
+  const sent = [];
+  const fetchImpl = (_url, { body, signal }) => {
+    sent.push(JSON.parse(body).method);
+    if (mode === 'stall') return new Promise((_, rej) => signal.addEventListener('abort', () => rej(new Error('aborted'))));
+    if (mode === 'http') return Promise.resolve({ ok: false, status: 503 });
+    return Promise.resolve({ ok: true, json: async () => ({ jsonrpc: '2.0', id: 1, result: '0x10' }) });
+  };
+  const rpc = makeRpc('http://node.test/', { fetchImpl, timeoutMs: 50, downMs: 10_000, now: () => clock });
+  // What app.js does before Explore can render: chain id, the registry, the head block. Only the first one waits.
+  const t0 = Date.now();
+  await assert.rejects(rpc.chainId(), (e) => e instanceof RpcError && e.code === -1 && /unreachable/.test(e.message));
+  const t1 = Date.now();
+  await assert.rejects(rpc.ethCall('0x' + '11'.repeat(20), '0x'), (e) => e instanceof RpcError && e.code === -1 && /unreachable/.test(e.message));
+  await assert.rejects(scanLogs(rpc, {}, { maxBlocks: 50_000, store: { getItem: () => null, setItem() {}, removeItem() {} } }), (e) => e.code === -1);
+  assert.ok(t1 - t0 >= 40, 'the first read waited for its timeout');
+  assert.ok(Date.now() - t1 < 40, 'the next reads failed at once');
+  assert.deepEqual(sent, ['eth_chainId'], 'nothing more was sent to the down node');
+  // After downMs the node is asked again; once it answers, it is used normally.
+  mode = 'up';
+  clock += 9_999;
+  await assert.rejects(rpc.blockNumber(), (e) => e.code === -1);
+  clock += 1;
+  assert.equal(await rpc.blockNumber(), 16);
+  assert.deepEqual(sent, ['eth_chainId', 'eth_blockNumber']);
+  // An HTTP error or a JSON-RPC error is an answer: the next read is still sent.
+  mode = 'http';
+  await assert.rejects(rpc.blockNumber(), (e) => e.code === 503);
+  mode = 'up';
+  assert.equal(await rpc.blockNumber(), 16);
+  assert.equal(sent.length, 4);
+});
+
 test('every language has every text; Neuro wording stays neutral and carries the disclaimer', () => {
   // The shared set and menu order of all ZETAPHY apps; English is the default.
   assert.deepEqual(LANGS, ['en', 'zh', 'es', 'ko', 'ja', 'ru', 'vi', 'th']);

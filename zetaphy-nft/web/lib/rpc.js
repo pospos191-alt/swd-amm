@@ -11,9 +11,16 @@ export class RpcError extends Error {
 
 const hex = (n) => '0x' + BigInt(n).toString(16);
 
-export function makeRpc(url, { fetchImpl = (...a) => globalThis.fetch(...a), timeoutMs = 15_000 } = {}) {
+// A node that just failed in transport (no answer within timeoutMs, unreachable, unreadable) is taken as down for
+// `downMs`: calls meanwhile fail at once with that error instead of each waiting timeoutMs again. A page makes
+// several reads one after another before it can show anything (chain id, registry, head block, ...), so without
+// this a stalled node kept the page on "Loading" for a multiple of the timeout before it showed the error.
+export function makeRpc(url, { fetchImpl = (...a) => globalThis.fetch(...a), timeoutMs = 15_000, downMs = 10_000, now = () => Date.now() } = {}) {
   let id = 0;
+  let downUntil = 0, downMsg = '';
+  const transportFailure = (msg) => { downUntil = now() + downMs; downMsg = msg; return new RpcError(msg, -1); };
   async function call(method, params = []) {
+    if (now() < downUntil) throw new RpcError(downMsg, -1);
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     let res, j;
@@ -23,11 +30,12 @@ export function makeRpc(url, { fetchImpl = (...a) => globalThis.fetch(...a), tim
         res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
           signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
       } catch (e) {
-        throw new RpcError(`RPC unreachable: ${e?.message ?? e}`, -1);
+        throw transportFailure(`RPC unreachable: ${e?.message ?? e}`);
       }
       if (!res.ok) throw new RpcError(`RPC HTTP ${res.status}`, res.status);
-      try { j = await res.json(); } catch (e) { throw new RpcError(`RPC unreadable answer: ${e?.message ?? e}`, -1); }
+      try { j = await res.json(); } catch (e) { throw transportFailure(`RPC unreadable answer: ${e?.message ?? e}`); }
     } finally { clearTimeout(timer); }
+    downUntil = 0; // it answered
     if (j.error) throw new RpcError(String(j.error.message ?? 'RPC error').slice(0, 300), j.error.code, j.error.data);
     return j.result;
   }
