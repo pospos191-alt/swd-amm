@@ -77,6 +77,7 @@ contract BridgeAirlock {
         bool released;
         bool vetoed;
         uint64 readyEpoch;   // removalEpoch when readyFrom was set
+        bool held;           // a challenge is open on it (the challenger: SaphanChallenges); release waits
     }
 
     IGuardInbound public immutable guard;
@@ -124,6 +125,8 @@ contract BridgeAirlock {
     event Untripped(address indexed who);
     event VetoerSet(address who, bool on);
     event MarkerSet(address marker, bool on);
+    event ChallengerSet(address challenger);
+    event Held(bytes32 indexed id, bool on);
     /// The transfer's details too, so a monitor sees two lanes that disagree
     /// about one source deposit (same chain, contract and nonce; another id).
     event Attested(bytes32 indexed id, address indexed lane, uint8 count, uint256 srcChainId, address srcContract,
@@ -137,6 +140,7 @@ contract BridgeAirlock {
     error NotLane();
     error NotVetoer();
     error NotMarker();
+    error NotChallenger();
     error NotGuardian();
     error Twice();
     error NotReady();
@@ -156,6 +160,29 @@ contract BridgeAirlock {
     }
 
     modifier onlyGov() { if (msg.sender != governance) revert NotGovernance(); _; }
+
+    /// The challenge contract (SaphanChallenges, docs/SAPHAN-SAFETY.md), or none. Like a marker it can only DELAY:
+    /// hold(id) stops one transfer's release while its challenge is open, unhold(id) lets it go again; a challenge
+    /// that is upheld ends in veto() (the challenger is also a vetoer, set apart). It cannot attest, release, mint,
+    /// pause or move funds. Governance sets or removes it; removing it lifts nothing by itself (unhold does).
+    address public challenger;
+
+    function setChallenger(address c) external onlyGov { challenger = c; emit ChallengerSet(c); }
+
+    function hold(bytes32 id) external {
+        if (msg.sender != challenger || challenger == address(0)) revert NotChallenger();
+        Transfer storage t = transfers[id];
+        if (t.released || t.vetoed || t.attestations == 0) revert Blocked(); // only a transfer some lane attested
+        t.held = true;
+        emit Held(id, true);
+    }
+
+    /// The challenger, or governance (e.g. after removing a challenger that left a hold behind).
+    function unhold(bytes32 id) external {
+        if (msg.sender != governance && (msg.sender != challenger || challenger == address(0))) revert NotChallenger();
+        transfers[id].held = false;
+        emit Held(id, false);
+    }
 
     function setLane(address lane, bool on) external onlyGov {
         if (on && !isLane[lane]) {
@@ -356,7 +383,7 @@ contract BridgeAirlock {
     function release(uint256 srcChainId, address srcContract, uint256 srcNonce, address sender, address to, uint256 amount) external {
         bytes32 id = transferId(srcChainId, srcContract, srcNonce, sender, to, amount);
         Transfer storage t = transfers[id];
-        if (t.released || t.vetoed || tripped(sender) || tripped(to)) revert Blocked();
+        if (t.released || t.vetoed || t.held || tripped(sender) || tripped(to)) revert Blocked();
         if (t.readyFrom == 0 || block.timestamp < t.readyFrom + quarantine || liveAttestations(id) < threshold) revert NotReady();
         uint8 what = flaggedParty(srcChainId, srcContract, sender, to);
         if (what != 0) revert ThreatFlagged(what);

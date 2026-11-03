@@ -20,6 +20,9 @@
 #                 saphan/<chain>-gateway (manual run only; key = ZETAPHY_DEPLOYER_KEY)
 # mode = execute  the Gateway executor once: runs every depositAndCall / withdrawAndCall that is funded or due, says why
 #                 the others wait (fees in the moved coin go to the deployer). Manual run only.
+# mode = safety   the route's SaphanCheckpointer + SaphanChallenges on ZETAPHY (docs/SAPHAN-SAFETY.md); pushes
+#                 saphan-routes.json `safety` to saphan/<chain>-safety and lists the governance calls that turn them on
+# mode = heartbeat one heartbeat to the route's lockbox (keeps the escape hatch closed while ZETAPHY is alive)
 # On pull requests: check + dry_run for every chain of the table. Cost: free (GitHub-hosted runner, public repository).
 #
 # token = <key>   a TOKEN route instead (tokens born on ZETAPHY, docs/SAPHAN-TOKENS.md): the token `tokens.<key>` of the
@@ -47,6 +50,9 @@ on:
       - 'zetaphy-network/contracts/BridgeGuard.sol'
       - 'zetaphy-network/contracts/SaphanTokens.sol'
       - 'zetaphy-network/contracts/SaphanGateway.sol'
+      - 'zetaphy-network/contracts/SaphanChallenges.sol'
+      - 'zetaphy-network/contracts/SaphanCheckpointer.sol'
+      - 'zetaphy-network/contracts/BridgeAirlock.sol'
       - 'zetaphy-network/src/saphangateway.js'
   workflow_dispatch:
     inputs:
@@ -61,7 +67,7 @@ on:
         required: true
         default: 'check'
         type: choice
-        options: ['check', 'dry_run', 'deploy', 'gateway', 'execute']
+        options: ['check', 'dry_run', 'deploy', 'gateway', 'execute', 'safety', 'heartbeat']
       token:
         description: "empty = the ETH route of this chain; a key of `tokens` in saphan-chains.json (e.g. zetaphy) = that token's route to this chain; test = a BZTPHY-like stand-in (dry_run only)"
         required: false
@@ -379,8 +385,8 @@ jobs:
           echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...$B"
 
   gateway:
-    name: Saphan Gateway ${{ inputs.chain }} (${{ inputs.mode }})
-    if: github.event_name == 'workflow_dispatch' && (inputs.mode == 'gateway' || inputs.mode == 'execute')
+    name: Saphan ${{ inputs.chain }} (${{ inputs.mode }})
+    if: github.event_name == 'workflow_dispatch' && contains(fromJSON('["gateway","execute","safety","heartbeat"]'), inputs.mode)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: testnet-deploy
@@ -414,22 +420,35 @@ jobs:
             || { rm -f "$H/worker.key"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
           trap 'rm -f "$H/worker.key"' EXIT
           export KEYFILE="$H/worker.key"
-          if [ "$MODE" = execute ]; then
+          if [ "$MODE" = heartbeat ]; then
+            node scripts/saphan.js heartbeat --chain "$CHAIN" | tail -1 | jq .
+            exit 0
+          fi
+          if [ "$MODE" = safety ]; then
+            node scripts/saphan.js safety-deploy --chain "$CHAIN" | tail -1 | tee "$H/safety.json" | jq .
+            { echo "### Saphan safety ($CHAIN): governance calls still to make"; echo '```json'; jq .governance "$H/safety.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            jq --arg c "$CHAIN" --slurpfile g "$H/safety.json" --arg run "${{ github.run_id }}" \
+              '.routes[$c].safety = {checkpointer: $g[0].checkpointer, challenges: $g[0].challenges, zetaphyFrom: $g[0].zetaphyFrom, workflowRun: $run}' \
+              ../zetaphy-chain/hyperlane/saphan-routes.json > "$H/routes.json"
+            SUFFIX=safety
+          elif [ "$MODE" = execute ]; then
             node scripts/saphan.js gateway-execute --chain "$CHAIN" | tail -1 | tee "$H/exec.json" | jq .
             { echo "### Saphan Gateway executor ($CHAIN)"; echo '```json'; jq . "$H/exec.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
             exit 0
+          else
+            node scripts/saphan.js gateway-deploy --chain "$CHAIN" | tail -1 | tee "$H/gw.json"
+            jq --arg c "$CHAIN" --slurpfile g "$H/gw.json" --arg run "${{ github.run_id }}" \
+              '.routes[$c].gateway = {zetaphy: $g[0].zetaphy, source: $g[0].source, zetaphyFrom: $g[0].zetaphyFrom, sourceFrom: $g[0].sourceFrom, workflowRun: $run}' \
+              ../zetaphy-chain/hyperlane/saphan-routes.json > "$H/routes.json"
+            SUFFIX=gateway
           fi
-          node scripts/saphan.js gateway-deploy --chain "$CHAIN" | tail -1 | tee "$H/gw.json"
-          jq --arg c "$CHAIN" --slurpfile g "$H/gw.json" --arg run "${{ github.run_id }}" \
-            '.routes[$c].gateway = {zetaphy: $g[0].zetaphy, source: $g[0].source, zetaphyFrom: $g[0].zetaphyFrom, sourceFrom: $g[0].sourceFrom, workflowRun: $run}' \
-            ../zetaphy-chain/hyperlane/saphan-routes.json > "$H/routes.json"
           mv "$H/routes.json" ../zetaphy-chain/hyperlane/saphan-routes.json
           cd ..
-          B="saphan/$CHAIN-gateway"
+          B="saphan/$CHAIN-$SUFFIX"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -q -B "$B"
           git add zetaphy-chain/hyperlane/saphan-routes.json
-          git commit -q -m "Saphan Gateway $CHAIN <-> ZETAPHY on the testnets: addresses" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          git commit -q -m "Saphan $SUFFIX $CHAIN <-> ZETAPHY on the testnets: addresses" -m "From ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
           git push -q --force origin "$B"
           echo "open the pull request: ${{ github.server_url }}/${{ github.repository }}/compare/main...$B"

@@ -32,6 +32,11 @@ interface ISaphanIsm {
     function verify(bytes calldata metadata, bytes calldata message) external returns (bool);
 }
 
+/// A message-id multisig ISM's validator set (Hyperlane's StaticMessageIdMultisigIsm; the argument is ignored there).
+interface ISaphanValidatorIsm {
+    function validatorsAndThreshold(bytes calldata message) external view returns (address[] memory, uint8);
+}
+
 /// BridgeGuard as an outbound adapter sees it: burns `amount` of the route's token from `from`.
 interface IGuardOutbound {
     function outbound(bytes32 route, address from, uint256 amount) external;
@@ -63,6 +68,14 @@ interface IGuardOutbound {
 ///         Roles: governance (the source chain's timelock: its multisig proposes, 48 h) changes
 ///         the ISM, raises limits, lifts vetoes, unpauses; guardians (a multisig) only reduce
 ///         risk, at once: pause, veto, lower the daily limit, lengthen the delay.
+///
+///         Escape hatch (docs/SAPHAN-SAFETY.md): ZETAPHY's SaphanCheckpointer for this route sends a
+///         heartbeat at least daily (governance names it once: setCheckpointer). If nothing comes from
+///         ZETAPHY for ESCAPE_AFTER, the route is ESCAPING: no new locks; and our validators (the same
+///         ones whose ISM releases funds) may sign an exit root: a Merkle root of what each address is
+///         owed (token balances on ZETAPHY at its last block, releases queued here and not claimed, locks
+///         ZETAPHY never minted). Once it is set, each address takes its share here (escape), pro rata if
+///         the backing is short; nothing else moves any more. A heartbeat before the root ends escaping.
 contract HyperlaneLockBoxV2 {
     struct Release {
         address to;
@@ -100,6 +113,18 @@ contract HyperlaneLockBoxV2 {
     mapping(uint256 => bytes32) public transferIds;
     mapping(bytes32 => Release) public releases; // by keccak256(body)
 
+    // escape hatch
+    uint64 public constant ESCAPE_AFTER = 14 days;
+    bytes32 public constant HEARTBEAT_TAG = keccak256("saphan/heartbeat/v1");
+    bytes32 public constant EXIT_TAG = keccak256("saphan/exit-root/v1");
+    bytes32 public checkpointer;             // SaphanCheckpointer on ZETAPHY (zero: no heartbeat, no escape)
+    uint64 public lastHeard;                 // the last heartbeat or release from ZETAPHY
+    uint64 public lastBeat;                  // the newest heartbeat's sequence number
+    bytes32 public exitRoot;                 // set once, while escaping: what each address is owed
+    uint256 public exitTotal;                // the sum the root owes
+    uint256 public exitPool;                 // what this lockbox held for locks when the root was set
+    mapping(address => bool) public escaped;
+
     event Locked(uint256 indexed nonce, address indexed sender, address indexed to, uint256 amount);
     event Dispatched(uint256 indexed nonce, bytes32 messageId);
     event ReleaseQueued(bytes32 indexed id, uint256 indexed srcNonce, address sender, address indexed to, uint256 amount, uint64 readyAt);
@@ -113,6 +138,10 @@ contract HyperlaneLockBoxV2 {
     event GuardianSet(address indexed who, bool on);
     event DailyLimitSet(uint256 limit);
     event ReleaseDelaySet(uint64 delay);
+    event CheckpointerSet(bytes32 checkpointer);
+    event Heartbeat(uint64 indexed seq, uint64 zetaphyTime);
+    event ExitRootSet(bytes32 root, uint256 total, uint256 pool);
+    event Escaped(address indexed who, uint256 owed, uint256 paid);
 
     error NotGovernance();
     error NotGuardian();
@@ -133,6 +162,11 @@ contract HyperlaneLockBoxV2 {
     error OverBacking(uint256 locked);
     error PayFailed();
     error Fee(uint256 needed);
+    error Escaping();
+    error NotEscaping();
+    error ExitDone();
+    error BadSignatures();
+    error BadProof();
 
     constructor(ISaphanMailbox mailbox_, uint32 zetaphyDomain_, uint256 zetaphyChainId_, bytes32 recipient_, bytes32 remoteSender_,
         address hook_, ISaphanIsm ism_, address governance_, address guardian_, uint256 dailyLimit_, uint64 releaseDelay_)
@@ -173,6 +207,7 @@ contract HyperlaneLockBoxV2 {
 
     function lock(address to, uint256 amount) external payable returns (bytes32 messageId) {
         if (paused) revert IsPaused();
+        if (escaping() || exitRoot != bytes32(0)) revert Escaping();
         require(amount > 0 && to != address(0) && msg.value >= amount, "lock");
         uint256 n = nonce++;
         bytes memory b = body(n, msg.sender, to, amount);
@@ -205,7 +240,10 @@ contract HyperlaneLockBoxV2 {
         if (msg.sender != address(mailbox)) revert NotMailbox();
         if (msg.value != 0) revert NoValue();
         if (origin != zetaphyDomain) revert WrongOrigin(origin);
+        if (exitRoot != bytes32(0)) revert ExitDone(); // after the exit root, nothing from ZETAPHY counts any more
+        if (sender == checkpointer && checkpointer != bytes32(0)) { _heartbeat(sender, b); return; }
         if (sender != remoteSender) revert WrongSender(sender);
+        lastHeard = uint64(block.timestamp);
         if (b.length != 256) revert BadBody();
         (uint256 srcChain, address src, uint256 n, address from, address to, uint256 amount, uint256 dstChain, address dst) =
             abi.decode(b, (uint256, address, uint256, address, address, uint256, uint256, address));
@@ -220,9 +258,21 @@ contract HyperlaneLockBoxV2 {
         emit ReleaseQueued(id, n, from, to, amount, readyAt);
     }
 
+    /// Heartbeat body (160 bytes): abi.encode(HEARTBEAT_TAG, ZETAPHY's chain id, the checkpointer, seq, ZETAPHY time).
+    function _heartbeat(bytes32 sender, bytes calldata b) private {
+        if (b.length != 160) revert BadBody();
+        (bytes32 tag, uint256 chain, address src, uint64 seq, uint64 t) = abi.decode(b, (bytes32, uint256, address, uint64, uint64));
+        if (tag != HEARTBEAT_TAG || chain != zetaphyChainId || bytes32(uint256(uint160(src))) != sender) revert WrongSource();
+        if (seq <= lastBeat) revert Replay(bytes32(uint256(seq)));
+        lastBeat = seq;
+        lastHeard = uint64(block.timestamp);
+        emit Heartbeat(seq, t);
+    }
+
     /// Anyone: pays a queued release to its receiver once every check passes.
     function claim(bytes32 id) external {
         Release storage r = releases[id];
+        if (exitRoot != bytes32(0)) revert ExitDone(); // the exit root counts unclaimed releases
         if (r.readyAt == 0) revert NoRelease();
         if (r.claimed) revert AlreadyClaimed();
         if (r.vetoed) revert IsVetoed();
@@ -245,6 +295,73 @@ contract HyperlaneLockBoxV2 {
     function remainingToday() external view returns (uint256) {
         uint256 used = day == uint64(block.timestamp / 1 days) ? releasedToday : 0;
         return dailyLimit > used ? dailyLimit - used : 0;
+    }
+
+    // ---------------------------------------------------------------- escape hatch
+
+    /// True when a checkpointer is named and nothing has come from ZETAPHY for ESCAPE_AFTER.
+    function escaping() public view returns (bool) {
+        return checkpointer != bytes32(0) && lastHeard != 0 && block.timestamp > uint256(lastHeard) + ESCAPE_AFTER;
+    }
+
+    /// What our validators sign for an exit root (EIP-191 personal message of this digest).
+    function exitDigest(bytes32 root, uint256 total) public view returns (bytes32) {
+        return keccak256(abi.encode(EXIT_TAG, block.chainid, address(this), root, total, lastHeard));
+    }
+
+    /// Anyone, while escaping: the exit root, signed by at least the threshold of the validators of this lockbox's
+    /// ISM (signatures ordered by signer, ascending: no signer twice). Once.
+    function submitExitRoot(bytes32 root, uint256 total, bytes[] calldata sigs) external {
+        if (!escaping()) revert NotEscaping();
+        if (exitRoot != bytes32(0)) revert ExitDone();
+        if (root == bytes32(0) || total == 0) revert BadBody();
+        bytes32 m = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", exitDigest(root, total)));
+        exitRoot = root;
+        exitTotal = total;
+        exitPool = locked;
+        emit ExitRootSet(root, total, locked);
+        // the signatures, checked last against the ISM's validators (too few good ones: the whole call reverts)
+        (address[] memory vals, uint8 threshold) = ISaphanValidatorIsm(address(interchainSecurityModule)).validatorsAndThreshold("");
+        address last;
+        uint256 good;
+        for (uint256 i = 0; i < sigs.length; i++) {
+            address who = _recover(m, sigs[i]);
+            if (who <= last) revert BadSignatures();
+            last = who;
+            for (uint256 j = 0; j < vals.length; j++) if (vals[j] == who) { good++; break; }
+        }
+        if (threshold == 0 || good < threshold) revert BadSignatures();
+    }
+
+    /// The caller's share of the exit: `owed` as in the root (leaf = keccak256(keccak256(abi.encode(caller, owed))),
+    /// sorted-pair Merkle proof), paid in full when the backing covers the root's total, else pro rata. Once.
+    function escape(uint256 owed, bytes32[] calldata proof) external {
+        if (exitRoot == bytes32(0)) revert NotEscaping();
+        if (escaped[msg.sender]) revert AlreadyClaimed();
+        bytes32 node = keccak256(bytes.concat(keccak256(abi.encode(msg.sender, owed))));
+        for (uint256 i = 0; i < proof.length; i++) {
+            bytes32 p = proof[i];
+            node = node < p ? keccak256(abi.encode(node, p)) : keccak256(abi.encode(p, node));
+        }
+        if (node != exitRoot) revert BadProof();
+        escaped[msg.sender] = true;
+        uint256 pay = exitTotal <= exitPool ? owed : owed * exitPool / exitTotal;
+        locked -= pay;
+        emit Escaped(msg.sender, owed, pay);
+        (bool ok, ) = msg.sender.call{value: pay}("");
+        if (!ok) revert PayFailed();
+    }
+
+    function _recover(bytes32 m, bytes calldata sig) private pure returns (address) {
+        if (sig.length != 65) revert BadSignatures();
+        bytes32 r = bytes32(sig[0:32]);
+        bytes32 s_ = bytes32(sig[32:64]);
+        uint8 v = uint8(sig[64]);
+        // low-s only (no malleable second form)
+        if (uint256(s_) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0 || (v != 27 && v != 28)) revert BadSignatures();
+        address who = ecrecover(m, v, r, s_);
+        if (who == address(0)) revert BadSignatures();
+        return who;
     }
 
     // ---------------------------------------------------------------- guardians: only reduce risk, at once
@@ -289,6 +406,16 @@ contract HyperlaneLockBoxV2 {
         require(d <= MAX_RELEASE_DELAY, "delay");
         releaseDelay = d;
         emit ReleaseDelaySet(d);
+    }
+
+    /// The route's SaphanCheckpointer on ZETAPHY (its heartbeats keep the route out of escape). Starting with it
+    /// counts as hearing from ZETAPHY now; zero turns the escape hatch off.
+    /// Never while escaping: governance cannot call off an escape that has begun.
+    function setCheckpointer(bytes32 c) external onlyGov {
+        if (escaping() || exitRoot != bytes32(0)) revert Escaping();
+        checkpointer = c;
+        lastHeard = uint64(block.timestamp);
+        emit CheckpointerSet(c);
     }
 
     /// A new ISM (e.g. more of our validators, a higher threshold). Never zero.
