@@ -18,6 +18,7 @@ ZETAPHY มี**แพลตฟอร์มตรวจสอบสัญญา�
 | CLI `zetaphy audit …` และ `zetaphy deploy-audit` | `zetaphy-network/src/auditnetcli.js`, `src/auditnetops.js` |
 | แท็บ "ตรวจสอบ" ใน hub (8 ภาษา) | `zetaphy-hub/audit.js`, `audit-i18n.js` |
 | ป้ายใบรับรองใน explorer (8 ภาษา) | `zetaphy-explorer/src/audit.js` |
+| ไฟร์วอลล์ invariant และกติกาใบรับรอง (ชั้น SS: invariant เป็นเงื่อนไขหลังการทำงาน และจำกัดเงินไหลออกเมื่อไม่มีใบรับรองที่ใช้ได้) | [invariant-firewall.th.md](invariant-firewall.th.md) |
 | สั่งตรวจจากทุกเชน (EVM, CosmWasm, Solana), ป้าย, หน้าตรวจ, สมุดรายชื่อ, GitHub Action | [audit-as-a-service.th.md](audit-as-a-service.th.md) |
 
 ## ขั้นตอน

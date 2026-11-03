@@ -1113,6 +1113,17 @@ A false trip, once the timelock judges it, slashes the signers and compensates t
 drains a vulnerable vault with self-healing off and on. Tests in `test/selfheal*.test.js`.
 Not deployed. Design, threat model and limits: [docs/future/self-healing.md](../docs/future/self-healing.md).
 
+## Invariant firewall and the certificate rule (testnet prototype)
+
+`contracts/InvariantFirewall.sol` + `contracts/Firewalled.sol`: a protocol registers and its governance adds invariant
+checkers (at most 8, each with a gas cap). After the outermost `firewalled` call, every invariant is checked, and a
+transaction that breaks one reverts as a whole. A checker that reverts, runs out of gas or answers anything but `true`
+counts as a violation. Removing an invariant or opting out waits 2 days. The same contract applies the certificate rule:
+a registered protocol holding more than a threshold without a live `AuditCertificate` certificate pays out at most a
+capped share of its balance per day. `attest` binds an invariant set to certificates. A node-level check after every EVM
+transaction is a prototype in `zetaphy-chain/prototypes/invariant-firewall/` (not in the node). Tests in
+`test/firewall.test.js`. Not deployed. Design and limits: [docs/future/invariant-firewall.md](../docs/future/invariant-firewall.md).
+
 ## Testing
 
 - `npm test`: tests the contracts on an in-memory EVM and tests the runner program (CI runs it every time)
