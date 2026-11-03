@@ -166,11 +166,14 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
     assert.match(await page.textContent('#p-start .tab-lede'), /Pick where/);
     await page.focus('#t-start');
     await page.keyboard.press('ArrowRight');
+    await page.waitForFunction(() => location.hash === '#check'); // the tab switch updates the address after the key event
     assert.equal(await page.getAttribute('#t-check', 'aria-selected'), 'true');
     assert.equal(new URL(page.url()).hash, '#check');
     assert.ok(await page.isVisible('#k-status'));
     await page.keyboard.press('End');
+    await page.waitForFunction(() => location.hash === '#advanced');
     assert.equal(new URL(page.url()).hash, '#advanced');
+    assert.equal(await page.getAttribute('#t-advanced', 'aria-selected'), 'true');
     await page.goto(`${site.url}validators.html#resume`); // an old link: the restart steps
     assert.equal(await page.getAttribute('#t-fix', 'aria-selected'), 'true');
     assert.ok(await page.isVisible('#r-unjail'));
