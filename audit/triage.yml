@@ -967,18 +967,6 @@ findings:
     decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
     date: 2026-10-30
     # zetaphy-dex/contracts/dlmm/ZetaphyDlmmRouter.sol:131
-  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentPolicyWallet.sol:fdd324aa9a3b
-    status: false-positive
-    reason: "executeCosigned (onlyAgent): ICosignCommittee.isValid is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. The committee is set only by the owner (_config). cosignNonce++ after it is the replay counter of the digest just checked."
-    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
-    date: 2026-10-30
-    # zetaphy-network/contracts/AgentPolicyWallet.sol:415
-  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentPolicyWallet.sol:c4d27826f961
-    status: false-positive
-    reason: "executeCosignedFrost (onlyAgent): ICosignCommittee.isValidFrost is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. The committee is set only by the owner (_config). cosignNonce++ after it is the replay counter of the digest just checked."
-    decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, auditor triage of the open Highs, by reading the code)
-    date: 2026-10-30
-    # zetaphy-network/contracts/AgentPolicyWallet.sol:434
   - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/AgentRegistry.sol:71496f0f2b20
     status: false-positive
     reason: "claimByChecker: IPolicyChecker.check is declared view/pure in the interface, so solc compiles the call to STATICCALL: the callee cannot write state or re-enter (any write in it reverts), and nothing it returns can be changed by a re-entrant caller. So a malicious checker cannot re-enter to pay twice; act.slashed is then set before _slash pays (one payout per action), and _slash caps the payout at the bond. (Separate design note, not this finding: the checker is the operator's choice; see review-notes.md.)"
@@ -1861,3 +1849,88 @@ findings:
     decided_by: pospos191 (owner, confirmed 2026-10-30; proposed by claude-agent, frontier integration triage by reading the code)
     date: 2026-10-30
     # zetaphy-network/contracts/ZkIdentityVerifier.sol:109
+  - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/PQCosignCommittee.sol:7f70d7d4cfb7
+    status: false-positive
+    reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature) sent to 0x…0900. The key is exactly PK_BYTES (1312) long (a fixed slice in the committee, an explicit length check in Cheques and Orders), so the split between key and signature is fixed and cannot shift."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ZetaphyPQCheques.sol:5d88ad20b905
+    status: false-positive
+    reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature) sent to 0x…0900. The key is exactly PK_BYTES (1312) long (a fixed slice in the committee, an explicit length check in Cheques and Orders), so the split between key and signature is fixed and cannot shift."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: aderyn:abi-encode-packed-hash-collision:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:c37822eb5cce
+    status: false-positive
+    reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature) sent to 0x…0900. The key is exactly PK_BYTES (1312) long (a fixed slice in the committee, an explicit length check in Cheques and Orders), so the split between key and signature is fixed and cannot shift."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:encode-packed-collision:zetaphy-network/contracts/PQCosignCommittee.sol:55e0d89304ee
+    status: false-positive
+    reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature) sent to 0x…0900. The key is exactly PK_BYTES (1312) long (a fixed slice in the committee, an explicit length check in Cheques and Orders), so the split between key and signature is fixed and cannot shift."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:encode-packed-collision:zetaphy-network/contracts/ZetaphyPQCheques.sol:59a48c758676
+    status: false-positive
+    reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature) sent to 0x…0900. The key is exactly PK_BYTES (1312) long (a fixed slice in the committee, an explicit length check in Cheques and Orders), so the split between key and signature is fixed and cannot shift."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:encode-packed-collision:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:fe34946ad443
+    status: false-positive
+    reason: "not a hash: the ML-DSA-44 precompile input (variant byte, 32-byte digest, public key, signature) sent to 0x…0900. The key is exactly PK_BYTES (1312) long (a fixed slice in the committee, an explicit length check in Cheques and Orders), so the split between key and signature is fixed and cannot shift."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQCheques.sol:fe6a082ff126
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:82fd350d24fa
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:ffb784d0915b
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:2c9eb2bb9ec5
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:1be360834882
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:0e3eabdda5f5
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:66d988589458
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:3fbcb91271bf
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:reentrancy-balance:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:6ef2633e6336
+    status: false-positive
+    reason: "balance-before/after measurement of a token transfer (fee-on-transfer and minimum-received checks); every external entry point that reaches it is nonReentrant (ZetaphyPQCheques.open / topUp; ZetaphyPQOfflineOrders.fill), the same code as the triaged ECDSA originals."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:arbitrary-send-eth:zetaphy-network/contracts/ZetaphyPQCheques.sol:d1e793e182e4
+    status: false-positive
+    reason: "pays only the channel's recorded payee (cash, after an ML-DSA-signed cheque) or payer (withdraw); state is updated first and the function is nonReentrant, as in the triaged ZetaphyCheques."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02
+  - id: slither:arbitrary-send-eth:zetaphy-network/contracts/ZetaphyPQOfflineOrders.sol:2104efee407f
+    status: false-positive
+    reason: "pays only the order's maker (whose ML-DSA signature over the order was checked) and the relayer (msg.sender); state is updated first and fill is nonReentrant, as in the triaged ZetaphyOfflineOrders."
+    decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
+    date: 2026-11-02

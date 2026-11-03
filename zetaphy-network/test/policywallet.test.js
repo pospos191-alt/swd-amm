@@ -1,16 +1,18 @@
 // Guardrails for AI-driven wallets (AgentPolicyWallet) and the AI co-signer (CosignCommittee +
 // src/cosign.js): caps per period, allow-lists, timelock or committee co-signatures above a threshold,
 // emergency freeze by the owner's account, passkey (P-256) or ML-DSA-44 key. Co-signatures: k-of-n ECDSA,
-// or one FROST threshold signature (RFC 9591; DKG without a dealer, src/frost.js) checked on chain.
+// or one FROST threshold signature (RFC 9591; DKG without a dealer, src/frost.js) checked on chain, or t-of-n
+// ML-DSA-44 signatures of a PQCosignCommittee (src/pqcosign.js; real keys, FIPS 204 at the 0x…0900 stand-in).
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { Wallet, id as textHash, Interface, ZeroHash } from 'ethers';
+import { Wallet, id as textHash, Interface, ZeroHash, ZeroAddress, keccak256 } from 'ethers';
 import { createChain, ZETA } from './helpers/evm.js';
 import { PRECOMPILES, passkey, mldsaKey } from './helpers/precompiles.js';
 import { dexArt, agentKit } from './helpers/mocks.js';
 import { runDkg } from './helpers/frost.js';
 import { cosignDigest, signCosign, combine, review, touched } from '../src/cosign.js';
 import { signRound1, signingPackage, signRound2, aggregateShares } from '../src/frost.js';
+import { pqCosignDigest, signCosignPq, combinePq } from '../src/pqcosign.js';
 
 const HOUR = 3600, DAY = 86_400;
 const NATIVE = '0x' + '00'.repeat(20);
@@ -258,4 +260,78 @@ test('above the threshold, path 2 with FROST: a DKG group key set by governance,
   await committee.send('gov', 'setFrostKey', ['0x']);
   assert.equal(await committee.call('frostKeyX'), 0n);
   await assert.rejects(w.send('agent', 'executeCosignedFrost', await frostSigned(addr('bob'), 1n * ZETA, '0x')), /BadCosign/);
+});
+
+test('above the threshold, path 2 with ML-DSA-44: a t-of-n PQCosignCommittee the owner opts into; pqOnly turns the secp256k1 paths off', async () => {
+  const M = [mldsaKey(), mldsaKey(), mldsaKey()];
+  const outsider = mldsaKey();
+  const pqc = await c.deploy('PQCosignCommittee', [addr('gov'), M.map((k) => k.keyHash), 2n], 'gov');
+  assert.deepEqual([...await pqc.call('members')], M.map((k) => k.keyHash));
+  await assert.rejects(c.deploy('PQCosignCommittee', [addr('gov'), [M[0].keyHash, M[0].keyHash], 1n], 'gov'), /deploy failed/);
+  await assert.rejects(c.deploy('PQCosignCommittee', [addr('gov'), [M[0].keyHash], 2n], 'gov'), /deploy failed/);
+  /** Each member reviews and signs the wallet's digest with ML-DSA-44; the agent combines them into one proof. */
+  async function pqSigned(to, value, data, { signers = [M[0], M[2]], deadline = c.now() + 600n, raw = null } = {}) {
+    const read = async (_chain, address) => ({ chain: 'zetaphy', address, analysis: { level: 'low', findings: [] }, functions: [] });
+    const r = await review({ to, data, read, hasCode: async () => false });
+    const digest = cosignDigest({ chainId: 1n, wallet: w.address, nonce: await w.call('cosignNonce'), to, value, data, reportHash: r.reportHash, deadline });
+    assert.equal(await pqc.call('pqDigest', [digest]), pqCosignDigest(digest));
+    const proof = raw ? raw(digest) : combinePq(digest, signers.map((k) => signCosignPq(k, digest)));
+    return [to, value, data, MODEL, PROMPT, r.reportHash, deadline, proof];
+  }
+  const first = await pqSigned(addr('bob'), 5n * ZETA, '0x');
+  await assert.rejects(w.send('agent', 'executeCosignedPq', first), /BadCosign/); // no PQ committee set yet
+  await assert.rejects(w.send('agent', 'setPqCosign', [pqc.address, false]), /NotOwner/);
+  await assert.rejects(w.send('owner', 'setPqCosign', [ZeroAddress, true]), /BadConfig/);
+  await w.send('owner', 'setPqCosign', [pqc.address, false]);
+  const before = await c.balance('bob');
+  const ev = await w.send('agent', 'executeCosignedPq', first);
+  assert.equal(await c.balance('bob') - before, 5n * ZETA);
+  assert.equal(ev.find((e) => e?.name === 'AgentAction').args.path, 4n);
+  await assert.rejects(w.send('agent', 'executeCosignedPq', first), /BadCosign/); // the nonce moved on
+  await assert.rejects(w.send('thief', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x')), /NotAgent/);
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { deadline: c.now() - 1n })), /Expired/);
+  // below threshold, an outsider, a repeated member, a signature of another digest, entries out of order, a truncated proof
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { signers: [M[1]] })), /BadCosign/);
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { signers: [M[1], outsider] })), /BadCosign/);
+  const entry = (k, d) => { const s = signCosignPq(k, d); return s.publicKey + s.sig.slice(2); };
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { raw: (d) => entry(M[1], d) + entry(M[1], d).slice(2) })), /BadCosign/);
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', {
+    raw: (d) => combinePq(d, [M[0], M[1]].map((k) => signCosignPq(k, d))).slice(0, -2 * 2420) + signCosignPq(M[1], ZeroHash).sig.slice(2) })), /BadCosign/);
+  const sorted = [M[0], M[1]].sort((x, y) => (BigInt(x.keyHash) < BigInt(y.keyHash) ? -1 : 1));
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { raw: (d) => entry(sorted[1], d) + entry(sorted[0], d).slice(2) })), /BadCosign/);
+  assert.equal(await w.call('cosignNonce'), 1n);
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { raw: (d) => combinePq(d, [M[0], M[1]].map((k) => signCosignPq(k, d))).slice(0, -2) })), /BadCosign/);
+  const tampered = await pqSigned(addr('bob'), 2n * ZETA, '0x');
+  tampered[1] = 3n * ZETA; // another amount than the members signed
+  await assert.rejects(w.send('agent', 'executeCosignedPq', tampered), /BadCosign/);
+  // combinePq refuses what the chain would refuse
+  const d0 = keccak256('0x01');
+  assert.throws(() => combinePq(d0, [{ ...signCosignPq(M[0], d0), sig: signCosignPq(M[0], ZeroHash).sig }]), /does not verify/);
+  assert.throws(() => combinePq(d0, [signCosignPq(outsider, d0)], { members: M.map((k) => k.keyHash) }), /not a committee member/);
+  assert.throws(() => combinePq(d0, [signCosignPq(M[0], d0), signCosignPq(M[0], d0)], { threshold: 2 }), /1 of the needed 2/);
+  // caps still apply; 3 of 3 is fine too
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(tok.address, 0n, xfer(addr('bob'), 1001n * ZETA))), /OverCap/);
+  await w.send('agent', 'executeCosignedPq', await pqSigned(tok.address, 0n, xfer(addr('bob'), 400n * ZETA), { signers: M }));
+  assert.equal(await tok.call('balanceOf', [addr('bob')]), 400n * ZETA);
+  // the secp256k1 paths keep working next to it, until the owner sets pqOnly
+  await w.send('agent', 'executeCosigned', (await cosigned(addr('bob'), 1n * ZETA, '0x')).args);
+  await w.send('owner', 'setPqCosign', [pqc.address, true]);
+  assert.equal(await w.call('pqCosignOnly'), true);
+  await assert.rejects(w.send('agent', 'executeCosigned', (await cosigned(addr('bob'), 1n * ZETA, '0x')).args), /ClassicalCosignOff/);
+  const { r3 } = runDkg(2, 3);
+  await committee.send('gov', 'setFrostKey', ['0x' + r3[0].group.groupKey]);
+  await assert.rejects(w.send('agent', 'executeCosignedFrost', [addr('bob'), 1n, '0x', MODEL, PROMPT, ZeroHash, c.now() + 600n, '0x' + '00'.repeat(65)]), /ClassicalCosignOff/);
+  await w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n * ZETA, '0x'));
+  // only governance changes the members; a new set drops the old keys
+  await assert.rejects(pqc.send('owner', 'setMembers', [[outsider.keyHash], 1n]), /NotGovernance/);
+  await assert.rejects(pqc.send('gov', 'setMembers', [[outsider.keyHash, outsider.keyHash], 1n]), /BadMembers/);
+  await assert.rejects(pqc.send('gov', 'setMembers', [[outsider.keyHash], 0n]), /BadMembers/);
+  await pqc.send('gov', 'setMembers', [[outsider.keyHash], 1n]);
+  assert.equal(await pqc.call('isMember', [M[0].keyHash]), false);
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x')), /BadCosign/);
+  await w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { signers: [outsider] }));
+  const { exec: gas } = await w.gas('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { signers: [outsider] }));
+  assert.ok(gas < 120_000, `gas ${gas}`);
+  await w.send('owner', 'setPqCosign', [ZeroAddress, false]);
+  await assert.rejects(w.send('agent', 'executeCosignedPq', await pqSigned(addr('bob'), 1n, '0x', { signers: [outsider] })), /BadCosign/);
 });

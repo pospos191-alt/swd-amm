@@ -234,6 +234,11 @@ interface ICosignCommittee {
     function isValidFrost(bytes32 digest, bytes calldata sig) external view returns (bool);
 }
 
+/// PQCosignCommittee (contracts/PQCosignCommittee.sol): t-of-n ML-DSA-44 co-signatures.
+interface IPQCosignCommittee {
+    function isValid(bytes32 digest, bytes calldata proof) external view returns (bool);
+}
+
 /// @title AgentPolicyWallet: a wallet an AI agent runs inside guardrails (testnet)
 /// @notice The owner (a person) holds the funds and sets the policy; the agent
 ///         key can only act inside it:
@@ -259,7 +264,10 @@ interface ICosignCommittee {
 ///             the owner may cancel) or carries co-signatures of the runner
 ///             committee (CosignCommittee, set by governance) that ran Neuro
 ///             checks on it: k-of-n ECDSA (executeCosigned) or one FROST
-///             threshold signature (executeCosignedFrost). Caps apply to all;
+///             threshold signature (executeCosignedFrost); or, when the owner
+///             has set one (setPqCosign), t-of-n ML-DSA-44 co-signatures of a
+///             PQCosignCommittee (executeCosignedPq), and the owner may turn
+///             the two secp256k1 paths off (pqOnly). Caps apply to all;
 ///           - emergency freeze: the owner's account, the owner's passkey
 ///             (WebAuthn, P-256 precompile via WebAuthnVerifier) or the
 ///             owner's ML-DSA-44 key (precompile 0x…0900) stops the agent at
@@ -287,6 +295,8 @@ contract AgentPolicyWallet {
     address public agent;
     ICosignCommittee public committee;
     IPolicyWebAuthn public webauthn;
+    IPQCosignCommittee public pqCommittee; // ML-DSA-44 co-signers (0 = none)
+    bool public pqCosignOnly;              // true: executeCosigned / executeCosignedFrost are refused
 
     bytes32 public pqKeyHash;   // owner's ML-DSA-44 key (0 = none)
     uint256 public passkeyX;    // owner's passkey (0,0 = none)
@@ -317,6 +327,7 @@ contract AgentPolicyWallet {
     event ConfigSet(address agent, address committee, uint256 period, uint256 delay);
     event EmergencyKeysSet(bytes32 pqKeyHash, uint256 passkeyX, uint256 passkeyY, bytes32 rpIdHash);
     event OwnerChanged(address owner);
+    event PqCosignSet(address pqCommittee, bool pqOnly);
 
     error NotOwner();
     error NotAgent();
@@ -330,6 +341,7 @@ contract AgentPolicyWallet {
     error NotQueued();
     error NotReady();
     error BadCosign();
+    error ClassicalCosignOff();
     error Expired();
     error BadEmergencyKey();
     error BadConfig();
@@ -399,6 +411,15 @@ contract AgentPolicyWallet {
             keccak256(data), reportHash, deadline));
     }
 
+    /// cosignDigest at the current nonce, then consumes that nonce: the replay counter moves before the
+    /// committee is called (checks-effects-interactions; a BadCosign revert undoes it).
+    function _useCosignDigest(address to, uint256 value, bytes calldata data, bytes32 reportHash, uint256 deadline)
+        private returns (bytes32 d)
+    {
+        d = cosignDigest(to, value, data, reportHash, deadline);
+        cosignNonce++;
+    }
+
     /// Above a threshold, path 2: no wait, with the committee's co-signatures
     /// (reportHash = the Neuro report the runners checked).
     function executeCosigned(
@@ -412,8 +433,8 @@ contract AgentPolicyWallet {
         bytes[] calldata sigs
     ) external onlyAgent returns (bytes memory) {
         if (block.timestamp > deadline) revert Expired();
-        if (address(committee) == address(0) || !committee.isValid(cosignDigest(to, value, data, reportHash, deadline), sigs)) revert BadCosign();
-        cosignNonce++;
+        if (pqCosignOnly) revert ClassicalCosignOff();
+        if (address(committee) == address(0) || !committee.isValid(_useCosignDigest(to, value, data, reportHash, deadline), sigs)) revert BadCosign();
         (address token, uint256 amount) = _classify(to, value, data);
         return _run(to, value, data, token, amount, modelHash, promptHash, 2);
     }
@@ -431,10 +452,29 @@ contract AgentPolicyWallet {
         bytes calldata sig
     ) external onlyAgent returns (bytes memory) {
         if (block.timestamp > deadline) revert Expired();
-        if (address(committee) == address(0) || !committee.isValidFrost(cosignDigest(to, value, data, reportHash, deadline), sig)) revert BadCosign();
-        cosignNonce++;
+        if (pqCosignOnly) revert ClassicalCosignOff();
+        if (address(committee) == address(0) || !committee.isValidFrost(_useCosignDigest(to, value, data, reportHash, deadline), sig)) revert BadCosign();
         (address token, uint256 amount) = _classify(to, value, data);
         return _run(to, value, data, token, amount, modelHash, promptHash, 3);
+    }
+
+    /// Path 2 with t-of-n ML-DSA-44 co-signatures of the same digest by the owner's chosen
+    /// PQCosignCommittee (proof: see that contract; src/pqcosign.js builds it). Post-quantum, unlike
+    /// the ECDSA and FROST paths; costs one precompile call per signer and ~3.7 KB of calldata each.
+    function executeCosignedPq(
+        address to,
+        uint256 value,
+        bytes calldata data,
+        bytes32 modelHash,
+        bytes32 promptHash,
+        bytes32 reportHash,
+        uint256 deadline,
+        bytes calldata proof
+    ) external onlyAgent returns (bytes memory) {
+        if (block.timestamp > deadline) revert Expired();
+        if (address(pqCommittee) == address(0) || !pqCommittee.isValid(_useCosignDigest(to, value, data, reportHash, deadline), proof)) revert BadCosign();
+        (address token, uint256 amount) = _classify(to, value, data);
+        return _run(to, value, data, token, amount, modelHash, promptHash, 4);
     }
 
     // ------------------------------------------------------------- emergency freeze
@@ -537,6 +577,16 @@ contract AgentPolicyWallet {
 
     function setConfig(address agent_, address committee_, uint256 period_, uint256 delay_) external onlyOwner {
         _config(agent_, committee_, period_, delay_);
+    }
+
+    /// The ML-DSA-44 co-signing committee (0 removes it) and whether it is the only co-signing path:
+    /// with pqOnly, the secp256k1 paths (k-of-n ECDSA, FROST) are refused, so a quantum attacker who
+    /// derives the classical committee's keys cannot co-sign for this wallet.
+    function setPqCosign(address pqCommittee_, bool pqOnly) external onlyOwner {
+        if (pqOnly && pqCommittee_ == address(0)) revert BadConfig();
+        pqCommittee = IPQCosignCommittee(pqCommittee_);
+        pqCosignOnly = pqOnly;
+        emit PqCosignSet(pqCommittee_, pqOnly);
     }
 
     function setEmergencyKeys(bytes32 pqKeyHash_, uint256 x, uint256 y, bytes32 rpIdHash_) external onlyOwner {

@@ -127,6 +127,14 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
       return bytesToHex(res.execResult.returnValue);
     },
     now: () => time,
+    /** eth_call: runs a call from any address and throws its state away (no block either): { ok, returnHex }. */
+    async staticCall(fromHex, toHex, dataHex, value = 0n) {
+      await sm.checkpoint();
+      try {
+        const res = await evm.runCall({ caller: acct[fromHex] ?? Address.fromString(fromHex), to: Address.fromString(toHex), data: hexToBytes(dataHex), value, gasLimit: txGasLimit, block: block() });
+        return { ok: !res.execResult.exceptionError, returnHex: bytesToHex(res.execResult.returnValue) };
+      } finally { await sm.revert(); }
+    },
     /** The runtime code at an address (0x… hex, "0x" when none), like eth_getCode. */
     async getCode(addressHex) { return bytesToHex(await sm.getContractCode(Address.fromString(addressHex))); },
     /** One storage word (0x… 32 bytes), like eth_getStorageAt. */

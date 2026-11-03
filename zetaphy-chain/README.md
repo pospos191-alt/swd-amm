@@ -59,7 +59,8 @@ Coin allocation at chain launch (according to plan B):
 2. **Add Ingress Rules** (Source CIDR `0.0.0.0/0`, IP Protocol **TCP**), one port at a time:
    - **26656** so other machines can join the chain (in stage 1)
    - **80** and **443** for https (the web wallet requires https)
-     - The script installs Caddy (from the Ubuntu package archive), which requests a free Let's Encrypt certificate automatically
+     - The script installs Caddy (Ubuntu's package, run as Caddy 2.11.7 from its release, SHA-256 pinned, for post-quantum
+       key exchange: see "Post-quantum https" below), which requests a free Let's Encrypt certificate automatically
      - The address is `https://<IP with dots replaced by dashes>.sslip.io`, e.g. IP `1.2.3.4` → `https://1-2-3-4.sslip.io`
      - sslip.io is a free DNS service whose names point back to that same IP
      - If you open the ports after the machine has finished installing, Caddy retries the certificate request by itself
@@ -250,6 +251,28 @@ keys and genesis.
 
 WebSocket: `wss://<name>/ws` (EVM JSON-RPC, e.g. `eth_subscribe` for new blocks and logs), forwarded by Caddy to 8546 on the machine.
 A node set up before this version gets it by running the same setup command again.
+
+### Post-quantum https (`TLS_PQ`)
+
+Ubuntu 24.04's Caddy (2.6) has no ML-KEM, so the script installs Caddy 2.11.7 from its GitHub release (tarball SHA-256
+pinned in `setup-node.sh`) in `/usr/local/bin` and points the `caddy` service at it with a systemd drop-in (apt upgrades
+do not undo it). The Caddyfile then sets the TLS key exchange:
+
+| `TLS_PQ` | Caddyfile | Who gets what |
+|---|---|---|
+| `prefer` (default) | `curves x25519mlkem768 x25519 secp256r1` | Clients offering the hybrid **X25519MLKEM768** (ML-KEM-768 + X25519: current Chrome, Edge, Firefox, Safari, Go ≥ 1.24, OpenSSL ≥ 3.5) always get it, even if they list X25519 first; the others (older curl, Node and Go, many wallet apps) get X25519 or P-256. Nobody is cut off. |
+| `require` | `curves x25519mlkem768` | Only the hybrid; clients without ML-KEM cannot connect (TLS 1.2 clients neither). |
+| `off` | none | Ubuntu's Caddy with its defaults (classical X25519). |
+
+Set it like `PUBLIC_HOST`: `sudo TLS_PQ=require bash setup-node.sh`, or on `install.sh … update`. If the pinned Caddy
+cannot be downloaded or does not match its hash, the script keeps Ubuntu's Caddy and says so; https still works.
+`prefer` is the default because requiring ML-KEM today would cut off wallets and tools whose TLS library lacks it.
+What it protects: recorded RPC traffic (who asked about which address) against "harvest now, decrypt later", for the
+clients that negotiate the hybrid. What it does not: the certificate is still ECDSA (Let's Encrypt), so after Q-day an
+active attacker could impersonate the node; wallets should check what they read (block certificates, not TLS). A hybrid
+handshake sends about 1.1 KB more per new connection (matters only near the `LOW_EGRESS` limit).
+Check from a machine with OpenSSL ≥ 3.5: `openssl s_client -connect <name>:443 -groups X25519MLKEM768`.
+Validator ↔ sentry links can also be put in WireGuard with a post-quantum pre-shared key: [`wireguard/README.md`](wireguard/README.md).
 
 ## Security (testnet only)
 

@@ -7,7 +7,7 @@ import { AbiCoder, Interface, id as ethersId, getAddress } from 'ethers';
 import { encode, decode, fn, event, checksum, topicOf } from '../web/lib/abi.js';
 import { resolveUri, normalizeTokenUri, imageSrc, readMetadata, fetchMetadataJson, cleanText, cleanMultiline, substituteId, normalizeGateway, MAX_METADATA } from '../web/lib/meta.js';
 import { parseZtphy, formatZtphy, F, E, STATUS, listingFrom } from '../web/lib/contracts.js';
-import { scanLogs } from '../web/lib/rpc.js';
+import { scanLogs, makeRpc, RpcError } from '../web/lib/rpc.js';
 import { t, keysOf, errorKeysOf, errorText, LANGS, LANG_NAMES, pickLang } from '../web/lib/i18n.js';
 import { artifacts } from './helpers/chain.js';
 
@@ -194,6 +194,62 @@ test('log scanning: bounded chunks, split on refusal, cache continues where it s
   const r4 = await scanLogs(rpc, {}, { floor: 9_000, maxBlocks: 100_000, store });
   assert.ok(calls.every(([a]) => a >= 9_000));
   assert.equal(r4.complete, true);
+});
+
+test('a slow or broken node ends a log scan at once (no split per failure); the timeout covers the answer body', async () => {
+  const mem = new Map();
+  const store = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, v), removeItem: (k) => mem.delete(k) };
+  for (const err of [new RpcError('RPC unreachable: aborted', -1), new RpcError('RPC HTTP 503', 503)]) {
+    let calls = 0;
+    const rpc = { blockNumber: async () => 179_000, getLogs: async () => { calls++; throw err; } };
+    await assert.rejects(scanLogs(rpc, {}, { maxBlocks: 50_000, store }), (e) => e === err);
+    assert.equal(calls, 1, `${err.message}: one request, not one per halving`);
+  }
+  // A node error (a refused range) still splits down to one block.
+  let calls = 0;
+  const refusing = { blockNumber: async () => 2000, getLogs: async () => { calls++; throw new RpcError('could not coalesce error', -32603); } };
+  await assert.rejects(scanLogs(refusing, {}, { maxBlocks: 2000, store }), /coalesce/);
+  assert.ok(calls > 5);
+  // Headers arrive, the body never does: the call still fails after timeoutMs.
+  const stalled = (_url, { signal }) => Promise.resolve({ ok: true, json: () => new Promise((_, rej) => signal.addEventListener('abort', () => rej(new Error('aborted')))) });
+  const t0 = Date.now();
+  await assert.rejects(makeRpc('http://node.test/', { fetchImpl: stalled, timeoutMs: 50 }).blockNumber(), (e) => e instanceof RpcError && e.code === -1);
+  assert.ok(Date.now() - t0 < 2000);
+});
+
+test('a node that just timed out is not waited for again by the next reads: the page shows its error after one timeout', async () => {
+  let clock = 1_000_000;
+  let mode = 'stall';
+  const sent = [];
+  const fetchImpl = (_url, { body, signal }) => {
+    sent.push(JSON.parse(body).method);
+    if (mode === 'stall') return new Promise((_, rej) => signal.addEventListener('abort', () => rej(new Error('aborted'))));
+    if (mode === 'http') return Promise.resolve({ ok: false, status: 503 });
+    return Promise.resolve({ ok: true, json: async () => ({ jsonrpc: '2.0', id: 1, result: '0x10' }) });
+  };
+  const rpc = makeRpc('http://node.test/', { fetchImpl, timeoutMs: 50, downMs: 10_000, now: () => clock });
+  // What app.js does before Explore can render: chain id, the registry, the head block. Only the first one waits.
+  const t0 = Date.now();
+  await assert.rejects(rpc.chainId(), (e) => e instanceof RpcError && e.code === -1 && /unreachable/.test(e.message));
+  const t1 = Date.now();
+  await assert.rejects(rpc.ethCall('0x' + '11'.repeat(20), '0x'), (e) => e instanceof RpcError && e.code === -1 && /unreachable/.test(e.message));
+  await assert.rejects(scanLogs(rpc, {}, { maxBlocks: 50_000, store: { getItem: () => null, setItem() {}, removeItem() {} } }), (e) => e.code === -1);
+  assert.ok(t1 - t0 >= 40, 'the first read waited for its timeout');
+  assert.ok(Date.now() - t1 < 40, 'the next reads failed at once');
+  assert.deepEqual(sent, ['eth_chainId'], 'nothing more was sent to the down node');
+  // After downMs the node is asked again; once it answers, it is used normally.
+  mode = 'up';
+  clock += 9_999;
+  await assert.rejects(rpc.blockNumber(), (e) => e.code === -1);
+  clock += 1;
+  assert.equal(await rpc.blockNumber(), 16);
+  assert.deepEqual(sent, ['eth_chainId', 'eth_blockNumber']);
+  // An HTTP error or a JSON-RPC error is an answer: the next read is still sent.
+  mode = 'http';
+  await assert.rejects(rpc.blockNumber(), (e) => e.code === 503);
+  mode = 'up';
+  assert.equal(await rpc.blockNumber(), 16);
+  assert.equal(sent.length, 4);
 });
 
 test('every language has every text; Neuro wording stays neutral and carries the disclaimer', () => {

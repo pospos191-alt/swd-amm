@@ -6,6 +6,9 @@
 // the listing on Explore and buys it; offers; withdraw; a stale listing; the
 // Neuro warning and refusal; an external collection; Thai/English; dark mode;
 // a phone-width layout. No CSP violation, script dialog or page error may occur.
+// Every test is hermetic: its pages get deployments.json and the RPC from the
+// in-process node (chainRoutes), and a request to any other host is refused and
+// fails the test (the live testnet node in web/deployments.json is never asked).
 //   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run test:e2e
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -55,9 +58,37 @@ before(async () => {
 });
 after(async () => { await browser?.close(); server?.kill(); });
 
+/**
+ * Routes a context's network to the test: deployments.json names the in-process node, whose RPC and an IPFS
+ * gateway are answered here. Any other request outside the page's own origin is aborted and noted in
+ * `problems` (so a page that reached a live node fails the test instead of depending on it).
+ */
+async function chainRoutes(ctx, label) {
+  // Registered first, so the routes below (registered later) take precedence for their URLs.
+  await ctx.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url.startsWith(`${ORIGIN}/`) || url.startsWith('data:') || url === 'about:blank') return route.fallback();
+    problems.push(`${label} left the test network: ${route.request().method()} ${url}`);
+    return route.abort('blockedbyclient');
+  });
+  await ctx.route(`${RPC}**`, async (route) => {
+    const body = JSON.parse(route.request().postData());
+    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(await shim.handle(body)) });
+  });
+  await ctx.route(`${GW}**`, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('.png')) return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: PNG });
+    const n = /\/(\d+)\.json$/.exec(path)?.[1] ?? '0';
+    return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ name: `Gateway Cat ${n}`, description: 'from IPFS', image: `ipfs://bafytest/${n}.png` }) });
+  });
+  await ctx.route(`${ORIGIN}/deployments.json`, (route) => route.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ chainId: 77390, rpc: RPC, factory: factory.address, marketplace: market.address, threatRegistry: registry.address, deployBlock }) }));
+}
+
 /** A browser context for one account: mock wallet, RPC and gateway routes, problem collection. */
 async function contextFor(account, label) {
   const ctx = await browser.newContext({ locale: 'en-US' });
+  await chainRoutes(ctx, label);
   await ctx.exposeBinding('__walletRequest', async (_src, method, params) => {
     if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [account];
     if (method === 'eth_chainId') return wallet.chainId;
@@ -91,18 +122,6 @@ async function contextFor(account, label) {
     window.addEventListener('eip6963:requestProvider', announce);
     announce();
   });
-  await ctx.route(`${RPC}**`, async (route) => {
-    const body = JSON.parse(route.request().postData());
-    await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(await shim.handle(body)) });
-  });
-  await ctx.route(`${GW}**`, async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    if (path.endsWith('.png')) return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: PNG });
-    const n = /\/(\d+)\.json$/.exec(path)?.[1] ?? '0';
-    return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ name: `Gateway Cat ${n}`, description: 'from IPFS', image: `ipfs://bafytest/${n}.png` }) });
-  });
-  await ctx.route(`${ORIGIN}/deployments.json`, (route) => route.fulfill({ status: 200, contentType: 'application/json',
-    body: JSON.stringify({ chainId: 77390, rpc: RPC, factory: factory.address, marketplace: market.address, threatRegistry: registry.address, deployBlock }) }));
   await ctx.addInitScript((gw) => { try { localStorage.setItem('zn.settings', JSON.stringify({ gateway: gw })); } catch {} }, GW);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => problems.push(`${label} pageerror ${e.message}`));
@@ -137,6 +156,7 @@ const statusIs = (re) => ({ fn: (s) => new RegExp(s).test(document.querySelector
 
 test('a first visit is in English, even from a Thai-language browser', async () => {
   const ctx = await browser.newContext({ locale: 'th-TH' });
+  await chainRoutes(ctx, 'first visit');
   try {
     const page = await ctx.newPage();
     await page.goto(`${ORIGIN}/`);
@@ -147,6 +167,8 @@ test('a first visit is in English, even from a Thai-language browser', async () 
     assert.deepEqual(await page.$$eval('#lang option', (os) => os.map((o) => [o.value, o.textContent])), LANG_MENU);
     assert.equal(await page.textContent('nav a[href="#/"]'), 'Explore');
     assert.equal(await page.evaluate(() => localStorage.getItem('zn.lang')), null);
+    await page.waitForSelector('.page[data-ready]');
+    assert.deepEqual(problems, [], 'only the test network was asked');
   } finally { await ctx.close(); }
 });
 
@@ -155,6 +177,7 @@ const LANG_MENU = [['en', 'English'], ['zh', '中文'], ['es', 'Español'], ['ko
 
 test('a language stored by the hub is honoured; anything else is English; every language renders without raw keys', async () => {
   const ctx = await browser.newContext({ locale: 'en-US' });
+  await chainRoutes(ctx, 'languages');
   try {
     const page = await ctx.newPage();
     await page.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('zn.lang', JSON.stringify('ja')); } });
@@ -185,6 +208,7 @@ test('a language stored by the hub is honoured; anything else is English; every 
     }
     await page.reload();
     await page.waitForFunction(() => document.documentElement.lang === 'th');
+    assert.deepEqual(problems, [], 'only the test network was asked');
   } finally { await ctx.close(); }
 });
 

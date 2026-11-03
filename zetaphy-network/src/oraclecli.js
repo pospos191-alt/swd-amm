@@ -2,8 +2,11 @@
 // ZetaphyOracle prices an asset from a DEX TWAP (TwapRecorder) and Pyth (ZetaphyPythRelay until Pyth
 // itself, or a Hyperlane route, is on ZETAPHY), or reverts naming why not. Its settings belong to
 // the ZetaphyTimelock; a guardian pauses a feed at once.
+// Reporters (push, relay-pyth, poke) sign with this machine's ECDSA key, or with --pq as its native
+// ML-DSA-44 account (src/pqsubmit.js, MsgEVMCall): the relay then sees msg.sender = that account's
+// 0x address, so governance makes that address the relayer (setRelayer) instead of an EOA.
 
-import { Contract, ContractFactory, getAddress, isHexString } from 'ethers';
+import { Contract, ContractFactory, Interface, getAddress, isHexString } from 'ethers';
 import { readFileSync } from 'node:fs';
 import { PROBLEMS, encodePriceFeed, fromHermes, hermesUrl, usd } from './oracle.js';
 import { timelockHint } from './timelockcli.js';
@@ -36,7 +39,37 @@ async function govSend(k, c, write, fn, args, what, read = 'governance') {
   return false;
 }
 
-export async function oracleCommand({ group, cmd, rest, opt, env, write, s, connect, saveSettings }) {
+/** EVM gas of updatePriceFeeds for n updates when sent as a PQ account (no estimate: a fixed, generous limit). */
+export const pushGas = (n) => 150_000n + 120_000n * BigInt(n);
+const RELAY_IFACE = () => new Interface(art('ZetaphyPythRelay').abi);
+
+/** A Pyth relayer that signs with this machine's ECDSA key. */
+async function ecdsaReporter(c, relayAddr) {
+  const relay = new Contract(relayAddr, art('ZetaphyPythRelay').abi, c.signer);
+  return {
+    me: c.me, relay: relayAddr,
+    isRelayer: () => relay.isRelayer(c.me),
+    latestTime: async () => (await c.provider.getBlock('latest')).timestamp,
+    update: async (data) => { await (await relay.updatePriceFeeds(data)).wait(); return ''; },
+  };
+}
+
+/** A Pyth relayer that signs as the native ML-DSA-44 account (msg.sender = its 0x address). */
+export async function pqReporter(p, relayAddr) {
+  const iface = RELAY_IFACE();
+  return {
+    me: p.me, relay: relayAddr,
+    isRelayer: async () => iface.decodeFunctionResult('isRelayer', await p.submitter.read({ to: relayAddr, data: iface.encodeFunctionData('isRelayer', [p.me]) }))[0],
+    latestTime: async () => Number(BigInt((await p.rpcCall('eth_getBlockByNumber', ['latest', false])).timestamp)),
+    update: async (data) => {
+      const r = await p.submitter.callEVM({ to: relayAddr, data: iface.encodeFunctionData('updatePriceFeeds', [data]), evmGasLimit: pushGas(data.length) });
+      await p.submitter.confirm(r);
+      return ` (tx ${r.txHash}, signed with ML-DSA-44 by ${p.me})`;
+    },
+  };
+}
+
+export async function oracleCommand({ group, cmd, rest, opt, env, write, s, connect, connectPq, saveSettings }) {
   if (group === 'deploy-oracle') {
     const c = await connect(s, { needJobs: false });
     const deploy = async (n, args) => { const a = art(n); const k = await new ContractFactory(a.abi, a.bytecode, c.signer).deploy(...args); await k.waitForDeployment(); return k.getAddress(); };
@@ -99,7 +132,18 @@ export async function oracleCommand({ group, cmd, rest, opt, env, write, s, conn
   }
 
   if (cmd === 'poke') {
-    if (!rest.length) throw new Error('usage: zetaphy oracle poke <asset 0x…>... (anyone: records a TWAP observation, moves the reference)');
+    if (!rest.length) throw new Error('usage: zetaphy oracle poke <asset 0x…>... [--pq] (anyone: records a TWAP observation, moves the reference)');
+    if (opt.pq) {
+      const p = await connectPq(s, opt);
+      const k = oracleAt(s, opt, null);
+      for (const a of rest) {
+        const r = await p.submitter.callEVM({ to: k.target, data: k.interface.encodeFunctionData('poke', [a]), evmGasLimit: POKE_GAS });
+        await p.submitter.confirm(r);
+        const moved = k.interface.decodeFunctionResult('poke', r.result)[0];
+        write(`${a}: ${moved ? 'reference moved' : 'nothing new (paused, tripped or no change)'} (tx ${r.txHash}, signed with ML-DSA-44 by ${p.me}; zetaphy oracle status shows the price)`);
+      }
+      return 0;
+    }
     const c = await connect(s, { needJobs: false });
     const k = oracleAt(s, opt, c.signer);
     for (const a of rest) {
@@ -121,17 +165,16 @@ export async function oracleCommand({ group, cmd, rest, opt, env, write, s, conn
   }
 
   if (cmd === 'push' || cmd === 'relay-pyth') {
-    const c = await connect(s, { needJobs: false });
     const relayAddr = opt.relay ?? s.pythRelay;
     if (!ADDR_RE.test(String(relayAddr ?? ''))) throw new Error('no ZetaphyPythRelay: pass --relay 0x…');
-    const relay = new Contract(getAddress(String(relayAddr)), art('ZetaphyPythRelay').abi, c.signer);
-    if (!(await relay.isRelayer(c.me))) throw new Error(`${c.me} is not a relayer of ${relay.target} (governance: setRelayer)`);
+    const rep = opt.pq ? await pqReporter(await connectPq(s, opt), getAddress(String(relayAddr))) : await ecdsaReporter(await connect(s, { needJobs: false }), getAddress(String(relayAddr)));
+    if (!(await rep.isRelayer())) throw new Error(`${rep.me} is not a relayer of ${rep.relay} (governance: setRelayer)`);
     if (cmd === 'push') {
-      if (!isHexString(String(opt.feed ?? ''), 32) || opt.price == null) throw new Error('usage: zetaphy oracle push --feed 0x<id> --price <int> [--conf <int> --expo -8 --publish-time <unix>]');
-      const t = opt['publish-time'] ?? (await c.provider.getBlock('latest')).timestamp;
+      if (!isHexString(String(opt.feed ?? ''), 32) || opt.price == null) throw new Error('usage: zetaphy oracle push --feed 0x<id> --price <int> [--conf <int> --expo -8 --publish-time <unix>] [--pq]');
+      const t = opt['publish-time'] ?? await rep.latestTime();
       const data = encodePriceFeed({ id: String(opt.feed), price: BigInt(String(opt.price)), conf: BigInt(String(opt.conf ?? 0)), expo: Number(opt.expo ?? -8), publishTime: t });
-      await (await relay.updatePriceFeeds([data])).wait();
-      write(`pushed ${opt.feed}: ${opt.price} x 10^${opt.expo ?? -8} at ${t}`);
+      const how = await rep.update([data]);
+      write(`pushed ${opt.feed}: ${opt.price} x 10^${opt.expo ?? -8} at ${t}${how}`);
       return 0;
     }
     const ids = list(opt.feed);
@@ -141,11 +184,11 @@ export async function oracleCommand({ group, cmd, rest, opt, env, write, s, conn
       const r = await fetch(url);
       if (!r.ok) throw new Error(`Hermes answered ${r.status}`);
       const data = fromHermes(await r.json());
-      await (await relay.updatePriceFeeds(data)).wait();
-      write(`${new Date().toISOString()} relayed ${data.length} Pyth price(s) from Hermes`);
+      const how = await rep.update(data);
+      write(`${new Date().toISOString()} relayed ${data.length} Pyth price(s) from Hermes${how}`);
       if (!every || opt.once) return 0;
       await new Promise((res) => setTimeout(res, every * 1000));
     }
   }
-  throw new Error('usage: zetaphy oracle feed <asset> … | status [asset] | poke <asset>… | pause <asset> | push --feed … | relay-pyth --feed <id,…> [--every 30]');
+  throw new Error('usage: zetaphy oracle feed <asset> … | status [asset] | poke <asset>… | pause <asset> | push --feed … | relay-pyth --feed <id,…> [--every 30]   (poke, push, relay-pyth: --pq signs with the ML-DSA-44 account)');
 }

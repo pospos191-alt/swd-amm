@@ -19,6 +19,8 @@ P-256 ออกมาจากกุญแจสาธารณะได้) แ
 | กู้คืนด้วย ZK ของ seed (พิสูจน์ seed BIP-32 ที่อยู่เบื้องหลังกุญแจที่เปิดเผยแล้ว) | **ออกแบบไว้** (ข้อ 4.5) | ต่อยอดจากงาน STARK light client |
 | `PQSettlement`: หักกลบลบหนี้เป็นชุด อนุมัติด้วยลายเซ็น ML-DSA เท่านั้น | **ทำแล้ว** (สัญญา) | `contracts/PQSettlement.sol`, `src/qsafe/settlement.js` |
 | `PQMultisigIsm`: ISM ของ Hyperlane ที่ validator เซ็นด้วย ML-DSA | **ทำแล้ว** (สัญญา, ปลายทาง ZETAPHY) | `contracts/PQMultisigIsm.sol`, `src/qsafe/pqism.js` |
+| `PQCosignCommittee`: ผู้ร่วมเซ็นแบบ t-of-n ML-DSA-44 ให้ `AgentPolicyWallet` (เลือกเปิดเอง FROST ยังเป็นค่าเริ่มต้น) | **ทำแล้ว** (สัญญา, ข้อ 4.6) | `contracts/PQCosignCommittee.sol`, `src/pqcosign.js`, `zetaphy cosign pq-review` |
+| เช็คออฟไลน์และคำสั่งออฟไลน์ที่ส่งต่อได้ เซ็นด้วย ML-DSA (`ZetaphyPQCheques`, `ZetaphyPQOfflineOrders`): ไม่มี `ecrecover` | **ทำแล้ว** (สัญญา ยังไม่ deploy และฮับยังใช้ฉบับ ECDSA) | `contracts/ZetaphyPQCheques.sol`, `contracts/ZetaphyPQOfflineOrders.sol`, `src/qsafe/offline.js`, [offline-trading.th.md](offline-trading.th.md) ข้อ 4 |
 | ห่อคำรับรองด้วย STARK สำหรับปลายทางที่ตรวจ ML-DSA ไม่ได้ (Ethereum, BNB) | **ออกแบบไว้** (ข้อ 6.2) | — |
 | แท็บ "ความปลอดภัยจากควอนตัม" ใน hub (8 ภาษา) | **ทำแล้ว** | `zetaphy-hub/quantum*.js` |
 
@@ -60,7 +62,7 @@ IBC light client), P-256 (passkey, ใบรับรอง TLS) และ BN254
 `zetaphy-network/src/qsafe/inventory.js` ส่วน `test/qsafe-inventory.test.js` ตรวจทุกแถว (ครบทุกช่อง สถานะถูกต้อง
 และไฟล์ที่อ้างถึงมีอยู่จริงในรีโป) และตรวจว่าตารางในเอกสารภาษาอังกฤษตรงกับที่ไฟล์สร้างขึ้นทุกตัวอักษร
 
-**คะแนนความพร้อม: 46/100** (ถ่วงตามผลกระทบ: วิกฤต 5 สูง 3 กลาง 2 ต่ำ 1 และให้คะแนนตามสถานะ: ทนควอนตัม 1 ไฮบริด 0.8
+**คะแนนความพร้อม: 52/100** (ถ่วงตามผลกระทบ: วิกฤต 5 สูง 3 กลาง 2 ต่ำ 1 และให้คะแนนตามสถานะ: ทนควอนตัม 1 ไฮบริด 0.8
 บางส่วน 0.4 แบบเดิม 0) ดูได้ด้วย `zetaphy qsafe inventory` หรือแท็บควอนตัมใน hub คะแนนนี้ตั้งใจให้ดูไม่สบายใจ
 มันจะขยับก็ต่อเมื่อสถานะของแถวเปลี่ยนจริงเท่านั้น
 
@@ -70,9 +72,12 @@ IBC light client), P-256 (passkey, ใบรับรอง TLS) และ BN254
   คำรับรองรายงานด้วย ML-DSA, `PQSettlement`
 - **ไฮบริด:** โหวตบล็อกของ CometBFT (Ed25519 + ML-DSA), ความถูกต้องของไฟล์ติดตั้งโหนด
 - **บางส่วน:** บัญชี secp256k1 (ล็อกได้ แต่ยังมีบัญชีที่ไม่ล็อก), บัญชีผู้ดูแล validator, หลักฐานการเซ็นซ้ำ, ผู้เซ็น timelock/multisig,
-  validator ของ Hyperlane ISM, ลายเซ็นที่สัญญาตรวจเอง (ecrecover), TLS, remote signer ของ validator
-- **แบบเดิม:** IBC light client ทั้งสองทิศทาง, relayer ของ IBC และ Hyperlane, MetaMask และกระเป๋าแบบ injected,
-  การเก็บทรัพย์สินบน Ethereum/BNB, oracle, passkey (P-256), FROST, Groth16, ลิงก์ p2p, ความเป็นส่วนตัวของ mempool
+  validator ของ Hyperlane ISM, ลายเซ็นที่สัญญาตรวจเอง (ecrecover), TLS, remote signer ของ validator,
+  ลิงก์ p2p (ลิงก์ validator–sentry ผ่าน WireGuard + PSK ได้ถ้าเลือกใช้), MetaMask และกระเป๋าแบบ injected (เซ็นผ่าน ZETAPHY Snap ได้ถ้าเลือกใช้),
+  oracle (ผู้รายงานราคาเซ็นเป็นบัญชี PQ ได้แล้ว), relayer ของ Hyperlane (ส่งข้อความเข้า ZETAPHY ด้วยบัญชี PQ ได้แล้ว),
+  คณะกรรมการร่วมเซ็นของ agent (FROST เป็นค่าเริ่มต้น มีทาง ML-DSA-44 แบบ t-of-n ให้เลือกเปิด)
+- **แบบเดิม:** IBC light client ทั้งสองทิศทาง, relayer ของ IBC,
+  การเก็บทรัพย์สินบน Ethereum/BNB, passkey (P-256), Groth16, ความเป็นส่วนตัวของ mempool
 
 **งานต้นแบบที่เกี่ยวข้องบน branch อื่น** (ไม่ทำซ้ำที่นี่): mempool เข้ารหัสแบบ PQ (`zetaphy-network/src/encmempool`, ML-KEM),
 STARK light client (`zetaphy-network/src/starklc`, ใช้ในข้อ 4.5 และ 6.2), circuit breaker ที่ซ่อมตัวเองได้ (`CircuitBreaker`
@@ -84,12 +89,42 @@ STARK light client (`zetaphy-network/src/starklc`, ใช้ในข้อ 4.5 
 - เงินของ **บัญชี ML-DSA-44 โดยกำเนิด** (ธุรกรรม Cosmos ที่เซ็นด้วย ML-DSA-44 เท่านั้น และใช้ EVM ได้ทั้งหมดผ่าน `MsgEVMCall`)
 - บัญชี secp256k1 ที่ **ล็อกควอนตัม** แล้ว (`MsgQuantumLock`): เชนปฏิเสธกุญแจ ECDSA ของบัญชีนั้น มีแต่บัญชี ML-DSA ที่คุมอยู่ทำแทนได้
 - สัญญาที่อนุมัติด้วย ML-DSA เท่านั้น (`QuantumWallet` โหมด PQ ล้วน, `PQSettlement`, การเปิดคำมั่นของ `QuantumRescue`, `PQMultisigIsm`)
+  และ `AgentPolicyWallet` ที่เจ้าของตั้ง `setPqCosign(<PQCosignCommittee>, true)`: ธุรกรรมใหญ่ของ agent ต้องมีลายเซ็น
+  ML-DSA-44 แบบ t-of-n (ข้อ 4.6) ส่วนกุญแจของ agent เองเป็นบัญชีเหมือนบัญชีอื่น (แถว `evm-accounts`)
 - **ความเป็นที่สุดของบล็อก** ตราบใดที่ validator ที่ถือคะแนนโหวตเกิน 2/3 ลงทะเบียนกุญแจโหวต ML-DSA แล้ว
   บล็อก H+1 จะพกใบรับรอง ML-DSA ของบล็อก H ซึ่งทุกโหนดและ `zetaphy pq verify-block` ตรวจ
 
-**ยังเป็นแบบเดิม:** โหวต Ed25519 ของ CometBFT เองและลิงก์ p2p, IBC light client ทั้งสองทาง, ISM และกุญแจ relayer ฝั่งเชนต้นทาง,
-MetaMask และกระเป๋า injected ทุกตัว, ผู้เซ็น timelock/multisig ที่เป็น EOA, ผู้รายงานราคา oracle และ TLS
+**ยังเป็นแบบเดิม:** โหวต Ed25519 ของ CometBFT เองและลิงก์ p2p แบบ SecretConnection, IBC light client ทั้งสองทาง, ISM และกุญแจ relayer ฝั่งเชนต้นทาง,
+MetaMask และกระเป๋า injected ทุกตัว (ค่าเริ่มต้น), ผู้เซ็น timelock/multisig ที่เป็น EOA, ผู้รายงานราคา oracle ที่ยังเป็น EOA, กุญแจของ relayer IBC, ใบรับรอง TLS
+และคณะกรรมการร่วมเซ็นของ agent ตามค่าเริ่มต้น (FROST / k-of-n ECDSA จนกว่ากระเป๋าจะเลือกใช้คณะกรรมการแบบ ML-DSA)
 ทรัพย์สินที่ข้ามสะพานมาจาก Ethereum/BNB ปลอดภัยได้แค่เท่ากับ lockbox บนเชนต้นทาง
+
+**ทางเลือกทนควอนตัมที่มีอยู่ข้าง ๆ (ต้องเลือกใช้เอง แถวเหล่านี้จึงเป็น "บางส่วน" ไม่ใช่ "ทนควอนตัม"):**
+- *https ของโหนด* (`tls`): `setup-node.sh` ติดตั้ง Caddy 2.11.7 (ตรึง SHA-256 ไว้ เพราะ Caddy 2.6 ของ Ubuntu 24.04 ไม่มี ML-KEM)
+  ตั้ง `curves x25519mlkem768 x25519 secp256r1` ไคลเอนต์ที่เสนอ X25519MLKEM768 แบบไฮบริดจะได้แบบนั้นเสมอ (ทดสอบแล้ว: เซิร์ฟเวอร์เลือกไฮบริด
+  แม้ไคลเอนต์จะวาง X25519 ไว้ก่อน) ส่วนที่เหลือใช้ X25519 / P-256 ไม่มีกระเป๋าหรือเครื่องมือไหนถูกตัดออก `TLS_PQ=require` รับเฉพาะไฮบริด
+  (ไคลเอนต์ OpenSSL 3.0 เช่น curl และ Node รุ่นเก่าจะเชื่อมต่อไม่ได้) `TLS_PQ=off` ใช้ Caddy ของ Ubuntu ตามเดิม
+  สิ่งนี้ปกป้องทราฟฟิก RPC ที่ถูกอัดเก็บไว้ (เก็บวันนี้ ถอดรหัสทีหลัง) ของไคลเอนต์ที่มี ML-KEM ส่วนใบรับรองยังเป็น ECDSA จึงยังกันผู้ปลอมตัวหลัง Q-day ไม่ได้
+- *ลิงก์ validator–sentry* (`p2p-transport`): `zetaphy-chain/wireguard/pq-link.sh` ใส่ลิงก์ไว้ใน WireGuard พร้อมกุญแจร่วมล่วงหน้า (PSK) แบบสุ่ม
+  ที่ส่งผ่าน SSH ซึ่งบังคับให้แลกกุญแจแบบไฮบริด ML-KEM / NTRU Prime เท่านั้น SecretConnection ยังทำงานข้างในเหมือนเดิม
+  ไม่มี forward secrecy ถ้า PSK หลุดภายหลัง (ให้หมุน PSK หรือใช้ Rosenpass) และ peer สาธารณะของ sentry ยังเป็นแบบเดิม
+- *dapp* (`injected-wallets`): hub, Swap และ NFT มีตัวเลือก "ZETAPHY Snap" ข้าง MetaMask (`zetaphy-hub/pqsnap.js` คัดลอกด้วย `npm run sync:shared`)
+  ธุรกรรมถูกส่งเป็น `MsgEVMCall` ที่เซ็นด้วย ML-DSA-44 ภายใน MetaMask จากบัญชี PQ ของ Snap เอง ผลลัพธ์อ่านจาก CometBFT แล้วส่งต่อให้ `txguard.js`
+  ต้องใช้ MetaMask Flask จนกว่า Snap จะได้รับอนุญาต ส่วนการเซ็น EIP-712 / `personal_sign` และ explorer ยังต้องใช้กระเป๋า ECDSA
+  กระเป๋าเว็บ PQ เป็นอีกเว็บหนึ่งที่ไม่มี API ให้เว็บอื่นขอลายเซ็น dapp จึงไม่ได้เซ็นผ่านมัน
+
+**บริการที่เซ็นเป็นบัญชี PQ ได้แล้ว** (`zetaphy-network/src/pqsubmit.js` ตัวส่งธุรกรรม PQ): บริการส่งการเรียก EVM เป็น `MsgEVMCall`
+จากบัญชี ML-DSA-44 โดยกำเนิด สัญญาจึงเห็น `msg.sender` เป็นที่อยู่ 0x ของบัญชีนั้น ตัวส่งนับ sequence ต่อเองเมื่อส่งหลายธุรกรรมติดกัน
+(โหนดรายงาน sequence ของบล็อกล่าสุด) เซ็นใหม่ด้วย sequence ที่โหนดบอกเมื่อไม่ตรงกัน ส่งไบต์ที่เซ็นแล้วชุดเดิมซ้ำเมื่อคำตอบหาย
+(ธุรกรรมจึงไม่ถูกส่งสองครั้ง) ลองใหม่เมื่อ mempool เต็มหรือค่าธรรมเนียมต่ำไป และไม่เซ็นการเรียกที่จะ revert (ตรวจด้วย eth_call ก่อน)
+- ผู้รายงานราคา oracle: `zetaphy oracle push / relay-pyth / poke --pq` แล้วให้ governance ตั้งที่อยู่ PQ เป็น relayer ของ
+  `ZetaphyPythRelay` (`setRelayer`) แถวนี้ยังเป็น *บางส่วน* เพราะ relayer ที่ติดตั้งอยู่ยังเป็น EOA จนกว่าจะเปลี่ยน
+  และราคาของ Pyth เองยังพึ่งลายเซ็น secp256k1 ของ guardian ของ Wormhole
+- การส่งข้อความ Hyperlane เข้า ZETAPHY: `zetaphy bridge deliver --mailbox … --message … --metadata …` ส่ง `Mailbox.process`
+  ที่เซ็นด้วย ML-DSA-44 (ตรวจ ISM ด้วย eth_call ก่อน) ยังเป็น *บางส่วน* เพราะ agent ของ Hyperlane ยังเป็นผู้หาข้อความ
+  สร้าง metadata และเซ็นบนเชนอื่นด้วย ECDSA
+- relayer ของ IBC: ยังเป็น *แบบเดิม* ตัวส่งเซ็นข้อความ Cosmos ใดก็ได้ แต่ยังไม่มีอะไรสร้าง `MsgUpdateClient` / `MsgRecvPacket`
+  ให้มัน (Hermes สร้างและเซ็นด้วย secp256k1) และเส้นทางนี้ยังไม่เคยทดสอบกับเชนจริง
 
 ## 4. โปรโตคอล Q-day
 
@@ -179,6 +214,18 @@ func (k Keeper) QDayRescue(ctx sdk.Context, m *MsgQDayRescue) error {
 ใช้เวลาเป็นนาทีถึงชั่วโมงบนเครื่องทั่วไป ทำครั้งเดียว) และ precompile ตรวจ STARK ต้องผ่านการตรวจสอบแยกต่างหาก
 นักวิจัยของ Ethereum ก็เสนอทางฉุกเฉินแบบเดียวกันนี้ให้ Ethereum
 
+### 4.6 การร่วมเซ็นของ agent ด้วย ML-DSA: `PQCosignCommittee.sol` (ทำแล้ว)
+
+`AgentPolicyWallet` ให้ agent ทำธุรกรรมเกินเกณฑ์ได้โดยไม่ต้องรอ timelock เมื่อคณะกรรมการ runner ร่วมเซ็น
+([agents.th.md](agents.th.md)) แต่กุญแจกลุ่ม FROST และกุญแจ ECDSA ของสมาชิกเป็น secp256k1 วัน Q-day จึงถูกหากุญแจได้
+และปลอมเป็นคณะกรรมการได้ (แถว `frost-cosign`) `PQCosignCommittee` คือคณะกรรมการเดียวกันที่ใช้กุญแจ **ML-DSA-44**:
+governance ตั้งสมาชิก t จาก n คน (เก็บเป็นแฮชของกุญแจ แบบ `PQMultisigIsm`) สมาชิกแต่ละคนตรวจธุรกรรมเหมือนเดิมแล้วเซ็น
+`keccak256("ZETAPHY PQ cosign v1" ‖ cosignDigest)` หลักฐานคือคู่ (กุญแจสาธารณะ ‖ ลายเซ็น) t คู่ เรียงตามแฮชของกุญแจ
+แต่ละคู่ตรวจด้วย precompile ที่ 0x…0900 (`src/pqcosign.js`, `zetaphy cosign pq-review | pq-combine`)
+เจ้าของกระเป๋าเลือกเปิดด้วย `setPqCosign(committee, pqOnly)` ทางนี้คือ `executeCosignedPq` (path 4) และเมื่อตั้ง `pqOnly`
+ทาง FROST และ ECDSA จะถูกปฏิเสธ นี่เป็น multisig แบบ t-of-n ไม่ใช่ลายเซ็น threshold: calldata ราว 3.7 KB และเรียก
+precompile หนึ่งครั้งต่อผู้เซ็นหนึ่งคน และเห็นว่าใครเซ็น FROST ยังเป็นค่าเริ่มต้น แถวนี้จึงเป็น **บางส่วน** ไม่ใช่ PQ
+
 ## 5. การชำระราคาแบบ PQ: `PQSettlement.sol`
 
 บัญชีในสัญญานี้คือกุญแจ ML-DSA-44 (`keyId = keccak256(publicKey)`) ไม่มีกุญแจ ECDSA ใดย้ายอะไรในสัญญานี้ได้
@@ -244,8 +291,9 @@ Ethereum และ BNB ตรวจ ML-DSA ได้แพงมาก เส้
 
 | | |
 |---|---|
-| สัญญา | `zetaphy-network/contracts/QuantumRescue.sol`, `PQSettlement.sol`, `PQMultisigIsm.sol` |
-| JS | `zetaphy-network/src/qsafe/inventory.js`, `rescue.js`, `settlement.js`, `pqism.js`, `cli.js` |
-| CLI | `zetaphy qsafe inventory [--json]`, `zetaphy qsafe rescue-kit <account> --contract <0x…>`, `zetaphy qsafe rescue-reveal <kit.json>` |
+| สัญญา | `zetaphy-network/contracts/QuantumRescue.sol`, `PQSettlement.sol`, `PQMultisigIsm.sol`, `PQCosignCommittee.sol` (+ `AgentPolicyWallet.executeCosignedPq`), `ZetaphyPQCheques.sol`, `ZetaphyPQOfflineOrders.sol` |
+| JS | `zetaphy-network/src/qsafe/inventory.js`, `rescue.js`, `settlement.js`, `pqism.js`, `offline.js`, `cli.js`; `zetaphy-network/src/pqcosign.js` |
+| CLI | `zetaphy qsafe inventory [--json]`, `zetaphy qsafe rescue-kit <account> --contract <0x…>`, `zetaphy qsafe rescue-reveal <kit.json>`, `zetaphy cosign pq-review` / `pq-combine` |
 | Hub | แท็บควอนตัม: `zetaphy-hub/quantum.js`, `quantum-core.js`, `quantum-i18n.js` (8 ภาษา) ไฟล์บันทึกการติดตั้ง `zetaphy-network/deployments/qsafe-77390.json` เปิดใช้การส่ง |
-| การทดสอบ | `zetaphy-network/test/qsafe-*.test.js` (ใช้กุญแจ ML-DSA-44 จริงผ่าน precompile ที่เขียนด้วย JS), `zetaphy-hub/test/quantum.test.mjs`, `quantum.e2e.mjs` |
+| ตัวส่งธุรกรรม PQ | `zetaphy-network/src/pqsubmit.js`; `zetaphy oracle push / relay-pyth / poke --pq`, `zetaphy bridge deliver` |
+| การทดสอบ | `zetaphy-network/test/qsafe-*.test.js` (ใช้กุญแจ ML-DSA-44 จริงผ่าน precompile ที่เขียนด้วย JS), `policywallet.test.js` (ทางร่วมเซ็นด้วย ML-DSA), `agentscli.test.js`, `pqsubmit.test.js` (โหนดจำลองที่ตรวจลายเซ็น ML-DSA-44 และ sequence), `zetaphy-hub/test/quantum.test.mjs`, `quantum.e2e.mjs` |

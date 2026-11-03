@@ -108,6 +108,17 @@ The "Use MetaMask (ZETAPHY Snap)" card on the start page
 - The web page computes the address from the public key itself. It does not trust the address the snap reports
 - Send, token send, stake, and deploy are signed through `zetaphy_signTx`. The in-browser key mode (seed encrypted with a password) still works as before
 
+## Use from the hub, Swap and NFT (`zetaphy-hub/pqsnap.js`)
+
+The wallet dialogs of the hub, Swap and NFT list "ZETAPHY Snap" next to MetaMask (only when MetaMask or Flask is in the
+browser). `pqsnap.js` makes the snap an EIP-1193 provider, so the apps' usual send path works unchanged:
+- the account is the snap's ML-DSA-44 account (its own 0x… address, derived from the public key in the page);
+- `eth_sendTransaction {to, data, value}` becomes one `evmCall` message: gas from `eth_estimateGas` + 25% (+ the Cosmos
+  overhead), `zetaphy_signTx` (the snap's window), `zetaphy_sendCosmosTx`, then the result from CometBFT `/rpc/tx`,
+  handed to `txguard.js` (a Cosmos tx has no EVM receipt);
+- `personal_sign`, EIP-712 and `eth_sign` are refused with a plain reason (an ML-DSA key cannot make them); contract
+  creation is not offered there. The choice is shared across the site as the wallet id `zetaphy-snap`.
+
 ## Vaccine: check every transaction in MetaMask
 
 Before the user confirms any EVM transaction in MetaMask (every chain, every site), the snap shows the ZETAPHY Neuro check result in the snap's tab

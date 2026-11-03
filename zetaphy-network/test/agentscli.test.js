@@ -1,10 +1,13 @@
-// `zetaphy intent show|compile` and `zetaphy cosign combine` (src/agentscli.js), without a chain.
+// `zetaphy intent show|compile` and `zetaphy cosign combine | pq-review | pq-combine | FROST` (src/agentscli.js), without a chain.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Wallet, getAddress, keccak256 } from 'ethers';
+import { Wallet, getAddress, keccak256, getBytes, dataSlice } from 'ethers';
+import { ml_dsa44 } from '@noble/post-quantum/ml-dsa.js';
+import { pqFromSeed } from '../src/pq.js';
+import { pqCosignDigest } from '../src/pqcosign.js';
 import { agentsCommand } from '../src/agentscli.js';
 import { signIntent, signedJson, hashTargets } from '../src/intent.js';
 import { signCosign } from '../src/cosign.js';
@@ -54,6 +57,32 @@ test('cosign combine: same digest from every runner, signatures ordered by signe
     assert.equal(signCosign(ws.find((w) => w.address.toLowerCase() === order[0]).privateKey, digest).sig, sigs[0]);
     writeFileSync(files[1], JSON.stringify({ digest: keccak256('0x02'), sig: '0x' }));
     await assert.rejects(run('cosign', 'combine', files), /different digests/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('cosign pq-review / pq-combine: ML-DSA-44 answers ordered by key hash into the executeCosignedPq proof', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'zq-'));
+  try {
+    const digest = keccak256('0x0def');
+    const keys = ['0x' + '01'.repeat(32), '0x' + '02'.repeat(32)].map(pqFromSeed);
+    const files = [];
+    for (const [i, key] of keys.entries()) {
+      const deps = { pqKey: () => key, reviewedDigest: async (o) => ({ ok: true, reasons: [], reports: [], wallet: EXE, to: getAddress(o.to), value: 0n, data: '0x',
+        deadline: 99n, nonce: 0n, reportHash: keccak256('0x01'), digest }) };
+      const out = [];
+      assert.equal(await agentsCommand({ group: 'cosign', cmd: 'pq-review', rest: [], opt: { wallet: EXE, to: A }, write: (l) => out.push(l), s: {}, connect: null, connectRpc: null, deps }), 0);
+      const ans = JSON.parse(out.join('\n'));
+      assert.equal(ans.keyHash, key.keyHash);
+      assert.ok(ml_dsa44.verify(getBytes(ans.sig), getBytes(pqCosignDigest(digest)), getBytes(key.publicKey)), 'a real ML-DSA-44 signature of the PQ digest');
+      files.push(join(dir, `${i}.json`));
+      writeFileSync(files[i], JSON.stringify(ans));
+    }
+    const proof = JSON.parse((await run('cosign', 'pq-combine', files)).out).executeCosignedPq[7];
+    assert.equal(getBytes(proof).length, 2 * (1312 + 2420));
+    const first = keys.map((k) => k.keyHash).sort((a, b) => (BigInt(a) < BigInt(b) ? -1 : 1))[0];
+    assert.equal(keccak256(dataSlice(proof, 0, 1312)), first, 'ordered by key hash');
+    writeFileSync(files[1], JSON.stringify({ ...JSON.parse(readFileSync(files[1], 'utf8')), digest: keccak256('0x02') }));
+    await assert.rejects(run('cosign', 'pq-combine', files), /different digests/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

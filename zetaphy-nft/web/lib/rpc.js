@@ -11,20 +11,31 @@ export class RpcError extends Error {
 
 const hex = (n) => '0x' + BigInt(n).toString(16);
 
-export function makeRpc(url, { fetchImpl = (...a) => globalThis.fetch(...a), timeoutMs = 15_000 } = {}) {
+// A node that just failed in transport (no answer within timeoutMs, unreachable, unreadable) is taken as down for
+// `downMs`: calls meanwhile fail at once with that error instead of each waiting timeoutMs again. A page makes
+// several reads one after another before it can show anything (chain id, registry, head block, ...), so without
+// this a stalled node kept the page on "Loading" for a multiple of the timeout before it showed the error.
+export function makeRpc(url, { fetchImpl = (...a) => globalThis.fetch(...a), timeoutMs = 15_000, downMs = 10_000, now = () => Date.now() } = {}) {
   let id = 0;
+  let downUntil = 0, downMsg = '';
+  const transportFailure = (msg) => { downUntil = now() + downMs; downMsg = msg; return new RpcError(msg, -1); };
   async function call(method, params = []) {
+    if (now() < downUntil) throw new RpcError(downMsg, -1);
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
-    let res;
+    let res, j;
+    // The timeout covers the whole answer, body included: a node that sends headers and then stalls must not hang the page.
     try {
-      res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
-        signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
-    } catch (e) {
-      throw new RpcError(`RPC unreachable: ${e?.message ?? e}`, -1);
+      try {
+        res = await fetchImpl(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }),
+          signal: ctl.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+      } catch (e) {
+        throw transportFailure(`RPC unreachable: ${e?.message ?? e}`);
+      }
+      if (!res.ok) throw new RpcError(`RPC HTTP ${res.status}`, res.status);
+      try { j = await res.json(); } catch (e) { throw transportFailure(`RPC unreadable answer: ${e?.message ?? e}`); }
     } finally { clearTimeout(timer); }
-    if (!res.ok) throw new RpcError(`RPC HTTP ${res.status}`, res.status);
-    const j = await res.json();
+    downUntil = 0; // it answered
     if (j.error) throw new RpcError(String(j.error.message ?? 'RPC error').slice(0, 300), j.error.code, j.error.data);
     return j.result;
   }
@@ -88,7 +99,11 @@ export async function scanLogs(rpc, filter, { floor = 0, maxBlocks = 50_000, ste
     try {
       return await rpc.getLogs({ ...filter, fromBlock: from, toBlock: to });
     } catch (e) {
-      if (to > from) { // too many blocks or logs: split
+      // Too many blocks or logs: the node refused the range (a JSON-RPC error), so split it. A transport failure
+      // (unreachable, timed out, HTTP error, unreadable answer) is not about the range: splitting it would only
+      // repeat the wait once per halving (~11 times for 2000 blocks), so it ends the scan at once.
+      const transport = e instanceof RpcError && (e.code === -1 || (typeof e.code === 'number' && e.code >= 100 && e.code < 600));
+      if (to > from && !transport) {
         const mid = Math.floor((from + to) / 2);
         return [...await range(from, mid), ...await range(mid + 1, to)];
       }

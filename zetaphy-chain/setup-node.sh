@@ -24,6 +24,14 @@ EGRESS_LIMIT_MB="${EGRESS_LIMIT_MB:-800}"
 # allow the wallet and app methods and limit each IP). PUBLIC_HTTP_RPC=1 also
 # opens plain http://<ip>:8545, without those limits (the faucet stays https only).
 PUBLIC_HTTP_RPC="${PUBLIC_HTTP_RPC:-0}"
+# https key exchange. prefer (default): the hybrid post-quantum X25519MLKEM768
+# (ML-KEM-768 + X25519) with every client that offers it (current Chrome, Edge,
+# Firefox, Safari, Go >= 1.24, OpenSSL >= 3.5), X25519 / P-256 for the others
+# (older Node, curl and Go, many wallet apps), so nobody is cut off. require:
+# the hybrid only; clients without ML-KEM cannot connect. off: Ubuntu's caddy
+# with its defaults. The certificate stays classical (ECDSA) either way.
+TLS_PQ="${TLS_PQ:-prefer}"
+[[ "$TLS_PQ" =~ ^(prefer|require|off)$ ]] || { echo "TLS_PQ: prefer, require or off"; exit 1; }
 
 set -euo pipefail
 
@@ -46,6 +54,13 @@ RATELIMIT_SUM="h1:5X2o/xT1x1fltUrkhvDCOpFaRJK5/1M36/SCh873VOc="
 WASMVM_VERSION="v3.0.9"
 WASMVM_SO_SHA256_x86_64="0d41aa842c004a6aa138291d1f9f99818479fec7aef024d419e4ad244f858ee4"
 WASMVM_SO_SHA256_aarch64="7eeb256b7baecaf465c555260d4e21b6d2532f451a2c7b95fd8acef4c4da597e"
+# The https proxy for TLS_PQ: Caddy's official release (built with Go >= 1.24,
+# which has X25519MLKEM768), installed in /usr/local/bin next to Ubuntu's package
+# (2.6 on 24.04: no ML-KEM) and checked against these SHA-256 sums of the release
+# tarballs (their SHA-512 in the release's checksums file matched when pinned).
+CADDY_VERSION="v2.11.7"
+CADDY_SHA256_x86_64="727b91701a392de6ebc5027509f548bf39979e5216340d0faed8fa5e69c84f8b"
+CADDY_SHA256_aarch64="d8fc6d179a5d283028a472a5618564f6ad8a86fed513e64f032b3b0b7cc45e42"
 
 NODE_USER="zetaphy"
 NODE_HOME="/home/${NODE_USER}/.zetaphy"          # chain data + config (no keys)
@@ -480,6 +495,36 @@ if [ -z "$JOIN" ] && [ ! -f "$V.registered" ]; then
 fi
 
 step "8/8 firewall and https"
+# TLS_PQ: installs Caddy $CADDY_VERSION from its release (SHA-256 checked) and points
+# the caddy service at it. Returns non-zero, changing nothing, when it cannot.
+pq_caddy() {
+  local arch sum tmp
+  case "$(uname -m)" in
+    x86_64) arch=amd64; sum=$CADDY_SHA256_x86_64 ;;
+    aarch64) arch=arm64; sum=$CADDY_SHA256_aarch64 ;;
+    *) return 1 ;;
+  esac
+  if ! /usr/local/bin/caddy version 2>/dev/null | grep -q "^$CADDY_VERSION "; then
+    tmp=$(mktemp -d)
+    if curl -fsSL -m 300 -o "$tmp/caddy.tar.gz" "https://github.com/caddyserver/caddy/releases/download/$CADDY_VERSION/caddy_${CADDY_VERSION#v}_linux_$arch.tar.gz" \
+      && echo "$sum  $tmp/caddy.tar.gz" | sha256sum -c --quiet - && tar -xzf "$tmp/caddy.tar.gz" -C "$tmp" caddy; then
+      install -m 755 "$tmp/caddy" /usr/local/bin/caddy
+      rm -rf "$tmp"
+    else
+      rm -rf "$tmp"
+      return 1
+    fi
+  fi
+  mkdir -p /etc/systemd/system/caddy.service.d
+  cat > /etc/systemd/system/caddy.service.d/zetaphy-pq.conf <<'UNIT'
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --force
+UNIT
+  systemctl daemon-reload
+}
 # Oracle's Ubuntu images reject everything except SSH in iptables; open the public ports.
 if command -v iptables >/dev/null && iptables -S INPUT 2>/dev/null | grep -q -- '-j REJECT'; then
   ports="26656 80 443"; [ "$PUBLIC_HTTP_RPC" = 1 ] && ports="8545 $ports"
@@ -539,8 +584,24 @@ WantedBy=multi-user.target
 UNIT
   systemctl daemon-reload && systemctl enable zetaphy-rpc-guard >/dev/null 2>&1 && systemctl restart zetaphy-rpc-guard \
     || echo "rpc-guard did not start: systemctl status zetaphy-rpc-guard"
-  { apt_get install -y caddy >/dev/null && cat > /etc/caddy/Caddyfile <<CADDY
+  # Ubuntu's package gives the caddy user, the service and /etc/caddy; for TLS_PQ the
+  # service runs the pinned release instead (a drop-in: apt upgrades do not undo it).
+  tls_block=""
+  if apt_get install -y caddy >/dev/null; then
+    if [ "$TLS_PQ" != off ] && pq_caddy; then
+      case "$TLS_PQ" in
+        require) curves="x25519mlkem768" ;;
+        *) curves="x25519mlkem768 x25519 secp256r1" ;;  # hybrid first: Go's TLS server picks it whenever the client offers it
+      esac
+      tls_block=$(printf '\ttls {\n\t\tcurves %s\n\t}' "$curves")
+    else
+      { rm -f /etc/systemd/system/caddy.service.d/zetaphy-pq.conf; systemctl daemon-reload; } 2>/dev/null || true
+      [ "$TLS_PQ" = off ] || echo "post-quantum https: Caddy $CADDY_VERSION could not be installed; Ubuntu's caddy serves classical X25519"
+    fi
+  fi
+  { command -v caddy >/dev/null && cat > /etc/caddy/Caddyfile <<CADDY
 $host${PUBLIC_HOST:+, $PUBLIC_HOST} {
+$tls_block
 	header ?Access-Control-Allow-Origin *
 	header ?Access-Control-Allow-Headers "Content-Type"
 	header ?Access-Control-Allow-Methods "GET, POST, OPTIONS"

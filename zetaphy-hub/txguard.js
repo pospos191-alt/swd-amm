@@ -139,6 +139,17 @@ export async function preflight({ rpc, chainId, from, lang = 'en' }) {
   if (n > 0) throw txgError(lang, 'stuck', n);
 }
 
+// A signer that settles its own transactions records the result here, and the watch below takes it: the ZETAPHY Snap
+// (pqsnap.js) sends a Cosmos tx (MsgEVMCall, signed with ML-DSA-44), which has no EVM receipt to poll for.
+const SETTLED = new Map();
+/** Records the receipt-like result of `hash` (status '0x1' in a block, '0x0' failed) for this page's watches. */
+export function settleTx(hash, receipt) {
+  SETTLED.set(String(hash).toLowerCase(), receipt);
+  if (SETTLED.size > 100) SETTLED.delete(SETTLED.keys().next().value);
+}
+/** The result settleTx recorded for `hash`, or null. */
+export const settledTx = (hash) => SETTLED.get(String(hash ?? '').toLowerCase()) ?? null;
+
 /**
  * After the wallet returns a hash: { status: 'ok' | 'failed' | 'timeout' | 'dropped' | 'stopped', receipt? }.
  * 'dropped' = the node has never seen the hash after `dropMs` (the wallet could not broadcast it).
@@ -150,7 +161,7 @@ export async function watchTx({ rpc, hash, from = null, timeoutMs = 180_000, dro
   let seen = false;
   while (now() - t0 < timeoutMs) {
     if (signal?.aborted) return { status: 'stopped' };
-    const rc = await rpc('eth_getTransactionReceipt', [hash]).catch(() => null);
+    const rc = settledTx(hash) ?? await rpc('eth_getTransactionReceipt', [hash]).catch(() => null);
     if (rc) return { status: rc.status === '0x1' ? 'ok' : 'failed', receipt: rc };
     if (!seen) seen = !!(await rpc('eth_getTransactionByHash', [hash]).catch(() => null));
     // a node that does not serve queued transactions by hash still counts them in the pending nonce

@@ -19,6 +19,7 @@ import { createDlmmTab } from './dlmm.js';
 import { safety, ledgerReason } from './lib/wallet-safety.js';
 import { LEDGER_ID_RE, ledgerId, ledgerProvider, hidSupported, preloadTransport } from './lib/ledger.js';
 import * as txg from './lib/txguard.js';
+import { PQSNAP_ID, snapHost, snapProvider, pqsText } from './lib/pqsnap.js';
 
 const $ = (id) => document.getElementById(id);
 const BASE = './';
@@ -338,6 +339,10 @@ function renderWalletList() {
     b.append(el('span', { text: w.name }));
     return b;
   }));
+  // The ZETAPHY Snap (post-quantum: an ML-DSA-44 key inside MetaMask, lib/pqsnap.js), when MetaMask is here.
+  const sw = snapWallet();
+  if (sw) $('wallet-list').append(el('button', { type: 'button', class: 'wallet-btn', id: 'wallet-pqsnap', onclick: () => connectWallet(sw) }, el('span', { text: pqsText(state.lang, 'btn') })),
+    el('p', { class: 'hint', text: pqsText(state.lang, 'note') }));
   $('wallet-none').hidden = list.length > 0;
   if (!list.length) {
     $('wallet-links').replaceChildren(...openInAppLinks(location.href).map((l) => el('a', { href: l.href, rel: 'noopener noreferrer', text: l.name })));
@@ -362,6 +367,17 @@ function ledgerWallet(index = null) {
   return w;
 }
 const isHardware = () => !!(state.wallet?.hardware || state.wallet?.provider?.isHardware);
+let snapW = null;
+/** The ZETAPHY Snap as a wallet entry (lib/pqsnap.js speaks EIP-1193): signs with ML-DSA-44 as its own account. */
+function snapWallet() {
+  const host = snapHost(walletsNow());
+  if (!host) return null;
+  if (snapW?.host === host.provider) return snapW;
+  const nodeRpc = (m, p) => (rpcUrl() ? rpc(m, p) : Promise.reject(new Error(t('noRpc'))));
+  snapW = { id: PQSNAP_ID, name: 'ZETAPHY Snap', pq: true, host: host.provider,
+    provider: snapProvider({ host: host.provider, rpc: nodeRpc, comet: () => nodeEndpoints(rpcUrl()).rpc, chainId: EVM_CHAIN_ID, lang: () => state.lang }) };
+  return snapW;
+}
 
 /** The large-balance banner (ZETAPHY on the connected account; none for a hardware account or inside the hub). */
 let bannerSeq = 0;
@@ -1114,7 +1130,7 @@ async function init() {
   const restore = () => {
     const id = sharedWalletId() ?? cleanWalletId(store.get(KEYS.wallet));
     const m = id && LEDGER_ID_RE.exec(id);
-    const w = m ? ledgerWallet(Number(m[1])) : id && walletsNow().find((x) => x.id === id);
+    const w = m ? ledgerWallet(Number(m[1])) : id === PQSNAP_ID ? snapWallet() : id && walletsNow().find((x) => x.id === id);
     if (w && (!state.account || state.wallet?.id !== id)) connectWallet(w, true);
   };
   setTimeout(restore, 400);
