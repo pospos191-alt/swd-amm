@@ -1944,3 +1944,28 @@ findings:
     reason: "SaphanSourceGateway.claim pays owed[msg.sender] to msg.sender after zeroing it, under nonReentrant: the standard pull payout, through _payCaller (ETH only to the caller)."
     decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #110 triage by reading the code)
     date: 2026-11-03
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/HyperlaneLockBoxV2.sol:b296ceed3428
+    status: false-positive
+    reason: "HyperlaneLockBoxV2.escape pays only msg.sender the owed amount its own Merkle leaf keccak256(abi.encode(msg.sender, owed)) proves against the validator-signed exit root; escaped[msg.sender] and locked are written first and a failed send reverts. The caller cannot name another recipient."
+    decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #111 triage by reading the code)
+    date: 2026-11-03
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/SaphanChallenges.sol:dc4e21ef89eb
+    status: false-positive
+    reason: "the external calls before these writes are view calls (lanes, attestedBy) to the route's immutable BridgeAirlock, not a caller-chosen contract; resolve is nonReentrant and sets the challenge state first, and no value is sent there (payouts only via claim)."
+    decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #111 triage by reading the code)
+    date: 2026-11-03
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/SaphanChallenges.sol:1cef0a1123a7
+    status: false-positive
+    reason: "same path as dc4e21ef89eb: view calls to the immutable airlock, under nonReentrant, state set first, no value sent."
+    decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #111 triage by reading the code)
+    date: 2026-11-03
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/SaphanChallenges.sol:dc1280a88107
+    status: false-positive
+    reason: "SaphanChallenges.claim pays credit[msg.sender] to msg.sender after zeroing it, under nonReentrant: the standard pull payout."
+    decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #111 triage by reading the code)
+    date: 2026-11-03
+  - id: aderyn:contract-locks-ether:zetaphy-network/contracts/SaphanCheckpointer.sol:4d3503ca3c0f
+    status: false-positive
+    reason: "the only payable function, beat(), requires msg.value to equal the Mailbox quote exactly and forwards that fee in the same call; there is no receive or fallback, so no ether stays in the contract."
+    decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #111 triage by reading the code)
+    date: 2026-11-03
