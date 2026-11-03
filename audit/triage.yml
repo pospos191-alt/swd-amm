@@ -1934,3 +1934,13 @@ findings:
     reason: "pays only the order's maker (whose ML-DSA signature over the order was checked) and the relayer (msg.sender); state is updated first and fill is nonReentrant, as in the triaged ZetaphyOfflineOrders."
     decided_by: pospos191 (owner, confirmed 2026-11-02 "ดำเนินการทั้งหมดให้เสร็จ"; proposed by claude-agent, PR #107 triage by reading the code)
     date: 2026-11-02
+  - id: slither:arbitrary-send-eth:zetaphy-network/contracts/SaphanGateway.sol:eb87803c87ce
+    status: false-positive
+    reason: "SaphanCalls._payCaller sends ETH only to msg.sender: its own change, its executor fee, or its own owed balance (zeroed first, nonReentrant). No call can direct ETH to a third address; a failed call's refund on the source chain is pulled (owed[revertTo] + claim())."
+    decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #110 triage by reading the code)
+    date: 2026-11-03
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/SaphanGateway.sol:7bdaad1cd945
+    status: false-positive
+    reason: "SaphanSourceGateway.claim pays owed[msg.sender] to msg.sender after zeroing it, under nonReentrant: the standard pull payout, through _payCaller (ETH only to the caller)."
+    decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #110 triage by reading the code)
+    date: 2026-11-03
