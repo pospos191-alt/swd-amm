@@ -528,7 +528,7 @@ export async function safetyDeploy(t, c, routes, zp, zs) {
   const r = routes[c.name];
   if (!r?.zetaphy?.bridgeAirlock || !r?.origin?.lockbox) throw new Error(`no deployed v2 route for ${c.name} in saphan-routes.json`);
   if (r.safety?.checkpointer) throw new Error(`${c.name} has its safety contracts already: ${r.safety.checkpointer} / ${r.safety.challenges}`);
-  const cp = await step('SaphanCheckpointer', () => deployArt('SaphanCheckpointer', [t.zetaphy.mailbox, c.domain, bytes32(r.origin.lockbox)], zs));
+  const cp = await step('SaphanCheckpointer', () => deployArt('SaphanCheckpointer', [t.zetaphy.mailbox, c.domain, bytes32(r.origin.lockbox), r.zetaphy.bridgedToken], zs));
   const ch = await step('SaphanChallenges', () => deployArt('SaphanChallenges', [r.zetaphy.bridgeAirlock, t.zetaphy.neuroJobs, t.zetaphy.timelock,
     parseEther(CHALLENGE_BOND), CHALLENGE_VOTING, CHALLENGE_QUORUM, CHALLENGE_MIN_AGREED], zs));
   const cpAt = getAddress(await cp.getAddress()), chAt = getAddress(await ch.getAddress());

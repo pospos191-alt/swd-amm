@@ -49,8 +49,13 @@ function closure(content, from, out) {
 const all = Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.sol')).sort()
   .map((f) => [`contracts/${f}`, { content: readFileSync(new URL(f, dir), 'utf8') }]));
 const usesOz = (src) => /^\s*import\s/m.test(src.content);
+// Files without imports are self-contained, so they compile in chunks: one unit of every contract made the
+// solc WebAssembly build run out of memory (Aborted) once there were enough of them. A contract's bytecode and
+// metadata depend only on its own file, so the chunking changes neither; `input` holds the chunk's sources.
+const CHUNK = 40;
+const plain = Object.entries(all).filter(([, s]) => !usesOz(s));
 const units = [
-  Object.fromEntries(Object.entries(all).filter(([, s]) => !usesOz(s))),
+  ...Array.from({ length: Math.ceil(plain.length / CHUNK) }, (_, i) => Object.fromEntries(plain.slice(i * CHUNK, (i + 1) * CHUNK))),
   (() => {
     const own = Object.fromEntries(Object.entries(all).filter(([, s]) => usesOz(s)));
     const libs = {};

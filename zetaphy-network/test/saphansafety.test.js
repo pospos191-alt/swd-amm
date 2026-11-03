@@ -70,7 +70,7 @@ async function route() {
   await r.guard.send('gov', 'setAudit', AUDIT);
   await r.guard.send('gov', 'setRoute', [ROUTE_IN, r.airlock.address, 100n * E, true]);
   await r.guard.send('gov', 'setOutboundRoute', [ROUTE_OUT, r.outbox.address, 100n * E, true]);
-  r.cp = await c.deployRaw(withErrors('SaphanCheckpointer'), [zMailbox.address, SEPOLIA, b32(r.lockbox.address)], 'gov');
+  r.cp = await c.deployRaw(withErrors('SaphanCheckpointer'), [zMailbox.address, SEPOLIA, b32(r.lockbox.address), r.token], 'gov');
   return r;
 }
 const lastMessage = (mb) => mb.call('lastMessage');
@@ -99,7 +99,7 @@ test('heartbeat: ZETAPHY\'s checkpointer reaches the lockbox through our validat
   await relayOut(r);
   assert.equal(await r.lockbox.call('lastBeat'), 1n);
   // a checkpointer nobody named is just a wrong sender
-  const other = await c.deployRaw(withErrors('SaphanCheckpointer'), [zMailbox.address, SEPOLIA, b32(r.lockbox.address)], 'attacker');
+  const other = await c.deployRaw(withErrors('SaphanCheckpointer'), [zMailbox.address, SEPOLIA, b32(r.lockbox.address), r.token], 'attacker');
   await other.send('attacker', 'beat', []);
   await assert.rejects(relayOut(r), /WrongSender/);
   // the body must name this checkpointer and ZETAPHY's chain (a release body from it is refused)

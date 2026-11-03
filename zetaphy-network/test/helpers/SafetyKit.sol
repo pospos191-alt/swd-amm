@@ -11,3 +11,20 @@ contract KitRunners {
         return (x.bond, x.unbondAt, x.active, x.agreed, x.rejected);
     }
 }
+
+/// Test-only light client: app hashes set by hand (StarkLightClient's own proofs are tested in starkbridge.test.js).
+contract KitLightClient {
+    mapping(uint64 => bytes32) public appHashAt;
+    function set(uint64 h, bytes32 a) external { appHashAt[h] = a; }
+}
+
+/// Test-only SPV client: a block is "included" when set by hand; returns the txid like BtcLightClient
+/// (its real proofs of work and Merkle branches are tested in btclc.test.js on mainnet blocks).
+contract KitBtcClient {
+    mapping(bytes32 => bool) public known;
+    function setKnown(bytes32 b) external { known[b] = true; }
+    function verifyTx(bytes calldata rawTx, bytes32 blockHash, uint256, bytes32[] calldata, uint256) external view returns (bytes32) {
+        require(known[blockHash], "unknown block");
+        return sha256(abi.encodePacked(sha256(rawTx)));
+    }
+}

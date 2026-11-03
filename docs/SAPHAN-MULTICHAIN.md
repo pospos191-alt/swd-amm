@@ -14,6 +14,8 @@ Calling a contract on the other side in the same transaction (`depositAndCall` /
 refunds) is the Gateway on top of each route: docs/SAPHAN-GATEWAY.md ([ไทย](SAPHAN-GATEWAY.th.md)).
 The escape hatch (ETH back on the source chain if ZETAPHY stops) and bonded challenges (stop a bad transfer before
 it mints; the lanes that vouched for it lose their bonds): docs/SAPHAN-SAFETY.md ([ไทย](SAPHAN-SAFETY.th.md)).
+Proven releases (ZETAPHY -> source chain on a STARK light client, no signer), Bitcoin deposits by proof of work,
+and proof of reserves on every heartbeat: docs/SAPHAN-PROOFS.md ([ไทย](SAPHAN-PROOFS.th.md)).
 
 ## Design
 
