@@ -14,13 +14,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = join(HERE, '..', 'dist');
 const exe = process.env.CHROMIUM_PATH || undefined;
 const ACC = '0x6af57fC3633dD0F7907f7900dbd4A2822F43a245';
+const FRESH = '0x000000000000000000000000000000000000F00d'; // an empty wallet in the mock node
 const vercel = JSON.parse(readFileSync(join(HERE, '..', 'vercel.json'), 'utf8'));
 const CSP = vercel.headers[0].headers.find((h) => h.key === 'Content-Security-Policy').value;
 
 test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120_000 }, async () => {
   const site = await serve(DIST, { headers: { 'content-security-policy': CSP } });
   const browser = await chromium.launch(exe ? { executablePath: exe } : {});
-  let nodeDown = false, hardPow = false;
+  let nodeDown = false, hardPow = false, refuseClaims = 0, dropClaims = 0;
   try {
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     const errors = [];
@@ -31,6 +32,15 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
       if (new URL(u).origin === new URL(site.url).origin) return route.continue();
       if (new URL(u).origin === 'https://rpc.sawasdeecoin.com') {
         if (nodeDown) return route.abort('connectionrefused');
+        const body = route.request().postData();
+        if (/zetaphy_faucetPow"/.test(body ?? '')) {
+          if (dropClaims > 0) { dropClaims--; return route.abort('connectionreset'); }
+          if (refuseClaims > 0) {
+            refuseClaims--;
+            return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+              body: JSON.stringify({ jsonrpc: '2.0', id: 1, error: { code: -32000, message: "the proof's block 1 is too old: use one of the last 100 blocks (latest 200)" } }) });
+          }
+        }
         const a = answer(u, route.request().postData());
         if (hardPow && a?.result?.proof) a.result = { ...a.result, bits: 40 }; // a session that keeps mining
         if (a) return route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(a) });
@@ -64,7 +74,13 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
     await page.click('#mn-start');
     await page.waitForFunction(() => document.getElementById('mn-msg').classList.contains('bad'));
     assert.match(await page.textContent('#mn-msg'), /0x… or zetaphy1…/, 'an address first');
+    // an address holding coins already: said before any work (the node would refuse it)
     await page.fill('#mn-addr', ACC);
+    await page.click('#mn-start');
+    await page.waitForFunction(() => /already has 10 ZTPHY/.test(document.getElementById('mn-msg').textContent));
+    assert.equal(await page.textContent('#mn-status'), 'Error');
+    assert.deepEqual(await page.evaluate(() => window.__workers), { made: 0, ended: 0 }, 'no work for an address the faucet will not pay');
+    await page.fill('#mn-addr', FRESH);
 
     // a long session: the status, the miners at work, workers changed live, pause, stop
     hardPow = true;
@@ -74,7 +90,7 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
     assert.equal(await page.textContent('#mn-status'), 'Mining');
     assert.equal(await page.textContent('#mn-start'), 'Stop mining');
     assert.ok(await page.isVisible('#mn-art.on #mn-crew svg .mg-arm'), 'the miners swing while mining');
-    assert.match(await page.textContent('#mn-session'), /Session started \d\d:\d\d · 0x6af5/);
+    assert.match(await page.textContent('#mn-session'), /Session started \d\d:\d\d · 0x0000/);
     assert.equal(await live(), 2);
     if (await page.evaluate(() => (navigator.hardwareConcurrency || 2) >= 3)) {
       await page.click('#mn-more');
@@ -100,21 +116,24 @@ test('mine testnet ZETAPHY in the browser, and the faucet forms', { timeout: 120
     assert.equal(await live(), 0, 'Stop ends the workers');
     hardPow = false;
 
-    // a quick session: the proof is found and claimed by itself
+    // a quick session: the proof is found and claimed by itself; a refused claim and a lost answer
+    // do not end it: it mines on (and asks again) until the coins are sent
     const made = await page.evaluate(() => window.__workers.made);
+    refuseClaims = 1; dropClaims = 1;
     await page.click('#mn-start');
     await page.waitForFunction(() => document.getElementById('mn-msg').classList.contains('ok'), null, { timeout: 30_000 });
     assert.match(await page.textContent('#mn-msg'), /10 test ZETAPHY/);
     assert.equal(await page.textContent('#mn-status'), 'Done');
     assert.equal(await page.textContent('#mn-start'), 'Done');
     assert.equal(await page.textContent('#mn-won'), '10 ZTPHY');
-    assert.equal(powClaims.length, 1);
+    assert.equal(refuseClaims + dropClaims, 0, 'both failures happened');
+    assert.equal(powClaims.length, 1, 'the claim the node saw');
     assert.ok(powClaims[0].ok, 'the proof holds');
-    assert.equal(powClaims[0].addr, ACC);
+    assert.equal(powClaims[0].addr, FRESH);
     assert.match(powClaims[0].nonce, /^0x[0-9a-f]{16}$/);
     assert.equal(powClaims[0].height, '0x1e240');
     const w = await page.evaluate(() => window.__workers);
-    assert.equal(w.made - made, 1, 'one worker');
+    assert.equal(w.made - made, 2, 'one worker, started again after the refused claim');
     assert.equal(w.ended, w.made, 'the workers stop once the proof is found');
     assert.equal(await page.isDisabled('#mn-start'), false);
     assert.ok(POW_BITS < 20);

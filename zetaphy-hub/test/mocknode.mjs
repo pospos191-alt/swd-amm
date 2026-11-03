@@ -45,6 +45,8 @@ export function answer(url, body) {
     if (method === 'zetaphy_faucet' && /dead$/i.test(params?.[0] ?? '')) return { jsonrpc: '2.0', id, error: { code: -32000, message: 'this address already has ZETAPHY' } };
     // the proof-of-work faucet, at a low difficulty; claims are checked as the node checks them
     if (method === 'zetaphy_faucetPowInfo') return { jsonrpc: '2.0', id, result: { enabled: true, bits: POW_BITS, reward: '0x8ac7230489e80000', chainId: 77390, latestHeight: H, maxAgeBlocks: 100, remainingToday: 199, perDay: 200, cooldownSeconds: 86400, proof: 'sha256(…)' } };
+    // an empty wallet (the faucet pays only those): addresses ending in f00d
+    if (method === 'eth_getBalance' && /f00d$/i.test(params?.[0] ?? '')) return { jsonrpc: '2.0', id, result: '0x0' };
     if (method === 'eth_getBlockByNumber') return { jsonrpc: '2.0', id, result: { number: `0x${H.toString(16)}`, hash: BLOCK_HASH } };
     if (method === 'zetaphy_faucetPow') {
       const [addr, height, nonce] = params;

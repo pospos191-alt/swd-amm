@@ -458,6 +458,7 @@ export const MINE = {
     claimFail: 'The claim failed', badAddr: 'Enter a 0x… or zetaphy1… address', off: 'The faucet is off on this node',
     noneLeft: 'The faucet has given out today\'s grants; try again tomorrow (UTC)', noInfo: 'The node does not offer the mining faucet yet',
     workerFail: 'The miner stopped unexpectedly; press Start again',
+    hasCoins: "This address already has 10 ZTPHY or more; the faucet only fills up empty wallets. Use another address", cooldown: "This address got coins from the faucet less than a day ago; try again later or use another address", again: "The claim did not go through ({why}); mining on by itself until the coins arrive", waitNode: "The node does not answer; trying again by itself…",
   },
   zh: {
     title: '挖测试网 ZETAPHY', addr: "目标地址", useWallet: '使用我的钱包',
@@ -484,6 +485,7 @@ export const MINE = {
     claimFail: '领取失败', badAddr: '请输入 0x… 或 zetaphy1… 地址', off: '此节点的水龙头已关闭',
     noneLeft: '水龙头今天的份额已发完；请明天（UTC）再试', noInfo: '节点尚未提供挖矿水龙头',
     workerFail: '挖矿意外停止；请再按“开始”',
+    hasCoins: "该地址已有 10 ZTPHY 或更多；水龙头只给空钱包。请换一个地址", cooldown: "该地址不到一天前已从水龙头领过币；请稍后再试或换一个地址", again: "领取未成功（{why}）；将自动继续挖，直到收到币", waitNode: "节点没有响应；正在自动重试…",
   },
   es: {
     title: 'Mina ZETAPHY de testnet', addr: "Dirección destino", useWallet: 'Usar mi wallet',
@@ -510,6 +512,7 @@ export const MINE = {
     claimFail: 'El reclamo falló', badAddr: 'Escribe una dirección 0x… o zetaphy1…', off: 'El faucet está apagado en este nodo',
     noneLeft: 'El faucet ya repartió las entregas de hoy; vuelve mañana (UTC)', noInfo: 'El nodo aún no ofrece el faucet de minería',
     workerFail: 'El minero se detuvo inesperadamente; pulsa Empezar otra vez',
+    hasCoins: "Esta dirección ya tiene 10 ZTPHY o más; el faucet solo llena wallets vacías. Usa otra dirección", cooldown: "Esta dirección recibió monedas del faucet hace menos de un día; vuelve más tarde o usa otra dirección", again: "El reclamo no salió ({why}); sigue minando solo hasta que lleguen las monedas", waitNode: "El nodo no responde; reintentando solo…",
   },
   ko: {
     title: '테스트넷 ZETAPHY 채굴', addr: "받을 주소", useWallet: '내 지갑 사용',
@@ -536,6 +539,7 @@ export const MINE = {
     claimFail: '받기에 실패했습니다', badAddr: '0x… 또는 zetaphy1… 주소를 입력하세요', off: '이 노드의 Faucet이 꺼져 있습니다',
     noneLeft: 'Faucet이 오늘 지급분을 모두 나눠 주었습니다. 내일(UTC) 다시 시도하세요', noInfo: '노드가 아직 채굴 Faucet을 제공하지 않습니다',
     workerFail: '채굴이 예기치 않게 멈췄습니다. 다시 시작을 누르세요',
+    hasCoins: "이 주소에는 이미 10 ZTPHY 이상이 있습니다. Faucet은 빈 지갑에만 지급합니다. 다른 주소를 사용하세요", cooldown: "이 주소는 하루 이내에 Faucet에서 코인을 받았습니다. 나중에 다시 시도하거나 다른 주소를 사용하세요", again: "받기에 실패했습니다({why}). 코인을 받을 때까지 자동으로 계속 채굴합니다", waitNode: "노드가 응답하지 않습니다. 자동으로 다시 시도하는 중…",
   },
   ja: {
     title: 'テストネット ZETAPHY をマイニング', addr: "受取アドレス", useWallet: '接続中のウォレットを使う',
@@ -562,6 +566,7 @@ export const MINE = {
     claimFail: '受け取りに失敗しました', badAddr: '0x… または zetaphy1… のアドレスを入力してください', off: 'このノードの Faucet は停止中です',
     noneLeft: 'Faucet は今日の分を配り終えました。明日（UTC）また試してください', noInfo: 'ノードはまだマイニング Faucet に対応していません',
     workerFail: 'マイナーが予期せず止まりました。もう一度開始を押してください',
+    hasCoins: "このアドレスにはすでに 10 ZTPHY 以上あります。Faucet は空のウォレットにだけ送ります。別のアドレスを使ってください", cooldown: "このアドレスは 1 日以内に Faucet から受け取っています。後でもう一度試すか、別のアドレスを使ってください", again: "受け取りに失敗しました（{why}）。コインが届くまで自動でマイニングを続けます", waitNode: "ノードが応答しません。自動で再試行しています…",
   },
   ru: {
     title: 'Майнинг тестовых ZETAPHY', addr: "Адрес получателя", useWallet: 'Взять из кошелька',
@@ -588,6 +593,7 @@ export const MINE = {
     claimFail: 'Получить не удалось', badAddr: 'Введите адрес 0x… или zetaphy1…', off: 'Кран на этом узле выключен',
     noneLeft: 'Кран уже раздал сегодняшние выдачи; попробуйте завтра (UTC)', noInfo: 'Узел пока не поддерживает майнинг-кран',
     workerFail: 'Майнер неожиданно остановился; нажмите «Старт» ещё раз',
+    hasCoins: "На этом адресе уже 10 ZTPHY или больше; кран пополняет только пустые кошельки. Используйте другой адрес", cooldown: "Этот адрес получил монеты из крана меньше суток назад; попробуйте позже или используйте другой адрес", again: "Получить не удалось ({why}); майнинг продолжается сам, пока монеты не придут", waitNode: "Узел не отвечает; повторяю попытку автоматически…",
   },
   vi: {
     title: 'Đào ZETAPHY testnet', addr: "Địa chỉ nhận", useWallet: 'Dùng ví của tôi',
@@ -614,6 +620,7 @@ export const MINE = {
     claimFail: 'Nhận thất bại', badAddr: 'Hãy nhập địa chỉ 0x… hoặc zetaphy1…', off: 'Faucet đang tắt trên node này',
     noneLeft: 'Faucet đã phát hết lượt hôm nay; hãy thử lại ngày mai (UTC)', noInfo: 'Node chưa hỗ trợ faucet đào',
     workerFail: 'Trình đào dừng bất ngờ; hãy bấm Bắt đầu lại',
+    hasCoins: "Địa chỉ này đã có từ 10 ZTPHY trở lên; faucet chỉ nạp cho ví trống. Hãy dùng địa chỉ khác", cooldown: "Địa chỉ này đã nhận coin từ faucet chưa đầy một ngày; hãy thử lại sau hoặc dùng địa chỉ khác", again: "Nhận chưa thành công ({why}); tự tiếp tục đào cho đến khi nhận được coin", waitNode: "Node không phản hồi; đang tự thử lại…",
   },
   th: {
     title: 'ขุด ZETAPHY ทดลอง', addr: "ที่อยู่ปลายทาง", useWallet: 'ใช้กระเป๋าที่เชื่อมไว้',
@@ -640,5 +647,6 @@ export const MINE = {
     claimFail: 'รับเหรียญไม่สำเร็จ', badAddr: 'ใส่ที่อยู่ 0x… หรือ zetaphy1…', off: 'faucet ปิดอยู่บนโหนดนี้',
     noneLeft: 'faucet แจกครบโควตาวันนี้แล้ว ลองใหม่พรุ่งนี้ (UTC)', noInfo: 'โหนดยังไม่รองรับ faucet แบบขุด',
     workerFail: 'ตัวขุดหยุดกะทันหัน กดเริ่มอีกครั้ง',
+    hasCoins: "ที่อยู่นี้มี ZTPHY ตั้งแต่ 10 เหรียญขึ้นไปแล้ว faucet เติมให้เฉพาะกระเป๋าที่ยังไม่มีเหรียญ ลองใช้ที่อยู่อื่น", cooldown: "ที่อยู่นี้เพิ่งรับเหรียญจาก faucet ไปไม่ถึง 1 วัน ลองใหม่ภายหลังหรือใช้ที่อยู่อื่น", again: "รับเหรียญยังไม่สำเร็จ ({why}) กำลังขุดต่อเองจนกว่าจะได้เหรียญ", waitNode: "โหนดยังไม่ตอบ กำลังลองใหม่เอง…",
   },
 };

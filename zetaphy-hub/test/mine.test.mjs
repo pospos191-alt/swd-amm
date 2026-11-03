@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { sha256, zeroBits, powPrefix, powMessage, powOk, search, nonceHex, expectedTries } from '../mine-core.js';
-import { mineAddress, chanceBy, clock, rate } from '../mine.js';
+import { mineAddress, chanceBy, clock, rate, claimVerdict, unreachable } from '../mine.js';
 import { askFaucet } from '../pages.js';
 
 test('sha256 is SHA-256 (every padding case)', () => {
@@ -63,4 +63,23 @@ test('askFaucet: the tx hash; the node\'s own reason; "down" when the node canno
   await assert.rejects(askFaucet('https://n', '0x1', reply(429, { error: { message: 'at most 3 grants a day' } })), (e) => !e.down && /3 grants/.test(e.message));
   await assert.rejects(askFaucet('https://n', '0x1', reply(502, '<html>')), (e) => e.down);
   await assert.rejects(askFaucet('https://n', '0x1', async () => { throw new TypeError('Failed to fetch'); }), (e) => e.down);
+});
+
+test('a failed claim: stop only when mining on cannot help, otherwise mine on or ask again', () => {
+  // the node's own reasons (zetaphy-chain/setup-node.sh: faucetGrant, FaucetPow)
+  assert.equal(claimVerdict('this address got ZETAPHY less than a day ago'), 'cooldown');
+  assert.equal(claimVerdict('this address already has ZETAPHY'), 'hasCoins');
+  assert.equal(claimVerdict("the faucet has given out today's 200 grants; try again tomorrow (UTC)"), 'noneLeft');
+  assert.equal(claimVerdict('the faucet is off on this node'), 'final');
+  assert.equal(claimVerdict('the faucet answers only through this node\'s https address'), 'final');
+  assert.equal(claimVerdict("the proof's block 5 is too old: use one of the last 100 blocks (latest 200)"), 'again');
+  assert.equal(claimVerdict('this proof was used already; mine a new one'), 'again');
+  assert.equal(claimVerdict('block 9 is not there yet (latest 8)'), 'again');
+  assert.equal(claimVerdict('the proof has 3 leading zero bits; 28 are needed'), 'again');
+  // no answer from the node: the same proof again
+  for (const m of ['HTTP 502', 'Failed to fetch', 'NetworkError when attempting to fetch resource.', 'signal is aborted without reason', 'Load failed', 'request timed out']) {
+    assert.equal(claimVerdict(m), 'unreachable', m);
+    assert.ok(unreachable(m));
+  }
+  assert.equal(unreachable('this address already has ZETAPHY'), false);
 });

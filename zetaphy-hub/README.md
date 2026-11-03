@@ -50,6 +50,11 @@ stake, the work secures nothing, the coins have no value, and only `sha256` puzz
   is left or redrawn (a language change). Threads: 1 to the number of cores (at most 8), **default 2**; one is enough on battery.
 - The proof's block is refreshed every 20 s once it is half the allowed age (100 blocks, ~8 min), so a slow search never builds
   on a block the node no longer accepts.
+- **It keeps going until the coins arrive.** A claim the node refuses for the proof (an old block, a proof used already) mines
+  on by itself on the newest block; a claim the node does not answer (timeout, 502, no connection) is sent again with the same
+  proof (3 times, 5–20 s apart), then mines on; a node that does not answer at Start is asked again every 10 s. It stops on its
+  own only when mining on cannot help: the address got coins less than a day ago, the day's grants are gone, the faucet is off.
+  The node pays only an address holding less than one reward (10 ZTPHY), so the page checks the balance **before** any work.
 
 **Difficulty: 30 zero bits** (2^30 ≈ 1.07 billion tries on average). Measured here, headless Chromium 141 on a 2.1 GHz Xeon VM
 (4 vCPU, shared): pure-JS SHA-256 in a Web Worker **2.38 MH/s** with one worker, ~1.8–2.3 MH/s each with 2–4 workers;
