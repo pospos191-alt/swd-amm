@@ -162,6 +162,12 @@ test('governance behind a ZetaphyTimelock: its delay, its own admin role and its
   const bad = fakeProvider({ [TL]: timelock(3600n, [DEPLOYER], [DEPLOYER]), [GUARD]: guard });
   const p = (await roleChecks(bad, { governance: [TL], guardians: [GUARD] }, { deployer: DEPLOYER })).problems.join('\n');
   assert.match(p, /3600 s delay: at least 86400/);
+  // on the public testnet a 0 s governance timelock is a warning, not a refusal (only there)
+  const zero = fakeProvider({ [TL]: timelock(0n, [MS], [TL]), [MS]: ms, [GUARD]: guard });
+  const onTestnet = await roleChecks(zero, { governance: [TL], guardians: [GUARD] }, { deployer: DEPLOYER, testnet: true });
+  assert.deepEqual(onTestnet.problems, []);
+  assert.match(onTestnet.warnings.join('\n'), /0 s delay: allowed on the testnet only/);
+  assert.match((await roleChecks(zero, { governance: [TL], guardians: [GUARD] }, { deployer: DEPLOYER })).problems.join('\n'), /0 s delay: at least 86400/);
   assert.match(p, /must be its own only admin/);
   assert.match(p, /proposer of timelock .* is a single key/);
   const shared = fakeProvider({ [TL]: timelock(172800n, [MS], [TL]), [MS]: ms, [GUARD]: simple([A(1), A(5), A(6)], 2) });

@@ -175,7 +175,10 @@ export async function roleChecks(provider, { governance = [], guardians = [] }, 
   // governance behind a ZetaphyTimelock: the delay holds (24 h+), the timelock is its own only admin,
   // and its proposers are checked like governance (multisigs or the gov module)
   for (const t of govInfos.filter((x) => x.kind === 'timelock')) {
-    if (t.delay < 86400 && !devnet) problems.push(`governance ${t.address} is a timelock with a ${t.delay} s delay: at least 86400 (24 h)`);
+    // the public testnet (test coins only) may run its governance timelock without a delay (the owner's choice for
+    // the testnet); anything else needs 24 h so a harmful change can be seen and stopped before it takes effect
+    if (t.delay < 86400 && testnet) warnings.push(`governance ${t.address} is a timelock with a ${t.delay} s delay: allowed on the testnet only (at least 86400, 24 h, anywhere else)`);
+    else if (t.delay < 86400 && !devnet) problems.push(`governance ${t.address} is a timelock with a ${t.delay} s delay: at least 86400 (24 h)`);
     if (t.admins.length !== 1 || !same(t.admins[0], t.address)) problems.push(`governance ${t.address} is a timelock whose admin role is ${t.admins.join(', ') || 'nobody'}: it must be its own only admin`);
     if (!t.proposers.length) problems.push(`governance ${t.address} is a timelock without proposers`);
     for (const p of t.proposers) govInfos.push({ ...p, role: `governance (proposer of timelock ${t.address})` });
