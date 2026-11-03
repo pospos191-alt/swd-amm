@@ -1,5 +1,29 @@
 {
   "about": "ZETAPHY Saphan, EVM routes v2: what the saphan-route workflow deployed, per source chain (written by its deploy mode). Empty until the first deploy. The first route (Sepolia -> ZETAPHY only, v1, never opened) is in bridge-testnet.json. `tokens`: the token routes (tokens born on ZETAPHY), per token key and destination chain.",
-  "routes": {},
+  "routes": {
+    "sepolia": {
+      "version": 2,
+      "state": "CLOSED",
+      "zetaphy": {
+        "bridgeGuard": "0xF0DaB19e256bE002d870F26A30C195717Ef56c76",
+        "bridgedToken": "0x3e800aC76bd8785108c16BCEFF5591f935803b03",
+        "bridgeAirlock": "0x15a8d622A992F5Be1404637E251f6F89DC3f16CE",
+        "neuroLane": "0xE001473bEa4D94A82C7D8A2D7C51D81b3Ba8e071",
+        "hyperlaneLane": "0x2acb3032F2f32492272fB115c5B8cdC491B3d528",
+        "hyperlaneOutbox": "0x191f05A3Cdfa1154b169E24fFaaf38FE59437848",
+        "ism": "0xb304b80e6D3fb4adc6424dEB27117b0952623D38",
+        "fromBlock": 213008
+      },
+      "origin": {
+        "lockbox": "0x50dDFB6c42AE06c9aF10439A992480712C581E5E",
+        "ism": "0xd282A48c9755734C1467247636EA51468243E1a5",
+        "multisig": "0xBf1DfA50367df6dEe44F4BE2953D02c2ADDCA5A9",
+        "timelock": "0x58ad8D3B083B91eD4e91e363A8C147142436098E",
+        "deployTx": "0xf03260f4f70ea453d89fa23c1fe549651ac4535278a325abd9eec1287f6324a9",
+        "fromBlock": 12056947
+      },
+      "workflowRun": "41690047176"
+    }
+  },
   "tokens": {}
 }
