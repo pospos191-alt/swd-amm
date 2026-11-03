@@ -210,6 +210,10 @@
 //   zetaphy aas chains|intake|order|pay|verify|badge|registry …   Audit-as-a-Service for any chain (EVM, CosmWasm, Solana):
 //                                      what would be audited (code hash now, verified source, proxy + implementation),
 //                                      the AuditNetwork order, VALID / EXPIRED / REVOKED / CODE CHANGED (docs/future/audit-as-a-service.md)
+//   zetaphy redteam scan|targets|replay | exploit list|submit|commit|reveal|settle|withdraw | econ sim|attach|…
+//                                      the AI red team (SS3), exploit market (S1) and economic-security sim (SS4),
+//                                      docs/future/red-team.md; all attacks run on a LOCAL fork, never a live chain
+//   zetaphy deploy-redteam --jobs 0x<NeuroJobs> [--governance 0x<timelock> --network 0x… --certificate 0x…]  ExploitMarket (+ EconomicBounds)
 //   zetaphy deploy-audit --timelock 0x… --treasury 0x… --jobs 0x… [--reputation 0x…]   AuditNetwork + AuditRunners +
 //                                      AuditJudges + AuditCertificate, governed by the timelock (no key keeps a role)
 //   zetaphy identity register <chain> <address>          give a contract its Neuro identity (anyone may; one per contract)
@@ -1772,6 +1776,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, writ
   // Neuro-checked certificates, ML-DSA-44 attestations, the herd-immunity pusher (src/assistcli.js)
   if (group === 'certify' || group === 'attest-pq' || group === 'immune' || group === 'deploy-assist') {
     return assistCommand({ group, cmd, rest, opt, write, s, connect, connectRpc, argv });
+  }
+
+  // the AI red team (SS3), exploit market (S1) and economic-security simulation (SS4): all on local forks (src/redteamcli.js)
+  if (group === 'redteam' || group === 'exploit' || group === 'econ' || group === 'deploy-redteam') {
+    const { redteamCommand } = await import('./src/redteamcli.js');
+    return redteamCommand({ group, cmd, rest, opt, write, s, connect, connectRpc });
   }
 
   // parametric hack insurance: the deterministic forensic replay and the committee vote (src/insurancecli.js)
