@@ -1,0 +1,420 @@
+{
+  "schema": "zetaphy.proof/1",
+  "by": "zetaphy-spec 1.0.0",
+  "contract": "BridgeGuard",
+  "file": "zetaphy-network/contracts/BridgeGuard.sol",
+  "specHash": "0x3b2304ae07b3b33e437b22ef02e0ed645e24e4c20d655ec6a5cd032e3db0509f",
+  "sourceHash": "0xdfcdf6edd9ab2bf501327a82e8ecf54eebe85c1e397ed5130f1c6a66e727970b",
+  "runtimeHash": "0xdb8082cae8047f89f43571418d3016833e4e384311903bcc2a35e14c11084525",
+  "codeMatch": null,
+  "tools": {
+    "forge": "1.2.3-v1.2.3",
+    "halmos": "0.3.3",
+    "solc": "0.8.26+commit.8a97fa7a.Linux.g++"
+  },
+  "artifacts": [
+    {
+      "path": "test/Spec.t.sol",
+      "hash": "0x232b5c44993ef5e7f28fd9f728a308d19de29dc9e5513806fc0dce0f2406478d"
+    },
+    {
+      "path": "smt/SpecSMT.sol",
+      "hash": "0xd7d503e3a887e5ec35221135dc670c0c00cb712eab1beb1eef9cbeaddefa8d42"
+    }
+  ],
+  "artifactsHash": "0x8421be4a56b867095ac6daae61cb59e2132b2735f6e26da4489bad3debf20b2f",
+  "recipe": {
+    "install": "bash audit/tools/install.sh <dir> fast  # forge 1.2.3, halmos 0.3.3 (pip, hashed), solc 0.8.26 (sha256-checked)",
+    "run": "node audit/spec/cli.js prove audit/spec/examples/BridgeGuard.spec.json",
+    "halmos": "halmos --root <work> --contract SpecChecks --loop 3 --solver-timeout-assertion 60000"
+  },
+  "summary": {
+    "properties": 26,
+    "proven": 26,
+    "counterexamples": 0,
+    "unknown": 0,
+    "allProven": true
+  },
+  "properties": [
+    {
+      "id": "access-createToken",
+      "kind": "access",
+      "title": "only governance can call createToken",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_createToken",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setGovernance",
+      "kind": "access",
+      "title": "only governance can call setGovernance",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setGovernance",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setGuardian",
+      "kind": "access",
+      "title": "only governance can call setGuardian",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setGuardian",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setAudit",
+      "kind": "access",
+      "title": "only governance can call setAudit",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setAudit",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-proposeMaxDailyLimit",
+      "kind": "access",
+      "title": "only governance can call proposeMaxDailyLimit",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_proposeMaxDailyLimit",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-cancelMaxDailyLimit",
+      "kind": "access",
+      "title": "only governance or a guardian can call cancelMaxDailyLimit",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_cancelMaxDailyLimit",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-lowerMaxDailyLimit",
+      "kind": "access",
+      "title": "only governance or a guardian can call lowerMaxDailyLimit",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_lowerMaxDailyLimit",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-disableRoute",
+      "kind": "access",
+      "title": "only governance or a guardian can call disableRoute",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_disableRoute",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setThreats",
+      "kind": "access",
+      "title": "only governance can call setThreats",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setThreats",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setRoute",
+      "kind": "access",
+      "title": "only governance can call setRoute",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setRoute",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setOutboundRoute",
+      "kind": "access",
+      "title": "only governance can call setOutboundRoute",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setOutboundRoute",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-pause",
+      "kind": "access",
+      "title": "only governance or a guardian can call pause",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_pause",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-unpause",
+      "kind": "access",
+      "title": "only governance can call unpause",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_unpause",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-dropHeld",
+      "kind": "access",
+      "title": "only governance can call dropHeld",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_dropHeld",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "pause-noloss",
+      "kind": "pause-noloss",
+      "title": "pausing loses nothing",
+      "scope": "from any state reachable in prover.depth-1 steps; public no-argument getters and the ETH balance (mappings are covered by the AST fact that pause writes only the flag)",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_pause_noloss",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "paused-blocks-inbound",
+      "kind": "paused-blocks",
+      "title": "inbound is stopped while paused",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_paused_blocks_inbound",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "paused-blocks-releaseHeld",
+      "kind": "paused-blocks",
+      "title": "releaseHeld is stopped while paused",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_paused_blocks_releaseHeld",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "paused-blocks-outbound",
+      "kind": "paused-blocks",
+      "title": "outbound is stopped while paused",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_paused_blocks_outbound",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "cei-inbound",
+      "kind": "cei",
+      "title": "inbound: no storage write after an external call",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "spec-ast",
+          "status": "proven",
+          "detail": "no storage write after the first external call"
+        }
+      ]
+    },
+    {
+      "id": "cei-releaseHeld",
+      "kind": "cei",
+      "title": "releaseHeld: no storage write after an external call",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "spec-ast",
+          "status": "proven",
+          "detail": "no storage write after the first external call"
+        }
+      ]
+    },
+    {
+      "id": "cei-outbound",
+      "kind": "cei",
+      "title": "outbound: no storage write after an external call",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "spec-ast",
+          "status": "proven",
+          "detail": "no storage write after the first external call"
+        }
+      ]
+    },
+    {
+      "id": "cap-in",
+      "kind": "post",
+      "title": "no mint takes the day's inbound total over the hard cap",
+      "scope": null,
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_cap_in__inbound",
+          "status": "proven"
+        },
+        {
+          "tool": "halmos",
+          "check": "check_cap_in__releaseHeld",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "cap-out",
+      "kind": "post",
+      "title": "no burn takes the day's outbound total over the hard cap",
+      "scope": null,
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_cap_out__outbound",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "route-limit-in",
+      "kind": "post",
+      "title": "a mint never takes route IN over its daily limit (or the cap, if lower)",
+      "scope": null,
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_route_limit_in__inbound",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "route-limit-out",
+      "kind": "post",
+      "title": "a burn never takes route OUT over its daily limit (or the cap, if lower)",
+      "scope": null,
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_route_limit_out__outbound",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "mint-is-bounded",
+      "kind": "post",
+      "title": "one inbound mints at most the route's limit",
+      "scope": null,
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_mint_is_bounded__inbound",
+          "status": "proven"
+        }
+      ]
+    }
+  ],
+  "resultHash": "0x7ebc40997642e57824ed34fda89d10bc08cbd7573452a3e9af63b780214cd753",
+  "runs": {
+    "build": {
+      "status": "ok"
+    },
+    "halmos": {
+      "code": 0,
+      "timedOut": false
+    }
+  },
+  "recipeHash": "0x8479d508e0163c5bfa8bbe4537664fa77dd4abae4866ace16dabd55d121206b8"
+}

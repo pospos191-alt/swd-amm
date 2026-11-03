@@ -69,6 +69,13 @@ node --test audit/test/*.test.js                   # เทสต์ของร
 8. **Code hash**: keccak-256 ของ runtime bytecode เทียบกับ `EXTCODEHASH` ของสัญญาที่ deploy จริงได้
 9. **สิ่งที่รายงานนี้พิสูจน์ไม่ได้** (ระบุวันที่)
 
+## สเปกและการพิสูจน์ (SS6)
+
+`audit/spec/cli.js` ร่างคุณสมบัติเชิงรูปนัยของสัญญา (ฮิวริสติกที่ให้ผลเหมือนเดิมทุกครั้ง ส่วนขั้น LLM ทำเฉพาะเมื่อมี `ANTHROPIC_API_KEY`)
+แล้วให้ผู้ตรวจอนุมัติ จากนั้นสร้างการทดสอบ Halmos `check_*` เป้าหมาย SMTChecker และ forge invariant จากสเปกที่อนุมัติ
+แล้วรันด้วยเครื่องมือข้างบน เครื่องมือที่ไม่ได้ติดตั้งจะเป็น "not-installed" ไม่มีวันเป็น "proven" และตัวอย่างค้านทุกตัวถูกเล่นซ้ำใน forge
+ดู [docs/future/specs-and-proofs.th.md](../docs/future/specs-and-proofs.th.md) (ไม่ได้เป็นขั้นหนึ่งของ `run.sh`)
+
 ## ระดับความรุนแรง
 
 | ระดับ | ความหมาย |

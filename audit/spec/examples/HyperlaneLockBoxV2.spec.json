@@ -1,0 +1,520 @@
+{
+  "schema": "zetaphy.spec/1",
+  "target": {
+    "contract": "HyperlaneLockBoxV2",
+    "root": "zetaphy-network",
+    "file": "contracts/HyperlaneLockBoxV2.sol",
+    "project": "zetaphy-network",
+    "sourceHash": "0x1857f9672e961ca191bd4239aa21309a98491e31757d733494b0073e4af27ed8",
+    "solc": "0.8.26+commit.8a97fa7a.Linux.g++"
+  },
+  "drafted": {
+    "by": "zetaphy-spec 1.0.0",
+    "heuristics": true,
+    "llm": null,
+    "docs": [],
+    "review": "audit/spec/examples/review/HyperlaneLockBoxV2.review.json"
+  },
+  "harness": {
+    "status": "reviewed",
+    "notes": [
+      "reviewed: MockMailbox (contracts/MockMailbox.sol, fee 0) and SpecIsm, which accepts every message (the worst case: any release message, any receiver, any amount)",
+      "the handler records every successful lock amount and every successful claim amount (sumLocked / sumReleased)",
+      "release delay 0 so a release can be claimed in the step after its message; the daily limit is 10 ETH; the setup locks 5 ETH from 0xB0B (counted in sumLocked)"
+    ],
+    "imports": [
+      "contracts/MockMailbox.sol"
+    ],
+    "helpers": "/// An ISM that accepts every message: the worst case for the lockbox's own checks.\ncontract SpecIsm {\n    function moduleType() external pure returns (uint8) { return 5; }\n    function verify(bytes calldata, bytes calldata) external pure returns (bool) { return true; }\n}",
+    "state": "MockMailbox public mailbox;\nbytes32 public constant OUTBOX = bytes32(uint256(0x0b0b));\nuint256 public sumLocked;\nuint256 public sumReleased;\nbytes32[] public ids;",
+    "setup": "mailbox = new MockMailbox(11155111);\nt = new HyperlaneLockBoxV2(ISaphanMailbox(address(mailbox)), 77390, 77390, bytes32(uint256(0x1a2e)), OUTBOX, address(0),\n    ISaphanIsm(address(new SpecIsm())), address(0x6070), address(0x6A2D), 10 ether, 0);\nvm.deal(address(this), 5 ether);\nt.lock{value: 5 ether}(address(0xB0B), 5 ether);\nsumLocked = 5 ether;",
+    "actors": [
+      "address(0x6070)",
+      "address(0x6A2D)",
+      "address(0xA11CE)",
+      "address(0xB0B)"
+    ],
+    "actions": {
+      "lock": "ok = call_lock(caller, a);\nif (ok) sumLocked += a[2];",
+      "handle": "// any release message the (all-accepting) ISM lets through: any nonce, sender, receiver and amount\nbytes memory b = abi.encode(uint256(77390), address(uint160(uint256(OUTBOX))), a[0], address(uint160(a[1])), address(uint160(a[2])),\n    uint256(uint96(a[3])), block.chainid, address(t));\nvm.prank(address(mailbox));\ntry t.handle(77390, OUTBOX, b) { ok = true; ids.push(keccak256(b)); } catch { ok = false; }",
+      "claim": "if (ids.length == 0) return false;\nbytes32 id = ids[a[0] % ids.length];\n(, , , , uint256 amount) = t.releases(id);\nvm.prank(caller);\ntry t.claim(id) { ok = true; sumReleased += amount; } catch { ok = false; }",
+      "veto": "if (ids.length == 0) return false;\nvm.prank(caller);\ntry t.veto(ids[a[0] % ids.length]) { ok = true; } catch { ok = false; }"
+    },
+    "words": {
+      "lock": 3,
+      "handle": 4,
+      "claim": 1,
+      "veto": 1
+    },
+    "bytesWords": {
+      "handle": 8
+    },
+    "views": "function released() external view returns (uint256) { return sumReleased; }\nfunction lockedTotal() external view returns (uint256) { return sumLocked; }",
+    "steps": [
+      "lock",
+      "handle",
+      "claim",
+      "pause",
+      "veto"
+    ]
+  },
+  "prover": {
+    "depth": 2,
+    "halmos": {
+      "loop": 3,
+      "solverTimeoutMs": 60000,
+      "wallSec": 5400
+    },
+    "forge": {
+      "runs": 256,
+      "depth": 20
+    },
+    "smtchecker": {
+      "engine": "chc",
+      "timeoutMs": 30000,
+      "wallSec": 300
+    }
+  },
+  "properties": [
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-handle",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only mailbox can call handle",
+      "statement": "For every caller that is not `mailbox()`, and for all arguments (and any ETH sent), `handle` reverts.",
+      "rationale": "handle (line 204) reverts on a comparison of msg.sender with mailbox.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "handle",
+        "authorized": {
+          "eq": [
+            "mailbox"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-pause",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance or a guardian can call pause",
+      "statement": "For every caller that is not `governance()` and not in `guardian`, and for all arguments (and any ETH sent), `pause` reverts.",
+      "rationale": "pause (line 252) reverts on a comparison of msg.sender with governance, guardian.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "pause",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": [
+            "guardian"
+          ]
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-veto",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance or a guardian can call veto",
+      "statement": "For every caller that is not `governance()` and not in `guardian`, and for all arguments (and any ETH sent), `veto` reverts.",
+      "rationale": "veto (line 255) reverts on a comparison of msg.sender with governance, guardian.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "veto",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": [
+            "guardian"
+          ]
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-lowerDailyLimit",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance or a guardian can call lowerDailyLimit",
+      "statement": "For every caller that is not `governance()` and not in `guardian`, and for all arguments (and any ETH sent), `lowerDailyLimit` reverts.",
+      "rationale": "lowerDailyLimit (line 263) reverts on a comparison of msg.sender with governance, guardian.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "lowerDailyLimit",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": [
+            "guardian"
+          ]
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-raiseReleaseDelay",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance or a guardian can call raiseReleaseDelay",
+      "statement": "For every caller that is not `governance()` and not in `guardian`, and for all arguments (and any ETH sent), `raiseReleaseDelay` reverts.",
+      "rationale": "raiseReleaseDelay (line 269) reverts on a comparison of msg.sender with governance, guardian.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "raiseReleaseDelay",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": [
+            "guardian"
+          ]
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-unpause",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call unpause",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `unpause` reverts.",
+      "rationale": "unpause (line 277) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "unpause",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-liftVeto",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call liftVeto",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `liftVeto` reverts.",
+      "rationale": "liftVeto (line 279) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "liftVeto",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setDailyLimit",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setDailyLimit",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setDailyLimit` reverts.",
+      "rationale": "setDailyLimit (line 286) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setDailyLimit",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setReleaseDelay",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setReleaseDelay",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setReleaseDelay` reverts.",
+      "rationale": "setReleaseDelay (line 288) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setReleaseDelay",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setInterchainSecurityModule",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setInterchainSecurityModule",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setInterchainSecurityModule` reverts.",
+      "rationale": "setInterchainSecurityModule (line 295) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setInterchainSecurityModule",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setGuardian",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setGuardian",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setGuardian` reverts.",
+      "rationale": "setGuardian (line 301) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setGuardian",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setGovernance",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setGovernance",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setGovernance` reverts.",
+      "rationale": "setGovernance (line 303) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setGovernance",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "monotonic-nonce",
+      "kind": "monotonic",
+      "confidence": "high",
+      "title": "nonce never decreases",
+      "statement": "No call, by anyone, with any arguments, makes `nonce` smaller (it is only ever increased: lock).",
+      "rationale": "every write of nonce is += or ++.",
+      "scope": "every function that writes nonce, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "check": {
+        "var": "nonce",
+        "functions": [
+          "lock"
+        ]
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "monotonic-received",
+      "kind": "monotonic",
+      "confidence": "high",
+      "title": "received never decreases",
+      "statement": "No call, by anyone, with any arguments, makes `received` smaller (it is only ever increased: handle).",
+      "rationale": "every write of received is += or ++.",
+      "scope": "every function that writes received, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "check": {
+        "var": "received",
+        "functions": [
+          "handle"
+        ]
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "backing-locked",
+      "kind": "invariant",
+      "pattern": "backing",
+      "confidence": "high",
+      "title": "the contract always holds at least locked in ETH",
+      "statement": "After any sequence of calls (by anyone, with any arguments), the contract's ETH balance is at least `locked`: what it owes is always backed (lock add, claim pay out).",
+      "rationale": "locked grows in payable lock and shrinks where ETH is sent (claim).",
+      "scope": "bounded: every sequence of prover.depth calls over harness.steps from the setup state (Halmos); unbounded where the SMTChecker proves it; fuzzed by forge",
+      "check": {
+        "expr": "address(t).balance >= t.locked()"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "pause-noloss",
+      "kind": "pause-noloss",
+      "confidence": "high",
+      "title": "pausing loses nothing",
+      "statement": "`pause` and `unpause` change no balance and no public state except `paused`: the contract's ETH and every public number, address and flag are the same before and after.",
+      "rationale": "pause writes paused.",
+      "scope": "from any state reachable in prover.depth-1 steps; public no-argument getters and the ETH balance (mappings are covered by the AST fact that pause writes only the flag)",
+      "check": {
+        "pause": "pause",
+        "unpause": "unpause",
+        "by": "governance",
+        "unpauseBy": "governance",
+        "flag": "paused"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "paused-blocks-lock",
+      "kind": "paused-blocks",
+      "confidence": "high",
+      "title": "lock is stopped while paused",
+      "statement": "Once `pause` ran, `lock` reverts for every caller and argument.",
+      "rationale": "lock reverts on paused.",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "check": {
+        "function": "lock",
+        "pause": "pause",
+        "by": "governance"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "paused-blocks-claim",
+      "kind": "paused-blocks",
+      "confidence": "high",
+      "title": "claim is stopped while paused",
+      "statement": "Once `pause` ran, `claim` reverts for every caller and argument.",
+      "rationale": "claim reverts on paused.",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "check": {
+        "function": "claim",
+        "pause": "pause",
+        "by": "governance"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "cei-lock",
+      "kind": "cei",
+      "confidence": "high",
+      "title": "lock: no storage write after an external call",
+      "statement": "`lock` makes external calls (dispatch with ETH line 186, dispatch with ETH line 185, call with ETH line 190); every storage write happens before the first call.",
+      "rationale": "a write after an external call lets the callee re-enter while the state is stale (the classic reentrancy pattern).",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "check": {
+        "function": "lock"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "cei-claim",
+      "kind": "cei",
+      "confidence": "high",
+      "title": "claim: no storage write after an external call",
+      "statement": "`claim` makes external calls (call with ETH line 240); every storage write happens before the first call.",
+      "rationale": "a write after an external call lets the callee re-enter while the state is stale (the classic reentrancy pattern).",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "check": {
+        "function": "claim"
+      }
+    },
+    {
+      "origin": "human",
+      "status": "approved",
+      "confidence": "reviewer",
+      "id": "locked-never-below-releases",
+      "kind": "invariant",
+      "title": "releases never exceed locks, and locked is exactly locks minus releases",
+      "statement": "After any sequence of locks, release messages (forged or not: the ISM here accepts everything), claims, pauses and vetoes, the ETH paid out by claims is at most the ETH locked, and `locked` equals locked minus paid. Even a compromised ISM can only release this route's own deposits.",
+      "rationale": "HyperlaneLockBoxV2's header: 'within what this contract holds for locks (`locked`: locks minus releases), so even a forged message can never take more than this route's own deposits'.",
+      "scope": "bounded: every sequence of 2 calls over lock, handle (any message), claim, pause, veto from the setup state (5 ETH locked) (Halmos); fuzzed by forge",
+      "check": {
+        "expr": "h.released() <= h.lockedTotal() && t.locked() == h.lockedTotal() - h.released()"
+      }
+    },
+    {
+      "origin": "human",
+      "status": "approved",
+      "confidence": "reviewer",
+      "id": "daily-limit",
+      "kind": "post",
+      "title": "a claim never takes the day's releases over the daily limit",
+      "statement": "After any successful claim, `releasedToday` is at most `dailyLimit`.",
+      "rationale": "claim reverts with OverLimit when releasedToday + amount > dailyLimit.",
+      "scope": "any caller and claim, after any 1 call from the setup state (Halmos)",
+      "check": {
+        "functions": [
+          "claim"
+        ],
+        "expr": "t.releasedToday() <= t.dailyLimit()"
+      }
+    },
+    {
+      "origin": "human",
+      "status": "approved",
+      "confidence": "reviewer",
+      "id": "claim-pays-from-locked",
+      "kind": "post",
+      "title": "a claim reduces locked by exactly the ETH that left",
+      "statement": "After any successful claim, `locked` went down by exactly as much as the contract's ETH balance.",
+      "rationale": "claim: locked -= amount, then pays amount.",
+      "scope": "any caller and claim, after any 1 call from the setup state (Halmos)",
+      "check": {
+        "functions": [
+          "claim"
+        ],
+        "expr": "old(t.locked()) - t.locked() == old(address(t).balance) - address(t).balance"
+      }
+    }
+  ],
+  "notes": [
+    {
+      "kind": "unguarded",
+      "function": "lock",
+      "text": "changes nonce, locked, transferIds and anyone can call it: intended?"
+    },
+    {
+      "kind": "unguarded",
+      "function": "claim",
+      "text": "changes day, releasedToday, releases, locked and anyone can call it: intended?"
+    }
+  ],
+  "approval": {
+    "reviewer": "spec demo (Najaso)",
+    "at": "2026-11-03",
+    "specHash": "0x1542bbf1088ba970120ba87651798d515a93477b641ef7b2cb9b5e555172e35a"
+  }
+}

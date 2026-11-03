@@ -133,6 +133,12 @@ ZETAPHY มี**แพลตฟอร์มตรวจสอบสัญญา�
 
 ใบรับรองของสัญญาบนเชนอื่นถูกบันทึกด้วย chainId และ codeHash ของเชนนั้น `NeuroOracleSender.pushCertificate` ส่งใบรับรองผ่าน Hyperlane และ `NeuroOracle.isCertified` บนเชนปลายทางจะตรวจ EXTCODEHASH ในเชนนั้นเอง ถ้าจะเปิดใช้กับ oracle ที่ดีพลอยไปแล้ว ต้องดีพลอยใหม่ แล้วเรียก `setAudit` ผ่าน timelock
 
+## Proven: ระดับเหนือ Gold
+
+`ProofRegistry` เพิ่มระดับ **Proven** โดยไม่แก้ AuditCertificate: `levelOf(chainId, address)` อ่านใบรับรองแล้วคืน PROVEN (4)
+เมื่อเป็นใบรับรอง Gold ที่ยังใช้ได้ และ code hash มีหลักฐานเชิงรูปนัยของสเปกที่อนุมัติแล้ว ซึ่งผู้รัน 2 ใน 3 ทำซ้ำได้
+และมีตลาดหลักฐาน (รางวัลที่รับได้ด้วยหลักฐาน หรือด้วยตัวอย่างค้านที่เล่นซ้ำบนเชน) ดู [specs-and-proofs.th.md](specs-and-proofs.th.md)
+
 ## สิ่งที่ยังขาด
 
 - **ยังไม่ได้ดีพลอย**: `zetaphy deploy-audit` จะเขียนไฟล์ `deployments/audit-77390.json`

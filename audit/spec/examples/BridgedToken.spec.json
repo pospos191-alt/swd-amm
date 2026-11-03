@@ -1,0 +1,128 @@
+{
+  "schema": "zetaphy.spec/1",
+  "target": {
+    "contract": "BridgedToken",
+    "root": "zetaphy-network",
+    "file": "contracts/BridgeGuard.sol",
+    "project": "zetaphy-network",
+    "sourceHash": "0xdfcdf6edd9ab2bf501327a82e8ecf54eebe85c1e397ed5130f1c6a66e727970b",
+    "solc": "0.8.26+commit.8a97fa7a.Linux.g++"
+  },
+  "drafted": {
+    "by": "zetaphy-spec 1.0.0",
+    "heuristics": true,
+    "llm": null,
+    "docs": []
+  },
+  "harness": {
+    "status": "drafted",
+    "notes": [],
+    "imports": [],
+    "helpers": "",
+    "state": "",
+    "setup": "t = new BridgedToken(\"T\", \"T\", 1, address(0x1000));",
+    "actors": [
+      "address(0x1000)",
+      "address(0xA11CE)",
+      "address(0xB0B)"
+    ],
+    "actions": {},
+    "words": {},
+    "bytesWords": {},
+    "views": "",
+    "steps": [
+      "mint",
+      "burn",
+      "approve",
+      "transfer",
+      "transferFrom",
+      "warp"
+    ]
+  },
+  "prover": {
+    "depth": 2,
+    "halmos": {
+      "loop": 3,
+      "solverTimeoutMs": 60000,
+      "wallSec": 1800
+    },
+    "forge": {
+      "runs": 256,
+      "depth": 20
+    },
+    "smtchecker": {
+      "engine": "chc",
+      "timeoutMs": 60000,
+      "wallSec": 600
+    }
+  },
+  "properties": [
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-mint",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only guard can call mint",
+      "statement": "For every caller that is not `guard()`, and for all arguments (and any ETH sent), `mint` reverts.",
+      "rationale": "mint (line 36) reverts on a comparison of msg.sender with guard.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "mint",
+        "authorized": {
+          "eq": [
+            "guard"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-burn",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only guard can call burn",
+      "statement": "For every caller that is not `guard()`, and for all arguments (and any ETH sent), `burn` reverts.",
+      "rationale": "burn (line 37) reverts on a comparison of msg.sender with guard.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "burn",
+        "authorized": {
+          "eq": [
+            "guard"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "conservation-balanceOf-totalSupply",
+      "kind": "conservation",
+      "confidence": "high",
+      "title": "totalSupply moves exactly with the balanceOf it sums",
+      "statement": "Every call changes `totalSupply` by exactly the total change of `balanceOf` over the accounts it touches (the caller and every address argument): nothing is created or lost in between. Transfers leave `totalSupply` unchanged.",
+      "rationale": "balanceOf and totalSupply are written together in mint, burn.",
+      "scope": "every function that writes either, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "check": {
+        "map": "balanceOf",
+        "total": "totalSupply",
+        "functions": [
+          "mint",
+          "burn",
+          "transfer",
+          "transferFrom"
+        ]
+      }
+    }
+  ],
+  "notes": [],
+  "approval": {
+    "reviewer": "spec demo (Najaso)",
+    "at": "2026-11-03",
+    "specHash": "0x16fa6f25ebef38fc4ba0026d70928fd3a8362e2019511182c766469ab3b93edb"
+  }
+}

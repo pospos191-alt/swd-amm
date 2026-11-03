@@ -1,0 +1,2 @@
+# prove/gen work directories (generated; the results that matter are copied next to the spec)
+*.proof/

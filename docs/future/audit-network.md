@@ -264,6 +264,13 @@ The hub's **Audit** tab offers the same in a browser:
 The **explorer** shows a badge ("Audited (ZETAPHY) · Gold · until …") on the address and token pages when
 `auditCertificate` is set in its config.
 
+## Proven: on top of Gold
+
+`ProofRegistry` adds a **Proven** level without changing AuditCertificate: `levelOf(chainId, address)` reads the
+certificate and reports PROVEN (4) when it is a valid Gold certificate whose code hash has a formal proof of an
+approved spec, reproduced by 2 of 3 runners. It also runs a proof market (bounties claimed by proof or by an
+on-chain replayed counterexample). See [specs-and-proofs.md](specs-and-proofs.md).
+
 ## What is missing
 
 - **Not deployed**: `zetaphy deploy-audit` writes `zetaphy-network/deployments/audit-77390.json`, and the hub

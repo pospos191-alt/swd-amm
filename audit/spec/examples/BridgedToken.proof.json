@@ -1,0 +1,108 @@
+{
+  "schema": "zetaphy.proof/1",
+  "by": "zetaphy-spec 1.0.0",
+  "contract": "BridgedToken",
+  "file": "zetaphy-network/contracts/BridgeGuard.sol",
+  "specHash": "0x16fa6f25ebef38fc4ba0026d70928fd3a8362e2019511182c766469ab3b93edb",
+  "sourceHash": "0xdfcdf6edd9ab2bf501327a82e8ecf54eebe85c1e397ed5130f1c6a66e727970b",
+  "runtimeHash": "0x2371f0f3e235526c5cd82cf4f5b86890dd7eec0c629f79883b7b525a9c8b4cd9",
+  "codeMatch": null,
+  "tools": {
+    "forge": "1.2.3-v1.2.3",
+    "halmos": "0.3.3",
+    "solc": "0.8.26+commit.8a97fa7a.Linux.g++"
+  },
+  "artifacts": [
+    {
+      "path": "test/Spec.t.sol",
+      "hash": "0xeb948058086835198721b506ed06909c569497d738e2c7559e199b5d2abb59bf"
+    },
+    {
+      "path": "smt/SpecSMT.sol",
+      "hash": "0xc7f29ae8cc0932c24b8ec29277d7a228ff88f37360a1b0c9987c1862b73af791"
+    }
+  ],
+  "artifactsHash": "0xf04a9f00a1c6abddec53581f16dfd087552c7fad85d20f204bd32a15a45cecaf",
+  "recipe": {
+    "install": "bash audit/tools/install.sh <dir> fast  # forge 1.2.3, halmos 0.3.3 (pip, hashed), solc 0.8.26 (sha256-checked)",
+    "run": "node audit/spec/cli.js prove audit/spec/examples/BridgedToken.spec.json",
+    "halmos": "halmos --root <work> --contract SpecChecks --loop 3 --solver-timeout-assertion 60000"
+  },
+  "summary": {
+    "properties": 3,
+    "proven": 3,
+    "counterexamples": 0,
+    "unknown": 0,
+    "allProven": true
+  },
+  "properties": [
+    {
+      "id": "access-mint",
+      "kind": "access",
+      "title": "only guard can call mint",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_mint",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-burn",
+      "kind": "access",
+      "title": "only guard can call burn",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_burn",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "conservation-balanceOf-totalSupply",
+      "kind": "conservation",
+      "title": "totalSupply moves exactly with the balanceOf it sums",
+      "scope": "every function that writes either, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_conservation_balanceOf_totalSupply__mint",
+          "status": "proven"
+        },
+        {
+          "tool": "halmos",
+          "check": "check_conservation_balanceOf_totalSupply__burn",
+          "status": "proven"
+        },
+        {
+          "tool": "halmos",
+          "check": "check_conservation_balanceOf_totalSupply__transfer",
+          "status": "proven"
+        },
+        {
+          "tool": "halmos",
+          "check": "check_conservation_balanceOf_totalSupply__transferFrom",
+          "status": "proven"
+        }
+      ]
+    }
+  ],
+  "resultHash": "0x768443c987ad6f8425cd7fa1ea364ee055306b995ab0e25cc7497d36aee87304",
+  "runs": {
+    "build": {
+      "status": "ok"
+    },
+    "halmos": {
+      "code": 0,
+      "timedOut": false
+    }
+  },
+  "recipeHash": "0x9bf0d0f4d56aa4aa3e58432439b00b7e361830fa76ccfd191217f74cdf5d36e5"
+}
