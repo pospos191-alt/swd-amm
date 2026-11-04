@@ -494,6 +494,12 @@ handler `zetaphy-v4`) และบนเชนจริง `npm run test:devnet:
 
 เชนใหม่มี v5 ตั้งแต่บล็อก 1 ส่วนเชนที่รันอยู่ใช้ `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`
 
+**ไฟร์วอลล์ invariant ในโหนด** ([`docs/CHAIN-FIREWALL.th.md`](../docs/CHAIN-FIREWALL.th.md), `evmd/zetaphy_firewall.go`): หลังธุรกรรม EVM
+ที่สำเร็จทุกธุรกรรม โหนดเรียกตัวตรวจ invariant ของโปรโตคอลในรายการชั้นเชนของ `InvariantFirewall` (STATICCALL, เพดาน gas คงที่, fail-closed)
+และย้อนธุรกรรมที่ทำให้ invariant พัง ปิดอยู่จนกว่าจะ `gov.sh propose-upgrade zetaphy-firewall <H>` (ติดตั้งก่อนได้) แล้ว
+`gov.sh invariant-firewall <InvariantFirewall 0x…>` ส่วน `gov.sh invariant-firewall -` ปิด คู่มืออัปเกรดของ `zetaphy-node-0` อยู่ในเอกสารนั้น
+ทดสอบ: `fork-tests/evmd/zetaphy_firewall_test.go`, `zetaphy_firewall_core_test.go`
+
 ### แอร์ดรอปบน testnet (`gov.sh airdrop`)
 
 ส่ง ZETAPHY ทดสอบให้หลายกระเป๋าพร้อมกัน จากกองทุน `community` (200 ล้านของผู้ถือ SWD ไม่ถูกแตะ)
@@ -516,7 +522,7 @@ sudo -u zetaphy -H bash -c 'cd ~ && bash /tmp/gov.sh airdrop ~/airdrop.txt 100'
 และ x/upgrade ไม่ยอมให้โปรแกรมที่มี handler ของ upgrade ที่ตั้งไว้แต่ยังไม่ถึงความสูงทำงานต่อ ("BINARY UPDATED BEFORE TRIGGER!")
 ตอนนี้มี 3 ชั้นกันไว้:
 
-1. **ตัวเชน (`evmd/zetaphy_upgradeguard.go`)** upgrade ที่อยู่ใน `zetaphyEarlyUpgrades` (ตอนนี้คือ `zetaphy-v5`)
+1. **ตัวเชน (`evmd/zetaphy_upgradeguard.go`)** upgrade ที่อยู่ใน `zetaphyEarlyUpgrades` (ตอนนี้คือ `zetaphy-v5` และ `zetaphy-firewall`)
    ติดตั้งก่อนถึงความสูงได้ เพราะโค้ดใหม่เปิดตามความสูงที่ handler ตั้ง และไม่เพิ่มสโตร์ โหนดติดตั้ง release ได้ทุกเมื่อก่อน H
    พอถึง H handler ทำงานและเชนไม่หยุด กรณีอื่นยังเป็นแบบเดิมของ x/upgrade upgrade ใหม่จะเข้ารายชื่อนี้ได้ก็ต่อเมื่อไม่เพิ่มสโตร์และไม่เปลี่ยนอะไรก่อนความสูงของมัน
 2. **`gov.sh propose-upgrade`** ไม่ยอมยื่นถ้า release บน `main` ไม่มีชื่อนั้น ถ้า release ยังไม่ build

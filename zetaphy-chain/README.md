@@ -532,6 +532,12 @@ Everything stays **off until it is voted on** (`gov.sh ai-model | immune | break
 
 New chains have v5 from block 1. Running chains: `gov.sh propose-upgrade zetaphy-v5 <H> "<summary>"`.
 
+**Invariant firewall in the node** ([`docs/CHAIN-FIREWALL.md`](../docs/CHAIN-FIREWALL.md), `evmd/zetaphy_firewall.go`): after every
+successful EVM transaction the node calls the invariant checkers of the protocols on `InvariantFirewall`'s chain-layer list
+(STATICCALL, fixed gas caps, fail-closed) and reverts a transaction that broke one. Off until `gov.sh propose-upgrade zetaphy-firewall <H>`
+(may run early) and then `gov.sh invariant-firewall <InvariantFirewall 0x…>`; `gov.sh invariant-firewall -` turns it off.
+The upgrade runbook for `zetaphy-node-0` is in that document. Tests: `fork-tests/evmd/zetaphy_firewall_test.go`, `zetaphy_firewall_core_test.go`.
+
 ### Testnet airdrop (`gov.sh airdrop`)
 
 Send test ZETAPHY to many wallets at once, from the `community` fund (the SWD holders' 200M stays untouched).
@@ -556,7 +562,7 @@ installed before the vote passed, and x/upgrade refuses a binary that already ha
 scheduled, not yet due upgrade ("BINARY UPDATED BEFORE TRIGGER!"). Three things now prevent it:
 
 1. **The chain (`evmd/zetaphy_upgradeguard.go`).** Upgrades in `zetaphyEarlyUpgrades` (today
-   `zetaphy-v5`) may run early: their new code is gated by a height the handler sets, and they add no
+   `zetaphy-v5` and `zetaphy-firewall`) may run early: their new code is gated by a height the handler sets, and they add no
    store. A node may install their release any time before H; at H the handler runs and nothing stops.
    Every other case keeps x/upgrade's behaviour. A new upgrade goes on that list only if it adds no
    store and changes nothing below its height.

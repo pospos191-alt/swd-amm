@@ -44,6 +44,7 @@
 #   gov.sh breaker-rearm <bridge 0x…>                    let a tripped breaker fire again (after governance unpaused the bridge)
 #   gov.sh model-epochs <ModelEpochs 0x… | ->            propose the Neuro model registry the chain reads (ModelAt; - removes it)
 #   gov.sh model-at <height>                             the Neuro model version in force at a height (state after height-1)
+#   gov.sh invariant-firewall <InvariantFirewall 0x… | ->  propose the node-level invariant firewall (docs/CHAIN-FIREWALL.md; - turns it off)
 #   gov.sh ibc-hold-cancel <id>                          the guardian (FROM) returns a held transfer to its sender
 #   gov.sh ibc-usdc-denom <channel>                      USDC from Noble via that channel: ibc/<hash>, ERC-20 0x…
 #   gov.sh ibc-usdc-ratelimit <channel> [send%] [recv%] [hours]   cap USDC on it, or change the cap (default 1 1 24)
@@ -382,6 +383,10 @@ case "${1:-}" in
     r=${2:?ModelEpochs 0x… (zetaphy-network/contracts/ModelEpochs.sol), or - to remove it}
     [ "$r" = - ] || [[ "$r" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "registry: 0x + 40 hex, or -"; exit 1; }
     submit tx security-proposal model-epochs "$r" --deposit "$DEPOSIT" ;;
+  invariant-firewall)
+    r=${2:?InvariantFirewall 0x… (zetaphy-network/contracts/InvariantFirewall.sol), or - to turn it off}
+    [ "$r" = - ] || [[ "$r" =~ ^0x[0-9a-fA-F]{40}$ ]] || { echo "firewall: 0x + 40 hex, or -"; exit 1; }
+    submit tx security-proposal invariant-firewall "$r" --deposit "$DEPOSIT" ;;
   model-at)
     h=${2:?height}; [[ "$h" =~ ^[0-9]+$ ]] || { echo "height: a block number"; exit 1; }
     $ZETAPHYD q neuro model-at "$h" $QF ;;
@@ -588,5 +593,5 @@ case "${1:-}" in
     $ZETAPHYD q wasm list-code $QF | jq -c '.code_infos[]? | {code_id, creator, data_hash, instantiate_permission}' ;;
 
   *)
-    sed -n '8,61p' "$0" | sed 's/^# //'; exit 2 ;;
+    sed -n '8,62p' "$0" | sed 's/^# //'; exit 2 ;;
 esac

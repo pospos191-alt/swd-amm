@@ -48,7 +48,7 @@ func TestUpgradeEarlyBinaryV5(t *testing.T) {
 
 // Every other case keeps x/upgrade's behaviour.
 func TestUpgradeGuardKeepsOtherStops(t *testing.T) {
-	require.Equal(t, map[string]bool{ZetaphyV5UpgradeName: true}, zetaphyEarlyUpgrades,
+	require.Equal(t, map[string]bool{ZetaphyV5UpgradeName: true, ZetaphyFirewallUpgradeName: true}, zetaphyEarlyUpgrades,
 		"only upgrades without new stores may run early (zetaphy-v2..v4 add the wasm store)")
 
 	// A handler that is not on the list, installed early: still refused.

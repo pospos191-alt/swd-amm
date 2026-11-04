@@ -1473,7 +1473,7 @@ index 204345c..e7cffda 100644
  }
  
  func (app *EVMD) onPendingTx(hash common.Hash) {
-@@ -842,7 +926,22 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
+@@ -842,7 +926,23 @@ func (app *EVMD) Name() string { return app.BaseApp.Name() }
  
  // BeginBlocker application updates every begin block
  func (app *EVMD) BeginBlocker(ctx sdk.Context) (sdk.BeginBlock, error) {
@@ -1491,13 +1491,14 @@ index 204345c..e7cffda 100644
 +	if err != nil {
 +		return bb, err
 +	}
-+	app.breakerBeginBlock(ctx.WithEventManager(em)) // ZETAPHY v5: pause bridges the validators tripped (zetaphy_breaker.go)
++	app.breakerBeginBlock(ctx.WithEventManager(em))  // ZETAPHY v5: pause bridges the validators tripped (zetaphy_breaker.go)
++	app.firewallBeginBlock(ctx.WithEventManager(em)) // ZETAPHY: invariant firewall check point (zetaphy_firewall.go)
 +	bb.Events = append(em.ABCIEvents(), bb.Events...)
 +	return bb, nil
  }
  
  // EndBlocker application updates every end block
-@@ -869,10 +968,24 @@ func (app *EVMD) InitChainer(ctx sdk.Context, req *abci.RequestInitChain) (*abci
+@@ -869,10 +969,24 @@ func (app *EVMD) InitChainer(ctx sdk.Context, req *abci.RequestInitChain) (*abci
  		panic(err)
  	}
  
@@ -3241,12 +3242,570 @@ index 0000000..a68e4a1
 +	write()
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_dead_burn", sdk.NewAttribute("amount", coins.String())))
 +}
+diff --git a/evmd/zetaphy_firewall.go b/evmd/zetaphy_firewall.go
+new file mode 100644
+index 0000000..35ef973
+--- /dev/null
++++ b/evmd/zetaphy_firewall.go
+@@ -0,0 +1,325 @@
++package evmd
++
++// ZETAPHY invariant firewall, node layer (docs/CHAIN-FIREWALL.md).
++//
++// After every successful EVM transaction (pqHooks.PostTxProcessing, whose
++// error reverts the whole transaction in x/vm's ApplyTransaction) and every
++// successful MsgEVMCall, the node checks the invariants of every protocol on
++// the chain-layer list of the InvariantFirewall contract governance named,
++// on the state the transaction left. If one that held at the last check point
++// does not hold now, the transaction fails with ErrInvariantFirewall and its
++// state is discarded, whichever contract the attacker went through.
++//
++// Off by default, in two steps, never by a binary swap alone:
++//
++//  1. the "zetaphy-firewall" software upgrade (or key 0x33 in a new chain's
++//     genesis) sets the height from which the code path exists at all; below
++//     it this binary runs blocks exactly as the previous one;
++//  2. governance points the chain at an InvariantFirewall contract:
++//     MsgSetFuture kind "invariant-firewall" {"address":"0x…"}
++//     (zetaphyd tx security-proposal invariant-firewall <0x…>), or key 0x31 in
++//     genesis. {"address":""} (or "-") turns it off again.
++//
++// How a check runs (deterministic, the same on every validator):
++//
++//   - The registry is read with two kinds of STATICCALL, each with
++//     firewallReadGas: chainProtocols() (at most 8 protocols) and, per
++//     protocol in list order, invariantsOf(p) (at most 8 invariants, caps in
++//     5,000..500,000). The answers are decoded strictly
++//     (zetaphy_firewall_core.go).
++//   - Each checker is called the way the contract layer calls it: STATICCALL
++//     holds(p) from the "zetaphy-firewall" module address with exactly its gas
++//     cap. Fail-closed: false, a revert, out of gas, or any answer that is
++//     not exactly 32 bytes encoding true is a violation. The first violation
++//     of a protocol ends its checks.
++//   - All checker caps of one check together are bounded by
++//     firewallTxGasBudget (2,000,000, CHAIN_GAS_BUDGET); a protocol whose
++//     checks do not fit in what is left counts as broken. So one transaction
++//     costs the node at most 9 reads + 2,000,000 gas of EVM work.
++//   - The calls run on a cache of the transaction's state that is never
++//     written back, with an infinite gas meter and no KV gas (the gas is the
++//     EVM gas above; PostTxProcessing hooks charge the tx nothing in
++//     cosmos/evm). No wall clock, no map iteration: block time and height
++//     come from the header, and every loop is over a slice in registry order.
++//
++// Check points: what is broken at the start of each block (BeginBlocker) and
++// after each transaction that passes is stored under 0x32. A transaction is
++// reverted only for a protocol that is broken now and was not broken at the
++// last check point: this transaction broke it. A protocol that broke some
++// other way (time passed, a non-EVM message, a checker that changed its
++// answer) does not revert every transaction of the chain; it is reported in
++// the zetaphy_firewall_broken event of each check point instead.
++//
++// A registry that cannot be read at all (chainProtocols reverts, runs out of
++// its gas, or answers garbage; the contract is gone) fails OPEN, with a
++// zetaphy_firewall_error event: a broken registry must not halt the chain.
++// Everything per protocol and per checker fails closed.
++
++import (
++	"context"
++	"encoding/binary"
++	"errors"
++	"fmt"
++	"math/big"
++	"strings"
++
++	"github.com/ethereum/go-ethereum/common"
++	"github.com/ethereum/go-ethereum/core"
++	"github.com/ethereum/go-ethereum/core/tracing"
++	ethtypes "github.com/ethereum/go-ethereum/core/types"
++	"github.com/ethereum/go-ethereum/crypto"
++
++	errorsmod "cosmossdk.io/errors"
++
++	"github.com/cosmos/evm/x/vm/statedb"
++
++	storetypes "github.com/cosmos/cosmos-sdk/store/v2/types"
++	sdk "github.com/cosmos/cosmos-sdk/types"
++	errortypes "github.com/cosmos/cosmos-sdk/types/errors"
++	"github.com/cosmos/cosmos-sdk/types/module"
++	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
++	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
++)
++
++// Keys of the zetaphypq store (after v5's 0x20..0x30).
++var (
++	firewallKey       = []byte{0x31} // the InvariantFirewall contract, EVM address (20)
++	firewallBaseKey   = []byte{0x32} // protocols broken at the last check point (20 bytes each)
++	firewallHeightKey = []byte{0x33} // height (8) from which the node layer exists ("zetaphy-firewall")
++)
++
++// ZetaphyFirewallUpgradeName adds the node-level invariant firewall to a
++// running chain (from the next block). It only sets 0x33: the firewall stays
++// off until governance names an InvariantFirewall contract.
++const ZetaphyFirewallUpgradeName = "zetaphy-firewall"
++
++// FirewallCaller is the "from" of every firewall call: a module address (no key).
++var FirewallCaller = common.BytesToAddress(authtypes.NewModuleAddress("zetaphy-firewall"))
++
++// ErrInvariantFirewall: a transaction broke a chain-layer protocol's invariant (codespace "zetaphy", code 40).
++var ErrInvariantFirewall = errorsmod.Register("zetaphy", 40, "invariant firewall")
++
++var (
++	firewallSelChainProtocols = crypto.Keccak256([]byte("chainProtocols()"))[:4]
++	firewallSelInvariantsOf   = crypto.Keccak256([]byte("invariantsOf(address)"))[:4]
++	firewallSelHolds          = crypto.Keccak256([]byte("holds(address)"))[:4]
++)
++
++func (app *EVMD) firewallHeight(ctx sdk.Context) int64 {
++	return int64(readU64(app.secRaw(ctx).Get(firewallHeightKey))) // #nosec G115 -- block heights
++}
++
++func (app *EVMD) setFirewallHeight(ctx sdk.Context, h int64) {
++	ctx.KVStore(app.GetKey(pqStoreKey)).Set(firewallHeightKey, binary.BigEndian.AppendUint64(nil, uint64(h))) // #nosec G115 -- block heights
++}
++
++// firewallActive: block h runs with the node-level firewall code (it may still be off).
++func (app *EVMD) firewallActive(ctx sdk.Context, h int64) bool {
++	a := app.firewallHeight(ctx)
++	return a > 0 && h >= a && app.futV5(ctx, h)
++}
++
++func (app *EVMD) firewallAddr(ctx sdk.Context) (common.Address, bool) {
++	v := app.secRaw(ctx).Get(firewallKey)
++	if len(v) != 20 {
++		return common.Address{}, false
++	}
++	return common.BytesToAddress(v), true
++}
++
++// firewallOn: the upgrade ran and governance named a contract.
++func (app *EVMD) firewallOn(ctx sdk.Context) bool {
++	if !app.firewallActive(ctx, ctx.BlockHeight()) {
++		return false
++	}
++	_, ok := app.firewallAddr(ctx)
++	return ok
++}
++
++// setFirewall: governance's "invariant-firewall" kind of MsgSetFuture.
++func (app *EVMD) setFirewall(ctx sdk.Context, data []byte) error {
++	if !app.firewallActive(ctx, ctx.BlockHeight()) {
++		return errorsmod.Wrap(errortypes.ErrInvalidRequest, "invariant-firewall: not active on this chain yet (zetaphy-firewall upgrade)")
++	}
++	var c struct {
++		Address string `json:"address"`
++	}
++	if err := futJSON(data, &c); err != nil {
++		return err
++	}
++	st := ctx.KVStore(app.GetKey(pqStoreKey))
++	if c.Address == "" {
++		st.Delete(firewallKey)
++		st.Delete(firewallBaseKey)
++		return nil
++	}
++	if !common.IsHexAddress(c.Address) || common.HexToAddress(c.Address) == (common.Address{}) {
++		return errorsmod.Wrap(errortypes.ErrInvalidRequest, "invariant-firewall: address: a 0x address, or \"\" to turn it off")
++	}
++	a := common.HexToAddress(c.Address)
++	if len(app.EVMKeeper.GetCode(ctx, app.EVMKeeper.GetCodeHash(ctx, a))) == 0 {
++		return errorsmod.Wrapf(errortypes.ErrInvalidRequest, "invariant-firewall: no contract at %s", a.Hex())
++	}
++	st.Set(firewallKey, a.Bytes())
++	app.firewallCheckpoint(ctx) // the first check point: what is broken already does not block anyone
++	return nil
++}
++
++// firewallStatic makes one STATICCALL with exactly `gas`, on c's state, from
++// FirewallCaller. ok is false on any EVM error (revert, out of gas, …) or panic.
++func (app *EVMD) firewallStatic(c sdk.Context, to common.Address, data []byte, gas uint64) (ret []byte, ok bool) {
++	defer func() {
++		if r := recover(); r != nil {
++			ret, ok = nil, false
++		}
++	}()
++	cfg, err := app.EVMKeeper.EVMConfig(c, c.BlockHeader().ProposerAddress)
++	if err != nil {
++		return nil, false
++	}
++	sdb := statedb.New(c, app.EVMKeeper, statedb.NewEmptyTxConfig())
++	msg := core.Message{
++		From: FirewallCaller, To: &to, Value: new(big.Int), GasLimit: gas, Data: data,
++		GasPrice: new(big.Int), GasFeeCap: new(big.Int), GasTipCap: new(big.Int), AccessList: ethtypes.AccessList{},
++		SkipNonceChecks: true,
++	}
++	evm := app.EVMKeeper.NewEVM(c, msg, cfg, &tracing.Hooks{}, sdb) // no tracer: never traced, never logged
++	rules := evm.ChainConfig().Rules(evm.Context.BlockNumber, true, evm.Context.Time)
++	sdb.Prepare(rules, FirewallCaller, common.Address{}, &to, evm.ActivePrecompiles(), nil)
++	out, _, err := evm.StaticCall(FirewallCaller, to, data, gas)
++	if err != nil {
++		return nil, false
++	}
++	return out, true
++}
++
++// firewallEvaluate runs every chain-layer check on ctx's state (nothing is
++// written back). broken[i] and why[i] are for list[i]. err: the registry
++// itself could not be read (the caller fails open).
++func (app *EVMD) firewallEvaluate(ctx sdk.Context) (list []fwAddr, broken []bool, why []string, err error) {
++	fw, ok := app.firewallAddr(ctx)
++	if !ok {
++		return nil, nil, nil, errors.New("no InvariantFirewall is set")
++	}
++	c, _ := ctx.CacheContext() // never written back
++	c = c.WithGasMeter(storetypes.NewInfiniteGasMeter()).WithKVGasConfig(storetypes.GasConfig{}).
++		WithTransientKVGasConfig(storetypes.GasConfig{}).WithEventManager(sdk.NewEventManager())
++	if len(app.EVMKeeper.GetCode(c, app.EVMKeeper.GetCodeHash(c, fw))) == 0 {
++		return nil, nil, nil, fmt.Errorf("no contract at the firewall %s", fw.Hex())
++	}
++	ret, ok := app.firewallStatic(c, fw, firewallSelChainProtocols, firewallReadGas)
++	if !ok {
++		return nil, nil, nil, errors.New("chainProtocols() reverted or ran out of gas")
++	}
++	if list, err = firewallDecodeProtocols(ret); err != nil {
++		return nil, nil, nil, err
++	}
++	broken = make([]bool, len(list))
++	why = make([]string, len(list))
++	var used uint64
++	for i, p := range list {
++		ret, ok := app.firewallStatic(c, fw, append(append([]byte{}, firewallSelInvariantsOf...), common.LeftPadBytes(p[:], 32)...), firewallReadGas)
++		if !ok {
++			broken[i], why[i] = true, "invariantsOf reverted or ran out of gas"
++			continue
++		}
++		invs, err := firewallDecodeInvariants(ret)
++		if err != nil {
++			broken[i], why[i] = true, err.Error()
++			continue
++		}
++		var fits bool
++		if used, fits = firewallBudget(used, invs); !fits {
++			broken[i], why[i] = true, "its checks do not fit in the per-transaction gas budget"
++			continue
++		}
++		for _, v := range invs {
++			out, ok := app.firewallStatic(c, common.Address(v.Checker), firewallCalldataHolds(firewallSelHolds, p), v.Gas)
++			if !firewallHoldsOK(ok, out) {
++				broken[i] = true
++				why[i] = fmt.Sprintf("checker %s (%s) does not hold", common.Address(v.Checker).Hex(), strings.TrimRight(string(v.Name[:]), "\x00"))
++				break
++			}
++		}
++	}
++	return list, broken, why, nil
++}
++
++func (app *EVMD) firewallError(ctx sdk.Context, err error) {
++	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_firewall_error", sdk.NewAttribute("error", err.Error())))
++}
++
++// firewallCheckpoint records what is broken now (the start of a block, or a
++// fresh setting), so that it does not revert the transactions that follow.
++func (app *EVMD) firewallCheckpoint(ctx sdk.Context) {
++	st := ctx.KVStore(app.GetKey(pqStoreKey))
++	list, broken, why, err := app.firewallEvaluate(ctx)
++	if err != nil {
++		app.firewallError(ctx, err)
++		st.Delete(firewallBaseKey)
++		return
++	}
++	now, _ := firewallNewlyBroken(nil, list, broken)
++	for i, a := range list {
++		if broken[i] {
++			ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_firewall_broken",
++				sdk.NewAttribute("protocol", common.Address(a).Hex()), sdk.NewAttribute("reason", why[i])))
++		}
++	}
++	st.Set(firewallBaseKey, firewallEncodeSet(now))
++}
++
++// firewallBeginBlock: the first check point of each block (after the
++// breaker's pauses, which can change what holds).
++func (app *EVMD) firewallBeginBlock(ctx sdk.Context) {
++	if !app.firewallOn(ctx) {
++		return
++	}
++	app.firewallCheckpoint(ctx)
++}
++
++// firewallPostTx: after a successful EVM transaction or MsgEVMCall, on the
++// state it left. An error reverts it. ctx is the transaction's own (cached)
++// context, so the new check point is committed with the transaction, or
++// dropped with it.
++func (app *EVMD) firewallPostTx(ctx sdk.Context) error {
++	if !app.firewallOn(ctx) {
++		return nil
++	}
++	list, broken, why, err := app.firewallEvaluate(ctx)
++	if err != nil {
++		app.firewallError(ctx, err) // fail open (see the top of this file)
++		return nil
++	}
++	base, err := firewallDecodeSet(app.secRaw(ctx).Get(firewallBaseKey))
++	if err != nil {
++		base = nil
++	}
++	now, newly := firewallNewlyBroken(base, list, broken)
++	if len(newly) > 0 {
++		reason := ""
++		for i, a := range list {
++			if a == newly[0] {
++				reason = why[i]
++			}
++		}
++		return errorsmod.Wrapf(ErrInvariantFirewall, "the transaction breaks an invariant of %s: %s", common.Address(newly[0]).Hex(), reason)
++	}
++	ctx.KVStore(app.GetKey(pqStoreKey)).Set(firewallBaseKey, firewallEncodeSet(now))
++	return nil
++}
++
++// registerZetaphyFirewall (from registerZetaphyUpgrades): "zetaphy-firewall"
++// makes the node layer exist from the block after the upgrade. It needs v5
++// (setFuture is v5's message) and adds no store.
++func (app *EVMD) registerZetaphyFirewall() {
++	app.UpgradeKeeper.SetUpgradeHandler(ZetaphyFirewallUpgradeName,
++		func(c context.Context, _ upgradetypes.Plan, fromVM module.VersionMap) (module.VersionMap, error) {
++			ctx := sdk.UnwrapSDKContext(c)
++			if a := app.firewallHeight(ctx); a == 0 || a > ctx.BlockHeight()+1 {
++				app.setFirewallHeight(ctx, ctx.BlockHeight()+1)
++			}
++			ctx.Logger().Info("ZETAPHY invariant firewall available (off until governance sets invariant-firewall)", "from_height", ctx.BlockHeight()+1)
++			return app.ModuleManager.RunMigrations(c, app.Configurator(), fromVM)
++		})
++}
+diff --git a/evmd/zetaphy_firewall_core.go b/evmd/zetaphy_firewall_core.go
+new file mode 100644
+index 0000000..f22790b
+--- /dev/null
++++ b/evmd/zetaphy_firewall_core.go
+@@ -0,0 +1,221 @@
++package evmd
++
++// ZETAPHY invariant firewall, node layer: the consensus-relevant pure logic
++// (docs/CHAIN-FIREWALL.md). Standard library only; zetaphy_firewall.go wires
++// it into the node.
++//
++// What it decides, from the registry the node read and the checks it ran:
++//
++//   - strict decoding of InvariantFirewall.chainProtocols() (address[], at
++//     most firewallMaxProtocols, no zero address, no duplicate) and of
++//     invariantsOf(p) ((address checker, uint32 gasLimit, bytes32 name)[]);
++//   - the bounds the contract has, enforced again by the node: at most
++//     firewallMaxInvariants per protocol, each cap in
++//     [firewallMinCheckGas, firewallMaxCheckGas], and at most
++//     firewallTxGasBudget of checker gas per transaction in all. A protocol
++//     whose invariants break a bound is counted broken (fail-closed);
++//   - a checker passes only on exactly 32 bytes encoding true;
++//   - which protocols a transaction broke (broken now, not at the check point).
++//
++// Everything iterates slices in registry order (never a map): the same
++// registry gives the same plan, the same gas and the same answer on every
++// validator.
++
++import (
++	"bytes"
++	"errors"
++)
++
++const (
++	firewallMaxProtocols  = 8         // InvariantFirewall.MAX_CHAIN
++	firewallMaxInvariants = 8         // InvariantFirewall.MAX_INVARIANTS
++	firewallMinCheckGas   = 5_000     // InvariantFirewall.MIN_CHECK_GAS
++	firewallMaxCheckGas   = 500_000   // InvariantFirewall.MAX_CHECK_GAS
++	firewallTxGasBudget   = 2_000_000 // InvariantFirewall.CHAIN_GAS_BUDGET: all checker caps of one check
++	firewallReadGas       = 200_000   // each registry read (chainProtocols, invariantsOf)
++)
++
++type fwAddr = [20]byte
++
++// fwInvariant is one entry of invariantsOf(p).
++type fwInvariant struct {
++	Checker fwAddr
++	Gas     uint64
++	Name    [32]byte
++}
++
++// fwSmall decodes a 32-byte ABI word that must fit in a uint64.
++func fwSmall(w []byte) (uint64, bool) {
++	for _, b := range w[:24] {
++		if b != 0 {
++			return 0, false
++		}
++	}
++	var v uint64
++	for _, b := range w[24:32] {
++		v = v<<8 | uint64(b)
++	}
++	return v, true
++}
++
++// fwWordAddr decodes a 32-byte ABI word that must be an address.
++func fwWordAddr(w []byte) (fwAddr, bool) {
++	var a fwAddr
++	if !bytes.Equal(w[:12], make([]byte, 12)) {
++		return a, false
++	}
++	copy(a[:], w[12:32])
++	return a, true
++}
++
++// fwArrayHead checks the head of a single dynamic-array return value with
++// `words` words per element, at most `max` elements, and returns n.
++func fwArrayHead(ret []byte, words, max uint64) (uint64, error) {
++	if len(ret) < 64 || len(ret)%32 != 0 || uint64(len(ret)) > 64+32*words*max {
++		return 0, errors.New("answer of the wrong size")
++	}
++	off, ok1 := fwSmall(ret[0:32])
++	n, ok2 := fwSmall(ret[32:64])
++	if !ok1 || !ok2 || off != 32 || n > max || uint64(len(ret)) != 64+32*words*n {
++		return 0, errors.New("malformed answer")
++	}
++	return n, nil
++}
++
++// firewallDecodeProtocols strictly decodes chainProtocols()'s answer.
++func firewallDecodeProtocols(ret []byte) ([]fwAddr, error) {
++	n, err := fwArrayHead(ret, 1, firewallMaxProtocols)
++	if err != nil {
++		return nil, errors.New("chainProtocols: " + err.Error())
++	}
++	list := make([]fwAddr, 0, n)
++	for i := uint64(0); i < n; i++ {
++		a, ok := fwWordAddr(ret[64+32*i : 96+32*i])
++		if !ok || a == (fwAddr{}) {
++			return nil, errors.New("chainProtocols: malformed address")
++		}
++		for _, b := range list {
++			if b == a {
++				return nil, errors.New("chainProtocols: a protocol listed twice")
++			}
++		}
++		list = append(list, a)
++	}
++	return list, nil
++}
++
++// firewallDecodeInvariants strictly decodes invariantsOf(p)'s answer and
++// checks the bounds: at most firewallMaxInvariants, caps in range, no zero or
++// duplicate checker. An error makes the protocol count as broken.
++func firewallDecodeInvariants(ret []byte) ([]fwInvariant, error) {
++	// More entries than allowed is a bound violation, not only a size error.
++	if len(ret) >= 64 {
++		if n, ok := fwSmall(ret[32:64]); ok && n > firewallMaxInvariants {
++			return nil, errors.New("invariantsOf: more than 8 invariants")
++		}
++	}
++	n, err := fwArrayHead(ret, 3, firewallMaxInvariants)
++	if err != nil {
++		return nil, errors.New("invariantsOf: " + err.Error())
++	}
++	out := make([]fwInvariant, 0, n)
++	for i := uint64(0); i < n; i++ {
++		e := ret[64+96*i : 160+96*i]
++		c, ok1 := fwWordAddr(e[0:32])
++		g, ok2 := fwSmall(e[32:64])
++		if !ok1 || !ok2 || c == (fwAddr{}) || g > 0xffffffff {
++			return nil, errors.New("invariantsOf: malformed entry")
++		}
++		if g < firewallMinCheckGas || g > firewallMaxCheckGas {
++			return nil, errors.New("invariantsOf: a gas cap outside 5,000..500,000")
++		}
++		for _, v := range out {
++			if v.Checker == c {
++				return nil, errors.New("invariantsOf: a checker listed twice")
++			}
++		}
++		v := fwInvariant{Checker: c, Gas: g}
++		copy(v.Name[:], e[64:96])
++		out = append(out, v)
++	}
++	return out, nil
++}
++
++// firewallHoldsOK: a checker's answer counts as "holds" only when the call
++// succeeded and returned exactly 32 bytes encoding true (uint256 1). False,
++// a revert, running out of its cap, or any other answer is a violation.
++func firewallHoldsOK(callOK bool, ret []byte) bool {
++	if !callOK || len(ret) != 32 {
++		return false
++	}
++	for _, b := range ret[:31] {
++		if b != 0 {
++			return false
++		}
++	}
++	return ret[31] == 1
++}
++
++// firewallCalldataHolds: holds(protocol).
++func firewallCalldataHolds(sel []byte, p fwAddr) []byte {
++	out := make([]byte, 0, 36)
++	out = append(out, sel...)
++	out = append(out, make([]byte, 12)...)
++	return append(out, p[:]...)
++}
++
++// firewallBudget reports whether a protocol's checks fit in what is left of
++// the per-transaction budget, and the gas they take from it.
++func firewallBudget(used uint64, invs []fwInvariant) (uint64, bool) {
++	var g uint64
++	for _, v := range invs {
++		g += v.Gas // each <= firewallMaxCheckGas, at most 8: no overflow
++	}
++	if used+g > firewallTxGasBudget {
++		return used, false
++	}
++	return used + g, true
++}
++
++// firewallNewlyBroken: the protocols broken now (broken[i] for list[i]), and
++// those of them that were not broken at the check point (baseline): the ones
++// this transaction broke.
++func firewallNewlyBroken(baseline, list []fwAddr, broken []bool) (now, newly []fwAddr) {
++	for i, a := range list {
++		if i >= len(broken) || !broken[i] {
++			continue
++		}
++		now = append(now, a)
++		was := false
++		for _, b := range baseline {
++			if b == a {
++				was = true
++				break
++			}
++		}
++		if !was {
++			newly = append(newly, a)
++		}
++	}
++	return now, newly
++}
++
++// firewallEncodeSet / firewallDecodeSet: the check point in the store (20 bytes each).
++func firewallEncodeSet(set []fwAddr) []byte {
++	out := make([]byte, 0, 20*len(set))
++	for _, a := range set {
++		out = append(out, a[:]...)
++	}
++	return out
++}
++
++func firewallDecodeSet(b []byte) ([]fwAddr, error) {
++	if len(b)%20 != 0 || len(b) > 20*firewallMaxProtocols {
++		return nil, errors.New("firewall check point: corrupt")
++	}
++	set := make([]fwAddr, len(b)/20)
++	for i := range set {
++		copy(set[i][:], b[20*i:])
++	}
++	return set, nil
++}
 diff --git a/evmd/zetaphy_future.go b/evmd/zetaphy_future.go
 new file mode 100644
-index 0000000..2863fea
+index 0000000..a2fe62b
 --- /dev/null
 +++ b/evmd/zetaphy_future.go
-@@ -0,0 +1,291 @@
+@@ -0,0 +1,308 @@
 +package evmd
 +
 +// ZETAPHY v5: protocol-level protection research, all off until governance
@@ -3310,10 +3869,11 @@ index 0000000..2863fea
 +	holdTokenPfx      = byte(0x2E)   // || account (20) || token (20) -> holdRule (binary)
 +	holdTokenStatsPfx = byte(0x2F)   // || account (20) || token (20) -> holdStats (binary)
 +	modelEpochsKey    = []byte{0x30} // the ModelEpochs registry, EVM address (20) (zetaphy_modelat.go)
++	// 0x31..0x33: the node-level invariant firewall (zetaphy_firewall.go)
 +)
 +
-+// futKeyKnown: v5 prefixes a genesis may carry.
-+func futKeyKnown(p byte) bool { return p >= 0x20 && p <= 0x30 }
++// futKeyKnown: v5 prefixes a genesis may carry (and the firewall's 0x31..0x33).
++func futKeyKnown(p byte) bool { return p >= 0x20 && p <= 0x33 }
 +
 +// ZetaphyV5UpgradeName turns v5 on for a running chain (from the next block).
 +const ZetaphyV5UpgradeName = "zetaphy-v5"
@@ -3350,6 +3910,8 @@ index 0000000..2863fea
 +//	breaker        breakerCfg as JSON (enabled false removes the bridge)
 +//	breaker-rearm  {"bridge":"0x…"}: forget a trip, so the breaker can fire again
 +//	model-epochs   {"address":"0x…"}: the Neuro ModelEpochs registry ("" removes it; zetaphy_modelat.go)
++//	invariant-firewall  {"address":"0x…"}: the InvariantFirewall the node checks after every EVM tx
++//	               ("" turns it off; zetaphy_firewall.go; needs the zetaphy-firewall upgrade)
 +type MsgSetFuture struct {
 +	Authority string
 +	Kind      string
@@ -3447,8 +4009,12 @@ index 0000000..2863fea
 +		if err := app.setModelEpochs(ctx, m.Data); err != nil {
 +			return nil, err
 +		}
++	case "invariant-firewall":
++		if err := app.setFirewall(ctx, m.Data); err != nil {
++			return nil, err
++		}
 +	default:
-+		return nil, errorsmod.Wrapf(errortypes.ErrInvalidRequest, "kind %q: ai-model, immune, breaker, breaker-rearm or model-epochs", m.Kind)
++		return nil, errorsmod.Wrapf(errortypes.ErrInvalidRequest, "kind %q: ai-model, immune, breaker, breaker-rearm, model-epochs or invariant-firewall", m.Kind)
 +	}
 +	ctx.EventManager().EmitEvent(sdk.NewEvent("zetaphy_v5_set", sdk.NewAttribute("kind", m.Kind), sdk.NewAttribute("bytes", fmt.Sprint(len(m.Data)))))
 +	return &MsgPQResponse{}, nil
@@ -3493,6 +4059,7 @@ index 0000000..2863fea
 +//	breaker '<json>'                     see breakerCfg
 +//	breaker-rearm <bridge 0x…>
 +//	model-epochs <ModelEpochs 0x… | ->  (- removes it)
++//	invariant-firewall <InvariantFirewall 0x… | ->  (- turns the node-level firewall off)
 +func futProposalMsg(args []string, readFile func(string) ([]byte, error)) (sdk.Msg, string, error) {
 +	gov := govAuthority()
 +	if len(args) != 2 {
@@ -3535,6 +4102,15 @@ index 0000000..2863fea
 +		}
 +		data, _ := json.Marshal(map[string]string{"address": common.HexToAddress(args[1]).Hex()})
 +		return &MsgSetFuture{Authority: gov, Kind: "model-epochs", Data: data}, "Neuro ModelEpochs registry " + args[1], nil
++	case "invariant-firewall":
++		if args[1] == "-" {
++			return &MsgSetFuture{Authority: gov, Kind: "invariant-firewall", Data: []byte(`{"address":""}`)}, "Turn the node-level invariant firewall off", nil
++		}
++		if !common.IsHexAddress(args[1]) {
++			return nil, "", fmt.Errorf("invariant-firewall <InvariantFirewall 0x… | ->")
++		}
++		data, _ := json.Marshal(map[string]string{"address": common.HexToAddress(args[1]).Hex()})
++		return &MsgSetFuture{Authority: gov, Kind: "invariant-firewall", Data: data}, "Node-level invariant firewall: check the chain-layer protocols of " + args[1], nil
 +	}
 +	return nil, "", fmt.Errorf("unknown proposal %q", args[0])
 +}
@@ -6304,10 +6880,10 @@ index 0000000..6789501
 +}
 diff --git a/evmd/zetaphy_pqcall.go b/evmd/zetaphy_pqcall.go
 new file mode 100644
-index 0000000..42d22c2
+index 0000000..2d448d3
 --- /dev/null
 +++ b/evmd/zetaphy_pqcall.go
-@@ -0,0 +1,496 @@
+@@ -0,0 +1,499 @@
 +package evmd
 +
 +// ZETAPHY post-quantum messages (zetaphy/pq/v1/tx.proto, built in code below):
@@ -6785,6 +7361,9 @@ index 0000000..42d22c2
 +	if res.Failed() {
 +		return nil, errorsmod.Wrapf(errortypes.ErrInvalidRequest, "evm call reverted: %s", res.VmError)
 +	}
++	if err := app.firewallPostTx(ctx); err != nil { // ZETAPHY: the node-level invariant firewall (zetaphy_firewall.go)
++		return nil, err
++	}
 +	out := &MsgEVMCallResponse{Ret: res.Ret, GasUsed: res.GasUsed}
 +	if to == nil {
 +		out.Created = crypto.CreateAddress(sender, nonce).Hex()
@@ -7212,10 +7791,10 @@ index 0000000..34df4b6
 +}
 diff --git a/evmd/zetaphy_pqguard.go b/evmd/zetaphy_pqguard.go
 new file mode 100644
-index 0000000..7c6f8b6
+index 0000000..9689315
 --- /dev/null
 +++ b/evmd/zetaphy_pqguard.go
-@@ -0,0 +1,519 @@
+@@ -0,0 +1,527 @@
 +package evmd
 +
 +// ZETAPHY post-quantum guards.
@@ -7362,6 +7941,11 @@ index 0000000..7c6f8b6
 +func (h pqHooks) PostTxProcessing(ctx sdk.Context, sender common.Address, msg core.Message, r *ethtypes.Receipt) error {
 +	if err := threatRefused(ctx); err != nil {
 +		return err // the threat gate refused this tx in the ante handler: revert it (the fee stays paid)
++	}
++	if r.Status == ethtypes.ReceiptStatusSuccessful { // ZETAPHY: the node-level invariant firewall (zetaphy_firewall.go)
++		if err := h.app.firewallPostTx(ctx); err != nil {
++			return err // a chain-layer invariant broke: revert the whole tx
++		}
 +	}
 +	if r.Status == ethtypes.ReceiptStatusSuccessful { // ZETAPHY v5: new contracts to score, bridge outflows (never fails)
 +		if msg.To == nil && r.ContractAddress != (common.Address{}) {
@@ -7709,7 +8293,10 @@ index 0000000..7c6f8b6
 +		if k[0] == futV5Key[0] && app.futV5(ctx, ctx.BlockHeight()+1) {
 +			v = binary.BigEndian.AppendUint64(nil, 1)
 +		}
-+		if k[0] == immunePendingPfx || k[0] == breakerPausePfx { // this chain's last blocks only
++		if k[0] == firewallHeightKey[0] && app.firewallHeight(ctx) > 0 && app.firewallHeight(ctx) <= ctx.BlockHeight()+1 {
++			v = binary.BigEndian.AppendUint64(nil, 1) // the invariant firewall's code path (zetaphy_firewall.go)
++		}
++		if k[0] == immunePendingPfx || k[0] == breakerPausePfx || k[0] == firewallBaseKey[0] { // this chain's last blocks only
 +			continue
 +		}
 +		if k[0] == 2 { // vote keys: the current key only, valid from the new chain's start
@@ -9150,7 +9737,7 @@ index 0000000..2835e0e
 +}
 diff --git a/evmd/zetaphy_seccli.go b/evmd/zetaphy_seccli.go
 new file mode 100644
-index 0000000..3eb7f6c
+index 0000000..aafe6de
 --- /dev/null
 +++ b/evmd/zetaphy_seccli.go
 @@ -0,0 +1,180 @@
@@ -9294,16 +9881,16 @@ index 0000000..3eb7f6c
 +			title = fmt.Sprintf("IBC hold rule for other denoms: %d bps of supply, from %s", bps, args[2])
 +		}
 +		return &MsgSetIBCHoldRule{Authority: gov, Denom: args[1], MinAmount: min, SupplyBps: bps}, title, nil
-+	case "ai-model", "immune", "breaker", "breaker-rearm", "model-epochs": // ZETAPHY v5 (zetaphy_future.go)
++	case "ai-model", "immune", "breaker", "breaker-rearm", "model-epochs", "invariant-firewall": // ZETAPHY v5 (zetaphy_future.go), firewall (zetaphy_firewall.go)
 +		return futProposalMsg(args, func(f string) ([]byte, error) { return os.ReadFile(filepath.Clean(f)) })
 +	}
-+	return nil, "", fmt.Errorf("unknown proposal %q: qday, threat-gate, ibc-hold, ibc-hold-rule, ai-model, immune, breaker, breaker-rearm or model-epochs", args[0])
++	return nil, "", fmt.Errorf("unknown proposal %q: qday, threat-gate, ibc-hold, ibc-hold-rule, ai-model, immune, breaker, breaker-rearm, model-epochs or invariant-firewall", args[0])
 +}
 +
 +// SecurityProposalCmd: zetaphyd tx security-proposal <kind> ... --deposit ... --from <key>.
 +func SecurityProposalCmd() *cobra.Command {
 +	cmd := &cobra.Command{
-+		Use:   "security-proposal qday|threat-gate|ibc-hold|ibc-hold-rule|ai-model|immune|breaker|breaker-rearm|model-epochs <args>",
++		Use:   "security-proposal qday|threat-gate|ibc-hold|ibc-hold-rule|ai-model|immune|breaker|breaker-rearm|model-epochs|invariant-firewall <args>",
 +		Short: "Propose a ZETAPHY security-core setting (Q-day, threat gate, IBC large-transfer hold, v5: AI model, immune system, bridge breaker, Neuro model registry)",
 +		Args:  cobra.RangeArgs(2, 4),
 +		RunE: func(cmd *cobra.Command, args []string) error {
@@ -9893,10 +10480,10 @@ index 0000000..2092b0d
 +}
 diff --git a/evmd/zetaphy_upgrade.go b/evmd/zetaphy_upgrade.go
 new file mode 100644
-index 0000000..d629c38
+index 0000000..674091e
 --- /dev/null
 +++ b/evmd/zetaphy_upgrade.go
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,174 @@
 +package evmd
 +
 +// ZETAPHY v2 activation height.
@@ -10002,8 +10589,9 @@ index 0000000..d629c38
 +			ctx.Logger().Info("ZETAPHY security core scheduled", "from_height", ctx.BlockHeight()+1)
 +			return app.zetaphyWasmMigrations(c, fromVM)
 +		})
-+	app.registerZetaphyV4() // "zetaphy-v4": CosmWasm (zetaphy_cosmwasm.go)
-+	app.registerZetaphyV5() // "zetaphy-v5": immune system, AI precompile, breaker, account guard (zetaphy_future.go)
++	app.registerZetaphyV4()       // "zetaphy-v4": CosmWasm (zetaphy_cosmwasm.go)
++	app.registerZetaphyV5()       // "zetaphy-v5": immune system, AI precompile, breaker, account guard (zetaphy_future.go)
++	app.registerZetaphyFirewall() // "zetaphy-firewall": the node-level invariant firewall (zetaphy_firewall.go)
 +
 +	info, err := app.UpgradeKeeper.ReadUpgradeInfoFromDisk()
 +	if err != nil {
@@ -10037,8 +10625,11 @@ index 0000000..d629c38
 +		if err1 != nil || err2 != nil || len(k) == 0 || (k[0] != 1 && k[0] != 2 && k[0] != pqEvidenceKey[0] && k[0] != pqActivationKey[0] && !secKeyKnown(k[0]) && !futKeyKnown(k[0])) {
 +			return nil, fmt.Errorf("zetaphypq genesis: bad entry %q", e.Key)
 +		}
-+		if (k[0] == pqActivationKey[0] || k[0] == secV3Key[0] || k[0] == futV5Key[0]) && (len(k) != 1 || len(v) != 8) {
++		if (k[0] == pqActivationKey[0] || k[0] == secV3Key[0] || k[0] == futV5Key[0] || k[0] == firewallHeightKey[0]) && (len(k) != 1 || len(v) != 8) {
 +			return nil, fmt.Errorf("zetaphypq genesis: activation height: want key %02x and 8 bytes", k[0])
++		}
++		if k[0] == firewallKey[0] && (len(k) != 1 || len(v) != 20) {
++			return nil, fmt.Errorf("zetaphypq genesis: invariant firewall: want key 31 and a 20-byte address")
 +		}
 +		out = append(out, [2][]byte{k, v})
 +	}
@@ -10069,10 +10660,10 @@ index 0000000..d629c38
 +}
 diff --git a/evmd/zetaphy_upgradeguard.go b/evmd/zetaphy_upgradeguard.go
 new file mode 100644
-index 0000000..3bb3a85
+index 0000000..0a553d1
 --- /dev/null
 +++ b/evmd/zetaphy_upgradeguard.go
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,77 @@
 +package evmd
 +
 +// ZETAPHY: upgrades whose binary may run before the upgrade height.
@@ -10108,6 +10699,10 @@ index 0000000..3bb3a85
 +
 +var zetaphyEarlyUpgrades = map[string]bool{
 +	ZetaphyV5UpgradeName: true,
++
++	// only sets 0x33; every firewall path checks it (zetaphy_firewall.go).
++	// One entry per block (no gofmt alignment): gov.sh greps "<Name>: true,".
++	ZetaphyFirewallUpgradeName: true,
 +}
 +
 +// zetaphyUpgradeModule is x/upgrade with one change in PreBlock: a scheduled,

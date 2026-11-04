@@ -20,8 +20,7 @@
 | ทะเบียน การตรวจ รายชื่อชั้นเชน กติกาใบรับรอง ชุด invariant ที่รับรองแล้ว | `zetaphy-network/contracts/InvariantFirewall.sol` | ใช้งานจริง มีเทสต์ |
 | สิ่งที่โปรโตคอลต้องเพิ่ม: modifier `firewalled`, `_firewallOutflow`, `_firewallRegister` | `zetaphy-network/contracts/Firewalled.sol` | ใช้งานจริง มีเทสต์ |
 | เทสต์ 12 ข้อ: หยุดการโจมตีได้, การตรวจแบบปิดเมื่อพลาด (fail-closed), ขอบเขตและการรอ, ทะเบียนชั้นเชน, กติกาใบรับรอง, การรับรองชุด invariant, `AuditCertificate` ตัวจริง, ทำงานคู่กับ `CircuitBreaker` | `zetaphy-network/test/firewall.test.js` และสัญญาทดสอบใน `test/helpers/FirewallKit.sol` | ใช้งานจริง |
-| ตรวจระดับโหนดหลังทุกธุรกรรม EVM: ตรรกะล้วน | `zetaphy-chain/prototypes/invariant-firewall/evmd/zetaphy_firewall_core.go` (+ `_core_test.go`) | ต้นแบบ มี unit test |
-| ตรวจระดับโหนด: ต่อเข้ากับ `evmd` ที่แพตช์แล้ว และ fork test | `zetaphy-chain/prototypes/invariant-firewall/evmd/zetaphy_firewall.go`, `zetaphy_firewall_test.go` | **ต้นแบบ ยังไม่ได้คอมไพล์ ยังไม่อยู่ในโหนด** |
+| ตรวจระดับโหนดหลังทุกธุรกรรม EVM (อยู่ในโหนดที่แพตช์แล้ว ปิดไว้เป็นค่าเริ่มต้น) | แพตช์ใน `zetaphy-chain/setup-node.sh` (`evmd/zetaphy_firewall.go`, `zetaphy_firewall_core.go`) fork test ใน `zetaphy-chain/fork-tests/evmd/zetaphy_firewall*_test.go` | ใช้งานจริง คอมไพล์และผ่าน fork test แล้ว เปิดด้วยการอัปเกรดและการโหวต ([CHAIN-FIREWALL.th.md](../CHAIN-FIREWALL.th.md)) |
 
 ## SS1: invariant เป็นเงื่อนไขหลังการทำงาน (ชั้นสัญญา)
 
@@ -94,7 +93,10 @@ invariant หนึ่งข้อไว้ไม่เกิน 40,000 แก�
 (approve) ดึงโทเคนออกด้วย `transferFrom` บนสัญญาโทเคนโดยตรง โค้ดของโปรโตคอลจะไม่ได้ทำงานเลย กรณีนี้
 ชั้นเชน (ด้านล่าง) เป็นตัวปิดช่อง
 
-## SS1: ชั้นเชน (ต้นแบบ)
+## SS1: ชั้นเชน (อยู่ในโหนดแล้ว ปิดไว้เป็นค่าเริ่มต้น)
+
+โค้ดโหนด วิธีเปิด เทสต์ และขั้นตอนอัปเกรด อยู่ใน [docs/CHAIN-FIREWALL.th.md](../CHAIN-FIREWALL.th.md)
+ถ้าต่างจากบันทึกการออกแบบด้านล่าง ให้ยึดเอกสารนั้น
 
 ชั้นสัญญาพึ่งให้โปรโตคอลเรียก `enforce` เอง ส่วนชั้นเชนให้โหนดเป็นคนตรวจ หลังทุกธุรกรรม EVM ที่สำเร็จ
 (และทุก `MsgEVMCall`) โหนดจะอ่าน `InvariantFirewall.chainCheck()` บนสถานะที่ธุรกรรมทิ้งไว้ ถ้าโปรโตคอลใน
@@ -132,17 +134,8 @@ invariant หนึ่งข้อไว้ไม่เกิน 40,000 แก�
 - **ค่าใช้จ่าย** hook `PostTxProcessing` ใน cosmos/evm ไม่เก็บแก๊ส ทุกธุรกรรม EVM จึงทำให้โหนดต้องรันงาน EVM
   เพิ่มได้สูงสุด `CHAIN_CALL_GAS` นี่คือเหตุผลที่ทุกโปรโตคอลต้องให้ timelock อนุมัติ และงบเป็นค่าคงที่
 
-**ส่วนไหนจริง ส่วนไหนยังไม่จริง**
-- จริงแล้ว: ตรรกะล้วนใน `zetaphy_firewall_core.go` คือการถอดรหัสแบบเข้มงวด กฎ "เพิ่งเสีย" และชุดที่เก็บไว้
-  มี unit test (`go test` ในโฟลเดอร์นั้น ใช้แค่ไลบรารีมาตรฐาน) ซึ่งรันกับไบต์ที่ EVM ตอบมาจริง
-- ยังไม่จริง: ไฟล์ที่ต่อเข้าโหนด (`zetaphy_firewall.go` แท็ก `zetaphy_firewall_prototype`) และ fork test
-  ฉบับร่าง (`zetaphy_firewall_test.go`) เขียนโดยอิง `evmd` ที่แพตช์แล้ว แต่**ยังไม่ได้คอมไพล์** เพราะเครื่องที่
-  ใช้เขียนมีดิสก์ไม่พอจะ build โหนด ทั้งสองไฟล์จึงถูกเก็บไว้**นอก**แพตช์ของ `setup-node.sh` โดยตั้งใจ
-  โหนด CI และ fork test เดิมจึงไม่เปลี่ยนเลย
-- ขั้นตอนเอาเข้าโหนด
-  1. ใส่ทั้งสองไฟล์ลงใน `ZETAPHY_PQ_PATCH` พร้อมโค้ดสี่บรรทัดที่ระบุไว้ต้นไฟล์ `zetaphy_firewall.go`
-  2. ย้ายเทสต์ไปที่ `zetaphy-chain/fork-tests/evmd/` และเพิ่ม `Firewall` ในแพตเทิร์น `-run` ของ fork test
-  3. ให้ CI คอมไพล์และรัน
+**สถานะ:** ต้นแบบที่อธิบายไว้ที่นี่เป็นโค้ดโหนดจริงแล้ว (คอมไพล์และผ่าน fork test) ปิดไว้จนกว่าจะอัปเกรด
+`zetaphy-firewall` และโหวตผ่าน ดู [docs/CHAIN-FIREWALL.th.md](../CHAIN-FIREWALL.th.md)
 
 ## SS2: ใบรับรองเป็นกติกาของเชน
 
@@ -231,7 +224,7 @@ timelock กำหนดเกณฑ์มูลค่าให้สินท�
 
 - **ยังไม่ได้ deploy** ยังไม่มีในสคริปต์ deploy คอนสตรักเตอร์คือ
   `InvariantFirewall(AuditCertificate, ZetaphyTimelock, uncertifiedBps)`
-- **ชั้นเชนยังเป็นต้นแบบ** (ดูด้านบน) โหนดที่แพตช์แล้วยังไม่มีส่วนนี้
+- **ชั้นเชนปิดไว้เป็นค่าเริ่มต้น** ต้องอัปเกรด `zetaphy-firewall` และโหวตผ่านก่อน ([CHAIN-FIREWALL.th.md](../CHAIN-FIREWALL.th.md))
 - **ยังไม่มี UI** hub และ explorer ยังไม่แสดงโปรโตคอลที่ได้รับการปกป้องหรือการรับรอง ถ้ามีข้อความ UI ต้องมีครบ 8
   ภาษาของ hub
 - **ยังไม่ผ่านการตรวจสอบ** สัญญาเหล่านี้ยังไม่ผ่านกระบวนการตรวจแบบเปิดหรือการตรวจแบบอื่นใด

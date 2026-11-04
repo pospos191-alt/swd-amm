@@ -21,8 +21,7 @@ parameters and nothing else. There is no new admin key.
 | Registry, checks, chain-layer list, certificate rule, attested invariant sets | `zetaphy-network/contracts/InvariantFirewall.sol` | real, tested |
 | What a protocol adds: `firewalled` modifier, `_firewallOutflow`, `_firewallRegister` | `zetaphy-network/contracts/Firewalled.sol` | real, tested |
 | Tests (12): exploits stopped, fail-closed checks, bounds and delays, chain-layer registry, certificate rule, attestations, the real `AuditCertificate`, `CircuitBreaker` side by side | `zetaphy-network/test/firewall.test.js`, fixtures in `test/helpers/FirewallKit.sol` | real |
-| Node-level check after every EVM transaction: pure logic | `zetaphy-chain/prototypes/invariant-firewall/evmd/zetaphy_firewall_core.go` (+ `_core_test.go`) | prototype, unit-tested |
-| Node-level check: wiring into the patched `evmd`, fork test | `zetaphy-chain/prototypes/invariant-firewall/evmd/zetaphy_firewall.go`, `zetaphy_firewall_test.go` | **prototype, not compiled, not in the node** |
+| Node-level check after every EVM transaction (in the patched node, off by default) | `zetaphy-chain/setup-node.sh` patch (`evmd/zetaphy_firewall.go`, `zetaphy_firewall_core.go`), fork tests in `zetaphy-chain/fork-tests/evmd/zetaphy_firewall*_test.go` | real, compiled, fork-tested; switched on by upgrade + governance ([CHAIN-FIREWALL.md](../CHAIN-FIREWALL.md)) |
 
 ## SS1: invariants as post-conditions (contract layer)
 
@@ -95,7 +94,10 @@ overhead with one invariant below 40,000 gas. Each checker's own work comes on t
 checked. A token that an approved spender pulls with `transferFrom` straight on the token contract never runs
 the protocol's code. The chain layer (below) covers that case.
 
-## SS1: the chain layer (prototype)
+## SS1: the chain layer (in the node, off by default)
+
+The node code, how it is switched on, its tests and the upgrade runbook are in [docs/CHAIN-FIREWALL.md](../CHAIN-FIREWALL.md),
+which is authoritative where it differs from the design notes below.
 
 The contract layer depends on the protocol calling `enforce`. The chain layer makes the node do it. After every
 successful EVM transaction (and every `MsgEVMCall`), the node reads `InvariantFirewall.chainCheck()` on the
@@ -134,19 +136,8 @@ How it would work in the patched `evmd`:
   to `CHAIN_CALL_GAS` of EVM work. That is why each protocol needs the timelock's approval and the budget is a
   constant.
 
-**What is real and what is not:**
-- Real: the pure logic (strict decoding, the newly-broken rule, the stored set) in
-  `zetaphy_firewall_core.go`. It has unit tests (`go test` in that folder, standard library only), and they run
-  on the exact bytes the EVM returns.
-- Not real yet: the wiring file (`zetaphy_firewall.go`, build tag `zetaphy_firewall_prototype`) and its fork
-  test sketch (`zetaphy_firewall_test.go`). They were written against the patched `evmd` but were **not
-  compiled**: building the patched node did not fit in the disk of the machine they were written on. They are
-  kept **out of** `setup-node.sh`'s patch on purpose, so the node, its CI and its fork tests are unchanged.
-- To move them in:
-  1. add both files to `ZETAPHY_PQ_PATCH`, together with the four wiring lines listed at the top of
-     `zetaphy_firewall.go`;
-  2. move the test to `zetaphy-chain/fork-tests/evmd/` and add `Firewall` to the fork-test `-run` pattern;
-  3. let CI compile and run it.
+**Status:** the prototype described here is now real node code (compiled, fork-tested, off until the
+`zetaphy-firewall` upgrade and a governance vote). See [docs/CHAIN-FIREWALL.md](../CHAIN-FIREWALL.md).
 
 ## SS2: the certificate as a chain rule
 
@@ -238,7 +229,7 @@ Every external call the firewall makes is a static (view) call, and every state 
 
 - **Not deployed.** There is no deploy script entry yet. The constructor is
   `InvariantFirewall(AuditCertificate, ZetaphyTimelock, uncertifiedBps)`.
-- **The chain layer is a prototype** (see above). The patched node does not contain it.
+- **The chain layer is off by default.** It needs the `zetaphy-firewall` upgrade and a governance vote ([CHAIN-FIREWALL.md](../CHAIN-FIREWALL.md)).
 - **No UI.** The hub and the explorer do not show protected protocols or attestations yet. Any UI text must
   come in all 8 hub languages.
 - **Not audited**: these contracts have not been through the open audit process, or any other, yet.
