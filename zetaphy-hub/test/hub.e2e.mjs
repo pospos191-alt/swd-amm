@@ -124,8 +124,8 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await page.waitForFunction(() => document.querySelectorAll('#sp-routes tr').length === 1 && /Noble testnet/.test(document.getElementById('sp-routes').textContent));
     assert.match(await page.textContent('#sp-routes'), /channel-0 → channel-123/);
     // EVM routes (Hyperlane) from the chain table in hub-config.json: every chain listed, planned until deployed
-    assert.match(await page.textContent('#sp-evm'), /EVM chains \(Hyperlane\)[\s\S]*Sepolia[\s\S]*Base Sepolia[\s\S]*Arbitrum Sepolia/);
-    assert.equal(await page.locator('#sp-evm .pill').count(), 3);
+    assert.match(await page.textContent('#sp-evm'), /EVM chains \(Hyperlane\)[\s\S]*Sepolia[\s\S]*Base Sepolia[\s\S]*Arbitrum Sepolia[\s\S]*Optimism Sepolia[\s\S]*Polygon Amoy[\s\S]*BSC Testnet/);
+    assert.equal(await page.locator('#sp-evm .pill').count(), 6);
     // token routes (tokens born on ZETAPHY): the native coin to the three chains, BZTPHY staying home
     assert.match(await page.textContent('#sp-tok'), /Tokens born on ZETAPHY[\s\S]*ZETAPHY → Sepolia[\s\S]*zZETAPHY[\s\S]*BZTPHY[\s\S]*stays on ZETAPHY/);
     assert.equal(await page.locator('#sp-tok .pill').count(), 4);
@@ -133,9 +133,9 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     assert.match(await page.textContent('#sp-gw summary'), /Gateway[\s\S]*another chain in one transaction/);
     await page.click('#sp-gw summary');
     assert.match(await page.textContent('#sp-gw'), /depositAndCall[\s\S]*withdrawAndCall[\s\S]*go back to you automatically[\s\S]*no gas coin on the other chain/);
-    assert.equal(await page.locator('#sp-gw-routes tr').count(), 3);
+    assert.equal(await page.locator('#sp-gw-routes tr').count(), 6);
     // sepolia's Gateway is deployed (2026-11-04): both its addresses; the other two routes: not deployed yet
-    assert.match(await page.textContent('#sp-gw-routes'), /Sepolia\s*on ZETAPHY 0xf9A12b…C25609 · on Sepolia 0x6a2605…1D0Ed8\s*Base Sepolia\s*Gateway not deployed yet\s*Arbitrum Sepolia\s*Gateway not deployed yet/);
+    assert.match(await page.textContent('#sp-gw-routes'), /Sepolia\s*on ZETAPHY 0xf9A12b…C25609 · on Sepolia 0x6a2605…1D0Ed8\s*Base Sepolia\s*Gateway not deployed yet\s*Arbitrum Sepolia\s*Gateway not deployed yet\s*Optimism Sepolia\s*Gateway not deployed yet\s*Polygon Amoy\s*Gateway not deployed yet\s*BSC Testnet\s*Gateway not deployed yet/);
     await shot('saphan-gateway');
     await page.click('#sp-gw summary');
     await page.click('#sp-go'); // connect first: the site-wide wallet dialog
