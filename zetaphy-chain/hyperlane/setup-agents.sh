@@ -28,7 +28,7 @@ set -euo pipefail
 # ghcr.io/hyperlane-xyz/hyperlane-agent:agents-v2.3.0 (multi-arch index digest, 23 Oct 2026)
 IMAGE="${IMAGE:-ghcr.io/hyperlane-xyz/hyperlane-agent@sha256:6414aecfdc1b6ea2e364019f672004c113c2a347dd4d1343aa856921d1e0a685}"
 # agent-config.json from swd-amm main at 710e5f9 (PR #51), refused if the hash differs
-CONFIG_URL="https://raw.githubusercontent.com/pospos191-alt/swd-amm/710e5f91020998cbf9858754693e2e10265626fa/zetaphy-chain/hyperlane/agent-config.json"
+CONFIG_URL="https://raw.githubusercontent.com/pospos191-alt/zetaphy/710e5f91020998cbf9858754693e2e10265626fa/zetaphy-chain/hyperlane/agent-config.json"
 CONFIG_SHA256="858b7f0fbcf0e9fb594e14be58c7910050c7d538c72eba31baa47da7a07d1691"
 
 ETC=/etc/hyperlane

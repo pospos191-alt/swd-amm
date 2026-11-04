@@ -167,7 +167,7 @@ src=$HOME/src/evm-firewall
 rm -rf "$src"                                                                         # [CHANGES FILES] (only this folder)
 git clone -q --depth 1 --branch v0.7.3 https://github.com/cosmos/evm.git "$src"
 [ "$(git -C "$src" rev-parse HEAD)" = c3ae9067a7eadcdea55a5192226916deb44c71c4 ]
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/<COMMIT>/zetaphy-chain/setup-node.sh -o $HOME/setup-node-firewall.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/<COMMIT>/zetaphy-chain/setup-node.sh -o $HOME/setup-node-firewall.sh
 grep -q "ZetaphyFirewallUpgradeName = \"zetaphy-firewall\"" $HOME/setup-node-firewall.sh
 cd "$src" && bash $HOME/setup-node-firewall.sh --patch-source "$src"
 make install                                                                          # -> $HOME/go/bin/evmd
@@ -196,7 +196,7 @@ journalctl -u zetaphyd -n 50 --no-pager | grep -iE "panic|error|CONSENSUS FAILUR
 Voting takes 600 s and blocks come every ~5 s, so `H` must be at least ~150 blocks ahead; 300 is safe.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh -o /tmp/gov.sh   # [CHANGES FILES] /tmp only
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/gov.sh -o /tmp/gov.sh   # [CHANGES FILES] /tmp only
 H=$(( $(curl -s localhost:26657/status | jq -r .result.sync_info.latest_block_height) + 300 )); echo "H=$H"
 sudo -u zetaphy -H bash -c "cd ~ && bash /tmp/gov.sh propose-upgrade zetaphy-firewall $H 'Node-level invariant firewall (off until voted)'"   # [CHANGES CHAIN]
 sudo -u zetaphy -H bash -c 'cd ~ && bash /tmp/gov.sh vote <ID> yes'                    # [CHANGES CHAIN]

@@ -31,7 +31,7 @@ concurrency:
 jobs:
   scan:
     name: Scan new ZETAPHY pools
-    if: github.repository == 'pospos191-alt/swd-amm'
+    if: github.repository == 'pospos191-alt/zetaphy'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

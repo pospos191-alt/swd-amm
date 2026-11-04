@@ -31,7 +31,7 @@ const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
 // The public ZETAPHY testnet: EVM chain id and the hash of block 1 (zetaphy-launch's "genesisHash").
 export const TESTNET_CHAIN_ID = 77390n;
 export const TESTNET_GENESIS = '0xbfda796f182e1b3a4b78f039100035ab24287d06bbe19e4e746826d86754295a';
-export const TESTNET_NOTICE_URL = 'https://github.com/pospos191-alt/swd-amm/blob/main/docs/BRIDGE-TESTNET.md';
+export const TESTNET_NOTICE_URL = 'https://github.com/pospos191-alt/zetaphy/blob/main/docs/BRIDGE-TESTNET.md';
 export const TESTNET_DAILY_CAP = 100n;
 export const TESTNET_MIN_RUNNERS = 1;
 export const TESTNET_MIN_OWNERS = 2;

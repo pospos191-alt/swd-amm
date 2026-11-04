@@ -1,6 +1,6 @@
 # ZETAPHY audit, as a reusable GitHub Action for ANY repository (docs/future/audit-as-a-service.md).
 #
-#   - uses: pospos191-alt/swd-amm/.github/actions/zetaphy-audit@<full commit sha>
+#   - uses: pospos191-alt/zetaphy/.github/actions/zetaphy-audit@<full commit sha>
 #     with:
 #       path: contracts        # the Solidity project in YOUR repository (default: the repo root)
 #

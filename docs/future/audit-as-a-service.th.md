@@ -134,7 +134,7 @@ contract Router {
 พร้อมโค้ดป้ายสำหรับแปะ:
 
 ```html
-<a href="https://app.sawasdeecoin.com/audit.html#8453:0xสัญญาของคุณ"><img src="https://cdn.jsdelivr.net/gh/pospos191-alt/swd-amm@audit-registry/badges/base-0xสัญญาของคุณ.svg" alt="ZETAPHY audit certificate" height="20"></a>
+<a href="https://app.sawasdeecoin.com/audit.html#8453:0xสัญญาของคุณ"><img src="https://cdn.jsdelivr.net/gh/pospos191-alt/zetaphy@audit-registry/badges/base-0xสัญญาของคุณ.svg" alt="ZETAPHY audit certificate" height="20"></a>
 ```
 
 รูปป้ายเป็นไฟล์ static (สร้างใหม่ทุก 6 ชั่วโมง) ส่วนลิงก์คือการตรวจสด ป้ายเป็น SVG ล้วน ไม่มีสคริปต์และไม่อ้างไฟล์ภายนอก
@@ -142,7 +142,7 @@ contract Router {
 
 **ในกระเป๋าและ explorer** อ่าน `AuditCertificate.certificate(chainId, target)` บน ZETAPHY คู่กับแฮชโค้ดสด (แบบที่หน้าเว็บทำ)
 หรือ `isCertified` ของสำเนาบนเชนนั้น หรืออ่านทะเบียนสาธารณะ
-`https://raw.githubusercontent.com/pospos191-alt/swd-amm/audit-registry/audit-registry.json` (เป็นแค่ดัชนี
+`https://raw.githubusercontent.com/pospos191-alt/zetaphy/audit-registry/audit-registry.json` (เป็นแค่ดัชนี
 ก่อนแสดงว่า "ใช้ได้" ควรตรวจสดอีกครั้ง) explorer ของ ZETAPHY เองแสดงป้ายให้ที่อยู่ที่ได้ใบรับรองอยู่แล้ว
 
 **จากเทอร์มินัล** `zetaphy aas verify base 0x…` พิมพ์สถานะและแฮชทั้งสองค่า exit code เป็น 0 เฉพาะตอนใช้ได้
@@ -170,7 +170,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with: { persist-credentials: false }
       - id: zetaphy
-        uses: pospos191-alt/swd-amm/.github/actions/zetaphy-audit@<commit sha เต็ม>
+        uses: pospos191-alt/zetaphy/.github/actions/zetaphy-audit@<commit sha เต็ม>
         with:
           path: contracts      # ค่าเริ่มต้นคือรากของ repo
           tier: fast           # หรือ deep (ใช้หลายชั่วโมง)
@@ -182,7 +182,7 @@ jobs:
 ```yaml
 jobs:
   zetaphy-audit:
-    uses: pospos191-alt/swd-amm/.github/workflows/audit-reusable.yml@<commit sha เต็ม>
+    uses: pospos191-alt/zetaphy/.github/workflows/audit-reusable.yml@<commit sha เต็ม>
     permissions: { contents: read, security-events: write }
     with: { path: contracts }
 ```

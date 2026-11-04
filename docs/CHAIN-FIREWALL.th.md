@@ -160,7 +160,7 @@ src=$HOME/src/evm-firewall
 rm -rf "$src"                                                                         # [เปลี่ยนไฟล์] (เฉพาะโฟลเดอร์นี้)
 git clone -q --depth 1 --branch v0.7.3 https://github.com/cosmos/evm.git "$src"
 [ "$(git -C "$src" rev-parse HEAD)" = c3ae9067a7eadcdea55a5192226916deb44c71c4 ]
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/<COMMIT>/zetaphy-chain/setup-node.sh -o $HOME/setup-node-firewall.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/<COMMIT>/zetaphy-chain/setup-node.sh -o $HOME/setup-node-firewall.sh
 grep -q "ZetaphyFirewallUpgradeName = \"zetaphy-firewall\"" $HOME/setup-node-firewall.sh
 cd "$src" && bash $HOME/setup-node-firewall.sh --patch-source "$src"
 make install                                                                          # -> $HOME/go/bin/evmd
@@ -187,7 +187,7 @@ journalctl -u zetaphyd -n 50 --no-pager | grep -iE "panic|error|CONSENSUS FAILUR
 การโหวตใช้ 600 วินาที และบล็อกออกทุก ~5 วินาที `H` จึงต้องอยู่ข้างหน้าอย่างน้อย ~150 บล็อก ใช้ 300 จะปลอดภัย
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh -o /tmp/gov.sh   # [เปลี่ยนไฟล์] เฉพาะ /tmp
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/gov.sh -o /tmp/gov.sh   # [เปลี่ยนไฟล์] เฉพาะ /tmp
 H=$(( $(curl -s localhost:26657/status | jq -r .result.sync_info.latest_block_height) + 300 )); echo "H=$H"
 sudo -u zetaphy -H bash -c "cd ~ && bash /tmp/gov.sh propose-upgrade zetaphy-firewall $H 'Node-level invariant firewall (off until voted)'"   # [เปลี่ยนเชน]
 sudo -u zetaphy -H bash -c 'cd ~ && bash /tmp/gov.sh vote <ID> yes'                    # [เปลี่ยนเชน]

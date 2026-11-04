@@ -22,7 +22,7 @@ export const ORIGIN = {
   nft: 'https://nft.sawasdeecoin.com',
   explorer: 'https://explorer.sawasdeecoin.com',
 };
-export const REPO_URL = 'https://github.com/pospos191-alt/swd-amm';
+export const REPO_URL = 'https://github.com/pospos191-alt/zetaphy';
 // IndexNow (indexnow.org): a public key; the file <key>.txt on each site proves the site is ours. Not a secret.
 export const INDEXNOW_KEY = '064679038019a2fde97fc74c5983f6aa';
 
@@ -126,7 +126,7 @@ export function aboutPage(lang) {
   const figure = [blockFigure(c.block), null, flowFigure(c.flow)];
   const sections = c.sections.map((s, n) => `<section>
 <h2>${esc(s.h)}</h2>
-${s.p ? `<p>${esc(s.p)}</p>\n` : ''}${figure[n] ? `${figure[n]}\n` : ''}${s.items ? `<ul class="cards">\n${s.items.map((t, k) => card(t, ITEM_ICONS[n][k])).join('\n')}\n</ul>\n` : ''}${s.note ? `<p class="note">${esc(s.note)}</p>\n` : ''}${s === c.sections.at(-1) ? `<p><a href="${REPO_URL}">github.com/pospos191-alt/swd-amm</a></p>\n` : ''}</section>`).join('\n');
+${s.p ? `<p>${esc(s.p)}</p>\n` : ''}${figure[n] ? `${figure[n]}\n` : ''}${s.items ? `<ul class="cards">\n${s.items.map((t, k) => card(t, ITEM_ICONS[n][k])).join('\n')}\n</ul>\n` : ''}${s.note ? `<p class="note">${esc(s.note)}</p>\n` : ''}${s === c.sections.at(-1) ? `<p><a href="${REPO_URL}">github.com/pospos191-alt/zetaphy</a></p>\n` : ''}</section>`).join('\n');
   return `<!doctype html>
 <html lang="${lang}">
 <head>

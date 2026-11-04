@@ -23,7 +23,7 @@ Additional Use Grant: You may make production use of the Licensed Work to:
 
                       "Official ZETAPHY Network" means a network whose chain
                       ID and genesis are published by the Licensor in the
-                      repository https://github.com/pospos191-alt/swd-amm
+                      repository https://github.com/pospos191-alt/zetaphy
                       (at the time of this version: Cosmos chain ID
                       zetaphy_77390-1, EVM chain ID 77390), including its
                       upgrades approved by that network's on-chain
@@ -51,7 +51,7 @@ Scope:                This License covers the files in this repository
                         licenses.
 
 For information about alternative licensing arrangements for the Licensed
-Work, please open an issue at https://github.com/pospos191-alt/swd-amm.
+Work, please open an issue at https://github.com/pospos191-alt/zetaphy.
 
 Notice
 

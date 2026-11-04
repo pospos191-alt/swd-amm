@@ -78,7 +78,7 @@
    แล้วเปลี่ยน `DEPLOYER` ใน job `award` ของ `rewards.yml` เป็น address ใหม่ (หรือเพิ่ม secret แยกสำหรับมัน)
 3. จากนั้นลบ `ZETAPHY_DEPLOYER_KEY` ออกจาก `testnet-automation`: key จะอยู่หลัง reviewer เท่านั้น
 
-## 3. ขั้นตอนที่เจ้าของต้องกด (GitHub → repo `swd-amm`)
+## 3. ขั้นตอนที่เจ้าของต้องกด (GitHub → repo `zetaphy`)
 
 ทำครั้งเดียว ใช้เวลาประมาณ 10 นาที เปิดไว้สองแท็บ: **Settings → Environments** และ
 **Settings → Secrets and variables → Actions**

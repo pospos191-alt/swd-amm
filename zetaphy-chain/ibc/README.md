@@ -11,8 +11,8 @@ People use it from the **Saphan** tab at app.sawasdeecoin.com:
 **Google Cloud (e2-micro):** for steps 1–2 below use the VM's **SSH** button instead of Oracle's Cloud Shell,
 and fetch the scripts straight from the repo:
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/ibc/setup-relayer.sh
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh | sudo install -m 755 /dev/stdin /usr/local/bin/gov.sh
+curl -fsSLO https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/ibc/setup-relayer.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/gov.sh | sudo install -m 755 /dev/stdin /usr/local/bin/gov.sh
 ```
 The relayer is capped at 300 MB of memory (`MemoryMax`): if it ever grows, the system restarts the relayer, not the node.
 

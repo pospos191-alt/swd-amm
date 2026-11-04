@@ -3,8 +3,8 @@
 # public testnet RPC, writes audit-registry.json + one static SVG badge per certificate, and force-pushes them as
 # ONE commit to the orphan branch `audit-registry` (no history kept: the chain is the history).
 #   - the hub's Audit Directory (audits.html) reads
-#     https://raw.githubusercontent.com/pospos191-alt/swd-amm/audit-registry/audit-registry.json
-#   - websites embed https://cdn.jsdelivr.net/gh/pospos191-alt/swd-amm@audit-registry/badges/<chain>-<address>.svg
+#     https://raw.githubusercontent.com/pospos191-alt/zetaphy/audit-registry/audit-registry.json
+#   - websites embed https://cdn.jsdelivr.net/gh/pospos191-alt/zetaphy@audit-registry/badges/<chain>-<address>.svg
 # The registry is an index, not the authority: the certificate page (audit.html) re-reads ZETAPHY and the target
 # chain live. No secrets: only public RPC reads and a push to that one branch with the workflow's own token.
 name: audit-registry

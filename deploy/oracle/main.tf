@@ -10,7 +10,7 @@ locals {
   is_flex        = var.shape == "VM.Standard.A1.Flex"
   roles          = distinct(compact([for r in split(",", var.roles) : trimspace(r)]))
   ad_name        = var.availability_domain != "" ? var.availability_domain : data.oci_identity_availability_domains.ads.availability_domains[0].name
-  installer_url  = "https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh"
+  installer_url  = "https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh"
 
   # Public script only: never put secrets here (user_data is readable in the console).
   user_data = <<-EOT

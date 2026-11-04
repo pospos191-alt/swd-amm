@@ -137,7 +137,7 @@ test('certificate check page + Audit Directory: live states from mocked chains, 
     await page.waitForFunction(() => document.getElementById('badge-img').complete);
     assert.ok(await page.evaluate(() => document.getElementById('badge-img').naturalWidth > 50), 'the badge renders (UTF-8 SVG)');
     const snip = await page.textContent('#snip-html');
-    assert.ok(snip.includes(`href="https://app.sawasdeecoin.com/audit.html#8453:${VAULT}"`) && snip.includes(`src="https://cdn.jsdelivr.net/gh/pospos191-alt/swd-amm@audit-registry/badges/base-${VAULT}.svg"`), snip);
+    assert.ok(snip.includes(`href="https://app.sawasdeecoin.com/audit.html#8453:${VAULT}"`) && snip.includes(`src="https://cdn.jsdelivr.net/gh/pospos191-alt/zetaphy@audit-registry/badges/base-${VAULT}.svg"`), snip);
     assert.match(await page.textContent('body'), /not mean the code is safe/);
 
     v = await verdict(`8453:${MOVED}`);

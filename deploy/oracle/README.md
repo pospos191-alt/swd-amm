@@ -2,7 +2,7 @@
 
 One button gives you one Always Free machine with ZETAPHY installed automatically. No commands to type, no cost.
 
-[![Deploy to Oracle Cloud](https://oci-resourcemanager-plugin.plugins.oci.oraclecloud.com/latest/deploy-to-oracle-cloud.svg)](https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/pospos191-alt/swd-amm/releases/download/oracle-stack/zetaphy-oracle-stack.zip)
+[![Deploy to Oracle Cloud](https://oci-resourcemanager-plugin.plugins.oci.oraclecloud.com/latest/deploy-to-oracle-cloud.svg)](https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/pospos191-alt/zetaphy/releases/download/oracle-stack/zetaphy-oracle-stack.zip)
 
 ## Just 4 steps
 

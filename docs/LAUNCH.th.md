@@ -88,7 +88,7 @@ zetaphyd tx bank send liquidity zetaphy1… 1000000000000000000000azetaphy --key
 ## 4. ใส่ key ใน GitHub secret `ZETAPHY_DEPLOYER_KEY`
 
 1. MetaMask → บัญชี `ZETAPHY deployer` → ⋮ → **Account details → Show private key** → ใส่รหัสผ่าน MetaMask → กดค้างเพื่อแสดง → **Copy**
-2. GitHub → repo `swd-amm` → **Settings → Environments → `testnet-deploy` → Environment secrets → Add environment secret**
+2. GitHub → repo `zetaphy` → **Settings → Environments → `testnet-deploy` → Environment secrets → Add environment secret**
    (สร้าง environment ก่อน โดยให้คุณเป็น required reviewer และจำกัดเฉพาะ `main`: [SECRETS-HARDENING.th.md](SECRETS-HARDENING.th.md);
    ไม่ใช่ repository secret ซึ่งทุก workflow และทุก branch อ่านได้)
    - Name: `ZETAPHY_DEPLOYER_KEY`
@@ -144,7 +144,7 @@ workflow นี้ **เปิดสะพานไม่ได้** ดูข�
 
 ## 6. โปรเจกต์ Vercel
 
-vercel.com (Hobby ฟรี) → **Add New… → Project** → Import repo `swd-amm` → ตั้ง **Root Directory** ตามตาราง,
+vercel.com (Hobby ฟรี) → **Add New… → Project** → Import repo `zetaphy` → ตั้ง **Root Directory** ตามตาราง,
 Framework Preset **Other**, ไม่ต้องตั้ง Build/Output (มี `vercel.json` ในแต่ละโฟลเดอร์แล้ว) → **Deploy**
 
 | เว็บ | Root Directory | โดเมน (ข้อ 7) |

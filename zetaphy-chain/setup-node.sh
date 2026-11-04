@@ -714,7 +714,7 @@ ZETAPHY testnet node is starting.
   Then lock it down:   sudo zetaphy-validator secure   (deletes the plaintext words file once you
                        confirm the backup; SSH keys only; security updates; asks first). Where
                        zetaphy-validator is not installed (the chain's first node):
-                       curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/join-validator.sh -o /tmp/zv && sudo bash /tmp/zv secure
+                       curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/join-validator.sh -o /tmp/zv && sudo bash /tmp/zv secure
   Logs:                journalctl -u zetaphyd -f
 INFO
 
