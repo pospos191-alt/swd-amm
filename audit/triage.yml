@@ -1969,3 +1969,8 @@ findings:
     reason: "the only payable function, beat(), requires msg.value to equal the Mailbox quote exactly and forwards that fee in the same call; there is no receive or fallback, so no ether stays in the contract."
     decided_by: pospos191 (owner, confirmed 2026-11-03 "ยืนยัน triage"; proposed by claude-agent, PR #111 triage by reading the code)
     date: 2026-11-03
+  - id: aderyn:contract-locks-ether:zetaphy-network/contracts/SaphanProofs.sol:fa06734d5457
+    status: false-positive
+    reason: "SaphanProvableOutbox.send, its only payable function, requires msg.value to equal outbox.quoteSend exactly and forwards that fee to the outbox in the same call; there is no receive or fallback (a refund from the outbox would revert the call), so no ether stays in the contract. Same pattern as the triaged SaphanCheckpointer."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #112 triage by reading the code)
+    date: 2026-11-04

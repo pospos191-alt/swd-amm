@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+interface ICheckpointToken {
+    function totalSupply() external view returns (uint256);
+}
+
 interface ICheckpointMailbox {
     function dispatch(uint32 destinationDomain, bytes32 recipientAddress, bytes calldata messageBody) external payable returns (bytes32 messageId);
     function quoteDispatch(uint32 destinationDomain, bytes32 recipientAddress, bytes calldata messageBody) external view returns (uint256 fee);
@@ -19,6 +23,7 @@ contract SaphanCheckpointer {
     ICheckpointMailbox public immutable mailbox;   // ZETAPHY's Mailbox
     uint32 public immutable destinationDomain;     // the source chain's Hyperlane domain
     bytes32 public immutable recipient;            // the route's HyperlaneLockBoxV2 there
+    ICheckpointToken public immutable token;       // token(X): its supply rides on every heartbeat (proof of reserves)
     uint64 public seq;
     uint64 public lastAt;
 
@@ -27,16 +32,17 @@ contract SaphanCheckpointer {
     error TooSoon(uint64 next);
     error Fee(uint256 needed);
 
-    constructor(ICheckpointMailbox mailbox_, uint32 destinationDomain_, bytes32 recipient_) {
-        require(address(mailbox_) != address(0) && recipient_ != bytes32(0), "config");
+    constructor(ICheckpointMailbox mailbox_, uint32 destinationDomain_, bytes32 recipient_, ICheckpointToken token_) {
+        require(address(mailbox_) != address(0) && recipient_ != bytes32(0) && address(token_) != address(0), "config");
+        token = token_;
         mailbox = mailbox_;
         destinationDomain = destinationDomain_;
         recipient = recipient_;
     }
 
-    /// The heartbeat body (160 bytes), as the lockbox reads it.
+    /// The heartbeat body (192 bytes), as the lockbox reads it: with token(X)'s total supply now.
     function body(uint64 n) public view returns (bytes memory) {
-        return abi.encode(HEARTBEAT_TAG, block.chainid, address(this), n, uint64(block.timestamp));
+        return abi.encode(HEARTBEAT_TAG, block.chainid, address(this), n, uint64(block.timestamp), token.totalSupply());
     }
 
     function quote() external view returns (uint256) { return mailbox.quoteDispatch(destinationDomain, recipient, body(seq + 1)); }

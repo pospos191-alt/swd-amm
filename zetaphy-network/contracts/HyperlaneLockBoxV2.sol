@@ -118,6 +118,10 @@ contract HyperlaneLockBoxV2 {
     bytes32 public constant HEARTBEAT_TAG = keccak256("saphan/heartbeat/v1");
     bytes32 public constant EXIT_TAG = keccak256("saphan/exit-root/v1");
     bytes32 public checkpointer;             // SaphanCheckpointer on ZETAPHY (zero: no heartbeat, no escape)
+    address public proofVerifier;            // SaphanReleaseVerifier here (zero: no proof path)
+    bool public requireProof;                // true: only proven releases (the Hyperlane path releases nothing)
+    uint256 public zetaphySupply;            // token(X)'s total supply on ZETAPHY, as of the last heartbeat
+    uint64 public supplyAt;                  // when that heartbeat came
     uint64 public lastHeard;                 // the last heartbeat or release from ZETAPHY
     uint64 public lastBeat;                  // the newest heartbeat's sequence number
     bytes32 public exitRoot;                 // set once, while escaping: what each address is owed
@@ -142,6 +146,8 @@ contract HyperlaneLockBoxV2 {
     event Heartbeat(uint64 indexed seq, uint64 zetaphyTime);
     event ExitRootSet(bytes32 root, uint256 total, uint256 pool);
     event Escaped(address indexed who, uint256 owed, uint256 paid);
+    event ProofVerifierSet(address verifier, bool required);
+    event Reserves(uint256 locked, uint256 zetaphySupply);
 
     error NotGovernance();
     error NotGuardian();
@@ -167,6 +173,8 @@ contract HyperlaneLockBoxV2 {
     error ExitDone();
     error BadSignatures();
     error BadProof();
+    error NotVerifier();
+    error ProofRequired();
 
     constructor(ISaphanMailbox mailbox_, uint32 zetaphyDomain_, uint256 zetaphyChainId_, bytes32 recipient_, bytes32 remoteSender_,
         address hook_, ISaphanIsm ism_, address governance_, address guardian_, uint256 dailyLimit_, uint64 releaseDelay_)
@@ -243,6 +251,19 @@ contract HyperlaneLockBoxV2 {
         if (exitRoot != bytes32(0)) revert ExitDone(); // after the exit root, nothing from ZETAPHY counts any more
         if (sender == checkpointer && checkpointer != bytes32(0)) { _heartbeat(sender, b); return; }
         if (sender != remoteSender) revert WrongSender(sender);
+        if (requireProof) revert ProofRequired();   // releases come only through the verifier (math, not signers)
+        _queue(b);
+    }
+
+    /// The proof path (SaphanReleaseVerifier, set by governance): the same release body, proven from ZETAPHY's state
+    /// by a STARK light client; queued exactly like a Hyperlane message (the same id: each body once, by either path).
+    function queueProven(bytes calldata b) external {
+        if (msg.sender != proofVerifier || proofVerifier == address(0)) revert NotVerifier();
+        if (exitRoot != bytes32(0)) revert ExitDone();
+        _queue(b);
+    }
+
+    function _queue(bytes calldata b) private {
         lastHeard = uint64(block.timestamp);
         if (b.length != 256) revert BadBody();
         (uint256 srcChain, address src, uint256 n, address from, address to, uint256 amount, uint256 dstChain, address dst) =
@@ -258,15 +279,29 @@ contract HyperlaneLockBoxV2 {
         emit ReleaseQueued(id, n, from, to, amount, readyAt);
     }
 
-    /// Heartbeat body (160 bytes): abi.encode(HEARTBEAT_TAG, ZETAPHY's chain id, the checkpointer, seq, ZETAPHY time).
+    /// Heartbeat body (192 bytes): abi.encode(HEARTBEAT_TAG, ZETAPHY's chain id, the checkpointer, seq, ZETAPHY time,
+    /// token(X)'s total supply on ZETAPHY). The supply is the proof of reserves: every heartbeat records it next to
+    /// `locked` (reserves(): what backs each bridged coin).
     function _heartbeat(bytes32 sender, bytes calldata b) private {
-        if (b.length != 160) revert BadBody();
-        (bytes32 tag, uint256 chain, address src, uint64 seq, uint64 t) = abi.decode(b, (bytes32, uint256, address, uint64, uint64));
+        if (b.length != 192) revert BadBody();
+        (bytes32 tag, uint256 chain, address src, uint64 seq, uint64 t, uint256 supply) = abi.decode(b, (bytes32, uint256, address, uint64, uint64, uint256));
         if (tag != HEARTBEAT_TAG || chain != zetaphyChainId || bytes32(uint256(uint160(src))) != sender) revert WrongSource();
         if (seq <= lastBeat) revert Replay(bytes32(uint256(seq)));
         lastBeat = seq;
         lastHeard = uint64(block.timestamp);
+        zetaphySupply = supply;
+        supplyAt = uint64(block.timestamp);
         emit Heartbeat(seq, t);
+        emit Reserves(locked, supply);
+    }
+
+    /// Proof of reserves: what this lockbox holds for locks, token(X)'s supply on ZETAPHY at the last heartbeat, and
+    /// whether the first covers the second (bps: locked / supply x 10000; 10000 or more = fully backed).
+    function reserves() external view returns (uint256 held, uint256 supply, uint64 asOf, uint256 bps) {
+        held = locked;
+        supply = zetaphySupply;
+        asOf = supplyAt;
+        bps = supply == 0 ? type(uint256).max : held * 10000 / supply;
     }
 
     /// Anyone: pays a queued release to its receiver once every check passes.
@@ -406,6 +441,14 @@ contract HyperlaneLockBoxV2 {
         require(d <= MAX_RELEASE_DELAY, "delay");
         releaseDelay = d;
         emit ReleaseDelaySet(d);
+    }
+
+    /// The proof path (SaphanReleaseVerifier) and whether releases need it. requireProof needs a verifier.
+    function setProofVerifier(address v, bool required) external onlyGov {
+        require(!required || v != address(0), "verifier");
+        proofVerifier = v;
+        requireProof = required;
+        emit ProofVerifierSet(v, required);
     }
 
     /// The route's SaphanCheckpointer on ZETAPHY (its heartbeats keep the route out of escape). Starting with it
