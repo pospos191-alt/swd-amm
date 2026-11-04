@@ -1,7 +1,7 @@
 #!/bin/bash
 # ZETAPHY: one command to set up a server (Linux with sudo; the validator runs on any Linux with systemd). Pick:
 #
-#   curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- runner
+#   curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo bash -s -- runner
 #
 #   runner     a Neuro runner: takes Neuro jobs and earns ZETAPHY (needs a 100 ZETAPHY testnet bond)
 #   agents     the Hyperlane validator for ZETAPHY Saphan (EVM route); the relayer starts later
@@ -12,7 +12,7 @@
 # Several at once: ... | sudo bash -s -- runner agents
 # Safe to run again (it updates and keeps the keys). Testnet only.
 set -euo pipefail
-REPO="pospos191-alt/swd-amm"
+REPO="pospos191-alt/zetaphy"
 REF="${REF:-main}"
 [ "$(id -u)" = 0 ] || { echo "ERROR: run with sudo (… | sudo bash -s -- runner)" >&2; exit 1; }
 [ $# -gt 0 ] || { sed -n '2,14p' "${BASH_SOURCE[0]:-/dev/null}" 2>/dev/null || echo "usage: install.sh runner|agents|validator"; exit 1; }

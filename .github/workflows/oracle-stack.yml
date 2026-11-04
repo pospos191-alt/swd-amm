@@ -2,7 +2,7 @@ name: oracle-stack
 
 # Validates the Oracle Resource Manager stack and publishes it as a zip at a
 # stable URL used by the "Deploy to Oracle Cloud" button:
-# https://github.com/pospos191-alt/swd-amm/releases/download/oracle-stack/zetaphy-oracle-stack.zip
+# https://github.com/pospos191-alt/zetaphy/releases/download/oracle-stack/zetaphy-oracle-stack.zip
 
 on:
   pull_request:

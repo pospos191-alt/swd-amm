@@ -84,7 +84,7 @@ real protection is `main`'s branch protection. To remove it from `testnet-automa
    secret for it).
 3. Then delete `ZETAPHY_DEPLOYER_KEY` from `testnet-automation`: it lives only behind the reviewer.
 
-## 3. What the owner clicks (GitHub → repo `swd-amm`)
+## 3. What the owner clicks (GitHub → repo `zetaphy`)
 
 Do this once. It takes about 10 minutes. Keep two browser tabs open: **Settings → Environments** and
 **Settings → Secrets and variables → Actions**.

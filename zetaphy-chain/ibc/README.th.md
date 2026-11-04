@@ -11,8 +11,8 @@
 **เครื่อง Google Cloud (e2-micro):** ข้อ 1–2 ข้างล่างใช้ปุ่ม **SSH** ในหน้า VM instances แทน Cloud Shell ของ Oracle
 และดาวน์โหลดสคริปต์ตรงจาก repo:
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/ibc/setup-relayer.sh
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh | sudo install -m 755 /dev/stdin /usr/local/bin/gov.sh
+curl -fsSLO https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/ibc/setup-relayer.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/gov.sh | sudo install -m 755 /dev/stdin /usr/local/bin/gov.sh
 ```
 relayer จำกัดหน่วยความจำไว้ 300 MB (`MemoryMax`) ถ้าใช้เกิน ระบบจะรีสตาร์ต relayer ไม่ใช่โหนด
 

@@ -531,7 +531,7 @@ export const certKey = (k, chainId, target) => keccakHex(k, encodeArgs(['uint64'
 // as image/svg+xml (raw.githubusercontent.com sends text/plain, which <img> refuses). The hub ships its own copy
 // (aas-registry.json, empty until a build has one) as the fallback.
 export const HUB_ORIGIN = 'https://app.sawasdeecoin.com';
-export const REPO = 'pospos191-alt/swd-amm';
+export const REPO = 'pospos191-alt/zetaphy';
 export const REGISTRY_BRANCH = 'audit-registry';
 export const REGISTRY_URLS = [`https://raw.githubusercontent.com/${REPO}/${REGISTRY_BRANCH}/audit-registry.json`, './aas-registry.json'];
 /** badges/<chain key>-<native address>.svg, the file name the registry writes for an entry. */

@@ -414,8 +414,8 @@ th: {
 },
 };
 const LANGS = Object.keys(T);
-const base = 'curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo MONIKER=';
-const oracle = 'https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/pospos191-alt/swd-amm/releases/download/oracle-stack/zetaphy-oracle-stack.zip';
+const base = 'curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo MONIKER=';
+const oracle = 'https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/pospos191-alt/zetaphy/releases/download/oracle-stack/zetaphy-oracle-stack.zip';
 const $ = (id) => document.getElementById(id);
 let L = 'en';
 try { const s = localStorage.getItem('zetaphy-join-lang'); if (LANGS.includes(s)) L = s; } catch (e) {}
@@ -432,7 +432,7 @@ function apply(l) {
   document.querySelectorAll('[data-t]').forEach((el) => { const k = el.dataset.t; el.innerHTML = t[k] ?? (X[l] || {})[k] ?? X.en[k]; });
   $('w-msg').textContent = '';
   const m = t.share;
-  $('share').value = [m[0], m[1], '', m[2], base + t.yourName + ' bash -s -- validator', '', m[3] + ' ' + oracle, m[4] + ' https://github.com/pospos191-alt/swd-amm', m[5]].join('\n');
+  $('share').value = [m[0], m[1], '', m[2], base + t.yourName + ' bash -s -- validator', '', m[3] + ' ' + oracle, m[4] + ' https://github.com/pospos191-alt/zetaphy', m[5]].join('\n');
   ['copied-cmd', 'copied-share', 'copied-loop'].forEach((id) => { $(id).textContent = ''; });
   earn();
   const fq = F[l] || F.en;
@@ -446,7 +446,7 @@ $('moniker').addEventListener('input', render);
 const tx = (k) => T[L][k] ?? (X[L] || {})[k] ?? X.en[k];
 let openGuide = null;
 // Quick links per guide (labels are product or console names; w1b is the page's own translated button).
-const ORACLE_STACK = 'https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/pospos191-alt/swd-amm/releases/download/oracle-stack/zetaphy-oracle-stack.zip';
+const ORACLE_STACK = 'https://cloud.oracle.com/resourcemanager/stacks/create?zipUrl=https://github.com/pospos191-alt/zetaphy/releases/download/oracle-stack/zetaphy-oracle-stack.zip';
 const LINKS = {
   oracle: [['Oracle Cloud sign up', 'https://signup.cloud.oracle.com/'], ['@w1b', ORACLE_STACK], ['Oracle Console', 'https://cloud.oracle.com/']],
   google: [['Google Cloud sign up', 'https://cloud.google.com/free'], ['Create instance', 'https://console.cloud.google.com/compute/instancesAdd'],

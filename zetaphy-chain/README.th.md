@@ -120,7 +120,7 @@ Google Cloud ให้เครื่อง **e2-micro** ฟรีถาวร�
 
 **คำสั่งเดียว (แนะนำ):** บนเครื่อง Ubuntu 24.04 ใดก็ได้ (Oracle ฟรี, Google ฟรี, VPS) วางคำสั่งนี้:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo MONIKER=ชื่อของคุณ bash -s -- validator
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo MONIKER=ชื่อของคุณ bash -s -- validator
 ```
 - ใช้ไฟล์เชนสำเร็จรูป (ตรวจ SHA-256) ไม่ต้อง build เอง ต่อเข้ากับ `rpc.sawasdeecoin.com` และขอ 10 ZETAPHY จาก faucet ให้เอง
 - ตัวจับเวลาเช็กทุก 10 นาที: ซิงก์ครบและมีเหรียญแล้ว จะ stake 9 ZETAPHY เป็น validator เอง แล้วหยุดเช็ก
@@ -191,8 +191,8 @@ compile บนเครื่อง RAM 1 GB ใช้เวลาหลาย�
 ```bash
 S=<sha256 ของสคริปต์>; R=zetaphyd-${S:0:12}; ARCH=amd64   # เครื่อง ARM ใช้ arm64
 cd /tmp
-curl -fsSLO https://github.com/pospos191-alt/swd-amm/releases/download/$R/zetaphyd-linux-$ARCH
-curl -fsSLO https://github.com/pospos191-alt/swd-amm/releases/download/$R/SHA256SUMS
+curl -fsSLO https://github.com/pospos191-alt/zetaphy/releases/download/$R/zetaphyd-linux-$ARCH
+curl -fsSLO https://github.com/pospos191-alt/zetaphy/releases/download/$R/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
 curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy-chain/main/v/$S.sh -o setup.sh
 echo "$S  setup.sh" | sha256sum -c
@@ -204,10 +204,10 @@ sudo tail -f /var/log/zetaphy-setup.log     # Ctrl+C เลิกดู กา�
 สคริปต์รันได้ทีละรอบ ถ้าสั่งซ้ำ รอบที่สองจะบอกแล้วออกเอง ใครก็ build ไฟล์นี้ใหม่จากซอร์สเดียวกัน
 (`.github/workflows/release-zetaphyd.yml`) แล้วเทียบ hash ได้
 ไฟล์แต่ละตัวมีลายเซ็นที่มาของการ build (Sigstore) ยืนยันว่า workflow นี้ build จาก commit ใน repo นี้ ไม่ได้อัปโหลดเอง:
-`gh attestation verify zetaphyd-linux-$ARCH --repo pospos191-alt/swd-amm`
+`gh attestation verify zetaphyd-linux-$ARCH --repo pospos191-alt/zetaphy`
 
 **อัปเดตโหนดที่รันอยู่** (เก็บกุญแจและข้อมูลเชนไว้ ตั้งค่า rpc-guard และ Caddy ใหม่ แล้วรีสตาร์ตโหนด):
-`curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- update`
+`curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo bash -s -- update`
 
 ### ใช้โดเมนของตัวเองเป็น RPC
 
@@ -507,7 +507,7 @@ handler `zetaphy-v4`) และบนเชนจริง `npm run test:devnet:
 `ที่อยู่,จำนวน` ให้บางคนได้จำนวนต่างจากคนอื่น; `#` คือหมายเหตุ) แล้วรันบนโหนดแรก:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh -o /tmp/gov.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/gov.sh -o /tmp/gov.sh
 sudo -u zetaphy -H nano /home/zetaphy/airdrop.txt
 sudo -u zetaphy -H bash -c 'cd ~ && bash /tmp/gov.sh airdrop ~/airdrop.txt 100'
 ```

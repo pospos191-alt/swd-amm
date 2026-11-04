@@ -57,7 +57,7 @@
 ### วิธีง่ายที่สุด: คำสั่งเดียว (เซิร์ฟเวอร์ Ubuntu)
 
 ```
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- runner
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo bash -s -- runner
 ```
 
 - ติดตั้งให้ครบ: Node.js (ตรวจ SHA-256), โค้ด ZETAPHY, กุญแจของร่าง (สร้างในเครื่อง ไม่แสดง) และบริการที่รันเองตลอด รวมถึงหลังรีสตาร์ต
@@ -319,7 +319,7 @@ zetaphy bridge close        # governance: ปิด route
 - ทุกบรรทัดที่พิมพ์ขึ้นต้นด้วย `[TESTNET (not audited)]`
 - mainnet ต้องมี audit จริงและผ่านทุกประตู
 ```
-zetaphy bridge open --testnet --audit-report https://github.com/pospos191-alt/swd-amm/blob/main/docs/BRIDGE-TESTNET.md \
+zetaphy bridge open --testnet --audit-report https://github.com/pospos191-alt/zetaphy/blob/main/docs/BRIDGE-TESTNET.md \
   --audit-sha256 $(sha256sum docs/BRIDGE-TESTNET.md | cut -d' ' -f1) --daily-limit 100
 ```
 

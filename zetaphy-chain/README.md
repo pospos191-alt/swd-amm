@@ -120,7 +120,7 @@ When you open it to the public, move to a bigger machine (e.g. Contabo / OVH) us
 
 **One command (recommended):** on any Linux machine with systemd (x86_64 or arm64), paste:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo MONIKER=your-name bash -s -- validator
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo MONIKER=your-name bash -s -- validator
 ```
 - Uses the prebuilt chain binary (SHA-256 checked), no build. Joins `rpc.sawasdeecoin.com` and asks its faucet for 10 ZETAPHY
 - A timer checks every 10 minutes: once synced and funded, it stakes 9 ZETAPHY and becomes a validator by itself, then stops checking
@@ -222,8 +222,8 @@ for every published `setup-node.sh` (x86_64 and ARM64) and publishes it as the r
 ```bash
 S=<the script's sha256>; R=zetaphyd-${S:0:12}; ARCH=amd64   # arm64 on ARM machines
 cd /tmp
-curl -fsSLO https://github.com/pospos191-alt/swd-amm/releases/download/$R/zetaphyd-linux-$ARCH
-curl -fsSLO https://github.com/pospos191-alt/swd-amm/releases/download/$R/SHA256SUMS
+curl -fsSLO https://github.com/pospos191-alt/zetaphy/releases/download/$R/zetaphyd-linux-$ARCH
+curl -fsSLO https://github.com/pospos191-alt/zetaphy/releases/download/$R/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
 curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy-chain/main/v/$S.sh -o setup.sh
 echo "$S  setup.sh" | sha256sum -c
@@ -236,10 +236,10 @@ Only one copy of the script runs at a time; a second one says so and exits. Anyo
 binary from the same sources (`.github/workflows/release-zetaphyd.yml`) and compare the hash.
 Each binary also has a signed build provenance (Sigstore), which shows it was built by that workflow
 from a commit of this repository and not uploaded by hand:
-`gh attestation verify zetaphyd-linux-$ARCH --repo pospos191-alt/swd-amm`
+`gh attestation verify zetaphyd-linux-$ARCH --repo pospos191-alt/zetaphy`
 
 **Updating a running node** (keys and chain data kept; settings, rpc-guard and Caddy redone, node restarted):
-`curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- update`
+`curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo bash -s -- update`
 
 ### Your own domain for the RPC
 
@@ -545,7 +545,7 @@ Put one address per line in a file (`0x…` from MetaMask, Trust or any EVM wall
 `address,amount` gives one person a different amount; `#` starts a comment), then on the genesis node:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/gov.sh -o /tmp/gov.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/gov.sh -o /tmp/gov.sh
 sudo -u zetaphy -H nano /home/zetaphy/airdrop.txt
 sudo -u zetaphy -H bash -c 'cd ~ && bash /tmp/gov.sh airdrop ~/airdrop.txt 100'
 ```

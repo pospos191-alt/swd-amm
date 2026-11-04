@@ -2,7 +2,7 @@
 #
 #   jobs:
 #     zetaphy-audit:
-#       uses: pospos191-alt/swd-amm/.github/workflows/audit-reusable.yml@<full commit sha>
+#       uses: pospos191-alt/zetaphy/.github/workflows/audit-reusable.yml@<full commit sha>
 #       permissions:
 #         contents: read
 #         security-events: write   # SARIF to code scanning (optional)
@@ -72,7 +72,7 @@ jobs:
       - name: Check out the ZETAPHY audit pipeline at the pinned commit
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          repository: pospos191-alt/swd-amm
+          repository: pospos191-alt/zetaphy
           ref: ${{ github.job_workflow_sha }}
           path: .zetaphy-audit-pipeline
           persist-credentials: false

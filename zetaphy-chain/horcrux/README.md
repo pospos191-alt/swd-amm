@@ -95,7 +95,7 @@ Every command runs on the machine it names, in a browser SSH window or Oracle Cl
 Get the script on each machine:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/horcrux/setup-horcrux.sh -o setup-horcrux.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/horcrux/setup-horcrux.sh -o setup-horcrux.sh
 ```
 
 0. **Back up** `priv_validator_key.json` offline first (`sudo zetaphy-validator backup`). The switch shreds it from the

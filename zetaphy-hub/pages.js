@@ -410,9 +410,9 @@ const dev = {
           ['Cosmos REST', `curl -s "${e.rest}/cosmos/bank/v1beta1/supply/by_denom?denom=azetaphy"`],
           [ctx.T('devFaucet'), `curl -s ${e.evm} -H "content-type: application/json" \\\n  -d '{"jsonrpc":"2.0","id":1,"method":"zetaphy_faucet","params":["0xYOUR_ADDRESS"]}'`],
           [ctx.T('devRegistry'), `curl -s ${e.files}/keplr.json\ncurl -s ${e.files}/evm-chain.json`],
-          [ctx.T('devCli'), 'git clone https://github.com/pospos191-alt/swd-amm.git\ncd swd-amm/zetaphy-network && npm ci --omit=dev\nnode cli.js --help']]
+          [ctx.T('devCli'), 'git clone https://github.com/pospos191-alt/zetaphy.git\ncd zetaphy/zetaphy-network && npm ci --omit=dev\nnode cli.js --help']]
           .flatMap(([t, cmd]) => [ctx.el('h3', { text: t }), code(ctx, cmd)]),
-        ctx.el('p', { class: 'small' }, ctx.el('a', { href: 'https://github.com/pospos191-alt/swd-amm', target: '_blank', rel: 'noopener noreferrer', text: 'GitHub ↗' }))),
+        ctx.el('p', { class: 'small' }, ctx.el('a', { href: 'https://github.com/pospos191-alt/zetaphy', target: '_blank', rel: 'noopener noreferrer', text: 'GitHub ↗' }))),
       ctx.el('div', { class: 'card' },
         ctx.el('div', { class: 'card-head' }, ctx.el('h2', { text: ctx.T('devContracts') }), ctx.el('span', { class: 'info', 'data-tip-key': 'tipDevContracts', tabindex: 0, text: 'i' })),
         ctx.el('div', { class: 'scroll' }, ctx.el('table', { class: 'tbl' }, ctx.el('tbody', {}, rows.map(([k, a]) => ctx.el('tr', {},

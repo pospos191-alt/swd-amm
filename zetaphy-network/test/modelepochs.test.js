@@ -113,6 +113,6 @@ test('the committed Neuro manifest hash fits the registry (bytes32)', async () =
   const text = readFileSync(new URL('../../zetaphy-neuro/ml/manifest.json', import.meta.url));
   const { sha256 } = await import('ethers');
   const hash = sha256(text);
-  await reg.send('gov', 'schedule', [hash, boundary(20), 'https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-neuro/ml/manifest.json']);
+  await reg.send('gov', 'schedule', [hash, boundary(20), 'https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-neuro/ml/manifest.json']);
   assert.equal((await readVersions(reg))[0].hash, hash);
 });

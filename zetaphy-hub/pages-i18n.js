@@ -7,7 +7,7 @@ export const EARN_METHODS = [
   { id: 'faucet', icon: 'drop', cmds: [null, 'curl -s https://RPC -H "content-type: application/json" \\\n  -d \'{"jsonrpc":"2.0","id":1,"method":"zetaphy_faucet","params":["0xYOUR_ADDRESS"]}\'', null] },
   { id: 'mine', icon: 'pick', tab: 'mine', cmds: [null, null, null] },
   { id: 'runner', icon: 'cpu', cmds: [null,
-    'git clone https://github.com/pospos191-alt/swd-amm.git\ncd swd-amm/zetaphy-network\nnpm ci --omit=dev',
+    'git clone https://github.com/pospos191-alt/zetaphy.git\ncd zetaphy/zetaphy-network\nnpm ci --omit=dev',
     'node cli.js node status --rpc https://RPC --jobs JOBS',
     null,
     'node cli.js node register\nnode cli.js node start',

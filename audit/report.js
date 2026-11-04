@@ -460,7 +460,7 @@ export function toSarif(r, { repoRelative = true, includeTriaged = false } = {})
     $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
     version: '2.1.0',
     runs: [...runs].map(([tool, run]) => ({
-      tool: { driver: { name: `zetaphy-audit/${tool}`, informationUri: 'https://github.com/pospos191-alt/swd-amm/tree/main/audit', rules: [...run.rules.values()] } },
+      tool: { driver: { name: `zetaphy-audit/${tool}`, informationUri: 'https://github.com/pospos191-alt/zetaphy/tree/main/audit', rules: [...run.rules.values()] } },
       automationDetails: { id: `zetaphy-audit/${tool}/` },
       results: run.results,
     })),

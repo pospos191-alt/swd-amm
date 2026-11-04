@@ -1,7 +1,7 @@
 #!/bin/bash
 # ZETAPHY Neuro runner in one command (Ubuntu/Debian server, x86_64 or arm64), with sudo:
 #
-#   curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- runner
+#   curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo bash -s -- runner
 #
 # Installs Node.js (official build, SHA-256 checked), the ZETAPHY code, a runner key made on this
 # machine, and a service that starts by itself (also after a reboot). It prints the runner's
@@ -20,7 +20,7 @@
 set -euo pipefail
 
 NODE_VERSION="v22.22.0"
-REPO="pospos191-alt/swd-amm"
+REPO="pospos191-alt/zetaphy"
 REF="${REF:-main}"
 RPC="${ZETAPHY_RPC:-https://rpc.sawasdeecoin.com}"
 JOBS="${ZETAPHY_JOBS:-0x698dC17df6a34b02263b295d101BE39F3F3B433B}"     # NeuroJobs (zetaphy-launch/state/77390.json)

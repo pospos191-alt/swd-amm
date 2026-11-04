@@ -93,7 +93,7 @@ test('the badge is a static, script-free SVG with the state (and escapes what it
   assert.equal(aas.badgeSvg({ status: 'nope' }).includes('NOT CERTIFIED'), true);
   const s = aas.embedSnippets(aas.chainOf('base'), '0x' + 'ab'.repeat(20));
   assert.equal(s.href, `https://app.sawasdeecoin.com/audit.html#8453:0x${'ab'.repeat(20)}`);
-  assert.equal(s.img, `https://cdn.jsdelivr.net/gh/pospos191-alt/swd-amm@audit-registry/badges/base-0x${'ab'.repeat(20)}.svg`);
+  assert.equal(s.img, `https://cdn.jsdelivr.net/gh/pospos191-alt/zetaphy@audit-registry/badges/base-0x${'ab'.repeat(20)}.svg`);
 });
 
 test('the registry is untrusted input: anything malformed is dropped, strings are bounded', () => {

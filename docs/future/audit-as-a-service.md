@@ -136,7 +136,7 @@ beacon) that answers `implementation()`; contracts cannot read another contract'
 chain in the visitor's browser, and offers the badge snippet:
 
 ```html
-<a href="https://app.sawasdeecoin.com/audit.html#8453:0xYourContract"><img src="https://cdn.jsdelivr.net/gh/pospos191-alt/swd-amm@audit-registry/badges/base-0xyourcontract.svg" alt="ZETAPHY audit certificate" height="20"></a>
+<a href="https://app.sawasdeecoin.com/audit.html#8453:0xYourContract"><img src="https://cdn.jsdelivr.net/gh/pospos191-alt/zetaphy@audit-registry/badges/base-0xyourcontract.svg" alt="ZETAPHY audit certificate" height="20"></a>
 ```
 
 The badge image is static (rebuilt every 6 hours); the link is the live check. Badges are plain SVG (no
@@ -144,7 +144,7 @@ script, no external reference), safe as `<img>` anywhere.
 
 **In wallets and explorers.** Read `AuditCertificate.certificate(chainId, target)` on ZETAPHY plus the live code
 hash (as the page does), or the mirror's `isCertified` on that chain, or the public registry
-`https://raw.githubusercontent.com/pospos191-alt/swd-amm/audit-registry/audit-registry.json` (an index: re-check
+`https://raw.githubusercontent.com/pospos191-alt/zetaphy/audit-registry/audit-registry.json` (an index: re-check
 live before showing VALID). ZETAPHY's own explorer already shows the badge for certified addresses.
 
 **From a terminal.** `zetaphy aas verify base 0x…` prints the state and both hashes; exit code 0 only when VALID.
@@ -172,7 +172,7 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with: { persist-credentials: false }
       - id: zetaphy
-        uses: pospos191-alt/swd-amm/.github/actions/zetaphy-audit@<full commit sha>
+        uses: pospos191-alt/zetaphy/.github/actions/zetaphy-audit@<full commit sha>
         with:
           path: contracts      # default: the repository root
           tier: fast           # or deep (hours)
@@ -184,7 +184,7 @@ or the reusable workflow:
 ```yaml
 jobs:
   zetaphy-audit:
-    uses: pospos191-alt/swd-amm/.github/workflows/audit-reusable.yml@<full commit sha>
+    uses: pospos191-alt/zetaphy/.github/workflows/audit-reusable.yml@<full commit sha>
     permissions: { contents: read, security-events: write }
     with: { path: contracts }
 ```

@@ -100,7 +100,7 @@ export const flowText = (lang, tab) => withFallback(FLOW, lang).steps[tab];
 export { LANG_CODES };
 
 // ------------------------------------------------------------------ the AI map (35 roadmap items)
-const DOCS = 'https://github.com/pospos191-alt/swd-amm/blob/main/docs/future/';
+const DOCS = 'https://github.com/pospos191-alt/zetaphy/blob/main/docs/future/';
 /** Doc page for a language (Thai has its own .th.md; the others read English). */
 export const docUrl = (file, lang) => `${DOCS}${file}${lang === 'th' ? '.th' : ''}.md`;
 

@@ -90,7 +90,7 @@ Horcrux ป้องกันกรณีเครื่องหนึ่งถ
 ดาวน์โหลดสคริปต์ลงทุกเครื่อง:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/zetaphy-chain/horcrux/setup-horcrux.sh -o setup-horcrux.sh
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/zetaphy-chain/horcrux/setup-horcrux.sh -o setup-horcrux.sh
 ```
 
 0. **สำรอง** `priv_validator_key.json` แบบออฟไลน์ก่อน (`sudo zetaphy-validator backup`) ขั้น switch จะทำลายไฟล์นี้

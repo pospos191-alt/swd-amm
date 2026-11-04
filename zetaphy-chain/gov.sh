@@ -71,7 +71,7 @@ FROM=${FROM:-validator}
 NODE=${NODE:-tcp://127.0.0.1:26657}
 CHAIN_ID=${CHAIN_ID:-zetaphy_77390-1}
 DEPOSIT=${DEPOSIT:-1000000000000000000000azetaphy}   # 1,000 ZETAPHY
-REPO=${REPO:-pospos191-alt/swd-amm}
+REPO=${REPO:-pospos191-alt/zetaphy}
 SETUP_URL=${SETUP_URL:-https://raw.githubusercontent.com/$REPO/main/zetaphy-chain/setup-node.sh}
 RELEASE_BASE=${RELEASE_BASE:-https://github.com/$REPO/releases/download}
 

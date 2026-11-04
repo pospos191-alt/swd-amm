@@ -57,7 +57,7 @@ So every honest runner gets the same verdict
 ### Easiest: one command (Ubuntu server)
 
 ```
-curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- runner
+curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo bash -s -- runner
 ```
 
 - Installs everything: Node.js (SHA-256 checked), the ZETAPHY code, the runner key (made on the machine, never shown) and a service that keeps running, also after a reboot
@@ -318,7 +318,7 @@ zetaphy bridge close        # governance: close the route
 - Everything else holds: 2+ independent lanes, the on-chain hard cap.
 - Every output line starts with `[TESTNET (not audited)]`. Mainnet needs a real audit and every gate.
 ```
-zetaphy bridge open --testnet --audit-report https://github.com/pospos191-alt/swd-amm/blob/main/docs/BRIDGE-TESTNET.md \
+zetaphy bridge open --testnet --audit-report https://github.com/pospos191-alt/zetaphy/blob/main/docs/BRIDGE-TESTNET.md \
   --audit-sha256 $(sha256sum docs/BRIDGE-TESTNET.md | cut -d' ' -f1) --daily-limit 100
 ```
 

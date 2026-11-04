@@ -127,7 +127,7 @@ for (const e of events) if (e.flagged && e.severity >= 4 && watched.has(e.subjec
 import { createImmune } from 'zetaphy-network/src/immune/sdk.js';
 const immune = createImmune({
   mirrors: { 84532: { rpc: 'https://sepolia.base.org', address: '0x…ImmuneMirror' } },
-  feedUrl: 'https://cdn.jsdelivr.net/gh/pospos191-alt/swd-amm@immune-feed/',
+  feedUrl: 'https://cdn.jsdelivr.net/gh/pospos191-alt/zetaphy@immune-feed/',
   trustedKeys: ['0x…keyHash ของผู้เซ็นฟีด'],
 });
 await immune.checkAddress(84532, '0x…');  // { flagged, severity, since, evidenceHash, source: 'mirror' | 'feed' | 'none', … }

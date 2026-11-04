@@ -88,7 +88,7 @@ zetaphyd tx bank send liquidity zetaphy1… 1000000000000000000000azetaphy --key
 ## 4. Put the key in the GitHub secret `ZETAPHY_DEPLOYER_KEY`
 
 1. MetaMask → the `ZETAPHY deployer` account → ⋮ → **Account details → Show private key** → enter your MetaMask password → press and hold to reveal → **Copy**
-2. GitHub → repo `swd-amm` → **Settings → Environments → `testnet-deploy` → Environment secrets → Add environment secret**
+2. GitHub → repo `zetaphy` → **Settings → Environments → `testnet-deploy` → Environment secrets → Add environment secret**
    (create the environment first, with you as required reviewer and `main` only: [SECRETS-HARDENING.md](SECRETS-HARDENING.md);
    not a repository secret, which every workflow and branch could read)
    - Name: `ZETAPHY_DEPLOYER_KEY`
@@ -144,7 +144,7 @@ Moving the 500 million reward pool into the RewardVault uses the `rewards` key o
 
 ## 6. Vercel projects
 
-vercel.com (Hobby, free) → **Add New… → Project** → Import repo `swd-amm` → set the **Root Directory** as in the table,
+vercel.com (Hobby, free) → **Add New… → Project** → Import repo `zetaphy` → set the **Root Directory** as in the table,
 Framework Preset **Other**, no need to set Build/Output (each folder already has a `vercel.json`) → **Deploy**
 
 | Web app | Root Directory | Domain (step 7) |

@@ -4,7 +4,7 @@
 # a home PC or mini PC, a Raspberry Pi 4/5 (64-bit OS), Windows through WSL 2, or a Mac through an Ubuntu VM.
 # Ubuntu, Debian, Fedora, RHEL/Rocky/Alma, Amazon Linux, openSUSE and Arch install what they need themselves.
 #
-#   curl -fsSL https://raw.githubusercontent.com/pospos191-alt/swd-amm/main/install.sh | sudo bash -s -- validator
+#   curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/main/install.sh | sudo bash -s -- validator
 #
 # Your own name:  ... | sudo MONIKER=my-name bash -s -- validator
 #
@@ -40,7 +40,7 @@
 # Testnet only. Keys are made on this machine and never printed or sent anywhere.
 set -euo pipefail
 
-REPO="pospos191-alt/swd-amm"
+REPO="pospos191-alt/zetaphy"
 REF="${REF:-main}"
 JOIN="${JOIN:-rpc.sawasdeecoin.com}"
 STAKE="${STAKE:-9}"                                   # ZETAPHY staked; the faucet gives 10, the rest pays fees
