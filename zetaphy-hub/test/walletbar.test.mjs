@@ -61,7 +61,9 @@ test('Saphan EVM routes: every chain of the table, its state from saphan-routes.
   // deployed 2026-11-03, closed until governance opens it)
   const real = saphanRoutes((f) => { try { return JSON.parse(readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')); } catch { return null; } });
   assert.deepEqual(real.map((x) => [x.name, x.state]), [['sepolia', 'closed'], ['basesepolia', 'planned'], ['arbitrumsepolia', 'planned']]);
-  assert.ok(real.every((x) => x.gateway === undefined), 'no Gateway deployed yet');
+  // the Gateway: deployed for sepolia (2026-11-04), not yet for the others
+  assert.deepEqual(real[0].gateway, { zetaphy: '0xf9A12bDfC8d3e22c62e5aFc19b1D2a3579C25609', source: '0x6a26055803556ff891CAB11CF47aB363aC1D0Ed8' });
+  assert.ok(real.slice(1).every((x) => x.gateway === undefined), 'no Gateway on the other routes yet');
 });
 
 test('Saphan token routes: tokens born on ZETAPHY with their destinations; held tokens carry their routes into the wallet bar', () => {

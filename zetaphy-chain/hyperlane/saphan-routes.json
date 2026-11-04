@@ -22,7 +22,14 @@
         "deployTx": "0xf03260f4f70ea453d89fa23c1fe549651ac4535278a325abd9eec1287f6324a9",
         "fromBlock": 12056947
       },
-      "workflowRun": "41690047176"
+      "workflowRun": "41690047176",
+      "gateway": {
+        "zetaphy": "0xf9A12bDfC8d3e22c62e5aFc19b1D2a3579C25609",
+        "source": "0x6a26055803556ff891CAB11CF47aB363aC1D0Ed8",
+        "zetaphyFrom": 220886,
+        "sourceFrom": 12060222,
+        "workflowRun": "41777124033"
+      }
     }
   },
   "tokens": {}
