@@ -15,13 +15,17 @@ import { sourceClosure } from '../../lib/scope.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(HERE, '../../..');
 
-/** The solc to use: { kind: 'native', bin, version } | { kind: 'js', solc, version } | null. */
+/** The compiler every contract here pins (pragma solidity 0.8.26; audit/tools/install.sh installs it). */
+export const PINNED_SOLC = '0.8.26';
+
+/** The solc to use: { kind: 'native', bin, version } | { kind: 'js', solc, version } | null.
+ *  Only the pinned version counts: another solc on PATH (e.g. a solc-select shim on its latest) is skipped. */
 export function findSolc(prefer = process.env.SOLC) {
-  for (const bin of [prefer, 'solc'].filter(Boolean)) {
+  for (const bin of [...new Set([prefer, process.env.SOLC, 'solc'].filter(Boolean))]) {
     try {
       const v = execFileSync(bin, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       const version = v.match(/Version: (\S+)/)?.[1];
-      if (version) return { kind: 'native', bin, version };
+      if (version?.startsWith(`${PINNED_SOLC}+`)) return { kind: 'native', bin, version };
     } catch { /* not installed */ }
   }
   const js = join(REPO, 'zetaphy-network/node_modules/solc/index.js');
