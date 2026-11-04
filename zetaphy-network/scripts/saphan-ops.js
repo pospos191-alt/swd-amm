@@ -24,7 +24,18 @@
 //       Without --act it only says what it would do.
 //   node scripts/saphan.js bitvm judge --claim claim.json --tx <raw hex|"">   a watcher's decision for one claim
 //   node scripts/saphan.js privacy note --pool 0x… [--chain-id 77390]          a new note (keep it secret) and its commitment
-import { readFileSync } from 'node:fs';
+//
+// Saphan PR 4 (docs/SAPHAN-PR4.md), offline:
+//   node scripts/saphan.js agg batch --file transfers.json     the Merkle root of [{srcChainId,srcContract,srcNonce,sender,to,amount}] + each path
+//   node scripts/saphan.js agg digest --lane 0x… --epoch <n> --root 0x… [--chain-id 77390]   what each committee member signs
+//   node scripts/saphan.js agg cert --file sigs.json --threshold <t>   [{publicKey, signature}] -> the certificate (keys hash-sorted)
+//   node scripts/saphan.js sealed key --seed-file <f>          a solver's X-Wing (ML-KEM-768 + X25519) public key; the seed file
+//                                                              (32 bytes hex, made when missing) IS the secret key
+//   node scripts/saphan.js sealed seal --contract 0x… --solver 0x… --key <public key hex> --order order.json [--chain-id 77390]
+//       salt, commitment and ciphertext for SaphanSealedOrders.commit (keep the salt)
+//   node scripts/saphan.js sealed open --contract 0x… --solver 0x… --seed-file <f> --commitment 0x… --ciphertext 0x… [--chain-id 77390]
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { Interface, Wallet, Contract, getAddress, keccak256, toUtf8Bytes } from 'ethers';
 
 const TIMELOCK = new Interface(['function schedule(address,uint256,bytes,bytes32,bytes32,uint256)', 'function execute(address,uint256,bytes,bytes32,bytes32)']);
@@ -33,7 +44,7 @@ const json = (f) => JSON.parse(readFileSync(String(f), 'utf8'));
 const need = (o, ks) => { for (const k of ks) if (o[k] == null) throw new Error(`--${k} is needed`); };
 const str = (x) => JSON.parse(JSON.stringify(x, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
 
-export const COMMANDS = ['recovery', 'liquidity', 'offline', 'heal', 'bitvm', 'privacy'];
+export const COMMANDS = ['recovery', 'liquidity', 'offline', 'heal', 'bitvm', 'privacy', 'agg', 'sealed'];
 
 /** One command: (cmd, sub, options, helpers from scripts/saphan.js) -> a JSON-able result. */
 export async function run(cmd, sub, o, h = {}) {
@@ -141,6 +152,36 @@ export async function run(cmd, sub, o, h = {}) {
     const chainId = Number(o['chain-id'] ?? 77390);
     return { note: P.encodeNote({ chainId, pool: o.pool, note }), commitment: P.noteCommitment(note).toString(),
       warning: 'keep the note secret: whoever holds it can withdraw; the pool uses a DEV trusted setup (testnet only)' };
+  }
+  if (cmd === 'agg') {
+    const G = await import('../src/saphanagg.js');
+    if (sub === 'batch') { need(o, ['file']); return str(G.buildBatch(json(o.file))); }
+    if (sub === 'digest') {
+      need(o, ['lane', 'epoch', 'root']);
+      return { digest: G.certDigest({ chainId: BigInt(o['chain-id'] ?? 77390), lane: getAddress(o.lane), epoch: BigInt(o.epoch), root: o.root }) };
+    }
+    if (sub === 'cert') { need(o, ['file', 'threshold']); return { certificate: G.certificate(json(o.file), Number(o.threshold)) }; }
+  }
+  if (cmd === 'sealed') {
+    const S = await import('../src/saphansealed.js');
+    const seed = () => {
+      need(o, ['seed-file']);
+      const f = String(o['seed-file']);
+      if (!existsSync(f)) writeFileSync(f, '0x' + randomBytes(32).toString('hex') + '\n', { mode: 0o600 });
+      return readFileSync(f, 'utf8').trim();
+    };
+    const chainId = BigInt(o['chain-id'] ?? 77390);
+    if (sub === 'key') { const k = S.solverKey(seed()); return { publicKey: k.publicKey, keyHash: k.keyHash, next: 'setSolverKey(publicKey) from the solver address' }; }
+    if (sub === 'seal') {
+      need(o, ['contract', 'solver', 'key', 'order']);
+      return S.sealOrder({ chainId, contract: getAddress(o.contract), solver: getAddress(o.solver), solverPublicKey: o.key, order: json(o.order) });
+    }
+    if (sub === 'open') {
+      need(o, ['contract', 'solver', 'commitment', 'ciphertext']);
+      const r = S.openOrder({ chainId, contract: getAddress(o.contract), solver: getAddress(o.solver), secretKey: S.solverKey(seed()).secretKey,
+        commitment: o.commitment, ciphertext: o.ciphertext });
+      return r ? str(r) : { error: 'does not decrypt or does not match its commitment: do not reveal (the user is refunded after the window)' };
+    }
   }
   throw new Error(`usage: saphan.js ${COMMANDS.join('|')} <sub> … (see scripts/saphan-ops.js)`);
 }

@@ -54,6 +54,7 @@
 // Saphan PR 6 (docs/SAPHAN-PR6.md; scripts/saphan-ops.js lists every option):
 //   node scripts/saphan.js recovery plan|snapshot|read|proof|start …   the guided path after an incident
 //   node scripts/saphan.js liquidity plan …   offline sign|check|relay …   heal once …   bitvm judge …   privacy note …
+// Saphan PR 4 (docs/SAPHAN-PR4.md; offline): agg batch|digest|cert …   sealed key|seal|open …
 //
 //   node scripts/saphan.js whitelist          the relayer's HYP_WHITELIST for every deployed route (+ the v1 lockbox, + token routes)
 //   node scripts/saphan.js pending            per two-way route: the outbox's sends on ZETAPHY vs releases the lockbox recorded;
@@ -591,8 +592,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       const R = await import('../src/saphanreads.js');
       res = o.slot != null ? { query: R.slotQuery(BigInt(o['chain-id']), getAddress(o.target), BigInt(o.slot)) }
         : { query: R.callQuery(BigInt(o['chain-id']), getAddress(o.target), String(o.data ?? '0x')) };
-    } else if (['recovery', 'liquidity', 'offline', 'heal', 'bitvm', 'privacy'].includes(cmd)) {
-      // Saphan PR 6 (docs/SAPHAN-PR6.md): recovery, liquidity, offline transfers, self-healing, BitVM, privacy
+    } else if (['recovery', 'liquidity', 'offline', 'heal', 'bitvm', 'privacy', 'agg', 'sealed'].includes(cmd)) {
+      // Saphan PR 6 (docs/SAPHAN-PR6.md): recovery, liquidity, offline transfers, self-healing, BitVM, privacy;
+      // Saphan PR 4 (docs/SAPHAN-PR4.md): aggregated certificates (agg), sealed orders (sealed)
       res = await (await import('./saphan-ops.js')).run(cmd, rest[0], o, { zetaphyP, originP, keySigner, routes: loadRoutes, table: () => t });
     } else if (cmd === 'exit-root' || cmd === 'exit-proof') {
       const S = await import('../src/saphansafety.js');
