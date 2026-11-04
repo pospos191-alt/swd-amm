@@ -3,7 +3,8 @@
   "sources": {
     "registry": "https://github.com/hyperlane-xyz/hyperlane-registry/tree/fd1acc240ea812d1ae76cd81a9872c0b526c020a/chains (chains/<name>/metadata.yaml, addresses.yaml)",
     "validators": "https://github.com/hyperlane-xyz/hyperlane-monorepo/blob/1aadbba0696ecf96ed4c06f78c978d08db22c0ad/typescript/sdk/src/consts/multisigIsm.ts (defaultMultisigConfigs: DEFAULT_AW_TESTNET_VALIDATOR, threshold 1, for sepolia, basesepolia and arbitrumsepolia)",
-    "fetched": "2026-10-28"
+    "fetched": "2026-10-28",
+    "pr6": "Saphan PR 6 added optimismsepolia, polygonamoy and bsctestnet from the registry's main branch (chains/<name>/addresses.yaml and metadata.yaml) and the monorepo's main branch (multisigIsm.ts: DEFAULT_AW_TESTNET_VALIDATOR, threshold 1, for all three), both read 2026-11-04 (the commit was not pinned: re-check against a pinned commit before deploying a route). Not checked on chain: the sandbox that added them could not reach the chains' RPCs. Each route bridges its chain's native coin (opETH, amoyPOL, tBNB)."
   },
   "zetaphy": {
     "name": "zetaphy",
@@ -87,6 +88,73 @@
       "limits": { "zetaphyDailyLimit": "1", "releaseDailyLimit": "1", "releaseDelay": 3600, "quarantine": 3600 },
       "faucetEth": "0.02",
       "faucets": ["https://faucet.quicknode.com/arbitrum/sepolia"]
+    },
+    "optimismsepolia": {
+      "displayName": "Optimism Sepolia",
+      "chainId": 11155420,
+      "domain": 11155420,
+      "rpc": ["https://sepolia.optimism.io"],
+      "explorer": "https://sepolia-optimistic.etherscan.io",
+      "estimateBlockTime": 2,
+      "mailbox": "0x6966b0E55883d49BFB24539356a2f8A673E02039",
+      "merkleTreeHook": "0x86fb9F1c124fB20ff130C41a79a432F770f67AFD",
+      "validatorAnnounce": "0x20c44b1E3BeaDA1e9826CFd48BeEDABeE9871cE9",
+      "staticMessageIdMultisigIsmFactory": "0xfc6e546510dC9d76057F1f76633FCFfC188CB213",
+      "validators": ["0x3c659e0fe8d01b80d7828b421630085777346e7c"],
+      "threshold": 1,
+      "token": { "name": "Optimism Sepolia ETH (bridged, testnet)", "symbol": "opETH", "decimals": 18 },
+      "limits": { "zetaphyDailyLimit": "1", "releaseDailyLimit": "1", "releaseDelay": 3600, "quarantine": 3600 },
+      "faucetEth": "0.02",
+      "faucets": ["https://console.optimism.io/faucet"]
+    },
+    "polygonamoy": {
+      "displayName": "Polygon Amoy",
+      "chainId": 80002,
+      "domain": 80002,
+      "rpc": ["https://rpc-amoy.polygon.technology", "https://polygon-amoy-bor-rpc.publicnode.com", "https://polygon-amoy.drpc.org"],
+      "explorer": "https://amoy.polygonscan.com",
+      "estimateBlockTime": 1,
+      "mailbox": "0x54148470292C24345fb828B003461a9444414517",
+      "merkleTreeHook": "0xddf4C3e791caCaFd26D7fb275549739B38ae6e75",
+      "validatorAnnounce": "0x11918DC33E067C5DA83EEF58E50F856398b8Df4C",
+      "staticMessageIdMultisigIsmFactory": "0x275aCcCa81cAD931dC6fB6E49ED233Bc99Bed4A7",
+      "validators": ["0x3c659e0fe8d01b80d7828b421630085777346e7c"],
+      "threshold": 1,
+      "token": { "name": "Polygon Amoy POL (bridged, testnet)", "symbol": "amoyPOL", "decimals": 18 },
+      "limits": { "zetaphyDailyLimit": "1", "releaseDailyLimit": "1", "releaseDelay": 3600, "quarantine": 3600 },
+      "faucetEth": "0.5",
+      "faucets": ["https://faucet.polygon.technology"]
+    },
+    "bsctestnet": {
+      "displayName": "BSC Testnet",
+      "chainId": 97,
+      "domain": 97,
+      "rpc": ["https://bsc-testnet.publicnode.com", "https://bsc-testnet.drpc.org"],
+      "explorer": "https://testnet.bscscan.com",
+      "estimateBlockTime": 0.45,
+      "mailbox": "0xF9F6F5646F478d5ab4e20B0F910C92F1CCC9Cc6D",
+      "merkleTreeHook": "0xc6cbF39A747f5E28d1bDc8D9dfDAb2960Abd5A8f",
+      "validatorAnnounce": "0xf09701B0a93210113D175461b6135a96773B5465",
+      "staticMessageIdMultisigIsmFactory": "0x0D96aF0c01c4bbbadaaF989Eb489c8783F35B763",
+      "validators": ["0x3c659e0fe8d01b80d7828b421630085777346e7c"],
+      "threshold": 1,
+      "token": { "name": "BSC Testnet BNB (bridged, testnet)", "symbol": "tBNB", "decimals": 18 },
+      "limits": { "zetaphyDailyLimit": "1", "releaseDailyLimit": "1", "releaseDelay": 3600, "quarantine": 3600 },
+      "faucetEth": "0.05",
+      "faucets": ["https://www.bnbchain.org/en/testnet-faucet"]
+    }
+  },
+  "planned": {
+    "about": "Chains we want but cannot list in `chains` yet (nothing reads this section: no route, no hub card, no relayer entry). Saphan PR 6.",
+    "fuji": {
+      "displayName": "Avalanche Fuji",
+      "chainId": 43113,
+      "domain": 43113,
+      "mailbox": "0x5b6CFf85442B851A8e6eaBd2A4E4507B5135B3B0",
+      "merkleTreeHook": "0x9ff6ac3dAf63103620BBf76136eA1AFf43c2F612",
+      "validatorAnnounce": "0x4f7179A691F8a684f56cF7Fed65171877d30739a",
+      "staticMessageIdMultisigIsmFactory": "0x90e1F9918F304645e4F6324E5C0EAc70138C84Ce",
+      "why": "The Hyperlane registry (main, read 2026-11-04) still lists Fuji's core contracts, but the monorepo's defaultMultisigConfigs (typescript/sdk/src/consts/multisigIsm.ts, main, read 2026-11-04) has NO default validator set for fuji, so nobody we know signs Fuji -> ZETAPHY messages. A route needs Hyperlane's validators for its origin (chains.<name>.validators). Move it to `chains` once a validator set is published (or we run our own for that origin)."
     }
   },
   "tokens": {

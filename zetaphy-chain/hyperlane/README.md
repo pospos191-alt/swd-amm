@@ -55,7 +55,9 @@ registry, default validators from the Hyperlane monorepo, both pinned by commit 
 its own stack: a `HyperlaneLockBoxV2` on the source chain (locks; releases after a delay, behind a multisig ISM of
 OUR validator(s) for origin ZETAPHY), and on ZETAPHY its own guard, bridged token, airlock, lanes and a
 `HyperlaneOutbox` (the way back). `agent-config.json` now also lists `basesepolia` and `arbitrumsepolia` (made with
-the pinned CLI from the registry). Deployed routes go to `saphan-routes.json`. The `hyperlane-relayer` workflow
+the pinned CLI from the registry), and `optimismsepolia`, `polygonamoy` and `bsctestnet` (Saphan PR 6: the registry's
+metadata + addresses from its main branch, read 2026-11-04, merged by hand in the CLI's format, without `index.from`:
+the relayer gets its start block from the route, docs/SAPHAN-PR6.md). Deployed routes go to `saphan-routes.json`. The `hyperlane-relayer` workflow
 relays every route both ways and runs our validator (`ZETAPHY_VALIDATOR_KEY`) only while a release waits, with its
 checkpoints in the Actions cache. Design, egress estimate and the owner's steps: docs/SAPHAN-MULTICHAIN.md.
 
