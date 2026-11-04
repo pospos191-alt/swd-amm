@@ -62,9 +62,36 @@ What it deploys, in order (each only if missing):
 | HackInsurance | crosschain-assist.md | timelock | as `zetaphy deploy-assist insurance`: NeuroJobs runners, quorum 3. Testnet only |
 | AuditNetwork, AuditRunners, AuditJudges, AuditCertificate | audit-network.md | timelock (Runners: none) | as `zetaphy deploy-audit`; treasury = the RewardVault; no WorkerReputation (not deployed) |
 | ZetaphyCheques, ZetaphyOfflineOrders, ZetaphyOfflineCash | offline-trading.md, offline-cash.md | none | as `scripts/offline-deploy.js`; the ZETAPHY Swap router |
+| InvariantFirewall | invariant-firewall.md | timelock | the AuditCertificate; uncertified outflow 10 % a day. Contract layer only: the node-level check stays off until the `zetaphy-firewall` upgrade and a vote ([CHAIN-FIREWALL.md](../CHAIN-FIREWALL.md)) |
+| ExploitMarket | red-team.md | timelock | NeuroJobs runners (≥ 1 agreed job); submit bond 1, commit / reveal 1 h each, runners 10 % (as `zetaphy deploy-redteam`) |
+| EconomicBounds | red-team.md | none | the AuditNetwork, the AuditCertificate, NeuroJobs runners |
+| ProofRegistry | specs-and-proofs.md | timelock | NeuroJobs runners, the AuditCertificate; commit / reveal 1 day each, fee 1; no WorkerReputation (not deployed) |
+| ImmuneVaccines | immune-score.md | timelock | the AuditNetwork, the AuditCertificate, HackInsurance, and the ThreatRegistry **only if it has review holds** (see below) |
+| SecurityScore | immune-score.md | none | the AuditCertificate, AuditNetwork, CircuitBreaker, NeuroScore, ImmuneVaccines, ThreatRegistry, ImmuneRegistry |
+| SaphanBundles, SaphanOfflineTransfers | SAPHAN-PR5.md, SAPHAN-PR6.md | none | no configuration |
+| SaphanLiquidityBounds | SAPHAN-PR6.md | timelock | for routes whose vault is on ZETAPHY (tokens born here; none yet). The timelock sets the bounds and the rebalancer |
+| SaphanPrivacyPool | SAPHAN-PR6.md | none | PoseidonT3 and the ZkIdentityVerifier above, token(sepolia), 0.01 per note. **DEV trusted setup: testnet only** |
+| SaphanReads, SaphanIntents, SaphanSealedOrders | SAPHAN-PR5.md, SAPHAN-PR4.md | none (see below) | **only with `deployer_setters`.** Reads of Sepolia through the route's ISM, no state-root source (proven reads off). Intents: NeuroScore, the ThreatRegistry, ZETAPHY's Mailbox, the Sepolia route's ISM, the tests' bonds and periods. SealedOrders: the intents |
 
 PQMultisigIsm is deployed only when the run is given ML-DSA-44 validator key hashes (`pq_validators`); none exist
 yet, so by default it is skipped.
+
+The SS tier and Saphan rows are wired to the addresses the earlier parts recorded: `audit-77390.json` (AuditNetwork,
+AuditCertificate), `frontier-77390.json` (CircuitBreaker, HackInsurance, ImmuneRegistry, PoseidonT3, the verifier),
+`ai-77390.json` (NeuroScore), the launch state (NeuroJobs, ThreatRegistry) and the Sepolia route on ZETAPHY
+(`zetaphy-chain/hyperlane/saphan-routes.json`: its ISM and token). Their records are `deployments/ss-77390.json` and
+`deployments/saphan-77390.json`.
+
+- **Review holds.** The run asks the ThreatRegistry for `underReview`. The launch ThreatRegistry predates review holds
+  (PR #115), so on the testnet today ImmuneVaccines is built without it (matches are recorded and owners notified,
+  nothing is held) and SecurityScore is skipped: with that registry every score would read as degraded (at most 500),
+  and without it the score would not see its flags. With a registry that has them, both are deployed, and the timelock
+  must then call `ThreatRegistry.setVaccines(ImmuneVaccines)`.
+- **`deployer_setters`.** SaphanReads (`setResponder`) and SaphanIntents (`setRelay`, once per chain) let their
+  deployer set, once, the contract on the source chain that may answer them. The contracts have no governance path for
+  it, so whoever deploys them keeps that role until it is used. The button deploys them (and SaphanSealedOrders, which
+  needs the intents) only when the run is started with `deployer_setters` on; the record then lists the role under
+  `deployerRoles`. Off by default, so the deploy key keeps no role.
 
 What it does **not** deploy, and why (also written into the record as `skipped`):
 
@@ -78,10 +105,19 @@ What it does **not** deploy, and why (also written into the record as `skipped`)
 - **Encrypted mempool**: a chain module, not a contract.
 - **NeuroJobs, StableGateway, RewardVault, BridgeAirlock** and the other launch contracts: already deployed;
   redeploying them would mean rewiring everything that points at them.
+- **ScoredCollateral**: an example helper; a lending protocol deploys its own with its tiers.
+- **The node-level invariant firewall**: a chain module, switched on by the `zetaphy-firewall` upgrade and a vote.
+- **SaphanAccountFactory**: the same address on every chain needs one fresh key's first transaction on every chain.
+- **SaphanRecoveryClaims**: one per incident, deployed by the timelock after the snapshot.
+- **SaphanBtcWithdrawals**: needs a BtcLightClient (see above). **SaphanAggLane**: needs an ML-DSA-44 committee; none
+  exists yet.
+- **Source-chain contracts** (SaphanReadResponder, SaphanZetaphyReads, SaphanFillRelay, SaphanSourceGateway, the
+  source chains' account factories and liquidity bounds, SaphanReleaseVerifier): "source chain: saphan-route".
 
 `node scripts/frontier-deploy.js check` then reads every address back and fails if any governance is not the
 timelock. The records go to the branch `frontier/testnet`: `deployments/frontier-77390.json` (with the skips),
-`audit-77390.json`, `offline-77390.json`, `qsafe-77390.json` and `zetaphy-chain/hyperlane/immune-network.json`.
+`audit-77390.json`, `offline-77390.json`, `ss-77390.json`, `saphan-77390.json` (each with its skips),
+`qsafe-77390.json` and `zetaphy-chain/hyperlane/immune-network.json`.
 Open its pull request and merge it; the hub reads them. A stopped run can be run again: it skips what is recorded,
-adopts a contract whose deploy landed after the stop, and finishes a half-deployed audit network at its planned
-addresses.
+adopts a contract whose deploy landed after the stop (in any of the records, before it sends anything new), and
+finishes a half-deployed audit network at its planned addresses.

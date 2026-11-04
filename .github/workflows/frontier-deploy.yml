@@ -1,8 +1,10 @@
 # One button for everything still missing on the ZETAPHY testnet that can be deployed now (docs/future/deploy.md,
 # "The frontier button"): the frontier contracts (immune network, circuit breaker, quantum rescue and PQ settlement,
-# the bridge outbox, private identity, HackInsurance), then the open audit network and offline trading. One key,
-# one transaction at a time. Every governance is the ZetaphyTimelock of the launch state; the deploy key keeps no
-# role. What is left out, and why, is printed in the summary (and kept in deployments/frontier-77390.json).
+# the bridge outbox, private identity, HackInsurance), then the open audit network and offline trading, the audit
+# network's SS tier (invariant firewall, exploit market, economic bounds, proof registry, vaccines, security score) and
+# Saphan's ZETAPHY-side contracts for the Sepolia route. One key, one transaction at a time. Every governance is the
+# ZetaphyTimelock of the launch state; the deploy key keeps no role (unless deployer_setters: see that input). What is
+# left out, and why, is printed in the summary (and kept in deployments/frontier-77390.json, ss-77390.json, saphan-77390.json).
 # A re-run resumes where a stopped run ended. The records go to the branch frontier/testnet for a pull request.
 #
 # Environment testnet-deploy (main only; the owner approves each run), secret ZETAPHY_DEPLOYER_KEY.
@@ -19,6 +21,10 @@ on:
       pq_threshold:
         description: "PQMultisigIsm threshold (with validators)"
         default: "1"
+      deployer_setters:
+        description: "Also deploy SaphanReads, SaphanIntents, SaphanSealedOrders: the deploy key then keeps their once-only setResponder / setRelay (no governance path in those contracts)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -73,13 +79,14 @@ jobs:
             || { rm -rf "$H"; echo "::error::ZETAPHY_DEPLOYER_KEY is not $DEPLOYER"; exit 1; }
           echo "KEYFILE=$H/worker.key" >> "$GITHUB_ENV"
 
-      - name: Frontier contracts, audit network, HackInsurance, offline trading (governance = the timelock)
+      - name: Frontier contracts, audit network, HackInsurance, offline trading, SS tier, Saphan (governance = the timelock)
         env:
           PQ_VALIDATORS: ${{ inputs.pq_validators }}
           PQ_THRESHOLD: ${{ inputs.pq_threshold }}
+          SETTERS: ${{ inputs.deployer_setters && 'yes' || '' }}
         run: |
           set -o pipefail
-          node scripts/frontier-deploy.js ${PQ_VALIDATORS:+--pq-validators "$PQ_VALIDATORS" --pq-threshold "$PQ_THRESHOLD"} 2>&1 | tee "$RUNNER_TEMP/frontier.log"
+          node scripts/frontier-deploy.js ${PQ_VALIDATORS:+--pq-validators "$PQ_VALIDATORS" --pq-threshold "$PQ_THRESHOLD"} ${SETTERS:+--deployer-setters} 2>&1 | tee "$RUNNER_TEMP/frontier.log"
           node scripts/frontier-deploy.js check 2>&1 | tee -a "$RUNNER_TEMP/frontier.log"
 
       - name: Forget the key
@@ -89,7 +96,7 @@ jobs:
       - name: Summary and the branch frontier/testnet
         if: always()
         run: |
-          { echo "### Frontier contracts on the testnet"; echo '```'; tail -120 "$RUNNER_TEMP/frontier.log" 2>/dev/null || echo "(no log: the run stopped before the deploy step)"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "### Frontier contracts on the testnet"; echo '```'; tail -200 "$RUNNER_TEMP/frontier.log" 2>/dev/null || echo "(no log: the run stopped before the deploy step)"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           cd ..
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
