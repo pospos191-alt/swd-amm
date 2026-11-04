@@ -84,6 +84,10 @@ finding), **not run** (with the reason), **timeout** (the tool did not finish wi
 | HackInsurance | an approved claim is never closed short by the daily cap; a large one is paid over days (HI-1, fixed) | Foundry `test_regression_HI1_payoutNotGriefedByDailyCap`, `test_regression_HI1_largeClaimPaidOverDays` | pass |
 | HackInsurance | no standing withdrawal; frozen while a claim is open (HI-2, fixed) | Foundry `test_regression_HI2_noStandingWithdrawal` | pass |
 | HackInsurance | share price: an emptied pool does not dilute a new deposit; donation inflation unprofitable; any round trip pays ≤ pool and ≤ deposit (HI-3, fixed) | Foundry `test_HI3_*` (2), fuzz `testFuzz_HI3_roundTripNeverPaysMoreThanPool` | pass |
+| AuditNetwork + AuditRunners + AuditJudges + AuditCertificate | *new (SS8, docs/future/immune-score.md):* no payout exceeds deposits: a request pays ≤ its pool; withdrawn ≤ paid in; Σ balances = in − out | Foundry `AuditNetwork.inv.t.sol::invariant_noPayoutExceedsDeposits` | pass |
+| AuditNetwork + AuditRunners + AuditJudges | *new:* every owed balance, auditor / judge bond and escrowed slash is backed by the contract's balance | Foundry `invariant_creditsBacked` | pass |
+| AuditCertificate | *new:* a certificate never issues with an open critical (0 valid critical/high, 0 undecided, no open appeal, agreed automated tier with 0 critical/high) | Foundry `invariant_noCertificateWithOpenCritical` | pass |
+| AuditCertificate | *new:* a certificate hit by a valid post-certificate critical/high never holds again | Foundry `invariant_revokedStaysRevoked`; the handler reaches certificates and revocations (`test_handlerReachesCertificatesAndRevocations`) | pass |
 | UsefulIssuance | balance = Σ accrued + pendingOverflow; accrued ≤ cap; in = held + out | Foundry `Rewards.inv.t.sol::invariant_accounting`, Echidna `EchidnaIssuance`, Medusa | pass / pass / pass |
 | UsefulWork (+ UsefulIssuance) | balance = reserve + Σ credits + (fee + deposits) of unsettled jobs | Foundry `invariant_conservation` | pass |
 | UsefulWork | an accepted result has ≥ quorum matching reveals | Foundry `invariant_resultHasQuorum` | pass |

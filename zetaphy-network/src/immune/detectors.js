@@ -3,6 +3,7 @@
 //   - a PURE verdict over explicit inputs, which is what goes into the evidence bundle. A runner re-runs that verdict
 //     on the bundle's inputs (reverify) before it votes, so no runner has to trust a sentinel.
 // What they detect:
+//   confirmed      an exploit confirmed on ZETAPHY (ImmuneVaccines: audit finding, revoked certificate, insurance claim)
 //   clone          a new contract matching a shared vaccine (vaccines.js)
 //   flashloan      a flash loan + a pool price pushed >= 25% and back inside one transaction + profit to the caller
 //   outflow        a protocol losing >= 10% of its value (or 8x its usual outflow) in one block, mostly to one address
@@ -13,7 +14,7 @@
 //   authz-drainer  Cosmos: one grantee getting send grants from >= 3 granters in a window
 // Thresholds are conservative on purpose: a false flag costs the runners who agree to it their bond (NeuroJobs).
 import { keccak_256 } from '@noble/hashes/sha3.js';
-import { toHex } from './evidence.js';
+import { toHex, fromHex as fromHexBytes } from './evidence.js';
 import { matchVaccine } from './vaccines.js';
 
 const enc = new TextEncoder();
@@ -59,6 +60,26 @@ export function cloneVerdict({ chainId, address, code, codeHash, vaccine }) {
   const severity = m.how === 'exact' || m.how === 'fingerprint' ? SEVERITY.critical : SEVERITY.high;
   return [{ ...finding('clone', chainId, { address, kind: KIND.clone, severity, codeHash, label: `${m.how} match (${m.score}%) of vaccine ${vaccine.id.slice(0, 18)}: ${vaccine.label}`, ttl: TTL.clone }),
     vaccineId: vaccine.id, match: m }];
+}
+
+// ---------------------------------------------------------------- confirmed exploit (ImmuneVaccines, SS5)
+
+const SOURCE_NAMES = { 1: 'audit finding', 2: 'revoked certificate', 3: 'insurance claim' };
+
+/**
+ * Pure: an exploit CONFIRMED on ZETAPHY (an ImmuneVaccines record: a valid high/critical audit finding, a revoked
+ * certificate or an approved insurance claim) and the vulnerable runtime code -> the exploit contract's finding (its
+ * code hash flagged on every chain; toReport derives the vaccine from `code`). inputs: { chainId, address, code,
+ * vaccines: ImmuneVaccines address, id, record: { active, chainId, target, codeHash, severity, sources } } as read
+ * from ZETAPHY (a runner may re-read it there: docs/future/immune-score.md).
+ */
+export function confirmedVerdict({ chainId, address, code, id, record }) {
+  if (!record?.active || Number(record.chainId) !== Number(chainId) || lower(record.target) !== lower(address)) return [];
+  if (!/^0x([0-9a-f]{2})+$/i.test(code ?? '') || lower(record.codeHash) !== toHex(keccak_256(fromHexBytes(code)))) return [];
+  const sev = Number(record.severity) >= SEVERITY.critical ? SEVERITY.critical : SEVERITY.high;
+  const from = Object.entries(SOURCE_NAMES).filter(([b]) => (Number(record.sources) >> Number(b)) & 1).map(([, n]) => n).join(' + ') || 'confirmation';
+  return [finding('confirmed', chainId, { address, kind: KIND.exploit, severity: sev, codeHash: record.codeHash,
+    label: `confirmed exploit (${from}), vaccine ${String(id).slice(0, 18)}`, ttl: TTL.exploit })];
 }
 
 // ---------------------------------------------------------------- flash loan + price manipulation (one tx)
@@ -346,7 +367,7 @@ export function authzDrainerVerdict({ chainId, grantee, grants, minVictims = 3 }
 
 // ---------------------------------------------------------------- re-verification (runners)
 
-const VERDICTS = { clone: cloneVerdict, flashloan: flashLoanVerdict, outflow: outflowVerdict, drainer: drainerVerdict, taint: taintVerdict,
+const VERDICTS = { confirmed: confirmedVerdict, clone: cloneVerdict, flashloan: flashLoanVerdict, outflow: outflowVerdict, drainer: drainerVerdict, taint: taintVerdict,
   'sol-drainer': solDrainerVerdict, 'wasm-clone': wasmCloneVerdict, 'authz-drainer': authzDrainerVerdict };
 
 /** Revives a bundle's inputs (JSON) for a verdict: a vaccine referenced by id comes from `vaccines` (a VaccineSet / Map). */

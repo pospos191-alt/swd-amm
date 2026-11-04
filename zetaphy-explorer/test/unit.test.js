@@ -905,3 +905,40 @@ test('audit certificate badge: the selector, the decoder and the lookup (one eth
   assert.equal(sanitizeConfig({ auditCertificate: 'nope' }).auditCertificate, '');
   assert.equal(sanitizeConfig({ auditCertificate: A }).auditCertificate, A);
 });
+
+test('security score badge: the selector, the Breakdown decoder, the lookup (one eth_call per address, cached), the texts in 8 languages', async () => {
+  const { SEL_BREAKDOWN, breakdownCall, decodeBreakdown, createScore, scoreClass } = await import('../src/score.js');
+  assert.equal(SEL_BREAKDOWN, ethId('breakdown(uint64,address)').slice(0, 10));
+  const abi = AbiCoder.defaultAbiCoder();
+  const A = '0x' + 'be'.repeat(20);
+  const TYPES16 = ['uint16', 'uint16', 'uint16', 'uint16', 'uint16', 'uint16', 'uint16', 'uint8', 'uint64', 'uint8', 'uint32', 'uint8', 'bool', 'bool', 'bool', 'bool'];
+  const enc = (v) => abi.encode([`(${TYPES16.join(',')})`], [v]);
+  // the struct SecurityScore.breakdown returns (zetaphy-network/contracts/SecurityScore.sol)
+  const net = JSON.parse(read('../zetaphy-network/artifacts/SecurityScore.json'));
+  const fn = net.abi.find((x) => x.name === 'breakdown');
+  assert.deepEqual(fn.outputs[0].components.map((c) => c.type), TYPES16);
+  assert.deepEqual(fn.outputs[0].components.map((c) => c.name), ['score', 'certificate', 'neuro', 'monitoring', 'history', 'penalty', 'cap', 'level', 'certExpires', 'openFindings', 'exploits', 'vaccineMatch', 'flagged', 'held', 'tripped', 'degraded']);
+  assert.equal(breakdownCall(77390, A), SEL_BREAKDOWN + abi.encode(['uint64', 'address'], [77390n, A]).slice(2));
+  const d = decodeBreakdown(enc([812, 325, 200, 150, 250, 100, 1000, 2, 1_900_000_000n, 1, 0, 0, false, false, false, false]));
+  assert.deepEqual([d.state, d.score, d.certificate, d.neuro, d.monitoring, d.history, d.penalty, d.cap, d.level, d.openFindings, d.held, d.flagged], ['ok', 812, 325, 200, 150, 250, 100, 1000, 2, 1, false, false]);
+  const held = decodeBreakdown(enc([100, 0, 100, 0, 250, 0, 100, 0, 0n, 0, 0, 3, false, true, false, false]));
+  assert.deepEqual([held.score, held.vaccineMatch, held.held], [100, 3, true]);
+  assert.throws(() => decodeBreakdown('0x1234'));
+  assert.throws(() => decodeBreakdown(enc([1001, 0, 0, 0, 0, 0, 0, 0, 0n, 0, 0, 0, false, false, false, false])), 'never above 1000');
+  assert.deepEqual([900, 500, 300, 100].map(scoreClass), ['badge-ok', null, 'badge-warn', 'badge-bad']);
+  let calls = 0;
+  const sc = createScore({ contract: '0x' + 'ce'.repeat(20), chainId: 77390, single: async (m, p) => { calls++; assert.equal(p[0].data, breakdownCall(77390, A)); return enc([812, 325, 200, 150, 250, 100, 1000, 2, 1n, 1, 0, 0, false, false, false, false]); } });
+  assert.equal((await sc.lookup(A.toUpperCase().replace('0X', '0x'))).score, 812);
+  assert.equal((await sc.lookup(A)).score, 812);
+  assert.equal(calls, 1, 'cached for the visit');
+  assert.equal((await createScore({ contract: '', chainId: 1, single: async () => '0x' }).lookup(A)).state, 'unset');
+  assert.equal((await createScore({ contract: A, chainId: 1, single: async () => { throw new Error('down'); } }).lookup(A)).state, 'error', 'nothing is shown when the node fails');
+  assert.equal(sanitizeConfig({ securityScore: 'nope' }).securityScore, '');
+  assert.equal(sanitizeConfig({ securityScore: A }).securityScore, A);
+  // every key score.js uses, in every language
+  const used = [...read('src/score.js').matchAll(/\bt\('([A-Za-z0-9_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(used)].sort(), ['secScore', 'secScoreFlagged', 'secScoreHeld', 'secScoreTip']);
+  for (const [code] of LANGS) for (const k of used) assert.ok(T[code][k], `${code}.${k}`);
+  assert.equal(makeT('th')('secScore', { score: 812 }), 'ความปลอดภัย 812/1000');
+  assert.ok(read('src/app.js').includes('scoreBadge(a.lower'), 'shown on the address and token pages');
+});

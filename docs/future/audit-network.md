@@ -272,4 +272,4 @@ The **explorer** shows a badge ("Audited (ZETAPHY) · Gold · until …") on the
   test uses the fixture.
 - **Judge pay for post-certificate findings** is not funded (the contest pot is settled by then). Judges
   decide those for reputation.
-- **Not audited**: these contracts have not been through this process, or any other, yet.
+- **Not audited**: these contracts have not been through this process, or any other, yet. The self-audit is scripted and tested ([immune-score.md](immune-score.md), SS8): their four requests, certificates, a CI check that is OFF until the testnet record exists, and Foundry invariants for them.

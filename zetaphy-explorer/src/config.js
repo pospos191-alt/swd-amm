@@ -20,6 +20,9 @@ export const DEFAULTS = Object.freeze({
   immuneFeed: '',
   // AuditCertificate (zetaphy-network/contracts/AuditCertificate.sol) on ZETAPHY: 0x… or empty (no audit badges).
   auditCertificate: '',
+  // SecurityScore (zetaphy-network/contracts/SecurityScore.sol, docs/future/immune-score.md) on ZETAPHY: 0x… or empty
+  // (no security score badge). A live 0..1000 score from on-chain facts: an input for risk limits, never "safe".
+  securityScore: '',
   // ProvenVerdicts (zetaphy-network/contracts/ProvenVerdicts.sol) on ZETAPHY: 0x… or empty (no proven-verdict card).
   // Its proofs are checked in the browser (src/zkverdict-core.js, pure JS, no WebAssembly).
   provenVerdicts: '',
@@ -92,7 +95,7 @@ export function sanitizeConfig(...layers) {
       if (!(k in DEFAULTS) || v == null) continue;
       if (typeof DEFAULTS[k] === 'number') { const n = Number(v); if (Number.isFinite(n) && n > 0) out[k] = n; continue; }
       if (typeof v !== 'string') continue;
-      if ((k === 'threatRegistry' || k === 'auditCertificate' || k === 'immuneFeed' || k === 'provenVerdicts') && v && !ADDR.test(v.trim())) continue;
+      if ((k === 'threatRegistry' || k === 'auditCertificate' || k === 'securityScore' || k === 'immuneFeed' || k === 'provenVerdicts') && v && !ADDR.test(v.trim())) continue;
       if (k === 'chainStatsUrl' && v.trim()) { try { checkUrl(v); } catch { continue; } }
       if (k === 'ipfsGateway') { try { out[k] = checkUrl(v).replace(/\/+$/, ''); } catch { /* keep the default */ } continue; }
       if (k === 'hubGovUrl' && v.trim()) { try { const u = new URL(v.trim()); if (u.protocol !== 'https:' || u.username) continue; } catch { continue; } }

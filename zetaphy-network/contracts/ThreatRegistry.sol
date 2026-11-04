@@ -216,6 +216,14 @@ contract ThreatRegistry {
     mapping(address => uint256) public owed;       // refunds, taken with withdraw()
     uint256 public fundOwed;                       // the community fund's share, sent with payFund()
 
+    // ---- held pending review: vaccine matches (ImmuneVaccines, docs/future/immune-score.md) ----
+    /// The ImmuneVaccines contract (governance sets it; zero: off). It may only HOLD a key pending review
+    /// (is*Held), for at most MAX_REVIEW_HOLD, never flag or enforce it, and never a protected key.
+    address public vaccines;
+    uint64 public constant MAX_REVIEW_HOLD = 14 days;
+    struct ReviewHold { bytes32 vaccine; uint64 from; uint64 until; }
+    mapping(bytes32 => ReviewHold) public reviewHold;
+
     event Voted(bytes32 indexed fingerprint, address indexed runner, bool flag, Reason reason, bytes32 reportHash, string uri);
     event Flagged(bytes32 indexed fingerprint, Reason reason);
     event Cleared(bytes32 indexed fingerprint);
@@ -237,6 +245,9 @@ contract ThreatRegistry {
     event Paid(address indexed to, uint256 amount);
     event HoldDelaySet(uint64 delay);
     event HeldNow(bytes32 indexed key, address indexed by);
+    event VaccinesSet(address vaccines);
+    event ReviewHeld(bytes32 indexed key, bytes32 indexed vaccine, uint64 until);
+    event ReviewReleased(bytes32 indexed key, address indexed by);
 
     error NotRunner();
     error AlreadyVoted();
@@ -257,6 +268,7 @@ contract ThreatRegistry {
     error NotFresh();
     error PayFailed();
     error NoFund();
+    error NotVaccines();
 
     constructor(IRunners runners_, uint8 quorum_, uint32 minAgreed_, address governance_, uint64 enforceDelay_) {
         require(quorum_ >= 2, "quorum");
@@ -356,6 +368,43 @@ contract ThreatRegistry {
         emit HeldNow(key, msg.sender);
     }
 
+    /// Governance names the ImmuneVaccines contract (zero turns review holds off; standing ones run out).
+    function setVaccines(address v) external onlyGov {
+        vaccines = v;
+        emit VaccinesSet(v);
+    }
+
+    /// ImmuneVaccines: `key` (a contract whose code matches a confirmed exploit's vaccine) is held pending review
+    /// for `duration` (<= MAX_REVIEW_HOLD). A hold only: the is*Held views report it (bridging of that party is
+    /// held, reversibly); it never flags and never enforces. Protected keys are never held (false).
+    function holdForReview(bytes32 key, bytes32 vaccine, uint64 duration) external returns (bool) {
+        if (msg.sender != vaccines || msg.sender == address(0)) revert NotVaccines();
+        if (duration == 0 || duration > MAX_REVIEW_HOLD) revert NoChange();
+        if (protectedKey[key]) return false;
+        uint64 until = uint64(block.timestamp) + duration;
+        ReviewHold storage h = reviewHold[key];
+        if (h.until > block.timestamp && h.until >= until) return true; // a longer hold stands
+        reviewHold[key] = ReviewHold(vaccine, h.until > block.timestamp ? h.from : uint64(block.timestamp), until);
+        emit ReviewHeld(key, vaccine, until);
+        return true;
+    }
+
+    /// The review is done (governance or a guardian looked: nothing to hold), or the vaccine behind it was retired
+    /// (ImmuneVaccines). A real problem is FLAGGED by the runners' quorum, as any other.
+    function releaseReview(bytes32 key) external {
+        if (msg.sender != governance && !guardian[msg.sender] && (msg.sender != vaccines || vaccines == address(0))) revert NotGuardian();
+        if (reviewHold[key].until <= block.timestamp) revert NoChange();
+        delete reviewHold[key];
+        emit ReviewReleased(key, msg.sender);
+    }
+
+    /// Is `key` held pending review right now (and by which vaccine, until when)?
+    function underReview(bytes32 key) public view returns (bool held, bytes32 vaccine, uint64 until) {
+        ReviewHold storage h = reviewHold[key];
+        if (h.until <= block.timestamp || protectedKey[key]) return (false, bytes32(0), 0);
+        return (true, h.vaccine, h.until);
+    }
+
     function _fast(Entry storage e, bytes32 key) private {
         e.fast = true;
         e.fastAt = uint64(block.timestamp);
@@ -370,6 +419,7 @@ contract ThreatRegistry {
             protectedKey[k] = on;
             emit Protected(k, on);
             if (!on) continue;
+            if (reviewHold[k].until != 0) delete reviewHold[k];
             Entry storage e = entries[k];
             if (e.flagged || e.votes != 0) {
                 bool was = e.flagged;
@@ -750,19 +800,25 @@ contract ThreatRegistry {
     //      lane or holdNow (these hold bridging, reversibly) ----
 
     /// When a standing flag starts to hold (0: not flagged).
+    /// A review hold (vaccine match) counts from when it started, while it lasts.
     function heldFrom(bytes32 key) public view returns (uint64 from) {
         Entry storage e = entries[key];
-        if (!e.flagged) return 0;
+        (bool review, , ) = underReview(key);
+        if (!e.flagged) return review ? reviewHold[key].from : 0;
         from = e.updatedAt + holdDelay;
         if (e.fast && e.fastAt < from) from = e.fastAt;
         HoldNow storage h = heldNow[key];
         if (h.round == e.round && h.at < from) from = h.at;
+        if (review && reviewHold[key].from < from) from = reviewHold[key].from;
     }
 
+    /// Held: a standing flag past holdDelay (or fast, or holdNow), or a key held pending review (Reason.Other
+    /// when only the review holds it).
     function isHeld(bytes32 key) public view returns (bool, Reason) {
         Entry storage e = entries[key];
-        if (!e.flagged) return (false, Reason.None);
-        if (e.fast || heldNow[key].round == e.round || block.timestamp >= uint256(e.updatedAt) + holdDelay) return (true, e.reason);
+        if (e.flagged && (e.fast || heldNow[key].round == e.round || block.timestamp >= uint256(e.updatedAt) + holdDelay)) return (true, e.reason);
+        (bool review, , ) = underReview(key);
+        if (review) return (true, e.flagged ? e.reason : Reason.Other);
         return (false, Reason.None);
     }
 

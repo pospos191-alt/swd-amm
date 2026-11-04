@@ -807,6 +807,7 @@ export const T_INSIGHT = {
   en: {
     // audit certificate badge (src/audit.js)
     auditCertified: "Audited (ZETAPHY)", auditLevel1: "Bronze", auditLevel2: "Silver", auditLevel3: "Gold", auditUntil: "until {date}", auditTip: "{level} certificate: this exact code ({code}…) passed the ZETAPHY open audit process on {date} (automated tools, a public contest, judged findings). Valid until {until}. Not a guarantee that the code is safe.", auditRevoked: "Audit certificate revoked", auditRevokedTip: "A critical or high finding against this code was judged valid after the certificate: it no longer counts.", auditInvalid: "Audit certificate not valid", auditInvalidTip: "The certificate expired, or the code at this address is no longer the audited code (upgraded or redeployed).",
+    secScore: "Security {score}/1000", secScoreTip: "Live security score (0–1000) from on-chain facts: certificate {cert}, Neuro {neuro}, monitoring {mon}, history {hist}, penalties −{pen}, cap {cap}. An input for risk limits, not a guarantee that the code is safe.", secScoreHeld: "held pending review", secScoreFlagged: "flagged",
     // risk
     riskFlagged: 'Flagged by Neuro', riskEnforced: 'Flagged by Neuro (enforced)', riskTitle: 'Risk summary (Neuro)',
     riskImmune: 'Immune flag', riskImmuneTip: 'Bonded runners agreed on a reproducible finding about this address: an exploit, a drainer or a known-bad code pattern (immune network)',
@@ -888,6 +889,7 @@ export const T_INSIGHT = {
   zh: {
     // audit certificate badge (src/audit.js)
     auditCertified: "已审计（ZETAPHY）", auditLevel1: "铜级", auditLevel2: "银级", auditLevel3: "金级", auditUntil: "有效至 {date}", auditTip: "{level}证书：这份确切的代码（{code}…）于 {date} 通过了 ZETAPHY 开放审计流程（自动化工具、公开竞赛、经裁决的发现）。有效期至 {until}。这不保证代码安全。", auditRevoked: "审计证书已撤销", auditRevokedTip: "证书颁发后，针对此代码的严重或高危发现被裁定有效：证书不再有效。", auditInvalid: "审计证书无效", auditInvalidTip: "证书已过期，或此地址上的代码已不是被审计的代码（已升级或重新部署）。",
+    secScore: "安全分 {score}/1000", secScoreTip: "实时安全分（0–1000），只来自链上事实：证书 {cert}，Neuro {neuro}，监控 {mon}，历史 {hist}，扣分 −{pen}，上限 {cap}。它是风险限额的输入，不保证代码安全。", secScoreHeld: "暂停待审查", secScoreFlagged: "已标记",
     riskFlagged: '被 Neuro 标记', riskEnforced: '被 Neuro 标记（已执行）', riskTitle: '风险概要（Neuro）', riskOwn: '此地址', riskOwnToken: '此代币',
     riskImmune: '免疫网络标记', riskImmuneTip: '质押的运行者就此地址的一项可复现发现达成一致：漏洞利用、盗取合约或已知有害的代码模式（免疫网络）',
     riskUnreadable: '无法读取 ThreatRegistry，因此不作任何结论', riskCounterpartiesLabel: '近期交易对手', riskNoCounterparties: '扫描的区块中没有',
@@ -934,6 +936,7 @@ export const T_INSIGHT = {
   es: {
     // audit certificate badge (src/audit.js)
     auditCertified: "Auditado (ZETAPHY)", auditLevel1: "Bronce", auditLevel2: "Plata", auditLevel3: "Oro", auditUntil: "hasta {date}", auditTip: "Certificado {level}: este código exacto ({code}…) pasó el proceso de auditoría abierta de ZETAPHY el {date} (herramientas automáticas, un concurso público, hallazgos juzgados). Válido hasta {until}. No garantiza que el código sea seguro.", auditRevoked: "Certificado de auditoría revocado", auditRevokedTip: "Después del certificado se juzgó válido un hallazgo crítico o alto contra este código: ya no cuenta.", auditInvalid: "Certificado de auditoría no válido", auditInvalidTip: "El certificado caducó, o el código de esta dirección ya no es el auditado (actualizado o redesplegado).",
+    secScore: "Seguridad {score}/1000", secScoreTip: "Puntuación de seguridad en vivo (0–1000) a partir de hechos en cadena: certificado {cert}, Neuro {neuro}, monitoreo {mon}, historial {hist}, penalizaciones −{pen}, tope {cap}. Un dato para límites de riesgo, no una garantía de que el código sea seguro.", secScoreHeld: "retenido en revisión", secScoreFlagged: "marcado",
     riskFlagged: 'Marcado por Neuro', riskEnforced: 'Marcado por Neuro (aplicado)', riskTitle: 'Resumen de riesgo (Neuro)', riskOwn: 'Esta dirección',
     riskImmune: 'Marca inmunitaria', riskImmuneTip: 'Ejecutores con fianza acordaron un hallazgo reproducible sobre esta dirección: un exploit, un drainer o un patrón de código dañino conocido (red inmunitaria)',
     riskOwnToken: 'Este token', riskUnreadable: 'no se pudo leer el ThreatRegistry; no se afirma nada', riskCounterpartiesLabel: 'Contrapartes recientes',
@@ -1014,6 +1017,7 @@ export const T_INSIGHT = {
   ko: {
     // audit certificate badge (src/audit.js)
     auditCertified: "감사 완료 (ZETAPHY)", auditLevel1: "브론즈", auditLevel2: "실버", auditLevel3: "골드", auditUntil: "{date}까지", auditTip: "{level} 인증서: 바로 이 코드({code}…)가 {date}에 ZETAPHY 공개 감사 절차(자동화 도구, 공개 경연, 심사된 발견)를 통과했습니다. {until}까지 유효합니다. 코드가 안전하다는 보장은 아닙니다.", auditRevoked: "감사 인증서 취소됨", auditRevokedTip: "인증 후 이 코드에 대한 치명적 또는 높은 등급의 발견이 유효로 판정되어 더 이상 인정되지 않습니다.", auditInvalid: "감사 인증서 무효", auditInvalidTip: "인증서가 만료되었거나, 이 주소의 코드가 더 이상 감사받은 코드가 아닙니다(업그레이드 또는 재배포).",
+    secScore: "보안 {score}/1000", secScoreTip: "온체인 사실로 계산한 실시간 보안 점수(0–1000): 인증서 {cert}, Neuro {neuro}, 모니터링 {mon}, 이력 {hist}, 감점 −{pen}, 상한 {cap}. 위험 한도의 입력값이며 코드가 안전하다는 보장은 아닙니다.", secScoreHeld: "검토 대기 보류", secScoreFlagged: "플래그됨",
     riskFlagged: 'Neuro 경고', riskEnforced: 'Neuro 경고 (적용 중)', riskTitle: '위험 요약 (Neuro)', riskOwn: '이 주소', riskOwnToken: '이 토큰',
     riskImmune: '면역 표시', riskImmuneTip: '보증금을 건 실행자들이 이 주소에 대한 재현 가능한 발견에 합의했어요: 익스플로잇, 드레이너 또는 알려진 유해 코드 패턴 (면역 네트워크)',
     riskUnreadable: 'ThreatRegistry를 읽을 수 없어 아무것도 판단하지 않습니다', riskCounterpartiesLabel: '최근 거래 상대', riskNoCounterparties: '스캔한 블록에는 없음',
@@ -1066,6 +1070,7 @@ export const T_INSIGHT = {
   ja: {
     // audit certificate badge (src/audit.js)
     auditCertified: "監査済み（ZETAPHY）", auditLevel1: "ブロンズ", auditLevel2: "シルバー", auditLevel3: "ゴールド", auditUntil: "{date} まで", auditTip: "{level}証明書：このコードそのもの（{code}…）が {date} に ZETAPHY のオープン監査プロセス（自動ツール、公開コンテスト、審査済みの指摘）を通過しました。{until} まで有効。コードの安全を保証するものではありません。", auditRevoked: "監査証明書は取り消されました", auditRevokedTip: "証明書の発行後、このコードに対する重大または高の指摘が有効と判定されたため、もう有効ではありません。", auditInvalid: "監査証明書は無効です", auditInvalidTip: "証明書の期限が切れたか、このアドレスのコードが監査済みのコードではなくなりました（アップグレードまたは再デプロイ）。",
+    secScore: "セキュリティ {score}/1000", secScoreTip: "オンチェーンの事実から算出するリアルタイムのセキュリティスコア（0–1000）：証明書 {cert}、Neuro {neuro}、監視 {mon}、履歴 {hist}、減点 −{pen}、上限 {cap}。リスク上限の入力値であり、コードの安全を保証するものではありません。", secScoreHeld: "審査待ちで保留中", secScoreFlagged: "フラグあり",
     riskFlagged: 'Neuro が警告', riskEnforced: 'Neuro が警告（適用中）', riskTitle: 'リスク概要（Neuro）', riskOwn: 'このアドレス', riskOwnToken: 'このトークン',
     riskImmune: '免疫フラグ', riskImmuneTip: '保証金を預けたランナーが、このアドレスについて再現可能な発見に合意しました：エクスプロイト、ドレイナー、または既知の有害なコードパターン（免疫ネットワーク）',
     riskUnreadable: 'ThreatRegistry を読み取れないため、何も判断していません', riskCounterpartiesLabel: '最近の取引相手', riskNoCounterparties: 'スキャンしたブロックにはなし',
@@ -1119,6 +1124,7 @@ export const T_INSIGHT = {
   ru: {
     // audit certificate badge (src/audit.js)
     auditCertified: "Проверен аудитом (ZETAPHY)", auditLevel1: "Бронза", auditLevel2: "Серебро", auditLevel3: "Золото", auditUntil: "до {date}", auditTip: "Сертификат {level}: именно этот код ({code}…) прошёл открытый аудит ZETAPHY {date} (автоматические инструменты, публичный конкурс, рассмотренные находки). Действует до {until}. Это не гарантия безопасности кода.", auditRevoked: "Сертификат аудита отозван", auditRevokedTip: "После выдачи сертификата критическая или высокая находка против этого кода признана верной: сертификат больше не действует.", auditInvalid: "Сертификат аудита недействителен", auditInvalidTip: "Срок сертификата истёк или код по этому адресу уже не тот, что проверялся (обновлён или развёрнут заново).",
+    secScore: "Безопасность {score}/1000", secScoreTip: "Текущая оценка безопасности (0–1000) по фактам в блокчейне: сертификат {cert}, Neuro {neuro}, мониторинг {mon}, история {hist}, штрафы −{pen}, потолок {cap}. Входные данные для лимитов риска, а не гарантия безопасности кода.", secScoreHeld: "удержан до проверки", secScoreFlagged: "отмечен",
     riskFlagged: 'Помечено Neuro', riskEnforced: 'Помечено Neuro (применяется)', riskTitle: 'Сводка рисков (Neuro)', riskOwn: 'Этот адрес', riskOwnToken: 'Этот токен',
     riskImmune: 'Иммунный флажок', riskImmuneTip: 'Исполнители с залогом согласовали воспроизводимую находку об этом адресе: эксплойт, дрейнер или известный вредный шаблон кода (иммунная сеть)',
     riskUnreadable: 'не удалось прочитать ThreatRegistry; ничего не утверждается', riskCounterpartiesLabel: 'Недавние контрагенты',
@@ -1195,6 +1201,7 @@ export const T_INSIGHT = {
   vi: {
     // audit certificate badge (src/audit.js)
     auditCertified: "Đã kiểm toán (ZETAPHY)", auditLevel1: "Đồng", auditLevel2: "Bạc", auditLevel3: "Vàng", auditUntil: "đến {date}", auditTip: "Chứng chỉ {level}: chính mã này ({code}…) đã qua quy trình kiểm toán mở của ZETAPHY ngày {date} (công cụ tự động, cuộc thi công khai, phát hiện đã được phân xử). Hiệu lực đến {until}. Không bảo đảm mã an toàn.", auditRevoked: "Chứng chỉ kiểm toán đã bị thu hồi", auditRevokedTip: "Sau khi cấp chứng chỉ, một phát hiện nghiêm trọng hoặc cao đối với mã này được phân xử là đúng: chứng chỉ không còn giá trị.", auditInvalid: "Chứng chỉ kiểm toán không hợp lệ", auditInvalidTip: "Chứng chỉ đã hết hạn, hoặc mã tại địa chỉ này không còn là mã đã được kiểm toán (đã nâng cấp hoặc triển khai lại).",
+    secScore: "Bảo mật {score}/1000", secScoreTip: "Điểm bảo mật trực tiếp (0–1000) từ dữ kiện trên chuỗi: chứng chỉ {cert}, Neuro {neuro}, giám sát {mon}, lịch sử {hist}, trừ điểm −{pen}, mức trần {cap}. Là đầu vào cho hạn mức rủi ro, không bảo đảm mã an toàn.", secScoreHeld: "tạm giữ chờ xem xét", secScoreFlagged: "bị gắn cờ",
     riskFlagged: 'Bị Neuro gắn cờ', riskEnforced: 'Bị Neuro gắn cờ (đang áp dụng)', riskTitle: 'Tóm tắt rủi ro (Neuro)', riskOwn: 'Địa chỉ này',
     riskImmune: 'Cờ miễn dịch', riskImmuneTip: 'Các runner ký quỹ đã thống nhất một phát hiện có thể tái lập về địa chỉ này: exploit, drainer hoặc mẫu mã độc đã biết (mạng miễn dịch)',
     riskOwnToken: 'Token này', riskUnreadable: 'không đọc được ThreatRegistry; không kết luận gì', riskCounterpartiesLabel: 'Đối tác gần đây',
@@ -1270,6 +1277,7 @@ export const T_INSIGHT = {
   th: {
     // audit certificate badge (src/audit.js)
     auditCertified: "ผ่านการตรวจสอบ (ZETAPHY)", auditLevel1: "ทองแดง", auditLevel2: "เงิน", auditLevel3: "ทอง", auditUntil: "ถึง {date}", auditTip: "ใบรับรองระดับ{level}: โค้ดนี้ตรงตัว ({code}…) ผ่านกระบวนการตรวจสอบแบบเปิดของ ZETAPHY เมื่อ {date} (เครื่องมืออัตโนมัติ การแข่งขันสาธารณะ ข้อค้นพบที่ผ่านการตัดสิน) ใช้ได้ถึง {until} ไม่ใช่การรับประกันว่าโค้ดปลอดภัย", auditRevoked: "ใบรับรองการตรวจสอบถูกเพิกถอน", auditRevokedTip: "หลังออกใบรับรอง มีข้อค้นพบระดับวิกฤตหรือสูงต่อโค้ดนี้ที่ถูกตัดสินว่าจริง ใบรับรองจึงไม่มีผลแล้ว", auditInvalid: "ใบรับรองการตรวจสอบใช้ไม่ได้", auditInvalidTip: "ใบรับรองหมดอายุ หรือโค้ดที่ที่อยู่นี้ไม่ใช่โค้ดที่ตรวจสอบแล้ว (อัปเกรดหรือดีพลอยใหม่)",
+    secScore: "ความปลอดภัย {score}/1000", secScoreTip: "คะแนนความปลอดภัยแบบสด (0–1000) จากข้อเท็จจริงบนเชน: ใบรับรอง {cert} Neuro {neuro} การเฝ้าระวัง {mon} ประวัติ {hist} หักคะแนน −{pen} เพดาน {cap} เป็นข้อมูลสำหรับวงเงินความเสี่ยง ไม่ใช่การรับประกันว่าโค้ดปลอดภัย", secScoreHeld: "ถูกพักไว้รอตรวจสอบ", secScoreFlagged: "ถูกตั้งธง",
     riskFlagged: 'Neuro ติดธง', riskEnforced: 'Neuro ติดธง (บังคับใช้)', riskTitle: 'สรุปความเสี่ยง (Neuro)',
     riskImmune: 'ธงภูมิคุ้มกัน', riskImmuneTip: 'ผู้รันที่วางเงินค้ำเห็นตรงกันในผลตรวจที่ทำซ้ำได้ของที่อยู่นี้: การเจาะระบบ drainer หรือรูปแบบโค้ดอันตรายที่รู้จัก (เครือข่ายภูมิคุ้มกัน)',
     riskOwn: 'ที่อยู่นี้', riskOwnToken: 'โทเคนนี้', riskUnreadable: 'อ่าน ThreatRegistry ไม่ได้ จึงไม่แสดงผลใด ๆ',
