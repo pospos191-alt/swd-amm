@@ -5,7 +5,7 @@
 // a run that timed out or crashed is "unknown": neither ever counts as proven. A Halmos
 // counterexample is replayed as a concrete forge test; "replayed: true" means a real EVM run hit
 // the same failed assert.
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, openSync, closeSync } from 'node:fs';
 import { join, resolve, relative } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
 import { analyze, findSolc, REPO } from './analyze.js';
@@ -164,10 +164,14 @@ export async function prove(specPath, opts = {}) {
     if (!solcBin) st = 'not-installed';
     else {
       const r = await new Promise((done) => {
-        const child = spawn('bash', ['-c', `ulimit -v ${4 * 1024 * 1024}; exec "$0" --standard-json < "$1"`, solcBin, join(work, 'smt/input.json')], { stdio: ['ignore', 'pipe', 'pipe'] });
+        // no shell: solc reads the input file on stdin, its address space capped at 4 GiB by prlimit (util-linux)
+        const input = openSync(join(work, 'smt/input.json'), 'r');
+        const child = spawn('prlimit', [`--as=${4 * 1024 ** 3}`, '--', solcBin, '--standard-json'], { stdio: [input, 'pipe', 'pipe'] });
+        closeSync(input);
         let out = ''; let to = false;
         child.stdout.on('data', (d) => { out += d; });
         const timer = setTimeout(() => { to = true; child.kill('SIGKILL'); }, Number(sp.wallSec ?? 600) * 1000);
+        child.on('error', (e) => { clearTimeout(timer); done({ out: String(e.message), code: -1, to }); });
         child.on('close', (code) => { clearTimeout(timer); done({ out, code, to }); });
       });
       if (r.to) st = 'timeout';

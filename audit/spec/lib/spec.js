@@ -128,7 +128,7 @@ export function validateSpec(spec, model) {
 
 // ------------------------------------------------------------------ Markdown
 
-const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+const esc = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
 export function toMarkdown(spec) {
   const L = [];
