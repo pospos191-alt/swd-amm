@@ -30,6 +30,7 @@ const M = {
     note: 'Signs with an ML-DSA-44 key kept inside MetaMask. It is its own account (not your MetaMask address): send ZETAPHY to it first. Until the snap is on MetaMask\'s allowlist, MetaMask Flask is needed.',
     badge: 'post-quantum',
     noSnaps: 'This wallet cannot run MetaMask Snaps. Use MetaMask Flask (until the ZETAPHY Snap is allowlisted), or the ZETAPHY web wallet.',
+    notPublished: 'The ZETAPHY Snap is not published yet, so MetaMask cannot install it. Use MetaMask or the ZETAPHY web wallet for now.',
     badAccount: 'The snap answered with an account whose address does not match its public key. Nothing was signed.',
     notFunded: (a) => `This post-quantum account is not on the chain yet. Send some ZETAPHY to ${a} first.`,
     noFunds: 'Not enough ZETAPHY on the post-quantum account for the amount and the fee.',
@@ -42,6 +43,7 @@ const M = {
     note: '使用保存在 MetaMask 内的 ML-DSA-44 密钥签名。这是一个独立账户（不是你的 MetaMask 地址）：请先向它转入 ZETAPHY。在该 Snap 进入 MetaMask 白名单之前，需要使用 MetaMask Flask。',
     badge: '抗量子',
     noSnaps: '此钱包无法运行 MetaMask Snaps。请使用 MetaMask Flask（直到 ZETAPHY Snap 进入白名单），或使用 ZETAPHY 网页钱包。',
+    notPublished: 'ZETAPHY Snap 尚未发布，MetaMask 无法安装。请暂时使用 MetaMask 或 ZETAPHY 网页钱包。',
     badAccount: 'Snap 返回的账户地址与其公钥不符。没有签署任何内容。',
     notFunded: (a) => `这个抗量子账户还不在链上。请先向 ${a} 转入一些 ZETAPHY。`,
     noFunds: '抗量子账户中的 ZETAPHY 不足以支付金额和手续费。',
@@ -54,6 +56,7 @@ const M = {
     note: 'Firma con una clave ML-DSA-44 guardada dentro de MetaMask. Es una cuenta propia (no tu dirección de MetaMask): envíale ZETAPHY primero. Hasta que el snap esté en la lista permitida de MetaMask, se necesita MetaMask Flask.',
     badge: 'poscuántico',
     noSnaps: 'Esta billetera no puede ejecutar MetaMask Snaps. Usa MetaMask Flask (hasta que el ZETAPHY Snap esté permitido) o la billetera web de ZETAPHY.',
+    notPublished: 'El ZETAPHY Snap aún no está publicado, así que MetaMask no puede instalarlo. Por ahora usa MetaMask o la billetera web de ZETAPHY.',
     badAccount: 'El snap respondió con una cuenta cuya dirección no coincide con su clave pública. No se firmó nada.',
     notFunded: (a) => `Esta cuenta poscuántica aún no está en la cadena. Envía primero algo de ZETAPHY a ${a}.`,
     noFunds: 'No hay suficiente ZETAPHY en la cuenta poscuántica para el importe y la comisión.',
@@ -66,6 +69,7 @@ const M = {
     note: 'MetaMask 안에 보관된 ML-DSA-44 키로 서명합니다. 별도의 계정입니다(MetaMask 주소가 아님): 먼저 ZETAPHY를 보내세요. 스냅이 MetaMask 허용 목록에 오르기 전까지는 MetaMask Flask가 필요합니다.',
     badge: '양자 내성',
     noSnaps: '이 지갑은 MetaMask Snaps를 실행할 수 없습니다. MetaMask Flask(ZETAPHY Snap이 허용될 때까지) 또는 ZETAPHY 웹 지갑을 사용하세요.',
+    notPublished: 'ZETAPHY Snap이 아직 게시되지 않아 MetaMask가 설치할 수 없습니다. 지금은 MetaMask 또는 ZETAPHY 웹 지갑을 사용하세요.',
     badAccount: '스냅이 공개키와 맞지 않는 주소의 계정을 돌려주었습니다. 아무것도 서명하지 않았습니다.',
     notFunded: (a) => `이 양자 내성 계정은 아직 체인에 없습니다. 먼저 ${a}(으)로 ZETAPHY를 보내세요.`,
     noFunds: '양자 내성 계정의 ZETAPHY가 금액과 수수료에 부족합니다.',
@@ -78,6 +82,7 @@ const M = {
     note: 'MetaMask 内に保管された ML-DSA-44 鍵で署名します。別のアカウントです（MetaMask のアドレスではありません）：先に ZETAPHY を送ってください。スナップが MetaMask の許可リストに載るまでは MetaMask Flask が必要です。',
     badge: '耐量子',
     noSnaps: 'このウォレットでは MetaMask Snaps を実行できません。MetaMask Flask（ZETAPHY Snap が許可されるまで）か、ZETAPHY ウェブウォレットを使ってください。',
+    notPublished: 'ZETAPHY Snap はまだ公開されていないため、MetaMask はインストールできません。今は MetaMask か ZETAPHY ウェブウォレットを使ってください。',
     badAccount: 'スナップが返したアカウントのアドレスが公開鍵と一致しません。何も署名していません。',
     notFunded: (a) => `この耐量子アカウントはまだチェーン上にありません。先に ${a} に ZETAPHY を送ってください。`,
     noFunds: '耐量子アカウントの ZETAPHY が金額と手数料に足りません。',
@@ -90,6 +95,7 @@ const M = {
     note: 'Подписывает ключом ML-DSA-44, который хранится внутри MetaMask. Это отдельный счёт (не ваш адрес MetaMask): сначала отправьте на него ZETAPHY. Пока снап не в списке разрешённых MetaMask, нужен MetaMask Flask.',
     badge: 'постквантовый',
     noSnaps: 'Этот кошелёк не может запускать MetaMask Snaps. Используйте MetaMask Flask (пока ZETAPHY Snap не разрешён) или веб-кошелёк ZETAPHY.',
+    notPublished: 'ZETAPHY Snap ещё не опубликован, поэтому MetaMask не может его установить. Пока используйте MetaMask или веб-кошелёк ZETAPHY.',
     badAccount: 'Снап вернул счёт, адрес которого не соответствует его открытому ключу. Ничего не подписано.',
     notFunded: (a) => `Этого постквантового счёта ещё нет в сети. Сначала отправьте немного ZETAPHY на ${a}.`,
     noFunds: 'На постквантовом счёте не хватает ZETAPHY на сумму и комиссию.',
@@ -102,6 +108,7 @@ const M = {
     note: 'Ký bằng khóa ML-DSA-44 giữ bên trong MetaMask. Đây là một tài khoản riêng (không phải địa chỉ MetaMask của bạn): hãy gửi ZETAPHY vào nó trước. Cho đến khi snap có trong danh sách cho phép của MetaMask, cần dùng MetaMask Flask.',
     badge: 'hậu lượng tử',
     noSnaps: 'Ví này không chạy được MetaMask Snaps. Hãy dùng MetaMask Flask (cho đến khi ZETAPHY Snap được cho phép) hoặc ví web ZETAPHY.',
+    notPublished: 'ZETAPHY Snap chưa được phát hành nên MetaMask không cài được. Tạm thời hãy dùng MetaMask hoặc ví web ZETAPHY.',
     badAccount: 'Snap trả về một tài khoản có địa chỉ không khớp với khóa công khai. Chưa ký gì cả.',
     notFunded: (a) => `Tài khoản hậu lượng tử này chưa có trên chuỗi. Hãy gửi một ít ZETAPHY tới ${a} trước.`,
     noFunds: 'Tài khoản hậu lượng tử không đủ ZETAPHY cho số tiền và phí.',
@@ -114,6 +121,7 @@ const M = {
     note: 'เซ็นด้วยกุญแจ ML-DSA-44 ที่เก็บอยู่ใน MetaMask เป็นบัญชีแยกต่างหาก (ไม่ใช่ที่อยู่ MetaMask ของคุณ) ให้โอน ZETAPHY เข้าไปก่อน จนกว่า Snap จะอยู่ในรายชื่อที่ MetaMask อนุญาต ต้องใช้ MetaMask Flask',
     badge: 'ทนควอนตัม',
     noSnaps: 'กระเป๋านี้รัน MetaMask Snaps ไม่ได้ ใช้ MetaMask Flask (จนกว่า ZETAPHY Snap จะได้รับอนุญาต) หรือกระเป๋าเว็บ ZETAPHY',
+    notPublished: 'ZETAPHY Snap ยังไม่ได้เผยแพร่ MetaMask จึงติดตั้งไม่ได้ ตอนนี้ใช้ MetaMask หรือกระเป๋าเว็บ ZETAPHY ไปก่อน',
     badAccount: 'Snap ตอบกลับบัญชีที่ที่อยู่ไม่ตรงกับกุญแจสาธารณะของมัน ยังไม่ได้เซ็นอะไร',
     notFunded: (a) => `บัญชีทนควอนตัมนี้ยังไม่อยู่บนเชน โอน ZETAPHY ไปที่ ${a} ก่อน`,
     noFunds: 'ZETAPHY ในบัญชีทนควอนตัมไม่พอสำหรับจำนวนเงินและค่าธรรมเนียม',
@@ -209,6 +217,8 @@ export function snapProvider({ host, rpc, comet, chainId = 77390, cosmosChainId 
   const L = () => (PQS_LANGS.includes(lang()) ? lang() : 'en');
   let account = null; // { hex, bech32 }
   const unsupported = (e) => e?.code === -32601 || e?.code === 4200 || /does not exist|not supported|not available|unsupported/i.test(e?.message ?? '');
+  // MetaMask could not download the snap package (not on npm yet): say so instead of its raw error
+  const unpublished = (m) => /failed to fetch (snap|npm)|status code: 404/i.test(String(m ?? ''));
 
   async function invoke(method, params) {
     return host.request({ method: 'wallet_invokeSnap', params: { snapId, request: params === undefined ? { method } : { method, params } } });
@@ -232,8 +242,10 @@ export function snapProvider({ host, rpc, comet, chainId = 77390, cosmosChainId 
     let snaps;
     try { snaps = await host.request({ method: 'wallet_requestSnaps', params: { [snapId]: {} } }); } catch (e) {
       if (unsupported(e)) throw rpcError(4200, pqsText(L(), 'noSnaps'));
+      if (unpublished(e?.message)) throw rpcError(4200, pqsText(L(), 'notPublished'));
       throw e; // 4001: the user said no in MetaMask
     }
+    if (unpublished(snaps?.[snapId]?.error?.message)) throw rpcError(4200, pqsText(L(), 'notPublished'));
     if (!snaps?.[snapId] || snaps[snapId].error) throw rpcError(4001, clean(snaps?.[snapId]?.error?.message) || 'snap not connected');
     account = await readAccount();
     emit('accountsChanged', [account.hex]);
