@@ -1121,7 +1121,7 @@ transaction that breaks one reverts as a whole. A checker that reverts, runs out
 counts as a violation. Removing an invariant or opting out waits 2 days. The same contract applies the certificate rule:
 a registered protocol holding more than a threshold without a live `AuditCertificate` certificate pays out at most a
 capped share of its balance per day. `attest` binds an invariant set to certificates. A node-level check after every EVM
-transaction is a prototype in `zetaphy-chain/prototypes/invariant-firewall/` (not in the node). Tests in
+transaction is in the patched node, off until an upgrade and a governance vote ([docs/CHAIN-FIREWALL.md](../docs/CHAIN-FIREWALL.md)). Tests in
 `test/firewall.test.js`. Not deployed. Design and limits: [docs/future/invariant-firewall.md](../docs/future/invariant-firewall.md).
 
 ## Testing
