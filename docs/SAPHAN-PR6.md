@@ -38,7 +38,8 @@ Three tools check them, each with its strength:
   (`audit/run.sh`, step invariants) runs it with the other suites.
 - **Halmos** (`audit/invariants/saphan/SaphanSymbolic.t.sol`, functions `check_*`): proofs for *all* inputs of a
   small scenario: any two locks and any two releases never pay more than locked or than the daily limit, each release
-  pays once; the pro rata rule of the escape hatch / recovery never pays more than the pool.
+  pays once (proven: 549 paths). The pro rata rule of the escape hatch / recovery (never pays more than the pool) is
+  written too, but the solver times out on it (a multiplication and a division of unknowns); forge fuzzes it instead.
   `halmos --forge-build-out audit/out --contract SaphanSymbolic`.
 - **A JS property test in the normal suite** (`test/saphaninvariants.test.js`): the same four properties checked
   after every step of seeded random sequences, so `node --test test/*.test.js` catches a regression without Foundry.
@@ -172,3 +173,5 @@ Hyperlane publishes no default validator for it, so nobody we know would sign Fu
 - The liquidity contract can only lower limits by itself; raises stay with each chain's timelock (on purpose).
 - The new chains need a route deployed (the saphan-route workflow) and their addresses checked on chain first.
 - Hub screens for these features are not part of this PR (the CLI and contracts are).
+- IBC (Cosmos Hub, Osmosis), which SAPHAN-PROOFS.md moved here: still not done. It needs a relayer that runs all the
+  time (Hermes), more than the free node can carry; this PR adds EVM chains only.

@@ -54,6 +54,7 @@ contract SaphanPrivacyPool {
     mapping(uint256 => bool) public rootSeen;          // every root this pool ever had (the tree only grows)
     mapping(uint256 => bool) public nullifierUsed;
     mapping(uint256 => bool) public commitmentUsed;
+    uint256 public spent;                               // withdrawals so far (the pool owes (leafCount - spent) notes)
     uint256[21] private zeros;
     uint256[20] private filled;                         // the left node last written at each height
     uint256 private unlocked = 1;
@@ -123,8 +124,8 @@ contract SaphanPrivacyPool {
         root = node;
         rootSeen[node] = true;
         emit Deposit(commitment, leaf, index, node);
-        uint256 before = token.balanceOf(address(this));
-        if (!token.transferFrom(msg.sender, address(this), denomination) || token.balanceOf(address(this)) - before != denomination) revert TokenFailed();
+        // the whole denomination must arrive (no fee-on-transfer): the balance covers every unspent note after the pull
+        if (!token.transferFrom(msg.sender, address(this), denomination) || token.balanceOf(address(this)) < (leafCount - spent) * denomination) revert TokenFailed();
     }
 
     /// Withdraws one note to `recipient` (denomination - fee), paying `fee` to the caller.
@@ -133,10 +134,12 @@ contract SaphanPrivacyPool {
         if (!rootSeen[root_]) revert UnknownRoot();
         if (nullifierUsed[nullifier]) revert Spent();
         if (fee > denomination || recipient == address(0)) revert BadFee();
+        nullifierUsed[nullifier] = true;
+        spent += 1;
+        emit Withdrawal(nullifier, recipient, msg.sender, fee);
+        // the proof (a view of the immutable verifier) before any token moves; a bad one reverts the marks above
         if (!verifier.verifyProof([proof[0], proof[1]], [[proof[2], proof[3]], [proof[4], proof[5]]], [proof[6], proof[7]],
             [root_, nullifier, scope, signalOf(recipient, fee), LEVEL])) revert BadProof();
-        nullifierUsed[nullifier] = true;
-        emit Withdrawal(nullifier, recipient, msg.sender, fee);
         if (!token.transfer(recipient, denomination - fee)) revert TokenFailed();
         if (fee != 0 && !token.transfer(msg.sender, fee)) revert TokenFailed();
     }

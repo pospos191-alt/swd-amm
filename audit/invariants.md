@@ -126,7 +126,7 @@ delivers releases in any order, twice or never. Runs of 2026-11-04 (forge 1.2.3,
 | LockBoxV2 + Airlock | each body delivered, paid, minted at most once; a lying lane alone never mints | Foundry `invariant_eachBodyReleasedOnce` | pass |
 | LockBoxV2 + Guard | per UTC day: paid ≤ the lockbox's limit, minted ≤ the guard's route limit (and hard cap) | Foundry `invariant_dailyLimits` | pass |
 | LockBoxV2 | for ANY two locks and ANY two releases (amounts, receivers), claimed in one day: paid ≤ locked, ≤ daily limit, each release once, balance = locked | Halmos `SaphanSymbolic.t.sol::check_releaseNeverExceedsLockedOrLimit` (+ forge `testFuzz_` twin) | **pass** (proven: 549 paths, 37 s) |
-| SaphanRecoveryClaims (escape hatch's pro rata rule) | for ANY pool, total and two lines within the total: payouts ≤ pool, each ≤ its line | Halmos `check_recoveryProRataNeverExceedsPool` (32-bit amounts; + forge `testFuzz_` twin on 96-bit) | HALMOS_STATUS |
+| SaphanRecoveryClaims (escape hatch's pro rata rule) | for ANY pool, total and two lines within the total: payouts ≤ pool, each ≤ its line | Halmos `check_recoveryProRataNeverExceedsPool` (32-bit amounts; + forge `testFuzz_` twin on 96-bit) | timeout (z3, 600 s per query, both the 96-bit and the 32-bit statement: owed × pool / total is non-linear; a yices run could not be completed here). Covered by the forge `testFuzz_` twin (256 runs, pass); run overnight with `--solver-timeout-assertion 0` |
 | the whole route | the same four properties after every step of seeded random sequences (3 seeds × 80 steps) | JS `zetaphy-network/test/saphaninvariants.test.js` (normal `npm test`) | pass |
 
 Harness checks (not properties): `test_handlerReaches*` and `EchidnaHarnessesSmoke` assert that each

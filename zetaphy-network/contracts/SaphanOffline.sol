@@ -53,7 +53,6 @@ contract SaphanOfflineTransfers {
     uint256 private constant HALF_N = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
-    address private expectRefund;
     uint256 private unlocked = 1;
 
     /// The amount, receiver and chain are in the outbox's Sent event of the same transaction (messageId).
@@ -74,11 +73,6 @@ contract SaphanOfflineTransfers {
         unlocked = 2;
         _;
         unlocked = 1;
-    }
-
-    /// Only the outbox being called returns change here (its Mailbox-fee refund).
-    receive() external payable {
-        if (msg.sender != expectRefund) revert PayFailed();
     }
 
     function domainSeparator() public view returns (bytes32) {
@@ -121,26 +115,24 @@ contract SaphanOfflineTransfers {
         IOfflineOutbox outbox = IOfflineOutbox(t.outbox);
         uint256 fee = outbox.quoteSend(t.to, t.amount);
         if (msg.value < fee) revert Fee(fee);
-        (IOfflineToken token, uint256 before) = _pull(t);
+        _pull(t);
 
-        expectRefund = t.outbox;
-        messageId = outbox.send{value: fee}(t.to, t.amount); // burns `amount` from this contract (the guard's outbound route)
-        expectRefund = address(0);
+        // exactly the quote (the outbox quotes the same body in the same transaction, so it returns no change; this
+        // contract has no receive(): a change would revert the whole relay)
+        messageId = outbox.send{value: fee}(t.to, t.amount); // burns `amount` from this contract (the guard's outbound route): nothing is kept here
         emit Relayed(t.from, t.nonce, t.outbox, msg.sender, t.relayerFee, messageId);
-        if (token.balanceOf(address(this)) != before) revert TokenFailed(); // all of amount was burned, nothing kept
-        uint256 change = address(this).balance;
+        uint256 change = msg.value - fee;
         if (change != 0) {
             (bool ok, ) = msg.sender.call{value: change}("");
             if (!ok) revert PayFailed();
         }
     }
 
-    /// Pulls amount + relayerFee from the signer (exactly: no fee-on-transfer token) and pays the relayer its fee.
-    function _pull(Transfer calldata t) private returns (IOfflineToken token, uint256 before) {
-        token = IOfflineToken(IOfflineGuard(IOfflineOutbox(t.outbox).guard()).token());
-        before = token.balanceOf(address(this));
+    /// Pulls amount + relayerFee from the signer and pays the relayer its fee. The token is the outbox guard's
+    /// BridgedToken (no fee on transfer); if less arrived, the fee transfer or the guard's burn of `amount` reverts.
+    function _pull(Transfer calldata t) private {
+        IOfflineToken token = IOfflineToken(IOfflineGuard(IOfflineOutbox(t.outbox).guard()).token());
         if (!token.transferFrom(t.from, address(this), t.amount + t.relayerFee)) revert TokenFailed();
-        if (token.balanceOf(address(this)) - before != t.amount + t.relayerFee) revert TokenFailed();
         if (t.relayerFee != 0 && !token.transfer(msg.sender, t.relayerFee)) revert TokenFailed();
     }
 

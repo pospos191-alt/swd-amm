@@ -117,7 +117,12 @@ contract SaphanRecoveryClaims {
         uint256 amount = payout(owed);
         paid += amount;
         emit Claimed(msg.sender, owed, amount);
-        _pay(msg.sender, amount);
+        if (token != address(0)) {
+            if (!IRecoveryToken(token).transfer(msg.sender, amount)) revert PayFailed();
+        } else {
+            (bool ok, ) = msg.sender.call{value: amount}("");
+            if (!ok) revert PayFailed();
+        }
     }
 
     /// Anyone, after the deadline: what is left goes to sweepTo. Once.
@@ -128,18 +133,16 @@ contract SaphanRecoveryClaims {
         swept = true;
         uint256 left = _held();
         emit Swept(sweepTo, left);
-        _pay(sweepTo, left);
+        if (token != address(0)) {
+            if (!IRecoveryToken(token).transfer(sweepTo, left)) revert PayFailed();
+        } else {
+            (bool ok, ) = sweepTo.call{value: left}("");
+            if (!ok) revert PayFailed();
+        }
     }
 
     function _held() private view returns (uint256) {
         return token == address(0) ? address(this).balance : IRecoveryToken(token).balanceOf(address(this));
     }
 
-    function _pay(address to, uint256 amount) private {
-        if (amount == 0) return;
-        if (token == address(0)) {
-            (bool ok, ) = to.call{value: amount}("");
-            if (!ok) revert PayFailed();
-        } else if (!IRecoveryToken(token).transfer(to, amount)) revert PayFailed();
-    }
 }

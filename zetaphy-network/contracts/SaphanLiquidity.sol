@@ -125,7 +125,8 @@ contract SaphanLiquidityBounds {
     /// The largest change the next propose() may make (a target of 0 may move up to maxStepBps of max).
     function maxStep(bytes32 route) public view returns (uint256) {
         Bounds memory b = bounds[route];
-        uint256 base = target[route].value == 0 ? b.max : target[route].value;
+        uint256 v = target[route].value;
+        uint256 base = v > 0 ? v : b.max;
         return base * b.maxStepBps / 10000;
     }
 }

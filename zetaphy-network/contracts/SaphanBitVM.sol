@@ -81,6 +81,7 @@ contract SaphanBtcWithdrawals {
     mapping(address => uint256) public owedToken;    // pull payouts
     mapping(bytes32 => bool) public paymentUsed;     // keccak256(txid, vout)
     uint256 public escrowed;                         // tokens held for open requests
+    uint256 public tokenLiabilities;                 // escrowed + every owedToken: what the token balance must cover
     uint256 private unlocked = 1;
 
     event Requested(uint256 indexed id, address indexed holder, uint256 amount, uint64 sats, bytes btcScript);
@@ -143,9 +144,10 @@ contract SaphanBtcWithdrawals {
             operator: address(0), claimEnds: 0, respondBy: 0, vout: 0, challenger: address(0), scriptHash: keccak256(btcScript),
             txid: bytes32(0), amount: amount }));
         escrowed += amount;
+        tokenLiabilities += amount;
         emit Requested(id, msg.sender, amount, uint64(amount / SATS_TO_WEI), btcScript);
-        uint256 before = token.balanceOf(address(this));
-        if (!token.transferFrom(msg.sender, address(this), amount) || token.balanceOf(address(this)) - before != amount) revert TokenFailed();
+        // the whole amount must arrive (no fee-on-transfer): the balance covers every liability after the pull
+        if (!token.transferFrom(msg.sender, address(this), amount) || token.balanceOf(address(this)) < tokenLiabilities) revert TokenFailed();
     }
 
     /// The holder, when no operator claimed within claimTtl: the escrow comes back (withdraw()).
@@ -218,11 +220,12 @@ contract SaphanBtcWithdrawals {
             if (block.timestamp > w.respondBy) revert TooLate(w.respondBy);
         } else if (w.state != State.Claimed) revert BadState(w.state);
         checkPayment(rawTx, w.vout, w.sats, w.scriptHash, id, w.operator);
-        if (client.verifyTx(rawTx, blockHash, index, siblings, minConfirmations) != w.txid) revert BadPayment(6);
         address op = w.operator;
         if (w.state == State.Challenged) owedNative[op] += challengeBond;
         emit Proven(id, op);
         _reimburse(id, w);
+        // the SPV proof last (a view of the immutable light client; a wrong proof reverts everything above)
+        if (client.verifyTx(rawTx, blockHash, index, siblings, minConfirmations) != w.txid) revert BadPayment(6);
     }
 
     /// Anyone, after the challenge window of an unchallenged claim: the operator is reimbursed.
@@ -267,6 +270,7 @@ contract SaphanBtcWithdrawals {
         if (n == 0 && t == 0) revert Nothing();
         owedNative[msg.sender] = 0;
         owedToken[msg.sender] = 0;
+        tokenLiabilities -= t;
         emit Withdrawn(msg.sender, n, t);
         if (t != 0 && !token.transfer(msg.sender, t)) revert TokenFailed();
         if (n != 0) {
@@ -283,7 +287,7 @@ contract SaphanBtcWithdrawals {
 
     /// The OP_RETURN payload an operator's payment must carry for withdrawal `id`.
     function commitment(uint256 id, address operator) public pure returns (bytes memory) {
-        return abi.encodePacked(TAG, uint64(id), operator);
+        return abi.encodePacked(TAG, bytes8(bytes32(id << 192)), operator); // the low 8 bytes of id, big-endian (ids < 2^64)
     }
 
     /// Checks a raw (non-witness) Bitcoin transaction: output `vout` pays the script with keccak256 `scriptHash`
