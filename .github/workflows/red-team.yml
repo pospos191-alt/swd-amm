@@ -1,0 +1,73 @@
+# The AI red team (SS3), exploit market (S1) and economic-security simulation (SS4): docs/future/red-team.md.
+#
+# This workflow is OFF by default. It never runs on push or on a schedule unless a maintainer explicitly enables
+# the nightly cron below. It only ever attacks LOCAL forks / the in-memory EVM of DELIBERATELY VULNERABLE demo
+# targets in test/helpers/RedTeamDemo.sol and the repo's own DEX contracts; it never touches a live chain, a key
+# or real money. Cost: free (GitHub-hosted runner).
+#
+#   pull_request        runs only when the red team's own code changes (the unit + end-to-end tests)
+#   workflow_dispatch   a maintainer runs it by hand (the tests, then an attack sweep over the demo targets)
+#   schedule            COMMENTED OUT. A maintainer who wants a nightly sweep uncomments it; until then nothing
+#                       fires on a timer.
+
+name: red-team
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/red-team.yml'
+      - 'zetaphy-network/contracts/ExploitMarket.sol'
+      - 'zetaphy-network/contracts/EconomicBounds.sol'
+      - 'zetaphy-network/src/redteam/**'
+      - 'zetaphy-network/src/redteamcli.js'
+      - 'zetaphy-network/test/redteam.test.js'
+      - 'zetaphy-network/test/redteamfork.test.js'
+      - 'zetaphy-network/test/economic.test.js'
+      - 'zetaphy-network/test/exploitmarket.test.js'
+      - 'zetaphy-network/test/economicbounds.test.js'
+      - 'zetaphy-network/test/helpers/RedTeamDemo.sol'
+      - 'zetaphy-network/test/helpers/EconKit.sol'
+  workflow_dispatch:
+    inputs:
+      sweep:
+        description: 'Also run an attack sweep over the demo targets (local forks only)'
+        type: boolean
+        default: true
+  # A nightly sweep is intentionally DISABLED. Uncomment to opt in; it still only runs on local forks.
+  # schedule:
+  #   - cron: '17 4 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: red-team-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  red-team:
+    name: Red team (local forks / in-memory EVM only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: zetaphy-network
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: npm ci --no-audit --no-fund
+
+      - name: The red team's attack contract is built and committed
+        run: node scripts/build-redteam.js --check
+
+      - name: Unit + end-to-end tests (in-memory EVM; no network)
+        run: node --test test/redteamfork.test.js test/redteam.test.js test/exploitmarket.test.js test/economicbounds.test.js test/economic.test.js
+
+      - name: Attack sweep over the demo targets (manual runs)
+        if: github.event_name == 'workflow_dispatch' && inputs.sweep
+        run: node scripts/redteam-sweep.js

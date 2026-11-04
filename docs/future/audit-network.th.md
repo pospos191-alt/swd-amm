@@ -18,6 +18,7 @@ ZETAPHY มี**แพลตฟอร์มตรวจสอบสัญญา�
 | CLI `zetaphy audit …` และ `zetaphy deploy-audit` | `zetaphy-network/src/auditnetcli.js`, `src/auditnetops.js` |
 | แท็บ "ตรวจสอบ" ใน hub (8 ภาษา) | `zetaphy-hub/audit.js`, `audit-i18n.js` |
 | ป้ายใบรับรองใน explorer (8 ภาษา) | `zetaphy-explorer/src/audit.js` |
+| ไฟร์วอลล์ invariant และกติกาใบรับรอง (ชั้น SS: invariant เป็นเงื่อนไขหลังการทำงาน และจำกัดเงินไหลออกเมื่อไม่มีใบรับรองที่ใช้ได้) | [invariant-firewall.th.md](invariant-firewall.th.md) |
 | สั่งตรวจจากทุกเชน (EVM, CosmWasm, Solana), ป้าย, หน้าตรวจ, สมุดรายชื่อ, GitHub Action | [audit-as-a-service.th.md](audit-as-a-service.th.md) |
 
 ## ขั้นตอน
@@ -132,9 +133,15 @@ ZETAPHY มี**แพลตฟอร์มตรวจสอบสัญญา�
 
 ใบรับรองของสัญญาบนเชนอื่นถูกบันทึกด้วย chainId และ codeHash ของเชนนั้น `NeuroOracleSender.pushCertificate` ส่งใบรับรองผ่าน Hyperlane และ `NeuroOracle.isCertified` บนเชนปลายทางจะตรวจ EXTCODEHASH ในเชนนั้นเอง ถ้าจะเปิดใช้กับ oracle ที่ดีพลอยไปแล้ว ต้องดีพลอยใหม่ แล้วเรียก `setAudit` ผ่าน timelock
 
+## Proven: ระดับเหนือ Gold
+
+`ProofRegistry` เพิ่มระดับ **Proven** โดยไม่แก้ AuditCertificate: `levelOf(chainId, address)` อ่านใบรับรองแล้วคืน PROVEN (4)
+เมื่อเป็นใบรับรอง Gold ที่ยังใช้ได้ และ code hash มีหลักฐานเชิงรูปนัยของสเปกที่อนุมัติแล้ว ซึ่งผู้รัน 2 ใน 3 ทำซ้ำได้
+และมีตลาดหลักฐาน (รางวัลที่รับได้ด้วยหลักฐาน หรือด้วยตัวอย่างค้านที่เล่นซ้ำบนเชน) ดู [specs-and-proofs.th.md](specs-and-proofs.th.md)
+
 ## สิ่งที่ยังขาด
 
 - **ยังไม่ได้ดีพลอย**: `zetaphy deploy-audit` จะเขียนไฟล์ `deployments/audit-77390.json`
 - **`audit/report.js`**: สร้างแยกต่างหาก ตัวต่อและ fixture กำหนดรูปแบบไว้แล้ว
 - **ค่าตอบแทนกรรมการสำหรับข้อค้นพบหลังออกใบรับรอง**: ยังไม่มี
-- **ยังไม่ผ่านการตรวจสอบ**: สัญญาเหล่านี้ยังไม่ได้ผ่านกระบวนการนี้เอง
+- **ยังไม่ผ่านการตรวจสอบ**: สัญญาเหล่านี้ยังไม่ได้ผ่านกระบวนการนี้เอง แต่การตรวจสอบตัวเองมีสคริปต์และการทดสอบแล้ว ([immune-score.th.md](immune-score.th.md), SS8): คำขอสี่รายการ ใบรับรอง การตรวจใน CI ที่ปิดอยู่จนกว่าจะมีบันทึกจากเทสต์เน็ต และ invariant ของ Foundry

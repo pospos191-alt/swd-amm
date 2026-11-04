@@ -1,0 +1,278 @@
+{
+  "schema": "zetaphy.proof/1",
+  "by": "zetaphy-spec 1.0.0",
+  "contract": "BuggyVault",
+  "file": "audit/spec/fixtures/BuggyVault.sol",
+  "specHash": "0x54dfb5789ef15da9c42229acc413862e73c278e14dee789579f19aee00bd2f85",
+  "sourceHash": "0x7448f88190a4409f2e65f3e9126f3a54670fa6095509bb93d0fb44e0fa97d7ee",
+  "runtimeHash": "0xb3c2ef424739db0de4c04bdc50ba53e1810f471403c5039971ee2f94eece6a17",
+  "codeMatch": null,
+  "tools": {
+    "forge": "1.2.3-v1.2.3",
+    "halmos": "0.3.3",
+    "solc": "0.8.26+commit.8a97fa7a.Linux.g++"
+  },
+  "artifacts": [
+    {
+      "path": "test/Spec.t.sol",
+      "hash": "0xb03ce393931b76ac464e2b8c02f341639e41c60ffa2d56c3eb4cd7c6112e8da5"
+    },
+    {
+      "path": "smt/SpecSMT.sol",
+      "hash": "0x80acfee0f7fdeaca77a95a6a554a9b75dda6a976f222fa6de3e11b806b2148d5"
+    }
+  ],
+  "artifactsHash": "0x722129e6a1af824807b49895d8e0a324361f8ccbe86e28d37488a2380505806e",
+  "recipe": {
+    "install": "bash audit/tools/install.sh <dir> fast  # forge 1.2.3, halmos 0.3.3 (pip, hashed), solc 0.8.26 (sha256-checked)",
+    "run": "node audit/spec/cli.js prove audit/spec/examples/BuggyVault.spec.json",
+    "halmos": "halmos --root <work> --contract SpecChecks --loop 3 --solver-timeout-assertion 60000"
+  },
+  "summary": {
+    "properties": 10,
+    "proven": 7,
+    "counterexamples": 3,
+    "unknown": 0,
+    "allProven": false
+  },
+  "properties": [
+    {
+      "id": "access-pause",
+      "kind": "access",
+      "title": "only governance can call pause",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_pause",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-unpause",
+      "kind": "access",
+      "title": "only governance can call unpause",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_unpause",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setGovernance",
+      "kind": "access",
+      "title": "only governance can call setGovernance",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setGovernance",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "monotonic-deposits",
+      "kind": "monotonic",
+      "title": "deposits never decreases",
+      "scope": "every function that writes deposits, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_monotonic_deposits__deposit",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "conservation-balanceOf-totalDeposits",
+      "kind": "conservation",
+      "title": "totalDeposits moves exactly with the balanceOf it sums",
+      "scope": "every function that writes either, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "status": "counterexample",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_conservation_balanceOf_totalDeposits__deposit",
+          "status": "proven"
+        },
+        {
+          "tool": "halmos",
+          "check": "check_conservation_balanceOf_totalDeposits__withdraw",
+          "status": "proven"
+        },
+        {
+          "tool": "halmos",
+          "check": "check_conservation_balanceOf_totalDeposits__emergencyWithdraw",
+          "status": "counterexample",
+          "counterexample": {
+            "0": "0",
+            "1": "28948022309329048855892746252171976963317496166410141009864396001978282409984",
+            "2": "39614081257132168796771975168",
+            "3": "659918"
+          },
+          "trace": [
+            "deposit(value 39614081257132168796771975168) by address(0xA11CE)",
+            "emergencyWithdraw() by 0x00000000000000000000000000000000000a11ce"
+          ],
+          "replayed": true
+        }
+      ]
+    },
+    {
+      "id": "backing-totalDeposits",
+      "kind": "invariant",
+      "title": "the contract always holds at least totalDeposits in ETH",
+      "scope": "bounded: every sequence of prover.depth calls over harness.steps from the setup state (Halmos); unbounded where the SMTChecker proves it; fuzzed by forge",
+      "status": "counterexample",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_backing_totalDeposits",
+          "status": "counterexample",
+          "counterexample": {
+            "0": "0",
+            "1": "28948022309329048855892746252171976963317496166410141009864396001978282409984",
+            "2": "39614081257132168796771975168",
+            "3": "2",
+            "4": "28948022309329048855892746252171976963317496166410141009864396001978282409984"
+          },
+          "trace": [
+            "deposit(value 39614081257132168796771975168) by address(0xA11CE)",
+            "emergencyWithdraw() by address(0xA11CE)"
+          ],
+          "replayed": true
+        },
+        {
+          "tool": "forge",
+          "status": "counterexample",
+          "replayed": true,
+          "detail": "panic: assertion failed (0x01)",
+          "counterexample": {
+            "Sequence": [
+              3,
+              [
+                {
+                  "sender": "0x0000000000000000000000000000000000002b3f",
+                  "addr": "0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",
+                  "calldata": "0x8880565e000000000000020d16671fd69ef6353392db3fb6547f09a2be383dc183a20cec00000000000000000000000000000000000215be6027df8a783086cfd617e711",
+                  "contract_name": "test/Spec.t.sol:SpecHandler",
+                  "func_name": "fz_deposit",
+                  "signature": "fz_deposit(uint256,uint256[1])",
+                  "args": "3296027726860582373457925816523617130238785903242963599887596 [3.296e60], [10825607428388742411136207121016593 [1.082e34]]",
+                  "raw_args": "3296027726860582373457925816523617130238785903242963599887596, [10825607428388742411136207121016593]"
+                },
+                {
+                  "sender": "0x00000000000000000000000000000000ba414fa5",
+                  "addr": "0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f",
+                  "calldata": "0x2d34c4aa000000000000000000000000000000000000000000000000000000000003737500000000000000000000000000000000000000000000000000000a7f4ad86fe8",
+                  "contract_name": "test/Spec.t.sol:SpecHandler",
+                  "func_name": "fz_emergencyWithdraw",
+                  "signature": "fz_emergencyWithdraw(uint256,uint256[1])",
+                  "args": "226165 [2.261e5], [11541832822760 [1.154e13]]",
+                  "raw_args": "226165, [11541832822760]"
+                }
+              ]
+            ]
+          }
+        },
+        {
+          "tool": "smtchecker",
+          "status": "counterexample",
+          "replayed": false,
+          "detail": "CHC: Assertion violation happens here."
+        }
+      ]
+    },
+    {
+      "id": "pause-noloss",
+      "kind": "pause-noloss",
+      "title": "pausing loses nothing",
+      "scope": "from any state reachable in prover.depth-1 steps; public no-argument getters and the ETH balance (mappings are covered by the AST fact that pause writes only the flag)",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_pause_noloss",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "paused-blocks-deposit",
+      "kind": "paused-blocks",
+      "title": "deposit is stopped while paused",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_paused_blocks_deposit",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "cei-withdraw",
+      "kind": "cei",
+      "title": "withdraw: no storage write after an external call",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "status": "counterexample",
+      "by": [
+        {
+          "tool": "spec-ast",
+          "status": "counterexample",
+          "detail": "storage written after an external call: balanceOf line 39, totalDeposits line 40",
+          "counterexample": [
+            {
+              "var": "balanceOf",
+              "line": 39,
+              "via": null
+            },
+            {
+              "var": "totalDeposits",
+              "line": 40,
+              "via": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cei-emergencyWithdraw",
+      "kind": "cei",
+      "title": "emergencyWithdraw: no storage write after an external call",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "spec-ast",
+          "status": "proven",
+          "detail": "no storage write after the first external call"
+        }
+      ]
+    }
+  ],
+  "resultHash": "0xa3a72606d5eea60da7fe7cc8d978602a98d00c318c9d26ab71b89bf0bb116699",
+  "runs": {
+    "build": {
+      "status": "ok"
+    },
+    "halmos": {
+      "code": 1,
+      "timedOut": false
+    },
+    "replay": {
+      "code": 0
+    }
+  },
+  "recipeHash": "0xa214988621ccaa233c24a16c25e92b6ab5e795d5429245337630a3a92aa2d093"
+}

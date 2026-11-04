@@ -323,6 +323,11 @@ jobs:
       - name: Unit tests (NeuroJobs on an in-memory EVM, runner loop, native PQ txs)
         run: npm test
 
+      # docs/future/immune-score.md (SS8): the audit contracts must hold live certificates from their own audit
+      # network for the code this repository builds. OFF until deployments/audit-self-77390.json exists.
+      - name: Self-audit certificates of the audit contracts
+        run: node scripts/audit-self.js check
+
   zetaphy-wallet:
     name: zetaphy-wallet (bundle + browser test)
     needs: changes

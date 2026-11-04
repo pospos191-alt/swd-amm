@@ -1,0 +1,165 @@
+{
+  "_comment": "Reviewer input for the BridgeGuard spec (node audit/spec/cli.js draft ... --with this file). The harness opens the guard the way a deployment does (token, audit on record, one inbound route behind a 2-lane airlock stand-in, one outbound-only route, a guardian), then hands governance to 0x6070. The adapters are actors, so sequences mint and burn through the real route checks.",
+  "harness": {
+    "notes": [
+      "reviewed: SpecAirlock stands in for BridgeAirlock (independentLanes() = 2); the hard cap is the starter 1000 tokens, route IN 600/day, route OUT 400/day",
+      "inbound / outbound actions pick a route (IN or OUT) and a receiver among the actors, so the fuzzer reaches the limits too",
+      "SpecThreats stands in for ThreatRegistry: the setup holds 0xA11CE and queues one held mint of 1 token to it (held[0]); the `unhold` step clears a hold, so releaseHeld can succeed (without it releaseHeld always reverted and its checks were vacuous: found by a deliberately false property)"
+    ],
+    "helpers": [
+      "/// Stands in for a BridgeAirlock with two independent lanes (all the guard asks of an adapter).",
+      "contract SpecAirlock {",
+      "    function independentLanes() external pure returns (uint256) { return 2; }",
+      "}",
+      "/// Stands in for ThreatRegistry's hold view: a flag per address, set by the harness.",
+      "contract SpecThreats {",
+      "    mapping(address => bool) public held;",
+      "    function set(address a, bool v) external { held[a] = v; }",
+      "    function isContractHeld(address a) external view returns (bool, uint8) { return (held[a], 1); }",
+      "}"
+    ],
+    "state": [
+      "SpecAirlock public inAdapter;",
+      "SpecAirlock public outAdapter;",
+      "bytes32 public constant IN = keccak256(\"route in\");",
+      "bytes32 public constant OUT = keccak256(\"route out\");",
+      "SpecThreats public threats;"
+    ],
+    "setup": [
+      "t = new BridgeGuard(address(this));",
+      "t.createToken(\"Bridged ETH\", \"bETH\", 18);",
+      "t.setAudit(\"https://example.org/audit.pdf\", bytes32(uint256(1)));",
+      "inAdapter = new SpecAirlock();",
+      "outAdapter = new SpecAirlock();",
+      "t.setRoute(IN, address(inAdapter), 600 ether, true);",
+      "t.setOutboundRoute(OUT, address(outAdapter), 400 ether, true);",
+      "threats = new SpecThreats();",
+      "t.setThreats(IContractThreats(address(threats)));",
+      "threats.set(address(0xA11CE), true);",
+      "vm.prank(address(inAdapter));",
+      "t.inbound(IN, address(0xA11CE), 1 ether); // queued: held[0]",
+      "t.setGuardian(address(0x6A2D), true);",
+      "t.setGovernance(address(0x6070));"
+    ],
+    "actors": [
+      "address(0x6070)",
+      "address(0x6A2D)",
+      "address(inAdapter)",
+      "address(outAdapter)",
+      "address(0xA11CE)"
+    ],
+    "actions": {
+      "inbound": [
+        "bytes32 id = a[0] & 1 == 0 ? IN : OUT;",
+        "vm.prank(caller);",
+        "try t.inbound(id, actor(a[1]), uint256(uint128(a[2]))) { ok = true; } catch { ok = false; }"
+      ],
+      "outbound": [
+        "bytes32 id = a[0] & 1 == 0 ? OUT : IN;",
+        "vm.prank(caller);",
+        "try t.outbound(id, actor(a[1]), uint256(uint128(a[2]))) { ok = true; } catch { ok = false; }"
+      ],
+      "unhold": [
+        "threats.set(actor(a[0]), false);",
+        "ok = true;"
+      ]
+    },
+    "words": {
+      "inbound": 3,
+      "outbound": 3,
+      "unhold": 1
+    },
+    "views": [
+      "function inToday(bytes32 id) public view returns (uint256 i) { (, , uint128 x, , uint64 day, ) = t.routes(id); i = day == block.timestamp / 1 days ? x : 0; }",
+      "function outToday(bytes32 id) public view returns (uint256 o) { (, , , uint128 x, uint64 day, ) = t.routes(id); o = day == block.timestamp / 1 days ? x : 0; }",
+      "function limitOf(bytes32 id) public view returns (uint256) { (, uint128 l, , , , ) = t.routes(id); return l < t.maxDailyLimit() ? l : t.maxDailyLimit(); }",
+      "function inRoute() external view returns (uint256) { return inToday(IN); }",
+      "function outRoute() external view returns (uint256) { return outToday(OUT); }",
+      "function inLimit() external view returns (uint256) { return limitOf(IN); }",
+      "function outLimit() external view returns (uint256) { return limitOf(OUT); }",
+      "function supply() external view returns (uint256) { return t.token().totalSupply(); }"
+    ],
+    "steps": [
+      "inbound",
+      "outbound",
+      "releaseHeld",
+      "unhold",
+      "pause",
+      "unpause",
+      "lowerMaxDailyLimit",
+      "disableRoute",
+      "warp"
+    ]
+  },
+  "prover": {
+    "depth": 2
+  },
+  "properties": [
+    {
+      "id": "cap-in",
+      "kind": "post",
+      "title": "no mint takes the day's inbound total over the hard cap",
+      "statement": "After any successful inbound or releaseHeld, `totalInToday` is at most `maxDailyLimit`: all routes together never mint more than the hard cap in a day.",
+      "rationale": "BridgeGuard header: 'a hard cap, maxDailyLimit, over every route's daily limit and over all routes together per day'.",
+      "check": {
+        "functions": [
+          "inbound",
+          "releaseHeld"
+        ],
+        "expr": "t.totalInToday() <= t.maxDailyLimit()"
+      }
+    },
+    {
+      "id": "cap-out",
+      "kind": "post",
+      "title": "no burn takes the day's outbound total over the hard cap",
+      "statement": "After any successful outbound, `totalOutToday` is at most `maxDailyLimit`.",
+      "rationale": "the hard cap binds both directions.",
+      "check": {
+        "functions": [
+          "outbound"
+        ],
+        "expr": "t.totalOutToday() <= t.maxDailyLimit()"
+      }
+    },
+    {
+      "id": "route-limit-in",
+      "kind": "post",
+      "title": "a mint never takes route IN over its daily limit (or the cap, if lower)",
+      "statement": "After any successful inbound, route IN's minted-today is at most min(its daily limit, maxDailyLimit).",
+      "rationale": "'a daily limit per route and direction, so a hacked bridge can lose at most one day's limit'.",
+      "check": {
+        "functions": [
+          "inbound"
+        ],
+        "expr": "h.inRoute() <= h.inLimit()"
+      }
+    },
+    {
+      "id": "route-limit-out",
+      "kind": "post",
+      "title": "a burn never takes route OUT over its daily limit (or the cap, if lower)",
+      "statement": "After any successful outbound, route OUT's burned-today is at most min(its daily limit, maxDailyLimit).",
+      "rationale": "per-route, per-direction limits.",
+      "check": {
+        "functions": [
+          "outbound"
+        ],
+        "expr": "h.outRoute() <= h.outLimit()"
+      }
+    },
+    {
+      "id": "mint-is-bounded",
+      "kind": "post",
+      "title": "one inbound mints at most the route's limit",
+      "statement": "A successful inbound raises the token's supply by at most the route's daily limit (capped).",
+      "rationale": "the limit is checked before the mint.",
+      "check": {
+        "functions": [
+          "inbound"
+        ],
+        "expr": "h.supply() - old(h.supply()) <= h.inLimit()"
+      }
+    }
+  ]
+}

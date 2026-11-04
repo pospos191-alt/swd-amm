@@ -1,0 +1,278 @@
+{
+  "schema": "zetaphy.spec/1",
+  "target": {
+    "contract": "BuggyVault",
+    "root": "audit/spec/fixtures",
+    "file": "BuggyVault.sol",
+    "project": null,
+    "sourceHash": "0x7448f88190a4409f2e65f3e9126f3a54670fa6095509bb93d0fb44e0fa97d7ee",
+    "solc": "0.8.26+commit.8a97fa7a.Linux.g++"
+  },
+  "drafted": {
+    "by": "zetaphy-spec 1.0.0",
+    "heuristics": true,
+    "llm": null,
+    "docs": []
+  },
+  "harness": {
+    "status": "drafted",
+    "notes": [],
+    "imports": [],
+    "helpers": "",
+    "state": "",
+    "setup": "t = new BuggyVault(address(0x1000));",
+    "actors": [
+      "address(0x1000)",
+      "address(0xA11CE)",
+      "address(0xB0B)"
+    ],
+    "actions": {},
+    "words": {},
+    "bytesWords": {},
+    "views": "",
+    "steps": [
+      "deposit",
+      "withdraw",
+      "emergencyWithdraw",
+      "pause",
+      "unpause",
+      "setGovernance",
+      "warp"
+    ]
+  },
+  "prover": {
+    "depth": 2,
+    "halmos": {
+      "loop": 3,
+      "solverTimeoutMs": 60000,
+      "wallSec": 1800
+    },
+    "forge": {
+      "runs": 256,
+      "depth": 20
+    },
+    "smtchecker": {
+      "engine": "chc",
+      "timeoutMs": 60000,
+      "wallSec": 600
+    }
+  },
+  "properties": [
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-pause",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call pause",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `pause` reverts.",
+      "rationale": "pause (line 50) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "pause",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-unpause",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call unpause",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `unpause` reverts.",
+      "rationale": "unpause (line 55) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "unpause",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setGovernance",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setGovernance",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setGovernance` reverts.",
+      "rationale": "setGovernance (line 60) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setGovernance",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "monotonic-deposits",
+      "kind": "monotonic",
+      "confidence": "medium",
+      "title": "deposits never decreases",
+      "statement": "No call, by anyone, with any arguments, makes `deposits` smaller (it is only ever increased: deposit).",
+      "rationale": "every write of deposits is += or ++.",
+      "scope": "every function that writes deposits, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "check": {
+        "var": "deposits",
+        "functions": [
+          "deposit"
+        ]
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "conservation-balanceOf-totalDeposits",
+      "kind": "conservation",
+      "confidence": "medium",
+      "title": "totalDeposits moves exactly with the balanceOf it sums",
+      "statement": "Every call changes `totalDeposits` by exactly the total change of `balanceOf` over the accounts it touches (the caller and every address argument): nothing is created or lost in between. Transfers leave `totalDeposits` unchanged.",
+      "rationale": "balanceOf and totalDeposits are written together in deposit, withdraw.",
+      "scope": "every function that writes either, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "check": {
+        "map": "balanceOf",
+        "total": "totalDeposits",
+        "functions": [
+          "deposit",
+          "withdraw",
+          "emergencyWithdraw"
+        ]
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "rejected",
+      "id": "conservation-balanceOf-deposits",
+      "kind": "conservation",
+      "confidence": "medium",
+      "title": "deposits moves exactly with the balanceOf it sums",
+      "statement": "Every call changes `deposits` by exactly the total change of `balanceOf` over the accounts it touches (the caller and every address argument): nothing is created or lost in between. Transfers leave `deposits` unchanged.",
+      "rationale": "balanceOf and deposits are written together in deposit.",
+      "scope": "every function that writes either, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "check": {
+        "map": "balanceOf",
+        "total": "deposits",
+        "functions": [
+          "deposit",
+          "withdraw",
+          "emergencyWithdraw"
+        ]
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "backing-totalDeposits",
+      "kind": "invariant",
+      "pattern": "backing",
+      "confidence": "high",
+      "title": "the contract always holds at least totalDeposits in ETH",
+      "statement": "After any sequence of calls (by anyone, with any arguments), the contract's ETH balance is at least `totalDeposits`: what it owes is always backed (deposit add, withdraw pay out).",
+      "rationale": "totalDeposits grows in payable deposit and shrinks where ETH is sent (withdraw).",
+      "scope": "bounded: every sequence of prover.depth calls over harness.steps from the setup state (Halmos); unbounded where the SMTChecker proves it; fuzzed by forge",
+      "check": {
+        "expr": "address(t).balance >= t.totalDeposits()"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "pause-noloss",
+      "kind": "pause-noloss",
+      "confidence": "high",
+      "title": "pausing loses nothing",
+      "statement": "`pause` and `unpause` change no balance and no public state except `paused`: the contract's ETH and every public number, address and flag are the same before and after.",
+      "rationale": "pause writes paused.",
+      "scope": "from any state reachable in prover.depth-1 steps; public no-argument getters and the ETH balance (mappings are covered by the AST fact that pause writes only the flag)",
+      "check": {
+        "pause": "pause",
+        "unpause": "unpause",
+        "by": "governance",
+        "unpauseBy": "governance",
+        "flag": "paused"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "paused-blocks-deposit",
+      "kind": "paused-blocks",
+      "confidence": "high",
+      "title": "deposit is stopped while paused",
+      "statement": "Once `pause` ran, `deposit` reverts for every caller and argument.",
+      "rationale": "deposit reverts on paused.",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "check": {
+        "function": "deposit",
+        "pause": "pause",
+        "by": "governance"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "cei-withdraw",
+      "kind": "cei",
+      "confidence": "high",
+      "title": "withdraw: no storage write after an external call",
+      "statement": "`withdraw` makes external calls (call with ETH line 37); every storage write happens before the first call.",
+      "rationale": "a write after an external call lets the callee re-enter while the state is stale (the classic reentrancy pattern).",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "check": {
+        "function": "withdraw"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "cei-emergencyWithdraw",
+      "kind": "cei",
+      "confidence": "high",
+      "title": "emergencyWithdraw: no storage write after an external call",
+      "statement": "`emergencyWithdraw` makes external calls (call with ETH line 46); every storage write happens before the first call.",
+      "rationale": "a write after an external call lets the callee re-enter while the state is stale (the classic reentrancy pattern).",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "check": {
+        "function": "emergencyWithdraw"
+      }
+    }
+  ],
+  "notes": [
+    {
+      "kind": "unguarded",
+      "function": "deposit",
+      "text": "changes balanceOf, totalDeposits, deposits and anyone can call it: intended?"
+    },
+    {
+      "kind": "unguarded",
+      "function": "withdraw",
+      "text": "changes balanceOf, totalDeposits and anyone can call it: intended?"
+    },
+    {
+      "kind": "unguarded",
+      "function": "emergencyWithdraw",
+      "text": "changes balanceOf and anyone can call it: intended?"
+    }
+  ],
+  "approval": {
+    "reviewer": "spec demo (Najaso)",
+    "at": "2026-11-03",
+    "specHash": "0x54dfb5789ef15da9c42229acc413862e73c278e14dee789579f19aee00bd2f85"
+  }
+}

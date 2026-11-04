@@ -145,6 +145,14 @@ property is a **High** finding (`<tool>:property-violated:<dir>:…`).
    of a deployed contract.
 9. **What this does NOT prove**, dated.
 
+## Specs and proofs (SS6)
+
+`audit/spec/cli.js` drafts formal properties of a contract (deterministic heuristics; an LLM step only with
+`ANTHROPIC_API_KEY`), and a reviewer approves them. It then generates Halmos `check_*` tests, SMTChecker targets
+and forge invariants from the approved spec and runs them with the tools above. A missing tool is
+"not-installed", never "proven", and every counterexample is replayed in forge. See
+[docs/future/specs-and-proofs.md](../docs/future/specs-and-proofs.md). It is not a step of `run.sh`.
+
 ## Severity scale
 
 | Severity | Meaning | Examples |

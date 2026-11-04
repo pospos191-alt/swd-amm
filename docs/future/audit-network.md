@@ -23,6 +23,7 @@ and other projects audit ZETAPHY under the same rules. No owner key controls it:
 | CLI `zetaphy audit …`, `zetaphy deploy-audit` | `zetaphy-network/src/auditnetcli.js`, `src/auditnetops.js` |
 | Hub "Audit" tab (8 languages) | `zetaphy-hub/audit.js`, `audit-i18n.js` |
 | Explorer certificate badge (8 languages) | `zetaphy-explorer/src/audit.js` |
+| Invariant firewall and the certificate rule (SS tier: invariants as post-conditions, capped outflows without a live certificate) | [invariant-firewall.md](invariant-firewall.md) |
 | Orders from any chain (EVM, CosmWasm, Solana), badge, check page, directory, GitHub Action | [audit-as-a-service.md](audit-as-a-service.md) |
 | Tests | `zetaphy-network/test/auditnet.test.js` (strictness and abuse), `test/auditnet-e2e.test.js` (end to end through the CLI); `zetaphy-hub/test/audit.test.mjs`, `audit.e2e.mjs`; `zetaphy-explorer/test/unit.test.js`, `explorer.e2e.js` |
 
@@ -263,6 +264,13 @@ The hub's **Audit** tab offers the same in a browser:
 The **explorer** shows a badge ("Audited (ZETAPHY) · Gold · until …") on the address and token pages when
 `auditCertificate` is set in its config.
 
+## Proven: on top of Gold
+
+`ProofRegistry` adds a **Proven** level without changing AuditCertificate: `levelOf(chainId, address)` reads the
+certificate and reports PROVEN (4) when it is a valid Gold certificate whose code hash has a formal proof of an
+approved spec, reproduced by 2 of 3 runners. It also runs a proof market (bounties claimed by proof or by an
+on-chain replayed counterexample). See [specs-and-proofs.md](specs-and-proofs.md).
+
 ## What is missing
 
 - **Not deployed**: `zetaphy deploy-audit` writes `zetaphy-network/deployments/audit-77390.json`, and the hub
@@ -271,4 +279,4 @@ The **explorer** shows a badge ("Audited (ZETAPHY) · Gold · until …") on the
   test uses the fixture.
 - **Judge pay for post-certificate findings** is not funded (the contest pot is settled by then). Judges
   decide those for reputation.
-- **Not audited**: these contracts have not been through this process, or any other, yet.
+- **Not audited**: these contracts have not been through this process, or any other, yet. The self-audit is scripted and tested ([immune-score.md](immune-score.md), SS8): their four requests, certificates, a CI check that is OFF until the testnet record exists, and Foundry invariants for them.

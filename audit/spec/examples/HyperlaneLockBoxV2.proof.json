@@ -1,0 +1,387 @@
+{
+  "schema": "zetaphy.proof/1",
+  "by": "zetaphy-spec 1.0.0",
+  "contract": "HyperlaneLockBoxV2",
+  "file": "zetaphy-network/contracts/HyperlaneLockBoxV2.sol",
+  "specHash": "0x1542bbf1088ba970120ba87651798d515a93477b641ef7b2cb9b5e555172e35a",
+  "sourceHash": "0x1857f9672e961ca191bd4239aa21309a98491e31757d733494b0073e4af27ed8",
+  "runtimeHash": "0x0b5fcba7686e79c2b5c396da9cc5b33f50e64521c6a5de0e02271ab20cbd9b1e",
+  "codeMatch": null,
+  "tools": {
+    "forge": "1.2.3-v1.2.3",
+    "halmos": "0.3.3",
+    "solc": "0.8.26+commit.8a97fa7a.Linux.g++"
+  },
+  "artifacts": [
+    {
+      "path": "test/Spec.t.sol",
+      "hash": "0x2882ca10a6339a60636c26db1ce10f57ba1a98774a4a6500e4789d7e30074310"
+    },
+    {
+      "path": "smt/SpecSMT.sol",
+      "hash": "0x13afeaad4cfaa0ee582d9a4eaf6dff93061902648ef4bac7899ed93666291778"
+    }
+  ],
+  "artifactsHash": "0x4277bc50568230f0cc507f31c7f00f7d4558b7e240cfd1a2064e7c78e662d359",
+  "recipe": {
+    "install": "bash audit/tools/install.sh <dir> fast  # forge 1.2.3, halmos 0.3.3 (pip, hashed), solc 0.8.26 (sha256-checked)",
+    "run": "node audit/spec/cli.js prove audit/spec/examples/HyperlaneLockBoxV2.spec.json",
+    "halmos": "halmos --root <work> --contract SpecChecks --loop 3 --solver-timeout-assertion 60000"
+  },
+  "summary": {
+    "properties": 23,
+    "proven": 23,
+    "counterexamples": 0,
+    "unknown": 0,
+    "allProven": true
+  },
+  "properties": [
+    {
+      "id": "access-handle",
+      "kind": "access",
+      "title": "only mailbox can call handle",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_handle",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-pause",
+      "kind": "access",
+      "title": "only governance or a guardian can call pause",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_pause",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-veto",
+      "kind": "access",
+      "title": "only governance or a guardian can call veto",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_veto",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-lowerDailyLimit",
+      "kind": "access",
+      "title": "only governance or a guardian can call lowerDailyLimit",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_lowerDailyLimit",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-raiseReleaseDelay",
+      "kind": "access",
+      "title": "only governance or a guardian can call raiseReleaseDelay",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_raiseReleaseDelay",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-unpause",
+      "kind": "access",
+      "title": "only governance can call unpause",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_unpause",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-liftVeto",
+      "kind": "access",
+      "title": "only governance can call liftVeto",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_liftVeto",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setDailyLimit",
+      "kind": "access",
+      "title": "only governance can call setDailyLimit",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setDailyLimit",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setReleaseDelay",
+      "kind": "access",
+      "title": "only governance can call setReleaseDelay",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setReleaseDelay",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setInterchainSecurityModule",
+      "kind": "access",
+      "title": "only governance can call setInterchainSecurityModule",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setInterchainSecurityModule",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setGuardian",
+      "kind": "access",
+      "title": "only governance can call setGuardian",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setGuardian",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "access-setGovernance",
+      "kind": "access",
+      "title": "only governance can call setGovernance",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_access_setGovernance",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "monotonic-nonce",
+      "kind": "monotonic",
+      "title": "nonce never decreases",
+      "scope": "every function that writes nonce, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_monotonic_nonce__lock",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "monotonic-received",
+      "kind": "monotonic",
+      "title": "received never decreases",
+      "scope": "every function that writes received, any caller and arguments, from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_monotonic_received__handle",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "backing-locked",
+      "kind": "invariant",
+      "title": "the contract always holds at least locked in ETH",
+      "scope": "bounded: every sequence of prover.depth calls over harness.steps from the setup state (Halmos); unbounded where the SMTChecker proves it; fuzzed by forge",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_backing_locked",
+          "status": "proven"
+        },
+        {
+          "tool": "forge",
+          "status": "fuzz-passed",
+          "detail": "no violation in 256 runs x depth 20"
+        },
+        {
+          "tool": "smtchecker",
+          "status": "timeout"
+        }
+      ]
+    },
+    {
+      "id": "pause-noloss",
+      "kind": "pause-noloss",
+      "title": "pausing loses nothing",
+      "scope": "from any state reachable in prover.depth-1 steps; public no-argument getters and the ETH balance (mappings are covered by the AST fact that pause writes only the flag)",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_pause_noloss",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "paused-blocks-lock",
+      "kind": "paused-blocks",
+      "title": "lock is stopped while paused",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_paused_blocks_lock",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "paused-blocks-claim",
+      "kind": "paused-blocks",
+      "title": "claim is stopped while paused",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_paused_blocks_claim",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "cei-lock",
+      "kind": "cei",
+      "title": "lock: no storage write after an external call",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "spec-ast",
+          "status": "proven",
+          "detail": "no storage write after the first external call"
+        }
+      ]
+    },
+    {
+      "id": "cei-claim",
+      "kind": "cei",
+      "title": "claim: no storage write after an external call",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "spec-ast",
+          "status": "proven",
+          "detail": "no storage write after the first external call"
+        }
+      ]
+    },
+    {
+      "id": "locked-never-below-releases",
+      "kind": "invariant",
+      "title": "releases never exceed locks, and locked is exactly locks minus releases",
+      "scope": "bounded: every sequence of 2 calls over lock, handle (any message), claim, pause, veto from the setup state (5 ETH locked) (Halmos); fuzzed by forge",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_locked_never_below_releases",
+          "status": "proven"
+        },
+        {
+          "tool": "forge",
+          "status": "fuzz-passed",
+          "detail": "no violation in 256 runs x depth 20"
+        }
+      ]
+    },
+    {
+      "id": "daily-limit",
+      "kind": "post",
+      "title": "a claim never takes the day's releases over the daily limit",
+      "scope": "any caller and claim, after any 1 call from the setup state (Halmos)",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_daily_limit__claim",
+          "status": "proven"
+        }
+      ]
+    },
+    {
+      "id": "claim-pays-from-locked",
+      "kind": "post",
+      "title": "a claim reduces locked by exactly the ETH that left",
+      "scope": "any caller and claim, after any 1 call from the setup state (Halmos)",
+      "status": "proven",
+      "by": [
+        {
+          "tool": "halmos",
+          "check": "check_claim_pays_from_locked__claim",
+          "status": "proven"
+        }
+      ]
+    }
+  ],
+  "resultHash": "0xfb3b859c11dc061a6466efff0632a69f9d3bdd737ea3809d396dc4624e1fb91d",
+  "runs": {
+    "build": {
+      "status": "ok"
+    },
+    "halmos": {
+      "code": 0,
+      "timedOut": false
+    }
+  },
+  "recipeHash": "0xb8cd67093c69b9de44922aa07be946320a4b87e8cae1d8495a251e7ba93ce292"
+}

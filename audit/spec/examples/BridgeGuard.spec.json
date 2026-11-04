@@ -1,0 +1,573 @@
+{
+  "schema": "zetaphy.spec/1",
+  "target": {
+    "contract": "BridgeGuard",
+    "root": "zetaphy-network",
+    "file": "contracts/BridgeGuard.sol",
+    "project": "zetaphy-network",
+    "sourceHash": "0xdfcdf6edd9ab2bf501327a82e8ecf54eebe85c1e397ed5130f1c6a66e727970b",
+    "solc": "0.8.26+commit.8a97fa7a.Linux.g++"
+  },
+  "drafted": {
+    "by": "zetaphy-spec 1.0.0",
+    "heuristics": true,
+    "llm": null,
+    "docs": [],
+    "review": "audit/spec/examples/review/BridgeGuard.review.json"
+  },
+  "harness": {
+    "status": "reviewed",
+    "notes": [
+      "reviewed: SpecAirlock stands in for BridgeAirlock (independentLanes() = 2); the hard cap is the starter 1000 tokens, route IN 600/day, route OUT 400/day",
+      "inbound / outbound actions pick a route (IN or OUT) and a receiver among the actors, so the fuzzer reaches the limits too",
+      "SpecThreats stands in for ThreatRegistry: the setup holds 0xA11CE and queues one held mint of 1 token to it (held[0]); the `unhold` step clears a hold, so releaseHeld can succeed (without it releaseHeld always reverted and its checks were vacuous: found by a deliberately false property)"
+    ],
+    "imports": [],
+    "helpers": "/// Stands in for a BridgeAirlock with two independent lanes (all the guard asks of an adapter).\ncontract SpecAirlock {\n    function independentLanes() external pure returns (uint256) { return 2; }\n}\n/// Stands in for ThreatRegistry's hold view: a flag per address, set by the harness.\ncontract SpecThreats {\n    mapping(address => bool) public held;\n    function set(address a, bool v) external { held[a] = v; }\n    function isContractHeld(address a) external view returns (bool, uint8) { return (held[a], 1); }\n}",
+    "state": "SpecAirlock public inAdapter;\nSpecAirlock public outAdapter;\nbytes32 public constant IN = keccak256(\"route in\");\nbytes32 public constant OUT = keccak256(\"route out\");\nSpecThreats public threats;",
+    "setup": "t = new BridgeGuard(address(this));\nt.createToken(\"Bridged ETH\", \"bETH\", 18);\nt.setAudit(\"https://example.org/audit.pdf\", bytes32(uint256(1)));\ninAdapter = new SpecAirlock();\noutAdapter = new SpecAirlock();\nt.setRoute(IN, address(inAdapter), 600 ether, true);\nt.setOutboundRoute(OUT, address(outAdapter), 400 ether, true);\nthreats = new SpecThreats();\nt.setThreats(IContractThreats(address(threats)));\nthreats.set(address(0xA11CE), true);\nvm.prank(address(inAdapter));\nt.inbound(IN, address(0xA11CE), 1 ether); // queued: held[0]\nt.setGuardian(address(0x6A2D), true);\nt.setGovernance(address(0x6070));",
+    "actors": [
+      "address(0x6070)",
+      "address(0x6A2D)",
+      "address(inAdapter)",
+      "address(outAdapter)",
+      "address(0xA11CE)"
+    ],
+    "actions": {
+      "inbound": "bytes32 id = a[0] & 1 == 0 ? IN : OUT;\nvm.prank(caller);\ntry t.inbound(id, actor(a[1]), uint256(uint128(a[2]))) { ok = true; } catch { ok = false; }",
+      "outbound": "bytes32 id = a[0] & 1 == 0 ? OUT : IN;\nvm.prank(caller);\ntry t.outbound(id, actor(a[1]), uint256(uint128(a[2]))) { ok = true; } catch { ok = false; }",
+      "unhold": "threats.set(actor(a[0]), false);\nok = true;"
+    },
+    "words": {
+      "inbound": 3,
+      "outbound": 3,
+      "unhold": 1
+    },
+    "bytesWords": {},
+    "views": "function inToday(bytes32 id) public view returns (uint256 i) { (, , uint128 x, , uint64 day, ) = t.routes(id); i = day == block.timestamp / 1 days ? x : 0; }\nfunction outToday(bytes32 id) public view returns (uint256 o) { (, , , uint128 x, uint64 day, ) = t.routes(id); o = day == block.timestamp / 1 days ? x : 0; }\nfunction limitOf(bytes32 id) public view returns (uint256) { (, uint128 l, , , , ) = t.routes(id); return l < t.maxDailyLimit() ? l : t.maxDailyLimit(); }\nfunction inRoute() external view returns (uint256) { return inToday(IN); }\nfunction outRoute() external view returns (uint256) { return outToday(OUT); }\nfunction inLimit() external view returns (uint256) { return limitOf(IN); }\nfunction outLimit() external view returns (uint256) { return limitOf(OUT); }\nfunction supply() external view returns (uint256) { return t.token().totalSupply(); }",
+    "steps": [
+      "inbound",
+      "outbound",
+      "releaseHeld",
+      "unhold",
+      "pause",
+      "unpause",
+      "lowerMaxDailyLimit",
+      "disableRoute",
+      "warp"
+    ]
+  },
+  "prover": {
+    "depth": 2,
+    "halmos": {
+      "loop": 3,
+      "solverTimeoutMs": 60000,
+      "wallSec": 1800
+    },
+    "forge": {
+      "runs": 256,
+      "depth": 20
+    },
+    "smtchecker": {
+      "engine": "chc",
+      "timeoutMs": 60000,
+      "wallSec": 600
+    }
+  },
+  "properties": [
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-createToken",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call createToken",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `createToken` reverts.",
+      "rationale": "createToken (line 180) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "createToken",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setGovernance",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setGovernance",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setGovernance` reverts.",
+      "rationale": "setGovernance (line 192) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setGovernance",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setGuardian",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setGuardian",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setGuardian` reverts.",
+      "rationale": "setGuardian (line 193) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setGuardian",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setAudit",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setAudit",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setAudit` reverts.",
+      "rationale": "setAudit (line 213) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setAudit",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-proposeMaxDailyLimit",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call proposeMaxDailyLimit",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `proposeMaxDailyLimit` reverts.",
+      "rationale": "proposeMaxDailyLimit (line 225) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "proposeMaxDailyLimit",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-cancelMaxDailyLimit",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance or a guardian can call cancelMaxDailyLimit",
+      "statement": "For every caller that is not `governance()` and not in `guardian`, and for all arguments (and any ETH sent), `cancelMaxDailyLimit` reverts.",
+      "rationale": "cancelMaxDailyLimit (line 253) reverts on a comparison of msg.sender with governance, guardian.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "cancelMaxDailyLimit",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": [
+            "guardian"
+          ]
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-lowerMaxDailyLimit",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance or a guardian can call lowerMaxDailyLimit",
+      "statement": "For every caller that is not `governance()` and not in `guardian`, and for all arguments (and any ETH sent), `lowerMaxDailyLimit` reverts.",
+      "rationale": "lowerMaxDailyLimit (line 267) reverts on a comparison of msg.sender with governance, guardian.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "lowerMaxDailyLimit",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": [
+            "guardian"
+          ]
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-disableRoute",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance or a guardian can call disableRoute",
+      "statement": "For every caller that is not `governance()` and not in `guardian`, and for all arguments (and any ETH sent), `disableRoute` reverts.",
+      "rationale": "disableRoute (line 278) reverts on a comparison of msg.sender with governance, guardian.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "disableRoute",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": [
+            "guardian"
+          ]
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setThreats",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setThreats",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setThreats` reverts.",
+      "rationale": "setThreats (line 289) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setThreats",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setRoute",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setRoute",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setRoute` reverts.",
+      "rationale": "setRoute (line 294) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setRoute",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-setOutboundRoute",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call setOutboundRoute",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `setOutboundRoute` reverts.",
+      "rationale": "setOutboundRoute (line 312) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "setOutboundRoute",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-pause",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance or a guardian can call pause",
+      "statement": "For every caller that is not `governance()` and not in `guardian`, and for all arguments (and any ETH sent), `pause` reverts.",
+      "rationale": "pause (line 331) reverts on a comparison of msg.sender with governance, guardian.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "pause",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": [
+            "guardian"
+          ]
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-unpause",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call unpause",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `unpause` reverts.",
+      "rationale": "unpause (line 338) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "unpause",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "access-dropHeld",
+      "kind": "access",
+      "confidence": "high",
+      "title": "only governance can call dropHeld",
+      "statement": "For every caller that is not `governance()`, and for all arguments (and any ETH sent), `dropHeld` reverts.",
+      "rationale": "dropHeld (line 380) reverts on a comparison of msg.sender with governance.",
+      "scope": "all callers outside the set, all arguments, from the setup state",
+      "check": {
+        "function": "dropHeld",
+        "authorized": {
+          "eq": [
+            "governance"
+          ],
+          "map": []
+        }
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "pause-noloss",
+      "kind": "pause-noloss",
+      "confidence": "high",
+      "title": "pausing loses nothing",
+      "statement": "`pause` and `unpause` change no balance and no public state except `paused`: the contract's ETH and every public number, address and flag are the same before and after.",
+      "rationale": "pause writes paused.",
+      "scope": "from any state reachable in prover.depth-1 steps; public no-argument getters and the ETH balance (mappings are covered by the AST fact that pause writes only the flag)",
+      "check": {
+        "pause": "pause",
+        "unpause": "unpause",
+        "by": "governance",
+        "unpauseBy": "governance",
+        "flag": "paused"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "paused-blocks-inbound",
+      "kind": "paused-blocks",
+      "confidence": "high",
+      "title": "inbound is stopped while paused",
+      "statement": "Once `pause` ran, `inbound` reverts for every caller and argument.",
+      "rationale": "inbound reverts on paused.",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "check": {
+        "function": "inbound",
+        "pause": "pause",
+        "by": "governance"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "paused-blocks-releaseHeld",
+      "kind": "paused-blocks",
+      "confidence": "high",
+      "title": "releaseHeld is stopped while paused",
+      "statement": "Once `pause` ran, `releaseHeld` reverts for every caller and argument.",
+      "rationale": "releaseHeld reverts on paused.",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "check": {
+        "function": "releaseHeld",
+        "pause": "pause",
+        "by": "governance"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "paused-blocks-outbound",
+      "kind": "paused-blocks",
+      "confidence": "high",
+      "title": "outbound is stopped while paused",
+      "statement": "Once `pause` ran, `outbound` reverts for every caller and argument.",
+      "rationale": "outbound reverts on paused.",
+      "scope": "any caller and arguments, after a pause from any state reachable in prover.depth-1 steps",
+      "check": {
+        "function": "outbound",
+        "pause": "pause",
+        "by": "governance"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "cei-inbound",
+      "kind": "cei",
+      "confidence": "high",
+      "title": "inbound: no storage write after an external call",
+      "statement": "`inbound` makes external calls (mint line 354); every storage write happens before the first call.",
+      "rationale": "a write after an external call lets the callee re-enter while the state is stale (the classic reentrancy pattern).",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "check": {
+        "function": "inbound"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "cei-releaseHeld",
+      "kind": "cei",
+      "confidence": "high",
+      "title": "releaseHeld: no storage write after an external call",
+      "statement": "`releaseHeld` makes external calls (mint line 374); every storage write happens before the first call.",
+      "rationale": "a write after an external call lets the callee re-enter while the state is stale (the classic reentrancy pattern).",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "check": {
+        "function": "releaseHeld"
+      }
+    },
+    {
+      "origin": "heuristic",
+      "status": "approved",
+      "id": "cei-outbound",
+      "kind": "cei",
+      "confidence": "high",
+      "title": "outbound: no storage write after an external call",
+      "statement": "`outbound` makes external calls (burn line 395); every storage write happens before the first call.",
+      "rationale": "a write after an external call lets the callee re-enter while the state is stale (the classic reentrancy pattern).",
+      "scope": "static: the solc AST of the function, its modifiers and the internal functions it calls",
+      "check": {
+        "function": "outbound"
+      }
+    },
+    {
+      "origin": "human",
+      "status": "approved",
+      "confidence": "reviewer",
+      "id": "cap-in",
+      "kind": "post",
+      "title": "no mint takes the day's inbound total over the hard cap",
+      "statement": "After any successful inbound or releaseHeld, `totalInToday` is at most `maxDailyLimit`: all routes together never mint more than the hard cap in a day.",
+      "rationale": "BridgeGuard header: 'a hard cap, maxDailyLimit, over every route's daily limit and over all routes together per day'.",
+      "check": {
+        "functions": [
+          "inbound",
+          "releaseHeld"
+        ],
+        "expr": "t.totalInToday() <= t.maxDailyLimit()"
+      }
+    },
+    {
+      "origin": "human",
+      "status": "approved",
+      "confidence": "reviewer",
+      "id": "cap-out",
+      "kind": "post",
+      "title": "no burn takes the day's outbound total over the hard cap",
+      "statement": "After any successful outbound, `totalOutToday` is at most `maxDailyLimit`.",
+      "rationale": "the hard cap binds both directions.",
+      "check": {
+        "functions": [
+          "outbound"
+        ],
+        "expr": "t.totalOutToday() <= t.maxDailyLimit()"
+      }
+    },
+    {
+      "origin": "human",
+      "status": "approved",
+      "confidence": "reviewer",
+      "id": "route-limit-in",
+      "kind": "post",
+      "title": "a mint never takes route IN over its daily limit (or the cap, if lower)",
+      "statement": "After any successful inbound, route IN's minted-today is at most min(its daily limit, maxDailyLimit).",
+      "rationale": "'a daily limit per route and direction, so a hacked bridge can lose at most one day's limit'.",
+      "check": {
+        "functions": [
+          "inbound"
+        ],
+        "expr": "h.inRoute() <= h.inLimit()"
+      }
+    },
+    {
+      "origin": "human",
+      "status": "approved",
+      "confidence": "reviewer",
+      "id": "route-limit-out",
+      "kind": "post",
+      "title": "a burn never takes route OUT over its daily limit (or the cap, if lower)",
+      "statement": "After any successful outbound, route OUT's burned-today is at most min(its daily limit, maxDailyLimit).",
+      "rationale": "per-route, per-direction limits.",
+      "check": {
+        "functions": [
+          "outbound"
+        ],
+        "expr": "h.outRoute() <= h.outLimit()"
+      }
+    },
+    {
+      "origin": "human",
+      "status": "approved",
+      "confidence": "reviewer",
+      "id": "mint-is-bounded",
+      "kind": "post",
+      "title": "one inbound mints at most the route's limit",
+      "statement": "A successful inbound raises the token's supply by at most the route's daily limit (capped).",
+      "rationale": "the limit is checked before the mint.",
+      "check": {
+        "functions": [
+          "inbound"
+        ],
+        "expr": "h.supply() - old(h.supply()) <= h.inLimit()"
+      }
+    }
+  ],
+  "notes": [
+    {
+      "kind": "unguarded",
+      "function": "applyMaxDailyLimit",
+      "text": "changes maxDailyLimit, pendingMaxAt, pendingMaxDailyLimit, restoreMaxDailyLimit and anyone can call it: intended?"
+    },
+    {
+      "kind": "unguarded",
+      "function": "releaseHeld",
+      "text": "changes routes, totalDay, totalInToday, totalOutToday, held and anyone can call it: intended?"
+    }
+  ],
+  "approval": {
+    "reviewer": "spec demo (Najaso)",
+    "at": "2026-11-03",
+    "specHash": "0x3b2304ae07b3b33e437b22ef02e0ed645e24e4c20d655ec6a5cd032e3db0509f"
+  }
+}

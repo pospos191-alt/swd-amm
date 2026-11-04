@@ -1,0 +1,140 @@
+{
+  "_comment": "Reviewer input for the HyperlaneLockBoxV2 spec (node audit/spec/cli.js draft ... --with this file). The harness wires the real contract to the repo's MockMailbox and an ISM that accepts EVERY message: every release message is modelled as forged-but-verified, so the backing properties hold even if our validators were all compromised. Release delay 0, and the setup already locks 5 ETH from 0xB0B, so a forged message followed by a claim fits in 2 steps (depth 3 did not finish in 30 minutes).",
+  "harness": {
+    "notes": [
+      "reviewed: MockMailbox (contracts/MockMailbox.sol, fee 0) and SpecIsm, which accepts every message (the worst case: any release message, any receiver, any amount)",
+      "the handler records every successful lock amount and every successful claim amount (sumLocked / sumReleased)",
+      "release delay 0 so a release can be claimed in the step after its message; the daily limit is 10 ETH; the setup locks 5 ETH from 0xB0B (counted in sumLocked)"
+    ],
+    "imports": [
+      "contracts/MockMailbox.sol"
+    ],
+    "helpers": [
+      "/// An ISM that accepts every message: the worst case for the lockbox's own checks.",
+      "contract SpecIsm {",
+      "    function moduleType() external pure returns (uint8) { return 5; }",
+      "    function verify(bytes calldata, bytes calldata) external pure returns (bool) { return true; }",
+      "}"
+    ],
+    "state": [
+      "MockMailbox public mailbox;",
+      "bytes32 public constant OUTBOX = bytes32(uint256(0x0b0b));",
+      "uint256 public sumLocked;",
+      "uint256 public sumReleased;",
+      "bytes32[] public ids;"
+    ],
+    "setup": [
+      "mailbox = new MockMailbox(11155111);",
+      "t = new HyperlaneLockBoxV2(ISaphanMailbox(address(mailbox)), 77390, 77390, bytes32(uint256(0x1a2e)), OUTBOX, address(0),",
+      "    ISaphanIsm(address(new SpecIsm())), address(0x6070), address(0x6A2D), 10 ether, 0);",
+      "vm.deal(address(this), 5 ether);",
+      "t.lock{value: 5 ether}(address(0xB0B), 5 ether);",
+      "sumLocked = 5 ether;"
+    ],
+    "actors": [
+      "address(0x6070)",
+      "address(0x6A2D)",
+      "address(0xA11CE)",
+      "address(0xB0B)"
+    ],
+    "actions": {
+      "lock": [
+        "ok = call_lock(caller, a);",
+        "if (ok) sumLocked += a[2];"
+      ],
+      "handle": [
+        "// any release message the (all-accepting) ISM lets through: any nonce, sender, receiver and amount",
+        "bytes memory b = abi.encode(uint256(77390), address(uint160(uint256(OUTBOX))), a[0], address(uint160(a[1])), address(uint160(a[2])),",
+        "    uint256(uint96(a[3])), block.chainid, address(t));",
+        "vm.prank(address(mailbox));",
+        "try t.handle(77390, OUTBOX, b) { ok = true; ids.push(keccak256(b)); } catch { ok = false; }"
+      ],
+      "claim": [
+        "if (ids.length == 0) return false;",
+        "bytes32 id = ids[a[0] % ids.length];",
+        "(, , , , uint256 amount) = t.releases(id);",
+        "vm.prank(caller);",
+        "try t.claim(id) { ok = true; sumReleased += amount; } catch { ok = false; }"
+      ],
+      "veto": [
+        "if (ids.length == 0) return false;",
+        "vm.prank(caller);",
+        "try t.veto(ids[a[0] % ids.length]) { ok = true; } catch { ok = false; }"
+      ]
+    },
+    "words": {
+      "lock": 3,
+      "handle": 4,
+      "claim": 1,
+      "veto": 1
+    },
+    "bytesWords": {
+      "handle": 8
+    },
+    "views": [
+      "function released() external view returns (uint256) { return sumReleased; }",
+      "function lockedTotal() external view returns (uint256) { return sumLocked; }"
+    ],
+    "steps": [
+      "lock",
+      "handle",
+      "claim",
+      "pause",
+      "veto"
+    ]
+  },
+  "prover": {
+    "depth": 2,
+    "halmos": {
+      "loop": 3,
+      "solverTimeoutMs": 60000,
+      "wallSec": 5400
+    },
+    "smtchecker": {
+      "engine": "chc",
+      "timeoutMs": 30000,
+      "wallSec": 300
+    }
+  },
+  "properties": [
+    {
+      "id": "locked-never-below-releases",
+      "kind": "invariant",
+      "title": "releases never exceed locks, and locked is exactly locks minus releases",
+      "statement": "After any sequence of locks, release messages (forged or not: the ISM here accepts everything), claims, pauses and vetoes, the ETH paid out by claims is at most the ETH locked, and `locked` equals locked minus paid. Even a compromised ISM can only release this route's own deposits.",
+      "rationale": "HyperlaneLockBoxV2's header: 'within what this contract holds for locks (`locked`: locks minus releases), so even a forged message can never take more than this route's own deposits'.",
+      "scope": "bounded: every sequence of 2 calls over lock, handle (any message), claim, pause, veto from the setup state (5 ETH locked) (Halmos); fuzzed by forge",
+      "check": {
+        "expr": "h.released() <= h.lockedTotal() && t.locked() == h.lockedTotal() - h.released()"
+      }
+    },
+    {
+      "id": "daily-limit",
+      "kind": "post",
+      "title": "a claim never takes the day's releases over the daily limit",
+      "statement": "After any successful claim, `releasedToday` is at most `dailyLimit`.",
+      "rationale": "claim reverts with OverLimit when releasedToday + amount > dailyLimit.",
+      "scope": "any caller and claim, after any 1 call from the setup state (Halmos)",
+      "check": {
+        "functions": [
+          "claim"
+        ],
+        "expr": "t.releasedToday() <= t.dailyLimit()"
+      }
+    },
+    {
+      "id": "claim-pays-from-locked",
+      "kind": "post",
+      "title": "a claim reduces locked by exactly the ETH that left",
+      "statement": "After any successful claim, `locked` went down by exactly as much as the contract's ETH balance.",
+      "rationale": "claim: locked -= amount, then pays amount.",
+      "scope": "any caller and claim, after any 1 call from the setup state (Halmos)",
+      "check": {
+        "functions": [
+          "claim"
+        ],
+        "expr": "old(t.locked()) - t.locked() == old(address(t).balance) - address(t).balance"
+      }
+    }
+  ]
+}

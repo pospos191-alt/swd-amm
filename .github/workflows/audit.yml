@@ -95,6 +95,9 @@ jobs:
           grep -v '^PATH=' "$RUNNER_TEMP/audit-env" >> "$GITHUB_ENV"
 
       - name: Test the pipeline itself (report.js, triage matching)
+        env:
+          # the pinned solc (0.8.26, SHA-256 checked by install.sh), not the venv's solc-select shim that PATH finds first
+          SOLC: ${{ runner.temp }}/audit-tools/bin/solc
         run: node --test audit/test/*.test.js
 
       - name: Project dependencies (mutation testing runs the projects' own tests)

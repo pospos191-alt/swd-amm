@@ -2024,3 +2024,13 @@ findings:
     reason: "transferFrom(t.from) runs only after t.from's EIP-712 signature over the whole transfer (low-s) and a single-use nonce: nobody can pull from an address that did not sign. Same pattern as the triaged ZetaphyOfflineOrders."
     decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #114 triage by reading the code)
     date: 2026-11-04
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/EconomicBounds.sol:f2c80bd79209
+    status: false-positive
+    reason: "EconomicBounds.withdraw pays owed[msg.sender] to msg.sender only, zeroed before the call with nothing written after it (a re-entering call finds 0); a failed send reverts. Pull payout, as the triaged AuditNetwork / AuditRunners withdraws."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #115 triage by reading the code)
+    date: 2026-11-04
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/ExploitMarket.sol:1cd0889d5b1e
+    status: false-positive
+    reason: "ExploitMarket.withdraw pays owed[msg.sender] to msg.sender only, zeroed before the call with nothing written after it; a failed send reverts. Pull payout, as the triaged AuditNetwork / AuditRunners withdraws."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #115 triage by reading the code)
+    date: 2026-11-04
