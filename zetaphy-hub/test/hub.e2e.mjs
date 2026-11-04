@@ -134,7 +134,8 @@ test('the hub: tabs, one screen, hover text, embedded apps, stake and vote', { t
     await page.click('#sp-gw summary');
     assert.match(await page.textContent('#sp-gw'), /depositAndCall[\s\S]*withdrawAndCall[\s\S]*go back to you automatically[\s\S]*no gas coin on the other chain/);
     assert.equal(await page.locator('#sp-gw-routes tr').count(), 3);
-    assert.match(await page.textContent('#sp-gw-routes'), /Sepolia[\s\S]*not deployed yet[\s\S]*Base Sepolia[\s\S]*Arbitrum Sepolia/);
+    // sepolia's Gateway is deployed (2026-11-04): both its addresses; the other two routes: not deployed yet
+    assert.match(await page.textContent('#sp-gw-routes'), /Sepolia\s*on ZETAPHY 0xf9A12b…C25609 · on Sepolia 0x6a2605…1D0Ed8\s*Base Sepolia\s*Gateway not deployed yet\s*Arbitrum Sepolia\s*Gateway not deployed yet/);
     await shot('saphan-gateway');
     await page.click('#sp-gw summary');
     await page.click('#sp-go'); // connect first: the site-wide wallet dialog

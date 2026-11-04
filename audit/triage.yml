@@ -1974,3 +1974,18 @@ findings:
     reason: "SaphanProvableOutbox.send, its only payable function, requires msg.value to equal outbox.quoteSend exactly and forwards that fee to the outbox in the same call; there is no receive or fallback (a refund from the outbox would revert the call), so no ether stays in the contract. Same pattern as the triaged SaphanCheckpointer."
     decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #112 triage by reading the code)
     date: 2026-11-04
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/SaphanIntents.sol:7300a78034f4
+    status: false-positive
+    reason: "SaphanIntents.withdrawBonds pays bonds[msg.sender] to msg.sender only, after zeroing it, under nonReentrant (a failed send reverts): the standard pull payout, as in the triaged SaphanChallenges.claim."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #113 triage by reading the code)
+    date: 2026-11-04
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/SaphanReads.sol:913d90b7e5a2
+    status: false-positive
+    reason: "SaphanReads.claim pays credit[msg.sender] (collected bounties or a cancelled request's refund) to msg.sender only, after zeroing it, under nonReentrant: the standard pull payout."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #113 triage by reading the code)
+    date: 2026-11-04
+  - id: aderyn:contract-locks-ether:zetaphy-network/contracts/SaphanReads.sol:e7910306d77e
+    status: false-positive
+    reason: "SaphanReadResponder.answer, its only payable function, requires msg.value to equal the Mailbox quote exactly and forwards that fee in the same call; there is no receive or fallback, so no ether stays in the contract. Same pattern as the triaged SaphanCheckpointer and SaphanProvableOutbox."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #113 triage by reading the code)
+    date: 2026-11-04
