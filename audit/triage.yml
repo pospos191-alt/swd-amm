@@ -1989,3 +1989,38 @@ findings:
     reason: "SaphanReadResponder.answer, its only payable function, requires msg.value to equal the Mailbox quote exactly and forwards that fee in the same call; there is no receive or fallback, so no ether stays in the contract. Same pattern as the triaged SaphanCheckpointer and SaphanProvableOutbox."
     decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #113 triage by reading the code)
     date: 2026-11-04
+  - id: aderyn:eth-send-unchecked-address:zetaphy-network/contracts/SaphanBitVM.sol:de64f71f2db2
+    status: false-positive
+    reason: "SaphanBtcWithdrawals.withdraw pays owedNative/owedToken of msg.sender to msg.sender only, both zeroed first, under nonReentrant: the standard pull payout."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #114 triage by reading the code)
+    date: 2026-11-04
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/SaphanPrivacy.sol:2a367d2cb05d
+    status: false-positive
+    reason: "the external call before these writes is poseidon.poseidon, a pure hash on the immutable PoseidonT3 set in the constructor (no state, cannot call back); deposit is nonReentrant and pulls the token last. Same pattern as the triaged ZkIdentityRegistry / PrivateAirdrop entries."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #114 triage by reading the code)
+    date: 2026-11-04
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/SaphanPrivacy.sol:b32e63864b69
+    status: false-positive
+    reason: "the external call before these writes is poseidon.poseidon, a pure hash on the immutable PoseidonT3 set in the constructor (no state, cannot call back); deposit is nonReentrant and pulls the token last. Same pattern as the triaged ZkIdentityRegistry / PrivateAirdrop entries."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #114 triage by reading the code)
+    date: 2026-11-04
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/SaphanPrivacy.sol:6132c89ca3c8
+    status: false-positive
+    reason: "the external call before these writes is poseidon.poseidon, a pure hash on the immutable PoseidonT3 set in the constructor (no state, cannot call back); deposit is nonReentrant and pulls the token last. Same pattern as the triaged ZkIdentityRegistry / PrivateAirdrop entries."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #114 triage by reading the code)
+    date: 2026-11-04
+  - id: aderyn:reentrancy-state-change:zetaphy-network/contracts/SaphanPrivacy.sol:d4fcb99a1b82
+    status: false-positive
+    reason: "the external call before these writes is poseidon.poseidon, a pure hash on the immutable PoseidonT3 set in the constructor (no state, cannot call back); deposit is nonReentrant and pulls the token last. Same pattern as the triaged ZkIdentityRegistry / PrivateAirdrop entries."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #114 triage by reading the code)
+    date: 2026-11-04
+  - id: slither:arbitrary-send-eth:zetaphy-network/contracts/SaphanOffline.sol:daddf1e7133d
+    status: false-positive
+    reason: "SaphanOfflineTransfers.relay forwards exactly outbox.quoteSend from the relayer's own msg.value to the outbox named in the signed transfer and returns change to msg.sender; the contract holds no ether (no receive). A relayer pays the quote of the signer's chosen outbox, capped by its own msg.value, so relayers should simulate first."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #114 triage by reading the code)
+    date: 2026-11-04
+  - id: slither:arbitrary-send-erc20:zetaphy-network/contracts/SaphanOffline.sol:5d4b3e148178
+    status: false-positive
+    reason: "transferFrom(t.from) runs only after t.from's EIP-712 signature over the whole transfer (low-s) and a single-use nonce: nobody can pull from an address that did not sign. Same pattern as the triaged ZetaphyOfflineOrders."
+    decided_by: pospos191 (owner, confirmed 2026-11-04 "ยืนยัน triage"; proposed by claude-agent, PR #114 triage by reading the code)
+    date: 2026-11-04
