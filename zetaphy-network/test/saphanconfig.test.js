@@ -15,14 +15,23 @@ const routes = {
   arbitrumsepolia: { origin: { lockbox: A(0xa1), fromBlock: 900 }, zetaphy: { hyperlaneLane: A(0xa2), bridgedToken: A(0xa4), fromBlock: 19000 }, state: 'OPEN' },
 };
 
-test('the committed chain table is valid: Sepolia, Base Sepolia, Arbitrum Sepolia from the Hyperlane registry', () => {
+test('the committed chain table is valid: Sepolia, Base Sepolia, Arbitrum Sepolia, Optimism Sepolia, Polygon Amoy, BSC testnet from the Hyperlane registry', () => {
   const t = loadChains();
-  assert.deepEqual(Object.keys(t.chains), ['sepolia', 'basesepolia', 'arbitrumsepolia']);
-  assert.deepEqual(Object.values(t.chains).map((c) => [c.chainId, c.domain]), [[11155111, 11155111], [84532, 84532], [421614, 421614]]);
+  assert.deepEqual(Object.keys(t.chains), ['sepolia', 'basesepolia', 'arbitrumsepolia', 'optimismsepolia', 'polygonamoy', 'bsctestnet']);
+  assert.deepEqual(Object.values(t.chains).map((c) => [c.chainId, c.domain]), [[11155111, 11155111], [84532, 84532], [421614, 421614],
+    [11155420, 11155420], [80002, 80002], [97, 97]]);
   // the registry's Mailboxes (hyperlane-registry chains/<name>/addresses.yaml at the commit in `sources`)
   assert.equal(t.chains.basesepolia.mailbox, '0x6966b0E55883d49BFB24539356a2f8A673E02039');
   assert.equal(t.chains.arbitrumsepolia.mailbox, '0x598facE78a4302f11E3de0bee1894Da0b2Cb71F8');
   assert.equal(t.chains.sepolia.mailbox, '0xfFAEF09B3cd11D9b20d1a19bECca54EEC2884766');
+  // Saphan PR 6 (registry main, read 2026-11-04: sources.pr6)
+  assert.equal(t.chains.optimismsepolia.mailbox, '0x6966b0E55883d49BFB24539356a2f8A673E02039');
+  assert.equal(t.chains.polygonamoy.mailbox, '0x54148470292C24345fb828B003461a9444414517');
+  assert.equal(t.chains.bsctestnet.mailbox, '0xF9F6F5646F478d5ab4e20B0F910C92F1CCC9Cc6D');
+  assert.deepEqual(Object.values(t.chains).slice(3).map((c) => c.token.symbol), ['opETH', 'amoyPOL', 'tBNB']);
+  // Fuji is planned only (no default Hyperlane validator for it): not a chain of the table
+  assert.equal(t.chains.fuji, undefined);
+  assert.equal(t.planned.fuji.chainId, 43113);
   for (const c of Object.values(t.chains)) assert.deepEqual([c.validators, c.threshold], [['0x3c659e0fe8d01b80d7828b421630085777346e7c'], 1]);
   assert.match(t.sources.registry, /hyperlane-registry\/tree\/[0-9a-f]{40}/);
   assert.match(t.sources.validators, /hyperlane-monorepo\/blob\/[0-9a-f]{40}/);
@@ -33,7 +42,7 @@ test('the committed chain table is valid: Sepolia, Base Sepolia, Arbitrum Sepoli
   // and the relayer's agent config knows every source chain, with the same Mailbox
   const agent = JSON.parse(readFileSync(new URL('../../zetaphy-chain/hyperlane/agent-config.json', import.meta.url), 'utf8')).chains;
   for (const [n, c] of Object.entries(t.chains)) assert.deepEqual([agent[n]?.mailbox, agent[n]?.domainId, agent[n]?.merkleTreeHook], [c.mailbox, c.domain, c.merkleTreeHook], n);
-  assert.throws(() => chainOf(t, 'mainnet'), /unknown source chain mainnet: one of sepolia, basesepolia, arbitrumsepolia/);
+  assert.throws(() => chainOf(t, 'mainnet'), /unknown source chain mainnet: one of sepolia, basesepolia, arbitrumsepolia, optimismsepolia, polygonamoy, bsctestnet$/);
 });
 
 test('chain table problems are named; a broken table is refused', () => {
@@ -122,7 +131,8 @@ test('relay gate: runs while a lockbox locked in the last 2 days, starts the val
 test('the hub lists every chain of the table: planned, closed or open, and which ones go both ways', () => {
   const t = loadChains();
   const h = hubRoutes(t, routes);
-  assert.deepEqual(h.map((r) => [r.name, r.state, r.twoWay]), [['sepolia', 'planned', false], ['basesepolia', 'closed', true], ['arbitrumsepolia', 'open', false]]);
+  assert.deepEqual(h.map((r) => [r.name, r.state, r.twoWay]), [['sepolia', 'planned', false], ['basesepolia', 'closed', true], ['arbitrumsepolia', 'open', false],
+    ['optimismsepolia', 'planned', false], ['polygonamoy', 'planned', false], ['bsctestnet', 'planned', false]]);
   assert.equal(h[1].symbol, 'baseETH');
   assert.equal(h[1].lockbox, A(0xb1));
 });

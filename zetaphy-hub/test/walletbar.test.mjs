@@ -57,10 +57,12 @@ test('Saphan EVM routes: every chain of the table, its state from saphan-routes.
   assert.deepEqual(r[0].gateway, { zetaphy: '0x' + '55'.repeat(20), source: '0x' + '66'.repeat(20) });
   assert.equal(r[1].gateway, undefined);
   assert.deepEqual(chainTokens(read), [{ address: '0x' + '22'.repeat(20), symbol: 'sepETH', decimals: 18 }]);
-  // the committed table: the three test networks, planned until the saphan-route workflow deploys them (sepolia:
-  // deployed 2026-11-03, closed until governance opens it)
+  // the committed table: the six test networks, planned until the saphan-route workflow deploys them (sepolia:
+  // deployed 2026-11-03, closed until governance opens it; optimismsepolia, polygonamoy, bsctestnet: Saphan PR 6)
   const real = saphanRoutes((f) => { try { return JSON.parse(readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')); } catch { return null; } });
-  assert.deepEqual(real.map((x) => [x.name, x.state]), [['sepolia', 'closed'], ['basesepolia', 'planned'], ['arbitrumsepolia', 'planned']]);
+  assert.deepEqual(real.map((x) => [x.name, x.state]), [['sepolia', 'closed'], ['basesepolia', 'planned'], ['arbitrumsepolia', 'planned'],
+    ['optimismsepolia', 'planned'], ['polygonamoy', 'planned'], ['bsctestnet', 'planned']]);
+  assert.deepEqual(real.slice(3).map((x) => [x.chainId, x.symbol]), [[11155420, 'opETH'], [80002, 'amoyPOL'], [97, 'tBNB']]);
   // the Gateway: deployed for sepolia (2026-11-04), not yet for the others
   assert.deepEqual(real[0].gateway, { zetaphy: '0xf9A12bDfC8d3e22c62e5aFc19b1D2a3579C25609', source: '0x6a26055803556ff891CAB11CF47aB363aC1D0Ed8' });
   assert.ok(real.slice(1).every((x) => x.gateway === undefined), 'no Gateway on the other routes yet');

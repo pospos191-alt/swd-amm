@@ -31,6 +31,42 @@
    "explorer": "https://sepolia.basescan.org",
    "blockTime": 2
   },
+  "bsctestnet": {
+   "name": "BSC Testnet",
+   "domain": 97,
+   "chainId": 97,
+   "mailbox": "0xF9F6F5646F478d5ab4e20B0F910C92F1CCC9Cc6D",
+   "rpc": [
+    "https://bsc-testnet.publicnode.com",
+    "https://bsc-testnet.drpc.org"
+   ],
+   "explorer": "https://testnet.bscscan.com",
+   "blockTime": 0.45
+  },
+  "optimismsepolia": {
+   "name": "Optimism Sepolia",
+   "domain": 11155420,
+   "chainId": 11155420,
+   "mailbox": "0x6966b0E55883d49BFB24539356a2f8A673E02039",
+   "rpc": [
+    "https://sepolia.optimism.io"
+   ],
+   "explorer": "https://sepolia-optimistic.etherscan.io",
+   "blockTime": 2
+  },
+  "polygonamoy": {
+   "name": "Polygon Amoy",
+   "domain": 80002,
+   "chainId": 80002,
+   "mailbox": "0x54148470292C24345fb828B003461a9444414517",
+   "rpc": [
+    "https://rpc-amoy.polygon.technology",
+    "https://polygon-amoy-bor-rpc.publicnode.com",
+    "https://polygon-amoy.drpc.org"
+   ],
+   "explorer": "https://amoy.polygonscan.com",
+   "blockTime": 1
+  },
   "sepolia": {
    "name": "Sepolia",
    "domain": 11155111,

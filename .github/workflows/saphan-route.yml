@@ -23,7 +23,9 @@
 # mode = safety   the route's SaphanCheckpointer + SaphanChallenges on ZETAPHY (docs/SAPHAN-SAFETY.md); pushes
 #                 saphan-routes.json `safety` to saphan/<chain>-safety and lists the governance calls that turn them on
 # mode = heartbeat one heartbeat to the route's lockbox (keeps the escape hatch closed while ZETAPHY is alive)
-# On pull requests: check + dry_run for every chain of the table. Cost: free (GitHub-hosted runner, public repository).
+# On pull requests: check + dry_run for sepolia, basesepolia and arbitrumsepolia. Cost: free (GitHub-hosted runner, public
+# repository). The chains Saphan PR 6 added (optimismsepolia, polygonamoy, bsctestnet: docs/SAPHAN-PR6.md) run by hand
+# (mode = check, then dry_run) until their registry addresses have been checked on chain; then they join the PR matrix.
 #
 # token = <key>   a TOKEN route instead (tokens born on ZETAPHY, docs/SAPHAN-TOKENS.md): the token `tokens.<key>` of the
 #                 chain table, to this chain and back (contracts/SaphanTokens.sol):
@@ -61,7 +63,7 @@ on:
         required: true
         default: 'basesepolia'
         type: choice
-        options: ['sepolia', 'basesepolia', 'arbitrumsepolia']
+        options: ['sepolia', 'basesepolia', 'arbitrumsepolia', 'optimismsepolia', 'polygonamoy', 'bsctestnet']
       mode:
         description: "check = read only; dry_run = on local chains; deploy = the real testnets"
         required: true

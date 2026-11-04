@@ -112,6 +112,23 @@ finding), **not run** (with the reason), **timeout** (the tool did not finish wi
 | NeuroJobs | no bond withdrawn while its runner can still be slashed (open round, grace, challengeable or challenged round 1) | Foundry `invariant_bondHeldWhileSlashable` | pass after the NJ-1 fix (was **FAIL** in 1 of 3 full runs, 5-call counterexample) |
 | NeuroJobs | an unrevealed seat holds the bond until its penalty lands, whoever calls expire and whenever; a reveal resolves the seat (NJ-1, fixed) | Foundry `test_regression_NJ1_unrevealedSeatHoldsBondUntilPenalised`, `test_regression_NJ1_revealResolvesSeat` | pass |
 
+### Saphan route (Saphan PR 6, item S2; docs/SAPHAN-PR6.md)
+
+Suites in `zetaphy-network/audit/invariants/saphan/` (forge picks them up with the others). One route end to end:
+the source chain's `HyperlaneLockBoxV2` and ZETAPHY's `BridgeAirlock` (two honest lanes + one LYING lane),
+`BridgeGuard`, its token and `HyperlaneOutbox`, both chains in one EVM with a `MockMailbox` each; the handler
+delivers releases in any order, twice or never. Runs of 2026-11-04 (forge 1.2.3, halmos 0.3.3, default solver).
+
+| Contract(s) | Property | Tool / file | Status |
+|---|---|---|---|
+| LockBoxV2 + route | the lockbox never releases more than was locked; balance = locked = locks − claims | Foundry `SaphanRoute.inv.t.sol::invariant_lockboxNeverReleasesMoreThanLocked` | pass (256 × 50) |
+| LockBoxV2 + Guard + Outbox | supply on ZETAPHY + in flight out (burned, not paid) ≤ locked; the gap is exactly the locks not minted | Foundry `invariant_supplyBackedByLockedPlusInFlight` | pass |
+| LockBoxV2 + Airlock | each body delivered, paid, minted at most once; a lying lane alone never mints | Foundry `invariant_eachBodyReleasedOnce` | pass |
+| LockBoxV2 + Guard | per UTC day: paid ≤ the lockbox's limit, minted ≤ the guard's route limit (and hard cap) | Foundry `invariant_dailyLimits` | pass |
+| LockBoxV2 | for ANY two locks and ANY two releases (amounts, receivers), claimed in one day: paid ≤ locked, ≤ daily limit, each release once, balance = locked | Halmos `SaphanSymbolic.t.sol::check_releaseNeverExceedsLockedOrLimit` (+ forge `testFuzz_` twin) | **pass** (proven: 549 paths, 37 s) |
+| SaphanRecoveryClaims (escape hatch's pro rata rule) | for ANY pool, total and two lines within the total: payouts ≤ pool, each ≤ its line | Halmos `check_recoveryProRataNeverExceedsPool` (32-bit amounts; + forge `testFuzz_` twin on 96-bit) | timeout (z3, 600 s per query, both the 96-bit and the 32-bit statement: owed × pool / total is non-linear; a yices run could not be completed here). Covered by the forge `testFuzz_` twin (256 runs, pass); run overnight with `--solver-timeout-assertion 0` |
+| the whole route | the same four properties after every step of seeded random sequences (3 seeds × 80 steps) | JS `zetaphy-network/test/saphaninvariants.test.js` (normal `npm test`) | pass |
+
 Harness checks (not properties): `test_handlerReaches*` and `EchidnaHarnessesSmoke` assert that each
 handler actually reaches the money-moving paths, so a passing invariant is not vacuous.
 
