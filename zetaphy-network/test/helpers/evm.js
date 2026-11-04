@@ -142,6 +142,9 @@ export async function createChain(names = [], fundAddresses = {}, opts = {}) {
       const v = await sm.getContractStorage(Address.fromString(addressHex), hexToBytes(toBeHex(BigInt(slotHex), 32)));
       return toBeHex(v.length ? BigInt(bytesToHex(v)) : 0n, 32);
     },
+    /** The state root now, and an eth_getProof-style proof of an account and storage slots (Merkle-Patricia). */
+    async stateRoot() { return bytesToHex(await sm.getStateRoot()); },
+    async getProof(addressHex, slots = []) { return sm.getProof(Address.fromString(addressHex), slots.map((s) => hexToBytes(toBeHex(BigInt(s), 32)))); },
     /** An account's nonce (the next CREATE address is getCreateAddress({ from, nonce })). */
     nonce: async (who) => (await sm.getAccount(acct[who] ?? who))?.nonce ?? 0n,
     balance: async (who) => (await sm.getAccount(acct[who] ?? who))?.balance ?? 0n,

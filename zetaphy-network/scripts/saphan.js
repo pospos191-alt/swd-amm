@@ -46,6 +46,12 @@
 //       digest the lockbox wants, signed by KEYFILE (a validator of the lockbox's ISM). Proofs: exit-proof.
 //   node scripts/saphan.js exit-proof --file <owed.json> --account 0x…
 //
+// Saphan PR 5 (docs/SAPHAN-PR5.md), offline helpers:
+//   node scripts/saphan.js account --owner 0x… (--deployer 0x… | --factory 0x…)
+//       the owner's SaphanAccount: the same address on every chain whose SaphanAccountFactory is the deployer's first contract
+//   node scripts/saphan.js read-query --chain-id <X> --target 0x… (--data 0x… | --slot <n>)
+//       the question id SaphanReads on ZETAPHY keeps answers under (for read / requestCall / requestSlot)
+//
 //   node scripts/saphan.js whitelist          the relayer's HYP_WHITELIST for every deployed route (+ the v1 lockbox, + token routes)
 //   node scripts/saphan.js pending            per two-way route: the outbox's sends on ZETAPHY vs releases the lockbox recorded;
 //                                             per token route: messages each way the other end has not recorded
@@ -570,7 +576,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const originP = (name) => { const c = chainOf(t, name); return providerFor(process.env.ORIGIN_RPC || c.rpc.join(','), c.chainId); };
     let res;
     const zetaphyP = () => providerFor(process.env.ZETAPHY_RPC || t.zetaphy.rpc.join(','), t.zetaphy.chainId);
-    if (cmd === 'exit-root' || cmd === 'exit-proof') {
+    if (cmd === 'account') {
+      // offline (docs/SAPHAN-PR5.md): the owner's Saphan account, the same address on every chain with the factory
+      needAddr(o, ['owner']);
+      const A = await import('../src/saphanaccounts.js');
+      const factory = o.factory ? getAddress(o.factory) : (needAddr(o, ['deployer']), A.factoryAddress(getAddress(o.deployer)));
+      res = { owner: getAddress(o.owner), factory, account: A.accountAddress(factory, o.owner, art('SaphanAccount').bytecode) };
+    } else if (cmd === 'read-query') {
+      // offline: the id SaphanReads uses for "target.call(data) on chain --chain-id" (or a storage slot with --slot)
+      needAddr(o, ['target']);
+      const R = await import('../src/saphanreads.js');
+      res = o.slot != null ? { query: R.slotQuery(BigInt(o['chain-id']), getAddress(o.target), BigInt(o.slot)) }
+        : { query: R.callQuery(BigInt(o['chain-id']), getAddress(o.target), String(o.data ?? '0x')) };
+    } else if (cmd === 'exit-root' || cmd === 'exit-proof') {
       const S = await import('../src/saphansafety.js');
       const raw = JSON.parse(readFileSync(String(o.file), 'utf8'));
       const owed = Array.isArray(raw) ? raw : S.exitEntitlements(raw);
