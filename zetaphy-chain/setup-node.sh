@@ -219,8 +219,9 @@ node_home_dir
 as_node() { su -s /bin/bash "$NODE_USER" -c "$*"; }
 
 step "4/8 build zetaphyd"
+new_bin=""   # installed below, after libwasmvm and the pre-flight
 if [ -n "$ZETAPHYD_BIN" ]; then
-  install -m 755 "$ZETAPHYD_BIN" "$BIN"
+  new_bin=$ZETAPHYD_BIN
 elif [ ! -x "$BIN" ] || [ -n "${FORCE_BUILD:-}" ]; then
   # Any Go >= 1.21 can fetch the exact toolchain the source asks for (GOTOOLCHAIN),
   # verified against Go's checksum database. Ubuntu 24.04's golang-go is 1.22.
@@ -239,8 +240,9 @@ elif [ ! -x "$BIN" ] || [ -n "${FORCE_BUILD:-}" ]; then
   # The ZETAPHY changes (zetaphy_patch_source, above), as the node user.
   install -m 644 "$SELF" /tmp/zetaphy-setup-node.sh
   as_node "cd '$src' && $goenv bash /tmp/zetaphy-setup-node.sh --patch-source '$src'"
+  as_node "rm -f '/home/${NODE_USER}/go/bin/evmd'"   # a failed build must not leave an older evmd to install
   as_node "cd '$src' && $goenv make install"
-  install -m 755 "/home/${NODE_USER}/go/bin/evmd" "$BIN"
+  new_bin="/home/${NODE_USER}/go/bin/evmd"
   [ "$(as_node "cd '$src/evmd' && $goenv go list -m -f '{{.Version}}' github.com/CosmWasm/wasmvm/v3")" = "$WASMVM_VERSION" ] || { echo "wasmvm is not $WASMVM_VERSION"; exit 1; }
   wasmvm_so="$(as_node "cd '$src/evmd' && $goenv go list -m -f '{{.Dir}}' github.com/CosmWasm/wasmvm/v3")/internal/api/libwasmvm.$(uname -m).so"
 fi
@@ -258,6 +260,25 @@ if ! echo "$want  $lib" | sha256sum -c --quiet - 2>/dev/null; then
   fi
   echo "$want  $wasmvm_so" | sha256sum -c --quiet - || { echo "libwasmvm hash mismatch"; exit 1; }
   install -m 644 "$wasmvm_so" "$lib" && ldconfig
+fi
+# Pre-flight (evmd/zetaphy_upgradecheck.go): while this node's chain runs, the new
+# binary must be able to run its next block. The 2026-11-05 testnet halt at block
+# 239468 ("upgrade handler is missing for zetaphy-v5") was a binary without the
+# handler of an upgrade the chain had completed. A binary too old to have
+# upgrade-check is refused too. UPGRADE_CHECK=0 skips it (e.g. a deliberate rollback).
+if [ -n "$new_bin" ]; then
+  rpc=$(sed -n '/^\[rpc\]/,/^\[/ s/^laddr = "tcp:\/\/[^:]*:\([0-9]*\)"$/\1/p' "$NODE_HOME/config/config.toml" 2>/dev/null | head -1 || true)
+  if [ "${UPGRADE_CHECK:-1}" != 0 ] && [ -f "$NODE_HOME/config/genesis.json" ] \
+    && curl -fsS -m 5 "http://127.0.0.1:${rpc:-26657}/status" >/dev/null 2>&1; then
+    chk=$(mktemp /tmp/zetaphyd-check.XXXXXX) && install -m 755 "$new_bin" "$chk"
+    if ! as_node "cd ~ && '$chk' upgrade-check --node tcp://127.0.0.1:${rpc:-26657} --home '$NODE_HOME'"; then
+      rm -f "$chk"
+      echo "refused: this zetaphyd cannot run the next block of the chain this node runs; $BIN was not changed (UPGRADE_CHECK=0 skips the check)"
+      exit 1
+    fi
+    rm -f "$chk"
+  fi
+  install -m 755 "$new_bin" "$BIN"
 fi
 "$BIN" version
 su -s /bin/bash "$NODE_USER" -c "$BIN q wasm libwasmvm-version" # the VM loads (CosmWasm)
@@ -1526,7 +1547,7 @@ index 204345c..e7cffda 100644
  }
  
 diff --git a/evmd/cmd/evmd/cmd/root.go b/evmd/cmd/evmd/cmd/root.go
-index 4da3349..4574a48 100644
+index 4da3349..93deb15 100644
 --- a/evmd/cmd/evmd/cmd/root.go
 +++ b/evmd/cmd/evmd/cmd/root.go
 @@ -22,6 +22,8 @@ import (
@@ -1538,15 +1559,17 @@ index 4da3349..4574a48 100644
  	"cosmossdk.io/log/v2"
  	confixcmd "cosmossdk.io/tools/confix/cmd"
  	"github.com/cosmos/cosmos-sdk/store/v2"
-@@ -174,6 +176,7 @@ func initRootCmd(rootCmd *cobra.Command, evmApp *evmd.EVMD) {
+@@ -174,6 +176,9 @@ func initRootCmd(rootCmd *cobra.Command, evmApp *evmd.EVMD) {
  		pruning.Cmd(sdkAppCreator, defaultNodeHome),
  		snapshot.Cmd(sdkAppCreator),
  		NewTestnetCmd(evmApp.BasicModuleManager, banktypes.GenesisBalancesIterator{}, appCreator{}),
 +		evmd.RPCGuardCmd(), // ZETAPHY: the public RPC filter (setup-node.sh)
++		// ZETAPHY: pre-flight before installing a binary (zetaphy_upgradecheck.go)
++		evmd.UpgradeCheckCmd(evmApp),
  	)
  
  	// add Cosmos EVM' flavored TM commands to start server, etc.
-@@ -204,7 +207,9 @@ func initRootCmd(rootCmd *cobra.Command, evmApp *evmd.EVMD) {
+@@ -204,7 +209,9 @@ func initRootCmd(rootCmd *cobra.Command, evmApp *evmd.EVMD) {
  	}
  }
  
@@ -1557,7 +1580,7 @@ index 4da3349..4574a48 100644
  
  func queryCommand() *cobra.Command {
  	cmd := &cobra.Command{
-@@ -223,6 +228,7 @@ func queryCommand() *cobra.Command {
+@@ -223,6 +230,7 @@ func queryCommand() *cobra.Command {
  		authcmd.QueryTxCmd(),
  		sdkserver.QueryBlockCmd(),
  		sdkserver.QueryBlockResultsCmd(),
@@ -1565,7 +1588,7 @@ index 4da3349..4574a48 100644
  	)
  
  	cmd.PersistentFlags().String(flags.FlagChainID, "", "The network chain ID")
-@@ -249,6 +255,8 @@ func txCommand() *cobra.Command {
+@@ -249,6 +257,8 @@ func txCommand() *cobra.Command {
  		authcmd.GetEncodeCommand(),
  		authcmd.GetDecodeCommand(),
  		authcmd.GetSimulateCmd(),
@@ -10657,6 +10680,198 @@ index 0000000..674091e
 +func (pqGenesisBasic) ValidateGenesis(_ codec.JSONCodec, _ client.TxEncodingConfig, raw json.RawMessage) error {
 +	_, err := pqParseGenesis(raw)
 +	return err
++}
+diff --git a/evmd/zetaphy_upgradecheck.go b/evmd/zetaphy_upgradecheck.go
+new file mode 100644
+index 0000000..dad44dc
+--- /dev/null
++++ b/evmd/zetaphy_upgradecheck.go
+@@ -0,0 +1,186 @@
++package evmd
++
++// ZETAPHY: `zetaphyd upgrade-check`, the pre-flight for every binary swap.
++//
++// Run the NEW binary, before it is installed, against the node that runs now
++// (read-only; the running node is not stopped or touched):
++//
++//	/tmp/zetaphyd-new upgrade-check --node tcp://127.0.0.1:26657
++//
++// It reads the chain's completed upgrades (the x/upgrade store, prefix 0x01,
++// the keys x/upgrade's GetLastCompletedUpgrade reads) and the scheduled plan,
++// and fails when this binary could not run the next block:
++//
++//   - the last completed upgrade has no handler in this binary: x/upgrade's
++//     PreBlocker stops the chain at the first block with "wrong app version
++//     ..., upgrade handler is missing for <name> upgrade plan". That is the
++//     2026-11-05 halt at block 239468: a binary without the "zetaphy-v5"
++//     handler was installed on a chain that had completed zetaphy-v5;
++//   - a scheduled plan is due and this binary has no handler for it
++//     ("UPGRADE ... NEEDED");
++//   - a scheduled plan is not due yet, this binary has its handler and the
++//     upgrade may not run early (zetaphyEarlyUpgrades): "BINARY UPDATED
++//     BEFORE TRIGGER!".
++//
++// A binary too old to have this command fails the check as well ("unknown
++// command"). Only the command line uses it; blocks are not affected.
++
++import (
++	"bytes"
++	"encoding/binary"
++	"errors"
++	"fmt"
++	"strings"
++
++	"github.com/spf13/cobra"
++	"google.golang.org/protobuf/encoding/protowire"
++
++	abci "github.com/cometbft/cometbft/abci/types"
++
++	"github.com/cosmos/cosmos-sdk/client"
++	"github.com/cosmos/cosmos-sdk/client/flags"
++	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
++)
++
++// zetaphyUpgradeNames: every upgrade a ZETAPHY chain may have completed, oldest
++// first. A new binary must keep the handler of each (fork test
++// TestUpgradeRestartAfterEveryUpgrade); a new upgrade is appended here.
++var zetaphyUpgradeNames = []string{
++	UpgradeName, // upstream evmd's "v0.6.0-to-v0.7.0" (upgrades.go)
++	ZetaphyV2UpgradeName,
++	ZetaphyV3UpgradeName,
++	ZetaphyV4UpgradeName,
++	ZetaphyV5UpgradeName,
++	ZetaphyFirewallUpgradeName,
++}
++
++// zetaphyLastDone: the last completed upgrade among the x/upgrade "done" keys
++// (0x01 || height (8, big endian) || name), picked as GetLastCompletedUpgrade
++// does (the greatest key: the highest height). raw is the kv.Pairs protobuf
++// a "/store/upgrade/subspace" query answers.
++func zetaphyLastDone(raw []byte) (string, int64, error) {
++	var best []byte
++	for len(raw) > 0 {
++		num, typ, n := protowire.ConsumeTag(raw)
++		if n < 0 {
++			return "", 0, protowire.ParseError(n)
++		}
++		raw = raw[n:]
++		if num != 1 || typ != protowire.BytesType { // Pairs.pairs
++			if n = protowire.ConsumeFieldValue(num, typ, raw); n < 0 {
++				return "", 0, protowire.ParseError(n)
++			}
++			raw = raw[n:]
++			continue
++		}
++		pair, n := protowire.ConsumeBytes(raw)
++		if n < 0 {
++			return "", 0, protowire.ParseError(n)
++		}
++		raw = raw[n:]
++		for len(pair) > 0 {
++			f, t, m := protowire.ConsumeTag(pair)
++			if m < 0 {
++				return "", 0, protowire.ParseError(m)
++			}
++			pair = pair[m:]
++			if f == 1 && t == protowire.BytesType { // Pair.key
++				k, m := protowire.ConsumeBytes(pair)
++				if m < 0 {
++					return "", 0, protowire.ParseError(m)
++				}
++				if len(k) >= 10 && k[0] == upgradetypes.DoneByte && bytes.Compare(k, best) > 0 {
++					best = k
++				}
++				pair = pair[m:]
++				continue
++			}
++			if m = protowire.ConsumeFieldValue(f, t, pair); m < 0 {
++				return "", 0, protowire.ParseError(m)
++			}
++			pair = pair[m:]
++		}
++	}
++	if best == nil {
++		return "", 0, nil
++	}
++	return string(best[9:]), int64(binary.BigEndian.Uint64(best[1:9])), nil // #nosec G115 -- block heights
++}
++
++// zetaphyUpgradeCheck: nil when a binary with these handlers (has) can run
++// block height+1 of a chain whose last completed upgrade is last and whose
++// scheduled plan is plan (nil: none). The same rules as x/upgrade's PreBlocker
++// and zetaphyUpgradeModule.PreBlock.
++func zetaphyUpgradeCheck(last string, plan *upgradetypes.Plan, height int64, has func(string) bool) error {
++	if last != "" && !has(last) {
++		return fmt.Errorf("this binary has no handler for %q, the chain's last completed upgrade: "+
++			"it would stop the chain at block %d (\"upgrade handler is missing for %s upgrade plan\")", last, height+1, last)
++	}
++	if plan == nil {
++		return nil
++	}
++	if plan.ShouldExecute(height + 1) {
++		if !has(plan.Name) {
++			return fmt.Errorf("upgrade %q is due at block %d and this binary has no handler for it", plan.Name, plan.Height)
++		}
++		return nil
++	}
++	if has(plan.Name) && !zetaphyEarlyUpgrades[plan.Name] {
++		return fmt.Errorf("upgrade %q is scheduled for block %d and this binary already has its handler: "+
++			"install it at that height, not before (BINARY UPDATED BEFORE TRIGGER)", plan.Name, plan.Height)
++	}
++	return nil
++}
++
++// UpgradeCheckCmd: zetaphyd upgrade-check [--node ...] (see the top of this file).
++func UpgradeCheckCmd(app *EVMD) *cobra.Command {
++	cmd := &cobra.Command{
++		Use:   "upgrade-check",
++		Short: "Before installing this binary: can it run the next block of the chain --node serves? (read-only)",
++		Args:  cobra.NoArgs,
++		RunE: func(cmd *cobra.Command, _ []string) error {
++			cctx, err := client.GetClientQueryContext(cmd)
++			if err != nil {
++				return err
++			}
++			res, err := cctx.QueryABCI(abci.RequestQuery{Path: "/store/" + upgradetypes.StoreKey + "/subspace", Data: []byte{upgradetypes.DoneByte}})
++			if err != nil {
++				return err
++			}
++			if res.Code != 0 {
++				return fmt.Errorf("completed upgrades: %s", res.Log)
++			}
++			last, lastH, err := zetaphyLastDone(res.Value)
++			if err != nil {
++				return fmt.Errorf("completed upgrades: %w", err)
++			}
++			var plan *upgradetypes.Plan
++			pr, err := upgradetypes.NewQueryClient(cctx).CurrentPlan(cmd.Context(), &upgradetypes.QueryCurrentPlanRequest{})
++			if err != nil {
++				return fmt.Errorf("scheduled plan: %w", err)
++			}
++			if pr.Plan != nil && pr.Plan.Name != "" {
++				plan = pr.Plan
++			}
++			out := cmd.OutOrStdout()
++			var have []string
++			for _, n := range zetaphyUpgradeNames {
++				if app.UpgradeKeeper.HasHandler(n) {
++					have = append(have, n)
++				}
++			}
++			fmt.Fprintf(out, "this binary's upgrade handlers: %s\n", strings.Join(have, " "))
++			fmt.Fprintf(out, "chain at block %d; last completed upgrade: %q at %d\n", res.Height, last, lastH)
++			if plan != nil {
++				fmt.Fprintf(out, "scheduled: %q at block %d\n", plan.Name, plan.Height)
++			}
++			if err := zetaphyUpgradeCheck(last, plan, res.Height, app.UpgradeKeeper.HasHandler); err != nil {
++				return errors.New("REFUSED: " + err.Error())
++			}
++			_, err = fmt.Fprintln(out, "ok: this binary can run the next block")
++			return err
++		},
++	}
++	flags.AddQueryFlagsToCmd(cmd)
++	return cmd
 +}
 diff --git a/evmd/zetaphy_upgradeguard.go b/evmd/zetaphy_upgradeguard.go
 new file mode 100644

@@ -170,8 +170,9 @@ git clone -q --depth 1 --branch v0.7.3 https://github.com/cosmos/evm.git "$src"
 curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/<COMMIT>/zetaphy-chain/setup-node.sh -o $HOME/setup-node-firewall.sh
 grep -q "ZetaphyFirewallUpgradeName = \"zetaphy-firewall\"" $HOME/setup-node-firewall.sh
 cd "$src" && bash $HOME/setup-node-firewall.sh --patch-source "$src"
+rm -f $HOME/go/bin/evmd                     # a build that fails must not leave an older evmd behind
 make install                                                                          # -> $HOME/go/bin/evmd
-$HOME/go/bin/evmd version
+cp $HOME/go/bin/evmd /tmp/zetaphyd-new
 '
 ```
 
@@ -179,13 +180,60 @@ On an e2-micro this takes an hour or more (it uses swap). Alternatively, once th
 has built the release for that `setup-node.sh`, `sudo zetaphy-validator update` installs it (SHA-256 checked)
 instead of steps 3 and 4.
 
+### 3b. Pre-flight: check the new binary against the running chain **[read]**
+
+Never install a binary that has not passed this. On 2026-11-05 the testnet stopped at block 239468 with
+`wrong app version 0, upgrade handler is missing for zetaphy-v5 upgrade plan`: the binary that was started did
+not have the handler of `zetaphy-v5`, an upgrade the chain had completed at block 123343. x/upgrade checks this
+once, at the first block after every start. The published `zetaphyd-c453ae6d6c5a` release has the handler (it
+runs a chain that completed `zetaphy-v5`; checked on a local chain with the release binaries), and a release
+from before `zetaphy-v5` (e.g. `zetaphyd-3efeec9d4e16`) stops with exactly that error. `zetaphyd version`
+prints `0.7.3` for every build, so it does not tell which one you have; a file left in `$HOME/go/bin` by an
+earlier build is a stale binary.
+
+The new binary is in `/tmp/zetaphyd-new`: built in step 3, or a release downloaded and checked:
+
+```bash
+R=zetaphyd-<first 12 characters of the setup-node.sh sha256>; ARCH=amd64                 # [read] e.g. zetaphyd-c453ae6d6c5a
+cd /tmp && curl -fsSLO https://github.com/pospos191-alt/zetaphy/releases/download/$R/zetaphyd-linux-$ARCH \
+  && curl -fsSLO https://github.com/pospos191-alt/zetaphy/releases/download/$R/SHA256SUMS \
+  && sha256sum -c --ignore-missing SHA256SUMS && install -m 755 zetaphyd-linux-$ARCH /tmp/zetaphyd-new   # [CHANGES FILES] /tmp only
+```
+
+Then, with the node running (read-only; a few seconds and ~200 MB of RAM, fine on an e2-micro):
+
+```bash
+sudo -u zetaphy -H bash -c 'cd ~ && /tmp/zetaphyd-new upgrade-check --node tcp://127.0.0.1:26657 --home ~/.zetaphy'   # [read]
+# ok: this binary can run the next block          -> go on with step 4
+# REFUSED: ... / unknown command "upgrade-check"  -> do not install it
+```
+
+`upgrade-check` reads the chain's completed upgrades and the scheduled plan from the node and applies x/upgrade's
+rules to the handlers of the binary it runs in: the last completed upgrade must have a handler; a due plan must
+have one; a plan that is not due yet may have one only if it may run early (`zetaphyEarlyUpgrades`). Binaries
+built before this command existed (`zetaphyd-c453ae6d6c5a` and older) answer `unknown command`; for those,
+check by hand that the file has the handler of every upgrade the chain applied:
+
+```bash
+for n in zetaphy-v2 zetaphy-v3 zetaphy-v4 zetaphy-v5 zetaphy-firewall; do                 # [read]
+  h=$(/usr/local/bin/zetaphyd q upgrade applied $n --node tcp://127.0.0.1:26657 -o json 2>/dev/null | jq -r '.height // empty')
+  echo "$n applied at: ${h:-no}"
+done
+for f in registerZetaphyV4 registerZetaphyV5 registerZetaphyFirewall; do echo "$f $(grep -c -a $f /tmp/zetaphyd-new)"; done   # [read]
+# each applied upgrade needs its function in the file (a binary with v4 also has v2 and v3): 0 = do not install
+```
+
+`setup-node.sh` (and so `zetaphy-validator update`) runs `upgrade-check` itself before it replaces the binary of
+a running node, and refuses a binary that fails it (`UPGRADE_CHECK=0` skips the check, e.g. for a deliberate
+rollback).
+
 ### 4. Install it **[CHANGES FILES]** (restarts the node; the chain goes on)
 
 `zetaphy-firewall` may run early, so the new binary can go in before the vote. Below the upgrade height it
-produces exactly the same blocks as the old one.
+produces exactly the same blocks as the old one. Install the file that passed step 3b, nothing else.
 
 ```bash
-sudo install -m 755 /home/zetaphy/go/bin/evmd /usr/local/bin/zetaphyd                # [CHANGES FILES]
+sudo install -m 755 /tmp/zetaphyd-new /usr/local/bin/zetaphyd                         # [CHANGES FILES]
 sudo systemctl restart zetaphyd zetaphy-rpc-guard                                     # restarts the node
 sleep 20; curl -s localhost:26657/status | jq -r .result.sync_info.latest_block_height   # [read] must keep rising
 journalctl -u zetaphyd -n 50 --no-pager | grep -iE "panic|error|CONSENSUS FAILURE" || echo ok   # [read]
