@@ -1,0 +1,72 @@
+{
+  "chainId": 77390,
+  "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+  "contracts": {
+    "saphanBundles": "0xb39f2086E0Cb227580755f230aedbEf4Cd37b753",
+    "saphanOfflineTransfers": "0x5fA60CC6C6fd810e20834b3EA06f6ef5fed5c695",
+    "saphanLiquidityBounds": "0xED1A971095aAf1e61AD1a3de9a06E5849eb558C7",
+    "saphanPrivacyPool": "0x4E6A062Dd2a62C1f17C81B3d0B14258da01E12c7"
+  },
+  "blocks": {
+    "saphanBundles": 238588,
+    "saphanOfflineTransfers": 238589,
+    "saphanLiquidityBounds": 238590,
+    "saphanPrivacyPool": 238591
+  },
+  "timelockMinDelay": 0,
+  "route": "sepolia",
+  "notes": {
+    "saphanLiquidityBounds": "for routes whose vault is on ZETAPHY (ZetaphyTokenVault: tokens born here; none yet): the timelock sets the bounds and the rebalancer. The Sepolia lockbox's one lives on Sepolia",
+    "saphanPrivacyPool": "token(sepolia) 0x3e800aC76bd8785108c16BCEFF5591f935803b03, 0.01 per note; DEV trusted setup (ZkIdentityVerifier): testnet only, protects nothing of value"
+  },
+  "skipped": [
+    {
+      "what": "SaphanReads (saphanReads)",
+      "reason": "gives the deploy key setResponder(SaphanReadResponder on the source chain), once (the contract has no governance path for it); deployed only with --deployer-setters (workflow input deployer_setters)"
+    },
+    {
+      "what": "SaphanIntents (saphanIntents)",
+      "reason": "gives the deploy key setRelay(domain, SaphanFillRelay), once per chain (the contract has no governance path for it); deployed only with --deployer-setters (workflow input deployer_setters)"
+    },
+    {
+      "what": "SaphanSealedOrders (saphanSealedOrders)",
+      "reason": "needs saphanIntents (not deployed)"
+    },
+    {
+      "what": "SaphanAccountFactory (SAPHAN-PR5.md)",
+      "reason": "the same account address on every chain needs the factory deployed by one fresh key as its first transaction on every chain; the deploy key has used its first nonces"
+    },
+    {
+      "what": "SaphanRecoveryClaims (SAPHAN-PR6.md S10)",
+      "reason": "one per incident: the timelock deploys it after the snapshot, with that incident's token, sweep target and claim period"
+    },
+    {
+      "what": "SaphanBtcWithdrawals (SAPHAN-PR6.md S7)",
+      "reason": "needs a BtcLightClient on ZETAPHY (not deployed: it needs a real Bitcoin checkpoint header and a header relayer)"
+    },
+    {
+      "what": "SaphanAggLane (SAPHAN-PR4.md S1)",
+      "reason": "needs an ML-DSA-44 committee (key hashes and a threshold); none exists yet. Then the airlock's governance adds it as a lane through the timelock"
+    },
+    {
+      "what": "SaphanReadResponder, SaphanZetaphyReads (SAPHAN-PR5.md)",
+      "reason": "source chain: saphan-route"
+    },
+    {
+      "what": "SaphanFillRelay (SAPHAN-PR5.md)",
+      "reason": "source chain: saphan-route"
+    },
+    {
+      "what": "SaphanSourceGateway, SaphanAccountFactory on the source chains (SAPHAN-PR5.md)",
+      "reason": "source chain: saphan-route"
+    },
+    {
+      "what": "SaphanLiquidityBounds for the Sepolia lockbox (SAPHAN-PR6.md S9: one per source chain, that chain's timelock)",
+      "reason": "source chain: saphan-route"
+    },
+    {
+      "what": "SaphanReleaseVerifier (SAPHAN-PROOFS.md)",
+      "reason": "source chain: saphan-route"
+    }
+  ]
+}
