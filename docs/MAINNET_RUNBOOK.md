@@ -106,6 +106,19 @@ From here on every governance instruction (mint policy, proposals,
 cancellations) is created as a Squads proposal and approved by 2 of 3
 members. Timelocked actions can be executed by anyone once they are ready.
 
+## Gate 7b — Verified build (free)
+
+So anyone can check that the program on mainnet is exactly this repository's audited commit:
+
+```bash
+bash scripts/verified-build.sh build                      # before deploy: deterministic Docker build, prints the hash
+bash scripts/verified-build.sh verify <PROGRAM_ID> <RPC>   # after deploy: on-chain hash must equal the build hash
+bash scripts/verified-build.sh upload <PROGRAM_ID> <RPC>   # publish to OtterSec's registry (explorers show "Verified")
+```
+
+Deploy the `.so` produced by `solana-verify build` (not a plain `anchor build`), or the hashes will not match. Once
+the upgrade authority is the Squads vault, the `upload` step's verify-PDA write is a Squads proposal (2-of-3).
+
 ## Gate 8 — Launch configuration
 
 - Allow the launch mints (`set-mint-policy <mint> true`, as Squads
