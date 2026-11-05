@@ -29,6 +29,12 @@
         "zetaphyFrom": 220886,
         "sourceFrom": 12060222,
         "workflowRun": "41777124033"
+      },
+      "safety": {
+        "checkpointer": "0x15749Ad20F5Bb868186020CeA0bB950eB0C1CB76",
+        "challenges": "0x5093Aba98d0B0c3BFbA8c98BB739C9bE29B4f1D2",
+        "zetaphyFrom": 230781,
+        "workflowRun": "41892870639"
       }
     }
   },
