@@ -163,20 +163,65 @@ git clone -q --depth 1 --branch v0.7.3 https://github.com/cosmos/evm.git "$src"
 curl -fsSL https://raw.githubusercontent.com/pospos191-alt/zetaphy/<COMMIT>/zetaphy-chain/setup-node.sh -o $HOME/setup-node-firewall.sh
 grep -q "ZetaphyFirewallUpgradeName = \"zetaphy-firewall\"" $HOME/setup-node-firewall.sh
 cd "$src" && bash $HOME/setup-node-firewall.sh --patch-source "$src"
+rm -f $HOME/go/bin/evmd                     # build ที่ล้มเหลวต้องไม่ทิ้ง evmd เก่าไว้ให้ติดตั้งผิดตัว
 make install                                                                          # -> $HOME/go/bin/evmd
-$HOME/go/bin/evmd version
+cp $HOME/go/bin/evmd /tmp/zetaphyd-new
 '
 ```
 
 บน e2-micro ใช้เวลาตั้งแต่หนึ่งชั่วโมงขึ้นไป (ใช้ swap) อีกทางหนึ่ง เมื่อ workflow `release-zetaphyd` build release ของ
 `setup-node.sh` นั้นเสร็จแล้ว `sudo zetaphy-validator update` จะติดตั้งให้ (ตรวจ SHA-256) แทนขั้นที่ 3 และ 4
 
+### 3b. Pre-flight: ตรวจไบนารีใหม่กับเชนที่รันอยู่ **[อ่าน]**
+
+ห้ามติดตั้งไบนารีที่ยังไม่ผ่านขั้นนี้ วันที่ 2026-11-05 testnet หยุดที่บล็อก 239468 ด้วย
+`wrong app version 0, upgrade handler is missing for zetaphy-v5 upgrade plan`: ไบนารีที่ถูกสตาร์ตไม่มี handler ของ
+`zetaphy-v5` ซึ่งเชนทำเสร็จไปแล้วที่บล็อก 123343 (x/upgrade ตรวจเรื่องนี้ครั้งเดียว ที่บล็อกแรกหลังสตาร์ตทุกครั้ง)
+release `zetaphyd-c453ae6d6c5a` ที่เผยแพร่มี handler นี้ (ทดสอบบนเชน local ด้วยไบนารี release แล้ว รันต่อได้)
+ส่วน release ก่อนมี `zetaphy-v5` (เช่น `zetaphyd-3efeec9d4e16`) หยุดด้วย error นี้ทุกตัวอักษร `zetaphyd version`
+พิมพ์ `0.7.3` ทุก build จึงบอกไม่ได้ว่าเป็นตัวไหน และไฟล์ที่ค้างอยู่ใน `$HOME/go/bin` จาก build ก่อนๆ คือไบนารีเก่า
+
+ไบนารีใหม่อยู่ที่ `/tmp/zetaphyd-new`: build จากขั้นที่ 3 หรือดาวน์โหลด release แล้วตรวจ SHA-256:
+
+```bash
+R=zetaphyd-<12 ตัวแรกของ sha256 ของ setup-node.sh>; ARCH=amd64                        # [อ่าน] เช่น zetaphyd-c453ae6d6c5a
+cd /tmp && curl -fsSLO https://github.com/pospos191-alt/zetaphy/releases/download/$R/zetaphyd-linux-$ARCH \
+  && curl -fsSLO https://github.com/pospos191-alt/zetaphy/releases/download/$R/SHA256SUMS \
+  && sha256sum -c --ignore-missing SHA256SUMS && install -m 755 zetaphyd-linux-$ARCH /tmp/zetaphyd-new   # [เปลี่ยนไฟล์] เฉพาะ /tmp
+```
+
+แล้วตรวจขณะโหนดรันอยู่ (อ่านอย่างเดียว ไม่กี่วินาที ใช้ RAM ~200 MB พอสำหรับ e2-micro):
+
+```bash
+sudo -u zetaphy -H bash -c 'cd ~ && /tmp/zetaphyd-new upgrade-check --node tcp://127.0.0.1:26657 --home ~/.zetaphy'   # [อ่าน]
+# ok: this binary can run the next block          -> ไปขั้นที่ 4
+# REFUSED: ... / unknown command "upgrade-check"  -> ห้ามติดตั้ง
+```
+
+`upgrade-check` อ่าน upgrade ที่เชนทำเสร็จแล้วและแผนที่ตั้งไว้จากโหนด แล้วใช้กฎของ x/upgrade กับ handler ของไบนารีตัวที่รันมัน:
+upgrade ล่าสุดที่ทำเสร็จต้องมี handler แผนที่ถึงความสูงแล้วต้องมี handler แผนที่ยังไม่ถึงความสูงมี handler ได้เฉพาะเมื่อรันก่อนเวลาได้
+(`zetaphyEarlyUpgrades`) ไบนารีที่ build ก่อนมีคำสั่งนี้ (`zetaphyd-c453ae6d6c5a` และเก่ากว่า) ตอบ `unknown command`
+สำหรับไบนารีเหล่านั้นให้ตรวจเองว่าไฟล์มี handler ของทุก upgrade ที่เชน apply แล้ว:
+
+```bash
+for n in zetaphy-v2 zetaphy-v3 zetaphy-v4 zetaphy-v5 zetaphy-firewall; do                 # [อ่าน]
+  h=$(/usr/local/bin/zetaphyd q upgrade applied $n --node tcp://127.0.0.1:26657 -o json 2>/dev/null | jq -r '.height // empty')
+  echo "$n applied at: ${h:-no}"
+done
+for f in registerZetaphyV4 registerZetaphyV5 registerZetaphyFirewall; do echo "$f $(grep -c -a $f /tmp/zetaphyd-new)"; done   # [อ่าน]
+# upgrade ที่ apply แล้วต้องมีฟังก์ชันของมันในไฟล์ (ไบนารีที่มี v4 มี v2 และ v3 ด้วย): 0 = ห้ามติดตั้ง
+```
+
+`setup-node.sh` (และ `zetaphy-validator update`) รัน `upgrade-check` เองก่อนเปลี่ยนไบนารีของโหนดที่รันอยู่ และปฏิเสธไบนารีที่ไม่ผ่าน
+(`UPGRADE_CHECK=0` ข้ามการตรวจ เช่น ตอนตั้งใจ rollback)
+
 ### 4. ติดตั้ง **[เปลี่ยนไฟล์]** (รีสตาร์ตโหนด เชนเดินต่อ)
 
 `zetaphy-firewall` รันก่อนเวลาได้ จึงติดตั้งไบนารีใหม่ก่อนโหวตได้ ต่ำกว่าความสูง upgrade มันสร้างบล็อกเหมือนไบนารีเก่าทุกประการ
+ติดตั้งเฉพาะไฟล์ที่ผ่านขั้นที่ 3b
 
 ```bash
-sudo install -m 755 /home/zetaphy/go/bin/evmd /usr/local/bin/zetaphyd                # [เปลี่ยนไฟล์]
+sudo install -m 755 /tmp/zetaphyd-new /usr/local/bin/zetaphyd                         # [เปลี่ยนไฟล์]
 sudo systemctl restart zetaphyd zetaphy-rpc-guard                                     # รีสตาร์ตโหนด
 sleep 20; curl -s localhost:26657/status | jq -r .result.sync_info.latest_block_height   # [อ่าน] ต้องเพิ่มขึ้นเรื่อยๆ
 journalctl -u zetaphyd -n 50 --no-pager | grep -iE "panic|error|CONSENSUS FAILURE" || echo ok   # [อ่าน]
