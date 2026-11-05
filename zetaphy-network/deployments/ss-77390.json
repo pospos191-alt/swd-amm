@@ -1,0 +1,38 @@
+{
+  "chainId": 77390,
+  "governance": "0x731db92410B3b15Ae4b6b41E47fc3c9a66390340",
+  "contracts": {
+    "invariantFirewall": "0xb3E6B8a7756420D074C08c335e722d0ce2A342AB",
+    "exploitMarket": "0xa89fc7Cc882B043b8cC9F2CC1E52572b01999D59",
+    "economicBounds": "0x6082750F52e690886F8aa12875154F7C598F701B",
+    "proofRegistry": "0x0eBB0371fA2Fd30EAF78eF70CCEe0a55452081E4",
+    "immuneVaccines": "0xA9A3dD1797aA5F4713fDD63Af671d8BaAd47562b"
+  },
+  "blocks": {
+    "invariantFirewall": 238583,
+    "exploitMarket": 238584,
+    "economicBounds": 238585,
+    "proofRegistry": 238586,
+    "immuneVaccines": 238587
+  },
+  "timelockMinDelay": 0,
+  "notes": {
+    "invariantFirewall": "contract layer only: the node-level check (CHAIN-FIREWALL.md) stays off until the zetaphy-firewall upgrade and a governance vote name this address",
+    "proofRegistry": "no WorkerReputation (not deployed: it needs a 2-day timelock), so proof runs are not reported to one",
+    "immuneVaccines": "built without a ThreatRegistry (the launch one has no review holds): matches are recorded and owners notified, nothing is held"
+  },
+  "skipped": [
+    {
+      "what": "SecurityScore (securityScore)",
+      "reason": "needs a ThreatRegistry with review holds (underReview / holdForReview / setVaccines, PR #115): the launch ThreatRegistry predates them, so with it every score would read as degraded (at most 500), and without it the score would not see its flags"
+    },
+    {
+      "what": "ScoredCollateral (immune-score.md)",
+      "reason": "an example collateral helper: a lending protocol deploys its own with its tiers (no lending protocol exists yet)"
+    },
+    {
+      "what": "Node-level invariant firewall (CHAIN-FIREWALL.md, PR #117)",
+      "reason": "a chain module, not a contract: on after the zetaphy-firewall upgrade and a governance vote (security-proposal invariant-firewall <InvariantFirewall>)"
+    }
+  ]
+}
