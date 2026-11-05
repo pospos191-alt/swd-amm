@@ -40,6 +40,8 @@ function metamask(opts = {}) {
     async request({ method, params }) {
       calls.push({ method, params });
       if (opts.noSnaps && /Snap/.test(method)) throw Object.assign(new Error('Method not supported'), { code: -32601 });
+      if (opts.unpublished && method === 'wallet_requestSnaps') throw Object.assign(new Error('Failed to fetch snap "npm:@zetaphy/snap": Failed to fetch NPM registry entry. Status code: 404.'), { code: -32603 });
+      if (opts.unpublishedResult && method === 'wallet_requestSnaps') return { [pqs.SNAP_ID]: { error: { message: 'Failed to fetch snap "npm:@zetaphy/snap": Failed to fetch NPM registry entry. Status code: 404.' } } };
       if (method === 'wallet_getSnaps') return opts.installed === false ? {} : { [pqs.SNAP_ID]: { version: '0.1.0' } };
       if (method === 'wallet_requestSnaps') { if (opts.deny) throw Object.assign(new Error('User rejected'), { code: 4001 }); return { [pqs.SNAP_ID]: { version: '0.1.0' } }; }
       if (method === 'wallet_invokeSnap') {
@@ -94,6 +96,9 @@ test('connect: the snap is requested, the account checked against its key; no pr
   await assert.rejects(make(metamask({ lie: true }), node()).request({ method: 'eth_requestAccounts' }), /does not match its public key/);
   await assert.rejects(make(metamask({ noSnaps: true }), node()).request({ method: 'eth_requestAccounts' }), (e) => e.code === 4200 && /Flask/.test(e.message));
   await assert.rejects(make(metamask({ deny: true }), node()).request({ method: 'eth_requestAccounts' }), (e) => e.code === 4001);
+  // the snap is not on npm yet: a plain sentence in the page's language, not MetaMask's raw 404
+  await assert.rejects(make(metamask({ installed: false, unpublished: true }), node()).request({ method: 'eth_requestAccounts' }), (e) => e.code === 4200 && /not published yet/.test(e.message) && !/404/.test(e.message));
+  await assert.rejects(make(metamask({ installed: false, unpublishedResult: true }), node(), { lang: () => 'th' }).request({ method: 'eth_requestAccounts' }), (e) => e.code === 4200 && /ยังไม่ได้เผยแพร่/.test(e.message));
 });
 
 test('eth_sendTransaction: one evmCall signed by the snap, sent as a Cosmos tx, settled for the watch', async () => {
@@ -158,7 +163,7 @@ test('helpers: gas bounds, CometBFT answers, bech32', () => {
 });
 
 test('every text exists in all 8 hub languages', () => {
-  for (const l of pqs.PQS_LANGS) for (const k of ['btn', 'note', 'badge', 'noSnaps', 'badAccount', 'notFunded', 'noFunds', 'ecdsaOnly', 'wouldFail', 'refused']) {
+  for (const l of pqs.PQS_LANGS) for (const k of ['btn', 'note', 'badge', 'noSnaps', 'notPublished', 'badAccount', 'notFunded', 'noFunds', 'ecdsaOnly', 'wouldFail', 'refused']) {
     const m = pqs.pqsText(l, k, 'x');
     assert.ok(typeof m === 'string' && m.trim().length >= 2, `${l}.${k}`);
     if (l !== 'en') assert.notEqual(m, pqs.pqsText('en', k, 'x'), `${l}.${k} translated`);
