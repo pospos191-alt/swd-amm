@@ -15,7 +15,7 @@ test('CORS: only the hub\'s https origins; preflight answered', () => {
   assert.deepEqual(hosts, ['app.sawasdeecoin.com', 'zetaphy-hub.vercel.app']);
   assert.deepEqual(cors({ method: 'GET', headers: { origin: 'https://app.sawasdeecoin.com' } }, hosts).headers, { 'access-control-allow-origin': 'https://app.sawasdeecoin.com', vary: 'Origin' });
   for (const origin of ['https://evil.example', 'http://app.sawasdeecoin.com', 'https://app.sawasdeecoin.com.evil.example', 'null', '']) {
-    assert.deepEqual(cors({ method: 'POST', headers: { origin } }, hosts).headers, {}, origin);
+    assert.deepEqual(cors({ method: 'POST', headers: { origin } }, hosts).headers, { vary: 'Origin' }, origin);
   }
   const pre = cors({ method: 'OPTIONS', headers: { origin: 'https://zetaphy-hub.vercel.app' } }, hosts, 'POST');
   assert.equal(pre.preflight, true);
@@ -23,4 +23,13 @@ test('CORS: only the hub\'s https origins; preflight answered', () => {
   assert.equal(pre.headers['access-control-allow-methods'], 'POST');
   assert.equal(cors({ method: 'OPTIONS', headers: { origin: 'https://evil.example' } }, hosts).status, 403);
   assert.deepEqual(hubHosts({ NEURO_ALLOWED_ORIGIN_HOSTS: ' A.example , ,b.example' }), ['a.example', 'b.example']);
+});
+
+test('cors: every answer varies on Origin, so a cached copy never reaches another origin', () => {
+  const hosts = ['app.sawasdeecoin.com'];
+  for (const headers of [{}, { origin: 'https://evil.example' }, { origin: 'https://app.sawasdeecoin.com' }]) {
+    assert.equal(cors({ method: 'GET', headers }, hosts).headers.vary, 'Origin');
+  }
+  assert.equal(cors({ method: 'GET', headers: {} }, hosts).headers['access-control-allow-origin'], undefined);
+  assert.equal(cors({ method: 'OPTIONS', headers: { origin: 'https://evil.example' } }, hosts).headers.vary, 'Origin');
 });

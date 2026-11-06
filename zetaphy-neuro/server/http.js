@@ -29,9 +29,11 @@ const hostOf = (origin) => { try { const u = new URL(origin); return u.protocol 
 export function cors(req, hosts, methods = 'GET, POST') {
   const origin = typeof req.headers?.origin === 'string' ? req.headers.origin : '';
   const ok = origin && hosts.includes(hostOf(origin));
-  const headers = ok ? { 'access-control-allow-origin': origin, vary: 'Origin' } : {};
+  // Vary on every answer, allowed or not: a CDN-cached answer must never be served
+  // to an origin it was not made for (usage.js GET answers are cached).
+  const headers = ok ? { 'access-control-allow-origin': origin, vary: 'Origin' } : { vary: 'Origin' };
   if (req.method === 'OPTIONS') {
-    return { preflight: true, status: ok ? 204 : 403, headers: ok ? { ...headers, 'access-control-allow-methods': methods, 'access-control-allow-headers': 'content-type', 'access-control-max-age': '86400' } : {} };
+    return { preflight: true, status: ok ? 204 : 403, headers: ok ? { ...headers, 'access-control-allow-methods': methods, 'access-control-allow-headers': 'content-type', 'access-control-max-age': '86400' } : { vary: 'Origin' } };
   }
   return { preflight: false, headers };
 }

@@ -47,6 +47,15 @@ export function monthsUntil(month) {
  * @param {string|undefined} secret
  * @returns {Promise<{status:number, json?:object, headers?:object}>}
  */
+// The counts are public and change slowly, so GET answers are cached on Vercel's CDN
+// (per Origin, through the Vary header that http.js cors() sets). Without
+// s-maxage every page view ran this function and counted toward the Hobby plan's
+// Active CPU limit (the team was paused for exceeding it on 2026-11-06).
+export const USAGE_GET_HEADERS = Object.freeze({
+  'cache-control': 'public, max-age=60',
+  'vercel-cdn-cache-control': 'public, max-age=300, stale-while-revalidate=3600',
+});
+
 export async function handleUsage(req, store, secret) {
   const now = req.now ?? new Date();
   const enabled = !!store && typeof secret === 'string' && secret.length >= 16;
@@ -54,7 +63,7 @@ export async function handleUsage(req, store, secret) {
   if (req.method === 'GET') {
     const month = typeof req.query?.month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(req.query.month)
       ? req.query.month : monthOf(now);
-    if (!enabled) return { status: 200, json: { enabled: false, month, goal: GOAL } };
+    if (!enabled) return { status: 200, headers: { ...USAGE_GET_HEADERS }, json: { enabled: false, month, goal: GOAL } };
     const [users, checks, ...lv] = await store.pipeline([
       ['PFCOUNT', `${P}users:${month}`], ['GET', `${P}checks:${month}`],
       ...LEVELS.map((l) => ['GET', `${P}level:${l}:${month}`]),
@@ -70,7 +79,7 @@ export async function handleUsage(req, store, secret) {
     EXTRA.forEach((x, i) => { total[x] = sum(LEVELS.length + 1 + i); });
     return {
       status: 200,
-      headers: { 'cache-control': 'public, max-age=60' },
+      headers: { ...USAGE_GET_HEADERS },
       json: {
         enabled: true, month, users: Number(users) || 0, checks: Number(checks) || 0, goal: GOAL,
         found: Object.fromEntries(LEVELS.map((l, i) => [l, Number(lv[i]) || 0])),
