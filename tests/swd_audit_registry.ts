@@ -167,7 +167,8 @@ describe("swd_audit_registry", () => {
     const tx = new Transaction().add(edIx(signer, recordMessage(config, f)), await upsertIx(f, undefined, relayer.publicKey));
     if (relayer === payer) return provider.sendAndConfirm(tx, [payer]);
     // provider.sendAndConfirm would add the provider wallet as a signer: send it as the relayer alone
-    return sendAndConfirmTransaction(conn, tx, [relayer], { commitment: "confirmed" });
+    // same commitments as the provider: a "confirmed" preflight could miss state the previous call just wrote
+    return sendAndConfirmTransaction(conn, tx, [relayer], provider.opts);
   }
   async function fund(kp: Keypair, sol = 1) {
     await send([SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: kp.publicKey, lamports: sol * LAMPORTS_PER_SOL })]);
