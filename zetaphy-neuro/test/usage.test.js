@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleUsage, memoryStore, upstashStore, GOAL, monthsUntil } from '../server/usage.js';
+import { handleUsage, memoryStore, upstashStore, GOAL, monthsUntil, USAGE_GET_HEADERS } from '../server/usage.js';
 
 const SECRET = 'test-secret-0123456789';
 const oct = new Date('2026-10-19T10:00:00Z');
@@ -126,4 +126,17 @@ test('counts transaction checks and checks on ZETAPHY (only those two words, nev
   assert.equal(r.total.tx, 2);
   assert.equal(r.total.zetaphy, 2);
   assert.equal(r.total.checks, 4);
+});
+
+test('GET answers are cached on the CDN; POST answers are not', async () => {
+  const s = memoryStore();
+  const on = await get(s);
+  assert.equal(on.headers['vercel-cdn-cache-control'], 'public, max-age=300, stale-while-revalidate=3600');
+  assert.equal(on.headers['cache-control'], 'public, max-age=60');
+  const off = await handleUsage({ method: 'GET', query: {}, now: oct }, null, SECRET);
+  assert.equal(off.json.enabled, false);
+  assert.deepEqual(off.headers, { ...USAGE_GET_HEADERS });
+  const p = await post(s);
+  assert.equal(p.headers?.['vercel-cdn-cache-control'], undefined);
+  assert.ok(!/max-age|s-maxage/.test(p.headers?.['cache-control'] ?? ''));
 });
