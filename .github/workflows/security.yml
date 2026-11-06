@@ -823,6 +823,13 @@ jobs:
           grep -q "declare_id!(\"${pid}\")" programs/swd_amm/src/lib.rs || { echo "::error::could not rewrite declare_id!"; exit 1; }
           grep -n "declare_id" programs/swd_amm/src/lib.rs
           grep -n "^swd_amm = " Anchor.toml
+          # swd_mine (on-chain mining payouts, docs/SWD_MINE.md): same treatment.
+          solana-keygen new --no-bip39-passphrase --silent --force --outfile target/deploy/swd_mine-keypair.json
+          mid=$(solana-keygen pubkey target/deploy/swd_mine-keypair.json)
+          sed -i -E "s/declare_id!\(\"[1-9A-HJ-NP-Za-km-z]+\"\)/declare_id!(\"${mid}\")/" programs/swd_mine/src/lib.rs
+          sed -i -E "s/^swd_mine = \"[1-9A-HJ-NP-Za-km-z]+\"/swd_mine = \"${mid}\"/" Anchor.toml
+          grep -q "declare_id!(\"${mid}\")" programs/swd_mine/src/lib.rs || { echo "::error::could not rewrite swd_mine declare_id!"; exit 1; }
+          grep -n "^swd_mine = " Anchor.toml
 
       - name: Use private RPC for the Squads clone (if MAINNET_RPC_URL secret is set)
         env:
@@ -838,8 +845,14 @@ jobs:
       - name: cargo test (unit + proptest property tests, no validator)
         run: cargo test -p swd_amm
 
+      - name: cargo test swd_mine (pure mining logic, no validator)
+        run: cargo test -p swd_mine
+
       - name: mainnet build flags compile (24h-48h timelock)
         run: cargo check -p swd_amm --features mainnet
+
+      - name: swd_mine mainnet build flags compile (SWD mint only)
+        run: cargo check -p swd_mine --features mainnet
 
       - name: anchor build (SBF program + IDL)
         run: anchor build
@@ -990,7 +1003,7 @@ jobs:
 
       - name: Deploy / upgrade on Devnet
         run: |
-          anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/devnet-deployer.json
+          anchor deploy -p swd_amm --provider.cluster devnet --provider.wallet ~/.config/solana/devnet-deployer.json
           # `solana program show` still loads a default signer, and this runner
           # has no ~/.config/solana/id.json, so point it at the deployer key.
           solana program show "$(solana-keygen pubkey target/deploy/swd_amm-keypair.json)" --url devnet \
