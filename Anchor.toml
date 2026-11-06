@@ -11,9 +11,14 @@ skip-lint = false
 # after your first `anchor build`, then `anchor keys list` and paste the
 # real program id here AND in programs/swd_amm/src/lib.rs's declare_id!.
 swd_amm = "3zKYYQT7LhCWLLnzbRMhTZJKmQdSwGzEghRrTyT4jdCL"
+# TODO(before build): same for swd_mine — `solana-keygen new -o
+# target/deploy/swd_mine-keypair.json`, then paste its id here, below, AND in
+# programs/swd_mine/src/lib.rs's declare_id! (placeholder until then).
+swd_mine = "2zMuwaF7NXovgqSnpreRrYBLkhmABEkg6PWTEznA5RDF"
 
 [programs.devnet]
 swd_amm = "3zKYYQT7LhCWLLnzbRMhTZJKmQdSwGzEghRrTyT4jdCL"
+swd_mine = "2zMuwaF7NXovgqSnpreRrYBLkhmABEkg6PWTEznA5RDF"
 
 [registry]
 url = "https://api.apr.dev"
