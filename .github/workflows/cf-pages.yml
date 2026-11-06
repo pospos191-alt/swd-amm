@@ -1,0 +1,130 @@
+# ZETAPHY's static sites on Cloudflare Pages (free plan: static requests are not
+# metered). The Vercel team was paused on 2026-11-06 for going over the Hobby
+# plan's function CPU limit; static files never needed functions, so they move
+# here. Each site's vercel.json stays the source of truth: cloudflare/pages.mjs
+# turns it into Cloudflare's _headers and _redirects.
+#
+# Sites (Cloudflare Pages project -> custom domain, set once in the dashboard):
+#   zetaphy-hub -> app, zetaphy-wallet -> wallet, zetaphy-swap -> swap,
+#   zetaphy-nft -> nft, zetaphy-explorer -> explorer, zetaphy-neuro -> neuro
+#   (.sawasdeecoin.com). Neuro's /api functions are not part of this move.
+#
+# Needs, once (Settings -> Secrets and variables -> Actions):
+#   secret   CLOUDFLARE_API_TOKEN   an API token with "Cloudflare Pages: Edit"
+#   variable CLOUDFLARE_ACCOUNT_ID  the account id (not a secret)
+# Without them the check job still runs and the deploy job says what is missing.
+# Cost: about 1-2 minutes of the free Actions allowance per run.
+
+name: Cloudflare Pages
+
+on:
+  pull_request:
+    paths: ['cloudflare/**', 'zetaphy-hub/**', 'zetaphy-wallet/**', 'zetaphy-dex/web/**', 'zetaphy-nft/web/**', 'zetaphy-explorer/**', 'zetaphy-neuro/**', '.github/workflows/cf-pages.yml']
+  push:
+    branches: [main]
+    paths: ['cloudflare/**', 'zetaphy-hub/**', 'zetaphy-wallet/**', 'zetaphy-dex/web/**', 'zetaphy-nft/web/**', 'zetaphy-explorer/**', 'zetaphy-neuro/**', '.github/workflows/cf-pages.yml']
+  workflow_dispatch:
+    inputs:
+      sites:
+        description: "Sites to deploy, space-separated (hub wallet swap nft explorer neuro); empty = all"
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER_VERSION: '4.151.0'
+
+jobs:
+  check:
+    name: stage + headers check (wrangler pages dev)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Unit tests
+        run: node --test cloudflare/pages.test.mjs
+      - name: Build the hub
+        working-directory: zetaphy-hub
+        run: node build.mjs
+      - name: Stage every site
+        run: for s in $(node cloudflare/pages.mjs list); do node cloudflare/pages.mjs stage "$s" "$RUNNER_TEMP/cf/$s"; done
+      - name: Install wrangler
+        run: npm install --prefix "$RUNNER_TEMP/wrangler" --no-save --no-audit --no-fund "wrangler@$WRANGLER_VERSION"
+      - name: Headers and redirects on Cloudflare's engine
+        env:
+          WRANGLER: ${{ runner.temp }}/wrangler/node_modules/.bin/wrangler
+        run: node cloudflare/pages.e2e.mjs "$RUNNER_TEMP/cf"
+
+  deploy:
+    name: deploy ${{ matrix.site }}
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        site: [hub, wallet, swap, nft, explorer, neuro]
+    concurrency:
+      group: cf-pages-${{ matrix.site }}
+      cancel-in-progress: false
+    steps:
+      - name: Selected?
+        id: pick
+        env:
+          SITES: ${{ github.event.inputs.sites }}
+          SITE: ${{ matrix.site }}
+        run: |
+          if [ -z "$SITES" ] || [[ " $SITES " == *" $SITE "* ]]; then echo "go=1" >> "$GITHUB_OUTPUT"; else echo "go=0" >> "$GITHUB_OUTPUT"; fi
+      - name: Credentials present?
+        id: creds
+        if: steps.pick.outputs.go == '1'
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$ACCOUNT" ]; then
+            echo "::warning::Not deployed: set the secret CLOUDFLARE_API_TOKEN and the variable CLOUDFLARE_ACCOUNT_ID (see the top of .github/workflows/cf-pages.yml)."
+            echo "ok=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=1" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v5
+        if: steps.creds.outputs.ok == '1'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        if: steps.creds.outputs.ok == '1'
+        with:
+          node-version: "22"
+      - name: Build and stage
+        if: steps.creds.outputs.ok == '1'
+        env:
+          SITE: ${{ matrix.site }}
+        run: |
+          if [ "$SITE" = hub ]; then (cd zetaphy-hub && node build.mjs); fi
+          node cloudflare/pages.mjs stage "$SITE" "$RUNNER_TEMP/site"
+      - name: Deploy to Cloudflare Pages
+        if: steps.creds.outputs.ok == '1'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          SITE: ${{ matrix.site }}
+        run: |
+          npm install --prefix "$RUNNER_TEMP/wrangler" --no-save --no-audit --no-fund "wrangler@$WRANGLER_VERSION"
+          W="$RUNNER_TEMP/wrangler/node_modules/.bin/wrangler"
+          PROJECT=$(node -e "import('./cloudflare/pages.mjs').then((m) => console.log(m.SITES[process.argv[1]].project))" "$SITE")
+          # First run: create the project; later runs: "already exists" is fine, any other error stops.
+          if ! out=$("$W" pages project create "$PROJECT" --production-branch main 2>&1); then
+            echo "$out"
+            echo "$out" | grep -qi "already exists" || exit 1
+          fi
+          "$W" pages deploy "$RUNNER_TEMP/site" --project-name "$PROJECT" --branch main --commit-hash "$GITHUB_SHA" --commit-dirty=true
