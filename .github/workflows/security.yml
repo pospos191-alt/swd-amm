@@ -824,6 +824,17 @@ jobs:
           grep -n "declare_id" programs/swd_amm/src/lib.rs
           grep -n "^swd_amm = " Anchor.toml
 
+      # Same throwaway-key treatment for the SWD Audit Registry program
+      # (programs/swd_audit_registry; its declare_id! is a placeholder).
+      - name: Create CI-only program keypair (swd_audit_registry)
+        run: |
+          solana-keygen new --no-bip39-passphrase --silent --force --outfile target/deploy/swd_audit_registry-keypair.json
+          pid=$(solana-keygen pubkey target/deploy/swd_audit_registry-keypair.json)
+          sed -i -E "s/declare_id!\(\"[1-9A-HJ-NP-Za-km-z]+\"\)/declare_id!(\"${pid}\")/" programs/swd_audit_registry/src/lib.rs
+          sed -i -E "s/^swd_audit_registry = \"[1-9A-HJ-NP-Za-km-z]+\"/swd_audit_registry = \"${pid}\"/" Anchor.toml
+          grep -q "declare_id!(\"${pid}\")" programs/swd_audit_registry/src/lib.rs || { echo "::error::could not rewrite declare_id! (swd_audit_registry)"; exit 1; }
+          grep -n "^swd_audit_registry = " Anchor.toml
+
       - name: Use private RPC for the Squads clone (if MAINNET_RPC_URL secret is set)
         env:
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
@@ -837,6 +848,9 @@ jobs:
 
       - name: cargo test (unit + proptest property tests, no validator)
         run: cargo test -p swd_amm
+
+      - name: cargo test (swd_audit_registry unit tests)
+        run: cargo test -p swd_audit_registry
 
       - name: mainnet build flags compile (24h-48h timelock)
         run: cargo check -p swd_amm --features mainnet
@@ -990,7 +1004,9 @@ jobs:
 
       - name: Deploy / upgrade on Devnet
         run: |
-          anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/devnet-deployer.json
+          # -p swd_amm: the workspace also holds swd_audit_registry, which has
+          # no devnet key here and is deployed on its own (docs/SWD_AUDIT_REGISTRY.md).
+          anchor deploy -p swd_amm --provider.cluster devnet --provider.wallet ~/.config/solana/devnet-deployer.json
           # `solana program show` still loads a default signer, and this runner
           # has no ~/.config/solana/id.json, so point it at the deployer key.
           solana program show "$(solana-keygen pubkey target/deploy/swd_amm-keypair.json)" --url devnet \

@@ -1,0 +1,29 @@
+[package]
+name = "swd_audit_registry"
+version = "0.1.0"
+description = "SWD Audit Registry — on-chain, readable SWD Audit results (UNAUDITED, see docs/SWD_AUDIT_REGISTRY.md)"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "swd_audit_registry"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+# Other programs depend on this crate with `features = ["cpi"]` to read
+# records with `swd_audit_registry::reader` (docs/SWD_AUDIT_REGISTRY.md).
+cpi = ["no-entrypoint"]
+default = []
+idl-build = ["anchor-lang/idl-build"]
+
+[dependencies]
+# init-if-needed: `upsert_record` creates a subject's Record on its first
+# signed audit and updates it afterwards (see that instruction's comment for
+# why re-initialisation cannot happen).
+anchor-lang = { version = "0.31.1", features = ["init-if-needed"] }
+
+# cfgs that Anchor's macros emit (silences "unexpected cfg" noise only)
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))', 'cfg(feature, values("custom-heap", "custom-panic", "anchor-debug"))'] }

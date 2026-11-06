@@ -11,9 +11,14 @@ skip-lint = false
 # after your first `anchor build`, then `anchor keys list` and paste the
 # real program id here AND in programs/swd_amm/src/lib.rs's declare_id!.
 swd_amm = "3zKYYQT7LhCWLLnzbRMhTZJKmQdSwGzEghRrTyT4jdCL"
+# SWD Audit Registry (docs/SWD_AUDIT_REGISTRY.md). TODO(before build): same
+# as above with target/deploy/swd_audit_registry-keypair.json; paste the id
+# here AND in programs/swd_audit_registry/src/lib.rs's declare_id!.
+swd_audit_registry = "AX4Z8w2r7558cz4uK2nq3iPoE8HWzwh58ew47caPVyCZ"
 
 [programs.devnet]
 swd_amm = "3zKYYQT7LhCWLLnzbRMhTZJKmQdSwGzEghRrTyT4jdCL"
+swd_audit_registry = "AX4Z8w2r7558cz4uK2nq3iPoE8HWzwh58ew47caPVyCZ"
 
 [registry]
 url = "https://api.apr.dev"
