@@ -10,6 +10,6 @@
     "test:unit": "node --test sol-safety.test.mjs"
   },
   "devDependencies": {
-    "playwright": "1.49.1"
+    "playwright": "1.55.1"
   }
 }
