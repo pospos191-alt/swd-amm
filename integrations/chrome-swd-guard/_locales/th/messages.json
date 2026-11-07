@@ -1,0 +1,136 @@
+{
+  "extName": {
+    "message": "SWD Guard"
+  },
+  "extDescription": {
+    "message": "แสดงระดับความเสี่ยง SWD Audit บนหน้าเหรียญ ตรวจเหรียญหรือธุรกรรมใดก็ได้ และเตือนเมื่อเข้าเว็บฟิชชิงที่รู้จัก"
+  },
+  "close": {
+    "message": "ปิด"
+  },
+  "badgeChecking": {
+    "message": "SWD Audit: กำลังตรวจ…"
+  },
+  "badgeLabel": {
+    "message": "SWD Audit"
+  },
+  "badgeUnavailable": {
+    "message": "ยังตรวจไม่ได้ในตอนนี้"
+  },
+  "level_high": {
+    "message": "ความเสี่ยงสูง"
+  },
+  "level_medium": {
+    "message": "ความเสี่ยงปานกลาง"
+  },
+  "level_low": {
+    "message": "ความเสี่ยงต่ำ"
+  },
+  "level_info": {
+    "message": "กฎไม่พบความเสี่ยง"
+  },
+  "warnHigh": {
+    "message": "พบความเสี่ยงร้ายแรง อย่าซื้อหรืออนุมัติเหรียญนี้ หากยังไม่เข้าใจความเสี่ยง"
+  },
+  "warnMedium": {
+    "message": "พบความเสี่ยงบางอย่าง อ่านรายงานก่อนซื้อขาย"
+  },
+  "openReport": {
+    "message": "ดูรายงานเต็ม"
+  },
+  "notAdvice": {
+    "message": "ตรวจอัตโนมัติด้วยกฎ ไม่ใช่คำแนะนำการลงทุน"
+  },
+  "phishTitle": {
+    "message": "สงสัยว่าเป็นเว็บฟิชชิง (เว็บหลอก)"
+  },
+  "phishBody": {
+    "message": "รายชื่อของ SWD Guard ระบุว่าเว็บนี้ปลอมตัวเป็นโปรเจกต์คริปโตเพื่อขโมยกระเป๋าหรือเหรียญ"
+  },
+  "phishNever": {
+    "message": "ห้ามพิมพ์ seed phrase หรือ private key และห้ามเชื่อมต่อกระเป๋าหรือเซ็นอะไรในเว็บนี้"
+  },
+  "phishLeave": {
+    "message": "ออกจากเว็บนี้"
+  },
+  "phishContinue": {
+    "message": "ฉันเข้าใจความเสี่ยง ไปต่อ"
+  },
+  "popupInputLabel": {
+    "message": "ตรวจเหรียญหรือธุรกรรม"
+  },
+  "popupInputPlaceholder": {
+    "message": "ที่อยู่เหรียญ, hash ธุรกรรม หรือลิงก์"
+  },
+  "popupInputHint": {
+    "message": "ระบบแยกที่อยู่และลายเซ็นของ Solana ให้เอง ถ้าเป็น 0x… ให้เลือกเชน EVM"
+  },
+  "popupCheck": {
+    "message": "ตรวจ"
+  },
+  "popupBadInput": {
+    "message": "ไม่ใช่ที่อยู่ hash ธุรกรรม หรือลิงก์ที่รองรับ"
+  },
+  "popupThisSite": {
+    "message": "เว็บนี้"
+  },
+  "popupNotListed": {
+    "message": "ไม่อยู่ในรายชื่อเว็บฟิชชิงของ SWD Guard (แต่ไม่ได้แปลว่าปลอดภัยแน่นอน)"
+  },
+  "popupOptions": {
+    "message": "ตั้งค่า"
+  },
+  "popupPrivacy": {
+    "message": "ไม่ติดตามผู้ใช้ ไม่แตะกระเป๋า"
+  },
+  "lookalikeTitle": {
+    "message": "ดูเหมือน SWD แต่ไม่ใช่เว็บทางการของ SWD"
+  },
+  "lookalikeBody": {
+    "message": "เว็บทางการของ SWD ลงท้ายด้วย sawasdeecoin.com เท่านั้น"
+  },
+  "txNotFound": {
+    "message": "ยังไม่พบธุรกรรม ลองใหม่อีกครั้งในไม่กี่วินาที"
+  },
+  "optTitle": {
+    "message": "ตั้งค่า SWD Guard"
+  },
+  "optBadges": {
+    "message": "แสดงป้าย SWD Audit บนหน้าเหรียญ (Solscan, Jupiter, Birdeye, DEX Screener, pump.fun)"
+  },
+  "optUpdatedList": {
+    "message": "ดาวน์โหลดรายชื่อเว็บฟิชชิงฉบับล่าสุดวันละครั้ง"
+  },
+  "optUpdatedListHint": {
+    "message": "เป็นรายชื่อโดเมนธรรมดาจาก GitHub สาธารณะของ SWD ดาวน์โหลดเฉพาะไฟล์ ไม่มีการส่งข้อมูลของคุณออกไป"
+  },
+  "optRefresh": {
+    "message": "อัปเดตตอนนี้"
+  },
+  "optListStatus": {
+    "message": "$COUNT$ โดเมน อัปเดตเมื่อ $WHEN$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "when": {
+        "content": "$2"
+      }
+    }
+  },
+  "optAllSitesHint": {
+    "message": "ตัวเลือกเสริม: ให้ SWD Guard แสดงหน้าคำเตือนบนทุกโดเมนในรายชื่อฉบับล่าสุด Chrome จะขอสิทธิ์เข้าถึงทุกเว็บ แต่ SWD Guard ทำงานเฉพาะโดเมนในรายชื่อ และไม่อ่านเนื้อหาเว็บ"
+  },
+  "optGrantAllSites": {
+    "message": "อนุญาตให้เตือนบนทุกเว็บในรายชื่อ"
+  },
+  "optRevokeAllSites": {
+    "message": "ยกเลิกสิทธิ์เข้าถึงทุกเว็บ"
+  },
+  "privacyTitle": {
+    "message": "ความเป็นส่วนตัว"
+  },
+  "privacyBody": {
+    "message": "SWD Guard ส่งเฉพาะที่อยู่เหรียญหรือ hash ธุรกรรมที่คุณกำลังดู ไปยัง SWD Audit API (swd-zetaphy.sawasdeecoin.com) โดยไม่มีคุกกี้หรือตัวระบุตัวตน ไม่อ่านกระเป๋า คีย์ รหัสผ่าน หรือเนื้อหาเว็บ ไม่มีระบบเก็บสถิติ และไม่โหลดโค้ดจากภายนอก การตั้งค่าเก็บอยู่ในเบราว์เซอร์ของคุณ"
+  }
+}

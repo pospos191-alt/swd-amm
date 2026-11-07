@@ -1,0 +1,136 @@
+{
+  "extName": {
+    "message": "SWD Guard"
+  },
+  "extDescription": {
+    "message": "在代币页面显示 SWD Audit 风险标记，可审计任意代币或交易，并在已知钓鱼网站上发出警告。"
+  },
+  "close": {
+    "message": "关闭"
+  },
+  "badgeChecking": {
+    "message": "SWD Audit：检查中…"
+  },
+  "badgeLabel": {
+    "message": "SWD Audit"
+  },
+  "badgeUnavailable": {
+    "message": "暂时无法获取"
+  },
+  "level_high": {
+    "message": "高风险"
+  },
+  "level_medium": {
+    "message": "中风险"
+  },
+  "level_low": {
+    "message": "低风险"
+  },
+  "level_info": {
+    "message": "规则未发现风险"
+  },
+  "warnHigh": {
+    "message": "发现严重风险。除非您了解这些风险，否则不要购买或授权此代币。"
+  },
+  "warnMedium": {
+    "message": "发现一些风险。交易前请阅读报告。"
+  },
+  "openReport": {
+    "message": "完整报告"
+  },
+  "notAdvice": {
+    "message": "自动规则检查，非投资建议。"
+  },
+  "phishTitle": {
+    "message": "疑似钓鱼网站"
+  },
+  "phishBody": {
+    "message": "根据 SWD Guard 的名单，此网站冒充加密项目以盗取钱包或代币。"
+  },
+  "phishNever": {
+    "message": "切勿输入助记词或私钥，也不要在此连接钱包或签名。"
+  },
+  "phishLeave": {
+    "message": "离开此网站"
+  },
+  "phishContinue": {
+    "message": "我了解风险，继续"
+  },
+  "popupInputLabel": {
+    "message": "检查代币或交易"
+  },
+  "popupInputPlaceholder": {
+    "message": "地址、交易哈希或链接"
+  },
+  "popupInputHint": {
+    "message": "Solana 地址和签名会自动识别；0x… 请选择 EVM 链。"
+  },
+  "popupCheck": {
+    "message": "检查"
+  },
+  "popupBadInput": {
+    "message": "不是地址、交易哈希或受支持的链接。"
+  },
+  "popupThisSite": {
+    "message": "此网站"
+  },
+  "popupNotListed": {
+    "message": "不在 SWD Guard 钓鱼名单中（但这并不能证明它安全）。"
+  },
+  "popupOptions": {
+    "message": "设置"
+  },
+  "popupPrivacy": {
+    "message": "不追踪，不访问钱包。"
+  },
+  "lookalikeTitle": {
+    "message": "看似 SWD，但不是 SWD 官方网站"
+  },
+  "lookalikeBody": {
+    "message": "SWD 官方网站以 sawasdeecoin.com 结尾。"
+  },
+  "txNotFound": {
+    "message": "尚未找到交易，请几秒后重试。"
+  },
+  "optTitle": {
+    "message": "SWD Guard 设置"
+  },
+  "optBadges": {
+    "message": "在代币页面显示 SWD Audit 标记（Solscan、Jupiter、Birdeye、DEX Screener、pump.fun）"
+  },
+  "optUpdatedList": {
+    "message": "每天下载一次最新钓鱼名单"
+  },
+  "optUpdatedListHint": {
+    "message": "来自 SWD 公共 GitHub 仓库的域名列表。仅下载文件，不发送您的任何信息。"
+  },
+  "optRefresh": {
+    "message": "立即更新"
+  },
+  "optListStatus": {
+    "message": "$COUNT$ 个域名，更新于 $WHEN$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "when": {
+        "content": "$2"
+      }
+    }
+  },
+  "optAllSitesHint": {
+    "message": "可选：让 SWD Guard 在最新名单的所有域名上显示整页警告。为此 Chrome 会请求访问所有网站；SWD Guard 仍只在名单域名上运行，且从不读取页面内容。"
+  },
+  "optGrantAllSites": {
+    "message": "允许在所有名单网站上警告"
+  },
+  "optRevokeAllSites": {
+    "message": "移除所有网站权限"
+  },
+  "privacyTitle": {
+    "message": "隐私"
+  },
+  "privacyBody": {
+    "message": "SWD Guard 只会把您查看的代币地址或交易哈希发送到 SWD Audit API（swd-zetaphy.sawasdeecoin.com），不带 Cookie 和标识符。它从不读取钱包、密钥、密码或页面内容，没有统计分析，也不加载远程代码。设置保存在您的浏览器中。"
+  }
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SWD Guard</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>body { width: auto; max-width: 640px; margin: 0 auto; } label.chk { display: flex; gap: 8px; font-weight: 400; align-items: flex-start; } label.chk input { margin-top: 3px; }</style>
+</head>
+<body>
+  <main>
+    <h1><img src="../icons/icon48.png" alt=""><span data-i18n="optTitle"></span></h1>
+    <section class="card">
+      <label class="chk"><input type="checkbox" id="badges"><span data-i18n="optBadges"></span></label>
+    </section>
+    <section class="card">
+      <label class="chk"><input type="checkbox" id="updatedList"><span data-i18n="optUpdatedList"></span></label>
+      <p class="muted" data-i18n="optUpdatedListHint"></p>
+      <div class="row"><button id="refresh" data-i18n="optRefresh"></button><span id="listStatus" class="muted"></span></div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
+      <p data-i18n="optAllSitesHint"></p>
+      <div class="row"><button id="grant"></button></div>
+    </section>
+    <section class="card">
+      <h2 style="font-size:14px;margin:0 0 6px" data-i18n="privacyTitle"></h2>
+      <p data-i18n="privacyBody"></p>
+    </section>
+  </main>
+  <script src="common.js"></script>
+  <script src="ui.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

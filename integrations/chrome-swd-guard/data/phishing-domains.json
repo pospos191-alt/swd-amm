@@ -1,0 +1,14 @@
+{
+  "format": "swd-guard.phishing.v1",
+  "updated": "2026-11-07",
+  "note": "Domains SWD Guard warns on. Bundled entries are lookalikes of SWD's own domains (sawasdeecoin.com) built on the usual drainer patterns (claim / airdrop / connect). Add a domain only after it is reported and checked; remove one that turns out to be legitimate. Lowercase host names, no scheme, no path. Each entry also covers its subdomains.",
+  "domains": [
+    "sawasdeecoin-claim.com",
+    "sawasdeecoin-airdrop.com",
+    "claim-sawasdeecoin.com",
+    "swd-airdrop-claim.com",
+    "sawasdee-coin-claim.com",
+    "sawasdeecoin-connect.com"
+  ],
+  "official": ["sawasdeecoin.com"]
+}

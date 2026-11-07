@@ -1,0 +1,14 @@
+{
+  "name": "chrome-swd-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SWD Guard: a Chrome (Manifest V3) extension with SWD Audit badges, an audit popup and phishing warnings. No build step, no dependencies.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/common.test.mjs && node scripts/check.mjs",
+    "check": "node scripts/check.mjs",
+    "sync": "node scripts/sync-manifest.mjs",
+    "zip": "sh scripts/zip.sh"
+  },
+  "engines": { "node": ">=18" }
+}

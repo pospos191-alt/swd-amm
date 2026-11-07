@@ -1,0 +1,136 @@
+{
+  "extName": {
+    "message": "SWD Guard"
+  },
+  "extDescription": {
+    "message": "Insignias de riesgo SWD Audit en páginas de tokens, auditoría de cualquier token o transacción y avisos en sitios de phishing."
+  },
+  "close": {
+    "message": "Cerrar"
+  },
+  "badgeChecking": {
+    "message": "SWD Audit: comprobando…"
+  },
+  "badgeLabel": {
+    "message": "SWD Audit"
+  },
+  "badgeUnavailable": {
+    "message": "no disponible ahora"
+  },
+  "level_high": {
+    "message": "riesgo alto"
+  },
+  "level_medium": {
+    "message": "riesgo medio"
+  },
+  "level_low": {
+    "message": "riesgo bajo"
+  },
+  "level_info": {
+    "message": "las reglas no hallaron riesgo"
+  },
+  "warnHigh": {
+    "message": "Se hallaron riesgos graves. No compres ni apruebes este token si no los entiendes."
+  },
+  "warnMedium": {
+    "message": "Se hallaron algunos riesgos. Lee el informe antes de operar."
+  },
+  "openReport": {
+    "message": "Informe completo"
+  },
+  "notAdvice": {
+    "message": "Reglas automáticas, no es asesoría financiera."
+  },
+  "phishTitle": {
+    "message": "Sitio sospechoso de phishing"
+  },
+  "phishBody": {
+    "message": "Según la lista de SWD Guard, este sitio imita un proyecto cripto para robar billeteras o monedas."
+  },
+  "phishNever": {
+    "message": "Nunca escribas tu frase semilla ni tu clave privada, y no conectes ni firmes nada aquí."
+  },
+  "phishLeave": {
+    "message": "Salir de este sitio"
+  },
+  "phishContinue": {
+    "message": "Entiendo el riesgo, continuar"
+  },
+  "popupInputLabel": {
+    "message": "Revisar un token o transacción"
+  },
+  "popupInputPlaceholder": {
+    "message": "Dirección, hash de transacción o enlace"
+  },
+  "popupInputHint": {
+    "message": "Las direcciones y firmas de Solana se detectan solas; para 0x… elige la cadena EVM."
+  },
+  "popupCheck": {
+    "message": "Revisar"
+  },
+  "popupBadInput": {
+    "message": "No es una dirección, hash ni enlace compatible."
+  },
+  "popupThisSite": {
+    "message": "Este sitio"
+  },
+  "popupNotListed": {
+    "message": "No está en la lista de phishing de SWD Guard (eso no prueba que sea seguro)."
+  },
+  "popupOptions": {
+    "message": "Ajustes"
+  },
+  "popupPrivacy": {
+    "message": "Sin rastreo. Sin acceso a la billetera."
+  },
+  "lookalikeTitle": {
+    "message": "Parece SWD, pero no es un sitio oficial de SWD"
+  },
+  "lookalikeBody": {
+    "message": "Los sitios oficiales de SWD terminan en sawasdeecoin.com."
+  },
+  "txNotFound": {
+    "message": "Transacción aún no encontrada. Reintenta en unos segundos."
+  },
+  "optTitle": {
+    "message": "Ajustes de SWD Guard"
+  },
+  "optBadges": {
+    "message": "Mostrar la insignia SWD Audit en páginas de tokens (Solscan, Jupiter, Birdeye, DEX Screener, pump.fun)"
+  },
+  "optUpdatedList": {
+    "message": "Descargar la lista de phishing actualizada una vez al día"
+  },
+  "optUpdatedListHint": {
+    "message": "Una lista de dominios del repositorio público de SWD en GitHub. Solo se descarga el archivo; no se envía nada sobre ti."
+  },
+  "optRefresh": {
+    "message": "Actualizar ahora"
+  },
+  "optListStatus": {
+    "message": "$COUNT$ dominios, actualizado $WHEN$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "when": {
+        "content": "$2"
+      }
+    }
+  },
+  "optAllSitesHint": {
+    "message": "Opcional: deja que SWD Guard muestre el aviso de página completa en cada dominio de la lista actualizada. Chrome pide acceso a todos los sitios para esto; SWD Guard solo se ejecuta en los dominios de la lista y nunca lee el contenido."
+  },
+  "optGrantAllSites": {
+    "message": "Permitir avisos en todos los sitios de la lista"
+  },
+  "optRevokeAllSites": {
+    "message": "Quitar el permiso de todos los sitios"
+  },
+  "privacyTitle": {
+    "message": "Privacidad"
+  },
+  "privacyBody": {
+    "message": "SWD Guard solo envía la dirección del token o el hash de la transacción que miras a la API de SWD Audit (swd-zetaphy.sawasdeecoin.com), sin cookies ni identificadores. Nunca lee billeteras, claves, contraseñas ni el contenido de las páginas, no tiene analíticas y no carga código remoto. Los ajustes quedan en tu navegador."
+  }
+}

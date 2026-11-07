@@ -1,0 +1,81 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extName__",
+  "short_name": "SWD Guard",
+  "description": "__MSG_extDescription__",
+  "version": "0.1.0",
+  "default_locale": "en",
+  "homepage_url": "https://swd-zetaphy.sawasdeecoin.com",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "__MSG_extName__",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "options_page": "src/options.html",
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://swd-zetaphy.sawasdeecoin.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://solscan.io/*",
+        "https://jup.ag/*",
+        "https://birdeye.so/*",
+        "https://dexscreener.com/*",
+        "https://pump.fun/*"
+      ],
+      "js": [
+        "src/common.js",
+        "src/content-token.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://sawasdeecoin-claim.com/*",
+        "*://*.sawasdeecoin-claim.com/*",
+        "*://sawasdeecoin-airdrop.com/*",
+        "*://*.sawasdeecoin-airdrop.com/*",
+        "*://claim-sawasdeecoin.com/*",
+        "*://*.claim-sawasdeecoin.com/*",
+        "*://swd-airdrop-claim.com/*",
+        "*://*.swd-airdrop-claim.com/*",
+        "*://sawasdee-coin-claim.com/*",
+        "*://*.sawasdee-coin-claim.com/*",
+        "*://sawasdeecoin-connect.com/*",
+        "*://*.sawasdeecoin-connect.com/*"
+      ],
+      "js": [
+        "src/common.js",
+        "src/content-phish.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "minimum_chrome_version": "116"
+}

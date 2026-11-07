@@ -1,0 +1,136 @@
+{
+  "extName": {
+    "message": "SWD Guard"
+  },
+  "extDescription": {
+    "message": "トークンページに SWD Audit のリスク表示、任意のトークンや取引の監査、既知のフィッシングサイトでの警告。"
+  },
+  "close": {
+    "message": "閉じる"
+  },
+  "badgeChecking": {
+    "message": "SWD Audit：確認中…"
+  },
+  "badgeLabel": {
+    "message": "SWD Audit"
+  },
+  "badgeUnavailable": {
+    "message": "現在利用できません"
+  },
+  "level_high": {
+    "message": "高リスク"
+  },
+  "level_medium": {
+    "message": "中リスク"
+  },
+  "level_low": {
+    "message": "低リスク"
+  },
+  "level_info": {
+    "message": "ルール上のリスクなし"
+  },
+  "warnHigh": {
+    "message": "重大なリスクがあります。理解していない場合、このトークンを購入・承認しないでください。"
+  },
+  "warnMedium": {
+    "message": "いくつかのリスクがあります。取引前にレポートを読んでください。"
+  },
+  "openReport": {
+    "message": "詳細レポート"
+  },
+  "notAdvice": {
+    "message": "自動ルールによる確認で、投資助言ではありません。"
+  },
+  "phishTitle": {
+    "message": "フィッシングの疑いがあるサイト"
+  },
+  "phishBody": {
+    "message": "SWD Guard のリストでは、このサイトは暗号資産プロジェクトを装いウォレットやコインを盗むとされています。"
+  },
+  "phishNever": {
+    "message": "シードフレーズや秘密鍵を入力せず、ここでウォレット接続や署名をしないでください。"
+  },
+  "phishLeave": {
+    "message": "このサイトを離れる"
+  },
+  "phishContinue": {
+    "message": "リスクを理解して続行"
+  },
+  "popupInputLabel": {
+    "message": "トークンまたは取引を確認"
+  },
+  "popupInputPlaceholder": {
+    "message": "アドレス、取引ハッシュ、またはリンク"
+  },
+  "popupInputHint": {
+    "message": "Solana のアドレスと署名は自動判別。0x… は EVM チェーンを選択。"
+  },
+  "popupCheck": {
+    "message": "確認"
+  },
+  "popupBadInput": {
+    "message": "アドレス・取引ハッシュ・対応リンクではありません。"
+  },
+  "popupThisSite": {
+    "message": "このサイト"
+  },
+  "popupNotListed": {
+    "message": "SWD Guard のフィッシングリストにはありません（安全の証明ではありません）。"
+  },
+  "popupOptions": {
+    "message": "設定"
+  },
+  "popupPrivacy": {
+    "message": "追跡なし。ウォレットにアクセスしません。"
+  },
+  "lookalikeTitle": {
+    "message": "SWD に似ていますが公式サイトではありません"
+  },
+  "lookalikeBody": {
+    "message": "SWD の公式サイトは sawasdeecoin.com で終わります。"
+  },
+  "txNotFound": {
+    "message": "取引がまだ見つかりません。数秒後に再試行してください。"
+  },
+  "optTitle": {
+    "message": "SWD Guard の設定"
+  },
+  "optBadges": {
+    "message": "トークンページに SWD Audit バッジを表示（Solscan、Jupiter、Birdeye、DEX Screener、pump.fun）"
+  },
+  "optUpdatedList": {
+    "message": "最新のフィッシングリストを1日1回ダウンロード"
+  },
+  "optUpdatedListHint": {
+    "message": "SWD の公開 GitHub リポジトリにあるドメイン名の一覧です。ファイルを取得するだけで、あなたの情報は送信しません。"
+  },
+  "optRefresh": {
+    "message": "今すぐ更新"
+  },
+  "optListStatus": {
+    "message": "$COUNT$ ドメイン、$WHEN$ に更新",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "when": {
+        "content": "$2"
+      }
+    }
+  },
+  "optAllSitesHint": {
+    "message": "任意：最新リストの全ドメインで全画面警告を表示します。Chrome は全サイトへのアクセスを求めますが、SWD Guard はリストのドメインでのみ動作し、ページ内容は読みません。"
+  },
+  "optGrantAllSites": {
+    "message": "リストの全サイトで警告を許可"
+  },
+  "optRevokeAllSites": {
+    "message": "全サイトの権限を削除"
+  },
+  "privacyTitle": {
+    "message": "プライバシー"
+  },
+  "privacyBody": {
+    "message": "SWD Guard が送信するのは、閲覧中のトークンアドレスまたは取引ハッシュだけです（送信先 SWD Audit API: swd-zetaphy.sawasdeecoin.com、Cookie や識別子なし）。ウォレット、鍵、パスワード、ページ内容は読まず、解析ツールもリモートコードもありません。設定はブラウザ内に保存されます。"
+  }
+}
