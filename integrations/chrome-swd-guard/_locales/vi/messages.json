@@ -1,0 +1,136 @@
+{
+  "extName": {
+    "message": "SWD Guard"
+  },
+  "extDescription": {
+    "message": "Huy hiệu rủi ro SWD Audit trên trang token, kiểm tra mọi token hoặc giao dịch, cảnh báo trang lừa đảo đã biết."
+  },
+  "close": {
+    "message": "Đóng"
+  },
+  "badgeChecking": {
+    "message": "SWD Audit: đang kiểm tra…"
+  },
+  "badgeLabel": {
+    "message": "SWD Audit"
+  },
+  "badgeUnavailable": {
+    "message": "hiện chưa khả dụng"
+  },
+  "level_high": {
+    "message": "rủi ro cao"
+  },
+  "level_medium": {
+    "message": "rủi ro trung bình"
+  },
+  "level_low": {
+    "message": "rủi ro thấp"
+  },
+  "level_info": {
+    "message": "quy tắc không thấy rủi ro"
+  },
+  "warnHigh": {
+    "message": "Phát hiện rủi ro nghiêm trọng. Đừng mua hoặc phê duyệt token này nếu chưa hiểu rõ."
+  },
+  "warnMedium": {
+    "message": "Có một số rủi ro. Hãy đọc báo cáo trước khi giao dịch."
+  },
+  "openReport": {
+    "message": "Báo cáo đầy đủ"
+  },
+  "notAdvice": {
+    "message": "Kiểm tra tự động, không phải lời khuyên đầu tư."
+  },
+  "phishTitle": {
+    "message": "Nghi là trang lừa đảo"
+  },
+  "phishBody": {
+    "message": "Theo danh sách của SWD Guard, trang này giả mạo dự án tiền mã hóa để đánh cắp ví hoặc coin."
+  },
+  "phishNever": {
+    "message": "Đừng nhập cụm từ khôi phục hay khóa riêng, và đừng kết nối hoặc ký gì ở đây."
+  },
+  "phishLeave": {
+    "message": "Rời trang này"
+  },
+  "phishContinue": {
+    "message": "Tôi hiểu rủi ro, tiếp tục"
+  },
+  "popupInputLabel": {
+    "message": "Kiểm tra token hoặc giao dịch"
+  },
+  "popupInputPlaceholder": {
+    "message": "Địa chỉ, mã giao dịch hoặc liên kết"
+  },
+  "popupInputHint": {
+    "message": "Địa chỉ và chữ ký Solana được nhận diện tự động; với 0x… hãy chọn chuỗi EVM."
+  },
+  "popupCheck": {
+    "message": "Kiểm tra"
+  },
+  "popupBadInput": {
+    "message": "Không phải địa chỉ, mã giao dịch hoặc liên kết được hỗ trợ."
+  },
+  "popupThisSite": {
+    "message": "Trang này"
+  },
+  "popupNotListed": {
+    "message": "Không có trong danh sách lừa đảo của SWD Guard (không có nghĩa là an toàn)."
+  },
+  "popupOptions": {
+    "message": "Cài đặt"
+  },
+  "popupPrivacy": {
+    "message": "Không theo dõi. Không truy cập ví."
+  },
+  "lookalikeTitle": {
+    "message": "Trông giống SWD nhưng không phải trang chính thức"
+  },
+  "lookalikeBody": {
+    "message": "Trang chính thức của SWD kết thúc bằng sawasdeecoin.com."
+  },
+  "txNotFound": {
+    "message": "Chưa tìm thấy giao dịch. Thử lại sau vài giây."
+  },
+  "optTitle": {
+    "message": "Cài đặt SWD Guard"
+  },
+  "optBadges": {
+    "message": "Hiện huy hiệu SWD Audit trên trang token (Solscan, Jupiter, Birdeye, DEX Screener, pump.fun)"
+  },
+  "optUpdatedList": {
+    "message": "Tải danh sách lừa đảo mới mỗi ngày một lần"
+  },
+  "optUpdatedListHint": {
+    "message": "Danh sách tên miền từ kho GitHub công khai của SWD. Chỉ tải tệp, không gửi thông tin của bạn."
+  },
+  "optRefresh": {
+    "message": "Cập nhật ngay"
+  },
+  "optListStatus": {
+    "message": "$COUNT$ tên miền, cập nhật $WHEN$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "when": {
+        "content": "$2"
+      }
+    }
+  },
+  "optAllSitesHint": {
+    "message": "Tùy chọn: cho SWD Guard hiện cảnh báo toàn trang trên mọi tên miền trong danh sách mới. Chrome sẽ xin quyền truy cập mọi trang; SWD Guard vẫn chỉ chạy trên tên miền trong danh sách và không đọc nội dung trang."
+  },
+  "optGrantAllSites": {
+    "message": "Cho phép cảnh báo trên mọi trang trong danh sách"
+  },
+  "optRevokeAllSites": {
+    "message": "Gỡ quyền truy cập mọi trang"
+  },
+  "privacyTitle": {
+    "message": "Quyền riêng tư"
+  },
+  "privacyBody": {
+    "message": "SWD Guard chỉ gửi địa chỉ token hoặc mã giao dịch bạn đang xem tới SWD Audit API (swd-zetaphy.sawasdeecoin.com), không cookie, không định danh. Không đọc ví, khóa, mật khẩu hay nội dung trang, không có phân tích và không tải mã từ xa. Cài đặt lưu trong trình duyệt của bạn."
+  }
+}

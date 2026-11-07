@@ -1,0 +1,136 @@
+{
+  "extName": {
+    "message": "SWD Guard"
+  },
+  "extDescription": {
+    "message": "SWD Audit risk badges on token pages, an audit popup for any token or transaction, and warnings on known phishing sites."
+  },
+  "close": {
+    "message": "Close"
+  },
+  "badgeChecking": {
+    "message": "SWD Audit: checking…"
+  },
+  "badgeLabel": {
+    "message": "SWD Audit"
+  },
+  "badgeUnavailable": {
+    "message": "unavailable right now"
+  },
+  "level_high": {
+    "message": "high risk"
+  },
+  "level_medium": {
+    "message": "medium risk"
+  },
+  "level_low": {
+    "message": "low risk"
+  },
+  "level_info": {
+    "message": "no risk found by the rules"
+  },
+  "warnHigh": {
+    "message": "Serious risks found. Do not buy or approve this token unless you understand them."
+  },
+  "warnMedium": {
+    "message": "Some risks found. Read the report before you trade."
+  },
+  "openReport": {
+    "message": "Full report"
+  },
+  "notAdvice": {
+    "message": "Automated rules, not financial advice."
+  },
+  "phishTitle": {
+    "message": "Suspected phishing site"
+  },
+  "phishBody": {
+    "message": "SWD Guard's list says this site imitates a crypto project to steal wallets or coins."
+  },
+  "phishNever": {
+    "message": "Never type your seed phrase or private key, and do not connect or sign anything here."
+  },
+  "phishLeave": {
+    "message": "Leave this site"
+  },
+  "phishContinue": {
+    "message": "I understand the risk, continue"
+  },
+  "popupInputLabel": {
+    "message": "Check a token or transaction"
+  },
+  "popupInputPlaceholder": {
+    "message": "Address, transaction hash or link"
+  },
+  "popupInputHint": {
+    "message": "Solana addresses and signatures are detected automatically; for 0x… pick the EVM chain."
+  },
+  "popupCheck": {
+    "message": "Check"
+  },
+  "popupBadInput": {
+    "message": "Not an address, transaction hash or supported link."
+  },
+  "popupThisSite": {
+    "message": "This site"
+  },
+  "popupNotListed": {
+    "message": "Not on SWD Guard's phishing list (that alone does not prove it is safe)."
+  },
+  "popupOptions": {
+    "message": "Settings"
+  },
+  "popupPrivacy": {
+    "message": "No tracking. No wallet access."
+  },
+  "lookalikeTitle": {
+    "message": "Looks like SWD, but is not an official SWD site"
+  },
+  "lookalikeBody": {
+    "message": "Official SWD sites end in sawasdeecoin.com."
+  },
+  "txNotFound": {
+    "message": "Transaction not found yet. Try again in a few seconds."
+  },
+  "optTitle": {
+    "message": "SWD Guard settings"
+  },
+  "optBadges": {
+    "message": "Show the SWD Audit badge on token pages (Solscan, Jupiter, Birdeye, DEX Screener, pump.fun)"
+  },
+  "optUpdatedList": {
+    "message": "Download the updated phishing list once a day"
+  },
+  "optUpdatedListHint": {
+    "message": "A plain list of domain names from SWD's public GitHub repository. Only the file is downloaded; nothing about you is sent."
+  },
+  "optRefresh": {
+    "message": "Update now"
+  },
+  "optListStatus": {
+    "message": "$COUNT$ domains, updated $WHEN$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "when": {
+        "content": "$2"
+      }
+    }
+  },
+  "optAllSitesHint": {
+    "message": "Optional: let SWD Guard show the full-page warning on every domain of the updated list. Chrome asks for access to all sites for this; SWD Guard still runs only on listed domains and never reads page content."
+  },
+  "optGrantAllSites": {
+    "message": "Allow warnings on all listed sites"
+  },
+  "optRevokeAllSites": {
+    "message": "Remove the all-sites permission"
+  },
+  "privacyTitle": {
+    "message": "Privacy"
+  },
+  "privacyBody": {
+    "message": "SWD Guard sends only the token address or transaction hash you look at to the SWD Audit API (swd-zetaphy.sawasdeecoin.com), with no cookies and no identifiers. It never reads wallets, keys, passwords or page content, has no analytics and loads no remote code. Settings stay in your browser."
+  }
+}

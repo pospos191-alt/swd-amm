@@ -1,0 +1,136 @@
+{
+  "extName": {
+    "message": "SWD Guard"
+  },
+  "extDescription": {
+    "message": "Значки риска SWD Audit на страницах токенов, проверка любого токена или транзакции и предупреждения на фишинговых сайтах."
+  },
+  "close": {
+    "message": "Закрыть"
+  },
+  "badgeChecking": {
+    "message": "SWD Audit: проверка…"
+  },
+  "badgeLabel": {
+    "message": "SWD Audit"
+  },
+  "badgeUnavailable": {
+    "message": "сейчас недоступно"
+  },
+  "level_high": {
+    "message": "высокий риск"
+  },
+  "level_medium": {
+    "message": "средний риск"
+  },
+  "level_low": {
+    "message": "низкий риск"
+  },
+  "level_info": {
+    "message": "правила не нашли риска"
+  },
+  "warnHigh": {
+    "message": "Найдены серьёзные риски. Не покупайте и не одобряйте этот токен, если не понимаете их."
+  },
+  "warnMedium": {
+    "message": "Найдены некоторые риски. Прочтите отчёт перед сделкой."
+  },
+  "openReport": {
+    "message": "Полный отчёт"
+  },
+  "notAdvice": {
+    "message": "Автоматические правила, не финансовый совет."
+  },
+  "phishTitle": {
+    "message": "Подозрение на фишинговый сайт"
+  },
+  "phishBody": {
+    "message": "По списку SWD Guard этот сайт выдаёт себя за криптопроект, чтобы украсть кошельки или монеты."
+  },
+  "phishNever": {
+    "message": "Никогда не вводите сид-фразу или приватный ключ и ничего здесь не подключайте и не подписывайте."
+  },
+  "phishLeave": {
+    "message": "Покинуть сайт"
+  },
+  "phishContinue": {
+    "message": "Я понимаю риск, продолжить"
+  },
+  "popupInputLabel": {
+    "message": "Проверить токен или транзакцию"
+  },
+  "popupInputPlaceholder": {
+    "message": "Адрес, хеш транзакции или ссылка"
+  },
+  "popupInputHint": {
+    "message": "Адреса и подписи Solana определяются сами; для 0x… выберите EVM-сеть."
+  },
+  "popupCheck": {
+    "message": "Проверить"
+  },
+  "popupBadInput": {
+    "message": "Это не адрес, хеш транзакции или поддерживаемая ссылка."
+  },
+  "popupThisSite": {
+    "message": "Этот сайт"
+  },
+  "popupNotListed": {
+    "message": "Нет в фишинговом списке SWD Guard (это не доказывает безопасность)."
+  },
+  "popupOptions": {
+    "message": "Настройки"
+  },
+  "popupPrivacy": {
+    "message": "Без слежки. Без доступа к кошельку."
+  },
+  "lookalikeTitle": {
+    "message": "Похоже на SWD, но это не официальный сайт SWD"
+  },
+  "lookalikeBody": {
+    "message": "Официальные сайты SWD заканчиваются на sawasdeecoin.com."
+  },
+  "txNotFound": {
+    "message": "Транзакция пока не найдена. Повторите через несколько секунд."
+  },
+  "optTitle": {
+    "message": "Настройки SWD Guard"
+  },
+  "optBadges": {
+    "message": "Показывать значок SWD Audit на страницах токенов (Solscan, Jupiter, Birdeye, DEX Screener, pump.fun)"
+  },
+  "optUpdatedList": {
+    "message": "Загружать обновлённый фишинговый список раз в день"
+  },
+  "optUpdatedListHint": {
+    "message": "Простой список доменов из публичного GitHub-репозитория SWD. Скачивается только файл, о вас ничего не отправляется."
+  },
+  "optRefresh": {
+    "message": "Обновить сейчас"
+  },
+  "optListStatus": {
+    "message": "$COUNT$ доменов, обновлено $WHEN$",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      },
+      "when": {
+        "content": "$2"
+      }
+    }
+  },
+  "optAllSitesHint": {
+    "message": "Необязательно: показывать полноэкранное предупреждение на всех доменах обновлённого списка. Chrome запросит доступ ко всем сайтам; SWD Guard всё равно работает только на доменах из списка и не читает содержимое страниц."
+  },
+  "optGrantAllSites": {
+    "message": "Разрешить предупреждения на всех сайтах списка"
+  },
+  "optRevokeAllSites": {
+    "message": "Отозвать доступ ко всем сайтам"
+  },
+  "privacyTitle": {
+    "message": "Конфиденциальность"
+  },
+  "privacyBody": {
+    "message": "SWD Guard отправляет только адрес токена или хеш транзакции, которые вы смотрите, в SWD Audit API (swd-zetaphy.sawasdeecoin.com), без cookie и идентификаторов. Он не читает кошельки, ключи, пароли и содержимое страниц, не использует аналитику и не загружает удалённый код. Настройки хранятся в вашем браузере."
+  }
+}

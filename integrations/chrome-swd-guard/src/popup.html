@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SWD Guard</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <h1><img src="../icons/icon48.png" alt=""><span data-i18n="extName"></span></h1>
+    <section id="site" class="card" hidden></section>
+    <section class="card">
+      <label for="q" data-i18n="popupInputLabel"></label>
+      <input id="q" type="text" autocomplete="off" spellcheck="false" maxlength="300">
+      <div class="row">
+        <select id="evm" aria-label="EVM chain">
+          <option value="eth">Ethereum</option>
+          <option value="bsc">BNB Chain</option>
+          <option value="base">Base</option>
+          <option value="arbitrum">Arbitrum</option>
+        </select>
+        <button id="go" data-i18n="popupCheck"></button>
+      </div>
+      <p class="muted" data-i18n="popupInputHint"></p>
+    </section>
+    <section id="result" class="card" hidden aria-live="polite"></section>
+  </main>
+  <footer>
+    <a href="#" id="opts" data-i18n="popupOptions"></a>
+    <span class="muted" data-i18n="popupPrivacy"></span>
+  </footer>
+  <script src="common.js"></script>
+  <script src="ui.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
