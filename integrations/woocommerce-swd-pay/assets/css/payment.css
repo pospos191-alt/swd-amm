@@ -1,0 +1,13 @@
+.swd-pay { border: 1px solid #d4d4d8; border-radius: 12px; padding: 16px; margin: 24px 0; max-width: 420px; }
+.swd-pay h2 { margin-top: 0; }
+.swd-pay-tabs { display: flex; gap: 8px; margin: 12px 0; }
+.swd-pay-tab { border: 1px solid #a1a1aa; background: transparent; border-radius: 999px; padding: 4px 14px; cursor: pointer; }
+.swd-pay-tab[aria-selected="true"] { background: #047857; border-color: #047857; color: #fff; }
+.swd-pay-qr { display: block; width: 264px; height: 264px; max-width: 100%; margin: 8px 0; border-radius: 8px; background: #fff; }
+.swd-pay-amount { font-size: 1.3em; margin: 4px 0; }
+.swd-pay-rate, .swd-pay-until { color: #52525b; font-size: .9em; margin: 2px 0; }
+.swd-pay dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; }
+.swd-pay dd { margin: 0; word-break: break-all; }
+.swd-pay-status { font-weight: 600; }
+.swd-pay.is-paid { border-color: #10b981; }
+.swd-pay.is-paid .swd-pay-status { color: #047857; }
