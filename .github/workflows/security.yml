@@ -824,6 +824,19 @@ jobs:
           grep -n "declare_id" programs/swd_amm/src/lib.rs
           grep -n "^swd_amm = " Anchor.toml
 
+      # Same throwaway-key treatment for swd_launch_guard and swd_audit_court
+      # (docs/SWD_LAUNCH_GUARD.md, docs/SWD_AUDIT_COURT.md; placeholder ids).
+      - name: Create CI-only program keypairs (swd_launch_guard, swd_audit_court)
+        run: |
+          for p in swd_launch_guard swd_audit_court; do
+            solana-keygen new --no-bip39-passphrase --silent --force --outfile "target/deploy/${p}-keypair.json"
+            pid=$(solana-keygen pubkey "target/deploy/${p}-keypair.json")
+            sed -i -E "s/declare_id!\(\"[1-9A-HJ-NP-Za-km-z]+\"\)/declare_id!(\"${pid}\")/" "programs/${p}/src/lib.rs"
+            sed -i -E "s/^${p} = \"[1-9A-HJ-NP-Za-km-z]+\"/${p} = \"${pid}\"/" Anchor.toml
+            grep -q "declare_id!(\"${pid}\")" "programs/${p}/src/lib.rs" || { echo "::error::could not rewrite declare_id! (${p})"; exit 1; }
+            grep -n "^${p} = " Anchor.toml
+          done
+
       - name: Use private RPC for the Squads clone (if MAINNET_RPC_URL secret is set)
         env:
           MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
@@ -840,6 +853,12 @@ jobs:
 
       - name: mainnet build flags compile (24h-48h timelock)
         run: cargo check -p swd_amm --features mainnet
+
+      - name: cargo test (swd_launch_guard + swd_audit_court rules, no validator)
+        run: cargo test -p swd_launch_guard -p swd_audit_court
+
+      - name: swd_audit_court mainnet build flags compile (SWD bond, >= 3-day votes)
+        run: cargo check -p swd_audit_court --features mainnet
 
       - name: anchor build (SBF program + IDL)
         run: anchor build
@@ -990,7 +1009,9 @@ jobs:
 
       - name: Deploy / upgrade on Devnet
         run: |
-          anchor deploy --provider.cluster devnet --provider.wallet ~/.config/solana/devnet-deployer.json
+          # -p swd_amm: the workspace also holds swd_launch_guard / swd_audit_court,
+          # which have no devnet keys here and deploy on their own (their docs).
+          anchor deploy -p swd_amm --provider.cluster devnet --provider.wallet ~/.config/solana/devnet-deployer.json
           # `solana program show` still loads a default signer, and this runner
           # has no ~/.config/solana/id.json, so point it at the deployer key.
           solana program show "$(solana-keygen pubkey target/deploy/swd_amm-keypair.json)" --url devnet \
